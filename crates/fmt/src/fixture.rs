@@ -37,10 +37,18 @@ pub struct Fixture {
     pub bytes: Vec<u8>,
 }
 
-/// Every fixture writer in the crate. Format modules register here as they
-/// land (M1); the list is empty until then.
+/// Every fixture writer in the crate, one `extend` per format module.
 pub fn registry() -> Vec<Box<dyn FixtureWriter>> {
-    Vec::new()
+    let mut w: Vec<Box<dyn FixtureWriter>> = Vec::new();
+    w.extend(crate::mix::fixture_writers());
+    w.extend(crate::pal::fixture_writers());
+    w.extend(crate::shp::fixture_writers());
+    w.extend(crate::tmp::fixture_writers());
+    w.extend(crate::pcx::fixture_writers());
+    w.extend(crate::csf::fixture_writers());
+    w.extend(crate::vxl::fixture_writers());
+    w.extend(crate::hva::fixture_writers());
+    w
 }
 
 /// Error from [`generate`]: two writers produced the same path.

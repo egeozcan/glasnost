@@ -288,6 +288,48 @@ fn read_entries(r: &mut Reader<'_>, count: usize) -> Result<Vec<MixEntry>> {
     Ok(entries)
 }
 
+/// Cheap pre-check on the first bytes of an entry of `len` bytes: could it
+/// be a MIX archive? Plain headers must already imply exactly `len`;
+/// encrypted ones need the full parse.
+pub fn may_be_mix(probe: &[u8], len: u64) -> bool {
+    let u16_at = |i: usize| {
+        probe
+            .get(i..i + 2)
+            .map(|b| u16::from_le_bytes([b[0], b[1]]))
+    };
+    let u32_at = |i: usize| {
+        probe
+            .get(i..i + 4)
+            .map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]))
+    };
+    let implied =
+        |count: u16, body: u32, header: u64| header + 12 * u64::from(count) + u64::from(body);
+    match (u16_at(0), u32_at(0)) {
+        (Some(count), _) if count != 0 => {
+            u32_at(2).is_some_and(|body| implied(count, body, 6) == len)
+        }
+        (_, Some(flags)) => {
+            if flags & !(FLAG_CHECKSUM | FLAG_ENCRYPTED) != 0 {
+                return false;
+            }
+            if flags & FLAG_ENCRYPTED != 0 {
+                // Smallest encrypted header: flags, key source, one block.
+                return len >= 92;
+            }
+            let digest = if flags & FLAG_CHECKSUM != 0 {
+                CHECKSUM_LEN
+            } else {
+                0
+            };
+            match (u16_at(4), u32_at(6)) {
+                (Some(count), Some(body)) => implied(count, body, 10) + digest == len,
+                _ => false,
+            }
+        }
+        _ => false,
+    }
+}
+
 /// A whole archive held in memory.
 #[derive(Clone, Debug)]
 pub struct MixArchive<'a> {
@@ -450,6 +492,62 @@ impl MixWriter {
         out.extend_from_slice(&body);
         out
     }
+}
+
+/// A synthetic archive: invented files in each layout.
+struct SyntheticMix {
+    layout: &'static str,
+}
+
+impl SyntheticMix {
+    fn writer(&self) -> MixWriter {
+        let mut rng = crate::synth::SynthRng::new(42);
+        let files = (0..6)
+            .map(|i| {
+                let mut data = vec![0u8; 20 + 37 * i];
+                rng.fill(&mut data);
+                (id_hash(&format!("synthetic-{i}.bin")), data)
+            })
+            .collect();
+        let layout = match self.layout {
+            "classic" => WriteLayout::Classic,
+            "plain" => WriteLayout::Plain,
+            _ => {
+                let mut key = [0u8; BLOWFISH_KEY_LEN];
+                rng.fill(&mut key);
+                WriteLayout::Encrypted {
+                    key,
+                    rsa: RsaKeyPair::synthetic(),
+                    cipher: HeaderCipher::BigEndianWords,
+                }
+            }
+        };
+        MixWriter { layout, files }
+    }
+}
+
+impl crate::fixture::FixtureWriter for SyntheticMix {
+    fn format(&self) -> &'static str {
+        "mix"
+    }
+    fn name(&self) -> String {
+        format!("{}-6files", self.layout)
+    }
+    fn extension(&self) -> &'static str {
+        "mix"
+    }
+    fn write(&self, out: &mut Vec<u8>) {
+        out.extend(self.writer().write());
+    }
+}
+
+/// Fixture writers for this module. The encrypted one uses
+/// [`RsaKeyPair::synthetic`], so parse it with that key's public half.
+pub fn fixture_writers() -> Vec<Box<dyn crate::fixture::FixtureWriter>> {
+    ["classic", "plain", "encrypted"]
+        .into_iter()
+        .map(|layout| Box::new(SyntheticMix { layout }) as Box<dyn crate::fixture::FixtureWriter>)
+        .collect()
 }
 
 #[cfg(test)]

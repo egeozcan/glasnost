@@ -104,6 +104,15 @@ impl IndexedImage {
         })
     }
 
+    /// A 0 × 0 image.
+    pub fn empty() -> Self {
+        Self {
+            width: 0,
+            height: 0,
+            pixels: Vec::new(),
+        }
+    }
+
     /// Width in pixels.
     pub fn width(&self) -> u32 {
         self.width

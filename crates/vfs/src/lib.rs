@@ -21,7 +21,7 @@
 use std::io;
 use std::rc::Rc;
 
-use glasnost_fmt::mix::{MixEntry, MixIndex, MixKeys, MixLayout, id_hash};
+use glasnost_fmt::mix::{MixEntry, MixIndex, MixKeys, MixLayout, id_hash, may_be_mix};
 
 pub mod names;
 pub mod precedence;
@@ -560,49 +560,6 @@ pub struct NestedReport {
     pub mounted: Vec<ArchiveId>,
     /// Candidates rejected as inconsistent.
     pub rejected: usize,
-}
-
-/// Cheap pre-check on the first bytes of an entry of `len` bytes: could it
-/// be a MIX archive? Plain headers must already imply exactly `len`;
-/// encrypted ones need the full parse.
-pub fn may_be_mix(probe: &[u8], len: u64) -> bool {
-    let u16_at = |i: usize| {
-        probe
-            .get(i..i + 2)
-            .map(|b| u16::from_le_bytes([b[0], b[1]]))
-    };
-    let u32_at = |i: usize| {
-        probe
-            .get(i..i + 4)
-            .map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]))
-    };
-    let implied =
-        |count: u16, body: u32, header: u64| header + 12 * u64::from(count) + u64::from(body);
-    match (u16_at(0), u32_at(0)) {
-        (Some(count), _) if count != 0 => {
-            u32_at(2).is_some_and(|body| implied(count, body, 6) == len)
-        }
-        (_, Some(flags)) => {
-            use glasnost_fmt::mix::{CHECKSUM_LEN, FLAG_CHECKSUM, FLAG_ENCRYPTED};
-            if flags & !(FLAG_CHECKSUM | FLAG_ENCRYPTED) != 0 {
-                return false;
-            }
-            if flags & FLAG_ENCRYPTED != 0 {
-                // Smallest encrypted header: flags, key source, one block.
-                return len >= 92;
-            }
-            let digest = if flags & FLAG_CHECKSUM != 0 {
-                CHECKSUM_LEN
-            } else {
-                0
-            };
-            match (u16_at(4), u32_at(6)) {
-                (Some(count), Some(body)) => implied(count, body, 10) + digest == len,
-                _ => false,
-            }
-        }
-        _ => false,
-    }
 }
 
 /// Reads an archive index at `base` in `source`, fetching more of the

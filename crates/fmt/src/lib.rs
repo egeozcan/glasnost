@@ -18,12 +18,20 @@
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 
 pub mod bytes;
+pub mod csf;
 pub mod error;
 pub mod fixture;
+pub mod hva;
 pub mod image;
 pub mod limits;
 pub mod mix;
 pub mod mix_key;
+pub mod pal;
+pub mod pcx;
+pub mod shp;
+pub mod sniff;
 pub mod synth;
+pub mod tmp;
+pub mod vxl;
 
 pub use error::{Error, Result};

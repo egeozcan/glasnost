@@ -4,6 +4,7 @@ use glasnost_fmt::mix::{HeaderCipher, MixWriter, WriteLayout};
 use glasnost_fmt::mix_key::RsaKeyPair;
 
 use super::*;
+use glasnost_fmt::mix::may_be_mix;
 
 fn synthetic_keys() -> MixKeys {
     MixKeys {
