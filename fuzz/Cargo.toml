@@ -1,0 +1,118 @@
+# cargo-fuzz targets for glasnost-fmt (PLAN.md 6.2, layer 0). Needs a
+# nightly toolchain and cargo-fuzz; not part of the workspace or CI.
+# See fuzz/README.md.
+[package]
+name = "glasnost-fmt-fuzz"
+version = "0.0.0"
+edition = "2024"
+license = "GPL-3.0-or-later"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+glasnost-fmt = { path = "../crates/fmt" }
+
+# Its own workspace, so the main workspace's toolchain pin and lints do not
+# apply and `cargo test --workspace` never builds it.
+[workspace]
+
+[[bin]]
+name = "mix"
+path = "fuzz_targets/mix.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "shp"
+path = "fuzz_targets/shp.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "tmp"
+path = "fuzz_targets/tmp.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "vxl"
+path = "fuzz_targets/vxl.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "hva"
+path = "fuzz_targets/hva.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "pal"
+path = "fuzz_targets/pal.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "pcx"
+path = "fuzz_targets/pcx.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "csf"
+path = "fuzz_targets/csf.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "idx"
+path = "fuzz_targets/idx.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "aud"
+path = "fuzz_targets/aud.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "lzo"
+path = "fuzz_targets/lzo.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "lcw"
+path = "fuzz_targets/lcw.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "mappack"
+path = "fuzz_targets/mappack.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "sniff"
+path = "fuzz_targets/sniff.rs"
+test = false
+doc = false
+bench = false

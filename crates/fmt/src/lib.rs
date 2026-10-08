@@ -23,6 +23,7 @@ pub mod bytes;
 pub mod csf;
 pub mod error;
 pub mod fixture;
+pub mod hostile;
 pub mod hva;
 pub mod idx;
 pub mod image;

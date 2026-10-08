@@ -1,0 +1,6 @@
+# Generated corpora, crash artifacts and build output stay local.
+target/
+corpus/
+artifacts/
+coverage/
+Cargo.lock
