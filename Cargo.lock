@@ -61,6 +61,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "glasnost-tools"
+version = "0.0.0"
+dependencies = [
+ "glasnost-fmt",
+]
+
+[[package]]
 name = "glasnost-ui"
 version = "0.0.0"
 
