@@ -273,6 +273,12 @@ impl Vfs {
         &self.loose
     }
 
+    /// A picked file, for reads that must not borrow the file system (an
+    /// async task reading a [`Location`]).
+    pub fn source(&self, id: SourceId) -> Option<Rc<dyn ByteSource>> {
+        self.sources.get(id.0 as usize).map(|(_, s)| s.clone())
+    }
+
     /// Name of a picked file.
     pub fn source_name(&self, id: SourceId) -> Option<&str> {
         self.sources.get(id.0 as usize).map(|(n, _)| n.as_str())

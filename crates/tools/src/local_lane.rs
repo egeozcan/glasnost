@@ -14,8 +14,10 @@ use std::rc::Rc;
 
 use std::collections::BTreeSet;
 
+use glasnost_fmt::aud::Aud;
 use glasnost_fmt::csf::Csf;
 use glasnost_fmt::hva::Hva;
+use glasnost_fmt::idx::{Idx, IdxEntry};
 use glasnost_fmt::mix::id_hash;
 use glasnost_fmt::pal::Palette6;
 use glasnost_fmt::pcx::Pcx;
@@ -133,6 +135,10 @@ pub mod labels {
     pub const CONQ_SHP_FRAMES: &str = "conqmd.mix: SHP frames decoded";
     /// VXL files under ra2.mix and ra2md.mix that parsed.
     pub const RA2_VXL_FILES: &str = "ra2.mix/ra2md.mix: VXL files parsed";
+    /// IDX files that parsed and found their BAG.
+    pub const IDX_FILES: &str = "IDX sound banks parsed with their BAG";
+    /// IDX samples decoded from their BAG.
+    pub const IDX_SAMPLES: &str = "IDX samples decoded";
     /// Every check the test requires at 100 %.
     pub const REQUIRED: &[&str] = &[
         MIX_TOP,
@@ -140,6 +146,8 @@ pub mod labels {
         CONQ_SHP_FILES,
         CONQ_SHP_FRAMES,
         RA2_VXL_FILES,
+        IDX_FILES,
+        IDX_SAMPLES,
     ];
 }
 
@@ -248,6 +256,7 @@ async fn classify(vfs: &mut Vfs, report: &mut Report) {
     let mut limbs = 0u64;
     let mut tokens: BTreeSet<String> = BTreeSet::new();
     let mut unreadable = Tally::default();
+    let mut idx_files: Vec<(FileRef, Vec<u8>)> = Vec::new();
     for (i, archive) in vfs.archives().iter().enumerate() {
         let aid = ArchiveId(i as u32);
         let in_conq = archive.name.eq_ignore_ascii_case(CONQ_ARCHIVE);
@@ -282,6 +291,8 @@ async fn classify(vfs: &mut Vfs, report: &mut Report) {
                     | Kind::Hva
                     | Kind::Pcx
                     | Kind::Text
+                    | Kind::Idx
+                    | Kind::Aud
             );
             if !needs_body {
                 continue;
@@ -374,11 +385,20 @@ async fn classify(vfs: &mut Vfs, report: &mut Report) {
                 ),
                 Kind::Pcx => record(report, "PCX images decoded", Pcx::parse(&bytes).map(|_| ())),
                 Kind::Text => tokens.extend(harvest_tokens(&bytes)),
+                Kind::Idx => idx_files.push((file, bytes)),
+                Kind::Aud => record(
+                    report,
+                    "AUD sounds decoded",
+                    Aud::parse(&bytes).and_then(|a| a.decode()).map(|_| ()),
+                ),
                 _ => {}
             }
         }
     }
     report.tallies.push(("entries readable".into(), unreadable));
+    for (file, bytes) in idx_files {
+        decode_bank(vfs, report, file, &bytes).await;
+    }
     report.count("ra2.mix/ra2md.mix: VXL limbs decoded", limbs);
     for (kind, n) in kinds {
         report.count(&format!("entries sniffed as {kind}"), n);
@@ -424,6 +444,72 @@ async fn classify(vfs: &mut Vfs, report: &mut Report) {
     });
     report.count("entries with a known name", named);
     report.count("entries in total", total);
+}
+
+/// Decodes every sample of one IDX file. Its BAG is the entry of the same
+/// archive whose size is exactly the end of the furthest sample (archives
+/// store no names, and the pairing must not depend on knowing them).
+async fn decode_bank(vfs: &Vfs, report: &mut Report, file: FileRef, bytes: &[u8]) {
+    let idx = match Idx::parse(bytes) {
+        Ok(i) => i,
+        Err(e) => {
+            report.tally(labels::IDX_FILES).fail(e.kind());
+            return;
+        }
+    };
+    let end = idx
+        .entries
+        .iter()
+        .map(|e| u64::from(e.offset) + u64::from(e.size))
+        .max()
+        .unwrap_or(0);
+    let Some(archive) = vfs.archive(file.archive) else {
+        return;
+    };
+    let bags: Vec<_> = archive
+        .index
+        .entries
+        .iter()
+        .filter(|e| e.id != file.entry.id && u64::from(e.size) == end)
+        .collect();
+    let [bag] = bags.as_slice() else {
+        report.tally(labels::IDX_FILES).fail("no-unique-bag");
+        return;
+    };
+    report.tally(labels::IDX_FILES).pass();
+    let bag_ref = FileRef {
+        archive: file.archive,
+        entry: **bag,
+    };
+    let Ok(bag_loc) = vfs.locate(&bag_ref) else {
+        report.tally(labels::IDX_SAMPLES).fail("bag-out-of-range");
+        return;
+    };
+    let Some(source) = vfs.source(bag_loc.source) else {
+        return;
+    };
+    for entry in &idx.entries {
+        let read = source
+            .read_at(
+                bag_loc.offset + u64::from(entry.offset),
+                entry.size as usize,
+            )
+            .await;
+        let t = report.tally(labels::IDX_SAMPLES);
+        let Ok(data) = read else {
+            t.fail("io");
+            continue;
+        };
+        let local = IdxEntry {
+            offset: 0,
+            ..entry.clone()
+        };
+        match local.decode(&data) {
+            Ok(pcm) if pcm.frames() > 0 => t.pass(),
+            Ok(_) => t.fail("empty"),
+            Err(e) => t.fail(e.kind()),
+        }
+    }
 }
 
 fn record(report: &mut Report, label: &str, result: glasnost_fmt::Result<()>) {
