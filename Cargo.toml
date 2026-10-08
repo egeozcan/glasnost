@@ -9,6 +9,7 @@ members = [
     "crates/deterministic/map",
     "crates/deterministic/sim",
     "crates/deterministic/ai",
+    "crates/render",
     "crates/audio",
     "crates/ui",
     "crates/net",
@@ -31,6 +32,7 @@ glasnost-rules = { path = "crates/deterministic/rules" }
 glasnost-map = { path = "crates/deterministic/map" }
 glasnost-sim = { path = "crates/deterministic/sim" }
 glasnost-ai = { path = "crates/deterministic/ai" }
+glasnost-render = { path = "crates/render" }
 glasnost-audio = { path = "crates/audio" }
 glasnost-ui = { path = "crates/ui" }
 glasnost-net = { path = "crates/net" }
