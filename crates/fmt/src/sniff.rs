@@ -105,7 +105,12 @@ fn is_hva(p: &[u8], len: u64) -> bool {
     match (r.u32(), r.u32()) {
         (Ok(frames), Ok(limbs)) if frames > 0 && limbs > 0 => {
             let (f, l) = (u64::from(frames), u64::from(limbs));
-            24 + 16 * l + 48 * f * l == len
+            // Both factors are below 2^32, so the products fit in u64 only
+            // pairwise; check the sum.
+            (48 * f)
+                .checked_mul(l)
+                .and_then(|m| m.checked_add(24 + 16 * l))
+                == Some(len)
         }
         _ => false,
     }
@@ -154,7 +159,7 @@ fn is_tmp(p: &[u8], len: u64) -> bool {
     if u64::from(offset) + 52 > len {
         return false;
     }
-    match Reader::at(p, offset as usize + 12).i32() {
+    match Reader::at(p, (offset as usize).saturating_add(12)).i32() {
         Ok(depth) => i64::from(depth) == i64::from(w) * i64::from(h) / 2 + 52,
         Err(_) => true,
     }
