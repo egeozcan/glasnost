@@ -2,8 +2,8 @@
 //! winit event loop, the same rendering code on both targets.
 //!
 //! **Milestone M0**: the palette-indexed quad demo ([`run_demo`]).
-//! **M1** turns this into the asset viewer; **M5** into the game client
-//! (simulation worker, UI, audio).
+//! **M1**: the asset viewer ([`run_viewer`], module [`viewer`]).
+//! **M5** turns this into the game client (simulation worker, UI, audio).
 
 use std::sync::Arc;
 
@@ -19,7 +19,9 @@ use winit::keyboard::{Key, NamedKey};
 use winit::window::{Window, WindowId};
 
 mod status;
+pub mod viewer;
 pub use status::Status;
+pub use viewer::{ViewerOptions, run_viewer};
 
 /// Options for [`run_demo`].
 #[derive(Clone, Debug, Default)]

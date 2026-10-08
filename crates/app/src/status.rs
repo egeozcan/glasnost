@@ -19,6 +19,21 @@ pub enum Status {
     Error(String),
 }
 
+/// Mirrors the viewer's mount result into `data-glasnost-mount` on the page
+/// (`mounted:<archives>` or `error`), for the browser lane. No-op natively.
+pub fn publish_mount(archives: Option<usize>) {
+    #[cfg(target_arch = "wasm32")]
+    if let Some(body) = web_sys::window()
+        .and_then(|w| w.document())
+        .and_then(|d| d.body())
+    {
+        let value = archives.map_or_else(|| "error".to_owned(), |n| format!("mounted:{n}"));
+        let _ = body.dataset().set("glasnostMount", &value);
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    let _ = archives;
+}
+
 impl Status {
     /// Reports this status.
     pub fn publish(&self) {

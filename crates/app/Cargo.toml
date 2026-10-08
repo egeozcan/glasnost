@@ -8,8 +8,14 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
+glasnost-audio.workspace = true
 glasnost-fmt.workspace = true
 glasnost-render.workspace = true
+glasnost-vfs.workspace = true
+# Development UI (PLAN.md 4.1). Default features off: egui's bundled fonts
+# carry licences outside our policy, so the viewer ships its own font.
+egui = { version = "0.36.2", default-features = false }
+egui-wgpu = { version = "0.36.2", default-features = false, features = ["fragile-send-sync-non-atomic-wasm"] }
 log = "0.4"
 winit = "0.30.13"
 
@@ -17,8 +23,13 @@ winit = "0.30.13"
 pollster = "0.4"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
+js-sys = "0.3"
+wasm-bindgen = "=0.2.129"
 wasm-bindgen-futures = "0.4"
-web-sys = { version = "0.3", features = ["Document", "DomStringMap", "Element", "HtmlElement", "Window"] }
+web-sys = { version = "0.3", features = ["Document", "DomStringMap", "Element", "File", "FileList", "HtmlElement", "HtmlInputElement", "Performance", "Window"] }
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+pollster = "0.4"

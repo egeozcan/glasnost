@@ -1,0 +1,197 @@
+//! Asynchronous work for the viewer: mounting, indexing and file reads.
+//!
+//! Tasks never borrow the file system; they own reference-counted handles
+//! to the picked files and the [`Location`]s to read, so the same futures
+//! run natively (finished at once with `pollster`) and in the browser
+//! (spawned on the page's event loop).
+
+use std::collections::{BTreeMap, BTreeSet};
+use std::future::Future;
+use std::pin::Pin;
+use std::rc::Rc;
+
+use glasnost_fmt::sniff::{Kind, SNIFF_LEN, sniff};
+use glasnost_vfs::names::harvest_tokens;
+use glasnost_vfs::{ArchiveId, ByteSource, FileRef, Location, PickedFile, Vfs};
+
+/// A boxed task.
+pub type Task = Pin<Box<dyn Future<Output = TaskResult>>>;
+
+/// Something that runs tasks and delivers their results to the viewer.
+pub trait Spawner {
+    /// Starts `task`.
+    fn spawn(&self, task: Task);
+}
+
+/// Why a file was read.
+#[derive(Clone, Debug)]
+pub enum Purpose {
+    /// To show it.
+    Preview(FileRef),
+    /// To use it as the palette.
+    Palette(FileRef),
+    /// One sample of a sound bank, to play it.
+    Sample(glasnost_fmt::idx::IdxEntry),
+}
+
+/// A finished task.
+pub enum TaskResult {
+    /// The install was mounted.
+    Mounted(Result<Box<(Vfs, String)>, String>),
+    /// Every entry was classified.
+    Indexed {
+        /// Kind of each entry, by (archive, entry ID).
+        kinds: BTreeMap<(ArchiveId, u32), Kind>,
+        /// Name-like tokens from text entries.
+        tokens: BTreeSet<String>,
+    },
+    /// A file was read.
+    Loaded {
+        /// What it was read for.
+        purpose: Purpose,
+        /// Its bytes, or why reading failed.
+        bytes: Result<Vec<u8>, String>,
+    },
+}
+
+/// Mounts the picked files.
+pub fn mount(files: Vec<PickedFile>) -> Task {
+    Box::pin(async move {
+        let mut vfs = Vfs::default();
+        let report = vfs.mount_install(files).await;
+        let summary = format!(
+            "{} archives mounted ({} nested), {} failed, {} loose files not opened",
+            report.top_level.len() + report.nested.len(),
+            report.nested.len(),
+            report.failed.len(),
+            vfs.loose_files().len(),
+        );
+        if report.top_level.is_empty() {
+            TaskResult::Mounted(Err(format!("no archives could be mounted: {summary}")))
+        } else {
+            TaskResult::Mounted(Ok(Box::new((vfs, summary))))
+        }
+    })
+}
+
+/// Largest text entry read for name harvesting.
+const MAX_TEXT: u64 = 4 << 20;
+
+/// One entry to classify.
+pub struct IndexJob {
+    /// The entry.
+    pub file: FileRef,
+    /// Where its bytes are.
+    pub location: Location,
+    /// The picked file holding them.
+    pub source: Rc<dyn ByteSource>,
+}
+
+/// Index jobs for every entry that is not itself a mounted archive.
+pub fn index_jobs(vfs: &Vfs) -> Vec<IndexJob> {
+    let nested: BTreeSet<(ArchiveId, u32)> =
+        vfs.archives().iter().filter_map(|a| a.parent).collect();
+    let mut jobs = Vec::new();
+    for (i, archive) in vfs.archives().iter().enumerate() {
+        let aid = ArchiveId(i as u32);
+        for &entry in &archive.index.entries {
+            if nested.contains(&(aid, entry.id)) {
+                continue;
+            }
+            let file = FileRef {
+                archive: aid,
+                entry,
+            };
+            let (Ok(location), Some(source)) =
+                (vfs.locate(&file), vfs.source(archive.location.source))
+            else {
+                continue;
+            };
+            jobs.push(IndexJob {
+                file,
+                location,
+                source,
+            });
+        }
+    }
+    jobs
+}
+
+/// Classifies every entry and harvests names from text entries.
+pub fn index(jobs: Vec<IndexJob>) -> Task {
+    Box::pin(async move {
+        let mut kinds = BTreeMap::new();
+        let mut tokens = BTreeSet::new();
+        for job in jobs {
+            let n = job.location.len.min(SNIFF_LEN as u64) as usize;
+            let Ok(prefix) = job.source.read_at(job.location.offset, n).await else {
+                continue;
+            };
+            let kind = sniff(&prefix, job.location.len);
+            kinds.insert((job.file.archive, job.file.entry.id), kind);
+            if kind == Kind::Text
+                && job.location.len <= MAX_TEXT
+                && let Ok(text) = job
+                    .source
+                    .read_at(job.location.offset, job.location.len as usize)
+                    .await
+            {
+                tokens.extend(harvest_tokens(&text));
+            }
+        }
+        TaskResult::Indexed { kinds, tokens }
+    })
+}
+
+/// Reads `len` bytes at `location` (the whole file when `len` is `None`).
+pub fn read(
+    purpose: Purpose,
+    source: Rc<dyn ByteSource>,
+    location: Location,
+    len: Option<u64>,
+) -> Task {
+    Box::pin(async move {
+        let len = len.unwrap_or(location.len).min(location.len);
+        let bytes = match usize::try_from(len) {
+            Ok(n) => source
+                .read_at(location.offset, n)
+                .await
+                .map_err(|e| format!("read failed ({:?})", e.kind())),
+            Err(_) => Err("file too large".to_owned()),
+        };
+        TaskResult::Loaded { purpose, bytes }
+    })
+}
+
+/// The picked files of a native folder: top-level files only, archives
+/// opened for reading, everything else listed by size and never opened.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn native_files(dir: &std::path::Path) -> Result<Vec<PickedFile>, String> {
+    use glasnost_vfs::MountOptions;
+    use glasnost_vfs::source::{FileSource, Unopened};
+    let archive_ext = MountOptions::default().archive_extensions;
+    let entries =
+        std::fs::read_dir(dir).map_err(|e| format!("cannot list the folder ({:?})", e.kind()))?;
+    let mut files = Vec::new();
+    for e in entries.flatten() {
+        let Ok(meta) = e.metadata() else { continue };
+        if !meta.is_file() {
+            continue;
+        }
+        let name = e.file_name().to_string_lossy().into_owned();
+        let ext = name
+            .rsplit_once('.')
+            .map(|(_, x)| x.to_ascii_lowercase())
+            .unwrap_or_default();
+        let source: Rc<dyn ByteSource> = if archive_ext.contains(&ext) {
+            match FileSource::open(&e.path()) {
+                Ok(f) => Rc::new(f),
+                Err(_) => continue,
+            }
+        } else {
+            Rc::new(Unopened(meta.len()))
+        };
+        files.push(PickedFile { path: name, source });
+    }
+    Ok(files)
+}
