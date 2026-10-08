@@ -14,7 +14,9 @@
 //!   chunk may hold only one. (XCC uses each chunk's decoded size; OpenRA
 //!   instead decodes whole bytes until the file's total decoded size is
 //!   reached. Both agree on files whose chunks hold even sample counts
-//!   except the last.)
+//!   except the last.) The last chunk may state one sample more than its
+//!   nibbles hold; real files do this, and the missing sample repeats the
+//!   one before it.
 //!
 //! Supported combinations: Westwood mono or stereo 8-bit (stereo bytes are
 //! taken as interleaved), IMA mono 16-bit. Others are
@@ -170,6 +172,9 @@ impl<'a> Aud<'a> {
         let mut total: u64 = 0;
         let past = |_| Error::Invalid("AUD chunk extends past the compressed data");
         while !r.is_empty() {
+            let last_fits = |input: u32, output: u32| {
+                ima && output.is_multiple_of(2) && output == input * 4 + 2
+            };
             let size_in = r.u16().map_err(past)?;
             let output_size = r.u16().map_err(past)?;
             if r.u32().map_err(past)? != CHUNK_ID {
@@ -179,6 +184,7 @@ impl<'a> Aud<'a> {
             let (input, output) = (u32::from(size_in), u32::from(output_size));
             let fits = if ima {
                 output.is_multiple_of(2) && output <= input * 4
+                    || (r.is_empty() && last_fits(input, output))
             } else {
                 input == output || output <= input * 64
             };
@@ -232,8 +238,14 @@ impl<'a> Aud<'a> {
                 let mut state = ImaState::default();
                 for c in &self.chunks {
                     let n = usize::from(c.output_size) / 2;
-                    adpcm::ima_decode(c.data, n, &mut state, &mut samples)
+                    // Only the last chunk may state one sample more than
+                    // its nibbles hold (checked in `parse`).
+                    let held = n.min(c.data.len() * 2);
+                    adpcm::ima_decode(c.data, held, &mut state, &mut samples)
                         .map_err(|_| Error::Invalid("AUD IMA chunk too short"))?;
+                    if held < n {
+                        samples.push(state.sample());
+                    }
                 }
             }
         }
@@ -539,5 +551,38 @@ mod tests {
         for f in fixture_bytes() {
             assert!(f.len() < 16 * 1024, "{}", f.len());
         }
+    }
+
+    fn ima_file(chunks: &[(&[u8], u16)]) -> Vec<u8> {
+        let body: usize = chunks.iter().map(|(d, _)| 8 + d.len()).sum();
+        let out: u32 = chunks.iter().map(|&(_, o)| u32::from(o)).sum();
+        let mut f = Vec::new();
+        f.put_u16(22050);
+        f.put_u32(len_u32(body));
+        f.put_u32(out);
+        f.extend_from_slice(&[FLAG_16BIT, 99]);
+        for (d, o) in chunks {
+            f.put_u16(len_u16(d.len()));
+            f.put_u16(*o);
+            f.put_u32(CHUNK_ID);
+            f.extend_from_slice(d);
+        }
+        f
+    }
+
+    #[test]
+    fn last_ima_chunk_may_state_one_extra_sample() {
+        // Chunk 1: 2 bytes, 4 samples. Chunk 2: 1 byte holds 2 samples but
+        // states 3; the third repeats the second.
+        let file = ima_file(&[(&[0x11, 0x22], 8), (&[0x33], 6)]);
+        let pcm = Aud::parse(&file).unwrap().decode().unwrap();
+        assert_eq!(pcm.samples.len(), 7);
+        assert_eq!(pcm.samples[6], pcm.samples[5]);
+        // The same overstatement on a chunk that is not the last is an error.
+        let file = ima_file(&[(&[0x33], 6), (&[0x11, 0x22], 8)]);
+        assert!(Aud::parse(&file).is_err());
+        // Two samples too many is an error even on the last chunk.
+        let file = ima_file(&[(&[0x11, 0x22], 8), (&[0x33], 8)]);
+        assert!(Aud::parse(&file).is_err());
     }
 }
