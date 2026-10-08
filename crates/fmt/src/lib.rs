@@ -1,19 +1,29 @@
 //! File-format parsers, each paired with a writer for synthetic fixtures.
 //!
-//! **Milestone M1** fills the parsers listed in PLAN.md section 4.2 (archives,
-//! sprites, tiles, voxels, palettes, string tables, sound banks, fonts and the
-//! compression schemes). Each parser lands together with a [`fixture`] writer
-//! so that tests and CI run on bytes we generated ourselves, never on game
-//! data.
+//! Every parser here reads the public, documented container and asset
+//! formats of the user's install. Layouts follow OpenRA and XCC (both
+//! GPL-3.0-or-later, credited in each module) and public format notes. None
+//! of this code describes game behaviour; it only turns bytes into
+//! structures.
 //!
-//! What exists in M0:
-//! - [`image`]: the format-neutral decoded forms (palette-indexed images and
-//!   palettes) that parsers will produce and the renderer consumes;
-//! - [`synth`]: deterministic generators of invented content for fixtures and
-//!   demos;
-//! - [`fixture`]: the writer trait, the fixture registry, the manifest that
-//!   records what was generated, and the round-trip test harness.
+//! **Hostile input.** Parsers never panic: every read is bounds-checked
+//! ([`bytes`]), allocations are bounded by the input or by [`limits`], and
+//! failures are [`Error`] values. Fuzz targets live in `fuzz/` (cargo-fuzz)
+//! and a stable smoke test (`tests/hostile.rs`) runs mutated fixtures in CI.
+//!
+//! Each parser lands together with a [`fixture`] writer so that tests and CI
+//! run on bytes we generated ourselves, never on game data.
 
+#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+#![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
+
+pub mod bytes;
+pub mod error;
 pub mod fixture;
 pub mod image;
+pub mod limits;
+pub mod mix;
+pub mod mix_key;
 pub mod synth;
+
+pub use error::{Error, Result};

@@ -8,6 +8,9 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
+base64 = "0.23"
+blowfish = "0.10"
+num-bigint = "0.5"
 
 
 [lints]

@@ -89,6 +89,7 @@ pub fn ramp_palette(tint: usize) -> Palette {
 ///
 /// # Panics
 /// If `cell` is zero.
+#[allow(clippy::expect_used)]
 pub fn checkerboard(width: u32, height: u32, cell: u32) -> IndexedImage {
     assert!(cell > 0, "cell size must be positive");
     let mut pixels = Vec::with_capacity(width as usize * height as usize);
