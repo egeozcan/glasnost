@@ -1,0 +1,61 @@
+// SPDX-License-Identifier: CC0-1.0
+// glasnost-synthetic: invented test data, not derived from any game files.
+//
+// Two invented sides with a handful of invented objects. Units: cost in
+// credits, health in hit points, speed in leptons per tick, sight in cells.
+{
+  "owners": {
+    "heliotrope": {},
+    "basalt": {},
+  },
+  "objects": {
+    // Abstract templates (never built) start with "^".
+    "^syn_walker": {
+      "kind": "infantry",
+      "armor": "foam",
+      "sight": "4c",
+      "speed": 9,
+    },
+    "^syn_roller": {
+      "kind": "vehicle",
+      "armor": "lattice",
+      "sight": "6c",
+      "speed": 13,
+    },
+    "syn_depot": {
+      "kind": "building",
+      "armor": "slab",
+      "cost": 1337,
+      "health": 1789,
+      "owners": ["heliotrope", "basalt"],
+      "prerequisites": [],
+    },
+    "syn_fizz_squad": {
+      "inherits": ["^syn_walker"],
+      "cost": 143,
+      "health": 97,
+      "owners": ["heliotrope"],
+      "prerequisites": ["syn_depot"],
+      "armament": {
+        "primary": { "weapon": "wpn_fizzer" },
+      },
+    },
+    "syn_crack_rover": {
+      "inherits": ["^syn_roller"],
+      "cost": 917,
+      "health": 433,
+      "owners": ["basalt"],
+      "prerequisites": ["syn_depot"],
+      "armament": {
+        "primary": { "weapon": "wpn_cracker" },
+        "secondary": { "weapon": "wpn_fizzer" },
+      },
+    },
+    // Inherits a concrete object, then adds an owner with a set operation.
+    "syn_crack_rover_mk2": {
+      "inherits": ["syn_crack_rover"],
+      "cost": 1029,
+      "owners": { "+": ["heliotrope"] },
+    },
+  },
+}

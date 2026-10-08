@@ -1,0 +1,14 @@
+// SPDX-License-Identifier: CC0-1.0
+// glasnost-synthetic: invented test data, not derived from any game files.
+{
+  "globals": {
+    "economy": {
+      "starting_credits": 7350, // credits
+    },
+    "production": {
+      "build_queue_length": 7,
+    },
+    // Quirk switches arrive with the specs that define them (M3+).
+    "quirks": {},
+  },
+}

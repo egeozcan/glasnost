@@ -1,0 +1,15 @@
+// SPDX-License-Identifier: CC0-1.0
+// glasnost-synthetic: invented test data. Every name and number in this
+// directory was made up for Glasnost's tests; none comes from any game's files.
+//
+// Synthetic ruleset skeleton (M0). It exercises the shape of our rules format
+// (PLAN.md 4.6) before the schema exists: objects keyed by instance name,
+// `inherits` lists, `^abstract` templates, set operations, integer numbers in
+// native units and quoted decimals with a unit. The schema crate (M1) will
+// type-check it; until then crates/deterministic/rules/tests checks its shape.
+{
+  "schema": 0, // pre-release; M1 freezes schema 1
+  "name": "glasnost-synthetic",
+  // Layers in application order; later layers patch earlier ones.
+  "layers": ["globals.jsonc", "combat.jsonc", "objects.jsonc"],
+}
