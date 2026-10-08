@@ -6,17 +6,29 @@ An open-source reimplementation of the game engine for **Command & Conquer: Yuri
 
 ## Status
 
-**Planning. There is no code yet.** The first goal is skirmish against our own AI with the Allied, Soviet and Yuri factions, with the mechanics replicated closely. Multiplayer comes once the mechanics are right. The simulation is deterministic and lockstep-ready from the start.
+**Milestone M0 (engineering).** The Cargo workspace, its determinism, citation and "no stock numbers" checks, CI, a synthetic ruleset and a renderer demo exist. There is no game yet. The first goal is skirmish against our own AI with the Allied, Soviet and Yuri factions, with the mechanics replicated closely. Multiplayer comes once the mechanics are right. The simulation is deterministic and lockstep-ready from the start.
 
 ## You need your own copy of the game
 
 This repository contains **no EA game assets**: no graphics, sounds, maps, rules values or executables. At runtime the engine imports these from an install of Yuri's Revenge that you own, and everything it imports stays on your machine. Nothing derived from the game data is uploaded or redistributed.
+
+## Building
+
+Rust is pinned in `rust-toolchain.toml` (rustup installs it on first use).
+
+```sh
+cargo run -p glasnost-platform-native   # native renderer demo (Vulkan/Metal/DX12/GL)
+cargo xtask web --serve                 # web demo at http://127.0.0.1:8000/ (needs wasm-bindgen-cli, see docs/web.md)
+cargo test --workspace                  # tests
+cargo xtask check                       # dependency rule, determinism, citations, no stock numbers
+```
 
 ## Documents
 
 - [PLAN.md](PLAN.md): architecture, milestones and decisions.
 - [PROVENANCE.md](PROVENANCE.md): how behaviour specs are produced and how they reach the code (the two-team process).
 - [CONTRIBUTING.md](CONTRIBUTING.md): workflow, determinism rules, data rules and commit sign-off.
+- [docs/development.md](docs/development.md): workspace layout, repository checks, CI. [docs/web.md](docs/web.md): the web build and browser tests.
 - [spec/](spec/README.md): behaviour specs. [measurements/](measurements/README.md): measurement records from the original game.
 
 ## Disclaimer
