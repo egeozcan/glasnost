@@ -16,5 +16,6 @@ pub mod gpu;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod offscreen;
 pub mod palette_quad;
+pub mod remap;
 
 pub use wgpu;
