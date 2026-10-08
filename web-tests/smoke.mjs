@@ -7,6 +7,10 @@
 //
 // Usage: node smoke.mjs [--browser chromium|firefox|webkit] [--backend webgl2|webgpu|auto]
 //                       [--webgpu] [--expect WebGL2|WebGPU] [--dist ../dist/web] [--out out] [--headed]
+//                       [--viewer [--install DIR]]
+//
+// --viewer opens the asset viewer (?mode=viewer) instead of the demo and
+// imports DIR (default: the synthetic MIX fixtures) through its folder input.
 //
 // --webgpu turns on Chromium's WebGPU flags (implied by --backend webgpu), so
 // `--backend auto --webgpu --expect WebGPU` checks the runtime selection.
@@ -45,7 +49,10 @@ const server = http.createServer((req, res) => {
   fs.createReadStream(file).pipe(res);
 });
 await new Promise((r) => server.listen(0, "127.0.0.1", r));
-const url = `http://127.0.0.1:${server.address().port}/?backend=${backend}`;
+const viewer = args.viewer === true;
+const url = `http://127.0.0.1:${server.address().port}/?backend=${backend}${viewer ? "&mode=viewer" : ""}`;
+// Synthetic install for the viewer lane: our own fixture archives, never game data.
+const syntheticInstall = path.resolve(here, args.install ?? "../tests/fixtures/synthetic/mix");
 
 // Software rendering so the lane runs on GPU-less CI machines.
 const launchOptions = {
@@ -92,10 +99,21 @@ try {
     }
     console.log(`[${browserName}/${backend}] presented with ${data.glasnostBackend} (${data.glasnostDetail})`);
 
+    if (viewer) {
+      // Import a synthetic folder through the folder input, as a user would.
+      await page.locator("#glasnost-folder").setInputFiles(syntheticInstall);
+      const mount = await page
+        .waitForFunction(() => document.body.dataset.glasnostMount, null, { timeout: timeoutMs })
+        .then((h) => h.jsonValue())
+        .catch(() => null);
+      console.log(`[${browserName}/${backend}] viewer mount: ${mount}`);
+      if (!mount || !mount.startsWith("mounted:")) fail(`viewer did not mount the synthetic folder (${mount})`);
+    }
+
     // Let a few frames render, then screenshot just the canvas.
     await page.waitForTimeout(500);
     fs.mkdirSync(outDir, { recursive: true });
-    const png = await page.locator("canvas").screenshot({ path: path.join(outDir, `${browserName}-${backend}.png`) });
+    const png = await page.locator("canvas").screenshot({ path: path.join(outDir, `${browserName}-${backend}${viewer ? "-viewer" : ""}.png`) });
 
     // Decode the PNG in a blank page and measure it.
     const probe = await browser.newPage();
@@ -115,8 +133,12 @@ try {
     await probe.close();
 
     console.log(`[${browserName}/${backend}] canvas ${stats.w}x${stats.h}, centre ${stats.centre}, corner ${stats.corner}, ${stats.distinct} colours in the middle`);
-    if (stats.distinct < 8) fail(`only ${stats.distinct} distinct colours in the middle; the checkerboard did not render`);
-    if (stats.corner.some((c) => c > 64)) fail(`corner ${stats.corner} is not the dark clear colour`);
+    if (!viewer) {
+      if (stats.distinct < 8) fail(`only ${stats.distinct} distinct colours in the middle; the checkerboard did not render`);
+      if (stats.corner.some((c) => c > 64)) fail(`corner ${stats.corner} is not the dark clear colour`);
+    } else if (stats.distinct < 2) {
+      fail("the viewer canvas is blank");
+    }
   }
   if (failed) console.error(logs.join("\n"));
 } finally {

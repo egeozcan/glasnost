@@ -41,6 +41,7 @@ jobs:
         run: >-
           cargo clippy --locked --target wasm32-unknown-unknown
           -p glasnost-platform-web -p glasnost-app -p glasnost-render -p glasnost-fmt
+          -p glasnost-vfs -p glasnost-audio
           -p glasnost-sim -p glasnost-ai -p glasnost-map -p glasnost-rules
           -- -D warnings
 
@@ -128,6 +129,9 @@ jobs:
         run: npx playwright install --with-deps ${{ matrix.browser }}
       - working-directory: web-tests
         run: node smoke.mjs --browser ${{ matrix.browser }} --backend webgl2
+      # Asset viewer: imports the synthetic MIX fixtures through the folder input.
+      - working-directory: web-tests
+        run: node smoke.mjs --browser ${{ matrix.browser }} --backend webgl2 --viewer
       - if: always()
         uses: actions/upload-artifact@v5
         with:
