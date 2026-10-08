@@ -1,0 +1,164 @@
+# Continuous integration. Uses only synthetic data: no game files, no stock
+# values, no install paths (CONTRIBUTING.md, "No EA bytes, anywhere").
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+jobs:
+  fmt:
+    name: rustfmt
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - run: rustup toolchain install
+      - run: cargo fmt --all --check
+
+  clippy:
+    name: clippy (native and wasm32)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - run: rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - name: clippy, whole workspace (simulation crates use crates/deterministic/clippy.toml)
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: clippy, wasm32 (web crates and simulation crates)
+        run: >-
+          cargo clippy --locked --target wasm32-unknown-unknown
+          -p glasnost-platform-web -p glasnost-app -p glasnost-render -p glasnost-fmt
+          -p glasnost-sim -p glasnost-ai -p glasnost-map -p glasnost-rules
+          -- -D warnings
+
+  test:
+    name: tests (with a software GPU)
+    runs-on: ubuntu-24.04
+    env:
+      # Fail, rather than skip, GPU tests when no adapter is found.
+      GLASNOST_REQUIRE_GPU: "1"
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install lavapipe (software Vulkan) for the offscreen render test
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends mesa-vulkan-drivers
+      - run: rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --workspace --locked
+
+  repo-checks:
+    name: dependency rule, determinism, citations, no stock numbers
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - run: rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      # deps, determinism, cite, stock-guard and the clippy canary.
+      - run: cargo xtask check
+
+  licenses:
+    name: dependency licences (GPL-3.0-or-later compatible)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check licenses bans sources
+
+  wasm:
+    name: web build (wasm32-unknown-unknown)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - run: rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - name: Read the wasm-bindgen version from Cargo.lock
+        id: wbg
+        run: echo "version=$(grep -A1 '^name = "wasm-bindgen"$' Cargo.lock | sed -n 's/^version = "\(.*\)"$/\1/p')" >> "$GITHUB_OUTPUT"
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-bindgen@${{ steps.wbg.outputs.version }}
+      - run: cargo xtask web --release
+      - uses: actions/upload-artifact@v5
+        with:
+          name: web-dist
+          path: dist/web
+          retention-days: 7
+
+  # Browser lane (PLAN.md 6.2, layer 3): the WebGL2 lane is mandatory from M0.
+  browser-webgl2:
+    name: browser lane, WebGL2 (${{ matrix.browser }})
+    needs: wasm
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox, webkit]
+    # WebKit has not been verified yet (it needs system packages the dev
+    # machine lacks); make it blocking once it has run green here.
+    continue-on-error: ${{ matrix.browser == 'webkit' }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v5
+        with:
+          name: web-dist
+          path: dist/web
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web-tests/package-lock.json
+      - working-directory: web-tests
+        run: npm ci
+      - working-directory: web-tests
+        run: npx playwright install --with-deps ${{ matrix.browser }}
+      - working-directory: web-tests
+        run: node smoke.mjs --browser ${{ matrix.browser }} --backend webgl2
+      - if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: screenshot-webgl2-${{ matrix.browser }}
+          path: web-tests/out
+          if-no-files-found: ignore
+
+  # Optional, non-blocking: WebGPU through Chromium's software Vulkan path.
+  browser-webgpu:
+    name: browser lane, WebGPU (optional)
+    needs: wasm
+    runs-on: ubuntu-24.04
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v5
+        with:
+          name: web-dist
+          path: dist/web
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web-tests/package-lock.json
+      - working-directory: web-tests
+        run: npm ci
+      - working-directory: web-tests
+        run: npx playwright install --with-deps chromium
+      - working-directory: web-tests
+        run: node smoke.mjs --browser chromium --backend webgpu
+      - if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: screenshot-webgpu-chromium
+          path: web-tests/out
+          if-no-files-found: ignore

@@ -1,0 +1,13 @@
+{
+  "name": "glasnost-web-tests",
+  "private": true,
+  "license": "GPL-3.0-or-later",
+  "type": "module",
+  "description": "Browser lane: loads the wasm demo in real browsers and checks that it renders.",
+  "scripts": {
+    "smoke": "node smoke.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.63.0"
+  }
+}

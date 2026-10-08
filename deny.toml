@@ -1,0 +1,44 @@
+# cargo-deny configuration: `cargo deny check licenses bans sources`.
+# Dependencies must be compatible with GPL-3.0-or-later (CONTRIBUTING.md).
+
+[graph]
+all-features = false
+
+[licenses]
+# Permissive and weak-copyleft licences compatible with GPL-3.0-or-later.
+# GPL-2.0-only is deliberately absent: it is incompatible with GPL-3.
+allow = [
+    "GPL-3.0-or-later",
+    "GPL-3.0-only",
+    "LGPL-2.1-or-later",
+    "LGPL-3.0-or-later",
+    "MPL-2.0",
+    "MIT",
+    "MIT-0",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "BSL-1.0",
+    "ISC",
+    "Zlib",
+    "CC0-1.0",
+    "Unicode-3.0",
+    "Unlicense",
+]
+confidence-threshold = 0.9
+# The allow list is policy, not an inventory; unused entries are fine.
+unused-allowed-license = "allow"
+
+[licenses.private]
+# Our own crates are unpublished and GPL-3.0-or-later.
+ignore = true
+
+[bans]
+multiple-versions = "allow"
+wildcards = "deny"
+allow-wildcard-paths = true
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
