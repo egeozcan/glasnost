@@ -12,8 +12,20 @@ use std::fmt::Write as _;
 use std::path::Path;
 use std::rc::Rc;
 
+use std::collections::BTreeSet;
+
+use glasnost_fmt::csf::Csf;
+use glasnost_fmt::hva::Hva;
+use glasnost_fmt::mix::id_hash;
+use glasnost_fmt::pal::Palette6;
+use glasnost_fmt::pcx::Pcx;
+use glasnost_fmt::shp::{FrameStats, Shp};
+use glasnost_fmt::sniff::{Kind, SNIFF_LEN, sniff};
+use glasnost_fmt::tmp::Tmp;
+use glasnost_fmt::vxl::Vxl;
+use glasnost_vfs::names::{candidates, harvest_tokens};
 use glasnost_vfs::source::FileSource;
-use glasnost_vfs::{MountOptions, PickedFile, Vfs};
+use glasnost_vfs::{ArchiveId, FileRef, MountOptions, PickedFile, Vfs};
 
 /// Environment variable naming the install folder.
 pub const GAME_DIR_VAR: &str = "GLASNOST_GAME_DIR";
@@ -109,13 +121,32 @@ impl std::fmt::Display for Report {
     }
 }
 
-/// Labels of the M1 headline numbers.
+/// Labels of the report lines the opt-in test checks.
 pub mod labels {
     /// Encrypted MIX headers decrypted to a consistent index.
     pub const MIX_DECRYPTED: &str = "MIX headers decrypted (top-level and nested)";
     /// Top-level archives mounted.
     pub const MIX_TOP: &str = "top-level MIX containers mounted";
+    /// SHP files in conqmd.mix that parsed (of those the sniffer calls SHP).
+    pub const CONQ_SHP_FILES: &str = "conqmd.mix: SHP files parsed";
+    /// SHP frames in conqmd.mix decoded.
+    pub const CONQ_SHP_FRAMES: &str = "conqmd.mix: SHP frames decoded";
+    /// VXL files under ra2.mix and ra2md.mix that parsed.
+    pub const RA2_VXL_FILES: &str = "ra2.mix/ra2md.mix: VXL files parsed";
+    /// Every check the test requires at 100 %.
+    pub const REQUIRED: &[&str] = &[
+        MIX_TOP,
+        MIX_DECRYPTED,
+        CONQ_SHP_FILES,
+        CONQ_SHP_FRAMES,
+        RA2_VXL_FILES,
+    ];
 }
+
+/// Name of the sprite archive the M1 exit criterion names.
+const CONQ_ARCHIVE: &str = "conqmd.mix";
+/// Top-level archives whose voxels the M1 exit criterion counts.
+const VOXEL_SCOPES: &[&str] = &["ra2.mix", "ra2md.mix"];
 
 /// Runs the lane over the install at `dir`.
 pub fn run(dir: &Path) -> std::io::Result<Report> {
@@ -190,7 +221,217 @@ async fn run_async(dir: &Path) -> std::io::Result<Report> {
             .map(|a| a.index.entries.len() as u64)
             .sum(),
     );
+    vfs.learn_name(CONQ_ARCHIVE);
+    classify(&mut vfs, &mut report).await;
     Ok(report)
+}
+
+/// Which top-level archive an archive sits under (lower-case name).
+fn top_level_name(vfs: &Vfs, mut id: ArchiveId) -> String {
+    while let Some(a) = vfs.archive(id) {
+        match a.parent {
+            Some((p, _)) => id = p,
+            None => return a.name.to_ascii_lowercase(),
+        }
+    }
+    String::new()
+}
+
+/// Sniffs every entry that is not itself a mounted archive and runs the
+/// strict parser for its kind.
+async fn classify(vfs: &mut Vfs, report: &mut Report) {
+    let nested: BTreeSet<(ArchiveId, u32)> =
+        vfs.archives().iter().filter_map(|a| a.parent).collect();
+    let mut kinds: BTreeMap<&'static str, u64> = BTreeMap::new();
+    let mut shp_by_compression: BTreeMap<u32, u64> = BTreeMap::new();
+    let mut leniency = FrameStats::default();
+    let mut limbs = 0u64;
+    let mut tokens: BTreeSet<String> = BTreeSet::new();
+    let mut unreadable = Tally::default();
+    for (i, archive) in vfs.archives().iter().enumerate() {
+        let aid = ArchiveId(i as u32);
+        let in_conq = archive.name.eq_ignore_ascii_case(CONQ_ARCHIVE);
+        let in_voxel_scope = VOXEL_SCOPES.contains(&top_level_name(vfs, aid).as_str());
+        for entry in archive.index.entries.clone() {
+            if nested.contains(&(aid, entry.id)) {
+                continue;
+            }
+            let file = FileRef {
+                archive: aid,
+                entry,
+            };
+            let prefix = match vfs.read_prefix(&file, SNIFF_LEN as u64).await {
+                Ok(p) => {
+                    unreadable.pass();
+                    p
+                }
+                Err(e) => {
+                    unreadable.fail(&mount_error_kind(&e));
+                    continue;
+                }
+            };
+            let kind = sniff(&prefix, u64::from(entry.size));
+            *kinds.entry(kind.label()).or_default() += 1;
+            let needs_body = matches!(
+                kind,
+                Kind::Shp
+                    | Kind::Vxl
+                    | Kind::Tmp
+                    | Kind::Pal
+                    | Kind::Csf
+                    | Kind::Hva
+                    | Kind::Pcx
+                    | Kind::Text
+            );
+            if !needs_body {
+                continue;
+            }
+            let Ok(bytes) = vfs.read(&file).await else {
+                report.tally("entries readable in full").fail("io");
+                continue;
+            };
+            match kind {
+                Kind::Shp => {
+                    let shp = Shp::parse(&bytes);
+                    let files = report.tally("all archives: SHP files parsed");
+                    match &shp {
+                        Ok(_) => files.pass(),
+                        Err(e) => files.fail(e.kind()),
+                    }
+                    if in_conq {
+                        let t = report.tally(labels::CONQ_SHP_FILES);
+                        match &shp {
+                            Ok(_) => t.pass(),
+                            Err(e) => t.fail(e.kind()),
+                        }
+                    }
+                    let Ok(shp) = shp else { continue };
+                    for (fi, f) in shp.frames.iter().enumerate() {
+                        let result = shp.decode_frame_stats(fi);
+                        if !f.is_empty() {
+                            *shp_by_compression
+                                .entry(u32::from(f.compression))
+                                .or_default() += 1;
+                        }
+                        if let Ok((_, s)) = &result {
+                            leniency.short_rows += s.short_rows;
+                            leniency.clamped_runs += s.clamped_runs;
+                            leniency.clamped_runs_unusual += s.clamped_runs_unusual;
+                        }
+                        for label in ["all archives: SHP frames decoded"]
+                            .into_iter()
+                            .chain(in_conq.then_some(labels::CONQ_SHP_FRAMES))
+                        {
+                            let t = report.tally(label);
+                            match &result {
+                                Ok(_) => t.pass(),
+                                Err(e) => t.fail(e.kind()),
+                            }
+                        }
+                    }
+                }
+                Kind::Vxl => {
+                    let v = Vxl::parse(&bytes);
+                    let label = if in_voxel_scope {
+                        labels::RA2_VXL_FILES
+                    } else {
+                        "other archives: VXL files parsed"
+                    };
+                    let t = report.tally(label);
+                    match &v {
+                        Ok(_) => t.pass(),
+                        Err(e) => t.fail(e.kind()),
+                    }
+                    if let (Ok(v), true) = (v, in_voxel_scope) {
+                        limbs += v.limbs.len() as u64;
+                    }
+                }
+                Kind::Tmp => {
+                    let t = Tmp::parse(&bytes).and_then(|t| {
+                        for i in 0..t.tiles.len() {
+                            if t.tiles[i].is_some() {
+                                t.decode_tile(i)?;
+                            }
+                        }
+                        Ok(())
+                    });
+                    record(report, "TMP templates decoded (all tiles)", t);
+                }
+                Kind::Pal => record(
+                    report,
+                    "PAL palettes parsed",
+                    Palette6::parse(&bytes).map(|_| ()),
+                ),
+                Kind::Csf => record(
+                    report,
+                    "CSF string tables parsed",
+                    Csf::parse(&bytes).map(|_| ()),
+                ),
+                Kind::Hva => record(
+                    report,
+                    "HVA animations parsed",
+                    Hva::parse(&bytes).map(|_| ()),
+                ),
+                Kind::Pcx => record(report, "PCX images decoded", Pcx::parse(&bytes).map(|_| ())),
+                Kind::Text => tokens.extend(harvest_tokens(&bytes)),
+                _ => {}
+            }
+        }
+    }
+    report.tallies.push(("entries readable".into(), unreadable));
+    report.count("ra2.mix/ra2md.mix: VXL limbs decoded", limbs);
+    for (kind, n) in kinds {
+        report.count(&format!("entries sniffed as {kind}"), n);
+    }
+    for (c, n) in shp_by_compression {
+        report.count(
+            &format!("SHP frames with compression {c} (all archives)"),
+            n,
+        );
+    }
+    report.count(
+        "SHP rows padded (short rows)",
+        u64::from(leniency.short_rows),
+    );
+    report.count(
+        "SHP zero runs cut at a row end (final run, one past: usual)",
+        u64::from(leniency.clamped_runs - leniency.clamped_runs_unusual),
+    );
+    report.count(
+        "SHP zero runs cut at a row end (other)",
+        u64::from(leniency.clamped_runs_unusual),
+    );
+    let before = vfs.names().len();
+    for token in &tokens {
+        for name in candidates(token) {
+            if vfs.contains_id(id_hash(&name)) {
+                vfs.learn_name(&name);
+            }
+        }
+    }
+    report.count(
+        "names learned from text entries",
+        (vfs.names().len() - before) as u64,
+    );
+    let (named, total) = vfs.archives().iter().fold((0u64, 0u64), |(n, t), a| {
+        let k = a
+            .index
+            .entries
+            .iter()
+            .filter(|e| vfs.names().get(e.id).is_some())
+            .count();
+        (n + k as u64, t + a.index.entries.len() as u64)
+    });
+    report.count("entries with a known name", named);
+    report.count("entries in total", total);
+}
+
+fn record(report: &mut Report, label: &str, result: glasnost_fmt::Result<()>) {
+    let t = report.tally(label);
+    match result {
+        Ok(()) => t.pass(),
+        Err(e) => t.fail(e.kind()),
+    }
 }
 
 fn mount_error_kind(e: &glasnost_vfs::MountError) -> String {

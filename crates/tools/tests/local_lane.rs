@@ -11,7 +11,7 @@ fn real_install_parses_completely() {
     };
     let report = local_lane::run(std::path::Path::new(&dir)).expect("install folder readable");
     eprint!("{report}");
-    for label in [labels::MIX_TOP, labels::MIX_DECRYPTED] {
+    for &label in labels::REQUIRED {
         let t = report.get(label).expect("tally present");
         assert!(t.total() > 0, "{label}: nothing found");
         assert!(t.all_ok(), "{label}: {t:?}");
