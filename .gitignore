@@ -1,6 +1,8 @@
 # Personal and machine-specific notes
 LOCAL.md
 .claude/settings.local.json
+# Git worktrees created for isolated agent sessions
+.claude/worktrees/
 
 # Build output
 target/
