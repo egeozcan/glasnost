@@ -1,0 +1,54 @@
+# Personal and machine-specific notes
+LOCAL.md
+.claude/settings.local.json
+
+# Build output
+target/
+pkg/
+dist/
+node_modules/
+*.wasm
+
+# Imported or local game data: never committed
+/game-data/
+/import/
+/imported/
+/local-data/
+/local-lane/
+measurements/local/
+
+# EA archive and asset formats (any case). Synthetic fixtures made by our own
+# writers are re-included below.
+*.[mM][iI][xX]
+*.[sS][hH][pP]
+*.[vV][xX][lL]
+*.[hH][vV][aA]
+*.[pP][aA][lL]
+*.[iI][dD][xX]
+*.[bB][aA][gG]
+*.[aA][uU][dD]
+*.[cC][sS][fF]
+*.[bB][iI][kK]
+*.[mM][aA][pP]
+*.[mM][pP][rR]
+*.[yY][rR][mM]
+*.[eE][xX][eE]
+*.[dD][lL][lL]
+rulesmd*.ini
+artmd*.ini
+aimd*.ini
+soundmd*.ini
+*md.ini
+!**/tests/fixtures/**
+!**/fixtures/synthetic/**
+
+# Local recordings and logs from oracle runs
+*.mkv
+*.mp4
+*.log
+
+# Editors and OS
+.DS_Store
+*.swp
+.idea/
+.vscode/

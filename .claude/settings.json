@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "deny": [
+      "Read(~/yr-spec-dirty/**)",
+      "Edit(~/yr-spec-dirty/**)",
+      "Read(~/ra2-yr-setup/**)",
+      "Edit(~/ra2-yr-setup/**)",
+      "Read(~/.claude/projects/*ra2-yr-setup*/**)",
+      "Read(~/.claude/projects/*yr-spec-dirty*/**)",
+      "Read(~/yr-scrub/**)",
+      "Edit(~/yr-scrub/**)",
+      "Bash(*yr-spec-dirty*)",
+      "Bash(*yr-scrub*)",
+      "Bash(*ra2-yr-setup*)",
+      "Bash(*ghidra*)",
+      "Bash(*objdump*)",
+      "Bash(*radare2*)",
+      "Bash(*rizin*)",
+      "Bash(rz-*)",
+      "Bash(r2 *)",
+      "WebFetch(domain:modenc.renegadeprojects.com)",
+      "WebFetch(domain:phobos.readthedocs.io)",
+      "WebFetch(domain:ares-developers.github.io)",
+      "WebFetch(domain:ares.strategy-x.com)",
+      "WebFetch(domain:chronodivide.com)",
+      "WebFetch(domain:game.chronodivide.com)"
+    ]
+  }
+}
