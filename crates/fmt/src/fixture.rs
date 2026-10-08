@@ -50,6 +50,9 @@ pub fn registry() -> Vec<Box<dyn FixtureWriter>> {
     w.extend(crate::hva::fixture_writers());
     w.extend(crate::aud::fixture_writers());
     w.extend(crate::idx::fixture_writers());
+    w.extend(crate::lzo::fixture_writers());
+    w.extend(crate::lcw::fixture_writers());
+    w.extend(crate::mappack::fixture_writers());
     w
 }
 

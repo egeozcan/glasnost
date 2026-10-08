@@ -26,7 +26,10 @@ pub mod fixture;
 pub mod hva;
 pub mod idx;
 pub mod image;
+pub mod lcw;
 pub mod limits;
+pub mod lzo;
+pub mod mappack;
 pub mod mix;
 pub mod mix_key;
 pub mod pal;
@@ -37,5 +40,6 @@ pub mod sniff;
 pub mod synth;
 pub mod tmp;
 pub mod vxl;
+pub(crate) mod lz;
 
 pub use error::{Error, Result};
