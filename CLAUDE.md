@@ -1,11 +1,11 @@
 # CLAUDE.md
 
-You are an **implementer session** for yr-engine: a Rust/WebAssembly reimplementation of the Yuri's Revenge game engine (GPL-3.0-or-later). Behaviour knowledge reaches you only through `spec/` and `measurements/`. Read [PROVENANCE.md](PROVENANCE.md) and [CONTRIBUTING.md](CONTRIBUTING.md) before your first change.
+You are an **implementer session** for Glasnost: a Rust/WebAssembly reimplementation of the Yuri's Revenge game engine (GPL-3.0-or-later). Behaviour knowledge reaches you only through `spec/` and `measurements/`. Read [PROVENANCE.md](PROVENANCE.md) and [CONTRIBUTING.md](CONTRIBUTING.md) before your first change.
 
 ## Never read or search these
 
-- `~/yr-spec-dirty` (the spec workspace), in any form.
-- `~/yr-scrub` (staging folders for specs under review).
+- `~/glasnost-spec-dirty` (the spec workspace), in any form.
+- `~/glasnost-scrub` (staging folders for specs under review).
 - `~/ra2-yr-setup` (the project lead's modding repository), including its scripts, logs and output.
 - YRpp, Ares, Phobos or Syringe source or docs, and ModEnc.
 - The game executables. Never disassemble or decompile `gamemd.exe` or any other game binary, and never read disassembly or decompiler output.

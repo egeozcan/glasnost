@@ -1,6 +1,6 @@
-# yr-engine: project plan
+# Glasnost: project plan
 
-*Planning document. Written 2026-10-08. Self-contained: it is the reference for the project lead and for every implementer session in this repo. The final project name is still to be decided (name TBD); `yr-engine` is the working repo name.*
+*Planning document. Written 2026-10-08. Self-contained: it is the reference for the project lead and for every implementer session in this repo.*
 
 > **For implementer sessions.** Behavioural numbers and mechanics mentioned in this plan are *planning context only*. They are not specs. Sim code cites only scrubbed specs (`S-xxxx`) and measurements (`M-xxxx`), never this file. Anything below marked "to be confirmed by spec" is a working assumption.
 
@@ -42,8 +42,8 @@ An open-source (GPL-3.0-or-later) reimplementation of *Command & Conquer: Yuri's
 | D9 | **Language and graphics:** Rust stable, wgpu with both backends. Core renderer within the WebGL2 feature set (works on Firefox Linux). WebGPU-only extras behind runtime checks. Native Vulkan build for GPU debugging. | DECIDED |
 | D10 | **Audio:** music deferred (M8). SFX, voices and EVA in later milestones (viewer in M1, in game from M5). | DECIDED |
 | D11 | **Team:** the project lead is spec owner, oracle operator and reviewer/approver, and writes no engine code. No second human implementer; implementation is done only by isolated AI sessions. | DECIDED |
-| D12 | **Repos:** `yr-engine` (this repo: scrubbed `spec/`, measurements, code) and a separate, never-pushed spec workspace (`~/yr-spec-dirty`). Each has its own CLAUDE.md and Claude Code memory. | DECIDED |
-| D13 | **Name:** must avoid EA trademarks: no "Red Alert", "Command & Conquer", "Yuri" or "Westwood". Trademark search before going public. | **OPEN** |
+| D12 | **Repos:** `glasnost` (this repo: scrubbed `spec/`, measurements, code) and a separate, never-pushed spec workspace (`~/glasnost-spec-dirty`). Each has its own CLAUDE.md and Claude Code memory. | DECIDED |
+| D13 | **Name:** Glasnost (Gorbachev's policy of "openness"). It avoids EA trademarks. Registry search (USPTO/EUIPO) and claiming the crate/GitHub name before going public. | DECIDED |
 
 Deployment default (not a decision yet): static hosting such as GitHub Pages for v1; v1 uses no threads, so COOP/COEP headers are not needed.
 
@@ -55,26 +55,26 @@ These rules are written up for implementers in `PROVENANCE.md`, `CONTRIBUTING.md
 
 | Location | Pushed? | Contents |
 |---|---|---|
-| `~/yr-spec-dirty` | **Never pushed anywhere** | Decompiler projects, raw analyst notes, the identifier denylist, the spec backlog, the scrub log (the full provenance record of every spec); spec-side session transcripts stay on that side too |
-| `yr-engine/spec/` | Yes, with this repo | Scrubbed specs (`S-xxxx`), signed off |
-| `yr-engine/measurements/` | Schemas, scenarios and M-ids yes; measured stock values no (git-ignored) | Measurement records (`M-xxxx`) and scenario definitions |
-| `yr-engine/` (rest) | Yes | Code, synthetic fixtures, converter, schema |
+| `~/glasnost-spec-dirty` | **Never pushed anywhere** | Decompiler projects, raw analyst notes, the identifier denylist, the spec backlog, the scrub log (the full provenance record of every spec); spec-side session transcripts stay on that side too |
+| `glasnost/spec/` | Yes, with this repo | Scrubbed specs (`S-xxxx`), signed off |
+| `glasnost/measurements/` | Schemas, scenarios and M-ids yes; measured stock values no (git-ignored) | Measurement records (`M-xxxx`) and scenario definitions |
+| `glasnost/` (rest) | Yes | Code, synthetic fixtures, converter, schema |
 
-Decompiler raw notes never leave `~/yr-spec-dirty`. Personal machine details stay out of tracked files; they go in the gitignored `LOCAL.md`.
+Decompiler raw notes never leave `~/glasnost-spec-dirty`. Personal machine details stay out of tracked files; they go in the gitignored `LOCAL.md`.
 
 ### 3.2 Roles
 
 | Role | Who | Sees | Never sees |
 |---|---|---|---|
-| **Spec agent** | Local Claude Code sessions (cloud-hosted Claude model) in `~/yr-spec-dirty` | Stock, hash-checked gamemd.exe and decompiler output; YRpp, Ares, Phobos source and docs; ModEnc; OpenRA; XCC; the existing ra2-yr-setup repo | `yr-engine/` code |
+| **Spec agent** | Local Claude Code sessions (cloud-hosted Claude model) in `~/glasnost-spec-dirty` | Stock, hash-checked gamemd.exe and decompiler output; YRpp, Ares, Phobos source and docs; ModEnc; OpenRA; XCC; the existing ra2-yr-setup repo | `glasnost/` code |
 | **Oracle operator** | The project lead, plus scripted harnesses | The running stock game; measurement harnesses; may see the spec side | — |
 | **Scrubber** | Automated lint → a fresh AI session with no access to the spec workspace → the project lead's sign-off | Draft spec text; lint verdicts; spec template, topic list and glossary | Raw notes, decompiler output, the spec workspace |
-| **Implementers** | Isolated Claude Code sessions in `yr-engine/` only | `yr-engine/` (scrubbed `spec/`, measurements, code); OpenRA and XCC (GPL-3) for format/loader code, with attribution | `~/yr-spec-dirty` and the scrub staging folders; ra2-yr-setup; YRpp, Ares, Phobos, Syringe source *and docs*; ModEnc; disassembly and decompiler output; the Chrono Divide client; the browser forks |
+| **Implementers** | Isolated Claude Code sessions in `glasnost/` only | `glasnost/` (scrubbed `spec/`, measurements, code); OpenRA and XCC (GPL-3) for format/loader code, with attribution | `~/glasnost-spec-dirty` and the scrub staging folders; ra2-yr-setup; YRpp, Ares, Phobos, Syringe source *and docs*; ModEnc; disassembly and decompiler output; the Chrono Divide client; the browser forks |
 
 - The spec agent works only on the **stock gamemd.exe, verified by Steam's file check**. Never the patched `gamemd-spawn.exe` or the launchers.
 - The Chrono Divide client and the decompiled browser forks (huangkaoya/redalert2, OpenRA2/RA2Web, ammaarreshi) are banned on **both** sides.
 - Never copy text from EA manuals or strategy guides into specs.
-- **Implementer sandbox:** Claude Code permission deny rules for `~/yr-spec-dirty`, the scrub staging folders, ra2-yr-setup, any YRpp/Ares/Phobos checkout and decompiler output directories; web access blocked to the YRpp, Ares, Phobos and Syringe repos and docs, ModEnc and the browser forks. Keep logs showing the rules were in force.
+- **Implementer sandbox:** Claude Code permission deny rules for `~/glasnost-spec-dirty`, the scrub staging folders, ra2-yr-setup, any YRpp/Ares/Phobos checkout and decompiler output directories; web access blocked to the YRpp, Ares, Phobos and Syringe repos and docs, ModEnc and the browser forks. Keep logs showing the rules were in force.
 - **The project lead on the implementation side:**
   - every instruction to an implementer cites a spec, measurement or spec-request ID (`S-`, `M-`, `Q-`);
   - no "do it like the original does internally";
@@ -106,13 +106,13 @@ Organise specs by game topic: combat, movement, production, economy, visibility,
 
 ### 3.4 Scrubber, records and checks
 
-1. **Lint** every draft: any `0x` hex number (short values are written in decimal) and bare 6-to-8-digit hex patterns; C-like tokens (`->`, `::`, `if (`, braces, lines ending in `;`); the denylist of YRpp, Ares and Phobos identifiers and any RTTI names (the list itself lives only in `~/yr-spec-dirty`).
+1. **Lint** every draft: any `0x` hex number (short values are written in decimal) and bare 6-to-8-digit hex patterns; C-like tokens (`->`, `::`, `if (`, braces, lines ending in `;`); the denylist of YRpp, Ares and Phobos identifiers and any RTTI names (the list itself lives only in `~/glasnost-spec-dirty`).
 2. **Scrubber session** (fresh context, no access to the spec workspace) rewrites anything code-shaped into behavioural prose and rejects specs that fail the two-implementations test.
 3. **Sign-off** by the project lead, recorded.
 4. **Spec front matter** in `spec/` (see `spec/TEMPLATE.md`): id, title, topic, revision, source class, status, approver, approval date, linked M- and Q-IDs. Per-claim backing sits in the spec body. The full record (draft and notes hashes, reviewer session ID, analyst session, sources) stays in the spec workspace's scrub log.
 5. **Citations in code.** Engine code cites `// spec: S-0142` or `// measure: M-0042`; absent-key defaults in the schema carry the same tags. A CI lint fails any behavioural constant without a citation.
 6. **Transcripts** of spec-side sessions are kept on the spec side and never pushed.
-7. **Similarity checks** on `yr-engine/`, run periodically by the project lead outside implementer sessions and outside public CI: JPlag against YRpp, Phobos and Ares; identifier overlap against the denylist. On a hit: revert, re-implement in a fresh session, log the incident.
+7. **Similarity checks** on `glasnost/`, run periodically by the project lead outside implementer sessions and outside public CI: JPlag against YRpp, Phobos and Ares; identifier overlap against the denylist. On a hit: revert, re-implement in a fresh session, log the incident.
 8. Format scripts in ra2-yr-setup (`mixextract.py`, `vxl.py`, `csf.py`) are never copied; formats are re-implemented from specs and OpenRA/XCC.
 
 ### 3.5 Assets, numbers and naming
@@ -348,7 +348,7 @@ The `ini` reader must parse exactly as YR does: case; duplicate keys, entries an
 |---|---|
 | Solo burnout or scope collapse | Every milestone useful on its own (viewer, map viewer). Devlog per milestone. A hard cut list. |
 | EA takedown (a non-commercial RA2 VR remake was refused in 2016) | Zero assets and zero EA numbers, neutral name, disclaimer, donations only, low profile until M5, portable static hosting. |
-| Raw spec-side material leaking into `yr-engine` | Raw notes never leave `~/yr-spec-dirty`; scrubber lint, denylist and sign-off on every spec; code cites opaque S/M IDs; implementer deny rules and web blocks with logs. |
+| Raw spec-side material leaking into `glasnost` | Raw notes never leave `~/glasnost-spec-dirty`; scrubber lint, denylist and sign-off on every spec; code cites opaque S/M IDs; implementer deny rules and web blocks with logs. |
 | Specs that mirror the binary's code structure | Spec style rules, lint, denylist, scrubber session, two-implementations test, sign-off. |
 | AI regurgitation of YRpp/Phobos/Ares code; shared training exposure | Implementers are asked only to "implement S-xxxx", never given the original's internal names. Periodic JPlag and identifier-overlap checks. |
 | The owner's dual role weakens the split | The owner never implements. Every implementation-side instruction cites an ID. Exceptions logged. |

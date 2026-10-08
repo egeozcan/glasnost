@@ -1,6 +1,4 @@
-# yr-engine
-
-*Working name. The final project name is not chosen yet.*
+# Glasnost
 
 An open-source reimplementation of the game engine for **Command & Conquer: Yuri's Revenge**, written in Rust. It targets the browser (WebAssembly, WebGL2 with optional WebGPU extras) and native desktop builds.
 
