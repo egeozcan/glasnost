@@ -18,6 +18,8 @@ use glasnost_fmt::aud::Aud;
 use glasnost_fmt::csf::Csf;
 use glasnost_fmt::hva::Hva;
 use glasnost_fmt::idx::{Idx, IdxEntry};
+use glasnost_fmt::limits::MAX_DECOMPRESSED;
+use glasnost_fmt::mappack::{PackCodec, decode_base64, iso_tiles, unpack};
 use glasnost_fmt::mix::id_hash;
 use glasnost_fmt::pal::Palette6;
 use glasnost_fmt::pcx::Pcx;
@@ -384,7 +386,10 @@ async fn classify(vfs: &mut Vfs, report: &mut Report) {
                     Hva::parse(&bytes).map(|_| ()),
                 ),
                 Kind::Pcx => record(report, "PCX images decoded", Pcx::parse(&bytes).map(|_| ())),
-                Kind::Text => tokens.extend(harvest_tokens(&bytes)),
+                Kind::Text => {
+                    tokens.extend(harvest_tokens(&bytes));
+                    decode_map_packs(report, &bytes);
+                }
                 Kind::Idx => idx_files.push((file, bytes)),
                 Kind::Aud => record(
                     report,
@@ -509,6 +514,48 @@ async fn decode_bank(vfs: &Vfs, report: &mut Report, file: FileRef, bytes: &[u8]
             Ok(_) => t.fail("empty"),
             Err(e) => t.fail(e.kind()),
         }
+    }
+}
+
+/// Lines of the section `[name]` in map text, as `key=value` values.
+///
+/// A lexical test helper for this lane only: it finds the section header
+/// line and takes the text after the first `=` of each following line until
+/// the next header. It is not an INI reader and makes no claim about how
+/// the game reads these files (that waits for the INI specs).
+fn section_values<'a>(text: &'a str, name: &str) -> Option<Vec<&'a str>> {
+    let mut lines = text.lines();
+    let header = format!("[{name}]");
+    lines.find(|l| l.trim().eq_ignore_ascii_case(&header))?;
+    Some(
+        lines
+            .take_while(|l| !l.trim_start().starts_with('['))
+            .filter_map(|l| l.split_once('=').map(|(_, v)| v.trim()))
+            .collect(),
+    )
+}
+
+/// Decodes the map packs of a text entry that has them.
+fn decode_map_packs(report: &mut Report, bytes: &[u8]) {
+    let Ok(text) = std::str::from_utf8(bytes) else {
+        return;
+    };
+    let packs = [
+        ("IsoMapPack5", PackCodec::Lzo),
+        ("OverlayPack", PackCodec::Lcw),
+        ("OverlayDataPack", PackCodec::Lcw),
+    ];
+    for (section, codec) in packs {
+        let Some(values) = section_values(text, section) else {
+            continue;
+        };
+        let result = decode_base64(values)
+            .and_then(|data| unpack(&data, codec, MAX_DECOMPRESSED))
+            .and_then(|raw| match codec {
+                PackCodec::Lzo => iso_tiles(&raw).map(|_| ()),
+                PackCodec::Lcw => Ok(()),
+            });
+        record(report, &format!("map packs decoded: {section}"), result);
     }
 }
 
