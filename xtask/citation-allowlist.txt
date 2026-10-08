@@ -1,0 +1,7 @@
+# Files exempt from the simulation-crate source scans (cargo xtask cite /
+# determinism). Format: <path> <rules> # <reason>
+# Rules: cite (citation lint), float (float-literal scan).
+# Keep this list short: prefer a `// nocite: <reason>` comment on the line or
+# item. Every entry needs a reason; stale entries fail the check.
+
+crates/deterministic/rules/src/jsonc.rs cite # JSONC syntax parser of our own design (PLAN.md 4.6); its literals are syntax (escapes, radix, depth bound), not game behaviour

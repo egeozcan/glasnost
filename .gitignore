@@ -52,3 +52,6 @@ soundmd*.ini
 *.swp
 .idea/
 .vscode/
+
+# Throwaway crate created and deleted by `cargo xtask canary`
+crates/deterministic/.canary/

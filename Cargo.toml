@@ -17,6 +17,7 @@ members = [
     "crates/platform-native",
     "crates/platform-web",
     "crates/tools",
+    "xtask",
 ]
 
 [workspace.package]
