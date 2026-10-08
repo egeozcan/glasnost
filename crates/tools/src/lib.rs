@@ -2,8 +2,11 @@
 //!
 //! **Milestone M0**: `glasnost-fixtures`, which writes every synthetic fixture
 //! from `glasnost_fmt::fixture::registry()` plus its manifest.
-//! **M1** adds the asset viewer (with egui development panels); **M3** the
-//! headless runner, sync-diff and the scenario DSL compiler.
+//! **M1** adds the local-only lane ([`local_lane`], binary
+//! `glasnost-local-lane`); the asset viewer lives in `glasnost-app`. **M3**
+//! adds the headless runner, sync-diff and the scenario DSL compiler.
+
+pub mod local_lane;
 
 use std::io;
 use std::path::Path;

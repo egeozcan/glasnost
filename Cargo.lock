@@ -822,6 +822,8 @@ name = "glasnost-tools"
 version = "0.0.0"
 dependencies = [
  "glasnost-fmt",
+ "glasnost-vfs",
+ "pollster",
 ]
 
 [[package]]
@@ -833,6 +835,11 @@ name = "glasnost-vfs"
 version = "0.0.0"
 dependencies = [
  "glasnost-fmt",
+ "js-sys",
+ "pollster",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
 ]
 
 [[package]]
