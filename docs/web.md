@@ -55,7 +55,10 @@ npm ci
 npx playwright install chromium firefox     # once; add --with-deps on Debian/Ubuntu
 node smoke.mjs --browser chromium --backend webgl2
 node smoke.mjs --browser firefox --backend webgl2
-node smoke.mjs --browser chromium --backend webgpu   # optional lane
+node smoke.mjs --browser chromium --backend webgpu   # optional lane: forced WebGPU
+node smoke.mjs --browser chromium --backend auto --webgpu --expect WebGPU   # runtime choice
 ```
+
+`--webgpu` turns on Chromium's WebGPU flags; with `--backend auto` it checks that the app picks WebGPU when the browser offers it (and, without the flag, that it falls back to WebGL2).
 
 Screenshots go to `web-tests/out/`. Browser and GPU recipes specific to your machine (a flagged Chromium for WebGPU, say) belong in `LOCAL.md`.

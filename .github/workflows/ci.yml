@@ -73,9 +73,11 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
-      - uses: EmbarkStudios/cargo-deny-action@v2
+      - run: rustup toolchain install
+      - uses: taiki-e/install-action@v2
         with:
-          command: check licenses bans sources
+          tool: cargo-deny@0.20.2
+      - run: cargo deny check licenses bans sources
 
   wasm:
     name: web build (wasm32-unknown-unknown)
@@ -134,6 +136,8 @@ jobs:
           if-no-files-found: ignore
 
   # Optional, non-blocking: WebGPU through Chromium's software Vulkan path.
+  # The first run checks the runtime choice (auto must pick WebGPU when the
+  # browser offers it), the second the forced backend.
   browser-webgpu:
     name: browser lane, WebGPU (optional)
     needs: wasm
@@ -154,6 +158,8 @@ jobs:
         run: npm ci
       - working-directory: web-tests
         run: npx playwright install --with-deps chromium
+      - working-directory: web-tests
+        run: node smoke.mjs --browser chromium --backend auto --webgpu --expect WebGPU
       - working-directory: web-tests
         run: node smoke.mjs --browser chromium --backend webgpu
       - if: always()

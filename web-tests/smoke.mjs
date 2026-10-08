@@ -6,7 +6,10 @@
 // the middle, the clear colour in the corner).
 //
 // Usage: node smoke.mjs [--browser chromium|firefox|webkit] [--backend webgl2|webgpu|auto]
-//                       [--dist ../dist/web] [--out out] [--headed]
+//                       [--webgpu] [--expect WebGL2|WebGPU] [--dist ../dist/web] [--out out] [--headed]
+//
+// --webgpu turns on Chromium's WebGPU flags (implied by --backend webgpu), so
+// `--backend auto --webgpu --expect WebGPU` checks the runtime selection.
 // Exit code 0 on success. Writes a screenshot to <out>/<browser>-<backend>.png.
 
 import http from "node:http";
@@ -27,6 +30,8 @@ const backend = args.backend ?? "webgl2";
 const dist = path.resolve(here, args.dist ?? "../dist/web");
 const outDir = path.resolve(here, args.out ?? "out");
 const timeoutMs = Number(args.timeout ?? 60000);
+const webgpuFlags = backend === "webgpu" || args.webgpu === true;
+const expectedBackend = args.expect ?? { webgl2: "WebGL2", webgpu: "WebGPU" }[backend];
 
 const types = { ".html": "text/html", ".js": "text/javascript", ".wasm": "application/wasm" };
 const server = http.createServer((req, res) => {
@@ -46,11 +51,11 @@ const url = `http://127.0.0.1:${server.address().port}/?backend=${backend}`;
 const launchOptions = {
   headless: !args.headed,
   chromium: {
-    args: backend === "webgpu"
+    args: webgpuFlags
       ? ["--enable-unsafe-webgpu", "--enable-features=Vulkan", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"]
       : ["--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"],
   },
-  firefox: { firefoxUserPrefs: { "webgl.force-enabled": true, "dom.webgpu.enabled": backend === "webgpu" } },
+  firefox: { firefoxUserPrefs: { "webgl.force-enabled": true, "dom.webgpu.enabled": webgpuFlags } },
   webkit: {},
 };
 
@@ -82,8 +87,9 @@ try {
   if (!data) fail(`no status within ${timeoutMs} ms`);
   else if (data.glasnostStatus === "error") fail(`app reported an error: ${data.glasnostDetail}`);
   else {
-    const expected = { webgl2: "WebGL2", webgpu: "WebGPU" }[backend];
-    if (expected && data.glasnostBackend !== expected) fail(`backend is ${data.glasnostBackend}, expected ${expected}`);
+    if (expectedBackend && data.glasnostBackend !== expectedBackend) {
+      fail(`backend is ${data.glasnostBackend}, expected ${expectedBackend}`);
+    }
     console.log(`[${browserName}/${backend}] presented with ${data.glasnostBackend} (${data.glasnostDetail})`);
 
     // Let a few frames render, then screenshot just the canvas.
