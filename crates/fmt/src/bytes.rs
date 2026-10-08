@@ -1,6 +1,6 @@
 //! Bounds-checked little-endian reading and writing helpers.
 //!
-//! Every read goes through [`Reader`] or [`slice`], which return
+//! Every read goes through [`Reader`] or [`slice()`], which return
 //! [`Error::Truncated`] instead of panicking, so parsers built on them stay
 //! panic-free on hostile input.
 
@@ -20,7 +20,7 @@ pub fn slice(data: &[u8], offset: usize, len: usize) -> Result<&[u8]> {
         .ok_or(Error::Truncated { needed: wide(end) })
 }
 
-/// Same as [`slice`] with `u64` offset and length (archive coordinates).
+/// Same as [`slice()`] with `u64` offset and length (archive coordinates).
 pub fn slice64(data: &[u8], offset: u64, len: u64) -> Result<&[u8]> {
     let too_big = Error::Truncated { needed: u64::MAX };
     let offset = usize::try_from(offset).map_err(|_| too_big)?;
