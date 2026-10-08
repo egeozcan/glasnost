@@ -1,0 +1,22 @@
+[package]
+name = "glasnost-platform-native"
+description = "Glasnost native desktop entry point"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "glasnost"
+path = "src/main.rs"
+
+[dependencies]
+glasnost-app.workspace = true
+glasnost-render.workspace = true
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+env_logger = { version = "0.11", default-features = false, features = ["auto-color", "humantime"] }
+
+[lints]
+workspace = true

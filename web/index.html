@@ -1,0 +1,48 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Glasnost: renderer demo</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #08080c; color: #c8c8d0;
+                 font: 13px/1.4 system-ui, sans-serif; overflow: hidden; }
+    canvas { display: block; width: 100vw; height: 100vh; outline: none; }
+    #status { position: fixed; left: 12px; top: 10px; pointer-events: none; }
+    #status b { color: #fff; }
+    footer { position: fixed; left: 12px; right: 12px; bottom: 8px; font-size: 11px; opacity: .6; }
+  </style>
+</head>
+<body data-glasnost-status="loading">
+  <div id="status">Loading…</div>
+  <footer>
+    Glasnost M0 renderer demo: palette-indexed quad, procedural texture.
+    Space switches the palette row. <code>?backend=webgl2</code> or
+    <code>?backend=webgpu</code> forces a backend.
+    Not affiliated with or endorsed by Electronic Arts.
+  </footer>
+  <script type="module">
+    import init from "./glasnost_platform_web.js";
+    const status = document.getElementById("status");
+    const show = () => {
+      const d = document.body.dataset;
+      if (d.glasnostStatus === "presented") {
+        status.innerHTML = `Rendering with <b>${d.glasnostBackend}</b>` +
+          (d.glasnostDetail === "webgpu-extras" ? " (WebGPU extras available)" : " (core path)");
+      } else if (d.glasnostStatus === "error") {
+        status.textContent = `Error: ${d.glasnostDetail}`;
+      } else {
+        status.textContent = `${d.glasnostStatus}…`;
+      }
+    };
+    new MutationObserver(show).observe(document.body, { attributes: true });
+    try {
+      await init();
+    } catch (e) {
+      document.body.dataset.glasnostStatus = "error";
+      document.body.dataset.glasnostDetail = String(e);
+    }
+  </script>
+</body>
+</html>

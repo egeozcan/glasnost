@@ -13,6 +13,9 @@ members = [
     "crates/audio",
     "crates/ui",
     "crates/net",
+    "crates/app",
+    "crates/platform-native",
+    "crates/platform-web",
     "crates/tools",
 ]
 
@@ -36,6 +39,7 @@ glasnost-render = { path = "crates/render" }
 glasnost-audio = { path = "crates/audio" }
 glasnost-ui = { path = "crates/ui" }
 glasnost-net = { path = "crates/net" }
+glasnost-app = { path = "crates/app" }
 
 # Lints for every crate that is not a simulation crate. The simulation crates
 # under crates/deterministic/ carry their own, stricter table (see

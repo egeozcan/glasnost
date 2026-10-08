@@ -1,0 +1,25 @@
+[package]
+name = "glasnost-platform-web"
+description = "Glasnost browser entry point (wasm32-unknown-unknown)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+glasnost-app.workspace = true
+glasnost-render.workspace = true
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+console_error_panic_hook = "0.1"
+console_log = "1"
+log = "0.4"
+wasm-bindgen = "=0.2.129"
+web-sys = { version = "0.3", features = ["Location", "UrlSearchParams", "Window"] }
+
+[lints]
+workspace = true
