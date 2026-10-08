@@ -17,16 +17,20 @@
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 
+pub mod adpcm;
+pub mod aud;
 pub mod bytes;
 pub mod csf;
 pub mod error;
 pub mod fixture;
 pub mod hva;
+pub mod idx;
 pub mod image;
 pub mod limits;
 pub mod mix;
 pub mod mix_key;
 pub mod pal;
+pub mod pcm;
 pub mod pcx;
 pub mod shp;
 pub mod sniff;
