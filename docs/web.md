@@ -36,6 +36,12 @@ The output goes to `dist/web/` (git-ignored): `index.html` from `web/`, plus the
 
 The page shows a palette-indexed checkerboard: an R8 index texture resolved through a 256×N palette texture in the shader, with palette cycling. Space switches the palette row. The top-left label shows the backend in use.
 
+## Asset viewer
+
+`/?mode=viewer` opens the asset viewer instead of the demo. **Pick install folder…** opens the browser's folder dialog (`<input webkitdirectory>`). Only the MIX containers at the top of the folder are mounted, and they are read lazily with `File.slice`, so nothing is copied or uploaded. Natively: `cargo run -p glasnost-platform-native -- --viewer [--game-dir DIR]`.
+
+The viewer lists archives (nested ones included) and their entries, previews sprites, tiles, images, palettes, string tables and a simple voxel view with a chosen palette and house-colour rows, and plays IDX samples and AUD sounds. Names come from text entries in the install, or type a file name under **Find file**. The remap range and the palette expansion are provisional settings (spec requests Q-0001 and Q-0003). Natively, sound previews go through a command-line player (`pw-play`, `paplay`, `aplay` or `afplay`) until the in-process mixer arrives.
+
 ## Native demo
 
 ```sh
@@ -57,7 +63,10 @@ node smoke.mjs --browser chromium --backend webgl2
 node smoke.mjs --browser firefox --backend webgl2
 node smoke.mjs --browser chromium --backend webgpu   # optional lane: forced WebGPU
 node smoke.mjs --browser chromium --backend auto --webgpu --expect WebGPU   # runtime choice
+node smoke.mjs --browser chromium --backend webgl2 --viewer   # viewer: imports the synthetic MIX fixtures
 ```
+
+`--viewer` loads `?mode=viewer`, gives the folder input the synthetic MIX fixtures with `setInputFiles` and waits for the viewer to report the mount on `<body>` (`data-glasnost-mount`).
 
 `--webgpu` turns on Chromium's WebGPU flags; with `--backend auto` it checks that the app picks WebGPU when the browser offers it (and, without the flag, that it falls back to WebGL2).
 

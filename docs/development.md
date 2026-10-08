@@ -8,8 +8,8 @@ Rust stable (pinned in `rust-toolchain.toml`), one Cargo workspace. Package name
 
 | Crate | Path | Filled in | Role |
 |---|---|---|---|
-| `fmt` | `crates/fmt` | M0 scaffolding, M1 parsers | File-format parsers, each with a fixture writer; indexed-image model; synthetic generators |
-| `vfs` | `crates/vfs` | M1 | Archive mounting and lookup over the user's install |
+| `fmt` | `crates/fmt` | M0 scaffolding, M1 parsers | File-format parsers, each with a fixture writer; indexed-image model; synthetic generators; content sniffing |
+| `vfs` | `crates/vfs` | M1 | Archive mounting (nested archives included), lookup by name hash in a pluggable precedence order, lazy reads |
 | `ini` | `crates/ini` | M1 | INI reader with the original's parse semantics, for the importer only |
 | `convert` | `crates/convert` | M1–M2 | Import: INI layers → our rules tree, `coverage.csv`, maps |
 | `rules` | `crates/deterministic/rules` | M0 JSONC reader, M1 schema | Our rules format, resolve pipeline, `sim_rules_hash` |
@@ -17,13 +17,13 @@ Rust stable (pinned in `rust-toolchain.toml`), one Cargo workspace. Package name
 | `sim` | `crates/deterministic/sim` | M3–M7 | The deterministic simulation |
 | `ai` | `crates/deterministic/ai` | M5+ | Our own opponent; produces Orders only |
 | `render` | `crates/render` | M0 quad, M1+ | wgpu renderer: WebGL2 core path, WebGPU where available |
-| `audio` | `crates/audio` | M1, M5 | Sound playback |
+| `audio` | `crates/audio` | M1 preview, M5 | Sound playback (M1: viewer previews) |
 | `ui` | `crates/ui` | M5 | Game UI |
 | `net` | `crates/net` | M9 | Lockstep networking (the relay server gets its own crate in M9) |
-| `app` | `crates/app` | M0 demo | winit shell shared by native and web |
+| `app` | `crates/app` | M0 demo, M1 viewer | winit shell shared by native and web; the asset viewer |
 | `platform-native` | `crates/platform-native` | M0 | Native binary `glasnost` |
 | `platform-web` | `crates/platform-web` | M0 | wasm entry point |
-| `tools` | `crates/tools` | M0 fixtures, M1+ | `glasnost-fixtures`; later viewer, headless runner, sync-diff |
+| `tools` | `crates/tools` | M0 fixtures, M1 local lane | `glasnost-fixtures`, `glasnost-local-lane`; later headless runner, sync-diff |
 | `xtask` | `xtask` | M0 | Repository checks and build helpers (`cargo xtask help`) |
 
 `app` is not in PLAN.md section 4.2: it holds the event loop and rendering setup that both platform crates share, so native and web run the same code.
@@ -87,7 +87,7 @@ Stock values can't be recognised without knowing them, and this repository must 
 4. **Paths:** no install paths (Steam libraries, Windows program folders, Westwood or EA folders) or home-directory paths in text files. Use `~` or a placeholder. `LOCAL.md` and `.claude/settings.local.json` stay untracked.
 5. **Size:** no file over 1 MiB.
 
-Tests that need the user's real install run in a local-only lane (opt-in, never in CI); their inputs and outputs are git-ignored. A local comparison of committed synthetic data against the user's imported values needs the converter's (field, value) output. It arrives with the converter in M1 and will run only on the developer's machine.
+Tests that need the user's real install run in a local-only lane (opt-in, never in CI; see "Local-only lane" below); their inputs and outputs are git-ignored. A local comparison of committed synthetic data against the user's imported values needs the converter's (field, value) output. It arrives with the converter in M1 and will run only on the developer's machine.
 
 ### Synthetic ruleset
 
@@ -101,7 +101,32 @@ Tests that need the user's real install run in a local-only lane (opt-in, never 
 
 ### Fixture writers
 
-`glasnost_fmt::fixture` defines `FixtureWriter` (one synthetic file), the registry, the manifest and `check_round_trip` (encode, decode, compare, re-encode). Each format parser added in M1 brings its writer and registers it. `glasnost-fixtures` writes the registry's output, and the stock guard checks any committed copy. The registry is empty until the first format lands.
+`glasnost_fmt::fixture` defines `FixtureWriter` (one synthetic file), the registry, the manifest and `check_round_trip` (encode, decode, compare, re-encode). Each format module brings its writers and registers them. `glasnost-fixtures` writes the registry's output to `tests/fixtures/synthetic/`, and the stock guard checks the committed copy byte for byte: after changing a writer, regenerate with `cargo run -p glasnost-tools --bin glasnost-fixtures` and commit the result.
+
+Encrypted MIX fixtures use a key pair of our own (`RsaKeyPair::synthetic`), so they parse only with that key's public half, not with the Westwood key.
+
+### Hostile input and fuzzing
+
+Every parser in `fmt` is panic-free on hostile input: reads are bounds-checked, input-driven arithmetic is checked, allocations are bounded by the input or by `fmt::limits`, and the crate denies `unwrap`, `expect` and `panic` outside tests. `fmt::hostile::run` drives one parser and all its decoders over arbitrary bytes. Two users:
+
+- `cargo test -p glasnost-fmt --test hostile` (stable, in CI): every fixture, its prefixes and mutated copies through every parser.
+- `fuzz/` (cargo-fuzz, nightly, outside the workspace and CI): one target per parser; see [fuzz/README.md](../fuzz/README.md).
+
+### Local-only lane
+
+`GLASNOST_GAME_DIR=<install> cargo run --release -p glasnost-tools --bin glasnost-local-lane` mounts a real install and prints counts only: MIX headers decrypted, SHP files and frames (all archives and `conqmd.mix`), VXL files and limbs under `ra2.mix`/`ra2md.mix`, IDX samples, AUD, TMP, PAL, PCX, CSF, HVA and map packs, each by error kind. `cargo test -p glasnost-tools --test local_lane` asserts 100 % on the M1 checks when the variable is set and skips otherwise; CI never sets it. The lane opens only the MIX containers at the top of the folder (`.mix`, `.mmx`, `.yro`); every other file there is counted and never read. It classifies entries with the permissive sniffer (`fmt::sniff`) and counts the strict parsers against that, so a file the sniffer calls SHP but the parser rejects shows up as a failure.
+
+`cargo test --release -p glasnost-app snapshot -- --ignored` (with the same variable) writes viewer screenshots of a real install to the temp directory. Never commit them.
+
+### Provisional placeholders
+
+Behaviour that needs a spec stays out of code; the M1 format work carries three explicit placeholders, each tied to a spec request:
+
+| Where | Placeholder | Request |
+|---|---|---|
+| `vfs::precedence` | lookup order = mount order (top-level archives by name, nested ones after their parent) | Q-0002 |
+| `render::remap`, viewer | house-colour remap range set by the user, no default; linear shade ramp | Q-0001 |
+| `fmt::pal::Expansion` | 6-to-8-bit expansion chosen by the caller | Q-0003 |
 
 ## Tests
 
