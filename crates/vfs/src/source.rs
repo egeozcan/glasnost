@@ -61,6 +61,24 @@ impl ByteSource for MemSource {
     }
 }
 
+/// A file that is listed but must never be read (loose files in the picked
+/// folder): it reports its length and fails every read.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Unopened(pub u64);
+
+impl ByteSource for Unopened {
+    fn len(&self) -> u64 {
+        self.0
+    }
+
+    fn read_at(&self, _offset: u64, _len: usize) -> ReadFuture<'_> {
+        Box::pin(std::future::ready(Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "loose files are not opened",
+        ))))
+    }
+}
+
 /// A file on the local file system (native builds).
 #[cfg(not(target_arch = "wasm32"))]
 #[derive(Debug)]
