@@ -1,0 +1,55 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/fmt",
+    "crates/vfs",
+    "crates/ini",
+    "crates/convert",
+    "crates/deterministic/rules",
+    "crates/deterministic/map",
+    "crates/deterministic/sim",
+    "crates/deterministic/ai",
+    "crates/audio",
+    "crates/ui",
+    "crates/net",
+]
+
+[workspace.package]
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.99"
+license = "GPL-3.0-or-later"
+publish = false
+
+[workspace.dependencies]
+glasnost-fmt = { path = "crates/fmt" }
+glasnost-vfs = { path = "crates/vfs" }
+glasnost-ini = { path = "crates/ini" }
+glasnost-convert = { path = "crates/convert" }
+glasnost-rules = { path = "crates/deterministic/rules" }
+glasnost-map = { path = "crates/deterministic/map" }
+glasnost-sim = { path = "crates/deterministic/sim" }
+glasnost-ai = { path = "crates/deterministic/ai" }
+glasnost-audio = { path = "crates/audio" }
+glasnost-ui = { path = "crates/ui" }
+glasnost-net = { path = "crates/net" }
+
+# Lints for every crate that is not a simulation crate. The simulation crates
+# under crates/deterministic/ carry their own, stricter table (see
+# crates/deterministic/clippy.toml and docs/development.md).
+[workspace.lints.rust]
+unsafe_code = "deny"
+missing_docs = "warn"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+
+[profile.release]
+# Keeps the web bundle small; native release builds are unaffected in practice.
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+
+[profile.dev.package."*"]
+# Dependencies (wgpu, naga) are slow unoptimised; our own crates stay debuggable.
+opt-level = 2

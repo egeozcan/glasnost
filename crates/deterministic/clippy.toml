@@ -1,0 +1,65 @@
+# Determinism lints for the simulation crates (sim, ai, map, rules).
+#
+# Clippy finds this file by walking up from each crate's manifest directory, so
+# it applies to every crate under crates/deterministic/ and to nothing else.
+# `cargo xtask check` runs a canary crate against this file to prove each entry
+# still fires (a silently ignored entry would otherwise go unnoticed).
+#
+# Why: CONTRIBUTING.md "Determinism rules" and PLAN.md section 4.5. The
+# simulation must be bit-identical on wasm32, x86-64 and aarch64.
+
+disallowed-types = [
+    # Floating point. The narrow `Real` exception (PLAN.md 4.5) will be a
+    # wrapper type with a per-site `#[allow]` and a spec citation.
+    { path = "f32", reason = "no floats in the simulation; use integers or fixed point" },
+    { path = "f64", reason = "no floats in the simulation; use integers or fixed point" },
+
+    # Hash-ordered containers and host-seeded hashers.
+    { path = "std::collections::HashMap", reason = "iteration order depends on hashing; use BTreeMap or a sorted Vec" },
+    { path = "std::collections::HashSet", reason = "iteration order depends on hashing; use BTreeSet or a sorted Vec" },
+    { path = "std::hash::RandomState", reason = "seeded from the host" },
+    { path = "std::hash::DefaultHasher", reason = "algorithm is unspecified and may change between Rust releases" },
+
+    # Wall-clock time.
+    { path = "std::time::Instant", reason = "no wall-clock time in the simulation; time is the tick counter" },
+    { path = "std::time::SystemTime", reason = "no wall-clock time in the simulation; time is the tick counter" },
+
+    # Threads and shared-state concurrency.
+    { path = "std::thread::JoinHandle", reason = "the simulation is single-threaded" },
+    { path = "std::thread::Builder", reason = "the simulation is single-threaded" },
+    { path = "std::sync::Mutex", reason = "the simulation is single-threaded" },
+    { path = "std::sync::RwLock", reason = "the simulation is single-threaded" },
+    { path = "std::sync::mpsc::Sender", reason = "the simulation is single-threaded" },
+    { path = "std::sync::mpsc::Receiver", reason = "the simulation is single-threaded" },
+
+    # Host I/O.
+    { path = "std::fs::File", reason = "no I/O in the simulation" },
+    { path = "std::net::TcpStream", reason = "no I/O in the simulation" },
+    { path = "std::net::UdpSocket", reason = "no I/O in the simulation" },
+    { path = "std::process::Command", reason = "no host calls in the simulation" },
+]
+
+disallowed-methods = [
+    { path = "std::time::Instant::now", reason = "no wall-clock time in the simulation" },
+    { path = "std::time::SystemTime::now", reason = "no wall-clock time in the simulation" },
+    { path = "std::thread::spawn", reason = "the simulation is single-threaded" },
+    { path = "std::thread::scope", reason = "the simulation is single-threaded" },
+    { path = "std::thread::sleep", reason = "the simulation is single-threaded and never waits" },
+    { path = "std::env::var", reason = "no host environment in the simulation" },
+    { path = "std::env::var_os", reason = "no host environment in the simulation" },
+    { path = "std::env::vars", reason = "no host environment in the simulation" },
+    { path = "std::env::args", reason = "no host environment in the simulation" },
+    { path = "std::fs::read", reason = "no I/O in the simulation" },
+    { path = "std::fs::read_to_string", reason = "no I/O in the simulation" },
+    { path = "std::fs::write", reason = "no I/O in the simulation" },
+    { path = "std::process::exit", reason = "no host calls in the simulation" },
+]
+
+disallowed-macros = [
+    { path = "std::println", reason = "no host I/O in the simulation; report through events" },
+    { path = "std::eprintln", reason = "no host I/O in the simulation; report through events" },
+    { path = "std::print", reason = "no host I/O in the simulation; report through events" },
+    { path = "std::eprint", reason = "no host I/O in the simulation; report through events" },
+    { path = "std::dbg", reason = "no host I/O in the simulation" },
+    { path = "std::ptr::addr_of", reason = "addresses must never influence simulation state" },
+]

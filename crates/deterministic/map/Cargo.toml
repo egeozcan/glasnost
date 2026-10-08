@@ -1,0 +1,30 @@
+[package]
+name = "glasnost-map"
+description = "Glasnost typed map for the simulation"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+glasnost-rules.workspace = true
+
+# Simulation crate: determinism lints. The disallowed types, methods and macros
+# are listed in ../clippy.toml, which clippy finds by walking up from this
+# directory. Keep this table identical across crates/deterministic/*
+# (checked by `cargo xtask check`).
+[lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+disallowed_types = "deny"
+disallowed_methods = "deny"
+disallowed_macros = "deny"
+float_arithmetic = "deny"
+float_cmp = "deny"
+float_cmp_const = "deny"
+lossy_float_literal = "deny"
+cast_precision_loss = "deny"

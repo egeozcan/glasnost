@@ -1,0 +1,14 @@
+[package]
+name = "glasnost-ini"
+description = "Glasnost INI reader for the importer"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+
+
+[lints]
+workspace = true

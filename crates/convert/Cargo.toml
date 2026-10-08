@@ -1,0 +1,18 @@
+[package]
+name = "glasnost-convert"
+description = "Glasnost converter from the user's install to our rules and map formats"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+glasnost-fmt.workspace = true
+glasnost-vfs.workspace = true
+glasnost-ini.workspace = true
+glasnost-rules.workspace = true
+glasnost-map.workspace = true
+
+[lints]
+workspace = true

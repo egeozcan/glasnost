@@ -1,0 +1,7 @@
+# Pinned so clippy's lint set (and so CI's -D warnings) only changes when we
+# bump it on purpose.
+[toolchain]
+channel = "1.99.0"
+components = ["rustfmt", "clippy"]
+targets = ["wasm32-unknown-unknown"]
+profile = "minimal"
