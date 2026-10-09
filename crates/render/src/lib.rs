@@ -14,6 +14,7 @@
 
 pub mod compose;
 pub mod gpu;
+pub mod light;
 pub mod map_gpu;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod offscreen;
