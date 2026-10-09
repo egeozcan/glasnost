@@ -10,6 +10,8 @@ publish.workspace = true
 [dependencies]
 glasnost-fmt.workspace = true
 glasnost-vfs.workspace = true
+glasnost-convert.workspace = true
+glasnost-rules.workspace = true
 pollster = "0.4"
 
 [lints]

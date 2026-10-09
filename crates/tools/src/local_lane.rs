@@ -87,6 +87,9 @@ pub struct Report {
     pub tallies: Vec<(String, Tally)>,
     /// Ordered (label, count) lines for plain counts.
     pub counts: Vec<(String, u64)>,
+    /// `coverage.csv` of the install's rules and art (names only; never
+    /// printed, never committed).
+    pub coverage_csv: String,
 }
 
 impl Report {
@@ -146,8 +149,14 @@ pub mod labels {
     /// The rules file resolves to the expansion archive's copy.
     pub const RULES_FROM_EXPANSION: &str =
         "rulesmd.ini resolves to expandmd01.mix's copy (S-0005 claim 18)";
+    /// The imported rules resolve through the rules pipeline.
+    pub const RULES_RESOLVE: &str = "imported rules resolve, type-check and validate (schema 1)";
+    /// Every (category, key) of the rules and art files has a coverage row.
+    pub const COVERAGE: &str = "rules and art keys with a coverage outcome";
     /// Every check the test requires at 100 %.
     pub const REQUIRED: &[&str] = &[
+        RULES_RESOLVE,
+        COVERAGE,
         REQUIRED_ARCHIVES,
         RULES_FROM_EXPANSION,
         MIX_TOP,
@@ -246,6 +255,7 @@ async fn run_async(dir: &Path) -> std::io::Result<Report> {
             .sum(),
     );
     search_order(&mut vfs, &mut report).await;
+    rules_import(&vfs, &mut report).await;
     vfs.learn_name(CONQ_ARCHIVE);
     classify(&mut vfs, &mut report).await;
     Ok(report)
@@ -306,6 +316,53 @@ async fn search_order(vfs: &mut Vfs, report: &mut Report) {
         "importer data files with a loose copy (flagged, not used)",
         shadowed as u64,
     );
+}
+
+/// Imports the rules and art (S-0004, S-0006), resolves the result through
+/// the rules pipeline and builds `coverage.csv` (kept in the report, never
+/// printed: the binary writes it to the git-ignored `local-lane/`).
+async fn rules_import(vfs: &Vfs, report: &mut Report) {
+    let import = glasnost_convert::import(vfs, &glasnost_convert::ImportOptions::default()).await;
+    for (kind, reg) in &import.outcome.registries {
+        report.count(
+            &format!("types registered: {}", kind.key()),
+            reg.len() as u64,
+        );
+    }
+    report.count("sides", import.outcome.sides.len() as u64);
+    report.count("colour definitions", import.outcome.colours.len() as u64);
+    report.count(
+        "game-wide sections layered",
+        import.outcome.globals.len() as u64,
+    );
+    report.count("importer warnings", import.warnings.len() as u64);
+    report.count(
+        "import errors (the original would not start)",
+        import.errors.len() as u64,
+    );
+    {
+        let t = report.tally(labels::RULES_RESOLVE);
+        match glasnost_rules::resolve_ruleset(
+            Some((import.tree.clone(), import.provenance.clone())),
+            &[],
+        ) {
+            Ok(_) => t.pass(),
+            Err(glasnost_rules::Error::Resolve(_)) => t.fail("resolve"),
+            Err(glasnost_rules::Error::Schema(_)) => t.fail("schema"),
+            Err(glasnost_rules::Error::Invalid(_)) => t.fail("invalid"),
+        }
+    }
+    {
+        let t = report.tally(labels::COVERAGE);
+        for _ in &import.coverage {
+            // Every row has an outcome by construction; unsupported ones are counted below.
+            t.pass();
+        }
+    }
+    for (outcome, n) in glasnost_convert::coverage::summary(&import.coverage) {
+        report.count(&format!("coverage rows: {}", outcome.word()), n as u64);
+    }
+    report.coverage_csv = glasnost_convert::coverage::csv(&import.coverage);
 }
 
 /// Which top-level archive an archive sits under (lower-case name).
