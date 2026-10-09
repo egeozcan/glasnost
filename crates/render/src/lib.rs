@@ -12,10 +12,13 @@
 //! the asset viewer; **M2** terrain chunks and lighting; **M3+** draw lists
 //! built from simulation snapshots. The renderer only reads simulation state.
 
+pub mod compose;
 pub mod gpu;
+pub mod map_gpu;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod offscreen;
 pub mod palette;
 pub mod palette_quad;
+pub mod scene;
 
 pub use wgpu;

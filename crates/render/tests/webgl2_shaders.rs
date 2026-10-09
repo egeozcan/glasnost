@@ -49,3 +49,13 @@ fn palette_quad_translates_to_glsl_es_300() {
         "index lookups must be plain texel fetches"
     );
 }
+
+#[test]
+fn map_shader_translates_to_glsl_es_300() {
+    let src = glasnost_render::map_gpu::SHADER_SOURCE;
+    let vs = translate_for_webgl2(src, naga::ShaderStage::Vertex, "vs_main");
+    let fs = translate_for_webgl2(src, naga::ShaderStage::Fragment, "fs_main");
+    assert!(vs.starts_with("#version 300 es"));
+    assert!(fs.contains("gl_FragDepth"), "depth is written per fragment");
+    assert!(fs.contains("texelFetch"));
+}

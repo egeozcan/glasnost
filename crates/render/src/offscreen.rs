@@ -31,16 +31,6 @@ pub fn render_rgba(
     });
     let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
 
-    let unpadded_row = width * 4;
-    let padded_row = unpadded_row.div_ceil(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT)
-        * wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
-    let readback = device.create_buffer(&wgpu::BufferDescriptor {
-        label: Some("offscreen readback"),
-        size: u64::from(padded_row) * u64::from(height),
-        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-        mapped_at_creation: false,
-    });
-
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
         label: Some("offscreen"),
     });
@@ -60,9 +50,34 @@ pub fn render_rgba(
         });
         record(&mut pass);
     }
+    queue.submit([encoder.finish()]);
+    read_texture(device, queue, &texture, width, height)
+}
+
+/// Reads a [`OFFSCREEN_FORMAT`] texture of `width`×`height` back as tightly
+/// packed RGBA, top row first. Blocks until the GPU is done.
+pub fn read_texture(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    texture: &wgpu::Texture,
+    width: u32,
+    height: u32,
+) -> Vec<u8> {
+    let unpadded_row = width * 4;
+    let padded_row = unpadded_row.div_ceil(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT)
+        * wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
+    let readback = device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("offscreen readback"),
+        size: u64::from(padded_row) * u64::from(height),
+        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+        mapped_at_creation: false,
+    });
+    let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+        label: Some("offscreen readback"),
+    });
     encoder.copy_texture_to_buffer(
         wgpu::TexelCopyTextureInfo {
-            texture: &texture,
+            texture,
             mip_level: 0,
             origin: wgpu::Origin3d::ZERO,
             aspect: wgpu::TextureAspect::All,
