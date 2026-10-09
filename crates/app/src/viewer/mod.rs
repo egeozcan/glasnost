@@ -360,6 +360,12 @@ impl Gfx {
         self.surface.configure(&self.device, &self.config);
     }
 
+    fn free_textures<'a>(&mut self, ids: impl IntoIterator<Item = &'a egui::TextureId>) {
+        for id in ids {
+            self.renderer.free_texture(id);
+        }
+    }
+
     fn paint(&mut self, ctx: &egui::Context, mut output: egui::FullOutput) -> Result<(), String> {
         // Texture changes apply even when no frame can be drawn this time:
         // egui sends each texture once.
@@ -369,18 +375,19 @@ impl Gfx {
                     .update_texture(&self.device, &self.queue, *id, delta);
             }
         }
-        for id in &output.textures_delta.free {
-            self.renderer.free_texture(id);
-        }
+        // Frees apply after the frame that may still draw them.
+        let free = std::mem::take(&mut output.textures_delta.free);
         output.textures_delta.clear();
         let frame = match self.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(t)
             | wgpu::CurrentSurfaceTexture::Suboptimal(t) => t,
             wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded => {
+                self.free_textures(&free);
                 return Ok(());
             }
             wgpu::CurrentSurfaceTexture::Outdated | wgpu::CurrentSurfaceTexture::Lost => {
                 self.surface.configure(&self.device, &self.config);
+                self.free_textures(&free);
                 return Ok(());
             }
             wgpu::CurrentSurfaceTexture::Validation => {
@@ -428,6 +435,7 @@ impl Gfx {
         }
         self.queue
             .submit(extra.into_iter().chain(std::iter::once(encoder.finish())));
+        self.free_textures(&free);
         self.window.pre_present_notify();
         self.queue.present(frame);
         self.frames_presented += 1;
