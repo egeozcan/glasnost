@@ -258,6 +258,33 @@ fn objects() {
     assert_eq!(o.smudges[0].cell, CellXY::new(4, 10));
 }
 
+/// Extreme sizes and positions neither overflow nor take long (S-0009
+/// claim 2: no cell beyond coordinate 511 exists).
+#[test]
+fn extreme_sizes() {
+    for size in [
+        "0,0,2147483647,2147483647",
+        "0,0,100000,100000",
+        "0,0,-5,7",
+        "0,0,1,2147483647",
+        "0,0,2147483647,1",
+    ] {
+        let m = MapText {
+            ini: format!(
+                "[Basic]\nNewINIFormat=4\nHomeCell=3\n[Map]\nSize={size}\nLocalSize=2147483647,2147483647,2147483647,2147483647\nFill=Water\n\
+                 [Waypoints]\n3=2147483647\n[Structures]\n0=Neutral,X,256,2147483647,-2147483648,0\n"
+            ),
+            terrain: Some(record_bytes(&[rec(65535, 65535, 1, 1)])),
+            ..Default::default()
+        };
+        let d = decode_text(&m.text());
+        assert!(d.map.cells.iter().count() <= 512 * 512);
+        let f = d.map.footprint;
+        let _ = f.is_usable(CellXY::new(300, 300), 127, true);
+        let _ = f.legal_count();
+    }
+}
+
 /// Hostile input never panics: prefixes and byte flips of a synthetic map.
 #[test]
 fn hostile_maps_never_panic() {

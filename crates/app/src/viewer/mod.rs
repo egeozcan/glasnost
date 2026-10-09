@@ -410,6 +410,11 @@ impl Gfx {
             }
             let renderer = MapRenderer::new(&self.device, &self.queue, &r.scene, COLOR_FORMAT)
                 .map_err(|e| e.to_string())?;
+            log::info!(
+                "map scene uploaded: {} items, {} images",
+                r.scene.items.len(),
+                r.scene.images.len()
+            );
             self.map = Some(MapGpu {
                 generation: r.generation,
                 renderer,
@@ -482,6 +487,14 @@ impl Gfx {
             },
         );
         self.queue.submit([encoder.finish()]);
+        if self.frames_presented.is_multiple_of(120) {
+            log::info!(
+                "map view drawn on the GPU at {:?}, {}×{}",
+                r.view.origin,
+                size.0,
+                size.1
+            );
+        }
         m.texture.ok_or_else(|| "no texture".into())
     }
 

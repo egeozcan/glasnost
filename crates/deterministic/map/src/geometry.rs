@@ -31,14 +31,15 @@ impl CellXY {
         Self { x, y }
     }
 
-    /// Screen row s = x + y (S-0009 Terms).
-    pub fn s(self) -> i32 {
-        self.x + self.y
+    /// Screen row s = x + y (S-0009 Terms), in 64 bits so that no input
+    /// overflows.
+    pub fn s(self) -> i64 {
+        i64::from(self.x) + i64::from(self.y)
     }
 
     /// Screen column d = x − y (S-0009 Terms).
-    pub fn d(self) -> i32 {
-        self.x - self.y
+    pub fn d(self) -> i64 {
+        i64::from(self.x) - i64::from(self.y)
     }
 }
 
@@ -82,7 +83,7 @@ impl Footprint {
     /// Whether (x, y) is a legal cell (S-0009 claims 1 and 2):
     /// W < s ≤ W + 2H and −W < d < W, and both coordinates within 0 … 511.
     pub fn is_legal(&self, c: CellXY) -> bool {
-        let (w, h) = (self.width, self.height);
+        let (w, h) = (i64::from(self.width), i64::from(self.height));
         let (s, d) = (c.s(), c.d());
         // spec: S-0009 claim 1 (W < s ≤ W + 2H and −W < d < W)
         let inside = w < s && s <= w + 2 * h && -w < d && d < w;
@@ -103,7 +104,8 @@ impl Footprint {
     /// Side of the coordinate square 0 … W + H − 1 that holds every legal
     /// cell, capped at the supported range (S-0009 claim 2).
     pub fn coordinate_side(&self) -> u16 {
-        let side = (self.width + self.height).clamp(0, MAX_COORDINATE + 1);
+        let side = (i64::from(self.width) + i64::from(self.height))
+            .clamp(0, i64::from(MAX_COORDINATE) + 1);
         u16::try_from(side).unwrap_or(0)
     }
 
@@ -125,10 +127,13 @@ impl Footprint {
             }
             return out;
         }
-        // spec: S-0009 claim 3 (rows s = W + 1 … W + 2H top to bottom, increasing x within a row)
-        for s in (w + 1)..=(w + 2 * h) {
-            for x in 0..=s {
-                let c = CellXY::new(x, s - x);
+        let (w, h) = (i64::from(w), i64::from(h));
+        let max = i64::from(MAX_COORDINATE);
+        // spec: S-0009 claim 3 (rows s = W + 1 … W + 2H top to bottom, increasing x within a row);
+        // claim 2 (our engine: no cell beyond coordinate 511 exists, so no row beyond 1022 holds one)
+        for s in (w + 1)..=(w + 2 * h).min(2 * max) {
+            for x in (s - max).max(0)..=s.min(max) {
+                let c = CellXY::new(x as i32, (s - x) as i32);
                 if self.is_legal(c) {
                     out.push(c);
                 }
@@ -140,8 +145,9 @@ impl Footprint {
     /// The usable-cell test of S-0009 claim 4 with height term `h` (0 for
     /// the plain test).
     pub fn is_usable_with(&self, c: CellXY, h: i32) -> bool {
-        let w = self.width;
-        let [lx, ly, lw, lh] = self.local;
+        let w = i64::from(self.width);
+        let [lx, ly, lw, lh] = self.local.map(i64::from);
+        let h = i64::from(h);
         let (s, d) = (c.s(), c.d());
         // spec: S-0009 claim 4, Formulas (usable cell inequalities)
         self.is_legal(c)
@@ -154,10 +160,10 @@ impl Footprint {
     /// The height-aware usable test of S-0009 claim 4: h = level, plus one
     /// for a slope when s < W + 4 + 2·Ly + level.
     pub fn is_usable(&self, c: CellXY, level: i32, slope: bool) -> bool {
-        let w = self.width;
-        let ly = self.local[1];
+        let w = i64::from(self.width);
+        let ly = i64::from(self.local[1]);
         // spec: S-0009 Formulas (δ = 1 if the cell is a slope and s < W + 4 + 2·Ly + ℓ)
-        let delta = i32::from(slope && c.s() < w + 4 + 2 * ly + level);
+        let delta = i32::from(slope && c.s() < w + 4 + 2 * ly + i64::from(level));
         self.is_usable_with(c, level + delta)
     }
 
@@ -165,7 +171,8 @@ impl Footprint {
     /// claim 16).
     pub fn home_default(&self) -> CellXY {
         // spec: S-0009 Formulas (home waypoint default cell)
-        let c = (self.width + self.height).max(0) / 2;
+        let c = (i64::from(self.width) + i64::from(self.height)).max(0) / 2;
+        let c = i32::try_from(c).unwrap_or(i32::MAX);
         CellXY::new(c, c)
     }
 }

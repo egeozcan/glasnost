@@ -239,14 +239,19 @@ impl Browser {
             }
             TaskResult::MapsFound(found) => {
                 let (vfs, maps) = *found;
+                log::info!("{} maps found", maps.len());
                 self.vfs = Some(vfs);
                 self.busy = false;
                 if let Some(want) = self.pending_map.take() {
                     let want = want.to_ascii_lowercase();
                     let hit = maps
                         .iter()
-                        .find(|m| m.name.to_ascii_lowercase().contains(&want))
+                        .find(|m| {
+                            m.name.to_ascii_lowercase().contains(&want)
+                                || m.archive.to_ascii_lowercase().contains(&want)
+                        })
                         .map(|m| (m.file, m.archive.clone()));
+                    log::info!("map to open: {:?}", hit.as_ref().map(|h| &h.1));
                     if let (Some((file, origin)), Some(vfs)) = (hit, self.vfs.take()) {
                         self.busy = true;
                         spawner.spawn(tasks::load_map(vfs, file, origin, Default::default()));
@@ -256,6 +261,11 @@ impl Browser {
             }
             TaskResult::MapLoaded(loaded) => {
                 let (vfs, loaded) = *loaded;
+                log::info!(
+                    "map loaded: {} items, {} problems",
+                    loaded.built.scene.items.len(),
+                    loaded.problems.len()
+                );
                 self.vfs = Some(vfs);
                 self.busy = false;
                 self.map.set_loaded(loaded);

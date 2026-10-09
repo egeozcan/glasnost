@@ -104,7 +104,7 @@ fn rec(x: u16, y: u16, level: u8) -> Record {
     }
 }
 
-fn scene(options: &Options) -> (Built, glasnost_map::Map) {
+fn context() -> (glasnost_convert::Import, Catalogue, Assets) {
     let mut import = convert(
         &Inputs {
             base: input("rules.ini", RULES),
@@ -139,17 +139,13 @@ fn scene(options: &Options) -> (Built, glasnost_map::Map) {
     assets.insert(b"orex.shp", shp((10, 10), 8, (2, 2), (4, 4)));
     assets.insert(b"cratex.shp", shp((10, 10), 2, (2, 2), (4, 4)));
     assets.insert(b"fencex.shp", shp((10, 10), 2, (2, 2), (4, 4)));
-    let m = MapText {
-        ini: "[Basic]\nNewINIFormat=4\n[Map]\nSize=0,0,10,10\nLocalSize=0,0,10,10\n\
-              [Structures]\n0=Neutral,HUTX,256,6,10,0\n1=Americans,HUTX,256,8,12,0\n\
-              [Infantry]\n0=Neutral,MANX,256,9,11,0,Guard,64\n1=Neutral,MANX,256,9,13,0,Guard,0\n"
-            .into(),
-        terrain: Some(record_bytes(&[rec(7, 9, 2), rec(0, 0, 0)])),
-        overlay: Some(overlay_stream(255, &[(5, 9, 0), (5, 10, 1), (7, 9, 2)])),
-        overlay_data: Some(overlay_stream(0, &[(5, 9, 3)])),
-        ..Default::default()
-    };
-    let doc = Document::parse(m.text().as_bytes(), Quirks::default(), &mut Vec::new());
+    (import, catalogue, assets)
+}
+
+/// Builds the scene of `text` in the test context.
+fn build_text(text: &[u8], options: &Options) -> (Built, glasnost_map::Map) {
+    let (import, catalogue, assets) = context();
+    let doc = Document::parse(text, Quirks::default(), &mut Vec::new());
     let map = decode(
         &doc,
         &DecodeContext {
@@ -163,6 +159,20 @@ fn scene(options: &Options) -> (Built, glasnost_map::Map) {
         build(&map, &import, &catalogue, &palettes, &assets, options),
         map,
     )
+}
+
+fn scene(options: &Options) -> (Built, glasnost_map::Map) {
+    let m = MapText {
+        ini: "[Basic]\nNewINIFormat=4\n[Map]\nSize=0,0,10,10\nLocalSize=0,0,10,10\n\
+              [Structures]\n0=Neutral,HUTX,256,6,10,0\n1=Americans,HUTX,256,8,12,0\n\
+              [Infantry]\n0=Neutral,MANX,256,9,11,0,Guard,64\n1=Neutral,MANX,256,9,13,0,Guard,0\n"
+            .into(),
+        terrain: Some(record_bytes(&[rec(7, 9, 2), rec(0, 0, 0)])),
+        overlay: Some(overlay_stream(255, &[(5, 9, 0), (5, 10, 1), (7, 9, 2)])),
+        overlay_data: Some(overlay_stream(0, &[(5, 9, 3)])),
+        ..Default::default()
+    };
+    build_text(m.text().as_bytes(), options)
 }
 
 fn items_of(b: &Built, kind: &str) -> Vec<Item> {
@@ -200,7 +210,7 @@ fn tiles_are_lifted_and_depth_anchored() {
     assert_eq!(tile.test, DepthTest::Tile);
 }
 
-/// spec: S-0108 claims 2, 3, 7, 8, 9; S-0102 claims 13, 16
+/// spec: S-0108 claims 2, 3, 6, 7, 8, 9; S-0102 claims 13, 16 (initial state: Q-0016)
 #[test]
 fn building_body_shadow_and_bib() {
     let (b, _) = scene(&Options::default());
@@ -215,7 +225,8 @@ fn building_body_shadow_and_bib() {
     assert_eq!(bias(&shadow), (Profile::Flat, -4));
     assert_eq!(shadow.paint, Paint::Shadow);
     assert_eq!(bias(&bib), (Profile::Flat, -3));
-    // Idle range starts at 1: body frame 1 (claim 6), shadow frame 1 + 2 = 3.
+    // Idle range starts at 1: body frame 1 (the idle start is provisional, Q-0016; claim 6 gives
+    // stage a), shadow frame 1 + 2 = 3.
     assert_eq!(b.scene.images[body.image as usize].pixels()[0], 2);
     assert_eq!(b.scene.images[shadow.image as usize].pixels()[0], 4);
     // Bib uses the same frame without the clamp.
@@ -289,4 +300,37 @@ fn overlays() {
     assert_eq!(level, 2);
     assert_eq!(bias(&items[1]), (Profile::Upright, -47));
     assert!(items.iter().all(|i| i.provisional));
+}
+
+/// Hostile maps never panic or hang in the scene builder: extreme sizes,
+/// prefixes and byte flips of a synthetic map.
+#[test]
+fn hostile_maps_build() {
+    for size in ["0,0,2147483647,2147483647", "0,0,100000,3", "0,0,-1,-1"] {
+        let text = format!(
+            "[Basic]\nNewINIFormat=4\n[Map]\nSize={size}\nLocalSize=0,0,2147483647,9\n\
+             [Structures]\n0=Neutral,HUTX,256,2147483647,2147483647,0\n\
+             [Infantry]\n0=Neutral,MANX,256,-5,-5,0,Guard,999999\n"
+        );
+        let _ = build_text(text.as_bytes(), &Options::default());
+    }
+    let m = MapText {
+        ini: "[Basic]\nNewINIFormat=4\n[Map]\nSize=0,0,6,6\nLocalSize=0,0,6,6\n\
+              [Structures]\n0=Neutral,HUTX,256,3,5,0\n[Infantry]\n0=Neutral,MANX,256,4,5,0,Guard,64\n"
+            .into(),
+        terrain: Some(record_bytes(&[rec(3, 5, 1), rec(0, 0, 0)])),
+        overlay: Some(overlay_stream(255, &[(4, 5, 0), (3, 4, 2)])),
+        ..Default::default()
+    };
+    let text = m.text().into_bytes();
+    let mut seed = 99u32;
+    for _ in 0..60 {
+        let mut t = text.clone();
+        for _ in 0..6 {
+            seed = seed.wrapping_mul(1_103_515_245).wrapping_add(12345);
+            let i = (seed as usize >> 4) % t.len();
+            t[i] = (seed >> 9) as u8;
+        }
+        let _ = build_text(&t, &Options::default());
+    }
 }

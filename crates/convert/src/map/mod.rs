@@ -191,7 +191,7 @@ impl Decoder<'_> {
             q.absent_rect_is_zero,
         );
         let footprint = Footprint::new(w, h, local);
-        if w + h > OVERLAY_SIDE as i32 {
+        if i64::from(w) + i64::from(h) > OVERLAY_SIDE as i64 {
             self.warn(
                 self.line_of(b"Map", b"Size"),
                 "the map is larger than the supported coordinate range; cells beyond 511 do not exist (S-0009 claim 2)",

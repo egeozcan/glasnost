@@ -129,6 +129,10 @@ fn map_lane() {
             "maps found: {} ({multiplayer} with start waypoints 0 and 1)",
             maps.len()
         );
+        println!(
+            "maps without a [Basic] Name: {}",
+            maps.iter().filter(|m| m.name.is_empty()).count()
+        );
         let mut ok = 0usize;
         let mut panics = 0usize;
         let mut shots: BTreeMap<String, usize> = BTreeMap::new();

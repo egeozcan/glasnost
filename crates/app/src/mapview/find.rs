@@ -16,7 +16,9 @@ pub struct Listing {
     pub file: FileRef,
     /// The archive holding it.
     pub archive: String,
-    /// Its map-list name (S-0009 Import mapping, `[Basic] Name`).
+    /// Its map-list name (S-0009 Import mapping, `[Basic] Name`), or, when
+    /// the map has none, the entry's file name if known, else its archive's
+    /// name with the entry's position.
     pub name: String,
     /// Its theater value as written.
     pub theater: String,
@@ -65,10 +67,17 @@ pub async fn find_maps(vfs: &Vfs) -> Vec<Listing> {
                     .unwrap_or_default()
             };
             let wp = |k: &[u8]| doc.value(b"Waypoints", k).is_some();
+            let mut name = text(b"Basic", b"Name");
+            if name.is_empty() {
+                name = match vfs.names().get(entry.id) {
+                    Some(n) => n.to_owned(),
+                    None => format!("{} #{}", archive.name, out.len()),
+                };
+            }
             out.push(Listing {
                 file,
                 archive: archive.name.clone(),
-                name: text(b"Basic", b"Name"),
+                name,
                 theater: text(b"Map", b"Theater"),
                 multiplayer: wp(b"0") && wp(b"1"),
             });

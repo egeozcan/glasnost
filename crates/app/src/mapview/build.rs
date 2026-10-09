@@ -161,6 +161,11 @@ mod notes {
         "building depth images (S-0102 F5): the shared file is not named by a spec: not used";
     pub const HEALTH: &str =
         "Q-0010: the health scale is unknown, so every building is drawn undamaged";
+    pub const INITIAL_STATE: &str = "Q-0016: buildings start complete and idle, turrets face as their bodies, objects enter structures first";
+    pub const VPL: &str =
+        "Q-0014: voxels are lit through the lighting table read by a provisional layout";
+    pub const NO_VPL: &str =
+        "Q-0014: the voxel lighting table was not accepted: voxels show raw colour indices";
     pub const WATER_FILL: &str = "water-fill variants need the scenario random stream (no spec yet): the base water tile is drawn";
 }
 
@@ -394,12 +399,14 @@ pub fn build(
     b.structures(&mut ground);
     b.built.scene.cell_pass_len = b.built.scene.items.len();
     b.mobiles(&mut ground);
-    // spec: S-0102 claim 6 (an entering object goes before the first strictly greater key: a stable sort)
+    // spec: S-0102 claim 6 (an entering object goes before the first strictly greater key: a stable sort);
+    // provisional (Q-0016): objects enter in the order structures, vehicles, infantry, aircraft
     ground.sort_by_key(|g| g.key);
     for g in ground {
         b.built.scene.items.extend(g.items);
     }
     b.built.notes.insert(notes::NO_SLOT_ANIMS.into());
+    b.built.notes.insert(notes::INITIAL_STATE.into());
     b.built
 }
 
@@ -421,7 +428,7 @@ impl Builder<'_> {
             let Some(i) = find_type(self.import, Kind::Buildings, &s.placed.type_name) else {
                 continue;
             };
-            if !self.owner_kept(&s.placed.owner) {
+            if !self.owner_kept(&s.placed.owner) || self.map.cells.get(s.placed.cell).is_none() {
                 continue;
             }
             let intensity =
@@ -690,7 +697,8 @@ impl Builder<'_> {
                     },
                     paint: Paint::Row(row),
                     group: Group::Tiles,
-                    provisional: false,
+                    // provisional (Q-0009 placement, Q-0013 brightness)
+                    provisional: true,
                     object: None,
                 });
             };
@@ -895,12 +903,25 @@ impl Builder<'_> {
                 continue;
             };
             let z = LEVEL_LEPTONS * i32::from(cell.level);
-            let light = self.lights.get(t.cell);
-            // spec: S-0104 claim 13 (a plain terrain object: scaled ground level, its cell's tile table)
-            let row = self.tile_row(
-                light.map_or(TileTable::Neutral, |l| l.table),
-                light.map_or(NEUTRAL_BRIGHTNESS, |l| l.scaled_ground),
+            let light = self.lights.get(t.cell).copied();
+            let spawns = rule_bool(
+                self.import,
+                Kind::TerrainObjects,
+                i,
+                b"SpawnsTiberium",
+                false,
             );
+            // spec: S-0104 claim 13 (a plain terrain object: its cell's scaled ground level and tile table;
+            // an ore-spawning one: the unscaled ground level U, with a palette no spec names: Q-0012)
+            let b = if spawns {
+                light.map_or(NEUTRAL_BRIGHTNESS, |l| l.unscaled_ground)
+            } else {
+                light.map_or(NEUTRAL_BRIGHTNESS, |l| l.scaled_ground)
+            };
+            if spawns {
+                self.note(notes::OVERLAY);
+            }
+            let row = self.tile_row(light.map_or(TileTable::Neutral, |l| l.table), b);
             let (x, y) = cell_centre(t.cell.x, t.cell.y);
             let p = project_lifted(x, y, z);
             let frames = self.sprite_frames(&sprite).unwrap_or(0);
@@ -1080,7 +1101,8 @@ impl Builder<'_> {
                 continue;
             };
             let n = self.sprite_frames(&sprite).unwrap_or(0);
-            // spec: S-0108 claim 6 (game set-up: immediate change to idle; stage = a of the idle range)
+            // provisional (Q-0016): a map-placed building starts complete and idle; spec: S-0108 claim 6
+            // (a change during the game's set-up is immediate: stage = a of the range)
             let idle = self
                 .art_value(Kind::Buildings, i, b"AnimIdle")
                 .map(|v| value::int_tuple_or::<3>(v, [0, 1, 0]).0)
@@ -1198,9 +1220,10 @@ impl Builder<'_> {
         let q = VoxelQuirks::default();
         let vpl = self.vpl();
         let k = Kind::Buildings;
-        // The building's facing from the map entry (Q-0010) on the scale of glossary claim G1.
+        // provisional (Q-0016): the map entry's facing value × 256 (Q-0010 for the field).
         let facing = ((p.facing & 0xFF) * 256) as u16;
-        // spec: S-0105 Terms (turret anchor: the draw point moved by TurretAnimX and TurretAnimY, rules keys)
+        // spec: S-0105 Terms (turret anchor: the draw point moved by TurretAnimX and TurretAnimY, rules keys);
+        // provisional (Q-0016): the draw point taken as the S-0108 claim 8 image anchor
         let at = (
             anchor.0 + rule_int(self.import, k, idx, b"TurretAnimX", 0),
             anchor.1 + rule_int(self.import, k, idx, b"TurretAnimY", 0),
@@ -1541,8 +1564,14 @@ impl Builder<'_> {
 
     /// The voxel lighting table (S-0105 claim 19; its layout is provisional,
     /// Q-0014).
-    fn vpl(&self) -> Option<Vpl> {
-        Vpl::parse(self.assets.get(VPL_FILE)?).ok()
+    fn vpl(&mut self) -> Option<Vpl> {
+        let v = self.assets.get(VPL_FILE).and_then(|b| Vpl::parse(b).ok());
+        self.note(if v.is_some() {
+            notes::VPL
+        } else {
+            notes::NO_VPL
+        });
+        v
     }
 
     /// A voxel part image as a scene item at `point` (S-0105 claim 25, F6;
@@ -1573,7 +1602,8 @@ impl Builder<'_> {
             },
             paint,
             group,
-            provisional: false,
+            // provisional (Q-0014: the lighting table's layout; shadows also Q-0015)
+            provisional: true,
             object: Some(object),
         })
     }
@@ -1617,7 +1647,7 @@ impl Builder<'_> {
             voxel::DEFAULT_FIRE_ANGLE,
         );
         let elevation = voxel::barrel_elevation_after(fire_angle, 0);
-        // The turret's starting facing has no spec: it is taken as the body's (Q-0010).
+        // provisional (Q-0016): the turret's starting facing is taken as the body's.
         let pose = voxel::vehicle_parts(facing, facing, offset, elevation, &q);
         let name = self.import.outcome.registries[&kind][idx].name.clone();
         // spec: S-0105 Import mapping (UseBuffer is read from the art section of the type's own name)
@@ -1677,7 +1707,12 @@ impl Builder<'_> {
 /// S-0009 claim 4 dimmed. Size 2W × 2H. Our own viewer design.
 pub fn minimap(map: &Map, catalogue: &Catalogue, assets: &Assets) -> (u32, u32, Vec<u8>) {
     let f = map.footprint;
-    let (w, h) = (f.width.max(0) as u32 * 2, f.height.max(0) as u32 * 2);
+    // Cells exist only at coordinates 0 … 511 (S-0009 claim 2), so a legal
+    // cell's d and s fit a minimap of at most 1024 × 1024 pixels.
+    let (w, h) = (
+        f.width.clamp(0, 512) as u32 * 2,
+        f.height.clamp(0, 512) as u32 * 2,
+    );
     let mut px = vec![0u8; (w * h * 4) as usize];
     let mut radar: BTreeMap<Vec<u8>, Option<Tmp>> = BTreeMap::new();
     for (c, cell) in map.cells.iter() {
@@ -1699,11 +1734,11 @@ pub fn minimap(map: &Map, catalogue: &Catalogue, assets: &Assets) -> (u32, u32, 
             // spec: S-0009 claim 5a (the height-aware test limits the minimap; slopes need the theater spec)
             f.is_usable(c, i32::from(cell.level), false),
         );
-        let x = c.d() + f.width - 1;
-        let y = c.s() - f.width - 1;
+        let x = c.d() + i64::from(f.width.min(512)) - 1;
+        let y = c.s() - i64::from(f.width) - 1;
         for (dx, col) in [(0, l), (1, r)] {
             let (px_x, px_y) = (x + dx, y);
-            if px_x < 0 || px_y < 0 || px_x as u32 >= w || px_y as u32 >= h {
+            if px_x < 0 || px_y < 0 || px_x >= i64::from(w) || px_y >= i64::from(h) {
                 continue;
             }
             let at = ((px_y as u32 * w + px_x as u32) * 4) as usize;
