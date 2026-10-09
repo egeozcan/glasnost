@@ -18,6 +18,7 @@ use winit::event_loop::{ActiveEventLoop, EventLoop, EventLoopProxy};
 use winit::keyboard::{Key, NamedKey};
 use winit::window::{Window, WindowId};
 
+pub mod mapview;
 mod status;
 pub mod viewer;
 pub use status::Status;

@@ -19,6 +19,7 @@ use glasnost_render::palette::{PaletteQuirks, house_palette, palette_from_file, 
 use glasnost_vfs::names::candidates;
 use glasnost_vfs::{ArchiveId, FileRef, Vfs};
 
+use super::map_pane::{MapAction, MapPane};
 use super::preview::{Rgba, rgb, strip, voxel_preview};
 use super::rules::{RulesAction, RulesData, RulesPane};
 use super::tasks::{self, Purpose, Spawner, TaskResult};
@@ -126,6 +127,10 @@ pub struct Browser {
     angle: i32,
     player: glasnost_audio::Player,
     sample_status: String,
+    /// Map viewer mode (M2).
+    pub map_mode: bool,
+    /// The map viewer pane.
+    pub map: MapPane,
 }
 
 impl Browser {
@@ -165,6 +170,8 @@ impl Browser {
             angle: 30,
             player: glasnost_audio::Player::new(),
             sample_status: String::new(),
+            map_mode: false,
+            map: MapPane::default(),
         }
     }
 
@@ -219,6 +226,18 @@ impl Browser {
                     self.texture_dirty = true;
                 }
                 self.rules.set(data);
+            }
+            TaskResult::MapsFound(found) => {
+                let (vfs, maps) = *found;
+                self.vfs = Some(vfs);
+                self.busy = false;
+                self.map.set_listings(maps);
+            }
+            TaskResult::MapLoaded(loaded) => {
+                let (vfs, loaded) = *loaded;
+                self.vfs = Some(vfs);
+                self.busy = false;
+                self.map.set_loaded(loaded);
             }
             TaskResult::Mounted(Err(e)) => {
                 crate::status::publish_mount(None);
@@ -570,7 +589,9 @@ impl Browser {
     pub fn ui(&mut self, ui: &mut Ui, spawner: &dyn Spawner, backend: &str) {
         egui::Panel::top("top").show(ui, |ui| {
             ui.horizontal_wrapped(|ui| {
-                ui.heading("Glasnost asset viewer");
+                ui.heading("Glasnost viewer");
+                ui.selectable_value(&mut self.map_mode, false, "Assets");
+                ui.selectable_value(&mut self.map_mode, true, "Map viewer");
                 ui.separator();
                 self.mount_controls(ui, spawner);
                 ui.separator();
@@ -583,6 +604,26 @@ impl Browser {
                 });
             });
         });
+        if self.map_mode {
+            let action = self.map.ui(ui, self.vfs.is_some(), self.busy);
+            match action {
+                Some(MapAction::Find) => {
+                    if let Some(vfs) = self.vfs.take() {
+                        self.busy = true;
+                        self.map.status = "Finding maps…".into();
+                        spawner.spawn(tasks::find_maps(vfs));
+                    }
+                }
+                Some(MapAction::Load(file, origin, options)) => {
+                    if let Some(vfs) = self.vfs.take() {
+                        self.busy = true;
+                        spawner.spawn(tasks::load_map(vfs, file, origin, options));
+                    }
+                }
+                None => {}
+            }
+            return;
+        }
         let mut action = None;
         egui::Panel::left("archives")
             .resizable(true)

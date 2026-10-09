@@ -76,6 +76,11 @@ pub struct Import {
     pub errors: Vec<String>,
     /// Importer warnings, with file and line.
     pub warnings: Vec<Warning>,
+    /// Each type's art for the import's theater (S-0007), by kind and
+    /// registration index; empty without a theater.
+    pub arts: std::collections::BTreeMap<(kinds::Kind, usize), art::TypeArt>,
+    /// The art database as read, for the art keys the renderer reads.
+    pub art_file: Option<InputFile>,
 }
 
 /// Imports the rules and art of the install mounted in `vfs`, whose search
@@ -197,6 +202,7 @@ async fn look_up_art(
         &arts,
         theater,
     );
+    import.arts = arts;
 }
 
 fn empty_layer(role: Role, file: &str, quirks: IniQuirks) -> Layer {
@@ -405,6 +411,8 @@ pub fn convert(inputs: &Inputs, options: &ImportOptions) -> Import {
         coverage,
         errors,
         warnings,
+        arts: Default::default(),
+        art_file: inputs.art.clone(),
     }
 }
 

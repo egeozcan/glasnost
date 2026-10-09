@@ -121,7 +121,8 @@ fn gpu_matches_cpu_reference() {
         return;
     };
     let s = scene();
-    let mut r = MapRenderer::new(&device, &queue, &s).expect("scene uploads");
+    let mut r = MapRenderer::new(&device, &queue, &s, glasnost_render::map_gpu::COLOR_FORMAT)
+        .expect("scene uploads");
     for (origin, size) in [
         ((0, 0), (128, 72)),
         ((-7, 13), (100, 40)),
@@ -136,7 +137,7 @@ fn gpu_matches_cpu_reference() {
         let cpu = s
             .compose(&view, &filter, &ComposeQuirks::default())
             .to_rgba();
-        let (color, depth) = targets(&device, size);
+        let (color, depth) = targets(&device, size, glasnost_render::map_gpu::COLOR_FORMAT);
         let mut encoder = device.create_command_encoder(&Default::default());
         r.render(
             &device,

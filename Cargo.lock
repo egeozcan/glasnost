@@ -896,6 +896,7 @@ dependencies = [
  "glasnost-convert",
  "glasnost-fmt",
  "glasnost-ini",
+ "glasnost-map",
  "glasnost-render",
  "glasnost-rules",
  "glasnost-vfs",

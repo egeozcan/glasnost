@@ -125,11 +125,15 @@ impl std::fmt::Display for UploadError {
 impl std::error::Error for UploadError {}
 
 impl MapRenderer {
-    /// Uploads `scene`.
+    /// Uploads `scene` for drawing into targets of `target_format`
+    /// ([`COLOR_FORMAT`] or its sRGB form; with an sRGB target the palette
+    /// rows are stored sRGB too, so decode on fetch and encode on store
+    /// cancel out and the bytes stay exact).
     pub fn new(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         scene: &Scene,
+        target_format: wgpu::TextureFormat,
     ) -> Result<Self, UploadError> {
         let limits = device.limits();
         let side = limits.max_texture_dimension_2d.min(4096);
@@ -203,7 +207,11 @@ impl MapRenderer {
                 mip_level_count: 1,
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::Rgba8Unorm,
+                format: if target_format.is_srgb() {
+                    wgpu::TextureFormat::Rgba8UnormSrgb
+                } else {
+                    wgpu::TextureFormat::Rgba8Unorm
+                },
                 usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
                 view_formats: &[],
             },
@@ -329,7 +337,7 @@ impl MapRenderer {
                     entry_point: Some("fs_main"),
                     compilation_options: Default::default(),
                     targets: &[Some(wgpu::ColorTargetState {
-                        format: COLOR_FORMAT,
+                        format: target_format,
                         blend,
                         write_mask: wgpu::ColorWrites::COLOR,
                     })],
@@ -510,8 +518,13 @@ impl MapRenderer {
     }
 }
 
-/// Creates a colour target and a depth buffer for a view of `size`.
-pub fn targets(device: &wgpu::Device, size: (u32, u32)) -> (wgpu::Texture, wgpu::Texture) {
+/// Creates a colour target of `format` and a depth buffer for a view of
+/// `size`.
+pub fn targets(
+    device: &wgpu::Device,
+    size: (u32, u32),
+    format: wgpu::TextureFormat,
+) -> (wgpu::Texture, wgpu::Texture) {
     let make = |format, usage, label| {
         device.create_texture(&wgpu::TextureDescriptor {
             label: Some(label),
@@ -530,7 +543,7 @@ pub fn targets(device: &wgpu::Device, size: (u32, u32)) -> (wgpu::Texture, wgpu:
     };
     (
         make(
-            COLOR_FORMAT,
+            format,
             wgpu::TextureUsages::RENDER_ATTACHMENT
                 | wgpu::TextureUsages::TEXTURE_BINDING
                 | wgpu::TextureUsages::COPY_SRC,

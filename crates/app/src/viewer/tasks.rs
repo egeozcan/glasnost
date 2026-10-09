@@ -63,6 +63,10 @@ pub enum TaskResult {
         /// Name-like tokens from text entries.
         tokens: BTreeSet<String>,
     },
+    /// The install's maps were found.
+    MapsFound(Box<(Vfs, Vec<crate::mapview::find::Listing>)>),
+    /// A map was loaded for viewing.
+    MapLoaded(Box<(Vfs, crate::mapview::load::Loaded)>),
     /// A file was read.
     Loaded {
         /// What it was read for.
@@ -146,6 +150,28 @@ pub fn import(mut vfs: Vfs, theater: Theater) -> Task {
             palettes,
             theater,
         }))
+    })
+}
+
+/// Finds the maps of the mounted install.
+pub fn find_maps(vfs: Vfs) -> Task {
+    Box::pin(async move {
+        let maps = crate::mapview::find::find_maps(&vfs).await;
+        TaskResult::MapsFound(Box::new((vfs, maps)))
+    })
+}
+
+/// Loads a map for viewing.
+pub fn load_map(
+    mut vfs: Vfs,
+    file: FileRef,
+    origin: String,
+    options: crate::mapview::build::Options,
+) -> Task {
+    Box::pin(async move {
+        let bytes = vfs.read(&file).await.unwrap_or_default();
+        let loaded = crate::mapview::load::load(&mut vfs, bytes, origin, &options).await;
+        TaskResult::MapLoaded(Box::new((vfs, loaded)))
     })
 }
 
