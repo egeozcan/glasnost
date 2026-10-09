@@ -432,24 +432,46 @@ pub enum WriteLayout {
     },
 }
 
+/// Order of the entries in a written index.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum IndexOrder {
+    /// Ascending by ID read as a signed 32-bit integer: the order the public
+    /// format prescribes.
+    #[default]
+    SignedAscending,
+    /// Ascending by ID read as unsigned (for tests of lookups in archives
+    /// that do not follow the format).
+    UnsignedAscending,
+    /// The order of [`MixWriter::files`].
+    AsGiven,
+}
+
 /// Writes synthetic MIX archives.
 #[derive(Clone, Debug)]
 pub struct MixWriter {
     /// Index layout.
     pub layout: WriteLayout,
     /// Files as (ID, contents), stored in this order in the body; the index
-    /// lists them sorted by ID.
+    /// lists them in signed ID order (see [`MixWriter::write_ordered`]).
     pub files: Vec<(u32, Vec<u8>)>,
 }
 
 impl MixWriter {
-    /// Serialises the archive.
+    /// Serialises the archive with its index in signed ID order.
     ///
     /// # Panics
     /// If there are more than 65535 files or the body exceeds 4 GiB, or the
     /// RSA key cannot wrap keys (a writer-side programming error).
-    #[allow(clippy::expect_used)]
     pub fn write(&self) -> Vec<u8> {
+        self.write_ordered(IndexOrder::SignedAscending)
+    }
+
+    /// Serialises the archive with its index in the given order.
+    ///
+    /// # Panics
+    /// As [`MixWriter::write`].
+    #[allow(clippy::expect_used)]
+    pub fn write_ordered(&self, order: IndexOrder) -> Vec<u8> {
         let mut entries = Vec::with_capacity(self.files.len());
         let mut body = Vec::new();
         for (id, data) in &self.files {
@@ -460,7 +482,11 @@ impl MixWriter {
             });
             body.extend_from_slice(data);
         }
-        entries.sort();
+        match order {
+            IndexOrder::SignedAscending => entries.sort_by_key(|e| (e.id as i32, e.offset)),
+            IndexOrder::UnsignedAscending => entries.sort(),
+            IndexOrder::AsGiven => {}
+        }
         let mut header = Vec::new();
         header.put_u16(len_u16(entries.len()));
         header.put_u32(len_u32(body.len()));

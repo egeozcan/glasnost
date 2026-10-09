@@ -28,8 +28,8 @@ use glasnost_fmt::sniff::{Kind, SNIFF_LEN, sniff};
 use glasnost_fmt::tmp::Tmp;
 use glasnost_fmt::vxl::Vxl;
 use glasnost_vfs::names::{candidates, harvest_tokens};
-use glasnost_vfs::source::FileSource;
-use glasnost_vfs::{ArchiveId, FileRef, MountOptions, PickedFile, Vfs};
+use glasnost_vfs::source::{FileSource, Unopened};
+use glasnost_vfs::{ArchiveId, FileRef, GameOptions, MountOptions, PickedFile, Resolved, Vfs};
 
 /// Environment variable naming the install folder.
 pub const GAME_DIR_VAR: &str = "GLASNOST_GAME_DIR";
@@ -141,8 +141,15 @@ pub mod labels {
     pub const IDX_FILES: &str = "IDX sound banks parsed with their BAG";
     /// IDX samples decoded from their BAG.
     pub const IDX_SAMPLES: &str = "IDX samples decoded";
+    /// Required startup archives resolved (S-0005 claim 16).
+    pub const REQUIRED_ARCHIVES: &str = "required startup archives resolved (S-0005 claim 16)";
+    /// The rules file resolves to the expansion archive's copy.
+    pub const RULES_FROM_EXPANSION: &str =
+        "rulesmd.ini resolves to expandmd01.mix's copy (S-0005 claim 18)";
     /// Every check the test requires at 100 %.
     pub const REQUIRED: &[&str] = &[
+        REQUIRED_ARCHIVES,
+        RULES_FROM_EXPANSION,
         MIX_TOP,
         MIX_DECRYPTED,
         CONQ_SHP_FILES,
@@ -181,7 +188,14 @@ async fn run_async(dir: &Path) -> std::io::Result<Report> {
             .unwrap_or_default();
         if !options.archive_extensions.contains(&ext) {
             // Never opened: loose files may be user mods or unrelated tools.
+            // Their names still take part in the loose-file test (S-0005
+            // claim 1), which reports them without reading them.
             loose += 1;
+            let len = e.metadata().map_or(0, |m| m.len());
+            picked.push(PickedFile {
+                path: name,
+                source: Rc::new(Unopened(len)),
+            });
             continue;
         }
         picked.push(PickedFile {
@@ -231,9 +245,67 @@ async fn run_async(dir: &Path) -> std::io::Result<Report> {
             .map(|a| a.index.entries.len() as u64)
             .sum(),
     );
+    search_order(&mut vfs, &mut report).await;
     vfs.learn_name(CONQ_ARCHIVE);
     classify(&mut vfs, &mut report).await;
     Ok(report)
+}
+
+/// Data files the importer resolves (S-0005 Import mapping).
+const IMPORT_FILES: &[&str] = &[
+    "rulesmd.ini",
+    "artmd.ini",
+    "aimd.ini",
+    "soundmd.ini",
+    "evamd.ini",
+    "thememd.ini",
+    "mpmodesmd.ini",
+    "uimd.ini",
+    "keyboardmd.ini",
+];
+
+/// Builds the game's search order (S-0005) and checks the stock outcome
+/// the M1 exit criterion names: the expansion archive's rules file is the
+/// one used (S-0005 claim 18).
+async fn search_order(vfs: &mut Vfs, report: &mut Report) {
+    let startup = vfs.mount_startup(GameOptions::default()).await;
+    report.count(
+        "archives in the game's search order (S-0005 Table 1)",
+        vfs.search_order().len() as u64,
+    );
+    {
+        let t = report.tally(labels::REQUIRED_ARCHIVES);
+        // Six named archives and the movie archive (either name).
+        for _ in 0..7 - startup.missing_required.len() {
+            t.pass();
+        }
+        for _ in &startup.missing_required {
+            t.fail("missing");
+        }
+    }
+    {
+        let t = report.tally(labels::RULES_FROM_EXPANSION);
+        match vfs.resolve("rulesmd.ini") {
+            Some(Resolved::Member(f)) if top_level_name(vfs, f.archive) == "expandmd01.mix" => {
+                t.pass();
+            }
+            Some(_) => t.fail("resolved elsewhere"),
+            None => t.fail("not found"),
+        }
+    }
+    let resolved = IMPORT_FILES
+        .iter()
+        .filter(|n| vfs.resolve(n).is_some())
+        .count();
+    report.count("importer data files resolved", resolved as u64);
+    let shadowed = IMPORT_FILES
+        .iter()
+        .filter(|n| vfs.shadowing_loose(n).is_some())
+        .count();
+    report.count(
+        "importer data files with a loose copy (flagged, not used)",
+        shadowed as u64,
+    );
 }
 
 /// Which top-level archive an archive sits under (lower-case name).

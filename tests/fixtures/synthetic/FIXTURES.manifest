@@ -17,9 +17,9 @@ d2b3e6eb7044fef9     1438 lzo/sample-2.bin
 597a6134d7f0bf84     4210 mappack/iso-grid.bin
 174fe7c36e67a4ca     5697 mappack/iso-grid.txt
 4f29333805f63419      565 mappack/overlay.bin
-8ed2ef9aa3faab20      753 mix/classic-6files.mix
-9906c84b81c3938b      839 mix/encrypted-6files.mix
-ada4bccd098ac290      757 mix/plain-6files.mix
+934748a4e5542a6c      753 mix/classic-6files.mix
+8c23eadf3b935b3e      839 mix/encrypted-6files.mix
+3b6b226e88d0c1dc      757 mix/plain-6files.mix
 4fe9655ad4788ea1      768 pal/ramps-tint0.pal
 c0e2d3e6743ff295      768 pal/ramps-tint7.pal
 b1a6dcc573c020cd     1647 pcx/checker-indexed.pcx

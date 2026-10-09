@@ -9,7 +9,7 @@ Rust stable (pinned in `rust-toolchain.toml`), one Cargo workspace. Package name
 | Crate | Path | Filled in | Role |
 |---|---|---|---|
 | `fmt` | `crates/fmt` | M0 scaffolding, M1 parsers | File-format parsers, each with a fixture writer; indexed-image model; synthetic generators; content sniffing |
-| `vfs` | `crates/vfs` | M1 | Archive mounting (nested archives included), lookup by name hash in a pluggable precedence order, lazy reads |
+| `vfs` | `crates/vfs` | M1 | Archive mounting (nested archives included), the game's search order (S-0005), lazy reads |
 | `ini` | `crates/ini` | M1 | INI reader with the original's parse semantics, for the importer only |
 | `convert` | `crates/convert` | M1–M2 | Import: INI layers → our rules tree, `coverage.csv`, maps |
 | `rules` | `crates/deterministic/rules` | M0 JSONC reader, M1 schema | Our rules format, resolve pipeline, `sim_rules_hash` |
@@ -120,11 +120,9 @@ Every parser in `fmt` is panic-free on hostile input: reads are bounds-checked, 
 
 ### Provisional placeholders
 
-Behaviour that needs a spec stays out of code; where a spec leaves a gap, the code carries an explicit placeholder tied to a spec request:
+Behaviour that needs a spec stays out of code; where a spec leaves a gap, the code carries an explicit placeholder tied to a spec request (see the table in "Import" below).
 
-| Where | Placeholder | Request |
-|---|---|---|
-| `vfs::precedence` | lookup order = mount order (top-level archives by name, nested ones after their parent) | Q-0002 |
+Q-0002 is answered by S-0005: `vfs::game` builds the game's search order by name (Table 1), honours loose files for the archives it mounts, finds members by the signed index bisection and mounts the theater and side groups per game. Loose *data* files are an opt-in mod layer (PLAN.md 4.3); with it off, a loose file that would have won is reported and never read. Archives outside the search order (for example the base game's map archives) stay browsable in the viewer but never answer a lookup.
 
 Q-0001 and Q-0003 are answered by S-0103: `render::palette` loads palette files (×4 in 8-bit arithmetic), keeps the theater palettes in force, builds house-colour palettes from colour definitions and picks each object's palette. Shading by light (S-0104) is not applied yet; the viewer shows unshaded palettes.
 

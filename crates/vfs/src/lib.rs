@@ -1,18 +1,23 @@
 //! Virtual file system over the user's own game install.
 //!
-//! - **Mounting.** Top-level archives come from the folder the user picked
-//!   ([`Vfs::mount_install`]). Archives nested inside them are found by
-//!   content: an entry whose bytes start with a MIX header that is exactly
-//!   consistent with the entry's size is mounted as an archive (names are
-//!   not stored in archives, so content is the only reliable signal).
-//! - **Lookup** by name hashes the name ([`glasnost_fmt::mix::id_hash`]) and
-//!   asks the archives in [`Precedence`] order. The default order is a
-//!   placeholder pending spec request Q-0002 (see [`precedence`]).
+//! - **Mounting for browsing.** Top-level archives come from the folder the
+//!   user picked ([`Vfs::mount_install`]). Archives nested inside them are
+//!   found by content: an entry whose bytes start with a MIX header that is
+//!   exactly consistent with the entry's size is mounted as an archive
+//!   (names are not stored in archives, so content is the only reliable
+//!   signal for browsing).
+//! - **The game's search order** (S-0005) is built separately by
+//!   [`Vfs::mount_startup`] and [`Vfs::mount_game`]: archives are mounted by
+//!   name, in the original's order, each resolved through the loose files
+//!   and the archives mounted before it. Only archives in that order take
+//!   part in [`Vfs::resolve`]; the others stay browsable. See [`game`].
 //! - **Reads are lazy**: mounting reads only headers, and file contents are
 //!   read by range from the picked files when asked for.
-//! - **Loose files** in the picked folder are recorded by name only and
-//!   never opened unless the caller enables the mod layer (PLAN.md 4.3:
-//!   loose files are off by default).
+//! - **Loose files** in the picked folder are honoured as S-0005 says for
+//!   the archives of the search order; loose *data* files win over archive
+//!   members only when the mod layer is on ([`game::GameOptions::mod_layer`],
+//!   PLAN.md 4.3: off by default). Otherwise a loose file that would have won
+//!   is reported, never read.
 //!
 //! Nothing here ever ships or caches game data in this repository; see
 //! CONTRIBUTING.md, "No EA bytes, anywhere". Errors carry offsets, sizes
@@ -23,13 +28,13 @@ use std::rc::Rc;
 
 use glasnost_fmt::mix::{MixEntry, MixIndex, MixKeys, MixLayout, id_hash, may_be_mix};
 
+pub mod game;
 pub mod names;
-pub mod precedence;
 pub mod source;
 pub mod theater;
 
+pub use game::{GameOptions, GameQuirks, Resolved, SearchRank, StartupReport};
 pub use names::Names;
-pub use precedence::{ArchiveSummary, NamedPrecedence, PlaceholderPrecedence, Precedence};
 pub use source::{ByteSource, MemSource, ReadFuture};
 
 /// Index of a picked file in a [`Vfs`].
@@ -98,6 +103,8 @@ pub struct LooseFile {
     pub name: String,
     /// Size in bytes.
     pub len: u64,
+    /// Its bytes (read only when the mod layer allows it).
+    pub source: SourceId,
 }
 
 /// One file of the folder the user picked.
@@ -182,6 +189,9 @@ pub struct MountReport {
     /// Nested candidates (entries that start like a MIX header) that turned
     /// out not to be consistent archives.
     pub nested_rejected: usize,
+    /// Top-level files whose names differ only in letter case (S-0005 Edge
+    /// cases: an import error; the second name is ignored).
+    pub case_clashes: Vec<(String, String)>,
 }
 
 /// The mounted install.
@@ -190,10 +200,13 @@ pub struct Vfs {
     options: MountOptions,
     sources: Vec<(String, Rc<dyn ByteSource>)>,
     archives: Vec<Archive>,
-    order: Vec<ArchiveId>,
-    precedence: Box<dyn Precedence>,
     names: Names,
     loose: Vec<LooseFile>,
+    /// Top-level files of the picked folder by upper-cased name.
+    top: std::collections::BTreeMap<Vec<u8>, game::TopFile>,
+    /// The game's search order, rank 1 first (S-0005).
+    search: Vec<SearchRank>,
+    game: game::GameState,
 }
 
 impl Default for Vfs {
@@ -216,17 +229,12 @@ impl Vfs {
             options,
             sources: Vec::new(),
             archives: Vec::new(),
-            order: Vec::new(),
-            precedence: Box::new(PlaceholderPrecedence),
             names: Names::default(),
             loose: Vec::new(),
+            top: std::collections::BTreeMap::new(),
+            search: Vec::new(),
+            game: game::GameState::default(),
         }
-    }
-
-    /// Replaces the lookup order.
-    pub fn set_precedence(&mut self, precedence: Box<dyn Precedence>) {
-        self.precedence = precedence;
-        self.reorder();
     }
 
     /// Known names.
@@ -264,12 +272,13 @@ impl Vfs {
         self.archives.get(id.0 as usize)
     }
 
-    /// Archives in lookup order, highest precedence first.
-    pub fn lookup_order(&self) -> &[ArchiveId] {
-        &self.order
+    /// The game's search order (S-0005 Table 1), rank 1 first. Empty until
+    /// [`Vfs::mount_startup`] runs.
+    pub fn search_order(&self) -> &[SearchRank] {
+        &self.search
     }
 
-    /// Loose files of the picked folder (never opened by the file system).
+    /// Loose files of the picked folder (not mounted as archives).
     pub fn loose_files(&self) -> &[LooseFile] {
         &self.loose
     }
@@ -285,21 +294,42 @@ impl Vfs {
         self.sources.get(id.0 as usize).map(|(n, _)| n.as_str())
     }
 
-    /// Finds a file by name, honouring precedence.
+    /// Finds an archive member by name in the game's search order (S-0005
+    /// claims 6 to 8); loose files are not considered (see
+    /// [`Vfs::resolve`]).
     pub fn find(&self, name: &str) -> Option<FileRef> {
+        if name.len() > game::LONGEST_NAME {
+            return None;
+        }
         self.find_id(id_hash(name))
     }
 
-    /// Finds a file by ID, honouring precedence.
+    /// Finds an archive member by ID in the game's search order.
     pub fn find_id(&self, id: u32) -> Option<FileRef> {
-        self.find_all(id).into_iter().next()
+        self.search.iter().find_map(|rank| {
+            let entry = game::index_search(
+                &self.archives[rank.archive.0 as usize].index,
+                id,
+                &self.game.options.quirks,
+            )?;
+            Some(FileRef {
+                archive: rank.archive,
+                entry,
+            })
+        })
     }
 
-    /// Every copy of a file, highest precedence first.
+    /// Every mounted archive that lists `id`: first the archives of the
+    /// search order in rank order, then the others in mount order. The
+    /// first one of the search order is the copy the game uses.
     pub fn find_all(&self, id: u32) -> Vec<FileRef> {
-        self.order
-            .iter()
-            .filter_map(|&a| {
+        let ranked = self.search.iter().map(|r| r.archive);
+        let rest = (0..self.archives.len())
+            .map(|i| ArchiveId(i as u32))
+            .filter(|a| !self.search.iter().any(|r| r.archive == *a));
+        ranked
+            .chain(rest)
+            .filter_map(|a| {
                 let entry = *self.archive(a)?.index.find(id)?;
                 Some(FileRef { archive: a, entry })
             })
@@ -348,8 +378,10 @@ impl Vfs {
 
     /// Mounts the top-level archives of a picked folder (files directly in
     /// it whose extension is in [`MountOptions::archive_extensions`]), in
-    /// case-insensitive name order, and their nested archives. Every other
-    /// file is recorded as loose and never read.
+    /// case-insensitive name order, and their nested archives, for browsing.
+    /// Every other file is recorded as loose and read only when the mod
+    /// layer allows it. The game's search order is built afterwards by
+    /// [`Vfs::mount_startup`].
     pub async fn mount_install(&mut self, files: Vec<PickedFile>) -> MountReport {
         let mut report = MountReport::default();
         let mut top: Vec<PickedFile> = Vec::new();
@@ -363,24 +395,69 @@ impl Vfs {
             if is_top && self.options.archive_extensions.contains(&ext) {
                 top.push(f);
             } else {
+                let source = self.push_source(&f.path, f.source.clone());
+                if is_top {
+                    self.note_top(&f.path, source, f.source.len(), None, &mut report);
+                }
                 self.loose.push(LooseFile {
                     name: f.path.clone(),
                     len: f.source.len(),
+                    source,
                 });
             }
         }
         top.sort_by_key(|f| f.path.to_ascii_lowercase());
         for f in top {
-            match self.mount_top(&f.path, f.source).await {
+            let len = f.source.len();
+            match self.mount_top(&f.path, f.source.clone()).await {
                 Ok((id, nested)) => {
+                    let source = self.archives[id.0 as usize].location.source;
+                    self.note_top(&f.path, source, len, Some(id), &mut report);
                     report.top_level.push(id);
                     report.nested.extend(nested.mounted);
                     report.nested_rejected += nested.rejected;
                 }
-                Err(e) => report.failed.push((f.path, e)),
+                Err(e) => {
+                    let source = self.push_source(&f.path, f.source);
+                    self.note_top(&f.path, source, len, None, &mut report);
+                    report.failed.push((f.path, e));
+                }
             }
         }
         report
+    }
+
+    fn push_source(&mut self, name: &str, source: Rc<dyn ByteSource>) -> SourceId {
+        let id = SourceId(u32::try_from(self.sources.len()).unwrap_or(u32::MAX));
+        self.sources.push((name.to_owned(), source));
+        id
+    }
+
+    /// Records a top-level file for the loose-file test (S-0005 claims 1
+    /// and 2), and a clash when two names differ only in letter case.
+    fn note_top(
+        &mut self,
+        name: &str,
+        source: SourceId,
+        len: u64,
+        archive: Option<ArchiveId>,
+        report: &mut MountReport,
+    ) {
+        let key = name.to_ascii_uppercase().into_bytes();
+        let file = game::TopFile {
+            name: name.to_owned(),
+            source,
+            len,
+            archive,
+        };
+        if let Some(previous) = self.top.get(&key) {
+            // spec: S-0005 Edge cases (loose names that differ only in letter case: an error)
+            report
+                .case_clashes
+                .push((previous.name.clone(), name.to_owned()));
+            return;
+        }
+        self.top.insert(key, file);
     }
 
     /// Mounts one top-level archive and (if enabled) its nested archives.
@@ -392,11 +469,10 @@ impl Vfs {
         if self.archives.len() >= self.options.max_archives {
             return Err(MountError::Limit("too many archives"));
         }
-        let source_id = SourceId(u32::try_from(self.sources.len()).unwrap_or(u32::MAX));
         let len = source.len();
         let index = read_index(source.as_ref(), 0, len, &self.keys).await?;
         index.check_consistent(len)?;
-        self.sources.push((name.to_owned(), source));
+        let source_id = self.push_source(name, source);
         let id = self.push_archive(Archive {
             name: name.to_owned(),
             path: name.to_owned(),
@@ -414,7 +490,6 @@ impl Vfs {
         } else {
             NestedReport::default()
         };
-        self.reorder();
         Ok((id, nested))
     }
 
@@ -495,52 +570,6 @@ impl Vfs {
             stack.extend(ids);
         }
         report
-    }
-
-    fn summaries(&self) -> Vec<ArchiveSummary> {
-        // Mount order with nested archives depth-first after their parent.
-        let mut out = Vec::with_capacity(self.archives.len());
-        let mut stack: Vec<ArchiveId> = (0..self.archives.len())
-            .rev()
-            .map(|i| ArchiveId(i as u32))
-            .filter(|&id| self.archive(id).is_some_and(|a| a.parent.is_none()))
-            .collect();
-        while let Some(id) = stack.pop() {
-            let Some(a) = self.archive(id) else { continue };
-            out.push(ArchiveSummary {
-                id,
-                name: a.name.clone(),
-                parent: a.parent.map(|(p, _)| p),
-                depth: a.depth,
-            });
-            let children = (0..self.archives.len())
-                .rev()
-                .map(|i| ArchiveId(i as u32))
-                .filter(|&c| {
-                    self.archive(c)
-                        .is_some_and(|x| x.parent.map(|(p, _)| p) == Some(id))
-                });
-            stack.extend(children);
-        }
-        out
-    }
-
-    fn reorder(&mut self) {
-        let summaries = self.summaries();
-        let mut order = self.precedence.order(&summaries);
-        // Guard against a precedence that drops or repeats archives.
-        let mut seen = vec![false; self.archives.len()];
-        order.retain(|id| {
-            seen.get_mut(id.0 as usize)
-                .is_some_and(|s| !std::mem::replace(s, true))
-        });
-        order.extend(
-            summaries
-                .iter()
-                .map(|s| s.id)
-                .filter(|id| !seen[id.0 as usize]),
-        );
-        self.order = order;
     }
 
     fn refresh_paths(&mut self) {

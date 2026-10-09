@@ -649,9 +649,15 @@ impl Browser {
             self.archive = Some(ArchiveId(i as u32));
             self.status = format!("opened archive {name}");
         } else if let Some(file) = vfs.find(&name) {
+            // The copy the game uses (S-0005).
+            let copies = vfs.find_all(id).len();
             self.archive = Some(file.archive);
             self.select(file, spawner);
-            self.status = format!("found {name}");
+            self.status = format!("found {name} ({copies} copies; the game uses this one)");
+        } else if let Some(&file) = vfs.find_all(id).first() {
+            self.archive = Some(file.archive);
+            self.select(file, spawner);
+            self.status = format!("found {name}, but only in archives the game never searches");
         } else {
             self.status = format!("{name} is not in any mounted archive");
         }

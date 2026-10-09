@@ -12,7 +12,7 @@ use std::rc::Rc;
 
 use glasnost_fmt::sniff::{Kind, SNIFF_LEN, sniff};
 use glasnost_vfs::names::harvest_tokens;
-use glasnost_vfs::{ArchiveId, ByteSource, FileRef, Location, PickedFile, Vfs};
+use glasnost_vfs::{ArchiveId, ByteSource, FileRef, GameOptions, Location, PickedFile, Vfs};
 
 /// A boxed task.
 pub type Task = Pin<Box<dyn Future<Output = TaskResult>>>;
@@ -59,13 +59,26 @@ pub fn mount(files: Vec<PickedFile>) -> Task {
     Box::pin(async move {
         let mut vfs = Vfs::default();
         let report = vfs.mount_install(files).await;
-        let summary = format!(
-            "{} archives mounted ({} nested), {} failed, {} loose files not opened",
+        // The game's search order (S-0005), loose data files off (PLAN.md 4.3).
+        let startup = vfs.mount_startup(GameOptions::default()).await;
+        let mut summary = format!(
+            "{} archives mounted ({} nested), {} failed, {} loose files not opened; \
+             {} in the game's search order",
             report.top_level.len() + report.nested.len(),
             report.nested.len(),
             report.failed.len(),
             vfs.loose_files().len(),
+            vfs.search_order().len(),
         );
+        if !startup.starts() {
+            summary += &format!(
+                "; the game would not start without {}",
+                startup.missing_required.join(", ")
+            );
+        }
+        for (a, b) in &report.case_clashes {
+            summary += &format!("; {a} and {b} differ only in letter case (import error)");
+        }
         if report.top_level.is_empty() {
             TaskResult::Mounted(Err(format!("no archives could be mounted: {summary}")))
         } else {
