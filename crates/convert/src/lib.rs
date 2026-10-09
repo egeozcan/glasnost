@@ -21,7 +21,9 @@ pub mod emit;
 pub mod inputs;
 pub mod kinds;
 pub mod layers;
+pub mod map;
 pub mod names;
+pub mod theater;
 
 #[cfg(test)]
 mod tests;
