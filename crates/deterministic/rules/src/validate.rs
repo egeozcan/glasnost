@@ -1,0 +1,170 @@
+//! Semantic validation (PLAN.md 4.6, step 5) and ID interning (step 6).
+
+use std::collections::{BTreeMap, BTreeSet};
+
+use crate::jsonc::Node;
+use crate::schema::{Ruleset, SCHEMA_VERSION};
+
+/// A semantic error: a path and what is wrong there.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Problem {
+    /// Dotted path.
+    pub path: String,
+    /// What is wrong.
+    pub message: String,
+}
+
+impl std::fmt::Display for Problem {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}: {}", self.path, self.message)
+    }
+}
+
+/// Number of entries of the colour-adjustment table (S-0006 claim 2).
+const COLOUR_ADD_LEN: usize = 16; // spec: S-0006 claim 2 (16 entries)
+
+/// Checks references and ranges.
+pub fn validate(r: &Ruleset) -> Vec<Problem> {
+    let mut out = Vec::new();
+    let mut problem = |path: String, message: String| out.push(Problem { path, message });
+    if r.schema != SCHEMA_VERSION {
+        problem(
+            "schema".into(),
+            format!(
+                "schema {} is not supported (this build reads {SCHEMA_VERSION})",
+                r.schema
+            ),
+        );
+    }
+    for (id, o) in &r.objects {
+        if let Some(a) = &o.armor
+            && !r.armor_classes.contains_key(a)
+        {
+            problem(
+                format!("objects.{id}.armor"),
+                format!("unknown armour class {a:?}"),
+            );
+        }
+        for owner in &o.owners {
+            if !r.owners.contains_key(owner) {
+                problem(
+                    format!("objects.{id}.owners"),
+                    format!("unknown owner {owner:?}"),
+                );
+            }
+        }
+        for p in &o.prerequisites {
+            if !r.objects.contains_key(p) {
+                problem(
+                    format!("objects.{id}.prerequisites"),
+                    format!("unknown or abstract object {p:?}"),
+                );
+            }
+        }
+        for (slot, a) in &o.armament {
+            if !r.weapons.contains_key(&a.weapon) {
+                problem(
+                    format!("objects.{id}.armament.{slot}.weapon"),
+                    format!("unknown weapon {:?}", a.weapon),
+                );
+            }
+        }
+    }
+    for (id, w) in &r.weapons {
+        if let Some(wh) = &w.warhead
+            && !r.warheads.contains_key(wh)
+        {
+            problem(
+                format!("weapons.{id}.warhead"),
+                format!("unknown warhead {wh:?}"),
+            );
+        }
+    }
+    for (id, wh) in &r.warheads {
+        for class in wh.versus.keys() {
+            if !r.armor_classes.contains_key(class) {
+                problem(
+                    format!("warheads.{id}.versus"),
+                    format!("unknown armour class {class:?}"),
+                );
+            }
+        }
+    }
+    for (kind, names) in &r.registries {
+        let types = r.types.get(kind);
+        let mut seen = BTreeSet::new();
+        for (i, name) in names.iter().enumerate() {
+            if !seen.insert(name) {
+                problem(
+                    format!("registries.{kind}"),
+                    format!("{name:?} listed twice"),
+                );
+            }
+            match types.and_then(|t| t.get(name)) {
+                None => problem(
+                    format!("registries.{kind}"),
+                    format!("{name:?} has no entry in types.{kind}"),
+                ),
+                Some(t) if t.index as usize != i => problem(
+                    format!("types.{kind}.{name}.index"),
+                    format!("index {} but registry position {i}", t.index),
+                ),
+                Some(_) => {}
+            }
+        }
+    }
+    for (kind, types) in &r.types {
+        let listed: BTreeSet<&String> = r
+            .registries
+            .get(kind)
+            .map(|v| v.iter().collect())
+            .unwrap_or_default();
+        for name in types.keys() {
+            if !listed.contains(name) {
+                problem(
+                    format!("types.{kind}.{name}"),
+                    "not in the kind's registry".into(),
+                );
+            }
+        }
+    }
+    if !r.colour_add.is_empty() && r.colour_add.len() != COLOUR_ADD_LEN {
+        problem(
+            "colour_add".into(),
+            format!("{} entries, expected {COLOUR_ADD_LEN}", r.colour_add.len()),
+        );
+    }
+    out
+}
+
+/// Interned IDs: every kind's names in a defined order.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Ids {
+    /// Names per kind; the position is the ID.
+    pub kinds: BTreeMap<String, Vec<String>>,
+}
+
+impl Ids {
+    /// The ID of `name` in `kind`.
+    pub fn get(&self, kind: &str, name: &str) -> Option<usize> {
+        self.kinds.get(kind)?.iter().position(|n| n == name)
+    }
+}
+
+/// Interns IDs (PLAN.md 4.6, step 6): imported kinds in registration order
+/// (S-0004); our own collections in the order their instances first
+/// appear across the layers (import order, then mods).
+pub fn intern(r: &Ruleset, tree: &Node) -> Ids {
+    let mut kinds = r.registries.clone();
+    for collection in crate::resolve::COLLECTIONS {
+        let names: Vec<String> = tree
+            .get(collection)
+            .and_then(Node::members)
+            .map(|m| m.iter().map(|x| x.key.clone()).collect())
+            .unwrap_or_default();
+        if !names.is_empty() {
+            kinds.insert(collection.to_owned(), names);
+        }
+    }
+    Ids { kinds }
+}

@@ -1,16 +1,17 @@
-//! Shape checks for the synthetic ruleset in `data/synthetic/ruleset/`.
-//!
-//! These stand in for the schema and semantic validation that arrive in M1:
-//! every file parses as JSONC (so every number is an integer), carries the
-//! synthetic-data header, and every cross-reference resolves.
+//! The synthetic ruleset in `data/synthetic/ruleset/` through the whole
+//! resolve pipeline: every file parses as JSONC (so every number is an
+//! integer) and carries the synthetic-data header; the layers resolve,
+//! type-check against schema 1 and validate; and the committed JSON Schema
+//! is current.
 
 // Tests read fixture files from disk; they are not simulation code.
 #![allow(clippy::disallowed_methods, clippy::disallowed_types)]
 
-use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 use glasnost_rules::jsonc::{self, Node, Value};
+use glasnost_rules::resolve::Source;
+use glasnost_rules::schema::{Manifest, ObjectKind};
 
 fn ruleset_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../data/synthetic/ruleset")
@@ -24,14 +25,6 @@ fn load(name: &str) -> (String, Node) {
         panic!("{name}:{line}:{col}: {e}")
     });
     (src, node)
-}
-
-fn keys(node: &Node) -> BTreeSet<String> {
-    node.members()
-        .expect("object expected")
-        .iter()
-        .map(|m| m.key.clone())
-        .collect()
 }
 
 fn strings(node: &Node) -> Vec<String> {
@@ -83,88 +76,67 @@ fn every_file_parses_and_is_marked_synthetic() {
     }
 }
 
-#[test]
-fn references_resolve() {
-    let (_, combat) = load("combat.jsonc");
-    let (_, objects_file) = load("objects.jsonc");
-    let armor = keys(combat.get("armor_classes").unwrap());
-    let warheads = combat.get("warheads").unwrap();
-    let weapons = combat.get("weapons").unwrap();
-    let owners = keys(objects_file.get("owners").unwrap());
-    let objects = objects_file.get("objects").unwrap();
-    let object_ids = keys(objects);
-
-    for wh in warheads.members().unwrap() {
-        let classes = keys(wh.value.get("versus").unwrap());
-        assert!(classes.is_subset(&armor), "{}: unknown armor class", wh.key);
-    }
-    let warhead_ids = keys(warheads);
-    for w in weapons.members().unwrap() {
-        let wh = w.value.get("warhead").unwrap().as_str().unwrap();
-        assert!(warhead_ids.contains(wh), "{}: unknown warhead {wh}", w.key);
-    }
-
-    let weapon_ids = keys(weapons);
-    for o in objects.members().unwrap() {
-        let id = &o.key;
-        if let Some(a) = o.value.get("armor") {
-            assert!(armor.contains(a.as_str().unwrap()), "{id}: unknown armor");
-        }
-        for parent in o.value.get("inherits").map(strings).unwrap_or_default() {
-            assert!(
-                object_ids.contains(&parent),
-                "{id}: unknown parent {parent}"
-            );
-        }
-        for owner in o.value.get("owners").map(strings).unwrap_or_default() {
-            assert!(owners.contains(&owner), "{id}: unknown owner {owner}");
-        }
-        for pre in o
-            .value
-            .get("prerequisites")
-            .map(strings)
-            .unwrap_or_default()
-        {
-            assert!(
-                object_ids.contains(&pre),
-                "{id}: unknown prerequisite {pre}"
-            );
-            assert!(
-                !pre.starts_with('^'),
-                "{id}: abstract template as prerequisite"
-            );
-        }
-        if let Some(arm) = o.value.get("armament") {
-            for slot in arm.members().unwrap() {
-                let w = slot.value.get("weapon").unwrap().as_str().unwrap();
-                assert!(weapon_ids.contains(w), "{id}: unknown weapon {w}");
-            }
-        }
-    }
+fn resolved() -> glasnost_rules::Resolved {
+    let texts: Vec<(String, String)> = layers()
+        .into_iter()
+        .map(|name| {
+            let (src, _) = load(&name);
+            (name, src)
+        })
+        .collect();
+    let sources: Vec<Source> = texts
+        .iter()
+        .map(|(name, text)| Source {
+            layer: name,
+            file: name,
+            text,
+        })
+        .collect();
+    let (_, manifest) = load("manifest.jsonc");
+    let manifest: Manifest =
+        glasnost_rules::de::from_node(&manifest).expect("manifest matches the schema");
+    let schema = jsonc::object([(
+        "schema".to_owned(),
+        jsonc::integer(i128::from(manifest.schema)),
+    )]);
+    let base = (schema, Default::default());
+    glasnost_rules::resolve_ruleset(Some(base), &sources).unwrap_or_else(|e| panic!("{e}"))
 }
 
 #[test]
-fn inheritance_has_no_cycles() {
-    let (_, objects_file) = load("objects.jsonc");
-    let objects = objects_file.get("objects").unwrap();
-    let parents = |id: &str| {
-        objects
-            .get(id)
-            .and_then(|o| o.get("inherits"))
-            .map(strings)
-            .unwrap_or_default()
-    };
-    for o in objects.members().unwrap() {
-        let mut stack = vec![(o.key.clone(), vec![o.key.clone()])];
-        while let Some((id, path)) = stack.pop() {
-            for p in parents(&id) {
-                assert!(!path.contains(&p), "inheritance cycle: {path:?} -> {p}");
-                let mut next = path.clone();
-                next.push(p.clone());
-                stack.push((p, next));
-            }
-        }
+fn the_pipeline_resolves_and_validates_it() {
+    let r = resolved();
+    let objects = &r.ruleset.objects;
+    // Abstract templates are gone; inherited fields arrived.
+    assert!(!objects.keys().any(|k| k.starts_with('^')));
+    let rover = &objects["syn_crack_rover_mk2"];
+    assert_eq!(rover.kind, Some(ObjectKind::Vehicle));
+    assert_eq!(rover.cost, Some(1029));
+    assert_eq!(rover.speed, Some(13));
+    // A set operation on an inherited set.
+    assert_eq!(rover.owners, ["basalt", "heliotrope"]);
+    assert_eq!(rover.armament.len(), 2);
+    // IDs in first-appearance order; the hash is stable across runs.
+    assert_eq!(r.ids.get("objects", "syn_depot"), Some(0));
+    assert_eq!(r.sim_rules_hash, resolved().sim_rules_hash);
+    let path = glasnost_rules::explain::find_path(&r.tree, "syn_crack_rover_mk2.speed").unwrap();
+    let text = glasnost_rules::explain::explain(&r.tree, &r.provenance, &path);
+    assert!(text.contains("inherited from syn_crack_rover"), "{text}");
+}
+
+#[test]
+fn the_committed_json_schema_is_current() {
+    let path =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../data/schema/ruleset.schema.json");
+    let generated = glasnost_rules::schema::json_schema();
+    if std::env::var_os("GLASNOST_UPDATE_SCHEMA").is_some() {
+        std::fs::write(&path, &generated).unwrap();
     }
+    let committed = std::fs::read_to_string(&path).unwrap_or_default();
+    assert!(
+        committed == generated,
+        "data/schema/ruleset.schema.json is stale; rerun with GLASNOST_UPDATE_SCHEMA=1"
+    );
 }
 
 #[test]

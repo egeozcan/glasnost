@@ -1,0 +1,647 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Ruleset",
+  "description": "A resolved ruleset.",
+  "type": "object",
+  "properties": {
+    "armor_classes": {
+      "description": "Armour classes (our own format).",
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/Empty"
+      }
+    },
+    "art_sections": {
+      "description": "The art database's sections as stored (S-0007), by section name.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "string"
+        }
+      },
+      "default": {}
+    },
+    "colour_add": {
+      "description": "The colour-adjustment table (S-0006 claim 2): 16 red, green, blue\ntints.",
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "array",
+        "items": {
+          "type": "integer",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0
+        },
+        "maxItems": 3,
+        "minItems": 3
+      }
+    },
+    "colours": {
+      "description": "Imported colour definitions in definition-position order (S-0103).",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ColourDefinition"
+      }
+    },
+    "globals": {
+      "description": "Game-wide settings (our own format).",
+      "$ref": "#/$defs/Globals"
+    },
+    "import": {
+      "description": "Where imported data came from (informational, not hashed).",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Import"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "ini_globals": {
+      "description": "Imported game-wide sections, layered (S-0006), by section name.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "string"
+        }
+      },
+      "default": {}
+    },
+    "objects": {
+      "description": "Objects (our own format).",
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/Object"
+      }
+    },
+    "owners": {
+      "description": "Owners (our own format).",
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/Owner"
+      }
+    },
+    "registries": {
+      "description": "Imported type names per kind, in registration order (S-0004): the\nposition is the registration index.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "default": {}
+    },
+    "schema": {
+      "description": "Format version; must be [`SCHEMA_VERSION`].",
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "sides": {
+      "description": "Imported sides in index order (S-0004 claim 9).",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Side"
+      }
+    },
+    "types": {
+      "description": "Imported types per kind, by type name.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": {
+          "$ref": "#/$defs/ImportedType"
+        }
+      }
+    },
+    "warheads": {
+      "description": "Warheads (our own format).",
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/Warhead"
+      }
+    },
+    "weapons": {
+      "description": "Weapons (our own format).",
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/Weapon"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "schema"
+  ],
+  "$defs": {
+    "Armament": {
+      "description": "One armament slot.",
+      "type": "object",
+      "properties": {
+        "weapon": {
+          "description": "Weapon.",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "weapon"
+      ]
+    },
+    "Art": {
+      "description": "Art looked up for a type (S-0007), for one theater. Render data.",
+      "type": "object",
+      "properties": {
+        "alt_icon": {
+          "description": "Alternate sidebar icon (claim 25).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "building_sprites": {
+          "description": "Other sprites of a building, by role (claim 11).",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {}
+        },
+        "flags": {
+          "description": "The art section's flags in force.",
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        },
+        "icon": {
+          "description": "Main sidebar icon (claim 22).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "image": {
+          "description": "Image name (claims 1, 9, 10).",
+          "type": "string"
+        },
+        "notes": {
+          "description": "Notes on cases the specs leave open.",
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        },
+        "sprite": {
+          "description": "Sprite file seen in play, if any (claims 5 to 15).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "translucent": {
+          "description": "Translucent sprite (claim 23).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "voxels": {
+          "description": "Voxel parts found, by role (claims 16 to 20).",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {}
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "image"
+      ]
+    },
+    "ColourDefinition": {
+      "description": "An imported colour definition (S-0103 claim 4).",
+      "type": "object",
+      "properties": {
+        "hsv": {
+          "description": "Hue, saturation, value.",
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint8",
+            "maximum": 255,
+            "minimum": 0
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "name": {
+          "description": "Name.",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "hsv"
+      ]
+    },
+    "Empty": {
+      "description": "An empty object.",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "Globals": {
+      "description": "Game-wide settings (our own format).",
+      "type": "object",
+      "properties": {
+        "economy": {
+          "description": "Economy.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "default": {}
+        },
+        "production": {
+          "description": "Production.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "default": {}
+        },
+        "quirks": {
+          "description": "Quirk switches by name.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "boolean"
+          },
+          "default": {}
+        }
+      },
+      "additionalProperties": false
+    },
+    "Import": {
+      "description": "Provenance of imported data.",
+      "type": "object",
+      "properties": {
+        "converter": {
+          "description": "Converter name and version.",
+          "type": "string"
+        },
+        "game": {
+          "description": "Kind of game the layers were applied for (`skirmish` or `campaign`).",
+          "type": "string"
+        },
+        "incomplete_registries": {
+          "description": "Kinds whose registries may lack types created by reference that no\napproved spec describes yet (Q-0005).",
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        },
+        "inputs": {
+          "description": "Input files in layer order.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Input"
+          }
+        },
+        "quirks": {
+          "description": "Quirk switches in force, by name.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "boolean"
+          },
+          "default": {}
+        },
+        "theater": {
+          "description": "Theater the art was looked up for.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "converter",
+        "game"
+      ]
+    },
+    "ImportedType": {
+      "description": "An imported type.",
+      "type": "object",
+      "properties": {
+        "art": {
+          "description": "Art looked up for the import's theater (render data).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Art"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "created": {
+          "description": "What created it: `list`, or the reference that did.",
+          "type": "string"
+        },
+        "derived": {
+          "description": "Values the layering computed rather than copied (S-0006 claim 5:\nlight values truncated on re-read, in thousandths).",
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "default": {}
+        },
+        "index": {
+          "description": "Registration index (S-0004).",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "ini": {
+          "description": "Layered keys as stored INI text (S-0006 claims 3 and 4).",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {}
+        },
+        "reads": {
+          "description": "The layers whose section it read (S-0006 claim 7).",
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        },
+        "reset": {
+          "description": "Keys that hold their reset value (S-0006 claim 5); the value is the\nengine default the owning spec states.",
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        },
+        "side": {
+          "description": "For a country: its side index (S-0004 claim 9).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "default": null,
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "index",
+        "created"
+      ]
+    },
+    "Input": {
+      "description": "One input file.",
+      "type": "object",
+      "properties": {
+        "file": {
+          "description": "File name.",
+          "type": "string"
+        },
+        "origin": {
+          "description": "Where it was found: an archive path or `loose`.",
+          "type": "string"
+        },
+        "role": {
+          "description": "Its role (`base rules`, `art database`, ...).",
+          "type": "string"
+        },
+        "sha256": {
+          "description": "SHA-256 of its bytes, hexadecimal.",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "role",
+        "file",
+        "origin",
+        "sha256"
+      ]
+    },
+    "Object": {
+      "description": "An object (our own format). Fields without a spec carry no default.",
+      "type": "object",
+      "properties": {
+        "armament": {
+          "description": "Weapons by slot.",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/Armament"
+          }
+        },
+        "armor": {
+          "description": "Armour class.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "cost": {
+          "description": "Cost in credits.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64",
+          "default": null
+        },
+        "health": {
+          "description": "Health in hit points.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64",
+          "default": null
+        },
+        "kind": {
+          "description": "Kind.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ObjectKind"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "owners": {
+          "description": "Owners that may build it (a set).",
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        },
+        "prerequisites": {
+          "description": "Prerequisites (a set).",
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        },
+        "sight": {
+          "description": "Sight, a decimal with a unit (`\"4c\"`).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "speed": {
+          "description": "Speed in leptons per tick.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64",
+          "default": null
+        }
+      },
+      "additionalProperties": false
+    },
+    "ObjectKind": {
+      "description": "A kind of object (our own format).",
+      "oneOf": [
+        {
+          "description": "Infantry.",
+          "type": "string",
+          "const": "infantry"
+        },
+        {
+          "description": "Vehicle.",
+          "type": "string",
+          "const": "vehicle"
+        },
+        {
+          "description": "Aircraft.",
+          "type": "string",
+          "const": "aircraft"
+        },
+        {
+          "description": "Building.",
+          "type": "string",
+          "const": "building"
+        }
+      ]
+    },
+    "Owner": {
+      "description": "An owner (our own format).",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "Side": {
+      "description": "An imported side.",
+      "type": "object",
+      "properties": {
+        "members": {
+          "description": "Member countries in list order.",
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        },
+        "name": {
+          "description": "Side name.",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ]
+    },
+    "Warhead": {
+      "description": "A warhead (our own format).",
+      "type": "object",
+      "properties": {
+        "versus": {
+          "description": "Modifier per armour class, per mille.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "default": {}
+        }
+      },
+      "additionalProperties": false
+    },
+    "Weapon": {
+      "description": "A weapon (our own format).",
+      "type": "object",
+      "properties": {
+        "damage": {
+          "description": "Damage in hit points.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64",
+          "default": null
+        },
+        "range": {
+          "description": "Range, a decimal with a unit.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "reload": {
+          "description": "Reload in ticks.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64",
+          "default": null
+        },
+        "warhead": {
+          "description": "Warhead.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

@@ -191,6 +191,134 @@ pub fn line_col(src: &str, offset: usize) -> (usize, usize) {
     (line, col)
 }
 
+/// Writes `node` as JSONC text: two-space indentation, members in their
+/// order, strings escaped as JSON requires, a trailing newline. Parsing
+/// the result gives back an equal tree (spans aside).
+pub fn write(node: &Node) -> String {
+    let mut out = String::new();
+    write_node(node, 0, &mut out);
+    out.push('\n');
+    out
+}
+
+fn write_string(s: &str, out: &mut String) {
+    out.push('"');
+    for c in s.chars() {
+        match c {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\t' => out.push_str("\\t"),
+            '\r' => out.push_str("\\r"),
+            // nocite: JSON escapes every control character below U+0020
+            c if u32::from(c) < 0x20 => {
+                let _ = std::fmt::Write::write_fmt(out, format_args!("\\u{:04x}", u32::from(c)));
+            }
+            c => out.push(c),
+        }
+    }
+    out.push('"');
+}
+
+fn write_node(node: &Node, depth: usize, out: &mut String) {
+    let indent = |d: usize, out: &mut String| out.extend(std::iter::repeat_n("  ", d));
+    match &node.value {
+        Value::Null => out.push_str("null"),
+        Value::Bool(b) => out.push_str(if *b { "true" } else { "false" }),
+        Value::Integer(i) => out.push_str(i.text()),
+        Value::String(s) => write_string(s, out),
+        Value::Array(items) if items.is_empty() => out.push_str("[]"),
+        Value::Array(items) => {
+            let simple = items
+                .iter()
+                .all(|i| !matches!(i.value, Value::Array(_) | Value::Object(_)));
+            if simple {
+                out.push('[');
+                for (n, item) in items.iter().enumerate() {
+                    if n > 0 {
+                        out.push_str(", ");
+                    }
+                    write_node(item, depth + 1, out);
+                }
+                out.push(']');
+            } else {
+                out.push_str("[\n");
+                for item in items {
+                    indent(depth + 1, out);
+                    write_node(item, depth + 1, out);
+                    out.push_str(",\n");
+                }
+                indent(depth, out);
+                out.push(']');
+            }
+        }
+        Value::Object(members) if members.is_empty() => out.push_str("{}"),
+        Value::Object(members) => {
+            out.push_str("{\n");
+            for m in members {
+                indent(depth + 1, out);
+                write_string(&m.key, out);
+                out.push_str(": ");
+                write_node(&m.value, depth + 1, out);
+                out.push_str(",\n");
+            }
+            indent(depth, out);
+            out.push('}');
+        }
+    }
+}
+
+/// A string node.
+pub fn string(s: impl Into<String>) -> Node {
+    Node {
+        value: Value::String(s.into()),
+        span: Span::default(),
+    }
+}
+
+/// An integer node.
+pub fn integer(v: i128) -> Node {
+    Node {
+        value: Value::Integer(Integer {
+            text: v.to_string(),
+        }),
+        span: Span::default(),
+    }
+}
+
+/// A boolean node.
+pub fn boolean(v: bool) -> Node {
+    Node {
+        value: Value::Bool(v),
+        span: Span::default(),
+    }
+}
+
+/// An array node.
+pub fn array(items: Vec<Node>) -> Node {
+    Node {
+        value: Value::Array(items),
+        span: Span::default(),
+    }
+}
+
+/// An object node; members keep the given order.
+pub fn object(members: impl IntoIterator<Item = (String, Node)>) -> Node {
+    Node {
+        value: Value::Object(
+            members
+                .into_iter()
+                .map(|(key, value)| Member {
+                    key,
+                    key_span: Span::default(),
+                    value,
+                })
+                .collect(),
+        ),
+        span: Span::default(),
+    }
+}
+
 struct Parser<'a> {
     src: &'a str,
     pos: usize,
@@ -532,6 +660,20 @@ mod tests {
         let err = parse(src).unwrap_err();
         assert_eq!(err.kind, ErrorKind::DuplicateKey("k".into()));
         assert_eq!(&src[err.span.start..err.span.end], "\"k\"");
+    }
+
+    #[test]
+    fn writer_round_trips() {
+        let src =
+            r#"{"a": [1, -2, {"b": "q\"\\\u0001é"}], "c": {}, "d": [], "e": null, "f": true}"#;
+        let node = parse(src).unwrap();
+        let text = write(&node);
+        let again = parse(&text).unwrap();
+        assert_eq!(write(&again), text);
+        assert_eq!(
+            again.get("a").map(|a| matches!(a.value, Value::Array(_))),
+            Some(true)
+        );
     }
 
     #[test]
