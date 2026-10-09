@@ -7,32 +7,33 @@ use glasnost_fmt::aud::Aud;
 use glasnost_fmt::csf::Csf;
 use glasnost_fmt::hva::Hva;
 use glasnost_fmt::idx::{Idx, IdxEntry};
-use glasnost_fmt::image::{Palette, Rgb8};
+use glasnost_fmt::image::Palette;
 use glasnost_fmt::mix::{MixEntry, id_hash};
-use glasnost_fmt::pal::{Expansion, Palette6};
+use glasnost_fmt::pal::Palette6;
 use glasnost_fmt::pcx::Pcx;
 use glasnost_fmt::shp::Shp;
 use glasnost_fmt::sniff::{Kind, sniff};
 use glasnost_fmt::tmp::Tmp;
 use glasnost_fmt::vxl::Vxl;
-use glasnost_render::remap::{RampOrder, RemapRange, remap_row, shade_ramp};
+use glasnost_render::palette::{PaletteQuirks, house_palette, palette_from_file, ramp};
 use glasnost_vfs::names::candidates;
 use glasnost_vfs::{ArchiveId, FileRef, Vfs};
 
 use super::preview::{Rgba, rgb, strip, voxel_preview};
 use super::tasks::{self, Purpose, Spawner, TaskResult};
 
-/// House colours offered for remap previews: an invented set of our own,
-/// chosen to be easy to tell apart (not taken from the game).
-const HOUSE_COLOURS: [(&str, Rgb8); 8] = [
-    ("crimson", Rgb8::new(214, 48, 49)),
-    ("azure", Rgb8::new(52, 120, 246)),
-    ("jade", Rgb8::new(46, 184, 92)),
-    ("amber", Rgb8::new(242, 184, 36)),
-    ("violet", Rgb8::new(150, 82, 214)),
-    ("tangerine", Rgb8::new(245, 124, 32)),
-    ("teal", Rgb8::new(32, 178, 170)),
-    ("rose", Rgb8::new(232, 96, 168)),
+/// Colour definitions (hue, saturation, value) offered for house-colour
+/// previews before a rules file is imported: an invented set of our own,
+/// easy to tell apart (not taken from the game). Their ramps follow S-0103.
+const PREVIEW_DEFINITIONS: [(&str, [u8; 3]); 8] = [
+    ("crimson", [2, 220, 230]),
+    ("azure", [150, 200, 245]),
+    ("jade", [95, 190, 200]),
+    ("amber", [30, 230, 250]),
+    ("violet", [190, 160, 220]),
+    ("tangerine", [18, 235, 245]),
+    ("teal", [125, 210, 190]),
+    ("rose", [230, 150, 235]),
 ];
 
 /// Side of the voxel preview image.
@@ -87,11 +88,8 @@ pub struct Browser {
     palettes: Vec<(String, FileRef)>,
     palette_choice: Option<usize>,
     palette6: Option<Palette6>,
-    expansion: Expansion,
-    remap_start: u8,
-    remap_len: u8,
-    houses: [bool; HOUSE_COLOURS.len()],
-    ramp_order: RampOrder,
+    remap: bool,
+    houses: [bool; PREVIEW_DEFINITIONS.len()],
     frame: usize,
     on_canvas: bool,
     zoom: u32,
@@ -125,11 +123,8 @@ impl Browser {
             palettes: Vec::new(),
             palette_choice: None,
             palette6: None,
-            expansion: Expansion::default(),
-            remap_start: 0,
-            remap_len: 0,
+            remap: false,
             houses: [true, true, true, true, false, false, false, false],
-            ramp_order: RampOrder::default(),
             frame: 0,
             on_canvas: false,
             zoom: 2,
@@ -346,30 +341,22 @@ impl Browser {
 
     fn base_palette(&self) -> Palette {
         match &self.palette6 {
-            Some(p) if self.palette_choice.is_some() => p.to_palette(self.expansion),
+            Some(p) if self.palette_choice.is_some() => {
+                palette_from_file(p, &PaletteQuirks::default())
+            }
             _ => glasnost_fmt::synth::ramp_palette(0),
         }
     }
 
     fn rows_for(&self, base: &Palette) -> Vec<Palette> {
-        let range = RemapRange {
-            start: self.remap_start,
-            len: self.remap_len,
-        };
-        if range.len == 0 {
+        if !self.remap {
             return vec![base.clone()];
         }
-        let rows: Vec<Palette> = HOUSE_COLOURS
+        let rows: Vec<Palette> = PREVIEW_DEFINITIONS
             .iter()
             .zip(self.houses)
             .filter(|(_, on)| *on)
-            .map(|((_, c), _)| {
-                remap_row(
-                    base,
-                    range,
-                    &shade_ramp(*c, usize::from(range.len), self.ramp_order),
-                )
-            })
+            .map(|((_, def), _)| house_palette(base, *def))
             .collect();
         if rows.is_empty() {
             vec![base.clone()]
@@ -425,7 +412,11 @@ impl Browser {
                         .collect(),
                 )
                 .unwrap_or_else(|_| glasnost_fmt::image::IndexedImage::empty());
-                Ok(strip(&swatches, &[p.to_palette(self.expansion)], false))
+                Ok(strip(
+                    &swatches,
+                    &[palette_from_file(p, &PaletteQuirks::default())],
+                    false,
+                ))
             }
             _ => return None,
         })
@@ -693,36 +684,27 @@ impl Browser {
                 spawner.spawn(tasks::read(Purpose::Palette(*file), src, loc, None));
             }
         }
-        ui.label("6-bit to 8-bit (provisional, Q-0003):");
-        ui.horizontal(|ui| {
-            let mut e = self.expansion;
-            ui.radio_value(&mut e, Expansion::Shift, "shift");
-            ui.radio_value(&mut e, Expansion::Replicate, "full range");
-            if e != self.expansion {
-                self.expansion = e;
-                self.texture_dirty = true;
-            }
-        });
+        ui.label(
+            RichText::new("Components ×4 in 8-bit arithmetic (S-0103 claim 1); unshaded.")
+                .small()
+                .weak(),
+        );
         ui.separator();
         ui.heading("House colour");
         ui.label(
             RichText::new(
-                "Remap range is provisional (Q-0001); no default. Length 0 turns the remap off.",
+                "Indices 16–31 take the ramp of a colour definition (S-0103 claim 6). \
+                 Lighting (S-0104) is not applied.",
             )
             .small()
             .weak(),
         );
-        ui.horizontal(|ui| {
-            ui.label("first index");
-            let a = ui.add(egui::DragValue::new(&mut self.remap_start).range(0..=255));
-            ui.label("length");
-            let b = ui.add(egui::DragValue::new(&mut self.remap_len).range(0..=255));
-            if a.changed() || b.changed() {
-                self.texture_dirty = true;
-            }
-        });
+        if ui.checkbox(&mut self.remap, "house colour rows").changed() {
+            self.texture_dirty = true;
+        }
         ui.horizontal_wrapped(|ui| {
-            for (i, (name, c)) in HOUSE_COLOURS.iter().enumerate() {
+            for (i, (name, def)) in PREVIEW_DEFINITIONS.iter().enumerate() {
+                let c = ramp(*def)[0];
                 let colour = Color32::from_rgb(c.r, c.g, c.b);
                 if ui
                     .checkbox(&mut self.houses[i], RichText::new(*name).color(colour))
@@ -730,15 +712,6 @@ impl Browser {
                 {
                     self.texture_dirty = true;
                 }
-            }
-        });
-        ui.horizontal(|ui| {
-            let mut o = self.ramp_order;
-            ui.radio_value(&mut o, RampOrder::BrightestFirst, "brightest first");
-            ui.radio_value(&mut o, RampOrder::DarkestFirst, "darkest first");
-            if o != self.ramp_order {
-                self.ramp_order = o;
-                self.texture_dirty = true;
             }
         });
         ui.separator();
@@ -1086,9 +1059,8 @@ mod tests {
         frame(&mut b, &queue, &ctx);
         let single = b.texture.as_ref().unwrap().size();
 
-        // Two house rows side by side once a remap range is set.
-        b.remap_start = 16;
-        b.remap_len = 16;
+        // Two house rows side by side once house colour is on.
+        b.remap = true;
         b.houses = [true, true, false, false, false, false, false, false];
         b.texture_dirty = true;
         frame(&mut b, &queue, &ctx);
@@ -1316,8 +1288,8 @@ mod tests {
 
     /// Local only: mounts the install named by `GLASNOST_GAME_DIR`, opens a
     /// few assets and writes screenshots of the viewer to the temp dir (never
-    /// to the repository). `GLASNOST_SNAPSHOT_REMAP=start,len` sets a remap
-    /// range for the shot; there is no default (Q-0001).
+    /// to the repository). `GLASNOST_SNAPSHOT_REMAP=1` turns on the house
+    /// colour rows (S-0103).
     #[test]
     #[ignore = "local only: needs GLASNOST_GAME_DIR and a GPU"]
     fn snapshot_real_install() {
@@ -1331,12 +1303,7 @@ mod tests {
             tasks::native_files(std::path::Path::new(&dir)).unwrap(),
         );
         settle(&mut b, &queue);
-        if let Ok(v) = std::env::var("GLASNOST_SNAPSHOT_REMAP")
-            && let Some((s, l)) = v.split_once(',')
-        {
-            b.remap_start = s.trim().parse().unwrap_or(0);
-            b.remap_len = l.trim().parse().unwrap_or(0);
-        }
+        b.remap = std::env::var_os("GLASNOST_SNAPSHOT_REMAP").is_some();
         let shots = [
             (Kind::Shp, ""),
             (Kind::Vxl, ""),

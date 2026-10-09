@@ -110,7 +110,8 @@ pub fn run(target: Target, data: &[u8]) {
         }
         Target::Pal => {
             if let Ok(p) = crate::pal::Palette6::parse(data) {
-                let _ = p.to_palette(crate::pal::Expansion::Replicate);
+                let _ = p.is_six_bit();
+                let _ = p.write();
             }
         }
         Target::Pcx => {

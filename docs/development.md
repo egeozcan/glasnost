@@ -120,13 +120,13 @@ Every parser in `fmt` is panic-free on hostile input: reads are bounds-checked, 
 
 ### Provisional placeholders
 
-Behaviour that needs a spec stays out of code; the M1 format work carries three explicit placeholders, each tied to a spec request:
+Behaviour that needs a spec stays out of code; where a spec leaves a gap, the code carries an explicit placeholder tied to a spec request:
 
 | Where | Placeholder | Request |
 |---|---|---|
 | `vfs::precedence` | lookup order = mount order (top-level archives by name, nested ones after their parent) | Q-0002 |
-| `render::remap`, viewer | house-colour remap range set by the user, no default; linear shade ramp | Q-0001 |
-| `fmt::pal::Expansion` | 6-to-8-bit expansion chosen by the caller | Q-0003 |
+
+Q-0001 and Q-0003 are answered by S-0103: `render::palette` loads palette files (×4 in 8-bit arithmetic), keeps the theater palettes in force, builds house-colour palettes from colour definitions and picks each object's palette. Shading by light (S-0104) is not applied yet; the viewer shows unshaded palettes.
 
 ## Tests
 

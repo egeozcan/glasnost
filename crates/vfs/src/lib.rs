@@ -26,6 +26,7 @@ use glasnost_fmt::mix::{MixEntry, MixIndex, MixKeys, MixLayout, id_hash, may_be_
 pub mod names;
 pub mod precedence;
 pub mod source;
+pub mod theater;
 
 pub use names::Names;
 pub use precedence::{ArchiveSummary, NamedPrecedence, PlaceholderPrecedence, Precedence};

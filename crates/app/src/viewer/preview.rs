@@ -7,7 +7,7 @@
 
 use glasnost_fmt::image::{IndexedImage, Palette};
 use glasnost_fmt::vxl::Vxl;
-use glasnost_render::remap::resolve_rgba;
+use glasnost_render::palette::resolve_rgba;
 
 /// An RGBA picture.
 pub struct Rgba {
