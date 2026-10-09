@@ -16,7 +16,7 @@ A spec that contradicts a measurement goes back for revision; the measurement wi
 |---|---|
 | `<topic>/S-xxxx-*.md` | One spec per file, grouped by game topic |
 | `TEMPLATE.md` | The spec template |
-| `glossary.md` | Our own vocabulary for game concepts (to be written with the first specs) |
+| `glossary.md` | Our own vocabulary for game concepts |
 | `requests/` | Spec requests (`Q-xxxx`) from implementer sessions |
 | `incidents/` | Incident logs (`I-xxxx`), see PROVENANCE.md section 8 |
 
