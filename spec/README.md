@@ -38,3 +38,4 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0102](rendering/S-0102-draw-order.md) | Draw order, render layers and depth compositing | rendering | 2 | approved | — |
 | [S-0103](rendering/S-0103-palettes-house-colour.md) | Palettes and house colour | rendering | 3 | approved | — |
 | [S-0104](rendering/S-0104-lighting.md) | Lighting | rendering | 4 | approved | — |
+| [S-0105](rendering/S-0105-voxel-rendering.md) | Rendering of voxel models | rendering | 3 | approved | — |
