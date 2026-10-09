@@ -137,7 +137,7 @@ The importer turns the user's install into our rules format (PLAN.md 4.3, 4.6):
 3. `ini` reads each file (S-0001 to S-0003) with importer warnings.
 4. `convert::layers` applies the rules layers of one game (S-0004, S-0006): registration in list order with the rank rule for references, sides, tiberiums, per-key layering with its exceptions, colour definitions (S-0103 claim 5) and the colour-adjustment table.
 5. `convert::art` looks up every type's art for one theater (S-0007), with the game's per-game archives mounted.
-6. `convert::emit` writes a schema-1 tree: names are byte-exact (bytes 128 to 255 map to U+F780 to U+F7FF), keys no spec maps yet stay as INI text, and every value carries its INI history for `rules explain`.
+6. `convert::emit` writes a schema-1 tree: names are byte-exact (bytes 128 to 255 map to U+F780 to U+F7FF), keys no spec maps yet stay as INI text, values the layering computes (light values in thousandths, S-0104 claim 12) replace their text (`derived`, `ini_globals_derived`), and every value carries its INI history for `rules explain`. Import errors cover the conditions under which the original would not start, and loose names that differ only in letter case (S-0005 Edge cases).
 7. `rules::resolve_ruleset` applies mod patch layers, inheritance and set operations (only in our own collections, never inside imported INI data), types, validates, interns IDs and hashes.
 
 Every quirk switch of the implemented specs has a field in `ini::Quirks`, `vfs::GameQuirks`, `convert::layers::LayerQuirks`, `convert::art::ArtQuirks` or `render::palette::PaletteQuirks`, defaulting to the original's behaviour; the import records them under `import.quirks`.

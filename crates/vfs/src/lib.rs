@@ -206,6 +206,8 @@ pub struct Vfs {
     top: std::collections::BTreeMap<Vec<u8>, game::TopFile>,
     /// The game's search order, rank 1 first (S-0005).
     search: Vec<SearchRank>,
+    /// Top-level files whose names differ only in letter case.
+    case_clashes: Vec<(String, String)>,
     game: game::GameState,
 }
 
@@ -233,6 +235,7 @@ impl Vfs {
             loose: Vec::new(),
             top: std::collections::BTreeMap::new(),
             search: Vec::new(),
+            case_clashes: Vec::new(),
             game: game::GameState::default(),
         }
     }
@@ -276,6 +279,12 @@ impl Vfs {
     /// [`Vfs::mount_startup`] runs.
     pub fn search_order(&self) -> &[SearchRank] {
         &self.search
+    }
+
+    /// Pairs of top-level file names that differ only in letter case
+    /// (S-0005 Edge cases: an import error; the second name is ignored).
+    pub fn case_clashes(&self) -> &[(String, String)] {
+        &self.case_clashes
     }
 
     /// Loose files of the picked folder (not mounted as archives).
@@ -452,9 +461,9 @@ impl Vfs {
         };
         if let Some(previous) = self.top.get(&key) {
             // spec: S-0005 Edge cases (loose names that differ only in letter case: an error)
-            report
-                .case_clashes
-                .push((previous.name.clone(), name.to_owned()));
+            let pair = (previous.name.clone(), name.to_owned());
+            report.case_clashes.push(pair.clone());
+            self.case_clashes.push(pair);
             return;
         }
         self.top.insert(key, file);

@@ -317,6 +317,7 @@ fn long_names_and_case_clashes() {
         picked("RULESMD.INI", b"2".to_vec()),
     ]));
     assert_eq!(report.case_clashes.len(), 1);
+    assert_eq!(vfs.case_clashes().len(), 1);
 }
 
 /// spec: S-0005 claim 8 (a member the bisection misses counts as absent; the search goes on)

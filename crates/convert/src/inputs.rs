@@ -70,6 +70,9 @@ pub struct Inputs {
     /// Import-file names a loose file would supply if the mod layer were on
     /// (PLAN.md 4.3).
     pub shadowing_loose: Vec<String>,
+    /// Top-level file names that differ only in letter case (S-0005 Edge
+    /// cases).
+    pub case_clashes: Vec<(String, String)>,
 }
 
 /// Reads one file through the game's search order.
@@ -100,6 +103,7 @@ pub async fn read_inputs(
         language: read(vfs, LANGUAGE_RULES).await,
         art: read(vfs, ART).await,
         map,
+        case_clashes: vfs.case_clashes().to_vec(),
         ..Inputs::default()
     };
     if let Some(m) = mode {

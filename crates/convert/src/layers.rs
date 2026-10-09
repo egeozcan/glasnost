@@ -99,6 +99,11 @@ pub struct LayerQuirks {
     pub reread_truncates_light_values: bool,
     /// `quirks.colour_redefinition_ignored` (S-0103 claim 5).
     pub colour_redefinition_ignored: bool,
+    /// `quirks.bad_language_rules_skips_mode` (S-0006 claim 12): a
+    /// language rules file with sections that fails its check at game
+    /// start makes the game skip its game-mode layer and leaves the
+    /// colour-adjustment table to the map alone.
+    pub bad_language_rules_skips_mode: bool,
 }
 
 impl Default for LayerQuirks {
@@ -114,13 +119,14 @@ impl Default for LayerQuirks {
             barrel_recoil_layer_reset: true,
             reread_truncates_light_values: true,
             colour_redefinition_ignored: true,
+            bad_language_rules_skips_mode: true,
         }
     }
 }
 
 impl LayerQuirks {
     /// The switches by name, for the import record.
-    pub fn named(&self) -> [(&'static str, bool); 9] {
+    pub fn named(&self) -> [(&'static str, bool); 10] {
         [
             ("unlisted_reference_unread", self.unlisted_reference_unread),
             ("long_name_duplicates", self.long_name_duplicates),
@@ -139,6 +145,10 @@ impl LayerQuirks {
             (
                 "colour_redefinition_ignored",
                 self.colour_redefinition_ignored,
+            ),
+            (
+                "bad_language_rules_skips_mode",
+                self.bad_language_rules_skips_mode,
             ),
         ]
     }
@@ -426,6 +436,22 @@ pub fn apply(
     game: GameKind,
     quirks: &LayerQuirks,
 ) -> Outcome {
+    apply_with(layers, art, art_file, game, quirks, false)
+}
+
+/// [`apply`], for a game whose language rules file has sections and fails
+/// its check (`bad_language_rules`, S-0006 claim 12). With
+/// `quirks.bad_language_rules_skips_mode` on, the caller leaves the
+/// game-mode layer out and the colour-adjustment table takes only the
+/// map's entries.
+pub fn apply_with(
+    layers: &[Layer],
+    art: &Document,
+    art_file: &str,
+    game: GameKind,
+    quirks: &LayerQuirks,
+    bad_language_rules: bool,
+) -> Outcome {
     let mut out = Outcome::default();
     for l in layers {
         out.files.push((l.role.label().to_owned(), l.file.clone()));
@@ -442,6 +468,8 @@ pub fn apply(
         art,
         art_layer,
         pending: Vec::new(),
+        // spec: S-0006 claim 12 (the table is left with zero in all 16 positions; only the map's entries count)
+        map_only_colour_add: bad_language_rules && quirks.bad_language_rules_skips_mode,
     };
     for (li, layer) in layers.iter().enumerate() {
         if li == 0 && game == GameKind::Skirmish {
@@ -461,6 +489,9 @@ struct Run<'a> {
     /// Types created by reference that read the creating layer anyway
     /// (switch `quirks.unlisted_reference_unread` off).
     pending: Vec<(Kind, usize)>,
+    /// Only the map layer fills the colour-adjustment table (S-0006 claim
+    /// 12).
+    map_only_colour_add: bool,
 }
 
 impl Run<'_> {
@@ -1205,6 +1236,9 @@ impl Run<'_> {
     }
 
     fn colour_add(&mut self, li: usize, layer: &Layer) {
+        if self.map_only_colour_add && layer.role != Role::Map {
+            return;
+        }
         let Some(section) = layer.doc.section(COLOR_ADD) else {
             return;
         };

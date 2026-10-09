@@ -230,6 +230,7 @@ pub fn convert(inputs: &Inputs, options: &ImportOptions) -> Import {
     };
 
     let mut layers = Vec::new();
+    let mut bad_language_rules = false;
     // spec: S-0006 claim 1 (the base rules first)
     match &inputs.base {
         Some(f) => {
@@ -262,19 +263,34 @@ pub fn convert(inputs: &Inputs, options: &ImportOptions) -> Import {
                     doc,
                 });
             }
-            bad => warnings.push(Warning {
-                file: f.label(),
-                line: 0,
-                message: format!(
-                    "the language rules file's integrity digest is {}; the original refuses to start, \
-                     this import ignores the file (S-0006 claim 12, a departure)",
-                    if bad == DigestCheck::Missing { "missing" } else { "wrong" }
-                ),
-            }),
+            bad => {
+                // spec: S-0006 claim 12 (program start: a departure, our engine starts without the file)
+                bad_language_rules = true;
+                warnings.push(Warning {
+                    file: f.label(),
+                    line: 0,
+                    message: format!(
+                        "the language rules file's integrity digest is {}; the original refuses to start, \
+                         this import ignores the file (S-0006 claim 12, a departure)",
+                        if bad == DigestCheck::Missing { "missing" } else { "wrong" }
+                    ),
+                });
+            }
         }
     }
+    // spec: S-0006 claim 12 (game start: a failing language rules file skips the whole game-mode layer)
+    let skip_mode = bad_language_rules && options.quirks.bad_language_rules_skips_mode;
+    if skip_mode && options.game == GameKind::Skirmish {
+        warnings.push(Warning {
+            file: inputs::LANGUAGE_RULES.into(),
+            line: 0,
+            message: "because the language rules file fails its check, the game-mode layer is skipped and \
+                      the colour-adjustment table takes only the map's entries (S-0006 claim 12)"
+                .into(),
+        });
+    }
     // spec: S-0006 claim 1 (the game-mode layer in every skirmish or multiplayer game, empty if it has no file)
-    if options.game == GameKind::Skirmish {
+    if options.game == GameKind::Skirmish && !skip_mode {
         match &inputs.mode {
             Some(f) => {
                 note_input("game mode", f);
@@ -316,6 +332,13 @@ pub fn convert(inputs: &Inputs, options: &ImportOptions) -> Import {
         }
         None => (Document::empty(q), inputs::ART.to_owned()),
     };
+    for (a, b) in &inputs.case_clashes {
+        // spec: S-0005 Edge cases (an error at import until one of the two is removed)
+        errors.push(format!(
+            "the game directory holds {a} and {b}, whose names differ only in letter case; remove one \
+             (S-0005 Edge cases)"
+        ));
+    }
     for name in &inputs.missing_databases {
         // spec: S-0005 claim 16 (required databases)
         errors.push(format!(
@@ -348,7 +371,14 @@ pub fn convert(inputs: &Inputs, options: &ImportOptions) -> Import {
         warnings.extend(coverage::case_warnings(&l.doc, &l.file));
     }
     warnings.extend(coverage::case_warnings(&art, &art_label));
-    let outcome = layers::apply(&layers, &art, &art_label, options.game, &options.quirks);
+    let outcome = layers::apply_with(
+        &layers,
+        &art,
+        &art_label,
+        options.game,
+        &options.quirks,
+        bad_language_rules,
+    );
     warnings.extend(ini_warnings.into_iter().map(|(file, w)| {
         Warning {
             file,

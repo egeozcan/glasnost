@@ -47,6 +47,11 @@ pub struct Ruleset {
     /// Imported game-wide sections, layered (S-0006), by section name.
     #[serde(default)]
     pub ini_globals: BTreeMap<String, BTreeMap<String, String>>,
+    /// Game-wide values the layering computed rather than copied (S-0006
+    /// claim 5: extra-light values truncated on re-read, in thousandths),
+    /// by section name; such keys are absent from `ini_globals`.
+    #[serde(default)]
+    pub ini_globals_derived: BTreeMap<String, BTreeMap<String, i64>>,
     /// Imported sides in index order (S-0004 claim 9).
     #[serde(default)]
     pub sides: Vec<Side>,
@@ -139,7 +144,8 @@ pub struct ImportedType {
     #[serde(default)]
     pub reset: Vec<String>,
     /// Values the layering computed rather than copied (S-0006 claim 5:
-    /// light values truncated on re-read, in thousandths).
+    /// light values in thousandths, truncated on re-read); such keys are
+    /// absent from `ini`.
     #[serde(default)]
     pub derived: BTreeMap<String, i64>,
     /// For a country: its side index (S-0004 claim 9).

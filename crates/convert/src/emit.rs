@@ -217,7 +217,9 @@ pub fn emit(
                 p.push("ini".into());
                 p.push(ek.clone());
                 em.record_key(&p, state);
-                if let Some(v) = &state.value {
+                // A computed value is the value in force (S-0104 claim 12); the
+                // stored text it came from stays in the history only.
+                if let Some(v) = state.value.as_ref().filter(|_| state.derived.is_none()) {
                     ini.push((ek.clone(), s(&encode(v))));
                 }
                 if state.reset {
@@ -287,22 +289,39 @@ pub fn emit(
 
     // game-wide sections
     let mut globals = Vec::new();
+    let mut globals_derived = Vec::new();
     for (section, keys) in &outcome.globals {
         let sname = encode(section);
         let mut members = Vec::new();
+        let mut derived = Vec::new();
         for (k, state) in keys {
             let ek = encode(k);
             em.record_key(
                 &vec!["ini_globals".into(), sname.clone(), ek.clone()],
                 state,
             );
-            if let Some(v) = &state.value {
-                members.push((ek, s(&encode(v))));
+            match state.derived {
+                Some(d) => {
+                    em.record_key(
+                        &vec!["ini_globals_derived".into(), sname.clone(), ek.clone()],
+                        state,
+                    );
+                    derived.push((ek, int(i128::from(d))));
+                }
+                None => {
+                    if let Some(v) = &state.value {
+                        members.push((ek, s(&encode(v))));
+                    }
+                }
             }
         }
-        globals.push((sname, jsonc::object(members)));
+        globals.push((sname.clone(), jsonc::object(members)));
+        if !derived.is_empty() {
+            globals_derived.push((sname, jsonc::object(derived)));
+        }
     }
     root.push(("ini_globals".into(), jsonc::object(globals)));
+    root.push(("ini_globals_derived".into(), jsonc::object(globals_derived)));
 
     // sides
     let countries = &outcome.registries[&Kind::Countries];

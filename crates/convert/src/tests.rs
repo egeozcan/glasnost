@@ -197,6 +197,32 @@ fn sides_from_lists_and_country_fields() {
     assert_eq!(ty(&o, Kind::Countries, "Green").side, Some(0));
 }
 
+/// spec: S-0104 claim 12, S-0006 claim 5 (the value in force in the converted tree)
+#[test]
+fn computed_light_values_replace_their_text() {
+    let inputs = Inputs {
+        base: Some(file(
+            "rulesmd.ini",
+            "[BuildingTypes]\n1=Lamp\n[Lamp]\nLightIntensity=-3.0\n[AudioVisual]\nExtraUnitLight=0.75\n",
+        )),
+        map: Some(file("map.map", "[Lamp]\nStrength=2\n[AudioVisual]\nX=1\n")),
+        ..Inputs::default()
+    };
+    let import = convert(&inputs, &ImportOptions::default());
+    let r = glasnost_rules::resolve_ruleset(Some((import.tree, import.provenance)), &[]).unwrap();
+    let lamp = &r.ruleset.types["buildings"]["Lamp"];
+    assert!(!lamp.ini.contains_key("LightIntensity"));
+    assert_eq!(lamp.derived["LightIntensity"], -2999 + 1000);
+    assert!(!r.ruleset.ini_globals["AudioVisual"].contains_key("ExtraUnitLight"));
+    assert_eq!(
+        r.ruleset.ini_globals_derived["AudioVisual"]["ExtraUnitLight"],
+        0
+    );
+    let path = glasnost_rules::explain::find_path(&r.tree, "Lamp.derived.LightIntensity").unwrap();
+    let text = glasnost_rules::explain::explain(&r.tree, &r.provenance, &path);
+    assert!(text.contains("truncated to -1999"), "{text}");
+}
+
 /// spec: S-0006 claims 3, 4 and 5 (scenarios A, C, D1, D3)
 #[test]
 fn layering_keeps_replaces_and_resets() {
@@ -494,6 +520,48 @@ fn case_only_keys_warn() {
     assert_eq!(case.len(), 2, "{case:?}");
 }
 
+/// spec: S-0006 claim 12 and `quirks.bad_language_rules_skips_mode`
+#[test]
+fn failing_language_rules_skip_the_mode_layer() {
+    let inputs = || Inputs {
+        base: Some(file(
+            "rulesmd.ini",
+            "[ColorAdd]\nA=1,2,3\nB=1,1,1\nC=5,5,5\n[Animations]\n1=Spark\n[VehicleTypes]\n1=V\n[V]\nCost=1\n",
+        )),
+        language: Some(file("langrule.ini", "[V]\nCost=2\n")),
+        mode: Some(file("mode.ini", "[V]\nCost=3\n")),
+        map: Some(file("map.map", "[ColorAdd]\nA=4,5,6\nB=7,8,9\n")),
+        art: Some(file("artmd.ini", "[Spark]\nRate=1\n")),
+        ..Inputs::default()
+    };
+    let on = convert(&inputs(), &ImportOptions::default());
+    let v = &on.outcome.registries[&Kind::Vehicles][0];
+    assert_eq!(v.keys[&b"Cost"[..]].value.as_deref(), Some(&b"1"[..]));
+    // Base and map only: two reads of the art database.
+    assert_eq!(on.outcome.registries[&Kind::Animations][0].reads.len(), 2);
+    // Only the map's entries; position 3 stays zero although the base rules give it.
+    assert_eq!(on.outcome.colour_add[0].0, [4, 5, 6]);
+    assert_eq!(on.outcome.colour_add[1].0, [7, 8, 9]);
+    assert_eq!(on.outcome.colour_add[2].0, [0, 0, 0]);
+    assert!(
+        on.warnings
+            .iter()
+            .any(|w| w.message.contains("game-mode layer is skipped"))
+    );
+    let options = ImportOptions {
+        quirks: LayerQuirks {
+            bad_language_rules_skips_mode: false,
+            ..LayerQuirks::default()
+        },
+        ..ImportOptions::default()
+    };
+    let off = convert(&inputs(), &options);
+    let v = &off.outcome.registries[&Kind::Vehicles][0];
+    assert_eq!(v.keys[&b"Cost"[..]].value.as_deref(), Some(&b"3"[..]));
+    assert_eq!(off.outcome.registries[&Kind::Animations][0].reads.len(), 3);
+    assert_eq!(off.outcome.colour_add[2].0, [5, 5, 5]);
+}
+
 /// spec: S-0005 claim 16, S-0006 claim 12
 #[test]
 fn import_reports_errors_and_departures() {
@@ -501,10 +569,12 @@ fn import_reports_errors_and_departures() {
         base: None,
         language: Some(file("langrule.ini", "[A]\nk=v\n")),
         missing_databases: vec!["soundmd.ini".into()],
+        case_clashes: vec![("rulesmd.ini".into(), "RULESMD.INI".into())],
         ..Inputs::default()
     };
     let import = convert(&inputs, &ImportOptions::default());
-    assert_eq!(import.errors.len(), 1);
+    assert_eq!(import.errors.len(), 2);
+    assert!(import.errors.iter().any(|e| e.contains("letter case")));
     assert!(
         import
             .warnings

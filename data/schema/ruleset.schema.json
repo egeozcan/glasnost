@@ -71,6 +71,18 @@
       },
       "default": {}
     },
+    "ini_globals_derived": {
+      "description": "Game-wide values the layering computed rather than copied (S-0006\nclaim 5: extra-light values truncated on re-read, in thousandths),\nby section name; such keys are absent from `ini_globals`.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "integer",
+          "format": "int64"
+        }
+      },
+      "default": {}
+    },
     "objects": {
       "description": "Objects (our own format).",
       "type": "object",
@@ -366,7 +378,7 @@
           "type": "string"
         },
         "derived": {
-          "description": "Values the layering computed rather than copied (S-0006 claim 5:\nlight values truncated on re-read, in thousandths).",
+          "description": "Values the layering computed rather than copied (S-0006 claim 5:\nlight values in thousandths, truncated on re-read); such keys are\nabsent from `ini`.",
           "type": "object",
           "additionalProperties": {
             "type": "integer",
