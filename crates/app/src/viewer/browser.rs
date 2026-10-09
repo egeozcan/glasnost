@@ -1712,6 +1712,41 @@ mod tests {
         out
     }
 
+    /// Local only: mounts the install named by `GLASNOST_GAME_DIR`, opens the
+    /// map viewer on the map named by `GLASNOST_SNAPSHOT_MAP` (default
+    /// "dustbowl", matched against names and archives) and writes a
+    /// screenshot of the viewer, drawn with the CPU reference, to
+    /// `local-lane/` (git-ignored). Never commit it.
+    #[test]
+    #[ignore = "local only: needs GLASNOST_GAME_DIR and a GPU"]
+    fn snapshot_map_viewer() {
+        let Some(dir) = std::env::var_os("GLASNOST_GAME_DIR") else {
+            return;
+        };
+        let queue = Queue::default();
+        let mut b = Browser::new(None);
+        b.pending_map =
+            Some(std::env::var("GLASNOST_SNAPSHOT_MAP").unwrap_or_else(|_| "dustbowl".into()));
+        b.mount(
+            &queue,
+            tasks::native_files(std::path::Path::new(&dir)).unwrap(),
+        );
+        settle(&mut b, &queue);
+        b.map.set_use_gpu(false);
+        let size = [1600, 900];
+        let ctx = egui::Context::default();
+        super::super::configure_fonts(&ctx);
+        let Some(rgba) = render_offscreen(&ctx, size, |ui| b.ui(ui, &queue, "offscreen")) else {
+            eprintln!("no GPU adapter; skipped");
+            return;
+        };
+        let out = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../local-lane");
+        std::fs::create_dir_all(&out).unwrap();
+        let path = out.join("map-viewer-ui.png");
+        std::fs::write(&path, png(size[0], size[1], &rgba)).unwrap();
+        eprintln!("wrote {}", path.display());
+    }
+
     /// Local only: mounts the install named by `GLASNOST_GAME_DIR`, opens a
     /// few assets and writes screenshots of the viewer to the temp dir (never
     /// to the repository). `GLASNOST_SNAPSHOT_REMAP=1` turns on the house

@@ -4,7 +4,9 @@
 //! prints counts and timings only. Without the variable it does nothing.
 //!
 //! `GLASNOST_MAP_LIMIT=n` builds only the first n maps; `GLASNOST_MAP_SHOTS`
-//! (default 1) is the number of screenshots per theater.
+//! (default 1) is the number of screenshots per theater; `GLASNOST_MAP_OUT` names
+//! a sub-folder of `local-lane/`; `GLASNOST_MAP_ALL_OWNERS=1` turns the skirmish
+//! view (S-0009 claim 27) off, so every placed object is drawn.
 
 #![cfg(not(target_arch = "wasm32"))]
 
@@ -117,7 +119,10 @@ fn map_lane() {
         .ok()
         .and_then(|v| v.parse().ok())
         .unwrap_or(1);
-    let out_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../local-lane");
+    // Under local-lane/ (git-ignored); `GLASNOST_MAP_OUT` names a sub-folder.
+    let out_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../local-lane")
+        .join(std::env::var("GLASNOST_MAP_OUT").unwrap_or_default());
     std::fs::create_dir_all(&out_dir).unwrap();
     pollster::block_on(async {
         let mut vfs = Vfs::default();
@@ -128,10 +133,6 @@ fn map_lane() {
         println!(
             "maps found: {} ({multiplayer} with start waypoints 0 and 1)",
             maps.len()
-        );
-        println!(
-            "maps without a [Basic] Name: {}",
-            maps.iter().filter(|m| m.name.is_empty()).count()
         );
         let mut ok = 0usize;
         let mut panics = 0usize;

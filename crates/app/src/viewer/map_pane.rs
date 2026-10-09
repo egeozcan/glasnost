@@ -200,6 +200,12 @@ impl MapPane {
         })
     }
 
+    /// Chooses the GPU map pass or the CPU reference.
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub fn set_use_gpu(&mut self, on: bool) {
+        self.use_gpu = on;
+    }
+
     /// The texture the shell drew this frame's GPU view into.
     pub fn set_gpu_texture(&mut self, id: Option<egui::TextureId>) {
         self.gpu_texture = id;
