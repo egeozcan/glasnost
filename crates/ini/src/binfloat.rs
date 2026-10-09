@@ -211,6 +211,75 @@ impl Binary {
         }
     }
 
+    /// An integer as a value of `format`, rounded toward zero.
+    pub fn from_i64(format: Format, v: i64) -> Self {
+        Self::round_toward_zero(format, v < 0, u128::from(v.unsigned_abs()), 0)
+    }
+
+    /// The sum of `self` and `other`, computed exactly and rounded toward
+    /// zero to `out` (one rounding). Infinities and NaN propagate as IEEE
+    /// arithmetic does.
+    pub fn add_rz(&self, other: &Binary, out: Format) -> Self {
+        let nan = Self {
+            format: out,
+            bits: Self::infinity(out, false).bits | 1,
+        };
+        let (a, b) = match (self.decode(), other.decode()) {
+            (Decoded::NaN, _) | (_, Decoded::NaN) => return nan,
+            (Decoded::Infinite { neg: x }, Decoded::Infinite { neg: y }) => {
+                return if x == y { Self::infinity(out, x) } else { nan };
+            }
+            (Decoded::Infinite { neg }, _) | (_, Decoded::Infinite { neg }) => {
+                return Self::infinity(out, neg);
+            }
+            (
+                Decoded::Finite { neg, m, e },
+                Decoded::Finite {
+                    neg: nb,
+                    m: mb,
+                    e: eb,
+                },
+            ) => ((neg, m, e), (nb, mb, eb)),
+        };
+        let e = a.2.min(b.2);
+        let signed = |(neg, m, ex): (bool, u64, i64)| {
+            let v = num_bigint::BigInt::from(m) << ((ex - e) as u64);
+            if neg { -v } else { v }
+        };
+        let sum = signed(a) + signed(b);
+        let (sign, mag) = sum.into_parts();
+        let neg = sign == num_bigint::Sign::Minus;
+        if mag.bits() == 0 {
+            // Exact zero: +0 unless both operands are -0 (IEEE, any mode but downward).
+            return Self::zero(out, a.0 && b.0);
+        }
+        // Truncate to at most 64 significant bits first; truncation toward zero
+        // composes, so the final rounding is unchanged.
+        let extra = mag.bits().saturating_sub(64);
+        let m = u128::try_from(&mag >> extra).unwrap_or(0);
+        Self::round_toward_zero(out, neg, m, e + extra as i64)
+    }
+
+    /// The value truncated toward zero to an integer, or `None` for
+    /// infinities, NaN and magnitudes beyond `i64`.
+    pub fn trunc_to_i64(&self) -> Option<i64> {
+        let Decoded::Finite { neg, m, e } = self.decode() else {
+            return None;
+        };
+        let mag: u128 = if e >= 0 {
+            if e > 63 {
+                return if m == 0 { Some(0) } else { None };
+            }
+            u128::from(m).checked_shl(e as u32)?
+        } else if e <= -64 {
+            0
+        } else {
+            u128::from(m >> (-e) as u32)
+        };
+        let v = i64::try_from(mag).ok()?;
+        Some(if neg { -v } else { v })
+    }
+
     /// `self` converted to `out`, rounded toward zero.
     pub fn convert_rz(&self, out: Format) -> Self {
         match self.decode() {
@@ -524,6 +593,32 @@ mod tests {
         assert_eq!(
             decimal_to_binary(&dec("0.1"), Format::Double).value.bits,
             0x3FB9_9999_9999_999A
+        );
+    }
+
+    #[test]
+    fn addition_and_truncation() {
+        let d = |t: &str| decimal_to_binary(&dec(t), Format::Double).value;
+        let tenth = d("0.1");
+        // -3000 + 0.1 = -2999.9, truncated toward zero: -2999 (S-0006 claim 5 example).
+        let x = Binary::from_i64(Format::Double, -3000).add_rz(&tenth, Format::Double);
+        assert_eq!(x.trunc_to_i64(), Some(-2999));
+        let y = Binary::from_i64(Format::Double, -2000).add_rz(&tenth, Format::Double);
+        assert_eq!(y.trunc_to_i64(), Some(-1999));
+        // 0.5 × 1000 + 0.1 = 500.1 → 500.
+        let half = decimal_to_binary(&dec("0.5"), Format::Single).value;
+        let k = half
+            .mul_rz(&Binary::from_i64(Format::Double, 1000), Format::Double)
+            .add_rz(&tenth, Format::Double);
+        assert_eq!(k.trunc_to_i64(), Some(500));
+        assert_eq!(Binary::infinity(Format::Double, false).trunc_to_i64(), None);
+        assert_eq!(d("-0.9").trunc_to_i64(), Some(0));
+        // RZ addition: 1 + 2^-60 stays 1 (round to nearest would too, but 1 - 2^-60 drops to below 1).
+        let tiny = Binary::round_toward_zero(Format::Double, true, 1, -60);
+        let one = Binary::one(Format::Double);
+        assert_eq!(
+            one.add_rz(&tiny, Format::Double).bits,
+            0x3FEF_FFFF_FFFF_FFFF
         );
     }
 

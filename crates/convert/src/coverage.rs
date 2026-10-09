@@ -1,0 +1,593 @@
+//! `coverage.csv` (PLAN.md 4.6): one row per (category, key) of the user's
+//! rules and art files, with the outcome of each key in this converter.
+//!
+//! Outcomes: `field` (interpreted per an approved spec and part of the sim
+//! data), `render` (interpreted per a rendering spec), `folded` (consumed
+//! by the importer itself, such as type lists), `ignored`, and
+//! `unsupported` (kept as INI text: no approved spec maps the key yet, or
+//! one names it but this converter does not interpret it yet). The file
+//! lists names only, never values.
+
+use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::Write as _;
+
+use glasnost_ini::Document;
+
+use crate::kinds::Kind;
+use crate::layers::Outcome as Layered;
+use crate::names::show;
+
+/// A coverage outcome.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Outcome {
+    /// Interpreted, sim data.
+    Field,
+    /// Consumed by the importer (type lists, side lists, colour tables).
+    Folded,
+    /// Interpreted, render data.
+    Render,
+    /// Hint for our own AI.
+    AiHint,
+    /// Deliberately ignored.
+    Ignored,
+    /// Kept as INI text.
+    Unsupported,
+}
+
+impl Outcome {
+    /// The CSV word.
+    pub fn word(self) -> &'static str {
+        match self {
+            Outcome::Field => "field",
+            Outcome::Folded => "folded",
+            Outcome::Render => "render",
+            Outcome::AiHint => "ai-hint",
+            Outcome::Ignored => "ignored",
+            Outcome::Unsupported => "unsupported",
+        }
+    }
+}
+
+/// Keys this converter interprets: (category, key, outcome, spec).
+/// Category `*` matches every category.
+// spec: S-0004 Import mapping, S-0006 Import mapping, S-0007 Import mapping, S-0103 Import mapping
+const CONVERTED: &[(&str, &str, Outcome, &str)] = &[
+    ("countries", "Side", Outcome::Field, "S-0004"),
+    ("countries", "Name", Outcome::Field, "S-0004"),
+    ("countries", "ParentCountry", Outcome::Field, "S-0006"),
+    ("vehicles", "DeploysInto", Outcome::Field, "S-0004"),
+    ("projectiles", "AirburstWeapon", Outcome::Field, "S-0004"),
+    ("projectiles", "ShrapnelWeapon", Outcome::Field, "S-0004"),
+    (
+        "particle_systems",
+        "HoldsWhat",
+        Outcome::Field,
+        "S-0004, S-0006",
+    ),
+    ("particle_systems", "BehavesLike", Outcome::Field, "S-0006"),
+    ("particles", "BehavesLike", Outcome::Field, "S-0006"),
+    ("buildings", "SuperWeapon", Outcome::Field, "S-0004"),
+    ("warheads", "Verses", Outcome::Field, "S-0003, S-0006"),
+    ("superweapons", "RechargeTime", Outcome::Field, "S-0006"),
+    ("global:CrateRules", "CrateImg", Outcome::Field, "S-0004"),
+    (
+        "global:CrateRules",
+        "WoodCrateImg",
+        Outcome::Field,
+        "S-0004",
+    ),
+    (
+        "global:CrateRules",
+        "WaterCrateImg",
+        Outcome::Field,
+        "S-0004",
+    ),
+    ("global:Maximums", "Players", Outcome::Field, "S-0006"),
+    ("global:Easy", "*", Outcome::Field, "S-0006"),
+    ("global:Normal", "*", Outcome::Field, "S-0006"),
+    ("global:Difficult", "*", Outcome::Field, "S-0006"),
+    (
+        "global:AudioVisual",
+        "ExtraUnitLight",
+        Outcome::Render,
+        "S-0104, S-0006",
+    ),
+    (
+        "global:AudioVisual",
+        "ExtraInfantryLight",
+        Outcome::Render,
+        "S-0104, S-0006",
+    ),
+    (
+        "global:AudioVisual",
+        "ExtraAircraftLight",
+        Outcome::Render,
+        "S-0104, S-0006",
+    ),
+    (
+        "buildings",
+        "LightIntensity",
+        Outcome::Render,
+        "S-0104, S-0006",
+    ),
+    (
+        "buildings",
+        "LightRedTint",
+        Outcome::Render,
+        "S-0104, S-0006",
+    ),
+    (
+        "buildings",
+        "LightGreenTint",
+        Outcome::Render,
+        "S-0104, S-0006",
+    ),
+    (
+        "buildings",
+        "LightBlueTint",
+        Outcome::Render,
+        "S-0104, S-0006",
+    ),
+    (
+        "buildings",
+        "BarrelTravel",
+        Outcome::Render,
+        "S-0105, S-0006",
+    ),
+    (
+        "buildings",
+        "BarrelCompressFrames",
+        Outcome::Render,
+        "S-0105, S-0006",
+    ),
+    (
+        "buildings",
+        "BarrelHoldFrames",
+        Outcome::Render,
+        "S-0105, S-0006",
+    ),
+    (
+        "buildings",
+        "BarrelRecoverFrames",
+        Outcome::Render,
+        "S-0105, S-0006",
+    ),
+    ("*", "Image", Outcome::Field, "S-0007"),
+    ("global:Colors", "*", Outcome::Render, "S-0103"),
+    ("global:ColorAdd", "*", Outcome::Render, "S-0006"),
+    ("list", "*", Outcome::Folded, "S-0002, S-0004"),
+    ("global:Sides", "*", Outcome::Folded, "S-0004"),
+];
+
+/// Keys each approved spec's import mapping names, for the `spec` column of
+/// keys this converter does not interpret yet.
+// spec: S-0003, S-0004, S-0006, S-0007, S-0101 to S-0108 (Import mapping key names)
+const NAMED: &[(&str, &[&str])] = &[
+    (
+        "S-0003",
+        &[
+            "Armor",
+            "ConditionRed",
+            "ConditionYellow",
+            "Cost",
+            "ForbiddenHouses",
+            "Foundation",
+            "LaserColor",
+            "MovementZone",
+            "Owner",
+            "Pip",
+            "Prerequisite",
+            "PrimaryFireFLH",
+            "RequiredHouses",
+            "SecondaryFireFLH",
+            "SecretHouses",
+            "Selectable",
+            "Speed",
+            "SpeedType",
+            "Strength",
+        ],
+    ),
+    (
+        "S-0004",
+        &[
+            "AIBasePlanningSide",
+            "BuildCat",
+            "ConsideredAircraft",
+            "Naval",
+            "Owner",
+            "TechLevel",
+            "UIName",
+            "Value",
+        ],
+    ),
+    (
+        "S-0007",
+        &[
+            "AlphaImage",
+            "AltCameo",
+            "AlternateArcticArt",
+            "BarrelAnimIsVoxel",
+            "BibShape",
+            "Buildup",
+            "Cameo",
+            "DeployingAnim",
+            "DoorAnim",
+            "IsGattling",
+            "NewTheater",
+            "NoSpawnAlt",
+            "RoofDeployingAnim",
+            "Rubble",
+            "SpecialZOverlay",
+            "Theater",
+            "Trainable",
+            "Turret",
+            "TurretAnim",
+            "TurretAnimIsVoxel",
+            "TurretCount",
+            "UndeploysInto",
+            "UnderDoorAnim",
+            "UnderRoofDoorAnim",
+            "Voxel",
+            "VoxelBarrelFile",
+        ],
+    ),
+    (
+        "S-0102",
+        &[
+            "CruiseHeight",
+            "DrawFlat",
+            "Flat",
+            "Gate",
+            "IsARock",
+            "JumpJet",
+            "JumpjetHeight",
+            "Layer",
+            "Locomotor",
+            "NormalZAdjust",
+            "Shadow",
+            "SpecialZOverlayZAdjust",
+            "Tiberium",
+            "Tiled",
+            "TurretAnimX",
+            "TurretAnimY",
+            "TurretAnimYSort",
+            "TurretAnimZAdjust",
+            "Wall",
+            "YDrawOffset",
+            "YSortAdjust",
+            "ZAdjust",
+            "ZFudgeBridge",
+            "ZFudgeCliff",
+            "ZFudgeColumn",
+            "ZFudgeTunnel",
+            "ZShapePointMove",
+            "BalloonHover",
+        ],
+    ),
+    (
+        "S-0103",
+        &[
+            "AltPalette",
+            "BombParachute",
+            "IsVeins",
+            "Parachute",
+            "ShouldUseCellDrawer",
+            "TerrainPalette",
+            "UseNormalLight",
+        ],
+    ),
+    (
+        "S-0104",
+        &[
+            "AmbientChangeRate",
+            "AmbientChangeStep",
+            "LightVisibility",
+            "NukeAmbientChangeRate",
+            "SpawnsTiberium",
+        ],
+    ),
+    (
+        "S-0105",
+        &[
+            "DisableShadowCache",
+            "DisableVoxelCache",
+            "FireAngle",
+            "NoShadow",
+            "ShadowIndex",
+            "TurretCompressFrames",
+            "TurretHoldFrames",
+            "TurretOffset",
+            "TurretRecoil",
+            "TurretRecoverFrames",
+            "TurretTravel",
+            "UseBuffer",
+            "UseTurretShadow",
+        ],
+    ),
+    (
+        "S-0107",
+        &[
+            "Crashable",
+            "Crawls",
+            "Cyborg",
+            "DeadBodies",
+            "DeathAnims",
+            "DeploySound",
+            "EnterWaterSound",
+            "Fearless",
+            "Fraidycat",
+            "IdleActionFrequency",
+            "InfDeath",
+            "LeaveWaterSound",
+            "NotHuman",
+            "UndeploySound",
+            "VoiceComment",
+        ],
+    ),
+    (
+        "S-0108",
+        &[
+            "ActiveAnim",
+            "ActiveAnimFour",
+            "ActiveAnimThree",
+            "ActiveAnimTwo",
+            "BuildupTime",
+            "CanBeOccupied",
+            "ChargedAnimTime",
+            "ExtraDamageStage",
+            "Gate",
+            "GateStages",
+            "IdleAnim",
+            "InfantryAbsorb",
+            "InvisibleInGame",
+            "IsAnimDelayedFire",
+            "Normalized",
+            "Power",
+            "PreProductionAnim",
+            "ProductionAnim",
+            "Refinery",
+            "SpecialAnim",
+            "SpecialAnimFour",
+            "SpecialAnimThree",
+            "SpecialAnimTwo",
+            "Storage",
+            "SuperAnim",
+            "SuperAnimFour",
+            "SuperAnimThree",
+            "SuperAnimTwo",
+            "TurretAnimDamaged",
+            "TurretAnimGarrisoned",
+            "UnitRepair",
+            "Upgrades",
+        ],
+    ),
+];
+
+/// One row.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Row {
+    /// Category: a type kind, `global:Section`, `list`, `art` or `other`.
+    pub category: String,
+    /// The key.
+    pub key: String,
+    /// Outcome.
+    pub outcome: Outcome,
+    /// Specs that name the key.
+    pub spec: String,
+    /// Note.
+    pub note: String,
+}
+
+fn classify(category: &str, key: &str) -> (Outcome, String, String) {
+    let hit = CONVERTED.iter().find(|(c, k, _, _)| {
+        (*c == "*" || *c == category) && (*k == "*" || k.as_bytes() == key.as_bytes())
+    });
+    if let Some((_, _, outcome, spec)) = hit {
+        return (*outcome, (*spec).to_owned(), String::new());
+    }
+    let named: Vec<&str> = NAMED
+        .iter()
+        .filter(|(_, keys)| keys.contains(&key))
+        .map(|(s, _)| *s)
+        .collect();
+    if named.is_empty() {
+        (
+            Outcome::Unsupported,
+            String::new(),
+            "no approved spec maps this key yet; kept as INI text".into(),
+        )
+    } else {
+        (
+            Outcome::Unsupported,
+            named.join(", "),
+            "named by a spec, not converted yet; kept as INI text".into(),
+        )
+    }
+}
+
+/// Every (category, key) of the base rules document and the art database,
+/// classified. Categories follow the layered result: a section is a type
+/// section of each kind that has a type of that stored name.
+pub fn rows(base: &Document, art: &Document, layered: &Layered) -> Vec<Row> {
+    let mut kinds_of: BTreeMap<Vec<u8>, Vec<Kind>> = BTreeMap::new();
+    for (kind, reg) in &layered.registries {
+        for t in reg {
+            kinds_of.entry(t.name.clone()).or_default().push(*kind);
+        }
+    }
+    let lists: BTreeSet<&[u8]> = Kind::all().filter_map(Kind::list_section).collect();
+    let mut pairs: BTreeSet<(String, String)> = BTreeSet::new();
+    for s in base.sections() {
+        let keys: BTreeSet<String> = s.entries().iter().map(|e| show(&e.key)).collect();
+        let cats: Vec<String> = if lists.contains(s.name()) {
+            vec!["list".into()]
+        } else if s.name() == b"Sides" || s.name() == b"Colors" || s.name() == b"ColorAdd" {
+            vec![format!("global:{}", show(s.name()))]
+        } else if let Some(kinds) = kinds_of
+            .get(s.name())
+            .filter(|k| k.iter().any(|k| *k != Kind::Animations))
+        {
+            kinds
+                .iter()
+                .filter(|k| **k != Kind::Animations)
+                .map(|k| k.key().to_owned())
+                .collect()
+        } else if layered.globals.contains_key(s.name()) {
+            vec![format!("global:{}", show(s.name()))]
+        } else {
+            vec!["other".into()]
+        };
+        for c in cats {
+            if c == "list" {
+                pairs.insert((c.clone(), "*".into()));
+                continue;
+            }
+            for k in &keys {
+                pairs.insert((c.clone(), k.clone()));
+            }
+        }
+    }
+    for s in art.sections() {
+        let cat = if kinds_of
+            .get(s.name())
+            .is_some_and(|k| k.contains(&Kind::Animations))
+        {
+            "art:animations"
+        } else {
+            "art"
+        };
+        for e in s.entries() {
+            pairs.insert((cat.to_owned(), show(&e.key)));
+        }
+    }
+    pairs
+        .into_iter()
+        .map(|(category, key)| {
+            let lookup_cat = if category.starts_with("art") {
+                "*"
+            } else {
+                category.as_str()
+            };
+            let (mut outcome, mut spec, mut note) = classify(lookup_cat, &key);
+            if category.starts_with("art") {
+                // Art-file keys that S-0007 and S-0103 interpret.
+                const ART_RENDER: [&str; 18] = [
+                    // spec: S-0007 Import mapping, S-0103 Import mapping (art database keys)
+                    "Voxel",
+                    "Theater",
+                    "NewTheater",
+                    "Buildup",
+                    "DeployingAnim",
+                    "RoofDeployingAnim",
+                    "DoorAnim",
+                    "UnderDoorAnim",
+                    "UnderRoofDoorAnim",
+                    "Rubble",
+                    "SpecialZOverlay",
+                    "BibShape",
+                    "Cameo",
+                    "AltCameo",
+                    "AlphaImage",
+                    "AlternateArcticArt",
+                    "TerrainPalette",
+                    "AltPalette",
+                ];
+                if ART_RENDER.contains(&key.as_str()) || key == "Image" {
+                    outcome = Outcome::Render;
+                    spec = if matches!(key.as_str(), "TerrainPalette" | "AltPalette") {
+                        "S-0103".into()
+                    } else {
+                        "S-0007".into()
+                    };
+                    note = String::new();
+                }
+            }
+            Row {
+                category,
+                key,
+                outcome,
+                spec,
+                note,
+            }
+        })
+        .collect()
+}
+
+/// Spellings the original reads where stock data has a different letter
+/// case (S-0001 Import mapping, row I2).
+// spec: S-0001 Import mapping row I2
+const CASE_SENSITIVE_SPELLINGS: [&str; 3] = ["JumpjetAccel", "JumpjetTurnRate", "MaxDebris"];
+
+/// Every key spelling this importer knows: the keys it interprets, the
+/// keys the specs' import mappings name, and S-0001's row I2.
+pub fn known_keys() -> std::collections::BTreeSet<&'static str> {
+    CONVERTED
+        .iter()
+        .map(|(_, k, _, _)| *k)
+        .filter(|k| *k != "*")
+        .chain(NAMED.iter().flat_map(|(_, keys)| keys.iter().copied()))
+        .chain(CASE_SENSITIVE_SPELLINGS)
+        .collect()
+}
+
+/// Importer warnings for keys whose bytes differ from a key the importer
+/// reads only in the letter case of A to Z (S-0001 claim 13, Edge cases):
+/// such an entry has no effect.
+pub fn case_warnings(doc: &Document, file: &str) -> Vec<crate::layers::Warning> {
+    let known = known_keys();
+    let mut out = Vec::new();
+    for section in doc.sections() {
+        for e in section.entries() {
+            let Some(k) = known.iter().find(|k| {
+                k.as_bytes() != e.key.as_slice() && k.as_bytes().eq_ignore_ascii_case(&e.key)
+            }) else {
+                continue;
+            };
+            out.push(crate::layers::Warning {
+                file: file.to_owned(),
+                line: e.line,
+                message: format!(
+                    "key {:?} in [{}] differs from {k:?} only in letter case; keys are case-sensitive, so it \
+                     has no effect (S-0001 claim 13)",
+                    show(&e.key),
+                    show(section.name())
+                ),
+            });
+        }
+    }
+    out
+}
+
+fn csv_field(s: &str) -> String {
+    if s.contains([',', '"', '\n']) {
+        format!("\"{}\"", s.replace('"', "\"\""))
+    } else {
+        s.to_owned()
+    }
+}
+
+/// The rows as CSV text with a header line.
+pub fn csv(rows: &[Row]) -> String {
+    let mut out = String::from("category,key,outcome,spec,note\n");
+    for r in rows {
+        let _ = writeln!(
+            out,
+            "{},{},{},{},{}",
+            csv_field(&r.category),
+            csv_field(&r.key),
+            r.outcome.word(),
+            csv_field(&r.spec),
+            csv_field(&r.note)
+        );
+    }
+    out
+}
+
+/// Number of rows per outcome.
+pub fn summary(rows: &[Row]) -> BTreeMap<Outcome, usize> {
+    let mut m = BTreeMap::new();
+    for r in rows {
+        *m.entry(r.outcome).or_default() += 1;
+    }
+    m
+}
