@@ -1,8 +1,10 @@
 # Fuzzing
 
-cargo-fuzz targets for every parser in `glasnost-fmt`. Each target calls
-`glasnost_fmt::hostile::run`, which drives the parser and every decoder over
-the input and ignores errors: a panic, overflow trap, hang or runaway
+cargo-fuzz targets for every parser in `glasnost-fmt`, and `ini` for the INI
+reader. Each `fmt` target calls `glasnost_fmt::hostile::run`, which drives the
+parser and every decoder over the input and ignores errors; `ini` calls
+`glasnost_ini::hostile::run`, which reads the input as a document and every
+stored value in every value form. A panic, overflow trap, hang or runaway
 allocation is a finding.
 
 ```sh
@@ -16,4 +18,5 @@ cargo +nightly fuzz list                    # all targets
 Corpora and crash artifacts are git-ignored. They hold only bytes derived
 from our synthetic fixtures; never seed them from a real install. A stable
 smoke test with the same entry points runs in CI:
-`cargo test -p glasnost-fmt --test hostile`.
+`cargo test -p glasnost-fmt --test hostile` and
+`cargo test -p glasnost-ini --test hostile`.

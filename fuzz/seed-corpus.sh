@@ -10,3 +10,8 @@ for t in mix shp tmp vxl hva pal pcx csf idx aud lzo lcw mappack; do
 done
 mkdir -p fuzz/corpus/sniff
 cp "$src"/*/* fuzz/corpus/sniff/
+# The INI reader gets a few invented documents of our own.
+mkdir -p fuzz/corpus/ini
+printf '[A]\nk=1\nk=2\nFiller0=1\n[A]\nx=$1F\n' > fuzz/corpus/ini/dups
+printf '[B]\r\n  key = 12.5%%,0.125,abc ; c\r\n=x\n[x=5\n' > fuzz/corpus/ini/forms
+printf '[C]\nt=1, 2 ,3\nr=0,0,30\nc=300,-1,a\nl=,,a, b,\nd=0.1\n' > fuzz/corpus/ini/tuples

@@ -1,4 +1,4 @@
-# cargo-fuzz targets for glasnost-fmt (PLAN.md 6.2, layer 0). Needs a
+# cargo-fuzz targets for glasnost-fmt and glasnost-ini (PLAN.md 6.2, layer 0). Needs a
 # nightly toolchain and cargo-fuzz; not part of the workspace or CI.
 # See fuzz/README.md.
 [package]
@@ -14,6 +14,7 @@ cargo-fuzz = true
 [dependencies]
 libfuzzer-sys = "0.4"
 glasnost-fmt = { path = "../crates/fmt" }
+glasnost-ini = { path = "../crates/ini" }
 
 # Its own workspace, so the main workspace's toolchain pin and lints do not
 # apply and `cargo test --workspace` never builds it.
@@ -113,6 +114,13 @@ bench = false
 [[bin]]
 name = "sniff"
 path = "fuzz_targets/sniff.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "ini"
+path = "fuzz_targets/ini.rs"
 test = false
 doc = false
 bench = false

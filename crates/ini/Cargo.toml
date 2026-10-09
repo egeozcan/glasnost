@@ -8,7 +8,8 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
-
+glasnost-fmt.workspace = true
+num-bigint = "0.5"
 
 [lints]
 workspace = true
