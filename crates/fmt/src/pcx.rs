@@ -79,7 +79,8 @@ impl Pcx {
         slice(data, 0, HEADER_LEN)?;
         let width = usize::from(xmax - xmin) + 1;
         let height = usize::from(ymax - ymin) + 1;
-        if width * height > MAX_IMAGE_PIXELS {
+        // In u64: 65536² overflows a 32-bit usize (wasm32).
+        if (width as u64) * (height as u64) > MAX_IMAGE_PIXELS as u64 {
             return Err(Error::TooLarge("PCX image"));
         }
         if bpp != 8 || !(planes == 1 || planes == 3) {

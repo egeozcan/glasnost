@@ -130,6 +130,12 @@ pub struct DecodedTile {
 /// then shrink, as OpenRA's loader lays them out). Fails for sizes whose
 /// rows do not add up to `width × height / 2` within the width.
 pub fn diamond_rows(width: u32, height: u32) -> Result<Vec<u32>> {
+    // Engineering bound of our own, far above any real tile, checked before
+    // allocating; the row rule makes the width about twice the height.
+    const MAX_SIDE: u32 = 4096;
+    if height > MAX_SIDE || width > 2 * MAX_SIDE + 8 {
+        return Err(Error::Unsupported("TMP tile size"));
+    }
     let mut rows = Vec::with_capacity(height as usize);
     let mut w: i64 = 4;
     let half = i64::from(height / 2);
@@ -156,7 +162,9 @@ impl<'a> Tmp<'a> {
         if tile_width == 0 || tile_height == 0 {
             return Err(Error::Invalid("TMP tile size is zero"));
         }
-        if tile_width as usize * tile_height as usize > MAX_IMAGE_PIXELS {
+        // In u64: two u32 sizes overflow a 32-bit usize (wasm32). After this
+        // check `tile_width * tile_height` fits in u32 and usize.
+        if u64::from(tile_width) * u64::from(tile_height) > MAX_IMAGE_PIXELS as u64 {
             return Err(Error::TooLarge("TMP tile"));
         }
         diamond_rows(tile_width, tile_height)?;

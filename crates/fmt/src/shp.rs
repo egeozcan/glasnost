@@ -138,7 +138,8 @@ impl<'a> Shp<'a> {
     /// Decodes frame `i` placed on the canvas (pixels outside it clipped).
     pub fn decode_on_canvas(&self, i: usize) -> Result<IndexedImage> {
         let (cw, ch) = (usize::from(self.width), usize::from(self.height));
-        if cw * ch > MAX_IMAGE_PIXELS {
+        // In u64: 65535² overflows a 32-bit usize (wasm32).
+        if u64::from(self.width) * u64::from(self.height) > MAX_IMAGE_PIXELS as u64 {
             return Err(Error::TooLarge("SHP canvas"));
         }
         let mut canvas = vec![0u8; cw * ch];
@@ -179,7 +180,8 @@ fn decode_frame(data: &[u8], f: &ShpFrame, stats: &mut FrameStats) -> Result<Ind
         return Ok(IndexedImage::empty());
     }
     let (w, h) = (usize::from(f.width), usize::from(f.height));
-    if w * h > MAX_IMAGE_PIXELS {
+    // In u64: 65535² overflows a 32-bit usize (wasm32).
+    if u64::from(f.width) * u64::from(f.height) > MAX_IMAGE_PIXELS as u64 {
         return Err(Error::TooLarge("SHP frame"));
     }
     let start = usize::try_from(f.offset).map_err(|_| Error::Invalid("SHP offset"))?;
