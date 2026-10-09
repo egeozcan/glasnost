@@ -6,7 +6,9 @@ use std::collections::BTreeMap;
 
 use egui::{Color32, RichText, Ui};
 use glasnost_fmt::pal::Palette6;
-use glasnost_render::palette::{PaletteQuirks, PaletteState, SLOT_POSITIONS};
+use glasnost_render::palette::{
+    DrawnObject, PaletteChoice, PaletteQuirks, PaletteState, SLOT_POSITIONS, palette_for,
+};
 use glasnost_rules::Resolved;
 use glasnost_rules::explain::{explain, find_path};
 use glasnost_rules::jsonc::{Node, Value};
@@ -19,8 +21,39 @@ pub type SlotDefinition = (String, [u8; 3]);
 pub enum RulesAction {
     /// Import the rules for the pane's theater.
     Import,
-    /// Open a file by name in the preview.
-    Open(String),
+    /// Open a file by name in the preview, with the palette S-0103 claim 8
+    /// gives the object it belongs to, if known.
+    Open(String, Option<PaletteChoice>),
+}
+
+/// The palette a type's own art is drawn with (S-0103 claim 8), from its
+/// kind and art flags; `None` where the spec leaves it open (overlays,
+/// terrain objects, smudges) or for sidebar icons.
+fn palette_of(tree: &Node, kind: &str, name: &str, image: &str) -> Option<PaletteChoice> {
+    let flag = |section: &str, key: &str| {
+        tree.get("art_sections")
+            .and_then(|a| a.get(section))
+            .and_then(|s| s.get(key))
+            .and_then(Node::as_str)
+            .and_then(|v| glasnost_ini::value::boolean(v.as_bytes()))
+            .unwrap_or(false)
+    };
+    let object = match kind {
+        "infantry" | "vehicles" | "aircraft" => DrawnObject::Mobile,
+        // spec: S-0103 Import mapping (TerrainPalette in a building's art entry)
+        "buildings" => DrawnObject::Building {
+            terrain_palette: flag(image, "TerrainPalette"),
+        },
+        // spec: S-0103 Import mapping (IsVeins and AltPalette in an animation's art entry)
+        "animations" => DrawnObject::Animation {
+            veins: flag(name, "IsVeins"),
+            terrain: false,
+            drawn_with_object: false,
+            alt_palette: flag(name, "AltPalette"),
+        },
+        _ => return None,
+    };
+    Some(palette_for(object, &PaletteQuirks::default()))
 }
 
 /// The result of an import, as the pane keeps it.
@@ -148,6 +181,17 @@ impl RulesPane {
     /// The palettes in force for the imported game (S-0103 claims 1 to 3).
     pub fn palettes(&self) -> Option<&PaletteState> {
         self.data.as_ref().map(|d| &d.palettes)
+    }
+
+    /// The first colour definition (S-0103 claim 8, row 4).
+    pub fn first_definition(&self) -> Option<[u8; 3]> {
+        self.data
+            .as_ref()?
+            .resolved
+            .ruleset
+            .colours
+            .first()
+            .map(|c| c.hsv)
     }
 
     /// The colour definitions that lobby slots 0 to 7 show (S-0103 claim
@@ -363,7 +407,9 @@ impl RulesPane {
                 .id_salt("art")
                 .default_open(true)
                 .show(ui, |ui| {
-                    ui.label(format!("image {}", text(art.get("image"))));
+                    let image = text(art.get("image"));
+                    ui.label(format!("image {image}"));
+                    let palette = palette_of(&r.tree, &self.kind, name, &image);
                     let mut files: Vec<(String, String)> = Vec::new();
                     for field in ["sprite", "icon", "alt_icon", "translucent"] {
                         if let Some(f) = art.get(field) {
@@ -379,7 +425,11 @@ impl RulesPane {
                         ui.horizontal(|ui| {
                             ui.label(format!("{role}: {file}"));
                             if ui.small_button("open").clicked() {
-                                action = Some(RulesAction::Open(file.clone()));
+                                let icon = matches!(role.as_str(), "icon" | "alt_icon");
+                                action = Some(RulesAction::Open(
+                                    file.clone(),
+                                    if icon { None } else { palette },
+                                ));
                             }
                         });
                     }

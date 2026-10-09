@@ -22,6 +22,7 @@ use glasnost_vfs::{ArchiveId, FileRef, Vfs};
 use super::preview::{Rgba, rgb, strip, voxel_preview};
 use super::rules::{RulesAction, RulesData, RulesPane};
 use super::tasks::{self, Purpose, Spawner, TaskResult};
+use glasnost_render::palette::PaletteChoice;
 
 /// Colour definitions (hue, saturation, value) offered for house-colour
 /// previews before a rules file is imported: an invented set of our own,
@@ -114,6 +115,9 @@ pub struct Browser {
     remap: bool,
     houses: [bool; PREVIEW_DEFINITIONS.len()],
     game_palette: Option<GamePalette>,
+    /// Show one row with the first colour definition's ramp (S-0103 claim
+    /// 8, row 4) instead of the slots' rows.
+    first_definition_row: bool,
     rules: RulesPane,
     show_rules: bool,
     frame: usize,
@@ -152,6 +156,7 @@ impl Browser {
             remap: false,
             houses: [true, true, true, true, false, false, false, false],
             game_palette: None,
+            first_definition_row: false,
             rules: RulesPane::default(),
             show_rules: false,
             frame: 0,
@@ -416,6 +421,11 @@ impl Browser {
     fn rows_for(&self, base: &Palette) -> Vec<Palette> {
         if !self.remap {
             return vec![base.clone()];
+        }
+        if self.first_definition_row
+            && let Some(first) = self.rules.first_definition()
+        {
+            return vec![house_palette(base, first)];
         }
         let rows: Vec<Palette> = self
             .house_definitions()
@@ -746,6 +756,23 @@ impl Browser {
         }
     }
 
+    /// Sets the preview's palette to the one S-0103 claim 8 gives an
+    /// object's art (unshaded: lighting, S-0104, is not applied).
+    fn use_object_palette(&mut self, p: PaletteChoice) {
+        let (palette, remap, first) = match p {
+            PaletteChoice::Tile => (GamePalette::Tile, false, false),
+            PaletteChoice::Anim => (GamePalette::Anim, false, false),
+            PaletteChoice::OwnerHouse
+            | PaletteChoice::LocalPlayerHouse
+            | PaletteChoice::OwnerSingleShade => (GamePalette::Unit, true, false),
+            PaletteChoice::FirstDefinitionSingleShade => (GamePalette::Unit, true, true),
+        };
+        self.game_palette = Some(palette);
+        self.remap = remap;
+        self.first_definition_row = first;
+        self.texture_dirty = true;
+    }
+
     fn rules_action(&mut self, action: RulesAction, spawner: &dyn Spawner) {
         match action {
             RulesAction::Import => {
@@ -759,7 +786,10 @@ impl Browser {
                 );
                 spawner.spawn(tasks::import(vfs, self.rules.theater));
             }
-            RulesAction::Open(name) => {
+            RulesAction::Open(name, palette) => {
+                if let Some(p) = palette {
+                    self.use_object_palette(p);
+                }
                 let Some(vfs) = &mut self.vfs else {
                     return;
                 };
@@ -905,7 +935,15 @@ impl Browser {
             .weak(),
         );
         if ui.checkbox(&mut self.remap, "house colour rows").changed() {
+            self.first_definition_row = false;
             self.texture_dirty = true;
+        }
+        if self.first_definition_row {
+            ui.label(
+                RichText::new("One row: the first colour definition, as animations with the alternative palette show it (S-0103 claim 8).")
+                    .small()
+                    .weak(),
+            );
         }
         if self.rules.data().is_some() {
             ui.label(
@@ -1332,11 +1370,23 @@ mod tests {
         b.rules.select_type("infantry", "Walker");
         b.show_rules = true;
         frame(&mut b, &queue, &ctx);
-        b.rules_action(RulesAction::Open("STRIDER.shp".into()), &queue);
+        b.rules_action(
+            RulesAction::Open("STRIDER.shp".into(), Some(PaletteChoice::OwnerHouse)),
+            &queue,
+        );
         settle(&mut b, &queue);
         assert!(matches!(b.preview, Preview::Shp(_)), "{}", b.status);
+        // Infantry art: the unit palette with house rows (S-0103 claim 8).
+        assert_eq!(b.game_palette, Some(GamePalette::Unit));
+        assert!(b.remap);
         frame(&mut b, &queue, &ctx);
         assert!(b.texture.is_some());
+        b.use_object_palette(PaletteChoice::FirstDefinitionSingleShade);
+        let base = b.base_palette();
+        assert_eq!(b.rows_for(&base).len(), 1);
+        b.use_object_palette(PaletteChoice::Tile);
+        assert_eq!(b.game_palette, Some(GamePalette::Tile));
+        assert!(!b.remap);
     }
 
     #[test]
@@ -1681,7 +1731,10 @@ mod tests {
             b.rules.select_type(&kind, &name);
             b.rules
                 .explain_query(&format!("types.{kind}.{name}.ini.{key}"));
-            b.rules_action(RulesAction::Open(file), &queue);
+            b.rules_action(
+                RulesAction::Open(file, Some(PaletteChoice::OwnerHouse)),
+                &queue,
+            );
             settle(&mut b, &queue);
         }
         b.texture_dirty = true;

@@ -895,6 +895,7 @@ dependencies = [
  "glasnost-audio",
  "glasnost-convert",
  "glasnost-fmt",
+ "glasnost-ini",
  "glasnost-render",
  "glasnost-rules",
  "glasnost-vfs",
