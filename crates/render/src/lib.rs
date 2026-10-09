@@ -19,6 +19,7 @@ pub mod map_gpu;
 pub mod offscreen;
 pub mod palette;
 pub mod palette_quad;
+pub mod projection;
 pub mod scene;
 
 pub use wgpu;
