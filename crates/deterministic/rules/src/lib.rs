@@ -18,6 +18,7 @@
 pub mod de;
 pub mod explain;
 pub mod hash;
+pub mod hostile;
 pub mod jsonc;
 pub mod resolve;
 pub mod schema;
