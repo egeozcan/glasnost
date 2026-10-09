@@ -1,9 +1,9 @@
 ---
 id: Q-0002
 title: Which copy of a file the game uses when several archives hold it
-status: open
+status: answered
 related: []
-answered-by: []
+answered-by: [S-0005]
 ---
 
 ## Need
