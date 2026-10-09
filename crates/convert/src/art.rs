@@ -958,30 +958,30 @@ mod tests {
     /// spec: S-0007 claims 11 and 12 (buildings; scenarios A1, A2, A12)
     #[test]
     fn building_sprites() {
-        let rules = "[BuildingTypes]\n1=GAPOWR\n2=NAPLANT\n[GAPOWR]\nX=1\n[NAPLANT]\nX=1\n";
-        let art = "[GAPOWR]\nBuildup=GAPOWRMK\nBibShape=GAPOWRBB\n[NAPLANT]\nTheater=yes\nBuildup=NAPLANTMK\n";
+        let rules = "[BuildingTypes]\n1=GAWIDG\n2=NAGIZMO\n[GAWIDG]\nX=1\n[NAGIZMO]\nX=1\n";
+        let art = "[GAWIDG]\nBuildup=GAWIDGMK\nBibShape=GAWIDGBB\n[NAGIZMO]\nTheater=yes\nBuildup=NAGIZMK\n";
         let f = files(&[
-            "GDPOWR.shp",
-            "GDPOWRMK.shp",
-            "GDPOWRBB.shp",
-            "NAPLANT.des",
-            "NAPLANTMK.des",
-            "NDPLANT.des",
+            "GDWIDG.shp",
+            "GDWIDGMK.shp",
+            "GDWIDGBB.shp",
+            "NAGIZMO.des",
+            "NAGIZMK.des",
+            "NDGIZMO.des",
         ]);
         let (o, a) = run(&[(rules, Role::Base)], art, Theater::Desert, &f);
-        let p = get(&o, &a, Kind::Buildings, "GAPOWR");
-        assert_eq!(s(&p.sprite).as_deref(), Some("GDPOWR.shp"));
+        let p = get(&o, &a, Kind::Buildings, "GAWIDG");
+        assert_eq!(s(&p.sprite).as_deref(), Some("GDWIDG.shp"));
         assert_eq!(
             p.building_sprites
                 .get("buildup")
                 .map(|v| String::from_utf8_lossy(v).into_owned())
                 .as_deref(),
-            Some("GDPOWRMK.shp")
+            Some("GDWIDGMK.shp")
         );
         assert!(p.building_sprites.contains_key("bib"));
         // Theater flag: the refresh loads image.E and buildup.E, without substitution.
-        let n = get(&o, &a, Kind::Buildings, "NAPLANT");
-        assert_eq!(s(&n.sprite).as_deref(), Some("NAPLANT.des"));
+        let n = get(&o, &a, Kind::Buildings, "NAGIZMO");
+        assert_eq!(s(&n.sprite).as_deref(), Some("NAGIZMO.des"));
         assert!(n.icon.as_deref() == Some(PLACEHOLDER_ICON));
     }
 
@@ -1051,7 +1051,7 @@ mod tests {
     /// spec: S-0007 claim 20 (building voxel turrets)
     #[test]
     fn building_voxel_turrets() {
-        assert_eq!(late_tur(b"GTGCANTUR", true), Some(6));
+        assert_eq!(late_tur(b"GTFOOBARTUR", true), Some(8));
         assert_eq!(late_tur(b"TURX", true), None);
         assert_eq!(late_tur(b"ATUR", true), None);
         assert_eq!(late_tur(b"ATUR", false), Some(1));
