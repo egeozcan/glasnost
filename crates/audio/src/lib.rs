@@ -37,6 +37,8 @@ pub fn wav_bytes(sample_rate: u32, channels: u16, samples: &[i16]) -> Vec<u8> {
 pub struct Player {
     #[cfg(not(target_arch = "wasm32"))]
     child: Option<std::process::Child>,
+    #[cfg(not(target_arch = "wasm32"))]
+    wav: Option<std::path::PathBuf>,
     #[cfg(target_arch = "wasm32")]
     context: Option<web_sys::AudioContext>,
     #[cfg(target_arch = "wasm32")]
@@ -52,9 +54,14 @@ impl Player {
     /// Stops whatever is playing.
     pub fn stop(&mut self) {
         #[cfg(not(target_arch = "wasm32"))]
-        if let Some(mut child) = self.child.take() {
-            let _ = child.kill();
-            let _ = child.wait();
+        {
+            if let Some(mut child) = self.child.take() {
+                let _ = child.kill();
+                let _ = child.wait();
+            }
+            if let Some(path) = self.wav.take() {
+                let _ = std::fs::remove_file(path);
+            }
         }
         #[cfg(target_arch = "wasm32")]
         if let Some(source) = self.source.take() {
@@ -78,6 +85,7 @@ impl Player {
             std::env::temp_dir().join(format!("glasnost-preview-{}.wav", std::process::id()));
         std::fs::write(&path, wav_bytes(sample_rate, channels, samples))
             .map_err(|e| format!("could not write the preview file: {}", e.kind()))?;
+        self.wav = Some(path.clone());
         for player in ["pw-play", "paplay", "aplay", "afplay"] {
             let spawned = std::process::Command::new(player)
                 .arg(&path)
