@@ -159,9 +159,7 @@ fn map_lane() {
             ok += 1;
             items += loaded.built.scene.items.len();
             for k in &loaded.built.notes {
-                *notes
-                    .entry(k.split(':').next().unwrap_or("").to_owned())
-                    .or_default() += 1;
+                *notes.entry(k.clone()).or_default() += 1;
             }
             for (k, v) in &loaded.built.dropped {
                 *dropped.entry(k.clone()).or_default() += v;
