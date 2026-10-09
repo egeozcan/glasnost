@@ -5,7 +5,7 @@ Plain-language behaviour specs for the engine. Each spec passed the scrub pipeli
 ## How a spec arrives
 
 1. The spec agent drafts it in its own workspace, or answers a request from `requests/`.
-2. Lint, then a fresh scrubber session, then sign-off by the project lead.
+2. Lint, then a fresh scrubber session, then sign-off by the project lead or a delegate the lead names (the delegate is named in `approved-by`, and each sign-off is logged on the spec side).
 3. The lead commits it as `spec/<topic>/S-xxxx-short-name.md` with `spec: add S-xxxx <title>`.
 
 A spec that contradicts a measurement goes back for revision; the measurement wins. Revisions bump `revision` and go through the same pipeline.
