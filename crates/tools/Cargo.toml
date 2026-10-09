@@ -12,6 +12,8 @@ glasnost-fmt.workspace = true
 glasnost-vfs.workspace = true
 glasnost-convert.workspace = true
 glasnost-rules.workspace = true
+glasnost-ini.workspace = true
+glasnost-map.workspace = true
 pollster = "0.4"
 
 [lints]

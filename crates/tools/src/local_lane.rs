@@ -730,6 +730,47 @@ fn decode_map_packs(report: &mut Report, bytes: &[u8]) {
             });
         record(report, &format!("map packs decoded: {section}"), result);
     }
+    decode_map(report, bytes);
+}
+
+/// Label of the full map decode (S-0009, `glasnost_convert::map`).
+pub const MAPS_DECODED: &str = "maps decoded (S-0009), no panic";
+
+/// Decodes a text entry as a map when it has `[Map]` and `[IsoMapPack5]`,
+/// counting maps, panics and importer warnings by kind (counts only).
+fn decode_map(report: &mut Report, bytes: &[u8]) {
+    use glasnost_convert::map::{DecodeContext, decode, is_map};
+    let doc = glasnost_ini::Document::parse(bytes, Default::default(), &mut Vec::new());
+    if !is_map(&doc) {
+        return;
+    }
+    let result = std::panic::catch_unwind(|| decode(&doc, &DecodeContext::default()));
+    let t = report.tally(MAPS_DECODED);
+    match result {
+        Ok(d) => {
+            t.pass();
+            let multiplayer = d.map.waypoints.contains_key(&0) && d.map.waypoints.contains_key(&1);
+            if multiplayer {
+                report
+                    .tally("maps with start waypoints 0 and 1 (multiplayer)")
+                    .pass();
+            }
+            for w in &d.warnings {
+                // The warning's kind: its text up to the first digit or quote, so no
+                // names or values reach the report.
+                let kind: String = w
+                    .text
+                    .chars()
+                    .take_while(|c| !c.is_ascii_digit() && *c != '"' && *c != '[')
+                    .take(60)
+                    .collect();
+                report
+                    .tally("map importer warnings by kind")
+                    .fail(kind.trim());
+            }
+        }
+        Err(_) => t.fail("panic"),
+    }
 }
 
 fn record(report: &mut Report, label: &str, result: glasnost_fmt::Result<()>) {
