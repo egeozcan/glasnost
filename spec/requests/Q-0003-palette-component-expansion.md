@@ -1,9 +1,9 @@
 ---
 id: Q-0003
 title: How 6-bit palette components become displayed colours
-status: open
+status: answered
 related: []
-answered-by: []
+answered-by: [S-0103]
 ---
 
 ## Need

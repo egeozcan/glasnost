@@ -1,9 +1,9 @@
 ---
 id: Q-0001
 title: Which sprite and voxel colours take the owner's house colour, and how
-status: open
+status: answered
 related: []
-answered-by: []
+answered-by: [S-0103]
 ---
 
 ## Need
