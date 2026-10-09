@@ -41,6 +41,7 @@ pub mod shp;
 pub mod sniff;
 pub mod synth;
 pub mod tmp;
+pub mod vpl;
 pub mod vxl;
 
 pub use error::{Error, Result};

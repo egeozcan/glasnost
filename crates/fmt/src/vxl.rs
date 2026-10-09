@@ -78,6 +78,11 @@ pub struct Limb {
     pub normals_mode: u8,
     /// Voxels, by column (y, then x) and then height.
     pub voxels: Vec<Voxel>,
+    /// Each column's data exactly as stored, by column (y, then x): `None`
+    /// for a column the file marks empty, `Some` (possibly holding no voxel)
+    /// otherwise. Renderers that must tell those two apart, or read the
+    /// runs as stored, use this rather than [`Limb::voxels`].
+    pub columns: Vec<Option<Vec<u8>>>,
 }
 
 /// A parsed VXL file.
@@ -152,6 +157,7 @@ impl Vxl {
             let size: [u8; 3] = t.array()?;
             let normals_mode = t.u8()?;
             let voxels = decode_columns(body, start_ofs, end_ofs, data_ofs, size)?;
+            let columns = raw_columns(body, start_ofs, end_ofs, data_ofs, size)?;
             limbs.push(Limb {
                 name: name_raw[..name_len].to_vec(),
                 number,
@@ -163,6 +169,7 @@ impl Vxl {
                 size,
                 normals_mode,
                 voxels,
+                columns,
             });
         }
         Ok(Self {
@@ -172,6 +179,71 @@ impl Vxl {
             limbs,
         })
     }
+}
+
+/// Each column's stored data (`None`: marked empty), in column order.
+fn raw_columns(
+    body: &[u8],
+    start_ofs: usize,
+    end_ofs: usize,
+    data_ofs: usize,
+    size: [u8; 3],
+) -> Result<Vec<Option<Vec<u8>>>> {
+    let [sx, sy, _] = size.map(usize::from);
+    let columns = sx * sy;
+    let starts = slice(body, start_ofs, columns * 4)?;
+    let ends = slice(body, end_ofs, columns * 4)?;
+    let span_data = body.get(data_ofs..).ok_or(Error::Truncated {
+        needed: data_ofs as u64,
+    })?;
+    let i32_at = |t: &[u8], i: usize| {
+        let b = &t[i * 4..i * 4 + 4];
+        i32::from_le_bytes([b[0], b[1], b[2], b[3]])
+    };
+    let mut out = Vec::with_capacity(columns);
+    for col in 0..columns {
+        let (start, end) = (i32_at(starts, col), i32_at(ends, col));
+        if start == -1 {
+            out.push(None);
+            continue;
+        }
+        let start = usize::try_from(start).map_err(|_| Error::Invalid("VXL column offset"))?;
+        let end = usize::try_from(end).map_err(|_| Error::Invalid("VXL column end"))?;
+        if end < start {
+            return Err(Error::Invalid("VXL column ends before it starts"));
+        }
+        out.push(Some(slice(span_data, start, end - start + 1)?.to_vec()));
+    }
+    Ok(out)
+}
+
+/// The column data [`VxlWriter`] stores for `voxels` in a grid of `size`
+/// (spans as XCC writes them: one voxel per span, and a closing empty span
+/// when the column stops short of the top), in column order.
+pub fn column_bytes(voxels: &[Voxel], size: [u8; 3]) -> Vec<Option<Vec<u8>>> {
+    let [sx, sy, sz] = size.map(usize::from);
+    let mut sorted = voxels.to_vec();
+    sorted.sort_by_key(|v| (v.y, v.x, v.z));
+    (0..sx * sy)
+        .map(|col| {
+            let (x, y) = ((col % sx) as u8, (col / sx) as u8);
+            let in_col: Vec<&Voxel> = sorted.iter().filter(|v| v.x == x && v.y == y).collect();
+            if in_col.is_empty() {
+                return None;
+            }
+            let mut out = Vec::new();
+            let mut z = 0usize;
+            for v in in_col {
+                let vz = usize::from(v.z);
+                out.extend_from_slice(&[(vz - z) as u8, 1, v.color, v.normal, 1]);
+                z = vz + 1;
+            }
+            if z != sz {
+                out.extend_from_slice(&[(sz - z) as u8, 0, 0]);
+            }
+            Some(out)
+        })
+        .collect()
 }
 
 fn decode_columns(
@@ -252,32 +324,24 @@ impl VxlWriter<'_> {
         let mut body = Vec::new();
         let mut tailers = Vec::new();
         for limb in &m.limbs {
-            let [sx, sy, sz] = limb.size.map(usize::from);
+            let [sx, sy, _] = limb.size.map(usize::from);
             let start_ofs = body.len();
             body.resize(start_ofs + sx * sy * 8, 0);
             let data_ofs = body.len();
-            let mut voxels = limb.voxels.clone();
-            voxels.sort_by_key(|v| (v.y, v.x, v.z));
-            for col in 0..sx * sy {
-                let (x, y) = ((col % sx) as u8, (col / sx) as u8);
-                let in_col: Vec<&Voxel> = voxels.iter().filter(|v| v.x == x && v.y == y).collect();
-                let (s, e) = if in_col.is_empty() {
-                    (-1i32, -1i32)
-                } else {
-                    let begin = body.len();
-                    let mut z = 0usize;
-                    for v in in_col {
-                        let vz = usize::from(v.z);
-                        body.extend_from_slice(&[(vz - z) as u8, 1, v.color, v.normal, 1]);
-                        z = vz + 1;
+            for (col, data) in column_bytes(&limb.voxels, limb.size)
+                .into_iter()
+                .enumerate()
+            {
+                let (s, e) = match data {
+                    None => (-1i32, -1i32),
+                    Some(data) => {
+                        let begin = body.len();
+                        body.extend_from_slice(&data);
+                        (
+                            (begin - data_ofs) as i32,
+                            (body.len() - data_ofs - 1) as i32,
+                        )
                     }
-                    if z != sz {
-                        body.extend_from_slice(&[(sz - z) as u8, 0, 0]);
-                    }
-                    (
-                        (begin - data_ofs) as i32,
-                        (body.len() - data_ofs - 1) as i32,
-                    )
                 };
                 body[start_ofs + col * 4..start_ofs + col * 4 + 4]
                     .copy_from_slice(&s.to_le_bytes());
@@ -370,6 +434,7 @@ pub fn synthetic_model() -> Vxl {
             max: [f(5.0), f(4.0), f(6.0)],
             size,
             normals_mode: 4,
+            columns: column_bytes(&voxels, size),
             voxels,
         });
     }
