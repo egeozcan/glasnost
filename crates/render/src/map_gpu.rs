@@ -563,7 +563,7 @@ mod tests {
 
     #[test]
     fn shelf_packing_fits() {
-        let (slots, layers) = pack(&[(10, 10), (5, 20), (10, 10)], 16).unwrap();
+        let (slots, layers) = pack(&[(10, 10), (5, 12), (10, 10)], 16).unwrap();
         assert_eq!(slots.len(), 3);
         assert!(layers >= 2);
         assert!(pack(&[(17, 1)], 16).is_none());

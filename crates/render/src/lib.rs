@@ -21,6 +21,8 @@ pub mod offscreen;
 pub mod palette;
 pub mod palette_quad;
 pub mod projection;
+pub mod rz;
 pub mod scene;
+pub mod voxel;
 
 pub use wgpu;
