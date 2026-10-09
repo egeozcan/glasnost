@@ -255,7 +255,7 @@ async fn run_async(dir: &Path) -> std::io::Result<Report> {
             .sum(),
     );
     search_order(&mut vfs, &mut report).await;
-    rules_import(&vfs, &mut report).await;
+    rules_import(&mut vfs, &mut report).await;
     vfs.learn_name(CONQ_ARCHIVE);
     classify(&mut vfs, &mut report).await;
     Ok(report)
@@ -321,8 +321,13 @@ async fn search_order(vfs: &mut Vfs, report: &mut Report) {
 /// Imports the rules and art (S-0004, S-0006), resolves the result through
 /// the rules pipeline and builds `coverage.csv` (kept in the report, never
 /// printed: the binary writes it to the git-ignored `local-lane/`).
-async fn rules_import(vfs: &Vfs, report: &mut Report) {
-    let import = glasnost_convert::import(vfs, &glasnost_convert::ImportOptions::default()).await;
+async fn rules_import(vfs: &mut Vfs, report: &mut Report) {
+    let options = glasnost_convert::ImportOptions {
+        theater: Some(glasnost_vfs::theater::Theater::Temperate),
+        ..Default::default()
+    };
+    let import = glasnost_convert::import(vfs, &options).await;
+    art_counts(&import, report);
     for (kind, reg) in &import.outcome.registries {
         report.count(
             &format!("types registered: {}", kind.key()),
@@ -363,6 +368,45 @@ async fn rules_import(vfs: &Vfs, report: &mut Report) {
         report.count(&format!("coverage rows: {}", outcome.word()), n as u64);
     }
     report.coverage_csv = glasnost_convert::coverage::csv(&import.coverage);
+}
+
+/// Counts what the art lookup (S-0007, temperate theater) found, per kind.
+fn art_counts(import: &glasnost_convert::Import, report: &mut Report) {
+    use glasnost_rules::jsonc::Node;
+    let Some(types) = import.tree.get("types").and_then(Node::members) else {
+        return;
+    };
+    for kind in types {
+        let Some(entries) = kind.value.members() else {
+            continue;
+        };
+        let arts: Vec<&Node> = entries.iter().filter_map(|e| e.value.get("art")).collect();
+        if arts.is_empty() {
+            continue;
+        }
+        let sprites = arts.iter().filter(|a| a.get("sprite").is_some()).count();
+        let voxels = arts.iter().filter(|a| a.get("voxels").is_some()).count();
+        let noted = arts.iter().filter(|a| a.get("notes").is_some()).count();
+        let placeholder = arts
+            .iter()
+            .filter(|a| a.get("icon").and_then(Node::as_str) == Some("XXICON.SHP"))
+            .count();
+        report.count(
+            &format!(
+                "art (temperate) {}: types / with sprite / with voxels / with notes / placeholder icon",
+                kind.key
+            ),
+            0,
+        );
+        if let Some(last) = report.counts.last_mut() {
+            last.0 = format!(
+                "art (temperate) {}: {} types, {sprites} with a sprite, {voxels} with voxels, {noted} with notes, {placeholder} with the placeholder icon",
+                kind.key,
+                arts.len()
+            );
+            last.1 = arts.len() as u64;
+        }
+    }
 }
 
 /// Which top-level archive an archive sits under (lower-case name).

@@ -364,7 +364,13 @@ impl<'a> MixArchive<'a> {
 /// `len % 4` as a byte, then copies of the first byte of the last partial
 /// group. (Port of `PackageEntry.HashFilename`, CRC32 case, OpenRA.)
 pub fn id_hash(name: &str) -> u32 {
-    let mut buf: Vec<u8> = name.bytes().map(|b| b.to_ascii_uppercase()).collect();
+    id_hash_bytes(name.as_bytes())
+}
+
+/// [`id_hash`] of a name given as bytes (names in the user's data files
+/// are bytes with no encoding).
+pub fn id_hash_bytes(name: &[u8]) -> u32 {
+    let mut buf: Vec<u8> = name.iter().map(|b| b.to_ascii_uppercase()).collect();
     let len = buf.len();
     let rem = len % 4;
     if rem != 0 {

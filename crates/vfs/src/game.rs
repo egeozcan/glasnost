@@ -553,6 +553,24 @@ impl Vfs {
         Ok(Some((id, Origin::Member(file.archive))))
     }
 
+    /// [`Vfs::resolve`] for a name given as bytes.
+    pub fn resolve_bytes(&self, name: &[u8]) -> Option<Resolved> {
+        if name.len() > LONGEST_NAME {
+            return None;
+        }
+        if self.game.options.mod_layer
+            && let Some(top) = self.top.get(&name.to_ascii_uppercase())
+        {
+            return Some(Resolved::Loose {
+                name: top.name.clone(),
+                source: top.source,
+                len: top.len,
+            });
+        }
+        self.find_id(glasnost_fmt::mix::id_hash_bytes(name))
+            .map(Resolved::Member)
+    }
+
     /// The copy of a data file the game uses (S-0005 claim 1 and Table 1):
     /// a loose file when the mod layer is on and one exists, else the first
     /// archive of the search order that finds the member.

@@ -15,6 +15,7 @@
 //! **Milestone M2** adds map conversion. Conversion runs locally on the
 //! user's machine; its output is never committed.
 
+pub mod art;
 pub mod coverage;
 pub mod emit;
 pub mod inputs;
@@ -50,6 +51,12 @@ pub struct ImportOptions {
     pub ini: IniQuirks,
     /// Registration and layering quirk switches.
     pub quirks: LayerQuirks,
+    /// Art lookup quirk switches (S-0007).
+    pub art: art::ArtQuirks,
+    /// The local player's country, which picks the side group mounted for
+    /// art lookup (S-0005 claim 13a). Default: the first country that has
+    /// a side.
+    pub country: Option<String>,
 }
 
 /// The result of an import.
@@ -70,8 +77,10 @@ pub struct Import {
 }
 
 /// Imports the rules and art of the install mounted in `vfs`, whose search
-/// order must already be built (`Vfs::mount_startup`).
-pub async fn import(vfs: &Vfs, options: &ImportOptions) -> Import {
+/// order must already be built (`Vfs::mount_startup`). With a theater, the
+/// game's per-game archives are mounted (S-0005 claim 13) and every type's
+/// art is looked up (S-0007); the loading archives are released afterwards.
+pub async fn import(vfs: &mut Vfs, options: &ImportOptions) -> Import {
     let inputs = inputs::read_inputs(
         vfs,
         options.mode_file.as_deref(),
@@ -79,7 +88,113 @@ pub async fn import(vfs: &Vfs, options: &ImportOptions) -> Import {
         options.ini,
     )
     .await;
-    convert(&inputs, options)
+    let mut import = convert(&inputs, options);
+    if let Some(theater) = options.theater {
+        look_up_art(vfs, options, theater, &mut import, &inputs).await;
+    }
+    import
+}
+
+/// Answers art file questions through the game's search order.
+struct VfsFiles<'a> {
+    vfs: &'a Vfs,
+    /// Validity of model and motion files read so far; names not in the
+    /// map count as valid and are recorded in `asked`.
+    valid: std::collections::BTreeMap<Vec<u8>, bool>,
+    asked: std::cell::RefCell<std::collections::BTreeSet<Vec<u8>>>,
+}
+
+impl art::ArtFiles for VfsFiles<'_> {
+    fn exists(&self, name: &[u8]) -> bool {
+        self.vfs.resolve_bytes(name).is_some()
+    }
+
+    fn valid(&self, name: &[u8]) -> bool {
+        match self.valid.get(name) {
+            Some(v) => *v,
+            None => {
+                self.asked.borrow_mut().insert(name.to_vec());
+                true
+            }
+        }
+    }
+}
+
+async fn look_up_art(
+    vfs: &mut Vfs,
+    options: &ImportOptions,
+    theater: Theater,
+    import: &mut Import,
+    inputs: &Inputs,
+) {
+    let countries = &import.outcome.registries[&kinds::Kind::Countries];
+    let chosen = options.country.as_ref().and_then(|c| {
+        countries
+            .iter()
+            .find(|t| t.name.eq_ignore_ascii_case(c.as_bytes()))
+    });
+    let side = chosen
+        .or_else(|| countries.iter().find(|t| t.side.is_some()))
+        .and_then(|t| t.side)
+        .map(|s| s as u32);
+    // spec: S-0005 claim 13 (the per-game archives: loading, theater and side groups)
+    let game = vfs.mount_game(theater, side).await;
+    if game.never_reaches_play {
+        import.errors.push(
+            "the local player's side archive cannot be resolved: the game never reaches play \
+             (S-0005 claims 13a and 16)"
+                .into(),
+        );
+    }
+    let art_doc = match &inputs.art {
+        Some(f) => Document::parse(&f.bytes, options.ini, &mut Vec::new()),
+        None => Document::empty(options.ini),
+    };
+    // First pass: which model and motion files are asked for.
+    let mut files = VfsFiles {
+        vfs,
+        valid: Default::default(),
+        asked: Default::default(),
+    };
+    let _ = art::lookup(&import.outcome, &art_doc, theater, &files, &options.art);
+    let asked: Vec<Vec<u8>> = files.asked.borrow().iter().cloned().collect();
+    for name in asked {
+        let ok = match files.vfs.resolve_bytes(&name) {
+            Some(r) => match files.vfs.read_resolved(&r).await {
+                Ok(bytes) if name.to_ascii_lowercase().ends_with(b".vxl") => {
+                    glasnost_fmt::vxl::Vxl::parse(&bytes).is_ok()
+                }
+                Ok(bytes) => glasnost_fmt::hva::Hva::parse(&bytes).is_ok(),
+                Err(_) => false,
+            },
+            None => false,
+        };
+        files.valid.insert(name, ok);
+    }
+    // Second pass with the files' validity known.
+    let (mut arts, notes) = art::lookup(&import.outcome, &art_doc, theater, &files, &options.art);
+    // spec: S-0005 claim 13 (the loading archives are released before play)
+    vfs.finish_loading();
+    let in_play = |n: &[u8]| vfs.resolve_bytes(n).is_some();
+    art::note_vanishing_sprites(&mut arts, &in_play, &options.art);
+    let art_label = inputs
+        .art
+        .as_ref()
+        .map_or_else(|| inputs::ART.to_owned(), InputFile::label);
+    import
+        .warnings
+        .extend(notes.into_iter().map(|message| Warning {
+            file: art_label.clone(),
+            line: 0,
+            message,
+        }));
+    emit::attach_art(
+        &mut import.tree,
+        &mut import.provenance,
+        &import.outcome,
+        &arts,
+        theater,
+    );
 }
 
 fn empty_layer(role: Role, file: &str, quirks: IniQuirks) -> Layer {
@@ -222,6 +337,9 @@ pub fn convert(inputs: &Inputs, options: &ImportOptions) -> Import {
         record.quirks.push((k.to_owned(), v));
     }
     for (k, v) in options.quirks.named() {
+        record.quirks.push((k.to_owned(), v));
+    }
+    for (k, v) in options.art.named() {
         record.quirks.push((k.to_owned(), v));
     }
 

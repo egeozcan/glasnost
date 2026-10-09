@@ -391,3 +391,99 @@ fn strip_nulls(node: Node) -> Node {
         },
     }
 }
+
+/// Adds each type's looked-up art (S-0007) to the converted tree.
+pub fn attach_art(
+    tree: &mut Node,
+    provenance: &mut Provenance,
+    outcome: &Outcome,
+    arts: &std::collections::BTreeMap<(Kind, usize), crate::art::TypeArt>,
+    theater: glasnost_vfs::theater::Theater,
+) {
+    let jsonc::Value::Object(root) = &mut tree.value else {
+        return;
+    };
+    let Some(types) = root.iter_mut().find(|m| m.key == "types") else {
+        return;
+    };
+    let jsonc::Value::Object(kinds) = &mut types.value.value else {
+        return;
+    };
+    for ((kind, i), a) in arts {
+        let keys = type_keys(&outcome.registries[kind]);
+        let Some(key) = keys.get(*i) else { continue };
+        let Some(k) = kinds.iter_mut().find(|m| m.key == kind.key()) else {
+            continue;
+        };
+        let jsonc::Value::Object(entries) = &mut k.value.value else {
+            continue;
+        };
+        let Some(entry) = entries.iter_mut().find(|m| &m.key == key) else {
+            continue;
+        };
+        let jsonc::Value::Object(members) = &mut entry.value.value else {
+            continue;
+        };
+        let name = |v: &[u8]| s(&encode(v));
+        let mut art = vec![
+            ("image".to_owned(), name(&a.image)),
+            (
+                "flags".to_owned(),
+                jsonc::array(a.flags.iter().map(|f| s(f)).collect()),
+            ),
+        ];
+        if let Some(v) = &a.sprite {
+            art.push(("sprite".to_owned(), name(v)));
+        }
+        if !a.voxels.is_empty() {
+            art.push((
+                "voxels".to_owned(),
+                jsonc::object(a.voxels.iter().map(|(r, v)| (r.clone(), name(v)))),
+            ));
+        }
+        if !a.building_sprites.is_empty() {
+            art.push((
+                "building_sprites".to_owned(),
+                jsonc::object(
+                    a.building_sprites
+                        .iter()
+                        .map(|(r, v)| ((*r).to_owned(), name(v))),
+                ),
+            ));
+        }
+        for (field, v) in [
+            ("icon", &a.icon),
+            ("alt_icon", &a.alt_icon),
+            ("translucent", &a.translucent),
+        ] {
+            if let Some(v) = v {
+                art.push((field.to_owned(), name(v)));
+            }
+        }
+        if !a.notes.is_empty() {
+            art.push((
+                "notes".to_owned(),
+                jsonc::array(a.notes.iter().map(|n| s(n)).collect()),
+            ));
+        }
+        provenance.record(
+            vec!["types".into(), kind.key().into(), key.clone(), "art".into()],
+            Origin {
+                layer: "art lookup".into(),
+                file: "artmd.ini".into(),
+                line: 0,
+                event: RulesEvent::Imported,
+                detail: format!(
+                    "looked up for the {} theater (S-0007)",
+                    theater.identifier()
+                ),
+            },
+        );
+        members.retain(|m| m.key != "art");
+        members.push(glasnost_rules::jsonc::Member {
+            key: "art".into(),
+            key_span: Default::default(),
+            value: jsonc::object(art),
+        });
+    }
+}
