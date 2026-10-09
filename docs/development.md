@@ -120,6 +120,8 @@ The lane also builds the game's search order (S-0005) and checks the stock outco
 
 `cargo test --release -p glasnost-app snapshot -- --ignored` (with the same variable) writes viewer screenshots of a real install to the temp directory, including one of the rules view. Never commit them.
 
+The map lane (M2): the local lane above also decodes every map it finds (`maps decoded (S-0009), no panic`, with importer warnings by kind). `GLASNOST_GAME_DIR=<install> cargo test --release -p glasnost-app --test map_lane -- --nocapture` finds every map by content, loads each with its rules (the map as the map layer), builds its scene, times the build, a CPU redraw of a 1280×720 view and 120 scrolling GPU redraws, counts provisional notes and dropped objects, and writes one screenshot per theater (plus a minimap and a close-up of the first unit) to `local-lane/`. `GLASNOST_MAP_LIMIT=n` limits the maps built, `GLASNOST_MAP_SHOTS=n` the screenshots per theater, and `WGPU_BACKEND=gl` times the GL backend.
+
 ### Provisional placeholders
 
 Behaviour that needs a spec stays out of code; where a spec leaves a gap, the code carries an explicit placeholder tied to a spec request (see the table in "Import" below).
@@ -153,6 +155,20 @@ Every quirk switch of the implemented specs has a field in `ini::Quirks`, `vfs::
 | `convert` import options | the game-mode file is named by the user; the mode list is not read | Q-0006 |
 | `convert::layers` | land-type resets are not applied; only the recharge time's "not given" value is | Q-0007 |
 | `convert::art` | a building secondary sprite dropped by a later read's art section is left undetermined (a note, no file); no art for projectiles, particles and voxel animations | Q-0008 |
+| `convert::theater`, `app::mapview::build` | theater data file `C`‖`MD.INI` (then `C`‖`.INI`), tileset sections read until the first gap, tile files `FileName`‖`NN`‖ext (after OpenRA's LegacyTilesetImporter), no variants, sub-tile *n* = *n*-th template cell, diamond top at the cell's top corner; no land types | Q-0009 |
+| `convert::map`, `app::mapview::build` | object-list fields after OpenRA's ImportGen2MapCommand; infantry facing ×256 like a vehicle's; infantry, terrain objects and smudges at the cell centre; health kept raw, buildings drawn undamaged | Q-0010 |
+| `app::mapview::build` | sprites centred on their point by the canvas (truncated halves); sprite-drawn vehicles show frame 0 | Q-0011 |
+| `app::mapview::build` | overlays and smudges use their cell's tile shade table; ore shows the frame of its data value, other overlays frame 0 | Q-0012 |
+| `app::mapview::build` | tiles lit by the scaled ground level | Q-0013 |
+| `fmt::vpl` | four little-endian 32-bit header values, a palette, rows of 256; accepted only when a header value matches the file length | Q-0014 |
+| `render::compose`, `render::map_gpu` | a shadow pixel halves each channel of the pixel beneath | Q-0015 |
+
+## Map viewer (M2)
+
+- `glasnost-map` (a simulation crate) holds the decoded map: footprint, legal and usable cells and their visiting order (S-0009 claims 1 to 4), the cell grid after the initial fill and the terrain stream, overlay stream values, waypoints, header, preview, lighting values in hundredths and thousandths (S-0104 claim 1) and the object lists as read.
+- `convert::map` decodes a map document with importer warnings; `convert::theater` reads a theater's tile catalogue (base tiles, tile translation, tile files: Q-0009).
+- `render::projection` (S-0101), `render::light` (S-0104), `render::compose` (the CPU reference of S-0102's depth compositing), `render::scene` (items in world pixels) and `render::map_gpu` (the WebGL2 map pass, tested pixel for pixel against the CPU reference on a real or software GPU).
+- `app::mapview` builds a map's scene from the decoded map, the rules import and the theater's files; the viewer's *Map viewer* mode lists the install's maps, loads one, scrolls within S-0101's limits, shows a minimap, layer toggles and object info with `rules explain`. Everything that rests on a request is marked provisional and can be hidden.
 
 ## Tests
 

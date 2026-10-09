@@ -5,7 +5,8 @@ reader and `jsonc` for our rules format's reader and resolve pipeline. Each `fmt
 parser and every decoder over the input and ignores errors; `ini` calls
 `glasnost_ini::hostile::run`, which reads the input as a document and every
 stored value in every value form; `jsonc` calls `glasnost_rules::hostile::run`,
-which parses the input, writes it back, parses that again and resolves it. A panic, overflow trap, hang or runaway
+which parses the input, writes it back, parses that again and resolves it; `map` reads the input as
+a map document and decodes it (`glasnost_convert::map::decode`, S-0009). A panic, overflow trap, hang or runaway
 allocation is a finding.
 
 ```sh

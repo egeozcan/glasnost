@@ -1,4 +1,4 @@
-# cargo-fuzz targets for glasnost-fmt, glasnost-ini and the JSONC reader of glasnost-rules (PLAN.md 6.2, layer 0). Needs a
+# cargo-fuzz targets for glasnost-fmt, glasnost-ini, the map decoder of glasnost-convert and the JSONC reader of glasnost-rules (PLAN.md 6.2, layer 0). Needs a
 # nightly toolchain and cargo-fuzz; not part of the workspace or CI.
 # See fuzz/README.md.
 [package]
@@ -16,6 +16,7 @@ libfuzzer-sys = "0.4"
 glasnost-fmt = { path = "../crates/fmt" }
 glasnost-ini = { path = "../crates/ini" }
 glasnost-rules = { path = "../crates/deterministic/rules" }
+glasnost-convert = { path = "../crates/convert" }
 
 # Its own workspace, so the main workspace's toolchain pin and lints do not
 # apply and `cargo test --workspace` never builds it.
@@ -129,6 +130,13 @@ bench = false
 [[bin]]
 name = "jsonc"
 path = "fuzz_targets/jsonc.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "map"
+path = "fuzz_targets/map.rs"
 test = false
 doc = false
 bench = false
