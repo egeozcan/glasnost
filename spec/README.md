@@ -26,4 +26,4 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 
 | ID | Title | Topic | Rev | Status | Measurements |
 |---|---|---|---|---|---|
-| — | *No specs yet* | | | | |
+| [S-0001](rules-import/S-0001-ini-lexical-rules.md) | INI lexical rules | rules-import | 3 | approved | — |
