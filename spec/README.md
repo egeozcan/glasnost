@@ -39,3 +39,4 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0103](rendering/S-0103-palettes-house-colour.md) | Palettes and house colour | rendering | 3 | approved | — |
 | [S-0104](rendering/S-0104-lighting.md) | Lighting | rendering | 4 | approved | — |
 | [S-0105](rendering/S-0105-voxel-rendering.md) | Rendering of voxel models | rendering | 3 | approved | — |
+| [S-0107](rendering/S-0107-infantry-sprite-sequences.md) | Infantry sprite sequences | rendering | 3 | approved | — |
