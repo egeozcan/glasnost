@@ -12,6 +12,7 @@ use std::rc::Rc;
 
 use glasnost_fmt::sniff::{Kind, SNIFF_LEN, sniff};
 use glasnost_vfs::names::harvest_tokens;
+use glasnost_vfs::theater::Theater;
 use glasnost_vfs::{ArchiveId, ByteSource, FileRef, GameOptions, Location, PickedFile, Vfs};
 
 /// A boxed task.
@@ -34,10 +35,27 @@ pub enum Purpose {
     Sample(glasnost_fmt::idx::IdxEntry),
 }
 
+/// The result of a rules import (the file system travels with it).
+pub struct Imported {
+    /// The file system, with the game's per-game archives mounted.
+    pub vfs: Vfs,
+    /// The import.
+    pub import: glasnost_convert::Import,
+    /// The import resolved through the rules pipeline.
+    pub resolved: Result<glasnost_rules::Resolved, String>,
+    /// Palette files by upper-case name (S-0103 claim 2); `None` when one
+    /// cannot be resolved or read.
+    pub palettes: BTreeMap<String, Option<glasnost_fmt::pal::Palette6>>,
+    /// The theater the art was looked up for.
+    pub theater: Theater,
+}
+
 /// A finished task.
 pub enum TaskResult {
     /// The install was mounted.
     Mounted(Result<Box<(Vfs, String)>, String>),
+    /// The rules were imported.
+    Imported(Box<Imported>),
     /// Every entry was classified.
     Indexed {
         /// Kind of each entry, by (archive, entry ID).
@@ -84,6 +102,50 @@ pub fn mount(files: Vec<PickedFile>) -> Task {
         } else {
             TaskResult::Mounted(Ok(Box::new((vfs, summary))))
         }
+    })
+}
+
+/// Imports the rules and art of a mounted install for one theater
+/// (base rules, an empty game-mode layer, no map), resolves the result and
+/// reads the palette files S-0103 names.
+pub fn import(mut vfs: Vfs, theater: Theater) -> Task {
+    Box::pin(async move {
+        let options = glasnost_convert::ImportOptions {
+            theater: Some(theater),
+            ..Default::default()
+        };
+        let import = glasnost_convert::import(&mut vfs, &options).await;
+        let mut palettes = BTreeMap::new();
+        let names = [
+            Theater::Snow.unit_palette(),
+            glasnost_render::palette::ANIM_PALETTE_FILE.to_owned(),
+            theater.unit_palette(),
+            theater.tile_palette(),
+            theater.theater_palette(),
+        ];
+        for name in names {
+            let pal = match vfs.resolve(&name) {
+                Some(r) => vfs
+                    .read_resolved(&r)
+                    .await
+                    .ok()
+                    .and_then(|b| glasnost_fmt::pal::Palette6::parse(&b).ok()),
+                None => None,
+            };
+            palettes.insert(name.to_ascii_uppercase(), pal);
+        }
+        let resolved = glasnost_rules::resolve_ruleset(
+            Some((import.tree.clone(), import.provenance.clone())),
+            &[],
+        )
+        .map_err(|e| e.to_string());
+        TaskResult::Imported(Box::new(Imported {
+            vfs,
+            import,
+            resolved,
+            palettes,
+            theater,
+        }))
     })
 }
 

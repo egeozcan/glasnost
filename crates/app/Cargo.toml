@@ -9,6 +9,8 @@ publish.workspace = true
 
 [dependencies]
 glasnost-audio.workspace = true
+glasnost-convert.workspace = true
+glasnost-rules.workspace = true
 glasnost-fmt.workspace = true
 glasnost-render.workspace = true
 glasnost-vfs.workspace = true

@@ -20,6 +20,7 @@ use glasnost_vfs::names::candidates;
 use glasnost_vfs::{ArchiveId, FileRef, Vfs};
 
 use super::preview::{Rgba, rgb, strip, voxel_preview};
+use super::rules::{RulesAction, RulesData, RulesPane};
 use super::tasks::{self, Purpose, Spawner, TaskResult};
 
 /// Colour definitions (hue, saturation, value) offered for house-colour
@@ -65,6 +66,28 @@ struct Row {
     label: String,
     kind: Option<Kind>,
     nested: Option<ArchiveId>,
+    /// Which copy of the name the game uses (S-0005).
+    used: Used,
+}
+
+/// Whether a row's copy is the one the game uses.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Used {
+    /// This copy wins.
+    Yes,
+    /// Another archive's copy wins.
+    Shadowed,
+    /// No archive of the search order holds the name.
+    NotSearched,
+}
+
+/// A palette of the imported game (S-0103).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum GamePalette {
+    Unit,
+    Tile,
+    Theater,
+    Anim,
 }
 
 /// Viewer state.
@@ -90,6 +113,9 @@ pub struct Browser {
     palette6: Option<Palette6>,
     remap: bool,
     houses: [bool; PREVIEW_DEFINITIONS.len()],
+    game_palette: Option<GamePalette>,
+    rules: RulesPane,
+    show_rules: bool,
     frame: usize,
     on_canvas: bool,
     zoom: u32,
@@ -125,6 +151,9 @@ impl Browser {
             palette6: None,
             remap: false,
             houses: [true, true, true, true, false, false, false, false],
+            game_palette: None,
+            rules: RulesPane::default(),
+            show_rules: false,
             frame: 0,
             on_canvas: false,
             zoom: 2,
@@ -157,6 +186,34 @@ impl Browser {
                 self.preview = Preview::Nothing;
                 self.rows_dirty = true;
                 spawner.spawn(tasks::index(jobs));
+            }
+            TaskResult::Imported(imported) => {
+                let imported = *imported;
+                self.busy = false;
+                self.vfs = Some(imported.vfs);
+                self.rows_dirty = true;
+                let data = imported.resolved.map(|resolved| {
+                    RulesData::new(
+                        resolved,
+                        &imported.import,
+                        &imported.palettes,
+                        imported.theater,
+                    )
+                });
+                self.status = match &data {
+                    Ok(_) => format!(
+                        "Rules imported for {}: {} warnings, {} errors.",
+                        imported.theater.identifier(),
+                        imported.import.warnings.len(),
+                        imported.import.errors.len()
+                    ),
+                    Err(e) => format!("The imported rules did not resolve: {e}"),
+                };
+                if data.is_ok() {
+                    self.game_palette = Some(GamePalette::Unit);
+                    self.texture_dirty = true;
+                }
+                self.rules.set(data);
             }
             TaskResult::Mounted(Err(e)) => {
                 crate::status::publish_mount(None);
@@ -340,6 +397,14 @@ impl Browser {
     }
 
     fn base_palette(&self) -> Palette {
+        if let (Some(g), Some(state)) = (self.game_palette, self.rules.palettes()) {
+            return match g {
+                GamePalette::Unit => state.unit.clone(),
+                GamePalette::Tile => state.tile.clone(),
+                GamePalette::Theater => state.theater.clone(),
+                GamePalette::Anim => state.anim.clone(),
+            };
+        }
         match &self.palette6 {
             Some(p) if self.palette_choice.is_some() => {
                 palette_from_file(p, &PaletteQuirks::default())
@@ -352,17 +417,30 @@ impl Browser {
         if !self.remap {
             return vec![base.clone()];
         }
-        let rows: Vec<Palette> = PREVIEW_DEFINITIONS
-            .iter()
+        let rows: Vec<Palette> = self
+            .house_definitions()
+            .into_iter()
             .zip(self.houses)
-            .filter(|(_, on)| *on)
-            .map(|((_, def), _)| house_palette(base, *def))
+            .filter(|(d, on)| *on && d.is_some())
+            .filter_map(|(d, _)| d.map(|(_, def)| house_palette(base, def)))
             .collect();
         if rows.is_empty() {
             vec![base.clone()]
         } else {
             rows
         }
+    }
+
+    /// The colour definitions of lobby slots 0 to 7: the imported ones at
+    /// the slots' definition positions (S-0103 claim 10), or our invented
+    /// preview set before an import.
+    fn house_definitions(&self) -> Vec<Option<(String, [u8; 3])>> {
+        self.rules.slot_definitions().unwrap_or_else(|| {
+            PREVIEW_DEFINITIONS
+                .iter()
+                .map(|(n, d)| Some(((*n).to_owned(), *d)))
+                .collect()
+        })
     }
 
     fn picture(&self) -> Option<Result<Rgba, String>> {
@@ -457,11 +535,18 @@ impl Browser {
             if !filter.is_empty() && !label.contains(&filter) {
                 continue;
             }
+            // spec: S-0005 claim 7 (the first archive of the search order that holds the name wins)
+            let used = match vfs.find_id(entry.id) {
+                Some(f) if f.archive == aid => Used::Yes,
+                Some(_) => Used::Shadowed,
+                None => Used::NotSearched,
+            };
             self.rows.push(Row {
                 entry,
                 label,
                 kind,
                 nested: nested_id,
+                used,
             });
         }
         // Known names first, then hex IDs.
@@ -488,14 +573,35 @@ impl Browser {
                 });
             });
         });
+        let mut action = None;
         egui::Panel::left("archives")
             .resizable(true)
             .default_size(260.0)
-            .show(ui, |ui| self.archive_list(ui));
+            .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.selectable_value(&mut self.show_rules, false, "Archives");
+                    ui.selectable_value(&mut self.show_rules, true, "Rules");
+                });
+                ui.separator();
+                if self.show_rules {
+                    action = self.rules.list_ui(ui, self.busy || self.vfs.is_none());
+                } else {
+                    self.archive_list(ui);
+                }
+            });
         egui::Panel::left("entries")
             .resizable(true)
             .default_size(300.0)
-            .show(ui, |ui| self.entry_list(ui, spawner));
+            .show(ui, |ui| {
+                if self.show_rules {
+                    action = action.take().or(self.rules.details_ui(ui));
+                } else {
+                    self.entry_list(ui, spawner);
+                }
+            });
+        if let Some(a) = action {
+            self.rules_action(a, spawner);
+        }
         egui::Panel::right("settings")
             .resizable(true)
             .default_size(260.0)
@@ -541,7 +647,12 @@ impl Browser {
             for (i, a) in vfs.archives().iter().enumerate() {
                 let id = ArchiveId(i as u32);
                 let indent = "   ".repeat(a.depth as usize);
-                let text = format!("{indent}{} ({})", a.name, a.index.entries.len());
+                let rank = vfs
+                    .search_order()
+                    .iter()
+                    .position(|r| r.archive == id)
+                    .map_or_else(|| "–".to_owned(), |r| format!("#{}", r + 1));
+                let text = format!("{indent}{rank} {} ({})", a.name, a.index.entries.len());
                 if ui
                     .selectable_label(self.archive == Some(id), text)
                     .clicked()
@@ -607,7 +718,12 @@ impl Browser {
                     s.archive == self.archive.unwrap_or(ArchiveId(0)) && s.entry == row.entry
                 });
                 let kind = row.kind.map_or("?", Kind::label);
-                let text = format!("{}  [{kind}, {} B]", row.label, row.entry.size);
+                let used = match row.used {
+                    Used::Yes => "",
+                    Used::Shadowed => " · shadowed",
+                    Used::NotSearched => " · not searched",
+                };
+                let text = format!("{}  [{kind}, {} B]{used}", row.label, row.entry.size);
                 if ui.selectable_label(selected, text).clicked() {
                     clicked = Some((row.entry, row.nested));
                 }
@@ -626,6 +742,42 @@ impl Browser {
                     },
                     spawner,
                 ),
+            }
+        }
+    }
+
+    fn rules_action(&mut self, action: RulesAction, spawner: &dyn Spawner) {
+        match action {
+            RulesAction::Import => {
+                let Some(vfs) = self.vfs.take() else {
+                    return;
+                };
+                self.busy = true;
+                self.status = format!(
+                    "Importing the rules for {}…",
+                    self.rules.theater.identifier()
+                );
+                spawner.spawn(tasks::import(vfs, self.rules.theater));
+            }
+            RulesAction::Open(name) => {
+                let Some(vfs) = &mut self.vfs else {
+                    return;
+                };
+                vfs.learn_name(&name);
+                let found = vfs.resolve(&name).map(|r| (vfs.describe(&r), r));
+                match found {
+                    Some((from, glasnost_vfs::Resolved::Member(file))) => {
+                        self.archive = Some(file.archive);
+                        self.rows_dirty = true;
+                        self.select(file, spawner);
+                        self.status = format!("{name}: the game uses the copy in {from}");
+                    }
+                    Some((from, _)) => {
+                        self.status =
+                            format!("{name}: the game uses {from}, which the viewer does not open");
+                    }
+                    None => self.status = format!("{name} does not resolve"),
+                }
             }
         }
     }
@@ -665,21 +817,68 @@ impl Browser {
 
     fn settings(&mut self, ui: &mut Ui, spawner: &dyn Spawner) {
         ui.heading("Palette");
-        let current = self
-            .palette_choice
-            .and_then(|i| self.palettes.get(i))
-            .map_or("built-in synthetic ramps", |(n, _)| n.as_str())
-            .to_owned();
+        let game_label = |g: GamePalette| match g {
+            GamePalette::Unit => "game: unit palette",
+            GamePalette::Tile => "game: tile palette",
+            GamePalette::Theater => "game: theater palette",
+            GamePalette::Anim => "game: anim palette",
+        };
+        let current = match self
+            .game_palette
+            .filter(|_| self.rules.palettes().is_some())
+        {
+            Some(g) => game_label(g).to_owned(),
+            None => self
+                .palette_choice
+                .and_then(|i| self.palettes.get(i))
+                .map_or("built-in synthetic ramps", |(n, _)| n.as_str())
+                .to_owned(),
+        };
         let mut choice = self.palette_choice;
+        let mut game = self.game_palette;
         egui::ComboBox::from_id_salt("palette")
             .selected_text(current)
             .width(220.0)
             .show_ui(ui, |ui| {
-                ui.selectable_value(&mut choice, None, "built-in synthetic ramps");
+                if self.rules.palettes().is_some() {
+                    for g in [
+                        GamePalette::Unit,
+                        GamePalette::Tile,
+                        GamePalette::Theater,
+                        GamePalette::Anim,
+                    ] {
+                        if ui
+                            .selectable_label(game == Some(g), game_label(g))
+                            .clicked()
+                        {
+                            game = Some(g);
+                        }
+                    }
+                }
+                if ui
+                    .selectable_label(
+                        game.is_none() && choice.is_none(),
+                        "built-in synthetic ramps",
+                    )
+                    .clicked()
+                {
+                    game = None;
+                    choice = None;
+                }
                 for (i, (name, _)) in self.palettes.iter().enumerate() {
-                    ui.selectable_value(&mut choice, Some(i), name);
+                    if ui
+                        .selectable_label(game.is_none() && choice == Some(i), name)
+                        .clicked()
+                    {
+                        game = None;
+                        choice = Some(i);
+                    }
                 }
             });
+        if game != self.game_palette {
+            self.game_palette = game;
+            self.texture_dirty = true;
+        }
         if choice != self.palette_choice {
             self.palette_choice = choice;
             self.texture_dirty = true;
@@ -708,12 +907,27 @@ impl Browser {
         if ui.checkbox(&mut self.remap, "house colour rows").changed() {
             self.texture_dirty = true;
         }
+        if self.rules.data().is_some() {
+            ui.label(
+                RichText::new("Slots 0–7 show the imported definitions at positions 1, 5, 10, 14, 6, 12, 8, 7 (S-0103 claim 10).")
+                    .small()
+                    .weak(),
+            );
+        }
+        let defs = self.house_definitions();
         ui.horizontal_wrapped(|ui| {
-            for (i, (name, def)) in PREVIEW_DEFINITIONS.iter().enumerate() {
+            for (i, d) in defs.iter().enumerate() {
+                let Some((name, def)) = d else {
+                    ui.label(RichText::new(format!("slot {i}: none")).weak());
+                    continue;
+                };
                 let c = ramp(*def)[0];
                 let colour = Color32::from_rgb(c.r, c.g, c.b);
                 if ui
-                    .checkbox(&mut self.houses[i], RichText::new(*name).color(colour))
+                    .checkbox(
+                        &mut self.houses[i],
+                        RichText::new(format!("{i}: {name}")).color(colour),
+                    )
                     .changed()
                 {
                     self.texture_dirty = true;
@@ -780,6 +994,32 @@ impl Browser {
                 .map(|v| entry_label(v, file.archive, file.entry.id))
                 .unwrap_or_default();
             ui.label(RichText::new(name).strong());
+            if let Some(vfs) = &self.vfs {
+                // spec: S-0005 claim 7 (the first archive of the search order that holds the name wins)
+                let winner = vfs.find_id(file.entry.id).map(|f| f.archive);
+                let copies: Vec<String> = vfs
+                    .find_all(file.entry.id)
+                    .iter()
+                    .map(|c| {
+                        let path = vfs.archive(c.archive).map_or("?", |a| a.path.as_str());
+                        if Some(c.archive) == winner {
+                            format!("{path} (used by the game)")
+                        } else {
+                            path.to_owned()
+                        }
+                    })
+                    .collect();
+                if winner.is_none() {
+                    ui.label(
+                        RichText::new("Not in the game's search order (S-0005).")
+                            .small()
+                            .weak(),
+                    );
+                }
+                if copies.len() > 1 || winner.is_some_and(|w| w != file.archive) {
+                    ui.label(RichText::new(format!("copies: {}", copies.join(", "))).small());
+                }
+            }
         }
         match &self.preview {
             Preview::Nothing => {
@@ -1039,6 +1279,64 @@ mod tests {
             .unwrap();
         browser.select(FileRef { archive, entry }, queue);
         settle(browser, queue);
+    }
+
+    /// An invented install whose searched archive holds rules, art, a
+    /// palette and a sprite (S-0005 Table 1 names only; contents are ours).
+    fn rules_install() -> Vec<PickedFile> {
+        let rules = b"[InfantryTypes]\n1=Walker\n[Walker]\nCost=7\nImage=STRIDER\n\
+                      [Colors]\nC0=0,0,0\nC1=10,200,200\nC2=90,200,200\n";
+        let files = vec![
+            (id_hash("rulesmd.ini"), rules.to_vec()),
+            (
+                id_hash("artmd.ini"),
+                b"[STRIDER]\nCameo=STRIDERICON\n".to_vec(),
+            ),
+            (id_hash("strider.shp"), fixture("shp/discs-seed1.shp")),
+            (id_hash("unittem.pal"), fixture("pal/ramps-tint7.pal")),
+        ];
+        let main = MixWriter {
+            layout: WriteLayout::Plain,
+            files,
+        }
+        .write();
+        vec![PickedFile {
+            path: "ra2md.mix".into(),
+            source: Rc::new(MemSource(main)),
+        }]
+    }
+
+    #[test]
+    fn imports_rules_and_explains_them() {
+        let queue = Queue::default();
+        let ctx = egui::Context::default();
+        let mut b = Browser::new(None);
+        b.mount(&queue, rules_install());
+        settle(&mut b, &queue);
+        b.rules_action(RulesAction::Import, &queue);
+        settle(&mut b, &queue);
+        assert!(b.vfs.is_some(), "the file system comes back");
+        let data = b.rules.data().expect("rules imported");
+        let _ = data;
+        assert!(b.rules.palettes().is_some());
+        // Lobby slot 0 shows definition position 1 (S-0103 claim 10).
+        let slots = b.rules.slot_definitions().unwrap();
+        assert_eq!(slots[0].as_ref().map(|(n, _)| n.as_str()), Some("C1"));
+        assert!(slots[1].is_none());
+        let text = b.rules.explain_query("Walker.ini.Cost").to_owned();
+        assert!(
+            text.contains("rulesmd.ini (ra2md.mix) line 4 | set \"7\""),
+            "{text}"
+        );
+        // The type's sprite opens from the archive the game uses.
+        b.rules.select_type("infantry", "Walker");
+        b.show_rules = true;
+        frame(&mut b, &queue, &ctx);
+        b.rules_action(RulesAction::Open("STRIDER.shp".into()), &queue);
+        settle(&mut b, &queue);
+        assert!(matches!(b.preview, Preview::Shp(_)), "{}", b.status);
+        frame(&mut b, &queue, &ctx);
+        assert!(b.texture.is_some());
     }
 
     #[test]
@@ -1350,6 +1648,49 @@ mod tests {
             let path =
                 std::env::temp_dir().join(format!("glasnost-viewer-{n}-{}.png", kind.label()));
             std::fs::write(&path, png(size[0], size[1], &rgba)).unwrap();
+            eprintln!("wrote {}", path.display());
+        }
+        // The rules view: import, pick the first vehicle with a voxel body
+        // or a sprite, explain one of its keys and open its art.
+        b.rules_action(RulesAction::Import, &queue);
+        settle(&mut b, &queue);
+        b.show_rules = true;
+        b.remap = true;
+        let Some(data) = b.rules.data() else {
+            eprintln!("rules did not import: {}", b.status);
+            return;
+        };
+        let _ = data;
+        let tree = &b.rules.data().unwrap().resolved().tree;
+        let pick = ["vehicles", "infantry", "buildings"]
+            .iter()
+            .find_map(|kind| {
+                let types = tree.get("types")?.get(kind)?.members()?;
+                types.iter().find_map(|t| {
+                    let art = t.value.get("art")?;
+                    let file = art
+                        .get("sprite")
+                        .or_else(|| art.get("voxels").and_then(|v| v.get("body")))?
+                        .as_str()?
+                        .to_owned();
+                    let key = t.value.get("ini")?.members()?.first()?.key.clone();
+                    Some(((*kind).to_owned(), t.key.clone(), key, file))
+                })
+            });
+        if let Some((kind, name, key, file)) = pick {
+            b.rules.select_type(&kind, &name);
+            b.rules
+                .explain_query(&format!("types.{kind}.{name}.ini.{key}"));
+            b.rules_action(RulesAction::Open(file), &queue);
+            settle(&mut b, &queue);
+        }
+        b.texture_dirty = true;
+        let ctx = egui::Context::default();
+        super::super::configure_fonts(&ctx);
+        if let Some(rgba) = render_offscreen(&ctx, [1600, 900], |ui| b.ui(ui, &queue, "offscreen"))
+        {
+            let path = std::env::temp_dir().join("glasnost-viewer-rules.png");
+            std::fs::write(&path, png(1600, 900, &rgba)).unwrap();
             eprintln!("wrote {}", path.display());
         }
     }

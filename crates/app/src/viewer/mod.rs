@@ -20,6 +20,7 @@ use crate::Status;
 mod browser;
 mod input;
 pub mod preview;
+mod rules;
 mod tasks;
 #[cfg(target_arch = "wasm32")]
 mod web;
