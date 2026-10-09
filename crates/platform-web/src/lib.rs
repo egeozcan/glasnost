@@ -43,6 +43,8 @@ mod web {
                 backend,
                 game_dir: None,
                 exit_after_frames: None,
+                // `?mode=viewer&map=NAME` opens the map viewer once an install is picked.
+                open_map: Some(param("map")).filter(|m| !m.is_empty()),
             })
         } else {
             glasnost_app::run_demo(DemoOptions {

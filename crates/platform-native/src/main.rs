@@ -4,9 +4,10 @@
 //! file-system importer and the game itself; the shell lives in `glasnost-app`
 //! and is shared with the web build.
 //!
-//! Usage: `glasnost [--viewer [--game-dir DIR]] [--backend auto|gl|vulkan] [--frames N]`.
+//! Usage: `glasnost [--viewer [--game-dir DIR] [--map NAME]] [--backend auto|gl|vulkan] [--frames N]`.
 //! Without `--viewer` it runs the M0 palette-quad demo; with it, the asset
-//! viewer (optionally mounting `DIR` at start).
+//! viewer (optionally mounting `DIR` at start, and opening the map viewer on
+//! the first map whose name contains `NAME`).
 
 #[cfg(not(target_arch = "wasm32"))]
 fn main() -> std::process::ExitCode {
@@ -21,6 +22,7 @@ fn main() -> std::process::ExitCode {
     let mut options = DemoOptions::default();
     let mut viewer = false;
     let mut game_dir = None;
+    let mut open_map = None;
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         let mut value = |name: &str| args.next().ok_or_else(|| format!("{name} needs a value"));
@@ -36,9 +38,10 @@ fn main() -> std::process::ExitCode {
                 Ok(())
             }
             "--game-dir" => value("--game-dir").map(|v| game_dir = Some(v)),
+            "--map" => value("--map").map(|v| open_map = Some(v)),
             "-h" | "--help" => {
                 println!(
-                    "usage: glasnost [--viewer [--game-dir DIR]] [--backend auto|gl|vulkan] [--frames N]"
+                    "usage: glasnost [--viewer [--game-dir DIR] [--map NAME]] [--backend auto|gl|vulkan] [--frames N]"
                 );
                 return ExitCode::SUCCESS;
             }
@@ -55,6 +58,7 @@ fn main() -> std::process::ExitCode {
             backend: options.backend,
             game_dir,
             exit_after_frames: options.exit_after_frames,
+            open_map,
         })
     } else {
         glasnost_app::run_demo(options)

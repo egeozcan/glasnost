@@ -39,6 +39,9 @@ pub struct ViewerOptions {
     pub game_dir: Option<String>,
     /// Close after presenting this many frames (smoke tests).
     pub exit_after_frames: Option<u64>,
+    /// Open the map viewer on the first map whose name contains this text
+    /// (letter case ignored), once the install is mounted.
+    pub open_map: Option<String>,
 }
 
 /// Events delivered to the viewer's loop.
@@ -53,7 +56,11 @@ pub fn run_viewer(options: ViewerOptions) -> Result<(), winit::error::EventLoopE
     let event_loop = EventLoop::<ViewerEvent>::with_user_event().build()?;
     let proxy = event_loop.create_proxy();
     let app = ViewerApp {
-        browser: Browser::new(options.game_dir.clone()),
+        browser: {
+            let mut b = Browser::new(options.game_dir.clone());
+            b.pending_map = options.open_map.clone();
+            b
+        },
         options,
         spawner: Rc::new(LoopSpawner {
             proxy: proxy.clone(),

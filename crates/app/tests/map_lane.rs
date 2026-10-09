@@ -142,7 +142,10 @@ fn map_lane() {
         for (n, m) in maps.iter().enumerate().take(limit) {
             let bytes = vfs.read(&m.file).await.unwrap();
             let t0 = Instant::now();
-            let options = build::Options::default();
+            let options = build::Options {
+                skirmish: std::env::var_os("GLASNOST_MAP_ALL_OWNERS").is_none(),
+                ..build::Options::default()
+            };
             let loaded = {
                 let fut = load::load(&mut vfs, bytes, m.archive.clone(), &options);
                 // A panic inside the load is counted, not propagated.
@@ -219,11 +222,11 @@ fn map_lane() {
                     loaded.problems.len()
                 );
                 // A second shot centred on the first vehicle or infantry unit drawn.
-                if let Some(o) = loaded
-                    .built
-                    .objects
+                let objects = &loaded.built.objects;
+                if let Some(o) = objects
                     .iter()
-                    .find(|o| o.kind == "vehicle" || o.kind == "infantry")
+                    .find(|o| o.kind == "vehicle")
+                    .or_else(|| objects.iter().find(|o| o.kind == "infantry"))
                 {
                     let (lx, ly) = cell_centre(o.cell.x, o.cell.y);
                     let c = limit_centre(

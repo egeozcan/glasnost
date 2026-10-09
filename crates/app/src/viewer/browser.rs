@@ -131,6 +131,8 @@ pub struct Browser {
     pub map_mode: bool,
     /// The map viewer pane.
     pub map: MapPane,
+    /// A map to open once the install is mounted.
+    pub pending_map: Option<String>,
 }
 
 impl Browser {
@@ -172,6 +174,7 @@ impl Browser {
             sample_status: String::new(),
             map_mode: false,
             map: MapPane::default(),
+            pending_map: None,
         }
     }
 
@@ -198,6 +201,13 @@ impl Browser {
                 self.preview = Preview::Nothing;
                 self.rows_dirty = true;
                 spawner.spawn(tasks::index(jobs));
+                if self.pending_map.is_some()
+                    && let Some(vfs) = self.vfs.take()
+                {
+                    self.map_mode = true;
+                    self.busy = true;
+                    spawner.spawn(tasks::find_maps(vfs));
+                }
             }
             TaskResult::Imported(imported) => {
                 let imported = *imported;
@@ -231,6 +241,17 @@ impl Browser {
                 let (vfs, maps) = *found;
                 self.vfs = Some(vfs);
                 self.busy = false;
+                if let Some(want) = self.pending_map.take() {
+                    let want = want.to_ascii_lowercase();
+                    let hit = maps
+                        .iter()
+                        .find(|m| m.name.to_ascii_lowercase().contains(&want))
+                        .map(|m| (m.file, m.archive.clone()));
+                    if let (Some((file, origin)), Some(vfs)) = (hit, self.vfs.take()) {
+                        self.busy = true;
+                        spawner.spawn(tasks::load_map(vfs, file, origin, Default::default()));
+                    }
+                }
                 self.map.set_listings(maps);
             }
             TaskResult::MapLoaded(loaded) => {

@@ -13,8 +13,12 @@ use std::collections::{BTreeMap, BTreeSet};
 use glasnost_convert::Import;
 use glasnost_convert::kinds::Kind;
 use glasnost_convert::theater::Catalogue;
+use glasnost_fmt::hva::Hva;
+use glasnost_fmt::image::IndexedImage;
 use glasnost_fmt::shp::Shp;
 use glasnost_fmt::tmp::Tmp;
+use glasnost_fmt::vpl::Vpl;
+use glasnost_fmt::vxl::Vxl;
 use glasnost_ini::Document;
 use glasnost_ini::value;
 use glasnost_map::{CellXY, Map, NO_OVERLAY};
@@ -25,6 +29,7 @@ use glasnost_render::projection::{
     LEVEL_LEPTONS, TERRAIN_LIFT, cell_centre, cell_top, height_lift, project_lifted,
 };
 use glasnost_render::scene::{Group, Item, ItemDepth, Scene};
+use glasnost_render::voxel::{self, VoxelQuirks};
 
 /// File bytes read for a scene, by upper-case name.
 #[derive(Clone, Debug, Default)]
@@ -1176,6 +1181,8 @@ impl Builder<'_> {
         }
     }
 
+    /// A building's voxel turret and barrel, or its barrel alone (S-0105
+    /// claims 5, 9 to 11, 37; S-0102 claim 13).
     #[allow(clippy::too_many_arguments)]
     fn building_voxels(
         &mut self,
@@ -1188,8 +1195,58 @@ impl Builder<'_> {
         hsv: [u8; 3],
         object: u32,
     ) -> Vec<Item> {
-        let _ = (idx, art, p, anchor, lz, brightness, hsv, object);
-        Vec::new()
+        let q = VoxelQuirks::default();
+        let vpl = self.vpl();
+        let k = Kind::Buildings;
+        // The building's facing from the map entry (Q-0010) on the scale of glossary claim G1.
+        let facing = ((p.facing & 0xFF) * 256) as u16;
+        // spec: S-0105 Terms (turret anchor: the draw point moved by TurretAnimX and TurretAnimY, rules keys)
+        let at = (
+            anchor.0 + rule_int(self.import, k, idx, b"TurretAnimX", 0),
+            anchor.1 + rule_int(self.import, k, idx, b"TurretAnimY", 0),
+        );
+        let offset = self
+            .art_value(k, idx, b"TurretOffset")
+            .and_then(value::integer)
+            .unwrap_or(0);
+        // spec: S-0105 claim 6 (a building's elevation is level until it re-aims to fire)
+        let elevation = voxel::ELEVATION_LEVEL;
+        let name = self.import.outcome.registries[&k][idx].name.clone();
+        let depth_buffered = self
+            .art
+            .value(&name, b"UseBuffer")
+            .and_then(value::boolean)
+            .unwrap_or(false);
+        // spec: S-0102 claim 13 (a building's voxel parts: −L(z) + the turret slot depth adjustment)
+        let bias = -lz + rule_int(self.import, k, idx, b"TurretAnimZAdjust", 0);
+        // spec: S-0104 claim 13 (every part of an ordinary building: U of its top-left cell)
+        let row = self.house_row(hsv, brightness);
+        let turret = art.voxels.get("turret").and_then(|f| self.voxel_model(f));
+        let barrel = art.voxels.get("barrel").and_then(|f| self.voxel_model(f));
+        let mut items = Vec::new();
+        let parts = match turret {
+            Some(t) => {
+                let pose = voxel::building_turret_parts(facing, offset, elevation, &q);
+                let mut v = vec![(Some(t), pose.turret), (barrel, pose.barrel)];
+                // spec: S-0105 claim 11 (turret first when its 4-step facing is 1 or 2)
+                if !pose.turret_first {
+                    v.reverse();
+                }
+                v
+            }
+            // spec: S-0105 claim 37 (a barrel without a turret: V · Rz(θ) · Ry(φ), frame from the counter, 0)
+            None => vec![(barrel, voxel::building_barrel_only(facing, elevation, &q))],
+        };
+        for (model, draw) in parts {
+            if let Some(m) = model
+                && let Some(img) = voxel::draw_model(&m, 0, &draw, vpl.as_ref(), depth_buffered, &q)
+                && let Some(item) =
+                    self.voxel_item(&img, at, bias, Paint::Row(row), Group::Buildings, object)
+            {
+                items.push(item);
+            }
+        }
+        items
     }
 
     /// Vehicles, infantry and aircraft in the ground layer (S-0102 claims 3
@@ -1468,6 +1525,62 @@ impl Builder<'_> {
         })
     }
 
+    /// A parsed voxel model and its motion file from the assets.
+    fn voxel_model(&self, file: &[u8]) -> Option<voxel::VoxelModel> {
+        let vxl = Vxl::parse(self.assets.get(file)?).ok()?;
+        let hva = self
+            .assets
+            .get(&hva_name(file))
+            .and_then(|b| Hva::parse(b).ok());
+        Some(voxel::VoxelModel::new(
+            &vxl,
+            hva.as_ref(),
+            &VoxelQuirks::default(),
+        ))
+    }
+
+    /// The voxel lighting table (S-0105 claim 19; its layout is provisional,
+    /// Q-0014).
+    fn vpl(&self) -> Option<Vpl> {
+        Vpl::parse(self.assets.get(VPL_FILE)?).ok()
+    }
+
+    /// A voxel part image as a scene item at `point` (S-0105 claim 25, F6;
+    /// S-0102 F2: the drawing rectangle is the copy rectangle).
+    fn voxel_item(
+        &mut self,
+        img: &voxel::PartImage,
+        point: (i32, i32),
+        bias: i32,
+        paint: Paint,
+        group: Group,
+        object: u32,
+    ) -> Option<Item> {
+        let image = IndexedImage::new(img.width, img.height, img.pixels.clone()).ok()?;
+        if image.width() == 0 || image.height() == 0 {
+            return None;
+        }
+        let id = self.built.scene.add_image(image);
+        Some(Item {
+            image: id,
+            x: point.0 + img.offset[0] as i32,
+            y: point.1 + img.offset[1] as i32,
+            test: DepthTest::Reader,
+            depth: ItemDepth::Profile {
+                profile: Profile::Upright,
+                bias,
+                companion: None,
+            },
+            paint,
+            group,
+            provisional: false,
+            object: Some(object),
+        })
+    }
+
+    /// A vehicle's or aircraft's voxel body, turret, barrel and shadow in its
+    /// initial pose (S-0105 claims 3 to 11, 16, 29 to 31; S-0102 claims 13,
+    /// 18).
     #[allow(clippy::too_many_arguments)]
     fn vehicle_voxels(
         &mut self,
@@ -1481,9 +1594,81 @@ impl Builder<'_> {
         group: Group,
         object: u32,
     ) -> Vec<Item> {
-        let _ = (kind, idx, art, p, point, u, row, group, object);
-        self.note(notes::VOXEL_SHADOW_POINT);
-        Vec::new()
+        let q = VoxelQuirks::default();
+        let vpl = self.vpl();
+        let Some(body) = art.voxels.get("body").and_then(|f| self.voxel_model(f)) else {
+            return Vec::new();
+        };
+        // Glossary claim G1: a pre-placed vehicle faces v × 256 facing units.
+        let facing = ((p.facing & 0xFF) * 256) as u16;
+        let art_int = |b: &Self, key: &[u8], d: i32| {
+            b.art_value(kind, idx, key)
+                .and_then(value::integer)
+                .unwrap_or(d)
+        };
+        // spec: S-0105 Import mapping (TurretOffset, Art [image], default 0)
+        let offset = art_int(self, b"TurretOffset", 0);
+        // spec: S-0105 claim 6 (placed level, then turned toward the fire angle; no tick has run)
+        let fire_angle = rule_int(
+            self.import,
+            kind,
+            idx,
+            b"FireAngle",
+            voxel::DEFAULT_FIRE_ANGLE,
+        );
+        let elevation = voxel::barrel_elevation_after(fire_angle, 0);
+        // The turret's starting facing has no spec: it is taken as the body's (Q-0010).
+        let pose = voxel::vehicle_parts(facing, facing, offset, elevation, &q);
+        let name = self.import.outcome.registries[&kind][idx].name.clone();
+        // spec: S-0105 Import mapping (UseBuffer is read from the art section of the type's own name)
+        let depth_buffered = self
+            .art
+            .value(&name, b"UseBuffer")
+            .and_then(value::boolean)
+            .unwrap_or(false);
+        let mut items = Vec::new();
+        // spec: S-0105 claims 29 to 31 (the main body's shadow section in frame 0; skipped with the no-shadow option)
+        if !rule_bool(self.import, kind, idx, b"NoShadow", false) {
+            let section = art_int(self, b"ShadowIndex", 0).max(0) as usize;
+            let aircraft_like = rule_bool(self.import, kind, idx, b"ConsideredAircraft", false);
+            if let Some(img) = voxel::draw_shadow(&body, section, &pose.shadow, 0, aircraft_like, &q)
+                // spec: S-0102 claim 18 (the voxel shadow: bias U, upright, a reader, in the object's own drawing)
+                && let Some(item) = self.voxel_item(&img, point, u, Paint::Shadow, Group::Shadows, object)
+            {
+                items.push(item);
+                self.note(notes::VOXEL_SHADOW_POINT);
+                self.note(notes::SHADOW);
+            }
+        }
+        // spec: S-0105 claim 16 (walk counter 0: body frame 0)
+        if let Some(img) = voxel::draw_model(&body, 0, &pose.body, vpl.as_ref(), depth_buffered, &q)
+            // spec: S-0102 claim 13 (a voxel vehicle: bias U, upright, a reader)
+            && let Some(item) = self.voxel_item(&img, point, u, Paint::Row(row), group, object)
+        {
+            items.push(item);
+        }
+        // spec: S-0105 claims 4, 8 (a turret part only with the turret flag)
+        if rule_bool(self.import, kind, idx, b"Turret", false) {
+            let turret = art.voxels.get("turret").and_then(|f| self.voxel_model(f));
+            let barrel = art.voxels.get("barrel").and_then(|f| self.voxel_model(f));
+            let mut parts = vec![(turret, pose.turret), (barrel, pose.barrel)];
+            // spec: S-0105 claim 11 (turret first when its 4-step facing is 1 or 2)
+            if !pose.turret_first {
+                parts.reverse();
+            }
+            for (model, draw) in parts {
+                // spec: S-0105 claim 16 (turret frame 0 before any attack; barrels in frame 0)
+                if let Some(m) = model
+                    && let Some(img) =
+                        voxel::draw_model(&m, 0, &draw, vpl.as_ref(), depth_buffered, &q)
+                    && let Some(item) =
+                        self.voxel_item(&img, point, u, Paint::Row(row), group, object)
+                {
+                    items.push(item);
+                }
+            }
+        }
+        items
     }
 }
 
