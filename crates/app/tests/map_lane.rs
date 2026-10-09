@@ -18,6 +18,7 @@ use glasnost_render::projection::{
     ScrollQuirks, cell_centre, limit_centre, project_lifted, view_origin,
 };
 use glasnost_render::scene::{Filter, View};
+use glasnost_render::wgpu;
 use glasnost_vfs::source::{FileSource, Unopened};
 use glasnost_vfs::{ByteSource, GameOptions, MountOptions, PickedFile, Vfs};
 
@@ -45,6 +46,62 @@ fn files(dir: &std::path::Path) -> Vec<PickedFile> {
         out.push(PickedFile { path: name, source });
     }
     out
+}
+
+/// A GPU device, when an adapter exists (any backend `WGPU_BACKEND` picks).
+fn gpu() -> Option<(wgpu::Device, wgpu::Queue, String)> {
+    use glasnost_render::gpu::{self, BackendChoice};
+    pollster::block_on(async {
+        let instance = gpu::create_instance(BackendChoice::Auto, None).await;
+        let adapter = gpu::request_adapter(&instance, None).await.ok()?;
+        let info = adapter.get_info();
+        let label = format!("{} on {}", gpu::backend_label(info.backend), info.name);
+        let (d, q) = gpu::request_device(&adapter).await.ok()?;
+        Some((d, q, label))
+    })
+}
+
+/// Milliseconds per frame of `frames` GPU redraws of a 1280 × 720 view
+/// scrolling 4 pixels per frame from `origin`, waiting for the GPU at the end.
+fn gpu_scroll_ms(
+    gpu: &(wgpu::Device, wgpu::Queue, String),
+    scene: &glasnost_render::scene::Scene,
+    origin: (i32, i32),
+    frames: u32,
+) -> f64 {
+    use glasnost_render::map_gpu::{COLOR_FORMAT, MapRenderer, targets};
+    let (device, queue, _) = gpu;
+    let mut r = MapRenderer::new(device, queue, scene, COLOR_FORMAT).unwrap();
+    let size = (1280, 720);
+    let (color, depth) = targets(device, size, COLOR_FORMAT);
+    let (cv, dv) = (
+        color.create_view(&Default::default()),
+        depth.create_view(&Default::default()),
+    );
+    let reference = Frame::reset_reference(origin.1);
+    let t = Instant::now();
+    for i in 0..frames {
+        let view = View {
+            origin: (origin.0 + 4 * i as i32, origin.1 + 2 * i as i32),
+            size,
+            reference,
+        };
+        let mut enc = device.create_command_encoder(&Default::default());
+        r.render(
+            device,
+            queue,
+            &mut enc,
+            &cv,
+            &dv,
+            scene,
+            &view,
+            &Filter::default(),
+            true,
+        );
+        queue.submit([enc.finish()]);
+    }
+    device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
+    t.elapsed().as_secs_f64() * 1000.0 / f64::from(frames)
 }
 
 #[test]
@@ -79,6 +136,8 @@ fn map_lane() {
         let mut redraw_ms = Vec::new();
         let mut items = 0usize;
         let mut notes: BTreeMap<String, usize> = BTreeMap::new();
+        let gpu = gpu();
+        let mut gpu_ms: Vec<f64> = Vec::new();
         let mut dropped: BTreeMap<String, usize> = BTreeMap::new();
         for (n, m) in maps.iter().enumerate().take(limit) {
             let bytes = vfs.read(&m.file).await.unwrap();
@@ -135,6 +194,11 @@ fn map_lane() {
                     .scene
                     .compose(&view, &Filter::default(), &ComposeQuirks::default());
             redraw_ms.push(t1.elapsed().as_millis());
+            if let Some(g) = &gpu
+                && gpu_ms.len() < 10
+            {
+                gpu_ms.push(gpu_scroll_ms(g, &loaded.built.scene, origin, 120));
+            }
             let theater = m.theater.to_ascii_uppercase();
             let count = shots.entry(theater.clone()).or_default();
             if *count < shots_per_theater && m.multiplayer {
@@ -207,6 +271,16 @@ fn map_lane() {
             median(&redraw_ms),
             max(&redraw_ms)
         );
+        if let Some(g) = &gpu {
+            gpu_ms.sort_by(f64::total_cmp);
+            println!(
+                "GPU scrolling redraw (1280x720, {}): median {:.2} ms/frame, max {:.2} over {} maps",
+                g.2,
+                gpu_ms.get(gpu_ms.len() / 2).copied().unwrap_or(0.0),
+                gpu_ms.last().copied().unwrap_or(0.0),
+                gpu_ms.len()
+            );
+        }
         for (k, v) in &notes {
             println!("  note in {v} maps: {k}");
         }

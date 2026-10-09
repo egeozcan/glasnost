@@ -6,3 +6,5 @@ pub mod build;
 pub mod find;
 pub mod load;
 pub mod png;
+#[cfg(test)]
+mod tests;
