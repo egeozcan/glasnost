@@ -12,7 +12,7 @@ use glasnost_map::{
     Lighting, Map, Objects, Theater, Unit,
 };
 use glasnost_rules::schema::Ruleset;
-use glasnost_rules::sim::{Country, LandRow, LandType, LocomotionClass, UnitType};
+use glasnost_rules::sim::{Country, LandRow, LandType, LocomotionClass, Locomotor, UnitType};
 
 use crate::orders::Order;
 use crate::rules::{Behaviour, SimRules};
@@ -47,6 +47,7 @@ pub fn ruleset() -> Ruleset {
         speed: Some(7),
         rot: Some(6),
         locomotion_class: Some(LocomotionClass::Wheel),
+        locomotor: Some(Locomotor::Drive),
         primary: Some("Gun".into()),
         ..Default::default()
     };
@@ -55,6 +56,7 @@ pub fn ruleset() -> Ruleset {
         speed: Some(5),
         rot: Some(4),
         locomotion_class: Some(LocomotionClass::Track),
+        locomotor: Some(Locomotor::Drive),
         crusher: Some(true),
         ..Default::default()
     };
@@ -62,6 +64,7 @@ pub fn ruleset() -> Ruleset {
         strength: Some(100),
         speed: Some(4),
         locomotion_class: Some(LocomotionClass::Foot),
+        locomotor: Some(Locomotor::Walk),
         crushable: Some(true),
         primary: Some("Rifle".into()),
         ..Default::default()
@@ -71,6 +74,7 @@ pub fn ruleset() -> Ruleset {
         speed: Some(9),
         rot: Some(8),
         locomotion_class: Some(LocomotionClass::Wheel),
+        locomotor: Some(Locomotor::Drive),
         crushable: Some(true),
         ..Default::default()
     };

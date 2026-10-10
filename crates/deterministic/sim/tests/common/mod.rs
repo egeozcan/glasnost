@@ -16,7 +16,7 @@ use glasnost_map::{
     Lighting, Map, Objects, Theater, Unit,
 };
 use glasnost_rules::schema::Ruleset;
-use glasnost_rules::sim::{Country, LandRow, LandType, LocomotionClass, UnitType};
+use glasnost_rules::sim::{Country, LandRow, LandType, LocomotionClass, Locomotor, UnitType};
 use glasnost_sim::orders::{self, Order};
 use glasnost_sim::rules::{Behaviour, Kind, SimRules};
 use glasnost_sim::tick;
@@ -174,17 +174,34 @@ impl Scene {
         }
     }
 
-    /// Registers a vehicle type.
-    pub fn vehicle(&mut self, name: &str, t: UnitType) -> &mut Self {
+    /// Registers a vehicle type; one without a locomotor field gets the
+    /// driving locomotor (S-0207 claim 14 would otherwise give teleporting).
+    pub fn vehicle(&mut self, name: &str, mut t: UnitType) -> &mut Self {
+        t.locomotor.get_or_insert(Locomotor::Drive);
         self.register("vehicles", name);
         self.ruleset.sim.vehicles.insert(name.into(), t);
         self
     }
 
-    /// Registers an infantry type.
-    pub fn infantry(&mut self, name: &str, t: UnitType) -> &mut Self {
+    /// Registers an infantry type; one without a locomotor field gets the
+    /// walking locomotor.
+    pub fn infantry(&mut self, name: &str, mut t: UnitType) -> &mut Self {
+        t.locomotor.get_or_insert(Locomotor::Walk);
         self.register("infantry", name);
         self.ruleset.sim.infantry.insert(name.into(), t);
+        self
+    }
+
+    /// Registers a type of `registry` exactly as given (no locomotor
+    /// default), for tests of the locomotor field itself.
+    pub fn raw_unit(&mut self, registry: &str, name: &str, t: UnitType) -> &mut Self {
+        self.register(registry, name);
+        let map = match registry {
+            "vehicles" => &mut self.ruleset.sim.vehicles,
+            "infantry" => &mut self.ruleset.sim.infantry,
+            _ => &mut self.ruleset.sim.aircraft,
+        };
+        map.insert(name.into(), t);
         self
     }
 

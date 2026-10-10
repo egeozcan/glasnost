@@ -1399,6 +1399,66 @@
         }
       ]
     },
+    "Locomotor": {
+      "description": "The eleven locomotors a type's locomotor field can select (S-0207 claim\n14, table T3). Absent from every rules layer: the teleporting locomotor.",
+      "oneOf": [
+        {
+          "description": "Driving (S-0207).",
+          "type": "string",
+          "const": "drive"
+        },
+        {
+          "description": "Hovering.",
+          "type": "string",
+          "const": "hover"
+        },
+        {
+          "description": "Tunnelling.",
+          "type": "string",
+          "const": "tunnel"
+        },
+        {
+          "description": "Walking (infantry walking, S-0208).",
+          "type": "string",
+          "const": "walk"
+        },
+        {
+          "description": "Drop pod.",
+          "type": "string",
+          "const": "drop_pod"
+        },
+        {
+          "description": "Flying.",
+          "type": "string",
+          "const": "fly"
+        },
+        {
+          "description": "Teleporting.",
+          "type": "string",
+          "const": "teleport"
+        },
+        {
+          "description": "Walking vehicle (mechanical walking).",
+          "type": "string",
+          "const": "mech"
+        },
+        {
+          "description": "Ship.",
+          "type": "string",
+          "const": "ship"
+        },
+        {
+          "description": "Jumpjet.",
+          "type": "string",
+          "const": "jumpjet"
+        },
+        {
+          "description": "Rocket.",
+          "type": "string",
+          "const": "rocket"
+        }
+      ]
+    },
     "MovementZone": {
       "description": "The thirteen movement zones (S-0211 claim 12).",
       "oneOf": [
@@ -2698,12 +2758,15 @@
           ]
         },
         "locomotor": {
-          "description": "`Locomotor`, the identifier as written (its meaning: request Q-0019).",
-          "type": [
-            "string",
-            "null"
-          ],
-          "default": null
+          "description": "`Locomotor`, the locomotor its class identifier selects (S-0207\nclaim 14); absent: the teleporting locomotor.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Locomotor"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "move_to_shroud": {
           "description": "`MoveToShroud`.",

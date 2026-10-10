@@ -863,3 +863,63 @@ fn accelerating_vehicle_gains_twice_at_track_boundary() {
     }
     assert!(doubles > 0);
 }
+
+// ---------------------------------------------------------------------------
+// Which locomotor a type has
+
+// spec: S-0207 claim 14 (absent: the teleporting locomotor whatever the kind; the driving locomotor drives a vehicle)
+#[test]
+fn locomotor_field_selects_how_a_type_moves() {
+    use glasnost_rules::sim::Locomotor as L;
+    use glasnost_sim::rules::Locomotor;
+    let mut s = Scene::new();
+    let mut plain = car(WHEEL, 30, false);
+    plain.locomotor = None;
+    s.raw_unit("vehicles", "NOLOCO", plain.clone());
+    let mut walker = unit_type(FOOT, 10, 0);
+    walker.locomotor = None;
+    s.raw_unit("infantry", "NOLOCOINF", walker.clone());
+    let mut drives = plain.clone();
+    drives.locomotor = Some(L::Drive);
+    s.raw_unit("vehicles", "DRIVES", drives);
+    let mut walks = plain;
+    walks.locomotor = Some(L::Walk);
+    s.raw_unit("vehicles", "WALKS", walks);
+    s.place_unit(0, "NOLOCO", cell(0, 0), 0);
+    s.place_unit(0, "DRIVES", cell(4, 0), 0);
+    s.place_infantry(0, "NOLOCOINF", cell(8, 0), 1);
+    let r = s.sim_rules();
+    let unit = |kind: Kind, i: u32| r.unit(kind, i).expect("type").clone();
+    assert_eq!(unit(Kind::Vehicle, 0).type_locomotor(), L::Teleport);
+    assert_eq!(unit(Kind::Infantry, 0).type_locomotor(), L::Teleport);
+    assert_eq!(unit(Kind::Vehicle, 0).locomotor, Locomotor::None);
+    assert_eq!(unit(Kind::Infantry, 0).locomotor, Locomotor::None);
+    assert_eq!(unit(Kind::Vehicle, 1).locomotor, Locomotor::Drive);
+    // A vehicle type may name the walking locomotor; how it moves has no spec (Open questions).
+    assert_eq!(unit(Kind::Vehicle, 2).type_locomotor(), L::Walk);
+    assert_eq!(unit(Kind::Vehicle, 2).locomotor, Locomotor::None);
+
+    let mut w = s.build();
+    let vs = objects_of(&w, Kind::Vehicle);
+    let (teleporter, driver) = (vs[0], vs[1]);
+    assert!(
+        w.obj(teleporter).expect("v").drive.is_none(),
+        "no drive state without the driving locomotor"
+    );
+    open_orders(&mut w);
+    order_move(&mut w, teleporter, cell(0, -6));
+    order_move(&mut w, driver, cell(4, -6));
+    let p0 = w.obj(teleporter).expect("v").pos;
+    let d0 = w.obj(driver).expect("v").pos;
+    run(&mut w, 40);
+    assert_eq!(
+        w.obj(teleporter).expect("v").pos,
+        p0,
+        "a teleporting vehicle does not drive"
+    );
+    assert_ne!(
+        w.obj(driver).expect("v").pos,
+        d0,
+        "a driving vehicle drives"
+    );
+}

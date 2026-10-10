@@ -49,15 +49,16 @@ impl Kind {
     }
 }
 
-/// The locomotor that moves a mobile type (request Q-0019 for how the data
-/// selects it).
+/// How the simulation moves a mobile type: the type's locomotor (S-0207
+/// claim 14) for the kinds whose movement a spec gives.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Locomotor {
     /// The driving locomotor (S-0207).
     Drive,
     /// The walking locomotor of infantry (S-0208).
     Walk,
-    /// Not moved in M3 (aircraft and other locomotors).
+    /// Not moved in M3: every other locomotor, and a locomotor on a kind
+    /// whose movement with it no spec gives (S-0207 Open questions).
     None,
 }
 
@@ -154,6 +155,15 @@ pub struct UnitRules {
     pub move_to_shroud: bool,
     /// The raw record, for fields read only by input rules (S-0214).
     pub raw: UnitType,
+}
+
+impl UnitRules {
+    /// The type's locomotor (S-0207 claim 14): the teleporting locomotor
+    /// when no rules layer gives one.
+    pub fn type_locomotor(&self) -> rs::Locomotor {
+        // spec: S-0207 claim 14 (absent: the teleporting locomotor)
+        self.raw.locomotor.unwrap_or(rs::Locomotor::Teleport)
+    }
 }
 
 /// A building type's resolved fields.
@@ -833,10 +843,13 @@ fn unit_rules(kind: Kind, name: &str, u: UnitType, q: &Quirks, mode: Rounding) -
         // spec: S-0206 Import mapping (ROT absent: 0)
         turn_rate(u.rot.unwrap_or(0), q.turn_rate_negative_wrap)
     };
-    let locomotor = match kind {
-        // Q-0019: the data's locomotor identifier has no spec; interim choice by kind.
-        Kind::Infantry => Locomotor::Walk,
-        Kind::Vehicle => Locomotor::Drive,
+    // spec: S-0207 claim 14 (absent from every layer: the teleporting locomotor, whatever the kind)
+    let loco = u.locomotor.unwrap_or(rs::Locomotor::Teleport);
+    let locomotor = match (kind, loco) {
+        // spec: S-0207 Terms (a drive vehicle: a vehicle with the driving locomotor)
+        (Kind::Vehicle, rs::Locomotor::Drive) => Locomotor::Drive,
+        // spec: S-0208 (an infantry unit with the walking locomotor)
+        (Kind::Infantry, rs::Locomotor::Walk) => Locomotor::Walk,
         _ => Locomotor::None,
     };
     let cells = |d: &Option<Decimal>| -> i32 {

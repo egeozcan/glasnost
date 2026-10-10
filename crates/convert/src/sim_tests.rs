@@ -284,6 +284,79 @@ fn locomotion_classes() {
     );
 }
 
+/// spec: S-0207 claim 14 and table T3 (class identifiers: case, blanks, ignored values, unknown identifiers, layering)
+#[test]
+fn locomotor_field() {
+    let drive = "{4A582741-9839-11D1-B709-00A024DDAFD1}";
+    let walk = "{4A582744-9839-11D1-B709-00A024DDAFD1}";
+    let ship = "{2BEA74E1-7CCA-11D3-BE14-00104B62A16C}";
+    let unknown = "{00000000-0000-0000-0000-000000000001}";
+    let base = format!(
+        "[VehicleTypes]\n1=A\n2=B\n3=C\n4=S\n5=U\n6=Boat\n[InfantryTypes]\n1=I\n2=J\n\
+         [AircraftTypes]\n1=P\n\
+         [A]\nX=1\n[B]\nLocomotor={}\n[C]\nLocomotor=drive\n[S]\nLocomotor={drive}\n\
+         [U]\nLocomotor={drive}\n[Boat]\nLocomotor={ship}\n[I]\nX=1\n[J]\nLocomotor={walk}\n[P]\nX=1\n",
+        drive.to_ascii_lowercase()
+    );
+    // A later layer: an ignored value keeps S's locomotor, an unknown one keeps U's.
+    let map =
+        format!("[S]\nLocomotor=drive\n[U]\nLocomotor={unknown}\n[Boat]\nLocomotor=  {drive}  \n");
+    let (s, w) = sim(&base, &map, "");
+    use glasnost_rules::sim::Locomotor as L;
+    assert_eq!(
+        s.vehicles["A"].locomotor, None,
+        "absent: no field, the teleporting default"
+    );
+    assert_eq!(
+        s.vehicles["B"].locomotor,
+        Some(L::Drive),
+        "lower-case digits"
+    );
+    assert_eq!(s.vehicles["C"].locomotor, None, "a name is ignored");
+    assert_eq!(
+        s.vehicles["S"].locomotor,
+        Some(L::Drive),
+        "ignored value keeps the layer's locomotor"
+    );
+    assert_eq!(
+        s.vehicles["U"].locomotor,
+        Some(L::Drive),
+        "unknown identifier: kept (departure)"
+    );
+    assert_eq!(
+        s.vehicles["Boat"].locomotor,
+        Some(L::Drive),
+        "blanks around the value"
+    );
+    assert_eq!(s.infantry["I"].locomotor, None);
+    assert_eq!(s.infantry["J"].locomotor, Some(L::Walk));
+    assert_eq!(s.aircraft["P"].locomotor, None);
+    assert!(warned(
+        &w,
+        "C Locomotor \"drive\" is not a class identifier"
+    ));
+    assert!(warned(
+        &w,
+        "S Locomotor \"drive\" is not a class identifier"
+    ));
+    assert!(warned(&w, "U Locomotor"));
+    assert!(warned(&w, "names no known locomotor"));
+    for bad in [
+        "{4A582741983911D1B70900A024DDAFD1}",
+        "4A582741-9839-11D1-B709-00A024DDAFD1",
+        "{4A582741-9839-11D1-B709-00A024DDAFD}",
+        "{4A58274G-9839-11D1-B709-00A024DDAFD1}",
+        "",
+    ] {
+        assert_eq!(class_identifier(bad.as_bytes()), None, "{bad}");
+    }
+    assert_eq!(
+        class_identifier(format!("{drive}x").as_bytes()),
+        None,
+        "characters after the brace"
+    );
+}
+
 /// spec: S-0211 claim 4 and Import mapping (zone names, restricted land types)
 #[test]
 fn zones_and_restrictions() {

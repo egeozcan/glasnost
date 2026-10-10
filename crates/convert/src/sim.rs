@@ -282,7 +282,6 @@ const UNIT_FIELDS: &[(&str, &str, Form)] = &[
     ("jumpjet_turn_rate", "JumpjetTurnRate", Int),
     ("turret", "Turret", Bool),
     ("turret_spins", "TurretSpins", Bool),
-    ("locomotor", "Locomotor", Text),
     ("crusher", "Crusher", Bool),
     ("omni_crusher", "OmniCrusher", Bool),
     ("omni_crush_resistant", "OmniCrushResistant", Bool),
@@ -551,6 +550,50 @@ const CLIFF_BACK_QUIET: [i32; 3] = [0, 1, 2];
 /// The speed field's range without a warning (S-0207 claim 1).
 // spec: S-0207 claim 1 (warning above 100 or below −1)
 const SPEED_QUIET: std::ops::RangeInclusive<i32> = -1..=100;
+
+/// The class identifiers of the locomotors (S-0207 claim 14, table T3), as
+/// 32 hexadecimal digits in upper case without braces or hyphens, with our
+/// names (`glasnost_rules::sim::Locomotor`).
+// spec: S-0207 table T3 (the eleven class identifiers)
+const LOCOMOTORS: [(&str, &str); 11] = [
+    ("4A582741983911D1B70900A024DDAFD1", "drive"),
+    ("4A582742983911D1B70900A024DDAFD1", "hover"),
+    ("4A582743983911D1B70900A024DDAFD1", "tunnel"),
+    ("4A582744983911D1B70900A024DDAFD1", "walk"),
+    ("4A582745983911D1B70900A024DDAFD1", "drop_pod"),
+    ("4A582746983911D1B70900A024DDAFD1", "fly"),
+    ("4A582747983911D1B70900A024DDAFD1", "teleport"),
+    ("55D141B8DB9411D1AC98006008055BB5", "mech"),
+    ("2BEA74E17CCA11D3BE1400104B62A16C", "ship"),
+    ("92612C46F71F11D1AC9F006008055BB5", "jumpjet"),
+    ("B7B49766E57611D39BD900104B972FE8", "rocket"),
+];
+
+/// The digits of a class identifier (S-0207 Terms): the value, with
+/// leading and trailing blanks removed, is an opening brace, groups of 8,
+/// 4, 4, 4 and 12 hexadecimal digits joined by hyphens, and a closing
+/// brace. Returns the 32 digits in upper case, or `None` for any other
+/// form.
+pub fn class_identifier(v: &[u8]) -> Option<String> {
+    // spec: S-0207 claim 14 (the value is read whole, after leading and trailing blanks are removed)
+    let v = v.trim_ascii();
+    let inner = v.strip_prefix(b"{")?.strip_suffix(b"}")?;
+    let groups: Vec<&[u8]> = inner.split(|&b| b == b'-').collect();
+    // spec: S-0207 Terms (five groups of 8, 4, 4, 4 and 12 hexadecimal digits)
+    const LENGTHS: [usize; 5] = [8, 4, 4, 4, 12];
+    if groups.len() != LENGTHS.len() {
+        return None;
+    }
+    let mut out = String::new();
+    for (g, n) in groups.iter().zip(LENGTHS) {
+        // spec: S-0207 claim 14 (letters among the hexadecimal digits in either case)
+        if g.len() != n || !g.iter().all(u8::is_ascii_hexdigit) {
+            return None;
+        }
+        out.push_str(&String::from_utf8_lossy(g).to_ascii_uppercase());
+    }
+    Some(out)
+}
 
 /// What the builder reads.
 pub struct SimInputs<'a> {
@@ -938,6 +981,7 @@ impl Builder<'_> {
     fn unit(&mut self, rec: &mut Rec, kind: Kind, index: usize, t: &TypeRec) {
         self.speed(rec, kind, t);
         self.fields(rec, t, kind, UNIT_FIELDS);
+        self.locomotor(rec, kind, t);
         self.locomotion_class(rec, kind, t);
         self.movement_zone(rec, kind, t);
         if kind == Kind::Vehicles {
@@ -962,6 +1006,42 @@ impl Builder<'_> {
         }
         if kind == Kind::Infantry {
             self.infantry_art(rec, kind, index, t);
+        }
+    }
+
+    /// The locomotor field (S-0207 claim 14): a class identifier of table
+    /// T3 replaces the locomotor in force; a value of another form, and (our
+    /// departure) an identifier not in T3, keep it, with a warning.
+    fn locomotor(&mut self, rec: &mut Rec, kind: Kind, t: &TypeRec) {
+        let mut notes = Vec::new();
+        let loco = fold(t.keys.get(&b"Locomotor"[..]), None, |v, e| {
+            let Some(id) = class_identifier(v) else {
+                // spec: S-0207 claim 14 (not a class identifier: ignored, the locomotor in force is kept; our importer warns)
+                notes.push((e.layer, e.line, format!(
+                    "{} {} Locomotor {:?} is not a class identifier; the locomotor in force is kept (S-0207 claim 14)",
+                    kind.key(),
+                    show(&t.name),
+                    show(v)
+                )));
+                return None;
+            };
+            let known = LOCOMOTORS.iter().find(|l| l.0 == id).map(|l| l.1);
+            if known.is_none() {
+                // spec: S-0207 claim 14 (an unknown class identifier: treated as not given, with a warning; a departure)
+                notes.push((e.layer, e.line, format!(
+                    "{} {} Locomotor {:?} names no known locomotor; the original stops with a program error when such an object is created, our engine keeps the locomotor in force (S-0207 claim 14, a departure)",
+                    kind.key(),
+                    show(&t.name),
+                    show(v)
+                )));
+            }
+            known
+        });
+        for (l, line, m) in notes {
+            self.warn(l, line, m);
+        }
+        if let Some(name) = loco {
+            rec.put("locomotor", jsonc::string(name));
         }
     }
 

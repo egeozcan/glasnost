@@ -129,6 +129,35 @@ pub enum MovementZone {
     CrusherAll,
 }
 
+/// The eleven locomotors a type's locomotor field can select (S-0207 claim
+/// 14, table T3). Absent from every rules layer: the teleporting locomotor.
+#[derive(Clone, Copy, Debug, Deserialize, JsonSchema, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum Locomotor {
+    /// Driving (S-0207).
+    Drive,
+    /// Hovering.
+    Hover,
+    /// Tunnelling.
+    Tunnel,
+    /// Walking (infantry walking, S-0208).
+    Walk,
+    /// Drop pod.
+    DropPod,
+    /// Flying.
+    Fly,
+    /// Teleporting.
+    Teleport,
+    /// Walking vehicle (mechanical walking).
+    Mech,
+    /// Ship.
+    Ship,
+    /// Jumpjet.
+    Jumpjet,
+    /// Rocket.
+    Rocket,
+}
+
 /// Every simulation field of the ruleset.
 #[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -385,9 +414,10 @@ pub struct UnitType {
     /// `MovementZone` (S-0211 claim 4).
     #[serde(default)]
     pub movement_zone: Option<MovementZone>,
-    /// `Locomotor`, the identifier as written (its meaning: request Q-0019).
+    /// `Locomotor`, the locomotor its class identifier selects (S-0207
+    /// claim 14); absent: the teleporting locomotor.
     #[serde(default)]
-    pub locomotor: Option<String>,
+    pub locomotor: Option<Locomotor>,
     /// `MovementRestrictedTo` (S-0211 claim 14); absent: no restriction.
     #[serde(default)]
     pub movement_restricted_to: Option<LandType>,
