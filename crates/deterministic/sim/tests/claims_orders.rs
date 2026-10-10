@@ -1048,3 +1048,26 @@ fn s0215_open_without_a_gate() {
     process::turn(&mut w, cart);
     assert_eq!(w.obj(cart).unwrap().beh.last, Some((t, 450)));
 }
+
+// spec: S-0214 claim 3 (nothing over an object that is already selected: the selection stays and no order is made)
+#[test]
+fn s0214_nothing_over_a_selected_object() {
+    let (w, gate) = gate_world(true);
+    let hut = w
+        .objects
+        .values()
+        .find(|o| o.kind == Kind::Building && o.pos.cell() == testkit::cell(-12, 14))
+        .unwrap()
+        .id;
+    let sel = [hut, gate];
+    let on = targeting::ClickOn::Object(gate);
+    let mods = targeting::Modifiers::default();
+    assert_eq!(
+        targeting::cursor(&w, ALPHA, &sel, on, mods),
+        targeting::Action::Nothing
+    );
+    assert_eq!(
+        targeting::click(&w, ALPHA, &sel, on, mods),
+        targeting::ClickResult::default()
+    );
+}
