@@ -135,37 +135,31 @@ pub fn release_claims(w: &mut World, id: ObjectId) {
     }
 }
 
-/// Sets the vehicle's claims to its position's cell and the cells of its
-/// current step (S-0209 claim 1; when a claim ends is request Q-0019).
-fn update_claims(w: &mut World, id: ObjectId) {
+/// Sets the vehicle-present flag of `c` for the vehicle (S-0209 claim 1).
+fn claim(w: &mut World, id: ObjectId, c: CellXY) {
     let Some(o) = w.obj(id) else { return };
     let layer = o.layer;
-    let mut want = vec![o.pos.cell()];
-    if let Some(t) = o.drive.as_ref().and_then(|d| d.track.as_ref()) {
-        for &c in &t.cells {
-            if !want.contains(&c) {
-                want.push(c);
-            }
-        }
+    if o.drive.as_ref().is_some_and(|d| d.claims.contains(&c)) {
+        return;
     }
-    want.sort();
-    let have = o
-        .drive
-        .as_ref()
-        .map(|d| d.claims.clone())
-        .unwrap_or_default();
-    for c in &have {
-        if !want.contains(c) {
-            w.cells.claim_vehicle(*c, layer, false);
-        }
-    }
-    for c in &want {
-        if !have.contains(c) {
-            w.cells.claim_vehicle(*c, layer, true);
-        }
-    }
+    w.cells.claim_vehicle(c, layer, true);
     if let Some(d) = w.obj_mut(id).and_then(|o| o.drive.as_mut()) {
-        d.claims = want;
+        d.claims.push(c);
+        d.claims.sort();
+    }
+}
+
+/// Clears the vehicle's flag of `c`, in the cell layer of its position
+/// (S-0209 claim 1).
+fn release(w: &mut World, id: ObjectId, c: CellXY) {
+    let Some(o) = w.obj(id) else { return };
+    let layer = o.layer;
+    if !o.drive.as_ref().is_some_and(|d| d.claims.contains(&c)) {
+        return;
+    }
+    w.cells.claim_vehicle(c, layer, false);
+    if let Some(d) = w.obj_mut(id).and_then(|o| o.drive.as_mut()) {
+        d.claims.retain(|x| *x != c);
     }
 }
 
@@ -349,7 +343,8 @@ fn begin_track(w: &mut World, id: ObjectId, u: &UnitRules) -> bool {
     // spec: S-0207 claim 6 (a track begins only when the body facing equals 8192 × d exactly)
     let want = u16::from(d % 8) * 8192;
     if o.body.value(t) != want {
-        if !o.drive.as_ref().is_some_and(|x| x.turning_in_place) {
+        // A turn in place towards another facing (the path changed) is replaced.
+        if !o.drive.as_ref().is_some_and(|x| x.turning_in_place) || o.body.target != want {
             let mut body = o.body;
             body.turn_to(want, t, u.turn_rate);
             let dur = body.duration;
@@ -462,12 +457,18 @@ fn begin_track(w: &mut World, id: ObjectId, u: &UnitRules) -> bool {
                 crush,
             });
             dd.rho_t = rho_t;
-            dd.between_steps = false;
         }
         // spec: S-0212 claim 22 (a blockage ends once the unit has taken a step again)
         ob.path.blocked_since = None;
     }
-    update_claims(w, id);
+    // spec: S-0209 claim 1 (a step sets the flag of the cell it enters at once; a two-cell curve both cells)
+    for c in if two {
+        vec![first, second]
+    } else {
+        vec![first]
+    } {
+        claim(w, id, c);
+    }
     // spec: S-0210 claim 7 (a crusher warns the infantry of the first cell each time it begins a track, crush mode or not)
     if occupancy::is_crusher(w, id) {
         crate::crush::warn_ahead(w, id, first);
@@ -601,6 +602,22 @@ fn spend(w: &mut World, id: ObjectId) -> bool {
     a -= 7 * k as i32; // spec: S-0207 claim 3 (7 of the budget per point)
     let mut next = tr.next + k;
     let mut last = tr.last;
+    if k > 0 && dd.between_steps {
+        // spec: S-0209 claim 1 (passing the first point of a track while between steps clears the flag of the cell it is leaving)
+        release(w, id, o.pos.cell());
+        if let Some(d2) = w.obj_mut(id).and_then(|ob| ob.drive.as_mut()) {
+            // spec: S-0209 Terms (between steps until it next advances along a track)
+            d2.between_steps = false;
+        }
+    }
+    if let Some(rp) = tr.e.and_then(|e| tracks::release_point(tr.d, e))
+        && tr.next <= rp
+        && next > rp
+        && let Some(&c) = tr.cells.first()
+    {
+        // spec: S-0209 claim 1 (reaching a curve's release point clears the flag of the curve's first cell)
+        release(w, id, c);
+    }
     if k > 0 {
         if next > pts.len() {
             // spec: S-0207 claim 3 (the track target reached: A′ = A + trunc(7 × (1 − m/11)))
@@ -615,7 +632,6 @@ fn spend(w: &mut World, id: ObjectId) -> bool {
             if let Some(&(_, _, f)) = pts.last() {
                 set_facing(w, id, f);
             }
-            update_claims(w, id);
             crate::crush::at_cell_centre(w, id);
             return true;
         }
@@ -815,7 +831,6 @@ fn arrive_or_rest(w: &mut World, id: ObjectId) {
             ob.path.steps.clear();
         }
     }
-    update_claims(w, id);
 }
 
 /// A stop while on a track (S-0207 claim 11): the target fraction becomes

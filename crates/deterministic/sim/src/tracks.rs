@@ -457,6 +457,23 @@ pub fn chain_point(d: u8, e: u8) -> Option<usize> {
     }
 }
 
+/// The release point index of a two-cell curve (S-0207 table T1), if any:
+/// passing it clears the flag of the curve's first cell (S-0209 claim 1).
+pub fn release_point(d: u8, e: u8) -> Option<usize> {
+    let (c, _, two) = t2(d, e)?;
+    if !two {
+        return None;
+    }
+    // spec: S-0207 table T1 (release points: C 22, D 19, E 31, F 27)
+    match c {
+        2 => Some(22),
+        3 => Some(19),
+        4 => Some(31),
+        5 => Some(27),
+        _ => None,
+    }
+}
+
 /// The end correction trunc(7 × (1 − m/11)) of S-0207 claim 3 for a track.
 pub fn end_correction(points: &[Point]) -> i32 {
     let (x, y, _) = points.last().copied().unwrap_or((0, 0, 0));

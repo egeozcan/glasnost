@@ -1055,3 +1055,132 @@ fn walker_routes_around_moving_blocker() {
     assert_ne!(c, cell(0, 0));
     assert_eq!(c.x, cell(0, 0).x, "a detour beside the blocked cell");
 }
+
+// ---------------------------------------------------------------------------
+// When a driving vehicle clears its vehicle-present flag (claim 1, scenario C28)
+
+/// A scene with one slow driving vehicle (speed field 1: s = 2 per tick,
+/// acceleration off) facing map north in the middle cell, ordered to the
+/// end of `steps`, whose path is then set to `steps`.
+fn slow_driver(steps: &[u8]) -> (World, ObjectId) {
+    let mut s = Scene::new();
+    let mut t = unit_type(TRACK, 1, 10);
+    t.accelerates = Some(false);
+    s.vehicle("Snail", t);
+    s.place_unit(0, "Snail", cell(0, 0), 0);
+    let mut w = s.build();
+    let id = w
+        .objects
+        .values()
+        .find(|o| o.kind == Kind::Vehicle)
+        .map(|o| o.id)
+        .expect("vehicle");
+    open_orders(&mut w);
+    let mut end = cell(0, 0);
+    for &d in steps {
+        let (dx, dy) = glasnost_sim::regions::STEPS[usize::from(d)];
+        end = CellXY::new(end.x + dx, end.y + dy);
+    }
+    order_move(&mut w, id, end);
+    tick::step(&mut w);
+    w.obj_mut(id).expect("vehicle").path.steps = steps.to_vec();
+    (w, id)
+}
+
+fn flag(w: &World, c: CellXY) -> bool {
+    ground(w, c).vehicle_present()
+}
+
+// spec: S-0209 claim 1 (a step sets the next cell's flag at once; the cell left is cleared when the first track point is passed, while the position is still in it)
+#[test]
+fn driving_vehicle_clears_the_cell_it_leaves_at_the_first_track_point() {
+    let (mut w, id) = slow_driver(&[0, 0, 0, 0, 0]);
+    let start = cell(0, 0);
+    let next = cell(0, -1);
+    assert!(flag(&w, start));
+    // Run until the vehicle's position first moves.
+    let p0 = w.obj(id).expect("v").pos;
+    let mut moving = 0;
+    for _ in 0..200 {
+        tick::step(&mut w);
+        let o = w.obj(id).expect("v");
+        if moving == 0 && o.pos == p0 {
+            continue;
+        }
+        moving += 1;
+        assert!(
+            flag(&w, next),
+            "the next cell's flag is set from the start of the step"
+        );
+        assert_eq!(
+            o.pos.cell(),
+            start,
+            "the position is still in the start cell"
+        );
+        // Budgets 2, 4, 6 buy no point; 8 buys the first (S-0207 claim 3).
+        if moving < 4 {
+            assert!(
+                flag(&w, start),
+                "tick {moving} of movement keeps the start cell's flag"
+            );
+        } else {
+            assert!(!flag(&w, start), "the first point passed clears it");
+            break;
+        }
+    }
+    assert_eq!(moving, 4);
+}
+
+// spec: S-0209 claim 1 (on a two-cell curve the first cell's flag clears at the release point, position still in that cell; the target keeps its flag)
+// spec: S-0207 table T1 (curve D: release point 19)
+#[test]
+fn curve_first_cell_clears_at_the_release_point() {
+    let (mut w, id) = slow_driver(&[0, 2]);
+    let first = cell(0, -1);
+    let target = cell(1, -1);
+    let mut cleared = false;
+    for _ in 0..600 {
+        tick::step(&mut w);
+        let o = w.obj(id).expect("v");
+        let Some(t) = o.drive.as_ref().and_then(|d| d.track.clone()) else {
+            if cleared {
+                break;
+            }
+            continue;
+        };
+        assert!(flag(&w, target), "the curve's target keeps its flag");
+        if t.next <= 19 {
+            assert!(
+                flag(&w, first),
+                "before the release point (next point {})",
+                t.next
+            );
+        } else if !cleared {
+            assert_eq!(
+                t.next, 20,
+                "cleared on the tick the release point is reached"
+            );
+            assert!(!flag(&w, first));
+            assert_eq!(
+                o.pos.cell(),
+                first,
+                "the position is still in the first cell"
+            );
+            cleared = true;
+        }
+    }
+    assert!(cleared);
+    assert!(
+        flag(&w, target),
+        "at rest the vehicle keeps its cell's flag"
+    );
+}
+
+// spec: S-0209 claim 1 (a vehicle taken out of a cell's list clears that cell's flag)
+#[test]
+fn removed_vehicle_clears_its_flag() {
+    let (mut w, id) = slow_driver(&[0]);
+    assert!(flag(&w, cell(0, 0)));
+    objects::remove(&mut w, id);
+    assert!(!flag(&w, cell(0, 0)));
+}
