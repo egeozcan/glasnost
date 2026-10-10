@@ -2,7 +2,7 @@
 id: S-0107
 title: Infantry sprite sequences
 topic: rendering
-revision: 4
+revision: 5
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -20,7 +20,7 @@ How a soldier's image frame and shadow are chosen from its type's sequence table
 stage counter, and which sequence kind plays at any moment (movement, firing, fear, water, idling,
 dying). The fear rules and the attack state (claims 11, 15 and 16) are infantry behaviour kept here
 for now because they choose sequences; they are expected to move to a future infantry-behaviour
-spec. The infantry scatter from damage has already moved: which scatter requests a hit sends, and
+spec. S-0315 lists every trigger of fear and gives its effects in combat. The infantry scatter from damage has already moved: which scatter requests a hit sends, and
 whether an infantry unit acts on them, are S-0208's (claims 15 and 11). This spec keeps the
 scatters of its idle actions and of its flee rule (claims 14 and 15).
 
@@ -37,12 +37,13 @@ used by this spec only:
   first ⌊L/2⌋ image frames are body image frames, the second half are their shadows in the same
   order.
 - **Sequence kind:** one of 42 named roles a run of image frames can play. Our names, with the
-  import key of each in the Import mapping: *stand*, *guard*, *prone*, *walk*, *fire-standing*,
+  import key of each in the Import mapping: *stand*, guard, *prone*, *walk*, *fire-standing*,
   *go-prone*, *crawl*, *get-up*, *fire-prone*, *idle-a*, *idle-b*, *die-1* to *die-5*, *tread*,
   *swim*, *wet-idle-a*, *wet-idle-b*, *wet-die-1*, *wet-die-2*, *wet-fire*, *hover*, *fly*,
   *tumble*, *fire-airborne*, *deploy*, *deployed*, *deployed-fire*, *deployed-idle*, *undeploy*,
   *cheer*, *parachute*, *air-death-start*, *air-death-fall*, *air-death-end*, *panic*, *shovel*,
-  *carry*, *secondary-fire*, *secondary-fire-prone*. The **deploy kinds** are *deploy*, *deployed*,
+  *carry*, *secondary-fire*, *secondary-fire-prone*. The kind guard is written in roman, because the glossary reserves
+  italics for the behaviour of that name. The **deploy kinds** are *deploy*, *deployed*,
   *deployed-fire* and *deployed-idle*. A unit is **deploying** while its current sequence is one of
   them.
 - **Sequence entry** (per type, per kind): start image frame *S*, frame count *C*, facing multiplier *M*
@@ -56,8 +57,8 @@ used by this spec only:
   interruptible can only be replaced by a forced start.
 - **Forced start:** a start request that ignores the interruptible attribute. The text says which
   requests are forced.
-- **Fear level:** an integer from 0 to 300 per infantry unit that rises when it is hurt and decays
-  over time (claims 15 and 16).
+- **Fear level:** an integer from 0 to 300 per infantry unit that rises when it is hurt (and in the
+  other cases S-0315 claim 1 lists) and decays over time (claims 15 and 16).
 - **Prone state:** a yes/no state of each unit meaning "lying down". It begins when *go-prone*
   starts and ends when *get-up* or *deploy* starts.
 - **Land type:** the terrain category of a cell (clear, road, water, beach, rock and so on), which
@@ -89,26 +90,35 @@ used by this spec only:
 - **Attack state:** a yes/no state of each unit meaning "an attack is in progress". Claim 11 says
   when it begins (also when the firing request is turned down) and when it ends.
 - **Secondary weapon:** each infantry type has a primary and may have a secondary weapon. Which of
-  the two a unit uses against a target belongs to the combat specs. Here "firing its secondary
+  the two a unit uses against a target belongs to S-0308. Here "firing its secondary
   weapon" means that the weapon chosen for the current target is the secondary one.
 - **Behaviour processing that attempts the idle action:** a unit's current behaviour is
   processed from time to time, and in some cases the processing attempts the unit's idle action.
-  S-0215 owns the behaviours and says in which cases they attempt it: *guard* and *sticky* (S-0215
-  claims 24 and 25), *area guard* (claim 26) and *hunt* (claim 27). No other behaviour attempts it.
+  S-0215 owns the behaviours and says in which cases their processing attempts it:
+  - *guard* and *sticky* (S-0215 claims 24 and 25), when the unit had no target at the start of
+    the processing and no charge target was made.
+  - *area guard* (S-0215 claim 26), when the leash and search table leaves the unit with nothing to
+    search or engage, or its search found nothing.
+  - *hunt* (S-0215 claim 27), when the unit has no target after the search, or its type has the
+    stupid-hunt flag. A hunting unit that finds nothing in a skirmish therefore idles in place.
+
+  In each case a deployer rule that S-0215 gives for the behaviour (S-0215 claim 31), and the rules it
+  gives only for the original's computer player, take precedence and make no attempt. No other
+  behaviour attempts it.
   Claim 14 only says what an attempt does. The *guard* behaviour is not to be confused with the
-  *guard* sequence kind, which no stock behaviour starts (claim 20).
+  sequence kind guard, which no stock behaviour starts (claim 20).
 - **Selected:** the unit is in the local player's current selection (picked with the mouse or a
   hotkey). Here it only matters for the idle comment of claim 14, which a selected unit does not
   make.
 - **Crushable:** whether vehicles that crush can kill the unit by driving over it. Crushing belongs
-  to the movement and combat specs. This spec only says when deploying and undeploying change it.
+  to S-0210. This spec only says when deploying and undeploying change it.
 - **Veterancy ability:** a property a unit gains on reaching a veterancy rank, as listed for its
-  type in the rules data (the veterancy specs own which abilities exist and when they are gained).
+  type in the rules data (S-0311, claims 3 to 5, owns which abilities exist and when they are gained).
   The **fearless veterancy ability** is one of them.
 - **Fraidycat:** an infantry type flag (Import mapping) for civilians who run away instead of
   lying down: it never asks for *go-prone* and scatters when frightened.
 - **Cyborg:** an infantry type flag (Import mapping). A prone cyborg, and any cyborg killed by
-  damage that ignores defences, dies without a death sequence (claim 17), and a prone human-controlled cyborg does not get up when ordered to move (claim 15).
+  damage that ignores defences, dies without a death sequence (claim 17), and a prone cyborg whose owner is human-controlled does not get up when ordered to move (claim 15).
 - **Fearless:** an infantry type flag (Import mapping). Its units never lose fear over time, and
   damage raises their fear only in the fraidycat case of claim 16. A unit with the fearless
   veterancy ability is treated the same way when damage raises fear, but its fear still decays.
@@ -118,7 +128,7 @@ used by this spec only:
 - **Known attacker:** damage has a known attacker when it comes with the object that caused it (a
   unit or a structure), so that the hit unit knows where the attack came from. Damage that comes
   with no such object has no known attacker, whatever caused it. Which damage sources carry their
-  attacking object belongs to the combat specs. Here a known attacker decides which rows of the
+  attacking object belongs to S-0302 (Terms, claim 1). Here a known attacker decides which rows of the
   fear table of claim 16 apply. Which scatter requests a hit sends, with or without a known
   attacker, belongs to S-0208 (claim 15).
 - **Not human:** an infantry type flag (Import mapping) for animals and robots. It changes the death
@@ -132,10 +142,10 @@ used by this spec only:
   unless its replacement effect applies, and the other kinds spawn animations that other specs
   describe.
 - **Damage that ignores defences:** damage delivered with a marker that tells the target to
-  disregard its defences. Which damage carries the marker belongs to the combat specs. This spec
+  disregard its defences. Which damage carries the marker belongs to S-0302 (claims 1 and 9). This spec
   uses it only for the cyborg case of claim 17.
 - **Crash flag:** a unit type flag (Import mapping) for types that crash rather than vanish when
-  they die in the air. What a crash does belongs to the jumpjet locomotor's spec. Here it only
+  they die in the air. What a crash does belongs to S-0312 (claim 16) and the jumpjet locomotor's spec. Here it only
   decides, in claim 17, whether a killed unit that shows no death sequence is removed at once.
 - **Enslaved to a master:** the unit belongs to a master unit that controls it, as harvesting
   slaves do for their master. The mechanics belong to the economy specs.
@@ -167,7 +177,7 @@ used by this spec only:
    the groups lie *M* image frames apart. The entry used is that of the current sequence, or of
    *tread* when the current sequence is *none* and the unit stands on a water cell (beach does not
    count here, `quirks.tread_default_water_only`) and not on a bridge deck, or else of *stand*.
-   - Backing: `measurable` (scenario M2)
+   - Backing: `measurable` (scenarios M2 and, for the *tread* fallback, M5(b))
    - Confidence: high
 
 3. **Facing groups.** Each facing belongs to one of eight groups. The group depends only on which
@@ -194,7 +204,7 @@ used by this spec only:
    than a start. It applies only to the two secondary-fire kinds, whose delay is 1 (T1), so after a
    reset on tick *t* the stage is 0 after the updates of tick *t*, 1 after those of tick *t* + 1,
    and it grows by one per tick from there.
-   - Backing: `measurable` (scenario M3)
+   - Backing: `measurable` (scenarios M3, and M8(b) for the airstrike reset)
    - Confidence: high
 
 5. **Stage delays.** Each kind has an engine base delay *b* (Constants, table T1). For *idle-a*,
@@ -250,7 +260,7 @@ used by this spec only:
    cannot crawl asks for *go-prone*. When the record changes, the type's enter-water sound plays
    (dry to wet) or its leave-water sound (wet to dry), at the unit's position. A freshly created
    unit has no record yet, so its first request plays no sound.
-   - Backing: `measurable` (scenarios M1, M5, M6, M17)
+   - Backing: `measurable` (scenarios M1, M5 with M5(b) for a fresh unit's first request, M6, M17)
    - Confidence: high
 
 8. **Looping and completion.** A sequence is **complete** once its stage has reached *C*.
@@ -273,8 +283,10 @@ used by this spec only:
    *parachute* and *shovel*) never changes the facing, whatever its entry declares. Entries without a
    declared direction never change the facing. A one-facing sequence (*M* = 0) with a declared
    direction thus leaves the unit facing the way its image frames showed it.
-   - Backing: `measurable` (scenario M7, part (a) for the snap and part (b) for two of the kinds
-     that never snap, *deploy* and *undeploy*)
+   - Backing: `measurable` (scenario M7: part (a) for the snap, part (b) for *deploy* and
+     *undeploy*, part (c) for *parachute* and *shovel*); `unmeasured` (that the die kinds and the
+     air-death kinds never snap: a die kind removes the unit on completion, so no facing is left to
+     observe, and the air-death kinds cannot be started by a scenario, claim 21)
    - Confidence: high
 
 10. **Movement picks the moving and resting kinds.** On every tick:
@@ -286,8 +298,10 @@ used by this spec only:
 
     These requests are not forced. The substitutions of claim 7 then turn *stand* into *tread* on
     wet cells, *walk* into *swim*, and so on.
-    - Backing: `measurable` (scenarios M5, M17(c))
-    - Confidence: high
+    - Backing: `measurable` (scenarios M5, M17(c)); `unmeasured` (the sentence that a jumpjet in
+      the attack state asks for nothing: no scenario is known that reliably holds a jumpjet in the
+      attack state while it is moving now, so that sentence stands on the original's rule as read)
+    - Confidence: high (medium for that sentence)
 
 11. **Firing.** On a tick on which an infantry unit has a target, is not in the attack state and
     its weapon is ready to fire, it enters the attack state, its body facing is set at once (no
@@ -324,7 +338,7 @@ used by this spec only:
     With *F* = 0 the shot leaves on the tick the firing kind starts.
 
     **End of the attack state**, besides the case above: on a tick that begins with a current
-    sequence whose stage delay is 0 (only *stand* and *guard* have one), in which case the unit also
+    sequence whose stage delay is 0 (only *stand* and guard have one), in which case the unit also
     asks (not forced) for *stand*; when the unit has no target; when its target changes; and when a
     completed *secondary-fire* or *secondary-fire-prone* is repeated for an airstrike (State and
     ordering). When a firing kind completes and its follow-up (State and ordering) is *stand*, whose
@@ -338,11 +352,13 @@ used by this spec only:
     first of those ticks the weapon fires if it is ready, and on any of them on which it is not
     ready the attack state ends (shot rule). This repeat shot therefore happens at most once per
     start of *prone*, provided a shot leaves the weapon not ready on the following tick (firing
-    cycle, planned S-0301).
+    cycle, S-0301).
 
-    Shot timing beyond this belongs to the firing-cycle spec (planned S-0301). Firing kinds are
+    Shot timing beyond this belongs to the firing-cycle spec (S-0301). Firing kinds are
     interruptible.
-    - Backing: `measurable` (scenario M8)
+    - Backing: `measurable` (scenario M8: part (a) for the shot timing, the facing snap, fire
+      frames 0 and *C* and the prone repeat shot; part (b) for the airstrike reset; part (c) for
+      the shot during *go-prone*; part (d) for the end of the attack state on a change of target)
     - Confidence: high (the kind choice, the fire-frame rule, the facing snap), medium (the end
       conditions of the attack state and the prone repeat shot)
 
@@ -361,11 +377,14 @@ used by this spec only:
     - Confidence: medium
 
 14. **Idle actions.** Each infantry unit has an idle timer. An infantry unit attempts an idle action
-    whenever a processing of its current behaviour attempts it (Terms): *guard*, *sticky*, *area
-    guard* and *hunt*, in the cases S-0215 gives (claims 24 to 27). The attempt goes ahead only if
+    whenever a processing of its current behaviour attempts it (Terms). The triggers are *guard*
+    and *sticky* with no target (S-0215 claims 24 and 25), *area guard* in the cases of S-0215
+    claim 26, and *hunt* without a target, or with the stupid-hunt flag (S-0215 claim 27). S-0215
+    claim 27 is the one case that is not a resting behaviour: a unit that hunts and finds no target stays in
+    *hunt* and attempts the idle action at every processing, like a resting one. The attempt goes ahead only if
     all of these hold: the idle
     timer has run out; the unit has no movement in progress; it is not prone; it is not in the
-    attack state; and its current sequence is *stand*, *guard* or *tread*. A newly created unit's
+    attack state; and its current sequence is *stand*, guard or *tread*. A newly created unit's
     idle timer has already run out, so its first attempt that meets the other conditions goes
     ahead (medium confidence).
 
@@ -375,11 +394,20 @@ used by this spec only:
 
     | Unit | Effect | Draws, in stream order |
     |---|---|---|
-    | A fraidycat whose fear level is above 50 and whose owner is not human-controlled | It scatters, and nothing else happens | The timer draw only |
+    | A fraidycat whose fear level is above 50 and whose owner is not human-controlled (see below) | It scatters, and nothing else happens | The timer draw only |
     | The hard-coded "cow" type (see Import mapping) | The outcome of *r* in the table below, except that when *e* < 5 it is the outcome of *r* = 8, whatever *r* was (`quirks.cow_idle`) | The timer draw, *r*, *e*, then δ when the outcome is a turn |
     | Any other unit | The outcome of *r* in the table below | The timer draw, *r*, then δ when the outcome is a turn |
 
     *r* and *e* are integers, each drawn uniformly from 0 to 10 inclusive.
+
+    **Owners that are not human-controlled.** The original applies the first row, and the scatter of
+    the outcome *r* = 8, to units whose owner is not human-controlled. In our engine an AI house
+    counts as human-controlled (glossary *AI house*, decision of the project lead, 2026-10-09), so
+    a fraidycat of an AI house takes neither rule: it takes the third row, and on *r* = 8 it
+    turns without scattering, as one of a human-controlled house does. The neutral house and the
+    special house are not AI houses and keep the original's rule (decision of the project lead,
+    2026-10-10): a fraidycat of either takes the rows above as written. The cow's scatter is a
+    separate rule of its own (`quirks.cow_idle`) and holds for every owner.
 
     | *r* | Outcome |
     |---|---|
@@ -406,7 +434,7 @@ used by this spec only:
       named are the only ones whose processing attempts an idle action)
 
 15. **Fear selects prone, get-up and panic.** Write *f* for a unit's fear level at the start of a
-    tick and *f*′ for its level once that tick's decay has applied: *f*′ = *f* − 1 when *f* > 0 and
+    tick and *f*′ for that start-of-tick level once that tick's decay has applied to it: *f*′ = *f* − 1 when *f* > 0 and
     the type is not fearless, otherwise *f*′ = *f*. On each tick the unit follows these rules:
 
     | Rule | Ticks on which it applies | Unit | Fear test | Result |
@@ -418,14 +446,32 @@ used by this spec only:
     All three rules test *f*′, the level after that tick's decay. So on a tick that begins with a
     fear level of 0, these rules make a unit neither lie down nor get up, and a fraidycat whose
     level is 51 at the start of a tick (and is not fearless) does not scatter on that tick, because
-    *f*′ = 50.
+    *f*′ = 50. A hit that changes the fear level during a tick (claim 16) changes neither *f* nor
+    *f*′ of that tick, so it first takes part in these rules on the next tick. Observable
+    consequence: for a unit that the lie-down rule applies to, whose fear level of 0 a hit sets to
+    100, *go-prone* is asked for on the tick after the hit, not on the tick of the hit, and *get-up*
+    51 ticks after the tick of the hit, not 50 (scenario M6(a) tests the *get-up* time).
 
     *go-prone* is turned down for a type that cannot crawl (claim 6), so such types never lie down.
     Walking with a fear level above 199 shows *panic* (claim 7). A prone unit whose owner is
     human-controlled asks (not forced) for *get-up* when it is given a movement order, unless its
     type is a fraidycat or a cyborg. A prone unit of a computer-controlled owner keeps crawling.
-    - Backing: `measurable` (scenario M6)
-    - Confidence: high
+
+    **Owners that are not human-controlled.** The table and the get-up rule above give the original's
+    rule for each owner kind. In our engine an AI house counts as human-controlled (glossary *AI
+    house*, decision of the project lead, 2026-10-09), so its units follow the human-controlled
+    wording: the lie-down rule waits for them to be at rest, and a move order makes a prone one
+    get up. The neutral house and the special house keep the original's rule for owners that are
+    not human-controlled (decision of the project lead, 2026-10-10): their units lie down whether
+    or not they are moving, and a prone one keeps crawling when it is ordered to move.
+    - Backing: `measurable` (scenario M6, with M4 for the get-up on a move order of a
+      human-controlled owner and M6(g) for the lie-down timing of a human-controlled owner),
+      and `unmeasured` (the half of the get-up rule that makes a prone unit of an owner that is
+      not human-controlled keep crawling on a move order, and the fraidycat exception of the same
+      rule: a move order for such a unit comes only from the original's computer-player scripts,
+      which no scenario can drive, and a fraidycat never lies down in stock play, so those two
+      parts stand on the original's rule as read)
+    - Confidence: high (medium for those two parts)
 
 16. **How damage raises fear.** When a living infantry unit takes damage and survives it, its new
     fear level is given by this table. A unit is *fearless* here when its type is fearless or it
@@ -447,8 +493,8 @@ used by this spec only:
     (`quirks.fraidycat_fear_ignores_fearless`). Because a fearless type's fear never decays
     (claim 15), a fraidycat whose type is fearless keeps a fear level of 300 for good after its
     first hit by a known attacker: it shows *panic* whenever it walks, and it scatters by the flee
-    rule of claim 15 and, when its owner is not human-controlled, at every idle attempt that goes
-    ahead (claim 14). A fraidycat that is fearless only through the veterancy ability decays from
+    rule of claim 15 and, when its owner is not human-controlled (in our engine, the neutral or
+    special house only, claim 14), at every idle attempt that goes ahead (claim 14). A fraidycat that is fearless only through the veterancy ability decays from
     300 like any other unit.
 
     The fear mechanics stay in this spec for now because they choose sequences. They are expected
@@ -487,14 +533,22 @@ used by this spec only:
     under a parachute. A unit of any other type that rows 1 to 3 do not catch, killed while parachuting, has death
     kind 3 (below), so row 8 applies and it is removed at once.
 
-    For a type whose *die-1* or *die-2* entry has no image frames, that is bad data, and our engine
-    does not reproduce the original here (a *departure*, glossary): when such a death request is
-    turned down because the entry has *C* = 0, and the cyborg case below does not apply, the unit is
-    treated as if the kind that would have resulted (after the substitutions of claim 7, so
-    *wet-die-1* or *wet-die-2* on a wet cell) had completed on the tick of its death, with the
-    corpse or removal that completion gives (below). The importer warns
-    about any infantry type whose *die-1* or *die-2* entry has no image frames. A falling
-    parachutist of a type marked "not human" is not bad data, and is not covered by this departure.
+    **A death request turned down because the entry has no image frames**
+    (`quirks.refused_death_keeps_unit`, default: on). For a type whose *die-1* or *die-2* entry has
+    *C* = 0, a death request for that kind is turned down by row 1 of claim 6, which is judged
+    before row 2. By default the death handling then leaves the unit in play with its current
+    sequence and shows no death sequence, exactly as in the falling-parachutist case above. What
+    becomes of it afterwards is the same open question (scenario M10(b) records it). Off: when row
+    1 turns the death request down, whatever the unit's other state, and the cyborg case below does
+    not apply, the unit is treated as if the kind that would have resulted (after the
+    substitutions of claim 7, so *wet-die-1* or *wet-die-2* on a wet cell) had completed on the
+    tick of its death, with the corpse or removal that completion gives (below). The importer
+    warns about any infantry type whose *die-1* or *die-2* entry has no image frames, because the
+    original loses the death silently. The scope is exactly row 1. A falling parachutist of a type
+    marked "not human" whose *die-1* entry has image frames is turned down by row 2 only, and
+    keeps the original's behaviour whatever the switch says. If that type's *die-1* entry has
+    *C* = 0, row 1 applies first, so the switch decides: on, the unit stays in play while it
+    falls; off, it is removed even though it is falling.
 
     The **death kind** *w* is 5 when the killer is a laser-fence building, otherwise 3 when the
     unit's current sequence is *parachute*, and otherwise the infantry-death kind of the killing
@@ -513,14 +567,18 @@ used by this spec only:
     death sequence is not interruptible. When *die-1* to *die-5* complete,
     a corpse animation is left at the unit's position and the unit is removed on the same tick. The
     corpse comes from the type's own corpse list when that list is not empty. Otherwise it comes
-    from the general corpse list, unless the type is marked "not human", in which case there is no
-    corpse. The pick takes one draw from the scenario random stream, read as an unsigned 32-bit
+    from the general corpse list (for a list left over from an earlier game, see Import mapping),
+    unless the type is marked "not human", in which case there is no corpse. The pick takes one draw from the scenario random stream, read as an unsigned 32-bit
     number and reduced modulo the list length. When *wet-die-1*, *wet-die-2* or *air-death-end*
     complete, the unit is removed with no corpse. Because of the water case above, a wet death
     sequence may in practice be seen only on beach cells.
-    - Backing: `measurable` (scenario M10), except the cyborg paragraph, which is `unmeasured`:
-      no stock source of damage that ignores defences has been identified for a scenario (combat
-      specs).
+    - Backing: `measurable` (scenario M10: part (a) for the table, the corpse pick and the falling
+      paratroopers, part (b) for the switch's default, part (c) for the removal of a cyborg killed by
+      damage that ignores defences); `unmeasured` (row 1, the water case, and the sentence of the cyborg paragraph that
+      depends on its per-object condition: that condition is not identified, so no scenario can
+      set it up, and M10 only records the water-cell outcome to help identify it; and a general
+      corpse list left over from an earlier game, Import mapping: the original's result is
+      unspecified, and our engine's result is a design choice with nothing to compare it with)
     - Confidence: high (the die-1/die-2 choice, the completion behaviour, the corpse pick, the
       precedence of the laser-fence replacement, the refusal of a falling parachutist's death
       request), medium (the order of the special cases, the extra animations for kind 8, the
@@ -557,15 +615,16 @@ used by this spec only:
     bridge cell at or above the deck, the deck counts as the ground for this generic shadow, under
     a further condition on the neighbouring cells that is not specified here. No game option or
     data turns the body-sprite shadow off for all units.
-    - Backing: `measurable` (scenario M11)
+    - Backing: `measurable` (scenario M11); `unmeasured` (the neighbouring-cell condition of the
+      case above a bridge deck: it is not identified, so no scenario can set it up)
     - Confidence: high (on the ground and on a bridge deck), medium (the generic shadow and its
       image frame number, and that nothing turns the body-sprite shadow off for all units), low
       (the case above a bridge deck)
 
-20. **Unused kinds.** The *guard*, *tumble* and *deployed-idle* kinds are read from the art
+20. **Unused kinds.** The kinds guard, *tumble* and *deployed-idle* are read from the art
     (Import mapping), but no stock behaviour ever starts any of the three. Their entries therefore
-    never show. The *guard* conditions of claims 11 and 14 apply only if a mechanic of another
-    spec starts *guard*.
+    never show. The guard conditions of claims 11 and 14 apply only if a mechanic of another
+    spec starts guard.
     - Backing: `measurable` (scenario M16)
     - Confidence: medium
 
@@ -892,7 +951,7 @@ completion tick, also when the follow-up replaces that kind on the same tick.
   ends the attack state at the start of a tick, so a prone unit stays in the attack state after
   *fire-prone* completes. It fires again, with no firing sequence, when the stage of *prone* equals the
   fire frame while the weapon is ready. This can happen at most once per start of *prone*, provided
-  a shot leaves the weapon not ready on the following tick (planned S-0301): the stage keeps
+  a shot leaves the weapon not ready on the following tick (S-0301): the stage keeps
   growing while *prone* loops, and on the later ticks of the same stage value the weapon is not
   ready, which ends the attack state (claim 11). Off: end the attack state whenever a
   firing kind completes.
@@ -905,12 +964,16 @@ completion tick, also when the follow-up replaces that kind on the same tick.
   Off: keep every pair whose sound is known.
 - *die-3* to *die-5* are never selected (claim 17). This is not a switch, because no rule refers
   to them.
-- **Departure: a death entry with no image frames** (no switch). In the original, a killed unit
-  whose *die-1* or *die-2* entry has *C* = 0 gets its death request turned down (claim 6, row 1)
-  and is not removed by the death handling; what becomes of it is not established. Our engine
-  treats the resulting death kind as completed on the tick of the death (claim 17 gives the
-  details and the cyborg exception), and the importer warns about the entry. This is bad data, so the glossary's rule for a
-  *departure* applies and no quirk switch reproduces the original.
+- **`quirks.refused_death_keeps_unit`** (default: on, claim 17). A killed unit whose *die-1* or
+  *die-2* entry has *C* = 0 gets its death request turned down (claim 6, row 1) and is left in
+  play by the death handling; what becomes of it is not established (Open questions). Off: the
+  death counts as completed on the tick of the death, with the corpse or removal that gives
+  (claim 17 gives the scope and the cyborg exception). The importer warns about the entry either
+  way.
+- **Departure: a general corpse list left over from an earlier game** (no switch, no importer
+  warning). The original's pick from it is *unspecified*. Our engine shows no corpse and takes the
+  pick's draw as usual (Import mapping). It gives no importer warning, because the cause lies in
+  an earlier game's data and not in any input of this game.
 - **Strength 0** (no switch). F5 divides by the strength. Our engine gives the original's result
   for a strength of 0 (*i* = 12) without the division, and the importer warns (Formulas F5).
 
@@ -977,7 +1040,13 @@ by S-0007; "the type's art section" below means that section. Kind names map to 
   the value an earlier game's layers left (glossary *rules database*, S-0006). The general corpse
   list also stays when no layer of the game gives `[General]` `DeadBodies`, but the animation
   types it names are those of the earlier game, which no longer exist, since animation types are
-  created anew at each game start too. A corpse picked from such a list is *unspecified* (glossary).
+  created anew at each game start too. A corpse picked from such a list is *unspecified* (glossary): the original's list names
+  animation types that no longer exist, and what a pick from it shows depends on unrelated memory
+  state. Our engine's result: a general corpse list that an earlier game gave and no layer of this
+  game gives counts as a list of its own length whose entries show nothing. A death that would
+  pick from it takes the pick's one draw as for any list of that length, so the scenario random
+  stream stays in step, and leaves no corpse; the unit is removed as usual. There is no importer
+  warning, because the cause is an earlier game's data and not an input of this game.
   Booleans and decimals follow S-0003. A sound or animation name is looked up as S-0003 says for
   references by name. For the sound keys, a missing value or a sound name that is not known leaves
   the field as it was. For the three list keys, a value that is absent or empty leaves the list as
@@ -1074,13 +1143,28 @@ whose …") means any stock type with that property; the property is a precondit
   by a walk delay that depends on speed, by idle delays other than T3, or by a delay that changes
   in mid-idle. The recorder reads tick numbers (common setup), so speed 0 can be added as a fourth
   run with the expected idle delay 5; it is optional. Runs: one per game speed.
-- **M4 (claim 6).** Order a soldier that is lying down to move. Expected: *get-up* plays to the end
-  (it is not interruptible) before any *walk* image frame appears. Falsified if the walk starts
-  mid-get-up. Runs: three.
-- **M5 (claims 7, 10).** Move an amphibious-destroyer soldier from land onto beach, then water, then
+- **M4 (claims 6, 15).**
+  - (a) Order a soldier of the human player that is lying down to move. Expected: *get-up* plays to
+    the end (it is not interruptible) before any *walk* image frame appears. Falsified if the walk
+    starts mid-get-up. Runs: three.
+  - (b) The cyborg exception. Order a crippled (prone) cyborg of the human player to move.
+    Expected: it never plays *get-up* (it keeps crawling, or shows *prone* if its *crawl* entry
+    has no image frames). Falsified by any *get-up* image frame. Runs: three.
+- **M5 (claims 2, 7, 10).**
+  - (a) Move an amphibious-destroyer soldier from land onto beach, then water, then
   back. Expected: *swim* image frames on beach and water, *tread* when stopped there, and the enter-water
   and leave-water sounds once per transition. Falsified if a beach cell shows *walk*, or a sound
   repeats without a transition. Runs: one round trip.
+  - (b) Fresh units. Place an amphibious-destroyer soldier on a water cell at the start of the game
+  and another on a beach cell. Record the sounds and the drawn image frame of each over the first
+  30 ticks, and, if the capture has one, the first drawn frame before the first update. Expected:
+  neither unit plays an enter-water or leave-water sound before it moves (a fresh unit's first
+  request plays none, claim 7). The first drawn frame, when it exists, is a *tread* image frame
+  on the water cell and a *stand* image frame on the beach cell (claim 2,
+  `quirks.tread_default_water_only`). Then order the water unit onto land: its leave-water sound
+  plays once, at that later transition. Falsified by a sound from a fresh unit before it moves,
+  or by a *stand* image frame on the water cell or a *tread* one on the beach cell in that first
+  frame. Runs: three units per cell kind.
 - **M6 (claims 15, 16; State and ordering).**
   - (a) Damage an idle soldier of a computer-controlled owner once with a weak attack from a known
     attacker. Expected: *go-prone* at once, then *prone* (with *crawl* while any move lasts: a move
@@ -1109,6 +1193,14 @@ whose …") means any stock type with that property; the property is a precondit
     *go-prone* starts on the tick that follows the last *get-up* image frame directly (no tick in
     between), or if more than one tick lies in between. Repeat until the second hit lands while
     *get-up* plays.
+  - (g) The lie-down timing of a human-controlled owner, under the conditions of M15(b) (every
+    hit from beyond the soldier's retaliation reach, so that no scatter or move to attack back
+    occurs). A soldier of the human player is given a move order of 2 to 4 cells, so that the move
+    ends within about 40 ticks (read from the capture), and is hit once from a known attacker 5
+    ticks after it starts. Expected: no *go-prone* image frame while it still has a destination or
+    movement in progress; *go-prone* starts after the move has ended if its fear level is still at
+    least 50 then, and not at all if it has decayed below 50. Falsified by *go-prone* during the
+    move. Runs: three.
   - Runs: three per case.
 - **M7 (claim 9).**
   - (a) The snap. Use an infantry type whose *idle-a* entry declares a direction. Watch an idle
@@ -1140,6 +1232,15 @@ whose …") means any stock type with that property; the property is a precondit
     group. A death kind is not used here: its completion removes the unit on the same tick, so no
     facing is left to observe. Runs: one per starting facing, with the test art and with the
     control art.
+  - (c) *parachute* and *shovel*. Test art gives the *parachute* entry, and in a second variant
+    the *shovel* entry of an infantry type that harvests, the declared direction of a compass point
+    at least two facing groups away from the unit's facing at the start (read from the first
+    capture), with *M* > 0. Paradrop one soldier (a test map whose trigger paradrops it) and log
+    the facing group on every tick of its fall and on landing; in the second variant let a
+    harvesting unit run several shovel loops and log its facing group on every tick. Expected: the
+    group never changes to the declared direction's group because of the sequence (the control
+    runs with the declared direction removed show the same groups). Falsified if the group jumps to
+    the declared direction on a *parachute* or *shovel* completion tick. Runs: three per variant.
 - **M8 (claim 11; State and ordering, the go-prone bullet).**
   - (a) Make a soldier attack a wall and log the image frames and its facing per tick from the
     start of *fire-standing*. Expected: the facing jumps to the target direction on the start
@@ -1148,7 +1249,10 @@ whose …") means any stock type with that property; the property is a precondit
     previous one completed. Repeat with a prone soldier (hit it first) whose weapon reloads
     quickly. Expected: an extra shot with no firing sequence when the *prone* stage reaches the
     prone fire frame. Falsified by any other delay, or if the facing turns gradually. Runs: ten
-    shots standing and ten prone.
+    shots standing and ten prone. Then repeat with test art that gives the standing fire frame 0,
+    and with test art that gives it the value of *C* of *fire-standing*. Expected: the shot leaves
+    on the tick the sequence starts, and on the tick it completes, respectively. Falsified by a
+    shot on any other tick. Runs: three per variant.
   - (b) The airstrike reset. Use an infantry type that can designate an airstrike, whose
     *secondary-fire* entry has *C* ≥ 4 and whose weapon's delay between shots is longer than *C*
     ticks (stock data, or test rules and art data that give one type these properties). Let it
@@ -1170,6 +1274,15 @@ whose …") means any stock type with that property; the property is a precondit
     frame is drawn before the shot, and the projectile leaves on the tick after *go-prone* starts
     (its stage 1). Falsified by a firing kind drawn first, or by a shot on any other tick. Runs:
     three runs in which the two events fall on the same tick.
+  - (d) The end of the attack state on a change of target. Use a soldier whose weapon fires again
+    in fewer ticks than the *fire-standing* entry has image frames. It attacks wall A; after its
+    shot and before its sequence completes, the human player orders it to attack wall B, which lies
+    in a clearly different direction. Variant: instead, wall A is destroyed by a trigger in that
+    interval and a new target comes within the soldier's reach a few ticks later, while the
+    sequence still runs. Expected: the body facing turns to the new target at once, within the
+    running sequence, and the stage of the sequence is not restarted (the same kind is requested
+    again and turned down). Falsified if the facing stays on the old direction until the sequence
+    completes. Runs: three per variant.
 - **M9 (claim 14).**
   - (a) Timer bounds and outcome ratios. Over 50 games, leave one soldier idle for 18000 ticks per game, and log the
     ticks between visible idle outcomes and the outcomes. Only some attempts can be seen: *r* = 0
@@ -1177,7 +1290,7 @@ whose …") means any stock type with that property; the property is a precondit
     turn in 8 once the facing is a multiple of 8192 (after the first visible turn). Of the
     attempts, 3/11 give *idle-a*, 3/11 *idle-b* and 4/11 × 7/8 a visible turn, so the visible
     outcomes come in the ratio 6 : 6 : 7. Invisible attempts,
-    and the rule that an attempt goes ahead only while *stand*, *guard* or *tread* is current, can
+    and the rule that an attempt goes ahead only while *stand*, guard or *tread* is current, can
     only lengthen the time between visible outcomes, so the distribution of *T* itself is left to
     F4. Falsified by two consecutive visible outcomes less than ⌊450·R⌋ ticks
     apart, or by a chi-square test of the pooled visible-outcome counts (from the first visible turn
@@ -1244,7 +1357,8 @@ whose …") means any stock type with that property; the property is a precondit
     *idle-b* image frames or turns of facing), never two visible outcomes less than ⌊450·R⌋ ticks
     apart. Falsified if no idle outcome appears in the 18000 ticks while the unit stays in *hunt*.
     Runs: three games.
-- **M10 (claim 17).** Kill soldiers standing on a land cell with warheads of infantry-death kinds
+- **M10 (claim 17).**
+  - (a) Kill soldiers standing on a land cell with warheads of infantry-death kinds
   1 and 2. Expected: *die-1* and *die-2*; the corpse appears and the unit disappears *C* ticks after
   the death starts. Kill a soldier the same way with a warhead of kind 9. Expected: either *die-2*
   followed by a corpse, or removal at once with no death sequence (the replacement effect of row 7,
@@ -1267,12 +1381,32 @@ whose …") means any stock type with that property; the property is a precondit
   result is only recorded: it has no expected value, because it is meant to settle the open
   condition of claim 17 (low confidence). Runs: three kills per case; the corpse pick is the only
   random draw.
+  - (b) The default of `quirks.refused_death_keeps_unit` (claim 17). Test art empties the *die-1* entry of
+    one infantry type (*C* = 0). Kill a unit of it on a land cell with a warhead of infantry-death
+    kind 1. In a second run, empty the *die-1* entry of the "not human" type used above and kill
+    one of its units while it falls under a parachute. Log the drawn image frames and whether the
+    unit is still in play (selectable or attackable) for 3000 ticks after the death, and whether the
+    game keeps ticking and answering input. Expected: no death image frame, and the unit still in
+    play after the death tick. What it does afterwards, whether it is ever removed and whether
+    the game stays responsive are recorded with no expected value, since they decide the
+    aftermath (Open questions). Falsified if the unit is removed on the
+    tick of its death or a death image frame appears. Runs: three kills per case.
+  - (c) A cyborg killed by damage that ignores defences (claim 17, cyborg paragraph). On a land cell,
+    a standing (not prone) soldier of a cyborg type without the crash flag carries a tag whose
+    trigger fires the action that destroys attached objects (S-0011 claim 27, scenario T9). Test
+    rules data sets the infantry-death kind of the demolition warhead of that action to 1. Control:
+    the same unit with test rules data that clears the cyborg flag. Expected: the cyborg is removed
+    on the tick of the damage with no *die-1* image frame and no corpse; the control shows *die-1*
+    and then leaves a corpse (or none, if its type has none). Falsified if the cyborg shows a
+    *die-1* image frame or leaves a corpse, or if the control shows no *die-1*. Runs: three per
+    case.
 - **M11 (claim 19).** Screenshot a soldier standing on the ground, one standing on a bridge deck,
   and a jumpjet soldier hovering. Expected: the two standing soldiers show their own shadow, image
-  frame *frame* + ⌊L/2⌋. The hovering one has the generic shadow on the ground below it and no
-  body-sprite shadow. Falsified if either standing soldier shows no body-sprite shadow or a
+  frame *frame* + ⌊L/2⌋. The hovering one has the generic shadow on the ground below it, drawn as
+  image frame 1 of the generic infantry-shadow sprite (matched against that sprite's image frames
+  in the capture), and no body-sprite shadow. Falsified if either standing soldier shows no body-sprite shadow or a
   shadow image frame other than *frame* + ⌊L/2⌋, or if the hovering one shows a body-sprite
-  shadow or no generic shadow. Runs: one screenshot per case.
+  shadow, no generic shadow or a generic shadow image frame other than 1. Runs: one screenshot per case.
 - **M12 (claim 12).** Use a jumpjet infantry type that does not allow jumpjet turning and whose
   weapon has a long delay between shots. Let a hovering unit of that type attack a vehicle that is
   driven in a circle around it, within range. Expected: between shots, the drawn facing group
@@ -1311,7 +1445,7 @@ whose …") means any stock type with that property; the property is a precondit
       rules apart, because they agree whenever the yellow ratio is at or above the red one.
     - Runs: three per health band in each configuration.
   - (b) No known attacker. First pick a damage source that carries no attacking object (which
-    sources do belongs to the combat specs; a radiation field is the expected candidate). Every
+    sources do belongs to S-0302, claim 1; a radiation field is the expected candidate). Every
     soldier in this part belongs to the human player, rests with no movement order, and every hit
     from a known attacker comes from beyond the soldier's retaliation reach (S-0215, Formulas F7),
     so that with default
@@ -1327,9 +1461,9 @@ whose …") means any stock type with that property; the property is a precondit
     on tick *h*₂, were treated like a hit from a known attacker, it would reset the fear level to
     100 and *get-up* would come on tick *h*₂ + 51 (choose *h*₂ − *h*₁ different from *i* so that
     the two outcomes differ). Runs: three, with single hits where the source allows them.
-- **M16 (claim 20).** Place one unit of each stock infantry type whose *guard*, *tumble* or
+- **M16 (claim 20).** Place one unit of each stock infantry type whose guard, *tumble* or
   *deployed-idle* entry differs from its *stand* entry. Play them through idling, deploying and
-  combat for 9000 ticks. Expected: no image frame that belongs only to *guard*, *tumble* or
+  combat for 9000 ticks. Expected: no image frame that belongs only to guard, *tumble* or
   *deployed-idle* ever appears. Falsified if one does. Runs: one game of 9000 ticks.
 - **M17 (claim 7, carrying and hovering; claim 10, the hover and fly split).**
   - (a) Carrying. Use an infantry type with a non-zero storage capacity that works enslaved to a
@@ -1380,7 +1514,13 @@ whose …") means any stock type with that property; the property is a precondit
     both sounds once per cycle; variant 2 plays only the first. Falsified if variant 2 plays the
     second sound, or variant 1 does not. No cue sits at cue frame 0, which a sequence started by
     the movement rule skips on its start tick (claim 18).
-  - Runs: as stated per part; parts (b) and (c) involve no random draw.
+  - (d) Unknown sound. Give the *walk* entry a cue value of three pairs at cue frames 1, 2 and 3,
+    whose first pair names a sound that does not exist and whose other two pairs name two
+    different stock sounds, the whole value within 31 characters. Make the unit walk for five walk
+    cycles. Expected: the second and third sounds play once per cycle (the unknown pair is
+    dropped and does not count towards the two); nothing plays at cue frame 1. Falsified if the
+    third sound does not play, or a sound plays at cue frame 1.
+  - Runs: as stated per part; parts (b) to (d) involve no random draw.
   - The reference to the sequence section is not tested separately: it is read by the same rule
     as the kind and cue values.
 
@@ -1392,10 +1532,10 @@ whose …") means any stock type with that property; the property is a precondit
 - The per-object condition of the water death case and of the cyborg case (claim 17), and the
   neighbouring-cell condition of the generic shadow over a bridge (claim 19), are not identified.
 - A killed unit whose death request claim 6 turns down while it falls under a parachute (a type
-  marked "not human", claim 17) is not removed by the death handling and keeps its *parachute*
-  sequence. What becomes of it afterwards (whether it lands and stands with no health, and whether
-  or when it is removed) is not established; scenario M10 records it. The same gap would apply to
-  a death request turned down because the entry has no image frames, but there our engine defines
-  the result (claim 17, departure).
+  marked "not human", claim 17), or because its entry has no image frames
+  (`quirks.refused_death_keeps_unit`), is not removed by the death handling and keeps its current
+  sequence (for a falling parachutist, *parachute*). What becomes of it afterwards (whether it
+  lands and stands with no health, and whether or when it is removed) is not established.
+  Scenario M10(b) records it.
 - Whether a unit whose type has a strength of 0 can take damage and survive, so that F5's
   strength-0 rule is ever reached, is not established. Stock data may never do this.
