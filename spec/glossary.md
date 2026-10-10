@@ -2,7 +2,7 @@
 id: glossary
 title: Glossary of shared terms
 topic: rules-import        # cross-cutting; every topic uses these terms
-revision: 10
+revision: 11
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -142,8 +142,8 @@ member is used. The ranking follows the order in which archives are mounted, so 
 session (S-0005). See S-0005.
 
 **armed.** Ambiguous on its own in a rule, because the original asks different questions in
-different rules: S-0209 calls a walker armed when the combined damage of its weapons is positive,
-and S-0214 calls an object armed when it has a weapon in the weapon slot it currently uses.
+different rules: S-0209 (Terms) has its own test for walkers and for vehicles, and S-0214 (Terms)
+calls an object armed when it has a weapon in the weapon slot it currently uses.
 S-0309 uses S-0214's sense, and S-0312 (Terms) a third sense for one formula. A spec
 that uses "armed" in a rule says in its Terms which test it means. In a measurement setup the word
 keeps its everyday sense: the object has a weapon.
@@ -844,9 +844,10 @@ Sprites and voxel models store palette indices, not colours. Each theater has it
 and theater palettes; the anim palette is the same in every theater. See S-0103.
 
 **parasite, victim.** A *parasite* is a unit that attaches itself to another unit, its *victim*,
-and harms it from there, for example by climbing inside a vehicle or grabbing a ship. S-0315
+and damages it while attached. How it attaches and where it rides are given by the specs that use
+the term: S-0209 (Terms) and S-0214 (Terms). S-0315
 (claims 6 and 7) owns how damage to the victim, which it calls the *host*, suppresses a
-parasite; the rest is left to the special-abilities specs. See S-0209 (Terms) and S-0214 (Terms).
+parasite; the rest is left to the special-abilities specs.
 
 **passability category.** A number from 0 to 7 that each cell carries, computed from its land type,
 overlay and contents: *open*, *crushable*, *wall-like*, *beach*, *water*, *partial obstacle*,
@@ -1425,10 +1426,10 @@ switch for the same behaviour:
   list the claims of other specs that depend on it.
 - `quirks.table_root_distance`: the table square root of S-0204 (claim 5, Formulas F1), owned by
   S-0204. Every distance taken with that table follows it. The specs that name it are S-0104,
-  S-0009 (revision 7, the farthest-sum rule for start positions), S-0207, S-0209 (claim 8, Formulas
+  S-0009 (the farthest-sum rule for start positions), S-0207, S-0209 (claim 8, Formulas
   F1), S-0212, S-0214 and S-0215, and S-0208, which notes that it changes nothing there. An earlier revision of S-0009
   proposed a switch of a different name for the same table; by decision of the project lead the two
-  are one switch under this name, and S-0009 revision 7 uses it. It is the only name
+  are one switch under this name, and S-0009 uses it. It is the only name
   of this switch.
 
 ## Import mapping
