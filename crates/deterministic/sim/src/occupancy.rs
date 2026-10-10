@@ -368,8 +368,9 @@ pub fn infantry_outcome(w: &World, mover: ObjectId, c: CellXY, reference: i32) -
         .max()
         .unwrap_or(Outcome::Clear);
     // spec: S-0209 claim 4 (4a: the zero walker speed check applies outside the listed cases)
-    if let Some(class) = w.rules().unit(m.kind, m.type_index).and_then(|u| u.class)
-        && !passability::enterable_by_class(r, w, c, Some(class), MovementZone::Infantry, false)
+    if let Some(u) = w.rules().unit(m.kind, m.type_index)
+        && let Some(class) = u.class
+        && !passability::enterable_by_class(r, w, c, Some(class), u.zone, false)
         && obj_layer == Layer::Ground
     {
         return Outcome::Blocked;

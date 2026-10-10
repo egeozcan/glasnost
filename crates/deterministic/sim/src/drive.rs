@@ -468,7 +468,8 @@ fn begin_track(w: &mut World, id: ObjectId, u: &UnitRules) -> bool {
         ob.path.blocked_since = None;
     }
     update_claims(w, id);
-    if crush && occupancy::is_crusher(w, id) {
+    // spec: S-0210 claim 7 (a crusher warns the infantry of the first cell each time it begins a track, crush mode or not)
+    if occupancy::is_crusher(w, id) {
         crate::crush::warn_ahead(w, id, first);
     }
     if last_step && let Some(hp) = path::heading_point(w, id) {

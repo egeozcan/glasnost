@@ -600,8 +600,13 @@ impl SimRules {
             player_return_fire: g.player_return_fire.unwrap_or(false),
             // spec: S-0210 Constants (player-auto-crush rule absent: off)
             player_auto_crush: g.player_auto_crush.unwrap_or(false),
-            // spec: S-0210 F2 (crush range absent: 384 leptons)
-            crush_range: cells(&g.crush_range, 384),
+            // spec: S-0210 F2 (crush range absent, or exactly −1, which counts as no value: 384 leptons)
+            crush_range: cells(
+                &g.crush_range
+                    .clone()
+                    .filter(|d| !d.value(mode).eq_num(F64::from_i64(-1, mode))),
+                384,
+            ),
             // spec: S-0206 Import mapping (GuardAreaTargetingDelay absent: 36 ticks)
             guard_area_targeting_delay: g.guard_area_targeting_delay.unwrap_or(36),
             // spec: S-0215 Constants (normal targeting delay absent: 27 ticks)
