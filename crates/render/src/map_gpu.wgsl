@@ -27,7 +27,7 @@ struct Instance {
     @location(1) place: vec4<i32>,
     // Depth image atlas x, y, layer (0xFFFFFFFF: none), flags.
     @location(2) depth: vec4<u32>,
-    // Palette row.
+    // Palette row; 1 in y for a tile diamond (no transparent index).
     @location(3) paint: vec4<u32>,
 };
 
@@ -70,6 +70,24 @@ fn quantise(v: i32) -> i32 {
     return (v / 3) * 3;
 }
 
+// Whether pixel (c, r) of a 60 × 29 box is one of a tile diamond's 900
+// pixels (S-0010 Formulas, Diamond rows).
+fn in_diamond(c: i32, r: i32) -> bool {
+    if r < 0 || r > 28 {
+        return false;
+    }
+    var f: i32;
+    var n: i32;
+    if r <= 14 {
+        f = 28 - 2 * r;
+        n = 4 * (r + 1);
+    } else {
+        f = 2 * (r - 14);
+        n = 4 * (29 - r);
+    }
+    return c >= f && c < f + n;
+}
+
 struct Fragment {
     @location(0) color: vec4<f32>,
     @builtin(frag_depth) depth: f32,
@@ -81,9 +99,10 @@ fn fs_main(in: Varyings) -> Fragment {
     let top_left = in.place.xy - view.origin;
     let local = px - top_left;
     let index = textureLoad(atlas, vec2<i32>(in.image.xy) + local, i32(in.image.z), 0).r;
-    if index == 0u {
+    if index == 0u && !(in.paint.y == 1u && in_diamond(local.x, local.y)) {
         discard;
     }
+
     let flags = in.depth.w;
     let kind = flags & 3u;
     let height = i32(in.image.w >> 16u);

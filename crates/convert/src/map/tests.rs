@@ -1,7 +1,7 @@
 //! Tests of the map decoder on synthetic maps.
 
 use glasnost_ini::{Document, Quirks};
-use glasnost_map::{CellXY, Fill, NO_OVERLAY, NO_TILE, Theater};
+use glasnost_map::{CellXY, Fill, ListKind, NO_OVERLAY, NO_TILE, Theater};
 
 use super::synth::{MapText, Record, overlay_stream, record_bytes};
 use super::*;
@@ -241,21 +241,157 @@ fn cell_tags() {
     assert_eq!(d.map.cell_tags.len(), 1);
 }
 
-/// Q-0010 provisional object layout.
+/// spec: S-0009 claim 35 (field layout by kind)
 #[test]
-fn objects() {
+fn claim_35_field_layout() {
     let d = decode_text(&format!(
-        "{BASE}[Units]\n0=Neutral,TANKX,256,3,9,64,Guard\n[Infantry]\n0=Neutral,MANX,128,4,9,2,Guard,32\n\
-         [Structures]\n0=Neutral,HUTX,256,5,8,0\n[Terrain]\n10003=TREEX\n[Smudge]\n0=CRATERX,4,10,0\n"
+        "{BASE}[Units]\n0=Neutral,TANKX,200,3,9,64,Guard,TAGA,1,2,1,5,1,0\n\
+         [Infantry]\n0=Neutral,MANX,128,4,9,2,Hunt,32,TAGB,7,8,1,0,1\n\
+         [Aircraft]\n0=Neutral,JETX,256,5,9,96,Sleep,TAGC,3,4,1,1\n\
+         [Structures]\n0=Neutral,HUTX,256,5,8,16,TAGD,1,0,0,2,3,UPA,UPB,UPC,1,1\n"
     ));
     let o = &d.map.objects;
-    assert_eq!(o.units[0].placed.facing, 64);
-    assert_eq!(o.units[0].placed.cell, CellXY::new(3, 9));
+    let u = &o.units[0].placed;
+    assert_eq!((u.health, u.cell, u.facing), (200, CellXY::new(3, 9), 64));
+    let uf = o.fields(ListKind::Vehicles, 0);
+    assert_eq!(uf.behaviour.as_deref(), Some(&b"Guard"[..]));
+    assert_eq!(uf.tag.as_deref(), Some(&b"TAGA"[..]));
+    assert_eq!(
+        (
+            uf.veterancy,
+            uf.group,
+            uf.bridge,
+            uf.follow,
+            uf.recruit_no,
+            uf.recruit_yes
+        ),
+        (
+            Some(1),
+            Some(2),
+            Some(true),
+            Some(5),
+            Some(true),
+            Some(false)
+        )
+    );
     assert_eq!(o.infantry[0].sub_cell, 2);
     assert_eq!(o.infantry[0].placed.facing, 32);
-    assert_eq!(o.structures[0].placed.type_name, b"HUTX");
+    let inf = o.fields(ListKind::Infantry, 0);
+    assert_eq!(inf.behaviour.as_deref(), Some(&b"Hunt"[..]));
+    assert_eq!(inf.tag.as_deref(), Some(&b"TAGB"[..]));
+    assert_eq!(
+        (inf.veterancy, inf.group, inf.bridge),
+        (Some(7), Some(8), Some(true))
+    );
+    let af = o.fields(ListKind::Aircraft, 0);
+    assert_eq!(o.aircraft[0].placed.facing, 96);
+    assert_eq!((af.recruit_no, af.recruit_yes), (Some(true), Some(true)));
+    let s = o.fields(ListKind::Buildings, 0);
+    assert_eq!(o.structures[0].placed.facing, 16);
+    assert_eq!(s.tag.as_deref(), Some(&b"TAGD"[..]));
+    assert_eq!(
+        (
+            s.ai_sell,
+            s.ai_rebuild,
+            s.switched_on,
+            s.upgrade_count,
+            s.searchlight
+        ),
+        (Some(true), Some(false), Some(false), Some(2), Some(3))
+    );
+    assert_eq!(s.upgrades[2].as_deref(), Some(&b"UPC"[..]));
+    assert_eq!((s.ai_repair, s.nominal), (Some(true), Some(true)));
+    assert!(d.warnings.is_empty(), "{:?}", d.warnings);
+}
+
+/// spec: S-0009 claim 35 (below format version 4: one cell field, base 128, later fields shifted)
+#[test]
+fn claim_35_legacy_cell_field() {
+    let d = decode_text(
+        "[Map]\nSize=0,0,10,6\nLocalSize=1,2,8,3\n[Units]\n0=Neutral,TANKX,256,1283,64,Guard\n\
+         [Terrain]\n1283=TREEX\n",
+    );
+    let o = &d.map.objects;
+    // 1283 = 10·128 + 3.
+    assert_eq!(o.units[0].placed.cell, CellXY::new(3, 10));
+    assert_eq!(o.units[0].placed.facing, 64);
+    assert_eq!(
+        o.fields(ListKind::Vehicles, 0).behaviour.as_deref(),
+        Some(&b"Guard"[..])
+    );
     assert_eq!(o.terrain[0].cell, CellXY::new(3, 10));
-    assert_eq!(o.smudges[0].cell, CellXY::new(4, 10));
+}
+
+/// spec: S-0009 claim 34 (empty fields collapse, lenient integers, 127 characters, spaces kept)
+#[test]
+fn claim_34_splitting() {
+    let d = decode_text(&format!(
+        "{BASE}[Units]\n0=Neutral,TANKX,256,,3,9x,  +64z,Guard\n1=Neutral, TANKX,256,3,9,0\n"
+    ));
+    let o = &d.map.objects;
+    // "A,B,256,,3,…" reads 3 as the cell x; "9x" reads 9; "  +64z" reads 64.
+    assert_eq!(o.units[0].placed.cell, CellXY::new(3, 9));
+    assert_eq!(o.units[0].placed.facing, 64);
+    // Spaces belong to the field: the type is " TANKX".
+    assert_eq!(o.units[1].placed.type_name, b" TANKX");
+    // Switch off: an empty field keeps its place, and an empty required field makes the entry short.
+    let fields = split_entry(b"A,B,,4", false);
+    assert_eq!(fields.len(), 4);
+    assert_eq!(fields[2], None);
+    assert_eq!(split_entry(b"A,B,,4", true).len(), 3);
+    // Only the first 127 characters are read.
+    let long = format!("A,B,{}", "1".repeat(200));
+    let fields = split_entry(long.as_bytes(), true);
+    assert_eq!(fields[2].as_ref().map(Vec::len), Some(123));
+}
+
+/// spec: S-0009 claims 36 and 38 (short entries kept and marked; non-legal cells warned)
+#[test]
+fn claims_36_38_short_and_non_legal() {
+    let d = decode_text(&format!(
+        "{BASE}[Units]\n0=Neutral,TANKX,256,3,9\n1=Neutral\n2=Neutral,TANKX,256,1,1,0\n"
+    ));
+    let o = &d.map.objects;
+    assert_eq!(
+        o.units.len(),
+        2,
+        "an entry without a type field is not kept"
+    );
+    assert!(o.fields(ListKind::Vehicles, 0).short);
+    assert!(!o.fields(ListKind::Vehicles, 1).short);
+    assert_eq!(o.units[1].placed.cell, CellXY::new(1, 1));
+    assert_eq!(d.warnings.len(), 2, "{:?}", d.warnings);
+}
+
+/// spec: S-0009 claim 42 (terrain-object keys and values; smudge fields)
+#[test]
+fn claim_42_terrain_objects_and_smudges() {
+    let d = decode_text(&format!(
+        "{BASE}[Terrain]\n10003=TREEX\n10004=<None>\n10005=none\n9=TREEX\n\
+         [Smudge]\n0=CRATERX,4,10,0\n1=CRATERX,4,10,1\n2=CRATERX,5,10\n3=CRATERX,6\n4=CRATERX\n"
+    ));
+    let o = &d.map.objects;
+    assert_eq!(o.terrain.len(), 1);
+    assert_eq!(o.terrain[0].cell, CellXY::new(3, 10));
+    assert_eq!(
+        o.smudges.iter().map(|s| s.cell).collect::<Vec<_>>(),
+        vec![CellXY::new(4, 10), CellXY::new(5, 10)]
+    );
+    // The non-legal terrain cell (9, 0) and the smudge without y are warned.
+    assert_eq!(d.warnings.len(), 2, "{:?}", d.warnings);
+}
+
+/// spec: S-0009 claim 40 (an upgrade count above 3 is warned)
+#[test]
+fn claim_40_upgrade_count_warned() {
+    let d = decode_text(&format!(
+        "{BASE}[Structures]\n0=Neutral,HUTX,256,5,8,0,None,0,0,1,4\n"
+    ));
+    assert_eq!(
+        d.map.objects.fields(ListKind::Buildings, 0).upgrade_count,
+        Some(4)
+    );
+    assert_eq!(d.warnings.len(), 1, "{:?}", d.warnings);
 }
 
 /// Extreme sizes and positions neither overflow nor take long (S-0009

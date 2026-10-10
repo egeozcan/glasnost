@@ -704,6 +704,26 @@ mod tests {
         }
     }
 
+    // spec: S-0009 claim 44 (an off-map neighbour reads as a blank cell: level 0 in the cliff-back rule)
+    #[test]
+    fn claim_44_off_map_neighbour_is_blank() {
+        let cat = flat_catalogue();
+        let ov = no_overlay;
+        let mut r = rules(&cat, &ov);
+        r.cliff_back = 258; // acts as 2
+        let mut g = grid();
+        // (1, 8) lies on the edge: its neighbour (1, 7) is not a legal cell.
+        let c = CellXY::new(1, 8);
+        assert!(g.get(CellXY::new(1, 7)).is_none());
+        for (level, expected) in [(-3, land::CLEAR), (-4, land::ROCK)] {
+            if let Some(cell) = g.get_mut(c) {
+                cell.level = level;
+            }
+            recalc(&mut g, c, &r);
+            assert_eq!(g.get(c).map(|x| x.land), Some(expected), "level {level}");
+        }
+    }
+
     // spec: S-0010 claim 10 (ground smoothing: G inside a patch, L + m at its edge)
     #[test]
     fn ground_smoothing() {

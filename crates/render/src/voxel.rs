@@ -132,6 +132,10 @@ pub struct VoxelQuirks {
     /// `quirks.barrel_frame_zero` (claim 16): barrels drawn with a turret
     /// use HVA frame 0. Off: the turret's frame.
     pub barrel_frame_zero: bool,
+    /// `quirks.vpl_unloaded_rows_blank` (claim 38): rows the lighting table
+    /// file does not supply read as zero and a missing or truncated file
+    /// does not stop the game. Off: the importer rejects such a file.
+    pub vpl_unloaded_rows_blank: bool,
 }
 
 impl Default for VoxelQuirks {
@@ -155,6 +159,7 @@ impl Default for VoxelQuirks {
             building_turret_shift_eighths: true,
             barrel_elevation_quantised: true,
             barrel_frame_zero: true,
+            vpl_unloaded_rows_blank: true,
         }
     }
 }
@@ -860,7 +865,7 @@ pub fn shade_table(rot: &Mat34, mode: u8, quirks: &VoxelQuirks) -> [u8; 256] {
 /// itself.
 pub fn lit_colour(vpl: Option<&Vpl>, shade: u8, colour: u8) -> u8 {
     // spec: S-0105 claim 19
-    vpl.and_then(|v| v.get(shade, colour)).unwrap_or(colour)
+    vpl.map_or(colour, |v| v.get(shade, colour))
 }
 /// Normal mode 1: 16 directions (S-0105 Constants, normal direction tables).
 #[allow(clippy::excessive_precision)] // the spec's decimals, which identify each single exactly

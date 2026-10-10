@@ -11,8 +11,9 @@
 //! then the sub-tile, the height level and the ice-growth flag as single
 //! bytes (the layout `fmt::mappack::IsoTile` documents).
 //!
-//! The object lists have no spec (Q-0010); they are read by the provisional
-//! layout of Q-0010's workaround, after OpenRA's `ImportGen2MapCommand`.
+//! The object lists are split and read as S-0009 claims 34 to 36, 40 and 42
+//! say; the state each object starts in is the simulation's and the
+//! viewer's (claims 37 to 41, 43).
 
 use std::collections::BTreeMap;
 
@@ -24,7 +25,7 @@ use glasnost_map::geometry::{
     CELL_NUMBER_BASE, CELL_TAG_BASE_SWITCH_VERSION, LEGACY_CELL_TAG_BASE, decode_cell_number,
     wrap_coordinate,
 };
-use glasnost_map::objects::Placed;
+use glasnost_map::objects::{EntryFields, ListKind, Placed, UPGRADE_FIELDS};
 use glasnost_map::{
     Aircraft, Basic, CellGrid, CellXY, DEFAULT_HOME_WAYPOINT, Fill, Footprint, Header, Infantry,
     Lighting, LightingSet, Map, NO_OVERLAY, NO_TILE, Objects, Preview, Smudge, Structure,
@@ -45,6 +46,8 @@ pub struct MapQuirks {
     pub stale_fill_tiles: bool,
     /// `quirks.no_overlay_below_format_2` (claim 11).
     pub no_overlay_below_format_2: bool,
+    /// `quirks.object_empty_fields_collapse` (claim 34).
+    pub object_empty_fields_collapse: bool,
 }
 
 impl Default for MapQuirks {
@@ -55,6 +58,7 @@ impl Default for MapQuirks {
             absent_rect_is_zero: true,
             stale_fill_tiles: true,
             no_overlay_below_format_2: true,
+            object_empty_fields_collapse: true,
         }
     }
 }
@@ -213,7 +217,7 @@ impl Decoder<'_> {
         let preview = self.preview();
         let lighting = self.lighting();
         let basic = self.basic();
-        let objects = self.objects(&footprint);
+        let objects = self.objects(&footprint, format_version);
         let cell_tags = self.cell_tags(&footprint, format_version);
         for legacy in [
             &b"IsoMapPack"[..],
@@ -273,8 +277,8 @@ impl Decoder<'_> {
 
     /// The initial fill (S-0009 claim 6). Returns the number of draws a
     /// water fill takes from the scenario random stream. The draws' values
-    /// need that stream (a planned spec), so every visited cell gets the
-    /// base tile plus 0 until it exists.
+    /// are taken when a game loads (`glasnost_sim::load`, S-0202), so the
+    /// decoded map gives every visited cell the base tile plus 0.
     fn initial_fill(&mut self, cells: &mut CellGrid, level: i8, fill: Fill) -> u32 {
         let q = self.ctx.quirks;
         // spec: S-0009 claim 6 (quirks.stale_fill_tiles: the previous theater's base tiles, 0 before any)
@@ -302,7 +306,7 @@ impl Decoder<'_> {
             self.warn(
                 self.line_of(b"Map", b"Fill"),
                 format!(
-                    "water fill: {draws} cells take a draw over 0 … {} from the scenario random stream, which has no spec yet; they show the water base tile",
+                    "water fill: {draws} cells take a draw over 0 … {} from the scenario random stream (S-0202) when a game loads; the map as stored shows the water base tile",
                     WATER_VARIANTS - 1
                 ),
             );
@@ -738,100 +742,268 @@ impl Decoder<'_> {
         }
     }
 
-    /// The object lists (Q-0010: provisional layout).
-    fn objects(&mut self, footprint: &Footprint) -> Objects {
+    /// The object lists (S-0009 claims 34 to 36, 38, 40 to 42).
+    fn objects(&mut self, footprint: &Footprint, format_version: i32) -> Objects {
         let mut o = Objects::default();
-        // provisional (Q-0010): owner, type, health, x, y; facing 6th (infantry: 8th, sub-cell 6th)
-        for (name, kind) in [
-            (&b"Units"[..], 0u8),
-            (b"Infantry", 1),
-            (b"Aircraft", 2),
-            (b"Structures", 3),
+        let q = self.ctx.quirks;
+        // spec: S-0009 claim 35 (below format version 4 one cell field, decoded base 128)
+        let legacy = format_version < CELL_TAG_BASE_SWITCH_VERSION;
+        for kind in [
+            ListKind::Vehicles,
+            ListKind::Infantry,
+            ListKind::Aircraft,
+            ListKind::Buildings,
         ] {
+            let name: &[u8] = match kind {
+                ListKind::Vehicles => b"Units",
+                ListKind::Infantry => b"Infantry",
+                ListKind::Aircraft => b"Aircraft",
+                ListKind::Buildings => b"Structures",
+            };
             let Some(section) = self.doc.section(name) else {
                 continue;
             };
-            for (entry, winner) in section.list_positions() {
-                let fields: Vec<Vec<u8>> = winner
-                    .value
-                    .split(|&b| b == b',')
-                    .map(|f| value::text(f.trim_ascii_start(), usize::MAX).to_vec())
-                    .collect();
-                let int = |i: usize| fields.get(i).map(|f| value::decimal_integer(f));
-                let (Some(x), Some(y), Some(health)) = (int(3), int(4), int(2)) else {
-                    self.warn(
-                        Some(entry.line),
-                        format!(
-                            "[{}] {}: fewer than five values; the entry is skipped (Q-0010)",
-                            show(name),
-                            show(&entry.key)
-                        ),
-                    );
+            let entries: Vec<_> = section
+                .list_positions()
+                .map(|(e, w)| (e.key.clone(), e.line, w.value.clone()))
+                .collect();
+            for (key, line, value) in entries {
+                let fields = split_entry(&value, q.object_empty_fields_collapse);
+                let at = |f: usize| entry_field(&fields, f, legacy);
+                let (Some(owner), Some(type_name)) = (at(1), at(2)) else {
+                    // spec: S-0009 claim 36 (no owner or type field: no match, dropped silently, no creation draw)
                     continue;
                 };
-                let cell = CellXY::new(x, y);
-                if !footprint.is_legal(cell) {
+                // spec: S-0009 claim 35 (fields up to 6 required, up to 5 below format version 4)
+                let required = if legacy { 5 } else { 6 };
+                let short =
+                    fields.len() < required || fields[..required].iter().any(Option::is_none);
+                if short {
+                    // spec: S-0009 claim 36 (a short entry: dropped, a departure; the importer warns)
                     self.warn(
-                        Some(entry.line),
+                        Some(line),
                         format!(
-                            "[{}] {}: the cell is not legal",
+                            "[{}] {}: lacks a required field (S-0009 claim 36); our engine drops it",
                             show(name),
-                            show(&entry.key)
+                            show(&key)
                         ),
                     );
                 }
-                let facing_index = if kind == 1 { 7 } else { 5 }; // nocite: provisional layout (Q-0010)
+                let int = |f: usize| at(f).map(|v| value::decimal_integer(&v));
+                let flag = |f: usize| int(f).map(|v| v != 0);
+                let (x, y) = if legacy {
+                    // spec: S-0009 Formulas (object cell: below format version 4, x = n rem 128, y = n quo 128)
+                    decode_cell_number(int(4).unwrap_or(0), LEGACY_CELL_TAG_BASE)
+                } else {
+                    (int(4).unwrap_or(0), int(5).unwrap_or(0))
+                };
+                // spec: S-0009 Formulas (object cell: each coordinate wrapped modulo 65536)
+                let cell =
+                    CellXY::new(i32::from(wrap_coordinate(x)), i32::from(wrap_coordinate(y)));
+                if !short && !footprint.is_legal(cell) {
+                    // spec: S-0009 claim 38 (a non-legal cell: creation draw, dropped; the importer warns)
+                    self.warn(
+                        Some(line),
+                        format!(
+                            "[{}] {}: the cell is not legal (S-0009 claim 38); our engine drops the object",
+                            show(name),
+                            show(&key)
+                        ),
+                    );
+                }
+                let mut extra = EntryFields {
+                    short,
+                    ..Default::default()
+                };
+                // spec: S-0009 claim 35 (field layout by kind)
+                let facing = match kind {
+                    ListKind::Vehicles => {
+                        extra.behaviour = at(7);
+                        extra.tag = at(8);
+                        extra.veterancy = int(9);
+                        extra.group = int(10);
+                        extra.bridge = flag(11);
+                        extra.follow = int(12);
+                        extra.recruit_no = flag(13);
+                        extra.recruit_yes = flag(14);
+                        int(6)
+                    }
+                    ListKind::Aircraft => {
+                        extra.behaviour = at(7);
+                        extra.tag = at(8);
+                        extra.veterancy = int(9);
+                        extra.group = int(10);
+                        extra.recruit_no = flag(11);
+                        extra.recruit_yes = flag(12);
+                        int(6)
+                    }
+                    ListKind::Infantry => {
+                        extra.behaviour = at(7);
+                        extra.tag = at(9);
+                        extra.veterancy = int(10);
+                        extra.group = int(11);
+                        extra.bridge = flag(12);
+                        extra.recruit_no = flag(13);
+                        extra.recruit_yes = flag(14);
+                        // spec: S-0009 claim 39 (infantry: the facing value is field 8; absent faces 0)
+                        int(8)
+                    }
+                    ListKind::Buildings => {
+                        extra.tag = at(7);
+                        extra.ai_sell = flag(8);
+                        extra.ai_rebuild = flag(9);
+                        extra.switched_on = flag(10);
+                        extra.upgrade_count = int(11);
+                        extra.searchlight = int(12);
+                        extra.upgrades = [at(13), at(14), at(15)];
+                        extra.ai_repair = flag(16);
+                        extra.nominal = flag(17);
+                        if extra
+                            .upgrade_count
+                            .is_some_and(|c| c > UPGRADE_FIELDS as i32)
+                        {
+                            // spec: S-0009 claim 40 (a count above 3: unspecified, our engine uses 3; the importer warns)
+                            self.warn(
+                                Some(line),
+                                format!(
+                                    "[{}] {}: upgrade count above 3 (S-0009 claim 40); our engine uses 3",
+                                    show(name),
+                                    show(&key)
+                                ),
+                            );
+                        }
+                        int(6)
+                    }
+                };
                 let placed = Placed {
-                    key: entry.key.clone(),
-                    owner: fields.first().cloned().unwrap_or_default(),
-                    type_name: fields.get(1).cloned().unwrap_or_default(),
-                    health,
+                    key: key.clone(),
+                    owner,
+                    type_name,
+                    health: int(3).unwrap_or(0),
                     cell,
-                    facing: int(facing_index).unwrap_or(0),
-                    raw: fields.clone(),
+                    facing: facing.unwrap_or(0),
+                    raw: fields
+                        .iter()
+                        .map(|f| f.clone().unwrap_or_default())
+                        .collect(),
                 };
                 match kind {
-                    0 => o.units.push(Unit { placed }),
-                    1 => o.infantry.push(Infantry {
-                        sub_cell: int(5).unwrap_or(0), // nocite: provisional layout (Q-0010)
-                        placed,
-                    }),
-                    2 => o.aircraft.push(Aircraft { placed }),
-                    _ => o.structures.push(Structure { placed }),
+                    ListKind::Vehicles => {
+                        o.units.push(Unit { placed });
+                        o.unit_fields.push(extra);
+                    }
+                    ListKind::Infantry => {
+                        o.infantry.push(Infantry {
+                            sub_cell: int(6).unwrap_or(0),
+                            placed,
+                        });
+                        o.infantry_fields.push(extra);
+                    }
+                    ListKind::Aircraft => {
+                        o.aircraft.push(Aircraft { placed });
+                        o.aircraft_fields.push(extra);
+                    }
+                    ListKind::Buildings => {
+                        o.structures.push(Structure { placed });
+                        o.structure_fields.push(extra);
+                    }
                 }
             }
         }
-        if let Some(section) = self.doc.section(b"Terrain") {
-            for (entry, winner) in section.list_positions() {
-                // provisional (Q-0010): the key is a cell number, decoded 1000-based
-                let n = value::decimal_integer(&entry.key);
-                let (x, y) = decode_cell_number(n, CELL_NUMBER_BASE);
-                o.terrain.push(TerrainObject {
-                    cell: CellXY::new(x, y),
-                    type_name: value::text(&winner.value, usize::MAX).to_vec(),
-                });
-            }
-        }
-        if let Some(section) = self.doc.section(b"Smudge") {
-            for (_, winner) in section.list_positions() {
-                // provisional (Q-0010): type, x, y
-                let fields: Vec<&[u8]> = winner.value.split(|&b| b == b',').collect();
-                let int = |i: usize| {
-                    fields
-                        .get(i)
-                        .map(|f| value::decimal_integer(f))
-                        .unwrap_or(0)
-                };
-                o.smudges.push(Smudge {
-                    type_name: fields
-                        .first()
-                        .map(|f| value::text(f, usize::MAX).to_vec())
-                        .unwrap_or_default(),
-                    cell: CellXY::new(int(1), int(2)),
-                });
-            }
-        }
+        self.terrain_objects(&mut o, footprint, legacy);
+        self.smudges(&mut o);
         o
+    }
+
+    /// The terrain-object list (S-0009 claim 42).
+    fn terrain_objects(&mut self, o: &mut Objects, footprint: &Footprint, legacy: bool) {
+        let Some(section) = self.doc.section(b"Terrain") else {
+            return;
+        };
+        let entries: Vec<_> = section
+            .list_positions()
+            .map(|(e, w)| (e.key.clone(), e.line, w.value.clone()))
+            .collect();
+        // spec: S-0009 claim 42 (key decoded base 1000 from format version 4, base 128 below)
+        let base = if legacy {
+            LEGACY_CELL_TAG_BASE
+        } else {
+            CELL_NUMBER_BASE
+        };
+        for (key, line, value) in entries {
+            // spec: S-0009 claim 42 (the key read as a leading integer)
+            let (x, y) = decode_cell_number(value::decimal_integer(&key), base);
+            // spec: S-0009 Formulas (object cell: each coordinate wrapped modulo 65536)
+            let cell = CellXY::new(i32::from(wrap_coordinate(x)), i32::from(wrap_coordinate(y)));
+            let name = value::text(&value, usize::MAX).to_vec();
+            // spec: S-0009 claim 42 (the two "no tag" markers and an empty value place nothing)
+            if name.is_empty()
+                || name.eq_ignore_ascii_case(b"<none>")
+                || name.eq_ignore_ascii_case(b"none")
+            {
+                continue;
+            }
+            if !footprint.is_legal(cell) {
+                // spec: S-0009 claim 42 (a non-legal cell: our engine places nothing; the importer warns)
+                self.warn(
+                    Some(line),
+                    format!(
+                        "[Terrain] {}: the cell is not legal (S-0009 claim 42); nothing is placed",
+                        show(&key)
+                    ),
+                );
+                continue;
+            }
+            o.terrain.push(TerrainObject {
+                cell,
+                type_name: name,
+            });
+        }
+    }
+
+    /// The smudge list (S-0009 claim 42).
+    fn smudges(&mut self, o: &mut Objects) {
+        let Some(section) = self.doc.section(b"Smudge") else {
+            return;
+        };
+        let q = self.ctx.quirks;
+        let entries: Vec<_> = section
+            .list_positions()
+            .map(|(e, w)| (e.key.clone(), e.line, w.value.clone()))
+            .collect();
+        for (key, line, value) in entries {
+            // spec: S-0009 claim 42 (fields type, cell x, cell y, piece number, read as in claim 34)
+            let fields = split_entry(&value, q.object_empty_fields_collapse);
+            let at = |i: usize| fields.get(i).cloned().flatten();
+            let Some(type_name) = at(0) else {
+                continue;
+            };
+            // spec: S-0009 claim 42 (no x field: nothing placed)
+            let Some(x) = at(1) else {
+                continue;
+            };
+            let Some(y) = at(2) else {
+                // spec: S-0009 claim 42 (x but no y: unspecified, our engine places nothing; the importer warns)
+                self.warn(
+                    Some(line),
+                    format!(
+                        "[Smudge] {}: no cell y (S-0009 claim 42); nothing is placed",
+                        show(&key)
+                    ),
+                );
+                continue;
+            };
+            // spec: S-0009 claim 42 (a piece number present and not 0 places nothing)
+            if at(3).is_some_and(|p| value::decimal_integer(&p) != 0) {
+                continue;
+            }
+            let (x, y) = (value::decimal_integer(&x), value::decimal_integer(&y));
+            o.smudges.push(Smudge {
+                type_name,
+                // spec: S-0009 Formulas (object cell: a smudge's cell is always two fields, wrapped)
+                cell: CellXY::new(i32::from(wrap_coordinate(x)), i32::from(wrap_coordinate(y))),
+            });
+        }
     }
 
     /// Cell tags (S-0009 claim 31).
@@ -890,6 +1062,38 @@ impl Decoder<'_> {
         }
         out
     }
+}
+
+/// Characters of an object or smudge entry's value that are read (S-0009
+/// claim 34).
+const ENTRY_CHARS: usize = 127; // spec: S-0009 Constants (object entry characters read)
+
+/// Splits an object or smudge entry's value (S-0009 claim 34): only the
+/// first 127 characters are read, the value is cut at every comma, and with
+/// `collapse` (`quirks.object_empty_fields_collapse`) an empty field is no
+/// field at all. Without it an empty field keeps its place as `None`.
+/// Spaces belong to their field.
+pub fn split_entry(value: &[u8], collapse: bool) -> Vec<Option<Vec<u8>>> {
+    let v = &value[..value.len().min(ENTRY_CHARS)];
+    v.split(|&b| b == b',')
+        .filter(|f| !(collapse && f.is_empty()))
+        .map(|f| (!f.is_empty()).then(|| f.to_vec()))
+        .collect()
+}
+
+/// Field `f` (numbered from 1 in the layout of format version 4 and above,
+/// S-0009 claim 35) of a split entry. Below format version 4 fields 4 and 5
+/// are one cell field (returned for 4, none for 5) and every later field
+/// moves one place forward.
+fn entry_field(fields: &[Option<Vec<u8>>], f: usize, legacy: bool) -> Option<Vec<u8>> {
+    // spec: S-0009 claim 35 (below format version 4, one cell field; later fields move one place forward)
+    let i = match (legacy, f) {
+        (_, 1..=4) => f - 1,
+        (true, 5) => return None,
+        (true, _) => f - 2,
+        (false, _) => f - 1,
+    };
+    fields.get(i).cloned().flatten()
 }
 
 /// The double nearest to 0.01 (S-0104 Formulas, "Map value storage").

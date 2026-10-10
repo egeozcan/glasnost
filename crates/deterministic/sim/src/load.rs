@@ -1,11 +1,12 @@
 //! Loading a map into a new game (S-0009 claims 6, 12 to 14, 17 to 20, 27;
 //! S-0010 claim 12; S-0202 claims 8 and 10 and its table "Draws during map
-//! loading").
+//! loading"; S-0009 claims 34 to 43 for the pre-placed objects).
 //!
-//! The groups of draws run in the table's order. Groups owned by specs that
-//! do not exist yet (bridge pieces, vein patterns, animation creation draws,
-//! starting units, random start cells) take no draw here; each is listed in
-//! request Q-0018 and recorded in the world's notes when a map reaches it.
+//! The groups of draws run in the table's order. Groups this module does
+//! not implement yet (the bridge pieces and vein patterns of S-0202 claim 10
+//! and S-0009 claim 14, animation creation draws, the starting units of
+//! S-0009 claims 45 and 46 and the random start cells of claim 18) take no
+//! draw here and are recorded in the world's notes when a map reaches them.
 
 use std::sync::Arc;
 
@@ -26,8 +27,9 @@ use crate::world::{GameSetup, House, HouseId, HouseSetup, World};
 pub enum LoadError {
     /// A house names a country the rules do not have.
     UnknownCountry(String),
-    /// The start list needs a random start cell, whose search has no spec
-    /// yet (request Q-0018).
+    /// The start list needs a random start cell (S-0009 claim 18), whose
+    /// search, a use of S-0212 claim 25's nearby-cell search, is not
+    /// implemented yet.
     RandomStartCell,
 }
 
@@ -37,7 +39,7 @@ impl std::fmt::Display for LoadError {
             Self::UnknownCountry(c) => write!(f, "unknown country {c:?}"),
             Self::RandomStartCell => write!(
                 f,
-                "the map needs a random start cell; its search has no spec yet (request Q-0018)"
+                "the map needs a random start cell (S-0009 claim 18); its search is not implemented yet"
             ),
         }
     }
@@ -210,14 +212,14 @@ pub fn new_game(
     }
     let _ = placed;
     if bridge_note {
-        w.note("Q-0018: low-bridge end markers complete no bridge and take no draw");
+        w.note("S-0202 claim 10: low-bridge end markers complete no bridge and take no draw (not implemented yet)");
     }
 
     // First recalculation pass (S-0010 claim 12).
     recalc_cells(&mut w, &order);
 
-    // Veins are cleared and, with no placement test specified, not rebuilt
-    // (S-0009 claim 14; Q-0018).
+    // Veins are cleared; the vein rebuild of S-0009 claim 14 (S-0202 claim
+    // 10's placement test and pattern draws) is not implemented yet.
     let mut veins = false;
     for &c in &order {
         if let Some(cell) = w.cells.grid.get_mut(c)
@@ -230,11 +232,11 @@ pub fn new_game(
         }
     }
     if veins {
-        w.note("Q-0018: vein seeds are cleared and not rebuilt (no draw)");
+        w.note("S-0009 claim 14: vein seeds are cleared and not rebuilt (no draw; not implemented yet)");
     }
 
     // Terrain objects (no draws), then pre-placed objects kind by kind
-    // (S-0203 claim 3; S-0202 table).
+    // (S-0009 claim 43; S-0203 claim 3; S-0202 table).
     objects::place_map_objects(&mut w, map, setup.sandbox);
 
     // Second recalculation pass (S-0010 claim 12).
@@ -243,7 +245,7 @@ pub fn new_game(
     // Late phase: list 3 (S-0009 claim 20).
     if !setup.sandbox && !players.is_empty() {
         let _list3 = start_list(map, players.len())?;
-        w.note("Q-0018: starting units are not created");
+        w.note("S-0009 claims 45 and 46: starting units are not created (the rules fields they need are not imported yet)");
     }
     // spec: S-0009 claim 20 (after the last house one ranged draw over 0 … 65535 whose value has no effect)
     let _ = w.rng.ranged(0, 65535, q.ranged_draw_half_span);
@@ -257,7 +259,6 @@ pub fn new_game(
         }
     }
     crate::regions::rebuild(&mut w);
-    w.note("Q-0010: pre-placed objects start at full strength, facing value × 256, behaviour from the placement fall-back");
     Ok(w)
 }
 
@@ -288,7 +289,7 @@ fn start_list(map: &Map, players: usize) -> Result<Vec<CellXY>, LoadError> {
         .map(|&(x, y)| CellXY::new(i32::from(x), i32::from(y)))
         .collect();
     if list.len() < n {
-        // spec: S-0009 claim 18 (random start cells: the free-area search has no spec, Q-0018)
+        // spec: S-0009 claim 18 (random start cells: their search is not implemented yet)
         return Err(LoadError::RandomStartCell);
     }
     list.truncate(n);

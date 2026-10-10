@@ -66,15 +66,95 @@ pub struct TheaterQuirks {
     /// `quirks.role_one_past_end` (S-0010 claim 4): a role naming the first
     /// missing tileset number starts at the tile count. Off: it is unset.
     pub role_one_past_end: bool,
+    /// `quirks.variant_origin_mismatch` (S-0010 claim 13): the origin cell
+    /// of a multi-cell tile chooses its image with its own coordinates.
+    /// Off: every cell of a placed tile uses the divided origin coordinates.
+    pub variant_origin_mismatch: bool,
+    /// `quirks.variant_cell_missing` (S-0010 claim 24): a cell whose shown
+    /// variant has no tile cell at its index paints nothing. Off: it paints
+    /// the plain image's tile cell.
+    pub variant_cell_missing: bool,
 }
 
 impl Default for TheaterQuirks {
     fn default() -> Self {
-        // spec: S-0010 Edge cases (role_one_past_end defaults to the original)
+        // spec: S-0010 Edge cases (every switch defaults to the original)
         Self {
             role_one_past_end: true,
+            variant_origin_mismatch: true,
+            variant_cell_missing: true,
         }
     }
+}
+
+/// The fixed 4 × 4 variant pattern P4 of S-0010 claim 13, by row *Y* mod 4
+/// and column *X* mod 4.
+// spec: S-0010 Constants (P4, fixed variant pattern)
+pub const P4: [[u8; 4]; 4] = [[0, 1, 2, 3], [3, 2, 1, 0], [2, 3, 0, 1], [1, 0, 3, 2]];
+
+/// Image indices of the 8 × 8 pattern before the reduction of claim 13.
+const PATTERN_VALUES: u32 = 8; // spec: S-0010 Formulas (8 × 8 pattern: c_i = D_i mod 8)
+
+/// Draws tried per entry of the 8 × 8 pattern (S-0010 claim 14).
+const PATTERN_ATTEMPTS: usize = 64; // spec: S-0010 Constants (pattern draw attempts: 64)
+
+/// The neighbour offsets of an entry of the 8 × 8 pattern, along the index
+/// (S-0010 Formulas, *8 × 8 pattern*).
+// spec: S-0010 Formulas (neighbours (k + d) mod 64 for d in −9, −8, −7, −1, 1, 7, 8, 9)
+const PATTERN_NEIGHBOURS: [i32; 8] = [-9, -8, -7, -1, 1, 7, 8, 9];
+
+/// Builds the 8 × 8 variant pattern from consecutive draws of the
+/// unsynchronised random stream (S-0010 claim 14, Formulas). Returns the
+/// 64 entries, indexed by *X* + 8*Y*, and the number of draws taken.
+pub fn variant_pattern(mut draw: impl FnMut() -> u32) -> ([u8; 64], u32) {
+    let mut p = [0u8; 64];
+    let mut taken = 0u32;
+    for k in 0..64i32 {
+        let mut c = 0u8;
+        for _ in 0..PATTERN_ATTEMPTS {
+            // spec: S-0010 Formulas (c_i = D_i mod 8)
+            c = (draw() % PATTERN_VALUES) as u8;
+            taken += 1;
+            // spec: S-0010 Formulas (the first c differing from every neighbour k′ < k; else the 64th)
+            let clash = PATTERN_NEIGHBOURS.iter().any(|d| {
+                let n = (k + d).rem_euclid(64);
+                n < k && p[n as usize] == c
+            });
+            if !clash {
+                break;
+            }
+        }
+        p[k as usize] = c;
+    }
+    (p, taken)
+}
+
+/// The image a cell shows (S-0010 claim 13, Formulas *Variant*): for a cell
+/// (x, y) of sub-tile `t` of a tile whose plain image is `w` × `h` cells
+/// and has `n` variants, with the 8 × 8 pattern `p8`.
+pub fn variant_image(
+    (x, y): (i32, i32),
+    t: i32,
+    (w, h): (i32, i32),
+    n: usize,
+    p8: &[u8; 64],
+    origin_mismatch: bool,
+) -> usize {
+    let (w, h) = (w.max(1), h.max(1));
+    // spec: S-0010 Formulas ((X, Y) = (x, y) for t = 0, else the origin divided by the size, truncated)
+    let (cx, cy) = if t == 0 && origin_mismatch {
+        (x, y)
+    } else {
+        ((x - t.rem_euclid(w)) / w, (y - t.div_euclid(w)) / h)
+    };
+    // spec: S-0010 claim 13 (the 4 × 4 pattern with at most 4 images, else the 8 × 8 pattern)
+    let p = if n < 4 {
+        P4[cy.rem_euclid(4) as usize][cx.rem_euclid(4) as usize]
+    } else {
+        p8[(cx.rem_euclid(8) + 8 * cy.rem_euclid(8)) as usize]
+    };
+    // spec: S-0010 claim 13 (image = P mod (n + 1))
+    usize::from(p) % (n + 1)
 }
 
 /// One declared tileset of a theater (S-0010 claim 2).
@@ -386,21 +466,26 @@ impl Catalogue {
     /// image and the variants up to the first letter without a file.
     pub fn images(&self, exists: &dyn Fn(&[u8]) -> bool) -> Vec<TileImages> {
         (0..self.tile_count.max(0))
-            .map(|t| {
-                let plain = self.find_image(t, 0, exists);
-                let mut variants = Vec::new();
-                if plain.is_some() {
-                    for v in 1..=MAX_VARIANTS {
-                        // spec: S-0010 claim 3 (variants stop at the first letter without a file)
-                        match self.find_image(t, v, exists) {
-                            Some(f) => variants.push(f),
-                            None => break,
-                        }
-                    }
-                }
-                TileImages { plain, variants }
-            })
+            .map(|t| self.tile_images(t, exists))
             .collect()
+    }
+
+    /// Tile `t`'s image files (S-0010 claim 3): the plain image and the
+    /// variants up to the first letter without a file, each found with the
+    /// suffix fallback.
+    pub fn tile_images(&self, t: i32, exists: &dyn Fn(&[u8]) -> bool) -> TileImages {
+        let plain = self.find_image(t, 0, exists);
+        let mut variants = Vec::new();
+        if plain.is_some() {
+            for v in 1..=MAX_VARIANTS {
+                // spec: S-0010 claim 3 (variants stop at the first letter without a file)
+                match self.find_image(t, v, exists) {
+                    Some(f) => variants.push(f),
+                    None => break,
+                }
+            }
+        }
+        TileImages { plain, variants }
     }
 
     /// The simulation's tile catalogue from the tiles' images (from
@@ -495,6 +580,74 @@ mod tests {
 
     fn doc(text: &str) -> Document {
         Document::parse(text.as_bytes(), Quirks::default(), &mut Vec::new())
+    }
+
+    /// spec: S-0010 claim 13 (image P mod (n + 1); P4 for at most 4 images; origin divided by the size)
+    #[test]
+    fn claim_13_variant_choice() {
+        let p8 = [7u8; 64];
+        // One-cell tile with 2 images: P4 at (x mod 4, y mod 4), mod 2.
+        assert_eq!(variant_image((5, 2), 0, (1, 1), 1, &p8, true), 3 % 2);
+        assert_eq!(variant_image((6, 7), 0, (1, 1), 3, &p8, true), 3);
+        // More than 4 images: the 8 × 8 pattern.
+        assert_eq!(variant_image((6, 7), 0, (1, 1), 4, &p8, true), 7 % 5);
+        // A 2 × 2 tile placed with its origin at (6, 9): sub-tile 3 is cell (7, 10), X = 3, Y = 4.
+        assert_eq!(
+            variant_image((7, 10), 3, (2, 2), 3, &p8, true),
+            usize::from(P4[0][3])
+        );
+        // The origin cell uses its own coordinates (6, 9) with the quirk, (3, 4) without.
+        assert_eq!(
+            variant_image((6, 9), 0, (2, 2), 3, &p8, true),
+            usize::from(P4[1][2])
+        );
+        assert_eq!(
+            variant_image((6, 9), 0, (2, 2), 3, &p8, false),
+            usize::from(P4[0][3])
+        );
+        // An origin beyond the low edge: truncation toward zero, non-negative remainders.
+        assert_eq!(
+            variant_image((0, 0), 1, (2, 1), 3, &p8, true),
+            usize::from(P4[0][0])
+        );
+    }
+
+    /// spec: S-0010 claim 14 (entries 0 … 7, no clash with earlier index neighbours, 64 … 4096 draws)
+    #[test]
+    fn claim_14_pattern() {
+        let mut x = 12345u32;
+        let (p, taken) = variant_pattern(|| {
+            x = x.wrapping_mul(1_103_515_245).wrapping_add(12345);
+            x >> 8
+        });
+        assert!((64..=4096).contains(&taken));
+        for k in 0..64i32 {
+            assert!(p[k as usize] < 8);
+            for d in PATTERN_NEIGHBOURS {
+                let n = (k + d).rem_euclid(64);
+                if n < k {
+                    assert_ne!(p[k as usize], p[n as usize], "entry {k}");
+                }
+            }
+        }
+        // A stream of one value: every entry after the first clashes 64 times and takes the 64th.
+        let (p, taken) = variant_pattern(|| 3);
+        assert_eq!(p, [3; 64]);
+        assert_eq!(taken, 1 + 63 * 64);
+    }
+
+    /// spec: S-0010 claim 3 (variants each found with the suffix fallback, stopping at the first gap)
+    #[test]
+    fn claim_3_variants() {
+        let d = doc("[General]\n[TileSet0000]\nFileName=aa\nTilesInSet=1\n");
+        let c = Catalogue::read(&d, Theater::Temperate);
+        let have = [&b"aa01.TEM"[..], b"aa01a.MMT", b"aa01b.TEM", b"aa01d.TEM"];
+        let i = c.tile_images(0, &|n| have.contains(&n));
+        assert_eq!(i.plain.as_deref(), Some(&b"aa01.TEM"[..]));
+        assert_eq!(
+            i.variants,
+            vec![b"aa01a.MMT".to_vec(), b"aa01b.TEM".to_vec()]
+        );
     }
 
     /// spec: S-0009 claim 6 (base tiles), claim 8 (identity translation, clear-tile rule); S-0010 claim 4
@@ -598,6 +751,7 @@ mod tests {
             Theater::Temperate,
             &TheaterQuirks {
                 role_one_past_end: false,
+                ..Default::default()
             },
         );
         assert_eq!(off.roles.cliff, -1);

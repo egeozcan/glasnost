@@ -65,6 +65,9 @@ pub enum DepthTest {
     Writer,
     /// A reader: drawn where depth < stored, never stores (claim 10).
     Reader,
+    /// Neither reads nor writes depth: every pixel is painted (a smudge,
+    /// S-0102 claim 25).
+    Ignore,
 }
 
 /// A signed per-pixel depth image (S-0102 Terms: companion depth image,
@@ -109,9 +112,33 @@ pub enum DepthSource<'a> {
 pub enum Paint {
     /// Each pixel takes `rows[row][index]`.
     Row(usize),
-    /// Each non-zero pixel darkens the pixel beneath (provisional, Q-0015:
-    /// every channel halved).
+    /// A tile diamond (S-0010 claim 22): as `Row`, but every pixel of the
+    /// diamond shape is painted, palette index 0 included.
+    Diamond(usize),
+    /// Each non-zero pixel darkens the pixel beneath: every hi-colour
+    /// channel halved, rounded down (S-0102 claim 26, F7).
     Shadow,
+}
+
+/// Width of a tile diamond in pixels (S-0010 claim 22).
+pub const DIAMOND_WIDTH: i32 = 60; // spec: S-0010 Constants (diamond size 60 × 29)
+
+/// Rows of a tile diamond (S-0010 claim 22).
+pub const DIAMOND_ROWS: i32 = 29; // spec: S-0010 Constants (diamond size 60 × 29)
+
+/// Whether pixel (c, r) of a 60 × 29 diamond box is one of the diamond's 900
+/// pixels (S-0010 Formulas, *Diamond rows*).
+pub fn in_diamond(c: i32, r: i32) -> bool {
+    if !(0..DIAMOND_ROWS).contains(&r) {
+        return false;
+    }
+    // spec: S-0010 Formulas (f(r) = 28 − 2r, n(r) = 4(r + 1) for r ≤ 14; f(r) = 2(r − 14), n(r) = 4(29 − r) for r ≥ 14)
+    let (f, n) = if r <= 14 {
+        (28 - 2 * r, 4 * (r + 1))
+    } else {
+        (2 * (r - 14), 4 * (29 - r))
+    };
+    c >= f && c < f + n
 }
 
 /// One image to draw.
@@ -219,10 +246,10 @@ impl Frame {
             d.y + h - 1
         };
         let row_table = match d.paint {
-            Paint::Row(i) => rows.get(i),
+            Paint::Row(i) | Paint::Diamond(i) => rows.get(i),
             Paint::Shadow => None,
         };
-        if matches!(d.paint, Paint::Row(_)) && row_table.is_none() {
+        if !matches!(d.paint, Paint::Shadow) && row_table.is_none() {
             return;
         }
         for y in y0..y1 {
@@ -242,8 +269,11 @@ impl Frame {
                 let Some(index) = d.image.get(ix, iy) else {
                     continue;
                 };
-                // spec: S-0104 claim 6 (entry 0 is transparent in every row)
-                if index == 0 {
+                // spec: S-0104 claim 6 (entry 0 is transparent in every row);
+                // S-0010 claim 22 (a diamond has no transparent index)
+                if index == 0
+                    && !(matches!(d.paint, Paint::Diamond(_)) && in_diamond(ix as i32, iy as i32))
+                {
                     continue;
                 }
                 let depth = match &d.depth {
@@ -275,6 +305,11 @@ impl Frame {
                     DepthTest::Tile => depth <= stored,
                     // spec: S-0102 claim 10, F2 (drawn iff pixel depth < stored)
                     DepthTest::Writer | DepthTest::Reader => depth < stored,
+                    // spec: S-0102 claim 25 (a smudge neither reads nor writes depth)
+                    DepthTest::Ignore => {
+                        self.paint(x, y, index, d.paint, row_table);
+                        continue;
+                    }
                 };
                 if !pass {
                     continue;
@@ -317,7 +352,9 @@ impl Frame {
     fn paint(&mut self, x: i32, y: i32, index: u8, paint: Paint, row: Option<&Row565>) {
         let i = (y as u32 * self.width + x as u32) as usize;
         match (paint, row) {
-            (Paint::Row(_), Some(row)) => self.color[i] = row[usize::from(index)],
+            (Paint::Row(_) | Paint::Diamond(_), Some(row)) => {
+                self.color[i] = row[usize::from(index)]
+            }
             (Paint::Shadow, _) => self.color[i] = darken565(self.color[i]),
             _ => {}
         }
@@ -336,11 +373,11 @@ impl Frame {
     }
 }
 
-/// Halves each channel of a 5-6-5 pixel (provisional shadow treatment,
-/// Q-0015). Halving the 8-bit channel before packing gives the same top
-/// bits.
+/// Halves each channel of a 5-6-5 pixel (S-0102 claim 26, F7). Halving the
+/// 8-bit channel before packing gives the same top bits.
 pub fn darken565(c: u16) -> u16 {
-    // provisional (Q-0015): each channel halved, rounding down
+    // spec: S-0102 F7 (each channel halved separately, rounded down)
+
     let r = (c >> 11) >> 1;
     let g = ((c >> 5) & 0x3F) >> 1;
     let b = (c & 0x1F) >> 1;
@@ -530,10 +567,104 @@ mod tests {
         assert_eq!(f.depth, vec![32754, 32769, 32764]);
     }
 
-    /// Q-0015 provisional shadow halving.
+    /// spec: S-0102 claim 26, F7 (each hi-colour channel halved, rounded down; twice gives ⌊v/4⌋)
     #[test]
     fn shadow_halves() {
         assert_eq!(darken565(0xFFFF), 0x7BEF);
+        assert_eq!(darken565(darken565(0xFFFF)), (7 << 11) | (15 << 5) | 7);
         assert_eq!(expand565(0xFFFF), (255, 255, 255));
+        // Halving the 8-bit channel before packing gives the same packed pixel.
+        let c = Rgb8 {
+            r: 203,
+            g: 77,
+            b: 18,
+        };
+        let half = Rgb8 {
+            r: c.r / 2,
+            g: c.g / 2,
+            b: c.b / 2,
+        };
+        assert_eq!(darken565(pack565(c)), pack565(half));
+    }
+
+    /// spec: S-0102 claim 27 (cell-pass shadows write depth: a later shadow darkens again only where nearer)
+    #[test]
+    fn overlapping_shadows() {
+        let q = ComposeQuirks::default();
+        let img = IndexedImage::new(1, 1, vec![5]).unwrap();
+        let shadow = |bias, test| Drawing {
+            image: &img,
+            x: 0,
+            y: 0,
+            test,
+            depth: DepthSource::Profile {
+                profile: Profile::Flat,
+                bias,
+                companion: None,
+            },
+            paint: Paint::Shadow,
+        };
+        let mut f = Frame::new(1, 1, 0, Frame::reset_reference(0));
+        f.color[0] = 0xFFFF;
+        // A terrain-object shadow (−3), then a building shadow (−4): darkened twice.
+        f.draw(&shadow(-3, DepthTest::Writer), &rows(), &q);
+        f.draw(&shadow(-4, DepthTest::Writer), &rows(), &q);
+        assert_eq!(f.color[0], darken565(darken565(0xFFFF)));
+        // Another building shadow (−4) at the same depth: not darkened again.
+        f.draw(&shadow(-4, DepthTest::Writer), &rows(), &q);
+        assert_eq!(f.color[0], darken565(darken565(0xFFFF)));
+    }
+
+    /// spec: S-0010 claim 22 (a diamond paints all 900 pixels, index 0 included; row 29 never)
+    #[test]
+    fn diamond_paints_index_zero() {
+        let n: usize = (0..30)
+            .map(|r| (0..60).filter(|&c| in_diamond(c, r)).count())
+            .sum();
+        assert_eq!(n, 900);
+        assert!(in_diamond(28, 0) && in_diamond(31, 0) && !in_diamond(27, 0));
+        assert!(in_diamond(0, 14) && in_diamond(59, 14));
+        assert!(!(0..60).any(|c| in_diamond(c, 29)));
+        let q = ComposeQuirks::default();
+        let img = IndexedImage::new(60, 30, vec![0; 1800]).unwrap();
+        let mut f = Frame::new(60, 30, 0, Frame::reset_reference(0));
+        let d = Drawing {
+            image: &img,
+            x: 0,
+            y: 0,
+            test: DepthTest::Tile,
+            depth: DepthSource::Tile {
+                tile_depth: None,
+                reference_row: 0,
+            },
+            paint: Paint::Diamond(1),
+        };
+        f.draw(&d, &rows(), &q);
+        let painted = f.color.iter().filter(|&&c| c == rows()[1][0]).count();
+        assert_eq!(painted, 900);
+    }
+
+    /// spec: S-0102 claim 25 (a smudge neither reads nor writes depth)
+    #[test]
+    fn ignore_depth() {
+        let q = ComposeQuirks::default();
+        let img = IndexedImage::new(1, 1, vec![3]).unwrap();
+        let mut f = Frame::new(1, 1, 0, Frame::reset_reference(0));
+        f.depth[0] = 0;
+        let d = Drawing {
+            image: &img,
+            x: 0,
+            y: 0,
+            test: DepthTest::Ignore,
+            depth: DepthSource::Profile {
+                profile: Profile::Flat,
+                bias: 0,
+                companion: None,
+            },
+            paint: Paint::Row(1),
+        };
+        f.draw(&d, &rows(), &q);
+        assert_eq!(f.color[0], rows()[1][3]);
+        assert_eq!(f.depth[0], 0);
     }
 }

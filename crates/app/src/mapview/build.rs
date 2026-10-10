@@ -12,7 +12,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use glasnost_convert::Import;
 use glasnost_convert::kinds::Kind;
-use glasnost_convert::theater::Catalogue;
+use glasnost_convert::theater::{Catalogue, TheaterQuirks, variant_image, variant_pattern};
 use glasnost_fmt::hva::Hva;
 use glasnost_fmt::image::IndexedImage;
 use glasnost_fmt::shp::Shp;
@@ -21,15 +21,24 @@ use glasnost_fmt::vpl::Vpl;
 use glasnost_fmt::vxl::Vxl;
 use glasnost_ini::Document;
 use glasnost_ini::value;
-use glasnost_map::{CellXY, Map, NO_OVERLAY};
-use glasnost_render::compose::{DepthTest, Paint, Profile, row565};
+use glasnost_map::objects::{HealthKind, ListKind, facing_from_value, starting_health};
+use glasnost_map::{CellGrid, CellXY, Map, NO_OVERLAY};
+use glasnost_num::F64;
+use glasnost_num::geom::n_step;
+use glasnost_render::compose::{DIAMOND_WIDTH, DepthTest, Paint, Profile, row565};
+
 use glasnost_render::light::{self, DetailLevel, LightQuirks, LightSource, TileTable};
+use glasnost_render::overlay::{
+    DECK_BRIDGES, Flags, OverlayQuirks, Row as OverlayRow, Run, apply_image, deck_frame,
+    draw_shift, table_row as overlay_table_row, tiberium_body, tiberium_of,
+};
 use glasnost_render::palette::{PaletteState, TINT_EXEMPT, house_palette};
 use glasnost_render::projection::{
     LEVEL_LEPTONS, TERRAIN_LIFT, cell_centre, cell_top, height_lift, project_lifted,
 };
 use glasnost_render::scene::{Group, Item, ItemDepth, Scene};
 use glasnost_render::voxel::{self, VoxelQuirks};
+use glasnost_sim::rules::{Kind as SimKind, SimRules};
 
 /// File bytes read for a scene, by upper-case name.
 #[derive(Clone, Debug, Default)]
@@ -134,7 +143,10 @@ const WHITE: [i32; 3] = [1000, 1000, 1000]; // spec: S-0104 claim 3 (house-colou
 /// Ore and gem overlays are drawn at brightness 1000 (S-0104 claim 13).
 const NEUTRAL_BRIGHTNESS: i32 = 1000; // spec: S-0104 claim 13 (ore and gem overlays)
 /// The veinhole marker overlay index (S-0009 claim 14).
-const VEINHOLE_MARKER: u8 = 126; // spec: S-0009 Constants (veinhole marker overlay index)
+/// Rows an ore-spawning terrain object is drawn higher (S-0102 claim 23).
+const ORE_SPAWNER_RAISE: i32 = 16; // spec: S-0102 Constants (ore-spawning terrain object raise)
+/// Height levels a bridge deck adds to an overlay's depth (S-0102 claim 15).
+const DECK_LEVELS: i32 = 4; // spec: S-0102 Constants (overlay depth bias: level + 4 for bridge decks)
 /// Bridge deck height in levels (S-0102 claim 15).
 const SITUATIONAL: i32 = -1; // spec: S-0102 claim 14 (s = −1 in the ordinary case)
 /// A cliff cell is more than this many levels higher (S-0102 claim 14).
@@ -148,29 +160,34 @@ const DEFAULT_LIGHT_TINT: i32 = 1_000_000; // spec: S-0104 claim 12 (tint defaul
 /// Voxel lighting table file (S-0105 Import mapping).
 pub const VPL_FILE: &[u8] = b"voxels.vpl"; // spec: S-0105 Import mapping
 
-/// The provisional notes, by request.
+/// The notes a scene can carry: gaps in the specs (with their request) and
+/// parts our viewer does not draw yet.
 mod notes {
-    pub const TILES: &str = "Q-0009: tile files, sub-tile cells and tile placement are provisional";
-    pub const OBJECTS: &str =
-        "Q-0010: object list fields, infantry positions and facings are provisional";
-    pub const PLACEMENT: &str =
-        "Q-0011: sprites are centred on their object's point by their canvas (provisional)";
-    pub const OVERLAY: &str = "Q-0012: overlay and smudge frames and palettes are provisional";
-    pub const TILE_LIGHT: &str = "Q-0013: tiles are lit by the scaled ground level (provisional)";
-    pub const SHADOW: &str = "Q-0015: shadows halve the pixels beneath (provisional)";
+    pub const STANDING_POSE: &str =
+        "Q-0021: a vehicle drawn as a sprite is taken to be in its standing pose (provisional)";
+    pub const TILES_UNLOADED: &str = "no game was set up: tiles are drawn as the map stores them, before the load's terrain recalculation and smoothing (S-0010 claim 12)";
+    pub const OVERLAY_SHADOW_DEPTH: &str =
+        "Q-0021: an overlay shadow's depth bias is taken as its overlay's, flat (provisional)";
+    pub const RUBBLE: &str = "rubble overlays outside a rubble cell draw nothing (S-0112 claim 5); rubble cells arise only in play";
+    pub const SMUDGE_CLIP: &str = "a smudge is painted whole once per covered cell, not clipped to that cell (S-0102 claim 25): it differs only where covered cells differ in level or light";
+    pub const TERRAIN_STRENGTH: &str = "Q-0023: a terrain object type without a strength key is drawn with image frame 0 (provisional)";
+    pub const ANIMATED_TERRAIN: &str =
+        "Q-0023: animated terrain objects show image frame 0 (provisional)";
     pub const VOXEL_SHADOW_POINT: &str = "voxel shadows are placed at the object's ground point (the locomotor's shadow point has no spec)";
     pub const NO_SLOT_ANIMS: &str = "building slot animations (S-0108) need animation playback, which has no spec yet: not drawn";
     pub const NO_COMPANION: &str =
         "building depth images (S-0102 F5): the shared file is not named by a spec: not used";
-    pub const HEALTH: &str =
-        "Q-0010: the health scale is unknown, so every building is drawn undamaged";
-    pub const INITIAL_STATE: &str = "Q-0016: buildings start complete and idle, turrets face as their bodies, objects enter structures first";
-    pub const INITIAL_STATE_LIVE: &str = "Q-0016: buildings are drawn complete and idle, building voxel turrets face the map entry's facing";
+    pub const NO_RULES_HEALTH: &str = "the rules did not resolve: buildings are drawn undamaged (S-0009 claim 37 needs their strengths)";
+    pub const GATE_DAMAGED: &str =
+        "a damaged gate's body frame needs its gate-stage count (S-0108 claim 2): drawn undamaged";
+    pub const UPGRADES: &str = "upgrades a map entry places (S-0009 claim 40) are not drawn: the building upgrade slots of S-0108 need animation playback";
+    pub const AIRCRAFT_AIR: &str = "an aircraft on a cell outside the usable area is drawn landed: its flight height has no spec (S-0009 claim 38)";
     pub const VPL: &str =
-        "Q-0014: voxels are lit through the lighting table read by a provisional layout";
-    pub const NO_VPL: &str =
-        "Q-0014: the voxel lighting table was not accepted: voxels show raw colour indices";
-    pub const WATER_FILL: &str = "water-fill variants need the scenario random stream (no spec yet): the base water tile is drawn";
+        "Q-0022: voxels are lit through the lighting table read by a provisional byte layout";
+    pub const NO_VPL: &str = "no voxel lighting table, or one whose layout was not recognised (Q-0022): every row reads as zero, so voxels draw nothing (S-0105 claim 38)";
+    pub const VPL_REJECTED: &str = "the voxel lighting table is missing or short and quirks.vpl_unloaded_rows_blank is off: the importer rejects it (S-0105 claim 38)";
+    pub const SHORT_VPL: &str = "the voxel lighting table ends before its last row, or has more than 128 rows: missing rows read as zero (S-0105 claim 38)";
+    pub const WATER_FILL: &str = "water-fill variants are drawn by the game load (S-0009 claim 6, S-0202): without a game the base water tile is drawn";
 }
 
 fn upper(name: &[u8]) -> Vec<u8> {
@@ -229,22 +246,34 @@ fn derived(import: &Import, kind: Kind, idx: usize, key: &[u8]) -> Option<i64> {
 /// models with their motion files, and the voxel lighting table.
 pub fn wanted_files(
     map: &Map,
+    cells: &CellGrid,
     import: &Import,
     catalogue: &Catalogue,
     exists: &dyn Fn(&[u8]) -> bool,
 ) -> BTreeSet<Vec<u8>> {
     let mut out = BTreeSet::new();
     let mut tiles = BTreeSet::new();
-    for (_, cell) in map.cells.iter() {
+    for (_, cell) in cells.iter() {
         if let Some(t) = catalogue.art_tile(cell.tile) {
             tiles.insert(t);
         }
     }
-    for t in tiles {
-        if let Some(f) = catalogue.find_image(t, 0, exists) {
-            out.insert(upper(&f));
-        }
+    // spec: S-0010 claim 24 (a cell without a usable tile shows the clear tile)
+    if (0..catalogue.tile_count).contains(&catalogue.clear_base) {
+        tiles.insert(catalogue.clear_base);
     }
+    for t in tiles {
+        // spec: S-0010 claim 3 (the plain image and its variants, each with the suffix fallback)
+        let images = catalogue.tile_images(t, exists);
+        out.extend(
+            images
+                .plain
+                .iter()
+                .chain(&images.variants)
+                .map(|f| upper(f)),
+        );
+    }
+
     let mut add_art = |kind: Kind, idx: usize| {
         if let Some(a) = import.arts.get(&(kind, idx)) {
             out.extend(a.sprite.iter().map(|s| upper(s)));
@@ -337,6 +366,9 @@ impl Lights {
 struct Rows {
     tiles: BTreeMap<TileTable, (usize, usize)>,
     houses: BTreeMap<[u8; 3], (usize, usize)>,
+    /// The start-up tables: `false` the resource table, `true` the mine
+    /// table (S-0112 claim 2).
+    startup: BTreeMap<bool, (usize, usize)>,
 }
 
 /// What a scene's builder keeps for drawing more items later: the art file,
@@ -352,6 +384,16 @@ pub struct Painter {
     models: BTreeMap<Vec<u8>, Option<std::rc::Rc<voxel::VoxelModel>>>,
     /// The voxel lighting table, once read.
     vpl: Option<Option<Vpl>>,
+    /// Tile files decoded once, by upper-case name.
+    tile_files: BTreeMap<Vec<u8>, Option<TileFile>>,
+}
+
+/// A decoded tile file: its size in cells and its tile cells, row by row.
+#[derive(Clone, Debug)]
+struct TileFile {
+    width: i32,
+    height: i32,
+    cells: Vec<Option<TileImages>>,
 }
 
 /// A vehicle part image's pose: the type, the part, the 32-step body and
@@ -361,6 +403,8 @@ type VoxelKey = (Kind, usize, u8, u8, u8, u16);
 
 struct Builder<'a> {
     map: &'a Map,
+    rules: Option<&'a SimRules>,
+    cells_loaded: Option<&'a CellGrid>,
     import: &'a Import,
     catalogue: &'a Catalogue,
     palettes: &'a PaletteState,
@@ -412,6 +456,8 @@ pub fn build(
         palettes,
         assets,
         options,
+        rules: None,
+        cells: None,
     };
     build_parts(&inputs, false).0
 }
@@ -430,6 +476,8 @@ pub fn build_parts(inputs: &Inputs, live: bool) -> (Built, Painter) {
     };
     let mut b = Builder {
         map: inputs.map,
+        rules: inputs.rules,
+        cells_loaded: inputs.cells,
         import,
         catalogue: inputs.catalogue,
         palettes: inputs.palettes,
@@ -440,26 +488,27 @@ pub fn build_parts(inputs: &Inputs, live: bool) -> (Built, Painter) {
     };
     b.light_cells();
     b.tiles();
-    b.overlays();
+    // spec: S-0102 claim 25 (a smudge is painted right after the terrain tile; overlays come later)
     b.smudges();
+    b.overlays();
     b.terrain_objects();
     let mut ground = Vec::new();
     b.structures(&mut ground);
     b.built.scene.cell_pass_len = b.built.scene.items.len();
     b.built.notes.insert(notes::NO_SLOT_ANIMS.into());
     if live {
-        b.built.notes.insert(notes::INITIAL_STATE_LIVE.into());
         b.built.ground = ground;
         return (b.built, b.p);
     }
-    b.mobiles(&mut ground);
-    // spec: S-0102 claim 6 (an entering object goes before the first strictly greater key: a stable sort);
-    // provisional (Q-0016): objects enter in the order structures, vehicles, infantry, aircraft
-    ground.sort_by_key(|g| g.key);
-    for g in ground {
+    // spec: S-0009 claim 43 (objects enter the drawing order vehicles, aircraft, infantry, then buildings)
+    let mut entries = Vec::new();
+    b.mobiles(&mut entries);
+    entries.extend(ground);
+    // spec: S-0102 claim 6 (an entering object goes before the first strictly greater key: a stable sort)
+    entries.sort_by_key(|g| g.key);
+    for g in entries {
         b.built.scene.items.extend(g.items);
     }
-    b.built.notes.insert(notes::INITIAL_STATE.into());
     (b.built, b.p)
 }
 
@@ -633,7 +682,7 @@ impl Builder<'_> {
     }
 
     /// Places a sprite frame with its canvas centred on world pixel `p`
-    /// (provisional, Q-0011; S-0108 claim 8 for buildings).
+    /// (S-0102 claim 19, F6: the frame at (x − ⌊W/2⌋ + c, y − ⌊H/2⌋ + r); S-0108 claim 8 for buildings).
     #[allow(clippy::too_many_arguments)]
     fn place_sprite(
         &mut self,
@@ -650,6 +699,7 @@ impl Builder<'_> {
         let (image, (fx, fy), (cw, ch)) = self.sprite_frame(file, frame)?;
         Some(Item {
             image,
+            // spec: S-0102 F6 (⌊W/2⌋ and ⌊H/2⌋: W and H are positive, so truncation is the floor)
             x: p.0 - cw / 2 + fx,
             y: p.1 - ch / 2 + fy,
             test,
@@ -666,94 +716,163 @@ impl Builder<'_> {
         (self.built.objects.len() - 1) as u32
     }
 
-    /// Terrain tiles (S-0101 claim 4, S-0102 claim 9 and F3; Q-0009).
+    /// A tile file decoded once: its size in cells and its tile cells.
+    fn tile_file(&mut self, file: &[u8]) -> Option<TileFile> {
+        let key = upper(file);
+        if let Some(t) = self.p.tile_files.get(&key) {
+            return t.clone();
+        }
+        let decoded = self.assets.get(&key).and_then(|bytes| {
+            let tmp = Tmp::parse(bytes).ok()?;
+            let mut cells = Vec::new();
+            for i in 0..tmp.tiles.len() {
+                cells.push(tmp.decode_tile(i).ok().map(|d| {
+                    let dia = &d.diamond;
+                    let img = self.built.scene.add_image(dia.image.clone());
+                    let dep = dia.depth.clone().map(|i| self.built.scene.add_image(i));
+                    let extra = d.extra.as_ref().map(|e| {
+                        let ei = self.built.scene.add_image(e.image.clone());
+                        let ed = e.depth.clone().map(|i| self.built.scene.add_image(i));
+                        // spec: S-0010 claim 23 (only the difference of the two stored positions matters)
+                        (ei, ed, e.x - dia.x, e.y - dia.y)
+                    });
+                    (img, dep, dia.x, dia.y, extra)
+                }));
+            }
+            Some(TileFile {
+                width: tmp.cells_x as i32,
+                height: tmp.cells_y as i32,
+                cells,
+            })
+        });
+        self.p.tile_files.insert(key, decoded.clone());
+        decoded
+    }
+
+    /// Terrain tiles (S-0010 claims 13, 22 to 24; S-0101 claim 4; S-0102
+    /// claim 9 and F3; S-0104 claim 13).
     fn tiles(&mut self) {
-        self.note(notes::TILES);
-        self.note(notes::TILE_LIGHT);
-        if self.map.fill_draws > 0 {
+        if self.cells_loaded.is_none() {
+            self.note(notes::TILES_UNLOADED);
+        }
+        if self.map.fill_draws > 0 && self.cells_loaded.is_none() {
             self.note(notes::WATER_FILL);
         }
-        let mut tmps: BTreeMap<Vec<u8>, Option<Vec<Option<TileImages>>>> = BTreeMap::new();
-        let cells: Vec<(CellXY, glasnost_map::Cell)> = self
-            .map
-            .cells
+        let q = TheaterQuirks::default();
+        // spec: S-0010 claim 14, S-0202 claim 11 (the 8 × 8 pattern from the unsynchronised stream, built afresh at map load)
+        let mut stream = glasnost_sim::rng::Rng::new(super::live::SANDBOX_SEED);
+        let (p8, _) = variant_pattern(|| stream.raw());
+        let grid = self.cells_loaded.unwrap_or(&self.map.cells);
+        let loaded = self.cells_loaded.is_some();
+        let cells: Vec<(CellXY, glasnost_map::Cell)> = grid
             .visiting_order(true)
             .into_iter()
-            .filter_map(|c| Some((c, *self.map.cells.get(c)?)))
+            .filter_map(|c| Some((c, *grid.get(c)?)))
             .collect();
         // Cells the visiting order misses (W = 1) keep their blank state; draw them too.
         let mut seen: BTreeSet<CellXY> = cells.iter().map(|(c, _)| *c).collect();
         let mut all = cells;
-        for (c, cell) in self.map.cells.iter() {
+        for (c, cell) in grid.iter() {
             if seen.insert(c) {
                 all.push((c, *cell));
             }
         }
+        let count = self.catalogue.tile_count;
+        let assets = self.assets;
+        let exists = |n: &[u8]| assets.get(n).is_some();
+        let mut images: BTreeMap<i32, glasnost_convert::theater::TileImages> = BTreeMap::new();
         for (c, cell) in all {
-            let Some(t) = self.catalogue.art_tile(cell.tile) else {
-                // spec: S-0009 claim 8 (an out-of-range number shows the clear tile, which this theater lacks)
-                self.drop_object(
-                    "cell drawn blank: its tile and the clear tile are outside the catalogue",
-                );
-                continue;
+            let (t, s) = (cell.tile, i32::from(cell.sub_tile));
+            let mut files = |b: &mut Self, t: i32| {
+                images
+                    .entry(t)
+                    .or_insert_with(|| b.catalogue.tile_images(t, &exists))
+                    .clone()
             };
-            let assets = self.assets;
-            // spec: S-0010 claim 3 (the theater's suffix, else the fallback suffixes)
-            let Some(file) = self
-                .catalogue
-                .find_image(t, 0, &|n| assets.get(n).is_some())
-                .map(|f| upper(&f))
-            else {
+            // spec: S-0010 claims 7 and 24 (the tile case paints the cell's tile; the no-tile case, a stray
+            // or a negative number paint position 0 of the clear tile, at the cell's own coordinates)
+            let mut shown: Option<(i32, i32, glasnost_convert::theater::TileImages)> = None;
+            if (0..count).contains(&t) {
+                let f = files(self, t);
+                let plain = f.plain.as_ref().and_then(|p| self.tile_file(p));
+                let usable = plain.as_ref().is_some_and(|p| {
+                    s < p.width * p.height && p.cells.get(s as usize).is_some_and(Option::is_some)
+                });
+                if usable || loaded {
+                    // In loaded cells an unusable tile number is the overlay case (claim 7).
+                    shown = Some((t, s, f));
+                }
+            }
+            let (_, s, f) = match shown {
+                Some(x) => x,
+                None => {
+                    let clear = self.catalogue.clear_base;
+                    if !(0..count).contains(&clear) {
+                        self.drop_object(
+                            "cell drawn blank: its tile and the clear tile are outside the catalogue",
+                        );
+                        continue;
+                    }
+                    let f = files(self, clear);
+                    (clear, 0, f)
+                }
+            };
+            let Some(plain) = f.plain.as_ref().and_then(|p| self.tile_file(p)) else {
+                // spec: S-0010 claim 24 (a tile without an image paints nothing)
                 self.drop_object("cell drawn blank: no file holds its tile image");
                 continue;
             };
-            if !tmps.contains_key(&file) {
-                let decoded = self.assets.get(&file).and_then(|bytes| {
-                    let tmp = Tmp::parse(bytes).ok()?;
-                    let mut out = Vec::new();
-                    for i in 0..tmp.tiles.len() {
-                        out.push(tmp.decode_tile(i).ok().map(|d| {
-                            let dia = &d.diamond;
-                            let img = self.built.scene.add_image(dia.image.clone());
-                            let dep = dia.depth.clone().map(|i| self.built.scene.add_image(i));
-                            let extra = d.extra.as_ref().map(|e| {
-                                let ei = self.built.scene.add_image(e.image.clone());
-                                let ed = e.depth.clone().map(|i| self.built.scene.add_image(i));
-                                (ei, ed, e.x - dia.x, e.y - dia.y)
-                            });
-                            (img, dep, dia.x, dia.y, extra)
-                        }));
-                    }
-                    Some(out)
-                });
-                tmps.insert(file.clone(), decoded);
-            }
-            // provisional (Q-0009): sub-tile n is the n-th template cell in row-major order
-            let Some(Some(Some((img, dep, _, _, extra)))) = tmps.get(&file).map(|v| {
-                v.as_ref()
-                    .map(|v| v.get(usize::from(cell.sub_tile)).copied().flatten())
-            }) else {
-                self.drop_object(match tmps.get(&file) {
-                    Some(Some(_)) => "cell drawn blank: its sub-tile has no image in the tile file",
-                    _ => "cell drawn blank: its tile file is missing or unreadable",
-                });
+            // spec: S-0010 claim 13 (the image is chosen with the plain image's size)
+            let v = variant_image(
+                (c.x, c.y),
+                s,
+                (plain.width, plain.height),
+                f.variants.len(),
+                &p8,
+                q.variant_origin_mismatch,
+            );
+            let file = if v == 0 {
+                f.plain.clone()
+            } else {
+                f.variants.get(v - 1).cloned()
+            };
+            let Some(image) = file.and_then(|n| self.tile_file(&n)) else {
+                self.drop_object("cell drawn blank: its tile file is missing or unreadable");
                 continue;
             };
+            // spec: S-0010 claim 24 (index t mod N_s of the shown image, counted with its empty positions)
+            let n_s = (image.width * image.height).max(1);
+            let index = s.rem_euclid(n_s) as usize;
+            let cell_images = match image.cells.get(index).copied().flatten() {
+                Some(i) => i,
+                // spec: S-0010 claim 24 (quirks.variant_cell_missing: an empty position paints nothing)
+                None if !q.variant_cell_missing => {
+                    match plain.cells.get(s.max(0) as usize).copied().flatten() {
+                        Some(i) => i,
+                        None => continue,
+                    }
+                }
+                None => {
+                    self.drop_object("cell paints nothing: its shown image has no tile cell there");
+                    continue;
+                }
+            };
+            let (img, dep, _, _, extra) = cell_images;
             let level = i32::from(cell.level);
-            let (qx, qy) = cell_top(c.x, c.y);
-            // spec: S-0101 claim 4 (terrain is lifted 15 pixels per height level)
-            let top = qy - TERRAIN_LIFT * level;
-            let w = self.built.scene.images[img as usize].width() as i32;
-            let left = qx - w / 2;
+            // spec: S-0010 claim 22 ((u, v) the view pixel of the top corner at height 0)
+            let (u, v0) = cell_top(c.x, c.y);
+            // spec: S-0010 claim 22, S-0101 claim 4 (diamond pixel (c, r) at (u − 30 + c, v − 15ℓ + r))
+            let left = u - DIAMOND_WIDTH / 2;
+            let top = v0 - TERRAIN_LIFT * level;
             // spec: S-0102 F3 (t = the tile's top row as drawn plus 15 × its height level)
             let reference_row = top + TERRAIN_LIFT * level;
             let (table, b) = match self.p.lights.get(c) {
-                // provisional (Q-0013): the scaled ground level
+                // spec: S-0104 claim 13 (a terrain tile, ground and extra image: the cell's scaled ground level)
                 Some(l) => (l.table, l.scaled_ground),
                 None => (TileTable::Neutral, NEUTRAL_BRIGHTNESS),
             };
             let row = self.tile_row(table, b);
-            let mut push = |image: u32, depth: Option<u32>, x: i32, y: i32| {
+            let mut push = |image: u32, depth: Option<u32>, x: i32, y: i32, paint: Paint| {
                 self.built.scene.items.push(Item {
                     image,
                     x,
@@ -763,36 +882,88 @@ impl Builder<'_> {
                         depth,
                         reference_row,
                     },
-                    paint: Paint::Row(row),
+                    paint,
                     group: Group::Tiles,
-                    // provisional (Q-0009 placement, Q-0013 brightness)
-                    provisional: true,
+                    provisional: false,
                     object: None,
                 });
             };
-            push(img, dep, left, top);
+            // spec: S-0010 claim 22 (every pixel of the diamond is painted, index 0 included)
+            push(img, dep, left, top, Paint::Diamond(row));
             if let Some((ei, ed, dx, dy)) = extra {
-                push(ei, ed, left + dx, top + dy);
+                // spec: S-0010 claim 23 (the extra image at the diamond box's corner plus the position difference;
+                // index 0 transparent; drawn right after its own cell's diamond)
+                push(ei, ed, left + dx, top + dy, Paint::Row(row));
             }
         }
     }
 
-    /// Overlays (S-0009 claim 12, S-0102 claims 12 and 13, S-0104 claim 13;
-    /// frames and palettes provisional, Q-0012).
+    /// The shade row of an untinted start-up table (S-0112 Terms, claim 2;
+    /// S-0104 claim 6): the resource table, or the mine table.
+    fn startup_row(&mut self, mine: bool, brightness: i32) -> usize {
+        let q = OverlayQuirks::default();
+        let (base, n) = match self.p.rows.startup.get(&mine) {
+            Some(r) => *r,
+            None => {
+                // spec: S-0112 claim 2 (quirks.resource_palettes_from_start: the start-up palettes; off,
+                // the loaded theater's theater palette and unit palette)
+                let pal = match (mine, q.resource_palettes_from_start) {
+                    (false, true) => &self.palettes.resource,
+                    (true, true) => &self.palettes.mine,
+                    (false, false) => &self.palettes.theater,
+                    (true, false) => &self.palettes.unit,
+                };
+                let t = light::untinted_table(pal);
+                let base = self.built.scene.rows.len();
+                for row in &t {
+                    self.built.scene.add_row(row565(row));
+                }
+                self.p.rows.startup.insert(mine, (base, t.len()));
+                (base, t.len())
+            }
+        };
+        base + light::brightness_row(brightness, n, light::DEFAULT_LIGHT_ALPHA)
+    }
+
+    /// Each tiberium's image run, in tiberium list order, from the image
+    /// numbers its rules layers gave (S-0112 claim 10).
+    fn tiberium_runs(&self) -> Vec<Option<Run>> {
+        let q = OverlayQuirks::default();
+        let Some(list) = self.import.outcome.registries.get(&Kind::Tiberiums) else {
+            return Vec::new();
+        };
+        list.iter()
+            .map(|t| {
+                let mut run = None;
+                if let Some(k) = t.keys.get(&b"Image"[..]) {
+                    for e in &k.history {
+                        if let glasnost_convert::layers::What::Set(v) = &e.what
+                            && let Some(v) = value::integer(v)
+                        {
+                            run = apply_image(run, v, &q);
+                        }
+                    }
+                }
+                run
+            })
+            .collect()
+    }
+
+    /// Overlays and their shadows (S-0112 claims 1 to 9; S-0102 claims 12,
+    /// 13 and 24; S-0009 claim 12).
     fn overlays(&mut self) {
-        let list_len = self
-            .import
-            .outcome
-            .registries
-            .get(&Kind::Overlays)
-            .map_or(0, Vec::len);
+        let q = OverlayQuirks::default();
+        let k = Kind::Overlays;
+        let list_len = self.import.outcome.registries.get(&k).map_or(0, Vec::len);
+        let grid = self.cells_loaded.unwrap_or(&self.map.cells);
         let cells: Vec<(CellXY, glasnost_map::Cell)> =
-            self.map.cells.iter().map(|(c, cell)| (c, *cell)).collect();
+            grid.iter().map(|(c, cell)| (c, *cell)).collect();
+        let runs = self.tiberium_runs();
+        let (local_hsv, _) = self.owner_colour(HUMAN);
         let mut beyond = 0usize;
         for (c, cell) in cells {
             let o = cell.overlay;
-            // spec: S-0009 claim 14 (veinhole markers are cleared)
-            if o == NO_OVERLAY || o == VEINHOLE_MARKER {
+            if o == NO_OVERLAY {
                 continue;
             }
             let idx = usize::from(o);
@@ -801,88 +972,166 @@ impl Builder<'_> {
                 beyond += 1;
                 continue;
             }
+            let flag = |key: &[u8]| rule_bool(self.import, k, idx, key, false);
+            let flags = Flags {
+                tiberium: flag(b"Tiberium"),
+                wall: flag(b"Wall"),
+                crate_: flag(b"Crate"),
+                rubble: flag(b"IsRubble"),
+                // spec: S-0102 Import mapping (overlay Land: a railroad land type)
+                railroad: rule(self.import, k, idx, b"Land")
+                    .is_some_and(|v| value::text(v, usize::MAX).eq_ignore_ascii_case(b"Railroad")),
+            };
             // spec: S-0009 claim 12 (crate overlays never appear in skirmish or multiplayer)
-            if self.options.skirmish && rule_bool(self.import, Kind::Overlays, idx, b"Crate", false)
-            {
+            if self.cells_loaded.is_none() && self.options.skirmish && flags.crate_ {
                 continue;
             }
-            let Some(sprite) = self
-                .import
-                .arts
-                .get(&(Kind::Overlays, idx))
-                .and_then(|a| a.sprite.clone())
-            else {
-                // spec: S-0009 claim 12 (an overlay without artwork or cell animation is not created)
-                continue;
-            };
-            let k = (Kind::Overlays, idx);
-            let tiberium = rule_bool(self.import, k.0, idx, b"Tiberium", false);
-            let wall = rule_bool(self.import, k.0, idx, b"Wall", false);
-            let rock = rule_bool(self.import, k.0, idx, b"IsARock", false);
-            // spec: S-0102 claim 12 (drawn flat unless the type says otherwise; walls always upright)
-            let flat = !wall && (tiberium || rule_bool(self.import, k.0, idx, b"DrawFlat", true));
+            // spec: S-0112 claim 1 (a deck cell: one whose overlay is at a bridge position)
+            let deck = DECK_BRIDGES.contains(&o);
+            let table_row = overlay_table_row(o, flags, deck);
+            let d = cell.overlay_data;
             let level = i32::from(cell.level);
-            // spec: S-0102 claim 13 (overlay biases: −2 − 15ℓ, or −17 − 15ℓ for other upright types)
-            let bias = if flat || wall || rock || tiberium {
-                -2 - TERRAIN_LIFT * level
-            } else {
-                -17 - TERRAIN_LIFT * level
-            };
-            let light = self.p.lights.get(c);
-            // spec: S-0104 claim 13 (ore and gems 1000; walls U; others the scaled ground level)
-            let b = if tiberium {
-                NEUTRAL_BRIGHTNESS
-            } else if wall {
-                light.map_or(NEUTRAL_BRIGHTNESS, |l| l.unscaled_ground)
-            } else {
-                light.map_or(NEUTRAL_BRIGHTNESS, |l| l.scaled_ground)
-            };
+            let light = self.p.lights.get(c).copied();
+            let scaled = light.map_or(NEUTRAL_BRIGHTNESS, |l| l.scaled_ground);
             let table = light.map_or(TileTable::Neutral, |l| l.table);
-            // provisional (Q-0012): overlays use their cell's tile shade table
-            let row = self.tile_row(table, b);
-            let frames = self.sprite_frames(&sprite).unwrap_or(0);
-            // provisional (Q-0012): ore shows the frame of its data value, other overlays frame 0
-            let frame = if tiberium && usize::from(cell.overlay_data) < frames / 2 {
-                usize::from(cell.overlay_data)
-            } else {
-                0
+            // spec: S-0112 claim 1 (palette, shade table and brightness by row)
+            let paint_row = match table_row {
+                OverlayRow::Marker | OverlayRow::Rubble => None,
+                OverlayRow::Deck => Some(
+                    self.tile_row(table, light.map_or(NEUTRAL_BRIGHTNESS, |l| l.scaled_raised)),
+                ),
+                // spec: S-0112 claim 1 row 3 (ore and gems: the start-up resource table at 1000)
+                OverlayRow::Tiberium => Some(self.startup_row(false, NEUTRAL_BRIGHTNESS)),
+                // spec: S-0112 claim 1 row 4 (walls: the local player's house colour, quirks.wall_local_player_colour; U)
+                OverlayRow::Wall => {
+                    let _ = q.wall_local_player_colour;
+                    Some(self.house_row(
+                        local_hsv,
+                        light.map_or(NEUTRAL_BRIGHTNESS, |l| l.unscaled_ground),
+                    ))
+                }
+                OverlayRow::Vein => Some(self.startup_row(false, scaled)),
+                OverlayRow::Crate | OverlayRow::Other => Some(self.tile_row(table, scaled)),
             };
+            let own_sprite = self.overlay_sprite(idx);
+            // spec: S-0112 claims 1, 4 and 6 (the body's sprite and image frame)
+            let body: Option<(Vec<u8>, usize)> = match table_row {
+                OverlayRow::Marker | OverlayRow::Rubble => None,
+                OverlayRow::Deck => own_sprite.clone().map(|s| (s, deck_frame(d, (c.x, c.y)))),
+                OverlayRow::Tiberium => {
+                    let run = tiberium_of(i32::from(o), &runs).and_then(|t| runs[t]);
+                    match run {
+                        // spec: S-0112 claim 4 (the body comes from the tiberium's run, by cell position)
+                        Some(run) => {
+                            let p = tiberium_body(run, (c.x, c.y), cell.slope);
+                            usize::try_from(p)
+                                .ok()
+                                .and_then(|p| self.overlay_sprite(p))
+                                .map(|s| (s, usize::from(d)))
+                        }
+                        // spec: S-0112 claim 12 (no run: the stored type, with the data value as the frame)
+                        None => own_sprite.clone().map(|s| (s, usize::from(d))),
+                    }
+                }
+                OverlayRow::Crate => own_sprite.clone().map(|s| (s, 0)),
+                OverlayRow::Wall | OverlayRow::Vein | OverlayRow::Other => {
+                    own_sprite.clone().map(|s| (s, usize::from(d)))
+                }
+            };
+            if table_row == OverlayRow::Rubble {
+                self.note(notes::RUBBLE);
+            }
+            // spec: S-0102 claim 12 (drawn flat unless the type says otherwise; walls always upright)
+            let rock = flag(b"IsARock");
+            let flat = !flags.wall
+                && (flags.tiberium || rule_bool(self.import, k, idx, b"DrawFlat", true));
+            // spec: S-0102 Constants (overlay depth bias: level + 4 for bridge decks)
+            let depth_level = if deck { level + DECK_LEVELS } else { level };
+            // spec: S-0102 claim 13 (overlay biases: −2 − 15ℓ, or −17 − 15ℓ for other upright types)
+            let bias = if flat || flags.wall || rock || flags.tiberium {
+                -2 - TERRAIN_LIFT * depth_level
+            } else {
+                -17 - TERRAIN_LIFT * depth_level
+            };
+            // spec: S-0102 claim 24 (the cell's centre at level 0, lifted 15 rows per level, plus the shift s)
+            let (shift, shadow_offset) = draw_shift(o, flags, deck, d);
             let (qx, qy) = cell_top(c.x, c.y);
-            // provisional (Q-0011): centred on the cell centre; spec: S-0101 claim 11 (lift 15 per level)
-            let p = (qx, qy + 15 - TERRAIN_LIFT * level);
-            let name = self.import.outcome.registries[&Kind::Overlays][idx]
-                .name
-                .clone();
+            let p = (qx, qy + 15 - TERRAIN_LIFT * level + shift);
+            let name = self.import.outcome.registries[&k][idx].name.clone();
             let object = self.add_object(ObjectInfo {
                 kind: "overlay",
                 type_name: String::from_utf8_lossy(&name).into_owned(),
                 owner: String::new(),
                 cell: c,
-                entry: format!("type index {o}, data {}", cell.overlay_data),
-                notes: vec![notes::OVERLAY.into(), notes::PLACEMENT.into()],
+                entry: format!("type index {o}, data {d}"),
+                notes: Vec::new(),
             });
-            if let Some(item) = self.place_sprite(
-                &sprite,
-                frame,
-                p,
-                DepthTest::Writer,
-                ItemDepth::Profile {
-                    profile: if flat {
-                        Profile::Flat
-                    } else {
-                        Profile::Upright
+            // spec: S-0112 claim 9 (an image frame beyond the sprite draws nothing)
+            if let (Some((sprite, frame)), Some(row)) = (&body, paint_row)
+                && self.sprite_frames(sprite).is_some_and(|n| *frame < n)
+                && let Some(item) = self.place_sprite(
+                    sprite,
+                    *frame,
+                    p,
+                    DepthTest::Writer,
+                    ItemDepth::Profile {
+                        profile: if flat {
+                            Profile::Flat
+                        } else {
+                            Profile::Upright
+                        },
+                        bias,
+                        companion: None,
                     },
-                    bias,
-                    companion: None,
-                },
-                Paint::Row(row),
-                Group::Overlays,
-                true,
-                Some(object),
-            ) {
+                    Paint::Row(row),
+                    Group::Overlays,
+                    false,
+                    Some(object),
+                )
+            {
                 self.built.scene.items.push(item);
-                self.note(notes::OVERLAY);
-                self.note(notes::PLACEMENT);
+            }
+            // spec: S-0112 claim 8 (the shadow: crate N/2; rubble none; otherwise the stored type, d + N/2)
+            let shadow: Option<(Vec<u8>, usize)> = if flags.crate_ {
+                own_sprite.map(|s| {
+                    let n = self.sprite_frames(&s).unwrap_or(0);
+                    (s, n / 2)
+                })
+            } else if flags.rubble {
+                None
+            } else if q.overlay_shadow_from_stored_type {
+                own_sprite.map(|s| {
+                    let n = self.sprite_frames(&s).unwrap_or(0);
+                    (s, usize::from(d) + n / 2)
+                })
+            } else {
+                // spec: S-0112 Edge cases (switch off: the body's sprite, body frame + N/2)
+                body.map(|(s, f)| {
+                    let n = self.sprite_frames(&s).unwrap_or(0);
+                    (s, f + n / 2)
+                })
+            };
+            if let Some((sprite, frame)) = shadow
+                && self.sprite_frames(&sprite).is_some_and(|n| frame < n)
+                && let Some(item) = self.place_sprite(
+                    &sprite,
+                    frame,
+                    (p.0 + shadow_offset.0, p.1 + shadow_offset.1),
+                    DepthTest::Writer,
+                    // provisional (Q-0021): an overlay shadow's depth bias is the overlay's own, flat
+                    ItemDepth::Profile {
+                        profile: Profile::Flat,
+                        bias,
+                        companion: None,
+                    },
+                    Paint::Shadow,
+                    Group::Shadows,
+                    true,
+                    Some(object),
+                )
+            {
+                self.built.scene.items.push(item);
+                self.note(notes::OVERLAY_SHADOW_DEPTH);
             }
         }
         if beyond > 0 {
@@ -894,11 +1143,23 @@ impl Builder<'_> {
         }
     }
 
-    /// Smudges (provisional throughout: no spec draws them yet).
+    /// The sprite of the overlay type at list position `idx`.
+    fn overlay_sprite(&self, idx: usize) -> Option<Vec<u8>> {
+        self.import
+            .arts
+            .get(&(Kind::Overlays, idx))
+            .and_then(|a| a.sprite.clone())
+    }
+
+    /// Smudges (S-0102 claim 25, S-0112 claim 3, S-0009 claim 42): painted
+    /// once for every covered cell, image frame 0, from the top corner of
+    /// the smudge's first cell lifted by the painted cell's level, with that
+    /// cell's tile shade table and scaled ground level, without depth.
     fn smudges(&mut self) {
         let smudges = self.map.objects.smudges.clone();
         for s in smudges {
             let Some(i) = find_type(self.import, Kind::Smudges, &s.type_name) else {
+                // spec: S-0009 claim 42 (a type field that names no smudge type places nothing)
                 self.drop_object("unknown smudge type");
                 continue;
             };
@@ -911,46 +1172,58 @@ impl Builder<'_> {
                 self.drop_object("smudge without art");
                 continue;
             };
-            let Some(cell) = self.map.cells.get(s.cell).copied() else {
-                continue;
-            };
-            let level = i32::from(cell.level);
-            let light = self.p.lights.get(s.cell);
-            let row = self.tile_row(
-                light.map_or(TileTable::Neutral, |l| l.table),
-                light.map_or(NEUTRAL_BRIGHTNESS, |l| l.scaled_ground),
-            );
-            let (qx, qy) = cell_top(s.cell.x, s.cell.y);
+            // spec: S-0009 Import mapping (smudge Width and Height, absent 1 and 1)
+            let w = rule_int(self.import, Kind::Smudges, i, b"Width", 1);
+            let h = rule_int(self.import, Kind::Smudges, i, b"Height", 1);
             let object = self.add_object(ObjectInfo {
                 kind: "smudge",
                 type_name: String::from_utf8_lossy(&s.type_name).into_owned(),
                 owner: String::new(),
                 cell: s.cell,
                 entry: String::new(),
-                notes: vec![notes::OVERLAY.into(), notes::OBJECTS.into()],
+                notes: vec![notes::SMUDGE_CLIP.into()],
             });
-            if let Some(item) = self.place_sprite(
-                &sprite,
-                0,
-                (qx, qy + 15 - TERRAIN_LIFT * level),
-                DepthTest::Writer,
-                ItemDepth::Profile {
-                    profile: Profile::Flat,
-                    bias: -2 - TERRAIN_LIFT * level,
-                    companion: None,
-                },
-                Paint::Row(row),
-                Group::Smudges,
-                true,
-                Some(object),
-            ) {
-                self.built.scene.items.push(item);
+            // spec: S-0102 claim 25 (the top corner of the smudge's first cell)
+            let (qx, qy) = cell_top(s.cell.x, s.cell.y);
+            // spec: S-0009 claim 42 (the w × h cells (x + i, y + j)), S-0102 claim 25 (each covered cell paints the image again)
+            for j in 0..h.max(0) {
+                for i in 0..w.max(0) {
+                    let c = CellXY::new(s.cell.x + i, s.cell.y + j);
+                    let Some(cell) = self.map.cells.get(c).copied() else {
+                        continue;
+                    };
+                    let level = i32::from(cell.level);
+                    let light = self.p.lights.get(c);
+                    // spec: S-0112 claim 3 (the painted cell's tile shade table and scaled ground level)
+                    let row = self.tile_row(
+                        light.map_or(TileTable::Neutral, |l| l.table),
+                        light.map_or(NEUTRAL_BRIGHTNESS, |l| l.scaled_ground),
+                    );
+                    if let Some(item) = self.place_sprite(
+                        &sprite,
+                        0,
+                        (qx, qy - TERRAIN_LIFT * level),
+                        // spec: S-0102 claim 25 (no depth test and no depth write)
+                        DepthTest::Ignore,
+                        ItemDepth::Profile {
+                            profile: Profile::Flat,
+                            bias: 0,
+                            companion: None,
+                        },
+                        Paint::Row(row),
+                        Group::Smudges,
+                        false,
+                        Some(object),
+                    ) {
+                        self.built.scene.items.push(item);
+                    }
+                }
             }
         }
     }
 
-    /// Terrain objects (S-0102 claim 13 rows, S-0104 claim 13; frame and
-    /// placement provisional, Q-0011).
+    /// Terrain objects (S-0102 claims 13 and 23, S-0112 claim 3, S-0104
+    /// claim 13).
     fn terrain_objects(&mut self) {
         let list = self.map.objects.terrain.clone();
         for t in list {
@@ -979,33 +1252,51 @@ impl Builder<'_> {
                 b"SpawnsTiberium",
                 false,
             );
-            // spec: S-0104 claim 13 (a plain terrain object: its cell's scaled ground level and tile table;
-            // an ore-spawning one: the unscaled ground level U, with a palette no spec names: Q-0012)
-            let b = if spawns {
-                light.map_or(NEUTRAL_BRIGHTNESS, |l| l.unscaled_ground)
+            // spec: S-0112 claim 3 (plain: its cell's tile shade table and scaled ground; ore-spawning:
+            // the start-up mine table and U)
+            let row = if spawns {
+                self.startup_row(
+                    true,
+                    light.map_or(NEUTRAL_BRIGHTNESS, |l| l.unscaled_ground),
+                )
             } else {
-                light.map_or(NEUTRAL_BRIGHTNESS, |l| l.scaled_ground)
+                self.tile_row(
+                    light.map_or(TileTable::Neutral, |l| l.table),
+                    light.map_or(NEUTRAL_BRIGHTNESS, |l| l.scaled_ground),
+                )
             };
-            if spawns {
-                self.note(notes::OVERLAY);
-            }
-            let row = self.tile_row(light.map_or(TileTable::Neutral, |l| l.table), b);
+            // spec: S-0102 claim 23 (the centre of its cell at the terrain height; an ore spawner 16 rows higher)
             let (x, y) = cell_centre(t.cell.x, t.cell.y);
-            let p = project_lifted(x, y, z);
+            let point = project_lifted(x, y, z);
+            let p = if spawns {
+                (point.0, point.1 - ORE_SPAWNER_RAISE)
+            } else {
+                point
+            };
             let frames = self.sprite_frames(&sprite).unwrap_or(0);
+            // spec: S-0102 claim 23 (frame 0 while its health, its type's strength at the start, is 2 or more; 1 below)
+            let strength =
+                rule(self.import, Kind::TerrainObjects, i, b"Strength").and_then(value::integer);
+            if strength.is_none() {
+                self.note(notes::TERRAIN_STRENGTH);
+            }
+            let frame = usize::from(strength.is_some_and(|s| s < 2));
+            if rule_bool(self.import, Kind::TerrainObjects, i, b"IsAnimated", false) {
+                self.note(notes::ANIMATED_TERRAIN);
+            }
             let object = self.add_object(ObjectInfo {
                 kind: "terrain object",
                 type_name: String::from_utf8_lossy(&t.type_name).into_owned(),
                 owner: String::new(),
                 cell: t.cell,
                 entry: String::new(),
-                notes: vec![notes::PLACEMENT.into()],
+                notes: Vec::new(),
             });
             let lz = height_lift(z);
             // spec: S-0102 claim 13 (terrain object: −L(z) − 12, upright, writes)
             if let Some(item) = self.place_sprite(
                 &sprite,
-                0,
+                frame,
                 p,
                 DepthTest::Writer,
                 ItemDepth::Profile {
@@ -1015,17 +1306,16 @@ impl Builder<'_> {
                 },
                 Paint::Row(row),
                 Group::TerrainObjects,
-                true,
+                false,
                 Some(object),
             ) {
                 self.built.scene.items.push(item);
-                self.note(notes::PLACEMENT);
             }
-            // spec: S-0102 claim 13 (its shadow: −L(z) − 3, flat, writes); provisional frame (Q-0011)
-            if frames > 1
+            // spec: S-0102 claims 13 and 23 (its shadow: body frame + ⌊N/2⌋, −L(z) − 3, flat, writes)
+            if frame + frames / 2 < frames
                 && let Some(item) = self.place_sprite(
                     &sprite,
-                    frames / 2,
+                    frame + frames / 2,
                     p,
                     DepthTest::Writer,
                     ItemDepth::Profile {
@@ -1035,14 +1325,48 @@ impl Builder<'_> {
                     },
                     Paint::Shadow,
                     Group::Shadows,
-                    true,
+                    false,
                     Some(object),
                 )
             {
                 self.built.scene.items.push(item);
-                self.note(notes::SHADOW);
             }
         }
+    }
+
+    /// Whether a pre-placed building with health value `value` starts
+    /// damaged and badly damaged (S-0009 claim 37, S-0108 F3). Undamaged
+    /// without the typed rules.
+    fn building_condition(&mut self, idx: usize, value: i32) -> (bool, bool) {
+        let Some(r) = self.rules else {
+            self.note(notes::NO_RULES_HEALTH);
+            return (false, false);
+        };
+        let name = &self.import.outcome.registries[&Kind::Buildings][idx].name;
+        let Some(strength) = glasnost_sim::objects::type_index(r, SimKind::Building, name)
+            .and_then(|t| r.buildings.get(t as usize))
+            .map(|b| b.strength)
+        else {
+            return (false, false);
+        };
+        if strength == 0 {
+            return (false, false);
+        }
+        // spec: S-0009 claim 37 (quirks.near_full_health_rounds_up: on, the original)
+        let (h, _) = starting_health(
+            HealthKind::Building,
+            value,
+            strength,
+            true,
+            r.quirks.chop_rounding,
+        );
+        // spec: S-0108 F3 (h = health / strength in binary64, compared with the ratios)
+        let ratio = F64::from_i64(i64::from(h), r.mode)
+            .div(F64::from_i64(i64::from(strength), r.mode), r.mode);
+        (
+            ratio.le(r.general.condition_yellow),
+            ratio.le(r.general.condition_red),
+        )
     }
 
     /// The foundation W × H of a building (S-0108 Import mapping).
@@ -1105,8 +1429,14 @@ impl Builder<'_> {
     fn structures(&mut self, ground: &mut Vec<GroundEntry>) {
         let list = self.map.objects.structures.clone();
         let mut any = false;
-        for s in list {
+        for (n, s) in list.iter().enumerate() {
             let p = &s.placed;
+            let fields = self.map.objects.fields(ListKind::Buildings, n).clone();
+            if fields.short {
+                // spec: S-0009 claim 36 (an entry that lacks a required field is dropped, a departure)
+                self.drop_object("entry lacks a required field");
+                continue;
+            }
             if !self.owner_kept(&p.owner) {
                 self.drop_object("owner no skirmish house carries");
                 continue;
@@ -1136,11 +1466,14 @@ impl Builder<'_> {
                     .map(|f| String::from_utf8_lossy(f).into_owned())
                     .collect::<Vec<_>>()
                     .join(","),
-                notes: vec![notes::HEALTH.into(), notes::PLACEMENT.into()],
+                notes: Vec::new(),
             });
+            if fields.upgrade_count.unwrap_or(0) > 0 {
+                self.note(notes::UPGRADES);
+            }
             let z = LEVEL_LEPTONS * i32::from(cell.level);
             let lz = height_lift(z);
-            // spec: S-0108 claim 8 (centred on the foundation's top corner, 128 leptons before the top-left cell's centre)
+            // spec: S-0108 claim 8, S-0009 claim 38 (centred on the top corner of the foundation's top-left cell)
             let anchor = project_lifted(256 * p.cell.x, 256 * p.cell.y, z);
             let u = self
                 .p
@@ -1170,18 +1503,30 @@ impl Builder<'_> {
                 continue;
             };
             let n = self.sprite_frames(&sprite).unwrap_or(0);
-            // provisional (Q-0016): a map-placed building starts complete and idle; spec: S-0108 claim 6
-            // (a change during the game's set-up is immediate: stage = a of the range)
+            // spec: S-0009 claim 40 (a map-placed building is complete and idle at once);
+            // S-0108 claim 6 (a change during the game's set-up is immediate: stage = a of the range)
             let idle = self
                 .art_value(Kind::Buildings, i, b"AnimIdle")
                 .map(|v| value::int_tuple_or::<3>(v, [0, 1, 0]).0)
                 .unwrap_or([0, 1, 0]);
             let k = idle[0].max(0) as usize;
-            // spec: S-0108 claim 2 (occupiable: 2·[occupied] + [hurt] = 0; gate: 0; others: k when not damaged)
             let occupiable = rule_bool(self.import, Kind::Buildings, i, b"CanBeOccupied", false);
             let gate = rule_bool(self.import, Kind::Buildings, i, b"Gate", false);
-            let f = if occupiable || gate { 0 } else { k };
-            self.note(notes::HEALTH);
+            let (damaged, badly) = self.building_condition(i, p.health);
+            // spec: S-0108 claim 2 (occupiable: 2·[occupied] + [hurt], hurt badly damaged at tech level 0 or
+            // below, damaged above; gate: 0, damaged G + 1; others: k, damaged k + 1 in the idle state)
+            let f = if occupiable {
+                // spec: S-0108 Import mapping (TechLevel absent: 255)
+                let tech = rule_int(self.import, Kind::Buildings, i, b"TechLevel", 255);
+                usize::from(if tech <= 0 { badly } else { damaged })
+            } else if gate {
+                if damaged {
+                    self.note(notes::GATE_DAMAGED);
+                }
+                0
+            } else {
+                k + usize::from(damaged)
+            };
             // spec: S-0108 claim 3 (drawn frame min(f, ⌊N/2⌋))
             let body_frame = f.min(n / 2);
             let normal_z = self
@@ -1229,7 +1574,6 @@ impl Builder<'_> {
                 )
             {
                 self.built.scene.items.push(item);
-                self.note(notes::SHADOW);
             }
             // spec: S-0108 claim 7 (bib: same frame f, no clamp, outside the construction state)
             if let Some(bib) = art.building_sprites.get("bib").cloned()
@@ -1252,7 +1596,6 @@ impl Builder<'_> {
             {
                 self.built.scene.items.push(item);
             }
-            self.note(notes::PLACEMENT);
             // Voxel turret or barrel in the object pass (S-0105 claims 5, 9, 37; S-0102 claims 5, 13).
             let turret_voxel =
                 rule_bool(self.import, Kind::Buildings, i, b"TurretAnimIsVoxel", false);
@@ -1293,10 +1636,10 @@ impl Builder<'_> {
         let q = VoxelQuirks::default();
         let vpl = self.vpl();
         let k = Kind::Buildings;
-        // provisional (Q-0016): the map entry's facing value × 256 (Q-0010 for the field).
-        let facing = ((p.facing & 0xFF) * 256) as u16;
+        // spec: S-0009 claim 39 (a building's turret starts at 256 × (v mod 256))
+        let facing = facing_from_value(p.facing);
         // spec: S-0105 Terms (turret anchor: the draw point moved by TurretAnimX and TurretAnimY, rules keys);
-        // provisional (Q-0016): the draw point taken as the S-0108 claim 8 image anchor
+        // S-0009 claim 38 (the draw point is the S-0108 claim 8 image anchor)
         let at = (
             anchor.0 + rule_int(self.import, k, idx, b"TurretAnimX", 0),
             anchor.1 + rule_int(self.import, k, idx, b"TurretAnimY", 0),
@@ -1350,23 +1693,25 @@ impl Builder<'_> {
     /// (S-0102 claims 3 and 5) in their initial state: on the ground, every
     /// one of them is in the ground layer.
     fn mobiles(&mut self, ground: &mut Vec<GroundEntry>) {
-        self.note(notes::OBJECTS);
-        let units = self.map.objects.units.clone();
-        for u in &units {
-            if let Some(g) = self.placed_mobile(Kind::Vehicles, &u.placed) {
-                ground.push(g);
-            }
-        }
-        let infantry = self.map.objects.infantry.clone();
-        for i in &infantry {
-            if let Some(g) = self.placed_mobile(Kind::Infantry, &i.placed) {
-                ground.push(g);
-            }
-        }
-        let aircraft = self.map.objects.aircraft.clone();
-        for a in &aircraft {
-            if let Some(g) = self.placed_mobile(Kind::Aircraft, &a.placed) {
-                ground.push(g);
+        // spec: S-0009 claim 43 (vehicles, then aircraft, then infantry, each in entry order)
+        for lk in [ListKind::Vehicles, ListKind::Aircraft, ListKind::Infantry] {
+            let kind = match lk {
+                ListKind::Vehicles => Kind::Vehicles,
+                ListKind::Aircraft => Kind::Aircraft,
+                _ => Kind::Infantry,
+            };
+            let entries: Vec<_> = self.map.objects.list(lk).into_iter().cloned().collect();
+            for (n, p) in entries.iter().enumerate() {
+                if self.map.objects.fields(lk, n).short {
+                    // spec: S-0009 claim 36 (an entry that lacks a required field is dropped, a departure)
+                    self.drop_object("entry lacks a required field");
+                    continue;
+                }
+                let sub = (lk == ListKind::Infantry)
+                    .then(|| self.map.objects.infantry.get(n).map_or(0, |i| i.sub_cell));
+                if let Some(g) = self.placed_mobile(kind, p, sub) {
+                    ground.push(g);
+                }
             }
         }
     }
@@ -1401,12 +1746,31 @@ impl Builder<'_> {
         &mut self,
         kind: Kind,
         p: &glasnost_map::objects::Placed,
+        sub_cell: Option<i32>,
     ) -> Option<GroundEntry> {
         let (i, cell) = self.mobile_start(kind, p)?;
-        let (x, y) = cell_centre(p.cell.x, p.cell.y);
+        let (x, y) = match sub_cell {
+            Some(sub) => {
+                // spec: S-0009 claim 38 (an infantry unit stands at standing position field 6, S-0208 table P;
+                // outside 0 … 4 the centre, S-0208 claim 5's departure)
+                let sp = u8::try_from(sub).ok().filter(|s| *s <= 4).unwrap_or(0);
+                let (u, v) = glasnost_sim::walk::standing_point(sp);
+                (256 * p.cell.x + u, 256 * p.cell.y + v)
+            }
+            // spec: S-0009 claim 38 (a vehicle or aircraft stands on the centre of its cell)
+            None => cell_centre(p.cell.x, p.cell.y),
+        };
         let z = LEVEL_LEPTONS * i32::from(cell.level);
-        // provisional (Q-0010): the facing value on the scale of glossary claim G1 (× 256)
-        let facing = ((p.facing & 0xFF) * 256) as u16;
+        if kind == Kind::Aircraft
+            && !self
+                .map
+                .footprint
+                .is_usable(p.cell, i32::from(cell.level), cell.slope != 0)
+        {
+            self.note(notes::AIRCRAFT_AIR);
+        }
+        // spec: S-0009 claim 39 (body facing 256 × (v mod 256); infantry: field 8)
+        let facing = facing_from_value(p.facing);
         let fire_angle = rule_int(
             self.import,
             kind,
@@ -1415,8 +1779,14 @@ impl Builder<'_> {
             voxel::DEFAULT_FIRE_ANGLE,
         );
         let infantry = (kind == Kind::Infantry).then(|| {
-            // spec: S-0107 claim 2 (no current sequence: the stand entry; water cells need land types, Q-0009)
-            let (start, count, multiplier) = self.sequence_entry(i, b"Ready");
+            // spec: S-0107 claim 2 (no current sequence: tread on a water cell, else stand; the land type
+            // needs the loaded cells, so without a game every unit shows stand)
+            let water = self
+                .cells_loaded
+                .and_then(|g| g.get(p.cell))
+                .is_some_and(|c| c.land == glasnost_map::terrain::land::WATER);
+            let key: &[u8] = if water { b"Tread" } else { b"Ready" };
+            let (start, count, multiplier) = self.sequence_entry(i, key);
             InfantryFrame {
                 start,
                 count,
@@ -1439,7 +1809,7 @@ impl Builder<'_> {
                 .map(|f| String::from_utf8_lossy(f).into_owned())
                 .collect::<Vec<_>>()
                 .join(","),
-            notes: vec![notes::OBJECTS.into(), notes::PLACEMENT.into()],
+            notes: Vec::new(),
         });
         let m = Mobile {
             kind,
@@ -1447,7 +1817,7 @@ impl Builder<'_> {
             owner: p.owner.clone(),
             pos: (x, y, z),
             body: facing,
-            // provisional (Q-0016): the turret's starting facing is taken as the body's.
+            // spec: S-0009 claim 39 (a vehicle's or aircraft's turret starts at its body facing)
             turret: facing,
             // spec: S-0105 claim 6 (placed level, then turned toward the fire angle; no tick has run)
             elevation: voxel::barrel_elevation_after(fire_angle, 0),
@@ -1553,7 +1923,10 @@ impl Builder<'_> {
         }
     }
 
-    /// An infantry unit's body and shadow sprites (S-0107 claims 2, 3, 19).
+    /// An infantry unit's body and own shadow (S-0107 claims 2, 3, 19;
+    /// S-0102 claims 13, 20 and 28): the shadow right after the body, both
+    /// centred on the draw point. Units in the viewer stand on the ground
+    /// (height above the surface 0).
     fn infantry_items(&mut self, m: &Mobile, point: (i32, i32), u: i32, row: usize) -> Vec<Item> {
         let Some(sprite) = self
             .import
@@ -1568,29 +1941,9 @@ impl Builder<'_> {
         let Ok(frame) = usize::try_from(infantry_frame(&f, m.body)) else {
             return Vec::new();
         };
+        let lz = height_lift(m.pos.2);
         let mut items = Vec::new();
-        // spec: S-0107 claim 19 (on the ground: shadow frame + ⌊L/2⌋ at the same position, unless suppressed)
-        if !rule_bool(self.import, m.kind, m.idx, b"NoShadow", false)
-            && let Some(item) = self.place_sprite(
-                &sprite,
-                frame + n / 2,
-                point,
-                DepthTest::Reader,
-                // spec: S-0102 claim 13 (infantry shadow: U − 2, flat)
-                ItemDepth::Profile {
-                    profile: Profile::Flat,
-                    bias: u - 2,
-                    companion: None,
-                },
-                Paint::Shadow,
-                Group::Shadows,
-                true,
-                Some(m.object),
-            )
-        {
-            items.push(item);
-        }
-        // spec: S-0102 claim 13 (infantry drawn as a sprite: U − 2, upright, reader)
+        // spec: S-0102 claim 13 (infantry body, h = 0: U − 12, upright, reader)
         if let Some(item) = self.place_sprite(
             &sprite,
             frame,
@@ -1598,23 +1951,44 @@ impl Builder<'_> {
             DepthTest::Reader,
             ItemDepth::Profile {
                 profile: Profile::Upright,
-                bias: u - 2,
+                bias: u - 12,
                 companion: None,
             },
             Paint::Row(row),
             Group::Infantry,
-            true,
+            false,
             Some(m.object),
         ) {
             items.push(item);
         }
-        self.note(notes::SHADOW);
-        self.note(notes::PLACEMENT);
+        // spec: S-0107 claim 19 (on the ground: shadow frame + ⌊L/2⌋ at the same position, unless suppressed);
+        // S-0102 claims 20 and 28 (drawn right after the body; it darkens the body's own pixels)
+        if !rule_bool(self.import, m.kind, m.idx, b"NoShadow", false)
+            && let Some(item) = self.place_sprite(
+                &sprite,
+                frame + n / 2,
+                point,
+                DepthTest::Reader,
+                // spec: S-0102 claim 13 (own shadow of an infantry unit, h = 0: −L(z) − 4, flat)
+                ItemDepth::Profile {
+                    profile: Profile::Flat,
+                    bias: -lz - 4,
+                    companion: None,
+                },
+                Paint::Shadow,
+                Group::Shadows,
+                false,
+                Some(m.object),
+            )
+        {
+            items.push(item);
+        }
         items
     }
 
-    /// A vehicle's or aircraft's items: voxel parts (S-0105), or a sprite
-    /// showing image frame 0 (provisional, Q-0011).
+    /// A vehicle's or aircraft's items: voxel parts (S-0105), or for a
+    /// vehicle a sprite (S-0102 claims 21 and 22). An aircraft whose art is
+    /// not a voxel model shows no body (claim 21).
     fn vehicle_items(&mut self, m: &Mobile, point: (i32, i32), u: i32, row: usize) -> Vec<Item> {
         let Some(art) = self.import.arts.get(&(m.kind, m.idx)).cloned() else {
             return Vec::new();
@@ -1626,12 +2000,97 @@ impl Builder<'_> {
         };
         if art.voxels.contains_key("body") {
             self.vehicle_voxels(m, &art, point, u, row, group)
-        } else if let Some(sprite) = art.sprite.clone() {
-            self.note(notes::PLACEMENT);
-            // spec: S-0102 claim 13 (a unit drawn as a sprite: U − 2, upright, reader)
-            self.place_sprite(
-                &sprite,
-                0,
+        } else if m.kind == Kind::Vehicles
+            && let Some(sprite) = art.sprite.clone()
+        {
+            self.sprite_vehicle(m, &sprite, point, u, row)
+        } else {
+            // spec: S-0102 claim 21 (an aircraft is never drawn as a sprite)
+            Vec::new()
+        }
+    }
+
+    /// A vehicle drawn as a sprite (S-0102 claims 13, 21, 22 and 28).
+    fn sprite_vehicle(
+        &mut self,
+        m: &Mobile,
+        sprite: &[u8],
+        point: (i32, i32),
+        u: i32,
+        row: usize,
+    ) -> Vec<Item> {
+        let (k, i) = (m.kind, m.idx);
+        let n = self.sprite_frames(sprite).unwrap_or(0);
+        let art_int = |b: &Self, key: &[u8]| b.art_value(k, i, key).and_then(value::integer);
+        let turret = rule_bool(self.import, k, i, b"Turret", false);
+        // spec: S-0102 Import mapping (WalkFrames 12, FiringFrames 0)
+        let walk_frames = art_int(self, b"WalkFrames").unwrap_or(12);
+        let firing_frames = art_int(self, b"FiringFrames").unwrap_or(0);
+        // spec: S-0102 Import mapping (Facings 8, but 1 without firing frames and turret)
+        let facings =
+            art_int(self, b"Facings").unwrap_or(if firing_frames == 0 && !turret { 1 } else { 8 });
+        // spec: S-0102 Import mapping (standing frames 0, or 1 with firing frames; walking start 0;
+        // standing start F_w·n with standing frames, else the walking start)
+        let standing_frames = i32::from(firing_frames > 0);
+        let walk_start = 0;
+        let stand_start = if standing_frames > 0 {
+            walk_frames * facings
+        } else {
+            walk_start
+        };
+        // spec: S-0102 claim 22 (facing part: (f₈ + 1) mod 8 with 8 facings, else 0;
+        // quirks.sprite_vehicle_eight_facings_only)
+        let d = if facings == 8 {
+            (n_step(m.body, 8) as i32 + 1) % 8
+        } else {
+            0
+        };
+        // spec: S-0102 Import mapping (IdleRate absent: 0)
+        let idle_rate = rule_int(self.import, k, i, b"IdleRate", 0);
+        // spec: S-0102 claim 22 (frame table: no tick has run, so the walk counter w is 0, nothing fires
+        // or dies; the standing-pose state is taken as on, Q-0021)
+        let frame = if idle_rate != 0 {
+            walk_start + d * walk_frames
+        } else if standing_frames > 0 {
+            stand_start + d * standing_frames
+        } else {
+            walk_start + d * walk_frames
+        };
+        self.note(notes::STANDING_POSE);
+        let Ok(frame) = usize::try_from(frame) else {
+            return Vec::new();
+        };
+        let lz = height_lift(m.pos.2);
+        // spec: S-0102 claim 21 (no own shadow with the no-shadow flag or either visceroid flag)
+        let shadowed = !rule_bool(self.import, k, i, b"NoShadow", false)
+            && !rule_bool(self.import, k, i, b"SmallVisceroid", false)
+            && !rule_bool(self.import, k, i, b"LargeVisceroid", false);
+        let shadow_item = |b: &mut Self, bias: i32| {
+            if !shadowed {
+                return None;
+            }
+            // spec: S-0102 claim 21 (the shadow is the body frame + ⌊N/2⌋, centred on the same point)
+            b.place_sprite(
+                sprite,
+                frame + n / 2,
+                point,
+                DepthTest::Reader,
+                ItemDepth::Profile {
+                    profile: Profile::Flat,
+                    bias,
+                    companion: None,
+                },
+                Paint::Shadow,
+                Group::Shadows,
+                false,
+                Some(m.object),
+            )
+        };
+        let body = |b: &mut Self, f: usize| {
+            // spec: S-0102 claim 13 (a vehicle drawn as a sprite, h = 0: U − 2, upright, reader)
+            b.place_sprite(
+                sprite,
+                f,
                 point,
                 DepthTest::Reader,
                 ItemDepth::Profile {
@@ -1640,15 +2099,27 @@ impl Builder<'_> {
                     companion: None,
                 },
                 Paint::Row(row),
-                group,
+                Group::Vehicles,
                 true,
                 Some(m.object),
             )
-            .into_iter()
-            .collect()
+        };
+        let mut items = Vec::new();
+        if turret {
+            // spec: S-0102 claim 22 (a turret vehicle: body and turret frame ((t₃₂ + 4) mod 32) + 8·F_w
+            // combined into one image; its shadow, U − 2, never darkens them, so it goes first)
+            items.extend(shadow_item(self, u - 2));
+            items.extend(body(self, frame));
+            let t = (n_step(m.turret, 32) as i32 + 4) % 32 + 8 * walk_frames;
+            if let Ok(t) = usize::try_from(t) {
+                items.extend(body(self, t));
+            }
         } else {
-            Vec::new()
+            // spec: S-0102 claims 21 and 28 (the own shadow right after the body: −L(z) − 4, flat)
+            items.extend(body(self, frame));
+            items.extend(shadow_item(self, -lz - 4));
         }
+        items
     }
 
     /// A parsed voxel model and its motion file from the assets, parsed
@@ -1673,8 +2144,10 @@ impl Builder<'_> {
         m
     }
 
-    /// The voxel lighting table (S-0105 claim 19; its layout is provisional,
-    /// Q-0014).
+    /// The voxel lighting table (S-0105 claims 19 and 38; its byte layout
+    /// is provisional, Q-0022). A missing or unrecognised file gives the
+    /// empty table, whose rows all read as zero (claim 38,
+    /// `quirks.vpl_unloaded_rows_blank`).
     fn vpl(&mut self) -> Option<Vpl> {
         let assets = self.assets;
         let v = self
@@ -1682,12 +2155,32 @@ impl Builder<'_> {
             .vpl
             .get_or_insert_with(|| assets.get(VPL_FILE).and_then(|b| Vpl::parse(b).ok()))
             .clone();
-        self.note(if v.is_some() {
-            notes::VPL
-        } else {
-            notes::NO_VPL
-        });
-        v
+        let blank = VoxelQuirks::default().vpl_unloaded_rows_blank;
+        let v = match v {
+            Some(v) => {
+                self.note(notes::VPL);
+                if v.short {
+                    self.note(if blank {
+                        notes::SHORT_VPL
+                    } else {
+                        notes::VPL_REJECTED
+                    });
+                } else if v.stated_rows > glasnost_fmt::vpl::MAX_ROWS {
+                    // spec: S-0105 claim 38 (more than 128 rows: a departure, the first 128 kept)
+                    self.note(notes::SHORT_VPL);
+                }
+                v
+            }
+            None => {
+                self.note(if blank {
+                    notes::NO_VPL
+                } else {
+                    notes::VPL_REJECTED
+                });
+                Vpl::empty()
+            }
+        };
+        Some(v)
     }
 
     /// Adds a voxel part image to the scene: its index and offset from the
@@ -1723,7 +2216,7 @@ impl Builder<'_> {
             },
             paint,
             group,
-            // provisional (Q-0014: the lighting table's layout; shadows also Q-0015)
+            // provisional (Q-0022: the lighting table's byte layout)
             provisional: true,
             object: Some(object),
         }
@@ -1813,7 +2306,6 @@ impl Builder<'_> {
                     object,
                 ));
                 self.note(notes::VOXEL_SHADOW_POINT);
-                self.note(notes::SHADOW);
             }
         }
         // spec: S-0105 claim 16 (walk counter 0: body frame 0; the simulation keeps no walk counter yet)
@@ -1958,6 +2450,14 @@ pub struct Inputs<'a> {
     pub assets: &'a Assets,
     /// Viewer options.
     pub options: &'a Options,
+    /// The typed rules of the game, when the ruleset resolved: the strengths
+    /// and condition ratios a pre-placed building's starting health and
+    /// damaged state need (S-0009 claim 37, S-0108 F3).
+    pub rules: Option<&'a SimRules>,
+    /// The map's cells after loading (S-0009, S-0010 claim 12: the
+    /// recalculation passes and smoothing), when a game was set up; the
+    /// cells as the map stores them otherwise.
+    pub cells: Option<&'a CellGrid>,
 }
 
 impl Painter {
@@ -1973,6 +2473,7 @@ impl Painter {
             voxels: BTreeMap::new(),
             models: BTreeMap::new(),
             vpl: None,
+            tile_files: BTreeMap::new(),
         }
     }
 
@@ -1987,6 +2488,8 @@ impl Painter {
     ) -> (Vec<GroundEntry>, BTreeSet<String>) {
         let mut b = Builder {
             map: inputs.map,
+            rules: inputs.rules,
+            cells_loaded: inputs.cells,
             import: inputs.import,
             catalogue: inputs.catalogue,
             palettes: inputs.palettes,

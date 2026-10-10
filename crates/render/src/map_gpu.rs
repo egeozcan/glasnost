@@ -9,7 +9,9 @@
 //! into runs that share a pipeline, so the result matches
 //! [`Scene::compose`] pixel for pixel. The one exception is shadows: the GPU
 //! halves the expanded 8-bit channels by blending, which can differ from the
-//! CPU's 5-6-5 halving in the lowest bits (both provisional, Q-0015).
+//! CPU's 5-6-5 halving in the lowest bits (S-0102 claim 26, F7: an engine
+//! that keeps 8-bit channels packs to the same hi-colour pixel; the display
+//! path here keeps the expanded channels).
 
 use bytemuck::{Pod, Zeroable};
 use wgpu::util::DeviceExt;
@@ -144,11 +146,13 @@ enum Role {
     Writer,
     Reader,
     Shadow,
+    /// Neither reads nor writes depth (S-0102 claim 25).
+    Ignore,
 }
 
 /// GPU resources for one scene.
 pub struct MapRenderer {
-    pipelines: [wgpu::RenderPipeline; 4],
+    pipelines: [wgpu::RenderPipeline; 5],
     bind_group: wgpu::BindGroup,
     layout: wgpu::BindGroupLayout,
     view_buffer: wgpu::Buffer,
@@ -297,6 +301,7 @@ impl MapRenderer {
                 Role::Tile => (wgpu::CompareFunction::LessEqual, true),
                 Role::Writer => (wgpu::CompareFunction::Less, true),
                 Role::Reader | Role::Shadow => (wgpu::CompareFunction::Less, false),
+                Role::Ignore => (wgpu::CompareFunction::Always, false),
             };
             let blend = (role == Role::Shadow).then_some(wgpu::BlendState {
                 color: wgpu::BlendComponent {
@@ -347,6 +352,7 @@ impl MapRenderer {
             make(Role::Writer),
             make(Role::Reader),
             make(Role::Shadow),
+            make(Role::Ignore),
         ];
         let instance_capacity = 1024;
         let instances = device.create_buffer(&wgpu::BufferDescriptor {
@@ -493,13 +499,16 @@ impl MapRenderer {
                         (_, DepthTest::Reader) => Role::Reader,
                         (_, DepthTest::Tile) => Role::Tile,
                         (_, DepthTest::Writer) => Role::Writer,
+                        (_, DepthTest::Ignore) => Role::Ignore,
                     };
                     (role, kind, bias, 0, None)
                 }
             };
-            let row = match item.paint {
-                Paint::Row(r) => r as u32,
-                Paint::Shadow => 0,
+            let (row, diamond) = match item.paint {
+                Paint::Row(r) => (r as u32, 0),
+                // spec: S-0010 claim 22 (a diamond has no transparent index)
+                Paint::Diamond(r) => (r as u32, 1),
+                Paint::Shadow => (0, 0),
             };
             let ds = depth_slot.unwrap_or(Slot {
                 x: 0,
@@ -515,7 +524,7 @@ impl MapRenderer {
                 ],
                 place: [item.x, item.y, bias, reference_row],
                 depth: [ds.x, ds.y, ds.layer, flags],
-                paint: [row, 0, 0, 0],
+                paint: [row, diamond, 0, 0],
             });
             let n = list.len() as u32;
             match batches.last_mut() {
@@ -571,6 +580,7 @@ impl MapRenderer {
                 Role::Writer => 1,
                 Role::Reader => 2,
                 Role::Shadow => 3,
+                Role::Ignore => 4,
             };
             pass.set_pipeline(&self.pipelines[i]);
             pass.draw(0..6, range);

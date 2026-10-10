@@ -9,7 +9,11 @@ use glasnost_convert::game::GameInputs;
 use glasnost_convert::map::to_vfs_theater;
 use glasnost_convert::theater::Catalogue;
 use glasnost_fmt::pal::Palette6;
+use std::sync::Arc;
+
 use glasnost_map::Map;
+use glasnost_sim::rules::SimRules;
+
 use glasnost_render::palette::{ANIM_PALETTE_FILE, PaletteQuirks, PaletteState};
 use glasnost_vfs::Vfs;
 use glasnost_vfs::theater::Theater;
@@ -42,6 +46,10 @@ pub struct Loaded {
     pub problems: Vec<String>,
     /// The live sandbox game, when it started.
     pub live: Option<Live>,
+    /// The typed rules, when the ruleset resolved.
+    pub rules: Option<Arc<SimRules>>,
+    /// The cells after loading, when the game was set up.
+    pub cells: Option<glasnost_map::CellGrid>,
 }
 
 impl Loaded {
@@ -55,6 +63,8 @@ impl Loaded {
                 palettes: &self.palettes,
                 assets: &self.assets,
                 options: &self.options,
+                rules: self.rules.as_deref(),
+                cells: self.cells.as_ref(),
             },
             self.live.as_mut(),
         )
@@ -106,6 +116,10 @@ pub async fn load(
         pal(read_named(vfs, ANIM_PALETTE_FILE).await).as_ref(),
         PaletteQuirks::default(),
     );
+    // spec: S-0112 claim 2 (the start-up resource table: the temperate theater palette, read at program start)
+    palettes.set_startup_resource(
+        pal(read_named(vfs, &Theater::Temperate.theater_palette()).await).as_ref(),
+    );
     let mut files = std::collections::BTreeMap::new();
     for name in [
         theater.unit_palette(),
@@ -116,17 +130,6 @@ pub async fn load(
     }
     // spec: S-0103 claim 3 (a game in a new theater loads its palettes)
     palettes.start_game(theater, |n| files.get(n).cloned().flatten());
-    let mut assets = Assets::default();
-    let exists = |n: &[u8]| vfs.resolve_bytes(n).is_some();
-    let wanted = build::wanted_files(&map, &import, &catalogue, &exists);
-    for name in wanted {
-        let Ok(text) = std::str::from_utf8(&name) else {
-            continue;
-        };
-        if let Some(b) = read_named(vfs, text).await {
-            assets.insert(&name, b);
-        }
-    }
     let started = if play {
         match (&resolved, tiles) {
             (Err(e), _) => Err(format!("the rules did not resolve: {e}")),
@@ -136,6 +139,29 @@ pub async fn load(
     } else {
         Err("the game was not started".into())
     };
+    // The cells after loading (S-0010 claim 12), which the tiles are drawn from.
+    let cells = started.as_ref().ok().map(|(w, ..)| w.cells.grid.clone());
+    let mut assets = Assets::default();
+    let exists = |n: &[u8]| vfs.resolve_bytes(n).is_some();
+    let wanted = build::wanted_files(
+        &map,
+        cells.as_ref().unwrap_or(&map.cells),
+        &import,
+        &catalogue,
+        &exists,
+    );
+    for name in wanted {
+        let Ok(text) = std::str::from_utf8(&name) else {
+            continue;
+        };
+        if let Some(b) = read_named(vfs, text).await {
+            assets.insert(&name, b);
+        }
+    }
+    let rules = resolved
+        .as_ref()
+        .ok()
+        .map(|r| Arc::new(SimRules::new(&r.ruleset, &r.sim_rules_hash)));
     let mut options = options.clone();
     if started.is_ok() {
         // The sandbox game places every owner's objects (S-0009 claim 27 in
@@ -149,6 +175,8 @@ pub async fn load(
         palettes: &palettes,
         assets: &assets,
         options: &options,
+        rules: rules.as_deref(),
+        cells: cells.as_ref(),
     };
     let (mut built, painter) = build::build_parts(&inputs, started.is_ok());
     let live = match started {
@@ -173,5 +201,7 @@ pub async fn load(
         minimap,
         problems,
         live,
+        rules,
+        cells,
     }
 }

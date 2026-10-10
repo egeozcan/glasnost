@@ -131,6 +131,13 @@ pub struct PaletteState {
     pub theater: Palette,
     /// Anim palette, read once per session.
     pub anim: Palette,
+    /// The palette of the start-up resource table: the temperate theater
+    /// palette as read once at program start (S-0112 Terms, claim 2); all
+    /// black until [`PaletteState::set_startup_resource`].
+    pub resource: Palette,
+    /// The palette of the start-up mine table: the snow unit palette file as
+    /// read once at program start (S-0112 Terms, claim 2).
+    pub mine: Palette,
     loaded: Option<Theater>,
     quirks: PaletteQuirks,
 }
@@ -158,9 +165,21 @@ impl PaletteState {
             tile: Palette::default(),
             theater: Palette::default(),
             anim: load(anim),
+            resource: Palette::default(),
+            // spec: S-0112 Terms (the start-up mine table: the snow unit palette file × 4, once)
+            mine: load(snow_unit),
             loaded: None,
             quirks,
         }
+    }
+
+    /// Reads the start-up resource table's palette, the temperate theater
+    /// palette file × 4, once at program start (S-0112 Terms, claim 2).
+    pub fn set_startup_resource(&mut self, temperate: Option<&Palette6>) {
+        // spec: S-0112 Terms (start-up resource table: TEMPERAT.PAL × 4 by S-0103 claim 1)
+        self.resource = temperate
+            .map(|f| palette_from_file(f, &self.quirks))
+            .unwrap_or_default();
     }
 
     /// The theater whose palettes are loaded, if any.
