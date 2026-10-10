@@ -32,6 +32,7 @@ pub mod rules;
 pub mod save;
 pub mod scatter;
 pub mod surface;
+pub mod targeting;
 pub mod testkit;
 pub mod tick;
 pub mod tracks;
