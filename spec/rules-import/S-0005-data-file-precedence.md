@@ -2,11 +2,11 @@
 id: S-0005
 title: Data file precedence (loose files, archive mount order, name lookup)
 topic: rules-import
-revision: 3
+revision: 4
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-09
+approved-on: 2026-10-10
 measurements: []
 requests: [Q-0002]
 supersedes: []
@@ -16,10 +16,10 @@ supersedes: []
 
 ## Summary
 
-When the original game asks for a data file by name (rules, art, sprites, models, palettes, sounds),
+When the original asks for a data file by name (rules, art, sprites, models, palettes, sounds),
 exactly one copy is used: a loose file in the game directory if there is one, otherwise the copy in
 the highest-ranked mounted archive that holds the name. This spec gives that rank order, how a name
-is matched inside an archive, and which copy of each stock rules, art and game-mode file the game
+is matched inside an archive, and which copy of each stock rules, art and game-mode file the program
 therefore reads; how those files are then layered is S-0006.
 
 ## Terms
@@ -29,20 +29,34 @@ therefore reads; how those files are then layered is S-0006.
 *side*, *house*, *local player*, *settings file*, *sidebar*, *sprite*, *image frame*, *palette*,
 *voxel model*, *theater*, *type name*, *infantry*, *vehicle*, *aircraft*, *building*, *overlay*,
 *stock data*, *unspecified*, *measurement setup* and *measurement scenario* are used as in the
-glossary. The kinds of art in claim 22 and Scenario M11 are those of S-0007, in its wording: a
-building's main sprite and its other sprites (build-up, deploying, roof deploying, door, under-door,
-under-roof-door, rubble, special overlay and bib sprites, S-0007 claim 11), sidebar icons,
-secondary translucent images (S-0007 claim 23), motion files, theater-dependent sprites, a type's
-image name, a sprite's first-choice name and the generic fallback name. *Placeholder icon* and an
-art section's *theater flag* (Scenarios M3 and M11) are also used as in S-0007. Where S-0007 writes
-*type id*, this spec writes the glossary's *type name*. S-0108 says when a building shows each of
-its sprites.
+glossary. The kinds of art in claim 22 and Scenario M11 use the glossary's sprite roles and S-0007's
+wording: the *body sprite* of an infantry type or a building (this spec also calls the sprite of a
+vehicle drawn as a sprite its body sprite), a building's other sprites
+(build-up, deploying, roof-deploying, door, under-door, under-roof-door, rubble, special overlay and
+bib sprites, S-0007 claim 11), sidebar icons (S-0007 claims 22 and 25), *translucent sprites*
+(S-0007 claim 23), motion files, a type's *image name* and the *generic fallback* (S-0007 claim 8).
+*Placeholder icon* and an art section's *theater flag* (Scenarios M3 and M11) are also used as in
+S-0007. S-0108 says when a building shows each of these sprites, except the rubble sprite: no spec
+yet says when a rubble sprite is drawn (Open questions). The *theater refresh* (S-0007 claim 13)
+and the *letter substitution* of sprite names (Scenario M11, row 26) are used as in S-0007, and a
+building's *door-stage count* (Scenario M11 (c)) as in S-0108.
 Terms used only by this spec:
 
+- **First-choice name, generic fallback name.** A sprite's *first-choice name* is the file name
+  S-0007 builds for it before any generic fallback; its *generic fallback name* is the name that
+  S-0007's generic fallback tries when the first-choice name cannot be resolved.
+- **Theater-dependent sprite.** The sprite of a terrain object or smudge whose art section sets the
+  theater flag. The theater refresh of every game loads it under the type name and the current
+  theater's extension (Table 2), S-0007 claim 13.
+- **Program, startup.** *The program* is the original's executable while it runs; one run of it is
+  a *session* (glossary). *Startup* (also *program start*) is the start of a session, up to the
+  moment the main menu first appears. "The program refuses to start" means that startup fails: the
+  main menu never appears, and the session ends without any game. This is different from the
+  glossary's *game start*, the moment one match begins to load.
 - **Expansion, base game.** *The expansion* is YR (glossary). *The base game* is *Command &
   Conquer: Red Alert 2*, of which YR is the expansion.
 - **Member id.** The 32-bit number an archive stores for each member instead of its name (claim 6).
-- **Mounted archive.** An archive the game has opened for lookups. Only members of mounted archives
+- **Mounted archive.** An archive the program has opened for lookups. Only members of mounted archives
   can be found. A nested archive's members become visible only when the nested archive is mounted
   itself.
 - **Rank.** The position of a mounted archive in the search order. Rank 1 is searched first; a
@@ -57,14 +71,14 @@ Terms used only by this spec:
 - **Theater group, side group.** The archives mounted for the current map's theater (claim 14) and
   for the local player's side (claim 13).
 - **String table.** The file of player-visible texts (object names, messages, menu texts) that the
-  game loads once at startup.
+  program loads once at startup.
 - **AI, sound, speech and music databases; mode list.** The parsed contents of the expansion's AI,
   sound-effect, voice-announcement and music files, and of the file that lists the multiplayer and
   skirmish game modes. Their file names are in the Import mapping section.
 - **Kept art.** Art for which the first successful request of a session settles what later
-  requests in that session get, for the same name and for any name with the same member id, apart
-  from the discarding that claim 22 describes (claim 22). It comes in two sorts, which claim 22 tells apart by the requested name and by the
-  kind of art that makes the request.
+  requests in that session get, for the same name and for any name with the same member id
+  (`quirks.kept_art_keyed_by_id`), apart from the discarding described below. It comes in two sorts, which claim 22 tells apart by the
+  requested name and by the kind of art that makes the request.
   - A **kept file** is resolved and read once, and that copy is used for the rest of the session
     (except the four interface palettes of claim 22, which are discarded at every side-group mount).
   - A **deferred sprite** has its name fixed for the rest of the session by the first request,
@@ -77,7 +91,7 @@ Terms used only by this spec:
   form serves as its own short name. For a longer name the host makes up a different short form,
   which this spec does not specify (claims 14a and 20).
 - **Integrity digest section.** A section of a data file that holds a checksum of the file's
-  contents, written as text. Claim 21 says when it decides whether the game starts, claim 21b how
+  contents, written as text. Claim 21 says when it decides whether the program starts, claim 21b how
   the checksum is formed and how it is written, and claim 21a that the AI database's section has
   no effect. Its section name is in the Import mapping section.
 - **Interface layout file.** The expansion's data file that describes parts of the in-game
@@ -88,7 +102,7 @@ Terms used only by this spec:
 - **Keyboard file.** The expansion's data file that binds keys to commands. Its file name is in the
   Import mapping section; claim 18 says which copy is used.
 - **Map package.** An archive, kept as a loose file with the extension `yro`, that holds skirmish
-  and multiplayer maps together with a description member listing them. Claim 14a says how the game
+  and multiplayer maps together with a description member listing them. Claim 14a says how the program
   finds and mounts map packages.
 - **Side archive number.** The number nn in the names of the side group's archives (claim 13a).
 - **Observing local player.** A local player who takes part in a multiplayer game only to watch,
@@ -97,7 +111,7 @@ Terms used only by this spec:
   plays in a campaign mission. Its key is in the Import mapping section.
 - **jumpjet or balloon-hover unit** (Scenario M11). A unit of a jumpjet type (glossary), or of a
   type whose rules section sets the flag that makes it hover under a balloon. S-0108 names both
-  flags in its Import mapping and says that a war factory shows its roof deploying and
+  flags in its Import mapping and says that a war factory shows its roof-deploying and
   under-roof-door sprites while it releases such a unit.
 - **War factory** (Scenario M11). A building that produces vehicles and releases each newly built
   one from inside it.
@@ -116,7 +130,7 @@ Terms used only by this spec:
    archives hold. The mounted archives decide only when no such loose file exists. This
    holds for every kind of data file, including nested archives (claim 3) and the rules, art and
    game-mode files. The test is made afresh at every open: a loose file added or removed while the
-   game runs affects every later open. Some files are opened only once per session (claim 17), and
+   program runs affects every later open. Some files are opened only once per session (claim 17), and
    claim 22 says when each kind of art is opened, so a change reaches them only at those moments.
    - Backing: `measurable` (Scenario M2 for the precedence, Scenario M15 for the test at every open)
    - Confidence: high (precedence), medium (the test at every open)
@@ -124,7 +138,9 @@ Terms used only by this spec:
 2. **Loose names match case-insensitively.** The loose-file test uses the host file system of the
    original, which ignores letter case. A loose file spelled `RulesMd.Ini` therefore matches a
    request for `rulesmd.ini`. An implementation on a case-sensitive file system has to match loose
-   names without regard to ASCII letter case.
+   names without regard to ASCII letter case: a–z matches A–Z. This claim covers names made of
+   ASCII bytes. For bytes outside ASCII the original's host also folds letter case, by rules of the
+   host; our engine does not (Edge cases, "Non-ASCII loose names").
    - Backing: `measurable` (Scenario M8)
    - Confidence: high
 
@@ -164,13 +180,14 @@ Terms used only by this spec:
 6. **Member ids.** A requested name's member id is the public archive name-hash (Formulas) of the
    name with ASCII letters a–z upper-cased and all other bytes unchanged. The id is a 32-bit value,
    computed from the whole requested name.
-   Two different names with the same id are the same file as far as the archives and the kept art
-   of claim 22 are concerned. Requested names are at most 259 bytes long (Constants). For a longer
-   name the original's result is unspecified; our engine treats such a name as not found in any
-   archive.
+   Two different names with the same id are the same file as far as the archives (claim 7) and the
+   kept art of claim 22 (`quirks.kept_art_keyed_by_id`) are concerned. The original handles requested names of at most 259 bytes (Constants).
+   For a longer name the original's archive lookup has no defined result, and no loose file can
+   have such a name on the original's host. Our engine treats such a name as not found: neither as a
+   loose file nor in any archive (Edge cases, "Over-long names").
    - Backing: `measurable` (Scenario M8 for the id and the upper-casing, Scenario M21 for two names
      with the same id); `unmeasured` for names longer than 259 bytes (no data path in an ordinary
-     install requests one)
+     install requests one, and the original's result for one is not defined)
    - Confidence: high (the id, two names with the same id), medium (the length limit)
 
 7. **First-ranked archive wins.** Mounted archives are searched in rank order, and the first one
@@ -203,7 +220,7 @@ end. Claims 9 to 14a list the order. Table 1 in State and ordering gives it in o
 9. **Language archives first, then the expansion archives.** The first two archives mounted, and so
    the two highest ranks, are the expansion's language archive `langmd.mix` and then the base
    language archive `language.mix`. If neither a loose file nor either language archive holds the
-   string table, the game refuses to start (its main menu never appears), even when an expansion
+   string table, the program refuses to start (its main menu never appears), even when an expansion
    archive or any other archive mounted later holds it: the string table is read while these two
    are the only archives mounted, so no later archive can supply it. Next come the expansion archives
    that are present as loose files: of two of them, the one with the higher number ranks above the
@@ -228,7 +245,7 @@ end. Claims 9 to 14a list the order. Table 1 in State and ordering gives it in o
     language archives (`audiomd.mix` inside `langmd.mix`, `audio.mix` inside `language.mix`); all
     of them are resolved through the archives already mounted (claim 3).
     - Backing: `measurable` (Scenarios M1, M5, M14 for the order; Scenario M22 (a) for the sound
-      archive fallback); `unmeasured` for no sound archive without a working sound system (a game
+      archive fallback); `unmeasured` for no sound archive without a working sound system (a session
       whose sound system started but plays nothing audible looks the same from outside as one whose
       sound system did not start, so a test cannot tell which case it ran)
     - Confidence: high (order, fallback), medium (no sound archive when the sound system does not
@@ -319,9 +336,12 @@ end. Claims 9 to 14a list the order. Table 1 in State and ordering gives it in o
     and the Yuri side (index 2). These two numbers are consequences of the stock side order, not
     engine constants. A side of index 3 or higher asks for the archives numbered 04, 05 and so on.
     Stock data has none, so such a game never reaches play unless a loose file or an archive
-    supplies `sidecnn.mix` (claim 16). In a skirmish or multiplayer game the side indices follow
-    S-0004 claim 9's multiplayer order, the order in which the base rules' countries first name each
-    side.
+    supplies `sidecnn.mix` (claim 16). The indices are those of S-0004 claim 9: a side's index is
+    the order in which it was first created. In a skirmish or multiplayer game the sides that the
+    base rules' countries name come first, in the order in which those countries first name them, and
+    a side that only the base rules' side list, a game-mode layer or the map layer creates gets the
+    next free index when that layer creates it. So a new side name that a map override introduces
+    gets an index after every stock side (Scenario M24 (a)).
     - Backing: `measurable` (Scenario M7 (i) for the stock outcome, the Yuri side included; Scenario
       M24 (a) for a side of index 3, M24 (b) for a map override of the side field, M24 (c) for a
       country with no side, M24 (d) for a campaign mission); `unmeasured` for an observing local
@@ -345,7 +365,7 @@ end. Claims 9 to 14a list the order. Table 1 in State and ordering gives it in o
       previous game)
     - Confidence: high
 
-14a. **Map packages.** When the game builds its list of maps, every loose file in the game directory
+14a. **Map packages.** When the program builds its list of maps, every loose file in the game directory
     whose name matches `*.yro`, except one named `missions.yro` (letter case ignored), is mounted as
     an archive. Directory entries are skipped by the same rule as in claim 11 (directories and
     entries marked hidden, system or temporary). Each package names its maps in a description member
@@ -359,7 +379,7 @@ end. Claims 9 to 14a list the order. Table 1 in State and ordering gives it in o
     session, during startup, after all the archives of claim 12 are mounted. The packages therefore
     rank below all startup archives and above every per-game archive of claim 13, except a neutral
     pair mounted again later (claim 13), which then ranks below them. A package added or
-    removed while the game runs has no effect until the game restarts. Stock data includes several
+    removed while the program runs has no effect until the program restarts. Stock data includes several
     map packages, all loose in the game directory and all with names of at most eight characters
     before the dot. Map contents belong to S-0009.
     - Backing: `measurable` (Scenario M12 (a) for the startup-only mounting and for stock packages
@@ -386,7 +406,8 @@ end. Claims 9 to 14a list the order. Table 1 in State and ordering gives it in o
     game's own rules, art, AI, sound, speech, music and game-mode files, which have different names
     from the expansion's) are
     never read, even though their archives are mounted.
-    - Backing: `measurable` (Scenario M7 (a) and (d) for the archives never mounted, Scenario M7 (i)
+    - Backing: `measurable` (Scenario M22 (e) for the archives never mounted, Scenario M7 (a) and
+      (d) for their absence having no effect, Scenario M7 (i)
       and (j) for `conquer.mix`, `cameo.mix` and the side archives being found where stated,
       Scenario M6 (b) for the base snow-theater archives, Scenario M13 (a) (ii) for `load.mix`,
       Scenario M22 (a) and (b) for the two fallbacks, Scenario M14 for the rank of the mounted ones,
@@ -395,7 +416,7 @@ end. Claims 9 to 14a list the order. Table 1 in State and ordering gives it in o
 
 16. **Missing archives and files.** An archive that cannot be resolved is skipped without any
     message to the player, and the archives after it keep their relative order. Of the archives,
-    only these are required: the game refuses to start if one of `conqmd.mix`, `conquer.mix`,
+    only these are required: the program refuses to start if one of `conqmd.mix`, `conquer.mix`,
     `cameomd.mix`, `cameo.mix`, `mapsmd03.mix` or `multimd.mix` cannot be resolved, or if neither
     of the movie archives `movmd03.mix` and `movies03.mix` can be resolved (either one is enough).
     It also refuses to start if the string table cannot be resolved while only the language
@@ -409,27 +430,34 @@ end. Claims 9 to 14a list the order. Table 1 in State and ordering gives it in o
     - A missing base rules file is treated exactly like a base rules file that is present but empty:
       startup goes on with empty base rules. What empty base rules then lead to is outside this
       spec.
-    - A missing AI database does not stop the game from starting: its main menu appears. Startup
+    - A missing AI database does not stop the program from starting: its main menu appears. Startup
       goes on with an empty AI database. What computer players then do is not specified (Open
       questions).
-    - A missing mode list does not stop the game from starting: its main menu appears. The game
+    - A missing mode list does not stop the program from starting: its main menu appears. The program
       then has no game modes. What the skirmish and multiplayer screens then offer is not specified
       (Open questions).
-    - Backing: `measurable` (Scenario M7 (b), (c), (e), (f) and (j) for the seven archives and the
+    - Backing: `measurable` (every stock session for a missing archive being skipped without a
+      message: stock data has no `maps03.mix` (claim 12), and the program starts with no message,
+      which the measurement record of any scenario's stock start notes; falsified if a stock start
+      shows any message about a missing archive before the main menu; Scenario M22 (d) is the
+      counterpart with that archive present. Scenario M14's pair `mapsmd03.mix`/`multimd.mix`,
+      which stand on either side of the missing `maps03.mix`, for the archives around a missing
+      one keeping their relative order. Scenario M7 (b), (c), (e), (f) and (j) for the seven archives and the
       art, sound, speech and music databases missing, Scenario M16 (e) (i) for the string table, Scenario M22 (c)
       for either movie archive being enough,
       Scenario M7 (n) for one of those four databases holding no section; Scenario M7 (i) for the side
       archive; Scenario M7 (g) for the interface layout file; Scenario M7 (k) for the base rules,
       Scenario M7 (l) for the AI database, Scenario M7 (m) for the mode list)
     - Confidence: high (that missing archives are skipped, that the seven archives, the string
-      table and the art, sound, speech and music databases are required, one of those four databases without any section, the side archive),
+      table and the art, sound, speech and music databases are required, one of those four databases without any section, the side archive,
+      no game reaching play while the interface layout file cannot be resolved),
       medium (the interface layout file without any section, the base rules treated as empty, the
       missing AI database), low (that the main menu appears without a mode list)
 
 16a. **The interface layout file is read for every game.** The interface layout file, which among
     other things sets the buttons of the command bar, is resolved and read afresh at the start of
     every game, after the side group of that game is mounted (claim 13). It is not read at startup.
-    Two consequences follow. A loose interface layout file added or changed while the game runs
+    Two consequences follow. A loose interface layout file added or changed while the program runs
     takes effect from the next game on. And a side archive can supply the file, but only when no
     loose file and no higher-ranked archive holds it; in stock data `localmd.mix` holds it, so with
     stock data it always comes from there (claim 18).
@@ -442,9 +470,9 @@ end. Claims 9 to 14a list the order. Table 1 in State and ordering gives it in o
 
 17. **Rules, art and the other databases are resolved once, at startup.** The base rules, the art
     database, the AI database, the sound, speech and music databases and the mode list are resolved
-    and read once, while the game starts. So is every game-mode file the mode list names: each is
+    and read once, at startup. So is every game-mode file the mode list names: each is
     read once, at startup, when the mode list is read, and is not read again, even by the first game
-    played in that mode. Later changes to files on disk have no effect until the game restarts.
+    played in that mode. Later changes to files on disk have no effect until the program restarts.
     Every one of these files is resolved by claims 1 to 16. None of them is looked for under a base
     game name.
     - Backing: `measurable` (Scenario M2 (a) for the base rules, M2 (b) and its variant (ii) for a game-mode file, M2 (c)
@@ -473,9 +501,9 @@ end. Claims 9 to 14a list the order. Table 1 in State and ordering gives it in o
     - Backing: `measurable` (Scenario M7 (h))
     - Confidence: medium
 
-20. **Alternative rules picker.** At startup the game also looks for loose files whose names match
+20. **Alternative rules picker.** At startup the program also looks for loose files whose names match
     `rulemd*.ini`. That pattern lacks the letter s after "rule", so the standard rules file never
-    matches it. If one or more exist, the game shows a modal list before the main menu with the
+    matches it. If one or more exist, the program shows a modal list before the main menu with the
     standard rules file (resolved as usual) first and the matching files after it. The original
     lists several matching files in the host file system's listing order, as in claim 11, which it
     does not define. Our engine lists them in sorted name order (Formulas) of their names in the
@@ -497,10 +525,10 @@ end. Claims 9 to 14a list the order. Table 1 in State and ordering gives it in o
     at startup, and it is resolved and read again each time the rules are applied for a game; each
     read is layered on top of the base rules (S-0006). If the file holds at least one section, it
     must carry a valid integrity digest section (claim 21b). At startup, if that section is missing
-    or its checksum does not match, the game refuses to start (its main menu never appears). A file
+    or its checksum does not match, the program refuses to start (its main menu never appears). A file
     that holds no section at all, an empty file for example, is accepted without any check and
     changes nothing. Stock data has no such file. A file that fails the check only when a later
-    game's rules are applied (one added or changed after startup) does not stop the game: S-0006
+    game's rules are applied (one added or changed after startup) does not stop the program: S-0006
     claim 12 says what that game does (the file is ignored for that game, and so is its game-mode
     layer).
     - Backing: `measurable` (Scenario M18 (a) to (c) for the refusal and for the file without
@@ -508,17 +536,37 @@ end. Claims 9 to 14a list the order. Table 1 in State and ordering gives it in o
     - Confidence: high (the refusal), medium (the file without sections, the layering, the read per
       game)
 
+21a. **The AI database's digest is not enforced.** Whether the AI database's integrity digest
+    section is valid (in the sense of claim 21b), wrong or missing makes no difference: the program
+    starts and uses the file's contents in the same way. The stock AI database carries such a
+    section, so an edited copy is used even though its checksum no longer matches.
+    - Backing: `measurable` (Scenario M19)
+    - Confidence: high (the program starts), medium (that the contents are used in the same way)
+
 21b. **How the integrity digest is formed.** The checksum covers the file as parsed, not the bytes
     as stored. It is the standard SHA-1 hash, 20 bytes long, of a fixed text form of the document
     that S-0001 and S-0002 make of this file on its own (a fresh load), with the integrity digest
-    section left out (Formulas, Integrity digest). The stored checksum is the standard base64
-    decoding of a text that the integrity digest section's entries give, one piece per entry, joined
-    in entry order. An entry's piece is the value that a lookup of its key finds (S-0002), cut to its
-    first 127 bytes, with the trailing whitespace of the cut text removed: bytes after the 127th byte
-    of a value are ignored (Formulas). As long as no two of the keys are the same name (S-0002,
-    claims 1 and 3), only their order matters, so the text may be split over any number of entries.
-    The section is valid when the first 20 bytes that the text decodes to equal the computed hash.
-    Consequences:
+    section left out (Formulas, Integrity digest). The stored checksum is decoded from a text that
+    the integrity digest section's entries give, one piece per entry, joined in entry order. An
+    entry's piece is the value that a lookup of its key finds (S-0002), cut to its first 127 bytes,
+    with the trailing whitespace of the cut text removed: bytes after the 127th byte of a value are
+    ignored (Formulas). As long as no two of the keys are the same name (S-0002, claims 1 and 3),
+    only their order matters, so the text may be split over any number of entries. The section is
+    valid when the first 20 bytes that the text decodes to equal the computed hash.
+    - **Decoding.** For a text in standard base64 form (only characters of the base64 alphabet, with
+      "=" only to fill the last group of four), the decoding is standard base64 decoding. Any other
+      text is decoded by the same group rule (Formulas): the text is cut into groups of four bytes
+      by position, counted from the start of the joined text, so where one entry's piece ends makes
+      no difference. In each group only the alphabet characters before the group's first "=" count,
+      and every other byte is ignored, but it still fills its position in the group. A group with c
+      such characters gives one byte if c ≤ 2, two if c = 3 and three if c = 4, so a group of four
+      spaces gives one zero byte: a space inside the text is not skipped. Decoded bytes after the
+      20th are ignored.
+    - **Empty and short texts.** An empty text gives no bytes and counts as a missing integrity
+      digest section, which has the same consequence as a wrong checksum (claim 21). Every
+      non-empty text gives at least one byte. A text that gives 1 to 19 bytes leaves the original's
+      comparison without a defined result; our engine counts it as a checksum that does not match
+      (Edge cases, "Short integrity digest").
     - Whatever S-0001's parse leaves out of the document makes no difference: comments, blank
       lines, lines that create no entry, the whitespace its trimming removes, CR bytes, sections
       without entries and entries with an empty value. Whitespace that the trimming keeps (S-0001,
@@ -537,20 +585,17 @@ end. Claims 9 to 14a list the order. Table 1 in State and ordering gives it in o
       integrity digest section, although that section has no effect (claim 21a).
     - Backing: `measurable` (Scenario M18 (d) for a valid digest, M18 (e) for what makes no
       difference, M18 (f) for entry order, M18 (g) for a digest split over two entries, M18 (i)
-      for the 127-byte cut and the removal of trailing whitespace after it, M18 (j) for repeated
-      names), and `unmeasured` for the stock AI database's checksum (a property of the stock file
-      itself, checked directly by reading it, which a game run cannot add to)
-    - Confidence: high (the text form, SHA-1, base64, the comparison of 20 bytes, the 127-byte cut
-      and the removal of trailing whitespace after it), medium (repeated names: a key written twice,
-      two non-empty sections of the same name, two integrity digest sections, a key written twice in
-      the integrity digest section)
-
-21a. **The AI database's digest is not enforced.** Whether the AI database's integrity digest
-    section is valid (in the sense of claim 21), wrong or missing makes no difference: the game
-    starts and uses the file's contents in the same way. The stock AI database carries such a section, so an edited copy is used even though its
-    checksum no longer matches.
-    - Backing: `measurable` (Scenario M19)
-    - Confidence: high (the game starts), medium (that the contents are used in the same way)
+      variants (iii) and (iv) for the decoding of a text with spaces inside it, M18 (i) variants
+      (i) and (ii) for the 127-byte cut and the removal of trailing whitespace after it, M18 (j)
+      for repeated names), and `unmeasured` for the stock AI database's checksum (a property of the
+      stock file itself, checked directly by reading it, which a run of the program cannot add to) and for a
+      text that gives 1 to 19 bytes (the original's result is not defined, so no run can confirm
+      one)
+    - Confidence: high (the text form, SHA-1, standard base64 decoding of a standard text, the
+      comparison of 20 bytes, the 127-byte cut and the removal of trailing whitespace after it),
+      medium (the group rule for a text that is not standard base64; repeated names: a key written
+      twice, two non-empty sections of the same name, two integrity digest sections, a key written
+      twice in the integrity digest section)
 
 ### Kept art
 
@@ -559,7 +604,8 @@ end. Claims 9 to 14a list the order. Table 1 in State and ordering gives it in o
     kind is.
     - **Kept art.** The table says which kinds of art are kept art; the others are read afresh.
       For kept art, a later request of the same name, or of any name with the same member id
-      (claim 6), gets what the first successful request of the session got. A request whose name
+      (claim 6), gets what the first successful request of the session got
+      (`quirks.kept_art_keyed_by_id`). A request whose name
       was not found settles nothing, and the name is looked up again at the next request. Whether
       kept art is a deferred sprite or a kept file is decided by the requested name and kind: a
       request made for an overlay or an animation, or one whose file name contains ".shp" (letters
@@ -584,21 +630,22 @@ end. Claims 9 to 14a list the order. Table 1 in State and ordering gives it in o
 
     | Kind of art | Sort | Confidence | Scenario |
     |---|---|---|---|
-    | sprites of overlays and animations, whatever the file's extension; sprites, named with ".shp", of infantry, vehicles and aircraft drawn as sprites, and of terrain objects and smudges that are not theater-dependent | deferred sprite | high (c), medium (d); medium (c) for aircraft and terrain objects (stock data has no example, so the test sets one up) | M11 (c) and (d), rows 1–3, 15–18; M11 (a), M11 (e) |
-    | a building's main sprite and build-up sprite, named with ".shp" | deferred sprite | high (c), medium (d) | M11 (c) and (d), rows 4, 5 |
-    | sidebar icons; secondary translucent images | deferred sprite | high (c), medium (d) | M11 (c) and (d), rows 6, 7 |
+    | sprites of overlays and animations, whatever the file's extension; sprites, named with ".shp", of infantry, vehicles and aircraft drawn as sprites, and of terrain objects and smudges without the theater flag | deferred sprite | high (c), medium (d); medium (c) for aircraft and terrain objects (stock data has no example, so the test sets one up) | M11 (c) and (d), rows 1–3, 15–18; M11 (a), M11 (e) |
+    | a building's body sprite and build-up sprite, named with ".shp" | deferred sprite | high (c), medium (d) | M11 (c) and (d), rows 4, 5 |
+    | sidebar icons; translucent sprites | deferred sprite | high (c), medium (d) | M11 (c) and (d), rows 6, 7 |
     | a building's special overlay sprite | deferred sprite | high (c), medium (d) | M11 (c) and (d), row 19 |
     | a building's bib, under-door and under-roof-door sprites under the generic fallback name of S-0007, used when the first-choice name is not found | deferred sprite | high (c), medium (d) | M11 (c) and (d), rows 13, 22, 24 |
     | the palette "unit" ‖ E ‖ ".pal" loaded with each theater group (E as in Table 2) | kept file | high | M11 (c), row 8 |
     | the other palette loaded with each theater group, C ‖ ".pal" (C as in Table 2) | kept file | medium | unmeasured: its use in drawing is open in S-0103, so no picture is known to show it |
-    | a sprite named with a theater extension instead of ".shp" (S-0007), requested for a kind other than overlays and animations | kept file | medium (c), medium (d) | M11 (c) and (d), row 25 |
+    | a sprite named with a theater extension instead of ".shp" (S-0007), requested when a type of a kind other than overlays and animations is read; theater-dependent sprites are not of this row (for a smudge with the theater flag, the copy requested at the type read is always replaced by its theater-dependent sprite, S-0007 claim 13) | kept file | medium (c), medium (d) | M11 (c) and (d), row 25 |
     | the four interface palettes named below | kept file, discarded at every side-group mount | high | M11 (b) |
     | voxel models; motion files | read afresh | high | M15 (a), (b) |
-    | the theater-dependent sprites of terrain objects and smudges loaded when a game starts (S-0007) | read afresh | high (c), medium (d) | M11 (c) and (d), rows 9, 10 |
-    | a building's deploying and roof deploying sprites | read afresh | high (c), medium (d) | M11 (c) and (d), rows 11, 20 |
+    | theater-dependent sprites (Terms), loaded at the theater refresh of every game | read afresh | high (c), medium (d) | M11 (c) and (d), rows 9, 10 |
+    | a building's deploying and roof-deploying sprites | read afresh | high (c), medium (d) | M11 (c) and (d), rows 11, 20 |
     | a building's bib, under-door and under-roof-door sprites under their first-choice names | read afresh | high (c), medium (d) | M11 (c) and (d), rows 12, 21, 23 |
-    | a building's rubble sprite under its first-choice name | read afresh | medium | unmeasured: as for the door sprite, below |
-    | a building's door sprite (under either name); its rubble sprite under the generic fallback name | deferred sprite | medium | unmeasured: stock data gives no building a door or rubble sprite, and no spec says when either is drawn, so a test would have no picture to look at (the rule is that of the special overlay and bib sprites, so the confidence is medium) |
+    | a building's door sprite, under its first-choice name or under the generic fallback name | deferred sprite | medium (c), medium (d) (stock data gives no building a door sprite, so the test sets one up) | M11 (c) and (d), rows 26, 27 |
+    | a building's rubble sprite under its first-choice name | read afresh | medium | unmeasured: no spec says when a building's rubble sprite is drawn (Open questions), so a test would not know when to look for its picture |
+    | a building's rubble sprite under the generic fallback name | deferred sprite | medium | unmeasured: as in the row above (the rule is that of the bib, under-door and under-roof-door sprites, so the confidence is medium) |
 
     Four interface palettes, `sidebar.pal`, `uibkgd.pal`, `observer.pal` and `yrii.pal`, are
     discarded whenever the side group is mounted and are resolved afresh after it, so each game's
@@ -612,6 +659,11 @@ end. Claims 9 to 14a list the order. Table 1 in State and ordering gives it in o
     (`quirks.art_cache_never_invalidated`: YR keeps a kept file's first copy, and a deferred
     sprite's first name, for the whole session. The fixed behaviour discards both at the start of
     every game, so each game resolves all its art afresh.)
+    (`quirks.kept_art_keyed_by_id`: YR settles kept art per member id, so two different names with
+    the same member id share one entry: the name requested first decides what both get, even when
+    each name has its own loose file. The fixed behaviour settles kept art per requested name, with
+    a–z matched without regard to case, so each name resolves on its own, by claims 1 and 7, at its
+    own first request.)
     - Backing: `measurable` (per kind as in the table; Scenario M11 (c) row 14 for names that were
       not found, Scenario M21 (b) for two names with the same member id getting the same art,
       Scenario M11 (f) for a deferred sprite whose name does not resolve when it is to be drawn,
@@ -627,10 +679,11 @@ end. Claims 9 to 14a list the order. Table 1 in State and ordering gives it in o
 Let n = |U| and r = n mod 4. The hashed byte string is
 
 > H = U, if r = 0
-> H = U ‖ (r) ‖ (U[4·⌊n/4⌋] repeated 3 − r times), if r > 0
+> H = U ‖ (r) ‖ (u<sub>4·⌊n/4⌋</sub> repeated 3 − r times), if r > 0
 
-where (r) is the single byte with value r and U[k] is the byte at zero-based index k (the first byte
-of the incomplete last group of four). Then
+where (r) is the single byte with value r, and U = u₀ u₁ … u<sub>n−1</sub>, so that u<sub>k</sub> is
+the byte of U at zero-based position k (u<sub>4·⌊n/4⌋</sub> is the first byte of the incomplete last
+group of four). Then
 
 > id = CRC-32(H)
 
@@ -641,17 +694,17 @@ index is fully searchable when its entries are in ascending order of s(id). Exam
 "ABCDE" hashes the 8 bytes "ABCDE", (1), "E", "E". All arithmetic here is exact integer arithmetic
 on bytes and 32-bit values; there is no floating point.
 
-**Index search.** Let the archive's index entries, in stored order, have signed ids e[0], e[1], …,
-e[m − 1], and let t = s(id) of the requested name. The search state is a pair (a, c) of integers:
-the first position and the length of a run of consecutive entries still in play. It starts at
-(0, m). For a state with c > 0, let h = ⌊c / 2⌋ (integer division, rounding down). The entry e[a + h]
-decides the result:
+**Index search.** Let the archive's index entries, in stored order, have signed ids e₀, e₁, …,
+e<sub>m−1</sub>, and let t = s(id) of the requested name. The search state is a pair (a, c) of
+integers: the first position and the length of a run of consecutive entries still in play. It
+starts at (0, m). For a state with c > 0, let h = ⌊c / 2⌋ (integer division, rounding down). The
+entry e<sub>a+h</sub> decides the result:
 
-| State | Entry e[a + h] compared with t | Result |
+| State | Entry e<sub>a+h</sub> compared with t | Result |
 |---|---|---|
-| (a, c), c > 0 | e[a + h] = t | the member at position a + h is found |
-| (a, c), c > 0 | e[a + h] > t | next state (a, h) |
-| (a, c), c > 0 | e[a + h] < t | next state (a + h + 1, c − h − 1) |
+| (a, c), c > 0 | e<sub>a+h</sub> = t | the member at position a + h is found |
+| (a, c), c > 0 | e<sub>a+h</sub> > t | next state (a, h) |
+| (a, c), c > 0 | e<sub>a+h</sub> < t | next state (a + h + 1, c − h − 1) |
 | (a, 0) | — | not in this archive |
 
 Comparisons are between signed 32-bit integers. An
@@ -699,10 +752,29 @@ the j-th entry in entry order, let wⱼ be the value that a lookup of that entry
 finds (S-0002; the entry's own value unless its key occurs twice). Then dⱼ is the first
 min(|wⱼ|, 127) bytes of wⱼ with every trailing whitespace byte (S-0001) removed. A stored value
 never starts with whitespace (S-0001), so S-0001's trimming defect cannot apply to this removal: it
-always removes all trailing whitespace. D is decoded as standard base64 (alphabet A–Z, a–z, 0–9, "+",
-"/", with "=" filling the last group of four). The section is valid exactly when the first 20
-decoded bytes equal the checksum. A section whose text decodes to no bytes counts as missing. All of this is byte-string
-work; there is no arithmetic and no floating point.
+always removes all trailing whitespace.
+
+D is decoded with the standard base64 alphabet: A–Z stand for the digits 0 to 25, a–z for 26 to
+51, 0–9 for 52 to 61, "+" for 62 and "/" for 63. Cut D into groups g₁, g₂, …, g_r of four
+consecutive bytes, from its first byte; the last group holds the 1 to 4 bytes that are left
+(r = ⌈|D| / 4⌉). In group g, let x₁, …, x_c (0 ≤ c ≤ 4) be the digits of the alphabet characters
+that come before the first "=" of the group, in order; every other byte of the group, and every
+byte from its first "=" on, is ignored. Let
+
+> G = x₁ · 2¹⁸ + x₂ · 2¹² + x₃ · 2⁶ + x₄, where a missing xᵢ (i > c) counts as 0
+
+so that 0 ≤ G < 2²⁴. The group gives the bytes b₁ = ⌊G / 2¹⁶⌋, b₂ = ⌊G / 2⁸⌋ mod 2⁸ and
+b₃ = G mod 2⁸, of which it keeps only b₁ when c ≤ 2, b₁ and b₂ when c = 3, and all three when c = 4.
+The decoded bytes B are the bytes of g₁, g₂, …, g_r in order. For a D in standard base64 form, B is
+its standard base64 decoding. Then:
+
+| Decoded bytes | Result |
+|---|---|
+| \|B\| = 0 (only when D is empty) | the same as a missing integrity digest section |
+| \|B\| ≥ 20 | valid exactly when B's first 20 bytes equal the checksum; later bytes are ignored |
+| 1 ≤ \|B\| ≤ 19 | the original's result is not defined; our engine: does not match (Edge cases) |
+
+All of this is exact integer and byte-string work; there is no floating point.
 
 ## Constants
 
@@ -710,7 +782,7 @@ work; there is no arithmetic and no floating point.
 |---|---|---|---|
 | expansion archive numbers | 0 to 99 | archive number (integer) | two-digit decimal in the file name, highest number searched first |
 | maps and movie archive number | 3 | archive number (integer) | claim 12; written as the two decimal digits 03 in the names of the maps and movie archives |
-| longest name | 259 | bytes | longer requested names: unspecified in the original, "not found" in our engine (claim 6) |
+| longest name | 259 | bytes | engine constant: the longest requested name the original handles; longer requested names: unspecified in the original, "not found" (neither loose nor archived) in our engine (claim 6) |
 | member id width | 32 | bits | compared as signed for the index search |
 | required startup archives | 7 | count | claim 16; the movie archive counts once (either name) |
 | side archive number | nn = s + 1 for side index s, except nn = 2 for s = 2 | archive number (integer) | claim 13a; at least two decimal digits; the stock values follow from the stock side order |
@@ -762,9 +834,9 @@ only one of the two is mounted).
 | State | Event | Result |
 |---|---|---|
 | theater group of theater T mounted | game starts on theater T | nothing changes |
-| theater group of theater T mounted | game starts on theater T′ ≠ T | T's group is released; T′'s group is appended at the end |
-| side group mounted | game starts | the side group is released and the local player's side group is appended at the end, after any theater group mounted for this game; the four palettes of claim 22 are then resolved afresh |
-| no loading archives mounted | a game's loading starts | `loadmd.mix` and `load.mix` are appended at the end |
+| theater group of theater T mounted | game starts on theater T′ ≠ T | T's group is released; T′'s group is mounted and ranks below every archive already mounted |
+| side group mounted | game starts | the side group is released, and the local player's side group is mounted and ranks below every archive already mounted, a theater group mounted for this game included; the four palettes of claim 22 are resolved afresh, with the new side group already mounted |
+| no loading archives mounted | a game's loading starts | `loadmd.mix` and `load.mix` are mounted, `loadmd.mix` ranking above `load.mix`, and both rank below every archive already mounted |
 | loading archives mounted | the game has finished loading | both are released; they are absent during play |
 | deferred sprites hold pictures from the previous game | a skirmish or multiplayer game starts | every deferred sprite's picture is discarded; each is read again at its first drawing in the new game (claim 22) |
 | name requested | loose file exists | loose file used |
@@ -789,26 +861,59 @@ overrides a same-named member of any other archive, except of a neutral pair mou
 - **Session-long kept art** (`quirks.art_cache_never_invalidated`, claim 22). Default: a kept
   file keeps its first copy, and a deferred sprite the name of its first request, for the whole
   session. Fixed: both are discarded at the start of every game, so each game resolves all its art
-  afresh. The visible difference: a kept file that changed on disk, or a pair of names with the same
-  member id, is seen as changed from the next game on.
+  afresh. The visible difference: a kept file that changed on disk is seen as changed from the next
+  game on, and the name that settles a pair of names with the same member id is again the one
+  requested first in each game. Within one game such a pair still shares one entry; only
+  `quirks.kept_art_keyed_by_id` changes that.
+- **Kept art shared by names with the same member id** (`quirks.kept_art_keyed_by_id`, claims 6 and
+  22). Default: kept art is settled per member id, so two different names with the same id get
+  what the first request for either of them got, for the rest of the session, even when each name
+  has its own loose file (Scenario M21 (b)). Fixed: kept art is settled per requested name, with
+  a–z folded to A–Z, so each name gets the copy that it resolves to itself at its own first
+  request (claims 1 and 7). Stock data has no
+  such pair; the importer warns about every pair of data file names it sees that share a member
+  id.
 - **Sprites held only by the loading archives** (`quirks.loading_archive_sprites_vanish`, claim 13).
   Default: a deferred sprite's picture is read when it is first drawn, after the loading archives
   are released, so a sprite that only they hold is not drawn in play, and a same-named copy in
   another mounted archive is drawn instead. Fixed: a deferred sprite's picture is read from the copy
   found at its request, so the loading archives' copy is drawn.
-- **Id collisions.** Two different names that hash to the same id shadow each other across archives
-  (claim 7). No switch is proposed: an archive stores only member ids, not names (claim 6), so no
-  alternative lookup can tell two colliding archive members apart; stock data has no colliding
-  names that matter, and an importer should report collisions.
+- **Id collisions in the archives.** Two different names that hash to the same id shadow each other
+  across archives (claim 7). No switch is proposed for this lookup: an archive stores only member
+  ids, not names (claim 6), so no alternative lookup can tell two colliding archive members apart.
+  Stock data has no colliding names that matter, and the importer warns about every pair of data
+  file names it sees that share a member id. The sharing of kept art between such names is a
+  separate matter, covered by the entry "Kept art shared by names with the same member id", which has its own switch.
 - **Base-name files are dead data.** The base game's rules, art, AI, sound, speech, music and
   game-mode files sit inside mounted archives but are never requested (claim 15). An importer must
   not fall back to them.
 - **No extra search directories** (claim 4). The original also looks for loose files on disc drives
   or in a directory given on the command line; our engine looks in the game directory only. This is
   a deliberate departure for disc installs, which are out of scope. No switch is proposed.
+- **Short integrity digest** (claim 21b). For an integrity digest text that decodes to 1 to 19
+  bytes, the original's result is *unspecified* (glossary): it depends on more than the file's
+  contents, so it is not defined. Our engine counts such a text as a checksum that does not match, with the consequences
+  of claim 21, and the importer warns. No switch is proposed, because the original's result cannot
+  be reproduced. An empty text is not a departure: in the original too it counts as a missing
+  section (Formulas).
+- **Integrity digest text not in standard base64 form** (claim 21b). Not a departure: our engine
+  decodes it by the group rule of Formulas, as the original does, so spaces or other bytes inside
+  the text change the decoded bytes. The importer warns about such a text, since an author who
+  splits or pads the text by hand rarely expects this. No switch is proposed: the original's rule is
+  deterministic and is reproduced exactly, and a stricter or looser decoding would only make our
+  engine accept files that the original refuses, or refuse files that it accepts, with no gain for
+  any data.
 - **Over-long names** (claim 6). The original's result is unspecified; our engine treats a requested
-  name longer than 259 bytes as not found. No switch is proposed, because the original's result
-  cannot be reproduced.
+  name longer than 259 bytes as not found, neither as a loose file nor in any archive, and the
+  importer warns about the data that names it. No switch is proposed, because the original's
+  result cannot be reproduced.
+- **Non-ASCII loose names** (claim 2). The original's host file system folds letter case for
+  letters outside ASCII too, by the host's own case rules, which depend on the host. Our engine
+  folds only a–z to A–Z when it matches loose names, on every host, so a loose name that differs
+  from the requested name in the case of a non-ASCII letter does not match. Member ids (claim 6)
+  fold a–z only in the original as well, so they are unaffected. This is
+  a departure for a host-dependent behaviour, so no switch is proposed; the importer warns about
+  every loose data file whose name holds a byte outside ASCII.
 - **Loose names that differ only in letter case** (claim 2). On a case-sensitive host the game
   directory can hold two loose files whose names differ only in letter case, such as `rulesmd.ini`
   and `RULESMD.INI`. The original's host file system cannot hold both, so the original has no
@@ -856,10 +961,11 @@ statistical runs for sub-tests whose result depends on the random seed. Loose fi
 earlier work would win every test below (claim 1), so check that the game directory holds only the
 installed files. Scenarios that add test data say so; remove it afterwards and restore any
 installed file it replaced. Where a scenario
-relies on what claim 22 stores for the session, each variant runs in a fresh session. Game speed is free.
+relies on what claim 22 stores for the session, each variant runs in a fresh session. "Restart"
+means quitting the program and starting it again, which begins a new session. Game speed is free.
 
 **Runs.** Resolving and reading data files involves no random draw, and every observable below is a
-presence, absence or identity check (which copy shows, whether the game starts). A repeat therefore
+presence, absence or identity check (which copy shows, whether the program starts). A repeat therefore
 gives the same result, and one run per variant or step is enough. Each scenario's *Runs* line says
 what one run is. The exceptions are the sub-tests whose observable is the computer opponent's play
 (Scenario M2 (d), Scenario M19 and Scenario M20 (b)): that play involves random draws, so they are
@@ -881,20 +987,20 @@ measured statistically, over the number of runs and with the statistic their *Ru
 - (a) The base rules.
   - *Setup:* measurement setup plus a loose copy of the expansion rules file with one visible
     change, for example one unit's cost raised by 1 credit.
-  - *Procedure:* start the game, open a skirmish and read the cost on the sidebar tooltip. Then edit
-    the loose file again while the game runs (for example the cost raised by 2 credits instead) and
+  - *Procedure:* start the program, open a skirmish and read the cost on the sidebar tooltip. Then edit
+    the loose file again while the program runs (for example the cost raised by 2 credits instead) and
     start a second skirmish without restarting. Then restart and start a third skirmish.
   - *Observable:* the unit's cost on the sidebar tooltip in each of the three skirmishes.
   - *Runs:* one session of two skirmishes, then one skirmish after the restart.
   - *Expected:* +1 credit in the first and second skirmish, +2 credits in the third.
   - *Falsified if:* the first skirmish shows the stock cost, the second shows the edit made while
-    the game was running, or the third does not show it.
+    the program was running, or the third does not show it.
 - (b) A game-mode file.
   - *Setup:* measurement setup plus a loose copy of one stock game-mode file that is not the default
     mode's, with one added override section that raises one unit's cost by 1 credit. Play on a map
     without override sections.
-  - *Procedure:* start the game and play a skirmish in that mode; read the cost on the sidebar
-    tooltip. While the game runs, edit the loose file so that the cost is raised by 2 credits
+  - *Procedure:* start the program and play a skirmish in that mode; read the cost on the sidebar
+    tooltip. While the program runs, edit the loose file so that the cost is raised by 2 credits
     instead, and play a second skirmish in the same mode without restarting. Then restart and play a
     third skirmish in that mode.
   - *Observable:* the unit's cost on the sidebar tooltip in each of the three skirmishes.
@@ -904,7 +1010,7 @@ measured statistically, over the number of runs and with the statistic their *Ru
     third does not show +2 credits.
   - Variant (ii), read at startup rather than at the first game: *Setup:* measurement setup; the
     same loose game-mode file (+1 credit), stored outside the game directory at first.
-    *Procedure:* start the game and wait for the main menu; then, before any game, put the file
+    *Procedure:* start the program and wait for the main menu; then, before any game, put the file
     loose in the game directory and play a skirmish in that mode. *Observable:* the unit's cost on
     the sidebar tooltip. *Runs:* one session of one skirmish. *Expected:* the stock cost (the file
     was read before it was added). *Falsified if:* +1 credit shows.
@@ -917,7 +1023,7 @@ measured statistically, over the number of runs and with the statistic their *Ru
     different entry; in the speech database, the announcement made when a structure finishes
     building is given the sound of a different announcement; in the music database, one track's
     entry is deleted; in the mode list, one mode's entry is deleted.
-  - *Procedure:* start the game, open the skirmish lobby and play a skirmish in which all five edits
+  - *Procedure:* start the program, open the skirmish lobby and play a skirmish in which all five edits
     could show (build the structure and the unit, select the unit, look at the in-game music track
     list). Without restarting, put the five copies loose in the game directory, open the lobby again
     and play a second such skirmish. Then restart and do the same a third time.
@@ -980,26 +1086,31 @@ measured statistically, over the number of runs and with the statistic their *Ru
     and the copy in `expandmd98.mix` outranks the one in `ra2md.mix` (claim 3).
   - *Falsified if:* the stock sprite shows.
 
-**Scenario M5: extra-cache archives rank between the local archives and `conqmd.mix`; some archives
-are taken only loose; hidden and system entries are skipped (claims 5, 7, 11, 12).**
+**Scenario M5: extra-cache and extra-local archives rank below the archives of claim 10 (here tested
+against the local archives) and above `conqmd.mix`; some archives are taken only loose; hidden, system and
+temporary entries are skipped (claims 5, 7, 11, 12).**
 - *Setup:* (a) a loose test archive `ecache00.mix` holding (i) a rules file with a visible cost
-  change, and (ii) a visibly altered copy of an infantry sprite that stock data holds in
-  `conqmd.mix` and in no higher-ranked archive. (b) Instead of the loose `ecache00.mix`, a test
-  `expandmd98.mix` that holds three nested archives and nothing else: the `ecache00.mix` of (a), an
-  `elocal00.mix` with the same two changes, and an `expandmd97.mix` holding a rules file with a
-  different visible cost change for the same unit. (c) The loose settings file moved out of the game
+  change, (ii) a visibly altered copy of an infantry sprite that stock data holds in
+  `conqmd.mix` and in no higher-ranked archive, and (iii) the swapped interface layout file of
+  Scenario M17 (a), which stock data holds only in `localmd.mix` (claim 18). (b) Instead of the
+  loose `ecache00.mix`, a test `expandmd98.mix` that holds three nested archives and nothing else:
+  the `ecache00.mix` of (a), an `elocal00.mix` with the same three changes, and an `expandmd97.mix`
+  holding a rules file with a different visible cost change for the same unit. (c) The loose
+  settings file moved out of the game
   directory, and a test `expandmd98.mix` holding a settings file with one visible non-default
   setting, for example the player name shown in the skirmish lobby.
 - *Procedure:* in a fresh session per variant, start a skirmish with that infantry type available
   ((a), (b)), or open the skirmish lobby ((c)).
-- *Observable:* the unit's cost and the infantry's look ((a), (b)); the lobby's player name ((c)).
+- *Observable:* the unit's cost, the order of the command-bar buttons and the infantry's look ((a),
+  (b)); the lobby's player name ((c)).
 - *Runs:* one fresh session per variant.
-- *Expected:* (a) stock cost (the expansion and local copies rank higher) and the altered sprite.
-  (b) Neither change shows: stock cost and stock sprite. (c) The default player name; the archived
-  settings file is not used.
-- *Falsified if:* in (a) the cost changes or the sprite stays stock; in (b) any change shows; in (c)
-  the archived copy's player name shows.
-- Afterwards restore the original loose settings file and remove any settings file the game wrote.
+- *Expected:* (a) stock cost (the expansion and local copies rank higher), the stock button order
+  (the copy in `localmd.mix`, an archive of claim 10, ranks higher) and the altered sprite.
+  (b) None of the changes shows: stock cost, stock button order and stock sprite. (c) The default
+  player name; the archived settings file is not used.
+- *Falsified if:* in (a) the cost changes, the buttons show the swapped order or the sprite stays
+  stock; in (b) any change shows; in (c) the archived copy's player name shows.
+- Afterwards restore the original loose settings file and remove any settings file the program wrote.
 - (d) Hidden, system and temporary entries are skipped (claim 11).
   - *Setup:* the loose `ecache00.mix` of (a). Variant (i): the file marked hidden on the host.
     Variant (ii): instead, the file marked as a system file. Variant (iii): instead, the file's
@@ -1023,17 +1134,19 @@ are taken only loose; hidden and system entries are skipped (claims 5, 7, 11, 12
   - *Falsified if:* the picture of the archive listed second shows.
 - (f) Rank of the extra-local archives (claim 11).
   - *Setup:* variant (i): instead of the loose `ecache00.mix` of (a), a loose `elocal00.mix` with
-    the same contents (the rules file with the cost change and the altered infantry sprite).
+    the same contents (the rules file with the cost change, the altered infantry sprite and the
+    swapped interface layout file).
     Variant (ii): a loose `ecache00.mix` and a loose `elocal00.mix`, each holding a copy of the
     infantry sprite of (a) with a clearly different picture, and nothing else.
   - *Procedure:* in a fresh session per variant, start a skirmish with that infantry type available.
-  - *Observable:* the unit's cost ((i)) and the infantry's look ((i), (ii)).
+  - *Observable:* the unit's cost and the order of the command-bar buttons ((i)), and the
+    infantry's look ((i), (ii)).
   - *Runs:* one fresh session per variant.
-  - *Expected:* (i) stock cost (the archives of claim 10 rank higher) and the altered sprite (the
-    extra-local archive outranks `conqmd.mix`). (ii) The picture of `ecache00.mix`, whichever of the
-    two names the host lists first.
-  - *Falsified if:* (i) the cost changes or the sprite stays stock; (ii) the picture of
-    `elocal00.mix` shows.
+  - *Expected:* (i) stock cost and stock button order (the archives of claim 10 rank higher) and
+    the altered sprite (the extra-local archive outranks `conqmd.mix`). (ii) The picture of
+    `ecache00.mix`, whichever of the two names the host lists first.
+  - *Falsified if:* (i) the cost changes, the buttons show the swapped order or the sprite stays
+    stock; (ii) the picture of `elocal00.mix` shows.
 
 **Scenario M6: order of the per-game groups (claims 13, 14).**
 - (a) Expansion archive above the theater group.
@@ -1049,8 +1162,8 @@ are taken only loose; hidden and system entries are skipped (claims 5, 7, 11, 12
 - (b) Order inside the theater group.
   - *Setup:* loose copies of the five stock snow-theater archives (`snowmd.mix`, `snow.mix`,
     `sno.mix`, `isosnomd.mix`, `isosnow.mix`), each given an extra sprite under one shared new name,
-    with a clearly different picture in each, and a tiny snow map whose override section points one
-    infantry type's image at that name.
+    with a clearly different picture in each, and a tiny snow map whose override section sets one
+    infantry type's image name to that name.
   - *Procedure:* play the map in a fresh session. Then delete the extra sprite from the copy whose
     picture showed and play again in a fresh session, until one copy is left.
   - *Observable:* which picture the infantry shows each time.
@@ -1061,8 +1174,8 @@ are taken only loose; hidden and system entries are skipped (claims 5, 7, 11, 12
     order.
 - (c) Side group.
   - *Setup:* variant (i): a test `expandmd98.mix` holding a visibly altered copy of the sidebar's
-    radar frame image, which stock data holds only in the side archives; variant (ii): instead, a
-    loose copy of the stock `temperat.mix` holding the same altered image.
+    radar frame sprite, which stock data holds only in the side archives; variant (ii): instead, a
+    loose copy of the stock `temperat.mix` holding the same altered sprite.
   - *Procedure:* a temperate skirmish with an Allied local player, once with each variant.
   - *Observable:* the radar frame in the sidebar.
   - *Runs:* one skirmish per variant.
@@ -1071,32 +1184,32 @@ are taken only loose; hidden and system entries are skipped (claims 5, 7, 11, 12
   - *Falsified if:* the stock radar frame shows in either variant.
 
 **Scenario M7: missing archives and files (claims 13, 15, 16, 16a, 19).** Each step is separate; restore
-the install after each. For every step, the *Procedure* is to start the game and, where the step
+the install after each. For every step, the *Procedure* is to start the program and, where the step
 says so, open the skirmish map list or start a skirmish. *Runs:* one start per step, plus the
 repeats, variants and skirmishes that steps (e), (g), (h), (i), (j), (k) and (n) name.
 - (a) *Setup:* `multi.mix`, `maps01.mix` and `maps02.mix` moved out of the game directory.
-  *Observable:* whether the game starts, and the skirmish map list. *Expected:* the game starts and
-  the map list is unchanged. *Falsified if:* the game refuses to start or the map list changes.
-- (b) *Setup:* `multimd.mix` moved out. *Observable:* whether the game starts. *Expected:* it
+  *Observable:* whether the program starts, and the skirmish map list. *Expected:* the program starts and
+  the map list is unchanged. *Falsified if:* the program refuses to start or the map list changes.
+- (b) *Setup:* `multimd.mix` moved out. *Observable:* whether the program starts. *Expected:* it
   refuses to start. *Falsified if:* it starts.
 - (c) *Setup:* `movmd03.mix` moved out (no `movies03.mix` exists in stock). *Observable:* whether
-  the game starts. *Expected:* it refuses to start. *Falsified if:* it starts.
-- (d) *Setup:* `movies01.mix` and `movies02.mix` moved out. *Observable:* whether the game starts,
-  and the skirmish map list. *Expected:* the game starts and the map list is unchanged. *Falsified
+  the program starts. *Expected:* it refuses to start. *Falsified if:* it starts.
+- (d) *Setup:* `movies01.mix` and `movies02.mix` moved out. *Observable:* whether the program starts,
+  and the skirmish map list. *Expected:* the program starts and the map list is unchanged. *Falsified
   if:* it refuses to start or the map list changes.
 - (e) *Setup:* a loose copy of the stock `localmd.mix` (extracted from the main expansion archive)
   without the speech database. (In the steps below, "the loose `localmd.mix` copy of (e) without X"
   means such a copy that lacks only X, every other member unchanged.) Repeated with the art database removed
-  instead, and with the music database removed instead. *Observable:* whether the game starts. *Expected:* it refuses to start
+  instead, and with the music database removed instead. *Observable:* whether the program starts. *Expected:* it refuses to start
   each time. *Falsified if:* it starts in any of these runs.
 - (f) *Setup:* the loose `localmd.mix` copy of (e) without the sound database, and in place of the
-  stock `expandmd01.mix` a copy of it without the sound database. *Observable:* whether the game
+  stock `expandmd01.mix` a copy of it without the sound database. *Observable:* whether the program
   starts. *Expected:* it refuses to start. *Falsified if:* it starts.
 - (g) *Setup:* variant (i): the loose `localmd.mix` copy of (e) without the interface layout file.
   Variant (ii): instead, measurement setup plus a loose interface layout file that is empty (no
-  section at all). *Observable:* whether the game starts, and whether a skirmish reaches play.
-  *Expected:* in both variants the game starts, but the skirmish never reaches play. *Falsified
-  if:* the game refuses to start, or the skirmish plays, in either variant.
+  section at all). *Observable:* whether the program starts, and whether a skirmish reaches play.
+  *Expected:* in both variants the program starts, but the skirmish never reaches play. *Falsified
+  if:* the program refuses to start, or the skirmish plays, in either variant.
 - (h) *Setup:* a loose copy of the stock mode list in which one mode's game-mode file name is
   changed to a name that no archive and no loose file holds. Pick a mode whose stock game-mode file
   makes a change that a skirmish shows (for example a different starting condition or an object that
@@ -1104,48 +1217,48 @@ repeats, variants and skirmishes that steps (e), (g), (h), (i), (j), (k) and (n)
   rules and the game-mode layer can apply. *Observable:* whether that mode is offered, and whether
   its change shows in a skirmish played in it. *Expected:* the mode is offered, the skirmish starts,
   and the mode's change is absent: the skirmish plays as with the base rules alone. *Falsified if:*
-  the mode is missing from the list, the game refuses to start, the skirmish never reaches play, or
+  the mode is missing from the list, the program refuses to start, the skirmish never reaches play, or
   the mode's change still shows.
 - (i) *Setup:* variant (i): in place of the installed `ra2.mix`, a copy of it without the Allied
   side archive `sidec01.mix`. Variant (ii): instead, a copy of the installed `ra2.mix` without the
   Soviet side archive `sidec02.mix`. In stock data each of these two archives is a top-level member
   of `ra2.mix` only, so no other archive and no loose file can supply it. *Observable:* whether the
-  game starts; whether a skirmish reaches play with an Allied, with a Soviet and with a Yuri local
+  program starts; whether a skirmish reaches play with an Allied, with a Soviet and with a Yuri local
   player. *Runs:* per variant, one start, then one Allied, one Soviet and one Yuri skirmish, each in
-  a fresh session. *Expected:* the game starts in both variants. Variant (i): the Allied skirmish
+  a fresh session. *Expected:* the program starts in both variants. Variant (i): the Allied skirmish
   never reaches play, the Soviet and the Yuri skirmish play. Variant (ii): the Allied skirmish
   plays, the Soviet and the Yuri skirmish never reach play (the Yuri side uses the Soviet side's
-  archives). *Falsified if:* the game refuses to start in either variant, or any of the six
+  archives). *Falsified if:* the program refuses to start in either variant, or any of the six
   skirmishes reaches play or fails to reach play otherwise than stated.
 - (j) *Setup:* each of the five remaining required archives made unresolvable in turn:
   `mapsmd03.mix` moved out of the game directory; `conqmd.mix` removed from a copy of `ra2md.mix`,
   `conquer.mix` removed from a copy of `ra2.mix`, `cameomd.mix` removed from a copy of `langmd.mix`
   and `cameo.mix` removed from a copy of `language.mix`, each copy put in place of the installed
   file. In stock data each of these archives is held only where it is removed here. *Observable:*
-  whether the game starts. *Runs:* one start per archive, five in all. *Expected:* it refuses to
+  whether the program starts. *Runs:* one start per archive, five in all. *Expected:* it refuses to
   start each time. *Falsified if:* it starts in any of these runs.
 - (k) *Setup:* variant (i): the loose `localmd.mix` copy of (e) without the base rules file, and in
   place of the stock `expandmd01.mix` a copy of it without the base rules file, so that no copy of
   the base rules can be resolved. Variant (ii): instead, measurement setup plus a loose base rules
-  file of zero bytes. *Observable:* everything the game shows from its start until the main menu
-  appears or the game stops (record the screen): every message, and whether the main menu appears.
+  file of zero bytes. *Observable:* everything the program shows from its start until the main menu
+  appears or the program stops (record the screen): every message, and whether the main menu appears.
   *Runs:* one start per variant. *Expected:* both variants behave the same: the same messages (or
   none) and the same outcome. *Falsified if:* the two variants differ in any recorded message or
   in whether the main menu appears.
 - (l) *Setup:* the loose `localmd.mix` copy of (e) without the AI database. In stock data no other
   archive holds it (claim 18). *Observable:* every message shown before the main menu (record the
   screen), and whether the main menu appears. *Expected:* no message about the missing file, and
-  the main menu appears. *Falsified if:* a message about the missing file appears, or the game
+  the main menu appears. *Falsified if:* a message about the missing file appears, or the program
   refuses to start.
 - (m) *Setup:* the loose `localmd.mix` copy of (e) without the mode list. In stock data no other
   archive holds it (claim 18). *Observable:* every message shown before the main menu (record the
   screen), and whether the main menu appears. *Expected:* no message about the missing file, and
-  the main menu appears. *Falsified if:* a message about the missing file appears, or the game
+  the main menu appears. *Falsified if:* a message about the missing file appears, or the program
   refuses to start.
 - (n) *Setup:* measurement setup plus one loose file of zero bytes named as the art database.
   Repeated with the sound database instead, then with the speech database, then with the music
   database (one zero-byte file per run; the loose file wins over every archived copy, claim 1).
-  *Observable:* whether the game starts. *Runs:* one start per database, four in all. *Expected:*
+  *Observable:* whether the program starts. *Runs:* one start per database, four in all. *Expected:*
   it refuses to start each time. (Compare step (k) variant (ii): a zero-byte base rules file is
   not, of itself, a reason to refuse, claim 16.) *Falsified if:* it starts in any of these runs.
 
@@ -1179,7 +1292,7 @@ tools.
 - *Setup:* (a) measurement setup only. (b) and (c): measurement setup plus a copy of the expansion
   rules file, loose under the name `rulemdt.ini` (a valid short name), with one visible change: one
   unit's cost raised by 1 credit.
-- *Procedure:* (a) start the game. (b) Start the game and read the list. (c) Two fresh starts: in
+- *Procedure:* (a) start the program. (b) Start the program and read the list. (c) Two fresh starts: in
   one choose the second entry of the list, in the other the first; each time play a skirmish and
   read the unit's cost on the sidebar tooltip.
 - *Observable:* (a) whether a selection list appears before the main menu, (b) the list's entries,
@@ -1195,7 +1308,7 @@ tools.
   - *Setup:* measurement setup plus two loose copies of the expansion rules file, `rulemdt.ini` and
     `rulemdu.ini`. Before the run, list the game directory in the host's own, unsorted directory
     order (as in Scenario M5 (e)) and note which of the two names comes first.
-  - *Procedure:* start the game and read the list.
+  - *Procedure:* start the program and read the list.
   - *Observable:* the order of the list's entries.
   - *Runs:* one start.
   - *Expected:* the standard rules file, then the two files in the host's listing order.
@@ -1203,14 +1316,14 @@ tools.
     of the host's listing order.
 
 **Scenario M11: kept art, deferred sprites and art read afresh (claims 13, 22).** Every altered
-or test copy below keeps the number of image frames and the image size of the copy it replaces (see Open
+or test copy below keeps the number of image frames and the image-frame size of the copy it replaces (see Open
 questions).
 - (a) A deferred sprite's picture is read again in every skirmish. Low priority. It needs a sprite name
   that exists only in two theater groups, with different content in each. Stock data has none, so
   test data is needed.
   - *Setup:* loose copies of the stock temperate and snow control archives (`temperat.mix`,
     `snow.mix`), each given an extra sprite under the same new name with clearly different pictures,
-    and a map override that points one infantry type's image at that new name, on one temperate and
+    and a map override that sets one infantry type's image name to that new name, on one temperate and
     one snow map.
   - *Procedure:* a temperate skirmish, then a snow skirmish, in one session; then restart and play
     the snow skirmish first.
@@ -1235,9 +1348,12 @@ questions).
   - *Setup:* measurement setup. For each row of the table below, a subject chosen by its role, and a
     visibly altered loose copy of the subject's file, stored outside the game directory at first.
     Choose a stock map of the theater named in the row (temperate where none is named) on which the
-    subject is seen; where no stock map shows it, use a tiny test map that places it. Rows 16, 17
-    and 25 also need the test data their row names, present from the start in both sessions; for
-    them, "stock" below means the picture of that test data.
+    subject is seen; where no stock map shows it, use a tiny test map that places it. Rows 16, 17,
+    25, 26 and 27 also need the test data their row names, present from the start in both sessions
+    (the art database is read only at startup, claim 17); for them, "stock" below means the picture
+    of that test data. For rows 26 and 27 the subject is seen while the factory releases a vehicle.
+    The art database copy sets no door-stage count, so the door sprite shows image frame 0 for the
+    whole release (S-0108).
   - *Procedure:* per row, two sessions. Main session: play skirmish 1 on that map with the subject
     seen; without restarting, put the loose copy in the game directory; play skirmish 2 on the same
     map with the subject seen again. (For the theater palette row: skirmish 1 on a temperate map,
@@ -1259,9 +1375,10 @@ questions).
     made resolvable only through the loading archives: a loose copy of the stock archive that holds
     it, without that file (claim 3), and a loose copy of the stock `loadmd.mix` (extracted from the
     main expansion archive) with that file added. Choose the subject so that no other archive of
-    stock data holds a file of that name; for rows 13, 22 and 24, also none of the first-choice
-    name. For rows 16, 17 and 25, put the file under the new name in the `loadmd.mix` copy instead of
-    the test archive the row names.
+    stock data holds a file of that name; for rows 13, 22, 24 and 27, also none of the first-choice
+    name. For rows 16, 17, 25, 26 and 27, put the file under its name in the `loadmd.mix` copy
+    instead of the test archive the row names, and keep the row's other test data (the loose art
+    database copy of rows 25 to 27) in place from the start.
   - *Procedure:* per row, one fresh session; play one skirmish on the row's map with the subject
     seen.
   - *Observable:* whether the subject is drawn with its picture (for a sidebar icon: whether its
@@ -1274,13 +1391,13 @@ questions).
 
   | Row | Subject (chosen by role) | File | Sort (claim 22) | Expected in (c), skirmish 2 | Expected in (d) |
   |---|---|---|---|---|---|
-  | 1 | an infantry type the local player can train | its main sprite | deferred sprite | altered | not drawn |
+  | 1 | an infantry type the local player can train | its body sprite | deferred sprite | altered | not drawn |
   | 2 | an overlay the map shows, such as a wall or fence | its sprite | deferred sprite | altered | not drawn |
   | 3 | an animation that plays on an object present from the start of the game | its sprite | deferred sprite | altered | not drawn |
-  | 4 | a building the local player can build | its main sprite | deferred sprite | altered | not drawn |
+  | 4 | a building the local player can build | its body sprite | deferred sprite | altered | not drawn |
   | 5 | the same building | its build-up sprite (seen when it is placed) | deferred sprite | altered | not drawn |
   | 6 | a unit the local player can build | its sidebar icon | deferred sprite | altered | not drawn |
-  | 7 | an object type that has a secondary translucent image | that image | deferred sprite | altered | not drawn |
+  | 7 | an object type that has a translucent sprite | that sprite | deferred sprite | altered | not drawn |
   | 8 | the temperate theater | its palette "unit" ‖ E ‖ ".pal" (E from Table 2), seen on the colours of objects drawn with it | kept file | stock | — |
   | 9 | a terrain object of the temperate theater whose sprite depends on the theater, whose image name equals its type name (S-0007) | that sprite | read afresh | altered | drawn |
   | 10 | a smudge whose sprite depends on the theater, whose image name equals its type name, placed by the map | that sprite | read afresh | altered | drawn |
@@ -1288,21 +1405,23 @@ questions).
   | 12 | a building whose bib sprite stock data holds under its first-choice name for this theater | that file | read afresh | altered | drawn |
   | 13 | a building whose bib sprite stock data does not hold under its first-choice name for this theater, so that the generic fallback name is used (S-0007) | the file of the fallback name | deferred sprite | altered | not drawn |
   | 14 | an infantry type whose image name a tiny test map's override section sets to a new name that no archive holds (in skirmish 1 the infantry has no sprite) | a sprite under that new name | — | altered (a name that was not found is not stored) | — |
-  | 15 | a vehicle the local player can build that stock data draws as a sprite | its main sprite | deferred sprite | altered | not drawn |
+  | 15 | a vehicle the local player can build that stock data draws as a sprite | its body sprite | deferred sprite | altered | not drawn |
   | 16 | an aircraft type the local player can build, whose image name a tiny test map's override section sets to a new name that the art database has no section for, so that it is drawn as a sprite (S-0007); a test `expandmd98.mix` holds a sprite under that name | that sprite | deferred sprite | altered | not drawn |
   | 17 | a terrain object type whose image name a tiny test map's override section sets to a new name that the art database has no section for, so that its sprite does not depend on the theater, placed by that map; a test `expandmd98.mix` holds a sprite under that name | that sprite | deferred sprite | altered | not drawn |
   | 18 | a smudge whose sprite does not depend on the theater, placed by the map | its sprite | deferred sprite | altered | not drawn |
   | 19 | a gate building that has a special overlay sprite | the file of that sprite this theater uses | deferred sprite | altered | not drawn |
-  | 20 | a war factory that has a roof deploying sprite (shown while it releases a jumpjet or balloon-hover unit, S-0108) | that sprite | read afresh | altered | drawn |
+  | 20 | a war factory that has a roof-deploying sprite (shown while it releases a jumpjet or balloon-hover unit, S-0108) | that sprite | read afresh | altered | drawn |
   | 21 | a war factory whose under-door sprite stock data holds under its first-choice name for this theater (pick the theater accordingly) | that file | read afresh | altered | drawn |
   | 22 | a war factory whose under-door sprite stock data does not hold under its first-choice name for this theater, so that the generic fallback name is used | the file of the fallback name | deferred sprite | altered | not drawn |
   | 23 | as row 21, for the under-roof-door sprite (shown while a jumpjet or balloon-hover unit is released) | that file | read afresh | altered | drawn |
   | 24 | as row 22, for the under-roof-door sprite | the file of the fallback name | deferred sprite | altered | not drawn |
   | 25 | an infantry type the local player can train, whose art section a loose copy of the stock art database gives the theater flag, so that its sprite is named image name ‖ "." ‖ E (S-0007); a test `expandmd98.mix` holds that file for the temperate theater | that file | kept file | stock | drawn |
+  | 26 | a war factory whose art section a loose copy of the stock art database gives a door sprite under a new name whose first character is not G, N, C or Y and whose second character is not G, so that letter substitution leaves it unchanged and its first-choice name differs from its generic fallback name (S-0007); no archive of stock data holds either name; on a temperate map, a test `expandmd98.mix` holds the file of the first-choice name (the door sprite is drawn while the factory releases a newly built vehicle, S-0108 claim 23) | that file | deferred sprite | altered | not drawn |
+  | 27 | as row 26, but the test `expandmd98.mix` holds only the file of the generic fallback name, and no archive holds the first-choice name | the file of the fallback name | deferred sprite | altered | not drawn |
 
 - (e) Within one game, a deferred sprite's picture is read at its first drawing.
   - *Setup:* measurement setup. Separately, stored outside the game directory at first, visibly
-    altered loose copies of the main sprites of two infantry types I1 and I2 that the local player
+    altered loose copies of the body sprites of two infantry types I1 and I2 that the local player
     can train. Play against an opponent of the other side, so that only the local player can have
     I1 or I2, on a map that places none of them.
   - *Procedure:* in a fresh session, start skirmish 1, train an I1 and look at it. Without
@@ -1317,10 +1436,10 @@ questions).
     is stock in skirmish 2.
 - (f) A deferred sprite whose name does not resolve when it is to be drawn.
   - *Setup:* a new sprite name N that no archive of stock data holds, nor its generic fallback name
-    (S-0007); a loose sprite file N ‖ ".shp", a visibly altered copy of the stock main sprite of
-    the infantry type I below (same number of image frames and image size), present in the game directory at
-    first; a tiny test map whose override section points the image of an
-    infantry type I that the local player can train at N, placing none. Play against an opponent of
+    (S-0007); a loose sprite file N ‖ ".shp", a visibly altered copy of the stock body sprite of
+    the infantry type I below (same number of image frames and image-frame size), present in the game directory at
+    first; a tiny test map whose override section sets the image name of an
+    infantry type I, which the local player can train, to N; the map places none. Play against an opponent of
     the other side, so that only the local player can have I.
   - *Procedure:* in a fresh session, play skirmish 1 on the map, train an I and look at it. Back in
     the menus, move the loose file out of the game directory. Play skirmish 2 on the same map,
@@ -1343,7 +1462,7 @@ questions).
   - *Setup:* measurement setup, which includes several stock map packages loose in the game
     directory (claim 14a). Pick one of them.
   - *Procedure:* open the skirmish map list. Then quit, rename one stock package's extension,
-    restart and open the list. Then, with the game running, rename it back and open the list again
+    restart and open the list. Then, with the program running, rename it back and open the list again
     without restarting. Finally restart and open the list.
   - *Observable:* whether the maps inside that package appear in the skirmish map list.
   - *Runs:* one per step, four in all.
@@ -1437,7 +1556,7 @@ archives are mounted.
 - (c) They are released before play, seen through a deferred sprite.
   - *Setup:* variant (i): a loose copy of the stock `loadmd.mix` with one extra sprite, picture L,
     under a new name S that, like its generic fallback name (S-0007), no archive of stock data
-    holds; and a tiny temperate map whose override section points one infantry type's image at S.
+    holds; and a tiny temperate map whose override section sets one infantry type's image name to S.
     Variant (ii): also, a loose copy of the stock `temperat.mix` with a sprite under S that has a
     clearly different picture T.
   - *Procedure:* in a fresh session per variant, play a skirmish on the map with that infantry
@@ -1458,10 +1577,10 @@ archives are mounted.
   - *Expected:* the skirmish plays, with order A.
   - *Falsified if:* the skirmish never reaches play, or shows order B or the stock order.
 
-**Scenario M14: order of the startup archives (claims 9, 10, 12).** Low priority.
+**Scenario M14: order of the startup archives (claims 9, 10, 12, 16).** Low priority.
 - *Setup:* for two archives X and Y that are next to each other in Table 1 (rows 1 to 15, X listed
   first), test copies of both, each given an extra sprite under one shared new name, with clearly
-  different pictures; and a tiny map whose override section points one infantry type's image at that
+  different pictures; and a tiny map whose override section sets one infantry type's image name to that
   name. A test copy of an archive that is nested in stock is placed loose (claim 3); a test copy of
   a top-level installed archive takes the place of the installed file. For row 3, which has no
   installed archive, X or Y is a loose test expansion archive `expandmd98.mix` holding only the
@@ -1470,8 +1589,9 @@ archives are mounted.
 - *Observable:* the infantry's picture.
 - *Runs:* one fresh session per pair, for at least the pairs `langmd.mix`/`language.mix`,
   `language.mix`/`expandmd98.mix`, `cachemd.mix`/`cache.mix`,
-  `localmd.mix`/`local.mix`, `generic.mix`/`isogenmd.mix`, `cameo.mix`/`mapsmd03.mix` and
-  `multimd.mix`/`thememd.mix`.
+  `localmd.mix`/`local.mix`, `generic.mix`/`isogenmd.mix`, `cameo.mix`/`mapsmd03.mix`,
+  `mapsmd03.mix`/`multimd.mix` (next to each other in the search order of a stock install, which has
+  no `maps03.mix`; claim 16) and `multimd.mix`/`thememd.mix`.
 - *Expected:* X's picture.
 - *Falsified if:* Y's picture shows.
 
@@ -1481,7 +1601,7 @@ afresh (claims 1, 22).**
   the game directory at first. Variant (b): instead, a loose copy of the same vehicle's motion file
   in which every transform is changed so that the vehicle is drawn clearly displaced or turned (the
   voxel model itself unchanged), also stored outside at first.
-- *Procedure:* per variant, in one session: start the game and play a skirmish with that vehicle.
+- *Procedure:* per variant, in one session: start the program and play a skirmish with that vehicle.
   Without restarting, add the loose file and play a second skirmish. Then, still without
   restarting, remove it and play a third.
 - *Observable:* the vehicle's look in each game.
@@ -1499,23 +1619,23 @@ afresh (claims 1, 22).**
   label of one main-menu button is changed to a clearly different text; (c) the copy inside a test
   `expandmd98.mix`, (d) the copy loose in the game directory.
 - *Procedure:* in a fresh session per variant: (a), (b) start a skirmish and press the new key and
-  the stock key for that command; (c), (d) start the game and read the main menu.
+  the stock key for that command; (c), (d) start the program and read the main menu.
 - *Observable:* (a), (b) which key performs the command; (c), (d) the button's label.
 - *Runs:* one fresh session per variant.
 - *Expected:* (a) the stock key (the language archive outranks every expansion archive). (b) The new
   key (a loose file wins). (c) The stock label. (d) The changed label.
 - *Falsified if:* (a) the new key performs the command, (b) the stock key still does and the new
   one does not, (c) the changed label shows, or (d) the stock label shows.
-- Afterwards remove any keyboard file the game wrote.
+- Afterwards remove any keyboard file the program wrote.
 - (e) The string table is read while only the language archives are mounted (claims 9, 16).
   - *Setup:* variant (i): in place of the installed `langmd.mix`, a copy of it without the string
     table (in stock data no other archive holds it). Variant (ii): the same, plus a test
     `expandmd98.mix` holding the changed string table of (c). Variant (iii): the same as (i), plus
     the changed string table loose in the game directory.
-  - *Procedure:* start the game, one fresh start per variant.
+  - *Procedure:* start the program, one fresh start per variant.
   - *Observable:* whether the main menu appears, and the label of the changed button.
   - *Runs:* one start per variant, three in all.
-  - *Expected:* (i) and (ii): the game refuses to start, so the main menu never appears. (iii) The
+  - *Expected:* (i) and (ii): the program refuses to start, so the main menu never appears. (iii) The
     main menu appears with the changed label.
   - *Falsified if:* the main menu appears in (i) or (ii), or in (iii) it does not appear or shows
     the stock label.
@@ -1525,7 +1645,7 @@ afresh (claims 1, 22).**
   - *Setup:* measurement setup. Separately, a copy of the stock interface layout file in which the
     two command-bar button lists (the one for skirmish and solo games and the one for multiplayer
     games) both have their first two buttons swapped, stored outside the game directory at first.
-  - *Procedure:* start the game and play a skirmish. Without restarting, put the copy loose in the
+  - *Procedure:* start the program and play a skirmish. Without restarting, put the copy loose in the
     game directory and play a second skirmish. Still without restarting, remove it and play a
     third.
   - *Observable:* the order of the buttons on the command bar in each game.
@@ -1538,12 +1658,12 @@ afresh (claims 1, 22).**
     interface layout file of (a) is added.
   - *Procedure:* in one fresh session each, a skirmish with an Allied local player and a skirmish
     with a Soviet local player.
-  - *Observable:* whether the game starts; whether each skirmish reaches play; the order of the
+  - *Observable:* whether the program starts; whether each skirmish reaches play; the order of the
     command-bar buttons in the Allied game.
   - *Runs:* two fresh sessions.
-  - *Expected:* the game starts both times; the Allied skirmish plays with the swapped order; the
+  - *Expected:* the program starts both times; the Allied skirmish plays with the swapped order; the
     Soviet skirmish never reaches play, since no archive it mounts holds the file.
-  - *Falsified if:* the game refuses to start, the Allied skirmish does not play or shows the stock
+  - *Falsified if:* the program refuses to start, the Allied skirmish does not play or shows the stock
     order, or the Soviet skirmish plays.
 - (c) Order inside the side group (claim 13).
   - *Setup:* the loose `localmd.mix` copy without the interface layout file of Scenario M7 (g) (i).
@@ -1567,10 +1687,10 @@ afresh (claims 1, 22).**
     plus an integrity digest section whose checksum is not this file's (for example the stock AI
     database's integrity digest section, copied unchanged). Variant (c): an empty file (no section
     at all).
-  - *Procedure:* start the game, one fresh start per variant.
+  - *Procedure:* start the program, one fresh start per variant.
   - *Observable:* whether the main menu appears.
   - *Runs:* one start per variant, three in all.
-  - *Expected:* (a) and (b): the game refuses to start, so the main menu never appears. (c): the
+  - *Expected:* (a) and (b): the program refuses to start, so the main menu never appears. (c): the
     main menu appears.
   - *Falsified if:* the main menu appears in (a) or (b), or does not appear in (c).
 - (d) to (g): a valid digest, and what it covers. In these steps the *test file* is a loose
@@ -1586,42 +1706,54 @@ afresh (claims 1, 22).**
     again. Variant (g): the file of (d) with its digest text split into two entries of the
     integrity digest section, under two different arbitrary keys, the first part in the first
     entry.
-  - *Procedure:* start the game, one fresh session per variant; where the main menu appears, play
+  - *Procedure:* start the program, one fresh session per variant; where the main menu appears, play
     one skirmish.
   - *Observable:* whether the main menu appears; whether the skirmish shows the test file's change.
   - *Runs:* one session per variant, four in all.
   - *Expected:* (d), (e) and (g): the main menu appears and the skirmish shows the change. (f): the
-    game refuses to start.
-  - *Falsified if:* the game refuses to start in (d), (e) or (g), the change is missing from their
+    program refuses to start.
+  - *Falsified if:* the program refuses to start in (d), (e) or (g), the change is missing from their
     skirmish, or the main menu appears in (f).
 - (h) Read per game.
   - *Setup:* two test files as in (d), each with its own valid digest: file 1 changes one visible
     value, file 2 a different one and not the first.
-  - *Procedure:* start the game with file 1 in place and play a skirmish. Back in the menus,
-    replace it with file 2 without leaving the game, and play a second skirmish.
+  - *Procedure:* start the program with file 1 in place and play a skirmish. Back in the menus,
+    replace it with file 2 without quitting the program, and play a second skirmish.
   - *Observable:* which of the two changes each skirmish shows.
   - *Runs:* one session of two skirmishes.
   - *Expected:* the first skirmish shows file 1's change only, the second file 2's change only (the
     rules are rebuilt for each game, S-0006).
   - *Falsified if:* the second skirmish lacks file 2's change or still shows file 1's.
-- (i) The 127-byte cut and the removal of trailing whitespace after it. With base64 characters
-  alone the cut cannot be seen: the first 20 decoded bytes come from the first 28 characters of the
-  joined text, so a first entry of 128 or more such characters gives the same checksum whether it is
-  cut or not. Spaces are used as filler instead.
-  - *Setup:* the test file of (d), with its digest text D (28 characters) split over two entries of
-    the integrity digest section under two different keys. Variant (i): the first entry's value is
-    the first 12 characters of D, then spaces up to a value length of exactly 127 bytes, then the
-    four letters "AAAA" (bytes 128 to 131 of the value); the second entry's value is the remaining
-    16 characters of D. Variant (ii), the control: the same, but with four spaces fewer, so that
-    "AAAA" falls on bytes 124 to 127 and the value ends there.
-  - *Procedure:* start the game, one fresh session per variant; where the main menu appears, play
-    one skirmish.
+- (i) Spaces inside the digest text, the 127-byte cut and the removal of trailing whitespace after
+  it. With base64 characters alone the cut cannot be seen: the first 20 decoded bytes come from the
+  first 28 characters of the joined text, so a first entry of 128 or more such characters gives the
+  same checksum whether it is cut or not. Spaces are used as filler instead, and variants (iii) and
+  (iv) first settle how the original decodes a text with spaces inside it (claim 21b, Decoding).
+  - *Setup:* the test file of (d), with its digest text D (28 characters, the last one "=") written
+    as follows. Variant (iii): one entry whose value is the first 12 characters of D, then four
+    spaces, then the remaining 16 characters of D. Variant (iv), the positive control: one entry
+    whose value is D, then four spaces, then "AAAA". Variant (i): two entries under two different
+    keys; the first entry's value is the first 12 characters of D, then 115 spaces, so that it is
+    127 bytes long, then one letter "A" as byte 128; the second entry's value is the remaining 16
+    characters of D. Variant (ii): the same as (i), but with 114 spaces, so that the "A" is byte
+    127 and the value ends there.
+  - *Procedure:* start the program, one fresh session per variant, (iii) and (iv) first; where the
+    main menu appears, play one skirmish.
   - *Observable:* whether the main menu appears; whether the skirmish shows the test file's change.
-  - *Runs:* one session per variant, two in all.
-  - *Expected:* (i) the main menu appears and the skirmish shows the change: the cut drops "AAAA",
-    and the spaces left at the end of the cut text are removed, so the joined text is D. (ii) The
-    game refuses to start: "AAAA" lies within the first 127 bytes and stays in the text.
-  - *Falsified if:* (i) refuses to start or lacks the change, or the main menu appears in (ii).
+  - *Runs:* one session per variant, four in all.
+  - *Expected:* (iii) the program refuses to start: the group of four spaces gives a zero byte, and
+    the bytes after it are shifted, so the decoded bytes are not the checksum. (iv) The main menu
+    appears and the skirmish shows the change: the spaces and "AAAA" lie after the 20th decoded
+    byte. (i) The main menu appears and the skirmish shows the change: the cut drops the "A", and
+    the spaces left at the end of the cut text are removed, so the joined text is D. (ii) The
+    program refuses to start: the "A" lies within the first 127 bytes, so the spaces before it stay
+    inside the text.
+  - *Falsified if:* (iii) starts (spaces would then be skipped, or the decoding would stop at the
+    first space), or (iv) refuses or lacks the change (a space inside a value would then reject the
+    whole text). If (iii) and (iv) behave as expected: (i) refuses or lacks the change (no cut at
+    127 bytes, or no removal of trailing whitespace after it), or the main menu appears in (ii) (a
+    cut shorter than 127 bytes). If (iii) or (iv) does not behave as expected, the decoding claim
+    is falsified and (i) and (ii) say nothing about the cut until the decoding is settled.
 - (j) Repeated names.
   - *Setup:* every variant is a test file built as in (d), with its digest computed by Formulas
     (Integrity digest) under the stated assumption; "lookup" means S-0002's rule. Variant (i): the
@@ -1641,15 +1773,15 @@ afresh (claims 1, 22).**
     replaced by "A" (that character affects only the 21st decoded byte, which is ignored) and split
     into two entries of 14 characters each; in (viii), the control, under two different keys; in
     (ix), both under the same key.
-  - *Procedure:* start the game, one fresh session per variant; where the main menu appears, play
+  - *Procedure:* start the program, one fresh session per variant; where the main menu appears, play
     one skirmish.
   - *Observable:* whether the main menu appears; whether the skirmish shows the test file's change.
   - *Runs:* one session per variant, nine in all.
   - *Expected:* (i) and (iii): the main menu appears and the skirmish shows the change of the
-    occurrence a lookup finds. (ii) and (iv): the game refuses to start. Of (v) and (vi), exactly
+    occurrence a lookup finds. (ii) and (iv): the program refuses to start. Of (v) and (vi), exactly
     one starts: the one whose valid digest is in the integrity digest section that a lookup of its
-    name finds. (vii): the game refuses to start (the section that is not taken out is part of the
-    text). (viii): the main menu appears and the skirmish shows the change. (ix): the game refuses
+    name finds. (vii): the program refuses to start (the section that is not taken out is part of the
+    text). (viii): the main menu appears and the skirmish shows the change. (ix): the program refuses
     to start (both positions give the same piece of 14 characters, so the text is that piece twice,
     and its first 20 decoded bytes are not the checksum).
   - *Falsified if:* (i), (iii) or (viii) refuses to start, (ii), (iv), (vii) or (ix) starts, or (v)
@@ -1662,17 +1794,17 @@ afresh (claims 1, 22).**
   integrity digest section left as it is, and with every entry of its list of the conditions under
   which computer players form teams deleted, so that its checksum no longer matches. Variant (c),
   the control: measurement setup only.
-- *Procedure:* in one fresh session per variant, start the game and play a skirmish for 30 minutes
+- *Procedure:* in one fresh session per variant, start the program and play a skirmish for 30 minutes
   of real time at the default game speed against one computer opponent at the hardest difficulty, with superweapons turned off
   in the lobby, on the same map and settings each time, without attacking it.
-- *Observable:* whether the game starts and the skirmish plays; whether the computer opponent sends
+- *Observable:* whether the program starts and the skirmish plays; whether the computer opponent sends
   any units against the local player's base.
 - *Runs:* 10 fresh sessions per variant. The computer opponent's play involves random draws, so
   the statistic is, per variant, the number of sessions in which the opponent attacks.
-- *Expected:* the game starts and the skirmish plays in every session. The opponent attacks in at
+- *Expected:* the program starts and the skirmish plays in every session. The opponent attacks in at
   least 8 of the 10 sessions of (a) and of (c); in (b) it never forms an attack team, so it attacks
   in none of the 10.
-- *Falsified if:* the game refuses to start in any session; the opponent of (b) attacks in any
+- *Falsified if:* the program refuses to start in any session; the opponent of (b) attacks in any
   session; or the count of (a) is more than 2 below that of (c). If (c) shows an attack in fewer
   than 8 sessions, the run says nothing: play all three variants again for longer.
 
@@ -1712,7 +1844,7 @@ afresh (claims 1, 22).**
     (the base game's local archive holds them, under names that differ from the expansion's), each
     with one visible edit chosen as in Scenarios M2 (a) and M2 (c): one unit's cost raised by
     1 credit, and one unit's sidebar icon entry naming a different unit's stock icon.
-  - *Procedure:* start the game and play a skirmish in which both units can be built.
+  - *Procedure:* start the program and play a skirmish in which both units can be built.
   - *Observable:* the first unit's cost on the sidebar tooltip and the second unit's sidebar icon.
   - *Runs:* one skirmish.
   - *Expected:* both are stock (a loose file would win if the name were ever requested, claim 1).
@@ -1725,11 +1857,11 @@ afresh (claims 1, 22).**
   random names and looking for a repeat finds such a pair with high probability.) Two sprites with
   clearly different pictures P1 and P2. Variant (a): a test `expandmd98.mix` holding one member,
   stored under the id of N1 (which is also the id of N2), with picture P1, and a test `expandmd97.mix`
-  holding one member under the same id with picture P2; a tiny map whose override section points
-  one infantry type I2's image at N2, and no type's image at N1. Variant (b): instead, two loose
+  holding one member under the same id with picture P2; a tiny map whose override section sets
+  one infantry type I2's image name to N2, and no type's image name to N1. Variant (b): instead, two loose
   files, N1 ‖ ".shp" with picture P1 and N2 ‖ ".shp" with picture P2, no test archive, and a tiny
-  map whose override section points infantry type I1's image at N1 and a different infantry type
-  I2's image at N2.
+  map whose override section sets infantry type I1's image name to N1 and a different infantry type
+  I2's image name to N2.
 - *Procedure:* in a fresh session per variant, play a skirmish on the map in which the infantry
   types it names are seen.
 - *Observable:* (a) the picture of I2; (b) the pictures of I1 and I2.
@@ -1737,17 +1869,18 @@ afresh (claims 1, 22).**
 - *Expected:* (a) I2 shows P1: the request for N2 is answered by the member stored for N1, because
   only the id is compared, and the higher-ranked archive hides the lower-ranked member with the
   same id. (b) I1 and I2 show the same picture, P1 or P2: the name requested first is used for
-  every name with that member id (claim 22).
+  every name with that member id (claim 22, the YR default of `quirks.kept_art_keyed_by_id`; under
+  its fixed behaviour I1 would show P1 and I2 would show P2).
 - *Falsified if:* (a) I2 is invisible or shows P2; (b) I1 and I2 show different pictures.
 
 **Scenario M22: the fallback archives (claims 10, 12, 15, 16).** Each step uses a *probe sprite*:
 an extra sprite, added to the test archive the step names, under a new name that, like its generic
 fallback name (S-0007), no archive of stock data holds; and a tiny map whose override
-section points one infantry type's image at that name. If the test archive is mounted, the infantry
+section sets one infantry type's image name to that name. If the test archive is mounted, the infantry
 shows the probe sprite; if not, the infantry is invisible. Each variant runs in a fresh session,
-plays one skirmish on that map, and records whether the game starts and the infantry's look.
+plays one skirmish on that map, and records whether the program starts and the infantry's look.
 - (a) The sound archive.
-  - *Setup:* sound turned on in the game's settings, with a working audio device. A loose test copy
+  - *Setup:* sound turned on in the program's settings, with a working audio device. A loose test copy
     of the stock `audio.mix` (extracted from `language.mix`) with the probe sprite added. Variant
     (i), the control: nothing else changed. Variant (ii): also, in place of the installed
     `langmd.mix`, a copy of it without `audiomd.mix` (in stock data `audiomd.mix` is held only
@@ -1770,15 +1903,21 @@ plays one skirmish on that map, and records whether the game starts and the infa
     name, with the probe sprite added. Variant (i), the control: nothing else changed. Variant (ii):
     also, `movmd03.mix` moved out of the game directory.
   - *Runs:* one fresh session per variant.
-  - *Expected:* the game starts in both variants (one of the two movie archives is enough,
+  - *Expected:* the program starts in both variants (one of the two movie archives is enough,
     claim 16). (i) The infantry is invisible. (ii) The probe sprite shows.
-  - *Falsified if:* the game refuses to start in either variant, (i) shows the probe sprite, or (ii)
+  - *Falsified if:* the program refuses to start in either variant, (i) shows the probe sprite, or (ii)
     shows an invisible infantry.
 - (d) The base maps archive.
   - *Setup:* a loose test archive `maps03.mix` holding only the probe sprite.
   - *Runs:* one fresh session.
   - *Expected:* the probe sprite shows (`maps03.mix` is mounted when it is present).
   - *Falsified if:* the infantry is invisible.
+- (e) The base archives that are never mounted (claim 15).
+  - *Setup:* per variant, a test copy of one of the installed `multi.mix`, `maps01.mix`,
+    `maps02.mix`, `movies01.mix` and `movies02.mix`, in its place, with the probe sprite added.
+  - *Runs:* one fresh session per archive, five in all.
+  - *Expected:* the infantry is invisible in every variant.
+  - *Falsified if:* the probe sprite shows in any variant.
 
 **Scenario M23: the language archives (claim 5, Table 1 rows 1 and 2).**
 - (a) `langmd.mix` is taken only as a loose file.
@@ -1787,23 +1926,23 @@ plays one skirmish on that map, and records whether the game starts and the infa
     `langmd.mix` moved out of the game directory and put, unchanged, inside a test
     `expandmd98.mix`. Variant (ii), the control: the same test `expandmd98.mix`, with the installed
     `langmd.mix` also left in place.
-  - *Procedure:* start the game, one fresh start per variant.
+  - *Procedure:* start the program, one fresh start per variant.
   - *Observable:* whether the main menu appears.
   - *Runs:* one start per variant.
-  - *Expected:* (i) the game refuses to start: `cameomd.mix`, which the game requires (claim 16), is
+  - *Expected:* (i) the program refuses to start: `cameomd.mix`, which the program requires (claim 16), is
     held only inside `langmd.mix`, and `langmd.mix` is not mounted from the test archive. (ii) The
     main menu appears.
   - *Falsified if:* the main menu appears in (i), or does not appear in (ii). (If `langmd.mix` could
     be mounted from inside the test archive, (i) would start.)
 - (b) `language.mix` can come from inside `langmd.mix`.
   - *Setup:* variant (i): the installed `language.mix` moved out of the game directory. In stock
-    data no archive holds a member of that name, and `cameo.mix`, which the game requires
+    data no archive holds a member of that name, and `cameo.mix`, which the program requires
     (claim 16), is held only by `language.mix`. Variant (ii): also, in place of the installed
     `langmd.mix`, a copy of it to which the stock `language.mix` is added as a member.
-  - *Procedure:* start the game, one fresh start per variant; in (ii), also play a skirmish.
+  - *Procedure:* start the program, one fresh start per variant; in (ii), also play a skirmish.
   - *Observable:* whether the main menu appears; in (ii), whether the skirmish reaches play.
   - *Runs:* one start per variant, plus one skirmish in (ii).
-  - *Expected:* (i) the game refuses to start. (ii) The main menu appears and the skirmish plays.
+  - *Expected:* (i) the program refuses to start. (ii) The main menu appears and the skirmish plays.
   - *Falsified if:* the main menu appears in (i), or in (ii) it does not appear or the skirmish
     never reaches play.
 
@@ -1819,7 +1958,7 @@ mean those sides' names as the stock side list writes them.
     in a fresh session.
   - *Observable:* whether the skirmish reaches play; in (ii), the look of the sidebar's radar frame.
   - *Runs:* two skirmishes.
-  - *Expected:* (i) the skirmish never reaches play (the new side has index 3, so the game asks for
+  - *Expected:* (i) the skirmish never reaches play (the new side has index 3, so the program asks for
     `sidec04.mix`). (ii) It plays, with the Allied side's radar frame.
   - *Falsified if:* (i) plays, or (ii) never reaches play or shows another side's radar frame.
 - (b) A map override of the side field.
@@ -1869,18 +2008,18 @@ mean those sides' names as the stock side list writes them.
   `multi.mix`, and the theme archives `thememd.mix` and `theme.mix`. The number 03 of claim 12 is
   fixed in the original, so a change of disc is not expected to happen, and claim 15's "never mounts `multi.mix`" assumes it
   does not. Not specified here.
-- What the original does with an integrity digest section whose text holds bytes outside the base64
-  alphabet, or decodes to fewer than 20 bytes (claim 21b). Our engine treats both as a checksum that
-  does not match.
 - What computer players do when the AI database is missing or empty, and what the skirmish and
-  multiplayer screens offer when the mode list is missing (claim 16). Both start the game; their
+  multiplayer screens offer when the mode list is missing (claim 16). In both cases the program starts; their
   later behaviour is not specified.
 - The short form of a long name that the original uses to find a map package's description member
   (claim 14a) or to open an alternative rules candidate (claim 20) comes from the host file system
   and is not specified.
+- When a building's rubble sprite (claim 22) is drawn. No spec says so yet, so the two rubble rows
+  of claim 22 have no scenario; once a spec says when it is drawn, they can be measured like the
+  bib rows (Scenario M11 rows 12 and 13).
 - Whether the start of a campaign mission discards the pictures of deferred sprites as a skirmish
   or multiplayer game does (claim 22). This spec's scenarios are all skirmishes.
-- For a deferred sprite (claim 22), the number of image frames and the image size of the copy found
+- For a deferred sprite (claim 22), the number of image frames and the image-frame size of the copy found
   at the first request may be used together with the picture of a copy read later. What is drawn when
   the two copies differ in number of image frames or size is not specified; the scenarios avoid it by keeping both
   the same.
