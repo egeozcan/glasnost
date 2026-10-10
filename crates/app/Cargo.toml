@@ -12,6 +12,7 @@ glasnost-audio.workspace = true
 glasnost-convert.workspace = true
 glasnost-ini.workspace = true
 glasnost-map.workspace = true
+glasnost-num.workspace = true
 glasnost-rules.workspace = true
 glasnost-sim.workspace = true
 glasnost-fmt.workspace = true

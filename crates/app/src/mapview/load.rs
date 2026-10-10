@@ -9,7 +9,11 @@ use glasnost_convert::game::GameInputs;
 use glasnost_convert::map::to_vfs_theater;
 use glasnost_convert::theater::Catalogue;
 use glasnost_fmt::pal::Palette6;
+use std::sync::Arc;
+
 use glasnost_map::Map;
+use glasnost_sim::rules::SimRules;
+
 use glasnost_render::palette::{ANIM_PALETTE_FILE, PaletteQuirks, PaletteState};
 use glasnost_vfs::Vfs;
 use glasnost_vfs::theater::Theater;
@@ -42,6 +46,8 @@ pub struct Loaded {
     pub problems: Vec<String>,
     /// The live sandbox game, when it started.
     pub live: Option<Live>,
+    /// The typed rules, when the ruleset resolved.
+    pub rules: Option<Arc<SimRules>>,
 }
 
 impl Loaded {
@@ -55,6 +61,7 @@ impl Loaded {
                 palettes: &self.palettes,
                 assets: &self.assets,
                 options: &self.options,
+                rules: self.rules.as_deref(),
             },
             self.live.as_mut(),
         )
@@ -136,6 +143,10 @@ pub async fn load(
     } else {
         Err("the game was not started".into())
     };
+    let rules = resolved
+        .as_ref()
+        .ok()
+        .map(|r| Arc::new(SimRules::new(&r.ruleset, &r.sim_rules_hash)));
     let mut options = options.clone();
     if started.is_ok() {
         // The sandbox game places every owner's objects (S-0009 claim 27 in
@@ -149,6 +160,7 @@ pub async fn load(
         palettes: &palettes,
         assets: &assets,
         options: &options,
+        rules: rules.as_deref(),
     };
     let (mut built, painter) = build::build_parts(&inputs, started.is_ok());
     let live = match started {
@@ -173,5 +185,6 @@ pub async fn load(
         minimap,
         problems,
         live,
+        rules,
     }
 }

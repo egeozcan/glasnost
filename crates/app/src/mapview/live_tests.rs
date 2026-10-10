@@ -140,6 +140,7 @@ fn dynamic_pass_places_mobiles_at_their_projected_point() {
         palettes: &palettes,
         assets: &assets,
         options: &options,
+        rules: None,
     };
     let (built, mut painter) = build_parts(&inputs, true);
     // The live build leaves the map's infantry to the simulation.
@@ -205,6 +206,7 @@ fn synthetic_live() -> (Live, Scene) {
         palettes: &palettes,
         assets: &assets,
         options: &options,
+        rules: None,
     };
     let (mut built, painter) = build_parts(&inputs, true);
     let world = testkit::new_game(5);
@@ -302,6 +304,7 @@ fn drawing_leaves_the_game_alone() {
         palettes: &palettes,
         assets: &assets,
         options: &options,
+        rules: None,
     };
     let mut reference = testkit::new_game(5);
     for _ in 0..12 {

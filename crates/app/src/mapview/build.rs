@@ -21,7 +21,9 @@ use glasnost_fmt::vpl::Vpl;
 use glasnost_fmt::vxl::Vxl;
 use glasnost_ini::Document;
 use glasnost_ini::value;
+use glasnost_map::objects::{HealthKind, ListKind, facing_from_value, starting_health};
 use glasnost_map::{CellXY, Map, NO_OVERLAY};
+use glasnost_num::F64;
 use glasnost_render::compose::{DepthTest, Paint, Profile, row565};
 use glasnost_render::light::{self, DetailLevel, LightQuirks, LightSource, TileTable};
 use glasnost_render::palette::{PaletteState, TINT_EXEMPT, house_palette};
@@ -30,6 +32,7 @@ use glasnost_render::projection::{
 };
 use glasnost_render::scene::{Group, Item, ItemDepth, Scene};
 use glasnost_render::voxel::{self, VoxelQuirks};
+use glasnost_sim::rules::{Kind as SimKind, SimRules};
 
 /// File bytes read for a scene, by upper-case name.
 #[derive(Clone, Debug, Default)]
@@ -151,8 +154,6 @@ pub const VPL_FILE: &[u8] = b"voxels.vpl"; // spec: S-0105 Import mapping
 /// The provisional notes, by request.
 mod notes {
     pub const TILES: &str = "Q-0009: tile files, sub-tile cells and tile placement are provisional";
-    pub const OBJECTS: &str =
-        "Q-0010: object list fields, infantry positions and facings are provisional";
     pub const PLACEMENT: &str =
         "Q-0011: sprites are centred on their object's point by their canvas (provisional)";
     pub const OVERLAY: &str = "Q-0012: overlay and smudge frames and palettes are provisional";
@@ -162,10 +163,11 @@ mod notes {
     pub const NO_SLOT_ANIMS: &str = "building slot animations (S-0108) need animation playback, which has no spec yet: not drawn";
     pub const NO_COMPANION: &str =
         "building depth images (S-0102 F5): the shared file is not named by a spec: not used";
-    pub const HEALTH: &str =
-        "Q-0010: the health scale is unknown, so every building is drawn undamaged";
-    pub const INITIAL_STATE: &str = "Q-0016: buildings start complete and idle, turrets face as their bodies, objects enter structures first";
-    pub const INITIAL_STATE_LIVE: &str = "Q-0016: buildings are drawn complete and idle, building voxel turrets face the map entry's facing";
+    pub const NO_RULES_HEALTH: &str = "the rules did not resolve: buildings are drawn undamaged (S-0009 claim 37 needs their strengths)";
+    pub const GATE_DAMAGED: &str =
+        "a damaged gate's body frame needs its gate-stage count (S-0108 claim 2): drawn undamaged";
+    pub const UPGRADES: &str = "upgrades a map entry places (S-0009 claim 40) are not drawn: the building upgrade slots of S-0108 need animation playback";
+    pub const AIRCRAFT_AIR: &str = "an aircraft on a cell outside the usable area is drawn landed: its flight height has no spec (S-0009 claim 38)";
     pub const VPL: &str =
         "Q-0014: voxels are lit through the lighting table read by a provisional layout";
     pub const NO_VPL: &str =
@@ -361,6 +363,7 @@ type VoxelKey = (Kind, usize, u8, u8, u8, u16);
 
 struct Builder<'a> {
     map: &'a Map,
+    rules: Option<&'a SimRules>,
     import: &'a Import,
     catalogue: &'a Catalogue,
     palettes: &'a PaletteState,
@@ -412,6 +415,7 @@ pub fn build(
         palettes,
         assets,
         options,
+        rules: None,
     };
     build_parts(&inputs, false).0
 }
@@ -430,6 +434,7 @@ pub fn build_parts(inputs: &Inputs, live: bool) -> (Built, Painter) {
     };
     let mut b = Builder {
         map: inputs.map,
+        rules: inputs.rules,
         import,
         catalogue: inputs.catalogue,
         palettes: inputs.palettes,
@@ -448,18 +453,18 @@ pub fn build_parts(inputs: &Inputs, live: bool) -> (Built, Painter) {
     b.built.scene.cell_pass_len = b.built.scene.items.len();
     b.built.notes.insert(notes::NO_SLOT_ANIMS.into());
     if live {
-        b.built.notes.insert(notes::INITIAL_STATE_LIVE.into());
         b.built.ground = ground;
         return (b.built, b.p);
     }
-    b.mobiles(&mut ground);
-    // spec: S-0102 claim 6 (an entering object goes before the first strictly greater key: a stable sort);
-    // provisional (Q-0016): objects enter in the order structures, vehicles, infantry, aircraft
-    ground.sort_by_key(|g| g.key);
-    for g in ground {
+    // spec: S-0009 claim 43 (objects enter the drawing order vehicles, aircraft, infantry, then buildings)
+    let mut entries = Vec::new();
+    b.mobiles(&mut entries);
+    entries.extend(ground);
+    // spec: S-0102 claim 6 (an entering object goes before the first strictly greater key: a stable sort)
+    entries.sort_by_key(|g| g.key);
+    for g in entries {
         b.built.scene.items.extend(g.items);
     }
-    b.built.notes.insert(notes::INITIAL_STATE.into());
     (b.built, b.p)
 }
 
@@ -927,7 +932,7 @@ impl Builder<'_> {
                 owner: String::new(),
                 cell: s.cell,
                 entry: String::new(),
-                notes: vec![notes::OVERLAY.into(), notes::OBJECTS.into()],
+                notes: vec![notes::OVERLAY.into()],
             });
             if let Some(item) = self.place_sprite(
                 &sprite,
@@ -1045,6 +1050,41 @@ impl Builder<'_> {
         }
     }
 
+    /// Whether a pre-placed building with health value `value` starts
+    /// damaged and badly damaged (S-0009 claim 37, S-0108 F3). Undamaged
+    /// without the typed rules.
+    fn building_condition(&mut self, idx: usize, value: i32) -> (bool, bool) {
+        let Some(r) = self.rules else {
+            self.note(notes::NO_RULES_HEALTH);
+            return (false, false);
+        };
+        let name = &self.import.outcome.registries[&Kind::Buildings][idx].name;
+        let Some(strength) = glasnost_sim::objects::type_index(r, SimKind::Building, name)
+            .and_then(|t| r.buildings.get(t as usize))
+            .map(|b| b.strength)
+        else {
+            return (false, false);
+        };
+        if strength == 0 {
+            return (false, false);
+        }
+        // spec: S-0009 claim 37 (quirks.near_full_health_rounds_up: on, the original)
+        let (h, _) = starting_health(
+            HealthKind::Building,
+            value,
+            strength,
+            true,
+            r.quirks.chop_rounding,
+        );
+        // spec: S-0108 F3 (h = health / strength in binary64, compared with the ratios)
+        let ratio = F64::from_i64(i64::from(h), r.mode)
+            .div(F64::from_i64(i64::from(strength), r.mode), r.mode);
+        (
+            ratio.le(r.general.condition_yellow),
+            ratio.le(r.general.condition_red),
+        )
+    }
+
     /// The foundation W × H of a building (S-0108 Import mapping).
     fn foundation(&self, idx: usize) -> (i32, i32) {
         const WORDS: [(&str, (i32, i32)); 22] = [
@@ -1105,8 +1145,14 @@ impl Builder<'_> {
     fn structures(&mut self, ground: &mut Vec<GroundEntry>) {
         let list = self.map.objects.structures.clone();
         let mut any = false;
-        for s in list {
+        for (n, s) in list.iter().enumerate() {
             let p = &s.placed;
+            let fields = self.map.objects.fields(ListKind::Buildings, n).clone();
+            if fields.short {
+                // spec: S-0009 claim 36 (an entry that lacks a required field is dropped, a departure)
+                self.drop_object("entry lacks a required field");
+                continue;
+            }
             if !self.owner_kept(&p.owner) {
                 self.drop_object("owner no skirmish house carries");
                 continue;
@@ -1136,11 +1182,14 @@ impl Builder<'_> {
                     .map(|f| String::from_utf8_lossy(f).into_owned())
                     .collect::<Vec<_>>()
                     .join(","),
-                notes: vec![notes::HEALTH.into(), notes::PLACEMENT.into()],
+                notes: vec![notes::PLACEMENT.into()],
             });
+            if fields.upgrade_count.unwrap_or(0) > 0 {
+                self.note(notes::UPGRADES);
+            }
             let z = LEVEL_LEPTONS * i32::from(cell.level);
             let lz = height_lift(z);
-            // spec: S-0108 claim 8 (centred on the foundation's top corner, 128 leptons before the top-left cell's centre)
+            // spec: S-0108 claim 8, S-0009 claim 38 (centred on the top corner of the foundation's top-left cell)
             let anchor = project_lifted(256 * p.cell.x, 256 * p.cell.y, z);
             let u = self
                 .p
@@ -1170,18 +1219,30 @@ impl Builder<'_> {
                 continue;
             };
             let n = self.sprite_frames(&sprite).unwrap_or(0);
-            // provisional (Q-0016): a map-placed building starts complete and idle; spec: S-0108 claim 6
-            // (a change during the game's set-up is immediate: stage = a of the range)
+            // spec: S-0009 claim 40 (a map-placed building is complete and idle at once);
+            // S-0108 claim 6 (a change during the game's set-up is immediate: stage = a of the range)
             let idle = self
                 .art_value(Kind::Buildings, i, b"AnimIdle")
                 .map(|v| value::int_tuple_or::<3>(v, [0, 1, 0]).0)
                 .unwrap_or([0, 1, 0]);
             let k = idle[0].max(0) as usize;
-            // spec: S-0108 claim 2 (occupiable: 2·[occupied] + [hurt] = 0; gate: 0; others: k when not damaged)
             let occupiable = rule_bool(self.import, Kind::Buildings, i, b"CanBeOccupied", false);
             let gate = rule_bool(self.import, Kind::Buildings, i, b"Gate", false);
-            let f = if occupiable || gate { 0 } else { k };
-            self.note(notes::HEALTH);
+            let (damaged, badly) = self.building_condition(i, p.health);
+            // spec: S-0108 claim 2 (occupiable: 2·[occupied] + [hurt], hurt badly damaged at tech level 0 or
+            // below, damaged above; gate: 0, damaged G + 1; others: k, damaged k + 1 in the idle state)
+            let f = if occupiable {
+                // spec: S-0108 Import mapping (TechLevel absent: 255)
+                let tech = rule_int(self.import, Kind::Buildings, i, b"TechLevel", 255);
+                usize::from(if tech <= 0 { badly } else { damaged })
+            } else if gate {
+                if damaged {
+                    self.note(notes::GATE_DAMAGED);
+                }
+                0
+            } else {
+                k + usize::from(damaged)
+            };
             // spec: S-0108 claim 3 (drawn frame min(f, ⌊N/2⌋))
             let body_frame = f.min(n / 2);
             let normal_z = self
@@ -1293,10 +1354,10 @@ impl Builder<'_> {
         let q = VoxelQuirks::default();
         let vpl = self.vpl();
         let k = Kind::Buildings;
-        // provisional (Q-0016): the map entry's facing value × 256 (Q-0010 for the field).
-        let facing = ((p.facing & 0xFF) * 256) as u16;
+        // spec: S-0009 claim 39 (a building's turret starts at 256 × (v mod 256))
+        let facing = facing_from_value(p.facing);
         // spec: S-0105 Terms (turret anchor: the draw point moved by TurretAnimX and TurretAnimY, rules keys);
-        // provisional (Q-0016): the draw point taken as the S-0108 claim 8 image anchor
+        // S-0009 claim 38 (the draw point is the S-0108 claim 8 image anchor)
         let at = (
             anchor.0 + rule_int(self.import, k, idx, b"TurretAnimX", 0),
             anchor.1 + rule_int(self.import, k, idx, b"TurretAnimY", 0),
@@ -1350,23 +1411,25 @@ impl Builder<'_> {
     /// (S-0102 claims 3 and 5) in their initial state: on the ground, every
     /// one of them is in the ground layer.
     fn mobiles(&mut self, ground: &mut Vec<GroundEntry>) {
-        self.note(notes::OBJECTS);
-        let units = self.map.objects.units.clone();
-        for u in &units {
-            if let Some(g) = self.placed_mobile(Kind::Vehicles, &u.placed) {
-                ground.push(g);
-            }
-        }
-        let infantry = self.map.objects.infantry.clone();
-        for i in &infantry {
-            if let Some(g) = self.placed_mobile(Kind::Infantry, &i.placed) {
-                ground.push(g);
-            }
-        }
-        let aircraft = self.map.objects.aircraft.clone();
-        for a in &aircraft {
-            if let Some(g) = self.placed_mobile(Kind::Aircraft, &a.placed) {
-                ground.push(g);
+        // spec: S-0009 claim 43 (vehicles, then aircraft, then infantry, each in entry order)
+        for lk in [ListKind::Vehicles, ListKind::Aircraft, ListKind::Infantry] {
+            let kind = match lk {
+                ListKind::Vehicles => Kind::Vehicles,
+                ListKind::Aircraft => Kind::Aircraft,
+                _ => Kind::Infantry,
+            };
+            let entries: Vec<_> = self.map.objects.list(lk).into_iter().cloned().collect();
+            for (n, p) in entries.iter().enumerate() {
+                if self.map.objects.fields(lk, n).short {
+                    // spec: S-0009 claim 36 (an entry that lacks a required field is dropped, a departure)
+                    self.drop_object("entry lacks a required field");
+                    continue;
+                }
+                let sub = (lk == ListKind::Infantry)
+                    .then(|| self.map.objects.infantry.get(n).map_or(0, |i| i.sub_cell));
+                if let Some(g) = self.placed_mobile(kind, p, sub) {
+                    ground.push(g);
+                }
             }
         }
     }
@@ -1401,12 +1464,31 @@ impl Builder<'_> {
         &mut self,
         kind: Kind,
         p: &glasnost_map::objects::Placed,
+        sub_cell: Option<i32>,
     ) -> Option<GroundEntry> {
         let (i, cell) = self.mobile_start(kind, p)?;
-        let (x, y) = cell_centre(p.cell.x, p.cell.y);
+        let (x, y) = match sub_cell {
+            Some(sub) => {
+                // spec: S-0009 claim 38 (an infantry unit stands at standing position field 6, S-0208 table P;
+                // outside 0 … 4 the centre, S-0208 claim 5's departure)
+                let sp = u8::try_from(sub).ok().filter(|s| *s <= 4).unwrap_or(0);
+                let (u, v) = glasnost_sim::walk::standing_point(sp);
+                (256 * p.cell.x + u, 256 * p.cell.y + v)
+            }
+            // spec: S-0009 claim 38 (a vehicle or aircraft stands on the centre of its cell)
+            None => cell_centre(p.cell.x, p.cell.y),
+        };
         let z = LEVEL_LEPTONS * i32::from(cell.level);
-        // provisional (Q-0010): the facing value on the scale of glossary claim G1 (× 256)
-        let facing = ((p.facing & 0xFF) * 256) as u16;
+        if kind == Kind::Aircraft
+            && !self
+                .map
+                .footprint
+                .is_usable(p.cell, i32::from(cell.level), cell.slope != 0)
+        {
+            self.note(notes::AIRCRAFT_AIR);
+        }
+        // spec: S-0009 claim 39 (body facing 256 × (v mod 256); infantry: field 8)
+        let facing = facing_from_value(p.facing);
         let fire_angle = rule_int(
             self.import,
             kind,
@@ -1439,7 +1521,7 @@ impl Builder<'_> {
                 .map(|f| String::from_utf8_lossy(f).into_owned())
                 .collect::<Vec<_>>()
                 .join(","),
-            notes: vec![notes::OBJECTS.into(), notes::PLACEMENT.into()],
+            notes: vec![notes::PLACEMENT.into()],
         });
         let m = Mobile {
             kind,
@@ -1447,7 +1529,7 @@ impl Builder<'_> {
             owner: p.owner.clone(),
             pos: (x, y, z),
             body: facing,
-            // provisional (Q-0016): the turret's starting facing is taken as the body's.
+            // spec: S-0009 claim 39 (a vehicle's or aircraft's turret starts at its body facing)
             turret: facing,
             // spec: S-0105 claim 6 (placed level, then turned toward the fire angle; no tick has run)
             elevation: voxel::barrel_elevation_after(fire_angle, 0),
@@ -1958,6 +2040,10 @@ pub struct Inputs<'a> {
     pub assets: &'a Assets,
     /// Viewer options.
     pub options: &'a Options,
+    /// The typed rules of the game, when the ruleset resolved: the strengths
+    /// and condition ratios a pre-placed building's starting health and
+    /// damaged state need (S-0009 claim 37, S-0108 F3).
+    pub rules: Option<&'a SimRules>,
 }
 
 impl Painter {
@@ -1987,6 +2073,7 @@ impl Painter {
     ) -> (Vec<GroundEntry>, BTreeSet<String>) {
         let mut b = Builder {
             map: inputs.map,
+            rules: inputs.rules,
             import: inputs.import,
             catalogue: inputs.catalogue,
             palettes: inputs.palettes,

@@ -215,7 +215,7 @@ fn tiles_are_lifted_and_depth_anchored() {
     assert_eq!(tile.test, DepthTest::Tile);
 }
 
-/// spec: S-0108 claims 2, 3, 6, 7, 8, 9; S-0102 claims 13, 16 (initial state: Q-0016)
+/// spec: S-0108 claims 2, 3, 6, 7, 8, 9; S-0102 claims 13, 16; S-0009 claim 40 (initial state)
 #[test]
 fn building_body_shadow_and_bib() {
     let (b, _) = scene(&Options::default());
@@ -230,7 +230,7 @@ fn building_body_shadow_and_bib() {
     assert_eq!(bias(&shadow), (Profile::Flat, -4));
     assert_eq!(shadow.paint, Paint::Shadow);
     assert_eq!(bias(&bib), (Profile::Flat, -3));
-    // Idle range starts at 1: body frame 1 (the idle start is provisional, Q-0016; claim 6 gives
+    // Idle range starts at 1: body frame 1 (S-0009 claim 40: idle at once; claim 6 gives
     // stage a), shadow frame 1 + 2 = 3.
     assert_eq!(b.scene.images[body.image as usize].pixels()[0], 2);
     assert_eq!(b.scene.images[shadow.image as usize].pixels()[0], 4);
@@ -305,6 +305,58 @@ fn overlays() {
     assert_eq!(level, 2);
     assert_eq!(bias(&items[1]), (Profile::Upright, -47));
     assert!(items.iter().all(|i| i.provisional));
+}
+
+/// Builds `text` with typed rules in which HUTX has strength 100.
+fn build_with_rules(text: &[u8]) -> Built {
+    use glasnost_rules::sim::BuildingType;
+    let (import, catalogue, assets) = context();
+    let doc = Document::parse(text, Quirks::default(), &mut Vec::new());
+    let map = decode(&doc, &DecodeContext::default()).map;
+    let mut r = glasnost_rules::schema::Ruleset::default();
+    r.registries.insert("buildings".into(), vec!["HUTX".into()]);
+    r.sim.buildings.insert(
+        "HUTX".into(),
+        BuildingType {
+            strength: Some(100),
+            ..Default::default()
+        },
+    );
+    let rules = glasnost_sim::rules::SimRules::new(&r, "test");
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = super::build::Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: Some(&rules),
+    };
+    super::build::build_parts(&inputs, false).0
+}
+
+/// spec: S-0009 claim 37 (starting health from the health value), S-0108 claim 2 (damaged: k + 1 in idle)
+#[test]
+fn claim_37_damaged_building_frame() {
+    let body = |health: i32| {
+        let b = build_with_rules(
+            format!(
+                "[Basic]\nNewINIFormat=4\n[Map]\nSize=0,0,10,10\nLocalSize=0,0,10,10\n\
+                 [Structures]\n0=Neutral,HUTX,{health},6,10,0\n"
+            )
+            .as_bytes(),
+        );
+        let items = items_of(&b, "building");
+        b.scene.images[items[0].image as usize].pixels()[0]
+    };
+    // Idle stage 1 (AnimIdle=1,1,0): frame 1 shows pixel 2. Damaged (h ≤ 0.5): frame 2, pixel 3.
+    assert_eq!(body(256), 2);
+    assert_eq!(body(128), 3);
+    // 130 of 256 gives 50 (truncated), still damaged; 131 gives 51.
+    assert_eq!(body(130), 3);
+    assert_eq!(body(131), 2);
 }
 
 /// Hostile maps never panic or hang in the scene builder: extreme sizes,

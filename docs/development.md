@@ -158,8 +158,6 @@ Every quirk switch of the implemented specs has a field in `ini::Quirks`, `vfs::
 | `convert::layers`, `convert::sim` | land-type resets (S-0211 claim 2) are applied in `sim.land_types` only; `ini_globals` keeps per-key layering | Q-0007 |
 | `convert::art` | a building secondary sprite dropped by a later read's art section is left undetermined (a note, no file); no art for projectiles, particles and voxel animations | Q-0008 |
 | `app::mapview::build` | the plain tile image is drawn (no variant choice yet), sub-tile *n* = *n*-th template cell, diamond top at the cell's top corner; no land types (`convert::theater` itself follows S-0010 claims 1 to 5) | Q-0009 |
-| `app::mapview::build` | map-placed buildings start complete and idle; a vehicle's turret faces as its body; a building's voxel turret takes the entry's facing ×256 and the S-0108 claim 8 anchor as its draw point; in the static view (no game) objects enter structures first | Q-0016 |
-| `convert::map`, `app::mapview::build` | object-list fields after OpenRA's ImportGen2MapCommand; infantry facing ×256 like a vehicle's; infantry, terrain objects and smudges at the cell centre; health kept raw, buildings drawn undamaged | Q-0010 |
 | `app::mapview::build` | sprites centred on their point by the canvas (truncated halves); sprite-drawn vehicles show frame 0 | Q-0011 |
 | `app::mapview::build` | overlays and smudges use their cell's tile shade table; ore shows the frame of its data value, other overlays frame 0 | Q-0012 |
 | `app::mapview::build` | tiles lit by the scaled ground level | Q-0013 |
@@ -196,10 +194,11 @@ Provisional rules of the simulation, each tied to a request:
 | Where | Interim rule | Request |
 |---|---|---|
 | `path` | no corridor of claim 13; pending pairs of equal cost in recording order after the held candidate; the shortening of early detours (claim 18) is not applied | Q-0017 |
-| `load` | a start list that needs a random start cell is refused (`LoadError::RandomStartCell`); low-bridge end markers complete no bridge; vein seeds are cleared and not rebuilt; off-map neighbours count as blank cells in recalculation | Q-0018 |
+| `load` | not implemented yet (Q-0018 is answered): a start list that needs a random start cell (S-0009 claim 18) is refused (`LoadError::RandomStartCell`); no starting units (claims 45, 46: the rules fields they need are not imported); low-bridge end markers complete no bridge and vein seeds are cleared and not rebuilt (S-0202 claim 10, S-0009 claim 14) | — |
 | `rules`, `drive`, `scatter` | the locomotor follows the kind (vehicles drive, infantry walk, aircraft do not move); a driving vehicle meets any blocked outcome other than *blocked* as a moving blocker; vehicles refuse scatter requests; a vehicle's vehicle-present claims are its position's cell and its step's cells | Q-0019 |
 | `rules`, `occupancy`, `cells` | the acceleration and deceleration defaults are the doubles nearest their decimals; `[IQ] GuardArea` absent is 0 and `GuardModeStray` absent falls back to the leash; overlay damage levels absent 1, strength 0; no bridge decks; walls belong to no house; gates read as open | Q-0020 |
-| `objects`, `load` | pre-placed objects start at full strength, facing value × 256, with the placement fall-back as their behaviour | Q-0010, Q-0016 |
+| `objects` | pre-placed objects (S-0009 claims 34 to 43) carry no follower-car link, veterancy value, tag or bridge flag, start switched on, and aircraft stand landed; `near_full_health_rounds_up`, `upgrade_fields_carry_over` and `follow_index_by_place` are fixed on (their switches belong in `rules::Quirks`); a terrain object starts with health 0 (no strength field yet) | — |
+
 
 ## Tests
 

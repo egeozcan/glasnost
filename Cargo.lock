@@ -918,6 +918,7 @@ dependencies = [
  "glasnost-fmt",
  "glasnost-ini",
  "glasnost-map",
+ "glasnost-num",
  "glasnost-render",
  "glasnost-rules",
  "glasnost-sim",
