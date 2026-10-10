@@ -68,6 +68,16 @@ pub struct MapRun {
     pub moved: usize,
     /// Why the map did not run to the end, if it did not.
     pub failure: Option<String>,
+    /// The skirmish pass: players of the skirmish setup (0: not tried).
+    pub skirmish_players: usize,
+    /// The skirmish pass: why `new_game` refused, if it did.
+    pub skirmish_refused: Option<String>,
+    /// The skirmish pass: whether the start list needs a random start cell.
+    pub skirmish_random_start: bool,
+    /// The skirmish pass: objects in play after loading.
+    pub skirmish_objects: usize,
+    /// The skirmish pass: milliseconds for `new_game`.
+    pub skirmish_ms: u128,
 }
 
 /// Runs every map of the install for `ticks` ticks.
@@ -121,6 +131,7 @@ async fn smoke_async(
         run.houses = setup.houses.len();
         run.substituted = substituted.len();
         let map = inputs.map;
+        skirmish_pass(&mut run, &rules, &map, &tiles, seed);
         let result = catch_unwind(AssertUnwindSafe(|| {
             let t2 = Instant::now();
             let mut w = new_game(rules.clone(), &map, Arc::new(tiles.clone()), &setup)
@@ -180,6 +191,90 @@ async fn smoke_async(
         runs.push(run);
     }
     Ok(report(mount_ms, &runs, ticks))
+}
+
+/// The skirmish pass of the smoke run: a game set up by [`skirmish_setup`]
+/// (start positions, starting units), loaded but not run.
+fn skirmish_pass(
+    run: &mut MapRun,
+    rules: &Arc<SimRules>,
+    map: &glasnost_map::Map,
+    tiles: &glasnost_map::terrain::TileCatalogue,
+    seed: u32,
+) {
+    let setup = skirmish_setup(map, rules, seed);
+    let players = setup.houses.iter().filter(|h| h.human).count();
+    run.skirmish_players = players;
+    let (list, n) = map.start_list(players as u16);
+    run.skirmish_random_start = list.len() < usize::from(n);
+    let t = Instant::now();
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        new_game(rules.clone(), map, Arc::new(tiles.clone()), &setup).map(|w| w.objects.len())
+    }));
+    run.skirmish_ms = t.elapsed().as_millis();
+    match result {
+        Ok(Ok(objects)) => run.skirmish_objects = objects,
+        Ok(Err(e)) => run.skirmish_refused = Some(format!("{e:?}")),
+        Err(_) => run.skirmish_refused = Some("panic".into()),
+    }
+}
+
+/// The skirmish setup of the smoke run (a rule of our tool, not of the
+/// game): as many players as the lobby allows on the map, every one on a
+/// random start position, the first a human player's house and the others
+/// computer players' houses (AI houses count as human-controlled, glossary
+/// *AI house*), with the rules' countries that are not passive in turn; then
+/// the neutral and special houses, not human-controlled (S-0009 claims 19
+/// and 27).
+pub fn skirmish_setup(
+    map: &glasnost_map::Map,
+    rules: &SimRules,
+    seed: u32,
+) -> glasnost_sim::world::GameSetup {
+    use glasnost_sim::world::{GameSetup, HouseSetup};
+    let defined = (0..8u16).filter(|k| map.waypoints.contains_key(k)).count();
+    let players = if defined == 0 { 8 } else { defined };
+    let countries: Vec<&String> = rules
+        .country_names
+        .iter()
+        .zip(&rules.countries)
+        .filter(|(n, c)| !c.passive && *n != "Neutral" && *n != "Special")
+        .map(|(n, _)| n)
+        .collect();
+    let mut houses = Vec::new();
+    for i in 0..players {
+        let country = countries
+            .get(i % countries.len().max(1))
+            .map(|s| (*s).clone())
+            .unwrap_or_default();
+        houses.push(HouseSetup {
+            name: if i == 0 {
+                "<human player>".into()
+            } else {
+                "Computer".into()
+            },
+            country,
+            human: true,
+            start: None,
+        });
+    }
+    for name in ["Neutral", "Special"] {
+        if rules.country_names.iter().any(|n| n == name) {
+            houses.push(HouseSetup {
+                name: name.into(),
+                country: name.into(),
+                human: false,
+                start: None,
+            });
+        }
+    }
+    GameSetup {
+        seed,
+        game_speed: rules.general.lobby_game_speed,
+        houses,
+        alliances: Vec::new(),
+        sandbox: false,
+    }
 }
 
 /// The tick in which the smoke run orders its moves (the first tick after
@@ -257,6 +352,32 @@ fn report(mount_ms: u128, runs: &[MapRun], ticks: i32) -> String {
         s,
         "move orders: {ordered}; moved: {moved}; without a destination at the end: {settled}"
     );
+    let tried: Vec<&MapRun> = runs.iter().filter(|r| r.skirmish_players > 0).collect();
+    let refused = tried
+        .iter()
+        .filter(|r| r.skirmish_refused.is_some())
+        .count();
+    let random = tried.iter().filter(|r| r.skirmish_random_start).count();
+    let random_refused = tried
+        .iter()
+        .filter(|r| r.skirmish_random_start && r.skirmish_refused.is_some())
+        .count();
+    let mut reasons: std::collections::BTreeMap<String, usize> = Default::default();
+    for r in &tried {
+        if let Some(e) = &r.skirmish_refused {
+            *reasons.entry(e.clone()).or_default() += 1;
+        }
+    }
+    let skirmish_ms: u128 = tried.iter().map(|r| r.skirmish_ms).sum();
+    let _ = writeln!(
+        s,
+        "skirmish pass: {} maps set up, {} loaded, {refused} refused ({random} need a random start cell, {random_refused} of them refused); new_game {skirmish_ms} ms in all",
+        tried.len(),
+        tried.len() - refused
+    );
+    for (e, n) in reasons {
+        let _ = writeln!(s, "  refused {n}: {e}");
+    }
     let _ = writeln!(
         s,
         "index  objects  end  houses  subst  notes  problems  inputs_ms  new_game_ms  ticks_ms  ordered  moved  settled  result"
