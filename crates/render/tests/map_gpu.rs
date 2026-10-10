@@ -77,7 +77,12 @@ fn scene() -> Scene {
                 depth: Some(td),
                 reference_row: y + (k % 3),
             },
-            paint: Paint::Row(0),
+            // S-0010 claim 22: every third tile paints index 0 inside its diamond.
+            paint: if k % 3 == 0 {
+                Paint::Diamond(0)
+            } else {
+                Paint::Row(0)
+            },
             group: Group::Tiles,
             provisional: false,
             object: None,
@@ -112,6 +117,22 @@ fn scene() -> Scene {
             object: None,
         });
     }
+    // S-0102 claim 25: a smudge neither reads nor writes depth.
+    s.items.push(Item {
+        image: flat,
+        x: 50,
+        y: 22,
+        test: DepthTest::Ignore,
+        depth: ItemDepth::Profile {
+            profile: Profile::Flat,
+            bias: 0,
+            companion: None,
+        },
+        paint: Paint::Row(2),
+        group: Group::Smudges,
+        provisional: false,
+        object: None,
+    });
     s
 }
 
