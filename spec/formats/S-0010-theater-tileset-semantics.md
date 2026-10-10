@@ -2,7 +2,7 @@
 id: S-0010
 title: Theater data, tilesets and the terrain values of a cell
 topic: formats
-revision: 8
+revision: 9
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -48,6 +48,9 @@ this spec owns its rules. The terms below are specific to this spec.
   a *terrain code* (an integer the tile file stores, 0 … 15 in valid data), a *slope code* (the
   slope shape of S-0106, 0 … 20 in valid data) and two radar colours. The tile file format is
   public; this spec says only what these values mean.
+- **Alternate-image mark, alternate-image state.** The mark is a yes-or-no value of a tile cell in
+  its tile file; the state is a yes-or-no value of a map cell. Together they choose an image without
+  the variant pattern (claim 13).
 - **Tile number.** A tile's index in the theater, counted from 0 across all tilesets in declaration
   order (glossary: tileset). A tileset's *first tile* is the number of its first tile.
 - **Variant.** An alternative image file for a tile, found by a letter suffix (claim 3). A tile with
@@ -105,7 +108,8 @@ this spec owns its rules. The terms below are specific to this spec.
 1. **Files of a theater.** For a theater the original reads one theater data file and takes its
    tile images from files with the theater's tile suffix (claim 3). Both are fixed per theater
    (Constants, table T). The theater data file is resolved like any data file (S-0005).
-   - Backing: `measurable` (scenario F1)
+   - Backing: `measurable` (scenario F1, its theater part: the data file name, the tile suffix and
+     the fallback suffix of each of the six theaters, one run per theater)
    - Confidence: high
 
 2. **Tileset declaration and tile numbers.** The tileset sections are named with a fixed prefix and
@@ -140,7 +144,8 @@ this spec owns its rules. The terms below are specific to this spec.
    files "a" and "c" exist but "b" does not, the tile has one variant ("a") and the file "c" is
    never used.
    - Backing: `measurable` (scenario F1; the fallback, its order of preference, its use for a
-     variant and the gap rule need named test files)
+     variant, the gap rule and the digits of tile numbers 1 and 100 need named test files, in its
+     fallback, preference, gap and digits parts)
    - Confidence: high for the naming and the variant order; medium for the fallback, its order of
      preference and the condition on the non-height-view field
 
@@ -202,10 +207,16 @@ this spec owns its rules. The terms below are specific to this spec.
    are never read for the land type or the slope shape, and neither is the variant file for the
    validity test of claim 7. The theater data file's radar-colour fields are not read; the radar
    colours come from the tile cells (their use belongs to the interface specs).
-   - Backing: `measurable` (scenario V3 for the plain image, with a named test file; the slope
-     shape taken from a tile through S-0211's scenario L3, which places ore on every slope shape,
-     and the land type through S-0211's scenarios L5 and L11)
-   - Confidence: high for the plain image and the slope shape; the land type is S-0211's
+   - Backing, by part:
+
+     | Part | Backing |
+     |---|---|
+     | The land type and slope shape come from the plain image | `measurable` (scenario V3, with a named test file) |
+     | The slope shape taken from the tile cell of the sub-tile, and the land type | `measurable` through S-0211's scenario L3, which places ore on every slope shape, and its scenarios L5 and L11 |
+     | The radar colours come from the tile cells, not from the theater data file | `unmeasured`: the radar colours belong to the interface specs, and this spec has no scenario for them (claim 20 lists the unread radar-colour fields) |
+
+   - Confidence: high for the plain image and the slope shape; the land type is S-0211's; low for the
+     radar colours
 
 7. **Cells whose tile is not usable.** A cell's tile is *unusable* when its tile number is at or
    beyond the theater's tile count (the no-tile marker included), its tile has no image (claim 3),
@@ -251,13 +262,17 @@ this spec owns its rules. The terms below are specific to this spec.
 
    S-0211 claim 7 may remove the overlay of a tile-case cell in the same recalculation; that changes
    none of the above.
-   - Backing: the smoothing of the tile case is `measurable` (scenario L1) and that of the overlay
-     case is `measurable` (scenario C2 part A); the overlay case's lack of animations is
-     `measurable` (scenario C2 part C, on the animated tile of scenario G4 part A); the overlay
-     case's lack of tunnel entrances is `unmeasured`, for the reason of claim 21 (its effect is
-     defined by tunnel rules that no spec covers yet, and the entrance is the only thing it
-     changes), and the no-tile case's lack of animations follows from there being no tile
-     to name one
+   - Backing, by part:
+
+     | Part | Backing |
+     |---|---|
+     | The tile case is smoothed | `measurable` (scenario L1) |
+     | The overlay case is smoothed | `measurable` (scenario C2 part A) |
+     | The overlay case starts no tile animation | `measurable` (scenario C2 part C, on the animated tile of scenario G4 part A) |
+     | The no-tile case is not smoothed | `measurable` (scenario C1: a smoothed cell would not show the clear tile) |
+     | The no-tile case starts no tile animation | `unmeasured`: a cell without a tile has no tile to name an animation, so no state exists to test |
+     | The overlay case creates no tunnel entrance | `unmeasured`, for the reason of claim 21: the entrance's effect is defined by tunnel rules that no spec covers yet, and the entrance is the only thing this changes |
+
    - Confidence: high for the tile case and the no-tile case; medium for the overlay case
      (low for its lack of tunnel entrances)
 
@@ -304,25 +319,39 @@ this spec owns its rules. The terms below are specific to this spec.
     same kind; it holds one until the overlay is gone and the cell is recalculated. Until
     then the picture of such a cell is unspecified (claim 24). After map load this concerns the
     cells to which the second pass itself gave such a number, such as the centre of scenario R1
-    part D, and the cells of the overlay case. Apart from these unset-role cases, a cell that belongs to a pair still belongs to
-    it after smoothing, so the result does not depend on the order in which cells are smoothed, and
-    a further recalculation, by a unit's move or otherwise, leaves the tile unchanged. In play,
-    therefore, a unit's moves change tiles by this claim only in the one-past-the-end case and in
-    the case of a set transition role with an unset ground role. The cell's slope shape and land
+    part D, and the cells of the overlay case. Apart from these unset-role cases and from roles that name overlapping tilesets
+    (the next paragraph), a cell that belongs to a pair still belongs to it after smoothing, so the
+    result does not depend on the order in which cells are smoothed, and a further recalculation,
+    by a unit's move or otherwise, leaves the tile unchanged. In play, therefore, a unit's moves
+    change tiles by this claim only in the one-past-the-end case, in the case of a set transition
+    role with an unset ground role, and where roles name overlapping tilesets.
+    When roles name overlapping tilesets, a tile that one pair writes can lie in the range of a
+    later pair (or of an earlier pair, for the next pass), so a cell may stop belonging to its pair
+    and the neighbours' results then depend on the order of the cells and on how many times a cell
+    is recalculated. The rules above still hold step by step (pairs in the order given, each on the
+    tile the previous pair left; cells in the visiting order, each seeing its neighbours' current
+    tiles); this spec claims nothing further for that case. Stock data are not known to hold such
+    an overlap, and scenario R4 builds one with a loose copy of the theater data file. The cell's slope shape and land
     type are not re-read from the new tile in the same recalculation. Cells of the
     no-tile case (claim 8) are not smoothed at all (they hold the no-tile marker, which belongs to
     no pair and no ramp range). An edge neighbour outside the map reads as a blank cell (S-0009,
     claim 44): it holds the no-tile marker, so it belongs to no pair, counts as out for every pair
     (the widened neighbour tests included) and is flat for the ramp smoothing of claim 11.
-    - Backing: `measurable` (scenario L1 for set roles; S-0009's scenario M25 part A for a
-    neighbour outside the map; scenario R1 for an unset or one-past-the-end
-      rough transition role, including the erosion within one pass, and its part E for a unit's
-      move as the next recalculation; scenario R2 for the green
-      pair's widened neighbour test and its dependence on the shore and water-bridge roles,
-      scenario B1 parts A and B for the ends of the widened ranges of the green and pave pairs,
-      and scenario R3 for the skipped sand, green and pave pairs). The case of a set transition role with an unset ground role is
-      `unmeasured`, because the tile −1 it writes is unspecified in the original (claim 7)
-    - Confidence: high
+    - Backing, by part:
+
+      | Part | Backing |
+      |---|---|
+      | The mask rule for set roles | `measurable` (scenario L1) |
+      | A neighbour outside the map | `measurable` (S-0009's scenario M25 part A) |
+      | An unset or one-past-the-end rough transition role, including the erosion within one pass | `measurable` (scenario R1; its part E for a unit's move as the next recalculation) |
+      | The green pair's widened neighbour test and its dependence on the shore and water-bridge roles | `measurable` (scenario R2) |
+      | The ends of the widened ranges of the green and pave pairs | `measurable` (scenario B1 parts A and B) |
+      | The skipped sand, green and pave pairs | `measurable` (scenario R3) |
+      | The order of the pairs, and the overlapping-tilesets case | `measurable` (scenario R4, with a loose copy of the theater data file) |
+      | A set transition role with an unset ground role | `unmeasured`: the tile −1 it writes is unspecified in the original (claim 7) |
+
+    - Confidence: high; medium for the overlapping-tilesets case, which only follows the stated
+      rules step by step
 
 11. **Ramp smoothing.** A cell whose tile, as ground smoothing left it, lies in the ramp range
     (20 tiles from the ramp start) or the smooth-ramp range (12 tiles from the smooth-ramp start)
@@ -331,8 +360,8 @@ this spec owns its rules. The terms below are specific to this spec.
     tested, *a* with weight 1 and *b* with weight 2, as the table below gives; each counts as *flat*
     when its slope shape is 0, and *m* is the sum of the weights of the flat ones. For *s* = 0 or
     5 … 20, *m* = 0. The new tile is smooth-ramp start + 3(*s* − 1) + *m* − 1 when *m* > 0, and
-    ramp start + *s* − 1 when *m* = 0 (Formulas). Because the range test applies to the tile that
-    ground smoothing left, the order of the two smoothings shows only where ground smoothing writes
+    ramp start + *s* − 1 when *m* = 0 (Formulas, ramp smoothing; the ranges are table R's, claim 5). Because the range test applies to the tile that
+    ground smoothing left (claim 10), the order of the two smoothings shows only where ground smoothing writes
     a tile into a ramp range or out of one (roles that name overlapping tilesets, or the unset-role
     cases of claim 10).
 
@@ -344,10 +373,11 @@ this spec owns its rules. The terms below are specific to this spec.
     | 4 | S | N |
 
     So a ramp tile always shows the ramp-range tile of its own shape, or, for edge slopes that meet
-    flat ground at their low or high edge, one of three smoothed tiles. A ramp-range tile of shape 0
-    becomes the tile just before the ramp range, a tile of another tileset (`quirks.ramp_shape_zero`).
-    Unlike ground smoothing, the result depends on the neighbours' slope shapes at that moment (claim
-    12).
+    flat ground at their low or high edge, one of three smoothed tiles. A tile of the ramp range or of the smooth-ramp range whose slope shape is 0
+    becomes the tile just before the ramp range (ramp start − 1), a tile of another tileset
+    (`quirks.ramp_shape_zero`).
+    Unlike ground smoothing, the result depends on the neighbours' slope shapes at that moment, so
+    the order of the cells matters (claim 12; scenario L2).
 
     **Unset ramp roles.** As in ground smoothing (claim 10), an unset ramp or smooth-ramp role's
     range holds only the tile number −1, and the formulas use the unset start −1
@@ -360,7 +390,8 @@ this spec owns its rules. The terms below are specific to this spec.
     | unset | set | a smooth-ramp-range tile with *m* = 0 (or of shape 0 or 5 … 20) becomes *s* − 2, one of the tile numbers −2 … 18 (a negative result is unspecified from then on, claim 7); with *m* > 0 it gets its smoothed tile as usual |
     - Backing: `measurable` (scenario L2 for set roles; scenario B1 part C for the ends of the two
       ranges; scenario L3 for an unset smooth-ramp or ramp role, for the results that are not
-      negative; scenario L4 for a ramp-range tile of shape 0)
+      negative; scenario L4 for a ramp-range tile of shape 0 (part A) and a smooth-ramp-range tile
+      of shape 0 (part B))
     - Confidence: high for the rule and for the unset roles; medium for the edge case of shape 0
 
 12. **Order at map load.** When a map is loaded, terrain recalculation runs twice for every legal
@@ -379,9 +410,16 @@ this spec owns its rules. The terms below are specific to this spec.
     the second pass takes from the tile chosen by the first pass (claims 10 and 11), even where the second
     pass then picks another tile; it keeps that land type until the cell's next recalculation. A recalculation of a cell in play (Terms: among others, every
     unit's move into or out of the cell) sees its neighbours' current shapes.
-    - Backing: `measurable` (scenario L2)
+    - Backing, by part:
+
+      | Part | Backing |
+      |---|---|
+      | The first pass's partial view and the second pass's full view | `measurable` (scenario L2) |
+      | The land type after loading comes from the tile the first pass chose | `measurable` (scenario R1 parts D and E, through the centre cell, whose land type stays that of the tile the second pass found there until its next recalculation) |
+      | The first pass's results are in place before the map's terrain objects and units are placed | `unmeasured`: no effect of that order on anything a measurement can see is known (the open question below asks whether placing them recalculates their cells) |
+
     - Confidence: medium (the two passes and their order are certain; that the smoothed ramp tiles
-      keep their shapes in stock data is not checked)
+      keep their shapes in stock data is not checked); low for the placement order
 
 ### Variants
 
@@ -396,44 +434,62 @@ this spec owns its rules. The terms below are specific to this spec.
     *Y* = (y − ⌊*t* / *w*⌋) / *h*, divided with truncation toward zero, that is, the coordinates of
     the tile's origin cell divided by the tile's size. So for a tile larger than one cell, the
     origin cell and the other cells of the same placed tile can choose different images
-    (`quirks.variant_origin_mismatch`). A tile cell that its tile file marks with a certain flag
-    takes its image from a per-cell state instead (used by tiles that change in play; not covered:
-    which game events set that state belongs to specs not yet written).
+    (`quirks.variant_origin_mismatch`). A tile cell whose file carries the *alternate-image mark* (a
+    yes-or-no mark in the tile file, taken from the plain image's tile cell at the cell's
+    sub-tile) does not use the pattern: it shows image 1 when the map cell's own *alternate-image
+    state* is set and image 0 (the plain image) when it is clear. The state is a yes-or-no value that
+    each map cell holds, clear at map load; it is used by tiles that change in play. Which game
+    events set or clear it belong to specs not yet written, so this spec fixes only what the cell
+    shows for each value of the state. For a tile with only one image the mark has no effect: the
+    cell shows the plain image.
     The choice never reaches the cell's land type or slope shape, which come from the plain image
     (claim 6); as far as known it affects only which image is drawn.
-    - Backing, by part: the choice for tiles of one cell is `measurable` (scenario V1 part A) and
-      for larger tiles `measurable` (V1 part B); the image of a cell without a usable tile is
-      `measurable` (scenario C1 part B); the per-cell-state exception is `unmeasured`, because the
-      state it reads is set by rules that no spec covers yet
-    - Confidence: high for tiles of one cell; medium for larger tiles; low for the per-cell-state
-      exception
+    - Backing, by part:
 
-14. **The 8 × 8 pattern.** The original builds the 8 × 8 pattern the first time in a session that it
-    chooses an image for any cell, and keeps it for the rest of the session. At map load it chooses
-    an image for every cell whose tile has two or more images and for every cell without a usable
-    tile (which shows the clear tile), so the pattern is built while the first such map of the
-    session loads, whatever the number of images. The pattern's entry at (*X*, *Y*) has index
+      | Part | Backing |
+      |---|---|
+      | The choice for tiles of one cell | `measurable` (scenario V1 part A) |
+      | The choice for larger tiles | `measurable` (scenario V1 part B) |
+      | The choice never reaches the land type or slope shape | `measurable` (scenario V3) |
+      | The image of a cell without a usable tile | `measurable` (scenario C1 part B) |
+      | The origin coordinates of a tile placed beyond the map's low edges (a negative origin, with truncating division) | `unmeasured`: a cell that lies so near the map's edge is outside the playable area of S-0009 and shows nothing a measurement can compare; the formula only states the arithmetic |
+      | The alternate-image exception, its state being clear at map load, and its having no effect on a one-image tile | `unmeasured`: the state it reads is set by rules that no spec covers yet, so no way to set it is known |
+
+    - Confidence: high for tiles of one cell; medium for larger tiles; low for the negative origin and
+      the alternate-image exception
+
+14. **The 8 × 8 pattern.** The original builds the 8 × 8 pattern at the first image choice of claim 13
+    in a session, whatever the number of images of the tile it is made for, and keeps it for the
+    rest of the session. The choice is made for every cell whose tile has two or more images and for
+    every cell without a usable tile (which shows the clear tile), once for each at the end of every
+    map load and again whenever such a cell is drawn. So the pattern is built while the first map of
+    the session loads, unless that map has no such cell: a map whose cells all hold one-image tiles
+    (only a map built for the purpose) builds it at the first later moment that such a cell is
+    drawn or loaded, and then the draws fall in the middle of play. The pattern's entry at (*X*, *Y*) has index
     *k* = *X* + 8*Y*, and the 64 entries are the function of the draws from the unsynchronised
     random stream that the formula *8 × 8 pattern* gives (Formulas). Consequences: every entry is
     one of 0 … 7; no entry holds the same value as any of its 8 neighbours in the index-wrapped
     sense of that formula, except where all 64 candidates for an entry clashed; building the
     pattern takes between 64 and 4096 consecutive draws from the unsynchronised stream, all at one
     point of the session; and the pattern depends on how many draws that stream has given before.
-    - Backing: `measurable` for the pattern's properties (scenario V2); the draws themselves are
-      `measurable` with a recorder that reads the unsynchronised stream (scenario V2 part B), an
-      extension of the state recorder that S-0202 (random streams)
-      describes, which the project lead has approved as part of the measurement setup
-    - Confidence: high
+    - Backing, by part:
+
+      | Part | Backing |
+      |---|---|
+      | The pattern's properties, and its being kept for the session | `measurable` (scenario V2 part A) |
+      | The draws, when the first map has a multi-image or no-tile cell | `measurable` with a recorder that reads the unsynchronised stream (scenario V2 part B), an extension of the state recorder that S-0202 (random streams) describes, which the project lead has approved as part of the measurement setup |
+      | A first map without any such cell: the pattern is built at a later moment | `unmeasured`: the recorder of part B reads the stream at the first tick of a game, not at the moment of a later draw, and real maps always hold clear cells with variants |
+
+    - Confidence: high; low for the later-moment case
 
 ### Tileset flags
 
 15. **Tilesets with the morphable flag, and to-tile buildings.** A building type whose to-tile
     field names a tile (Import mapping) can be placed only on cells whose tile belongs to a tileset with the morphable
-    flag. The test passes without looking at any tileset for a cell that holds the no-tile marker, for
-    one that holds a stray tile number (Terms), and for one that holds a negative tile number (the
-    original tests the number against the range 0 … tile count − 1 and passes any number outside
-    it). The tile list is not consulted for such a cell, so the picture it shows (claim 24) does not
-    matter to the test. Other conditions of placement are not covered here, nor is what a to-tile
+    flag. The test passes, whatever the tilesets say, for every cell whose tile number lies outside
+    0 … tile count − 1: one that holds the no-tile marker, one that holds a stray tile number
+    (Terms) and one that holds a negative tile number. So for such a cell the picture it shows
+    (claim 24) does not matter to the test. Other conditions of placement are not covered here, nor is what a to-tile
     building does once placed. The original also uses the flag in its random map generator.
     - Backing, by part:
 
@@ -449,10 +505,10 @@ this spec owns its rules. The terms below are specific to this spec.
 16. **Where new tiberium can appear.** A cell can receive newly grown tiberium (an empty cell becoming
     a tiberium cell) only if, among other conditions that belong to the economy specs, its land type
     is buildable (the land type's buildable field, S-0006), it holds no overlay, its slope shape is 0,
-    and its tile belongs to a tileset with the allow-tiberium flag. As in claim 15, the tileset test is
-    passed without consulting any tileset by a cell that holds the no-tile marker, a stray tile
-    number (Terms) or a negative tile number (the original tests the number against the range
-    0 … tile count − 1 and passes any number outside it). A cell that holds an overlay fails the
+    and its tile belongs to a tileset with the allow-tiberium flag. As in claim 15, the tileset
+    condition holds, whatever the tilesets say, for every cell whose tile number lies outside
+    0 … tile count − 1: one that holds the no-tile marker, a stray tile number (Terms) or a
+    negative tile number. A cell that holds an overlay fails the
     overlay condition whatever its tile, so a stray number matters here only for a cell that is not
     of the overlay case, that is, for one that smoothing has just written one to (claims 4 and 10).
     - Backing, by part:
@@ -460,6 +516,7 @@ this spec owns its rules. The terms below are specific to this spec.
       | Part | Backing |
       |---|---|
       | The tilesets, and the no-tile marker | `measurable` (scenario G2, parts A and B) |
+      | The other conditions listed (buildable land type, no overlay, slope shape 0) | `unmeasured` here: they are the economy specs' and S-0211's rules, and this spec only quotes them |
       | A stray or negative tile number | `unmeasured`: such a cell exists only as a single cell (or the few cells that claim 10 writes one to) until its next recalculation, and the growth of new ore on one given cell is a rare random event that long runs cannot make observable |
 
     - Confidence: medium (the condition list is certain; that this test is the one ore growth uses is
@@ -471,8 +528,14 @@ this spec owns its rules. The terms below are specific to this spec.
     flag (absent: allowed), among other conditions: the cell is flat and free of buildings and of
     terrain objects. The same test answers *allowed* for every cell outside that area, whatever its tile; what
     that means in play is for the vehicle specs, which own the full rule.
-    - Backing: `measurable` inside the area (scenario G3); the answer outside it is `unmeasured`,
-      because a unit cannot be ordered to a cell there and what it would do is the vehicle specs'
+    - Backing, by part:
+
+      | Part | Backing |
+      |---|---|
+      | A cell of a tileset without the flag refuses, one with it accepts (inside the area) | `measurable` (scenario G3, parts A and B) |
+      | An absent key allows | `measurable` (scenario G3 part C, with a loose copy of the theater data file) |
+      | The answer outside the area | `unmeasured`: a unit cannot be ordered to a cell there, and what it would do is the vehicle specs' |
+
     - Confidence: medium
 
 18. **Shadow-casting tilesets.** A tileset casts shadows (S-0104 claim 13) only when both its
@@ -480,7 +543,7 @@ this spec owns its rules. The terms below are specific to this spec.
     no effect; with it set, a count of 0 (or an absent count) disables the shadow (Import mapping).
     Which cells a shadow-casting tile marks is open in S-0104, and so are some limits on which tiles
     of such a tileset cast (Open questions).
-    - Backing: `measurable` (scenario G5)
+    - Backing: `measurable` (scenario G5, which runs S-0104's scenario L15 part D)
     - Confidence: high
 
 19. **Tile animations.** A tile may name an animation, with a screen displacement (*dx*, *dy*) in
@@ -519,12 +582,23 @@ this spec owns its rules. The terms below are specific to this spec.
 
     These are S-0103's and S-0104's *terrain animations*; how they play belongs to S-0109 (animation
     playback).
-    - Backing: `measurable` (scenario G4, parts A to D: part D for the displacement that is far
-      larger than the view; the boundary of that case is `unmeasured`, for the reason above; the
-      draws through S-0202's scenario R8, part F)
+    - Backing, by part:
+
+      | Part | Backing |
+      |---|---|
+      | An animation starts on the attaches-to cell of a stock tile, at the displaced position | `measurable` (scenario G4 part A) |
+      | The animation is that of the tile held when the second pass began, not of the smoothed tile | `measurable` (scenario G4 part B) |
+      | A start in play, after smoothing, in a cell that has started none | `measurable` (scenario G4 part C) |
+      | None that the first pass started survives loading, and at most one animation per cell after loading | `measurable` (scenario G4 part E) |
+      | A cell that has started one starts no second one in later recalculations | `unmeasured`: a second animation of the same tile would lie exactly over the first, and a tile does not change in play without data that stock maps do not hold |
+      | A displacement far larger than the view | `measurable` (scenario G4 part D) |
+      | The boundary of that case | `unmeasured`: a departure that the engine does not reproduce, and the view size depends on the screen |
+      | The creation draws | `measurable` through S-0202's scenario R8, part F |
+
     - Confidence: high for when an animation starts at map load and for the position formula,
       medium for a start in play after smoothing (part C) and for the displacement far larger than
-      the battlefield view (part D), and low for the exact boundary of that case
+      the battlefield view (part D), and low for the exact boundary of that case and for the rule
+      of at most one animation per cell in play
 
 20. **Fields read without effect in play.** The tileset's allow-to-place, height-view and
     non-height-view fields (apart from claim 3) and its theater-conversion fields are read and have
@@ -610,8 +684,8 @@ this spec owns its rules. The terms below are specific to this spec.
       (claim 16 and its depth rules).
     - Backing: `measurable` (scenario X2, parts A to C; the depth rule in part D)
     - Confidence: high for the placement, the transparency and the variants; medium for the depth
-      rule (the formula is S-0102's, the extra image's use of it follows from the original's single
-      depth shift per tile cell)
+      rule (the formula is S-0102's; that the extra image takes its diamond's reference row is
+      inferred, not observed, and scenario X2 part D would confirm it)
 
 24. **Which tile cell is painted, and when nothing is.** Which image a cell shows is claim 13's.
     Let *t* be the cell's sub-tile and *N*<sub>s</sub> the number of tile positions, width times
@@ -882,8 +956,9 @@ All switches default to the original behaviour.
   transition role is skipped, and ramp smoothing is skipped when either ramp role is unset.
 - **`quirks.role_one_past_end`.** Original: a role naming the first missing tileset number starts at
   the theater's tile count (claim 4). Fixed: it is unset.
-- **`quirks.ramp_shape_zero`.** Original: a ramp-range tile of slope shape 0 is replaced by the
-  tile just before the ramp range (claim 11). Fixed: it keeps its tile.
+- **`quirks.ramp_shape_zero`.** Original: a tile of the ramp range or of the smooth-ramp range whose
+  slope shape is 0 is replaced by the tile just before the ramp range (claim 11). Fixed: it keeps
+  its tile.
 - **`quirks.variant_origin_mismatch`.** Original: the origin cell of a multi-cell tile uses its
   own coordinates for the variant choice and the other cells use the origin divided by the tile's
   size (claim 13). Fixed: every cell of a placed tile uses the divided origin coordinates.
@@ -893,9 +968,9 @@ All switches default to the original behaviour.
   `quirks.cliff_back_case_sets`) are S-0211's (claims 5 to 8). This spec adds no switch for them.
 - **The 8 × 8 pattern and the unsynchronised stream** (claim 14). The pattern depends on the
   unsynchronised stream's history in the session, so in the original two machines of a multiplayer
-  game can show different ground variants. S-0202 (claim 11) has our
-  engine run the unsynchronised stream on each machine from the game's seed, unsynchronised between
-  machines; this spec only fixes where the draws are taken. The pattern reaches no game state,
+  game can show different ground variants. Network games are out of scope for now; S-0202 (claim
+  11) has our engine run the unsynchronised stream from the game's seed; this spec only fixes where
+  the draws are taken. The pattern reaches no game state,
   because a cell's land type and slope shape come from the tile's plain image whatever image it
   shows (claims 6 and 13). S-0202's claim 11 lists this use (at map load, before play) and records the
   departure that builds the pattern afresh at every map load.
@@ -958,7 +1033,7 @@ Keys of other files that this spec uses:
 
 | User data | Key | Feeds | Form | Absent |
 |---|---|---|---|---|
-| rules, building type | `ToTile` | to-tile field (claim 15): the tile whose name matches; a tile's name is the first 28 bytes of its tileset's set name, a space and its number within the set written with at least two digits (matching rule not established, Open questions) | string | none |
+| rules, building type | `ToTile` | to-tile field (claim 15): the tile whose name matches; a tile's name is built from its tileset's set name and its number within the set (the form of the name, a limit on the length of the set name and the matching rule are not established, Open questions) | string | none |
 | rules, land-type sections | `Buildable` | the land type's buildable field (claim 16; S-0211 claim 2) | boolean | no |
 | theater tile files | each tile cell's terrain code and slope code | claims 6 and 7 (the terrain code's meaning is S-0211 claim 6) | integers | — |
 | theater tile files | each tile cell's 900 diamond pixels | palette indices, painted as claim 22 says | bytes | — |
@@ -1020,6 +1095,30 @@ identified by tile number.
   does not end the list, so the tile of section *D* + 1 is number *T*), and the clear tile in runs 1
   and 2 (the list ended at section *D*, so section *D* + 1 has no effect and *T* is the tile count,
   claim 7). *Falsified if:* the new picture shows in run 1 or 2, or the clear tile shows in run 0, 3 or 4.
+- *Digits part (claim 3, and the animation keys of claim 19; named test files):* a loose copy of the
+  theater data file that adds one tileset after the last declared one, with tile count 100 and a
+  new file-name stem that no stock file uses, and loose tile files (copies of a stock one-cell tile
+  file with the theater's own suffix, edited to three visibly different pictures) named for tile 1
+  with two digits ("01"), for tile 99 with two digits and for tile 100 with three digits ("100").
+  No other file of the stem exists, so every other tile of the set has no image. Tiles 1 and 100
+  also get an animation in the section named by the set name, with attaches-to sub-tile 0, under
+  the tile-animation keys of Import mapping with the tile's number written "01" and "100". The map places tiles 1, 99 and 100 of the set (numbers
+  *T* + 0, *T* + 98 and *T* + 99, *T* the stock tile count) on separate cells. *Expected:* each of the
+  three cells shows its own picture, and the animations appear on the cells of tiles 1 and 100 and
+  not on tile 99's. *Falsified if:* tile 1 or tile 100 shows the clear tile (the file name uses
+  another number of digits), or either animation is missing (the animation key uses another number of
+  digits).
+- *Theater part (claim 1, table T; named test files).* For each theater index 0 … 5, one run in
+  a map of that theater: a loose copy of that theater's data file (under the name that table T gives
+  for it) that adds one tileset after the last declared one, with tile count 1 and a new file-name
+  stem, and a loose one-cell tile file of that stem and number 1 whose picture differs visibly from
+  the clear tile. Two sub-runs per theater, each in a fresh program start: (a) the tile file has the
+  theater's own suffix from table T; (b) the tile file has only the theater's fallback suffix from
+  table T, the tileset's non-height-view field being absent. The map places the new tileset's tile
+  (number = the stock tile count). *Expected:* in all twelve runs the new picture shows (so the data
+  file name, the tile suffix and the fallback suffix of table T are those of every theater).
+  *Falsified if:* any run shows the clear tile (the loose data file was not read, or the suffix is
+  other than the table's).
 - *Spot-check part for claim 20 (named test file):* a loose copy of the theater data file in which
   the clear tileset's allow-to-place flag is set to no and its two theater-conversion fields are
   changed. *Expected:* buildings can still be placed on clear ground, and screenshots match those
@@ -1205,7 +1304,7 @@ behind cliffs) are S-0211's scenarios L3, L5, L11 and L16.
 - *Falsified if:* in part A the cell keeps its ramp tile or shows any other tile; in part B the
   middle cell shows a smooth-ramp-range tile or any tile other than 0.
 
-**L4. A ramp-range tile of slope shape 0 (claim 11, `quirks.ramp_shape_zero`; named test file).**
+**L4. A tile of slope shape 0 in a ramp range (claim 11, `quirks.ramp_shape_zero`; named test files). The setup below is part A, the ramp range; part B follows.**
 - *Setup:* a loose copy of the tile file of one ramp-range tile (the first tile of the ramp
   tileset, say) with every slope code set to 0 (the tile file format is public), a one-cell tile
   for this test; the ramp tileset after the tileset that holds the tile just before the ramp range
@@ -1214,6 +1313,12 @@ behind cliffs) are S-0211's scenarios L3, L5, L11 and L16.
 - *Observable:* the tile the cell shows after loading, compared with the stock tile images.
 - *Expected:* the tile just before the ramp range (ramp start − 1), not the ramp-range tile.
 - *Falsified if:* the cell keeps its ramp-range tile or shows any other tile.
+- *Part B, the smooth-ramp range.* As part A, with a loose copy of the tile file of the first tile of
+  the smooth-ramp tileset (every slope code 0, a one-cell tile), and a map with that tile on flat
+  ground; the measurer checks that the tile just before the *ramp* range is usable and lies in no
+  ground, transition or ramp range. *Expected:* the tile just before the ramp range (ramp start − 1),
+  not the smooth-ramp tile. *Falsified if:* the cell keeps its smooth-ramp-range tile or shows any
+  other tile.
 
 **R1. Unset and one-past-the-end roles (claims 4, 5 and 10; named test files).**
 - *Setup:* a theater whose data sets the rough pair, in which none of the tiles 8 … 14 is one of the
@@ -1294,6 +1399,25 @@ behind cliffs) are S-0211's scenarios L3, L5, L11 and L16.
   *L* + 11, *L* + 7, *L* + 14, *L* + 13 for N, E, S, W). In the loose copy, all 15 cells show their
   ground tile, unchanged (the rough pair, which is not skipped, is scenario R1).
 - *Falsified if:* in the loose copy any arm shows a tile other than its ground tile.
+
+**R4. Order of the pairs, and roles that name overlapping tilesets (claim 10; named test file).**
+- *Setup:* a theater whose data sets the rough pair and the sand transition role (the measurer
+  checks the stock data), and a loose copy of its theater data file in which the sand transition
+  role names the same tileset as the rough transition role (so the rough transition tiles *L* … *L* + 15
+  are also the sand transition range). The measurer checks that the rough ground tile lies in no
+  ground, transition or ramp range, and that no other pair or ramp range contains the tiles
+  *L* … *L* + 15 in the loose copy. A map with scenario L1's plus-shaped patch of five rough ground cells
+  on clear ground, away from other rough or sand tiles. Two runs, each in a fresh program start: a
+  control with the unchanged data (this is scenario L1), and the loose copy.
+- *Observable:* screenshot after loading; the tile each of the five cells shows.
+- *Expected:* control: centre *G*; arms *L* + 11, *L* + 7, *L* + 14, *L* + 13 for N, E, S, W. Loose copy:
+  centre *G*, and all four arms *L* + 15. Each pass first gives an arm its rough tile and then the sand
+  pair, which counts the rough tile as belonging to it but finds none of the arm's four neighbours
+  belonging (the centre holds the rough ground tile, which is not in the sand range), so it
+  writes *L* + 15. The result is that of the sand pair, which comes after the rough pair. If the pairs
+  ran in another order the arms would show the control's tiles.
+- *Falsified if:* in the loose copy any arm shows another tile than *L* + 15 (in particular a tile of
+  the control), or the centre shows another tile than *G*.
 
 **B1. Range ends (claims 5, 10 and 11; named test files where stock data does not fit).** The
 tiles used below are usable (each has an image and a tile cell at sub-tile 0), and the measurer
@@ -1408,10 +1532,21 @@ at fastest speed. *Observable:* the cells new ore appears on after 20 game minut
 to the theater's tile count (clear, buildable, flat land, claim 7) next to the ore. *Expected:* new
 ore also appears on those cells in the 5 runs. *Falsified if:* it never does.
 
-**G3. Burrowing (claim 17).** Inside the playable area only (the answer outside it is not measured,
-claim 17). *Setup:* a tunnelling unit ordered to a destination cell of a tileset
-without the allow-burrowing flag, and to one with it. *Observable:* where it comes up. *Expected:*
-not on the first cell (it comes up on the nearest allowed cell). *Falsified if:* it comes up there.
+**G3. Burrowing (claim 17; named test file for part C).** Inside the playable area only (the answer
+outside it is not measured, claim 17). The destination cells are flat, free of buildings and terrain
+objects, and out of the way of every other condition of the vehicle specs, so that only the tile's
+tileset decides.
+- *Part A, a tileset without the flag.* *Setup:* a tunnelling unit ordered to dig in on, and come up
+  at, a cell of a tileset whose allow-burrowing flag is set to no in the stock data (the measurer
+  checks the stock data; a loose copy of the theater data file may set the flag to no for a tileset).
+  *Observable:* the cells where it digs in and comes up. *Expected:* not on that cell.
+  *Falsified if:* it digs in or comes up there.
+- *Part B, a tileset with the flag.* The same with a cell of a tileset whose flag is set to yes.
+  *Expected:* it digs in and comes up on exactly that cell. *Falsified if:* it does not (then part A
+  is inconclusive).
+- *Part C, the absent key.* *Setup:* part B with a loose copy of the theater data file in which the
+  allow-burrowing key is removed from the tileset of part A. *Expected:* the unit digs in and comes up on
+  that cell as in part B (absent means allowed). *Falsified if:* it does not.
 
 **G4. Tile animation (claim 19).**
 - *Part A.* *Setup:* a map with a tile whose stock data names an animation (the measurer picks one
@@ -1451,17 +1586,37 @@ not on the first cell (it comes up on the nearest allowed cell). *Falsified if:*
   not at the cell's centre (including when it does not appear at all), or in run 3 it is not
   displaced. The boundary of the case (a displacement near the view's size) is not tested.
 
+- *Part E, the first pass's animation does not survive (claim 19; named test files).* *Setup:*
+  scenario L2's isolated cell (the placed tile *B*, the ramp tile of shape 1, which the first and
+  the second pass both smooth into *Q* + 2, *Q* the smooth-ramp start). A loose copy of the theater
+  data file that gives *B* an animation of one stock animation type with attaches-to sub-tile 0
+  and displacement (0, 0), in the section named by *B*'s tileset's set name. Run 1: *Q* + 2 gets no
+  animation. Run 2: *Q* + 2 gets an animation of another stock animation type that looks different,
+  with attaches-to sub-tile 0 and a displacement of (40, 0). Each run in a fresh program start.
+  *Observable:* screenshot after loading; which animations appear on the cell, by their types and
+  positions. *Expected:* run 1 shows no animation on the cell (the first pass started *B*'s, and
+  it did not survive); run 2 shows only the animation of *Q* + 2, at the displaced position, and
+  not *B*'s. *Falsified if:* run 1 shows *B*'s animation, or run 2 shows *B*'s animation (alone
+  or together with the other).
+
 **G5. Shadow casters need a count (claim 18; named test files).** *Setup:* a theater whose stock data
 declares a tileset a shadow caster with a non-zero shadow-tile count (the measurer checks), and
-S-0104's scenario part D on one tile of that tileset. Run 1: stock data. Run 2: a loose copy of the
+S-0104's scenario L15 part D on one tile of that tileset. Run 1: stock data. Run 2: a loose copy of the
 theater data file without that tileset's shadow-tile count (flag kept). Run 3: a loose copy without
-the flag (count kept). *Observable:* the vehicle's brightness on each cell, as in S-0104 part D.
+the flag (count kept). *Observable:* the vehicle's brightness on each cell, as in S-0104's scenario L15 part D.
 *Expected:* some cells darken the vehicle in run 1 (S-0104); none in runs 2 and 3. *Falsified if:*
 run 2 or run 3 darkens a cell that run 1 darkens. If run 1 darkens no cell, the part is
 inconclusive.
 
 ## Open questions
 
+- Q-0018 asks four things of this spec's area, and two reach it. Its question 4 (the draws of a tile
+  animation that starts during loading) is answered by claim 19 (when and for which tile an
+  animation starts, and that its creation takes the draws of S-0202 claim 10) with S-0202. Its
+  question 5 (what a neighbour outside the map counts as in ground and ramp smoothing) is answered by
+  claim 10: a blank cell, which belongs to no pair and is flat for ramp smoothing (the cliff-back
+  rule is S-0211's). Its questions 1 to 3 and 6 are answered by S-0009, S-0202, S-0203 and S-0211,
+  and this spec states nothing for them.
 - Q-0009 is answered in full. Its question 1 by claims 1 and 3 and table T, 2 by claim 2, 3 by
   claims 3, 7 and 24, 4 by claims 13 and 14, 5 by claims 6, 7 and 24, 6 by claims 22 to 24, 7 by
   claims 7 and 24 and S-0009 claim 8, 8 by claim 6 and S-0211 claims 5 to 8, and 9 (the spelling of
@@ -1472,11 +1627,11 @@ inconclusive.
 - Whether a tile cell whose file declares a cell height other than the standard 30 rows moves the
   depth shift of S-0102's F3 (the original appears to take it from the file), and the same for the
   width. Stock tile files are not known to differ, so claim 22 fixes 60 × 29 and S-0102 fixes 30.
-- Which cells the original paints when it repaints only part of the screen: it picks cells by a
-  rectangle that is 60 pixels wide and reaches up to the top of the cell's extra image, so an extra
-  image reaching outside it may be cut or missed at the edge of a repainted area. Our engine paints
-  whatever its images touch; the difference is a repainting artefact, not a rule, and is not
-  specified.
+- Which cells the original paints when it repaints only part of the screen. An extra image that
+  reaches far to the side of its cell's diamond may be cut or missed at the edge of a repainted
+  area, and how far it may reach upward and downward without being missed is not established. Our
+  engine paints whatever its images touch; the difference is a repainting artefact, not a rule,
+  and is not specified.
 - Whether the radar colours of a cell come from the plain image or from the image it shows (claim
   6 covers only the land type and the slope shape, which are read from the plain image).
 - Whether the smoothed ramp tiles of the stock theaters carry the same slope shape as the ramp
@@ -1484,7 +1639,11 @@ inconclusive.
 - Whether placing the map's terrain objects and units at map load, between the two passes of
   claim 12, recalculates their cells, as putting an object into a cell does in play (Terms).
   Claims 12 and 19 state the results after loading on the reading that it does not.
-- What a to-tile building does when placed, and how the to-tile name is matched (claim 15).
+- What a to-tile building does when placed, and how the to-tile name is matched (claim 15). The
+  original appears to build a tile's name from the set name (only its first 28 characters, a
+  longer set name being cut), a space and the tile's number within the set written with at least two
+  digits; the comparison with the building's to-tile value is not established (for example
+  whether letter case matters).
 - Which game rules use the role tests of table R that this spec does not use (bridges, cliffs and
   their destruction, shores, naval placement, the random map generator).
 - Which tiles of a shadow-casting tileset cast shadows (claim 18). The original appears to give
@@ -1493,13 +1652,9 @@ inconclusive.
 
 ## Questions for the project lead
 
-- **The glossary's *terrain animation* (and S-0103's Terms).** Both say a terrain animation is
-  created "when the map's terrain is set up". By claim 19 a tile animation also starts in play, at
-  the recalculation of a cell that has started none, whenever the tile it then holds qualifies (for
-  example after a unit's move, scenario G4 part C). The entry should say "when the map's terrain is
-  set up, or when a cell is recalculated in play".
-- **S-0009 claims 6 and 8 on drawing a tile number at or beyond the tile count.** They say such a
-  number is drawn as the theater's clear tile. That holds when the game decides which artwork to
-  load, but by claim 24 the original's painting of a cell that still holds such a number is
-  unspecified. Our engine paints the clear tile either way, so only the statements about what the
-  original does need a revision of S-0009 (a pointer to claim 24 in place of "is drawn as").
+None is open.
+
+- Decided (lead delegated, 2026-10-10): the glossary's *terrain animation* entry says the animation is
+  created when the map's terrain is set up or when a cell is recalculated in play (claim 19).
+- Decided (lead delegated, 2026-10-10): S-0009 claims 6 and 8 point to claim 24 of this spec in place of
+  "is drawn as"; our engine paints the clear tile either way.
