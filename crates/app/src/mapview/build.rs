@@ -170,8 +170,9 @@ mod notes {
         "Q-0021: an overlay shadow's depth bias is taken as its overlay's, flat (provisional)";
     pub const RUBBLE: &str = "rubble overlays outside a rubble cell draw nothing (S-0112 claim 5); rubble cells arise only in play";
     pub const SMUDGE_CLIP: &str = "a smudge is painted whole once per covered cell, not clipped to that cell (S-0102 claim 25): it differs only where covered cells differ in level or light";
-    pub const TERRAIN_STRENGTH: &str = "a terrain object type without a strength key is drawn with image frame 0 (S-0102 claim 23; no spec gives the absent default)";
-    pub const ANIMATED_TERRAIN: &str = "animated terrain objects show image frame 0: their stages need animation playback (S-0102 claim 23)";
+    pub const TERRAIN_STRENGTH: &str = "Q-0023: a terrain object type without a strength key is drawn with image frame 0 (provisional)";
+    pub const ANIMATED_TERRAIN: &str =
+        "Q-0023: animated terrain objects show image frame 0 (provisional)";
     pub const VOXEL_SHADOW_POINT: &str = "voxel shadows are placed at the object's ground point (the locomotor's shadow point has no spec)";
     pub const NO_SLOT_ANIMS: &str = "building slot animations (S-0108) need animation playback, which has no spec yet: not drawn";
     pub const NO_COMPANION: &str =
@@ -186,7 +187,7 @@ mod notes {
     pub const NO_VPL: &str = "no voxel lighting table, or one whose layout was not recognised (Q-0022): every row reads as zero, so voxels draw nothing (S-0105 claim 38)";
     pub const VPL_REJECTED: &str = "the voxel lighting table is missing or short and quirks.vpl_unloaded_rows_blank is off: the importer rejects it (S-0105 claim 38)";
     pub const SHORT_VPL: &str = "the voxel lighting table ends before its last row, or has more than 128 rows: missing rows read as zero (S-0105 claim 38)";
-    pub const WATER_FILL: &str = "water-fill variants need the scenario random stream (no spec yet): the base water tile is drawn";
+    pub const WATER_FILL: &str = "water-fill variants are drawn by the game load (S-0009 claim 6, S-0202): without a game the base water tile is drawn";
 }
 
 fn upper(name: &[u8]) -> Vec<u8> {

@@ -159,6 +159,7 @@ Every quirk switch of the implemented specs has a field in `ini::Quirks`, `vfs::
 | `convert::art` | a building secondary sprite dropped by a later read's art section is left undetermined (a note, no file); no art for projectiles, particles and voxel animations | Q-0008 |
 | `app::mapview::build` | a vehicle drawn as a sprite is taken to be in its standing pose (S-0102 claim 22) | Q-0021 |
 | `app::mapview::build` | an overlay shadow takes its overlay's depth bias, flat (S-0112 claim 8 draws it; S-0102 claim 13 gives no bias for it) | Q-0021 |
+| `app::mapview::build` | a terrain object type without a strength key is drawn with image frame 0; animated terrain objects show frame 0 (S-0102 claim 23) | Q-0023 |
 | `fmt::vpl` | four little-endian 32-bit header values, a palette, rows of 256; the row count is the first header value that fits the length exactly, else the largest the file ends inside; rows it does not supply read as zero (S-0105 claim 38) | Q-0022 |
 
 ## Map viewer (M2)

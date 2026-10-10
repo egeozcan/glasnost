@@ -277,8 +277,8 @@ impl Decoder<'_> {
 
     /// The initial fill (S-0009 claim 6). Returns the number of draws a
     /// water fill takes from the scenario random stream. The draws' values
-    /// need that stream (a planned spec), so every visited cell gets the
-    /// base tile plus 0 until it exists.
+    /// are taken when a game loads (`glasnost_sim::load`, S-0202), so the
+    /// decoded map gives every visited cell the base tile plus 0.
     fn initial_fill(&mut self, cells: &mut CellGrid, level: i8, fill: Fill) -> u32 {
         let q = self.ctx.quirks;
         // spec: S-0009 claim 6 (quirks.stale_fill_tiles: the previous theater's base tiles, 0 before any)
@@ -306,7 +306,7 @@ impl Decoder<'_> {
             self.warn(
                 self.line_of(b"Map", b"Fill"),
                 format!(
-                    "water fill: {draws} cells take a draw over 0 … {} from the scenario random stream, which has no spec yet; they show the water base tile",
+                    "water fill: {draws} cells take a draw over 0 … {} from the scenario random stream (S-0202) when a game loads; the map as stored shows the water base tile",
                     WATER_VARIANTS - 1
                 ),
             );

@@ -354,7 +354,11 @@ pub fn place_map_objects(w: &mut World, map: &Map, sandbox: bool) {
             let fields = map.objects.fields(lk, n);
             let m = owner_of(w, &p.owner)
                 .and_then(|o| type_index(&r, kind, &p.type_name).map(|t| (o, t)));
-            upgrade_fields.push((m.is_some(), fields.upgrades.clone()));
+            // spec: S-0009 claims 27 and 40 (a structure dropped for a human owner gives no upgrade field)
+            let human_dropped = kind == Kind::Building
+                && !sandbox
+                && m.is_some_and(|(o, _)| w.houses[usize::from(o.0)].human);
+            upgrade_fields.push((m.is_some() && !human_dropped, fields.upgrades.clone()));
             matched.push(m);
         }
         // spec: S-0009 claim 40 (quirks.upgrade_fields_carry_over: on, the original; its switch belongs to rules::Quirks)
