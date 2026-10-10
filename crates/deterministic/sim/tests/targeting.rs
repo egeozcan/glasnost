@@ -84,6 +84,10 @@ fn a_cell_click_moves_every_selected_unit() {
     }
 }
 
+// spec: S-0214 claim 4 (the generic result g by table G)
+// spec: S-0214 claim 6 (the attack rule: an enemy, armed, movable actor)
+// spec: S-0214 claim 8 (a vehicle's final action by table V)
+// spec: S-0214 claim 10 (table M: attack gives behaviour attack with the target)
 // spec: S-0214 table G row G8 (the attack rule holds on an enemy for an armed, movable actor)
 // spec: S-0214 table M (attack: behaviour attack with the object as target)
 #[test]
@@ -165,6 +169,7 @@ fn nothing_over_an_object_selects_it() {
     assert_eq!(r.selection, Some(vec![a[2]]));
 }
 
+// spec: S-0214 claim 10 (table M: move gives behaviour move with the destination of claim 11)
 // spec: S-0214 table G row G7 (force-move: move, also onto an own unit)
 // spec: S-0214 claim 11 (a move on an object: the object itself when reachable)
 #[test]
@@ -285,5 +290,36 @@ fn key_commands() {
     assert_eq!(
         targeting::key_command(&w, ALPHA, &sel, KeyCommand::Scatter).len(),
         2
+    );
+}
+
+// spec: S-0214 claim 7 (infantry on an object: table I; an armed infantry unit attacks an enemy, row I29)
+#[test]
+fn infantry_attack_an_enemy() {
+    let w = testkit::new_game(3);
+    let walker = of(&w, 1, Kind::Infantry, 0)[0];
+    let enemy = carts(&w, 0)[0];
+    let beta = HouseId(1);
+    assert_eq!(
+        targeting::action(
+            &w,
+            beta,
+            walker,
+            ClickOn::Object(enemy),
+            Modifiers::default()
+        ),
+        Action::Attack
+    );
+    // An own unit: select (row G10, then row I29).
+    let friend = of(&w, 1, Kind::Infantry, 0)[1];
+    assert_eq!(
+        targeting::action(
+            &w,
+            beta,
+            walker,
+            ClickOn::Object(friend),
+            Modifiers::default()
+        ),
+        Action::Select
     );
 }

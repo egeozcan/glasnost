@@ -464,3 +464,67 @@ fn s0215_area_guard() {
     let (_, d) = o.beh.last.unwrap();
     assert!((15..=19).contains(&d), "{d}");
 }
+
+// spec: S-0215 claim 17 (a zombie or paralysed behaviour is never left by falling back to rest)
+#[test]
+fn s0215_zombie_keeps_its_behaviour() {
+    let mut r = testkit::ruleset();
+    r.sim.behaviours.insert(
+        "sleep".into(),
+        glasnost_rules::sim::BehaviourProps {
+            zombie: Some(true),
+            ..Default::default()
+        },
+    );
+    let rules = Arc::new(SimRules::new(&r, "zombie"));
+    let mut w = new_game(
+        rules,
+        &testkit::map(),
+        testkit::catalogue(),
+        &testkit::setup(1),
+    )
+    .unwrap();
+    let id = of(&w, 0, Kind::Vehicle, 0)[0];
+    let t = w.tick;
+    w.obj_mut(id).unwrap().beh.force(Behaviour::Sleep, t);
+    process::fall_back(&mut w, id, false);
+    assert_eq!(w.obj(id).unwrap().beh.queued, None);
+    assert_eq!(w.obj(id).unwrap().beh.current, Some(Behaviour::Sleep));
+}
+
+// spec: S-0215 claim 20 (the recruitable property has no effect in our engine)
+#[test]
+fn s0215_recruitable_has_no_effect() {
+    let mut r = testkit::ruleset();
+    for b in ["guard", "area_guard", "move"] {
+        r.sim.behaviours.insert(
+            b.into(),
+            glasnost_rules::sim::BehaviourProps {
+                recruitable: Some(false),
+                ..Default::default()
+            },
+        );
+    }
+    let a = Arc::new(SimRules::new(&testkit::ruleset(), "x"));
+    let b = Arc::new(SimRules::new(&r, "x"));
+    let mut wa = new_game(a, &testkit::map(), testkit::catalogue(), &testkit::setup(4)).unwrap();
+    let mut wb = new_game(b, &testkit::map(), testkit::catalogue(), &testkit::setup(4)).unwrap();
+    for _ in 0..60 {
+        tick::step(&mut wa);
+        tick::step(&mut wb);
+    }
+    assert_eq!(
+        glasnost_sim::save::state_hash(&wa),
+        glasnost_sim::save::state_hash(&wb)
+    );
+}
+
+// spec: S-0215 claim 21 (a behaviour that gives no anti-air rate, or 0, uses its rate)
+#[test]
+fn s0215_anti_air_rate_default() {
+    let r = testkit::rules();
+    for b in Behaviour::ALL {
+        let p = r.behaviour(b);
+        assert_eq!(p.aa_rate_delay, p.rate_delay);
+    }
+}
