@@ -1,0 +1,1028 @@
+---
+id: S-0203
+title: Tick order
+topic: simulation
+revision: 7
+sources-class: [decomp, design]
+status: approved
+approved-by: Claude (delegated by project lead)
+approved-on: 2026-10-10
+measurements: []
+requests: []
+supersedes: []
+---
+
+# S-0203: Tick order
+
+## Summary
+
+What happens within one tick of a single-player game, and in which observable order: when the
+player's orders take effect, in which order objects act, when a shot's damage lands, when a
+destroyed object stops acting, and the consequences, such as two units killing each other in the
+same tick. How many ticks run per second is S-0201, and what each object does in its own turn
+(moving, firing, harvesting) belongs to the topic specs of those actions.
+
+## Terms
+
+- **Turn.** An object's share of one tick: the moment at which it moves, fires, counts down,
+  starts and ends its own actions. An object that "acts in tick *n*" takes its turn in tick *n*.
+  In this spec "turn" never means a rotation, as in the glossary's *facing*.
+- **Update order.** The sequence in which objects take their turns. Claim 2 says which objects are
+  in it, claim 3 how the sequence arises.
+- **Turn pass.** The part of a tick in which the objects in the update order take their turns, one
+  after another (claim 4), apart from the turns that removals cost (claim 10). It is a part of the
+  simulation. It has nothing to do with the *object pass* of S-0102 (named in the glossary's *animated terrain object*), which is a part of making a
+  drawn frame.
+- **Enter play, leave play, in play.** In this spec: to join the update order, to leave it, and to
+  be in it. This narrows the everyday sense of the words, because being in play is not the same as
+  being on the map. Most objects enter play when they are put on the map: placed by the map at game
+  start, created (a produced unit leaving the building that produced it, a projectile fired, an
+  animation started), or coming back onto the map (a passenger unloading from a transport that is
+  not open-topped, a unit leaving a building it was inside). Most objects leave play when they are
+  taken off the map: destroyed and removed, or going inside something. The one exception is a
+  passenger of an open-topped transport, which is in play while it is off the map (claim 3).
+- **Order.** An instruction from a human player (move, attack, deploy, sell, build, hold
+  production and so on), as in S-0213. Computer-controlled houses decide during their own updates
+  and give no orders in this sense.
+- **Projectile.** The object that carries a shot from the firer to the target or impact point and
+  applies the shot's warhead where it detonates. For some weapons nothing is drawn for it.
+- **Production line.** One of a house's production processes: the item it is building, its progress,
+  whether it is on hold, and its queue. The production specs own how many lines a house has and
+  what a line does; this spec places the lines' update in the tick.
+- **Open-topped transport.** A transport whose type is open-topped, a property that the type takes
+  from the rules data (scenario O5 sets it on a test type). This spec only uses its consequence for
+  the update order (claim 3).
+- **Planted bomb.** As in S-0213: a bomb that a bomb-planting infantry unit has attached to an
+  object. It detonates when its own countdown ends (or earlier on its planter's detonate order,
+  S-0213, claim 11). The combat specs own its countdown and its damage.
+- **Storm bolt.** One lightning bolt of the storm that the weather superweapon calls down around
+  its target. The superweapon specs own where and when bolts fall and what they damage.
+- **Disc laser.** The ring of laser beams that a weapon with that property in the rules data forms
+  around its target before it applies its damage. It is not an object in the update order and
+  takes no turns; it is updated in a part of the tick of its own (row 12). The combat specs own it.
+- **Radiation field.** A patch of ground left irradiated by a warhead with that property, whose
+  strength fades over time. The combat specs own it.
+- **Electromagnetic pulse.** The effect that disables the objects a warhead with that property
+  reaches, for a time. Row 14 is the moment its time runs out. The combat and superweapon specs own
+  it.
+- **Blast ring.** The expanding ring that the psychic dominator superweapon (its lighting effect is the glossary's
+  global effect *psychic dominator*), and one
+  trigger action, create at their target. The superweapon specs own it.
+- **Team.** A group of units under scripted control, created by a map trigger (S-0011, claim 30) or
+  by the original's computer player. The specs of teams own what a team does.
+- **Current object, counting removal.** During the turn pass, the *current object* is the object
+  taking its turn. A *counting removal* is a removal, during the turn pass, of the current object
+  or of any object before it in the update order, whether or not that object took its turn in this
+  tick. Each counting removal costs one later object its turn (claim 10).
+- **Trigger vocabulary.** *Tag*, *raise*, *polled tag*, the *any-event* code, *latch*, *trigger
+  variable*, *one-time trigger*, the events *elapsed time* and *entered-by*, and the *count* action
+  are used as in S-0011, which defines *tag*, *raise* and the trigger time unit of 15 ticks in its
+  Terms, and the *counter* in its common measurement setup. The *chrono-flash* action is as in
+  S-0201, scenario T6.
+- **Infantry-death kind, *die-1* entry.** As in S-0107, claim 17.
+- **Single-player game.** As in S-0201: a skirmish or a campaign mission.
+- **Cycle.** As in S-0201: the unit of real time in which the original runs a game. A cycle that is
+  not frozen takes the player's input and then runs one tick.
+
+## Behaviour
+
+1. **The parts of a tick and their places.** A tick of a single-player game contains the parts
+   listed in the table of **State and ordering**. That table is a partial order. For each part it
+   names the parts it comes after, and this spec fixes such a place only where it states an
+   observable consequence of it. Where the table fixes no order between two parts, an
+   implementation may run them in either order. A part sees every effect of the parts it comes
+   after in the same tick.
+   - **Draw order.** Every part that takes draws from the scenario random stream (S-0202), or can
+     take them, has a fixed place relative to every other such part, and the table links every two
+     of them. Each draw shifts every later draw of the stream (S-0202, claim 10), so running such a
+     part at another place, or swapping two of them, changes all later random outcomes of the game.
+     That is the observable consequence of these places, even where no other is known. The parts
+     that draw or can draw are rows 1 to 3 and 5 to 16. In the original they run in this sequence:
+     the polling of map triggers (row 1), resource growth and spread (row 9), planted bombs (row 2),
+     diving aircraft (row 10), teams (row 11), disc lasers (row 12), the weather storm (row 3),
+     radiation fields (row 13), the end of electromagnetic pulses (row 14), the turn pass (row 5),
+     blast rings (row 15), crate respawns (row 16), the production lines (row 6), the houses (row 7)
+     and the orders (row 8). Inside a part that holds several members (several teams, disc lasers,
+     radiation fields, houses), the members take their draws in the order the row states. Within a
+     part, the spec of the topic owns which draws are taken; this spec owns only where the part
+     stands. For teams and for the decisions of computer-controlled houses, which belong to the
+     original's own computer player and not to our engine's (Terms, *Order*), the place fixes only
+     where our engine's equivalent work takes its draws.
+     - Backing: `unmeasured`. S-0202's state recorder reads the scenario random stream at the end
+       of a tick, so it shows how many draws a tick took but not their order among its parts.
+       Telling that order needs a tick in which two parts draw and in which each part's outcome
+       identifies its own draws; no setup is known that gives this for a single link without
+       replaying a whole game from an exact seed.
+     - Confidence: high for the sequence itself; medium that rows 12 and 15 take their draws only
+       through the damage, animations and objects they create (not every path was traced); low
+       that rows 6, 10, 13 and 14 take draws at all. None was found in their own update, but their
+       work runs through paths that were not traced in full, so they keep the original's place.
+   - **Row 1, the polling of map triggers, comes before the turn pass.** Row 1 is the per-tick raise
+     of every polled tag (S-0011, claim 6), which also owns how the raise works. A trigger action
+     that this polling sets off (for example one that destroys an object) takes effect before any
+     object takes its turn in that tick.
+     - Backing: `measurable` (scenario O6, part A)
+     - Confidence: high
+   - **Row 2, the detonation of planted bombs whose countdown ends, comes before the turn pass.**
+     An object that a planted bomb destroys in tick *n* takes no turn in tick *n*. In particular it
+     does not fire in tick *n*, even if its weapon is ready then. Because it leaves play while the
+     turn pass is not running, its removal costs no other object a turn (claim 10): the object
+     directly after it in the update order takes its turn in tick *n* as usual.
+     - Backing: `measurable` (scenario O10, part A: the carrier's silence rules out a detonation in
+       a later object's turn, such as the planter's; the observer's turn rules out a detonation in
+       the carrier's own turn)
+     - Confidence: high
+   - **Row 3, the weather storm's update, with the strikes of its storm bolts, comes before the turn
+     pass.** An object that a storm bolt destroys in tick *n* takes no turn in tick *n*, and, as in
+     row 2, its removal costs no other object a turn.
+     - Backing: `measurable` (scenario O10, part B, in the same two ways as part A)
+     - Confidence: high
+   - **Row 4, the step of a chrono flash in force, comes after row 1 and before the turn pass.** The
+     step that a chrono flash takes in a tick (S-0201, claim 11) is part of row 4. So a chrono flash
+     started by a row-1 trigger takes its first step in the tick of the action, and one started by a
+     trigger raised during the turn pass takes its first step in the next tick.
+     - Backing: `measurable` (scenario O6, part B)
+     - Confidence: high
+   - **Rows 5 to 8.** The turn pass is row 5 (claims 2 to 6, 10 and 11). Claims 7 and 8 own the
+     places of the production lines, the houses and the orders. After the last part of a tick the
+     tick number grows by 1, unless the tick ends the game (S-0201, claim 1).
+   - **Rows 9 to 16.** These parts are placed only by the draw order above; apart from the disc
+     laser's, below, no other consequence of their places is stated here. The specs of their topics
+     own what each one does. A disc laser
+     (row 12) applies its damage in its own update, outside any object's turn. So, as in rows 2
+     and 3, an object it destroys takes no turn in that tick, and its removal costs no object a turn
+     (claim 10).
+     - Backing: `unmeasured` for the disc laser. Which weapons fire one, and in which tick its
+       damage falls after firing, is the combat specs' to establish, so no setup can yet time it.
+     - Confidence: medium
+   - **Other work done once per tick.** The original does further work once per tick outside any
+     object's turn that takes no draws from the scenario random stream: the regrowth of shroud and
+     the re-covering by fog of war (visibility), a periodic re-check of what is visible, the step of
+     a fading map-wide light level and the relighting of the map after lighting changes (S-0104),
+     the update of the player's view and some purely presentational timers. This spec gives that
+     work no place and no order. An owning spec that finds an observable consequence of its place
+     states the place, with that consequence and a test. Until then an implementation may run it
+     anywhere in the tick, which is a rule of our engine, not a claim about the original.
+     This freedom covers only work that takes no draws from the scenario random stream. Work that
+     another spec adds and that takes such draws needs a place in the table, set by its owning spec
+     in the original's order.
+     - Backing: `unmeasured` here for the existence of such work in the original and for its taking
+       no draws; each owning spec tests its own part
+     - Confidence: high that the original does such work once per tick outside any object's turn,
+       medium that it takes no draws (none was found, but not every path was traced)
+
+2. **Who takes turns.** Infantry, vehicles, aircraft, buildings, projectiles, animations (sprite
+   and voxel), particle systems, the travelling beam or wave of the weapons that fire one, the
+   searchlight beams of buildings, and terrain objects whose type spawns resources take turns. The
+   individual particles of a particle system take none of their own (the system moves them in its
+   turn), and neither do overlays, smudges or other terrain objects. An object out of play takes no
+   turns. A passenger of an open-topped transport stays in play while it is inside, so it does take
+   turns (claim 3).
+   - Backing: `measurable` in part (scenarios O1 and O3 for infantry, vehicles and buildings,
+     scenario O5 for open-topped passengers). `unmeasured` for the other kinds. The turn of an
+     animation, a particle system, a beam or a terrain object has no effect of its own that a
+     recorder can time against other turns. The one indirect route, the turn that the end of an
+     animation costs the next object (claim 10), needs to know where the animation stands in the
+     update order. For the animations a shot or a death creates, that depends on whether the
+     animation enters play before or after the projectile or object that comes with it, which is
+     not established, so no setup can yet predict which object loses its turn.
+   - Confidence: high for every kind except terrain objects; medium for which terrain objects take
+     turns
+
+3. **The update order is the order of entering play.**
+   - **Appending.** An object that enters play is put at the end of the update order. An object
+     that leaves play is taken out of it, and the others keep their order. An object that enters
+     play again goes to the end, not back to its old place. The update order is never sorted by
+     anything else: not by position, kind, owner or depth.
+   - **Objects placed by the map.** At game start they enter play in this order: terrain objects
+     (only those that take turns, claim 2), then vehicles, then aircraft, then infantry, then
+     buildings, each kind in the order of the map's entries (S-0009 owns the entries). In a
+     skirmish the players' starting units enter play after all of them. Because every kind is a
+     block of its own, an object of one kind never stands between two map-placed objects of
+     another kind. So at game start the last map-placed infantry unit is directly followed by the
+     first map-placed building, and as long as both stay in play, a counting removal (claim 10) in
+     that infantry unit's turn costs that building its turn, whatever terrain objects, vehicles or aircraft
+     the map holds.
+   - **Open-topped transports.** A unit that boards an open-topped transport leaves play and enters
+     play again at once: it is taken out of the update order, which is a removal for claim 10, and
+     put back at its end. It then takes turns while inside, so it can, for example, fire
+     from inside. If the turn pass is running when it boards, it takes a turn later in that same
+     pass (claim 4). If it had already taken its turn in that tick, that is its second turn of the
+     tick (claim 11), which happens only with the switch of claims 10 and 11 on. When it gets out
+     it stays where it is in the update order and does not move to the end. A passenger of a
+     transport that is not open-topped is out of play while inside.
+   - Backing:
+     - `measurable` (scenario O3) for appending, for the kinds vehicles, infantry and buildings and
+       for the entry order within one kind.
+     - `measurable` (scenario O9, variant T) for the block rule between infantry and buildings with
+       a terrain object that takes turns on the map.
+     - `measurable` (scenario O5) for the turns of open-topped passengers.
+     - `measurable` (scenario O11) for a boarding passenger's move to the end of the update order
+       and for a passenger that gets out keeping its place.
+     - For the second turn of a passenger that boards after its own turn: claim 11's backing
+       (`unmeasured`).
+     - `unmeasured` for which object loses its turn because of the removal that boarding causes.
+       That depends on whose turn performs the boarding, which is not known (Open questions), so no
+       setup can predict the object.
+     - `unmeasured` for the place of terrain objects before the vehicles and of the aircraft between
+       the vehicles and the infantry. Each of these places shows only through a removal in the turn
+       of the last map-placed object before it (the last terrain object, vehicle or aircraft), and
+       no terrain object, vehicle or aircraft is known to leave play in its own turn at a tick a
+       setup can predict. No setup is known, either, in which a pre-placed aircraft fires at a
+       steady rate from a fixed spot.
+     - `unmeasured` for the starting units. The game places them itself and gives every player
+       several, so a setup cannot fix which single starting unit faces a pre-placed one.
+   - Confidence: high for appending and the kept order; medium for the order of the map's kinds,
+     the starting units and the open-topped rule
+
+4. **Objects that enter play during the turn pass.** An object that enters play during the turn pass
+   of tick *n* (a projectile just fired, a unit just unloaded or produced, an animation just
+   started) takes its first turn later in that same turn pass, after every object that was already
+   in the update order, unless a removal costs it that turn (claim 10). An object that had already
+   taken its turn in that tick before it left play and entered play again takes this turn only
+   with the switch of claims 10 and 11 on (claim 11).
+   - Backing: `measurable` (scenarios O1 and O3). For the turn of an object that re-enters play
+     after its own turn: claim 11's backing (`unmeasured`).
+   - Confidence: high
+
+5. **Shots are resolved in the projectile's own turn.** A shot's damage is applied at the moment
+   its projectile detonates, during the projectile's own turn, to every object the warhead reaches.
+   There is no separate damage step later in the tick. A projectile that detonates leaves play in
+   that same turn. A projectile fired in tick *n* takes its first turn in tick *n* (claim 4), unless
+   a removal costs it that turn (claim 10), in which case its first turn is in tick *n* + 1. The
+   points below follow from this, or add to it.
+   - **(a) Mutual fire.** Take two units already in play that fire at each other in the same tick
+     *n*, with weapons whose projectiles reach the target on their first turn (one with no visible
+     flight, for example). Both shots are always fired, since neither projectile acts before both
+     units have taken their turns. Both shots land, and both units can die from them. Which unit is
+     hit first does not depend on any shot being faster: it follows from the update order.
+     - Backing: `measurable` (scenarios O1 and O3)
+     - Confidence: high
+   - **(b) Stagger.** In the setting of point (a), when nothing else entered play between the two
+     projectiles, the first projectile's detonation makes the second miss its first turn (claim
+     10). The earlier unit's shot lands in tick *n*, the later unit's in tick *n* + 1. So the unit
+     later in the update order is hit in tick *n* and the earlier one in tick *n* + 1. With the
+     switch of claim 10 off, both are hit in tick *n*.
+     - Backing: `measurable` (scenarios O1, O3 and O8)
+     - Confidence: high for the rule; medium that a projectile with no visible flight always
+       detonates on its first turn
+   - **(c) Projectiles with a flight.** A projectile with a longer flight detonates in a later
+     tick, in its own turn, and leaves play in that turn. That detonation is a removal like any
+     other for claim 10.
+     - Backing: `measurable` (scenario O3, variant e)
+     - Confidence: high
+   - **(d) Detonation after an animation.** Some projectiles first start an animation where they
+     arrive and detonate in a later turn, once that animation has ended.
+     - Backing: `unmeasured`. Which property of a projectile selects this behaviour is not
+       established, so no test projectile can be made to show it. The combat specs own it.
+     - Confidence: low
+   - **(e) Beam and wave weapons.** A weapon that fires a travelling beam or wave instead of a
+     projectile applies its damage in the beam's own turns, while the beam lasts.
+     - Backing: `unmeasured`. Which weapons fire such beams, and how often a beam deals damage,
+       is the combat specs' to establish, and the place of a beam's turn has no other effect a
+       recorder can time.
+     - Confidence: low
+   - **(f) Disc lasers.** A weapon that fires a disc laser applies its damage in the disc laser's own
+     update, in row 12 of a later tick, not in a turn of the turn pass (claim 1).
+     - Backing: `unmeasured`, for the reason given in claim 1 for rows 9 to 16
+     - Confidence: medium
+
+6. **When a destroyed object stops acting.**
+   - **(a) Vehicles.** A vehicle whose damage destroys it leaves play at the moment that damage is
+     applied, so it takes no further turn, not even later in the same turn pass. Its removal is a
+     removal for claim 10. It costs a turn only under claim 10's condition: during the turn pass,
+     when the vehicle is the current object or stands before it.
+     - Backing: `measurable` (scenario O1; scenario O8, variant a, lethal against non-lethal)
+     - Confidence: medium
+   - **(b) Buildings.** A building is believed to behave the same way.
+     - Backing: `measurable` (scenario O1, variant B)
+     - Confidence: low, since some buildings may play a destruction sequence first
+   - **(c) Infantry.** S-0107, claim 17, decides what a killed infantry unit shows and when it is
+     removed. An infantry unit leaves play exactly when it is removed. When claim 17 removes it at
+     once, it leaves play at the moment the damage is applied, like a vehicle, and that removal
+     is a removal for claim 10. When claim 17 gives it a death sequence, it stays in play while the
+     sequence plays, so the kill itself is no removal for claim 10, and it leaves play on the tick
+     the sequence completes. That leaving is a removal for claim 10 too, and it is believed to
+     happen in the unit's own turn.
+     - Backing: `measurable` (scenario O8, variants d and e, for the moment of leaving play, and
+       scenario O9 for the removal when the sequence completes)
+     - Confidence: medium for removal at once and for staying in play during the sequence; low that
+       the removal at completion happens in the unit's own turn
+   - **(d) Projectiles of destroyed firers.** A projectile whose firer has been destroyed still
+     flies, detonates and applies its damage.
+     - Backing: `measurable` (scenario O1: the later firer's shot lands after it is destroyed)
+     - Confidence: high
+   - **(e) Passengers.** An object that is destroyed takes its passengers with it at that moment.
+     Those of an open-topped transport are in play (claim 3), so they leave play then too, and each
+     of them is one more removal for claim 10, under the same condition as any other.
+     - Backing: `measurable` (scenario O8, variant c against variant b)
+     - Confidence: medium
+   - Whether an aircraft that is shot down stays in play while it falls is left to the aircraft
+     specs.
+
+7. **Orders take effect after the turn pass.** In a single-player game an order that the player
+   gives in the cycle that runs tick *n* (S-0201, *cycle*) takes effect after every object's turn
+   in tick *n* and after the production lines of tick *n* (claim 8), and before any object's turn in
+   tick *n* + 1. The objects it concerns first act on it in their turns of tick *n* + 1. How several
+   orders of the same tick are ordered among themselves is S-0213, claim 3. The drawn frame made
+   before tick *n* + 1 (S-0201, claim 6) already shows what the order changes at once, such as a
+   selection's new destination marker, but no object has yet moved because of it. The orders also
+   come after the houses' updates of tick *n* (claim 8). The only known consequence of that place
+   is the draw order of claim 1: carrying out an order can take draws from the scenario random
+   stream (for example by creating objects or firing a superweapon), and so can a house's update.
+   - Backing: `measurable` (scenario O2 for the turn pass; scenario O7, part C, for the production
+     lines); for the place after the houses, claim 1's draw-order backing (`unmeasured`)
+   - Confidence: high for the turn pass and for the place after the houses; medium for the
+     production lines
+
+8. **Production lines and houses see the whole turn pass.**
+   - **Production lines.** Every production line is updated after the turn pass of the same tick, so
+     everything objects did in that pass is in effect for it. For example, a line that has been
+     waiting for money, and that is ready to make its next progress step in tick *n*, makes it in
+     tick *n* when a harvester delivers enough credits during the turn pass of tick *n*. The lines
+     also come before the orders of the tick (claim 7). So a hold order given in the cycle of tick
+     *n* does not stop a progress step that falls in tick *n*: the line is on hold at the end of
+     tick *n* and has still made that step. The order among the lines is left to the production
+     specs.
+   - **Houses.** Each house's own update also comes after the turn pass of the same tick. A house
+     matter decided in the house update therefore sees what the turn pass did. One example is the
+     raise of a house's tags in every eighth tick (S-0011, claim 35): it sees a trigger variable that
+     an object's turn set earlier in the same tick. What else a house's update does belongs to the
+     economy, production and superweapon specs.
+   - **Draw order among them.** A house's update can take draws from the scenario random stream, so
+     its place is fixed by the draw order of claim 1: the houses come after the production lines,
+     one after another in house order (S-0009, claim 19), and before the orders (claim 7). No draw
+     is known in a production line's own update, but the lines keep the original's place before the
+     houses for the same reason (claim 1). The order among one house's production lines, and among
+     all lines, is left to the production specs, which state it in the original's order if a line
+     can take draws (Open questions).
+   - Backing: `measurable` (scenario O7, part A for the lines after the turn pass, part C for the
+     lines before the orders, and part B for the houses); for the draw order among them, claim 1's
+     backing (`unmeasured`)
+   - Confidence: high for the lines after the turn pass and for the draw order among the houses,
+     medium for the lines before the orders and the houses, and for the lines before the houses
+
+9. **Timings run on the tick number, not on turns.** A timing of game state that an object waits
+   for, such as the delay before its weapon can fire again, is measured against the tick number
+   (S-0201): it ends on the same tick whether or not the object took its turns meanwhile. An object
+   that missed a turn (claim 10) or was out of play for a while finds its delays have run on. A few
+   counters instead step once per turn; the spec that owns each such counter says so.
+   - Backing: `measurable` (scenario O4)
+   - Confidence: medium
+
+10. **A removal can cost the next objects their turns.** The condition depends only on where the
+    removed object stood in the update order, not on whether it took its turn. As in Terms, the
+    *current object* is the object taking its turn, and a removal *counts* when the object that
+    leaves play is the current object itself or stands anywhere before it in the update
+    order, whether that object took its turn in this tick or missed it (by this claim, earlier in
+    the same pass). Each counting removal during one turn costs one turn: *k* counting removals
+    during the current object's turn make the *k* objects that directly follow it, at the end of
+    that turn, miss their turns in this tick. Objects that entered play during that turn can be
+    among them, and if fewer than *k* objects follow, the pass simply ends. A removal
+    of an object that stands after the current one costs nobody a turn, and so does a removal while
+    the turn pass is not running (every row but row 5). Causes, each with its own backing:
+    - A projectile that detonates and leaves play in its own turn (one removal): `measurable`
+      (scenarios O1, O3 and O8).
+    - The same projectile destroying a vehicle that stands before it in the update order (a second
+      removal), and the passengers of that vehicle if it is an open-topped transport (one more
+      removal each): `measurable` (scenario O8, variants a and c). Every object that was in play
+      when the projectile was fired stands before it (claim 3).
+    - The same projectile destroying an infantry unit that claim 6 removes at once: `measurable`
+      (scenario O8, variant d), also when that unit missed its turn in the same tick (scenario
+      O12).
+    - An infantry unit whose death sequence completes (claim 6): `measurable` (scenario O9).
+    - An animation that ends: `unmeasured`, for the reason given in claim 2's backing: where such
+      an animation stands in the update order is not established, so no setup can predict which
+      object loses its turn.
+    - A unit boarding an open-topped transport (claim 3), or going inside anything: `unmeasured`.
+      Whose turn performs the boarding or the going inside is not known (Open questions), so no
+      setup can predict which object loses its turn.
+
+    **Consequence for an object that missed its turn.** Suppose projectile P1 detonates in its
+    turn, so that unit U directly after it misses its turn, and later in the same pass another
+    projectile P2, which stands after U, destroys U. U stands before P2, so U's removal counts, together with P2's own
+    leaving play: the two objects directly after P2 miss their turns, although U took no turn in
+    this tick. An implementation that counted only removals of objects that had taken their turn
+    would skip one object there, not two. Scenario O12 tests this case, with an infantry unit's
+    death sequence instead of P1.
+
+    The skipped object acts normally from the next tick on, with its delays run on (claim 9).
+    Since a missed turn can change what that object does, it can also change the number of draws
+    from the scenario random stream (S-0202). The switch is `quirks.update_order_removal_skip`
+    (default: the original behaviour). With the switch off, no removal costs a turn: every object
+    that is in the update order when the pass comes to it, and has not yet taken a turn in this
+    tick, takes its turn (claim 11).
+    - Backing: `measurable` for the rule (scenarios O1, O3, O8 and O9), and for its condition on an
+      object that missed its turn (scenario O12); for each cause as listed
+    - Confidence: high for the rule and its condition; medium for the causes listed
+
+11. **An object can act twice in one tick.** An object that has already taken its turn in tick *n*
+    and then leaves play and enters play again during the same turn pass is at the end of the update
+    order again and takes a second turn in tick *n*. A unit that boards an open-topped transport
+    after its own turn of the tick does exactly this (claim 3), and so would a unit taken inside
+    something and put back out by a later object's turn. The same switch
+    `quirks.update_order_removal_skip` covers it: with the switch off, no object takes more than one
+    turn per tick.
+    - Backing: `unmeasured`. A passenger's turn just after boarding can be seen (it can fire from
+      inside in the tick it boards), but a recorder cannot tell whether that turn is its second of
+      the tick or its first, because it is not known whose turn performs the boarding (Open
+      questions).
+    - Confidence: medium
+
+## Formulas
+
+None. This spec fixes sequences, not quantities.
+
+## Constants
+
+| Name (ours) | Value | Unit | Notes |
+|---|---|---|---|
+| Turns per object per tick | 1 | turns | Except the quirk cases of claims 10 and 11 |
+
+## State and ordering
+
+**The parts of one tick** (single-player game). The table is a partial order (claim 1): a part comes
+after exactly the parts named in its "Comes after" column, and after anything those come after.
+Two parts with no such link may run in either order. Row numbers are labels. Rows 1 and 4 keep the
+labels of revision 2, and rows 1 to 8 those of revision 5, so that other specs can keep citing them.
+Every two parts that take draws from the scenario random stream are linked, so their order is
+total (claim 1, draw order). Following the "Comes after" links, the drawing parts run as 1, 9, 2,
+10, 11, 12, 3, 13, 14, 5, 15, 16, 6, 7, 8.
+
+| Row | Part | Comes after | Observable consequence of its place | Claim |
+|---|---|---|---|---|
+| 1 | Polling of map triggers: the per-tick raise of every polled tag (S-0011, claim 6) | (start of the tick) | A trigger action set off here takes effect before any object takes its turn in this tick; draw order | Claim 1, scenario O6 part A |
+| 9 | Growth and spread of resources, growth first (the resource specs own both) | 1 | Draw order | Claim 1 |
+| 2 | Detonation of planted bombs whose countdown ends | 9 | An object a bomb destroys in this tick takes no turn in it, and its removal costs no object a turn; draw order | Claim 1, scenario O10 part A |
+| 10 | Steering of aircraft that dive into their target (the aircraft specs own it) | 2 | Draw order | Claim 1 |
+| 11 | Teams, one after another in the order of the list of teams (the specs of teams own both) | 10 | Draw order | Claim 1 |
+| 12 | Disc lasers, the most recently fired first; each applies its damage in its own update | 11 | An object a disc laser destroys takes no turn in this tick, and its removal costs no object a turn; draw order | Claim 1 |
+| 3 | The weather storm's update, with the strikes of its storm bolts | 12 | An object a bolt destroys in this tick takes no turn in it, and its removal costs no object a turn; draw order | Claim 1, scenario O10 part B |
+| 13 | Radiation fields, the most recently created first (the combat specs own them) | 3 | Draw order | Claim 1 |
+| 14 | The end of electromagnetic pulses whose time is up (the combat and superweapon specs own them) | 13 | Draw order | Claim 1 |
+| 4 | The step of a chrono flash in force (S-0201, claim 11) | 1 | A chrono flash started in row 1 steps in the tick of its action; one started in the turn pass first steps in the next tick | Claim 1, scenario O6 part B |
+| 5 | Turn pass | 4, 14 | Objects act one after another in update order; their effects are immediate; draw order | Claims 2 to 6, 10, 11 |
+| 15 | Blast rings (the superweapon specs own them) | 5 | Draw order | Claim 1 |
+| 16 | Crate respawns, in skirmish games with crates on (the crate rules own them) | 15 | Draw order | Claim 1 |
+| 6 | Production lines | 16 | A line sees credits delivered in the turn pass of the same tick; draw order | Claim 8, scenario O7 part A |
+| 7 | Houses, one after another in house order | 6 | A house's tag raise sees what the turn pass of the same tick changed; draw order | Claim 8, scenario O7 part B |
+| 8 | Orders given in this tick's cycle | 7 | Objects act on the orders from the next tick; a hold order does not stop a progress step of this tick; draw order | Claims 7 and 8, scenarios O2 and O7 part C |
+
+After the last part of the tick, the tick number grows by 1, unless the tick ends the game (S-0201,
+claim 1). Work that other specs own, that this table does not list and that takes no draws from the
+scenario random stream has no place here (claim 1).
+
+**An object's place in the update order:**
+
+| State | Event | Result |
+|---|---|---|
+| Out of play | Enters play | Appended at the end of the update order. If the turn pass is running, it takes a turn later in this pass, unless a removal costs it that turn (claim 4; with the switch off, only if it has not yet taken one in this tick) |
+| In play | Leaves play (destroyed and removed, or goes inside) | Taken out, the others keep their order. If the turn pass is running and it is the object taking its turn or stands before that object, whether or not it took its turn in this tick, one more of the objects directly after the one taking its turn misses its turn (claim 10; with the switch off, nobody misses a turn) |
+| In play, infantry | Killed, and S-0107 claim 17 removes it at once | Leaves play at the moment of the damage (claim 6) |
+| In play, infantry | Killed, and S-0107 claim 17 gives it a death sequence | Stays in play while the sequence plays; leaves play on the tick the sequence completes (claim 6) |
+| In play, on the map | Boards an open-topped transport | Taken out (a removal for claim 10) and appended at the end at once. Off the map, in play, keeps taking turns (claim 3) |
+| In play, inside an open-topped transport | Gets out | Back on the map, keeps its place in the update order (claim 3) |
+| In play, inside an open-topped transport | The transport is destroyed | Leaves play with it, one more removal for claim 10 (claim 6) |
+| In play | Nothing | Keeps its place |
+
+## Edge cases and quirks
+
+- **Removal skip** (claim 10), `quirks.update_order_removal_skip`, default: the original behaviour.
+  On (the original): each removal, during the turn pass, of the object taking its turn or of any
+  object before it in the update order, whether or not the removed object took its turn in this
+  tick, makes one more of the objects directly after the object taking its turn miss its turn.
+  Off: no removal costs any object a turn. Every object that is in the update order when the pass
+  comes to it, and has not yet taken a turn in this tick, takes its turn, whatever left play
+  before it.
+- **Second turn** (claim 11), same switch. Off: at most one turn per object per tick. This also
+  covers a unit that boards an open-topped transport after its own turn.
+- No departure: nothing in a tick's order depends on the host or on real time.
+
+## Import mapping
+
+None. The order of a tick takes no input from the user's data, apart from the map's own order of
+entries (claim 3), whose format S-0009 owns.
+
+## Measurement scenarios
+
+**Common setup.** All scenarios run under the glossary's *measurement setup*, as skirmish games on
+purpose-made maps, at game speed index 6. The speed does not change the results, and the slowest
+speed makes manual orders easiest.
+- *Recorder.* At the end of every tick the *recorder* reads, without changing anything: the tick
+  number; for the named objects their position, health and presence and the tick in which a
+  weapon's delay between shots starts; a production line's progress and whether it is on hold; the
+  house's credits; the list of objects in play; and which armed objects in play fire in the tick.
+  "Fires in tick *t*" means that the recorder sees the firer's delay between shots start in tick
+  *t*.
+- *Test data.* Named test data is a test map's override sections only. Test weapons used to time
+  turns have a projectile with no visible flight, unless a scenario says otherwise, no firing
+  animation, and a warhead that spawns no animation, particle or other object. Test types create no
+  objects when damaged or destroyed (no smoke, explosions, debris or survivors), apart from the
+  objects a scenario names. This does not change how the damaged or destroyed object itself
+  behaves. A pilot run of each scenario checks that no object enters play when a test weapon fires
+  or hits, or when a test object is destroyed, apart from the test weapon's projectile and the
+  objects the scenario names.
+- *Computer player.* It has the fewest starting units and the lowest starting credits the game
+  allows, and its start position is the one farthest from the test objects, so that none of its
+  starting units has a target in range of the test objects.
+- *Void rule.* Each scenario names its counted ticks and the events it expects in them: its
+  projectiles entering and leaving play, the animations it names, and the removals its expected
+  result lists. A counted tick is void, and is not used, when anything else enters or leaves play in
+  it, as the list of objects in play shows, or when any armed object other than the scenario's
+  firers fires in it. An object that enters and leaves play within one tick does not show in the
+  end-of-tick list, which is why unexpected firing is checked separately. The rule also voids a
+  counted tick in which a named unit boards a transport or gets out of one, and ticks in which the
+  computer player's own units enter or leave play.
+
+**Scenario O1: mutual kill and the projectile stagger (claims 4, 5, 6, 10).**
+- *Setup:* a flat test map. Its override sections define a test vehicle type with a health field
+  of 10, armed with a test weapon with damage 20 at 100 % against the vehicle's armour class, a
+  range of 5 cells and a long delay between shots. Two vehicles of that type are pre-placed 3 cells
+  apart, facing each other, one owned by the human player and one by the computer player
+  (enemies), the human's vehicle first in the map's vehicle entries. Variant B: the computer's
+  vehicle is replaced by a test defensive building of the computer player, with the same weapon and
+  health.
+- *Procedure:* start, and give no orders. Repeat with the two entries swapped in the map (in
+  variant B the building is always later, by claim 3, so there is nothing to swap).
+- *Observable:* the tick on which each object fires, and the tick on which each disappears.
+- *Runs:* runs are repeated until at least 5 runs per entry order, and 5 of variant B, count, up to
+  50 of each. Identical pre-placed objects are not certain to fire in the same tick, so runs in
+  which the two do not fire in the same tick are recorded but do not count. If fewer than 5 of 50
+  count, the scenario is inconclusive for that entry order. Scenarios O3 and O8 still cover the
+  stagger and claim 6(a), but the mutual kill of claim 5(a) (and, for variant B, claim 6(b)) then
+  stays unconfirmed, and claim 6(d) stays unconfirmed if every part is inconclusive. Counted
+  ticks: the shared firing tick *n* and tick *n* + 1.
+- *Expected:* in every run in which both fire in tick *n*, the object later in the update order
+  disappears in tick *n* and the earlier one in tick *n* + 1; with the entries swapped, the roles
+  swap. In such a run neither object survives. In variant B the building disappears in tick *n* and
+  the vehicle in tick *n* + 1. A firer that fires in an earlier tick than the other destroys it
+  before it fires, and its victim never fires.
+- *Falsified if:* in a counted run both disappear in the same tick, or the earlier entry disappears
+  first, or the roles do not swap with the entries, or one survives. A result in which both
+  disappear in tick *n* falsifies the stagger of claims 5 and 10 but not that both shots land. In
+  variant B, a building that disappears after tick *n* although its health ran out in tick *n*
+  falsifies claim 6 for buildings (it plays a destruction sequence first).
+
+**Scenario O2: order latency (claim 7).**
+- *Setup:* a flat test map with one human vehicle standing on a straight road, already facing
+  along it, and the computer player far away.
+- *Procedure:* give the vehicle a move order to a cell 8 cells down the road.
+- *Observable:* per tick, the vehicle's destination and its position.
+- *Runs:* 10.
+- *Expected:* on the first tick at whose end the recorder sees the new destination, the position is
+  still the old one; the position first changes on a later tick.
+- *Falsified if:* in any run the position has changed by the end of the tick on which the new
+  destination is first seen. The scenario is falsifiable in that direction only. A vehicle that
+  needs more than one turn to start moving also passes it.
+
+**Scenario O3: the update order by kind and entry, seen through the stagger (claims 3, 4, 5,
+10).**
+- *Setup:* a flat test map. Two objects E and L, enemies, stand in range of each other and fire at
+  each other for the whole run. Each is armed with a test weapon with damage 1, far below the other's
+  health, so that nobody dies. E's delay between shots is 10 ticks and L's is 11 ticks, so their
+  shots fall in the same tick about once every 110 ticks. No other armed object is on the map.
+  Variants, with E expected earlier in the update order than L:
+  - (a) E a human test vehicle, L a computer test infantry unit.
+  - (b) E a human test infantry unit, L a computer test defensive building.
+  - (c) E a human test vehicle, L a computer test defensive building.
+  - (d) both test vehicles, E the earlier of the two in the map's vehicle entries; and (d′) the
+    same map with the two entries swapped, which makes the other vehicle E.
+  - (e) as (d), but E's test weapon has a projectile with a visible flight at a constant speed, no
+    trail and no spawned objects. Its flight from E to L takes *f* ticks, with 1 ≤ *f* ≤ 5 (the
+    pilot run measures *f* and checks that it is the same for every shot). L's weapon is unchanged.
+- *Procedure:* start, and give no orders. Run each variant for 1000 ticks.
+- *Observable:* the ticks on which E and L fire, and the ticks on which each one's health drops.
+- *Runs:* 2 per variant. Counted ticks: every tick in which E or L fires, and the tick after it.
+- *Expected, variants a to d′:* in a tick in which only one of them fires, its shot lands in the same
+  tick. In a tick *n* in which both fire, L is hit in tick *n* and E in tick *n* + 1.
+- *Expected, variant e:* E's shot fired in tick *t* hits L in tick *t* + *f*. L's shot fired in a
+  tick *u* hits E in tick *u* + 1 when one of E's projectiles hits L in tick *u*, since that
+  projectile detonates and leaves play in its own turn just before the turn of L's new projectile.
+  In every other tick L's shot hits E in tick *u*, also when E fires in tick *u*.
+- *Falsified if:* in variants a to d′, in some tick in which both fire, E is hit in tick *n* and L
+  in tick *n* + 1 (the kind or entry order is the other way round), or both are hit in tick *n* (no
+  stagger), or a lone shot lands one tick late. In variant e, L's shot hits E in tick *u* in a tick
+  *u* in which E's projectile hits L, or hits it one tick late in any other tick.
+
+**Scenario O4: delays run on the tick number (claim 9).**
+- *Setup:* override sections give a test infantry type a test weapon with a delay between shots of
+  300 ticks. A human transport, not open-topped, stands next to it, and an enemy target stays in
+  range of the unload cell.
+- *Procedure:* let the infantry fire once, then load it into the transport at once, wait 100 ticks,
+  and unload it.
+- *Observable:* the tick of the first shot and of the second.
+- *Runs:* 3.
+- *Expected:* the second shot is 300 ticks after the first (or the first tick after unloading at
+  which it can fire, whichever is later).
+- *Falsified if:* the second shot comes about 400 ticks after the first, or later, while the target
+  stayed in range.
+
+**Scenario O5: passengers of an open-topped transport take turns (claims 2, 3).**
+- *Setup:* a flat test map with a human transport whose type is open-topped (a named test type in
+  the map's override sections if stock data has none), one human infantry unit standing next to it,
+  and an enemy vehicle placed so that it is in the infantry's weapon range from the transport but
+  not from the infantry's starting cell. A control run uses a transport type that is not
+  open-topped.
+- *Procedure:* order the infantry unit into the transport, then give no orders.
+- *Observable:* the tick on which the infantry unit leaves the map, whether the enemy vehicle takes
+  damage from the infantry's weapon while the infantry is inside, and the ticks of those shots.
+- *Runs:* 3 test and 3 control runs.
+- *Expected:* in the test runs the passenger fires from inside, at its own weapon's delay between
+  shots; in the control runs it never fires while inside.
+- *Falsified if:* the passenger of the open-topped transport never fires while inside.
+
+**Scenario O6: parts before the turn pass (claim 1).**
+- *Part A, row 1 before the turn pass.*
+  - *Setup:* a flat test map. A human test vehicle S is armed with a test weapon with damage 1 and a
+    delay between shots of *R* ticks. It faces a computer test target Z (an unarmed vehicle with high
+    health) in range. In the test run S carries a tag whose one-time trigger has the single event
+    elapsed time *v* and the action that destroys the objects carrying the tag (S-0011, claims 13
+    and 27), so the action runs in tick 15 × *v*.
+  - *Procedure:* a first control run without the trigger records the tick *t*₀ of S's first shot.
+    Then *v* is chosen with 15 × *v* > *t*₀, and *R* = 15 × *v* − *t*₀. A second control run, with
+    this *R* and still without the trigger, must show S's second shot in exactly tick 15 × *v*; if
+    it does not, *R* is adjusted until it does. Then the test run starts, with the trigger and the
+    same *R*, and no orders are given.
+  - *Observable:* the ticks on which S fires, the ticks on which Z's health drops, and the tick on
+    which S disappears.
+  - *Runs:* 3 test runs. Counted ticks: tick 15 × *v* and the tick after it.
+  - *Expected:* S disappears in tick 15 × *v*. Z's health drops in tick *t*₀ and not in tick
+    15 × *v* or later.
+  - *Falsified if:* Z's health drops in tick 15 × *v* or 15 × *v* + 1, because S fired before the
+    action destroyed it. A test run is void, and the setup is checked, if S's first shot is not in
+    tick *t*₀ or S disappears in another tick than 15 × *v*.
+- *Part B, row 4 between row 1 and the turn pass.*
+  - *Setup:* as S-0201, scenario T6, part B: the chrono-flash action with parameter *D* = 30. Run 1
+    sets it off with a one-time trigger whose only event is elapsed time 20, so its action runs in
+    tick 300. Run 2 sets it off with a one-time trigger whose only event is entered-by, on a cell tag
+    (S-0011, claim 18). That trigger's actions are, in this order, a count action on its own counter
+    (the S-0011 common setup's counter) and the chrono-flash action (S-0011, claim 11, for the order
+    of a trigger's actions).
+  - *Procedure:* in run 2 a human vehicle is ordered into the tagged cell.
+  - *Observable:* the value at which the tick number stands still during the chrono flash's freeze,
+    and in run 2 also the tick *a* of the counter drop, which is the tick in which the trigger fired.
+  - *Runs:* 3 of each.
+  - *Expected:* run 1 stands at 374 (first step in tick 300, the tick of the action). Run 2 stands at
+    *a* + 75 (first step in tick *a* + 1).
+  - *Falsified if:* run 1 stands at 375, which means row 4 comes before row 1, or run 2 stands at
+    *a* + 74, which means row 4 comes after the turn pass.
+
+**Scenario O7: production lines and houses after the turn pass (claims 7, 8).**
+- *Part A, production lines after the turn pass.*
+  - *Setup:* a test map with a human house that starts with 0 credits and owns a refinery, a
+    vehicle-producing building and a harvester working a nearby resource field. Override sections
+    set the game-wide build-speed field, a test vehicle type's price and the resource's value, as
+    follows. The build is short enough that, while money lasts, the line's progress advances on
+    every tick. The price is high enough that one full unloading of the harvester pays for some
+    progress steps but not for the whole vehicle. Each single credit increment of an unloading pays
+    for at least two progress steps, so that the credits still visibly rise in a tick in which one
+    step is paid from them. A pilot run checks all three.
+  - *Procedure:* order one test vehicle at the start and let the harvester work.
+  - *Observable:* per tick, the house's credits and the line's progress.
+  - *Runs:* 3, each covering at least 5 unloadings. Counted ticks: the tick *d* of the first credit
+    rise after each stretch without progress, and the tick after it.
+  - *Expected:* after a stretch in which progress has stood still for lack of money, progress
+    advances again in the tick *d* of the first credit rise after the stretch.
+  - *Falsified if:* after such a stretch progress first advances in tick *d* + 1.
+- *Part B, houses after the turn pass.*
+  - *Setup:* the S-0011 common setup, with a human vehicle and a cell tag on cell *e*. The cell tag's
+    one-time trigger E has the event entered-by and two actions: a count action on counter 1, and an
+    action that sets map trigger variable 1. A one-time trigger H, owned by the human player's
+    country (so that its tag is assigned to the human house, S-0011 claim 35), has the two events
+    any-event and variable 1 set, and a count action on counter 2.
+  - *Procedure:* order the vehicle into cell *e*. Orders given by hand cannot be timed to one tick,
+    so runs are repeated until at least two runs have *a*, the tick of counter 1's drop, a multiple
+    of 8, and at least two runs have *a* not a multiple of 8.
+  - *Observable:* the ticks of the drops of counter 1 (*a*) and counter 2.
+  - *Expected:* when *a* is a multiple of 8, counter 2 drops in tick *a*, because the human house's
+    raise comes after the turn pass. Otherwise it drops in tick *a* + 1, when the polling of the
+    next tick (row 1) raises H's tag, which is polled because its chain holds the any-event code
+    (S-0011, claim 17). Polling comes only at the start of a tick, so in such a run nothing else
+    raises H's tag between E's firing and the end of tick *a*.
+  - *Falsified if:* in a run with *a* a multiple of 8 counter 2 drops in tick *a* + 1, or in any
+    other run it drops in tick *a*.
+- *Part C, production lines before the orders.*
+  - *Setup:* as part A, but the house starts with ample credits and has no harvester, so that money
+    never runs out. The pilot run checks that the line's progress advances on every tick.
+  - *Procedure:* order one test vehicle. After at least 10 ticks of progress, and well before the
+    vehicle is done, put the line on hold by hand.
+  - *Observable:* per tick, the line's progress and whether it is on hold.
+  - *Runs:* 5. Counted ticks: the first tick *h* at whose end the line is on hold.
+  - *Expected:* progress at the end of tick *h* is higher than at the end of tick *h* − 1, and it
+    does not change after tick *h*.
+  - *Falsified if:* progress at the end of tick *h* equals that at the end of tick *h* − 1 in any
+    run, which means the hold took effect before the line's step of tick *h*.
+
+**Scenario O8: several removals in one turn, open-topped passengers and infantry deaths (claims
+5, 6, 10).**
+- *Setup:* a flat test map.
+  - *Firers.* Computer test vehicles F1, F2, … stand in this order in the map's vehicle entries.
+    Each is armed with the same test weapon: its damage is 1, and its delay between shots is 30
+    ticks. Its warhead does 0 % against the armour class of the test infantry type below, so no
+    firer ever chooses an infantry unit as its target. In variants d and e, F1 carries only a second
+    test weapon, described below, in place of the common one; F2 and F3 keep the common weapon.
+  - *Targets.* Each firer Fi faces its own human target Wi in range and has no other target in
+    range. The targets are unarmed test vehicles with high health, except W1 as the variants say.
+    All firers fire on their first chance after the start, so they fire together every 30 ticks
+    after that, in volleys.
+  - *Variants a to c.* In all three, W1's health is 10, so the tenth volley destroys it. (a) Three
+    firers; W1 a test vehicle. (b) Five firers; W1 a test transport that is not open-topped. (c) As
+    (b), but W1's type is open-topped. In variants b and c, two unarmed human test infantry units
+    stand next to W1.
+  - *Variants d and e.* Three firers. W1 is a human test infantry unit of a type that is not marked
+    "not human" (as in S-0107), is not a cyborg or jumpjet type, has no death animations of its own,
+    and has a *die-1* entry with image frames (S-0107, claim 17, which turns a death request down
+    when the entry has none). W1 stands on the ground, on a land cell that is not water. F1's second
+    test weapon does 100 % against W1's armour class, with damage above W1's health, so the first
+    volley destroys W1. Its warhead's infantry-death
+    kind is one for which S-0107, claim 17, removes the unit at once in variant d (row 8 of that
+    claim's table), and kind 1, which gives a death sequence, in variant e. In variant d the death
+    animations that S-0107 names for that kind are named objects. The pilot run checks that in
+    variant e W1 is still present at the end of tick *n* + 3.
+- *Procedure:* in variants b and c, right after the start, order the two infantry units into W1.
+  They must be inside well before the tenth volley, which the recorder checks. Otherwise give no
+  orders.
+- *Observable:* for every volley, fired in tick *n*, the tick on which each Wi's health drops or Wi
+  disappears.
+- *Runs:* 3 per variant. Runs in which the firers do not all fire in the same ticks do not count.
+  Counted ticks: ticks *n* to *n* + 3 of each volley. In variants d and e only the first volley
+  counts.
+- *Expected:* the ticks below, counted from the volley's tick *n*. They follow from claim 10 applied
+  to the projectiles in firing order, including the skips that later detonations cause in the
+  following ticks. A non-lethal volley is any volley before the tenth. The lethal volley is the one
+  that destroys W1: the tenth in variants a to c, which in variants b and c also destroys W1's two
+  passengers, and the first in variants d and e. In variant e, W1's health reaches 0 in tick *n*.
+
+  | Variant and volley | W1 | W2 | W3 | W4 | W5 |
+  |---|---|---|---|---|---|
+  | (a), non-lethal | *n* | *n* + 1 | *n* | — | — |
+  | (a), lethal | *n* | *n* + 1 | *n* + 2 | — | — |
+  | (b) or (c), non-lethal | *n* | *n* + 1 | *n* | *n* + 2 | *n* |
+  | (b), lethal | *n* | *n* + 1 | *n* + 2 | *n* | *n* + 1 |
+  | (c), lethal | *n* | *n* + 1 | *n* + 2 | *n* + 1 | *n* + 3 |
+  | (d), lethal | *n* | *n* + 1 | *n* + 2 | — | — |
+  | (e), lethal | *n* | *n* + 1 | *n* | — | — |
+
+- *Falsified if:* a counted volley differs from its row. In particular, the lethal volley of variant
+  a equal to the non-lethal one falsifies the count of *k* removals, and the lethal volley of
+  variant c equal to that of variant b falsifies that the passengers of an open-topped transport
+  leave the update order with it (claim 6), for example because they survive on the map. A lethal
+  volley of variant d equal to the row of variant e falsifies that an infantry unit removed at once
+  leaves play at the moment of the damage. A lethal volley of variant e equal to the row of variant
+  d falsifies that an infantry unit with a death sequence stays in play. If all targets are hit in
+  tick *n*, the skip of claim 10 is falsified.
+
+**Scenario O9: an infantry unit's death sequence ends (claims 6, 10).**
+- *Setup:* a flat test map. W is a human test infantry unit as in scenario O8, variant d, and the
+  only infantry unit on the map. B is a human test defensive building, the first building in the
+  map's building entries, so by claim 3 it comes directly after W in the update order. B is armed
+  with a test weapon with damage 1 and a delay between shots of 2 ticks, and faces a computer
+  target T (an unarmed test vehicle with high health) in range. K is a computer test vehicle armed
+  with a test weapon of infantry-death kind 1, damage above W's health and a long delay between
+  shots. W is in K's range. B and T are not. K is not in B's range.
+- *Procedure:* start, and give no orders. K kills W with its first shot, and W plays its death
+  sequence.
+- *Observable:* the ticks on which B fires, and the tick *c* on which W disappears. W's corpse
+  animation is a named object.
+- *Runs:* 10. A pilot run without K checks that B fires in every second tick. A run counts when B's
+  last shot before tick *c* was in tick *c* − 2, so that B's weapon is ready in tick *c*. About half
+  the runs count. Counted ticks: tick *c* and the tick after it.
+- *Expected:* in every counted run B does not fire in tick *c* and fires in tick *c* + 1, because
+  W leaves play in its own turn and B, directly after it, misses its turn. B fires in every second
+  tick everywhere else.
+- *Falsified if:* in a counted run B fires in tick *c*. That falsifies that W leaves play in its own
+  turn at the end of the sequence (claim 6). It does not tell whether W left play earlier or left it
+  in another object's turn.
+- *Variant T (claim 3, kinds as blocks).* As above, but the map also holds one terrain object of a
+  test terrain type that spawns resources, so that it takes turns (claim 2), placed far from every
+  other test object. Its entry is the only terrain entry. 10 runs. The variant counts only if the
+  base scenario passed. *Expected:* as the base scenario: B does not fire in tick *c* and fires in
+  tick *c* + 1. *Falsified if:* in a counted run of the variant B fires in tick *c*, while it never
+  does in the base scenario. That means the terrain object stands between W and B, so that W's
+  removal costs the terrain object its turn instead of B.
+
+**Scenario O10: planted bombs and storm bolts destroy before the turn pass (claim 1, rows 2 and
+3).**
+- *Common part:* a flat test map with no aircraft and no terrain entries.
+  - *V,* the destroyed object: a computer test vehicle, the last entry in the map's vehicle
+    entries, armed with a test weapon with damage 1 and a delay between shots of 2 ticks, which
+    does 0 % against the armour class of the test infantry type below. V faces a human target T (an
+    unarmed test vehicle with high health) in range, and has no other target.
+  - *Y,* the observer: a human test infantry unit, the first entry in the map's infantry entries.
+    Since V is the last vehicle and there are no aircraft, claim 3 puts Y directly after V in the
+    update order. Y is armed with a test weapon with damage 1 and a delay between shots of 2 ticks,
+    which does 100 % against the armour class of its target T2 and 0 % against that of V, which
+    differs from T2's. T2 is a computer unarmed test vehicle with high health in Y's range. Y has
+    no other target, and V is not in Y's range.
+  - T and T2 come before V in the map's vehicle entries. T, T2 and Y stand far enough from V that
+    neither the bomb of part A nor the bolts of part B can reach them, so T's health drops only
+    from V's shots, and Y stays in play.
+  - A pilot run checks that V and Y each fire in every second tick. *b* is the tick in which V
+    disappears. A run is *V-counted* when V's last shot before tick *b* was in tick *b* − 2, as the
+    recorder sees it, so that V's weapon is ready in tick *b*. It is *Y-counted* when Y's last shot
+    before tick *b* was in tick *b* − 2, so that Y's weapon is ready in tick *b*. A run can be both.
+    Counted ticks: tick *b* and the tick after it.
+- *Part A, planted bomb.*
+  - *Setup:* the common part, plus a human test infantry unit X, the second entry in the map's
+    infantry entries, whose test weapon plants a bomb whose detonation destroys V. X has no target
+    in range other than V. After planting, X is ordered away, out of the bomb's reach, and the
+    recorder checks that X is present at the end of tick *b*. By claim 3, V (a vehicle) comes before X (an infantry unit) in the update
+    order. The bomb's explosion animation is a named object.
+  - *Procedure:* order X to plant its bomb on V and then to move out of the bomb's reach, then give
+    no orders.
+  - *Observable:* per tick, T's health, V's presence and the ticks on which Y fires.
+  - *Runs:* repeated until at least 5 runs are V-counted and at least 5 are Y-counted, up to 40.
+    If either count stays below 5, that half of the scenario is inconclusive.
+  - *Expected:* in every V-counted run T takes no hit from a shot fired in tick *b*: T's health
+    does not drop in tick *b* or *b* + 1. In every Y-counted run Y fires in tick *b*. Y fires in
+    every second tick throughout.
+  - *Falsified if:* in a V-counted run T's health drops in tick *b* or *b* + 1, which means that V
+    fired in tick *b* before the bomb destroyed it. A bomb that went off in X's turn would give this
+    result, since V acts before X. Or, in a Y-counted run, Y does not fire in tick *b*, which means
+    that V left play in its own turn, so that its removal cost Y, directly after it, its turn
+    (claim 10). A bomb that went off at the start of V's own turn would give this result.
+- *Part B, storm bolt.*
+  - *Setup:* the common part, with V's health field set to 1. Superweapons are allowed in the game
+    settings. The human player owns a ready, powered weather superweapon building, with test data
+    that keeps the storm's area small enough that no bolt can reach T, T2, Y or the building. The
+    storm's bolt animations and any cloud animations are named objects.
+  - *Procedure:* fire the storm at V's cell, then give no orders.
+  - *Observable:* per tick, T's health, V's presence and the ticks on which Y fires.
+  - *Runs:* as part A.
+  - *Expected:* as part A.
+  - *Falsified if:* as part A. A bolt whose damage came in the turn of its own animation, which
+    enters play when the storm creates it and so comes after V, would give the first result; a
+    strike at the start of V's own turn would give the second.
+
+**Scenario O11: boarding an open-topped transport and getting out (claim 3).**
+- *Setup:* a flat test map, with its override sections. T is a computer test vehicle, unarmed, with
+  health high enough to survive the whole run, and the only computer object near the test objects.
+  The human player has these map-placed objects:
+  - P, a test infantry unit, the first infantry entry, armed with a test weapon with damage 1 and a
+    delay between shots of 10 ticks.
+  - Q, a test infantry unit, the second infantry entry, armed with a test weapon with damage 4 and a
+    delay between shots of 13 ticks.
+  - R, a test defensive building, the only building entry, armed with a test weapon with damage 2
+    and a delay between shots of 11 ticks.
+  - O, an unarmed test transport whose type is open-topped, and C, an unarmed test transport whose
+    type is not open-topped, both standing next to P and Q.
+
+  T stands in range of P, Q and R, of P inside O and of the cells where P and Q get out, and no
+  other armed object has it in range. All three weapons are 100 % against T's armour class. Since
+  every shot hits T and the three damages are 1, 2 and 4, each drop of T's health in a tick splits
+  in only one way into the shots that landed in that tick.
+- *Procedure:* right after the start, order Q into C. Then three stages, each at least 1500 ticks
+  long:
+  - stage 1, from the tick in which Q is inside C: P stands on the map.
+  - stage 2: order P into O. P fires at T from inside.
+  - stage 3: unload Q from C, and then, once Q has fired, unload P from O.
+- *Observable:* per tick, the ticks on which P, Q and R fire, T's health and the list of objects in
+  play.
+- *Runs:* 2. Counted ticks: in each stage, every tick in which two or more of P, Q and R fire, and
+  the tick after it, from the first tick after the stage's last boarding or getting out.
+- *Expected:* by claim 3, the update order is P, R in stage 1 (infantry before buildings); R, P in
+  stage 2 (P moved to the end when it boarded); and R, P, Q in stage 3 (Q appended when it got out
+  of C, and P kept its place when it got out of O). In a counted tick *n*, by claim 10 applied to
+  the projectiles in firing order, the shots of the firers in that order land as follows:
+
+  | Stage | Firers in tick *n* | Lands in *n* | Lands in *n* + 1 |
+  |---|---|---|---|
+  | 1 | P and R | P's shot | R's shot |
+  | 2 | P and R | R's shot | P's shot |
+  | 3 | R and P | R's shot | P's shot |
+  | 3 | P and Q | P's shot | Q's shot |
+  | 3 | R and Q | R's shot | Q's shot |
+  | 3 | R, P and Q | R's and Q's shots | P's shot |
+
+- *Falsified if:* stage 2 shows the stage 1 row, which means that boarding did not move P to the
+  end of the update order. (A stage 1 that differs from its row falsifies the kind order of claim
+  3, as scenario O3, variant b, would, and makes the later stages inconclusive.) Or stage 3 shows
+  Q's shot landing in *n* and P's in *n* + 1 when P and Q fire together, which means that getting
+  out moved P to the end, as does a triple tick in which R's and P's shots land in *n* and Q's in
+  *n* + 1 (the order R, Q, P). Or both shots of a pair land in *n* (no stagger).
+
+**Scenario O12: a removal counts although the removed object missed its turn (claim 10).**
+- *Setup:* a flat test map with no aircraft entries.
+  - *Infantry.* W and U are human test infantry units of the type of scenario O8, variant d, and
+    the map's only infantry entries: W the first and U the second, so by claim 3 U comes directly
+    after W in the update order. U's health is *h*. W and U stand apart.
+  - *K,* a computer test vehicle, is armed as in scenario O9: a test weapon of infantry-death kind
+    1, damage above W's health and a long delay between shots. W is in K's range, and nothing else
+    that K's weapon can damage is.
+  - *Firers.* Computer test vehicles F1, F2 and F3 stand in this order in the map's vehicle entries.
+    F1's test weapon does 100 % against the infantry type's armour class, has damage *d* with
+    *d* < *h* ≤ 2 × *d*, so that its second hit destroys U, and has an infantry-death kind for which
+    S-0107, claim 17, removes the unit at once (row 8 of that claim's table), as in scenario O8,
+    variant d. U is in F1's range and W is not. F2 and F3 carry the common test weapon of scenario
+    O8 (damage 1, 0 % against the infantry type's armour class) and face their own human targets W2
+    and W3, unarmed test vehicles with high health. Each firer has no other target in range. All
+    three weapons have the same delay between shots, *R* ticks.
+  - *Choosing R.* A pilot run with a long *R* records the tick *t*₁ of the firers' first shots and
+    the tick *c* in which W disappears, after K's shot and W's death sequence. Then *R* = *c* −
+    *t*₁, so that the firers' second volley falls in tick *c*. U's death animations under F1's
+    death kind, and W's corpse animation, are named objects.
+- *Procedure:* start, and give no orders.
+- *Observable:* the ticks on which K and the firers fire, the tick on which W and U disappear, and
+  the ticks on which the health of W2 and W3 drops.
+- *Runs:* repeated until at least 3 runs count, up to 30. A run counts when all three firers fire in
+  tick *t*₁ and again in tick *c*, W disappears in tick *c*, and U is still present at the end of
+  tick *c* − 1. If fewer than 3 of 30 runs count, the scenario is inconclusive. The scenario
+  counts only if scenario O8, variant d, and the base of scenario O9 passed. Counted ticks: *c*, *c* + 1 and *c* + 2.
+- *Expected:* U disappears in tick *c*. W2 is hit in tick *c* + 1 and W3 in tick *c* + 2. In tick *c*
+  W leaves play in its own turn, so U, directly after it, misses its turn. The firers' projectiles,
+  appended in the firers' turns, come after U. F1's projectile detonates and destroys U, which
+  stands before it, so its turn has two counting removals, and the projectiles of F2 and F3 both
+  miss their turns. In tick *c* + 1 F2's projectile detonates, and F3's misses its turn again.
+- *Falsified if:* in a counted run W3 is hit in tick *c* and W2 in tick *c* + 1, which means that
+  U's removal did not count because U had missed its turn. Both hit in tick *c* falsifies the skip
+  itself. Any other pattern is recorded and sends claim 10 back for review.
+
+## Open questions
+
+- Network games are out of scope here, as in S-0201 (claim 13) and S-0202 (claim 12). They run the
+  same parts of a tick plus some of their own, and take the orders of every player. A future
+  multiplayer spec owns them, including their extra draws from the scenario random stream.
+- Whether a projectile with no visible flight always detonates on its first turn, or can need a
+  second one at long range, is not traced in full (claim 5). Scenarios O1, O3 and O8 settle the
+  cases they use.
+- Whether a building plays a destruction sequence in play before it leaves play is not traced
+  (claim 6). Scenario O1, variant B, settles it.
+- Whose turn removes an infantry unit when its death sequence completes is not traced (claim 6).
+  Scenario O9 tests the unit's own turn.
+- Whose turn performs boarding, the boarding unit's or the transport's, is not traced, and neither
+  is whose turn performs going inside anything else. It decides which object loses its turn when a
+  unit boards or goes inside (claim 10) and whether a boarding open-topped passenger's next turn is
+  its second of the tick (claim 11).
+- The order among the production lines is not fixed here. The production specs own it, including
+  what happens when lines compete for the same credits. No draw from the scenario random stream was
+  found in a line's own update, but not every path was traced; if a line can take draws, the
+  production specs state the order in the original's sequence (claims 1 and 8).
+- Rows 6, 10, 13 and 14 keep the original's places only because they might take draws (claim 1).
+  If their owning specs show that they take none, their places can be released to the freedom of
+  claim 1's last point. Likewise, if work listed there turns out to take draws, it needs a row.
+- The open-topped rule of claim 3 is traced for boarding and getting out. That nothing else takes
+  such a passenger out of the update order while it is inside is not traced in full.
+
+## Questions for the project lead
+
+- **Partial order (applied).** The scrub of revision 2 asked for a choice between dropping the
+  fixed places that have no stated consequence and keeping a place only where one is stated.
+  Revisions 3 to 5 do both: the table keeps a place only where a consequence and a test are stated
+  (rows 1 to 8), and all other once-per-tick work has no place in this spec until its owning spec
+  finds a consequence (claim 1). Revision 6 narrows that: the draw order is a consequence, so every
+  part that takes draws now has a place (rows 9 to 16), and the free work is only work without
+  draws. Please confirm.
+- **Terrain objects at game start (revision 4).** The scrub of revision 3 offered to let our engine
+  put map-placed terrain objects anywhere in the update order. Revisions 4 and 5 keep the
+  original's place, first in the update order, instead. Only part of that is testable: scenario O9,
+  variant T, shows that a terrain object that takes turns does not stand between the map's infantry
+  and buildings, where it would take the missed turn that claim 10 gives the first building. That
+  terrain objects come before the vehicles, rather than anywhere else outside that gap, stays
+  `unmeasured` (claim 3). The choice is between keeping that untested place for fidelity and
+  stating a weaker rule of our engine, "anywhere except between the infantry and the buildings".
+  Please confirm.
+- **Draw order (revision 6).** Claim 1 now fixes the place of every part of a tick that takes, or
+  might take, draws from the scenario random stream, in the original's sequence, and limits the
+  freedom to place other once-per-tick work to work that takes no draws. Rows 9 to 16 are new. Some
+  of them (teams, the decisions of computer houses inside row 7) belong to the original's computer
+  player, which our engine replaces; for those the rows fix only where our engine's equivalent work
+  takes its draws, since the draws themselves cannot match the original. Four rows (6, 10, 13 and
+  14) are placed although no draw was found in them, because their work was not traced through
+  every path. The alternative is to release them until a draw is shown. Please confirm.
+- **Removal condition (revision 5).** The scrub of revision 4 found that claim 10 stated its
+  condition two ways. Revision 5 keeps one: a removal counts when the removed object is the object
+  taking its turn or stands before it in the update order, whether or not it took its turn in this
+  tick. Scenario O12 tests the case in which the two readings differ. No decision is needed unless
+  the lead prefers a different rule for our engine.
+- **For sign-off.**
+  - S-0011, S-0201, S-0202 and S-0213, cited above, are drafts of the same batch.
+  - S-0107 (approved), claim 17, is assumed by scenarios O8, O9 and O12: row 8 of its table removes
+    a killed unit at once, infantry-death kind 1 reaches *die-1* through row 5, and a death request
+    is turned down when the *die-1* entry has no image frames, which is why the test infantry type
+    needs frames there.
+  - The trigger words used in claims 1 and 8 and scenarios O6 and O7 come from the S-0011 draft.
+    *Tag* and *raise* are defined in its Terms, and so is the trigger time unit of 15 ticks behind
+    "elapsed time *v*" (tick 15 × *v*). The *counter* is defined in its common measurement setup.
+  - S-0201 cites rows 1 and 4 and claims 7 and 9 of this spec. Those labels and subjects are kept.
+    S-0201 calls row 4 "the map-wide effects of that tick". Row 4 now holds only the chrono flash's
+    step, which is the part S-0201 means, so the citation still resolves.
+  - S-0213 cites claim 8 for "the production lines of a tick are updated before that tick's
+    orders". Claim 8 keeps that statement, now measurable (scenario O7, part C).
+  - S-0213's open-questions line saying that claim 7 of this spec applies one tick's orders in the
+    order given is out of date: claim 7 leaves the order among one tick's orders to S-0213, claim 3.
+  - Revision 6 fixes again the orders after the houses' updates (claim 7), the houses in house
+    order and after the production lines (claim 8), for the draw order of claim 1. S-0213's claim 3
+    fixes its own order between houses' orders as a rule of our engine; that is unaffected.
+  - Row 1 now follows S-0011, claim 6: the per-tick polling raises every polled tag, and the
+    condition events, the any-event code, empty event lists and latches decide. Revision 5 described
+    it as time-based checks plus reports of changes since the previous check, which did not match
+    S-0011 (claim 22 has a variable change seen by all tags in the rest of the same tick). S-0011
+    was right; this spec was the wrong one.
+  - S-0202, claim 10, asks that drawing effects run in the original's order. Claim 1's draw order
+    and rows 9 to 16 are this spec's side of that requirement.
+  - S-0202, claim 10, places a produced object's creation draw in "the production lines or the
+    processing of orders" of this spec's table. A computer house that starts production does so in
+    its own update, so row 7 belongs in that list too. That is for S-0202's owner; nothing here
+    depends on it.
+  - S-0213 cites revision 5 of this spec. Its citations of claims 7 and 8 still hold; claim 7 now
+    also places the orders after the houses.
