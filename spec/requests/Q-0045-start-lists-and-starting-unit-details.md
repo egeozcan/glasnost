@@ -2,7 +2,7 @@
 id: Q-0045
 title: Start lists and starting units, details the specs leave open
 status: open
-related: [S-0009, S-0208, S-0209, S-0215]
+related: [S-0009, S-0208]
 answered-by: []
 ---
 
@@ -38,20 +38,14 @@ non-default quirk switches do are not stated.
 4. **`quirks.random_start_asymmetric_range` off (S-0009 Edge cases).** Both
    coordinates are drawn from 11 … W + H − 10. Which of the two ranged
    draws gives x and which gives y?
-5. **Skill level of the neutral and special houses (glossary *house skill
-   level*; S-0209 claim 11; S-0215 claim 15).** In a skirmish the original
-   gives every computer-controlled house the rules' maximum skill level
-   when the houses are set up. Do the neutral and special houses get that
-   maximum too, or do they keep level 0?
-6. **The unused-house cleanup (S-0009 claim 28) in our engine.** It runs
+5. **The unused-house cleanup (S-0009 claim 28) in our engine.** It runs
    only in a game with no computer players. Do AI houses (glossary *AI
    house*) count as computer players for that condition?
 
 ## Possible observation
-Questions 1, 2 and 5 by S-0009's scenario M26 (variants C and D) with a
+Questions 1 and 2 by S-0009's scenario M26 (variants C and D) with a
 pre-placed infantry unit and a vehicle on a bridge cell next to the base
-cell, and S-0209's scenario C7 with a fraidycat-free unit of the neutral
-house. Questions 3, 4 and 6 are decisions for our engine's switches.
+cell. Questions 3 to 5 are decisions for our engine.
 
 ## Current workaround
 1. The ground layer's list is read on every cell, bridge cells included;
@@ -61,5 +55,4 @@ house. Questions 3, 4 and 6 are decisions for our engine's switches.
 2. The draw is taken each time a cell passes the other conditions.
 3. N is kept as with the switch on.
 4. The first draw gives y and the second x, as with the switch on.
-5. The neutral and special houses keep skill level 0.
-6. The cleanup is not implemented (a note in the world's notes).
+5. The cleanup is not implemented (a note in the world's notes).
