@@ -7,7 +7,7 @@
 //! ranges and rearm times are unknown (the close-range shortening of F3
 //! applies only through the infantry close-range flag; no actor is ever
 //! rearming). The behaviours that other topics own (claim 34) and *hunt*,
-//! *capture*, *sabotage*, *enter* and *unload* are processed as behaviours
+//! *capture*, *sabotage*, *enter*, and *unload* for vehicles, are processed as behaviours
 //! without a processing rule until their topics are implemented; that is
 //! recorded as a note on the world.
 
