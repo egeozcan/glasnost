@@ -2,7 +2,7 @@
 id: S-0210
 title: Crushing (who crushes whom, when, the outcome, walls, warnings, slowdown and automatic crushing)
 topic: movement
-revision: 12
+revision: 13
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -565,7 +565,7 @@ Ordering stated as consequences:
   sound, the tilt and the end of the state are unchanged. Which cells can be entered and how they connect are then
   updated as for any destroyed overlay, which S-0211 and S-0212 own.
 - **Neighbour hits only at stage *D* − 2.** A crushed wall hits its undamaged neighbours only when it
-  was at damage stage *D* − 2 (claim 8). This is the original behaviour and not a defect, and has no
+  is of a type with *D* > 2 and was at damage stage *D* − 2 (claim 8). This is the original behaviour and not a defect, and has no
   switch.
 - **Persistent slowdown.** The crush-slowdown state of claim 9 is ended only by crushing an overlay,
   so an accelerating crusher-all vehicle stays at no more than 0.2 of its speed, across new orders,
@@ -617,7 +617,7 @@ Ordering stated as consequences:
 | Rules, overlay sections, `Crushable`, `Wall` | crushable overlay, wall overlay | boolean | no |
 | Art data, the section of the overlay type's image (S-0007), `DamageLevels` | damage-stage count *D* (claims 8 and 13) | integer (S-0003, claim 3) | keeps the value in force; engine default 1. The same key in the rules overlay section is not read |
 | Rules, overlay sections, `Strength` | wall strength *S* (F3, claim 13) | integer | keeps the value in force; engine default 1 |
-| Rules, country (house type) sections, the wall-owner key (its name is the words Wall and Owner written together, each capitalised; it waits for an entry in the allowed-key list, Questions for the project lead) | wall-owner flag of the country (claim 14) | boolean | keeps the value in force; engine default yes |
+| Rules, country (house type) sections, `WallOwner` | wall-owner flag of the country (claim 14) | boolean | keeps the value in force; engine default yes |
 | Rules, the combat-damage section, `Crush` | crush range *c* (F2) | real, cells; exactly −1 counts as absent | keeps the value in force; before any rules layer gives it, 384 leptons |
 | Rules, the combat-damage section, `PlayerAutoCrush` | player-auto-crush rule | boolean | no |
 | Rules, unit type sections, `AutoCrush` | auto-crush flag | boolean | no |
@@ -1113,10 +1113,3 @@ type of index 0" means the overlay type with registration index 0 in the data in
   which S-0209 owns; it is not specified here.
 - What "appears friendly" means in claim 11 (for example a disguised unit) is shared with S-0209
   claim 4 and should be defined by the disguise specs.
-
-## Questions for the project lead
-
-- **Key of the wall-owner flag.** The key of the wall-owner flag (Import mapping, claim 14) is a
-  genuine key of the original that stock data mentions only in a comment, so it is not yet on the
-  spec side's list of keys allowed in Import mapping and is spelled out in words. The next revision
-  names it once the list has it. Should the key be added to that list?
