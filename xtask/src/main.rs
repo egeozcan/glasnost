@@ -7,6 +7,7 @@ use std::process::ExitCode;
 mod canary;
 mod cite;
 mod deps;
+mod gate;
 mod stock_guard;
 mod web;
 mod workspace;
@@ -21,6 +22,10 @@ checks (CI runs `check`, which runs all of them):
   cite           behavioural constants in simulation code cite spec:/measure: IDs that exist
   stock-guard    committed files hold no game data, stock values or install paths
   canary         every determinism lint in crates/deterministic/clippy.toml still fires
+
+determinism gate (CI runs it as its own job):
+  gate           the scripted replay's per-tick state hashes match the golden file,
+                 natively in release and as wasm32 under node (needs node)
 
 web build:
   web [--release] [--serve] [--port N]
@@ -42,6 +47,7 @@ fn main() -> ExitCode {
         "cite" => run_check("cite", cite::run),
         "stock-guard" => run_check("stock-guard", stock_guard::run),
         "canary" => run_check("canary", canary::run),
+        "gate" => gate::run_gate(),
         "web" => web::run(rest),
         "help" | "-h" | "--help" => {
             print!("{HELP}");

@@ -1,0 +1,17 @@
+[package]
+name = "glasnost-sim-gate"
+description = "Glasnost determinism gate: the scripted synthetic replay's per-tick state hashes, native and wasm32"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+glasnost-sim.workspace = true
+
+[lints]
+workspace = true

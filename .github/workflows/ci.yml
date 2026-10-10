@@ -69,6 +69,19 @@ jobs:
       # deps, determinism, cite, stock-guard and the clippy canary.
       - run: cargo xtask check
 
+  gate:
+    name: determinism gate (native and wasm32 replay hashes)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - run: rustup toolchain install
+      - run: rustup target add wasm32-unknown-unknown
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo xtask gate
+
   licenses:
     name: dependency licences (GPL-3.0-or-later compatible)
     runs-on: ubuntu-24.04
