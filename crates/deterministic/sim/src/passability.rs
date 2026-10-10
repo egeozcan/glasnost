@@ -191,7 +191,8 @@ pub fn enterable_by_class(
     let Some(class) = class else {
         return false;
     };
-    // spec: S-0211 claim 10 (i) (winged: always)
+    // spec: S-0211 claim 10 (in symbols: c = winged, or ¬W ∧ (D ∨ M(ℓ, c) ≠ 0), or W ∧ Z ∧ (D ∨ M(clear, c) ≠ 0))
+    // spec: S-0211 claim 10 (i) (winged: always, a wall overlay included)
     if class == LocomotionClass::Winged {
         return true;
     }

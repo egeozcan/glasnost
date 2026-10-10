@@ -850,7 +850,7 @@ impl SimRules {
                 let t = s.terrain_objects.get(n).cloned().unwrap_or_default();
                 TerrainRules {
                     name: n.clone(),
-                    // spec: S-0209 Import mapping (occupation bits absent: 7)
+                    // spec: S-0211 Import mapping and S-0209 Import mapping (occupation bits absent: 7, an engine constant; category 2 by S-0211 claim 11 rule 4)
                     occupation: (
                         t.temperate_occupation_bits.unwrap_or(7),
                         t.snow_occupation_bits.unwrap_or(7),

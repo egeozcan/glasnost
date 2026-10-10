@@ -956,3 +956,18 @@ fn a_wall_under_a_deck_refuses_other_zones() {
         false
     ));
 }
+
+// spec: S-0211 Import mapping (a terrain object type without the occupation keys has pattern 7, an engine constant) and claim 11 (rule 4: pattern 7 gives category 2)
+#[test]
+fn terrain_object_without_occupation_keys_is_category_two() {
+    let mut s = Scene::new();
+    s.register("terrain_objects", "BAREROCK");
+    s.ruleset
+        .sim
+        .terrain_objects
+        .insert("BAREROCK".into(), TerrainObjectType::default());
+    s.place_terrain("BAREROCK", cell(1, 0));
+    let w = s.build();
+    assert_eq!(objects_of(&w, Kind::Terrain).len(), 1);
+    assert_eq!(cat_at(&w, cell(1, 0)), category::WALL_LIKE);
+}

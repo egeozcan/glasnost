@@ -695,6 +695,24 @@ mod tests {
         assert_eq!(g.get(c).map(|x| x.land), Some(land::CLEAR));
     }
 
+    // spec: S-0211 claim 8 (a neighbour 4 or more levels up counts: a rise of 3 does not, one of 6 does; scenario L5 runs L to O)
+    #[test]
+    fn cliff_back_rise_of_four_or_more() {
+        let cat = flat_catalogue();
+        let ov = no_overlay;
+        let mut r = rules(&cat, &ov);
+        r.cliff_back = 2;
+        let c = CellXY::new(8, 8);
+        for (rise, want) in [(3, land::CLEAR), (4, land::ROCK), (6, land::ROCK)] {
+            let mut g = grid();
+            if let Some(n) = g.get_mut(CellXY::new(8, 7)) {
+                n.level = rise;
+            }
+            recalc(&mut g, c, &r);
+            assert_eq!(g.get(c).map(|x| x.land), Some(want), "rise {rise}");
+        }
+    }
+
     // spec: S-0211 claim 8 (a neighbour outside the map reads level 0: behind a cliff only at level −4 or lower)
     // spec: S-0009 claim 44 (a cell outside the map reads as a blank cell)
     #[test]
