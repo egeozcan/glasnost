@@ -24,6 +24,12 @@ pub const SIZE: i32 = 40;
 
 /// The synthetic rules.
 pub fn rules() -> Arc<SimRules> {
+    Arc::new(SimRules::new(&ruleset(), "synthetic"))
+}
+
+/// The synthetic ruleset that [`rules`] is built from, for tests that add
+/// types of their own.
+pub fn ruleset() -> Ruleset {
     let mut r = Ruleset::default();
     let reg = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
     r.registries
@@ -72,7 +78,7 @@ pub fn rules() -> Arc<SimRules> {
     s.vehicles.insert("CART".into(), cart);
     s.vehicles.insert("CRUSHER".into(), crusher);
     s.infantry.insert("WALKER".into(), walker);
-    Arc::new(SimRules::new(&r, "synthetic"))
+    r
 }
 
 /// A small catalogue: tile 0 is clear and flat, tiles 1 to 4 are clear
