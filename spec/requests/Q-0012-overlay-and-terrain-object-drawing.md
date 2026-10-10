@@ -1,9 +1,9 @@
 ---
 id: Q-0012
 title: Overlay image frames, and the palettes of overlays, smudges and terrain objects
-status: open
+status: answered
 related: [S-0103, S-0104, S-0007]
-answered-by: []
+answered-by: [S-0112]
 ---
 
 ## Need
