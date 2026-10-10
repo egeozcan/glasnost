@@ -1,0 +1,2241 @@
+---
+id: S-0212
+title: Pathfinding (observable behaviour)
+topic: movement
+revision: 14
+sources-class: [decomp]
+status: approved
+approved-by: Claude (delegated by project lead)
+approved-on: 2026-10-10
+measurements: []
+requests: []
+supersedes: []
+---
+
+# S-0212: Pathfinding (observable behaviour)
+
+## Summary
+
+How a ground or naval unit of the original chooses the cells it will drive or walk through on the
+way to a destination: which cells count as connected at all, the reachability test made before
+any search, the cost of each step, the search and its limits, the two straightening passes applied
+to a found path, how many steps are kept, when a path is computed again, what happens when no path
+exists, and when the destination is replaced by a nearby cell. How a unit then moves along the kept
+steps (speed, turning, collisions, blocked-step reactions) belongs to the movement specs.
+
+## Terms
+
+*Cell*, *lepton*, *tick*, *facing*, *height level*, *world height*, *slope*, *bridge*, *high
+bridge*, *bridge deck*, *overlay*, *building*, *house*, *human-controlled*, *local area*, *legal
+cell*, *movement zone*, *locomotor*, *game minute*, *map size*, *round-toward-zero mode*,
+*departure*, *AI house*, *team member*, *importer warning*, *override section*, *trigger action*,
+*type kind* and *quirk switch* are used as in the glossary.
+
+Terms from other specs. The approved specs S-0003 (value forms), S-0006 (rules layering) and S-0009
+(map file semantics, which defines the *waypoint marker*) are cited by claim, and the approved spec
+S-0104 (lighting) for the *ion storm*, a global effect (table T5). Every other spec
+cited here, S-0010 included, is a draft of the same batch, and the claims cited from it stand or
+fall with that draft:
+- From S-0201 (game speed and tick rate): the **tick number** of a tick (its Terms and claim 1).
+- From S-0204 (coordinates and facing): the **table square root** *r*(*n*) of an integer
+  *n* (its Formulas F1), the **8-direction** of a facing (its claim 10 and Formulas F4: the facing
+  rounded to the nearest eighth of a turn, a half step rounding up), the **direction** of one point
+  from another (its claim 8 and Formulas F3), and the roundings trunc₂₄ and trunc₅₃ (truncation
+  toward zero to single and to double precision).
+- From S-0205 (number domains): every floating-point result of the original is formed with a 53-bit
+  significand under the round-toward-zero mode (its claims 4 and 5). This spec defines no rounding
+  switch of its own.
+- From S-0206 (turn rates): the *body facing* of a unit.
+- From S-0207 (ground vehicle movement) and S-0208 (infantry movement): the **type speed** *V* of
+  a vehicle type (S-0207 claim 1, in progress units per tick) and the **base speed** *b* of an
+  infantry type (S-0208 F4, in leptons per tick). Both are the integer 0 to 255 that the type's
+  speed field gives through the same clamp and scaling, with the same rule for the value −1. This
+  spec calls either integer the type's **speed number** and compares speed numbers as plain
+  integers, whatever their unit (claim 19).
+- From S-0211 (land types and passability): *land type*, *locomotion class*, *land multiplier*
+  *M*(*ℓ*, *c*), the **passability category** of a cell (claim 11) with its eight names *open*,
+  *crushable*, *wall-like*, *beach*, *water*, *partial obstacle*, *blocked* and *off-map*, the
+  **zone table** (claim 12) with its three answers *yes*, *no* and *never*, the *usable area*, a
+  house's *firestorm*, and the rule of its claim 10 for which cells an object of a locomotion class
+  may enter with a given movement zone (here: a cell is **enterable by class**).
+- From S-0208 (infantry movement): the *scatter* of an infantry unit, which uses the nearby-cell
+  search of claim 25 (S-0208 claim 13).
+- From S-0210 (crushing): who is a *crusher* (its claim 1: the type's crusher flag or the crusher
+  veterancy ability).
+- From S-0209 (occupancy and crowding): the **entry outcome** a unit gets for a neighbouring cell,
+  with its eight names *clear*, *cloaked blocker*, *moving blocker*, *closed friendly gate*, *friendly
+  obstacle*, *enemy obstacle*, *stationary friendly* and *blocked*, in that order of severity; the
+  *occupancy record* of a cell layer (its Terms); the *close-enough distance* and the *blockage
+  delay*, which S-0209 imports (its Formulas F2 and
+  Import mapping); the *path retry timer*, whose length this spec gives (claim 21). Which situation
+  gives which outcome belongs to S-0209 for an infantry mover. For a vehicle mover, claim 27 gives
+  the rows this spec relies on, and the rest belongs to the movement specs. To keep the two
+  *blocked*s apart, this spec always writes "outcome *blocked*" or "category *blocked*".
+- From S-0215 (behaviours): *behaviour* and the behaviour names *move*, *guard*, *area guard* and
+  *retreat*, to *queue* a behaviour, to *fall back to rest*; *destination*.
+- From S-0213 (human orders): the *order* and the *rally point* order of its claim 20, which this
+  spec cites as users of the nearby-cell search (claim 25). No rule of S-0213 is used otherwise: how
+  a unit is ordered, and when an order applies, belong to S-0213 and S-0214.
+- From S-0010 (theater and tileset semantics): the **destroyable-cliff role** of a theater's tiles
+  (its claim 4 and table R). From S-0214 (order targeting rules): the *destroyable-cliff cell*, a
+  cell whose tile is the first tile of that role or the tile after it (its Terms).
+
+Terms specific to this spec:
+
+- **Terrain object:** an object of the terrain-object type kind, such as a tree, standing in a cell.
+- **Destroyable cliff:** a destroyable-cliff cell (S-0214 Terms): its terrain tile is the first
+  tile of its theater's destroyable-cliff role (S-0010 claim 4) or the tile after it. Both tiles
+  can collapse when hit, which changes the cell's terrain.
+- **Wall section:** one cell's piece of a wall: an overlay whose overlay type has the wall flag
+  (S-0211 Terms), placed by the map or built by a house in play. A wall line is a row of them.
+- **Vein-hole field:** the vein overlay that a vein-hole object spreads around itself and that grows
+  and shrinks during play. Stock data is not known to use it.
+- **Step direction** *d*: an integer 0 to 7 naming one of the eight neighbours of a cell, *d* × 45°
+  clockwise from map north, in the facing convention of the glossary. Direction 0 is the cell at
+  (x, y − 1), 1 is (x + 1, y − 1), 2 is (x + 1, y), 3 is (x + 1, y + 1), 4 is (x, y + 1),
+  5 is (x − 1, y + 1), 6 is (x − 1, y) and 7 is (x − 1, y − 1). Even directions are *straight*,
+  odd ones *diagonal*. The 8-direction of a facing (S-0204) is a step direction.
+- **Chebyshev distance** between cells (x₁, y₁) and (x₂, y₂): max(|x₁ − x₂|, |y₁ − y₂|), in cells.
+- **Bridge cell:** a cell that carries a high bridge's bridge deck.
+- **Search layer:** a bridge cell is two places for the search: its ground and its deck. The deck
+  layer sits 4 height levels above the cell's height level. Every other cell has only the ground
+  layer.
+- **Region:** a maximal set of cells of one passability category, joined through the neighbour
+  rule of claim 3.
+- **Reach region** of a movement zone *Z*: a maximal set of cells reachable from one another for
+  *Z* according to claims 2 to 5. Two cells in different reach regions of *Z* are treated as
+  mutually unreachable for every unit of movement zone *Z*. Not the same thing as the glossary's
+  *movement zone*, which is the imported category.
+- **Sector** of level *L* (*L* = 0, 1, 2): the part of one region that lies inside one aligned
+  square block of 2^(*L*+1) × 2^(*L*+1) cells (blocks start at cell coordinates that are multiples
+  of the block size). Level 0 is the finest. Each sector of level *L* < 2 lies inside exactly one
+  sector of level *L* + 1, its **parent**. Sectors are joined by **connections**. A connection that
+  stands for a link (claim 3) is *marked as a link*.
+- **Anchor cell** of a sector: the cell of the sector from which the legs of F8 are measured (Open
+  questions).
+- **Pending:** the state of a search entry that has been recorded and not yet continued from. In the
+  cell search (claims 11 and 12) the entry is a (cell, search layer) pair. In the coarse search
+  (claim 13) it is a route to a sector, and one sector can have more than one pending route.
+- **Expansion:** continuing a search from a pending entry. The entry's candidates are considered
+  (claim 7 for the cell search, claim 13 for the coarse search) and the entry stops being pending.
+  An entry is *expanded* when this happens.
+- **Drive locomotor, walk locomotor:** the locomotor of driving vehicles and the locomotor of
+  walking infantry (glossary *locomotor*).
+- **Corridor exemption:** a ground-layer cell is exempt when one of its eight neighbours holds a
+  vehicle, an infantry unit, a terrain object or a wall section (claim 13).
+- **Corridor:** at each level, the chain of sectors, from the start's sector to the destination's,
+  that the coarse search of claim 13 selects.
+- **Cost unit:** the unit of every path cost in this spec, in the cell search and in the coarse
+  search alike. A straight step onto a cell with outcome *clear* costs about 1 cost unit (F1).
+- **Search mode** *m*: 0 for a fresh path, 1 for a re-path after the next step was found blocked
+  by a moving blocker, 2 for a re-path after the blockage lasted the blockage delay (claim 22).
+- **Stored path:** the list of at most 24 step directions that a unit keeps and follows
+  (claim 20).
+- **Heading point:** the point, in leptons, that a unit's locomotor is currently driving towards:
+  normally the position of its destination, and while chasing a unit the point that the movement
+  specs give.
+- **Tunnel:** an underground passage that a map defines in its tunnel list (Import mapping), from a
+  **tunnel entrance** cell to a **tunnel exit** cell. A **tunnel step** jumps from a tunnel entrance
+  to its exit (claim 9). Not the same thing as the land type *tunnel* of S-0211. Stock maps are not
+  known to define tunnels.
+- **Congestion mark:** a mark a cell can carry that makes steps onto it cost four times as much
+  (claim 9) and keeps it out of straightened stretches (claims 17 and 18).
+- **Threat value** of a cell for a house: the integer threat the original records for that house at
+  that cell. How it is computed belongs to the combat and AI-visible-rules specs. This spec only uses
+  it through the threat coefficient, in the straightening passes (claims 17 and 18).
+- **Coarse threat** *t*(*q*, *s*, *L*): the integer threat a house's records give for a step of the
+  coarse search from sector *q* to sector *s* of level *L* (F5). It is not the threat value of a
+  cell, and how the house's records are kept belongs to the combat and AI-visible-rules specs.
+- **Threat coefficient** *k* of a unit: its type's threat-avoidance field (Import mapping), or
+  exactly 1.0 when the unit is a team member whose team type is marked to avoid threats (never the
+  case for a unit of an *AI house*, which has no teams, Departure D5). The field is
+  a single-precision decimal (S-0003 claim 6) held as a double.
+- **Team type, script step:** the original's computer-team system: a team type describes a team, and
+  a team carries out the steps of a script one at a time. The team system itself is out of scope
+  (S-0215). This spec uses only the two conditions it names.
+- **Nearby-cell search:** the original's search for a substitute cell near a given cell
+  (claim 25).
+- **Loaner:** a unit only lent to its house for a while, which leaves the map again afterwards
+  (claim 14).
+- **Follower car:** a vehicle linked by the map to a leading vehicle so that it follows it, as a
+  train carriage follows its engine. A leader with follower cars and the cars behind it form a
+  chain (claim 26).
+
+## Behaviour
+
+### Connectivity
+
+1. **Connectivity uses the passability category.** Regions and reach regions are built from the
+   passability category of S-0211 claim 11 and the zone table of S-0211 claim 12. Two consequences
+   matter here: units never change a cell's category, so they never split regions, and buildings
+   leave their cells *open* (a house's firestorm is never on in the original, so firestorm wall
+   sections never count, S-0211 claim 11), so a ring of buildings does not separate the cells
+   inside it from those outside (Edge cases).
+   - Backing: `measurable` (scenarios P3, P4)
+   - Confidence: high for the consequences as stated. The category rules carry S-0211's confidence
+
+2. ***No* and *never*.** For pathfinding, a zone-table answer of *no* and one of *never* both keep the
+   category out of the movement zone's reach regions (claim 4) and out of its corridors (claim 13).
+   They differ in one way only: the *never* column is the category *off-map*, and off-map cells form
+   no region at all (claims 3 and 4).
+   - Backing: `measurable` for the shared effect of *no* and *never* on a destination (scenarios
+     P3 and P11 run 3). `unmeasured` for the distinction between them: it shows only when an off-map
+     cell is compared with another off-map cell or with a cell of no reach region, and claim 4 says
+     why neither comparison can be brought about in play
+   - Confidence: high
+
+3. **Regions and their joins.** Two neighbouring cells of the same passability category, neither of
+   them *off-map*, belong to the same region when their height levels differ by at most 1. Two
+   neighbours in step direction 2 or 6 (along cell x) of the same category also join when their
+   height levels differ by 2 or 3 (`quirks.region_join_height_asymmetry`). Off-map cells belong to
+   no region. Two regions are *adjacent* when they contain neighbouring cells whose height levels
+   differ by at most 1. They are also adjacent, whatever the heights, when one of the two regions
+   has the category *blocked* and they contain neighbouring cells. Apart from these two exceptions
+   (the join along cell x, and the adjacency of a region of category *blocked*), neighbouring cells
+   whose height levels differ by 2 or more are never joined or adjacent through that pair. Two
+   neighbouring cells that are both of category *blocked* still join only under the height limits
+   above. A **link** (a bridge connection or a tunnel connection, while it is enabled) makes the
+   regions of its two end cells adjacent.
+
+   The relation is symmetric: a step of 2 or 3 levels along cell x joins the two cells whichever of
+   them is higher. The original builds regions by labelling the map in a fixed order, and in rare
+   configurations its result differs from this rule: a region can stay separate from a neighbour
+   that the rule makes adjacent. The smallest known case is 2 × 2 cells: (x, y) *crushable* at level
+   *h*, (x + 1, y) *open* at *h* + 2, (x, y + 1) *open* at *h*, (x + 1, y + 1) *open* at *h* + 2, with
+   every other neighbour of the four in a category the movement zone cannot use. The rule makes all
+   four one reach region for a movement zone that allows *open* and *crushable*. The original leaves
+   (x, y) on its own. The adjacency of a region of category *blocked* across a height difference of
+   2 or more is affected in the same way: the original records it in some labelling orders and not
+   in others. Departure D4 (proposed) makes our engine follow the rule.
+   - Backing: `measurable` (scenario P4, maps F, F3, F5, I and H)
+   - Confidence: high for the height limits 1 and 3. Medium that the rule matches the original's
+     reach regions on stock maps for movement zones that do not allow the category *blocked*. Low
+     for the zones that allow it (subterranean and fly), where the original's labelling departs from
+     the rule far more often. Low for which bridge connections exist and when they are enabled,
+     which belongs to the bridge specs
+
+4. **Reach regions.** For a movement zone *Z*, each region gets the zone table's answer for its
+   category. Regions whose answer is *yes* and that are adjacent to one another, directly or through
+   a chain of *yes* regions, form one reach region of *Z*. A region whose answer is not *yes* belongs
+   to no reach region of *Z*: every cell in it counts as unreachable for *Z*. In the comparison of
+   claim 6, however, any two such cells count as lying in the same reach region, and so do any two
+   off-map cells. An off-map cell, a cell of no reach region and a cell of a reach region all count
+   as lying in different reach regions. Each movement zone has its own reach regions, all built from
+   the same regions.
+   - Backing: `measurable` for reach regions and their differences between cells inside the usable
+     area (scenarios P3, P4), and for a destination that is off-map or in no reach region while the
+     unit stands in a reach region (P11 run 3). `unmeasured` for the two shared comparisons. Two
+     off-map cells are compared only when the unit's own cell is outside the usable area, and then
+     the second exception of claim 6 skips the comparison. Two cells of no reach region are compared
+     only when the unit stands on a cell that its own movement zone cannot use, which no order or
+     map placement of the measurement setup is known to bring about. For the same reasons an off-map
+     cell is never compared with a cell of no reach region
+   - Confidence: medium (the two shared comparisons: low)
+
+5. **When connectivity is recomputed.** After each of the following changes of the map content, a
+   path computation sees the reach regions and the corridors that the new map content gives, even
+   one made later in the same tick as the change. Entries that change no category leave
+   connectivity as it was:
+   - a wall section built, damaged, destroyed or sold,
+   - a bridge destroyed or repaired, whether by damage, by an engineer (an infantry unit that enters a bridge repair hut to rebuild the bridge) or by a trigger action,
+   - a destroyable cliff collapsing,
+   - a vein-hole field growing or shrinking,
+   - a terrain object destroyed,
+   - a building destroyed,
+   - a trigger action that changes the map's local area, which moves cells into and out of the
+     category *off-map*.
+
+   No other event of play is known to change a cell's category. A destroyed building changes none:
+   a house's firestorm never becomes active in the original (S-0211 claim 11), so with S-0211's
+   defaults no building, firestorm wall sections included, ever decides a category. With
+   `quirks.passability_laser_fence_lost` off (S-0211), a laser-fence section placed, becoming active
+   or becoming inactive changes a category, and connectivity is then brought up to date after that
+   change too.
+   - Backing: `measurable` for a wall section built (scenario P15 run (wb)), for walls, terrain
+     objects and destroyable cliffs destroyed and bridges repaired (P15), for a change of the local
+     area (P15 run (r)) and for bridges destroyed (P8), each through "a later path computation sees
+     the change". `unmeasured` for the other entries: a damaged wall stays a wall, a destroyed
+     building changes no category, stock data has no vein holes, and whether a player can sell a
+     wall section at all belongs to the order specs (S-0213), so none of them is known to change a
+     path in stock play. `unmeasured` for "later in the same tick": a human order cannot be
+     placed in the same tick as a destruction, and an order given by a trigger action in that tick
+     would rest on trigger actions whose meaning no spec of this batch gives, so the difference
+     between "in the same tick" and "before the next path computation" cannot be made visible
+   - Confidence: medium for the list (high for walls built and destroyed, bridges and the local
+     area). Low for whether the result always equals a full recomputation for the new map content
+     (Open questions)
+
+### The reachability gate
+
+6. **No search across reach regions.** Every path computation compares the reach region
+   (claim 4) of the unit's cell with that of the destination cell as ordered, both for the unit's
+   movement zone and search layer. When they differ, no search is made: the unit gets no path, and
+   the gate-failure row of claim 23 applies. Only a destination that passes the comparison can be
+   replaced by a nearby cell (claim 24); one that fails it never is. The comparison is
+   skipped (the destination counts as reachable) in these cases:
+   - the unit's type has no movement zone (Import mapping, departure D1),
+   - the unit's cell is outside the usable area but a legal cell,
+   - the unit is in the state that disables the corridor (claim 14), its cell is inside the usable
+     area, and the destination is a legal cell outside it.
+   - Backing: `measurable` (scenarios P3, P7 run 7, P11 run 1 for the second exception, P11 run 2
+     for the third). `unmeasured` for the first exception, which only data outside the vocabulary
+     reaches, and which departure D1 replaces in our engine
+   - Confidence: high for the gate itself and its place before substitution. Medium for the
+     exceptions
+
+### The search
+
+7. **Search shape.** The path is found by a best-first search over (cell, search layer) pairs,
+   from the unit's cell to the destination cell. The candidates of an expansion are the eight
+   neighbours, in step directions 0 to 7, followed by the tunnel step when the cell is a tunnel
+   entrance. This *generation order* decides which candidate of an expansion is recorded first,
+   which decides the progress cell of claim 13. A candidate is considered only if the unit's entry
+   outcome for it is not *blocked*, and, when a corridor is in use and the candidate is on the
+   ground layer, only if the candidate cell's level-0 sector is on the corridor or the cell has the
+   corridor exemption (claim 13). Bridge-deck candidates are not restricted.
+   For each considered candidate the search records a cost *g* (F1) and an estimate *f* = *g* + *h*
+   (F2). The pair with the smallest *f* is expanded next (ordering and ties: claim 12). The search
+   ends with a path when the destination pair is about to be expanded. The start pair is the unit's
+   cell on the search layer the unit is on. The destination pair is the destination cell on its
+   ground layer, except that when the destination is a bridge cell the destination is its deck (for
+   every unit that is not an aircraft). A candidate step onto a bridge cell is on that cell's ground
+   layer when the height level of the pair being expanded is within 1 of the cell's height level,
+   and on its deck otherwise.
+
+   The estimate *h* is the table square root (S-0204) of the squared straight-line distance in
+   cells (F2), while a straight and a diagonal step cost about the same (F1). *h* therefore
+   overestimates the remaining cost on any route with diagonal steps, and the search is not
+   guaranteed to find the cheapest path: it favours the candidate that closes the straight-line
+   distance fastest, which is a diagonal one whenever the destination does not lie in a straight
+   direction. Two consequences:
+   - On open ground searched without a corridor (claim 14), the path found takes all its diagonal
+     steps first and then all its straight steps, and its number of steps is the Chebyshev
+     distance from start to destination. This holds for destinations up to at least 14 cells
+     away along each axis. In those searches no two pending pairs have exactly the same *f* when
+     one is expanded, so the tie order of claim 12 plays no part. Neither straightening pass
+     changes such a path: it has no right-angle V of diagonal runs (claim 17), and it is already
+     a shortest path, so claim 18 finds no stretch to shorten.
+   - Around obstacles the search can return a path with more steps than the shortest one. The
+     straightening passes (claims 17 and 18) can remove some of the extra steps before the path
+     is stored.
+   - Backing: `measurable` for the open-ground shape (scenario P17). `unmeasured` for the extra
+     steps around obstacles: what the unit drives is the path after claims 17 and 18, and how
+     claim 18 selects its stretches is not established, so the search's own extra steps cannot be
+     told apart from what straightening leaves
+   - Confidence: high for the cost and estimate formulas. Medium for the open-ground shape, which
+     follows from F1, F2 and T4. Medium for the obstacle consequence
+
+8. **Step cost by entry outcome.** The base cost *b* of a step depends on the entry outcome for its
+   target cell (table T2): *clear* 1, *cloaked blocker* 1000, *moving blocker* per the next
+   paragraph, *closed friendly gate* 1, *friendly obstacle* 60, *enemy obstacle* 20, *stationary
+   friendly* 8. Steps with outcome *blocked* are not considered. For a type marked as a train, every
+   outcome other than *blocked* costs 1.
+
+   For *moving blocker*: in search mode 2, *b* = 1000. In search mode 1, *b* = 4. In search mode 0,
+   *b* depends on the **blocker chain** of the target cell: a sequence of at most 10 cells
+   *c*₁, *c*₂, …, with *c*₁ the target cell. Each cell of the chain is represented by one object, the
+   first object the cell lists on the step's search layer (the occupancy specs own that order). Here
+   a *unit* is a vehicle, an infantry unit or an aircraft. Whether the unit counts as moving in the
+   sense of claim 27 plays no part. When the object of *c*ᵢ is a unit heading into a further cell,
+   and *i* < 10, that further cell is *c*ᵢ₊₁. Otherwise *c*ᵢ is the chain's last cell, and *b* follows
+   from it:
+
+   | Last cell *c*ᵢ of the chain | *b* |
+   |---|---|
+   | holds no object | 1 |
+   | its object is not a unit (for example a building or a terrain object) | 4 |
+   | its object is a unit with zero speed and an empty stored path (any *i*, 10 included) | 1, as if the cell were empty |
+   | *i* = 10, and its object is a unit heading into a further cell | 4 |
+
+   A unit is heading into the cell one step from its own cell in the 8-direction of its current body
+   facing if its current speed is not zero, and otherwise into the cell of the first step of its
+   stored path. A unit with zero speed and an empty stored path is heading nowhere. So a parked
+   unit, standing still with no stored path, ends the chain as an empty cell would (*b* = 1), while a
+   unit that stands still but keeps a stored path passes the chain on to its next cell. For a
+   further cell of the chain, the object is taken from the cell's deck when it is a bridge cell and
+   the unit heading into it either is on a bridge deck or stands in a cell whose height level is at
+   least 3 above that further cell's height level, and from its ground otherwise.
+
+   The land multipliers play no part in the cost: a step onto slow terrain costs the same as a step
+   onto a road. A land type whose multiplier for the unit's locomotion class is exactly 0 is
+   impassable for that unit, but that comes from the entry outcome (*blocked*), not from the cost.
+   - Backing: `measurable` (scenario P13 for the values of T2, for the chain ending on an empty cell
+     and for the chain ending on a parked unit, P2 for the absence of terrain costs, P1 for the
+     whole). `unmeasured` for the cap of 10 objects: it needs a column of ten units all heading on
+     at the moment of the search, which cannot be set up reliably. `unmeasured` for a chain ending
+     on an object that is not a unit: a unit heads into a building's or a terrain object's cell
+     only for moments (for example while it slows down in front of one), which cannot be timed
+     against another unit's search
+   - Confidence: high for the table. Medium for the blocker chain
+
+9. **Congestion marks and tunnel steps.** A step onto a cell that carries the congestion mark costs four
+   times its base cost (F1). No rule of the original that sets the mark on a cell for longer than
+   one search has been found, so the marks that occur in play are the temporary ones of claim 19,
+   and in particular a tunnel's entrance carries no mark. A tunnel step costs the Chebyshev distance
+   between the entrance and the exit cell, with no direction term and no factor. Stock data is not
+   known to contain tunnels.
+   - Backing: `measurable` with a test map containing a tunnel (scenario P9) for the tunnel step and
+     for the unmarked entrance, and the fourfold cost through claim 19 (scenario P14)
+   - Confidence: medium for the costs. Low that no rule sets the mark permanently
+
+10. **Height rule for a step.** A step between two cells has outcome *blocked* when their height
+    levels differ by 2, 3, or more than 4. A difference of 1 is allowed only when the lower of the
+    two cells is a slope (a cell whose slope shape index, S-0211 Terms, is not 0), whichever of the
+    two the step starts from. A slope that is the higher cell of the pair does not count. A
+    difference of 4 is allowed only between a bridge deck and the ground at a bridge's end, in the
+    way the bridge specs define. A step that this rule refuses is *blocked* whatever occupies the
+    target cell. Only the two height levels and whether the lower cell is a slope count: the
+    slope's shape and which of its sides is raised play no part. Bridge ends aside, every step of
+    a route therefore changes the height level by at most 1, and each step up by one level needs a
+    slope as its lower cell. So a route that climbs from level *h* to level *h* + *n* passes
+    through a slope cell at each of the levels *h*, *h* + 1, …, *h* + *n* − 1, and a single slope
+    cell never leads onto ground 2 levels higher.
+    - Backing: `measurable` (scenario P4, maps A, C, C2, C3, I, F3 and K)
+    - Confidence: medium
+
+11. **A pair is recorded once.** The first time a search considers a (cell, search layer) pair as a
+    candidate, it records the pair with that candidate's cost *g*, and the pair becomes *pending*. For
+    the rest of that search the pair never becomes pending again and its cost is never changed, even
+    when a later expansion reaches it more cheaply (`quirks.path_no_reopen`). So a cell's cost, and
+    its predecessor on the path the search finds, are those of the first expansion that reached it, which
+    with the expansion order of claim 12 is usually but not always the cheapest.
+    **Recorded-pair margin.** One further rule applies to an already recorded pair, and it shows
+    only in one corner of claim 15: when the destination pair has already been recorded and a later
+    neighbour finds its outcome *blocked*, the rule of claim 15 applies only if the destination's
+    recorded cost is at least that neighbour's cost plus 1.009 (F1).
+    - Backing: `unmeasured`. The recorded costs are internal. The rule changes path shape only where
+      a cheaper second route to an already recorded cell exists, and the estimate's own bias
+      (claim 7) changes path shape in the same places, so no practical map separates the two. The
+      secondary check of scenario P1 compares whole paths with claims 7 to 18 taken together, this
+      claim included, but it is not a test of this claim alone.
+    - Confidence: high
+
+12. **Expansion order, limits and failure.**
+    - Ordering key: the next pair expanded is one with the smallest *f* among the pending pairs, those
+      recorded (claim 11) and not yet expanded. Which of several pending pairs with exactly the same
+      *f* is expanded first follows an order of the original's that this spec does not fix
+      (Questions for the project lead, "Tie order", which also describes the part of that order
+      that is known).
+    - Expansion limit: a search expands at most 65527 pairs. A search that reaches the limit fails.
+    - A search that reaches the destination after exactly 10000 expansions also fails
+      (`quirks.path_search_10000_failure`). The count includes the end of claim 15: a search that
+      stops beside a blocked destination after exactly 10000 expansions fails as well.
+    - Recorded-pair limit: a search records at most 65535 pairs besides the start pair, and one that
+      would record more fails (departure D2).
+    - A found path must contain at least one step. When the destination cell is the unit's own cell
+      on the same search layer, no path results.
+    - Backing: `measurable` for the ordering key, through route choice (scenario P13). `unmeasured` for
+      the 10000 rule and the limits (the expansion count is internal and cannot be observed without
+      changing the original)
+    - Confidence: high for the ordering key, the limits and the 10000 rule
+
+13. **The corridor (coarse search).** When the corridor is used (claim 14), the cell search is
+    confined to a chain of sectors found first:
+    - Each level has its own corridor, a chain of sectors from the sector holding the start cell to
+      the sector holding the destination cell. A sector can be on a level's corridor only when the
+      zone table answers *yes* for the unit's movement zone and the sector's category, and, below
+      level 2, only when its parent is on the corridor of the level above or its category is
+      *crushable*. So, apart from *crushable* sectors, the level-2 corridor bounds the level-1
+      corridor, and that bounds the level-0 corridor.
+    - The search at each level is a cheapest-first search without an estimate. The cost of a route
+      to a sector is the cost of the route to the sector before it plus the entry cost of the new
+      sector: the per-category constant of table T3 for the new sector's category, plus the threat
+      term *T* (F5) when the unit's threat coefficient *k* exceeds 0.00001 (F7), plus 0.001 for a
+      connection marked as a link. The threat term is always 0 at level 0, so threat steers the
+      corridor only through levels 1 and 2. Number domain and rounding: F9. Unlike the cell search,
+      the coarse search lowers a sector's recorded cost whenever it finds a strictly cheaper route,
+      so it ends with each sector at the cost of the cheapest route found to it. Each route found
+      to a sector has this effect:
+
+      | Sector | Route found | Result |
+      |---|---|---|
+      | not yet reached | any, fewer than 9999 routes pending | the route's cost becomes the sector's recorded cost, and the route is pending |
+      | reached | strictly cheaper than the recorded cost, fewer than 9999 routes pending | the route's cost becomes the recorded cost and the route is pending. The route it undercut stays pending |
+      | reached | not strictly cheaper | no effect |
+      | not yet reached | any, 9999 routes pending | the route's cost becomes the sector's recorded cost, but the route is never pending and never continued from |
+      | reached | strictly cheaper than the recorded cost, 9999 routes pending | the route's cost becomes the recorded cost, so a later route to that sector must be cheaper still to be taken, but the route is never pending and never continued from |
+
+      A route recorded at the limit follows `quirks.coarse_limit_records_cost`. The pending routes, undercut ones included, count towards the limit of 9999 pending routes at
+      any moment, so one sector can account for more than one of them. Each pending route is
+      continued from once, at its own cost, when it comes up, and an undercut route is no
+      exception. While the limit has not been reached, continuing from an undercut route changes
+      no sector's cost, since the cheaper route to the same sector came up first. Connections
+      closed by the retry below are not used.
+    - The movement zone used here is the unit's own, except that an infantry type that is also a
+      jumpjet type (Import mapping) always uses movement zone *infantry* for the coarse search of
+      a path computation, while the reach regions of claims 6 and 14 and the free part of claim 13a
+      still use its own movement zone. The estimate *E* of claim 24 is not a path computation: it
+      runs the coarse search for the unit's own movement zone, a jumpjet infantry type included.
+    - When start and destination lie in the same sector at a level, that level's corridor is that
+      one sector.
+    - The corridor of each level is only the chain of sectors on the one route the coarse search
+      chose, not every sector it explored. At level 0 that is a chain of blocks of 2 × 2 cells.
+      Ground-layer cells whose level-0 sector is off the corridor are not considered, except cells
+      with the **corridor exemption**: a cell one of whose eight neighbours holds a vehicle, an
+      infantry unit, a terrain object or a wall section (placed by the map or built in play). A unit
+      counts in the cell it was last
+      recorded in, which follows it as it moves (Open questions). Bridge-deck cells are never
+      excluded this way. Consequently every ground-layer cell of a path *found* with a corridor lies
+      in that chain or has the exemption (straightening, claims 17 and 18, may later move cells off
+      it). In particular the first step of a path is normally not held to the corridor, because the
+      moving unit itself gives every neighbour of the cell it is recorded in the exemption.
+      On open ground, where most sectors cost the same, the route is decided largely by how the
+      coarse search orders sectors of equal cost (Questions for the project lead).
+    - **Progress.** Number the sectors of the level-0 corridor *s*₀ (the start's sector) to *s*ₙ (the
+      destination's). For one cell search with a corridor, define cells *e*₀, *e*₁, … in turn. *e*₀
+      is the start cell, and each *e*ᵢ is the first candidate in sector *s*ᵢ that the search records
+      (claim 11) after *e*ᵢ₋₁. A candidate refused as outcome *blocked*, or one whose pair was already
+      recorded, is not recorded and does not count. The chain stops where no such candidate exists.
+      Its last cell *e*ₚ is the search's **progress cell**, and *p* is its **progress**. So the
+      progress cell is the first cell the search recorded in the furthest corridor sector it reached
+      by entering the sectors in corridor order.
+    - **Retry.** A failed cell search inside a corridor has, at each level *L*, the effect given by
+      this table, where *S* is the level-*L* sector that holds the progress cell and *whole* and
+      *split* are defined in claim 13a:
+
+      | *S* | Level-*L* corridor | Effect |
+      |---|---|---|
+      | whole | any | the connections from *S* to every sector that the free part of *S* does not border are closed |
+      | split | at least 2 sectors, *S* on it | the connection from *S* to the next corridor sector (from the previous one to *S* when *S* is the last) is closed, and so is the connection from the earlier of those two sectors to every sector adjacent to both |
+      | split | fewer than 2 sectors, or *S* not on it | the corridor is abandoned |
+
+      Closed connections stay closed for the rest of the path computation. The searches of one path
+      computation with a corridor follow this table:
+
+      | State of the path computation | Event | Result |
+      |---|---|---|
+      | no coarse search made yet | the coarse search fails at any level | one cell search without a corridor, whose result is final |
+      | no coarse search made yet | the coarse search succeeds at every level | a cell search inside the corridor |
+      | cell search inside a corridor | it finds a path | that path is the result |
+      | cell search inside a corridor | it fails, and it was the 5th cell search of the path computation | the path computation fails; no further search is made, whatever the retry table would give |
+      | cell search inside a corridor | it fails, and fewer than 5 cell searches have been made | the retry table above applies at each level |
+      | retry made, corridor abandoned at some level | — | one cell search without a corridor, whose result is final |
+      | retry made, no level abandoned | — | a new coarse search, which does not use closed connections |
+      | new coarse search | it fails at any level | the path computation fails |
+      | new coarse search | it succeeds at every level | a cell search inside the new corridor |
+
+      So a path computation makes at most 5 cell searches, and the search without a corridor that
+      follows an abandoned corridor counts towards the 5. When the first coarse search fails, the
+      single search without a corridor is the only cell search made, so the limit plays no part.
+    - Backing: `measurable` through path shape and failure (scenarios P1, P10, P12). `unmeasured`
+      for the internal ordering of the coarse search and for the limit of 9999 pending routes, which
+      needs thousands of sectors reached at once, more than the maps of the measurement setup
+      produce, and whose effect could not be told from a route choice. `unmeasured` for the corridor
+      exemption: whether a found path needs an exempt cell off the chain depends on which chain the
+      coarse search picks, and on open ground that comes down to the tie order this spec leaves
+      open, so no practical map makes the exemption decide a route by itself. P1 (a) allows for it,
+      and the secondary checks of P1 and P12 compare whole routes with it included, but neither is a
+      test of the exemption alone
+    - Confidence: medium for the overall scheme, the cost formula, the progress rule, the retry's
+      two branches and the corridor exemption. High for the limit of 5 cell searches and that the
+      threat term is 0 at level 0. Low for the coarse threat at levels 1 and 2 (F5), the sector
+      construction details, the per-category constants' effect, and for when a moving unit's
+      recorded cell changes
+
+    13a. **Free part, whole and split.** The *free part* of *S* is the set of cells of *S* that
+    can be reached from the progress cell by steps in the eight directions that stay inside *S*,
+    through cells whose entry outcome for the unit (entering from the step's direction, at the
+    cell's own height level) is *clear* or whose category the zone table does not answer *yes* for
+    the unit's movement zone. The free part *borders* a sector other than *S* when a cell of that
+    sector next to the free part meets the same outcome-or-category condition. Whether *S* is
+    *split* is decided at one *probe cell*: with the progress cell at (*x*, *y*) and *B* the block
+    size of level *L*, the probe cell is (*x* + (*x* mod *B*), *y* + (*y* mod *B*)), in exact integer
+    arithmetic on cell coordinates. *S* counts as split when the probe cell is inside the usable
+    area, belongs to *S*, and the free part does not cover all *B* × *B* cells of *S*'s block.
+    Otherwise *S* counts as whole (`quirks.corridor_split_probe`).
+
+    The movement zone of the outcome-or-category condition is the unit's own, also for an infantry
+    type with the jumpjet flag, whose corridor was found for movement zone *infantry* (claim 13).
+    Under this condition a cell whose category the unit's own movement zone cannot use belongs to
+    the free part whatever its entry outcome, and so does a cell with outcome *clear*. Only a cell
+    of a usable category with an outcome other than *clear* stops the free part
+    (`quirks.corridor_free_part_unusable_cells`). With that switch off, a cell belongs to the free
+    part only when its category is usable for the unit's own movement zone *and* its entry outcome
+    is *clear*, and the same stricter condition decides which neighbouring sectors the free part
+    borders. The two switches are independent: `quirks.corridor_split_probe` changes only the split
+    test, and `quirks.corridor_free_part_unusable_cells` changes only which cells the free part and
+    its borders contain.
+
+    Where the category part can show: every cell of *S* has *S*'s category, because a sector lies
+    inside one region. For a unit whose corridor used its own movement zone, that category is
+    usable, because the level-0 sector of the progress cell is on the corridor and the sectors of
+    every level that hold that cell lie in the same region. So for such a unit the category part
+    acts only on cells of neighbouring sectors whose category the movement zone cannot use, and no
+    corridor ever enters those sectors, so whether their connections to *S* close changes no later
+    coarse search. The category part, and the switch, can change a retry only for an infantry type
+    with the jumpjet flag whose own movement zone cannot use a category that movement zone
+    *infantry* can.
+    - Backing: `measurable` only in aggregate, through scenario P12. `unmeasured` for the effect of
+      `quirks.corridor_free_part_unusable_cells`, which shows only for a jumpjet infantry type as
+      described above whose corridor search fails, a case no scenario of this spec sets up
+    - Confidence: high for the outcome-or-category condition as stated and for the movement zone it
+      uses. Medium for the probe cell and for the reasoning on where the category part can show. The
+      effect of both on the original's routes has not been checked
+
+14. **When the corridor is used.** The corridor is used only when all of these hold: the unit's
+    type is not a train; the unit has entered the usable area (a unit that arrives from outside it
+    counts as outside until it has first entered); both the start cell and the destination cell
+    are inside the usable area; and the unit is not in the corridor-disabling state. The unit is in
+    that state when it has entered the usable area and any of these holds: its type is a train; it
+    is a loaner; its current behaviour is *retreat*; or it is a team member whose team is carrying
+    out a "move to a waypoint marker" script step whose waypoint marker lies outside the usable
+    area, the team being in its moving state for that step and its script not yet finished. Other
+    script steps that move a team, such as "move to a cell", do not put a unit in this state. When
+    the corridor is used and the reach regions of start and destination (the destination after
+    claim 24) differ, the path computation fails at once. That failure counts as a failed
+    search with the gate passed, so the search-failure rows of claim 23 apply. Without the corridor,
+    the cell search runs over the whole map even when the reach regions differ.
+    - Backing: `measurable` (scenario P11: run 1 for a unit that has not yet entered the usable
+      area, run 2 for the team condition, P12 with the train type for trains). `unmeasured`
+      for the loaner and *retreat* conditions: no order or map setting of the measurement setup is
+      known to make a unit a loaner or to put it on *retreat* at a chosen moment
+    - Confidence: medium. Low for the loaner and team conditions, and for what the team's moving
+      state requires
+
+15. **A blocked destination is approached.** When the destination cell's entry outcome is *blocked*
+    as the search reaches a neighbour of it, and that neighbour's search layer is within 1 height
+    level of the destination's search layer, the search ends there: the path leads to the neighbour
+    of the destination, not into it. This does not apply to vehicles whose type is marked passive.
+    Because a found path must have at least one step (claim 12), a unit that already stands next to
+    its blocked destination gets no path from this rule: the search fails, and claim 23 applies.
+    The unit is within 1 cell, so it gets row 3 (it does not give up), except when the destination
+    is a bridge cell and the unit is not on a bridge deck, which gives row 2.
+    - Backing: `measurable` (scenario P7, runs 5 and 6)
+    - Confidence: medium (the passive exception: low)
+
+16. **Train restriction.** For a type marked as a train, the three neighbours of the start cell that
+    lie behind the train (the step directions *d* with (*d* − *f*₈) mod 8, taken from 0 to 7, equal
+    to 3, 4 or 5, where *f*₈ is the 8-direction of its current body facing) cannot be entered for
+    the whole search: no path passes through them, and a destination among them is never reached, so
+    the search fails. The exclusion applies on one search layer of each of the three cells, the
+    ground layer unless the start's search layer lies at least 2 height levels above that cell's
+    height level. So the path the search finds never starts with a reversing step. The exclusion
+    holds for the search only: the straightening passes (claims 17 and 18) judge the three cells by
+    their entry outcome like any other cell, so either pass can give the stored path a first step
+    into one of them. A train ordered to a cell a few cells straight behind it can therefore start
+    by stepping diagonally backwards (scenario P9, train run 2, `quirks.train_exclusion_search_only`).
+    - Backing: `measurable` only with test data (scenario P9: the order onto a cell behind the
+      train for the exclusion, the orders to cells further behind it for the first step after
+      straightening). Stock data is not known to use trains
+    - Confidence: medium (low for which search layer is excluded on a bridge)
+
+### Straightening
+
+17. **Right-angle turns are flattened.** After a path is found, its right-angle turns are flattened
+    once. The rule is given as the path that results.
+
+    *Runs and V's.* A **run** is a stretch of consecutive equal steps that cannot be extended by an
+    equal step before or after it, except that it never includes a final step (below). A **V** is
+    a run of *n* steps in direction *d₁* followed directly by a run of *m* steps in a direction *d₂*
+    at a right angle to it ((*d₂* − *d₁*) mod 8, taken from 0 to 7, equal to 2 or 6), where the
+    first run is one that can open a V. Every run of diagonal steps can open a V. A run of straight
+    steps can open a V only in the cases listed under *V's of straight runs* below. Tunnel steps
+    are never part of a V.
+
+    *Flattening one V.* The last *j* steps of the first run and the first *j* steps of the second
+    run (2*j* steps) are replaced by 2*j* steps in a direction *d₃* that depends only on the two
+    directions *d₁* and *d₂*, in either order. For two diagonal runs *d₃* is the straight direction
+    between them: 7 and 1 give 0, 1 and 3 give 2, 3 and 5 give 4, 5 and 7 give 6. For two straight
+    runs (below): 0 and 2 give 1, 2 and 4 give 3, 4 and 6 give 5, and 6 and 0 give 0, not the 7
+    between them. *j* is the largest value from 1 to min(*n*, *m*) for which every cell the 2*j* new
+    steps pass through has entry outcome *clear*, carries no congestion mark (claims 9 and 19), and has
+    threat value × *k* below 1.0 (F7), where the threat value is read at the cell where the new
+    steps start, the same cell for every cell checked (`quirks.flatten_threat_start_cell`). If no
+    *j* qualifies, the V is *not flattened* and stays as it is. For two diagonal runs the new steps
+    end on the same cell as the steps they replace, so the rest of the path is unchanged.
+
+    *Which V's are flattened.* V's are judged one at a time in path order, each on the path as the
+    judgements before it have left it. The next V judged is the one whose first run begins earliest
+    among the steps that are not yet final. Each judgement makes steps final:
+    - A flattened V makes final every step before its new steps, the *n* − *j* steps kept from its
+      first run included.
+    - A V that is not flattened makes final every step up to the end of its first run.
+
+    A final step belongs to no later V and never joins a later run, even when it is equal to that
+    run's steps. Everything after the final steps is judged as it now stands. Consequences:
+    - When the whole first run is replaced (*j* = *n*), the step before the old first run is final.
+      It never forms a V with the new steps, even when it is a straight step at a right angle to
+      them (example (b)).
+    - Two stretches of equal steps that end up side by side count as one run only when the earlier
+      one is not final. So the new straight steps of a flattened V never join equal straight steps
+      before them, which are final (example (c)), and do join equal straight steps directly after
+      them (example (d)).
+    - Judging resumes at the first new step: the *n* − *j* kept steps are final and are never read
+      again, and the 2*j* new steps, with any equal steps directly after them, are the run judged
+      next. Whether that run can open a V depends on its direction and on how it arose: a run of
+      diagonal steps always can, a run of straight steps only in the cases listed under *V's of
+      straight runs*. After a flattened V of diagonal runs the new steps are straight. The rest of
+      the second run (*m* − *j* steps, diagonal) is a run of its own after them and can open a
+      further V. After a V that is not flattened, judging resumes at the start of its second run,
+      which can be the first run of a further V. After a flattened V of straight runs, see
+      *V's of straight runs*.
+    - Where two V's would share a run, the one nearer the path's start is judged first and the
+      later one sees only what that judgement left of the shared run (examples (a) and (c)).
+
+    *V's of straight runs* (`quirks.flatten_straight_run_v`). A run of straight steps can open a V
+    in three cases: it begins with the new straight steps of a flattened V of diagonal runs (with
+    any equal straight steps directly after them, by the consequence above); it is the second run
+    of a V of straight runs that was not flattened; or it begins with the new steps of a flattened
+    V of straight runs whose directions are 6 and 0, because those steps lead north (below). No
+    other run of straight steps opens a V, so straight runs that the search produced never do,
+    except in those ways. A V of straight runs is judged and replaced by the same rule, with 2*j*
+    new steps. For the pairs 0 and 2, 2 and 4, and 4 and 6 these are diagonal and do not end where
+    the replaced steps end: *j* steps in each of two straight directions move the path *j* cells
+    along each axis, the 2*j* diagonal steps move it 2*j* cells along each. For the pair 6 and 0,
+    *d₃* is 0 (north), not 7: the 2*j* steps all lead north. In every case each later step of the
+    path is shifted by the same amount, and the stored path no longer ends on the cell the search
+    reached.
+
+    Where judging resumes after a V of straight runs is replaced follows the rule above: at the
+    first new step, with the *n* − *j* kept steps final. What the new steps can do then depends on
+    the pair:
+    - Pairs 0 and 2, 2 and 4, 4 and 6 (new steps diagonal). The 2*j* new steps are a run of
+      diagonal steps, which can open a V, but its only possible partner is the step after the
+      second run, so only when *j* = *m* and that step is at a right angle to the new steps. When
+      *j* < *m*, the rest of the second run (straight) comes after the new steps at 45° to them. It
+      is a run of its own, and it never opens a V.
+    - Pair 6 and 0 in the order 6 then 0 (new steps north). The rest of the second run is north as
+      well and joins the new steps, so the run judged next has *j* + *m* steps. It can open a V
+      with a straight step at a right angle after it.
+    - Pair 0 and 6 in the order 0 then 6 (new steps north). The rest of the second run is west, at a
+      right angle to the new steps, so the new steps and the rest form a V with *n* = 2*j* and
+      *m* − *j* steps, judged by the same rule.
+    - The last V judged is the one whose second run ends the path. Nothing that its new steps form
+      afterwards with the rest of that run is judged, so the case 0 then 6 at the end of a path
+      leaves the rest of the run as it is.
+
+    *Worked examples* (directions as in Terms; every cell clear, no congestion mark, no threat). Example
+    (a) and (b) hold under any setting of `quirks.flatten_straight_run_v`, examples (c) to (f) with
+    it on:
+    - (a) The search finds 1, 3, 3, 3, 1, which ends at (*x* + 5, *y* + 1). The first V is (1 | 3,
+      3, 3) with *n* = 1, *m* = 3, *j* = 1, giving 2, 2, 3, 3, 1. The rest of its second run, 3, 3,
+      opens the V (3, 3 | 1), *j* = 1, giving 2, 2, 3, 2, 2, which ends on the same cell.
+    - (b) 1, 3, 3, 5 ends at (*x* + 2, *y* + 2). The V (1 | 3, 3) gives 2, 2, 3, 5. The 2, 2 are
+      followed by a diagonal step, so the next V is (3 | 5). It has *j* = *n* = 1 and gives
+      2, 2, 4, 4, which makes the 2, 2 before its new steps final. So they do not form a V of
+      straight runs with the 4, 4 that now follow them, although east and south are at a right
+      angle.
+    - (c) 1, 3, 1, 3, 4, 4, 4 ends at (*x* + 4, *y* + 3). The two V's (1 | 3) give 2, 2, 2, 2, 4, 4,
+      4. The first pair 2, 2 is final, so the run that opens the next V is the second pair only:
+      the V (2, 2 | 4, 4, 4) has *n* = 2 and *j* = 2, and gives 2, 2, 3, 3, 3, 3, 4, which ends at
+      (*x* + 6, *y* + 5). Had the four 2's counted as one run, *j* would be 3.
+    - (d) 1, 3, 2, 4, 4, 4 ends at (*x* + 3, *y* + 3). The V (1 | 3) gives 2, 2, 2, 4, 4, 4: the
+      search's own step 2 joins the new pair, so the V (2, 2, 2 | 4, 4, 4) has *n* = 3 and *j* = 3,
+      and gives six steps 3, which end at (*x* + 6, *y* + 6).
+    - (e) 5, 7, 0 ends at (*x* − 2, *y* − 1). The V (5 | 7) gives 6, 6, 0, and the V (6, 6 | 0) has
+      *j* = 1 and *d₃* = 0 (directions 6 and 0), giving 6, 0, 0, which ends at (*x* − 1, *y* − 2).
+    - (f) 7, 1, 6 ends at (*x* − 1, *y* − 2). The V (7 | 1) gives 0, 0, 6. The run 0, 0 is followed by
+      the west step, a V of straight runs with *n* = 2, *m* = 1, *j* = 1 and *d₃* = 0, which makes the
+      first 0 final, keeps it and gives 0, 0, 0. The path now ends at (*x*, *y* − 3).
+    - With `quirks.flatten_straight_run_v` off, examples (c) to (f) stop after their V's of
+      diagonal runs: (c) gives 2, 2, 2, 2, 4, 4, 4, (d) gives 2, 2, 2, 4, 4, 4, (e) gives 6, 6, 0 and
+      (f) gives 0, 0, 6, each ending where the search's path ends.
+    - Backing: `measurable` for the flattening of V's of diagonal runs on clear ground after a
+      path's 20th step, where claim 18 does not act (scenario P1, expectation (b), long runs).
+      `unmeasured` for the threat test and `quirks.flatten_threat_start_cell`, for the order of
+      judging and for V's of straight runs: a V arises only where obstacles or the corridor bend the
+      path, and on open ground which corridor is chosen depends on the tie order left open by claim
+      12, so no practical map can place a threatened cell, two V's that share a run, or a V of
+      straight runs at a known point of a found path. The examples serve a reference implementation
+      and the secondary check of P1
+    - Confidence: medium. Medium also for V's of straight runs and their displacement, which no
+      measurement backs
+
+18. **Early detours are shortened.** This pass works on the path as claim 17 has left it: the
+    20 steps are counted, and stretches judged, on the path after the flattening of claim 17, so the
+    two passes together can give a path that neither pass alone would give. Within the first 20
+    steps of the path only, a stretch whose number of steps is larger than the Chebyshev distance
+    between its two ends is replaced by a shortest stretch with the same ends. The replacement has
+    one of two shapes: all diagonal steps first and then all straight steps (*diagonal-first*), or
+    all straight steps first and then all diagonal steps (*straight-first*). The diagonal-first
+    shape is used when it is acceptable, and otherwise the straight-first shape when that one is.
+    When neither is acceptable, the stretch stays as it is. A shape is acceptable only if every cell
+    on it has entry outcome *clear* and carries no congestion mark, and if its count of cells with
+    threat value × *k* ≥ 0.01 (F7), each cell's own threat value being used, stays within a limit.
+    The limit is 0 for every stretch except the one that closes the examined part of the path (the
+    stretch that ends where the 20-step scan or the path ends), for which it is 3. Threat is counted
+    only when *k* exceeds 0.00001. Tunnel steps are never part of a stretch. The stretch's steps
+    that become unnecessary are removed from the path.
+
+    Which stretches are examined, and in which order, is only partly established (Open
+    questions). What is known: a stretch can begin at the path's first step, so this pass can
+    change the first step. A train's path to a cell behind it (claim 16) is shortened in this way:
+    its first steps lead sideways only because the search may not enter the cells behind the train,
+    and the pass replaces its opening steps by a shorter stretch that begins with a diagonal step
+    from the start into a cell behind the train.
+    - Backing: `measurable` only with test data, for the shortening at the start of a path
+      (scenario P9, train runs 2 and 3). `unmeasured` for the rest of the stretch selection: its
+      rule is not established, so no scenario can state a path that only the original's selection
+      gives. Train runs 2 and 3 test that the shortening happens and how many steps remain, not
+      which stretch is chosen. The secondary check of P1 compares whole paths with claims 7 to 18
+      taken together, but it is not a test of the selection
+    - Confidence: low for how the stretches are chosen. Medium for the shortening at the start of
+      a path, the acceptance rule and the order of the two shapes
+
+### Re-paths and congestion
+
+19. **Re-paths avoid congestion.** In search modes 1 and 2, cells around the blockage carry the
+    congestion mark (so *τ* = 4 in F1) for the duration of that one search. The *cell ahead* is the cell
+    one step from the unit in the 8-direction of its body facing. A unit in the cell ahead
+    *qualifies* when, in mode 2, it is any vehicle or infantry unit, or, in mode 1, it is of a
+    different type from the blocked unit, its type has a lower speed number (Terms: S-0207 claim 1
+    for a vehicle type, S-0208 F4 for an infantry type) than the blocked unit's type, and it is
+    inside the usable area. The two speed numbers are compared as integers 0 to 255, whichever of
+    the two formulas gave each, so a vehicle and an infantry unit are compared directly. In
+    addition, in both modes, a vehicle qualifies only if its stored path has at least two steps,
+    and an infantry unit only if it has at least three (that mode 2 has these conditions too is
+    this spec's assumption, not established, Open questions). Each cell is then counted once for
+    each of these that names it:
+    - (i) the stored path of each qualifying unit: the cells that its remaining stored steps (up to
+      24) lead through, starting from the cell it is moving into, that cell itself not included,
+    - (ii) the occupied cells of the 5 × 5 block centred on the cell ahead, except the unit's own
+      cell (one count each),
+    - (iii) the cell ahead itself (one count).
+
+    In mode 1, when (i) counts no cell, nothing is counted and the search runs as mode 0 instead.
+    Otherwise, during the search a cell carries the congestion mark exactly when one, but not both, of
+    these holds: it carried the mark before the search, or its count is odd
+    (`quirks.path_congestion_toggle`). After the search every cell carries the mark it carried
+    before.
+
+    So a cell counted twice is not made costly. In particular the cell ahead, which is normally
+    occupied (that is why the unit is blocked), is counted once in (ii) and once in (iii). It
+    therefore ends up *not* made costly, unless the stored path of a qualifying unit counts it a
+    third time.
+    - Backing: `measurable` (scenario P14 for the marking of the qualifying unit's stored path and
+      for the parity rule, P6 for the timing)
+    - Confidence: medium for the rule. Low for the exact unit test of mode 1 and the path-length
+      conditions
+
+### Path storage and timing
+
+20. **Stored path and when it is recomputed.** A unit keeps at most 24 steps of a found path. A new
+    search starts from the cell the unit is in and replaces the stored path. The unit computes a new
+    path:
+    - with the drive locomotor only, when it begins the last step of its stored path while its
+      heading point is more than 512 leptons away (F6c). This search is made at once, in search
+      mode 0, without waiting for the retry delay of claim 21. The walk locomotor makes no such
+      recomputation,
+    - when it has no stored steps left and has not arrived (a fresh search, claim 21),
+    - when its destination changes,
+    - when its next step is blocked (claim 22 for the drive locomotor, S-0209 claims 7 to 10 for the
+      walk locomotor),
+    - and, with the drive locomotor, in the chase case below.
+
+    When a path is recomputed as the last stored step begins, the unit still takes that old step,
+    and the new path's first step is dropped: the unit continues with the new path's second step
+    from the cell the old step reached (`quirks.path_refresh_keeps_old_step`). When the new path's
+    first step is the old step, as is usual, this has no visible effect. Otherwise every later step
+    is taken from a cell one step away from the cell it was planned from, until a step is refused or
+    the path is computed again. For a train type, the step in progress is kept on purpose: the search
+    starts where that step leads and its result is stored after it, still up to 24 steps in total,
+    so the quirk does not arise.
+
+    When a unit with the drive locomotor has a vehicle or an infantry unit rather than a cell as its
+    destination, the stored path
+    is cut to ⌊*D* / 256⌋ steps when that is less than 24, where *D* is the distance in leptons from
+    the unit to its heading point (F6c). When *D* is under 256 the stored path is emptied at once, so
+    a fresh search follows (subject to the path retry timer). The unit therefore computes a new path
+    after about as many steps as there were cells between it and its heading point when it last
+    computed one. Where the heading point lies while chasing belongs to the movement specs. When the
+    chased unit moves slowly it stays close to the chased unit's position.
+    The walk locomotor cuts no stored path for a chased unit either.
+    - Backing: `measurable` (scenario P5, and P9's train refresh run for the train rule; P5 run 1i
+      for the absence of the refresh in the walk locomotor). `unmeasured` for the absence of the
+      chase cut in the walk locomotor: a walker that follows a moving unit meets it within a few
+      cells as a moving blocker or a stationary friendly, and S-0209's reactions then make new
+      paths of their own, so the absence of the cut cannot be isolated
+    - Confidence: high for the 24-step limit. Medium for the 512-lepton trigger, the chase cut, the
+      train rule and their absence in the walk locomotor. Low for the dropped first step
+
+21. **Retry delay.** The retry delay is *R* = trunc(*P* × 900) ticks (F3), where *P* is the
+    path-retry delay field in game minutes. The path retry timer of S-0209 counts it down. A unit
+    computes no new path while its retry delay runs, with these exceptions: the immediate
+    recomputation of claim 20 (drive locomotor), the computation a follower car makes when its
+    leader sends it after itself (claim 26), and the immediate new path of a walker that meets an
+    obstacle (S-0209 claim 7, walk locomotor). For the drive locomotor:
+    - A fresh search (no stored steps left) waits for the delay to be over. After a fresh search
+      that fails, or whose gate fails (claim 6), the delay *R* runs from the tick of that search.
+      After a fresh search that succeeds, no delay runs.
+    - A re-path for a blocked next step (claim 22) also waits for the delay. After such a re-path the
+      delay *R* starts again, whether the re-path succeeded or its search failed. After a re-path
+      whose gate failed, no delay runs.
+
+    For the walk locomotor, when its searches are made is S-0209's (claims 7 and 10), and the delay
+    after each is as follows. A fresh search, and the immediate new path of S-0209 claim 7, behave
+    as a fresh search of the drive locomotor: no delay after a found path, *R* after a failed search
+    or a failed gate. After a re-path for a moving blocker the delay *R* starts again whatever its
+    result, a failed gate included.
+    - Backing: `measurable` (scenarios P6, P7 run 5, P9 follower run 3 for the follower-car
+      exception; for the walk locomotor, S-0209's scenarios C2 (c, d) and C5 for the delay between
+      re-paths and C19 for the immediate new path). `unmeasured` for a walker's delay after a failed
+      search or a failed gate: what a walker does after such a failure belongs to S-0209 and S-0215,
+      and the delay would show only as the timing of a later search that those reactions also
+      decide
+    - Confidence: medium (for the walk locomotor: medium for the delays as stated)
+
+22. **Blocked next step (drive locomotor).** For a unit with the drive locomotor, when the entry
+    outcome for the next stored step is *moving blocker*, the unit starts a blockage timer of *B*
+    ticks (the blockage delay) the first time this happens for the current blockage. A blockage ends,
+    and the timer starts afresh the next time, once the unit has taken a step again or its
+    destination has been replaced; S-0209 claim 10 gives the same rule for a walker, for which only
+    a step ends it. Each time the
+    retry delay of claim 21 has passed, it computes a new path in search mode 1 while the blockage
+    timer runs, and in search mode 2 once it has run out. A unit with a stored path but a next step
+    of another outcome, other than *blocked*, reacts as S-0209 and the movement specs say (opening a
+    gate, attacking an obstacle, waiting). An outcome *blocked* for the next step clears the stored
+    path, which leads to a fresh search under claim 20, after the retry delay of claim 21.
+
+    The walk locomotor's reactions to every outcome of its next step are S-0209's (claims 7 to 10).
+    Its re-paths for a moving blocker (S-0209 claim 10) use search modes 1 and 2 as above, and the
+    immediate new path it makes after an obstacle (S-0209 claim 7) is a search in mode 0.
+    - Backing: `measurable` (scenarios P6, P14). `unmeasured` for what ends a blockage with this
+      locomotor: P6's shuttling blocker does not isolate a step taken between two waits from a
+      replaced destination, and S-0209's scenario C5 measures the step for the walk locomotor only
+    - Confidence: medium (the other locomotors are not established). Low for what ends a blockage
+
+23. **When no path is found.** What happens depends on why no path was found:
+
+    | Case | Result |
+    |---|---|
+    | The gate of claim 6 fails | The path computation ends at once with no path. The unit does not leave its team, no behaviour is queued and its house gives it no new destination. A unit with the drive locomotor has its destination cleared, so it stops where it is. The retry delay runs after a fresh search, and after a re-path only for the walk locomotor (claim 21). What its *move* behaviour does without a destination belongs to S-0215 (it falls back to rest). No other row of this claim applies. |
+    | The search fails (including the immediate failure of claim 14), and the unit is more than 1 cell (Chebyshev) from the destination, or is not on a bridge deck while the destination is a bridge cell | The unit stops (its current motion ends) and the retry delay *R* starts. It gives up: it leaves its team, its destination is cleared, and it queues *guard* if it has a human-controlled owner or *area guard* if it has a computer-controlled owner. A unit with a computer-controlled owner in a skirmish or multiplayer game is then given a new destination chosen by its house (a house cell whose choice belongs to the AI-visible-rules specs), provided that choice yields a cell; otherwise it gets none. These two computer-controlled rules (*area guard*, the new destination) describe the original only. In our engine the rule for a human-controlled owner holds for every unit, those of an *AI house* included (glossary *AI house*): such a unit queues *guard* and its house gives it no destination. This is Departure D5, with no switch. Our AI may give the same unit a destination as an ordinary order. |
+    | The search fails in any other case (within 1 cell) | The unit stops and the retry delay *R* starts. It does not give up: it stays in its team and no behaviour is queued. A unit with the drive locomotor also has its destination cleared, so it ends up standing where it is without a destination. For the other locomotors the destination is kept, and the unit tries again once its behaviour starts it moving towards it (S-0215), which the retry delay holds back. |
+
+    The same clearing ends every failed search of a drive-locomotor unit, so in rows 2 and 3 such a
+    unit is left without a destination, unless its house has just given it a new one (row 2, in the original only). Being
+    within the close-enough distance of the destination makes no difference to any row.
+    - Backing: `measurable` (scenarios P3, P4, P7 runs 5, 5b and 6, P8, P11)
+    - Confidence: medium. Low for the other locomotors in row 3
+
+### Destination substitution
+
+24. **Replacing a blocked destination.** After the gate of claim 6 has passed, and before the search
+    (not for trains):
+    - When the destination cell's entry outcome is *stationary friendly* and the unit's distance to
+      the destination, *D*ᵤ (F6a), is larger than the close-enough distance, the original runs the
+      nearby-cell search (claim 25) around the destination. *D*ᵤ is measured from the unit's position
+      to the centre of the destination cell taken at world height 0, so the unit's own world height
+      counts in full (`quirks.substitution_distance_flat_destination`). It adopts the cell found when
+      two conditions hold. First, the distance between the centres of that cell and the destination
+      cell (F6b) is smaller than *D*ᵤ. Second, a coarse estimate *E* of the route length from that
+      cell to the destination is at most their Chebyshev distance plus 6 cells. *E* comes from the
+      coarse search of claim 13 alone, run for the unit's own movement zone, with no exception for
+      an infantry type with the jumpjet flag (which uses movement zone *infantry* only in the
+      coarse search of a path computation, claim 13). The one exception is a unit of movement zone
+      *subterranean* whose destination passes the further test of a cell named in claim 25: *E* is
+      then found for movement zone *normal*.
+      *E* = max(Chebyshev distance, 2*n* − 2 + legs) cells, where *n* is the number of sectors on the
+      level-0 corridor found and the legs are given by F8, except in the first case of F8 (both cells
+      on the same bridge), where *E* is the Chebyshev distance alone. When the coarse search fails,
+      the cell is not adopted.
+    - When the destination cell's outcome is *blocked* and the cell holds a building, the original
+      always adopts the cell found by the nearby-cell search, with no distance or estimate test. When
+      that search finds no cell, the original's new destination is undefined. Our engine keeps the
+      destination unchanged (departure D3).
+    - In both cases the substitute comes from the nearby-cell search of claim 25 around the
+      destination cell, with the unit's own cell as reference cell, the reach region and the
+      simplified movement zone of claim 25, and the height condition of claim 25. By that condition
+      the destination counts 4 levels higher only when it is a bridge cell *and* the unit stands on a
+      bridge deck. So for a unit on the ground ordered onto a bridge cell, the substitute is sought
+      near the ground under the deck, although the search itself aims at the deck (claim 7), and it
+      can never be given a deck cell as its substitute: it gets a bank cell or none
+      (`quirks.substitution_centre_ground_level`). With that switch off, in this use of the
+      nearby-cell search the centre's level includes the deck whenever the destination is a bridge
+      cell, for every unit that is not an aircraft, as the search's destination pair does (claim 7):
+      a unit on the ground ordered onto an occupied deck cell can then be given a free deck cell
+      nearby. The switch does not change any other use of the search (claim 25, table T5). No simplified
+      movement zone may enter a cell with a wall section (S-0211
+      claim 10), so a wall cell is never adopted here, even for a unit whose own movement zone passes
+      walls, except by a unit of locomotion class *winged*, for which claim 25 skips the class rule.
+    - Backing: `measurable` (scenario P7, run 3b for the height rule, run 10 for the destination's
+      level on a bridge and so for `quirks.substitution_centre_ground_level`, run 9 for wall cells,
+      runs 8 and 8b for the estimate test). `unmeasured` for the movement zone of the estimate *E*
+      of a jumpjet infantry type, which no scenario sets up
+    - Confidence: medium for the triggers, the distance test and the height rule. High for the
+      wall-cell consequence. Low for the estimate details
+
+25. **The nearby-cell search.** Around a centre cell (*c*ₓ, *c*ᵧ), the original examines square
+    rings of Chebyshev radius *r* = 0, 1, 2, … cells, up to a largest radius of 31 cells, or of
+    *w* + *h* − 1 cells when *w* + *h* is less than 32, where *w* and *h* are the map width and map
+    height of the map size (glossary), added as plain numbers in the map size's own units. The
+    cells of ring *r* have a fixed **scan order**. A cell (*x*, *y*) of the ring is a *row cell*
+    when |*y* − *c*ᵧ| = *r*, and a *column cell* otherwise (then |*x* − *c*ₓ| = *r*). Every row cell
+    comes before every column cell. Row cells are ordered by *x*, and on equal *x* by *y*. Column
+    cells are ordered by *y*, and on equal *y* by *x*. Ring 0 is the centre cell, which appears twice
+    in the scan order (`quirks.nearby_centre_twice`): if it qualifies, it is collected twice and
+    counts twice towards the limit of 24 collected cells.
+
+    The search examines single cells. Each use of the search fixes a centre, a locomotion class, a
+    movement zone and whether the use is in **deck mode**, and optionally a reach region, the height
+    condition, the further test and a reference cell. Deck mode has the three effects given below:
+    a bridge cell's reach region is read for its deck, a bridge-cell centre's level includes the
+    deck (claim 24's switch aside, below), and the ring cut-off of the collection is the first ring that contains any collected
+    cell rather than the first that contains one passing the visibility test. Table T5
+    lists every user and what each use fixes.
+    The **simplified movement zone** of claim 24 maps crushing and destroying variants to their base
+    zone: *normal*, *crusher*, *destroyer* and *crusher-all* map to *normal*; *amphibious*,
+    *amphibious-crusher* and *amphibious-destroyer* map to *amphibious*; *infantry* and
+    *infantry-destroyer* map to *infantry*; the others map to themselves.
+
+    **T5. Users of the nearby-cell search.** "Search layer" is the ordered unit's own (claim 7).
+    "Own zone" is the movement zone of the ordered unit's type.
+
+    | User | Centre | Locomotion class | Movement zone | Reach region | In deck mode when | Height condition | Further test | Reference cell |
+    |---|---|---|---|---|---|---|---|---|
+    | Destination substitution (claim 24) | the destination | the unit's | the simplified movement zone | that of the unit's cell, on its search layer, for the simplified zone | the unit is on a bridge deck | yes | for a unit of movement zone *subterranean*, as below | the unit's cell |
+    | Scatter (S-0208 claim 13) | as S-0208 claim 13 says | the unit's | *normal* | none | the unit is on a bridge deck | yes | no | none |
+    | Move order onto a cell (S-0214 claim 11), when that claim uses the search, except the next row | the clicked cell | the unit's | own zone, *subterranean* counted as *normal*, and *fly* counted as *infantry* while an ion storm (a global effect, S-0104) is active | that of the unit's cell, on its search layer, for that zone | the centre is a bridge cell | yes | no | none |
+    | No-move order onto a cell (S-0214 claim 11) by a unit that is in the air, travels underground, is of a jumpjet infantry type (no ion storm active) or is an aircraft | the clicked cell | the unit's | as in the row above | none | the centre is a bridge cell | yes | for a unit of movement zone *subterranean*, under a further condition of the unit's state that is not established | none |
+    | Move order onto an object (S-0214 claim 11), when that claim uses the search, except the next row | the object's cell | the unit's | own zone, *subterranean* counted as *normal* and *fly* as *infantry*, whether or not an ion storm is active | that of the unit's cell, on its search layer, for that zone | the centre is a bridge cell | yes | no | none |
+    | No-move order onto an object (S-0214 claim 11) by a unit that is in the air, travels underground, is of a jumpjet infantry type (whether or not an ion storm is active) or is an aircraft | the object's cell | the unit's | as in the row above | none | the centre is a bridge cell | yes | as in the no-move row for a cell | none |
+    | Rally point (S-0213 claim 20) | the clicked cell | *foot*; *amphibious* for a naval factory; *winged* for an aircraft factory | *normal*; *amphibious-crusher* for a naval factory; *fly* for an aircraft factory | that of the building's own cell for that zone | the centre is a bridge cell | no | no | none |
+
+    A cell **qualifies** when all of these hold:
+    - it is inside the usable area,
+    - when the user gives a reach region, the cell lies in it (claim 4). A bridge cell's reach
+      region is read for its deck when the use is in deck mode, and for its ground otherwise,
+    - it is enterable by class (S-0211 claim 10) for the user's locomotion class with the user's
+      movement zone, a bridge cell being judged as entered on its deck, so that its land type is not
+      consulted,
+    - its occupancy record (S-0209) is empty as a whole: it records no standing position as taken,
+      and no vehicle, no building and no object as present. The record read is the
+      deck's for a bridge cell and the ground's for every other cell. So a cell holding any infantry unit,
+      vehicle or building on the cell layer whose record is read, or an aircraft on the ground there, never qualifies,
+    - when the user asks for the **height condition**: the cell's level and the centre's level
+      differ by at most 1 height level. A cell's level is its height level, plus 4 when it is a
+      bridge cell. The centre's level is its height level, plus 4 only when the centre is a bridge
+      cell and the use is in deck mode (in claim 24's use, `quirks.substitution_centre_ground_level`
+      off changes this to plus 4 whenever the centre is a bridge cell; no other use is changed).
+      Bridge cells may qualify in every use of the search,
+    - when the user asks for it, it passes a further test of a cell, whose content is not
+      established (Open questions). Claim 24 asks for it only for a unit of movement zone
+      *subterranean*, and only when the destination itself passes the same test. It is one test of
+      a cell, applied first to the destination: when the destination passes it, every candidate cell
+      must pass it too and the estimate *E* of claim 24 uses movement zone *normal*; when the
+      destination fails it, neither applies.
+
+    For locomotion class *winged*, only the first condition, the height condition and the further
+    test apply: the reach region, the class rule and the occupancy record are not consulted. In
+    claim 24 the centre is the destination, whose occupant gave the outcome that started the search,
+    so it normally does not qualify, and the double entry of the centre matters only where the
+    centre can be empty.
+
+    The **collected cells** are the qualifying cells of rings 0, 1, 2, … up to the largest radius,
+    taken ring by ring and, within a ring, in scan order. The collection is cut off at whichever
+    comes first: the 24th collected cell, even in the middle of a ring; or the end of the first ring
+    that contains a collected cell passing the *visibility test* (in deck mode: the
+    first ring that contains any collected cell). Short of the 24-cell cut, that ring contributes all
+    of its qualifying cells, and no later ring contributes any. A cell passes the
+    visibility test when it is not hidden on the screen by higher terrain in front of it: the cell
+    that the battlefield view shows at the position of the cell's centre is the cell itself. Among
+    the collected cells, those passing the visibility test are preferred when there are any. The
+    result is the preferred cell nearest to the reference cell: the one with the smallest table
+    square root of (Δx² + Δy²) in cells (S-0204), which for the distances of this search orders the
+    cells exactly as the true distance does. On equal distance the first collected wins. When the
+    user gives no reference cell (every user but claim 24), the result is instead the preferred cell
+    at position (*N* mod *n*) in collection order, counting from 0, where *n* is the number of
+    preferred cells, a centre collected twice counting twice, and *N* is the tick number (S-0201)
+    in force when the search is made: for a scatter, that of the tick of the scatter request; for a
+    move order or a rally point, the one in force when the click is handled, since the search is
+    made then (S-0213 claim 20, S-0214 claim 11). When no cell qualifies, there is no result. No draw from
+    any random stream is taken.
+    - Backing: `measurable` for the ring rule, the scan order and the distance choice (scenario P7,
+      runs 1, 2, 4, 8 and 8b), for the occupancy condition (P7 runs 1, 2, 8 and 8b, P16), for the
+      class rule with walls (P7 run 9, P16) and for the choice without a reference cell (P16, runs
+      (s), (u) and (r), which also test the parameters of table T5 for a scatter, a move order onto
+      an unreachable cell and a rally point). `unmeasured` for the other rows of T5 (the no-move
+      orders of units in the air, underground or of a jumpjet type, and orders onto an object):
+      they differ from the move-order row only in parameters that need a flying, underground or
+      jumpjet unit next to occupied cells, and their further test is not established.
+      `unmeasured` for the 24-cell limit and the stop rule in deck mode. Both differ from the plain
+      ring rule only when every qualifying cell of the inner rings fails the visibility test, which
+      needs terrain built to hide whole rings, and the visibility test itself is known only by its
+      result. `unmeasured` for the double entry of the centre: in claim 24 the centre normally does
+      not qualify, and a scatter's centre qualifies only in the case S-0208 claim 13 names (the
+      empty destination cell of a walking unit), while a scatter without a threat point is accepted
+      only while the unit's locomotor is not moving (S-0208 claim 11), so that case cannot be set up
+      at will. In the uses of table T5 for orders, a qualifying centre on flat ground ends the
+      collection with ring 0, so the result is the centre at either position.
+      `unmeasured` for the winged class, which no unit of this spec's scenarios has (S-0213's
+      scenario O14, step 5, covers the rally point of an aircraft factory)
+    - Confidence: high for the occupancy condition and the class rule. Medium for the ring rule, the
+      scan order, the 24-cell limit, the distance choice, the choice without a reference cell and
+      the parameters of table T5. Low for the visibility test and for the condition under which
+      the no-move rows of T5 ask for the further test (Open questions)
+
+### Linked vehicles
+
+26. **Follower cars are sent after the leader.** When a leading vehicle that is not itself a
+    follower car obtains a path with at least one step, each car of its chain is given, in that tick, a
+    destination: the first car the cell one step back from the leader's destination, against the
+    direction of the last step of the whole path found (not only of its stored part), and each
+    later car the cell one step further back in the same direction. A car whose current destination
+    already lies in that cell is left alone. Any other car queues *move* with that destination and
+    computes its path at once under this spec, with its own reachability gate and search. It does so
+    even while its own retry delay runs (the second exception of claim 21). Afterwards the car's
+    retry delay is as follows: none after a found path, the delay *R* from that tick after a failed
+    search, and unchanged after a failed gate. What else follows a failure is claim 23, except that
+    when exactly a drive-locomotor car's destination is cleared after such a failure is not
+    established (Open questions).
+    - Backing: `measurable` only with test data (scenario P9, follower runs 1 to 3). Stock data is
+      not known to link cars. `unmeasured` for the car's retry delay after a failed search or gate:
+      it would show only as the timing of the car's next search, which the car's failure handling
+      (not established) also decides
+    - Confidence: medium (low for the car's retry delay afterwards)
+
+### Entry outcomes for a vehicle mover
+
+27. **The rows this spec relies on.** For a ground vehicle asking to enter a cell, the objects on
+    the cell's search layer give these outcomes. "Allied" includes the vehicle's own house.
+    - An allied vehicle or infantry unit that does not count as moving (it has no destination, is
+      not turning and its locomotor is not moving) gives *stationary friendly*.
+    - An allied unit that counts as moving gives *moving blocker*, except in one close case, which
+      gives *blocked*. The close case needs all three of these: with *f*ₒ the occupant's body
+      facing and *f*ₘ the mover's, the 8-direction of the facing (*f*ₒ + 32767) mod 65536 equals the
+      8-direction of *f*ₘ (the two face roughly opposite ways, `quirks.opposite_facing_reversal`), the spatial distance between their
+      positions (F6c) is at most 511 leptons, and the 8-direction of the direction of the occupant
+      from the mover (S-0204) equals the 8-direction of the mover's body facing (the occupant lies
+      ahead).
+    - An allied building that is not a gate gives *blocked*, unless the building is the target the
+      vehicle's behaviour aims to reach (those exemptions belong to the behaviour specs).
+    - A wall section in the cell gives, for a vehicle that does not crush it, *blocked* when the
+      vehicle has no weapon or its primary weapon cannot damage walls (the combat specs say which
+      weapons can). A vehicle whose primary weapon can damage walls gets *friendly obstacle* for an
+      allied wall section and *enemy obstacle* for an enemy one. A vehicle crushes a wall section
+      when the wall's overlay type is crushable and the vehicle is a crusher (by its type's crusher
+      flag or by the crusher veterancy ability, S-0210 claim 1), or when its movement zone is
+      *crusher-all*, whatever the overlay type. It then gets *friendly obstacle* for an allied wall
+      section, and an enemy wall section adds no outcome.
+    - When the objects give different outcomes, the most severe counts, in S-0209's order. An object
+      giving *blocked* therefore makes the outcome *blocked*, whatever the others give. Terrain checks
+      (height steps, land multipliers, the usable area) come from claim 10, S-0211 and S-0209. Allied
+      infantry for a vehicle mover is S-0209 claim 5.
+    - Backing: `measurable` (scenario P7 runs 1 to 4, the held blocker of P6, P14 runs 1 to 4 for a
+      unit ahead that faces the same way, P14 run 5 for the close case itself, and P9's train
+      refresh run for an allied wall section and a vehicle without a weapon)
+    - Confidence: medium for the stationary-vehicle and building rows, the wall row for a vehicle
+      without a weapon, the close case and the "most severe" rule. Low for the other parts of the
+      wall row (which weapons count, the crusher case) and for the behaviour-target exemptions
+
+## Formulas
+
+All floating-point results below are formed with a 53-bit significand under the round-toward-zero
+mode (S-0205): a sum or product of two values is trunc₅₃ of the exact result, and storing a result in
+single precision is trunc₂₄.
+
+**Switches of S-0204.** `quirks.table_root_distance` covers the lepton distances F6a to F6c, and
+so the distance tests of claims 20, 24 and 27: with the switch off each distance is ⌊√*n*⌋, as
+S-0204 says. It does not cover the estimate *h* of F2 or the nearest-cell choice of claim 25, which
+use the table square root whatever the switch. S-0204's alternative is an integer root, and in
+cells an integer root would change these two rules instead of refining a rounding: an integer *h*
+makes many candidates tie and gives the search another shape, and in claim 25 a straight
+neighbour (distance 1) would tie with a diagonal one (√2, floored to 1). Claim 25 orders its cells
+in the same way under the table root as under an exact, unfloored root. `quirks.table_direction`
+covers the direction of the occupant from the mover in claim 27's close case: with the switch off
+that direction is S-0204's exact angle, and the 8-direction is taken of that angle. Taking the
+8-direction of a facing (S-0204 F4) has no switch.
+
+**F1. Step cost.** For a step in direction *d* onto a cell with entry outcome *v*:
+
+> *c* = trunc₂₄(*b*(*v*) × *τ* + *ε*(*d*))
+>
+> *g*(new) = trunc₂₄(*g*(current) + *c*)
+
+where *b*(*v*) is the base cost of claim 8 (table T2), *τ* = 4 when the target cell carries the
+congestion mark (claims 9 and 19) and 1 otherwise, and *ε*(*d*) is the direction term of table T4, a
+single-precision value. *b* × *τ* is an exact small integer. Unit: cost units. For a tunnel step
+*c* = the Chebyshev distance between entrance and exit, exactly, with no *ε*. The start pair has
+*g* = 0. The comparisons of *f* values (claim 12) are exact comparisons of the stored
+single-precision values.
+Recorded-pair margin (claim 11): with *g*ₑ the cost of the pair being expanded and *g*ᵣ the
+destination's recorded cost (both single precision), the rule of claim 15 for an already recorded
+destination applies when *g*ᵣ ≥ trunc₅₃(*g*ₑ + μ), where μ is the binary64 value nearest 1.009. The
+comparison is exact.
+
+**F2. Estimate.** For a candidate cell (*x*, *y*) and destination (*x*ₜ, *y*ₜ):
+
+> *h* = *r*((*x* − *x*ₜ)² + (*y* − *y*ₜ)²), in cells
+>
+> *f* = trunc₂₄(*g* + *h*)
+
+*r* is the table square root of S-0204 (its Formulas F1), applied to the exact integer sum of
+squares, here in square cells. Its result is a single-precision value that never exceeds the true
+square root, and the sum *g* + *h* of two single-precision values is exact before the narrowing.
+The search layer does not enter *h*.
+
+**F3. Retry delay.**
+
+> *R* = trunc(trunc₅₃(*P* × 900)) ticks
+
+with *P* the path-retry delay field in game minutes and 900 ticks per game minute. A value read
+from data is a single-precision decimal (S-0003 claim 6) held as a double. The absent-key default is
+the binary64 value nearest 0.016. trunc converts toward zero to an integer.
+
+**F4. Close-enough distance.** *C*, in leptons, is the close-enough distance of S-0209 (its
+Formulas F2 and Import mapping, which also give the absent-key default and the handling of the
+value −1). This spec only uses it (claim 24). A unit that is a team member uses a distance given by
+its team's current script step instead, which belongs to the team specs.
+
+**F5. Threat term (coarse search).**
+
+> *T* = trunc(trunc₅₃(*t* × *k*))
+
+*k* is the threat coefficient (a double: the single-precision field value widened, or exactly 1.0),
+and *t* = *t*(*q*, *s*, *L*) is the coarse threat (Terms) of the unit's house for the step from sector
+*q* to sector *s* at level *L*, an integer:
+- Level 0: *t* = 0 always.
+- Level 1: *t* is a value the house's records hold for the entered sector *s* alone; *q* plays no
+  part.
+- Level 2: *t* comes from the house's coarse threat record, read near both sectors. When the two
+  sectors read the same place, *t* is the value there. Otherwise *t* = ⌊(*a* + *b*) / 2⌋ (rounded
+  down), where *a* is the smaller of two readings on the side of *q* that faces *s*, and *b* the
+  smaller of two readings on the side of *s* that faces *q*. Which places are read is not
+  established (Open questions).
+
+*T* is an integer. The term is used only when *k* > 0.00001 (F7). Confidence: high that *t* is 0 at
+level 0, low for levels 1 and 2. How the house's records are kept belongs to the combat and
+AI-visible-rules specs.
+
+**F6. Lepton distances.** Each is ⌊*r*(*n*)⌋ leptons, with *r* the table square root of S-0204
+(its Formulas F1) and *n* the exact integer sum of squared coordinate differences in leptons:
+- **F6a. Unit to destination** (claim 24): *n* = Δ*x*² + Δ*y*² + *z*², from the unit's position to
+  the destination cell's centre (256*x* + 128, 256*y* + 128), with *z* the unit's world height. The
+  destination point is taken at world height 0
+  (`quirks.substitution_distance_flat_destination`).
+- **F6b. Cell centre to cell centre** (claim 24): *n* = Δ*x*² + Δ*y*².
+- **F6c. Unit to point** (claims 20 and 27): *n* = Δ*x*² + Δ*y*² + Δ*z*², between the unit's position
+  and its heading point (claim 20) or the other unit's position (claim 27).
+
+*D* / 256 in claim 20 is an integer division of the non-negative integer *D*.
+
+**F7. Threat tests.** The cell threat tests of claims 17 and 18 form trunc₅₃(*t* × *k*) for the
+integer threat value *t* of a cell and compare it exactly with a binary64 constant: < 1.0 in claim
+17, ≥ the binary64 value nearest 0.01 in claim 18. The coefficient test "*k* exceeds 0.00001" of
+claims 13 and 18 compares *k* exactly with the binary64 value nearest 0.00001.
+
+**F8. Legs of the coarse estimate (claim 24).** Let *n* be the number of level-0 corridor sectors
+from the found cell's sector to the destination's.
+- When the destination is a bridge cell and the found cell is a bridge cell of the same bridge, *E*
+  is just their Chebyshev distance, and no legs apply.
+- Otherwise, when the destination is a bridge cell, a leg equal to the Chebyshev distance from the
+  destination to the anchor cell of the corridor sector second from the destination's end (the
+  destination's own sector when *n* < 4) is added.
+- When the found cell is a bridge cell, a leg equal to the Chebyshev distance from the found cell to
+  the anchor cell of the corridor sector second from the found cell's end (the found cell's own
+  sector when *n* < 4) is added.
+
+Integers, in cells. Which cell of a sector is its anchor cell is not established (Open questions).
+Our engine's choice until then is a question for the project lead.
+
+**F9. Coarse route cost (claim 13).** For a route reaching sector *s* from sector *q*:
+
+> cost(*s*) = trunc₂₄(trunc₅₃(trunc₅₃(*κ*(*s*) + cost(*q*)) + *T*) + *λ*)
+
+*κ*(*s*) is the T3 constant for *s*'s category, cost(*q*) the stored single-precision cost of the
+route to *q* (0 for the start sector), *T* the integer threat term of F5 (0 when the coefficient test
+fails), and *λ* the binary64 value nearest 0.001 for a connection marked as a link, otherwise 0. Unit:
+cost units. A sector already reached gets the new route only when the new stored cost is strictly
+smaller than its stored cost (an exact comparison). Under the round-toward-zero mode the link term
+adds less than 0.001 once a cost reaches 2¹³ cost units, and nothing once it reaches 2¹⁴. Costs that
+large arise only with large threat terms.
+
+## Constants
+
+| Name (ours) | Value | Unit | Notes |
+|---|---|---|---|
+| Stored path length | 24 | steps | claim 20 |
+| Path refresh distance | 512 | leptons | claim 20, recomputation as the last stored step begins |
+| Expansion limit | 65527 | expanded pairs | claim 12 |
+| Failing expansion count | 10000 | expanded pairs | `quirks.path_search_10000_failure` |
+| Recorded pairs per search | 65535 | pairs besides the start | claim 12, departure D2 |
+| Coarse routes pending at once | 9999 | sector routes | claim 13, `quirks.coarse_limit_records_cost` |
+| Path length beyond which results are undefined | 1999 | steps | original only: departure D2 removes the limit in our engine |
+| Corridor length beyond which results are undefined | 500 | sectors per level | departure D2: our engine treats a longer chain as a failed coarse search |
+| Cell searches per path | 5 | searches | claim 13 |
+| Recorded-pair margin | 1.009 | cost units | claim 11 (corner case only), F1 |
+| Blocker chain | 10 | cells (one object each) | claim 8 |
+| Congestion-mark cost factor | 4 | factor (dimensionless) | *τ* in F1; claims 9, 19 |
+| Corridor levels | 3 | levels | block sizes 2, 4 and 8 cells |
+| Region join limit | 1 | height levels | claim 3 |
+| Region join limit along cell x | 3 | height levels | claim 3, `quirks.region_join_height_asymmetry` |
+| Nearby search largest radius | 31 | cells | claim 25, less on maps with *w* + *h* < 32 |
+| Nearby search candidates | 24 | cells | claim 25 |
+| Substitution detour allowance | 6 | cells | claim 24 |
+| Straightening scan | 20 | steps | claim 18 |
+| Threat cells allowed in the closing stretch | 3 | cells | claim 18 |
+| Congestion block | 5 × 5 | cells | claim 19 |
+| Close-case distance | 511 | leptons | claim 27 |
+| Close-case facing reversal | 32767 | facing units | claim 27, `quirks.opposite_facing_reversal` |
+| Threat thresholds | 1.0, 0.01, 0.00001 | 1.0 and 0.01: threat value × coefficient. 0.00001: coefficient (all dimensionless) | claims 13, 17, 18, F7 |
+| Link connection cost | 0.001 | cost units | claim 13, F9 |
+| Ticks per game minute | 900 | ticks per game minute | glossary |
+| Leptons per cell | 256 | leptons | glossary |
+
+**T2. Base step cost by entry outcome** (cost units).
+
+| Outcome | clear | cloaked blocker | moving blocker | closed friendly gate | friendly obstacle | enemy obstacle | stationary friendly | blocked |
+|---|---|---|---|---|---|---|---|---|
+| *b* | 1 | 1000 | claim 8 (1, 4 or 1000) | 1 | 60 | 20 | 8 | not considered |
+
+**T3. Sector entry cost by passability category** (coarse search, claim 13; cost units).
+
+| Category | open | crushable | wall-like | beach | water | partial obstacle | blocked | off-map |
+|---|---|---|---|---|---|---|---|---|
+| cost | 1 | 0 | 0 | 1 | 1 | 0 | 1 | 1 |
+
+**T4. Direction term** *ε*(*d*), the single-precision values nearest these decimals, in cost units.
+
+| *d* | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
+|---|---|---|---|---|---|---|---|---|
+| *ε* | 0.001 | 0.005 | 0.002 | 0.006 | 0.003 | 0.007 | 0.004 | 0.008 |
+
+Straight steps carry the smaller terms, so among routes of equal step count and outcomes the one
+with fewer diagonal steps is cheaper, and among straight steps map north is cheapest, then east,
+south and west.
+
+## State and ordering
+
+| State of the unit's path | Event | Result |
+|---|---|---|
+| no stored steps, retry delay over | needs to move | path computation: the gate of claim 6 judges the destination as ordered, and only a destination that passes it can be substituted (claim 24). On success the steps are stored and no retry delay follows (claim 21). On failure claim 23 |
+| no stored steps, retry delay running | needs to move | waits (a follower car sent by its leader computes at once instead, claim 26) |
+| stored path | next step *clear* | follows it (movement specs) |
+| stored path, drive locomotor | next step of another outcome, neither *moving blocker* nor *blocked* | reacts as S-0209 and the movement specs say: opens a gate, attacks an obstacle or waits (claim 22) |
+| stored path, more than one step | the next step begins | the step is taken |
+| stored path, one step left, drive locomotor | that step begins, heading point more than 512 leptons away | immediate recomputation in mode 0 (claim 20), the old step is still taken |
+| stored path, drive locomotor | next step *moving blocker* | blockage timer starts if not running. When the retry delay is over, re-path in mode 1, or 2 once the blockage timer has run out |
+| stored path, drive locomotor | next step outcome *blocked* | stored path cleared, fresh search once the retry delay is over |
+| stored path, walk locomotor | next step of any outcome other than *clear* | reacts as S-0209 claims 7 to 10 say, with the delays of claim 21 |
+| any | destination changes | stored path cleared, fresh search, which waits for a running retry delay like any fresh search (claims 20 and 21; whether a new order also clears the delay is S-0213's and S-0209's) |
+
+Ordering consequences:
+- A search made after a bridge is destroyed, even later in the same tick, already sees the bridge as
+  a separation (claim 5).
+- The gate uses the destination as ordered, so an ordered destination in another reach region is
+  dropped even when a cell near it would be reachable (claims 6 and 24).
+- Straightening (claims 17 and 18) uses the entry outcomes at the moment of the search, including
+  the temporary congestion marks of claim 19, so a path found in mode 1 or 2 is straightened around
+  the marked cells.
+- The search reads entry outcomes as they are at the moment of the search. Units that move later in
+  the same tick are not anticipated except by the blocker chain of claim 8.
+
+## Edge cases and quirks
+
+- **`quirks.path_search_10000_failure`** (default: on). A search that reaches the destination after
+  exactly 10000 expansions fails. Off: it succeeds as at any other count.
+- **`quirks.path_no_reopen`** (default: on). A (cell, search layer) pair keeps the cost and
+  predecessor of the first expansion that recorded it, and never becomes pending again (claim 11). Off:
+  when an expansion reaches a recorded pair more cheaply, the pair's cost and predecessor are
+  replaced and it becomes pending again, as in a standard best-first search. The 1.009 margin corner of
+  claim 11 applies only when the switch is on. With the switch off, claim 15 treats an already
+  recorded destination like one not yet recorded: a later neighbour that finds the destination's
+  outcome *blocked*, within 1 height level of it, ends the search there, with no comparison of
+  costs.
+- **`quirks.region_join_height_asymmetry`** (default: on). Neighbouring cells of one category along
+  cell x join one region when their height levels differ by up to 3, while in every other direction
+  they join only up to a difference of 1 (claim 3). The original therefore treats some
+  cliff-separated cells as connected, and a unit ordered across such a cliff searches and fails
+  instead of being stopped by the gate of claim 6. Off: the limit is 1 in every direction.
+- **`quirks.flatten_threat_start_cell`** (default: on). The right-angle flattening of claim 17
+  reads the threat value at the new steps' first cell for every cell it checks. Off: it reads the
+  threat value of each checked cell.
+- **`quirks.flatten_straight_run_v`** (default: on). In claim 17, the new straight steps of a
+  flattened V of diagonal runs, with equal straight steps directly after them, the second run
+  of a V of straight runs that was not flattened, and the new steps of a flattened V of straight
+  runs of the pair 6 and 0 can open a V of straight runs. Such a V is replaced by 2*j* steps, which
+  are diagonal except for the pair 6 and 0, displace every later step of the path by *j* cells
+  along each axis, and the pair 6 and 0 gives direction 0 instead of 7. The stored path then no longer ends on the
+  cell the search reached. Off: no run of straight steps opens a V, so only V's of diagonal runs are
+  flattened and the path always ends where the search ended.
+- **`quirks.path_congestion_toggle`** (default: on). The congestion marks of claim 19 follow the
+  parity of each cell's count, so a cell counted twice is left unmarked, and a cell that already
+  carried the congestion mark loses it during the search when its count is odd. Off: during the search a
+  cell carries the mark when it carried it before or its count is at least 1.
+- **`quirks.corridor_split_probe`** (default: on). Whether the progress sector counts as split
+  (claim 13a) is decided at the probe cell, which need not lie in that sector at all, and a sector
+  that does not fill its block counts as split whenever the probe cell is in it. Off: *S* counts as
+  split when some cell of *S* inside the usable area is not in the free part, and as whole
+  otherwise.
+- **`quirks.corridor_free_part_unusable_cells`** (default: on). In a corridor retry (claim 13a), a
+  cell whose category the unit's own movement zone cannot use belongs to the free part, and counts
+  for the free part's borders, whatever its entry outcome. Off: only a cell of a usable category
+  with entry outcome *clear* belongs to the free part or counts for its borders. Independent of
+  `quirks.corridor_split_probe`. Claim 13a says why the difference can show only for an infantry
+  type with the jumpjet flag.
+- **`quirks.substitution_centre_ground_level`** (default: on). In destination substitution
+  (claim 24), the nearby-cell search judges heights around the ground of a bridge-cell destination
+  unless the unit stands on a bridge deck, although the search aims at the deck (claim 7). So a
+  unit on the ground ordered onto an occupied deck cell gets a bank cell or no substitute, never a
+  deck cell. Off: in claim 24's use the centre's level includes the deck whenever the destination
+  is a bridge cell, for every unit that is not an aircraft, so free deck cells next to the
+  destination can be adopted. The other uses of the search (claim 25, table T5) are unchanged either way.
+- **`quirks.substitution_distance_flat_destination`** (default: on). The unit's distance to its
+  destination in claim 24 (F6a) measures to the destination cell's centre at world height 0, so a
+  unit on high ground counts as farther away than it is: it compares that larger distance with the
+  close-enough distance, and a nearby cell needs only to be closer to the destination than that
+  larger distance. Off: the destination point is the cell's centre at the cell's ground world
+  height, and the distance is the true spatial distance.
+- **`quirks.path_refresh_keeps_old_step`** (default: on). When a path is recomputed as the last stored
+  step begins (claim 20), the unit takes the old step and drops the new path's first step, so the
+  rest of the new path is followed from a cell one step away from where it was planned whenever the
+  two first steps differ. Off: the unit takes the new path's first step instead of the old one.
+- **`quirks.nearby_centre_twice`** (default: on). The nearby-cell search of claim 25 examines its
+  centre cell twice, so a qualifying centre is collected twice: it takes two of the 24 places and,
+  when the rule gives no reference cell, two of the *n* positions of the choice by tick number.
+  Off: the centre is examined and collected once. No known use of the search shows the difference
+  in practice (claim 25).
+- **`quirks.opposite_facing_reversal`** (default: on). The close case of claim 27 compares the
+  occupant's facing turned by 32767 facing units, not by the exact half turn of 32768, so facings
+  that differ by exactly 32768 can miss the test by one unit at the boundary of an 8-direction.
+  Off: the occupant's facing is turned by 32768.
+- **`quirks.coarse_limit_records_cost`** (default: on). In claim 13, a route found while 9999
+  routes are pending still sets the sector's recorded cost, although it is never pending, so later
+  routes to that sector must beat it. Off: such a route leaves the sector's recorded cost unchanged.
+- **`quirks.train_exclusion_search_only`** (default: on). Claim 16's exclusion of the three cells
+  behind a train holds for the search only, so straightening can give the stored path a reversing
+  first step. Off: the straightening passes also treat the three cells as not enterable, and make
+  no change that would put the path's first step into one of them.
+- **Quirks of the passability category** belong to S-0211: `quirks.passability_wheel_column` (the
+  category judges every movement zone by the wheel column of the land multipliers) and
+  `quirks.passability_laser_fence_lost` (laser-fence sections leave the category alone). Through
+  claim 1 both change regions and reach regions here too.
+- **Buildings do not separate regions** (claim 1). A destination enclosed by buildings passes the
+  gate and costs a full search, up to 5 cell searches, before it fails. This is original behaviour.
+- **Departure D1: unknown movement zone.** In the original a movement-zone value outside the
+  vocabulary leaves the type with no movement zone. The gate then always passes, and the search
+  reads the reach region of a non-existent movement zone, which is undefined. Our engine follows
+  S-0211 claim 4, which owns the parsing of zone names: such a value is treated as an absent key,
+  so the type keeps the movement zone it held before (from an earlier rules layer, or the
+  absent-key default *normal*), and the importer warns. In our engine every type therefore has a
+  movement zone, and the first exception of claim 6 never applies.
+- **Departure D2: search size limits.** In the original, a search that records more than 65535
+  pairs besides the start pair, or finds a path of more than 1999 steps, has undefined results. Our
+  engine ends a search as failed when it would record a 65536th pair besides the start pair, and
+  keeps a found path of any length (only its first 24 steps are stored anyway). Likewise a coarse
+  search (claim 13) whose chosen chain has more than 500 sectors at some level has undefined results
+  in the original. Our engine treats such a coarse search as failed, and the table of claim 13 then
+  applies: after a first coarse search the cell search runs without a corridor, after a repeated one
+  the path computation fails (low confidence that such chains occur on legal map sizes).
+- **Departure D3: building destination with no substitute.** When the destination cell holds a
+  building, its outcome is *blocked*, and the nearby-cell search of claim 24 finds no cell, the
+  original replaces the unit's destination by one that names no cell, and what follows is
+  undefined. Our engine keeps the destination unchanged, so the search approaches the building
+  under claim 15. This needs no importer warning, because the cause is the game situation, not the
+  data.
+- **Departure D4 (proposed): region corner cases.** In rare height configurations the original's
+  regions differ from the rule of claim 3 (smallest known case in claim 3). The difference comes
+  from the order in which the original labels the map, and reproducing it would mean reproducing that
+  labelling exactly. Our engine follows the rule of claim 3. Whether to accept this departure is a
+  question for the project lead.
+- **Departure D5: rules for computer-controlled owners only.** This is a design choice of scope,
+  the kind of departure the glossary entry *departure* allows, and it follows the project lead's
+  decision recorded under the glossary entry *AI house*. Three rules of the original apply to
+  units of its computer player only:
+  - after giving up (claim 23 row 2) the unit queues *area guard*, where a human-controlled
+    owner's unit queues *guard*,
+  - after giving up in a skirmish or multiplayer game, its house gives it a new destination, and
+  - the threat coefficient of a unit that is a team member whose team type is marked to avoid
+    threats is exactly 1.0 (Terms).
+
+  Our engine reproduces none of them for an *AI house*, which has the unit rules of a
+  human-controlled house and no teams (glossary *AI house*, *team member*). A unit of an *AI house*
+  queues *guard*, gets no destination from its house and always uses its own coefficient. There is
+  no switch. Our AI may reproduce the original's result through ordinary orders. The measurement
+  scenarios that use a computer-controlled house measure the original.
+- **Threat with a zero coefficient.** A unit with threat coefficient 0 ignores threat in every
+  claim: the coarse threat term is skipped and every threat test of claims 17 and 18 passes.
+
+## Import mapping
+
+Keys are read from the rules file and its rules layers (S-0006). Booleans, decimals, integers and
+named values follow S-0003. An absent key keeps the held value (S-0006 claim 3). The absent-key
+defaults are the values before any data is read. Type fields start from them in every game, because
+every type is created anew at each game start. The game-wide key of `[AI]` below is set to its
+default only once, when the program starts, so the default holds in the first game of a session,
+and in a later game an absent key keeps the value an earlier game's rules layers left
+(S-0006 claim 3). The keys behind the passability category (land types, overlays, terrain objects,
+firestorm walls and laser fences) and the locomotion class are S-0211's.
+
+**Unit and infantry type keys** (in the type's section)
+
+| Key | Form | Absent-key default | Use here |
+|---|---|---|---|
+| `MovementZone` | named value as in S-0211's import mapping (text cut to 31 characters, letter case ignored, the spelling `subterannean`) | `normal` | movement zone (claims 4, 6, 13, 25). A value outside the vocabulary: S-0211 claim 4, departure D1 |
+| `ThreatAvoidanceCoefficient` | decimal, single precision (S-0003 claim 6), held as a double | 0.0 | threat coefficient *k* (claims 13, 17, 18), copied to the unit when it enters play |
+| `Speed` | integer, converted to the speed number 0 to 255 (Terms): by S-0207 claim 1 for a vehicle type, by S-0208 F4 for an infantry type, each with its rule for the value −1 | speed number 0 | speed comparison of claim 19 |
+| train key (name at sign-off) | boolean | false | train rules (claims 8, 14, 16, 20, 24) |
+| `JumpJet` | boolean | false | an infantry type with this flag uses movement zone *infantry* for the coarse search of a path computation (claim 13), whatever its own movement zone. The estimate of claim 24 uses its own movement zone (Open questions) |
+| `Passive` (vehicle types only) | boolean | false | exception of claim 15 |
+
+**Team type key**
+
+| Key | Form | Absent-key default | Use here |
+|---|---|---|---|
+| `AvoidThreats` | boolean | false | describes the original only: when true, the original's team members use *k* = 1.0. Our engine does not read it for an *AI house* (Departure D5) |
+
+**Game-wide keys**
+
+| Section | Key | Form | Absent-key default | Use here |
+|---|---|---|---|---|
+| `[AI]` | `PathDelay` | decimal, game minutes, single precision held as a double | the binary64 value nearest 0.016 | *P* (F3, claim 21) |
+
+The close-enough distance *C* (claim 24) and the blockage delay *B* (claim 22) are imported as
+S-0209's Import mapping says.
+
+**Map tunnel list**
+
+| Map section | Entry | Use here |
+|---|---|---|
+| `[Tubes]` | one entry per tunnel: entrance cell x and y, a facing, exit cell x and y, then a list of directions | tunnel entrance and tunnel exit (claims 7 and 9). The facing and the direction list do not enter pathfinding |
+
+## Measurement scenarios
+
+**Common setup.** The glossary's *measurement setup*: unmodified install, stock data, no engine
+add-ons, a purpose-made test map unless stated, skirmish, game speed free (results are in ticks and
+cells). One human-controlled house with the test units. A computer-controlled house of the original only where a
+scenario says so, otherwise no opponent. Such a house shows the original's rules for a computer-controlled owner, which our engine's *AI houses* do not have (Edge cases and quirks). Record, with a recorder that reads the running game's state
+or a screen capture that keeps every drawn frame, per tick: each test unit's cell and destination,
+its current behaviour, whether it is a team member, and the tick count. Where the recorder can read
+it, also record each test unit's stored path. Where a scenario changes a rules value it does so
+through the test map's override section (a named test file), named in the scenario and removed after
+the run. A land-type override gives every multiplier key the scenario needs, because the rest of that
+row resets (S-0006 claim 5). No stock value is assumed: expected numbers are computed from the fields'
+values at measurement time. A computer-controlled team member gets its order through its team's
+script, the team being made by a trigger action that creates a team. Pathfinding takes no random
+draws (claim 25), so one run per variant is enough unless stated.
+
+- **P1 (claims 13 and 17; secondary check: claims 7 to 18): path shape on open ground.**
+  - Setup: a flat map of clear land at one height level, no overlays or objects, 40 × 40 cells. One
+    wheeled vehicle without a weapon (a test override removes its weapon if its type has one), of a
+    type not marked as a crusher and not of movement zone *crusher-all* (a test override changes
+    either if needed), and placed by the map with no veterancy gained, so without the crusher
+    veterancy ability (S-0210 claim 1). So a wall section
+    gives it outcome *blocked* (claim 27). It is started in turn at cells (10, 10),
+    (11, 10), (10, 11) and (11, 11) (all four parities of x and y) facing map north.
+  - Procedure: from each start, order it to the cells 5 and 2, 2 and 5, 7 and 7, 15 and 1, and 1 and
+    15 cells away (in +x and +y), one order per run, starting afresh each time. Repeat with a single
+    wall line placed across the direct route (a 7-cell wall perpendicular to the line from start to
+    goal, centred on it). Long runs, which serve (b): on a 64 × 64 map of the same kind, from the
+    same four starts, order it to the cells 22 and 8 cells away and to the cells 8 and 22 cells
+    away, once on open ground and once with a 7-cell wall line across the direct route,
+    perpendicular to it and centred 19 cells from the start, so that the route bends around the wall
+    after its 20th step.
+  - Observable: the sequence of cells entered, and from a recorder the ticks of the unit's path
+    computations and of any refused step.
+  - Expected, independent of tie order: (a) the cells entered, except those of straightened
+    stretches and those with the corridor exemption (the first cell entered, and in the wall runs
+    the cells next to a wall section), lie in a chain of aligned 2 × 2 blocks that connects the
+    start block to the goal block (claim 13). Any other cell outside every such chain may occur only
+    inside a run of off-chain cells
+    whose two neighbours on the route are in the chain and which forms a straight line (a flattened
+    V, claim 17) or, within the first 20 steps, a diagonal-then-straight or straight-then-diagonal
+    shape (claim 18). (b) No right-angle V of diagonal runs whose two runs both lie after the 20th
+    stored step of a path computation remains whose straight replacement would be all clear (claim
+    17), unless its second run came from flattening a V of straight runs (its first run was then
+    already final). Within the first 20 steps (b) says nothing, because claim 18 works there after
+    claim 17 and its stretch selection is open. A run in which the unit refuses a step, or computes
+    a new path before it arrives other than as it begins the 24th step of a stored path (claim 20),
+    has not followed a path that ends at the goal. On this static map there are two known causes: a
+    flattened V of straight runs, which shifts the rest of the stored path (claim 17,
+    `quirks.flatten_straight_run_v`), and, in a long run whose path is refreshed at its 24th step,
+    the dropped first step of the new path (claim 20, `quirks.path_refresh_keeps_old_step`). Such a
+    run is left out of (a) and (b), reported, and goes to the secondary
+    check. (c) The routes from starts of different parity differ in at least one
+    goal case, as confinement to aligned blocks predicts.
+  - Secondary check, not a falsifier of any single claim: compare each run's cell sequence with the
+    one a reference implementation of claims 7 to 18 with T2 to T4 gives, and have the reference
+    implementation log every tie it meets whose order this spec leaves open. A run whose reference
+    computation meets no such tie should match exactly. A mismatch there sends claims 7 to 18 back
+    for review as a whole.
+  - Falsified if: (a) or (b) fails in any run, or the four parities always give identical routes up
+    to translation.
+- **P2 (claim 8): terrain speed does not steer the path.**
+  - Setup: a flat map. Start and goal 20 cells apart on a straight line of rough land. A road runs
+    parallel, 3 cells to the side, joined to start and goal. No override.
+  - Procedure: order a wheeled vehicle from start to goal.
+  - Observable: cells entered.
+  - Expected: the vehicle drives straight across the rough land, ignoring the faster road.
+  - Falsified if: it uses the road.
+  - Void if: at measurement time the test vehicle's land multiplier for rough land is not lower than
+    its multiplier for road (S-0211), judged from the fields' values, since the road is then not the
+    faster route and the run cannot tell terrain-aware costs from this claim.
+- **P3 (claims 1, 2, 4, 6, 23): unreachable destination on an island.**
+  - Setup: a land vehicle on the mainland. A small island separated by water, no bridge. Run 1: the
+    vehicle belongs to the human-controlled house. Run 2: it belongs to a computer-controlled house
+    and is a team member.
+  - Procedure: order the vehicle to a cell on the island (through its team's script in run 2, and
+    in run 1 through the same script if the interface refuses the order).
+  - Observable: whether the vehicle moves at all, the tick its destination is cleared, whether it
+    is still a team member afterwards, whether it is given a new destination in the following
+    ticks.
+  - Expected: no step is taken. The destination is cleared in the tick the path is first requested.
+    In run 2 the vehicle stays a team member and gets no new destination from its house. Its
+    behaviour afterwards follows S-0215 (falling back to rest) and is not part of this test.
+  - Falsified if: the vehicle drives to the shore first, waits before its destination is cleared,
+    or (run 2) leaves its team or heads for a new destination of its house, which would mean the
+    search-failure rows of claim 23 ran instead of the gate.
+- **P4 (claims 1, 3, 6, 10, 23): plateaus, slopes and a building pocket.**
+  - Setup: map A: a goal cell on a plateau 2 height levels above the surrounding ground with cliff
+    edges and no slope. Map B: the same goal at ground level, enclosed by a ring of the house's own
+    buildings with no gap. Run B1 with a vehicle of the human-controlled house, run B2 with a vehicle of a
+    computer-controlled house that is a team member. Map C: a goal on a plateau 1 height level above
+    the surrounding ground, with cliff edges except for one slope cell at the ground's height level
+    whose raised side meets the plateau, so that it leads up onto it. Map C2: as A, with a ramp of
+    two slope cells in a row leading up, the first at the ground's height level and the second one
+    level higher, each raised on the side towards the plateau. Map C3: as C, but the slope cell
+    has the plateau's height level instead of the ground's, so that it stands 1 level above the
+    ground in front of it, and the plateau has no other slope. Its orientation is that of map C, and
+    by claim 10 only its height level and its being a slope count. Maps C, C2 and C3 are made with the
+    map's height and tile data, the slope tiles of a land type the vehicle can enter, and in map C3
+    the vehicle is a team member of a computer-controlled house, as in run B2.
+    Map D (snow theater) and map E (temperate theater): the goal enclosed by a ring of one stock tree
+    type whose occupation patterns differ between the two theaters (S-0211 claim 11), ordered for
+    one infantry unit and one vehicle. Map F: two goal plateaus of clear land 2 height levels above
+    the clear land next to them, with no cliff tiles in between (the map's height data alone raises
+    them) and no slope. The first plateau is a strip whose only edges with the low ground run across
+    cell x (its neighbours at x − 1 and x + 1 are low), the second a strip whose only such edges run
+    across cell y. All their other sides are land of a type the vehicle cannot enter. Maps I, F3
+    and F5: as map F, with the two plateaus 1, 3 and 5 height levels above the low ground. In maps
+    F, I, F3 and F5 the vehicle is a team member of a computer-controlled house, as in run B2, so
+    that a failed search shows as a team exit and a failed gate does not. Map K: a river crossed by
+    an intact high bridge, the goal on the far bank, the vehicle on the near bank. Map H: the
+    2 × 2 configuration of claim 3, made with a crushable overlay on the cell (x, y), every other
+    neighbour of the four cells being land of a category the test vehicle's movement zone cannot use
+    (for example category *blocked*). A crusher vehicle (movement zone allowing *open* and
+    *crushable*) stands at (x, y + 1).
+  - Procedure: order a vehicle to the goal in each map (both goals in map F, one per run). In map
+    H, order the crusher vehicle onto (x, y).
+  - Observable: whether the vehicle moves, how far it gets, the ticks until its destination is
+    cleared, team membership and new destinations as in P3.
+  - Expected: A: no movement, cleared at once (different reach regions). B: the reach regions agree
+    (buildings are *open*), so the search runs and fails. The vehicle stops and gives up when more
+    than 1 cell away. In run B2 it leaves its team and its house gives it a new destination, which
+    P3 run 2 does not show. C and C2: the vehicle drives up the slope or the ramp to the goal (in
+    C2 each step between ramp cells, and from the upper ramp cell onto the plateau, is a difference
+    of 1 whose lower cell is a slope). C3: the gate passes (a difference of 1 joins), but the only
+    step up, from the ground onto the slope cell, has a flat lower cell, so it is refused (claim
+    10): the search fails, the vehicle never reaches the plateau, and it leaves its team. D/E: the infantry unit
+    reaches the goal exactly when the theater's occupation pattern is not the full one. F: the
+    plateau whose edge runs across cell x passes the gate (claim 3's x rule), so the vehicle
+    searches, may drive towards the edge, fails, and leaves its team. The other is refused at once
+    without movement and stays in its team. I: both plateaus pass the gate (a difference of 1 joins
+    in every direction), and both searches fail because a step of 1 level needs a slope (claim 10):
+    team exit in both runs. F3: as F (a difference of 3 still joins along cell x, and the step is
+    refused). F5: both refused at once, no team exit. K: the vehicle drives over the bridge, onto and
+    off its deck (steps of 4 levels at the bridge's ends), and reaches the goal.
+    H (original, low confidence): the order is dropped at once by the gate, although the rule of
+    claim 3 would let the vehicle drive onto the cell. This result supports departure D4's
+    description of the original.
+  - Falsified if: A behaves like B, B is refused at once like A, B2 shows no team exit or new
+    destination, C or C2 fails, the vehicle of C3 reaches the
+    plateau (which would mean a slope as the higher cell also allows the step) or is refused without
+    a team exit, D/E disagree with S-0211's occupation rule, the two plateaus of F behave
+    alike, a vehicle reaches a plateau in map I, F3 or F5, either plateau of I is refused without a
+    team exit, the two plateaus of F3 behave alike, either plateau of F5 gives a team exit, or the
+    vehicle of K does not reach the goal. For map H, the vehicle driving onto (x, y) falsifies the
+    corner-case description of claim 3 (and makes D4 unnecessary).
+- **P5 (claim 20): path refresh, stale paths and chase re-paths.**
+  - Setup: map 1: a flat corridor map, a 1-cell-wide road between impassable land, 60 cells long,
+    then open ground. The road crosses a river on a high bridge whose near end lies 30 cells from the
+    road's start (run 1) or 15 cells (run 2). Map 2: flat open clear ground, 40 cells long along map
+    north, with a test vehicle at the south end on column *x* and three friendly vehicles waiting
+    off to the side. Map 3 (run 3): flat open clear ground, 100 cells long along map north and 3
+    cells wide, with the test vehicle at the south end on column *x* and, 30 cells ahead of it on the
+    same column, a friendly vehicle of a type whose speed number is lower than the test vehicle's.
+  - Procedure: run 1 (map 1): order a vehicle from the road's start to the far open ground. At the
+    moment the vehicle has taken 5 steps, destroy the bridge (a trigger action that detonates a weapon
+    at a waypoint marker on it, as in P8). Run 1i: as run 1 with an infantry unit instead of the
+    vehicle (walk locomotor). Run 2: as run 1, with the bridge 15 cells ahead. Run 3
+    (map 3): order the test vehicle to move to the friendly vehicle (an order whose destination is
+    that vehicle) and order the friendly vehicle to the north end of the map, so that it drives
+    slowly away along the column, and record the ticks of path recomputation
+    (direction changes, or a change of the recorded stored path) and the separation of the two
+    vehicles at each one. Run 4 (map 2): order the test vehicle 30 cells straight north. Right after
+    the order, drive the three friendly vehicles onto the cells (*x* − 1, *y*₂₅), (*x*, *y*₂₅) and
+    (*x* + 1, *y*₂₅), where *y*₂₅ is the row 25 cells north of the start, so that they stand there
+    before the test vehicle has taken 20 steps. The first path (computed at the order) cannot see
+    them, and its 24 stored steps end on row 24.
+  - Observable: runs 1 and 2: the cell at which the vehicle stops and the tick its destination is
+    cleared. Run 1i: the first cell at which the infantry unit stops. Run 3: the number of steps between successive recomputations, and the separation in
+    cells at the earlier one. Run 4: the cell the test vehicle enters from row 23, and the one
+    after it.
+  - Expected: run 2: it drives on until its stored path, which still crosses the bridge, reaches the
+    gap. There the next step is refused, the fresh search fails the gate and the destination is
+    cleared. Run 1: the bridge lies beyond its 24 stored steps. It computes a new path at once as it
+    begins its 24th step, from the cell reached after 23 steps (the heading point is far more than
+    512 leptons away). That computation fails the gate, and the destination is cleared there. The
+    vehicle may still finish the step it had begun. What decides is that the destination is cleared
+    before the vehicle reaches the cell 24 steps from the start. Run 1i: the walker makes no
+    recomputation as its last stored step begins (claim 20), so it walks all 24 stored steps and
+    first stops on the cell 24 steps from the start, where its fresh search fails the gate.
+    Run 3: the number of steps between
+    recomputations is ⌊separation in leptons / 256⌋ at the earlier recomputation, within 2 steps
+    (the chased vehicle moves a little meanwhile), and never more than 24. Run 4 (low
+    confidence): the recomputation from row 23 finds a new path whose first step is diagonal, to
+    (*x* + 1, row 24), the cheapest way past the three vehicles (the mirror-image detour has the same
+    length and loses on the direction terms). The vehicle still takes the old straight step to
+    (*x*, row 24), and then the new path's second step, diagonal from there towards
+    (*x* + 1, row 25), which holds a friendly vehicle.
+  - Falsified if: in run 1 the destination is cleared before the 23rd step is done, or only once
+    the vehicle has reached the cell 24 steps from the start (which would mean the path is recomputed
+    only when it is used up), or in run 1i the infantry unit first stops before the cell 24 steps
+    from the start (which would mean the walk locomotor recomputes early too), or in run 2 before the vehicle reaches the gap. In run 3 the steps
+    between recomputations are 24 whatever the separation, or differ from ⌊separation in leptons /
+    256⌋ by more than 2 steps. In run 4 the vehicle moves from row 23 directly to
+    (*x* + 1, row 24) and on to (*x* + 2, row 25), which would mean the new path's first step is
+    taken (`quirks.path_refresh_keeps_old_step` off).
+- **P6 (claims 19, 21, 22, 27): retry delay and blockage modes.**
+  - Setup: test override in the test map's override section for the game-wide AI fields (Import
+    mapping here and in S-0209): the path-retry delay set to a value *P* with trunc(*P* × 900) = 90
+    ticks, and the blockage-delay field (an integer number of ticks, S-0209 Import mapping) set to
+    *B* = 300. A 1-cell-wide corridor with a side loop (a longer
+    route around) of 12 cells. A friendly vehicle held in the corridor, and a test vehicle ordered
+    through it from behind.
+  - Procedure: record until the test vehicle takes the loop. Repeat 10 times with the held vehicle
+    swapped for a slowly moving one that shuttles back and forth (statistical runs, since the timing
+    of the encounters varies).
+  - Observable: ticks from first blockage to each recomputation (visible as a change of the stored
+    route or of the step direction), and the tick the loop is taken.
+  - Expected (main case, the shuttling blocker): recomputations at least 90 ticks apart. The loop
+    is not taken before 300 ticks after the first blockage while the blocker keeps counting as
+    moving. The median time to take the loop lies between 300 and 390 ticks. Held blocker (low
+    confidence, since a vehicle that stands still without a destination gives *stationary
+    friendly*, whose handling belongs to S-0209 and the movement specs): the loop is taken at the
+    first recomputation.
+  - Falsified if: two recomputations come less than 90 ticks apart, or the loop is taken before
+    the blockage delay in the shuttling case. For the held blocker (low confidence), falsified if
+    the loop is not taken at the first recomputation, which would show that a vehicle without a
+    destination is not handled as in the main case.
+- **P7 (claims 6, 15, 21, 23, 24, 25, 27): destination substitution and blocked destinations.**
+  - Setup: a flat map with a 2 × 2 building of the human house, a vehicle 10 cells away. For runs 2
+    to 4, a friendly vehicle stands on a guard behaviour with no destination, so a vehicle mover gets
+    *stationary friendly* for its cell (claim 27). For runs 5 and 6, a test override gives one land
+    type (say rough) a track multiplier of 0 and a wheel multiplier of 1.0, and a single cell of that
+    land type lies in clear land. The mover is a tracked vehicle. For run 7, a small island holds a
+    building of the human house. For runs 8 and 8b, a separate flat map: a straight barrier along
+    row *y*₀ from *x* − 15 to *x* + 15, one cell thick, with *x* even and *y*₀ odd. The barrier cells
+    must have a passability category that the mover's movement zone cannot use (for example
+    water), not merely a land multiplier of 0, because the coarse search reads categories only
+    (claim 13). Open clear ground lies on both sides and around both ends. The destination cell
+    *D* = (*x*, *y*₀ + 1) lies beside the barrier's middle. Six friendly vehicles on guard with no
+    destination stand on *D* and on the five cells of *D*'s ring 1 that are not barrier cells:
+    (*x* ± 1, *y*₀ + 1) and (*x* − 1 … *x* + 1, *y*₀ + 2). The mover stands at (*x*, *y*₀ − 10), on the
+    other side. A test override sets the close-enough field to 1.375 cells (352 leptons). In run 8b
+    the barrier has a one-cell gap of clear land at (*x* + 2, *y*₀). For run 9, a separate flat map
+    of clear land: a friendly vehicle on guard with no destination stands on *D* = (*x*, *y*), three
+    wall sections of the human house stand on (*x* − 1, *y* + 1), (*x*, *y* + 1) and
+    (*x* + 1, *y* + 1), and the mover, whose movement zone a test override sets to *crusher-all*,
+    stands at (*x*, *y* + 10); the close-enough field is set to 1.375 cells as for run 8. For run 10,
+    a river crossed by a high bridge at least 12 cells long, with a friendly vehicle on guard with
+    no destination standing on the deck of the bridge cell *Q* over the middle of the river, and the
+    close-enough field set to 1.375 cells. Orders onto an occupied cell are plain move orders to
+    that cell (S-0213).
+  - Procedure: run 1: order the vehicle onto a building cell. Run 2: onto the cell of the stationary
+    friendly vehicle, 10 cells away. Run 3: as run 2 but from 2 cells away. Run 3b: as run 3, with a
+    test override setting the close-enough field to 2.125 cells (544 leptons), once with both
+    vehicles on flat ground at height level 0 and once with both on a wide flat plateau at height
+    level 3. Run 4: as run 3, with a test override setting the close-enough field to half a cell (128
+    leptons). Run 5: order the tracked vehicle onto the single cell of the overridden land type, from
+    10 cells away. Run 5b: as run 5, with a test override setting the close-enough field to half a
+    cell (128 leptons). Run 6: as run 5, with a further override marking the tracked vehicle's type
+    passive. Run 7: order a vehicle on the mainland onto the island building's cell. Runs 8, 8b and
+    9: order the mover onto *D*. Run 10: order a wheeled vehicle onto *Q*, once from the ground of
+    the near bank 10 cells from *Q* along the bridge's axis, and once (control) from the deck of the
+    same bridge, 5 cells from *Q*.
+  - Observable: the cell where the vehicle stops, the tick its destination is cleared, team and
+    behaviour changes as in P3. In runs 8, 8b, 9 and 10, the recorded destination in the ticks after
+    the order.
+  - Expected: run 1: a cell next to the building, the qualifying ring-1 cell nearest to the
+    vehicle's start (on equal distance, the first in the ring order of claim 25). The building's
+    other cells are in ring 1 too but do not qualify, since their occupancy record is not empty
+    (claim 25). Run 2: an
+    unoccupied cell next to the occupied cell, nearest to the vehicle. Run 3: no substitution
+    (within the close-enough distance). The vehicle stops next to the occupied cell. Run 3b: at
+    height level 0 the distance is 512 leptons, below 544, so there is no substitution. On the
+    plateau the vehicle's world height of 312 leptons counts in full (F6a), the distance becomes 599
+    leptons (the table square root of 359488), above 544, and the vehicle is sent to an unoccupied
+    ring-1 cell. Run 4: substitution takes place (the unit is now farther than the close-enough
+    distance, and a ring-1 cell is closer to the destination than the unit is): the vehicle stops on
+    the unoccupied ring-1 cell nearest to it. Run 5: no substitution (the cell holds no building).
+    The vehicle stops on a neighbour of the cell (claim 15). Its next search follows at once (a
+    successful search leaves no delay), is made from beside the cell and fails. The vehicle stays
+    there, stays in any team, queues no behaviour, and its destination is cleared in the tick of
+    that failed search (claim 23, row 3). Run 5b: the same, although the vehicle now stands farther
+    from the cell's centre than the close-enough distance. Run 6: the passive vehicle gets no path
+    (claim 15 does not apply, the search exhausts the reach region and fails), takes no step, and
+    gives up (claim 23). Run 7: no step. The destination is cleared at once by the gate, with no
+    substitution (claims 6 and 24). Runs 8 and 8b: the unit's distance to *D* is 11 cells, far above
+    the close-enough distance, so the nearby-cell search runs. Ring 1 holds no qualifying cell
+    (barrier or occupied), so the scan ends with ring 2, and its qualifying cell nearest to the
+    mover is *F* = (*x*, *y*₀ − 1), on the mover's side, 512 leptons from *D* (closer than the
+    unit). The Chebyshev distance from *F* to *D* is 2, so *F* is adopted only if *E* ≤ 8. Run 8:
+    the only route from *F* to *D* leads around a barrier end, through at least 17 level-0 sectors,
+    so *E* ≥ 32 (or the coarse search fails, if the upper levels confine it), and *F* is not
+    adopted: the recorded destination stays *D* and the mover drives off towards a barrier end.
+    (Once it has passed a barrier end, a later path computation may adopt a ring-2 cell on *D*'s
+    side, with a short route. That is not part of this test.) Run 8b: with the parities of the
+    setup, the route through the gap passes 3 level-0 sectors, and with any alignment at most 5, so
+    *E* ≤ max(2, 2 × 5 − 2) = 8: the recorded destination becomes *F* in the tick of the order's
+    path computation, and the mover stops on *F*. Run 9: the mover's distance to *D* is 10 cells, so
+    the nearby-cell search runs, with the simplified movement zone *normal*, which may not enter a
+    wall cell. Ring 1 then holds five qualifying cells. The nearest to the mover are (*x* − 1, *y*)
+    and (*x* + 1, *y*), at equal distance, and (*x* − 1, *y*) comes first in scan order. It is 256
+    leptons from *D*, and its estimate is at most 2 cells. So the recorded destination becomes
+    (*x* − 1, *y*) in the tick of the order's path computation. Run 10 (low confidence for the bank
+    cell chosen): from the ground, the destination's level is the height level of *Q* without the
+    deck, so no bridge cell qualifies (each counts 4 levels higher) and the river's water cells are
+    not enterable by class. The recorded destination either stays *Q* or becomes a cell of a bank,
+    never a bridge cell. Control, from the deck: the destination's level includes the deck, the
+    deck cells next to *Q* qualify, and the recorded destination becomes the deck cell next to *Q*
+    on the mover's side (256 leptons from *Q*, estimate 1 cell by F8).
+  - Falsified if: in runs 1 to 4 the vehicle stops elsewhere, or a different ring is used. Run 3b
+    shows the same result on the plateau as at level 0 (which would mean the destination's height is
+    taken into account). Run 4 shows no substitution (which would mean the found cell must lie
+    within the close-enough distance of the destination, not merely closer than the unit). Run 5 or
+    5b enters the cell, is given a substitute, or keeps its destination and goes on searching (which
+    would mean the drive locomotor does not clear it), or run 5b keeps it while run 5 clears it
+    (which would mean the close-enough distance matters). Run 6 moves towards the cell. Run 7
+    drives to a cell near the island, which would mean substitution came before the gate. Run 8
+    changes the destination to *F*, or to any other cell on the mover's side of the barrier, before
+    the mover has passed a barrier end (which would mean there is no route-length test, or a much
+    looser one). Run 8b keeps *D* as its destination (which would mean the test refuses a short
+    route, or the scan picks a different cell). Run 9 changes the destination to one of the wall
+    cells (which would mean the class rule uses the mover's own movement zone), or to a cell other
+    than (*x* − 1, *y*). Run 10 from the ground changes the destination to a bridge cell (which would
+    mean the destination's level is its deck, as in the search: the behaviour of
+    `quirks.substitution_centre_ground_level` off), or the control does not change it to the deck
+    cell next to *Q* on the mover's side.
+  - Void if: runs 2 and 3 set no close-enough override, so their expectations rest on the
+    close-enough distance *C* at measurement time (S-0209 Import mapping, judged from the field's
+    value). The unit's distance *D*ᵤ to the destination (F6a, at height level 0) is 512 leptons in
+    run 3 (2 cells) and 2560 leptons in run 2 (10 cells). Run 3 is void if *C* is below 512 leptons,
+    and run 2 is void if *C* is not below 2560 leptons.
+- **P8 (claims 5, 6, 23): bridge destroyed.**
+  - Setup: a river with one high bridge. A vehicle on the near bank ordered to a far-bank cell.
+  - Procedure: destroy the bridge (a trigger action that detonates a weapon at a waypoint marker on
+    the bridge) while the vehicle approaches, at least 30 cells from the bridge.
+  - Observable: the tick the vehicle's destination is cleared, relative to the tick of the bridge's
+    destruction, and the cells entered after the destruction.
+  - Expected: at its next path computation after the destruction (at the latest when its stored
+    path of at most 24 steps runs out), the vehicle fails the gate: its destination is cleared at
+    once and it takes no step onto the bridge cells. As in P3, it does not leave a team and its house
+    gives it no new destination.
+  - Falsified if: it keeps driving to the river bank and waits there, or it searches and gives up
+    with the team exit of claim 23.
+- **P9 (claims 9, 16, 18, 20, 21, 26, 27): tunnels, trains and follower cars (test data).**
+  - Setup: named test map containing a tunnel in its tunnel list, a test vehicle type marked as a
+    train (override section), and a leading vehicle with two follower cars linked in the map's
+    vehicle section.
+  - Procedure: order a vehicle to a cell beyond the tunnel. Train runs 1 to 3: the train type stands
+    at (*x*, *y*) on open clear ground with no other object within 8 cells, facing map north. Order
+    it onto (*x*, *y* + 1), the cell straight behind it (run 1), onto (*x*, *y* + 6) (run 2) and onto
+    (*x* + 2, *y* + 6) (run 3), placed afresh for each run. Order the leading vehicle to a cell 10 cells away in a straight line along +x, and in a
+    second run to a cell 10 cells along +x and 4 along +y. Train refresh run: on the map of P5
+    run 4 without the three friendly vehicles, with a construction yard (a building that produces
+    buildings) of the human house beside the route, order the train type 30 cells straight north
+    from (*x*, *y*), facing north. Before it
+    has taken 20 steps, build three wall sections of the human house on (*x* − 1, *y*₂₅), (*x*, *y*₂₅)
+    and (*x* + 1, *y*₂₅) (*y*₂₅ as in P5). Repeat the train refresh run with an ordinary vehicle
+    type, not a train, as control. Both the train type and the control type are vehicle types
+    without a weapon (a test override removes it if needed), neither marked as a crusher nor of
+    movement zone *crusher-all*, so that the wall sections give both of them outcome *blocked*
+    (claim 27). Follower run 3: a test override sets the path-retry delay to a value *P* with
+    trunc(*P* × 900) = 9000 ticks. First order the first follower car alone onto a cell of a small
+    island that water separates from it: its fresh search fails the gate, so its retry delay of 9000
+    ticks runs (claim 21). 100 ticks later, order the leading vehicle 10 cells along +x as in the
+    first run.
+  - Observable: whether the tunnel is used, the cells the train enters in train runs 1 to 3 and
+    the tick its destination is cleared in run 1, the destinations and final cells of the two
+    follower cars. Train refresh run: the cells entered from
+    row 23 on, and whether the stored path is emptied by a refused step (recorder). Follower run 3:
+    the tick at which the first car starts to move after the leader's order.
+  - Map layout for the tunnel: an overland route of *n* clear straight steps, and a tunnel route of
+    *a* clear straight steps to the entrance, a tunnel of Chebyshev length *t* and *e* clear straight
+    steps after the exit, chosen so that *n* − (*a* + *t* + *e*) = 2.
+  - Expected: the tunnel is used. With an unmarked entrance the tunnel route costs *a* + *t* + *e*,
+    2 cost units less than the overland route (direction terms aside, at most 0.008 per step). Were
+    the entrance marked, the step onto it would cost 4 instead of 1 and the overland route would win
+    by 1. Train run 1: the destination is one of the three cells the search may not enter (claim
+    16), so the search fails although the cell is clear: the train takes no step, and its
+    destination is cleared in the tick of the order's path computation (claim 23, row 3). Train run
+    2: the search finds the step directions 2, 3, 5, 5, 4, 4, 4 (Terms: 2 is east, 3 south-east, 4
+    south, 5 south-west), 7 steps for a Chebyshev distance of 6. Claim 17 flattens the pair 3, 5 to
+    4, 4, and claim 18 shortens the opening 2, 4 to a single step 3. The
+    train enters 6 cells: (*x* + 1, *y* + 1), (*x* + 1, *y* + 2), (*x*, *y* + 3), (*x*, *y* + 4),
+    (*x*, *y* + 5), (*x*, *y* + 6). Train run 3: the search finds 2, 3, 4, 4, 4, 4, 4, and claim 18
+    shortens the opening 2, 3, 4 to 3, 3. The train enters 6 cells: (*x* + 1, *y* + 1),
+    (*x* + 2, *y* + 2), then (*x* + 2, *y* + 3) to (*x* + 2, *y* + 6). In both, the first cell
+    entered lies behind the train (claim 16: the exclusion holds for the search only). No exact tie
+    of *f* arises in these searches. The exact cells after the first rest on the stretch selection
+    of claim 18 (low confidence), the count of 6 cells does not. The cars end on the cells 1 and 2 steps back
+    from the leader's destination against the direction of the last step of the leader's path: along
+    −x in the first run, and in the second run against whatever the last step of the found path is
+    (which a reference implementation of claims 7 to 18 gives for the map). Follower run 3: the first
+    car is given its destination and computes its path in the tick of the leader's path computation,
+    although its own retry delay still has about 8900 ticks to run, so it starts to move within a few
+    ticks of the leader. Train refresh run: the walls give outcome *blocked* (claim 27), the only
+    outcome a train's search avoids (claim 8). The control
+    behaves as in P5 run 4: as it begins the step from row 23 to (*x*, row 24) it computes a new path
+    from row 23, whose first step is diagonal to (*x* + 1, row 24). It still takes the old step and
+    then the new path's second step, diagonal towards (*x* + 1, row 25), a wall cell: that step is
+    refused, its stored path is emptied and a fresh search follows (claim 22). The train computes its
+    new path from (*x*, row 24), where the step in progress leads, and keeps that step: from
+    (*x*, row 24) it steps sideways and passes the walls without a refused step.
+  - Falsified if: the vehicle drives overland (which would mean the entrance, or the tunnel step,
+    costs more than claim 9 says), the train of run 1 reaches its destination by any route (claim
+    16), the train of run 2 or 3 enters 7 or more cells before it reaches the destination (which
+    would mean claim 18 does not shorten a detour at the start of a path, or that a stored first
+    step cannot enter the cells the search excluded), or the cars' cells differ from the
+    expectation. In follower run 3, the first car stays where it is until its retry delay has run
+    out (which would mean a car's computation waits for the delay like a fresh search). In the train
+    refresh run, the train's stored path is emptied by a refused step into a wall cell
+    (which would mean a train drops a step like other vehicles). If the control shows no refused
+    step either, `quirks.path_refresh_keeps_old_step` is contradicted (P5 run 4) and the train
+    refresh run says nothing about trains.
+- **P10 (claim 13): threat avoidance.**
+  - Setup: test override giving a vehicle type a threat coefficient of 1.0, and an otherwise equal
+    type with 0, both of the human house. Two routes from the start to a goal, separated by
+    impassable land along their whole length and running at least 16 cells apart, so that they pass
+    through different level-2 sectors (the threat term is 0 at level 0, F5, so threat steers the
+    corridor only through levels 1 and 2). Route A is shorter than route B by at least 8 cells and
+    passes within range of a defensive building of a computer-controlled house. Route B is out of range of every
+    weapon. The recorder reads the human house's threat records for the sectors along both routes.
+  - Procedure: order each type to the goal 10 times, starting afresh each time.
+  - Observable: which route each takes, judged by the first cells it enters past the fork (so a
+    vehicle destroyed on the way still counts), and the threat the house's records hold along each
+    route.
+  - Expected: the coefficient-0 type takes route A in every run (claims 7 to 12; threat plays no
+    part for it, F7). The coefficient-1.0 type takes route B in every run, provided the recorder
+    shows a threat along route A that, with *k* = 1.0, outweighs the extra sector costs of route B
+    (F5, F9). Low confidence on whether, and how soon, a house's records hold the threat of a
+    defence it has not yet met; that belongs to the combat and AI-visible-rules specs.
+  - Falsified if: the coefficient-0 type takes route B in any run, or the coefficient-1.0 type takes
+    route A in any run while the recorder shows such a threat along route A. A run in which the
+    recorder shows no threat along route A is void.
+- **P11 (claims 2, 4, 6, 14, 23): the gate near the edge of the usable area.**
+  - Setup: a map whose local area leaves a strip of legal cells outside it along one edge. Vehicles
+    of a computer-controlled house in a skirmish, each a team member. Run 1: one vehicle placed by
+    the map on a legal cell in that strip, an island as in P3 inside the usable area, and a control
+    vehicle of the same house inside the usable area. Run 2: a vehicle inside the usable area whose
+    team's script has a "move to a waypoint marker" step, the waypoint marker lying on a small
+    island in the outside strip, separated from the vehicle by water, and a control vehicle whose
+    team moves it to a waypoint marker on an island inside the usable area. Run 3: a vehicle inside
+    the usable area whose team's script has a "move to a cell" step (the cell given in the form the
+    team specs define), once to a clear land cell in the outside strip that open land connects to
+    the vehicle, and once to a water cell inside the usable area.
+  - Procedure: run 1: order both vehicles, through their team's script, to a cell on the island.
+    Runs 2 and 3: let the teams carry out their move step.
+  - Observable: whether each vehicle leaves its team and is given a new destination by its house, and
+    the cells each enters. Run 2: in addition, whether the recorder shows the team in its moving
+    state when the vehicle's path is computed.
+  - Expected: both control vehicles fail the gate (as in P3 run 2: no team exit, no new
+    destination). Run 1: the outside vehicle skips the gate (claim 6, second exception), searches
+    without a corridor (claim 14), fails, and gives up: it leaves its team, and its house gives it a
+    new destination. Run 2: the first vehicle is in the corridor-disabling state, and its destination
+    is a legal cell outside the usable area, so the gate is skipped (third exception). It searches
+    without a corridor, fails, and gives up in the same way (low confidence). Run 3: the "move to a
+    cell" step does not disable the corridor, so the gate compares. An off-map destination (the
+    strip cell) and a destination of no reach region (the water cell) both lie in a different reach
+    region from the vehicle's cell (claims 2 and 4): each order is dropped at once, the vehicle
+    takes no step, and it stays in its team, although the strip cell can be reached over open land.
+  - Falsified if: the outside vehicle of run 1 or the first vehicle of run 2 behaves like its
+    control vehicle (destination cleared at once, no team exit), or a control vehicle leaves its
+    team. A run-2 result like the control's while the recorder does not show the team in its moving
+    state is void, not a falsification. In run 3 the vehicle drives towards the strip cell, or
+    searches and gives up with a team exit, for either destination.
+- **P12 (claims 13 with 13a, 14): corridor retries around buildings.**
+  - Setup: open clear ground, enclosed so that the only way from one half to the other leads
+    through or around a straight wall of the human house's own buildings, 2 cells thick, across the
+    direct route, with a single one-cell gap at one end. A vehicle 10 cells before the wall's
+    middle, goal 10 cells behind it. Maps G12, G24, G48 and G96: wall lengths of 12, 24, 48 and 96
+    cells, the gap always at the same end.
+  - Procedure: order the vehicle to the goal in each map. Then repeat each map with the test train
+    type of P9 (test data), facing the wall.
+  - Observable: whether the vehicle reaches the goal or gives up without a route, and the cells
+    entered.
+  - Expected: buildings leave the cells *open* (claim 1), so the first corridor runs through the
+    wall and the cell search inside it fails. Each retry closes connections and tries a new
+    corridor, and at most 5 cell searches are made. So at the longer lengths of the sweep the vehicle
+    gives up although a route through the gap exists, while at the shortest it reaches the goal (low
+    confidence on where the change happens). The result for each map is the same in every run.
+    The train never uses the corridor (claim 14) and searches the whole map, so it reaches the goal
+    through the gap in every map, including those where the ordinary vehicle gives up.
+    Secondary check: the outcome and route in each map match what an implementation of claims 3 to 18
+    with 13a gives for the same map.
+  - Falsified if: the vehicle reaches the goal at every length (which would mean no cap on the
+    retries, or closures that free the route much faster than claim 13 says), or the result of a map
+    changes between runs, or the train gives up in a map (which would mean trains use the corridor).
+- **P13 (claims 7, 8, 12): base costs and the blocker chain, by route choice.**
+  - Setup: a test map whose local area leaves a strip of legal cells outside it, as in P11, so that
+    the test unit, placed by the map in that strip, searches without a corridor (claim 14) and its
+    route choice depends on the cell costs alone. The test unit is an armed infantry unit of the
+    human house, so that S-0209 claim 4 decides each outcome. From its cell two 1-cell-wide corridors
+    of clear land, walled by impassable land, lead to one merge cell *M*, from which a single cell
+    leads on to the goal. Corridor A consists of straight steps only, in one direction. Corridor B is
+    longer than A by Δ steps. The two cells next to *M* on the corridors lie mirror-symmetrically
+    with respect to the line from *M* to the goal, so that they have the same estimate. One object
+    stands on a cell in the middle of corridor A. Sub-runs by object: (s) an allied vehicle standing
+    still without a destination (*stationary friendly*, *b* = 8), (e) an unarmed enemy vehicle of a
+    computer-controlled house (*enemy obstacle*, *b* = 20), (f) a wall section of the human house,
+    with a test override giving the test infantry type a weapon that can damage walls (*friendly
+    obstacle*, *b* = 60), (c) an enemy vehicle that the human house cannot see because it is
+    cloaked, made cloaked by a test override (*cloaked blocker*, *b* = 1000), (m1) an allied vehicle
+    given a move order along corridor A away from the start 15 ticks before the test order, the
+    cells ahead of it empty (chain ending on an empty cell, *b* = 1), (m4) as m1, but a second allied
+    vehicle, parked (no destination, no stored path), stands in the next cell ahead of the moving
+    one along corridor A, so that the moving one heads into the parked one's cell (chain ending on a
+    parked unit, *b* = 1 as for an empty cell).
+  - Procedure: order the test unit to the goal. Repeat each sub-run for the Δ values below, one
+    map per value.
+  - Observable: which corridor the test unit enters first. In sub-runs m1 and m4, also whether the
+    moving vehicle still has a destination in the tick of the test unit's path computation (a
+    sub-run in which it has lost it is void, since its cell would then give *stationary friendly*).
+  - Expected: with the object, corridor A costs about *b* − 1 cost units more than its length, so A
+    is taken when Δ exceeds *b* − 1 by a margin, and B when Δ falls short of it by a margin. Margins
+    of 3 cost units cover the direction terms and the estimate. (s): B at Δ = 4, A at Δ = 10. (e): B at
+    Δ = 16, A at Δ = 22. (f): B at Δ = 56, A at Δ = 62. (c): B at Δ = 60. The chain sub-runs have a
+    margin of 1 cost unit only (low confidence): (m1): A at Δ = 2. (m4): A at Δ = 2. The switch
+    point for each object can also be computed exactly from claims 7 to 12 for the map.
+  - Falsified if: any of these choices is reversed. For (c), A being taken at Δ = 60 means the
+    cloaked blocker costs far less than claim 8 says. For (m4), B being taken at Δ = 2 means a
+    parked unit ends the chain at cost 4, as a non-unit object does.
+- **P14 (claims 9, 19, 22, 27): which cells a re-path makes costly.**
+  - Setup: two parallel 1-cell-wide lanes of clear land, L and R, each 30 cells long, separated by
+    impassable land and joined at both ends: at the south end by a short junction to the start area,
+    at the north end to the goal. A slow vehicle *S* of one type and a fast test vehicle *T* of
+    another type with a higher type speed (S-0207), both of the human house. A test override sets the
+    path-retry delay field to a value *P* with trunc(*P* × 900) = 90 ticks (F3) and the blockage-delay
+    field (an integer number of ticks, S-0209 Import mapping) to 3000, so that every re-path of the
+    scenario is made in search mode 1. Run 1: *S* is ordered to the goal through lane L (its
+    stored path runs along L), and *T* follows it into L, 3 cells behind. Run 2: the mirror image, both
+    in lane R. Run 3 (parity, low confidence): as run 1, but the blocker in the cell ahead of *T* is a
+    group of two slow allied infantry units of a type whose speed number (claim 19) is lower than
+    *T*'s, walking together along L with
+    the same stored path, and run 4 the same with three such infantry units. Run 5 (close case):
+    lane R is made 2 cells longer than L by a kink, and *S* is replaced by a vehicle *O* of *T*'s
+    own type. *T* is ordered from the start area to the goal and, in the same tick, *O* from the goal
+    to the start area, so that both take lane L and meet head-on in it.
+  - Procedure: runs 1 to 4: let *T* catch up with the slower unit or units ahead until its next step
+    gives *moving blocker* and it re-paths in search mode 1 after the retry delay. Run 5: let the two
+    vehicles meet.
+  - Observable: the cells *T* enters after the re-path, and whether it backs out to the junction to
+    take the other lane. Run 5: in addition, the tick in which *T* and *O* first stand in
+    neighbouring cells, and the tick in which *T*'s stored path is emptied (recorder).
+  - Expected: runs 1 and 2: the re-path makes every cell of *S*'s remaining stored path in the lane
+    (up to 24 cells) cost four times as much, so *T* backs out and takes the other lane whenever that
+    is cheaper than following *S* (a reference implementation of claims 7 to 19 gives the choice for
+    the exact positions). Without the marks *T* would stay behind *S*. The choice mirrors with the
+    lanes. Run 3: each lane cell of the common stored path is counted twice, so it is not made
+    costly, and *T* stays behind the infantry. Run 4: counted three times, made costly, and *T* takes
+    the other lane as in run 1. *T* never gets *blocked* from the unit ahead, since the two face the
+    same way (claim 27). Run 5: once the two stand in neighbouring cells, facing each other and less
+    than 512 leptons apart, each gets outcome *blocked* for the other's cell (claim 27). *T*'s stored
+    path is emptied in the tick its next step is refused (claim 22), and its fresh search treats
+    *O*'s cell as impassable, so *T* backs out of L towards the junction within about the retry
+    delay of 90 ticks (or, should its searches fail under claim 13, gives up under claim 23; its
+    stored path is emptied either way). Were *O*'s cell *moving blocker* instead, it would cost *T*
+    at most 4 cost units (claim 8: *O* is of *T*'s own type, so mode 1 runs as mode 0 by claim 19),
+    far less than backing out to take the longer lane R, and *T* would wait facing *O* until the
+    blockage delay of 3000 ticks ran out.
+  - Falsified if: in runs 1 and 2 *T* stays behind *S* although the reference implementation with
+    claim 19 gives the other lane, or *T* takes the same lane in both runs. In run 3 *T* changes lanes
+    while in run 4 it does not. In run 5 *T* keeps its stored path and stays in L facing *O* for more
+    than 300 ticks after they first stand in neighbouring cells.
+- **P15 (claim 5): content changes that update connectivity.**
+  - Setup: for each change, a goal pocket sealed off from a test vehicle only by the object
+    concerned, everything else around the pocket impassable: (w) a wall section in a wall line,
+    (t) a tree with the full occupation pattern of its theater (category *wall-like*, S-0211) in a
+    ring of such trees, (k) a destroyable cliff cell between the pocket and the low ground, with a
+    test override setting the game-wide cliff-collapse chance field so that a hit cliff always
+    collapses, (b) a bridge whose repair joins the pocket (a far bank), repaired by an engineer (as in claim 5)
+    of the human house. In every run of P15 the test vehicle's movement zone is *normal*, for which the
+    zone table does not answer *yes* for the category *wall-like*.
+  - Procedure: order the vehicle to the pocket. Then remove the object: by a trigger action that
+    detonates a weapon at a waypoint marker on it in (w), (t) and (k), the weapon strong enough to
+    destroy it, and by the repair in (b). Wait 30 ticks and order the vehicle to the pocket again.
+  - Observable: whether the first order is dropped at once, whether the second leads into the
+    pocket.
+  - Expected: the first order fails the gate (the pocket is another reach region) and the
+    destination is cleared at once. The second order passes the gate and the vehicle drives into the
+    pocket. In (k) the collapsed cliff must leave a passable cell, which the recorder confirms.
+  - Falsified if: the second order is still dropped at once while the recorder shows the object
+    gone, which would mean that change does not update connectivity.
+  - Run (wb), a wall section built: the goal pocket is joined to the test vehicle's area only
+    through a one-cell gap of clear land, everything else around it impassable, and a construction
+    yard (a building that produces buildings) of the human house stands nearby. The test vehicle is a
+    team member of a computer-controlled house and gets its orders through its team's script, as in
+    P3 run 2. First order it into the
+    pocket and back out. Then build a wall section of the human house in the gap, wait 30 ticks, and
+    order it into the pocket again. Expected: the first order leads into the pocket. The second is
+    dropped at once by the gate: no step, no team exit. Falsified if the second order leads to a
+    search, shown by a team exit (claim 23) or by the vehicle driving to the wall, which would mean
+    building a wall section does not update connectivity.
+  - Run (r), the local area changed: the map of P11, with a trigger action that changes the local
+    area at a set tick so that it then covers the outside strip. A
+    vehicle inside the usable area, a team member as in P11 run 3, whose team's script has a "move to
+    a cell" step to a clear land cell of the strip that open land connects to the vehicle. Run it
+    once with the step carried out before the change and once 30 ticks after it. Expected: before
+    the change the order is dropped at once, no step and no team exit (as in P11 run 3). After the
+    change the vehicle drives to the cell. Falsified if after the change the order is still dropped
+    at once while the recorder shows the cell inside the new local area.
+- **P16 (claim 25): which cells the nearby-cell search collects, without a reference cell.**
+  - Run (s), a scatter. Setup: as part (c) of S-0208's scenario W7: an idle civilian of a computer-controlled house, of the unarmed
+    type that scenario uses, standing in *guard* at (*x*, *y*) on open flat ground, made to scatter on its own
+    by one hit from a unit of the human house at least 4 cells away, so that the scatter has no
+    threat point and uses the nearby-cell search around the civilian's own cell with no reference
+    cell (S-0208 claim 13). In addition, wall sections of the human house stand on (*x*, *y* − 1)
+    and (*x* + 1, *y*), and on
+    (*x* − 1, *y* + 1), an unarmed vehicle of the human house (a test override removes its weapon
+    if its type has one) standing still with no destination. No unit other than these is within 2
+    cells.
+  - Procedure: repeat 10 times, each time with the hit in a different tick.
+  - Observable: the tick number *N* of the tick of the scatter's search, read by the recorder, and
+    the civilian's new destination.
+  - Expected: ring 1 holds five qualifying cells: the two wall cells are not enterable by class for
+    movement zone *normal*, the vehicle's cell and the civilian's own cell have a non-empty
+    occupancy record. In scan order they are (*x* − 1, *y* − 1), (*x*, *y* + 1), (*x* + 1, *y* − 1),
+    (*x* + 1, *y* + 1) and (*x* − 1, *y*). All pass the visibility test on flat ground, so the
+    destination is the cell at position (*N* mod 5) of that list, counting from 0.
+  - Falsified if: the destination is a wall cell or the vehicle's cell in any run, or it differs
+    from the cell at position (*N* mod 5). The run is void if S-0208's own scenario W7 (c) does not
+    show the choice by tick number on open ground.
+  - Run (u), a move order onto an unreachable cell (table T5, move-order row). Setup: open flat clear
+    ground, and a test override that sets the wheel multiplier of one land type (say rough) to 0, so
+    that its cells have the category *blocked* (S-0211 claim 11). The only cell of that land type is
+    (*x*, *y*). An unarmed wheeled vehicle of the human house (a test override removes its weapon if
+    its type has one) stands at (*x* − 6, *y*), no other object is within 3 cells of (*x*, *y*), and
+    the area is not shrouded for the human house.
+    Procedure: click a move order for the vehicle onto (*x*, *y*), 10 times, each time with the
+    vehicle placed afresh and the click in a different tick. Observable: the tick number *N* in
+    force when the click is handled (recorder), and the vehicle's destination after the order.
+    Expected: (*x*, *y*) fails the reach-region comparison of claim 6, so S-0214 claim 11 uses the search. Ring 1
+    holds eight qualifying cells, in scan order (*x* − 1, *y* − 1), (*x* − 1, *y* + 1),
+    (*x*, *y* − 1), (*x*, *y* + 1), (*x* + 1, *y* − 1), (*x* + 1, *y* + 1), (*x* − 1, *y*) and
+    (*x* + 1, *y*). All pass the visibility test, so the destination is the cell at position
+    (*N* mod 8) of that list. Falsified if: the destination differs from that cell, or it is
+    (*x* − 1, *y*), the cell nearest to the vehicle, in every run whatever *N* (which would mean the
+    unit's cell serves as reference cell).
+  - Run (r), a rally point (table T5, rally-point row). Setup: open flat clear ground with a
+    barracks (a building that produces infantry) of the human house whose nearest cell is at least 3 cells from (*x*, *y*). An unarmed
+    vehicle of the human house stands still with no destination on (*x*, *y*), wall sections of the
+    human house stand on (*x*, *y* − 1) and (*x* + 1, *y*), and a second such vehicle on
+    (*x* − 1, *y* + 1). Procedure: set the barracks' rally point by a click on (*x*, *y*), 10 times,
+    each in a different tick. Observable: *N* as in run (u), and the barracks' guard spot after the
+    click (S-0213 claim 20). Expected: the same five cells as in run (s), in the same order, so the
+    guard spot is the cell at position (*N* mod 5). Falsified if: it is a wall cell or a vehicle's
+    cell, or it differs from that cell.
+  - For runs (u) and (r): if the recorder cannot fix which tick number is in force when the click
+    is handled, one shift *o* of 0 or 1 is allowed, the same for all 10 clicks of a run: the
+    expected cell is then the one at position ((*N* + *o*) mod *n*). The run falsifies the claim if
+    some click fits neither shift, or if its clicks need different shifts.
+
+- **P17 (claim 7): diagonal steps first on open ground without a corridor.**
+  - Setup: a test map whose local area covers only a small part of the map, as in P13, leaving
+    outside it a block of legal cells of flat clear land at one height level, at least 30 × 30
+    cells, with no overlays or objects. The vehicle of P1, placed by the map in the middle of that
+    block, at (*x*, *y*), facing map north. Having never entered the usable area, it searches
+    without a corridor (claim 14), and the gate is skipped (claim 6).
+  - Procedure: order it to the cells displaced by (+10, +4), (+4, −10), (−12, +5), (−9, −2),
+    (+7, +7) and (+12, 0) from (*x*, *y*), one order per run, with the vehicle placed afresh each
+    time. If the interface refuses an order to a cell outside the usable area, give it through a
+    team's script instead, as in P11, with the vehicle a team member of a computer-controlled
+    house. Each destination lies within 12 cells, so the whole path is stored at once (claim 20).
+  - Observable: the sequence of cells entered.
+  - Expected, independent of tie order: with displacement (Δ*x*, Δ*y*), the vehicle enters
+    max(|Δ*x*|, |Δ*y*|) cells. The first min(|Δ*x*|, |Δ*y*|) steps are diagonal, towards the
+    destination, and the rest straight. For (+10, +4) the cells are (*x* + *i*, *y* + *i*) for
+    *i* = 1 to 4, then (*x* + *i*, *y* + 4) for *i* = 5 to 10. No exact tie of *f* arises in
+    these searches. Neither straightening pass changes these paths: they contain no right-angle V
+    of diagonal runs, and they are already shortest paths.
+  - Falsified if: in any run a straight step comes before a diagonal one, or the vehicle enters
+    more cells than the Chebyshev distance. That would mean the search does not favour the
+    candidate that closes the straight-line distance fastest (claim 7), or that its estimate or
+    step costs differ from F1, F2 and T4.
+
+## Open questions
+
+- The exact construction of sectors (claim 13): which pieces of a region inside a block count as one
+  sector, and how sector connections are formed across block borders and through links, is only
+  partly established. Path shape in scenario P1 with obstacles is the practical check.
+- For the corridor exemption (claim 13): exactly when a moving unit's recorded cell changes (on
+  entering a new cell or at some other moment of its move), and whether an aircraft on the ground or
+  in the air also counts, are only partly established.
+- When exactly a drive-locomotor follower car's destination is cleared after its computation of
+  claim 26 fails (at once, or only at the car's next path computation) is not established.
+- The coarse threat at levels 1 and 2 (F5): which value the house's records hold for a level-1
+  sector, and which places of the house's coarse threat record are read at level 2, are not
+  established. Scenario P10 checks only the aggregate effect.
+- Whether, after a local change (claim 5), the original's result can ever differ from a full
+  recomputation for the new map content (for example when the change splits a region) is not
+  settled.
+- Whether the region corner cases of claim 3 occur on stock maps, and whether a configuration other
+  than the 2 × 2 case of claim 3 is common enough to matter, is not settled. Scenario P4 map H tests
+  the smallest case.
+- The further test of a cell in the nearby-cell search (claim 25) is not established beyond this:
+  a cell outside the usable area passes it, and it is applied to a subterranean unit's destination
+  and then, when the destination passes, to each candidate cell. For the no-move rows of table T5
+  the state of a subterranean unit under which the test is asked for is not established either.
+- Whether any rule sets the congestion mark of a cell permanently (Terms, claim 9). None was found.
+- The visibility test of the nearby-cell search (claim 25) is described by its result only. Its
+  exact geometry (how far in front of the cell it looks, and how heights shift the point it looks
+  at) is only partly established, and it decides which cells are preferred.
+- Which cell of a sector serves as the anchor cell for the legs of F8 is not established.
+- Which units are loaners (claim 14) in stock play, and the exact team state that goes with the
+  "move to a waypoint marker" condition, are only partly established.
+- For a unit of an infantry type with the jumpjet flag, whether its current locomotor affects its
+  path computation in any way is not established. It does not change the movement zone that the
+  coarse search of a path computation uses (claim 13). The estimate *E* of claim 24 uses the
+  unit's own movement zone, not *infantry*; no scenario checks this.
+- Units with the other locomotors (hover, ship, mechanical walker) also compute paths. Whether they
+  use the blockage modes of claim 22 and the immediate refresh of claim 20 like the drive locomotor
+  is not established.
+- The stretch selection of claim 18 (which stretches are tested and in which order) is only partly
+  established, beyond what that claim gives as known. The acceptance rule is clearer than the
+  selection.
+- Whether the path-length conditions of claim 19 (a vehicle with at least two stored steps, an infantry
+  unit with at least three) apply in search mode 2 as well as in mode 1 is not established. This spec
+  applies them in both.
+- The house cell to which a unit with a computer-controlled owner is sent in the original after giving up (claim 23) is not
+  identified.
+- For locomotors other than the drive locomotor, whether a unit of claim 23's third row keeps its
+  destination, and when it starts moving towards it again (S-0215), is not established.
+
+## Questions for the project lead
+
+- **Tie order.** Ties between pending entries with exactly equal cost are broken by an order of the
+  original's that is only partly known and that only a copy of the way it keeps its pending entries
+  would reproduce. In the cell search (claim 12) ties are
+  rare because of the direction terms (T4). In the coarse search (claim 13) they are the normal
+  case: sector costs are small whole numbers (T3) and there is no estimate, so on open ground many
+  corridors tie, and the chosen corridor decides the route (claim 13). One part of the original's
+  cell-search order is known. The **held candidate** of an expansion is the candidate it recorded
+  with the smallest *f* (on equal *f*, the first in generation order, claim 7). The held candidate
+  of the latest expansion is expanded next only when its *f* is strictly smaller than that of every
+  other pending pair, the other candidates of the same expansion included. On an exact tie another
+  pending pair with that *f* is expanded next, even one that the same expansion recorded later, and
+  from then on the former held candidate ranks like any other pending pair. The order among the
+  other pending pairs, and the coarse search's order, are not described here; a later revision would
+  describe them if the lead chooses to reproduce them. Should our engine reproduce the original's
+  order exactly (which fixes the data structure), or define its own deterministic order and accept
+  route differences on open ground? An order of our own, for example by cost, then by the order in
+  which entries were recorded, is simpler, but it differs from the original at ties, the
+  held-candidate case included (there it would expand the held candidate first).
+- **Anchor cell until it is established.** F8 needs an anchor cell for each sector, and the
+  original's choice is not known (Open questions). Should our engine use, until it is established,
+  the cell of the sector nearest to the bridge-cell end concerned (the destination or the found
+  cell), by Chebyshev distance, with ties going to the smaller y and then to the smaller x? The
+  choice changes only the estimate *E* of claim 24 for bridge cells.
+- **Departure D4.** Accept that our engine builds regions by the rule of claim 3, or reproduce the
+  original's labelling order exactly, which fixes how regions are built?
+- **Key name.** The type key that marks a train does not appear in stock data, so its spelling is
+  confirmed at sign-off and the lead adds it to the import mapping then.
+- **Scope of tunnels and trains.** Stock data is not known to use tunnels or trains. Should this
+  spec keep their rules (claims 7, 9, 14, 16, 20, 26) or move them to a later revision with test
+  data?
+- **Three behaviours that read like defects.** Claim 27 reverses the facing with 32767 rather than a
+  half turn (32768), claim 13 records a cost for a route at the 9999 limit that is then never
+  pending, and claim 16 applies the train exclusion to the search only, so straightening can give
+  the stored path a reversing first step. Each has a switch with a corrected alternative, default
+  original (`quirks.opposite_facing_reversal`, `quirks.coarse_limit_records_cost`,
+  `quirks.train_exclusion_search_only`). Are the names and the alternatives acceptable?
