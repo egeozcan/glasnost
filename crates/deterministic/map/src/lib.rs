@@ -155,12 +155,24 @@ impl CellGrid {
         }
     }
 
+    /// The number of dense indices (the coordinate square's area).
+    pub fn len(&self) -> usize {
+        self.cells.len()
+    }
+
+    /// Whether the grid holds no cell.
+    pub fn is_empty(&self) -> bool {
+        self.cells.is_empty()
+    }
+
     /// The map's footprint.
     pub fn footprint(&self) -> &Footprint {
         &self.footprint
     }
 
-    fn index(&self, c: CellXY) -> Option<usize> {
+    /// The dense index of a legal cell (row-major over the coordinate
+    /// square), for side tables kept beside the grid.
+    pub fn index(&self, c: CellXY) -> Option<usize> {
         if !self.footprint.is_legal(c) {
             return None;
         }

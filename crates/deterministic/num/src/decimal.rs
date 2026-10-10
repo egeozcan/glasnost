@@ -240,6 +240,35 @@ fn scaled_quotient(num: &BigUint, den: &BigUint, e: i64) -> (BigUint, BigUint, B
     }
 }
 
+/// The double nearest to the value of decimal text (ties to even), for
+/// engine constants that a spec gives as "the double nearest to" a decimal.
+// nocite: exact rational rounding helper (binary64 precision and guard bits)
+pub fn nearest_double(text: &str) -> F64 {
+    let Ok(t) = parse_text(text) else {
+        return F64::ZERO;
+    };
+    let n = BigUint::parse_bytes(&t.digits, 10).unwrap_or_default();
+    let ten = BigUint::from(10u32);
+    let (num, den) = if t.exp10 >= 0 {
+        (n * ten.pow(t.exp10 as u32), BigUint::from(1u32))
+    } else {
+        (n, ten.pow((-t.exp10) as u32))
+    };
+    if num == BigUint::from(0u32) {
+        return F64::ZERO;
+    }
+    let shift: i64 = 120 - (num.bits() as i64 - den.bits() as i64);
+    let (q, r) = if shift >= 0 {
+        let n2 = &num << (shift as u64);
+        (&n2 / &den, &n2 % &den)
+    } else {
+        let d2 = &den << ((-shift) as u64);
+        (&num / &d2, &num % &d2)
+    };
+    let q = u128::try_from(q).unwrap_or(0) | u128::from(r != BigUint::from(0u32));
+    F64::from_parts(t.neg, q, -(shift as i32), Rounding::Nearest)
+}
+
 /// The exact decimal expansion of a double (for messages and tests).
 // nocite: exact decimal printing for messages and tests
 pub fn exact_decimal(x: F64) -> String {
