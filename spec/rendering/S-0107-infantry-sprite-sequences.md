@@ -2,11 +2,11 @@
 id: S-0107
 title: Infantry sprite sequences
 topic: rendering
-revision: 3
+revision: 4
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-09
+approved-on: 2026-10-10
 measurements: []
 requests: []
 supersedes: []
@@ -20,14 +20,17 @@ How a soldier's image frame and shadow are chosen from its type's sequence table
 stage counter, and which sequence kind plays at any moment (movement, firing, fear, water, idling,
 dying). The fear rules and the attack state (claims 11, 15 and 16) are infantry behaviour kept here
 for now because they choose sequences; they are expected to move to a future infantry-behaviour
-spec.
+spec. The infantry scatter from damage has already moved: which scatter requests a hit sends, and
+whether an infantry unit acts on them, are S-0208's (claims 15 and 11). This spec keeps the
+scatters of its idle actions and of its flee rule (claims 14 and 15).
 
 ## Terms
 
 Terms from the glossary are used as defined there, in particular *tick*, *facing*, *game speed*
 (index *s*), *sprite*, *image frame*, *drawn frame*, *lepton*, *height level*, *cell*, *locomotor*,
 *scenario random stream*, *unsynchronised random stream*, *scatter*, *jumpjet*, *movement zone*,
-*disguise*, *human-controlled*, *local player*, *warhead*, *measurement setup* and *oracle*. Terms
+*disguise*, *human-controlled*, *local player*, *warhead*, *measurement setup*, *recorder* and
+*oracle*. Terms
 used by this spec only:
 
 - **Body sprite** (glossary *sprite*): the infantry type's body sprite holds *L* image frames. The
@@ -64,7 +67,7 @@ used by this spec only:
   bridge. A unit is *on a bridge deck* (glossary *bridge*) when it stands or moves on the bridge's
   deck rather than on the ground or water below it; which units are on a bridge deck belongs to the
   movement specs. The *bridge deck height* is the engine's fixed height of a high bridge's deck
-  above the ground of its cell: 4 height levels, 416 leptons, an engine constant. S-0102 gives it
+  above the terrain of its cell: 4 height levels, 416 leptons, an engine constant. S-0102 gives it
   (Behaviour 15 and Constants, *bridge deck height*), and S-0104 uses the same value (Terms,
   *bridge deck*).
 - **Height above the surface** (glossary): the unit's world height less the height of the terrain
@@ -88,10 +91,12 @@ used by this spec only:
 - **Secondary weapon:** each infantry type has a primary and may have a secondary weapon. Which of
   the two a unit uses against a target belongs to the combat specs. Here "firing its secondary
   weapon" means that the weapon chosen for the current target is the secondary one.
-- **Guard behaviour:** a unit's guard or area-guard behaviour, under which it looks for targets
-  by itself. What these behaviours do belongs to other specs. Claim 14 only uses the moment such a
-  search finds no target. Not to be confused with the *guard* sequence kind, which no stock
-  behaviour starts (claim 20).
+- **Behaviour processing that attempts the idle action:** a unit's current behaviour is
+  processed from time to time, and in some cases the processing attempts the unit's idle action.
+  S-0215 owns the behaviours and says in which cases they attempt it: *guard* and *sticky* (S-0215
+  claims 24 and 25), *area guard* (claim 26) and *hunt* (claim 27). No other behaviour attempts it.
+  Claim 14 only says what an attempt does. The *guard* behaviour is not to be confused with the
+  *guard* sequence kind, which no stock behaviour starts (claim 20).
 - **Selected:** the unit is in the local player's current selection (picked with the mouse or a
   hotkey). Here it only matters for the idle comment of claim 14, which a selected unit does not
   make.
@@ -113,8 +118,9 @@ used by this spec only:
 - **Known attacker:** damage has a known attacker when it comes with the object that caused it (a
   unit or a structure), so that the hit unit knows where the attack came from. Damage that comes
   with no such object has no known attacker, whatever caused it. Which damage sources carry their
-  attacking object belongs to the combat specs. Here a known attacker makes the hit unit scatter
-  and decides which rows of the fear table of claim 16 apply.
+  attacking object belongs to the combat specs. Here a known attacker decides which rows of the
+  fear table of claim 16 apply. Which scatter requests a hit sends, with or without a known
+  attacker, belongs to S-0208 (claim 15).
 - **Not human:** an infantry type flag (Import mapping) for animals and robots. It changes the death
   sequence and the corpse (claim 17).
 - **Infantry-death kind:** an integer field of a warhead (Import mapping) that says how an infantry
@@ -181,14 +187,13 @@ used by this spec only:
 
 4. **Stage timing.** When a sequence starts on tick *t₀*, its stage is 0 and its stage delay *d* is
    fixed for as long as that sequence stays current (claim 5 says how *d* is found). When *d* ≥ 1,
-   the stage grows by one on every later tick *t* with *t* − *t*ₗ ≥ *d*, where *t*ₗ is the tick of
-   the start or of the last increment. Without interruption, the stage
-   seen after the updates of tick *t* is ⌊(*t* − *t₀*) / *d*⌋. A stage delay of 0 freezes the stage
-   at 0, so the sequence shows a single image frame per facing. The only other change to the stage
-   is the airstrike reset of claim 11, which sets the stage back to 0 while the sequence stays
-   current. It applies only to the two secondary-fire kinds, whose delay is 1 (T1), so after a
-   reset on tick *t* the stage seen after the updates of tick *t* is 0, after those of tick *t* + 1
-   it is 1, and it grows by one per tick from there.
+   the stage seen after the updates of tick *t* is ⌊(*t* − *t*ᵣ) / *d*⌋, where *t*ᵣ is *t₀* or,
+   after an airstrike reset of claim 11, the tick of the latest reset. A stage delay of 0 freezes
+   the stage at 0, so the sequence shows a single image frame per facing. The airstrike reset sets
+   the stage back to 0 while the sequence stays current, and is the only change to the stage other
+   than a start. It applies only to the two secondary-fire kinds, whose delay is 1 (T1), so after a
+   reset on tick *t* the stage is 0 after the updates of tick *t*, 1 after those of tick *t* + 1,
+   and it grows by one per tick from there.
    - Backing: `measurable` (scenario M3)
    - Confidence: high
 
@@ -355,8 +360,10 @@ used by this spec only:
     - Backing: `measurable` (scenario M13)
     - Confidence: medium
 
-14. **Idle actions.** Each infantry unit has an idle timer. When the unit's guard behaviour finds no
-    target, it attempts an idle action. The attempt goes ahead only if all of these hold: the idle
+14. **Idle actions.** Each infantry unit has an idle timer. An infantry unit attempts an idle action
+    whenever a processing of its current behaviour attempts it (Terms): *guard*, *sticky*, *area
+    guard* and *hunt*, in the cases S-0215 gives (claims 24 to 27). The attempt goes ahead only if
+    all of these hold: the idle
     timer has run out; the unit has no movement in progress; it is not prone; it is not in the
     attack state; and its current sequence is *stand*, *guard* or *tread*. A newly created unit's
     idle timer has already run out, so its first attempt that meets the other conditions goes
@@ -391,14 +398,12 @@ used by this spec only:
     not the *idle-b* request was turned down. It uses the unsynchronised
     random stream (an integer drawn from 0 to 2, a comment on 0), and only the type's first comment
     sound is ever used (`quirks.first_comment_only`).
-    - Backing: `measurable` (scenario M9) for the timer bounds and the outcome ratios, which are
-      measured statistically over many games, as the measurement setup requires for results that
-      depend on the random seed; `unmeasured` for the stream used and the order of the draws.
-      These are internal to the random stream and could only be seen by starting a game twice from
-      the same random state, which the measurement setup rules out (nothing is placed inside the
-      original to fix its random state).
-    - Confidence: high (outcomes, the stream used and the draw order), medium (the "guard
-      behaviour finds no target" trigger covers the guard and area-guard behaviours)
+    - Backing: `measurable` (scenario M9: part (a) for the timer bounds and the outcome ratios,
+      measured statistically over many games; part (b) for the streams used, the number and the
+      order of the draws, read with a *recorder* (glossary) that reads the random streams'
+      state; part (c) for the *hunt* trigger)
+    - Confidence: high (outcomes, the streams used, the draw order, and that the four behaviours
+      named are the only ones whose processing attempts an idle action)
 
 15. **Fear selects prone, get-up and panic.** Write *f* for a unit's fear level at the start of a
     tick and *f*′ for its level once that tick's decay has applied: *f*′ = *f* − 1 when *f* > 0 and
@@ -422,9 +427,10 @@ used by this spec only:
     - Backing: `measurable` (scenario M6)
     - Confidence: high
 
-16. **How damage raises fear.** When a living infantry unit takes damage and survives it, the unit
-    scatters if the damage has a known attacker, and its new fear level is given by this table. A
-    unit is *fearless* here when its type is fearless or it has the fearless veterancy ability.
+16. **How damage raises fear.** When a living infantry unit takes damage and survives it, its new
+    fear level is given by this table. A unit is *fearless* here when its type is fearless or it
+    has the fearless veterancy ability. Which scatter requests the hit sends, and whether the unit
+    acts on them, belong to S-0208 (claims 15 and 11); this claim only sets the fear level.
 
     | Known attacker | Fear before the hit | Fraidycat | Fearless | New fear level |
     |---|---|---|---|---|
@@ -440,9 +446,10 @@ used by this spec only:
     300. The health ratio in F5 is taken after the damage has been applied. The first row holds even for a fearless fraidycat
     (`quirks.fraidycat_fear_ignores_fearless`). Because a fearless type's fear never decays
     (claim 15), a fraidycat whose type is fearless keeps a fear level of 300 for good after its
-    first hit by a known attacker: it shows *panic* whenever it walks and scatters whenever it is
-    idle. A fraidycat that is fearless only through the veterancy ability decays from 300 like any
-    other unit.
+    first hit by a known attacker: it shows *panic* whenever it walks, and it scatters by the flee
+    rule of claim 15 and, when its owner is not human-controlled, at every idle attempt that goes
+    ahead (claim 14). A fraidycat that is fearless only through the veterancy ability decays from
+    300 like any other unit.
 
     The fear mechanics stay in this spec for now because they choose sequences. They are expected
     to move to a future infantry-behaviour spec (Summary).
@@ -477,8 +484,8 @@ used by this spec only:
     falling parachutist, *parachute*). What becomes of such a unit afterwards is not established
     (Open questions). Consequences: a type marked "not human" that rows 1 to 3 do not catch shows
     *die-1* when it dies on the ground, also to a laser fence, but no death sequence while it falls
-    under a parachute. A unit of any other type killed while parachuting has death kind 3 (below),
-    so row 8 applies and it is removed at once.
+    under a parachute. A unit of any other type that rows 1 to 3 do not catch, killed while parachuting, has death
+    kind 3 (below), so row 8 applies and it is removed at once.
 
     For a type whose *die-1* or *die-2* entry has no image frames, that is bad data, and our engine
     does not reproduce the original here (a *departure*, glossary): when such a death request is
@@ -577,6 +584,23 @@ used by this spec only:
     - Confidence: high (that these mechanics start these kinds), medium (the *air-death-fall*
       follow-up)
 
+22. **Limits of the sequence data.** Three rules of reading the sequence data (Import mapping) have
+    effects that can be seen:
+    - A declared direction is recognised only when it is written exactly as one of the eight
+      upper-case compass abbreviations. Anything else, lower case included, gives an entry with no
+      declared direction, so claim 9 never changes the facing for it
+      (`quirks.case_sensitive_direction`).
+    - An entry keeps at most two sound cues: the first two pairs, in the order written, whose sound
+      is known. A pair with an unknown sound is dropped and does not count towards the two. Later
+      pairs never play (`quirks.two_sound_cues`).
+    - The reference to the sequence section, each kind value and each cue value are read as at
+      most 31 characters. The value is parsed as if it ended after its 31st character, so a cue
+      pair that begins after it never plays, and a field of a kind value that begins after it keeps
+      its default of claim 1 (`quirks.sequence_value_length_limit`).
+    - Backing: `measurable` (scenario M18; the 31-character limit is tested on a kind value and a
+      cue value, and the reference to the sequence section follows from the same reading rule)
+    - Confidence: high (the direction rule and the two-cue limit), medium (the 31-character limit)
+
 ## Formulas
 
 **F1 Image frame.** Integer arithmetic, with *k* ≥ 0 and mod the non-negative remainder:
@@ -629,7 +653,7 @@ not pass through single precision. *x* is an integer from one ranged draw, unifo
 nearest give the same value). All arithmetic is done at double precision, with a 53-bit significand, and each
 of these results is rounded toward zero: the two products, the difference P − Q, the scaled draw
 *u*, the product (P − Q) × *u* and the final sum: the glossary's *round-toward-zero mode*, owned
-by S-0205 (number domains, planned) with its switch `quirks.chop_rounding`. trunc converts the
+by S-0205 (number domains, claim 5) with its switch `quirks.chop_rounding`. trunc converts the
 sum to an integer by truncation toward zero. The grouping shown is part of the behaviour.
 Mathematically *T* ≈ 450R + 1350R·x/2147483646. *u* is at most 1 − 2⁻⁵³, so for *R* ≥ 0, *T* lies
 between about 450R and just below 1800R. 450 and 1800 are half a game minute and two game minutes at
@@ -645,7 +669,7 @@ between about 450R and just below 1800R. 450 and 1800 are half a game minute and
 
 So *i* is 50, 25 or 12. *h* is the health ratio: the unit's health divided by its type's strength
 field, both integers, divided in double precision and rounded toward zero
-(the *round-toward-zero mode*, S-0205 (number domains, planned)). *red* and *yellow* are the
+(the *round-toward-zero mode*, S-0205 claim 5). *red* and *yellow* are the
 imported condition ratios, read as decimals with an optional percent sign per S-0003 (claims 6
 to 8) and held as doubles. The comparisons are exact comparisons of doubles. *i* = 25 occurs
 whenever the two ratios differ and *h* lies above the lower of them and at or below the higher:
@@ -665,7 +689,7 @@ damage at all is an open question.
 | Name (ours) | Value | Unit | Notes |
 |---|---|---|---|
 | Sequence kinds | 42 | count | Listed in Terms |
-| Max sound cues per entry | 2 | count | Further cues are ignored (`quirks.two_sound_cues`) |
+| Max sound cues per entry | 2 | count | Further cues are ignored (claim 22, `quirks.two_sound_cues`) |
 | Facing sectors before grouping | 32 | directions | 2048 facing units each |
 | Facing groups | 8 | groups | |
 | Sector skew | 1024 | facing units | Counter-clockwise, `quirks.infantry_facing_sector_skew` |
@@ -679,14 +703,15 @@ damage at all is an open question.
 | Fear increments | 50, 25, 12 | fear points | F5 |
 | Hover/fly speed split | 0.8 | speed fraction | *hover* at ≤ 0.8; the double nearest to 0.8 |
 | Moving test at completion | 0.1 | speed fraction | Above it, the follow-up is *walk* or *crawl*; the double nearest to 0.1 |
-| Idle choice range | 0 to 10 | integer | Inclusive, 11 outcomes |
+| Idle choice range | 0 to 10 | ranged-draw result (integer) | Inclusive, 11 outcomes |
+| Ticks per game minute | 900 | ticks per game minute | Converts *R* in F4 (glossary *game minute*) |
 | Idle timer bounds | 450·R to 1800·R | ticks | R in game minutes (F4) |
-| Idle timer draw range | 0 to 2147483646 | integer | Inclusive (F4) |
+| Idle timer draw range | 0 to 2147483646 | ranged-draw result (integer) | Inclusive (F4) |
 | Idle timer scale *c* | (2³⁰ + 1) / 2⁶¹ | per draw | A double (F4) |
 | Airborne height | 2 | height levels | 208 leptons, for the *hover* substitution |
 | Water death height | 11 | leptons | Height above the surface; killed below it over water: splash, no sequence |
 | Idle comment chance | 1 in 3 | draws | Unsynchronised random stream, draw 0 of 0 to 2 |
-| Value length limit | 31 | characters | Sequence art values (Import mapping, `quirks.sequence_value_length_limit`) |
+| Value length limit | 31 | characters | Sequence art values (claim 22, Import mapping, `quirks.sequence_value_length_limit`) |
 | Generic shadow image frame | 1 | image frame | Of the generic infantry-shadow sprite (claim 19) |
 
 **T1. Engine table per sequence kind** (I = interruptible, b = base delay in ticks, n = normalised
@@ -806,7 +831,7 @@ completion tick, also when the follow-up replaces that kind on the same tick.
   is still started, and then shows the single image frame per facing that claim 2 gives with
   *C* = 0 (image frame 0 when the data leaves the key out), with no animation. Off: when the
   substitute has *C* = 0, keep the requested kind instead.
-- **`quirks.case_sensitive_direction`** (default: on). The declared direction is recognised only
+- **`quirks.case_sensitive_direction`** (default: on, claim 22). The declared direction is recognised only
   as an exact upper-case compass abbreviation. Anything else, including lower case, means "no
   declared direction". Off: case-insensitive.
 - **`quirks.tread_default_water_only`** (default: on). With no current sequence, the *tread*
@@ -831,7 +856,10 @@ completion tick, also when the follow-up replaces that kind on the same tick.
   it scatters only if its type is a fraidycat whose owner is not human-controlled, as any type
   would.
 - **`quirks.first_comment_only`** (default: on). The idle comment always uses the type's first
-  comment sound. Off: pick one from the list at random.
+  comment sound. Off: when the comment chance gives a comment, one more ranged draw from the
+  unsynchronised random stream, uniform from 0 to *n* − 1 over the type's *n* comment sounds and
+  taken right after the chance draw, picks the sound. Like the chance draw, it never touches the
+  scenario random stream, because the comment concerns the local player only.
 - **`quirks.speed_normalised_delays`** (default: on, shared with S-0108; glossary claim G3). The
   stage delays of *idle-a*, *idle-b*, *wet-idle-a*, *wet-idle-b*, *hover* and *cheer* are
   game-speed normalised when the sequence starts (claim 5, Formulas F3), so their length in ticks
@@ -843,8 +871,9 @@ completion tick, also when the follow-up replaces that kind on the same tick.
   precision (53-bit significand), not to nearest. A result that is mathematically an exact integer,
   but built from inputs that are not exactly representable, can come out one below it before the
   final truncation. This spec defines no switch for it: the mode and its single switch
-  `quirks.chop_rounding` (default: the original behaviour) will be owned by S-0205 (number domains,
-  planned), and round-to-nearest double arithmetic is what that switch selects when off.
+  `quirks.chop_rounding` (default: the original behaviour) is owned by S-0205 (number domains,
+  claim 5),
+  and round-to-nearest double arithmetic is what that switch selects when off.
 - **`quirks.fire_frame_by_stance`** (default: on). The fire frame follows the unit's stance and
   weapon (claim 11), not the firing kind that plays. A prone unit firing its secondary weapon with
   *secondary-fire* (because *secondary-fire-prone* has no image frames) uses the prone fire frame.
@@ -870,10 +899,10 @@ completion tick, also when the follow-up replaces that kind on the same tick.
 - **`quirks.air_death_fall_generic_follow_up`** (default: on). A completed *air-death-fall* gets the
   general follow-up (*stand*, *walk*, *prone* or *crawl*, forced), even while the unit is still in
   the air. Off: *air-death-fall* loops until *air-death-end* replaces it.
-- **`quirks.sequence_value_length_limit`** (default: on). The art values of the sequence table are
+- **`quirks.sequence_value_length_limit`** (default: on, claim 22). The art values of the sequence table are
   read as at most 31 characters (Import mapping), so a long cue list loses its tail. Off: no limit.
-- **`quirks.two_sound_cues`** (default: on). At most two sound cues are kept per entry. Off: keep
-  every valid pair.
+- **`quirks.two_sound_cues`** (default: on, claim 22). At most two sound cues are kept per entry.
+  Off: keep every pair whose sound is known.
 - *die-3* to *die-5* are never selected (claim 17). This is not a switch, because no rule refers
   to them.
 - **Departure: a death entry with no image frames** (no switch). In the original, a killed unit
@@ -917,7 +946,7 @@ by S-0007; "the type's art section" below means that section. Kind names map to 
   the type keeps the all-zero table of claim 1.
 - **`<kind key>=start,count,multiplier,direction`** in that section gives *S*, *C*, *M* and *D*.
   The first three are integers. The fourth is one of `N`, `NE`, `E`, `SE`, `S`, `SW`, `W`, `NW`
-  (exact, case-sensitive, `quirks.case_sensitive_direction`). When a field is missing or does not
+  (exact, case-sensitive, claim 22, `quirks.case_sensitive_direction`). When a field is missing or does not
   parse, that field and every field after it keep their defaults from claim 1 (0, 0, 0, none),
   while the fields before it take their given values. Reading the same art data again gives the
   same entries. Which of several entries with the same key counts is given by S-0002. The key name
@@ -926,10 +955,10 @@ by S-0007; "the type's art section" below means that section. Kind names map to 
   an exact upper-case compass abbreviation, since both lose data silently in the original.
 - **`<kind key>Sounds=frame sound [frame sound]`**, in the same sequence section: tokens separated
   by spaces, commas or tabs. Each pair is a cue frame (integer) and a sound name. A pair whose sound
-  is unknown is dropped, and at most two pairs are kept.
+  is unknown is dropped, and at most two pairs are kept (claim 22).
 - **Value length:** the `Sequence=` value, each kind value and each `Sounds` value are read as at
   most 31 characters. Anything longer is cut off before it is parsed, so a long cue list loses its
-  tail. The importer warns about any such value that is longer than 31 characters, and about a
+  tail (claim 22). The importer warns about any such value that is longer than 31 characters, and about a
   `Sounds` value with more than two valid pairs.
 - **Fire frames:** `FireUp` (standing), `FireProne` (prone), `SecondaryFire` (secondary) and
   `SecondaryProne` (secondary-prone) as integers in the type's art section itself, not the sequence
@@ -995,7 +1024,7 @@ screen capture that keeps every drawn frame, by matching the drawn sprite agains
 of the type's body sprite. Ticks are counted by a recorder that reports the tick number of each
 captured drawn frame, as
 the glossary's Scenario G2 assumes, not from the capture's real-time timing: how many ticks run per
-second belongs to planned S-0201, and game speed 0 has no fixed tick rate (glossary claim G2,
+second belongs to S-0201 (claims 2 and 5), and game speed 0 has no fixed tick rate (glossary claim G2,
 part (b)). Where a scenario needs test art or test rules data, it is a named test file (a test
 copy of the art or rules data that changes only what the scenario names, or a test map's override
 section) and it is removed after the run, as the measurement setup allows. Each measurement record
@@ -1054,9 +1083,10 @@ whose …") means any stock type with that property; the property is a precondit
   repeats without a transition. Runs: one round trip.
 - **M6 (claims 15, 16; State and ordering).**
   - (a) Damage an idle soldier of a computer-controlled owner once with a weak attack from a known
-    attacker. Expected: *go-prone* at once; afterwards *crawl* while the scatter move that the hit
-    causes lasts, and *prone* once it stops; and *get-up* 51 ticks after the hit (fear 100 decays
-    to 49). Falsified by another time from the hit to *get-up*.
+    attacker. Expected: *go-prone* at once, then *prone* (with *crawl* while any move lasts: a move
+    to attack back, or a scatter that S-0208 claims 11 and 15 may give, which this scenario does not
+    test); and *get-up* 51 ticks after the hit (fear 100 decays to 49). Falsified by another time
+    from the hit to *get-up*.
   - (b) The same with a fraidycat (a civilian type). Expected: scattering, and *panic* image frames
     while it runs for about 100 ticks (300 down to 199). Falsified by no *panic* image frames, or
     by *panic* lasting far longer than 100 ticks.
@@ -1069,8 +1099,9 @@ whose …") means any stock type with that property; the property is a precondit
     rank, and a test map that places one unit of it at veteran rank. Hit it once from a known
     attacker. Expected: as (b), *panic* for about 100 ticks and then calm. Falsified if it shows no
     *panic* image frames (the ability blocking the 300), or panics for good as in (c).
-  - (e) A fearless type that is not a fraidycat (stock, or test rules data), hit once from a known attacker. Expected: it
-    scatters but never shows *go-prone*. Falsified if it lies down.
+  - (e) A fearless type that is not a fraidycat (stock, or test rules data), hit once from a known
+    attacker. Expected: it never shows *go-prone*. Falsified if it lies down. Whether it moves is
+    not tested here (S-0208 claims 11 and 15).
   - (f) Same-tick order of fear and completion (State and ordering). As (a), and once the unit
     has started *get-up*, hit it again from a known attacker before *get-up* completes. Log the
     drawn image frame per tick. Expected: after the last *get-up* image frame, exactly one tick
@@ -1132,38 +1163,87 @@ whose …") means any stock type with that property; the property is a precondit
     *go-prone* entry with *C* ≥ 3. A unit of that type is owned by a computer-controlled house
     and rests in guard, not in the attack state. An enemy unit with a weak weapon approaches within
     the soldier's range and fires at it, so that the soldier's guard behaviour picks a target by
-    itself while the weak hit, from a known attacker, reaches it. The hit makes it scatter, but for
-    a computer-controlled owner movement does not block the lie-down rule (claim 15). Repeat until
+    itself while the weak hit, from a known attacker, reaches it. For a computer-controlled owner,
+    movement does not block the lie-down rule (claim 15), so any move the hit may cause (S-0208
+    claims 11 and 15) does not matter here. Repeat until
     the log shows the facing snap and the first *go-prone* image frame on the same tick. Expected: no *fire-standing* or *fire-prone* image
     frame is drawn before the shot, and the projectile leaves on the tick after *go-prone* starts
     (its stage 1). Falsified by a firing kind drawn first, or by a shot on any other tick. Runs:
     three runs in which the two events fall on the same tick.
-- **M9 (claim 14).** Over 50 games, leave one soldier idle for 18000 ticks per game, and log the
-  ticks between visible idle outcomes and the outcomes. Only some attempts can be seen: *r* = 0
-  shows nothing, and a turn to the facing the unit already has shows nothing either, which is 1
-  turn in 8 once the facing is a multiple of 8192 (after the first visible turn). Of the
-  attempts, 3/11 give *idle-a*, 3/11 *idle-b* and 4/11 × 7/8 a visible turn, so the visible
-  outcomes come in the ratio 6 : 6 : 7. Invisible attempts,
-  and the rule that an attempt goes ahead only while *stand*, *guard* or *tread* is current, can
-  only lengthen the time between visible outcomes, so the distribution of *T* itself is left to
-  F4. Falsified by two consecutive visible outcomes less than ⌊450·R⌋ ticks
-  apart, or by a chi-square test of the pooled visible-outcome counts (from the first visible turn
-  on) against 6 : 6 : 7 (2 degrees of freedom) that rejects at the 1% level. Runs: 50 games, as stated.
-  The cow (`quirks.cow_idle`): in the same 50 games, also leave one unit of the hard-coded cow type
-  (Import mapping), owned by a computer-controlled house, idle on open ground, never hurt, so that
-  its fear level stays 0. Its *stand*
-  entry must have *M* > 0 so that turns can be seen (test art gives it one otherwise). Count the
-  attempts that end in a scatter (the cow wanders off) and the plain visible turns with no
-  scatter; its *idle-a* and *idle-b* outcomes are not counted, because they depend on the cow's
-  art. A scatter follows 61/121 of the attempts (*e* < 5, or *r* = 8) and a plain turn 18/121, of
-  which between 7/8 and all are visible, depending on the facing the previous scatter left. So the
-  scatter share of the counted outcomes lies between about 0.77 and 0.80, whether or not the cow
-  type is a fraidycat. Were the cow treated like any other type (the switch off), it would be about
-  0.25 to 0.28 (a scatter on 1/11 of the attempts against 3/11 turns) if the cow type is a
-  fraidycat, and 0 otherwise. Falsified if the 99% confidence interval of the pooled share lies
-  wholly outside 0.76 to 0.81.
-  The order of the draws is not checked here: that would need one game started twice from the
-  same random state, and the measurement setup places nothing inside the original to fix it.
+- **M9 (claim 14).**
+  - (a) Timer bounds and outcome ratios. Over 50 games, leave one soldier idle for 18000 ticks per game, and log the
+    ticks between visible idle outcomes and the outcomes. Only some attempts can be seen: *r* = 0
+    shows nothing, and a turn to the facing the unit already has shows nothing either, which is 1
+    turn in 8 once the facing is a multiple of 8192 (after the first visible turn). Of the
+    attempts, 3/11 give *idle-a*, 3/11 *idle-b* and 4/11 × 7/8 a visible turn, so the visible
+    outcomes come in the ratio 6 : 6 : 7. Invisible attempts,
+    and the rule that an attempt goes ahead only while *stand*, *guard* or *tread* is current, can
+    only lengthen the time between visible outcomes, so the distribution of *T* itself is left to
+    F4. Falsified by two consecutive visible outcomes less than ⌊450·R⌋ ticks
+    apart, or by a chi-square test of the pooled visible-outcome counts (from the first visible turn
+    on) against 6 : 6 : 7 (2 degrees of freedom) that rejects at the 1% level. Runs: 50 games, as stated.
+    The cow (`quirks.cow_idle`): in the same 50 games, also leave one unit of the hard-coded cow type
+    (Import mapping), owned by a computer-controlled house, idle on open ground, never hurt, so that
+    its fear level stays 0. Its *stand*
+    entry must have *M* > 0 so that turns can be seen (test art gives it one otherwise). Count the
+    attempts that end in a scatter (the cow wanders off) and the plain visible turns with no
+    scatter; its *idle-a* and *idle-b* outcomes are not counted, because they depend on the cow's
+    art. A scatter follows 61/121 of the attempts (*e* < 5, or *r* = 8) and a plain turn 18/121, of
+    which between 7/8 and all are visible, depending on the facing the previous scatter left. So the
+    scatter share of the counted outcomes lies between about 0.77 and 0.80, whether or not the cow
+    type is a fraidycat. Were the cow treated like any other type (the switch off), it would be about
+    0.25 to 0.28 (a scatter on 1/11 of the attempts against 3/11 turns) if the cow type is a
+    fraidycat, and 0 otherwise. Falsified if the 99% confidence interval of the pooled share lies
+    wholly outside 0.76 to 0.81.
+  - (b) Streams, number and order of the draws, with a *recorder* (glossary) that reads the random
+    streams' state. Map: a test map with no computer players and nothing that moves or animates,
+    whose houses are the local player's and one neutral house that is not human-controlled and
+    runs no computer player. Control: for each case, a control game on the same map with the same
+    houses and orders but without the case's unit (and, in case (2), without its attacker), run for
+    300 ticks with the recorder on. Expected in the control game: the scenario random stream does
+    not advance on any tick. If it does, the cause is removed from the map before the case is run.
+    The unsynchronised random stream may advance in the control game through presentation uses
+    such as music or object flicker (S-0202 claim 11). Its per-tick advance there is the baseline,
+    and case (3) predicts only the advance beyond it. A tick on which such a use can be seen to
+    draw in the case's game (for example a change of music track, which is audible) is left out of
+    the unsynchronised comparison. In separate games,
+    the test map then places: (1) one unit of the hard-coded cow type, owned by the neutral house,
+    never hurt; (2) one unit of a fraidycat type, owned by the neutral house, after test rules data
+    has made the type fearless and it has been hit once, as in M6(c), so that its fear level stays
+    300, with the attacker removed after the hit and the recording counted from that
+    removal; (3) one soldier of the local player whose type has at least one comment sound, left unselected,
+    and then the same soldier kept selected. The test map gives each of these units *guard* as its
+    initial behaviour. Record the scenario random stream's position and state at every tick, in
+    case (3) also the unsynchronised random stream's. From the recorded state, predict each
+    attempt's draws under claim 14: (1) the timer draw, *r*, *e*, then δ when the outcome is a
+    turn, plus the draws of the scatter that follows when *e* < 5 or *r* = 8 (S-0208 claims 11 to
+    13); (2) the timer draw only, plus the draws of its scatter; (3) the timer draw, *r*, then δ on
+    a turn, and, when the outcome is *idle-b* and the unit is not selected, one ranged draw over 0
+    to 2 from the unsynchronised stream, with a comment exactly when it gives 0. A ranged draw can
+    take more than one raw value from its stream; the prediction counts raw values, as S-0202
+    claim 4 gives them for each ranged draw from the recorded state, rejected values included.
+    In case (2), the flee rule of claim 15 also scatters the unit between attempts; predict those
+    scatters' draws as S-0208 gives them. Every processing of the unit's behaviour, whether or not
+    it attempts the idle action and whether or not the attempt goes ahead, also takes the draw of
+    that behaviour's delay, after any draws of the attempt; predict it, and the ticks of the
+    processings, from S-0215's delay rule for *guard* (claims 6 and 24). Expected: on every tick the
+    recorded advance of the scenario random stream equals the prediction, and that of the
+    unsynchronised stream equals the prediction beyond the baseline; the visible outcomes match the
+    predicted *r*, *e* and δ; the next attempt comes at the tick that F4 gives from the predicted
+    timer draw; the comment heard is always the type's first comment sound; a selected unit takes
+    no draw from the unsynchronised stream at its attempts. Falsified by any other advance (for
+    example an *r* draw in case (2), no *e* draw in case (1), or an unsynchronised draw from a
+    selected unit), by an outcome that differs from the prediction, or by an attempt at another
+    tick. Runs: one game per case, until at least 30 attempts of the unit have been recorded.
+  - (c) The *hunt* trigger. A skirmish test map (not a campaign game) places one soldier of the
+    human player with *hunt* as its initial behaviour, and test rules data gives its type the
+    stupid-hunt flag (S-0215 claim 27 and Import mapping), so that its hunt never keeps a target
+    and, outside a campaign game, only attempts the idle action. Every enemy object stays far
+    outside the soldier's weapon range and sight. Leave it for 18000 ticks and log its image frames,
+    its facing and its behaviour. Expected: it stays in *hunt* and shows idle outcomes (*idle-a*,
+    *idle-b* image frames or turns of facing), never two visible outcomes less than ⌊450·R⌋ ticks
+    apart. Falsified if no idle outcome appears in the 18000 ticks while the unit stays in *hunt*.
+    Runs: three games.
 - **M10 (claim 17).** Kill soldiers standing on a land cell with warheads of infantry-death kinds
   1 and 2. Expected: *die-1* and *die-2*; the corpse appears and the unit disappears *C* ticks after
   the death starts. Kill a soldier the same way with a warhead of kind 9. Expected: either *die-2*
@@ -1231,19 +1311,22 @@ whose …") means any stock type with that property; the property is a precondit
       rules apart, because they agree whenever the yellow ratio is at or above the red one.
     - Runs: three per health band in each configuration.
   - (b) No known attacker. First pick a damage source that carries no attacking object (which
-    sources do belongs to the combat specs; a radiation field is the expected candidate). Check it
-    on an idle soldier of a computer-controlled owner whose fear level is 0: with no known attacker
-    one hit makes it neither scatter nor lie down (claim 15: *i* ≤ 50 gives *f*′ ≤ 49), while a hit
-    from a known attacker makes it do both. Then hit a soldier of a computer-controlled owner from a
-    known attacker on tick *h*₁, which sets its fear level to 100, and expose it to the chosen source
-    so that it takes its next hit or hits on later ticks, while it is still prone and at most 50
-    ticks after *h*₁. Read each of these hits and the health ratio after it from the health bar, and
-    take *i*ⱼ from F5 for hit *j*. Expected: no new scatter at these hits, and *get-up* on tick
-    *h*₁ + 51 + Σ *i*ⱼ, over the hits that landed before it. Falsified by a scatter at one of these
-    hits, or by *get-up* at another tick; in particular, if the first such hit, on tick *h*₂, were
-    treated like a hit from a known attacker, it would reset the fear level to 100 and *get-up*
-    would come on tick *h*₂ + 51 (choose *h*₂ − *h*₁ different from *i* so that the two outcomes
-    differ). Runs: three, with single hits where the source allows them.
+    sources do belongs to the combat specs; a radiation field is the expected candidate). Every
+    soldier in this part belongs to the human player, rests with no movement order, and every hit
+    from a known attacker comes from beyond the soldier's retaliation reach (S-0215, Formulas F7),
+    so that with default
+    rules neither a scatter from damage (S-0208 claims 11 and 15) nor a move to attack back moves
+    it, and the lie-down rule of claim 15 applies to it. Check the source on such a soldier whose
+    fear level is 0: with no known attacker one hit does not make it lie down (claim 15: *i* ≤ 50
+    gives *f*′ ≤ 49), while a hit from a known attacker does. Then hit such a soldier from a known
+    attacker on tick *h*₁, which sets its fear level to 100, and expose it to the chosen source so
+    that it takes its next hit or hits on later ticks, while it is still prone and at most 50 ticks
+    after *h*₁. Read each of these hits and the health ratio after it from the health bar, and take
+    *i*ⱼ from F5 for hit *j*. Expected: *get-up* on tick *h*₁ + 51 + Σ *i*ⱼ, over the hits that
+    landed before it. Falsified by *get-up* at another tick; in particular, if the first such hit,
+    on tick *h*₂, were treated like a hit from a known attacker, it would reset the fear level to
+    100 and *get-up* would come on tick *h*₂ + 51 (choose *h*₂ − *h*₁ different from *i* so that
+    the two outcomes differ). Runs: three, with single hits where the source allows them.
 - **M16 (claim 20).** Place one unit of each stock infantry type whose *guard*, *tumble* or
   *deployed-idle* entry differs from its *stand* entry. Play them through idling, deploying and
   combat for 9000 ticks. Expected: no image frame that belongs only to *guard*, *tumble* or
@@ -1272,6 +1355,34 @@ whose …") means any stock type with that property; the property is a precondit
     speed clearly below 0.8 of the full speed (0.7 or less), or *hover* image frames at a clearly
     higher one (0.9 or more), allowing for the error of positions read off the capture. Runs: three
     flights.
+
+- **M18 (claim 22).** Test art for one infantry type whose *stand* and *idle-a* entries have *M* > 0
+  and image frames, and whose *walk* entry has *C* ≥ 4. Each variant changes only what it names.
+  The sounds named below are stock sounds whose names are short enough for the stated lengths.
+  - (a) Direction case and kind-value length. Variant 1 gives the *idle-a* entry the declared
+    direction map south written in upper case. Variant 2 writes the same direction in lower case.
+    Variant 3 writes it in upper case but gives the facing multiplier leading zeros, so that the
+    multiplier ends exactly at the 31st character of the value and the direction lies beyond it.
+    Place one idle unit per variant and watch its *idle-a* completions, each starting from a
+    facing group other than 3. Record the facing group drawn just before and just after each
+    completion. Expected: in variant 1 the group after every completion is 3 (map south). In
+    variants 2 and 3 it equals the group before the completion. Falsified if variant 2 or 3
+    changes the group at a completion, or variant 1 does not show group 3. Runs: five *idle-a*
+    completions per variant; idle attempts are random, so wait for them.
+  - (b) Two cues. Give the *walk* entry a cue value of three pairs, at cue frames 1, 2 and 3, with
+    three different sounds, the whole value within 31 characters. Make the unit walk for five walk
+    cycles. Expected: the first two sounds play once per cycle; the third never plays. Falsified
+    if the third sound plays.
+  - (c) Cue-value length. Variant 1 gives the *walk* entry a cue value of two pairs, at cue frames
+    1 and 3, with two different sounds, within 31 characters. Variant 2 is the same value with
+    commas inserted between the two pairs, so that the second pair begins after the 31st
+    character. Make a unit of each variant walk for five walk cycles. Expected: variant 1 plays
+    both sounds once per cycle; variant 2 plays only the first. Falsified if variant 2 plays the
+    second sound, or variant 1 does not. No cue sits at cue frame 0, which a sequence started by
+    the movement rule skips on its start tick (claim 18).
+  - Runs: as stated per part; parts (b) and (c) involve no random draw.
+  - The reference to the sequence section is not tested separately: it is read by the same rule
+    as the kind and cue values.
 
 ## Open questions
 
