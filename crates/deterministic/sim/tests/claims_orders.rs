@@ -662,3 +662,76 @@ fn s0215_infantry_unload_toggles_deploy() {
     tick::step(&mut w);
     assert_eq!(seq(&w), Some(glasnost_sim::infantry::Seq::Undeploy));
 }
+
+// spec: S-0215 claim 25 (sticky is processed as guard, and an actor in sticky is never ready to change)
+#[test]
+fn s0215_sticky() {
+    let mut w = ready(1);
+    let id = of(&w, 0, Kind::Vehicle, 1)[0];
+    let t = w.tick;
+    w.obj_mut(id).unwrap().beh.force(Behaviour::Sticky, t);
+    assert!(!process::ready(&w, id));
+    orders::issue(&mut w, ALPHA, mv(id, testkit::cell(0, 9)));
+    for _ in 0..20 {
+        tick::step(&mut w);
+    }
+    let b = &w.obj(id).unwrap().beh;
+    // The ordered move stays queued, and sticky takes guard's standard delay.
+    assert_eq!(b.current, Some(Behaviour::Sticky));
+    assert_eq!(b.queued, Some(Behaviour::Move));
+    assert!(b.last.is_some_and(|(_, d)| (14..=16).contains(&d)));
+}
+
+// spec: S-0215 claim 31 (a deployed deployer with an undeploy delay of 0 or more undeploys in guard; the delay is that sequence's frame count)
+#[test]
+fn s0215_deployer_in_guard_undeploys() {
+    let mut r = testkit::ruleset();
+    let walker = r.sim.infantry.get_mut("WALKER").unwrap();
+    walker.deployer = Some(true);
+    walker.undeploy_delay = Some(30);
+    for (k, n) in [
+        ("deploy", 4),
+        ("deployed", 1),
+        ("undeploy", 6),
+        ("ready", 1),
+        ("guard", 1),
+    ] {
+        walker.sequences.insert(
+            k.into(),
+            glasnost_rules::sim::SequenceEntry {
+                start: 0,
+                count: n,
+                multiplier: 0,
+                direction: None,
+            },
+        );
+    }
+    let rules = Arc::new(SimRules::new(&r, "deployer2"));
+    let mut w = new_game(
+        rules,
+        &testkit::map(),
+        testkit::catalogue(),
+        &testkit::setup(1),
+    )
+    .unwrap();
+    while w.tick < 4 {
+        tick::step(&mut w);
+    }
+    let inf = of(&w, 1, Kind::Infantry, 0)[0];
+    orders::issue(&mut w, BETA, Order::Deploy { actor: inf });
+    tick::step(&mut w);
+    tick::step(&mut w);
+    // Claim 30: the undeploy delay (30) when it is 0 or more.
+    assert_eq!(w.obj(inf).unwrap().beh.last.map(|l| l.1), Some(30));
+    let seq = |w: &World| w.obj(inf).unwrap().infantry.as_ref().unwrap().seq;
+    for _ in 0..40 {
+        tick::step(&mut w);
+        if seq(&w) == Some(glasnost_sim::infantry::Seq::Undeploy) {
+            break;
+        }
+    }
+    assert_eq!(seq(&w), Some(glasnost_sim::infantry::Seq::Undeploy));
+    let b = &w.obj(inf).unwrap().beh;
+    assert_eq!(b.current, Some(Behaviour::Guard));
+    assert_eq!(b.last.map(|l| l.1), Some(6));
+}

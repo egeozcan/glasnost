@@ -416,3 +416,20 @@ fn s0205_tables_not_library() {
     assert_eq!(root_floor(16641, false, Rounding::TowardZero), 129);
     assert_eq!(glasnost_num::geom::direction(9, -97, true), 966);
 }
+
+// spec: S-0205 claim 8 (our engine gives every intermediate result the range of a double: overflow goes to the largest double or infinity)
+#[test]
+fn s0205_double_range() {
+    let big = F64::from_i64(i64::MAX, Rounding::TowardZero);
+    let mut x = big;
+    for _ in 0..20 {
+        x = x.mul(big, Rounding::TowardZero);
+    }
+    // Under round-toward-zero an overflow stops at the largest finite double.
+    assert_eq!(x.0, 0x7fef_ffff_ffff_ffff);
+    let mut y = F64::from_i64(i64::MAX, Rounding::Nearest);
+    for _ in 0..20 {
+        y = y.mul(big, Rounding::Nearest);
+    }
+    assert_eq!(y.0, 0x7ff0_0000_0000_0000);
+}
