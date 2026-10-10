@@ -9,5 +9,6 @@ pub mod live;
 mod live_tests;
 pub mod load;
 pub mod png;
+pub mod quirks;
 #[cfg(test)]
 mod tests;

@@ -22,6 +22,7 @@ use glasnost_sim::targeting::{self, ClickOn, KeyCommand, Modifiers};
 use glasnost_sim::world::{GameSetup, HouseId, Layer, ObjectId, World};
 
 use super::build::{Built, GroundEntry, InfantryFrame, Inputs, Mobile, Painter, find_type};
+use super::quirks::ViewQuirks;
 
 /// The flag that marks an [`glasnost_render::scene::Item::object`] code as
 /// a simulation object ID (the low 31 bits); codes without it index the
@@ -141,8 +142,14 @@ impl GroundLayer {
 
     /// The once-per-tick pass: adjacent swaps from front to back where the
     /// later entry's key is strictly smaller, on the keys as they stood
-    /// before this tick's movement.
-    pub fn pass(&mut self) {
+    /// before this tick's movement. With
+    /// `quirks.ground_layer_single_pass_sort` off, a full stable sort by key.
+    pub fn pass(&mut self, q: &ViewQuirks) {
+        if !q.ground_layer_single_pass_sort {
+            // spec: S-0102 Edge cases (quirks.ground_layer_single_pass_sort off: fully sorted every tick, stable, by key)
+            self.list.sort_by_key(|(_, k)| *k);
+            return;
+        }
         // spec: S-0102 claim 6 (one pass of adjacent swaps per tick, front to back)
         for i in 1..self.list.len() {
             if self.list[i].1 < self.list[i - 1].1 {
@@ -391,7 +398,7 @@ impl Live {
             self.failed = Some(format!("the simulation failed in a tick: {p}"));
             return;
         }
-        self.ground.pass();
+        self.ground.pass(&ViewQuirks::default());
         self.sync_ground();
     }
 

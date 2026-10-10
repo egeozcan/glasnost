@@ -168,6 +168,11 @@ pub struct ComposeQuirks {
     /// a writer (the cell pass's shadows) stores its depth where it darkens;
     /// off: every shadow darkens without storing depth.
     pub cell_pass_shadows_write_depth: bool,
+    /// `quirks.depth_reference_reset_on_jump` (F1): the depth reference *C*
+    /// is reset at every view jump and when the depth buffer is created
+    /// ([`Frame::reference_at_reset`]). Off: one *C* = 32768 for the whole
+    /// game, whatever the view.
+    pub depth_reference_reset_on_jump: bool,
 }
 
 impl Default for ComposeQuirks {
@@ -176,7 +181,28 @@ impl Default for ComposeQuirks {
         Self {
             upright_depth_anchor_after_clip: true,
             cell_pass_shadows_write_depth: true,
+            depth_reference_reset_on_jump: true,
         }
+    }
+}
+
+impl ComposeQuirks {
+    /// The switches by name.
+    pub fn named(&self) -> [(&'static str, bool); 3] {
+        [
+            (
+                "upright_depth_anchor_after_clip",
+                self.upright_depth_anchor_after_clip,
+            ),
+            (
+                "cell_pass_shadows_write_depth",
+                self.cell_pass_shadows_write_depth,
+            ),
+            (
+                "depth_reference_reset_on_jump",
+                self.depth_reference_reset_on_jump,
+            ),
+        ]
     }
 }
 
@@ -223,6 +249,19 @@ impl Frame {
     pub fn reset_reference(top_row: i32) -> i32 {
         // spec: S-0102 F1 (at a reset, C = 32768 + w_top)
         DEPTH_REFERENCE_START + top_row
+    }
+
+    /// *C* at a view jump or at the creation of the depth buffer, with
+    /// world row `top_row` at the view's top: [`Frame::reset_reference`],
+    /// or with `quirks.depth_reference_reset_on_jump` off the one *C* of
+    /// the whole game.
+    pub fn reference_at_reset(top_row: i32, q: &ComposeQuirks) -> i32 {
+        if q.depth_reference_reset_on_jump {
+            Self::reset_reference(top_row)
+        } else {
+            // spec: S-0102 Edge cases (quirks.depth_reference_reset_on_jump off: one C for the whole game, C = 32768)
+            DEPTH_REFERENCE_START
+        }
     }
 
     /// Screen-row depth d(r) of view row `r` (F1), in 0 … 65535.
@@ -431,6 +470,29 @@ mod tests {
         let f = Frame::new(4, 4, 100, c);
         assert_eq!(f.row_depth(0), 32768);
         assert_eq!(f.row_depth(3), 32765);
+    }
+
+    /// spec: S-0102 F1, Edge cases (quirks.depth_reference_reset_on_jump)
+    #[test]
+    fn depth_reference_switch() {
+        let on = ComposeQuirks::default();
+        let off = ComposeQuirks {
+            depth_reference_reset_on_jump: false,
+            ..on
+        };
+        // World row 500 seen from two view positions after a jump.
+        let depth_of_row_500 = |top: i32, q: &ComposeQuirks| {
+            Frame::new(1, 1, top, Frame::reference_at_reset(top, q)).row_depth(500 - top)
+        };
+        // On: C is reset, so the view's top row always has depth 32768 and a
+        // world row's depth depends on where the view jumped to.
+        assert_eq!(Frame::reference_at_reset(100, &on), 32868);
+        assert_eq!(depth_of_row_500(100, &on), 32368);
+        assert_eq!(depth_of_row_500(300, &on), 32568);
+        // Off: one C = 32768, so a world row's depth depends on the row only.
+        assert_eq!(Frame::reference_at_reset(100, &off), 32768);
+        assert_eq!(depth_of_row_500(100, &off), 32268);
+        assert_eq!(depth_of_row_500(300, &off), 32268);
     }
 
     /// spec: S-0102 claims 9, 10 (tiles ≤, writers and readers <; readers store nothing)

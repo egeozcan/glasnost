@@ -112,7 +112,7 @@ impl Default for MapPane {
             shown: None,
             generation: 0,
             centre: (0, 0),
-            reference: Frame::reset_reference(0),
+            reference: Frame::reference_at_reset(0, &ComposeQuirks::default()),
             view_size: (960, 600),
             groups: Group::ALL.to_vec(),
             provisional: true,
@@ -219,8 +219,9 @@ impl MapPane {
         let big = dx.abs() > size.0 || dy.abs() > size.1;
         self.centre = c;
         if jump || big {
-            // spec: S-0102 F1 (at a reset, C = 32768 + the world row of the view's top)
-            self.reference = Frame::reset_reference(view_origin(c, size).1);
+            // spec: S-0102 F1 (at a reset, C = 32768 + the world row of the view's top; quirks.depth_reference_reset_on_jump)
+            self.reference =
+                Frame::reference_at_reset(view_origin(c, size).1, &ComposeQuirks::default());
         }
     }
 
