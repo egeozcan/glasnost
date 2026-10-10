@@ -1,9 +1,9 @@
 ---
 id: Q-0005
 title: Which rules fields create types by reference, and in which order
-status: open
+status: answered
 related: [S-0004, S-0006, S-0007]
-answered-by: []
+answered-by: [S-0004]
 ---
 
 ## Need
