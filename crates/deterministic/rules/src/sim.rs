@@ -288,6 +288,28 @@ pub struct General {
     /// `EngineerCaptureLevel` (S-0214 F2).
     #[serde(default)]
     pub engineer_capture_level: Option<Decimal>,
+    /// `BaseUnit`: the base-unit list, vehicle type keys (S-0009 claim 45).
+    #[serde(default)]
+    pub base_unit: Option<Vec<String>>,
+    /// `[MultiplayerDialogSettings] TechLevel` as the base rules alone give
+    /// it: the game's tech level (S-0009 Terms).
+    #[serde(default)]
+    pub multiplayer_tech_level: Option<i32>,
+    /// `GDIGateOne`: the first Allied gate type, a building key (S-0112).
+    #[serde(default)]
+    pub allied_gate_one: Option<String>,
+    /// `GDIGateTwo`: the second Allied gate type (S-0112).
+    #[serde(default)]
+    pub allied_gate_two: Option<String>,
+    /// `NodGateOne`: the first Soviet gate type (S-0112).
+    #[serde(default)]
+    pub soviet_gate_one: Option<String>,
+    /// `NodGateTwo`: the second Soviet gate type (S-0112).
+    #[serde(default)]
+    pub soviet_gate_two: Option<String>,
+    /// `WallTower`: the wall tower type (S-0112).
+    #[serde(default)]
+    pub wall_tower: Option<String>,
 }
 
 /// One land type's row (S-0211 claim 2): multipliers per locomotion class and
@@ -369,6 +391,10 @@ pub struct Country {
     /// The wall-owner flag (S-0210 claim 14, Import mapping).
     #[serde(default)]
     pub wall_owner: Option<bool>,
+    /// `MultiplayPassive` as the base rules alone give it: the passive field
+    /// the early phase of start positions sees (S-0009 claim 33).
+    #[serde(default)]
+    pub multiplay_passive_base: Option<bool>,
 }
 
 /// One sequence entry of an infantry type (S-0107 claim 1).
@@ -559,6 +585,22 @@ pub struct UnitType {
     /// `SmallVisceroid`.
     #[serde(default)]
     pub small_visceroid: Option<bool>,
+    /// `LargeVisceroid` (S-0009 claim 46, S-0202 Import mapping).
+    #[serde(default)]
+    pub large_visceroid: Option<bool>,
+    /// `Cost`, credits (S-0009 claim 45).
+    #[serde(default)]
+    pub cost: Option<i32>,
+    /// `TechLevel` (S-0009 claim 45).
+    #[serde(default)]
+    pub tech_level: Option<i32>,
+    /// `AllowedToStartInMultiplayer` (S-0009 claim 45).
+    #[serde(default)]
+    pub allowed_to_start_in_multiplayer: Option<bool>,
+    /// `Owner`: the countries that own the type, as country keys (S-0009
+    /// claim 45; unknown names dropped by the importer, S-0004 claim 3).
+    #[serde(default)]
+    pub owner: Option<Vec<String>>,
     /// `Immune`.
     #[serde(default)]
     pub immune: Option<bool>,
@@ -830,6 +872,9 @@ pub struct OverlayType {
     /// as the importer's art lookup found.
     #[serde(default)]
     pub has_art: Option<bool>,
+    /// `IsVeins`, the veins flag (S-0202 Terms).
+    #[serde(default)]
+    pub is_veins: Option<bool>,
 }
 
 /// A terrain-object type's simulation fields.

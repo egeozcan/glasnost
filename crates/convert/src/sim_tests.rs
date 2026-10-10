@@ -716,3 +716,44 @@ fn teleporter_and_gate_times() {
     assert_eq!(dec(&d.deploy_time), Some("1e-1"));
     assert_eq!(dec(&d.gate_close_delay), Some("2e-1"));
 }
+
+/// spec: S-0009 Import mapping and claims 33 and 45 (starting-unit fields; the game's tech level and the early phase's passive field from the base rules only); S-0112 Import mapping (gate and tower types); S-0202 Import mapping (IsVeins)
+#[test]
+fn starting_unit_gate_and_vein_fields() {
+    let base = "[Countries]\n0=Alpha\n1=Beta\n[VehicleTypes]\n0=TRUCK\n1=MCV\n[InfantryTypes]\n0=GUY\n\
+                [BuildingTypes]\n0=GATEA\n1=TOWER\n[OverlayTypes]\n0=VEIN\n\
+                [General]\nBaseUnit=mcv,NOPE\nGDIGateOne=gatea\nWallTower=TOWER\n\
+                [MultiplayerDialogSettings]\nTechLevel=7\n\
+                [Alpha]\nMultiplayPassive=no\n[Beta]\n\
+                [TRUCK]\nCost=600\nTechLevel=3\nOwner=beta,Alpha, Beta,Gamma\nLargeVisceroid=yes\n\
+                [GUY]\nAllowedToStartInMultiplayer=no\n[VEIN]\nIsVeins=yes\n";
+    let map = "[MultiplayerDialogSettings]\nTechLevel=2\n[Alpha]\nMultiplayPassive=yes\n";
+    let (s, w) = sim(base, map, "");
+    let g = &s.general;
+    assert_eq!(g.base_unit, Some(vec!["MCV".to_string()]));
+    assert!(warned(&w, "\"NOPE\" names no"));
+    assert_eq!(
+        g.multiplayer_tech_level,
+        Some(7),
+        "the base rules' value only"
+    );
+    assert_eq!(g.allied_gate_one.as_deref(), Some("GATEA"));
+    assert_eq!(g.wall_tower.as_deref(), Some("TOWER"));
+    assert_eq!(g.soviet_gate_one, None);
+    let truck = &s.vehicles["TRUCK"];
+    assert_eq!((truck.cost, truck.tech_level), (Some(600), Some(3)));
+    assert_eq!(truck.large_visceroid, Some(true));
+    // S-0003 claim 12: items are not trimmed, so " Beta" names no country.
+    assert_eq!(
+        truck.owner,
+        Some(vec!["Beta".to_string(), "Alpha".to_string()])
+    );
+    assert_eq!(
+        s.infantry["GUY"].allowed_to_start_in_multiplayer,
+        Some(false)
+    );
+    let alpha = &s.countries["Alpha"];
+    assert_eq!(alpha.multiplay_passive, Some(true));
+    assert_eq!(alpha.multiplay_passive_base, Some(false));
+    assert_eq!(s.overlays["VEIN"].is_veins, Some(true));
+}

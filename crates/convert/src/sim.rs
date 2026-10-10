@@ -331,6 +331,15 @@ const UNIT_FIELDS: &[(&str, &str, Form)] = &[
         Bool,
     ),
     ("small_visceroid", "SmallVisceroid", Bool),
+    // spec: S-0009 Import mapping (LargeVisceroid, Cost, TechLevel, AllowedToStartInMultiplayer)
+    ("large_visceroid", "LargeVisceroid", Bool),
+    ("cost", "Cost", Int),
+    ("tech_level", "TechLevel", Int),
+    (
+        "allowed_to_start_in_multiplayer",
+        "AllowedToStartInMultiplayer",
+        Bool,
+    ),
     ("immune", "Immune", Bool),
     ("legal_target", "LegalTarget", Bool),
     ("bombable", "Bombable", Bool),
@@ -421,6 +430,8 @@ const OVERLAY_FIELDS: &[(&str, &str, Form)] = &[
     ("crate", "Crate", Bool),
     ("strength", "Strength", Int),
     ("armor", "Armor", Text),
+    // spec: S-0202 Import mapping (IsVeins, the veins flag)
+    ("is_veins", "IsVeins", Bool),
 ];
 
 /// Terrain-object fields (S-0211 Import mapping).
@@ -826,6 +837,40 @@ impl Builder<'_> {
                 }
             }
         }
+        // spec: S-0009 Import mapping ([General] BaseUnit: a list of vehicle type names)
+        let base_unit = globals
+            .get(&b"General"[..])
+            .and_then(|s| s.get(&b"BaseUnit"[..]))
+            .cloned();
+        if let Some(list) = self.name_list(base_unit.as_ref(), Kind::Vehicles, "[General] BaseUnit")
+        {
+            rec.put("base_unit", list);
+        }
+        // spec: S-0009 Terms and Import mapping (the game's tech level: the base rules' value only)
+        let tech = globals
+            .get(&b"MultiplayerDialogSettings"[..])
+            .and_then(|s| s.get(&b"TechLevel"[..]));
+        if let Some(v) = fold(tech, Some(0), |v, _| value::integer(v)) {
+            rec.put("multiplayer_tech_level", int_node(v));
+        }
+        // spec: S-0112 Import mapping (the gate and wall tower types of [General])
+        for (field, key) in [
+            ("allied_gate_one", "GDIGateOne"),
+            ("allied_gate_two", "GDIGateTwo"),
+            ("soviet_gate_one", "NodGateOne"),
+            ("soviet_gate_two", "NodGateTwo"),
+            ("wall_tower", "WallTower"),
+        ] {
+            let state = globals
+                .get(&b"General"[..])
+                .and_then(|s| s.get(key.as_bytes()));
+            let name = fold(state, None, |v, _| {
+                Some(value::text(v, value::COMMON_TEXT_LIMIT).to_vec())
+            });
+            if let Some(k) = name.and_then(|n| self.type_key(Kind::Buildings, &n)) {
+                rec.put(field, jsonc::string(k));
+            }
+        }
         rec.node()
     }
 
@@ -972,7 +1017,16 @@ impl Builder<'_> {
         for (i, (t, key)) in reg.iter().zip(&keys).enumerate() {
             let mut rec = Rec::default();
             match kind {
-                Kind::Countries => self.fields(&mut rec, t, kind, COUNTRY_FIELDS),
+                Kind::Countries => {
+                    self.fields(&mut rec, t, kind, COUNTRY_FIELDS);
+                    // spec: S-0009 claim 33 (the early phase sees the base rules' passive field only)
+                    let base = fold(t.keys.get(&b"MultiplayPassive"[..]), Some(0), |v, _| {
+                        value::boolean(v)
+                    });
+                    if let Some(b) = base {
+                        rec.put("multiplay_passive_base", jsonc::boolean(b));
+                    }
+                }
                 Kind::Infantry | Kind::Vehicles | Kind::Aircraft => self.unit(&mut rec, kind, i, t),
                 Kind::Buildings => {
                     self.fields(&mut rec, t, kind, BUILDING_FIELDS);
@@ -1018,9 +1072,56 @@ impl Builder<'_> {
                 rec.put(field, jsonc::array(list));
             }
         }
+        // spec: S-0009 Import mapping (Owner: the owner list of country names; S-0004 claim 3: unknown names are ignored)
+        if let Some(list) = self.name_list(t.keys.get(&b"Owner"[..]), Kind::Countries, "Owner") {
+            rec.put("owner", list);
+        }
         if kind == Kind::Infantry {
             self.infantry_art(rec, kind, index, t);
         }
+    }
+
+    /// A list of type names after every layer (S-0003 claim 12: split at
+    /// commas, empty items skipped, items not trimmed; a given list replaces
+    /// the held one), each item resolved to a type of `kind` by S-0003 claim
+    /// 14's comparison and written as that type's key. Items that name no
+    /// type are dropped with a warning (S-0004 claim 3; S-0003 claim 12).
+    fn name_list(&mut self, state: Option<&KeyState>, kind: Kind, what: &str) -> Option<Node> {
+        let mut dropped = Vec::new();
+        let list = fold(state, None, |v, e| {
+            Some(
+                value::list(v, value::COMMON_TEXT_LIMIT)
+                    .into_iter()
+                    .filter_map(|item| {
+                        let key = self.type_key(kind, item);
+                        if key.is_none() && !value::is_no_type(item) {
+                            dropped.push((e.layer, e.line, show(item)));
+                        }
+                        key
+                    })
+                    .map(jsonc::string)
+                    .collect::<Vec<_>>(),
+            )
+        });
+        for (l, line, item) in dropped {
+            // spec: S-0003 claim 12 (the importer warns for every dropped item other than none and <none>)
+            self.warn(
+                l,
+                line,
+                format!("{what}: {item:?} names no {} type; dropped", kind.key()),
+            );
+        }
+        list.map(jsonc::array)
+    }
+
+    /// The key of the type of `kind` that `name` names (S-0003 claim 14:
+    /// ASCII case folding), if any.
+    fn type_key(&self, kind: Kind, name: &[u8]) -> Option<String> {
+        let reg = self.i.outcome.registries.get(&kind)?;
+        let i = reg
+            .iter()
+            .position(|t| value::type_name_eq(&t.name, name))?;
+        type_keys(reg).get(i).cloned()
     }
 
     /// The locomotor field (S-0207 claim 14): a class identifier of table

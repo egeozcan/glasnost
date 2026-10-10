@@ -738,6 +738,14 @@
           ],
           "default": null
         },
+        "multiplay_passive_base": {
+          "description": "`MultiplayPassive` as the base rules alone give it: the passive field\nthe early phase of start positions sees (S-0009 claim 33).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
         "speed_infantry_mult": {
           "description": "`SpeedInfantryMult` (S-0208 F5), a single.",
           "anyOf": [
@@ -784,6 +792,33 @@
       "description": "Game-wide values (keys of `[General]`, `[AI]`, `[IQ]`, `[AudioVisual]`,\nthe combat-damage section and `[MultiplayerDialogSettings]`).",
       "type": "object",
       "properties": {
+        "allied_gate_one": {
+          "description": "`GDIGateOne`: the first Allied gate type, a building key (S-0112).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "allied_gate_two": {
+          "description": "`GDIGateTwo`: the second Allied gate type (S-0112).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "base_unit": {
+          "description": "`BaseUnit`: the base-unit list, vehicle type keys (S-0009 claim 45).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "string"
+          }
+        },
         "blockage_path_delay": {
           "description": "`[AI] BlockagePathDelay`, ticks (S-0209).",
           "type": [
@@ -942,6 +977,15 @@
           "format": "int32",
           "default": null
         },
+        "multiplayer_tech_level": {
+          "description": "`[MultiplayerDialogSettings] TechLevel` as the base rules alone give\nit: the game's tech level (S-0009 Terms).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
         "normal_targeting_delay": {
           "description": "`NormalTargetingDelay`, ticks (S-0215 F6).",
           "type": [
@@ -986,6 +1030,22 @@
           ],
           "default": null
         },
+        "soviet_gate_one": {
+          "description": "`NodGateOne`: the first Soviet gate type (S-0112).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "soviet_gate_two": {
+          "description": "`NodGateTwo`: the second Soviet gate type (S-0112).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
         "tracked_downhill": {
           "description": "`TrackedDownhill` (S-0207 claim 9).",
           "anyOf": [
@@ -1018,6 +1078,14 @@
               "type": "null"
             }
           ]
+        },
+        "wall_tower": {
+          "description": "`WallTower`: the wall tower type (S-0112).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
         },
         "wheeled_downhill": {
           "description": "`WheeledDownhill` (S-0207 claim 9).",
@@ -1707,6 +1775,14 @@
         },
         "has_art": {
           "description": "Whether the type has artwork or a cell animation (S-0009 claim 12),\nas the importer's art lookup found.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "is_veins": {
+          "description": "`IsVeins`, the veins flag (S-0202 Terms).",
           "type": [
             "boolean",
             "null"
@@ -2549,6 +2625,14 @@
           ],
           "default": null
         },
+        "allowed_to_start_in_multiplayer": {
+          "description": "`AllowedToStartInMultiplayer` (S-0009 claim 45).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
         "assaulter": {
           "description": "`Assaulter`.",
           "type": [
@@ -2619,6 +2703,15 @@
             "boolean",
             "null"
           ],
+          "default": null
+        },
+        "cost": {
+          "description": "`Cost`, credits (S-0009 claim 45).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
           "default": null
         },
         "crawls": {
@@ -2866,6 +2959,14 @@
           "format": "int32",
           "default": null
         },
+        "large_visceroid": {
+          "description": "`LargeVisceroid` (S-0009 claim 46, S-0202 Import mapping).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
         "legal_target": {
           "description": "`LegalTarget`.",
           "type": [
@@ -2981,6 +3082,17 @@
             "null"
           ],
           "default": null
+        },
+        "owner": {
+          "description": "`Owner`: the countries that own the type, as country keys (S-0009\nclaim 45; unknown names dropped by the importer, S-0004 claim 3).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "string"
+          }
         },
         "passengers": {
           "description": "`Passengers`.",
@@ -3130,6 +3242,15 @@
             "boolean",
             "null"
           ],
+          "default": null
+        },
+        "tech_level": {
+          "description": "`TechLevel` (S-0009 claim 45).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
           "default": null
         },
         "teleporter": {

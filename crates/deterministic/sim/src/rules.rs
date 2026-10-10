@@ -153,6 +153,16 @@ pub struct UnitRules {
     pub opportunity_fire: bool,
     /// Move into shroud.
     pub move_to_shroud: bool,
+    /// Cost in credits (S-0009 claim 45).
+    pub cost: i32,
+    /// Tech level (S-0009 claim 45).
+    pub tech_level: i32,
+    /// Allowed to start in multiplayer games (S-0009 claim 45).
+    pub allowed_to_start: bool,
+    /// The owner list: country registration indices (S-0009 claim 45).
+    pub owners: Vec<u32>,
+    /// Either visceroid flag (S-0009 claim 46, S-0202 claim 10).
+    pub visceroid: bool,
     /// The raw record, for fields read only by input rules (S-0214).
     pub raw: UnitType,
 }
@@ -221,6 +231,8 @@ pub struct OverlayRules {
     pub wood: bool,
     /// Has artwork or a cell animation (S-0009 claim 12).
     pub has_art: bool,
+    /// The veins flag (S-0202 Terms).
+    pub veins: bool,
 }
 
 /// A terrain-object type's resolved fields.
@@ -266,6 +278,25 @@ pub struct CountryRules {
     pub passive: bool,
     /// The wall-owner flag (S-0210 claim 14).
     pub wall_owner: bool,
+    /// Passive as the base rules alone give it, the passivity the early
+    /// phase of start positions sees (S-0009 claim 33).
+    pub passive_base: bool,
+}
+
+/// The gate and wall tower types that walls join (S-0112 claim 7), by
+/// building registration index.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct GateTypes {
+    /// The first Allied gate type.
+    pub allied_one: Option<u32>,
+    /// The second Allied gate type.
+    pub allied_two: Option<u32>,
+    /// The first Soviet gate type.
+    pub soviet_one: Option<u32>,
+    /// The second Soviet gate type.
+    pub soviet_two: Option<u32>,
+    /// The wall tower type.
+    pub tower: Option<u32>,
 }
 
 /// Game-wide values.
@@ -535,6 +566,12 @@ pub struct SimRules {
     pub warheads: BTreeMap<String, rs::WarheadType>,
     /// Type names by kind, to registration index.
     pub names: BTreeMap<(Kind, String), u32>,
+    /// The base-unit list: vehicle registration indices (S-0009 claim 45).
+    pub base_units: Vec<u32>,
+    /// The game's tech level (S-0009 Terms).
+    pub game_tech_level: i32,
+    /// The gate and wall tower types (S-0112 claim 7).
+    pub gates: GateTypes,
     /// The ruleset's `sim_rules_hash`.
     pub hash: String,
 }
@@ -733,9 +770,12 @@ impl SimRules {
                     speed_units: c.speed_units_mult.map_or(one, |d| d.single_value(mode)),
                     // spec: S-0208 Import mapping (SpeedInfantryMult absent: 1.0, single precision)
                     speed_infantry: c.speed_infantry_mult.map_or(one, |d| d.single_value(mode)),
+                    // spec: S-0009 Import mapping (MultiplayPassive absent: false)
                     passive: c.multiplay_passive.unwrap_or(false),
                     // spec: S-0210 Constants (wall-owner flag absent: yes)
                     wall_owner: c.wall_owner.unwrap_or(true),
+                    // spec: S-0009 claim 33 and Import mapping (the base rules' passive field; absent: false)
+                    passive_base: c.multiplay_passive_base.unwrap_or(false),
                 }
             })
             .collect();
@@ -754,6 +794,7 @@ impl SimRules {
                         map.get(n).cloned().unwrap_or_default(),
                         &quirks,
                         mode,
+                        &country_names,
                     )
                 })
                 .collect::<Vec<_>>()
@@ -796,10 +837,32 @@ impl SimRules {
                 }
             })
             .collect();
+        let index = |kind: Kind, n: &Option<String>| -> Option<u32> {
+            n.as_ref()
+                .and_then(|n| names.get(&(kind, n.clone())).copied())
+        };
+        let base_units = g
+            .base_unit
+            .iter()
+            .flatten()
+            .filter_map(|n| names.get(&(Kind::Vehicle, n.clone())).copied())
+            .collect();
+        // spec: S-0112 Import mapping (gate and wall tower types; absent: none)
+        let gates = GateTypes {
+            allied_one: index(Kind::Building, &g.allied_gate_one),
+            allied_two: index(Kind::Building, &g.allied_gate_two),
+            soviet_one: index(Kind::Building, &g.soviet_gate_one),
+            soviet_two: index(Kind::Building, &g.soviet_gate_two),
+            tower: index(Kind::Building, &g.wall_tower),
+        };
         Self {
             quirks,
             mode,
             general,
+            base_units,
+            // spec: S-0009 Terms and Import mapping (the game's tech level: the base rules' value, 10 when they omit it)
+            game_tech_level: g.multiplayer_tech_level.unwrap_or(10),
+            gates,
             land,
             behaviours,
             countries,
@@ -847,7 +910,14 @@ impl SimRules {
     }
 }
 
-fn unit_rules(kind: Kind, name: &str, u: UnitType, q: &Quirks, mode: Rounding) -> UnitRules {
+fn unit_rules(
+    kind: Kind,
+    name: &str,
+    u: UnitType,
+    q: &Quirks,
+    mode: Rounding,
+    countries: &[String],
+) -> UnitRules {
     let b = |x: Option<bool>| x.unwrap_or(false);
     // spec: S-0211 claim 3 (infantry start as foot and aircraft as winged before their sections)
     let class = match kind {
@@ -940,6 +1010,21 @@ fn unit_rules(kind: Kind, name: &str, u: UnitType, q: &Quirks, mode: Rounding) -
         opportunity_fire: b(u.opportunity_fire),
         // spec: S-0214 Import mapping (MoveToShroud absent: yes)
         move_to_shroud: u.move_to_shroud.unwrap_or(true),
+        // spec: S-0009 Import mapping (Cost absent: 0)
+        cost: u.cost.unwrap_or(0),
+        // spec: S-0009 Import mapping (TechLevel absent: 255)
+        tech_level: u.tech_level.unwrap_or(255),
+        // spec: S-0009 Import mapping (AllowedToStartInMultiplayer absent: yes)
+        allowed_to_start: u.allowed_to_start_in_multiplayer.unwrap_or(true),
+        // spec: S-0009 Import mapping (Owner absent: empty, no country)
+        owners: u
+            .owner
+            .iter()
+            .flatten()
+            .filter_map(|n| countries.iter().position(|c| c == n).map(|i| i as u32))
+            .collect(),
+        // spec: S-0009 Import mapping (SmallVisceroid, LargeVisceroid: either one on; absent: no)
+        visceroid: u.small_visceroid.unwrap_or(false) || u.large_visceroid.unwrap_or(false),
         raw: u,
     }
 }
@@ -997,6 +1082,8 @@ fn overlay_rules(name: &str, o: rs::OverlayType) -> OverlayRules {
             .is_some_and(|a| a.eq_ignore_ascii_case("wood")),
         // Overlays whose art the importer did not look up are taken as drawn.
         has_art: o.has_art.unwrap_or(true),
+        // spec: S-0202 Import mapping (IsVeins absent: no)
+        veins: o.is_veins.unwrap_or(false),
     }
 }
 
