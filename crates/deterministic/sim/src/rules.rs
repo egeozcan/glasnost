@@ -257,6 +257,8 @@ pub struct CountryRules {
     pub speed_infantry: F64,
     /// Passive.
     pub passive: bool,
+    /// The wall-owner flag (S-0210 claim 14).
+    pub wall_owner: bool,
 }
 
 /// Game-wide values.
@@ -724,6 +726,8 @@ impl SimRules {
                     // spec: S-0208 Import mapping (SpeedInfantryMult absent: 1.0, single precision)
                     speed_infantry: c.speed_infantry_mult.map_or(one, |d| d.single_value(mode)),
                     passive: c.multiplay_passive.unwrap_or(false),
+                    // spec: S-0210 Constants (wall-owner flag absent: yes)
+                    wall_owner: c.wall_owner.unwrap_or(true),
                 }
             })
             .collect();
@@ -958,9 +962,10 @@ fn overlay_rules(name: &str, o: rs::OverlayType) -> OverlayRules {
         rock: o.rock.unwrap_or(false),
         rubble: o.rubble.unwrap_or(false),
         crate_: o.crate_.unwrap_or(false),
-        // Q-0020: the absent-key default of the damage-stage count has no spec yet.
+        // spec: S-0210 claim 13 (damage-stage count absent: 1)
         damage_levels: o.damage_levels.unwrap_or(1),
-        strength: o.strength.unwrap_or(0),
+        // spec: S-0210 claim 13 (wall strength absent: 1)
+        strength: o.strength.unwrap_or(1),
         wood: o
             .armor
             .as_deref()

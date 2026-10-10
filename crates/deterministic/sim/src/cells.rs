@@ -105,6 +105,10 @@ pub struct Cells {
     pub deck: Vec<bool>,
     /// Marking counter.
     pub mark_seq: u32,
+    /// The owner of each cell's wall (S-0210 claim 14); `None`: no owner.
+    pub wall_owner: Vec<Option<HouseId>>,
+    /// Whether the marks a map's load gives (wall owners) have been made.
+    pub load_marks_done: bool,
 }
 
 fn li(l: Layer) -> usize {
@@ -125,6 +129,8 @@ impl Cells {
             lists: vec![[Vec::new(), Vec::new()]; n],
             deck: vec![false; n],
             mark_seq: 0,
+            wall_owner: vec![None; n],
+            load_marks_done: false,
         }
     }
 

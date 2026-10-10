@@ -1184,3 +1184,107 @@ fn removed_vehicle_clears_its_flag() {
     objects::remove(&mut w, id);
     assert!(!flag(&w, cell(0, 0)));
 }
+
+// ---------------------------------------------------------------------------
+// Wall owners in the wall rows (claims 4 and 5; S-0210 claim 14)
+
+/// A scene with a wall type STONE (overlay index 0) in `there()`, a walker
+/// and a vehicle whose primary weapon can damage walls, and a crusher-all
+/// vehicle; the wall's owner is set to `owner`.
+fn wall_rows(owner: Option<HouseId>) -> (World, ObjectId, ObjectId, ObjectId) {
+    let mut s = scene();
+    let sim = &mut s.ruleset.sim;
+    sim.weapons.insert(
+        "Drill".into(),
+        WeaponType {
+            damage: Some(7),
+            warhead: Some("Breaker".into()),
+            ..Default::default()
+        },
+    );
+    sim.warheads.insert(
+        "Breaker".into(),
+        WarheadType {
+            wall: Some(true),
+            ..Default::default()
+        },
+    );
+    s.infantry(
+        "Sapper",
+        UnitType {
+            primary: Some("Drill".into()),
+            // S-0211 claim 10 (iii): a zone that may enter a wall cell.
+            movement_zone: Some(MovementZone::InfantryDestroyer),
+            ..walker(true)
+        },
+    )
+    .vehicle(
+        "Digger",
+        UnitType {
+            primary: Some("Drill".into()),
+            movement_zone: Some(MovementZone::Destroyer),
+            ..vehicle(true, false)
+        },
+    )
+    .vehicle(
+        "Flattener",
+        UnitType {
+            movement_zone: Some(MovementZone::CrusherAll),
+            ..vehicle(true, true)
+        },
+    );
+    s.register("overlays", "STONE");
+    s.ruleset.sim.overlays.insert(
+        "STONE".into(),
+        glasnost_rules::sim::OverlayType {
+            wall: Some(true),
+            has_art: Some(true),
+            ..Default::default()
+        },
+    );
+    s.place_infantry(0, "Sapper", here(), 2);
+    s.place_unit(0, "Digger", cell(0, 1), 0);
+    s.place_unit(0, "Flattener", cell(1, 1), 0);
+    s.cell_mut(there()).overlay = 0;
+    let mut w = s.build();
+    let i = w.cells.idx(there()).expect("cell");
+    w.cells.wall_owner[i] = owner;
+    let sapper = at(&w, Kind::Infantry, here());
+    let digger = at(&w, Kind::Vehicle, cell(0, 1));
+    let flat = at(&w, Kind::Vehicle, cell(1, 1));
+    (w, sapper, digger, flat)
+}
+
+// spec: S-0209 claim 4 (rows WO3 and WO4: a wall of an allied house is a friendly obstacle, of another house or none an enemy obstacle)
+// spec: S-0209 claim 5 (rows VO2, VO3 and VO5 by the wall's owner)
+// spec: S-0210 claim 14 (b) (a wall without an owner counts as another house's)
+#[test]
+fn wall_rows_follow_the_wall_owner() {
+    for (owner, friendly) in [
+        (None, false),
+        (Some(HouseId(1)), false),
+        (Some(HouseId(0)), true),
+    ] {
+        let (w, sapper, digger, flat) = wall_rows(owner);
+        let (obstacle, crushed) = if friendly {
+            (Outcome::FriendlyObstacle, Outcome::FriendlyObstacle)
+        } else {
+            (Outcome::EnemyObstacle, Outcome::Clear)
+        };
+        assert_eq!(
+            inf(&w, sapper, there()),
+            obstacle,
+            "walker, owner {owner:?}"
+        );
+        assert_eq!(
+            veh(&w, digger, there()),
+            obstacle,
+            "vehicle, owner {owner:?}"
+        );
+        assert_eq!(
+            veh(&w, flat, there()),
+            crushed,
+            "crusher-all, owner {owner:?}"
+        );
+    }
+}

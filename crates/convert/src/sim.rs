@@ -414,7 +414,6 @@ const OVERLAY_FIELDS: &[(&str, &str, Form)] = &[
     ("rock", "IsARock", Bool),
     ("rubble", "IsRubble", Bool),
     ("crate", "Crate", Bool),
-    ("damage_levels", "DamageLevels", Int),
     ("strength", "Strength", Int),
     ("armor", "Armor", Text),
 ];
@@ -456,6 +455,8 @@ const COUNTRY_FIELDS: &[(&str, &str, Form)] = &[
     ("speed_units_mult", "SpeedUnitsMult", Dec),
     ("speed_infantry_mult", "SpeedInfantryMult", Dec),
     ("multiplay_passive", "MultiplayPassive", Bool),
+    // spec: S-0210 Import mapping (the wall-owner key of a country)
+    ("wall_owner", "WallOwner", Bool),
 ];
 
 /// Game-wide fields: our name, section, key, form (the field docs of
@@ -1172,6 +1173,19 @@ impl Builder<'_> {
 
     fn overlay(&mut self, rec: &mut Rec, index: usize, t: &TypeRec) {
         self.fields(rec, t, Kind::Overlays, OVERLAY_FIELDS);
+        // spec: S-0210 claim 13 (the damage-stage count from the image section of the art data, at each type read; the rules section's key is not read)
+        let mut levels = None;
+        for image in self.images(Kind::Overlays, index, t) {
+            if let Some(v) = self
+                .art_section(&image)
+                .and_then(|sec| sec.value(b"DamageLevels").and_then(value::integer))
+            {
+                levels = Some(v);
+            }
+        }
+        if let Some(v) = levels {
+            rec.put("damage_levels", int_node(v));
+        }
         // spec: S-0211 Import mapping (overlay land type absent: clear)
         let clear = 0;
         let tiberium = 5; // spec: S-0211 Terms (land type 5 tiberium)

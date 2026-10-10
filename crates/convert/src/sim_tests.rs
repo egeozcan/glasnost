@@ -357,6 +357,35 @@ fn locomotor_field() {
     );
 }
 
+/// spec: S-0210 claim 13 and Import mapping (DamageLevels from the art data's image section, Strength from the rules section), claim 14 (the wall-owner key)
+#[test]
+fn wall_data_and_wall_owner_flag() {
+    let base = "[OverlayTypes]\n0=Fence\n1=Pale\n2=Bare\n[Countries]\n0=Land\n1=Isle\n\
+                [Fence]\nWall=yes\nStrength=700\nImage=FENCEART\n\
+                [Pale]\nWall=yes\nDamageLevels=3\n[Bare]\nWall=yes\n\
+                [Land]\nWallOwner=no\n[Isle]\nX=1\n";
+    let art = "[FENCEART]\nDamageLevels=4\n[Fence]\nDamageLevels=9\n[Pale]\nX=1\n";
+    let (s, _) = sim(base, "", art);
+    assert_eq!(
+        s.overlays["Fence"].damage_levels,
+        Some(4),
+        "the image section's key"
+    );
+    assert_eq!(s.overlays["Fence"].strength, Some(700));
+    assert_eq!(
+        s.overlays["Pale"].damage_levels, None,
+        "the rules section's key is not read"
+    );
+    assert_eq!(s.overlays["Bare"].damage_levels, None);
+    assert_eq!(s.overlays["Bare"].strength, None);
+    assert_eq!(s.countries["Land"].wall_owner, Some(false));
+    assert!(
+        s.countries
+            .get("Isle")
+            .is_none_or(|c| c.wall_owner.is_none())
+    );
+}
+
 /// spec: S-0211 claim 4 and Import mapping (zone names, restricted land types)
 #[test]
 fn zones_and_restrictions() {

@@ -366,6 +366,9 @@ pub struct Country {
     /// `MultiplayPassive` (S-0009, S-0214).
     #[serde(default)]
     pub multiplay_passive: Option<bool>,
+    /// The wall-owner flag (S-0210 claim 14, Import mapping).
+    #[serde(default)]
+    pub wall_owner: Option<bool>,
 }
 
 /// One sequence entry of an infantry type (S-0107 claim 1).
@@ -804,7 +807,8 @@ pub struct OverlayType {
     /// `Crate`.
     #[serde(default, rename = "crate")]
     pub crate_: Option<bool>,
-    /// `DamageLevels`.
+    /// `DamageLevels` of the overlay type's image section in the art data
+    /// (S-0210 claim 13).
     #[serde(default)]
     pub damage_levels: Option<i32>,
     /// `Strength`.

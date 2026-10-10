@@ -737,6 +737,14 @@
               "type": "null"
             }
           ]
+        },
+        "wall_owner": {
+          "description": "The wall-owner flag (S-0210 claim 14, Import mapping).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
         }
       },
       "additionalProperties": false
@@ -1667,7 +1675,7 @@
           "default": null
         },
         "damage_levels": {
-          "description": "`DamageLevels`.",
+          "description": "`DamageLevels` of the overlay type's image section in the art data\n(S-0210 claim 13).",
           "type": [
             "integer",
             "null"

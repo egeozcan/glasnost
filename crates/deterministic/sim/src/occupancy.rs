@@ -3,7 +3,8 @@
 //!
 //! Object states that later milestones own read as their default here:
 //! nothing is cloaked, being erased, invulnerable, a parasite or a slave;
-//! gates read as open; map walls have no owner (request Q-0020).
+//! gates read as open (a gate's door is S-0215 claim 35, which the
+//! behaviour processing owns). A wall's owner is S-0210 claim 14.
 
 use glasnost_map::{CellXY, NO_OVERLAY};
 use glasnost_rules::sim::MovementZone;
@@ -232,6 +233,14 @@ fn mission_target(w: &World, mover: ObjectId) -> Option<Target> {
     }
 }
 
+/// Whether the wall in `c` belongs to a house allied with the mover's
+/// house (the mover's view). A wall without an owner is allied with no
+/// house (S-0209 Terms; S-0210 claim 14).
+fn wall_allied(w: &World, mover: ObjectId, c: CellXY) -> bool {
+    let owner = w.cells.idx(c).and_then(|i| w.cells.wall_owner[i]);
+    owner.is_some() && w.obj(mover).is_some_and(|m| w.allied(m.owner, owner))
+}
+
 /// The entry outcome of an infantry mover for cell `c` (S-0209 claim 4).
 pub fn infantry_outcome(w: &World, mover: ObjectId, c: CellXY, reference: i32) -> Outcome {
     let Some(m) = w.obj(mover) else {
@@ -252,13 +261,16 @@ pub fn infantry_outcome(w: &World, mover: ObjectId, c: CellXY, reference: i32) -
         && let Some(o) = r.overlays.get(usize::from(cell.overlay))
         && o.wall
     {
-        // Map walls have no owner in M3 (Q-0020): rows WO2 and WO4.
         // spec: S-0209 claim 4 (rows WO2 to WO4: walls by primary weapon and owner)
         overlay_value = Some(
-            if has_primary(w, mover) && primary_warhead_flag(w, mover, true) {
-                Outcome::EnemyObstacle
-            } else {
+            if !(has_primary(w, mover) && primary_warhead_flag(w, mover, true)) {
                 Outcome::Blocked
+            } else if wall_allied(w, mover, c) {
+                // spec: S-0209 claim 4 (row WO3: a wall owned by an allied house)
+                Outcome::FriendlyObstacle
+            } else {
+                // spec: S-0209 claim 4 (row WO4: a wall of another house, or without an owner)
+                Outcome::EnemyObstacle
             },
         );
     }
@@ -280,7 +292,7 @@ pub fn infantry_outcome(w: &World, mover: ObjectId, c: CellXY, reference: i32) -
                 // spec: S-0209 claim 4 (row WP7: a building invisible in play gives none)
                 (false, None)
             } else if b.gate {
-                // Gates read as open in M3 (Q-0020): row WP11.
+                // spec: S-0209 claim 4 (row WP11: an open gate gives none; gates read as open until S-0215 claim 35's door exists)
                 (false, None)
             } else if b.raw.firestorm_wall.unwrap_or(false) {
                 // spec: S-0209 claim 4 (row WP10: firestorm off gives none)
@@ -445,18 +457,27 @@ pub fn vehicle_outcome(w: &World, mover: ObjectId, c: CellXY, reference: i32) ->
         && let Some(o) = r.overlays.get(usize::from(cell.overlay))
         && o.wall
     {
-        // Map walls have no owner in M3 (Q-0020): "another house".
+        let allied_wall = wall_allied(w, mover, c);
         overlay_value = if crushes_wall(o.crushable) {
-            // spec: S-0209 claim 5 (row VO3: a wall it crushes, other owner: none)
-            None
+            if allied_wall {
+                // spec: S-0209 claim 5 (row VO2: a wall it crushes, allied owner: friendly obstacle)
+                Some(Outcome::FriendlyObstacle)
+            } else {
+                // spec: S-0209 claim 5 (row VO3: a wall it crushes, other owner or none: none)
+                None
+            }
         } else if u.primary.is_none() {
             // spec: S-0209 claim 5 (row VO4)
             Some(Outcome::Blocked)
         } else if primary_warhead_flag(w, mover, true)
             || (o.wood && primary_warhead_flag(w, mover, false))
         {
-            // spec: S-0209 claim 5 (row VO5: enemy obstacle for another owner)
-            Some(Outcome::EnemyObstacle)
+            // spec: S-0209 claim 5 (row VO5: friendly obstacle for an allied owner, enemy obstacle for another)
+            Some(if allied_wall {
+                Outcome::FriendlyObstacle
+            } else {
+                Outcome::EnemyObstacle
+            })
         } else {
             // spec: S-0209 claim 5 (row VO6)
             Some(Outcome::Blocked)

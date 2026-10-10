@@ -713,3 +713,101 @@ fn a_crush_range_of_minus_one_keeps_the_default() {
     s.ruleset.sim.general.crush_range = Some(Decimal("-1".into()));
     assert_eq!(s.sim_rules().general.crush_range, 384);
 }
+
+// ---------------------------------------------------------------------------
+// Wall data and wall owners (claims 13 and 14)
+
+// spec: S-0210 claim 13 (absent from every layer: damage-stage count 1 and wall strength 1)
+// spec: S-0210 Constants (damage-stage count and wall strength absent-key defaults)
+#[test]
+fn wall_defaults_are_one_stage_and_strength_one() {
+    let mut s = scene();
+    s.register("overlays", "BARE");
+    s.ruleset
+        .sim
+        .overlays
+        .insert("BARE".into(), overlay(|o| o.wall = Some(true)));
+    let r = s.sim_rules();
+    let bare = r.overlays.get(5).expect("BARE");
+    assert_eq!(bare.damage_levels, 1);
+    assert_eq!(bare.strength, 1);
+    // D = 1: only stage 0, so crushing it hits no neighbour and takes no draw.
+    s.place_unit(ALPHA, "MASHALL", cell(0, 0), 64);
+    let mut w = s.build();
+    let id = one(&w, Kind::Vehicle, "MASHALL");
+    set_overlay(&mut w, cell(0, 0), 5, 0);
+    set_overlay(&mut w, cell(0, -1), 5, 0);
+    let rng = w.rng.clone();
+    crush::at_cell_centre(&mut w, id);
+    assert_eq!(overlay_at(&w, cell(0, 0)), NO_OVERLAY);
+    assert_eq!(w.rng, rng);
+    assert!(!hit_noted(&w));
+}
+
+/// A scene with FENCE walls at `walls` and HUTs of the given houses.
+fn owner_world(walls: &[CellXY], huts: &[(u8, CellXY)], beta_flag: Option<bool>) -> World {
+    let mut s = scene();
+    s.ruleset
+        .sim
+        .countries
+        .get_mut("Betaland")
+        .expect("country")
+        .wall_owner = beta_flag;
+    for &c in walls {
+        s.cell_mut(c).overlay = FENCE;
+    }
+    for &(h, c) in huts {
+        s.place_structure(h, "HUT", c);
+    }
+    s.build()
+}
+
+fn wall_owner(w: &World, c: CellXY) -> Option<HouseId> {
+    w.cells.wall_owner[w.cells.idx(c).expect("cell")]
+}
+
+// spec: S-0210 claim 14 (a) (the nearest building whose owner's country has the wall-owner flag; a flag off is skipped)
+#[test]
+fn map_walls_take_the_owner_of_the_nearest_qualifying_building() {
+    let w1 = cell(0, 0);
+    let w2 = cell(-14, 0);
+    // Beta's hut 3 cells from w1 (flag off), Alpha's 6 cells away.
+    let w = owner_world(
+        &[w1, w2],
+        &[(BETA, cell(3, 0)), (ALPHA, cell(-6, 0))],
+        Some(false),
+    );
+    assert_eq!(wall_owner(&w, w1), Some(HouseId(ALPHA)));
+    assert_eq!(wall_owner(&w, w2), Some(HouseId(ALPHA)));
+    // With Beta's flag at its default (yes), Beta's nearer hut owns w1.
+    let w = owner_world(&[w1], &[(BETA, cell(3, 0)), (ALPHA, cell(-6, 0))], None);
+    assert_eq!(wall_owner(&w, w1), Some(HouseId(BETA)));
+    // No qualifying building: no owner.
+    let w = owner_world(&[w1], &[(BETA, cell(3, 0))], Some(false));
+    assert_eq!(wall_owner(&w, w1), None);
+}
+
+// spec: S-0210 claim 14 (a) (equal distances: the building created first, in map order)
+#[test]
+fn equally_near_buildings_the_first_created_wins() {
+    let w1 = cell(0, 0);
+    let w = owner_world(&[w1], &[(BETA, cell(4, 0)), (ALPHA, cell(-4, 0))], None);
+    assert_eq!(wall_owner(&w, w1), Some(HouseId(BETA)));
+    let w = owner_world(&[w1], &[(ALPHA, cell(-4, 0)), (BETA, cell(4, 0))], None);
+    assert_eq!(wall_owner(&w, w1), Some(HouseId(ALPHA)));
+}
+
+// spec: S-0210 claim 14 (c) (a wall that is removed has no owner from then on)
+#[test]
+fn a_crushed_wall_loses_its_owner() {
+    let mut s = scene();
+    s.cell_mut(cell(0, 0)).overlay = FENCE;
+    s.place_structure(BETA, "HUT", cell(4, 0));
+    s.place_unit(ALPHA, "MASHALL", cell(0, 0), 64);
+    let mut w = s.build();
+    assert_eq!(wall_owner(&w, cell(0, 0)), Some(HouseId(BETA)));
+    let id = one(&w, Kind::Vehicle, "MASHALL");
+    crush::at_cell_centre(&mut w, id);
+    assert_eq!(overlay_at(&w, cell(0, 0)), NO_OVERLAY);
+    assert_eq!(wall_owner(&w, cell(0, 0)), None);
+}

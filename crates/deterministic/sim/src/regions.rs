@@ -97,7 +97,17 @@ pub const STEPS: [(i32, i32); 8] = [
 ];
 
 /// Rebuilds the regions from the categories.
+///
+/// The first rebuild of a game, at the end of the map's load, also makes
+/// the marks that the load gives: with the map's buildings placed and
+/// before any starting unit, the owners of the map's walls (S-0210 claim
+/// 14). They are made here until the loader makes them at that moment
+/// itself.
 pub fn rebuild(w: &mut World) {
+    if !w.cells.load_marks_done {
+        w.cells.load_marks_done = true;
+        crate::crush::assign_wall_owners(w);
+    }
     let q = w.rules().quirks;
     let n = w.cells.grid.len();
     let cells: Vec<CellXY> = w.cells.grid.iter().map(|(c, _)| c).collect();
