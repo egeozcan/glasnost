@@ -1,0 +1,1255 @@
+---
+id: S-0208
+title: Infantry movement (standing positions, walking step and speed, crawling, scatter destinations)
+topic: infantry
+revision: 8
+sources-class: [decomp]
+status: approved
+approved-by: Claude (delegated by project lead)
+approved-on: 2026-10-10
+measurements: []
+requests: []
+supersedes: []
+---
+
+# S-0208: Infantry movement (standing positions, walking step and speed, crawling, scatter destinations)
+
+## Summary
+
+This spec covers where inside a cell an infantry unit stands and walks to, how far and how fast it
+walks per tick (crawling included), when it accepts a scatter request and where it then goes, and
+which scatter requests damage sends it.
+
+### Scope and cited specs
+
+Which sequence an infantry unit shows while it walks, and when fear makes it lie down, get up or
+panic, belong to S-0107 (claims 7, 10, 15 and 16). How many infantry a cell holds and what a blocked
+walker does belong to S-0209. This spec owns the infantry scatter from damage (claims 11 and 15).
+
+S-0003 (INI value forms), S-0006 (rules layering), S-0105 and S-0107 are approved. S-0107 is approved
+at revision 3. The claim numbers, table T1 and scenario M15(b) cited from S-0107 are those of its
+revision 4, a draft of the same batch that drops its damage-scatter passages and points here.
+S-0106 (slope shapes, terrain surface height and voxel tilt on
+slopes), S-0201 (game speed and tick rate), S-0202 (the random streams), S-0204 (coordinates, distance and facing), S-0205
+(number domains), S-0207 (ground vehicle movement), S-0209 (cell occupancy and crowding), S-0210
+(crushing), S-0211 (land types and passability), S-0212 (pathfinding) and S-0215 (behaviours) are
+drafts of the same batch, and the claim and formula numbers cited from them are those of their
+current drafts.
+
+## Terms
+
+Glossary terms are used as defined there, in particular *cell*, *lepton*, *tick*, *facing*,
+*infantry*, *scatter*, *scenario random stream*, *human-controlled*, *computer-controlled*, *AI house*, *team member*, *bridge, high bridge, bridge
+deck*, *locomotor*, *field*, *local area*, *round-toward-zero mode* and *measurement setup*. Terms
+used by this spec:
+
+- **Human-controlled, computer-controlled owner.** As the glossary defines them, and as the original
+  tells them apart. Where a rule below names a computer-controlled owner, it states what the
+  original does. In our engine an AI house counts as human-controlled and no house is
+  computer-controlled (glossary *AI house*), so every such rule is the original's only, and our
+  engine follows the rule for human-controlled owners. This follows the project lead's
+  decision recorded in the glossary entry *AI house* (a scope decision, see *departure*); it is stated in claim 11 and recalled in
+  claim 15, and it applies to every owner condition of this spec (claims 11 and 15).
+- **Position within a cell.** A point (*u*, *v*) with *u* = *x* mod 256 and *v* = *y* mod 256, where
+  (*x*, *y*) is the unit's world position in leptons. (128, 128) is the cell centre.
+- **Standing position.** One of five fixed positions within a cell where infantry stand (Constants,
+  table P): the *centre* position and the *top*, *right*, *left* and *bottom* positions, named after
+  where they appear on the screen. The top position is the one with the smallest *x* and *y*.
+- **Position class** of a point: the standing position that the original associates with that
+  point (claim 2). It is not always the nearest standing position.
+- **Side positions.** The right, left and bottom positions. They are the only positions that the
+  original assigns to an arriving walker when it takes the cell's other occupants into account
+  (claim 3).
+- **Open gate.** A gate (S-0209 Terms: a building type that units can pass through while it is
+  open) that is open at that moment.
+- **Occupancy record.** The per-cell record of which standing positions are taken, owned by S-0209.
+  A cell has one record for the ground and one for its bridge deck.
+- **Walking target.** The point a walking infantry unit is currently heading for: a standing
+  position in the cell it is entering (claims 3 and 4).
+- **Step direction.** One of the eight directions from a cell to a neighbouring cell, numbered 0 to 7
+  clockwise from map north (0 map north, 2 map east, 4 map south, 6 map west). The one-cell step in
+  direction *d* moves a point by 256 leptons along each map axis that the direction uses, for example
+  (+256, −256) for direction 1.
+- **Speed field.** The type's imported speed value (Import mapping), an integer.
+- **Speed multiplier.** A per-unit real number, 1.0 when the unit is created. A speed crate
+  multiplies it (the crate rules belong to the crate specs).
+- **Country speed factor for infantry.** A real number per country, imported (Import mapping), that
+  scales the walking speed of every infantry unit of a house of that country.
+- **Faster veterancy ability.** The veterancy ability (S-0107 Terms) that raises speed. A unit of
+  veteran rank has it when its type's veteran ability list names it; a unit of elite rank has it when
+  its type's veteran or elite ability list names it. Its factor is a game-wide imported value, the
+  *veteran speed factor*. The *scatter veterancy ability* (claim 11) is gained the same way.
+- **Prone state, can crawl, cyborg, fraidycat, fear level, deploy kinds, interruptible.** As defined
+  in S-0107 Terms.
+- **Crippled cyborg.** A unit of a cyborg type that took lethal damage but survived as a crawling
+  unit with at least 1 health. When that happens and what it looks like belong to the combat specs
+  and S-0107. Here it only matters that it enters the prone state then, whether or not its type can
+  crawl.
+- **Mission target.** As defined in S-0209 Terms: the object a unit's current behaviour aims to
+  enter, capture, repair at, sabotage or otherwise reach. Claim 4 names the master of an enslaved
+  unit beside it.
+- **Team member.** As in the glossary and S-0215 Terms: a unit that belongs to a team of
+  the original's computer player. No unit of ours is one (glossary *AI house*).
+- **The cow.** The hard-coded infantry type that S-0107 claim 14 singles out for its idle scatter
+  (`quirks.cow_idle`); S-0107 Import mapping names how the type is recognised.
+- **Known attacker.** As defined in S-0107 Terms: damage that comes with the object that caused it.
+- **Behaviour.** A unit's current behaviour in the sense of S-0215 (behaviours), for example *move*
+  or *guard*.
+- **Retaliate property, scatter property.** Two of the behaviour properties of S-0215 Terms: the
+  property of a behaviour without which an actor in it never retaliates (S-0215 claim 18), and the
+  property of a behaviour that lets an actor in it scatter (S-0215 claim 19). "Its behaviour has the
+  scatter property" refers to the unit's current behaviour.
+- **May retaliate.** As in S-0215 claim 18: whether a damaged actor may retaliate against its
+  attacker. An actor whose current behaviour lacks the retaliate property may not.
+- **Target, destination.** As defined in S-0215 Terms: the unit's current target object and its
+  current destination (a cell or object it moves to). Either may be absent.
+- **Locomotor moving.** "Its locomotor is moving" means that the unit *has movement in progress* in
+  the sense of S-0107 Terms. It does not mean S-0107's narrower *is moving now*.
+- **Locomotor destination.** The point the unit's locomotor is currently taking it to. While a unit
+  walks under a move it is the position of its destination; a unit with no movement in progress has
+  none. For a unit travelling through a tunnel (S-0212 Terms: the map-defined passage from a
+  tunnel entrance to a tunnel exit, not the land type *tunnel* of S-0211), the tunnel's exit cell
+  counts as its locomotor destination here (Open questions). It differs from the *destination* above: claim 15 tests the destination, the scatter
+  centre cell uses the locomotor destination.
+- **Tick number.** As defined in S-0201 (Terms and claim 1): the number of ticks the game has
+  completed, read during the tick in question.
+- **Player-scatter rule.** A game-wide imported yes/no rule (Import mapping) that lets units of
+  human-controlled houses scatter (claims 11 and 15).
+- **Usable area.** As defined in S-0211 Terms: the part of the map inside the local area that objects
+  may occupy.
+- **High-bridge cell.** A cell that carries a high bridge's bridge deck (glossary *bridge, high
+  bridge, bridge deck*). Low-bridge cells are not high-bridge cells.
+- **Scatter request.** A request to an infantry unit to scatter, with an optional *threat point* (the
+  point to move away from) and two yes/no options, *forced* and *move anywhere*, whose effects
+  claim 11 gives (the glossary's *scatter request* defines them in general terms). Claim 15 here says which
+  requests damage sends, S-0107 claim 15 the request of the flee rule, S-0107 claim 14 the
+  requests of the idle scatters (of a frightened computer-owned fraidycat and of the cow), and
+  S-0209 and S-0210 the requests of crowding and crushing, each with its options. The flee rule
+  and the idle scatters send forced requests without a threat point that are not move-anywhere.
+- **Scatter centre cell.** The cell around which a scattering unit looks for a destination (claims 12
+  and 13): the cell of its locomotor destination, when it has one, and otherwise the unit's own
+  cell.
+- **Screen-cover check.** A test of a candidate cell *C* at its own height level ℓ (claim 12). *C*ᵢ is the
+  cell *i* cells from *C* towards the bottom of the screen along the cell diagonal (*C* moved by +*i*
+  cells along both map axes), and its *effective level* *e*(*C*ᵢ), in height levels, is its height
+  level, plus 4 when *C*ᵢ is a high-bridge cell. The original adds the 4 only when *C* also has a
+  property that was not identified (Open questions); our engine adds it whenever *C*ᵢ is a
+  high-bridge cell, as if every *C* had the property. That is
+  our engine's provisional choice, kept until the open question is settled, and it has no quirk
+  switch because the original's condition is not known. *C* fails the check exactly when *e*(*C*ᵢ) ≥ ℓ + 2*i* − 1 for at least one *i* from
+  1 to 6, and passes otherwise. Height levels and *i* are integers, and the test is exact integer
+  arithmetic. *C* itself never makes *C* fail. A *C*ᵢ that lies outside the
+  map's cells counts as height level 0 and not a high-bridge cell, so on a map whose levels are all 0
+  or more it never makes *C* fail. Consequences: on flat ground with no high-bridge cell every cell
+  passes, and a cell whose diagonal neighbour towards the bottom of the screen is one level higher fails. The threshold
+  2*i* − 1 is what a cell lifted on the screen by 128 leptons along each map axis per height level
+  needs to reach *C*, so the check roughly asks whether a raised cell in front hides *C* on the
+  screen. The *visibility test* of the nearby-cell search (S-0212 claim 25) is this check, applied
+  to a candidate cell at its own height level. This entry owns the check's arithmetic; S-0212 claim
+  25 describes the same test by its result only (Questions for the project lead).
+- **Approximate square root √̃, table sine sinT, table cosine cosT.** The original's table square
+  root (S-0204 claim 5 and Formulas F1, the same function as S-0105's table square root) and table
+  trigonometry (S-0105 Formulas F1). See Formulas F3 and F8. S-0209 and S-0210 use √̃ too.
+- **Enterable.** A neighbouring cell is enterable for a unit when S-0209's occupancy check gives the
+  outcome *clear* for that unit.
+- **Tether link.** A link that two objects share while one of them performs a docking, loading or
+  unloading manoeuvre with the other. Both hold it from the moment one of them begins loading or
+  unloading, gives the other clearance to unload, or docks at a refinery, and both lose it when
+  that manoeuvre ends or the link is broken off. A unit holding one is not sent the second case of
+  request A (claim 15). Which situations give an infantry unit one was not traced (Open
+  questions).
+
+## Behaviour
+
+### Standing positions
+
+1. **Five standing positions.** An infantry unit standing still in a cell stands at one of the five
+   standing positions of table P. The points are engine constants. A walking target that claims 3
+   and 4 give lies at the terrain surface height *H* of S-0106 (claim 2) at that point, or, on a
+   bridge deck, 416 leptons (4 height levels, glossary *bridge deck*) above *H*. A walker that
+   arrives (claim 6) is placed on its walking target, height included. A pre-placed unit (claim 5)
+   is expected to stand at the same height as a walker that has arrived at the same position.
+   - Backing: `measurable` (scenario W1 for the points on flat ground; scenario W2, part e, for the
+     height on a slope and on a bridge deck, and for pre-placed units on a slope)
+   - Confidence: high for the points and for the height of a walking target; medium that an
+     arriving walker takes its target's height, and for the height of a pre-placed unit
+
+2. **Position class of a point.** For a point with position within the cell (*u*, *v*), let *r* be
+   its distance from the cell centre (Formulas F1). If *r* < 60, that is, when
+   (*u* − 128)² + (*v* − 128)² < 3600, the class is the centre.
+   Otherwise the class is chosen by quadrant: right when *u* > 128 and *v* ≤ 128, left when
+   *u* ≤ 128 and *v* > 128, bottom when *u* > 128 and *v* > 128, and the **centre** (not the top)
+   when *u* ≤ 128 and *v* ≤ 128. No point has the class *top*. A unit standing at the top position
+   therefore has the class *centre*, and it is recorded in the occupancy record as taking the centre
+   (`quirks.top_position_counts_as_centre`).
+   - Backing: `measurable` (scenario W2, parts b and c)
+   - Confidence: high for the class rule; medium for its consequence on what vehicles see (W2 b)
+
+3. **Choosing a standing position when walking into a cell.** When a walker steps from its cell
+   into the neighbouring cell in step direction *d*, its *desired point* is its current world
+   position moved by the one-cell step in direction *d*. So a walker keeps the same position within
+   the cell, as far as it is free. In the normal case (every case but that of claim 4) the cell's
+   other occupants are taken into account, and the walker gets the position that the table below
+   gives. In it, *c* is the class of its desired point (claim 2), and "free" and "taken" refer to the
+   cell's occupancy record (S-0209 Terms and claim 1) for the surface the walker is on (ground or
+   bridge deck). A side position that a terrain object in the cell marks (S-0209 claim 1) counts as
+   taken like one an infantry unit holds, so a walker never gets it. The *vehicle-present* and
+   *object-present* flags are those of S-0209 Terms. What a walker that gets no position does belongs
+   to S-0209.
+
+   | Occupancy record of the cell being entered | Class *c* | Position the walker gets | Draws from the scenario random stream |
+   |---|---|---|---|
+   | the record for the walker's surface has its vehicle-present flag on, or both the cell's ground record has its object-present flag on and no open gate (Terms) stands in the cell | any | none | none |
+   | neither | right, left or bottom, and *c* is free | *c* | none |
+   | neither | right, left or bottom, and *c* is taken | the first free position of the row of table O for *c* (S2 for right, S3 for left, S4 for bottom); none when no position of that row is free | none |
+   | neither | centre | the first free position of row R*k* of table O, where *k* is one ranged draw over 0 to 3; none when no position of that row is free | one |
+
+   The building-present flag plays no part here: buildings keep walkers out only through the entry
+   outcomes of S-0209 (claims 3 and 4), so a walker that S-0209 lets into a building's cell (for
+   example a cell of a building type that is invisible in play) gets a position there by this
+   table. For a walker on a bridge deck too, it is the ground record's object-present flag that
+   counts.
+
+   No point has the class *top* (claim 2), so the table covers every case. The centre and the top
+   position appear in no row of table O, so the table never gives them, even when free. Because
+   rows R0 and R1 both lead with the right position, a walker whose desired point has class centre
+   and that enters an empty cell stands at the right position with probability 1/2, and at the left
+   and bottom positions with probability 1/4 each.
+
+   The chosen position is reserved at once: from the tick on which the walker chooses it, the
+   occupancy record of the cell being entered shows that position as taken, and the walker's
+   standing position in the cell it is leaving is shown as free (S-0209 claim 1). A walker therefore
+   holds exactly one entry in the occupancy record at any time: its walking target while it has one,
+   otherwise the position it stands on.
+   - Backing: `measurable` (scenarios W1, W2 part c, W3 and W9; the reservation through S-0209 scenario
+     C1; the vehicle-present row through S-0209 scenario C2, the building-present flag through S-0209
+     scenario C10, the terrain marks through S-0209 scenario C16). `unmeasured` for the
+     object-present flag, for the reason S-0209 claim 1 gives: every stock object known to set it
+     gets an entry outcome of its own, so its effect here has no known stock trigger
+   - Confidence: high for the class rule, table O, the draw and the reservation; medium for the
+     object-present flag and the open-gate exception
+
+4. **Walking into a cell without regard to its occupants.** When the cell being entered holds the
+   unit's own mission target (for example a vehicle or aircraft it is ordered to enter, or a building
+   it is ordered to capture or sabotage) or the master it is enslaved to, the occupants are ignored:
+   the walker heads for the standing position of its desired point's class, which is the centre
+   position when that class is the centre. No random draw happens.
+   - Backing: `measurable` (scenario W1, part c)
+   - Confidence: medium
+
+5. **Pre-placed infantry.** An infantry unit placed by the map stands at the standing position whose
+   number (table P) is the map's sub-cell value. A map value of 1 places it at the top position,
+   which then counts as the centre in the occupancy record (claim 2). A map value outside 0 to 4 gives
+   an undefined position in the original. Our engine places such a unit at the centre position and
+   the importer warns (a departure).
+   - Backing: `measurable` (scenario W2, part d for the position of each value 0 to 4; part a for the
+     occupancy consequence of value 1)
+   - Confidence: high for values 0 to 4
+
+### The walking step
+
+6. **One step per tick.** A walker with a walking target does one of two things on each tick,
+   depending on its distance to the target at that moment (Formulas F2):
+   - Closer than 17 leptons: it is placed exactly on the walking target and arrives there on that
+     tick. From then on it has no walking target, and its occupancy entry is the position it stands
+     on (claim 3). It does not choose its next walking target on that tick.
+   - 17 leptons or more: it faces the walking target and moves *s* leptons towards it, where *s* is
+     its current walking speed (claim 7). Its new world position is its old position plus *s* times
+     the unit vector of its facing, each coordinate truncated to an integer (Formulas F3, with the
+     table sine and cosine of S-0105 and the facing of F7).
+
+   A walker that stands on a standing position with a path step ahead, having arrived there on an
+   earlier tick, chooses its next walking target (claim 3) on a tick on which it does not move; this
+   is the *asking tick* of S-0209. It takes its first step towards that target on the next tick.
+   On an uninterrupted walk the asking tick is the tick right after the arrival tick, and on the
+   first cell of a walk it is the tick before the first step.
+
+   The step changes only the walker's map position. Between standing positions our engine keeps the
+   height of the position the walker left, and on arrival it takes the height of its walking target
+   (claim 1). This is our engine's provisional choice, kept until the open question is settled, and
+   not a statement about the original: whether the original does the same was not determined (Open
+   questions). It has no quirk switch. The height
+   during the walk can matter only to a rule that reads a walking unit's height, and scenario
+   W2(e) records it.
+
+   Consequence: for a walking speed *s* from 2 to 38 leptons per tick, on a straight run due map
+   north or map east from standing position to standing position (256 leptons per cell), a walker
+   makes ⌈240 / *s*⌉ steps in each cell until it is within 17 leptons, spends one tick arriving and,
+   before every cell but the first, one tick choosing its walking target. So each cell after the
+   first takes ⌈240 / *s*⌉ + 2 ticks, and a run of *n* cells takes *n* × (⌈240 / *s*⌉ + 2) − 1
+   ticks counted from the first step to the arrival (both ticks included). Due map west the same
+   holds from *s* = 4 on. Due map south and due map west drift sideways and can take longer
+   (claim 14). Speeds outside 2 to 38 behave differently (claim 14 for *s* = 1, Edge cases for fast
+   walkers).
+   - Backing: `measurable` (scenarios W4 and W8)
+   - Confidence: high for the 17-lepton arrival rule and the truncation, and that a walker does not
+     move on the tick on which it chooses a walking target; medium for the choice falling on the tick
+     after the arrival tick, which assumes that a walker's movement is processed once per tick
+     (scenario W4 decides between ⌈240 / *s*⌉ + 2 and ⌈240 / *s*⌉ + 1 ticks per cell); medium for
+     the exact direction arithmetic (F3, F7)
+
+7. **Walking speed.** On every step, a walker's walking speed *s* in leptons per tick is the value
+   that Formulas F5 gives from the unit's values at that step: its type's base speed *b* (Formulas
+   F4), its speed multiplier, its house's country speed factor for infantry, and the veteran speed
+   factor if it has the faster veterancy ability. So a change to any of these shows from the next
+   step. Game speed does not change it (glossary claim G3).
+   - Backing: `measurable` (scenario W4: part a for the base speed and the country factor, part b for
+     the veteran speed factor, part c for the speed multiplier)
+   - Confidence: high for the structure and the truncation points; the base speed is S-0207's
+     (claim 1 and F1), with the confidence given there
+
+8. **Crawling is slower, and a prone non-crawler is faster.** While a walker is in the prone state,
+   its speed from claim 7 is changed: when its type can crawl, it moves *s* − ⌊*s*/3⌋ leptons per
+   tick; when it cannot crawl, *s* + ⌊*s*/2⌋. Only a crippled cyborg can be prone without being
+   able to crawl (S-0107 claim 6 turns down the lie-down request of a type that cannot crawl), so in
+   practice only such a unit gets the faster rate (`quirks.prone_noncrawler_speedup`). Which units
+   are prone, and when a prone unit gets up instead of crawling, belongs to S-0107 (claim 15).
+   - Backing: `measurable` (scenario W5: part a for crawling, part d for the prone non-crawler)
+   - Confidence: high for both formulas; medium for the crippled-cyborg trigger
+
+9. **Terrain does not slow walkers.** A land type's speed percentage for walkers has only one effect
+   on infantry: a percentage of exactly zero makes the cell impassable (S-0209). Any other value,
+   such as 50 %, leaves the walking speed unchanged.
+   - Backing: `measurable` (scenario W6)
+   - Confidence: medium
+
+10. **Panic does not change speed.** A walker whose fear shows the *panic* sequence (S-0107 claim 7)
+    walks at the speed of claim 7. Fear changes the speed only through the prone state of claim 8.
+    - Backing: `measurable` (scenario W5, part c)
+    - Confidence: medium
+
+### Scatter destinations
+
+11. **When an infantry unit accepts a scatter request.** A request is *effectively forced* when it
+    is forced and the unit's locomotor is not moving at that moment. A unit has *scatter
+    permission* for a request when at least one of these holds: its owner is computer-controlled, it
+    is a team member, the game-wide player-scatter rule is on, it has the scatter veterancy ability,
+    or the request is move-anywhere. The unit refuses the request, and does not move, when at least
+    one row of this table holds in full. Otherwise it accepts it.
+
+    | Case | The unit refuses when all of these hold |
+    |---|---|
+    | First (sequence) | it plays a sequence; that sequence is not *undeploy*; that sequence is not interruptible (S-0107 table T1) |
+    | Second (deploying) | its current sequence is one of the deploy kinds (it is *deploying*, S-0107 Terms); its owner is human-controlled; the request is not both forced and move-anywhere |
+    | Third (not forced) | the request is not effectively forced; and the unit is not a fraidycat, or its current behaviour lacks the scatter property (S-0215 claim 19), or it has no scatter permission |
+
+    When a request that is both forced and move-anywhere reaches a unit whose current sequence is
+    one of the deploy kinds, the unit is also sent a request to play *undeploy*, one that is not
+    forced, on that tick, whatever its owner, whether or not its locomotor is moving, and whether or
+    not it accepts the scatter request. Whether *undeploy* starts is decided by S-0107 claim 6. For
+    such a unit the first case refuses the scatter request exactly when *undeploy* does not start
+    and the sequence the unit keeps playing is neither *undeploy* nor interruptible (S-0107 table
+    T1). The table gives the outcomes:
+
+    | Sequence when the request arrives | Outcome of the *undeploy* request (S-0107 claim 6) | First case |
+    |---|---|---|
+    | any deploy kind | *undeploy* starts | does not refuse |
+    | *deploy* | turned down: the unit keeps playing *deploy*, which is not interruptible | refuses |
+    | *deployed*, *deployed-fire* or *deployed-idle* | turned down: the unit keeps playing it | does not refuse |
+
+    No other unit gets a request for *undeploy* or any exemption: for a unit whose current sequence is
+    not a deploy kind the first case applies to a forced, move-anywhere request as to any other, so
+    a unit playing a sequence that is not interruptible (for example *cheer*) refuses it.
+
+    **In our engine** (a departure). The owner conditions of this claim and of claim 15 describe the
+    original. Our engine does not reproduce them for AI houses: by the project lead's decision (recorded in the glossary entry *AI house*) an AI
+    house follows the rules for human-controlled owners (glossary *AI house*), and no unit of ours
+    has a computer-controlled owner or is a team member (glossary *team member*). This is a
+    deliberate departure of the whole spec, not only of claim 15, and it has no quirk switch because
+    the decision removes computer-only unit rules. It changes claim 11 for every unit of an AI house
+    in two places. The second case (deploy kinds) applies to every owner. Scatter permission reads "the game-wide player-scatter rule is on, it has the scatter veterancy ability, or
+    the request is move-anywhere". So an AI house's fraidycat in a behaviour with the scatter
+    property refuses a request that is not effectively forced (for example request B of claim 15)
+    unless one of those three holds, where the original's computer-owned fraidycat accepts it. The
+    original's rule is recorded for AI designers, who may reproduce it through ordinary orders.
+
+    The cases combine yes/no answers; their order carries no meaning. So a request that is not
+    effectively forced moves only fraidycats. The threat-point request that damage with a known
+    attacker sends (claim 15, request B) is of that kind, so only fraidycats act on it. The general
+    damage request (claim 15, request A), the request of the flee rule (S-0107 claim 15) and the
+    requests of the idle scatters (S-0107 claim 14) are forced and have no threat point, so they can
+    move any infantry unit whose locomotor is not moving.
+    - Backing: `measurable` (scenarios W7, parts a, c, e, g and m, and W9 for the draw taken by an
+      accepted request; part m for the first case with a forced, move-anywhere request to a unit
+      that is not deploying; part n for the second case; part o for the *deploy*, *deployed*,
+      *deployed-fire* and *deployed-idle* rows of the *undeploy* table)
+    - Confidence: medium (the cases were traced; the scatter property of each behaviour comes from
+      the rules data that S-0215 imports)
+
+12. **Scatter away from a threat point.** When an accepted request has a threat point, the unit's
+    first-choice direction is *d* = (*d*₀ + *j* − 2) mod 8, the residue from 0 to 7, in exact integer arithmetic. Here *d*₀ is
+    the facing from the threat point to the unit's own position, rounded to the nearest of the eight
+    step directions (Formulas F6), and *j* is one ranged draw from the scenario random stream over 0 to 4. Its candidates are
+    the eight neighbours of its scatter centre cell, in the step directions *d*, *d* + 1, …, *d* + 7
+    (mod 8), in that order of preference. A candidate *qualifies* when it lies inside the usable area
+    and is enterable for the unit. The unit's destination is the first qualifying candidate that also
+    passes the screen-cover check at its own height level and is not a high-bridge cell. When no qualifying candidate is both,
+    its destination is the first qualifying candidate, whatever the check gives and whether or not it
+    is a high-bridge cell. The unit then moves there as under a move order. When no candidate
+    qualifies, it does not move.
+    - Backing: `measurable` (scenario W7, parts b and d; part f for the screen-cover check on uneven
+      ground; part l for the exclusion of high-bridge cells from the first choice)
+    - Confidence: high for the direction rounding, the draw and the preference order; medium for the
+      scatter centre cell, for the exclusion of high-bridge cells and for the screen-cover rule on
+      uneven ground (that every cell passes on
+      flat ground is high); low for the high-bridge part of the check and for the level of a cell
+      outside the map (Open questions)
+
+13. **Scatter without a threat point.** An accepted request without a threat point also takes
+    the single draw *j* of claim 12, and has a direction *d* = (*d*₀ + *j* − 2) mod 8 as in claim 12.
+    Here *d*₀ is the facing from the centre of the unit's cell to its own position (or its body
+    facing when it stands exactly on the centre), rounded by F6. Its destination is the cell that
+    the nearby-cell search of S-0212 (claim 25) gives around its scatter centre cell, in the scatter
+    use that S-0212 claim 25 describes (no reference cell and no reach region). When the search
+    gives a cell, the unit moves there as under a move order. Which cells qualify (among
+    them the rule that a cell's whole occupancy record must be empty), the double count of the
+    centre, the movement zone and the choice among the preferred cells by the tick number of the
+    request are S-0212's. This spec adds only how a scatter uses the result. The direction plays no
+    part in that search, so the destination does not depend on the draw.
+
+    Consequences, from S-0212 claim 25 and S-0209 claim 1: the search never gives the cell the unit
+    stands in, since the unit's own standing position is marked there, but it can give the scatter
+    centre cell itself when that is the empty locomotor destination of a walking unit. On open flat
+    ground with no other units within 2 cells, an idle unit's search collects exactly the eight
+    neighbours of its cell, all preferred, so the destination is the neighbour at position
+    (*N* mod 8) of the search's collection order, where *N* is the tick number (Terms) of the tick
+    of the request.
+
+    When the search finds no cell, the unit instead chooses among the eight neighbours of its
+    scatter centre cell exactly as in claim 12, starting from the direction *d* computed here. This
+    happens when no cell qualifies for the search while a neighbour is enterable, for
+    example when every cell of the usable area holds an occupant and a neighbour holds allied
+    infantry with a side position free (scenario W7, part k).
+    - Backing: `measurable` (scenario W7, parts c and i for the use of the search and its
+      independence from the draw; part k for the fallback to the eight neighbours)
+    - Confidence: medium for the draw, the use of the search and the fallback; the search itself is
+      S-0212's, with the confidence given there
+
+### Rounding along the map axes
+
+14. **Walking due map south or due map west drifts sideways.** Under the original's round-toward-zero
+    mode (S-0205), the table trigonometry of S-0105 (F1) holds two tiny non-zero values where the
+    exact value is zero: table entry 4096 holds about +1.2 × 10⁻¹⁶ and entry 8192 about
+    −2.4 × 10⁻¹⁶. A walker heading exactly due map south reads entry 8192 as its cosine: it moves
+    1 lepton towards map west on each step (its *x* is reduced by 1). A walker heading exactly due map
+    west reads entry 4096 as its sine: it moves 1 lepton towards map north on each step (its *y* is
+    reduced by 1). Each drift lasts until the accumulated deviation turns the walker's facing away
+    from the exact axis. The walker then heads back towards its walking target at a slight angle and,
+    for due map south, covers 1 lepton less per step than its speed while it does. Due map east is
+    exact (its sine is exactly 0). Due map north reads entry 4096 as its cosine, but adding that tiny
+    positive amount to a positive coordinate and truncating gives the same integer, so it is exact
+    too.
+
+    For example, the formulas give, for straight runs of 10 cells from standing position to
+    standing position: at *s* = 9, 289 ticks north, east or west and 319 ticks south; at *s* = 4,
+    619 and 809 ticks. Evaluated for every speed *s* from 2 to 38 leptons per tick: north and east
+    always take 10 × (⌈240 / *s*⌉ + 2) − 1 ticks; west takes the same from *s* = 4 on and one tick
+    more per cell at *s* = 2 and 3; south never takes fewer ticks than north, takes more at low
+    speeds, and from *s* = 17 on often takes the same (at *s* = 21, for example, all four directions
+    take 139 ticks), so that only the sideways drift shows. The ticks on which the walker chooses its
+    walking target do not move it, so they add the same 9 ticks to every direction of a 10-cell run. The sideways deviation stays at or below 3
+    leptons going south and 6 leptons going west. With round-to-nearest arithmetic there is no drift
+    and all four axis directions take the same time. This follows from F3 and F7, and it is stated
+    because it is the most visible consequence.
+
+    **A walker of speed 1 can stall.** At *s* = 1, a step whose direction is not exactly along a map
+    axis changes each coordinate by less than one lepton. The truncation of F3 then leaves a
+    coordinate that should grow unchanged and lowers by 1 a coordinate that should shrink. So a
+    walker of speed 1 whose walking target lies towards larger *x* and larger *y* (between due map
+    east and due map south, exclusive) stops: its steps leave its position unchanged, and no rule
+    of this spec moves it on. A walker of speed 1 heading due map south drifts into such a
+    direction within its first few steps and stalls there, a few leptons from its starting point
+    (`quirks.slow_walker_stall`, Edge cases).
+    - Backing: `measurable` (scenario W8, part a for the drift and the tick counts, part b for the
+      stall)
+    - Confidence: medium (derived by exact evaluation of the formulas, not yet observed)
+
+### Scatter requests from damage
+
+15. **Scatter requests caused by damage.** When an infantry unit takes damage and survives it, it
+    can be sent two scatter requests on the tick of the hit. Each is judged by claim 11 on its own,
+    and each that is accepted takes its own draw (claims 12 and 13).
+    - **Request A, the general damage request** (the scatter from damage of S-0215 claim 19): forced,
+      not move-anywhere, without a threat point. It is sent when either row of this table holds in
+      full:
+
+      | Case | The damage and retaliation | All of these also hold |
+      |---|---|---|
+      | First | the damage has a known attacker (S-0107 Terms); the unit may retaliate against it (S-0215 claim 18); it does not retaliate against this hit | it had neither a target nor a destination (Terms) when hit; the player-scatter rule is on or the unit has the scatter veterancy ability, whatever its owner |
+      | Second | the damage has no known attacker, or the unit may not retaliate against it | its current behaviour has the scatter property (S-0215 claim 19); it is not held by a tether link (Terms); its locomotor is not moving; it has neither a target nor a destination; its owner is computer-controlled, or the player-scatter rule is on, or the unit has the scatter veterancy ability |
+
+      Retaliating always gives the unit a target (S-0215 claims 10 and 18), so a unit that
+      retaliates is never sent request A by the first case.
+    - **Request B, the threat-point request:** sent whenever the damage has a known attacker, with the
+      attacker's position as threat point, neither forced nor move-anywhere. By claim 11 only
+      fraidycats act on it.
+
+    **Original and our engine.** The second case of request A above, as written, is the original's:
+    its owner condition holds for every unit of a computer-controlled house, so such a unit is sent
+    request A of the second case whatever the player-scatter rule says. In our engine no house is
+    computer-controlled (the departure of claim 11), so the second case needs the player-scatter rule
+    on or the scatter veterancy ability for every unit, and the first case is unchanged. S-0215
+    claim 19 states the same rule for all mobile actors and points here for infantry.
+
+    Request A is forced, so by claim 11 it moves an infantry unit that is not a fraidycat when its
+    locomotor is not moving, the first case of claim 11 (its current sequence) does not refuse it
+    and, when its owner is human-controlled (in our engine, every owner), its current sequence is not
+    one of the deploy kinds. When a hit sends
+    both requests and both are accepted, two draws are taken on the tick of the hit. At the end of
+    that tick the unit heads for the destination that request B gives from the second draw; the
+    first draw is request A's (scenario W9, part c). Which scatter centre cell request B uses then
+    (the unit's own cell, or the destination that request A has just given it) was not determined
+    (Open questions). Consequences with the player-scatter rule off (its absent-key default, Import mapping) and
+    without the scatter veterancy ability:
+    - A human-controlled infantry unit (in our engine, every unit) that is not a fraidycat never scatters because of damage (it
+      may still move to retaliate, S-0215 claim 18).
+    - In the original, a computer-controlled one scatters only by request A, through the nearby-cell search of
+      claim 13, so its scatter destination does not depend on where the attacker is.
+    - In particular, in the original an armed computer-controlled soldier that is not a fraidycat, in a behaviour
+      with the retaliate property, and is hit by a known attacker retaliates at once (S-0215
+      claim 18) and does not scatter.
+    - In the original, an idle computer-controlled infantry unit that is not a fraidycat, whose behaviour has the
+      scatter property and whose sequence is interruptible, scatters when it is hurt by damage
+      without a known attacker, provided claim 13 finds it a cell.
+    - Backing: `measurable` (scenarios W7, parts a, g, h and i, and W9 for the order of the two draws; part j for the outcome when both
+      requests are accepted)
+    - Confidence: medium for the two cases of request A and for request B; low for the situations
+      that set the tether link (Terms, Open questions) and for the scatter centre cell of request B
+      when both requests are accepted
+
+## Formulas
+
+**F1. Distance from the centre.** *r* = trunc(√̃((*u* − 128)² + (*v* − 128)²)), where √̃ is the
+approximate square root of F8. *u* and *v* are integers from 0 to 255, so the argument is an integer
+from 0 to 32768. By F8, *r* < 60 exactly when (*u* − 128)² + (*v* − 128)² < 3600, as with the exact
+root. Unit: leptons.
+
+**F2. Arrival test.** The walker arrives when *D* < 17, with
+*D* = trunc(√̃((*x*ₜ − *x*)² + (*y*ₜ − *y*)²)) from its world position (*x*, *y*) and the walking target
+(*x*ₜ, *y*ₜ), all four integer world positions in leptons (table P and F3's truncation give integers),
+so the argument of √̃ is a non-negative integer. Height is ignored. By F8, the test is equivalent to (*x*ₜ − *x*)² + (*y*ₜ − *y*)² < 289.
+Unit: leptons.
+
+**F3. Step.** With facing *f* towards the walking target (F7), an integer from 0 to 65535, and speed
+*s* (F5),
+
+> *f̂* = *f* when *f* ≤ 32767, and *f̂* = *f* − 65536 otherwise (so −32768 ≤ *f̂* ≤ 32767),
+> θ = (*f̂* − 16383) × *c*₂ radians, with *c*₂ = −2π / 65534 (the double −9.587672516830327 × 10⁻⁵),
+> *x*′ = trunc(*x* + *s* × cosT θ),  *y*′ = trunc(*y* − *s* × sinT θ),
+
+where sinT and cosT are the table sine and cosine of S-0105 (F1, table trigonometry). *f̂* is exact
+integer arithmetic. Floating point in the original: every intermediate result of the formulas (θ,
+each product *s* × cosT θ and *s* × sinT θ, and each sum or difference) is a double rounded by the
+round-toward-zero mode of S-0205, with the grouping written, and trunc is the conversion to an
+integer toward zero. θ is negative exactly for *f* from 16384 to 32767, where S-0105's
+negative-angle rule applies to sinT and cosT (Edge cases). With `quirks.table_direction` off, θ =
+(*f̂* − 16384) × (−2π / 65536) instead (Edge cases); everything else in F3 is unchanged.
+With round-toward-zero, adding a tiny negative product to a positive coordinate gives the next lower
+representable value, which trunc then takes to the integer below (claim 14). Units: leptons, radians.
+
+**F4. Base speed from the speed field.** *b* is the type speed *V* of S-0207 (claim 1 and Formulas
+F1), computed from the type's speed field by the same rule for infantry as for vehicles, with its
+clamping, its "not given" value and its importer warnings (Import mapping). This spec adds nothing
+to that formula. For an infantry type the result counts in leptons per tick, from 0 to 255.
+Unit: leptons per tick.
+
+**F5. Walking speed.**
+
+> *s*₁ = trunc((*b* × *k*꜀) × *m*)
+> *s* = trunc(*s*₁ × *k*ᵥ) when the unit has the faster veterancy ability, and *s* = *s*₁ otherwise
+
+*k*꜀ is the country speed factor for infantry (stored as a single-precision real, widened to a
+double), *m* the unit's speed multiplier (a double), *k*ᵥ the veteran speed factor (a double). The
+products are taken in floating point in the original, grouped as the parentheses show:
+(*b* × *k*꜀) × *m*, not *b* × (*k*꜀ × *m*). Each product is rounded to a double toward zero (the
+round-toward-zero mode of S-0205), and each trunc is the conversion to an integer toward zero. In the
+prone state, claim 8 then gives *s* − ⌊*s*/3⌋ (can crawl) or *s* + ⌊*s*/2⌋ (cannot crawl), in exact
+integer arithmetic (*s* ≥ 0, so ⌊ ⌋ and truncation agree). Unit: leptons per tick.
+
+**F6. Rounding a facing to a step direction.** *d*₀ = (⌊(⌊*f* / 4096⌋ + 1) / 2⌋) mod 8 for a facing
+*f* from 0 to 65535. Exact integer arithmetic. This rounds to the nearest eighth of a turn, with a
+facing exactly halfway between two directions going to the clockwise one. It is the 8-step facing of
+S-0204 (F4). Units: *f* in facing units, *d*₀ a step direction (0 to 7, Terms).
+
+**F7. Facing from one point towards another.** *f* = *φ* of S-0204 Formulas F3 (claim 8), with *P*
+the "from" point and *Q* the "to" point. This spec adds nothing to that formula: its arithmetic,
+grouping and rounding are S-0204's. Consequences stated there: a point straight towards map north
+gives *f* = 0, map east 16383, map south 32767 and map west 49153, and a point one cell map
+north-east 8315. "From" is the unit and "to" its walking target for claim 6; "from" is the threat point and "to" the unit for claim 12; for claim 13
+"from" is the cell centre (128, 128) and "to" the unit's position within the cell. Unit: facing
+units.
+
+**F8. Approximate square root √̃.** √̃ is the table square root of S-0204 (claim 5, Formulas F1), the
+same function as S-0105's table square root for an integer argument. The properties this spec relies
+on, for integer arguments *V* ≥ 0: trunc(√̃(*V*)) never exceeds ⌊√*V*⌋, it equals ⌊√*V*⌋ for every
+*V* < 16641 (= 129²), and it never decreases as *V* grows. So trunc(√̃(*V*)) < *t* exactly when
+*V* < *t*² for every threshold *t* up to 128, which gives the equivalences in F1 and F2. From
+16641 on it can fall short of ⌊√*V*⌋ (for example trunc(√̃(129²)) = 128). Every distance in S-0208,
+S-0209 and S-0210 is taken with √̃.
+
+## Constants
+
+**Table P: standing positions** (engine constants; positions within the cell in leptons).
+
+| Number | Name | *u* | *v* | Screen |
+|---|---|---|---|---|
+| 0 | centre | 128 | 128 | middle of the cell |
+| 1 | top | 64 | 64 | towards the cell's top corner |
+| 2 | right | 192 | 64 | towards the right corner |
+| 3 | left | 64 | 192 | towards the left corner |
+| 4 | bottom | 192 | 192 | towards the bottom corner |
+
+**Table O: fallback orders** (engine constants; positions tried left to right. The centre and top
+positions are never taken, as claim 3 says).
+
+| Row | Used when | Order |
+|---|---|---|
+| S2 | desired class right, right taken | bottom, left |
+| S3 | desired class left, left taken | bottom, right |
+| S4 | desired class bottom, bottom taken | right, left |
+| R0 | desired class centre, draw 0 | right, left, bottom |
+| R1 | desired class centre, draw 1 | right, left, bottom |
+| R2 | desired class centre, draw 2 | left, bottom, right |
+| R3 | desired class centre, draw 3 | bottom, right, left |
+
+| Name (ours) | Value | Unit | Notes |
+|---|---|---|---|
+| Centre radius | 60 | leptons | claim 2: *r* < 60 has class centre |
+| Arrival distance | 17 | leptons | claim 6: *D* < 17 arrives |
+| Draw range, position order | 0 to 3 | draw value | claim 3, one draw |
+| Draw range, scatter jitter | 0 to 4 | draw value | claims 12 and 13, one draw |
+| Speed multiplier at creation | 1.0 | factor | Terms |
+| Crawl speed | *s* − ⌊*s*/3⌋ | leptons per tick | claim 8 |
+| Prone non-crawler speed | *s* + ⌊*s*/2⌋ | leptons per tick | claim 8 |
+| Step angle scale *c*₂ | −2π / 65534 | radians per facing unit | F3; a double |
+| Screen-cover reach | 6 | cells along the diagonal | Terms, *screen-cover check* |
+| Screen-cover threshold for the cell *i* cells away | 2*i* − 1 | height levels above *C* | Terms, *screen-cover check* |
+| Screen-cover high-bridge raise | 4 | height levels | Terms, *screen-cover check* (applied whenever *C*ᵢ is a high-bridge cell) |
+| Level of a cell outside the map, for the screen-cover check | 0 | height level | Terms, *screen-cover check* |
+
+## State and ordering
+
+| State | Event | Result |
+|---|---|---|
+| Walking towards a target in the next cell | distance < 17 leptons | placed on the target, arrives this tick; no walking target until its next asking tick |
+| Walking towards a target | distance ≥ 17 leptons | moves *s* leptons towards it this tick |
+| Standing, about to step into the next cell (asking tick, at the earliest the tick after arrival) | the cell is clear for it and a position is free | that position becomes its walking target (claim 3); no movement this tick, the first step on the next |
+| Standing, about to step | no position is free | no walking target; S-0209 decides |
+| Any | scatter request refused (claim 11) | no draw and no new destination; a unit whose current sequence is a deploy kind, sent a forced, move-anywhere request, has still been sent a request for *undeploy* (claim 11) |
+| Any | scatter request accepted, destination found | moves to that cell as under a move order |
+| Any | scatter request accepted, no destination found | does not move; the draw has been taken |
+
+Ordering stated as consequences (the draw counts and order are checked with the read-only recorder
+of the random stream, scenario W9): the random draw of claim 3 happens on the tick on which the walker
+chooses its position in the next cell (its asking tick, claim 6): the tick after the one on which it
+arrives in the previous cell, or, on the first cell of a walk, the tick before its first step. The draw of claim 12 or 13 happens on the tick on which the
+scatter request arrives, and only when the request is accepted: a request refused by any case of
+claim 11 takes no draw, while an accepted request takes its one draw even when no destination is
+then found. When one hit sends both damage requests of claim 15, both arrive on the tick of the hit.
+When both are accepted, two draws are taken. At the end of the tick the unit heads for the
+destination that request B gives from the second draw; the first draw is request A's (scenario W9,
+part c).
+
+## Edge cases and quirks
+
+- **The top position is recorded as the centre** (`quirks.top_position_counts_as_centre`, default:
+  the original). A unit standing at the top position is recorded as taking the centre (claim 2), so
+  a unit at the top and another at the centre of the same cell share one entry of the occupancy
+  record. When one of them leaves, the record shows the centre free although the other still stands
+  there. A vehicle asking to enter a cell sees allied infantry that stand still only through the
+  occupancy record, not through the units themselves, so the *moving blocker* outcome of S-0209
+  claim 5 then no longer arises for the remaining unit, and an allied vehicle can drive into its cell
+  (scenario W2(b); medium confidence, claim 2). Arriving walkers never take the top or centre
+  positions (claim 3). Only pre-placed units (claim 5) and units entering the cell of their mission
+  target or master (claim 4, which then uses the centre) stand there. With the switch off, a unit standing at the top position is recorded as taking the
+  top position, so each of the two units has its own entry. Nothing else changes: the position class
+  of every point is still given by claim 2 (no point has the class *top*), so claims 3 and 4 choose
+  positions and take draws exactly as with the switch on, and arriving walkers still use the side
+  positions only. The capacity rule of S-0209 claim 2 does not count either the top or the centre
+  position, so it is the same with the switch on or off.
+- **A prone non-crawler is faster** (`quirks.prone_noncrawler_speedup`, default: the original). With
+  the switch off, a prone unit whose type cannot crawl walks at the speed of claim 7.
+- **Fast walkers can step past the walking target** (`quirks.walker_overshoot`, default: the
+  original). A walker arrives only when it is closer than 17 leptons to its walking target at the
+  moment it takes its step (claim 6). From *s* = 34 leptons per tick on, one step can carry it from
+  17 leptons or more before the target to 17 leptons or more beyond it. It then turns and walks
+  back, and it can swing back and forth around the target for a while or for good. By the
+  formulas, a walker of speed 46 walking one cell from the right standing position due map north
+  never arrives; due map east it arrives after 15 ticks instead of 7, due map west after 28, and
+  due map south after 7. On the straight runs evaluated, speeds 34 to 38 still arrive on time and
+  39 is the first speed that does not. Medium confidence, derived by exact evaluation of the
+  formulas (scenario W8, part c). With the switch off, a step that would end 17 leptons or more
+  beyond the walking target ends exactly on the target instead, and the walker arrives on the next
+  tick as under claim 6. Nothing changes for speeds up to 33, which can never end that far beyond.
+- **A walker of speed 1 can stall** (`quirks.slow_walker_stall`, default: the original). By claim 14,
+  a walker of speed 1 whose walking target lies strictly between due map east and due map south of
+  it takes steps that leave its position unchanged, so no rule of this spec moves it on. Medium
+  confidence, derived by exact evaluation of F3 (scenario W8, part b). With the switch off, a step
+  that leaves both coordinates unchanged while the walker is 17 leptons or more from its walking
+  target moves it instead by 1 lepton along each map axis on which the target lies off its
+  position, towards the target.
+- **Facing scale of the walking direction** (`quirks.table_direction`, shared with S-0204, default:
+  the original). The original turns a facing back into an angle (F3) with the same short scale that
+  S-0204 F3 uses to make a facing from an angle: a full turn is 65534 facing units, not 65536, and
+  map east is facing 16383. So the angle F3 gives for a facing differs from that facing's exact
+  angle by up to 1.5 facing units, which can now and then change a truncated step by one lepton.
+  The two scales belong together: F7 gives the axis facings 0, 16383, 32767 and 49153, and F3 turns
+  each of them back into an angle within an eighth of a table step of its axis, which the table
+  trigonometry then reads as exactly the axis entry. With the switch off, S-0204 makes F7 the
+  exact direction (axis facings 0, 16384, 32768 and 49152), and F3 uses
+  θ = (*f̂* − 16384) × (−2π / 65536), with exact integer arithmetic for *f̂* − 16384 and the same
+  floating-point rules as F3 for the product. Then facings 0, 16384, 32768 and 49152 give the axis
+  angles π/2, 0, 3π/2 and π, up to the rounding of 2π to a double. One switch covers both formulas
+  so that the direction and the step always use the same scale: a mixed setting would turn exact
+  facings into angles one facing unit off. Claim 14 does not depend on this switch: due map south still reads table entry
+  8192 as its cosine and due map west entry 4096 as its sine, with the switch on or off.
+- **Table trigonometry and the approximate root.** The table square root, the table trigonometry
+  and the table direction are the original's arithmetic (S-0105, S-0204), not approximations chosen
+  by this spec. Their switches, as they bear on this spec:
+  - `quirks.table_trig_negative_bias` (S-0105, default: the original). The table sine and cosine of
+    a negative angle can land two table steps short (S-0105 F1). In F3, θ is negative exactly for
+    facings 16384 to 32767, so the switch can change some steps of walkers heading between map east
+    and map south. It does not change claim 14: exact due map south is 16384 × 8192 / 65534 =
+    2048.0625 table steps below zero (4096.125 half steps), and its fraction of a step is below one
+    half, where the bias does not apply.
+  - `quirks.table_root_distance` (S-0204, default: the original). It changes nothing in F1 or F2:
+    both thresholds (60 and 17 leptons) are below 129, where trunc(√̃(*V*)) and ⌊√*V*⌋ agree (F8).
+  - `quirks.table_direction` (S-0204, default: the original). It covers F7 and, by the entry above,
+    the scale of F3.
+  - S-0105 defines no switch for table trigonometry as a whole: sinT and cosT are always the
+    tables.
+
+  The quantised directions of the table arctangent (S-0204 claim 8, parts b and c) bend walks that
+  are not along an axis slightly.
+- **Sideways drift on the map axes** (claim 14). It needs both the two tiny non-zero entries 4096
+  and 8192 of the table trigonometry of S-0105 and round-toward-zero arithmetic, so it is governed by
+  the round-toward-zero switch `quirks.chop_rounding` of S-0205 and has no switch of its own. With
+  that switch off (round to nearest), the drift disappears.
+- **Rounding mode.** Every floating-point operation and truncation above follows the
+  round-toward-zero mode of S-0205, switch `quirks.chop_rounding`.
+- **Scatter around the destination.** A walking unit that accepts a scatter request looks for its
+  new destination around its locomotor destination (the scatter centre cell), not around the cell it
+  is in (claims 12 and 13), while the direction away from a threat point is still taken from the
+  unit's own position. It is listed here because it is easy to miss; it is ordinary behaviour of the
+  original, not a defect, and has no switch.
+
+## Import mapping
+
+| User data | Feeds | Form | Absent |
+|---|---|---|---|
+| Rules, infantry type section, `Speed` | speed field (F4) | as S-0207 claim 1 and its import mapping give for the same key: integer, clamped; −1 is the key's "not given" value (S-0006 claim 3) and keeps the value in force without a warning; the importer warns for a value above 100 or below −1 | as S-0207 gives: keeps the value in force (the engine default before any rules layer) |
+| Rules, the country's own section, `SpeedInfantryMult` | country speed factor for infantry *k*꜀ | decimal (S-0003 claim 6), stored in single precision | 1.0 (engine constant) |
+| Rules, `[General]`, `VeteranSpeed` | veteran speed factor *k*ᵥ | real | owned by the veterancy specs |
+| Rules, infantry type section, `VeteranAbilities` / `EliteAbilities` containing `FASTER` or `SCATTER` | faster and scatter veterancy abilities (Terms) | list | none |
+| Art, image section, `Crawls` | can crawl | boolean | yes (S-0107) |
+| Rules, infantry type section, `Cyborg`, `Fraidycat` | cyborg, fraidycat | boolean | no (S-0107) |
+| Rules, the combat-damage section, `PlayerScatter` | the player-scatter rule (claims 11 and 15) | boolean | no |
+| Rules, land-type sections, `Foot` | the walker speed percentage; only zero matters (claim 9) | percent | owned by S-0211 |
+| Map, `[Infantry]` entries, the sub-cell value | standing position number (claim 5) | integer, 0 to 4 | values outside 0 to 4: centre, importer warning |
+
+The scatter property of each behaviour (claim 11) is imported by S-0215.
+
+## Measurement scenarios
+
+All run under the *measurement setup*, on purpose-made flat maps of one theater with clear terrain
+unless stated, with one human player and one computer player whose start position is far away.
+The expected values for computer-owned units are the original's. Our engine's departure for AI
+houses (claims 11 and 15) is not measurable against the original, which has no such houses.
+Observations are taken with a *recorder* that reads unit world positions per tick (or from
+screenshots when stated). Where a scenario counts ticks "from the first step to arrival", the count
+is *t*ₐ − *t*₁ + 1, where *t*₁ is the first tick on which the unit's position changes and *t*ₐ the
+tick on which it is placed on its final standing position: both ticks are included. Paths are
+straight runs of clear cells, so S-0212 sends every walker along the run.
+
+**Scenario W1: standing positions and capacity of the side positions (claims 1, 3, 4).**
+- *Setup:* (a, b) an empty target cell *T* = (*x*, *y*). Four infantry of one stock type, owned by the
+  human player, each pre-placed at sub-cell 2 (the right position): one in each of the cells
+  (*x* − 1, *y*), (*x* − 2, *y*), (*x* − 3, *y*) and (*x* − 4, *y*), on the same row as *T*. (c) A
+  separate game: a stock transport vehicle that infantry can enter, standing still in *T*, and one
+  stock infantry type that can enter it, pre-placed at sub-cell 2 in (*x* − 1, *y*).
+- *Procedure:* (a) order the unit in (*x* − 1, *y*) into *T*, wait until it stops, record its
+  position within the cell. (b) Then order the unit from (*x* − 2, *y*), then the one from
+  (*x* − 3, *y*), then the one from (*x* − 4, *y*) into *T*, each after the previous one has stopped.
+  Each walks east along the row and so reaches *T* from (*x* − 1, *y*). (c) Order the infantry unit
+  to enter the transport, and record its position on every tick until it disappears.
+- *Observable:* (a, b) positions within the cell (*u*, *v*) at rest, and whether the fourth unit
+  enters *T*. (c) the unit's position within the cell on each tick while it is in *T* or heading
+  into it.
+- *Runs:* 1 of (a, b) and 1 of (c). No random draw is involved: every desired point has class right.
+- *Expected:* (a) (192, 64), the right position, since a unit at sub-cell 2 walking east keeps its
+  position within the cell. (b) the second and third take (192, 192) then (64, 192) (row S2: bottom,
+  then left). The fourth does not enter the cell (S-0209). (c) the unit keeps *v* = 64 as it walks
+  east into *T*, heading towards (192, 64), the class of its desired point, although the cell holds a
+  vehicle.
+- *Falsified if:* any unit stands at (128, 128) or (64, 64) in (a) or (b), the order of (b) differs, a
+  fourth unit enters, or in (c) the unit stops outside *T* or its *v* moves towards 128 or 192 before
+  it disappears.
+
+**Scenario W2: pre-placed units, the top position and standing height (claims 1, 2, 3, 5).**
+- *Setup and procedure:*
+  - (a) A cell *T* holds one infantry pre-placed at sub-cell 1. Three more infantry of the human
+    player stand in the three cells west of *T* on its row, each at sub-cell 2 as in W1. Order them
+    into *T* one after another, each after the previous one has stopped.
+  - (b) A separate game. A cell *T* holds two infantry of the human player, one pre-placed at
+    sub-cell 0 and one at sub-cell 1. A vehicle of the human player, of a stock type that cannot
+    crush, stands three cells east of *T* on its row. First order the vehicle into *T*, and record
+    whether it enters *T*. Restart, then order the unit at sub-cell 1 one cell west and wait until it
+    has stopped there; then order the vehicle into *T* and record again.
+  - (c) A separate game per run. One infantry unit pre-placed at sub-cell 1 in a cell, with an empty
+    cell east of it. Order it one cell east and record the position it takes.
+  - (d) A separate game. Five infantry units of the human player, of one stock type that is neither
+    a fraidycat nor the cow, each alone in its own cell, the five cells at least 2 cells apart. The
+    map gives them the sub-cell values 0, 1, 2, 3 and 4. No orders are given. Read each unit's
+    position within the cell 30 ticks after the start (the idle actions of S-0107 claim 14 only
+    turn such a unit; they do not move it).
+  - (e) Standing height. A separate game on a test map with a cell *S* of slope shape 1 (S-0106
+    claim 1, rising towards map east) at height level ℓ ≥ 0, whose west neighbour is flat at level
+    ℓ; the test map shapes the other cells around *S* so that the slope is valid. The map also has
+    a straight high bridge whose deck runs map east to west across at least three cells, with land
+    at deck level at both ends. The recorder reads every unit's world height on every tick, and
+    each cell's level and slope shape from the test map.
+    - (e1) Two infantry of the human player, pre-placed at sub-cells 2 and 3 in a second cell *S*′
+      of the same shape and level as *S*, away from the paths of (e2). No orders.
+    - (e2) As W1 (a, b), with *S* as *T*: three infantry of the human player, each pre-placed at
+      sub-cell 2 in one of the three flat cells west of *S* on its row, are ordered into *S* one
+      after another, each after the previous one has stopped.
+    - (e3) One infantry of the human player, standing on the land at the west end of the bridge,
+      ordered to the middle cell of the deck.
+- *Observable:* (a) the positions taken in *T*, and whether all three enter. (b) for each of the two
+  orders, whether the vehicle drives into *T* while the unit at sub-cell 0 stands there. (c) the
+  position taken. (d) the (*u*, *v*) of each of the five units. (e) the world height and the
+  (*u*, *v*) of each unit at rest, and in (e2) and (e3) its height on every tick of its walk.
+- *Runs:* (a) 1. (b) 1 of each order. (c) 200, a new game for each run (a different random state each
+  time). (d) 1. (e) 1.
+- *Expected:* (a) all three enter and take the three side positions, so *T* holds four infantry
+  (claim 5 and S-0209 claim 2). (b) with both units in *T*, the vehicle does not enter *T* while
+  either unit stands in it: it waits, or enters only after they have moved away. After the unit from
+  the top position has left, the vehicle drives into *T* although the unit at the centre still
+  stands there. (c) the desired point (64, 64) has class centre, so the draw of claim 3
+  applies: right in 80 to 120 runs, left and bottom each in 32 to 68 runs, never top or centre.
+  (d) the positions of table P: (128, 128) for value 0, (64, 64) for 1, (192, 64) for 2, (64, 192)
+  for 3 and (192, 192) for 4.
+  (e) every unit at rest in *S* or *S*′ stands at the height *H* that S-0106 claim 2 gives for the
+  cell's level and shape at its (*u*, *v*): in (e1) at (192, 64) and (64, 192), in (e2) at (192, 64),
+  (192, 192) and (64, 192) (as W1), so that the units at *u* = 192 stand higher than those at
+  *u* = 64. In (e3) the unit at rest stands 416 leptons above the *H* of its deck cell's terrain at
+  its (*u*, *v*). The heights during the walks have no expected value (Open questions).
+- *Falsified if:* (a) only two enter, or one of them takes the top or centre position. (b) the vehicle
+  enters *T* in the first order while both units stand in it, or, in the second, does not enter *T*
+  while the unit at the centre still stands there (the latter is what the switch turned off
+  gives). (c) any run takes top or centre, or a count falls outside its band; in
+  particular, right in every run would show that the top quadrant has a class of its own. (d) any
+  of the five positions differs from table P, in particular value 1 at (128, 128). (e) any height
+  at rest differs from the expected one, for example a unit in *S* or *S*′ at the height of the cell's
+  centre or of the flat cell it came from.
+
+**Scenario W3: the position-order draw (claim 3).**
+- *Setup:* one infantry pre-placed at sub-cell 0 (the centre) of a cell, with an empty cell east of
+  it.
+- *Procedure:* order it one cell east. Record the position it takes. Start a new game for each run
+  (a different random state each time).
+- *Observable:* the position taken.
+- *Runs:* 200.
+- *Expected:* right about half the time, left and bottom about a quarter each, never top or centre.
+  The count of right lies in 80 to 120, and the counts of left and of bottom each in 32 to 68 (about
+  three standard deviations).
+- *Falsified if:* any run takes top or centre, or a count falls outside its band.
+
+**Scenario W4: walking step and speed (claims 6, 7).**
+- *Setup:* every stock type and setting below is chosen so that F5 gives *s* from 2 to 38 in every
+  part (claim 6). A straight east-west run of 12 clear cells per unit, side by side, each unit owned by the
+  human player and pre-placed alone at sub-cell 2 in the west end cell of its run. No crates on the
+  runs. The house's country is noted, and its country speed factor for infantry is read from the
+  rules data.
+  - (a) Three stock infantry types with different speed fields, at the lowest veterancy rank.
+  - (b) One stock infantry type whose veteran ability list names the faster ability, placed by the
+    test map at veteran rank, beside a unit of the same type at the lowest rank. The type is chosen so
+    that trunc(*s*₁ × *k*ᵥ) differs from *s*₁ for the stock veteran speed factor; if no stock type
+    gives such a pair, the run still checks that *s* = trunc(*s*₁ × *k*ᵥ).
+  - (c) One stock infantry type, and a crate placed on the unit's own run one cell east of its start
+    cell. A named test file (an override section of the test map, or a loose copy of the rules file)
+    makes the speed crate the only crate outcome. The crate's speed multiplier is read from the rules
+    data.
+- *Procedure:* order each unit to the cell 10 cells east of its start.
+- *Observable:* the world *x* and *y* of the unit on every tick of the walk, and the number of ticks
+  from the first step to arrival.
+- *Runs:* 1 per unit.
+- *Expected:* on every tick of steady walking *x* grows by exactly the *s* of F5, and *y* does not
+  change: (a) from the speed field and the country factor, with *m* = 1.0 and no veteran factor; (b)
+  the veteran unit's *s* = trunc(*s*₁ × *k*ᵥ), where *s*₁ is the step of the lowest-rank unit beside
+  it; (c) after the crate is taken, *s* = trunc((*b* × *k*꜀) × *m*) with *m* the crate's multiplier,
+  and *s*₁ of (a) before it. In each cell the walker makes ⌈240 / *s*⌉ steps and then spends one
+  tick being placed exactly on the next standing position, and before each cell but the first it
+  spends one tick without moving, choosing its walking target. So for a unit whose speed does not
+  change the walk of 10 cells takes 10 × (⌈240 / *s*⌉ + 2) − 1 ticks from the first step to arrival
+  (for *s* from 2 to 38, claim 6). A count of 10 × (⌈240 / *s*⌉ + 1), 9 ticks fewer, would mean that
+  the walking target is chosen on the arrival tick; the per-tick record then shows no tick without
+  movement between two cells.
+- *Falsified if:* any steady step differs from the expected *s*, the final position is not exact,
+  *y* changes, or the number of ticks differs.
+
+**Scenario W5: crawling, panic and the prone non-crawler (claims 8, 10).**
+- *Setup and procedure:*
+  - (a) A unit of the human player, of a stock infantry type that can crawl, on open ground, ordered
+    to a cell ten cells away. While it walks (its behaviour is then *move*, in which a
+    human-controlled unit does not retaliate, S-0215 claim 18), a computer-owned unit with a weak
+    weapon hurts it once, enough to raise its fear to lie down (S-0107 claim 16) without killing it.
+    If it stops when it lies down, order it on at once. Record its per-tick step while prone.
+  - (b) The same unit and the same move, unhurt.
+  - (c) A computer-owned fraidycat civilian type hurt by a known attacker, which panics and flees.
+    Record its per-tick step while it shows *panic*.
+  - (d) A named test file (a loose copy of the rules file, and of the art file if needed) marks a
+    stock infantry type of the human player as a cyborg whose art cannot crawl. Order the unit to a
+    cell ten cells away and, while it walks, hit it with an attack from a known attacker that
+    deals more than its remaining health, so that it survives as a crippled cyborg. If it stops after
+    the hit, order it on at once. Record its per-tick step during the first 40 ticks after the hit,
+    before its fear drops below 50 and the get-up rule of S-0107 claim 15 can apply.
+- *Observable:* steady per-tick displacement.
+- *Runs:* 1 each.
+- *Expected:* (a) *s* − ⌊*s*/3⌋, (b) *s*, (c) *s* of its type (no change by panic), (d)
+  *s* + ⌊*s*/2⌋ after the hit, where *s* is its step before the hit.
+- *Falsified if:* any steady step differs; in (d) in particular, a step of *s* or of *s* − ⌊*s*/3⌋
+  after the hit.
+
+**Scenario W6: terrain does not slow walkers (claim 9).**
+- *Setup:* two straight runs of 10 cells side by side, one of clear land, one of a land type whose
+  walker percentage is between 0 % and 100 % in stock data. One infantry of the same type at the
+  start of each, at sub-cell 2.
+- *Procedure:* order both to the far end on the same tick.
+- *Observable:* ticks from the first step to arrival.
+- *Runs:* 1.
+- *Expected:* equal.
+- *Falsified if:* the unit on the slower land type takes longer.
+
+**Scenario W7: scatter acceptance, destinations and damage requests (claims 11 to 13, 15).**
+- *Setup:* Unless a part says otherwise, units are at the lowest veterancy rank, and the
+  player-scatter rule is off: if stock data turns it on, a named test file (a loose copy of the rules
+  file) turns it off. Where a part needs a behaviour with the scatter property and stock data does not
+  give it, a named test file gives it. In parts c, g, h1, i and j the unit that scatters stands on
+  open flat ground with no other unit within 2 cells, so its search collects exactly its eight
+  neighbours (claim 13). The recorder reads the tick number (Terms) of every tick.
+  - (a) Four infantry units on open ground: an idle soldier of the human player standing in the path
+    of an enemy crusher driving towards it (a forced request, S-0210); a soldier of the human player
+    walking across the crusher's path at the moment it approaches; an idle soldier of the human
+    player hit once by a computer-owned unit; and an idle computer-owned fraidycat civilian, whose
+    behaviour has the scatter property, hit once by a unit of the human player.
+  - (b) A computer-owned fraidycat civilian walking north along a straight run of open flat ground
+    under a map trigger's move to a cell *D* 8 cells away, whose move behaviour has the scatter
+    property. When it is 4 cells from *D* it is hit once by a long-range weapon fired from due map
+    east, from a unit on its row. Its locomotor is moving, so the hit sends it request B only
+    (claim 15).
+  - (c) An idle computer-owned fraidycat civilian of an unarmed type, standing in *guard* on open
+    flat ground. A named
+    test file removes the scatter property from *guard* (if stock data gives it the property) and
+    leaves the player-scatter rule off. A unit of the human player at least 4 cells away hits it
+    once. By claim 15 neither case of request A is sent (the first needs the player-scatter rule or
+    the scatter ability, the second the scatter property), and claim 11 refuses request B (it is not
+    forced and *guard* lacks the scatter property), so the hit does not move it. Its fear then
+    makes it scatter on its own, by the flee rule (S-0107 claim 15) or by the idle scatter of a
+    frightened fraidycat (S-0107 claim 14). Both send a forced request without a threat point, which
+    claim 11 accepts while its locomotor is not moving, and claim 13 gives its destination either
+    way.
+  - (d) The runs of (b), read for where the new destination lies.
+  - (e) A gap cell *G* in an otherwise impassable straight line (for example a cliff line), with open
+    ground on both sides. *G* holds three computer-owned infantry standing still on its three side
+    positions; one of them is of a stock type that can deploy and is deployed. A map trigger orders a
+    fourth infantry unit of the same house, standing 2 cells before *G*, to a cell 10 cells beyond
+    *G* through the gap. *G* gives it the outcome *stationary friendly* (S-0209 claim 4), and since its
+    destination is farther than the close-enough distance (S-0209 Terms) it sends every occupant of
+    *G* a forced, move-anywhere request without a threat point (S-0209 claim 8).
+  - (f) As (b), but on uneven ground around *D*: the map raises some cells near *D* so that, for at
+    least one of the five draws, the first qualifying candidate fails the screen-cover check. For
+    example, the cell map south of *D* stands at least one height level above the cell map west of
+    *D*, which makes the west candidate fail (the cell one step towards the bottom of the screen
+    from it is that raised cell). The recorder reads every cell's height level and passability from
+    the test map.
+  - (g) An idle soldier of the human player, not a fraidycat, on open flat ground, in a behaviour in
+    which it may retaliate (S-0215 claim 18). A computer-owned unit with a long-range weapon hits it
+    once from beyond the soldier's sight, so that it does not attack back (S-0215 F7). Two variants:
+    a named test file turns the player-scatter rule on; and the rule off. Each variant once with the
+    attacker due map east and once due map west of the soldier.
+  - (h) Three units, each hit once, each run once with the attacker due map east and once due map
+    west: (h1) an idle computer-owned infantry unit that is not a fraidycat and may not retaliate
+    (S-0215 claim 18; for example an unarmed type that is not an engineer, or a stock civilian type
+    that a named test file makes not a fraidycat), in a behaviour with the scatter property, hit by
+    a unit of the human player; (h2) the same type owned by the human player, hit by a computer-owned
+    unit; (h3) an idle armed computer-owned soldier, not a fraidycat, hit by a unit of the human
+    player.
+  - (i) Damage without a known attacker. First pick a damage source that carries no attacking
+    object (which sources do belongs to the combat specs; a radiation field is the expected
+    candidate) and check it with the fear rules of S-0107 claims 15 and 16 alone: an idle soldier of
+    the human player at fear level 0 does not lie down after one hit from the source, but lies down
+    after one hit from a known attacker that fires from beyond its sight (S-0215 F7), so that it
+    does not retaliate. Then take two soldiers that are not fraidycats, each idle at fear level 0 in
+    a behaviour with the scatter property, on open flat ground with no other unit within 3 cells:
+    (i1) one owned by the computer player, (i2) one owned by the human player. Each takes one hit
+    from that source that it survives; record from the tick of its first hit.
+  - (j) Both damage requests at once (claim 15, Open questions). An idle computer-owned fraidycat
+    civilian standing in *guard* on open flat ground, with no other unit within 3 cells. A named
+    test file gives *guard* the scatter property and removes its retaliate property, so that the
+    unit may not retaliate (Terms) and the hit sends it request A by its second case as well as
+    request B. A unit of the human player due map east of it, 5 cells away on its row, hits it once.
+    Before the runs, the mapping from the residue (*N* mod 8) to the neighbour that claim 13 gives
+    is taken from the runs of (c) and (i1).
+  - (k) The fallback of claim 13. A purpose-made flat map whose usable area is 5 × 5 cells. The
+    unit of (c), with the same test file, is pre-placed at the right standing position (map value
+    2) of the centre cell of that area. Each of the other 24 cells holds an occupant: a vehicle of
+    the human player in one corner cell, armed and ordered to hit the civilian once, and in each of
+    the other 23 cells one idle, unarmed infantry unit of the civilian's house, of a type that is not
+    a fraidycat (a named test file may make a stock civilian type not a fraidycat, as in (h1)),
+    pre-placed at a side position. Every cell of the usable area then has a non-empty occupancy
+    record, so the nearby-cell search finds nothing (S-0212 claim 25), while each of the eight
+    neighbours of the centre cell holds one allied infantry unit and is enterable (S-0209 claim 4).
+    As in (c), the hit itself does not move the civilian, and its fear later makes it scatter
+    without a threat point.
+  - (l) The exclusion of high-bridge cells (claim 12). A test map with a straight high bridge that
+    runs map south from land at deck level. The land end cell *E* carries no deck; the deck cells
+    *K*, map south of *E*, and *K*₂, map south of *K*, are high-bridge cells. The recorder reads
+    from the test map which cells carry the deck, and the part counts only when *E* carries none.
+    Every neighbour of *K* other than *E* and *K*₂ is not enterable for infantry (water below the
+    deck, or cliffs). No cell within 6 cells of *E* or of *K*₂ along the diagonal towards the bottom
+    of the screen stands higher than that cell, so both pass the screen-cover check and only the
+    exclusion can pass *K*₂ over. A computer-owned fraidycat civilian of an unarmed type, whose move
+    behaviour has the scatter property, walks from *E* onto *K* under a map trigger's move to *K*.
+    While it walks it is hit once by a long-range weapon fired from due map north, by a unit on land
+    beyond *E*. Its locomotor is moving, so the hit sends it request B only (claim 15), and its
+    scatter centre cell is *K*. The threat lies due map north, so *d*₀ is map south and the first
+    choice *d* is one of the directions 2 to 6.
+  - (m) The first case for a unit that is not deploying (claim 11). As (e), with these changes: no
+    occupant of *G* can deploy; the three occupants and the fourth unit belong to the human player,
+    the occupants of a stock type whose *cheer* entry has image frames; and the user moves the fourth unit
+    by a move order. When the fourth unit is one cell short of the cell before *G*, the user gives
+    the three occupants the celebration order, so that they play *cheer* (S-0107 claim 21) when the
+    fourth unit stops in front of *G* and starts sending its forced, move-anywhere requests (S-0209
+    claim 8). If the recorder shows a cheer ending before the fourth unit stops, the run is repeated
+    with the order given later.
+  - (n) The second case of claim 11 (deploying, human-controlled owner, request not both forced and
+    move-anywhere). A stock infantry type that can deploy, owned by the human player, on open flat
+    ground with no other unit within 2 cells, not a fraidycat, in a behaviour in which it may
+    retaliate (S-0215 claim 18). A named test file turns the player-scatter rule on, so that the
+    unit has scatter permission. A computer-owned unit with a long-range weapon, outside the
+    soldier's sight (S-0215 F7), hits it once, so that it does not attack back, and the hit sends
+    it request A (claim 15, first case), which is forced and not move-anywhere. Variants, each hit
+    given on a tick when the unit plays: (n1) *deploy*, (n2) *deployed*, (n3) *deployed-idle*,
+    (n4) not a deploy kind (the same unit undeployed, standing, as the control).
+  - (o) The *undeploy* table of claim 11 (the *deploy*, *deployed*, *deployed-fire* and
+    *deployed-idle* rows). As (e), with these changes: the three occupants of *G* and the fourth
+    unit belong to the human player; the occupants are of a stock type that can deploy, and the user
+    gives them the deploy order. The fourth unit, ordered through the gap, stops in front of *G* and
+    starts sending its forced, move-anywhere requests (S-0209 claim 8). Variants, by the sequence
+    that all three occupants play on the tick of the first request, reached by giving the deploy
+    order earlier or later (as in (m), the recorder shows the sequences): (o1) *deploy*,
+    (o2) *deployed*, (o3) *deployed-fire* (by an enemy unit in the occupants' weapon range) and
+    (o4) *deployed-idle*. If the recorder shows another sequence on that tick, the run is repeated
+    with the order given earlier or later.
+- *Procedure:* observe whether each unit moves away, and to which cell.
+- *Observable:* moved or not, and the tick on which its new destination was set. In (b) and (f), the
+  cell of its new destination, given as a step direction from *D* in (b). In (c), (g), (h) and (i),
+  the first cell it moves to, as a step direction from its own cell, together with the residue of
+  the tick number mod 8 on the tick its destination was set. In (d), whether the cell it moves to
+  is a neighbour of *D* or of the cell it was in when hit. In (e), whether it undeploys and leaves
+  *G*. In (j), the destination it holds at the end of the tick of the hit (the first cell it walks
+  to), as a cell relative to its own cell, and the residue of the tick number mod 8 on that tick.
+  In (k), the first cell the civilian moves to, as a step direction from its cell, and the residue
+  of the tick number mod 8 on the tick its destination was set. In (l), the cell of its new
+  destination. In (m), (n) and (o), for each unit and each tick, its current sequence and whether it has a
+  destination, and, from W9, whether a draw was taken on the tick of the request. A move towards the attacker is an attack, not a scatter, except in (l), where the
+  civilian is unarmed.
+- *Runs:* (a) 1 each. (b) and (f) until 100 runs have counted (see Expected). (c) 20. (d) the runs of
+  (b). (e) 1.
+  (g) and (h1) 12 per variant and attacker side, (h2) and (h3) 1 per attacker side. (i) 12 per
+  soldier. (j) 40. (k) 40. (l) until 50 runs have counted (counted as in (b)). (m) 1. (n) 12 per variant. (o) 1 per variant. Runs start on
+  different ticks so that the residues mod 8 vary.
+- *Expected:*
+  - (a) the idle soldier in the crusher's path moves, the walking soldier does not change its course,
+    the soldier hit by a known attacker does not scatter (it may attack back), the hit fraidycat
+    moves on the tick of the hit.
+  - (b) The flee rule of S-0107 claim 15 can redirect a fraidycat later, so only runs whose
+    destination changes on the tick of the hit count. In the counted runs the new destination is a
+    neighbour of *D* in the relative directions −2 … +2 around map west only, each in 8 to 32 of the
+    100 counted runs (about three standard deviations around 20), and never in the three directions
+    pointing back towards the threat.
+  - (c) the hit does not move the unit. Its first move goes to a neighbour of its own cell, never
+    staying in its own cell, and runs whose request ticks have the same residue mod 8 move to the
+    same neighbour, whatever the draw (claim 13: the neighbour at position (*N* mod 8) of the
+    search's collection order).
+  - (d) in every run the cell it moves to is a neighbour of *D*.
+  - (e) the deployed unit starts undeploying on the tick the request arrives, and later leaves *G*.
+  - (f) in every counted run the new destination is the cell that claim 12 gives, from the recorded
+    levels, for one of the draws 0 to 4. Each predicted destination occurs with probability *n*/5,
+    where *n* is the number of draws that lead to it; its count lies within three standard
+    deviations of 100 *n*/5. A candidate that fails the check is never chosen while a later
+    qualifying candidate passes it.
+  - (g) with the rule on, the soldier moves on the tick of the hit to a neighbour of its cell
+    (request A, claim 13), and runs whose hit ticks have the same residue mod 8 give the same
+    neighbour, whichever side the attacker is on. With the rule off it does not move.
+  - (h) (h1) moves on the tick of the hit to a neighbour of its cell, the same neighbour for equal
+    residues mod 8 whichever side the attacker is on. (h2) does not scatter. (h3) does not scatter: it attacks back at once, as a computer-controlled actor does
+    (S-0215 claim 18).
+  - (i) (i1) moves on the tick of the hit to a neighbour of its cell, the same neighbour for equal
+    residues mod 8 (request A, second case, through claim 13). (i2) does not move.
+  - (j) the unit moves on the tick of the hit. Let *A* be the neighbour of its cell that the residue
+    gives (the destination of request A). Request B ends as its destination (claim 15), and claim 15
+    leaves open around which cell B looks. Two outcome sets are predicted, each the set of
+    destinations that claim 12 gives for the five draws 0 to 4, with the threat due map east (so
+    *d*₀ is map west): *H*₁ with the unit's own cell as scatter centre cell, and *H*₂ with *A* as
+    scatter centre cell. On open ground these are the neighbours of the own cell, respectively of
+    *A*, in the relative directions −2 … +2 around map west, unless the first candidate is not
+    enterable. In every run the destination lies in *H*₁ or *H*₂. Runs in which it lies in
+    only one of them decide the open question: all such runs are expected to agree on one set.
+  - (k) the civilian moves, and its first cell is the neighbour of its cell in step direction
+    (1 + *j* − 2) mod 8 for a draw *j* from 0 to 4: the facing from its cell's centre to the right
+    position rounds to direction 1 (F6), so the directions are 7, 0, 1, 2 and 3, each with
+    probability 1/5 (each in 1 to 15 of the 40 runs, about three standard deviations), and never 4, 5 or 6. Runs whose request ticks
+    have the same residue mod 8 can end in different directions.
+  - (l) in every counted run the new destination is *E*. For the draws 0, 1 and 2, *K*₂ comes
+    before *E* in the order of preference, but it is a high-bridge cell, and *E* is a later
+    qualifying candidate that passes the screen-cover check.
+  - (m) no occupant gets a new destination on a tick on which its current sequence is *cheer*.
+    Each occupant leaves *G* only after its cheer has completed, on a later request of the fourth
+    unit.
+  - (n) in (n1), (n2) and (n3) the unit takes no new destination and no draw on the tick of the
+    hit and keeps playing its deploy-kind sequence (the second case refuses, though it has scatter
+    permission and the request is effectively forced). In (n4), the control, the unit moves to a
+    neighbour cell, as in (g) with the rule on.
+  - (o) in (o1) no occupant gets a new destination and none takes a draw on a tick on which it
+    plays *deploy*; each leaves *G* only after its *deploy* has completed, on a later request of the
+    fourth unit (the first case refuses: *undeploy* is turned down while *deploy* plays, and *deploy*
+    is not interruptible). In (o2), (o3) and (o4) every occupant has a new destination, and takes a
+    draw, on the tick of the first request, or undeploys at once and leaves; whether *undeploy*
+    starts in each variant is S-0107 claim 6's, and the recorded sequences settle it.
+- *Falsified if:* (a) a different move-or-stay pattern. (b) a direction pointing towards the threat,
+  or a count outside 8 to 32. (c) the hit itself moves the unit, two first moves with the same
+  residue mod 8 end in different cells, or it stays although free cells are next to it. (d) it
+  moves to a neighbour of the cell it was in that is not a neighbour of its destination. (e) it
+  stays deployed, or undeploys but never leaves *G* although cells next to the gap are free. (f) any counted destination differs from every predicted one; a candidate that fails
+  the check is chosen while a later qualifying candidate passes; or a count falls outside its band
+  (in particular, if the west candidate is chosen at the rate flat ground would give). (g) with the
+  rule on, it stays while free cells are next to it, or two runs with the same residue mod 8 end in
+  different cells; with the rule off, it scatters. (h) (h1) stays while free cells are next to it,
+  or two runs with the same residue end in different cells; (h2) or (h3) scatters. (i) the check of
+  the source fails (pick another source); (i1) stays while free cells are next to it, or two runs
+  with the same residue end in different cells; (i2) moves. A scatter of (h3), or (i1) staying,
+  would contradict this spec's claim 15 and S-0107's revised scenario M15(b), and so would the hit
+  itself moving the unit in (c). (j) a destination lies in neither *H*₁ nor *H*₂ (for example *A* itself when *A*
+  is in neither set, which would mean request B was refused or was judged before request A), or the
+  deciding runs split between the two sets. (k) the civilian never moves while the neighbours are
+  enterable (no fallback), it moves in direction 4, 5 or 6, a count falls outside its band, or every
+  pair of runs with the same residue mod 8 ends in the same direction while the directions follow
+  the residue (which would mean a search result and not the draw). (l) the destination is *K*₂ in
+  any counted run (without the exclusion it would be *K*₂ in about three runs out of five). (m) an
+  occupant gets a new destination on a tick on which its recorded sequence is still *cheer*, which
+  is what a first case that exempted every forced, move-anywhere request would give. (n) in (n1)
+  to (n3) it moves or takes a draw on the tick of the hit; in (n4) it stays although free cells are
+  next to it. (o) in (o1) an occupant moves or takes a draw while it plays *deploy*; in (o2) to (o4)
+  an occupant refuses on the tick of the first request and stays deployed.
+
+**Scenario W8: sideways drift on the map axes, and very slow and very fast walkers (claims 6 and
+14, Edge cases).**
+- *Setup:* four infantry of one type, owned by the human player, each pre-placed at sub-cell 2 (the
+  right position) in the end cell of its own straight run of 12 clear cells: one run along map
+  north, one along map east, one along map south and one along map west. A unit at a side position
+  keeps that position in every cell of a straight run (claim 3), so each leg is 256 leptons long and
+  parallel to its run, and no random draw is involved. The house's country speed factor for
+  infantry is read from the rules data.
+  - (a) A stock type at the lowest veterancy rank, chosen so that F5 gives *s* from 2 to 38 for the
+    house's country (claim 6).
+  - (b) A named test file (a loose copy of the rules file) sets the type's speed field and the
+    veteran speed factor so that F5 gives *s* = 1 for a unit at veteran rank whose type has the
+    faster ability; the test map places the four units at veteran rank.
+  - (c) A named test file sets the type's speed field so that F5 gives *s* = 46 at the lowest rank.
+- *Procedure:* (a) order each unit to the cell 10 cells along its run. (b, c) order each unit to the
+  next cell along its run. Record the world position per tick, for at least 1000 ticks in (b) and
+  600 in (c).
+- *Observable:* the number of ticks from the first step to arrival (or that it does not arrive), and
+  the largest sideways deviation from the straight line through its standing positions during the
+  walk.
+- *Runs:* 1 per direction and part.
+- *Expected:*
+  - (a) north and east take 10 × (⌈240 / *s*⌉ + 2) − 1 ticks; west and south take the numbers of
+    ticks that F3 and F7 give for its *s*, with the same one non-moving tick before each cell after
+    the first (claim 6), never fewer (for the example speeds *s* = 4, 9, 11 and 16, south: 809, 319,
+    259 and 179 ticks, against 619, 289, 239 and 169 north; west equals north at these speeds; at
+    *s* = 21 all four are 139). If W4 finds the count 9 ticks lower (claim 6), every value here is
+    9 ticks lower too. On the early steps of each cell the south walker's
+    *x* falls by 1 lepton per step and the west walker's *y* falls by 1 lepton per step; north and
+    east show no sideways deviation. The deviation never exceeds 3 leptons going south and 6 going
+    west.
+  - (b) north and east step 1 lepton per tick and take 241 ticks, west takes 242. The south walker
+    stops changing position within its first 5 ticks, a few leptons from its start, and does not
+    arrive by its own steps.
+  - (c) the north walker never arrives: it swings back and forth around its walking target. East
+    takes 15 ticks, west 28 and south 7.
+- *Falsified if:* (a) neither the south nor the west walker shows a sideways deviation (which would
+  mean the arithmetic is not round-toward-zero at this point, or the table values differ from
+  S-0105), north or east shows a deviation, a deviation exceeds its bound, or the number of ticks of
+  any of the four walks differs from the value F3 and F7 give. Equal numbers of ticks north and south
+  alone falsify nothing, since some speeds give them. (b) the south walker keeps changing position
+  by its own steps after its first 5 ticks, or a tick count differs. A move that a rule of another
+  spec starts later (for example a new path) does not count. (c) the north walker arrives within 600 ticks, or
+  a tick count differs.
+
+**Scenario W9: draw counts and their order (claims 3, 11, 12, 13, 15).**
+- *Setup:* a *recorder* (glossary) that reads the state of the original's random stream, and so the
+  number of draws taken, at the end of every tick. It only reads, so it is a *recorder* in the
+  glossary's sense (a program that only reads the running game's state), and reading the stream's
+  state does not make the claims `unmeasured`. Replaying the stream from a recorded state outside the game, to
+  predict the values of the draws, needs the stream's algorithm, which S-0202 owns; the
+  draw counts, and the outcome sets of W7(j), do not depend on it. Purpose-made
+  flat maps as in W3 and W7.
+- *Procedure:* (a) the walk of W3, one run. (b) the accepted and the refused scatter requests of
+  W7 parts (a) and (c), one run each. (c) the double hit of W7 part (j), 40 runs.
+- *Observable:* per tick, the number of draws taken from the stream and, once S-0202's algorithm is
+  available, their values (recovered by replay from the state read before the tick).
+- *Expected:* (a) exactly one draw on the asking tick of each cell entered whose class is centre
+  (claim 3), none on other ticks. (b) one draw on the tick of an accepted request, even when no
+  destination is found, and none on the tick of a refused request. (c) two draws on the tick of the
+  hit; the destination at the end of the tick is the one that claim 12 gives for the second draw
+  (request B), and the destination request A would have taken is the one the first draw gives.
+- *Falsified if:* (a) a draw on another tick, or two on one. (b) no draw for an accepted request,
+  a draw for a refused one. (c) one draw, three draws, or the final destination follows the first
+  draw instead of the second.
+
+## Open questions
+
+- The screen-cover check (Terms) is exact as arithmetic, but three parts of it are not confirmed:
+  the property of *C* that, in the original, lets a high-bridge cell count 4 levels higher was not
+  identified, and our engine raises such a cell whenever it is a high-bridge cell (Terms); a cell
+  outside the map is taken to read as height level 0, which matters only on a map with negative
+  levels; and that the check matches what a viewer sees hidden on the screen is an interpretation.
+  Scenario W7(f) tests the rule on uneven ground; W7(b) relies only on flat ground, where every cell
+  passes.
+- When one hit sends both damage requests of claim 15 and both are accepted, request B's scatter
+  centre cell may already be the destination that request A gave the unit, rather than its own
+  cell. This was not determined. Scenarios W7(b) and W7(c) avoid the case (a walking unit, to which
+  request A is not sent; a behaviour without the scatter property, in which neither request moves
+  the unit). Scenario W7(j) settles it.
+- Which situations of an infantry unit set the tether link (Terms) was not traced, and no situation
+  on the map in which an infantry unit holds one is known. The link only removes the second case of
+  request A (claim 15), so it matters only for an infantry unit hurt while it holds one.
+- While a unit travels through a tunnel (S-0212 Terms), its scatter centre cell appears to be the
+  tunnel's exit cell. Tunnels belong to S-0212 and the movement specs, and this was not checked
+  further.
+- No other factor (for example a game-wide speed bias of the movement specs) is known to scale a
+  walking infantry unit's speed during a step, and F5 has none; that none exists is not confirmed.
+- The height of a walker between standing positions, while it steps across a slope or onto a bridge
+  deck, was not determined. The step of claim 6 changes only the map position, and no rule was
+  found that sets the height to S-0106's surface height on every step, so the original's walker may
+  keep the height of the position it left until it arrives, which is what our engine does (claim 6).
+  Scenario W2(e) records the height on every tick of its walks, without an expected value; a
+  measured value replaces our engine's choice.
+- A walker that chooses its walking target in a cell holding a crate takes the crate at that moment,
+  before it arrives. The crate specs should own and confirm this.
+
+## Questions for the project lead
+
+- **One owner for the screen-cover check.** The screen-cover check (Terms) and the visibility test
+  of S-0212 claim 25 are the same test of a cell. This spec states it exactly, as arithmetic on
+  height levels; S-0212 describes it by its result only, with low confidence. Proposed: this spec
+  owns it, and S-0212 claim 25 cites this Terms entry for its visibility test (applied to the
+  candidate cell at its own height level), so that S-0212 can raise its confidence in the
+  arithmetic and keep only the bridge-deck and 24-cell rules of the search as its own.
+- **S-0204 and the facing scale of S-0208 F3.** This spec puts the step's facing-to-angle scale
+  under `quirks.table_direction` (Edge cases), so that the direction and the step always use one
+  scale. S-0204 should list S-0208 F3 among the formulas its switch changes, with the off form
+  given here.
