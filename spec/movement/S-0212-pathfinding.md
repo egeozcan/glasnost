@@ -2,13 +2,13 @@
 id: S-0212
 title: Pathfinding (observable behaviour)
 topic: movement
-revision: 14
+revision: 15
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-10
 measurements: []
-requests: []
+requests: [Q-0017]
 supersedes: []
 ---
 
@@ -21,7 +21,9 @@ way to a destination: which cells count as connected at all, the reachability te
 any search, the cost of each step, the search and its limits, the two straightening passes applied
 to a found path, how many steps are kept, when a path is computed again, what happens when no path
 exists, and when the destination is replaced by a nearby cell. How a unit then moves along the kept
-steps (speed, turning, collisions, blocked-step reactions) belongs to the movement specs.
+steps (speed, turning, collisions, blocked-step reactions) belongs to the movement specs. The spec
+covers skirmish games. Network games and campaigns are out of scope for now, and the few mentions
+of them describe the original only.
 
 ## Terms
 
@@ -29,17 +31,17 @@ steps (speed, turning, collisions, blocked-step reactions) belongs to the moveme
 bridge*, *bridge deck*, *overlay*, *building*, *house*, *human-controlled*, *local area*, *legal
 cell*, *movement zone*, *locomotor*, *game minute*, *map size*, *round-toward-zero mode*,
 *departure*, *AI house*, *team member*, *importer warning*, *override section*, *trigger action*,
-*type kind* and *quirk switch* are used as in the glossary.
+*type kind*, *quirk switch*, *step direction* (written *d*) and *follower car* (with its *leader*
+and *car chain*) are used as in the glossary.
 
-Terms from other specs. The approved specs S-0003 (value forms), S-0006 (rules layering) and S-0009
-(map file semantics, which defines the *waypoint marker*) are cited by claim, and the approved spec
-S-0104 (lighting) for the *ion storm*, a global effect (table T5). Every other spec
-cited here, S-0010 included, is a draft of the same batch, and the claims cited from it stand or
-fall with that draft:
+Terms from other specs, all of them approved and cited by claim. S-0003 (value forms), S-0006
+(rules layering) and S-0009 (map file semantics, which defines the *waypoint marker*) are cited by
+claim, and S-0104 (lighting) for the *ion storm*, a global effect (table T5). The others give:
 - From S-0201 (game speed and tick rate): the **tick number** of a tick (its Terms and claim 1).
 - From S-0204 (coordinates and facing): the **table square root** *r*(*n*) of an integer
   *n* (its Formulas F1), the **8-direction** of a facing (its claim 10 and Formulas F4: the facing
-  rounded to the nearest eighth of a turn, a half step rounding up), the **direction** of one point
+  rounded to the nearest eighth of a turn, a half step rounding up, which is a step direction), the
+  **direction** of one point
   from another (its claim 8 and Formulas F3), and the roundings trunc₂₄ and trunc₅₃ (truncation
   toward zero to single and to double precision).
 - From S-0205 (number domains): every floating-point result of the original is formed with a 53-bit
@@ -59,7 +61,8 @@ fall with that draft:
   house's *firestorm*, and the rule of its claim 10 for which cells an object of a locomotion class
   may enter with a given movement zone (here: a cell is **enterable by class**).
 - From S-0208 (infantry movement): the *scatter* of an infantry unit, which uses the nearby-cell
-  search of claim 25 (S-0208 claim 13).
+  search of claim 25 (S-0208 claim 13), and the *screen-cover check* of its Terms, which is the
+  visibility test of claim 25.
 - From S-0210 (crushing): who is a *crusher* (its claim 1: the type's crusher flag or the crusher
   veterancy ability).
 - From S-0209 (occupancy and crowding): the **entry outcome** a unit gets for a neighbouring cell,
@@ -77,7 +80,8 @@ fall with that draft:
   spec cites as users of the nearby-cell search (claim 25). No rule of S-0213 is used otherwise: how
   a unit is ordered, and when an order applies, belong to S-0213 and S-0214.
 - From S-0010 (theater and tileset semantics): the **destroyable-cliff role** of a theater's tiles
-  (its claim 4 and table R). From S-0214 (order targeting rules): the *destroyable-cliff cell*, a
+  (its claim 4 and table R), the *bridge* and *wooden bridge* roles of the same table (Terms,
+  *bridge ends*), and the burrowing test of its claim 17, which is the further test of claim 25. From S-0214 (order targeting rules): the *destroyable-cliff cell*, a
   cell whose tile is the first tile of that role or the tile after it (its Terms).
 
 Terms specific to this spec:
@@ -90,11 +94,6 @@ Terms specific to this spec:
   (S-0211 Terms), placed by the map or built by a house in play. A wall line is a row of them.
 - **Vein-hole field:** the vein overlay that a vein-hole object spreads around itself and that grows
   and shrinks during play. Stock data is not known to use it.
-- **Step direction** *d*: an integer 0 to 7 naming one of the eight neighbours of a cell, *d* × 45°
-  clockwise from map north, in the facing convention of the glossary. Direction 0 is the cell at
-  (x, y − 1), 1 is (x + 1, y − 1), 2 is (x + 1, y), 3 is (x + 1, y + 1), 4 is (x, y + 1),
-  5 is (x − 1, y + 1), 6 is (x − 1, y) and 7 is (x − 1, y − 1). Even directions are *straight*,
-  odd ones *diagonal*. The 8-direction of a facing (S-0204) is a step direction.
 - **Chebyshev distance** between cells (x₁, y₁) and (x₂, y₂): max(|x₁ − x₂|, |y₁ − y₂|), in cells.
 - **Bridge cell:** a cell that carries a high bridge's bridge deck.
 - **Search layer:** a bridge cell is two places for the search: its ground and its deck. The deck
@@ -106,13 +105,25 @@ Terms specific to this spec:
   *Z* according to claims 2 to 5. Two cells in different reach regions of *Z* are treated as
   mutually unreachable for every unit of movement zone *Z*. Not the same thing as the glossary's
   *movement zone*, which is the imported category.
-- **Sector** of level *L* (*L* = 0, 1, 2): the part of one region that lies inside one aligned
-  square block of 2^(*L*+1) × 2^(*L*+1) cells (blocks start at cell coordinates that are multiples
-  of the block size). Level 0 is the finest. Each sector of level *L* < 2 lies inside exactly one
-  sector of level *L* + 1, its **parent**. Sectors are joined by **connections**. A connection that
-  stands for a link (claim 3) is *marked as a link*.
-- **Anchor cell** of a sector: the cell of the sector from which the legs of F8 are measured (Open
-  questions).
+- **Block** of level *L* (*L* = 0, 1, 2): an aligned square of 2^(*L*+1) × 2^(*L*+1) cells, starting
+  at cell coordinates that are multiples of the block size. Level 0 is the finest.
+- **Sector** of level *L*: a maximal set of cells of one region inside one block of level *L*,
+  joined through neighbouring cells whose height levels differ by at most 1 (claim 13b). Each
+  sector of level *L* < 2 lies inside exactly one sector of level *L* + 1, its **parent**.
+- **Connection:** the relation between two sectors of one level that the coarse search may step
+  across (claim 13b). A connection is either *straight* or *diagonal* (claim 13b); entering a
+  sector across a diagonal connection costs slightly more (F9).
+- **Bridge ends** of a bridge cell *X*: walking from *X* along its bridge, one cell at a time, in
+  each of the two directions of the bridge's axis (along cell x for a bridge running east–west,
+  along cell y for one running north–south; the original keeps the axis with the bridge's cells),
+  the first cell that is not a bridge cell, provided its tile is one of the 16 tiles of the bridge
+  role or of the wooden-bridge role of its theater (S-0010 claims 4 and 5, table R) and its land type
+  (S-0211) is not rock. A direction whose first such cell fails this condition has no bridge end.
+  For a bridge along x the *first* bridge end is the east one, for a bridge along y the south one.
+- **Coarse end cell** of the start or of the destination: the cell from which, or to which, the
+  coarse search runs (claim 13b).
+- **Anchor** of a bridge cell for a sector: the cell near one of its bridge ends from which a leg of
+  the coarse estimate is measured (F8).
 - **Pending:** the state of a search entry that has been recorded and not yet continued from. In the
   cell search (claims 11 and 12) the entry is a (cell, search layer) pair. In the coarse search
   (claim 13) it is a route to a sector, and one sector can have more than one pending route.
@@ -157,9 +168,6 @@ Terms specific to this spec:
   (claim 25).
 - **Loaner:** a unit only lent to its house for a while, which leaves the map again afterwards
   (claim 14).
-- **Follower car:** a vehicle linked by the map to a leading vehicle so that it follows it, as a
-  train carriage follows its engine. A leader with follower cars and the cars behind it form a
-  chain (claim 26).
 
 ## Behaviour
 
@@ -312,16 +320,16 @@ Terms specific to this spec:
      steps first and then all its straight steps, and its number of steps is the Chebyshev
      distance from start to destination. This holds for destinations up to at least 14 cells
      away along each axis. In those searches no two pending pairs have exactly the same *f* when
-     one is expanded, so the tie order of claim 12 plays no part. Neither straightening pass
+     one is expanded, so the tie order of claim 12a plays no part. Neither straightening pass
      changes such a path: it has no right-angle V of diagonal runs (claim 17), and it is already
      a shortest path, so claim 18 finds no stretch to shorten.
    - Around obstacles the search can return a path with more steps than the shortest one. The
      straightening passes (claims 17 and 18) can remove some of the extra steps before the path
      is stored.
    - Backing: `measurable` for the open-ground shape (scenario P17). `unmeasured` for the extra
-     steps around obstacles: what the unit drives is the path after claims 17 and 18, and how
-     claim 18 selects its stretches is not established, so the search's own extra steps cannot be
-     told apart from what straightening leaves
+     steps around obstacles on their own: what the unit drives is the path after claims 17 and 18,
+     which can remove them, so the search's own extra steps show only together with the
+     straightening passes (scenario P9, train run 4, and the secondary check of P1)
    - Confidence: high for the cost and estimate formulas. Medium for the open-ground shape, which
      follows from F1, F2 and T4. Medium for the obstacle consequence
 
@@ -334,7 +342,7 @@ Terms specific to this spec:
    For *moving blocker*: in search mode 2, *b* = 1000. In search mode 1, *b* = 4. In search mode 0,
    *b* depends on the **blocker chain** of the target cell: a sequence of at most 10 cells
    *c*₁, *c*₂, …, with *c*₁ the target cell. Each cell of the chain is represented by one object, the
-   first object the cell lists on the step's search layer (the occupancy specs own that order). Here
+   first object the cell lists on the step's search layer, in the listing order of S-0209 claim 13. Here
    a *unit* is a vehicle, an infantry unit or an aircraft. Whether the unit counts as moving in the
    sense of claim 27 plays no part. When the object of *c*ᵢ is a unit heading into a further cell,
    and *i* < 10, that further cell is *c*ᵢ₊₁. Otherwise *c*ᵢ is the chain's last cell, and *b* follows
@@ -412,10 +420,8 @@ Terms specific to this spec:
 
 12. **Expansion order, limits and failure.**
     - Ordering key: the next pair expanded is one with the smallest *f* among the pending pairs, those
-      recorded (claim 11) and not yet expanded. Which of several pending pairs with exactly the same
-      *f* is expanded first follows an order of the original's that this spec does not fix
-      (Questions for the project lead, "Tie order", which also describes the part of that order
-      that is known).
+      recorded (claim 11) and not yet expanded. Among several pending pairs with exactly the same
+      *f*, the one recorded first is expanded first (claim 12a, departure D7).
     - Expansion limit: a search expands at most 65527 pairs. A search that reaches the limit fails.
     - A search that reaches the destination after exactly 10000 expansions also fails
       (`quirks.path_search_10000_failure`). The count includes the end of claim 15: a search that
@@ -429,10 +435,41 @@ Terms specific to this spec:
       changing the original)
     - Confidence: high for the ordering key, the limits and the 10000 rule
 
+    12a. **Order among equal entries.** Entries of different cost keep the ordering of claims 12
+    and 13. Among pending entries of exactly the same cost, our engine takes the one recorded first:
+    - *Cell search.* The cost compared is *f*, the stored single-precision values compared exactly
+      (F1, F2). The start pair is recorded first. After it, pairs are recorded in the order of the
+      expansions that record them (claim 11), and the candidates of one expansion in generation
+      order (claim 7).
+    - *Coarse search.* The cost compared is the route cost, the stored single-precision values
+      compared exactly (F9). The route to the start's sector is recorded first. Continuing from a
+      route records its new routes (claim 13) in the order of the sectors they enter, by each
+      sector's *first cell*: its cell that comes first when cells are taken row by row (increasing
+      y, and within a row increasing x). Two sectors of one level never share a cell, so this order
+      is strict. A route that undercuts a recorded cost (claim 13) is recorded when it is found,
+      like any other route.
+
+    This order is a rule of our engine, not the original's (departure D7). The original breaks the
+    same ties by an order of its own, which this spec does not reproduce. That order depends on
+    how the original keeps its pending entries, and in the coarse search also on the order in
+    which its labelling of the map found each sector's connections. So at exact ties our engine's route can differ from the original's. In the cell search such ties
+    are rare (T4). In the coarse search they are common on open ground, where many corridors cost
+    the same (claim 13).
+    - Backing: `unmeasured`. The order above is our engine's own: a reference implementation
+      checks it, not the original. That the original's order differs from it shows only through
+      whole routes at exact ties, and which pending entries tie depends on the whole search, so no
+      practical map isolates it. The secondary checks of scenarios P1 and P12 report the runs whose
+      reference computation meets an exact tie
+    - Confidence: high that the original's order differs from this one in some ties. For example,
+      when the smallest *f* among the pending pairs is shared by exactly two candidates that the
+      expansion just made has recorded, the original continues from the later-recorded of the two
+      first, while this order continues from the earlier one
+
 13. **The corridor (coarse search).** When the corridor is used (claim 14), the cell search is
     confined to a chain of sectors found first:
-    - Each level has its own corridor, a chain of sectors from the sector holding the start cell to
-      the sector holding the destination cell. A sector can be on a level's corridor only when the
+    - Each level has its own corridor, a chain of sectors from the sector holding the start's coarse
+      end cell to the sector holding the destination's coarse end cell (claim 13b: normally the
+      start cell and the destination cell themselves). A sector can be on a level's corridor only when the
       zone table answers *yes* for the unit's movement zone and the sector's category, and, below
       level 2, only when its parent is on the corridor of the level above or its category is
       *crushable*. So, apart from *crushable* sectors, the level-2 corridor bounds the level-1
@@ -440,8 +477,8 @@ Terms specific to this spec:
     - The search at each level is a cheapest-first search without an estimate. The cost of a route
       to a sector is the cost of the route to the sector before it plus the entry cost of the new
       sector: the per-category constant of table T3 for the new sector's category, plus the threat
-      term *T* (F5) when the unit's threat coefficient *k* exceeds 0.00001 (F7), plus 0.001 for a
-      connection marked as a link. The threat term is always 0 at level 0, so threat steers the
+      term *T* (F5) when the unit's threat coefficient *k* exceeds 0.00001 (F7), plus 0.001 when
+      the route enters the new sector across a diagonal connection (claim 13b). The threat term is always 0 at level 0, so threat steers the
       corridor only through levels 1 and 2. Number domain and rounding: F9. Unlike the cell search,
       the coarse search lowers a sector's recorded cost whenever it finds a strictly cheaper route,
       so it ends with each sector at the cost of the cheapest route found to it. Each route found
@@ -479,10 +516,11 @@ Terms specific to this spec:
       in that chain or has the exemption (straightening, claims 17 and 18, may later move cells off
       it). In particular the first step of a path is normally not held to the corridor, because the
       moving unit itself gives every neighbour of the cell it is recorded in the exemption.
-      On open ground, where most sectors cost the same, the route is decided largely by how the
-      coarse search orders sectors of equal cost (Questions for the project lead).
-    - **Progress.** Number the sectors of the level-0 corridor *s*₀ (the start's sector) to *s*ₙ (the
-      destination's). For one cell search with a corridor, define cells *e*₀, *e*₁, … in turn. *e*₀
+      On open ground, where most sectors cost the same, the route is decided largely by the extra
+      cost of diagonal connections (claim 13b) and by the order in which the coarse search takes
+      routes of equal cost (claim 12a).
+    - **Progress.** Number the sectors of the level-0 corridor *s*₀ (the sector of the start's coarse
+      end cell) to *s*ₙ (that of the destination's coarse end cell). For one cell search with a corridor, define cells *e*₀, *e*₁, … in turn. *e*₀
       is the start cell, and each *e*ᵢ is the first candidate in sector *s*ᵢ that the search records
       (claim 11) after *e*ᵢ₋₁. A candidate refused as outcome *blocked*, or one whose pair was already
       recorded, is not recorded and does not count. The chain stops where no such candidate exists.
@@ -522,15 +560,15 @@ Terms specific to this spec:
       needs thousands of sectors reached at once, more than the maps of the measurement setup
       produce, and whose effect could not be told from a route choice. `unmeasured` for the corridor
       exemption: whether a found path needs an exempt cell off the chain depends on which chain the
-      coarse search picks, and on open ground that comes down to the tie order this spec leaves
-      open, so no practical map makes the exemption decide a route by itself. P1 (a) allows for it,
+      coarse search picks, and on open ground that comes down to the order of equal routes (claim
+      12a), which a test map cannot set apart from the rest of the search, so no practical map makes the exemption decide a route by itself. P1 (a) allows for it,
       and the secondary checks of P1 and P12 compare whole routes with it included, but neither is a
       test of the exemption alone
     - Confidence: medium for the overall scheme, the cost formula, the progress rule, the retry's
       two branches and the corridor exemption. High for the limit of 5 cell searches and that the
-      threat term is 0 at level 0. Low for the coarse threat at levels 1 and 2 (F5), the sector
-      construction details, the per-category constants' effect, and for when a moving unit's
-      recorded cell changes
+      threat term is 0 at level 0. Low for the coarse threat at levels 1 and 2 (F5), the per-category
+      constants' effect, and for when a moving unit's recorded cell changes. The sectors and
+      connections carry the confidence of claim 13b
 
     13a. **Free part, whole and split.** The *free part* of *S* is the set of cells of *S* that
     can be reached from the progress cell by steps in the eight directions that stay inside *S*,
@@ -572,15 +610,91 @@ Terms specific to this spec:
       uses. Medium for the probe cell and for the reasoning on where the category part can show. The
       effect of both on the original's routes has not been checked
 
-14. **When the corridor is used.** The corridor is used only when all of these hold: the unit's
-    type is not a train; the unit has entered the usable area (a unit that arrives from outside it
-    counts as outside until it has first entered); both the start cell and the destination cell
-    are inside the usable area; and the unit is not in the corridor-disabling state. The unit is in
+    13b. **Sectors, connections and coarse end cells.**
+    - *Sectors.* At each level, the cells of one region that lie in one block form one sector or
+      more: two of them are in the same sector when a chain of neighbouring cells (eight
+      directions) of that region inside that block joins them, each two consecutive cells of the
+      chain differing by at most 1 height level. The join of claim 3 along cell x across 2 or 3
+      levels does not apply here, so where a region holds together only through such a step, its
+      two sides are different sectors, and no connection joins them directly (below). Unless other
+      sectors connect them, the coarse search then fails between them, and the table of claim 13
+      applies. Off-map cells belong to no sector. A
+      sector's category is its region's, which all its cells share. By this rule a sector lies
+      inside one sector of the next level, its parent.
+    - *Connections.* Two sectors of one level are connected when they contain two neighbouring cells
+      (eight directions), both inside the usable area, whose height levels differ by at most 1,
+      whatever the two sectors' categories and regions. Unlike the adjacency of regions in claim 3,
+      a sector of category *blocked* has no exception from the height limit. A connection is
+      *diagonal* when every such pair of cells between the two sectors is a diagonal pair whose two
+      cells lie in different block columns of that level, so that the pair crosses the left or right
+      edge of a block on the slant, and *straight* otherwise. On open ground, where each block is one
+      sector, a block's sector therefore has straight connections to the four blocks beside it and
+      diagonal ones to the four blocks at its corners.
+    - *Links.* An enabled link (claim 3) adds connections at every level, all of them straight, with
+      no height or usable-area condition: between the sectors of its two end cells and, for a
+      bridge, also between the sectors of the cell beside one end cell and the cell beside the
+      other end cell on the same side of the bridge, for each of the two sides across the bridge's
+      axis. Which side is which comes from the end cell's tile. For two of the 16 tiles of each
+      bridge role the original takes the two diagonal neighbours (north-west and south-east)
+      instead; whether those tiles occur at a link's end is not established. For a tunnel, which cells besides its two end cells are joined is not established.
+      In our engine two sectors share at most one connection: when a link joins two sectors that are
+      already connected, their connection is straight. The original can keep the two side by side,
+      which gives the same route costs (departure D7).
+    - *Coarse end cells.* The coarse search runs from the start's coarse end cell to the
+      destination's. The start's is the start cell, except when the unit is on a bridge deck; the
+      destination's is the destination cell, except when that is a bridge cell. In those two cases
+      the coarse end cell is a cell at an end of the bridge, on the same lane as the cell *X*
+      concerned, given by the table below. The coarse estimate of claim 24 finds its coarse end
+      cells in the same way, with the found cell in place of the start, which counts as on a bridge
+      deck when it is a bridge cell. The corridor condition of claim 14 reads the coarse end cells.
+
+      The bridge's link is a link of a bridge whose two end cells lie on one line along cell x
+      or cell y with *X* between them along that line and at most 2 cells to the side of it. When
+      more than one link meets this condition, the original takes the first in the order in which
+      it creates links, and that order is not established (Open questions). With *o* the distance,
+      signed, by which *X* lies to the side of the link's first end cell across that line, the two
+      **lane cells** are the link's two end cells, each moved by *o* across the line. *Y* is the
+      nearest cell that is not a bridge cell, going from *X* east along cell x for a link along
+      cell x, or south along cell y for a link along cell y.
+
+      | Link of *X* | Condition | Coarse end cell |
+      |---|---|---|
+      | found, enabled | — | the lane cell nearer to *X*, by the table square root (S-0204) of the squared distance in cells truncated to a whole number; the lane cell at the link's second end when both distances are equal |
+      | found, not enabled | *Y* meets the condition of a bridge end (Terms: its tile is one of the 16 tiles of the bridge or wooden-bridge role of its theater, and its land type is not rock) | the lane cell at the link's second end |
+      | found, not enabled | *Y* does not meet that condition | the lane cell at the link's first end |
+      | none found | at least one of *X*'s two bridge ends lies inside the usable area | the nearer of those of *X*'s bridge ends that lie inside the usable area; the first bridge end on equal distance |
+      | none found | neither bridge end lies inside the usable area | the original reads undefined data; our engine uses *X* itself (departure D6) |
+
+    - *The original's labelling.* The original builds sectors and connections by labelling the map
+      in a fixed order, as it builds regions (claim 3), and its result can differ from the rule
+      above in three ways: a sector can be split where only a diagonal pair of its cells joins two
+      parts whose other neighbours differ by 2 or more height levels; a connection that rests on
+      such a diagonal pair alone can be missing; and a connection can be diagonal in the original
+      although the two sectors also have a straight pair, when its labelling met a diagonal pair
+      across a block's left or right edge first. The first two need neighbouring cells 2 or more
+      levels apart. The third is common wherever a region's border meets a block's left or right
+      edge, but it changes only the extra cost of 0.001. On ground whose neighbouring cells differ
+      by at most 1 level, the original's sectors and connections are those of the rule. Our engine
+      follows the rule (departure D4).
+    - Backing: `measurable` only in aggregate, through the routes of scenarios P1 and P12 and their
+      secondary checks. `unmeasured` for the coarse end cells on a bridge: a corridor that starts
+      in the wrong sector changes only which corridor is chosen, and a coarse search that fails
+      falls back on a search without a corridor that still finds a path, so no route isolates them
+    - Confidence: medium for the sectors, the connections and their two kinds as stated, and for
+      the agreement with the original on ground without steps of 2 levels or more. Low for the
+      links' side cells and for the coarse end cells on a bridge
+
+14. **When the corridor is used.** The corridor is used only when all of these hold: the unit
+    has entered the usable area (a unit that arrives from outside it
+    counts as outside until it has first entered); the coarse end cells of the start and of the
+    destination (claim 13b) are inside the usable area; and the unit is not in the corridor-disabling state. The unit is in
     that state when it has entered the usable area and any of these holds: its type is a train; it
     is a loaner; its current behaviour is *retreat*; or it is a team member whose team is carrying
     out a "move to a waypoint marker" script step whose waypoint marker lies outside the usable
     area, the team being in its moving state for that step and its script not yet finished. Other
-    script steps that move a team, such as "move to a cell", do not put a unit in this state. When
+    script steps that move a team, such as "move to a cell", do not put a unit in this state. So a
+    train never uses the corridor: before it has first entered the usable area the first condition
+    fails, and afterwards it is in the corridor-disabling state. When
     the corridor is used and the reach regions of start and destination (the destination after
     claim 24) differ, the path computation fails at once. That failure counts as a failed
     search with the gate passed, so the search-failure rows of claim 23 apply. Without the corridor,
@@ -734,43 +848,123 @@ Terms specific to this spec:
       path's 20th step, where claim 18 does not act (scenario P1, expectation (b), long runs).
       `unmeasured` for the threat test and `quirks.flatten_threat_start_cell`, for the order of
       judging and for V's of straight runs: a V arises only where obstacles or the corridor bend the
-      path, and on open ground which corridor is chosen depends on the tie order left open by claim
-      12, so no practical map can place a threatened cell, two V's that share a run, or a V of
+      path, and on open ground which corridor is chosen depends on the order of equal routes (claim
+      12a), so no practical map can place a threatened cell, two V's that share a run, or a V of
       straight runs at a known point of a found path. The examples serve a reference implementation
       and the secondary check of P1
     - Confidence: medium. Medium also for V's of straight runs and their displacement, which no
       measurement backs
 
-18. **Early detours are shortened.** This pass works on the path as claim 17 has left it: the
-    20 steps are counted, and stretches judged, on the path after the flattening of claim 17, so the
-    two passes together can give a path that neither pass alone would give. Within the first 20
-    steps of the path only, a stretch whose number of steps is larger than the Chebyshev distance
-    between its two ends is replaced by a shortest stretch with the same ends. The replacement has
-    one of two shapes: all diagonal steps first and then all straight steps (*diagonal-first*), or
-    all straight steps first and then all diagonal steps (*straight-first*). The diagonal-first
-    shape is used when it is acceptable, and otherwise the straight-first shape when that one is.
-    When neither is acceptable, the stretch stays as it is. A shape is acceptable only if every cell
-    on it has entry outcome *clear* and carries no congestion mark, and if its count of cells with
-    threat value × *k* ≥ 0.01 (F7), each cell's own threat value being used, stays within a limit.
-    The limit is 0 for every stretch except the one that closes the examined part of the path (the
-    stretch that ends where the 20-step scan or the path ends), for which it is 3. Threat is counted
-    only when *k* exceeds 0.00001. Tunnel steps are never part of a stretch. The stretch's steps
-    that become unnecessary are removed from the path.
+18. **Early detours are shortened.** This pass works on the path as claim 17 has left it, so the
+    two passes together can give a path that neither pass alone would give. It examines the first
+    20 places of that path (below) and replaces some *stretches* (runs of consecutive steps) by shorter or
+    reordered ones with the same two ends. The rule is given by definitions; worked examples follow.
 
-    Which stretches are examined, and in which order, is only partly established (Open
-    questions). What is known: a stretch can begin at the path's first step, so this pass can
-    change the first step. A train's path to a cell behind it (claim 16) is shortened in this way:
-    its first steps lead sideways only because the search may not enter the cells behind the train,
-    and the pass replaces its opening steps by a shorter stretch that begins with a diagonal step
-    from the start into a cell behind the train.
-    - Backing: `measurable` only with test data, for the shortening at the start of a path
-      (scenario P9, train runs 2 and 3). `unmeasured` for the rest of the stretch selection: its
-      rule is not established, so no scenario can state a path that only the original's selection
-      gives. Train runs 2 and 3 test that the shortening happens and how many steps remain, not
-      which stretch is chosen. The secondary check of P1 compares whole paths with claims 7 to 18
-      taken together, but it is not a test of the selection
-    - Confidence: low for how the stretches are chosen. Medium for the shortening at the start of
-      a path, the acceptance rule and the order of the two shapes
+    *Shapes and acceptance.* A stretch from cell *s* to cell *e* is replaced by one of two shapes
+    with the same ends and with as many steps as the Chebyshev distance between them: all diagonal
+    steps first and then all straight steps (*diagonal-first*), or all straight steps first and then
+    all diagonal steps (*straight-first*). The diagonal-first shape is used when it is acceptable,
+    and otherwise the straight-first shape when that one is; the diagonal-first shape is not tried
+    when the ends lie on one straight line, nor the straight-first shape when they lie on one
+    diagonal line. When neither is acceptable, or when *s* and *e* are the same cell, the stretch
+    stays as it is. A shape is acceptable only if every cell it enters has entry outcome *clear*
+    and carries no congestion mark, and if its count of entered cells with threat value × *k* ≥
+    0.01 (F7), each cell's own threat value being used, stays within a limit. The limit is 0, except
+    for the closing stretch (below), for which it is 3. Threat is counted only when *k* exceeds
+    0.00001. The replacement can have as many steps as the stretch: then the stretch only changes
+    the order of its steps. The new steps take the first places of the stretch, and its remaining
+    places become *removed steps*, which are dropped from the path when the pass ends.
+
+    *What the pass judges on.* The first 20 places of the path are examined, removed steps included
+    once they arise. The legs, the reference distances and the triggers below are judged on the path
+    as this pass received it; the choice of each stretch and the acceptance test see the path as
+    the earlier replacements of this pass have left it. A replacement keeps both ends of its
+    stretch, so every later step still starts and ends on the cells it did.
+
+    *Legs.* The examined steps fall into *legs*. The first leg begins at the start cell. A step
+    *turns back* when, added to the displacement of its leg so far (from the leg's first cell), it
+    makes the absolute value of the x or the y component smaller. A step that turns back begins a
+    new leg at the cell it starts from, and is then the first step of that new leg; the first step
+    of a leg never turns back.
+
+    *Reference distance and triggers.* Each examined step has a *reference distance*, compared with
+    a *record*:
+    - In the first and second legs, the reference distance of a step is the Chebyshev distance from
+      the start cell to the cell the step ends on, and the record starts at 0.
+    - When the third or a later leg begins, at cell *p*, let *q* be the first cell of the leg before
+      it. The record is set to the Chebyshev distance between *q* and *p*. From then on the
+      reference distance of a step ending on cell *e* is the Chebyshev distance from *q* to the
+      cell 2*p* − *e*, the end cell mirrored through *p* (`quirks.detour_mirrored_reference`; with
+      the switch off, the distance from *q* to *e* itself).
+    - A step whose reference distance is larger than the record raises the record to it. A step
+      whose reference distance is not larger *triggers* a replacement of the stretch that ends on
+      the cell the step ends on.
+
+    *The stretch of a trigger.* A stretch is a run of consecutive places of the path. The stretch
+    of a trigger ends with the trigger step's place, on its end cell *e*. Its *earliest place* is,
+    in the first and second legs, the path's first place, and from the third leg on, the place of
+    the first step of the leg before the current one. Number the steps that are not removed, from
+    the earliest place to the stretch's last place (the trigger step's place, or for the closing
+    stretch the last examined place) in path order, *σ*₁, …, *σ*ₜ, and let *d*ᵢ be the
+    Chebyshev distance from *e* to the cell where *σ*ᵢ starts. *σ*ᵢ is a *new maximum* when *d*ᵢ
+    is larger than every *d*ⱼ with *i* < *j* ≤ *t*, so *σ*ₜ always is one. Let *u* be the largest
+    *i* for which *σ*ᵢ is not a new maximum. When *u* exists and some *σ*ᵢ with *i* < *u* is a new
+    maximum, let *v* be the largest such *i*: the stretch begins at the place right after
+    *σ*ᵥ's place. Otherwise it begins at the earliest place. Either way the removed steps in it
+    stay places of the stretch, also those before its first step that is not removed, so the
+    replacement's new steps can take a place that a removed step held. The stretch runs from the
+    cell where its first step that is not removed starts to *e* (from *e* to *e*, so it stays as it
+    is, when every place of it is removed).
+
+    *The closing stretch.* When the examined part has ended (after its 20th place or at the end of
+    the path) and at least one step turned back, let *p* be the first cell of the last leg, *e* the
+    cell where the examined part ends and *m* the number of places from the last leg's first step to
+    the end of the examined part, removed steps included. When the Chebyshev distance between *p*
+    and *e* is smaller than *m* − 1, the stretch ending on *e* is replaced as for a trigger, its
+    earliest place being the place of the last leg's first step, its last place the last examined
+    place, and its threat limit 3.
+
+    *Tunnel steps.* A tunnel step ends every leg and the reference: the pass starts afresh after it,
+    with the next step's place as the earliest place, as on a new path that begins at the cell to the north
+    of the tunnel entrance instead of the tunnel exit (`quirks.detour_after_tunnel_position`; with
+    the switch off, at the tunnel exit). A tunnel step is never part of a stretch.
+
+    *Worked examples* (directions as in Terms, steps counted from 1, every cell entered by a shape
+    clear, no congestion mark, no threat, switches at their defaults):
+    - (a) The path 1, 3, 4, 5, 4, 4 from (*x*, *y*), ending at (*x* + 1, *y* + 4), with the cell
+      (*x* + 1, *y*) not clear, so that claim 17 leaves it as it is (the path of scenario P9, train
+      run 4). The first step ends at distance 1 from the start and sets the record
+      to 1. The second step (3) turns back, since the y component of the leg shrinks from 1 to 0, so
+      the second leg begins at (*x* + 1, *y* − 1); its end cell (*x* + 2, *y*) raises the record to 2.
+      The third step ends on (*x* + 2, *y* + 1), also at distance 2: it triggers. From that cell
+      the distances *d* to the cells where the three steps start are 2, 2 and 1 in path order, so
+      *σ*₁ is the only step that is not a new maximum, no step comes before it, and the stretch
+      begins at the earliest place, the path's first: the stretch 1, 3, 4 becomes the diagonal-first shape 3, 2 with one removed step. The fourth step
+      (5) turns back, since x shrinks, so the third leg begins at *p* = (*x* + 2, *y* + 1) with
+      *q* = (*x* + 1, *y* − 1) and record 2. The fourth step ends on (*x* + 1, *y* + 2), whose mirror
+      through *p* is (*x* + 3, *y*), at distance 2 from *q*: it triggers, and its earliest place is the
+      second. The steps from there are the 2 at the second place and the 5 at the fourth, with
+      *d* = 1 and 1, so the stretch begins at the earliest place, and the stretch (2, a removed
+      step, 5) becomes the single step 4. The fifth and sixth steps trigger in the same way and keep the stretch straight. The stored
+      path is 3, 4, 4, 4. The closing stretch has *m* = 3 and distance 3, so it is left alone. With
+      `quirks.detour_mirrored_reference` off, the third leg's steps reach distances 3, 4 and 5 from
+      *q*, nothing more triggers, and the stored path is 3, 2, 5, 4, 4.
+    - (b) The path 2, 4, 4, 5, 4, 4, 4 from (*x*, *y*) (scenario P9, train run 2, after claim 17).
+      The first step sets the record to 1. The second step ends on (*x* + 1, *y* + 1), also at
+      distance 1: it triggers, the distances *d* are 1 and 1, so the stretch begins at the earliest
+      place, and the stretch 2, 4 becomes
+      the single step 3. The third step raises the record to 2. The fourth step (5) turns back, since
+      x shrinks, so the second leg begins at (*x* + 1, *y* + 2); its steps end at distances 3, 4, 5
+      and 6 from the start and trigger nothing. The closing stretch has *m* = 4 and distance 4, so it
+      is left alone. The stored path is 3, 4, 5, 4, 4, 4.
+
+    - Backing: `measurable` with test data (scenario P9, train runs 2 to 4, whose expected paths
+      follow from claims 7 to 18 with no exact tie), for the stretch selection, the mirrored
+      reference and the shortening at the start of a path. The secondary check of P1 compares whole
+      paths with claims 7 to 18 taken together. `unmeasured` for the threat limits and for tunnel
+      steps (stock data has no tunnels)
+    - Confidence: medium for the selection and the acceptance rule, and for the order of the two
+      shapes
 
 ### Re-paths and congestion
 
@@ -853,7 +1047,9 @@ Terms specific to this spec:
     computes no new path while its retry delay runs, with these exceptions: the immediate
     recomputation of claim 20 (drive locomotor), the computation a follower car makes when its
     leader sends it after itself (claim 26), and the immediate new path of a walker that meets an
-    obstacle (S-0209 claim 7, walk locomotor). For the drive locomotor:
+    obstacle (S-0209 claim 7, walk locomotor). The delay after a follower car's computation is
+    claim 26's, not the fresh-search rule below: in particular a failed gate leaves the car's delay
+    unchanged. For the drive locomotor:
     - A fresh search (no stored steps left) waits for the delay to be over. After a fresh search
       that fails, or whose gate fails (claim 6), the delay *R* runs from the tick of that search.
       After a fresh search that succeeds, no delay runs.
@@ -871,7 +1067,8 @@ Terms specific to this spec:
       re-paths and C19 for the immediate new path). `unmeasured` for a walker's delay after a failed
       search or a failed gate: what a walker does after such a failure belongs to S-0209 and S-0215,
       and the delay would show only as the timing of a later search that those reactions also
-      decide
+      decide. `unmeasured` for the delay after a follower car's computation, for the reason claim 26
+      gives
     - Confidence: medium (for the walk locomotor: medium for the delays as stated)
 
 22. **Blocked next step (drive locomotor).** For a unit with the drive locomotor, when the entry
@@ -920,7 +1117,8 @@ Terms specific to this spec:
       two conditions hold. First, the distance between the centres of that cell and the destination
       cell (F6b) is smaller than *D*ᵤ. Second, a coarse estimate *E* of the route length from that
       cell to the destination is at most their Chebyshev distance plus 6 cells. *E* comes from the
-      coarse search of claim 13 alone, run for the unit's own movement zone, with no exception for
+      coarse search of claim 13 alone, run between the coarse end cells of claim 13b for the unit's
+      own movement zone, with no exception for
       an infantry type with the jumpjet flag (which uses movement zone *infantry* only in the
       coarse search of a path computation, claim 13). The one exception is a unit of movement zone
       *subterranean* whose destination passes the further test of a cell named in claim 25: *E* is
@@ -951,9 +1149,12 @@ Terms specific to this spec:
     - Backing: `measurable` (scenario P7, run 3b for the height rule, run 10 for the destination's
       level on a bridge and so for `quirks.substitution_centre_ground_level`, run 9 for wall cells,
       runs 8 and 8b for the estimate test). `unmeasured` for the movement zone of the estimate *E*
-      of a jumpjet infantry type, which no scenario sets up
+      of a jumpjet infantry type, which no scenario sets up, and for the legs of F8, which apply only
+      when the found cell or the destination is a bridge cell and change *E* by a few cells, an
+      effect no scenario of this spec isolates
     - Confidence: medium for the triggers, the distance test and the height rule. High for the
-      wall-cell consequence. Low for the estimate details
+      wall-cell consequence. Medium for the estimate away from bridges. Low for the legs of F8 and
+      the coarse end cells on a bridge (claim 13b)
 
 25. **The nearby-cell search.** Around a centre cell (*c*ₓ, *c*ᵧ), the original examines square
     rings of Chebyshev radius *r* = 0, 1, 2, … cells, up to a largest radius of 31 cells, or of
@@ -1008,8 +1209,13 @@ Terms specific to this spec:
       cell and the use is in deck mode (in claim 24's use, `quirks.substitution_centre_ground_level`
       off changes this to plus 4 whenever the centre is a bridge cell; no other use is changed).
       Bridge cells may qualify in every use of the search,
-    - when the user asks for it, it passes a further test of a cell, whose content is not
-      established (Open questions). Claim 24 asks for it only for a unit of movement zone
+    - when the user asks for it, it passes the *further test* of a cell, which is the burrowing test
+      of S-0010 claim 17: the test of whether a tunnelling unit may dig in or come up on the cell.
+      Every cell outside the usable area passes it. A cell inside it passes only when its tile
+      belongs to a tileset with the allow-burrowing flag, it is flat (slope shape index 0), it is
+      not a bridge cell, and its ground layer holds no building and no terrain object; the
+      original also refuses some other cells of a bridge's structure, by a mark it keeps on them that
+      was not identified further (S-0010 owns the full rule). Claim 24 asks for it only for a unit of movement zone
       *subterranean*, and only when the destination itself passes the same test. It is one test of
       a cell, applied first to the destination: when the destination passes it, every candidate cell
       must pass it too and the estimate *E* of claim 24 uses movement zone *normal*; when the
@@ -1026,9 +1232,12 @@ Terms specific to this spec:
     comes first: the 24th collected cell, even in the middle of a ring; or the end of the first ring
     that contains a collected cell passing the *visibility test* (in deck mode: the
     first ring that contains any collected cell). Short of the 24-cell cut, that ring contributes all
-    of its qualifying cells, and no later ring contributes any. A cell passes the
-    visibility test when it is not hidden on the screen by higher terrain in front of it: the cell
-    that the battlefield view shows at the position of the cell's centre is the cell itself. Among
+    of its qualifying cells, and no later ring contributes any. The *visibility test* is the
+    screen-cover check of S-0208 (its Terms), which owns its arithmetic, applied to the candidate
+    cell at its own height level: a bridge cell is judged at its ground height level, also in deck
+    mode, and the high-bridge raise of the cells in front of it applies as S-0208 states it. A cell
+    passes when it passes that check, that is, when no higher terrain in front of it hides its
+    centre on the screen. Among
     the collected cells, those passing the visibility test are preferred when there are any. The
     result is the preferred cell nearest to the reference cell: the one with the smallest table
     square root of (Δx² + Δy²) in cells (S-0204), which for the distances of this search orders the
@@ -1047,11 +1256,12 @@ Terms specific to this spec:
       an unreachable cell and a rally point). `unmeasured` for the other rows of T5 (the no-move
       orders of units in the air, underground or of a jumpjet type, and orders onto an object):
       they differ from the move-order row only in parameters that need a flying, underground or
-      jumpjet unit next to occupied cells, and their further test is not established.
+      jumpjet unit next to occupied cells, and the state under which they ask for the further test
+      is not established.
       `unmeasured` for the 24-cell limit and the stop rule in deck mode. Both differ from the plain
       ring rule only when every qualifying cell of the inner rings fails the visibility test, which
-      needs terrain built to hide whole rings, and the visibility test itself is known only by its
-      result. `unmeasured` for the double entry of the centre: in claim 24 the centre normally does
+      needs terrain built to hide whole rings (S-0208's scenario W7, part f, tests the check itself
+      on uneven ground). `unmeasured` for the double entry of the centre: in claim 24 the centre normally does
       not qualify, and a scatter's centre qualifies only in the case S-0208 claim 13 names (the
       empty destination cell of a walking unit), while a scatter without a threat point is accepted
       only while the unit's locomotor is not moving (S-0208 claim 11), so that case cannot be set up
@@ -1061,13 +1271,15 @@ Terms specific to this spec:
       scenario O14, step 5, covers the rally point of an aircraft factory)
     - Confidence: high for the occupancy condition and the class rule. Medium for the ring rule, the
       scan order, the 24-cell limit, the distance choice, the choice without a reference cell and
-      the parameters of table T5. Low for the visibility test and for the condition under which
-      the no-move rows of T5 ask for the further test (Open questions)
+      the parameters of table T5. Medium that the visibility test is S-0208's screen-cover check
+      and that the further test is S-0010's burrowing test, each applied as stated; their content
+      carries the confidence of those specs. Low for the condition under which the no-move rows of
+      T5 ask for the further test (Open questions)
 
 ### Linked vehicles
 
 26. **Follower cars are sent after the leader.** When a leading vehicle that is not itself a
-    follower car obtains a path with at least one step, each car of its chain is given, in that tick, a
+    follower car obtains a path with at least one step, each car of its car chain is given, in that tick, a
     destination: the first car the cell one step back from the leader's destination, against the
     direction of the last step of the whole path found (not only of its stored part), and each
     later car the cell one step further back in the same direction. A car whose current destination
@@ -1075,7 +1287,9 @@ Terms specific to this spec:
     computes its path at once under this spec, with its own reachability gate and search. It does so
     even while its own retry delay runs (the second exception of claim 21). Afterwards the car's
     retry delay is as follows: none after a found path, the delay *R* from that tick after a failed
-    search, and unchanged after a failed gate. What else follows a failure is claim 23, except that
+    search, and unchanged after a failed gate. The last is an exception to claim 21, by which a
+    failed gate after a fresh search starts *R*: the car's computation is not a fresh search. What
+    else follows a failure is claim 23, except that
     when exactly a drive-locomotor car's destination is cleared after such a failure is not
     established (Open questions).
     - Backing: `measurable` only with test data (scenario P9, follower runs 1 to 3). Stock data is
@@ -1214,19 +1428,29 @@ integer threat value *t* of a cell and compare it exactly with a binary64 consta
 17, ≥ the binary64 value nearest 0.01 in claim 18. The coefficient test "*k* exceeds 0.00001" of
 claims 13 and 18 compares *k* exactly with the binary64 value nearest 0.00001.
 
-**F8. Legs of the coarse estimate (claim 24).** Let *n* be the number of level-0 corridor sectors
-from the found cell's sector to the destination's.
-- When the destination is a bridge cell and the found cell is a bridge cell of the same bridge, *E*
-  is just their Chebyshev distance, and no legs apply.
-- Otherwise, when the destination is a bridge cell, a leg equal to the Chebyshev distance from the
-  destination to the anchor cell of the corridor sector second from the destination's end (the
-  destination's own sector when *n* < 4) is added.
-- When the found cell is a bridge cell, a leg equal to the Chebyshev distance from the found cell to
-  the anchor cell of the corridor sector second from the found cell's end (the found cell's own
-  sector when *n* < 4) is added.
+**F8. Legs of the coarse estimate (claim 24).** The coarse search of the estimate runs from the
+found cell's coarse end cell to the destination's (claim 13b). Let *s*₁, …, *s*ₙ be the sectors of
+its level-0 corridor, *s*₁ holding the found cell's coarse end cell and *s*ₙ the destination's.
+- When the found cell and the destination are both bridge cells of one bridge (both on the same
+  bridge link, each at most 3 cells to the side of its line, between its two end cells), *E* is
+  just their Chebyshev distance, and no legs apply.
+- Otherwise, when the destination is a bridge cell, a *destination leg* is added: the Chebyshev
+  distance from the destination to its anchor for *s*ₙ₋₁ when *n* ≥ 4, and for *s*ₙ when *n* < 4.
+  When the anchor for *s*ₙ₋₁ does not exist, the anchor for *s*ₙ is used; when that does not exist
+  either, the destination's coarse end cell takes its place.
+- When the found cell is a bridge cell, a *found-cell leg* is added in the same way: the Chebyshev
+  distance from the found cell to its anchor for *s*₂ when *n* ≥ 4 and for *s*₁ when *n* < 4, then
+  its anchor for *s*₁, then its coarse end cell.
 
-Integers, in cells. Which cell of a sector is its anchor cell is not established (Open questions).
-Our engine's choice until then is a question for the project lead.
+The **anchor** of a bridge cell *X* for a sector *S* is the first of these six cells that lies inside
+the usable area and whose level-0 sector is *S*: *X*'s first bridge end (Terms), the two cells beside
+it across the bridge's axis, *X*'s second bridge end, and the two cells beside that. For a bridge
+along cell x the order is: east end, the cell south of it, the cell north of it, west end, the cell
+south of it, the cell north of it. For a bridge along cell y: south end, the cell west of it, the cell
+east of it, north end, the cell west of it, the cell east of it. A missing bridge end contributes no
+cells. When none of the six qualifies, the anchor does not exist.
+
+Integers, in cells.
 
 **F9. Coarse route cost (claim 13).** For a route reaching sector *s* from sector *q*:
 
@@ -1234,10 +1458,11 @@ Our engine's choice until then is a question for the project lead.
 
 *κ*(*s*) is the T3 constant for *s*'s category, cost(*q*) the stored single-precision cost of the
 route to *q* (0 for the start sector), *T* the integer threat term of F5 (0 when the coefficient test
-fails), and *λ* the binary64 value nearest 0.001 for a connection marked as a link, otherwise 0. Unit:
+fails), and *λ* the binary64 value nearest 0.001 when the route enters *s* across a diagonal connection
+(claim 13b), otherwise 0. Unit:
 cost units. A sector already reached gets the new route only when the new stored cost is strictly
-smaller than its stored cost (an exact comparison). Under the round-toward-zero mode the link term
-adds less than 0.001 once a cost reaches 2¹³ cost units, and nothing once it reaches 2¹⁴. Costs that
+smaller than its stored cost (an exact comparison). Under the round-toward-zero mode the diagonal
+term adds less than 0.001 once a cost reaches 2¹³ cost units, and nothing once it reaches 2¹⁴. Costs that
 large arise only with large threat terms.
 
 ## Constants
@@ -1255,6 +1480,10 @@ large arise only with large threat terms.
 | Cell searches per path | 5 | searches | claim 13 |
 | Recorded-pair margin | 1.009 | cost units | claim 11 (corner case only), F1 |
 | Blocker chain | 10 | cells (one object each) | claim 8 |
+| Blocker chain deck rule | 3 | height levels | claim 8: a further cell is read on its deck when the unit heading into it stands at least this much higher |
+| Deck layer height | 4 | height levels | Terms, *search layer*; claims 10 and 25 |
+| Train exclusion deck rule | 2 | height levels | claim 16: the deck is excluded when the start's search layer is at least this much higher |
+| Stored steps of a qualifying unit | 2 (vehicle), 3 (infantry unit) | steps, at least | claim 19 |
 | Congestion-mark cost factor | 4 | factor (dimensionless) | *τ* in F1; claims 9, 19 |
 | Corridor levels | 3 | levels | block sizes 2, 4 and 8 cells |
 | Region join limit | 1 | height levels | claim 3 |
@@ -1268,7 +1497,10 @@ large arise only with large threat terms.
 | Close-case distance | 511 | leptons | claim 27 |
 | Close-case facing reversal | 32767 | facing units | claim 27, `quirks.opposite_facing_reversal` |
 | Threat thresholds | 1.0, 0.01, 0.00001 | 1.0 and 0.01: threat value × coefficient. 0.00001: coefficient (all dimensionless) | claims 13, 17, 18, F7 |
-| Link connection cost | 0.001 | cost units | claim 13, F9 |
+| Diagonal connection cost | 0.001 | cost units | claims 13 and 13b, F9 |
+| Lane reach of a bridge link | 2 | cells to the side of the link's line | coarse end cells, claim 13b |
+| Lane reach for the same-bridge test | 3 | cells to the side of the link's line | F8 |
+| Bridge-role tiles that count as a bridge end | 16 | tiles per role | Terms, *bridge ends* |
 | Ticks per game minute | 900 | ticks per game minute | glossary |
 | Leptons per cell | 256 | leptons | glossary |
 
@@ -1348,6 +1580,16 @@ Ordering consequences:
   along each axis, and the pair 6 and 0 gives direction 0 instead of 7. The stored path then no longer ends on the
   cell the search reached. Off: no run of straight steps opens a V, so only V's of diagonal runs are
   flattened and the path always ends where the search ended.
+- **`quirks.detour_mirrored_reference`** (default: on). From the third leg of claim 18 on, the
+  reference distance of a step is measured from the previous leg's first cell *q* to the step's end
+  cell mirrored through the current leg's first cell, so triggers there bear no fixed relation to
+  how far the path has really got from *q*: stretches can be replaced that are not detours (they
+  are only reordered into one of the two shapes), and detours can be missed. Off: the reference
+  distance is the Chebyshev distance from *q* to the step's end cell.
+- **`quirks.detour_after_tunnel_position`** (default: on). After a tunnel step, claim 18 starts
+  afresh as if the rest of the path began at the cell north of the tunnel entrance, so the cells it
+  checks and the stretches it replaces after a tunnel are those of a path shifted away from where
+  the unit will really be. Off: it starts afresh at the tunnel exit.
 - **`quirks.path_congestion_toggle`** (default: on). The congestion marks of claim 19 follow the
   parity of each cell's count, so a cell counted twice is left unmarked, and a cell that already
   carried the congestion mark loses it during the search when its count is odd. Off: during the search a
@@ -1423,11 +1665,20 @@ Ordering consequences:
   undefined. Our engine keeps the destination unchanged, so the search approaches the building
   under claim 15. This needs no importer warning, because the cause is the game situation, not the
   data.
-- **Departure D4 (proposed): region corner cases.** In rare height configurations the original's
-  regions differ from the rule of claim 3 (smallest known case in claim 3). The difference comes
-  from the order in which the original labels the map, and reproducing it would mean reproducing that
-  labelling exactly. Our engine follows the rule of claim 3. Whether to accept this departure is a
+- **Departure D4 (proposed): labelling-order cases of regions and sectors.** In rare height
+  configurations the original's regions differ from the rule of claim 3 (smallest known case in
+  claim 3). Its sectors and connections can differ from the rule of claim 13b in the three ways that
+  claim lists: two of them need neighbouring cells 2 or more height levels apart, while the third,
+  a connection that the original makes diagonal although a straight pair exists, is common but
+  changes only the extra cost of 0.001 in the coarse search. Each difference comes from the order
+  in which the original labels the map, and reproducing it would mean reproducing that labelling
+  exactly. Our engine follows the rules of claims 3 and 13b. Whether to accept this departure is a
   question for the project lead.
+- **Departure D6: coarse end cell of a bridge cell with no answer.** When the coarse end cell of
+  claim 13b is sought for a bridge cell that belongs to no bridge link and neither of whose bridge
+  ends lies inside the usable area, the original reads undefined data. Our engine uses the bridge
+  cell itself as the coarse end cell. The case is not known to arise in stock play, and no importer
+  warning is needed, because the cause is the map situation.
 - **Departure D5: rules for computer-controlled owners only.** This is a design choice of scope,
   the kind of departure the glossary entry *departure* allows, and it follows the project lead's
   decision recorded under the glossary entry *AI house*. Three rules of the original apply to
@@ -1443,6 +1694,20 @@ Ordering consequences:
   queues *guard*, gets no destination from its house and always uses its own coefficient. There is
   no switch. Our AI may reproduce the original's result through ordinary orders. The measurement
   scenarios that use a computer-controlled house measure the original.
+- **Departure D7 (proposed): order among exactly equal entries.** Claim 12a gives our engine's
+  order among pending entries of exactly the same cost: the entry recorded first goes first, and in
+  the coarse search a route's new routes are recorded in the order of the sectors' first cells. The
+  original breaks the same ties by an order of its own, which depends on how it keeps its pending
+  entries and on the order in which its labelling of the map finds connections (claim 13b).
+  Reproducing it would fix the data structures of both searches and would need the original's
+  labelling order, which this spec does not establish (departure D4). Our engine does not reproduce
+  it, and there is no switch. Routes can therefore differ from the original's where the search meets
+  an exact tie: rarely in the cell search (T4), often in the coarse search on open ground. In the
+  same way our engine keeps one connection per pair of sectors (claim 13b), where the original can
+  hold a diagonal connection and a link's straight one side by side. That changes no route cost,
+  only the count of pending routes towards the limit of 9999 (claim 13). There is no quirk switch,
+  because a switch would need the original's order stated as behaviour, which this spec cannot do.
+  Whether to accept this departure is a question for the project lead.
 - **Threat with a zero coefficient.** A unit with threat coefficient 0 ignores threat in every
   claim: the coarse threat term is skipped and every threat test of claims 17 and 18 passes.
 
@@ -1464,7 +1729,7 @@ firestorm walls and laser fences) and the locomotion class are S-0211's.
 | `MovementZone` | named value as in S-0211's import mapping (text cut to 31 characters, letter case ignored, the spelling `subterannean`) | `normal` | movement zone (claims 4, 6, 13, 25). A value outside the vocabulary: S-0211 claim 4, departure D1 |
 | `ThreatAvoidanceCoefficient` | decimal, single precision (S-0003 claim 6), held as a double | 0.0 | threat coefficient *k* (claims 13, 17, 18), copied to the unit when it enters play |
 | `Speed` | integer, converted to the speed number 0 to 255 (Terms): by S-0207 claim 1 for a vehicle type, by S-0208 F4 for an infantry type, each with its rule for the value −1 | speed number 0 | speed comparison of claim 19 |
-| train key (name at sign-off) | boolean | false | train rules (claims 8, 14, 16, 20, 24) |
+| `IsTrain` (vehicle types) | boolean | false | marks the type as a train: train rules (claims 8, 14, 16, 20, 24). Stock data is not known to set it |
 | `JumpJet` | boolean | false | an infantry type with this flag uses movement zone *infantry* for the coarse search of a path computation (claim 13), whatever its own movement zone. The estimate of claim 24 uses its own movement zone (Open questions) |
 | `Passive` (vehicle types only) | boolean | false | exception of claim 15 |
 
@@ -1487,7 +1752,7 @@ S-0209's Import mapping says.
 
 | Map section | Entry | Use here |
 |---|---|---|
-| `[Tubes]` | one entry per tunnel: entrance cell x and y, a facing, exit cell x and y, then a list of directions | tunnel entrance and tunnel exit (claims 7 and 9). The facing and the direction list do not enter pathfinding |
+| `[Tubes]` | one entry per tunnel: entrance cell x and y, a facing, exit cell x and y, then a list of directions | tunnel entrance and tunnel exit (claims 7 and 9). The direction list does not enter pathfinding. The facing enters only which further cells a tunnel's link joins in the coarse search (claim 13b, not established) |
 
 ## Measurement scenarios
 
@@ -1534,7 +1799,7 @@ draws (claim 25), so one run per variant is enough unless stated.
     stored step of a path computation remains whose straight replacement would be all clear (claim
     17), unless its second run came from flattening a V of straight runs (its first run was then
     already final). Within the first 20 steps (b) says nothing, because claim 18 works there after
-    claim 17 and its stretch selection is open. A run in which the unit refuses a step, or computes
+    claim 17 and can reorder or shorten stretches (scenario P9, train run 4, tests its selection). A run in which the unit refuses a step, or computes
     a new path before it arrives other than as it begins the 24th step of a stored path (claim 20),
     has not followed a path that ends at the goal. On this static map there are two known causes: a
     flattened V of straight runs, which shifts the rest of the stored path (claim 17,
@@ -1545,9 +1810,10 @@ draws (claim 25), so one run per variant is enough unless stated.
     goal case, as confinement to aligned blocks predicts.
   - Secondary check, not a falsifier of any single claim: compare each run's cell sequence with the
     one a reference implementation of claims 7 to 18 with T2 to T4 gives, and have the reference
-    implementation log every tie it meets whose order this spec leaves open. A run whose reference
-    computation meets no such tie should match exactly. A mismatch there sends claims 7 to 18 back
-    for review as a whole.
+    implementation log every exact tie it meets between pending entries. A run whose reference
+    computation meets no such tie should match exactly, and a mismatch there sends claims 7 to 18
+    back for review as a whole. A run with a tie is reported but not judged, because our engine's
+    tie order (claim 12a, departure D7) is not the original's.
   - Falsified if: (a) or (b) fails in any run, or the four parities always give identical routes up
     to translation.
 - **P2 (claim 8): terrain speed does not steer the path.**
@@ -1699,12 +1965,15 @@ draws (claim 25), so one run per variant is enough unless stated.
     route or of the step direction), and the tick the loop is taken.
   - Expected (main case, the shuttling blocker): recomputations at least 90 ticks apart. The loop
     is not taken before 300 ticks after the first blockage while the blocker keeps counting as
-    moving. The median time to take the loop lies between 300 and 390 ticks. Held blocker (low
+    moving. Over the runs in which the blocker counts as moving until the loop is taken, the median
+    time to take the loop lies between 300 and 390 ticks. Held blocker (low
     confidence, since a vehicle that stands still without a destination gives *stationary
     friendly*, whose handling belongs to S-0209 and the movement specs): the loop is taken at the
     first recomputation.
   - Falsified if: two recomputations come less than 90 ticks apart, or the loop is taken before
-    the blockage delay in the shuttling case. For the held blocker (low confidence), falsified if
+    the blockage delay in the shuttling case, or, over the shuttling runs in which the blocker
+    counted as moving until the loop was taken (recorder), the median time to take the loop lies
+    outside 300 to 390 ticks. For the held blocker (low confidence), falsified if
     the loop is not taken at the first recomputation, which would show that a vehicle without a
     destination is not handled as in the main case.
 - **P7 (claims 6, 15, 21, 23, 24, 25, 27): destination substitution and blocked destinations.**
@@ -1830,7 +2099,9 @@ draws (claim 25), so one run per variant is enough unless stated.
   - Procedure: order a vehicle to a cell beyond the tunnel. Train runs 1 to 3: the train type stands
     at (*x*, *y*) on open clear ground with no other object within 8 cells, facing map north. Order
     it onto (*x*, *y* + 1), the cell straight behind it (run 1), onto (*x*, *y* + 6) (run 2) and onto
-    (*x* + 2, *y* + 6) (run 3), placed afresh for each run. Order the leading vehicle to a cell 10 cells away in a straight line along +x, and in a
+    (*x* + 2, *y* + 6) (run 3), placed afresh for each run. Train run 4: as runs 1 to 3, except for
+    wall sections of the human house on (*x* − 2, *y*), (*x* − 1, *y*), (*x* + 1, *y*), (*x*, *y* + 2)
+    and (*x*, *y* + 3); order the train onto (*x* + 1, *y* + 4). Order the leading vehicle to a cell 10 cells away in a straight line along +x, and in a
     second run to a cell 10 cells along +x and 4 along +y. Train refresh run: on the map of P5
     run 4 without the three friendly vehicles, with a construction yard (a building that produces
     buildings) of the human house beside the route, order the train type 30 cells straight north
@@ -1845,7 +2116,7 @@ draws (claim 25), so one run per variant is enough unless stated.
     island that water separates from it: its fresh search fails the gate, so its retry delay of 9000
     ticks runs (claim 21). 100 ticks later, order the leading vehicle 10 cells along +x as in the
     first run.
-  - Observable: whether the tunnel is used, the cells the train enters in train runs 1 to 3 and
+  - Observable: whether the tunnel is used, the cells the train enters in train runs 1 to 4 and
     the tick its destination is cleared in run 1, the destinations and final cells of the two
     follower cars. Train refresh run: the cells entered from
     row 23 on, and whether the stored path is emptied by a refused step (recorder). Follower run 3:
@@ -1865,10 +2136,12 @@ draws (claim 25), so one run per variant is enough unless stated.
     train enters 6 cells: (*x* + 1, *y* + 1), (*x* + 1, *y* + 2), (*x*, *y* + 3), (*x*, *y* + 4),
     (*x*, *y* + 5), (*x*, *y* + 6). Train run 3: the search finds 2, 3, 4, 4, 4, 4, 4, and claim 18
     shortens the opening 2, 3, 4 to 3, 3. The train enters 6 cells: (*x* + 1, *y* + 1),
-    (*x* + 2, *y* + 2), then (*x* + 2, *y* + 3) to (*x* + 2, *y* + 6). In both, the first cell
-    entered lies behind the train (claim 16: the exclusion holds for the search only). No exact tie
-    of *f* arises in these searches. The exact cells after the first rest on the stretch selection
-    of claim 18 (low confidence), the count of 6 cells does not. The cars end on the cells 1 and 2 steps back
+    (*x* + 2, *y* + 2), then (*x* + 2, *y* + 3) to (*x* + 2, *y* + 6). Train run 4: the search
+    finds 1, 3, 4, 5, 4, 4; claim 17 leaves it, because flattening the pair 1, 3 would enter the
+    wall cell (*x* + 1, *y*); and claim 18 gives 3, 4, 4, 4 (claim 18, example (a)). The train
+    enters 4 cells: (*x* + 1, *y* + 1) to (*x* + 1, *y* + 4). In runs 2 to 4 the first cell entered
+    lies behind the train (claim 16: the exclusion holds for the search only). No exact tie of *f*
+    arises in these searches. The cars end on the cells 1 and 2 steps back
     from the leader's destination against the direction of the last step of the leader's path: along
     −x in the first run, and in the second run against whatever the last step of the found path is
     (which a reference implementation of claims 7 to 18 gives for the map). Follower run 3: the first
@@ -1884,9 +2157,11 @@ draws (claim 25), so one run per variant is enough unless stated.
     (*x*, row 24) it steps sideways and passes the walls without a refused step.
   - Falsified if: the vehicle drives overland (which would mean the entrance, or the tunnel step,
     costs more than claim 9 says), the train of run 1 reaches its destination by any route (claim
-    16), the train of run 2 or 3 enters 7 or more cells before it reaches the destination (which
-    would mean claim 18 does not shorten a detour at the start of a path, or that a stored first
-    step cannot enter the cells the search excluded), or the cars' cells differ from the
+    16), the train of run 2, 3 or 4 enters other cells than expected (7 or more cells in run 2 or
+    3 would mean that claim 18 does not shorten a detour at the start of a path, or that a stored
+    first step cannot enter the cells the search excluded; in run 4, the 5 cells (*x* + 1, *y* + 1),
+    (*x* + 2, *y* + 1), (*x* + 1, *y* + 2), (*x* + 1, *y* + 3), (*x* + 1, *y* + 4) would contradict
+    `quirks.detour_mirrored_reference`, and any other sequence the stretch selection of claim 18), or the cars' cells differ from the
     expectation. In follower run 3, the first car stays where it is until its retry delay has run
     out (which would mean a car's computation waits for the delay like a fresh search). In the train
     refresh run, the train's stored path is emptied by a refused step into a wall cell
@@ -1962,7 +2237,9 @@ draws (claim 25), so one run per variant is enough unless stated.
     The train never uses the corridor (claim 14) and searches the whole map, so it reaches the goal
     through the gap in every map, including those where the ordinary vehicle gives up.
     Secondary check: the outcome and route in each map match what an implementation of claims 3 to 18
-    with 13a gives for the same map.
+    with 13a and 13b gives for the same map, when that implementation meets no exact tie between
+    pending entries in its coarse or cell searches. A map whose computation meets such a tie is
+    reported but not judged (claim 12a, departure D7).
   - Falsified if: the vehicle reaches the goal at every length (which would mean no cap on the
     retries, or closures that free the route much faster than claim 13 says), or the result of a map
     changes between runs, or the train gives up in a map (which would mean trains use the corridor).
@@ -2039,8 +2316,9 @@ draws (claim 25), so one run per variant is enough unless stated.
     far less than backing out to take the longer lane R, and *T* would wait facing *O* until the
     blockage delay of 3000 ticks ran out.
   - Falsified if: in runs 1 and 2 *T* stays behind *S* although the reference implementation with
-    claim 19 gives the other lane, or *T* takes the same lane in both runs. In run 3 *T* changes lanes
-    while in run 4 it does not. In run 5 *T* keeps its stored path and stays in L facing *O* for more
+    claim 19 gives the other lane, or *T* takes the same lane in both runs. In run 3 *T* changes lanes,
+    or in run 4 it stays behind the infantry although it changed lanes in run 1 (the parity rule
+    predicts the opposite in each case). In run 5 *T* keeps its stored path and stays in L facing *O* for more
     than 300 ticks after they first stand in neighbouring cells.
 - **P15 (claim 5): content changes that update connectivity.**
   - Setup: for each change, a goal pocket sealed off from a test vehicle only by the object
@@ -2155,9 +2433,13 @@ draws (claim 25), so one run per variant is enough unless stated.
 
 ## Open questions
 
-- The exact construction of sectors (claim 13): which pieces of a region inside a block count as one
-  sector, and how sector connections are formed across block borders and through links, is only
-  partly established. Path shape in scenario P1 with obstacles is the practical check.
+- Sectors and connections (claim 13b): which further cells a tunnel's link joins, and how often the
+  labelling-order cases of claim 13b occur on stock maps, are not established. The secondary checks
+  of scenarios P1 and P12 are the practical check.
+- Coarse end cell on a bridge (claim 13b): when more than one bridge link meets the condition for a
+  bridge cell, the original takes the first in the order in which it creates links. That order is
+  not established, and neither is whether two links can meet the condition for one cell on a map
+  that the original accepts.
 - For the corridor exemption (claim 13): exactly when a moving unit's recorded cell changes (on
   entering a new cell or at some other moment of its move), and whether an aircraft on the ground or
   in the air also counts, are only partly established.
@@ -2172,15 +2454,9 @@ draws (claim 25), so one run per variant is enough unless stated.
 - Whether the region corner cases of claim 3 occur on stock maps, and whether a configuration other
   than the 2 × 2 case of claim 3 is common enough to matter, is not settled. Scenario P4 map H tests
   the smallest case.
-- The further test of a cell in the nearby-cell search (claim 25) is not established beyond this:
-  a cell outside the usable area passes it, and it is applied to a subterranean unit's destination
-  and then, when the destination passes, to each candidate cell. For the no-move rows of table T5
-  the state of a subterranean unit under which the test is asked for is not established either.
+- For the no-move rows of table T5, the state of a subterranean unit under which the nearby-cell
+  search asks for the further test (claim 25) is not established.
 - Whether any rule sets the congestion mark of a cell permanently (Terms, claim 9). None was found.
-- The visibility test of the nearby-cell search (claim 25) is described by its result only. Its
-  exact geometry (how far in front of the cell it looks, and how heights shift the point it looks
-  at) is only partly established, and it decides which cells are preferred.
-- Which cell of a sector serves as the anchor cell for the legs of F8 is not established.
 - Which units are loaners (claim 14) in stock play, and the exact team state that goes with the
   "move to a waypoint marker" condition, are only partly established.
 - For a unit of an infantry type with the jumpjet flag, whether its current locomotor affects its
@@ -2190,9 +2466,6 @@ draws (claim 25), so one run per variant is enough unless stated.
 - Units with the other locomotors (hover, ship, mechanical walker) also compute paths. Whether they
   use the blockage modes of claim 22 and the immediate refresh of claim 20 like the drive locomotor
   is not established.
-- The stretch selection of claim 18 (which stretches are tested and in which order) is only partly
-  established, beyond what that claim gives as known. The acceptance rule is clearer than the
-  selection.
 - Whether the path-length conditions of claim 19 (a vehicle with at least two stored steps, an infantry
   unit with at least three) apply in search mode 2 as well as in mode 1 is not established. This spec
   applies them in both.
@@ -2203,33 +2476,19 @@ draws (claim 25), so one run per variant is enough unless stated.
 
 ## Questions for the project lead
 
-- **Tie order.** Ties between pending entries with exactly equal cost are broken by an order of the
-  original's that is only partly known and that only a copy of the way it keeps its pending entries
-  would reproduce. In the cell search (claim 12) ties are
-  rare because of the direction terms (T4). In the coarse search (claim 13) they are the normal
-  case: sector costs are small whole numbers (T3) and there is no estimate, so on open ground many
-  corridors tie, and the chosen corridor decides the route (claim 13). One part of the original's
-  cell-search order is known. The **held candidate** of an expansion is the candidate it recorded
-  with the smallest *f* (on equal *f*, the first in generation order, claim 7). The held candidate
-  of the latest expansion is expanded next only when its *f* is strictly smaller than that of every
-  other pending pair, the other candidates of the same expansion included. On an exact tie another
-  pending pair with that *f* is expanded next, even one that the same expansion recorded later, and
-  from then on the former held candidate ranks like any other pending pair. The order among the
-  other pending pairs, and the coarse search's order, are not described here; a later revision would
-  describe them if the lead chooses to reproduce them. Should our engine reproduce the original's
-  order exactly (which fixes the data structure), or define its own deterministic order and accept
-  route differences on open ground? An order of our own, for example by cost, then by the order in
-  which entries were recorded, is simpler, but it differs from the original at ties, the
-  held-candidate case included (there it would expand the held candidate first).
-- **Anchor cell until it is established.** F8 needs an anchor cell for each sector, and the
-  original's choice is not known (Open questions). Should our engine use, until it is established,
-  the cell of the sector nearest to the bridge-cell end concerned (the destination or the found
-  cell), by Chebyshev distance, with ties going to the smaller y and then to the smaller x? The
-  choice changes only the estimate *E* of claim 24 for bridge cells.
-- **Departure D4.** Accept that our engine builds regions by the rule of claim 3, or reproduce the
-  original's labelling order exactly, which fixes how regions are built?
-- **Key name.** The type key that marks a train does not appear in stock data, so its spelling is
-  confirmed at sign-off and the lead adds it to the import mapping then.
+- **Departure D7.** Accept that our engine breaks exact ties between pending entries by the order
+  of claim 12a (the entry recorded first goes first, and coarse routes are recorded in the order of
+  the sectors' first cells), and so can choose other routes than the original where a search meets
+  an exact tie? In the cell search such ties are rare because of the direction terms (T4). In the
+  coarse search (claim 13) they are the normal case on open ground: sector costs are small whole
+  numbers (T3) and there is no estimate, so many corridors tie and the chosen corridor decides the
+  route. The alternative is to reproduce the original's order, which fixes the data structures of
+  both searches and needs the original's labelling order (departure D4). This spec cannot state that
+  order as behaviour, so choosing it would also mean waiving the rule that a spec describes no data
+  structure, for this one passage.
+- **Departure D4.** Accept that our engine builds regions by the rule of claim 3, and sectors and
+  connections by the rule of claim 13b, or reproduce the original's labelling order exactly, which
+  fixes how regions and sectors are built?
 - **Scope of tunnels and trains.** Stock data is not known to use tunnels or trains. Should this
   spec keep their rules (claims 7, 9, 14, 16, 20, 26) or move them to a later revision with test
   data?
@@ -2239,3 +2498,8 @@ draws (claim 25), so one run per variant is enough unless stated.
   the stored path a reversing first step. Each has a switch with a corrected alternative, default
   original (`quirks.opposite_facing_reversal`, `quirks.coarse_limit_records_cost`,
   `quirks.train_exclusion_search_only`). Are the names and the alternatives acceptable?
+- **Two further behaviours of claim 18 that read like defects.** From the third leg on, the
+  reference distance is measured to the step's end cell mirrored through the leg's first cell, and
+  after a tunnel step the pass carries on from the cell north of the tunnel entrance. Each has a
+  switch with a corrected alternative, default original (`quirks.detour_mirrored_reference`,
+  `quirks.detour_after_tunnel_position`). Are the names and the alternatives acceptable?

@@ -3,7 +3,7 @@ id: Q-0017
 title: What S-0212 leaves open for an implementation of the path search
 status: answered
 related: [S-0212, S-0208, S-0211]
-answered-by: [S-0208]
+answered-by: [S-0208, S-0212]
 ---
 
 ## Need
