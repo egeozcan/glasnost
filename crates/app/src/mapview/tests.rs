@@ -307,6 +307,147 @@ fn overlays() {
     assert!(items.iter().all(|i| i.provisional));
 }
 
+/// A 1 × 1 tile file whose diamond holds `value`, with an optional extra
+/// image (stored position, size) whose pixels hold `value + 1`; the tile
+/// cell's stored position is (100, 200).
+fn tmp_tile(value: u8, extra: Option<(i32, i32, i32, i32)>) -> Vec<u8> {
+    let (ex, ey, ew, eh) = extra.unwrap_or((0, 0, 0, 0));
+    let header = TmpTile {
+        offset: 0,
+        x: 100,
+        y: 200,
+        extra_offset: 0,
+        depth_offset: 0,
+        extra_depth_offset: 0,
+        extra_x: ex,
+        extra_y: ey,
+        extra_width: ew,
+        extra_height: eh,
+        flags: 0,
+        height: 0,
+        terrain_type: 0,
+        ramp_type: 0,
+        radar_left: [1, 2, 3],
+        radar_right: [4, 5, 6],
+    };
+    TmpWriter {
+        cells_x: 1,
+        cells_y: 1,
+        tile_width: 60,
+        tile_height: 30,
+        tiles: vec![Some(WriteTile {
+            header,
+            diamond: vec![value; 900],
+            depth: None,
+            extra: extra.map(|_| (vec![value + 1; (ew * eh) as usize], None)),
+        })],
+    }
+    .write()
+}
+
+/// Builds a 10 × 10 map whose terrain records are `records` (x, y, tile),
+/// with `assets` changed by `edit`.
+fn build_tiles(records: &[(u16, u16, i32)], edit: impl FnOnce(&mut Assets)) -> Built {
+    let (import, catalogue, mut assets) = context();
+    edit(&mut assets);
+    let mut recs: Vec<Record> = records
+        .iter()
+        .map(|&(x, y, tile)| Record {
+            x,
+            y,
+            tile,
+            sub_tile: 0,
+            level: 0,
+            ice: 0,
+        })
+        .collect();
+    recs.push(rec(0, 0, 0));
+    let m = MapText {
+        ini: "[Basic]\nNewINIFormat=4\n[Map]\nSize=0,0,10,10\nLocalSize=0,0,10,10\n".into(),
+        terrain: Some(record_bytes(&recs)),
+        ..Default::default()
+    };
+    let doc = Document::parse(m.text().as_bytes(), Quirks::default(), &mut Vec::new());
+    let map = decode(
+        &doc,
+        &DecodeContext {
+            catalogue: Some(&catalogue),
+            ..Default::default()
+        },
+    )
+    .map;
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    build(
+        &map,
+        &import,
+        &catalogue,
+        &palettes,
+        &assets,
+        &Options::default(),
+    )
+}
+
+/// The tile items whose diamond lies at cell (x, y)'s top corner, level 0.
+fn tile_at(b: &Built, x: i32, y: i32) -> Vec<Item> {
+    b.scene
+        .items
+        .iter()
+        .filter(|i| i.group == Group::Tiles)
+        .filter(|i| matches!(i.paint, Paint::Diamond(_)))
+        .filter(|i| i.x == 30 * (x - y) - 30 && i.y == 15 * (x + y))
+        .copied()
+        .collect()
+}
+
+/// spec: S-0010 claims 13 and 22 (diamonds placed from the top corner, no transparent index; the image by P4)
+#[test]
+fn claims_13_22_diamond_and_variant() {
+    let b = build_tiles(&[(6, 9, 0), (7, 9, 0), (8, 9, 0), (6, 10, 0)], |a| {
+        a.insert(b"clr01.tem", tmp_tile(7, None));
+        a.insert(b"clr01a.tem", tmp_tile(8, None));
+    });
+    for (x, y) in [(6, 9), (7, 9), (8, 9), (6, 10)] {
+        let t = tile_at(&b, x, y);
+        assert_eq!(t.len(), 1, "cell ({x}, {y})");
+        let px = b.scene.images[t[0].image as usize].pixels()[28];
+        // Two images: P4(x mod 4, y mod 4) mod 2 picks the plain (7) or the variant (8).
+        let p = glasnost_convert::theater::P4[(y % 4) as usize][(x % 4) as usize] % 2;
+        assert_eq!(px, 7 + p, "cell ({x}, {y})");
+    }
+}
+
+/// spec: S-0010 claim 23 (the extra image at the box corner plus the position difference, after its diamond)
+#[test]
+fn claim_23_extra_image() {
+    let b = build_tiles(&[(6, 9, 0)], |a| {
+        a.insert(b"clr01.tem", tmp_tile(7, Some((90, 170, 12, 20))));
+    });
+    let i = b
+        .scene
+        .items
+        .iter()
+        .position(|i| i.x == 30 * (6 - 9) - 30 && i.y == 15 * 15 && i.group == Group::Tiles)
+        .expect("diamond");
+    let extra = b.scene.items[i + 1];
+    assert_eq!((extra.x, extra.y), (30 * (6 - 9) - 30 - 10, 15 * 15 - 30));
+    // Same row as its diamond; index 0 transparent in the extra image.
+    let Paint::Diamond(row) = b.scene.items[i].paint else {
+        panic!("diamond paint");
+    };
+    assert_eq!(extra.paint, Paint::Row(row));
+}
+
+/// spec: S-0010 claim 24 (a stray tile number paints position 0 of the clear tile)
+#[test]
+fn claim_24_stray_tile_shows_clear_tile() {
+    let b = build_tiles(&[(6, 9, 5)], |a| {
+        a.insert(b"clr01.tem", tmp_tile(7, None));
+    });
+    let t = tile_at(&b, 6, 9);
+    assert_eq!(t.len(), 1);
+    assert_eq!(b.scene.images[t[0].image as usize].pixels()[28], 7);
+}
+
 /// Builds `text` with typed rules in which HUTX has strength 100.
 fn build_with_rules(text: &[u8]) -> Built {
     use glasnost_rules::sim::BuildingType;
@@ -333,6 +474,7 @@ fn build_with_rules(text: &[u8]) -> Built {
         assets: &assets,
         options: &options,
         rules: Some(&rules),
+        cells: None,
     };
     super::build::build_parts(&inputs, false).0
 }

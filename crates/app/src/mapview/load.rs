@@ -48,6 +48,8 @@ pub struct Loaded {
     pub live: Option<Live>,
     /// The typed rules, when the ruleset resolved.
     pub rules: Option<Arc<SimRules>>,
+    /// The cells after loading, when the game was set up.
+    pub cells: Option<glasnost_map::CellGrid>,
 }
 
 impl Loaded {
@@ -62,6 +64,7 @@ impl Loaded {
                 assets: &self.assets,
                 options: &self.options,
                 rules: self.rules.as_deref(),
+                cells: self.cells.as_ref(),
             },
             self.live.as_mut(),
         )
@@ -123,17 +126,6 @@ pub async fn load(
     }
     // spec: S-0103 claim 3 (a game in a new theater loads its palettes)
     palettes.start_game(theater, |n| files.get(n).cloned().flatten());
-    let mut assets = Assets::default();
-    let exists = |n: &[u8]| vfs.resolve_bytes(n).is_some();
-    let wanted = build::wanted_files(&map, &import, &catalogue, &exists);
-    for name in wanted {
-        let Ok(text) = std::str::from_utf8(&name) else {
-            continue;
-        };
-        if let Some(b) = read_named(vfs, text).await {
-            assets.insert(&name, b);
-        }
-    }
     let started = if play {
         match (&resolved, tiles) {
             (Err(e), _) => Err(format!("the rules did not resolve: {e}")),
@@ -143,6 +135,25 @@ pub async fn load(
     } else {
         Err("the game was not started".into())
     };
+    // The cells after loading (S-0010 claim 12), which the tiles are drawn from.
+    let cells = started.as_ref().ok().map(|(w, ..)| w.cells.grid.clone());
+    let mut assets = Assets::default();
+    let exists = |n: &[u8]| vfs.resolve_bytes(n).is_some();
+    let wanted = build::wanted_files(
+        &map,
+        cells.as_ref().unwrap_or(&map.cells),
+        &import,
+        &catalogue,
+        &exists,
+    );
+    for name in wanted {
+        let Ok(text) = std::str::from_utf8(&name) else {
+            continue;
+        };
+        if let Some(b) = read_named(vfs, text).await {
+            assets.insert(&name, b);
+        }
+    }
     let rules = resolved
         .as_ref()
         .ok()
@@ -161,6 +172,7 @@ pub async fn load(
         assets: &assets,
         options: &options,
         rules: rules.as_deref(),
+        cells: cells.as_ref(),
     };
     let (mut built, painter) = build::build_parts(&inputs, started.is_ok());
     let live = match started {
@@ -186,5 +198,6 @@ pub async fn load(
         problems,
         live,
         rules,
+        cells,
     }
 }

@@ -12,7 +12,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use glasnost_convert::Import;
 use glasnost_convert::kinds::Kind;
-use glasnost_convert::theater::Catalogue;
+use glasnost_convert::theater::{Catalogue, TheaterQuirks, variant_image, variant_pattern};
 use glasnost_fmt::hva::Hva;
 use glasnost_fmt::image::IndexedImage;
 use glasnost_fmt::shp::Shp;
@@ -22,9 +22,10 @@ use glasnost_fmt::vxl::Vxl;
 use glasnost_ini::Document;
 use glasnost_ini::value;
 use glasnost_map::objects::{HealthKind, ListKind, facing_from_value, starting_health};
-use glasnost_map::{CellXY, Map, NO_OVERLAY};
+use glasnost_map::{CellGrid, CellXY, Map, NO_OVERLAY};
 use glasnost_num::F64;
-use glasnost_render::compose::{DepthTest, Paint, Profile, row565};
+use glasnost_render::compose::{DIAMOND_WIDTH, DepthTest, Paint, Profile, row565};
+
 use glasnost_render::light::{self, DetailLevel, LightQuirks, LightSource, TileTable};
 use glasnost_render::palette::{PaletteState, TINT_EXEMPT, house_palette};
 use glasnost_render::projection::{
@@ -153,12 +154,10 @@ pub const VPL_FILE: &[u8] = b"voxels.vpl"; // spec: S-0105 Import mapping
 
 /// The provisional notes, by request.
 mod notes {
-    pub const TILES: &str = "Q-0009: tile files, sub-tile cells and tile placement are provisional";
+    pub const TILES_UNLOADED: &str = "no game was set up: tiles are drawn as the map stores them, before the load's terrain recalculation and smoothing (S-0010 claim 12)";
     pub const PLACEMENT: &str =
         "Q-0011: sprites are centred on their object's point by their canvas (provisional)";
     pub const OVERLAY: &str = "Q-0012: overlay and smudge frames and palettes are provisional";
-    pub const TILE_LIGHT: &str = "Q-0013: tiles are lit by the scaled ground level (provisional)";
-    pub const SHADOW: &str = "Q-0015: shadows halve the pixels beneath (provisional)";
     pub const VOXEL_SHADOW_POINT: &str = "voxel shadows are placed at the object's ground point (the locomotor's shadow point has no spec)";
     pub const NO_SLOT_ANIMS: &str = "building slot animations (S-0108) need animation playback, which has no spec yet: not drawn";
     pub const NO_COMPANION: &str =
@@ -231,22 +230,34 @@ fn derived(import: &Import, kind: Kind, idx: usize, key: &[u8]) -> Option<i64> {
 /// models with their motion files, and the voxel lighting table.
 pub fn wanted_files(
     map: &Map,
+    cells: &CellGrid,
     import: &Import,
     catalogue: &Catalogue,
     exists: &dyn Fn(&[u8]) -> bool,
 ) -> BTreeSet<Vec<u8>> {
     let mut out = BTreeSet::new();
     let mut tiles = BTreeSet::new();
-    for (_, cell) in map.cells.iter() {
+    for (_, cell) in cells.iter() {
         if let Some(t) = catalogue.art_tile(cell.tile) {
             tiles.insert(t);
         }
     }
-    for t in tiles {
-        if let Some(f) = catalogue.find_image(t, 0, exists) {
-            out.insert(upper(&f));
-        }
+    // spec: S-0010 claim 24 (a cell without a usable tile shows the clear tile)
+    if (0..catalogue.tile_count).contains(&catalogue.clear_base) {
+        tiles.insert(catalogue.clear_base);
     }
+    for t in tiles {
+        // spec: S-0010 claim 3 (the plain image and its variants, each with the suffix fallback)
+        let images = catalogue.tile_images(t, exists);
+        out.extend(
+            images
+                .plain
+                .iter()
+                .chain(&images.variants)
+                .map(|f| upper(f)),
+        );
+    }
+
     let mut add_art = |kind: Kind, idx: usize| {
         if let Some(a) = import.arts.get(&(kind, idx)) {
             out.extend(a.sprite.iter().map(|s| upper(s)));
@@ -354,6 +365,16 @@ pub struct Painter {
     models: BTreeMap<Vec<u8>, Option<std::rc::Rc<voxel::VoxelModel>>>,
     /// The voxel lighting table, once read.
     vpl: Option<Option<Vpl>>,
+    /// Tile files decoded once, by upper-case name.
+    tile_files: BTreeMap<Vec<u8>, Option<TileFile>>,
+}
+
+/// A decoded tile file: its size in cells and its tile cells, row by row.
+#[derive(Clone, Debug)]
+struct TileFile {
+    width: i32,
+    height: i32,
+    cells: Vec<Option<TileImages>>,
 }
 
 /// A vehicle part image's pose: the type, the part, the 32-step body and
@@ -364,6 +385,7 @@ type VoxelKey = (Kind, usize, u8, u8, u8, u16);
 struct Builder<'a> {
     map: &'a Map,
     rules: Option<&'a SimRules>,
+    cells_loaded: Option<&'a CellGrid>,
     import: &'a Import,
     catalogue: &'a Catalogue,
     palettes: &'a PaletteState,
@@ -416,6 +438,7 @@ pub fn build(
         assets,
         options,
         rules: None,
+        cells: None,
     };
     build_parts(&inputs, false).0
 }
@@ -435,6 +458,7 @@ pub fn build_parts(inputs: &Inputs, live: bool) -> (Built, Painter) {
     let mut b = Builder {
         map: inputs.map,
         rules: inputs.rules,
+        cells_loaded: inputs.cells,
         import,
         catalogue: inputs.catalogue,
         palettes: inputs.palettes,
@@ -671,94 +695,163 @@ impl Builder<'_> {
         (self.built.objects.len() - 1) as u32
     }
 
-    /// Terrain tiles (S-0101 claim 4, S-0102 claim 9 and F3; Q-0009).
+    /// A tile file decoded once: its size in cells and its tile cells.
+    fn tile_file(&mut self, file: &[u8]) -> Option<TileFile> {
+        let key = upper(file);
+        if let Some(t) = self.p.tile_files.get(&key) {
+            return t.clone();
+        }
+        let decoded = self.assets.get(&key).and_then(|bytes| {
+            let tmp = Tmp::parse(bytes).ok()?;
+            let mut cells = Vec::new();
+            for i in 0..tmp.tiles.len() {
+                cells.push(tmp.decode_tile(i).ok().map(|d| {
+                    let dia = &d.diamond;
+                    let img = self.built.scene.add_image(dia.image.clone());
+                    let dep = dia.depth.clone().map(|i| self.built.scene.add_image(i));
+                    let extra = d.extra.as_ref().map(|e| {
+                        let ei = self.built.scene.add_image(e.image.clone());
+                        let ed = e.depth.clone().map(|i| self.built.scene.add_image(i));
+                        // spec: S-0010 claim 23 (only the difference of the two stored positions matters)
+                        (ei, ed, e.x - dia.x, e.y - dia.y)
+                    });
+                    (img, dep, dia.x, dia.y, extra)
+                }));
+            }
+            Some(TileFile {
+                width: tmp.cells_x as i32,
+                height: tmp.cells_y as i32,
+                cells,
+            })
+        });
+        self.p.tile_files.insert(key, decoded.clone());
+        decoded
+    }
+
+    /// Terrain tiles (S-0010 claims 13, 22 to 24; S-0101 claim 4; S-0102
+    /// claim 9 and F3; S-0104 claim 13).
     fn tiles(&mut self) {
-        self.note(notes::TILES);
-        self.note(notes::TILE_LIGHT);
-        if self.map.fill_draws > 0 {
+        if self.cells_loaded.is_none() {
+            self.note(notes::TILES_UNLOADED);
+        }
+        if self.map.fill_draws > 0 && self.cells_loaded.is_none() {
             self.note(notes::WATER_FILL);
         }
-        let mut tmps: BTreeMap<Vec<u8>, Option<Vec<Option<TileImages>>>> = BTreeMap::new();
-        let cells: Vec<(CellXY, glasnost_map::Cell)> = self
-            .map
-            .cells
+        let q = TheaterQuirks::default();
+        // spec: S-0010 claim 14, S-0202 claim 11 (the 8 × 8 pattern from the unsynchronised stream, built afresh at map load)
+        let mut stream = glasnost_sim::rng::Rng::new(super::live::SANDBOX_SEED);
+        let (p8, _) = variant_pattern(|| stream.raw());
+        let grid = self.cells_loaded.unwrap_or(&self.map.cells);
+        let loaded = self.cells_loaded.is_some();
+        let cells: Vec<(CellXY, glasnost_map::Cell)> = grid
             .visiting_order(true)
             .into_iter()
-            .filter_map(|c| Some((c, *self.map.cells.get(c)?)))
+            .filter_map(|c| Some((c, *grid.get(c)?)))
             .collect();
         // Cells the visiting order misses (W = 1) keep their blank state; draw them too.
         let mut seen: BTreeSet<CellXY> = cells.iter().map(|(c, _)| *c).collect();
         let mut all = cells;
-        for (c, cell) in self.map.cells.iter() {
+        for (c, cell) in grid.iter() {
             if seen.insert(c) {
                 all.push((c, *cell));
             }
         }
+        let count = self.catalogue.tile_count;
+        let assets = self.assets;
+        let exists = |n: &[u8]| assets.get(n).is_some();
+        let mut images: BTreeMap<i32, glasnost_convert::theater::TileImages> = BTreeMap::new();
         for (c, cell) in all {
-            let Some(t) = self.catalogue.art_tile(cell.tile) else {
-                // spec: S-0009 claim 8 (an out-of-range number shows the clear tile, which this theater lacks)
-                self.drop_object(
-                    "cell drawn blank: its tile and the clear tile are outside the catalogue",
-                );
-                continue;
+            let (t, s) = (cell.tile, i32::from(cell.sub_tile));
+            let mut files = |b: &mut Self, t: i32| {
+                images
+                    .entry(t)
+                    .or_insert_with(|| b.catalogue.tile_images(t, &exists))
+                    .clone()
             };
-            let assets = self.assets;
-            // spec: S-0010 claim 3 (the theater's suffix, else the fallback suffixes)
-            let Some(file) = self
-                .catalogue
-                .find_image(t, 0, &|n| assets.get(n).is_some())
-                .map(|f| upper(&f))
-            else {
+            // spec: S-0010 claims 7 and 24 (the tile case paints the cell's tile; the no-tile case, a stray
+            // or a negative number paint position 0 of the clear tile, at the cell's own coordinates)
+            let mut shown: Option<(i32, i32, glasnost_convert::theater::TileImages)> = None;
+            if (0..count).contains(&t) {
+                let f = files(self, t);
+                let plain = f.plain.as_ref().and_then(|p| self.tile_file(p));
+                let usable = plain.as_ref().is_some_and(|p| {
+                    s < p.width * p.height && p.cells.get(s as usize).is_some_and(Option::is_some)
+                });
+                if usable || loaded {
+                    // In loaded cells an unusable tile number is the overlay case (claim 7).
+                    shown = Some((t, s, f));
+                }
+            }
+            let (_, s, f) = match shown {
+                Some(x) => x,
+                None => {
+                    let clear = self.catalogue.clear_base;
+                    if !(0..count).contains(&clear) {
+                        self.drop_object(
+                            "cell drawn blank: its tile and the clear tile are outside the catalogue",
+                        );
+                        continue;
+                    }
+                    let f = files(self, clear);
+                    (clear, 0, f)
+                }
+            };
+            let Some(plain) = f.plain.as_ref().and_then(|p| self.tile_file(p)) else {
+                // spec: S-0010 claim 24 (a tile without an image paints nothing)
                 self.drop_object("cell drawn blank: no file holds its tile image");
                 continue;
             };
-            if !tmps.contains_key(&file) {
-                let decoded = self.assets.get(&file).and_then(|bytes| {
-                    let tmp = Tmp::parse(bytes).ok()?;
-                    let mut out = Vec::new();
-                    for i in 0..tmp.tiles.len() {
-                        out.push(tmp.decode_tile(i).ok().map(|d| {
-                            let dia = &d.diamond;
-                            let img = self.built.scene.add_image(dia.image.clone());
-                            let dep = dia.depth.clone().map(|i| self.built.scene.add_image(i));
-                            let extra = d.extra.as_ref().map(|e| {
-                                let ei = self.built.scene.add_image(e.image.clone());
-                                let ed = e.depth.clone().map(|i| self.built.scene.add_image(i));
-                                (ei, ed, e.x - dia.x, e.y - dia.y)
-                            });
-                            (img, dep, dia.x, dia.y, extra)
-                        }));
-                    }
-                    Some(out)
-                });
-                tmps.insert(file.clone(), decoded);
-            }
-            // provisional (Q-0009): sub-tile n is the n-th template cell in row-major order
-            let Some(Some(Some((img, dep, _, _, extra)))) = tmps.get(&file).map(|v| {
-                v.as_ref()
-                    .map(|v| v.get(usize::from(cell.sub_tile)).copied().flatten())
-            }) else {
-                self.drop_object(match tmps.get(&file) {
-                    Some(Some(_)) => "cell drawn blank: its sub-tile has no image in the tile file",
-                    _ => "cell drawn blank: its tile file is missing or unreadable",
-                });
+            // spec: S-0010 claim 13 (the image is chosen with the plain image's size)
+            let v = variant_image(
+                (c.x, c.y),
+                s,
+                (plain.width, plain.height),
+                f.variants.len(),
+                &p8,
+                q.variant_origin_mismatch,
+            );
+            let file = if v == 0 {
+                f.plain.clone()
+            } else {
+                f.variants.get(v - 1).cloned()
+            };
+            let Some(image) = file.and_then(|n| self.tile_file(&n)) else {
+                self.drop_object("cell drawn blank: its tile file is missing or unreadable");
                 continue;
             };
+            // spec: S-0010 claim 24 (index t mod N_s of the shown image, counted with its empty positions)
+            let n_s = (image.width * image.height).max(1);
+            let index = s.rem_euclid(n_s) as usize;
+            let cell_images = match image.cells.get(index).copied().flatten() {
+                Some(i) => i,
+                // spec: S-0010 claim 24 (quirks.variant_cell_missing: an empty position paints nothing)
+                None if !q.variant_cell_missing => {
+                    match plain.cells.get(s.max(0) as usize).copied().flatten() {
+                        Some(i) => i,
+                        None => continue,
+                    }
+                }
+                None => {
+                    self.drop_object("cell paints nothing: its shown image has no tile cell there");
+                    continue;
+                }
+            };
+            let (img, dep, _, _, extra) = cell_images;
             let level = i32::from(cell.level);
-            let (qx, qy) = cell_top(c.x, c.y);
-            // spec: S-0101 claim 4 (terrain is lifted 15 pixels per height level)
-            let top = qy - TERRAIN_LIFT * level;
-            let w = self.built.scene.images[img as usize].width() as i32;
-            let left = qx - w / 2;
+            // spec: S-0010 claim 22 ((u, v) the view pixel of the top corner at height 0)
+            let (u, v0) = cell_top(c.x, c.y);
+            // spec: S-0010 claim 22, S-0101 claim 4 (diamond pixel (c, r) at (u − 30 + c, v − 15ℓ + r))
+            let left = u - DIAMOND_WIDTH / 2;
+            let top = v0 - TERRAIN_LIFT * level;
             // spec: S-0102 F3 (t = the tile's top row as drawn plus 15 × its height level)
             let reference_row = top + TERRAIN_LIFT * level;
             let (table, b) = match self.p.lights.get(c) {
-                // provisional (Q-0013): the scaled ground level
+                // spec: S-0104 claim 13 (a terrain tile, ground and extra image: the cell's scaled ground level)
                 Some(l) => (l.table, l.scaled_ground),
                 None => (TileTable::Neutral, NEUTRAL_BRIGHTNESS),
             };
             let row = self.tile_row(table, b);
-            let mut push = |image: u32, depth: Option<u32>, x: i32, y: i32| {
+            let mut push = |image: u32, depth: Option<u32>, x: i32, y: i32, paint: Paint| {
                 self.built.scene.items.push(Item {
                     image,
                     x,
@@ -768,16 +861,18 @@ impl Builder<'_> {
                         depth,
                         reference_row,
                     },
-                    paint: Paint::Row(row),
+                    paint,
                     group: Group::Tiles,
-                    // provisional (Q-0009 placement, Q-0013 brightness)
-                    provisional: true,
+                    provisional: false,
                     object: None,
                 });
             };
-            push(img, dep, left, top);
+            // spec: S-0010 claim 22 (every pixel of the diamond is painted, index 0 included)
+            push(img, dep, left, top, Paint::Diamond(row));
             if let Some((ei, ed, dx, dy)) = extra {
-                push(ei, ed, left + dx, top + dy);
+                // spec: S-0010 claim 23 (the extra image at the diamond box's corner plus the position difference;
+                // index 0 transparent; drawn right after its own cell's diamond)
+                push(ei, ed, left + dx, top + dy, Paint::Row(row));
             }
         }
     }
@@ -1045,7 +1140,6 @@ impl Builder<'_> {
                 )
             {
                 self.built.scene.items.push(item);
-                self.note(notes::SHADOW);
             }
         }
     }
@@ -1290,7 +1384,6 @@ impl Builder<'_> {
                 )
             {
                 self.built.scene.items.push(item);
-                self.note(notes::SHADOW);
             }
             // spec: S-0108 claim 7 (bib: same frame f, no clamp, outside the construction state)
             if let Some(bib) = art.building_sprites.get("bib").cloned()
@@ -1497,8 +1590,14 @@ impl Builder<'_> {
             voxel::DEFAULT_FIRE_ANGLE,
         );
         let infantry = (kind == Kind::Infantry).then(|| {
-            // spec: S-0107 claim 2 (no current sequence: the stand entry; water cells need land types, Q-0009)
-            let (start, count, multiplier) = self.sequence_entry(i, b"Ready");
+            // spec: S-0107 claim 2 (no current sequence: tread on a water cell, else stand; the land type
+            // needs the loaded cells, so without a game every unit shows stand)
+            let water = self
+                .cells_loaded
+                .and_then(|g| g.get(p.cell))
+                .is_some_and(|c| c.land == glasnost_map::terrain::land::WATER);
+            let key: &[u8] = if water { b"Tread" } else { b"Ready" };
+            let (start, count, multiplier) = self.sequence_entry(i, key);
             InfantryFrame {
                 start,
                 count,
@@ -1690,7 +1789,6 @@ impl Builder<'_> {
         ) {
             items.push(item);
         }
-        self.note(notes::SHADOW);
         self.note(notes::PLACEMENT);
         items
     }
@@ -1805,7 +1903,7 @@ impl Builder<'_> {
             },
             paint,
             group,
-            // provisional (Q-0014: the lighting table's layout; shadows also Q-0015)
+            // provisional (Q-0014: the lighting table's layout)
             provisional: true,
             object: Some(object),
         }
@@ -1895,7 +1993,6 @@ impl Builder<'_> {
                     object,
                 ));
                 self.note(notes::VOXEL_SHADOW_POINT);
-                self.note(notes::SHADOW);
             }
         }
         // spec: S-0105 claim 16 (walk counter 0: body frame 0; the simulation keeps no walk counter yet)
@@ -2044,6 +2141,10 @@ pub struct Inputs<'a> {
     /// and condition ratios a pre-placed building's starting health and
     /// damaged state need (S-0009 claim 37, S-0108 F3).
     pub rules: Option<&'a SimRules>,
+    /// The map's cells after loading (S-0009, S-0010 claim 12: the
+    /// recalculation passes and smoothing), when a game was set up; the
+    /// cells as the map stores them otherwise.
+    pub cells: Option<&'a CellGrid>,
 }
 
 impl Painter {
@@ -2059,6 +2160,7 @@ impl Painter {
             voxels: BTreeMap::new(),
             models: BTreeMap::new(),
             vpl: None,
+            tile_files: BTreeMap::new(),
         }
     }
 
@@ -2074,6 +2176,7 @@ impl Painter {
         let mut b = Builder {
             map: inputs.map,
             rules: inputs.rules,
+            cells_loaded: inputs.cells,
             import: inputs.import,
             catalogue: inputs.catalogue,
             palettes: inputs.palettes,
