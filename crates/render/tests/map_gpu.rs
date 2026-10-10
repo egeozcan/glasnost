@@ -212,3 +212,61 @@ fn gpu_matches_cpu_reference() {
         assert_eq!(differing, 0, "view at {origin:?} size {size:?}");
     }
 }
+
+/// Images and palette rows added after the upload reach the GPU through
+/// `sync`: the result still matches the CPU reference.
+#[test]
+fn sync_uploads_added_images_and_rows() {
+    let Some((device, queue)) = device() else {
+        return;
+    };
+    let full = scene();
+    let mut head = Scene::default();
+    head.add_row(full.rows[0]);
+    head.images.extend(full.images[..2].iter().cloned());
+    head.items.extend(
+        full.items
+            .iter()
+            .filter(|i| i.image < 2 && i.paint == Paint::Row(0))
+            .copied(),
+    );
+    let mut r = MapRenderer::new(
+        &device,
+        &queue,
+        &head,
+        glasnost_render::map_gpu::COLOR_FORMAT,
+    )
+    .expect("scene uploads");
+    r.sync(&device, &queue, &full).expect("added images fit");
+    let size = (128, 72);
+    let view = View {
+        origin: (0, 0),
+        size,
+        reference: Frame::reset_reference(0),
+    };
+    let filter = Filter::default();
+    let cpu = full
+        .compose(&view, &filter, &ComposeQuirks::default())
+        .to_rgba();
+    let (color, depth) = targets(&device, size, glasnost_render::map_gpu::COLOR_FORMAT);
+    let mut encoder = device.create_command_encoder(&Default::default());
+    r.render(
+        &device,
+        &queue,
+        &mut encoder,
+        &color.create_view(&Default::default()),
+        &depth.create_view(&Default::default()),
+        &full,
+        &view,
+        &filter,
+        true,
+    );
+    queue.submit([encoder.finish()]);
+    let gpu = read_texture(&device, &queue, &color, size.0, size.1);
+    let differing = cpu
+        .chunks(4)
+        .zip(gpu.chunks(4))
+        .filter(|(a, b)| a[..3] != b[..3])
+        .count();
+    assert_eq!(differing, 0);
+}

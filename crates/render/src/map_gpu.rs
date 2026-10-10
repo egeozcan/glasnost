@@ -56,8 +56,65 @@ struct Slot {
     layer: u32,
 }
 
-/// Packs rectangles into layers of `side × side` with shelves.
-fn pack(sizes: &[(u32, u32)], side: u32) -> Option<(Vec<Slot>, u32)> {
+/// A shelf packer over layers of `side × side`.
+#[derive(Clone, Copy, Debug)]
+struct Packer {
+    side: u32,
+    x: u32,
+    y: u32,
+    shelf: u32,
+    layer: u32,
+}
+
+impl Packer {
+    fn new(side: u32) -> Self {
+        Self {
+            side,
+            x: 0,
+            y: 0,
+            shelf: 0,
+            layer: 0,
+        }
+    }
+
+    /// The slot of the next `w × h` rectangle, or `None` when it exceeds a
+    /// layer.
+    fn place(&mut self, w: u32, h: u32) -> Option<Slot> {
+        let side = self.side;
+        if w > side || h > side {
+            return None;
+        }
+        if self.x + w > side {
+            self.x = 0;
+            self.y += self.shelf;
+            self.shelf = 0;
+        }
+        if self.y + h > side {
+            self.layer += 1;
+            self.x = 0;
+            self.y = 0;
+            self.shelf = 0;
+        }
+        let slot = Slot {
+            x: self.x,
+            y: self.y,
+            layer: self.layer,
+        };
+        self.x += w;
+        self.shelf = self.shelf.max(h);
+        Some(slot)
+    }
+
+    /// Layers in use.
+    fn layers(&self) -> u32 {
+        self.layer + 1
+    }
+}
+
+/// Packs rectangles into layers of `side × side` with shelves, tallest
+/// first. Returns the slots and the packer, which places later rectangles
+/// after them.
+fn pack(sizes: &[(u32, u32)], side: u32) -> Option<(Vec<Slot>, Packer)> {
     let mut order: Vec<usize> = (0..sizes.len()).collect();
     order.sort_by_key(|&i| std::cmp::Reverse(sizes[i].1));
     let mut slots = vec![
@@ -68,29 +125,17 @@ fn pack(sizes: &[(u32, u32)], side: u32) -> Option<(Vec<Slot>, u32)> {
         };
         sizes.len()
     ];
-    let (mut x, mut y, mut shelf, mut layer) = (0u32, 0u32, 0u32, 0u32);
+    let mut packer = Packer::new(side);
     for i in order {
         let (w, h) = sizes[i];
-        if w > side || h > side {
-            return None;
-        }
-        if x + w > side {
-            x = 0;
-            y += shelf;
-            shelf = 0;
-        }
-        if y + h > side {
-            layer += 1;
-            x = 0;
-            y = 0;
-            shelf = 0;
-        }
-        slots[i] = Slot { x, y, layer };
-        x += w;
-        shelf = shelf.max(h);
+        slots[i] = packer.place(w, h)?;
     }
-    Some((slots, layer + 1))
+    Some((slots, packer))
 }
+
+/// Atlas layers kept free at upload for images added later
+/// ([`MapRenderer::sync`]); our own choice.
+const SPARE_LAYERS: u32 = 1;
 
 /// Pipelines by role.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -105,11 +150,17 @@ enum Role {
 pub struct MapRenderer {
     pipelines: [wgpu::RenderPipeline; 4],
     bind_group: wgpu::BindGroup,
+    layout: wgpu::BindGroupLayout,
     view_buffer: wgpu::Buffer,
     instances: wgpu::Buffer,
     instance_capacity: usize,
     slots: Vec<Slot>,
     rows_per_column: u32,
+    atlas: wgpu::Texture,
+    atlas_layers: u32,
+    packer: Packer,
+    row_count: usize,
+    target_format: wgpu::TextureFormat,
 }
 
 /// Why the scene could not be uploaded.
@@ -142,8 +193,9 @@ impl MapRenderer {
             .iter()
             .map(|i| (i.width().max(1), i.height().max(1)))
             .collect();
-        let (slots, layers) =
+        let (slots, packer) =
             pack(&sizes, side).ok_or_else(|| UploadError("an image exceeds the atlas".into()))?;
+        let layers = packer.layers();
         if layers > limits.max_texture_array_layers {
             return Err(UploadError(format!(
                 "the scene needs {layers} atlas layers; the device allows {}",
@@ -152,7 +204,10 @@ impl MapRenderer {
         }
         // On the GL backends a one-layer texture is a plain 2D texture and
         // cannot be viewed as an array, so the atlas always has two layers.
-        let layers = layers.max(2);
+        // Spare layers take images added later.
+        let layers = (layers + SPARE_LAYERS)
+            .min(limits.max_texture_array_layers)
+            .max(2);
         let mut atlas = vec![0u8; side as usize * side as usize * layers as usize];
         for (img, slot) in scene.images.iter().zip(&slots) {
             let base = slot.layer as usize * side as usize * side as usize;
@@ -181,43 +236,8 @@ impl MapRenderer {
             wgpu::util::TextureDataOrder::LayerMajor,
             &atlas,
         );
-        let rows_per_column = scene.rows.len().clamp(1, side as usize) as u32;
-        let columns = (scene.rows.len().max(1) as u32).div_ceil(rows_per_column);
-        if columns * 256 > side {
-            return Err(UploadError("too many palette rows".into()));
-        }
-        let mut row_bytes = vec![0u8; (columns * 256 * rows_per_column * 4) as usize];
-        for (r, row) in scene.rows.iter().enumerate() {
-            let (col, y) = (r as u32 / rows_per_column, r as u32 % rows_per_column);
-            for (i, &c) in row.iter().enumerate() {
-                let (cr, cg, cb) = expand565(c);
-                let at = ((y * columns * 256 + col * 256 + i as u32) * 4) as usize;
-                row_bytes[at..at + 4].copy_from_slice(&[cr, cg, cb, 255]);
-            }
-        }
-        let rows_texture = device.create_texture_with_data(
-            queue,
-            &wgpu::TextureDescriptor {
-                label: Some("map rows"),
-                size: wgpu::Extent3d {
-                    width: columns * 256,
-                    height: rows_per_column,
-                    depth_or_array_layers: 1,
-                },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: if target_format.is_srgb() {
-                    wgpu::TextureFormat::Rgba8UnormSrgb
-                } else {
-                    wgpu::TextureFormat::Rgba8Unorm
-                },
-                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-                view_formats: &[],
-            },
-            wgpu::util::TextureDataOrder::LayerMajor,
-            &row_bytes,
-        );
+        let (rows_texture, rows_per_column) =
+            rows_texture(device, queue, scene, side, target_format)?;
         let view_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("map view"),
             size: std::mem::size_of::<ViewUniform>() as u64,
@@ -259,31 +279,7 @@ impl MapRenderer {
                 },
             ],
         });
-        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("map"),
-            layout: &layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: view_buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::TextureView(&atlas_texture.create_view(
-                        &wgpu::TextureViewDescriptor {
-                            dimension: Some(wgpu::TextureViewDimension::D2Array),
-                            ..Default::default()
-                        },
-                    )),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: wgpu::BindingResource::TextureView(
-                        &rows_texture.create_view(&wgpu::TextureViewDescriptor::default()),
-                    ),
-                },
-            ],
-        });
+        let bind_group = bind_group(device, &layout, &view_buffer, &atlas_texture, &rows_texture);
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("map"),
             source: wgpu::ShaderSource::Wgsl(SHADER_SOURCE.into()),
@@ -362,12 +358,77 @@ impl MapRenderer {
         Ok(Self {
             pipelines,
             bind_group,
+            layout,
             view_buffer,
             instances,
             instance_capacity,
             slots,
             rows_per_column,
+            atlas: atlas_texture,
+            atlas_layers: layers,
+            packer,
+            row_count: scene.rows.len(),
+            target_format,
         })
+    }
+
+    /// Uploads what `scene` gained since the upload or the last sync: images
+    /// appended to [`Scene::images`] go into the atlas's free space, and
+    /// palette rows appended to [`Scene::rows`] replace the row texture.
+    /// Images and rows already uploaded must be unchanged. Fails when the
+    /// atlas is full (or the scene lost images); upload the scene anew then.
+    pub fn sync(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        scene: &Scene,
+    ) -> Result<(), UploadError> {
+        if scene.images.len() < self.slots.len() {
+            return Err(UploadError("the scene lost images".into()));
+        }
+        for img in &scene.images[self.slots.len()..] {
+            let (w, h) = (img.width(), img.height());
+            let slot = self
+                .packer
+                .place(w.max(1), h.max(1))
+                .filter(|s| s.layer < self.atlas_layers)
+                .ok_or_else(|| UploadError("the atlas is full".into()))?;
+            if w > 0 && h > 0 {
+                queue.write_texture(
+                    wgpu::TexelCopyTextureInfo {
+                        texture: &self.atlas,
+                        mip_level: 0,
+                        origin: wgpu::Origin3d {
+                            x: slot.x,
+                            y: slot.y,
+                            z: slot.layer,
+                        },
+                        aspect: wgpu::TextureAspect::All,
+                    },
+                    img.pixels(),
+                    wgpu::TexelCopyBufferLayout {
+                        offset: 0,
+                        bytes_per_row: Some(w),
+                        rows_per_image: Some(h),
+                    },
+                    wgpu::Extent3d {
+                        width: w,
+                        height: h,
+                        depth_or_array_layers: 1,
+                    },
+                );
+            }
+            self.slots.push(slot);
+        }
+        if scene.rows.len() != self.row_count {
+            let (rows, per_column) =
+                rows_texture(device, queue, scene, self.packer.side, self.target_format)?;
+            self.bind_group =
+                bind_group(device, &self.layout, &self.view_buffer, &self.atlas, &rows);
+            self.rows_per_column = per_column;
+            self.row_count = scene.rows.len();
+        }
+        Ok(())
     }
 
     /// Records the scene for `view` into `encoder`, rendering into `target`
@@ -518,6 +579,89 @@ impl MapRenderer {
     }
 }
 
+/// The palette-row texture of `scene` and its rows per column.
+fn rows_texture(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    scene: &Scene,
+    side: u32,
+    target_format: wgpu::TextureFormat,
+) -> Result<(wgpu::Texture, u32), UploadError> {
+    let rows_per_column = scene.rows.len().clamp(1, side as usize) as u32;
+    let columns = (scene.rows.len().max(1) as u32).div_ceil(rows_per_column);
+    if columns * 256 > side {
+        return Err(UploadError("too many palette rows".into()));
+    }
+    let mut row_bytes = vec![0u8; (columns * 256 * rows_per_column * 4) as usize];
+    for (r, row) in scene.rows.iter().enumerate() {
+        let (col, y) = (r as u32 / rows_per_column, r as u32 % rows_per_column);
+        for (i, &c) in row.iter().enumerate() {
+            let (cr, cg, cb) = expand565(c);
+            let at = ((y * columns * 256 + col * 256 + i as u32) * 4) as usize;
+            row_bytes[at..at + 4].copy_from_slice(&[cr, cg, cb, 255]);
+        }
+    }
+    let texture = device.create_texture_with_data(
+        queue,
+        &wgpu::TextureDescriptor {
+            label: Some("map rows"),
+            size: wgpu::Extent3d {
+                width: columns * 256,
+                height: rows_per_column,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: if target_format.is_srgb() {
+                wgpu::TextureFormat::Rgba8UnormSrgb
+            } else {
+                wgpu::TextureFormat::Rgba8Unorm
+            },
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        },
+        wgpu::util::TextureDataOrder::LayerMajor,
+        &row_bytes,
+    );
+    Ok((texture, rows_per_column))
+}
+
+/// The map pass's bind group.
+fn bind_group(
+    device: &wgpu::Device,
+    layout: &wgpu::BindGroupLayout,
+    view_buffer: &wgpu::Buffer,
+    atlas: &wgpu::Texture,
+    rows: &wgpu::Texture,
+) -> wgpu::BindGroup {
+    device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("map"),
+        layout,
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: view_buffer.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: wgpu::BindingResource::TextureView(&atlas.create_view(
+                    &wgpu::TextureViewDescriptor {
+                        dimension: Some(wgpu::TextureViewDimension::D2Array),
+                        ..Default::default()
+                    },
+                )),
+            },
+            wgpu::BindGroupEntry {
+                binding: 2,
+                resource: wgpu::BindingResource::TextureView(
+                    &rows.create_view(&wgpu::TextureViewDescriptor::default()),
+                ),
+            },
+        ],
+    })
+}
+
 /// Creates a colour target of `format` and a depth buffer for a view of
 /// `size`.
 pub fn targets(
@@ -563,10 +707,25 @@ mod tests {
 
     #[test]
     fn shelf_packing_fits() {
-        let (slots, layers) = pack(&[(10, 10), (5, 12), (10, 10)], 16).unwrap();
+        let (slots, packer) = pack(&[(10, 10), (5, 12), (10, 10)], 16).unwrap();
         assert_eq!(slots.len(), 3);
-        assert!(layers >= 2);
+        assert!(packer.layers() >= 2);
         assert!(pack(&[(17, 1)], 16).is_none());
+    }
+
+    #[test]
+    fn later_images_go_after_the_packed_ones() {
+        let (slots, mut packer) = pack(&[(10, 10), (5, 12)], 16).unwrap();
+        let next = packer.place(6, 4).unwrap();
+        // The new slot overlaps none of the first ones.
+        for (s, (w, h)) in slots.iter().zip([(10, 10), (5, 12)]) {
+            let apart = s.layer != next.layer
+                || next.x >= s.x + w
+                || s.x >= next.x + 6
+                || next.y >= s.y + h
+                || s.y >= next.y + 4;
+            assert!(apart, "{s:?} and {next:?} overlap");
+        }
     }
 
     #[test]
