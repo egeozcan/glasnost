@@ -2,7 +2,7 @@
 id: S-0211
 title: Land types and passability
 topic: movement
-revision: 8
+revision: 9
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -55,9 +55,8 @@ The crusher flag's effect in play is S-0210's (crushing).
   and gems), 6 *beach*, 7 *rough*, 8 *ice*, 9 *railroad*, 10 *tunnel*, 11 *weeds*. Each cell
   has exactly one land type at any time (claims 5 to 8).
 - **Locomotion class.** The column of the land-type table that a mobile type uses. This is the term
-  S-0006 uses, and this spec owns the list. The spec numbers the classes as follows (labels only):
-  0 *foot*, 1 *track*, 2 *wheel*, 3 *hover*, 4 *winged*, 5 *float*, 6 *amphibious*,
-  7 *float-on-beach*. A type may also have *no* class (claim 3). The locomotion class is not the same
+  S-0006 uses, and this spec owns the list. The classes are *foot*, *track*, *wheel*, *hover*,
+  *winged*, *float*, *amphibious* and *float-on-beach*. A type may also have *no* class (claim 3). The locomotion class is not the same
   thing as the *locomotor* (how an object moves) or the *movement zone* (where the pathfinder lets
   it go). A type has all three, chosen by three separate fields.
 - **Land multiplier** *M*(*ℓ*, *c*). A factor for land type *ℓ* and locomotion class *c*. It is
@@ -251,7 +250,7 @@ The crusher flag's effect in play is S-0210's (crushing).
      |---|---|
      | Row 1 | `measurable` (scenarios L4 map 3 type 2, L6 part A for the low bridge, L5 run E) |
      | Row 2, with and without an overlay | `measurable` (scenario L16, cells A and B) |
-     | Row 3, as seen after loading (with an overlay, the overlay's land type; without one, *clear*) | `measurable` (scenario L16, cells C and D) |
+     | Row 3, as seen after loading (with an overlay, the overlay's land type; without one, *clear*) | `measurable` (scenario L16, cells C, C′ and D) |
      | Row 3's *clear* for a cell with an overlay, before the next recompute | `unmeasured`: at map load the second pass replaces it before play begins, and no event in play makes a usable tile unusable |
      | Row 4 | `measurable` (scenario L3) |
      | Row 5 | `measurable` (scenarios L4 map 3 type 1, L5, L11, L16 cell E) |
@@ -264,15 +263,15 @@ The crusher flag's effect in play is S-0210's (crushing).
      | Recompute on a further whole-map change of the terrain at game start | `unmeasured`: which such changes happen belongs to S-0009 and S-0010, and no scenario of this spec separates such a pass from the two passes of map load |
      | Recompute when a terrain object is removed | `measurable` (scenario L14) |
      | Recompute when a terrain object is put into a cell | `unmeasured`: in a skirmish, terrain objects are known to be put into cells only while the map loads, between the two passes of S-0010 claim 12, and the second pass recomputes every cell anyway, so the placement's own recompute has no separate observable |
-     | Recompute when a building is placed or removed | `unmeasured`: a building changes no land type (claim 5 reads only the tile, the overlay and the neighbours' levels) and, as scenario L20 shows for the three kinds of building that can be set up, no category (claim 11), so the recompute has no visible effect in this spec |
+     | Recompute when a building is placed or removed | `unmeasured`: a building changes no land type (claim 5 reads only the tile, the overlay and the neighbours' levels) and, as scenario L20 shows for the three kinds of building that can be set up, no category (claim 11), so the recompute has no visible effect in this spec. The method of scenario L23 (a cell whose tile is dropped by the recompute, read by the placement check on that cell) cannot separate it either: while a building covers the cell the check is blocked by occupancy, and once the building is gone its removal has recomputed the cell too, so placement and removal cannot be told apart; and the check needs stock land data that make rough and clear land differ in buildability, which this spec cannot assume |
      | Recompute when a vehicle moves | `measurable` (S-0010 scenario R1, part E, which uses a named test theater file with the rough-transition role unset: the first unit to enter or leave such a cell makes the recompute visible as a change of the cell's tile; the category cannot show it, because it never depends on units, claim 11) |
      | Recompute when an infantry unit moves, and when an aircraft lands in a cell or leaves it | `measurable` (scenario L23, parts A and B, by S-0010 scenario R1 part E's method) |
 
    - Confidence: high for rows 1, 4 and 5; medium for rows 2 and 3 (the map's tile numbers and
      sub-tiles must reach the recompute unchanged); high for the recompute at map load, on overlay
-     changes, on terrain-object and building changes and on the moves of vehicles and
-     infantry; medium for tile and level changes in play, for aircraft on the ground and for whether the
-     list is complete
+     changes, on terrain-object removal and on the moves of vehicles and infantry; medium for a
+     terrain object put into a cell and for a building placed or removed (both `unmeasured`), for tile
+     and level changes in play, for aircraft on the ground and for whether the list is complete
 
 6. **Tile land codes.** The tile land code *k* maps to a land type by this fixed table:
 
@@ -287,9 +286,9 @@ The crusher flag's effect in play is S-0210's (crushing).
    **Departure.** The original has no entries for codes below 0 or above 15, and a cell with such a
    code gets an unspecified land type. Our engine uses *clear* and the importer warns.
    - Backing: `measurable` (scenario L11 for the codes that occur on flat cells of the test theater,
-     scenario L5 run B for code 0 at the foot of a cliff, and scenario L16 cells C and D for the
-     unusable sub-tile: a sub-tile number beyond the tile's cells, and an empty cell of a
-     multi-cell tile); the out-of-range codes are a departure; a tile with no image data at all is
+     scenario L5 run B for code 0 at the foot of a cliff, and scenario L16 for the unusable
+     sub-tile: cells C and D for a sub-tile number beyond the tile's cells, and cell C′ for an empty
+     cell of a multi-cell tile); the out-of-range codes are a departure; a tile with no image data at all is
      `unmeasured` here, because no scenario of this spec produces such a tile (S-0010 claim 7 and its
      scenario C1 cover the tile itself)
    - Confidence: high
@@ -356,7 +355,7 @@ The crusher flag's effect in play is S-0210's (crushing).
      |---|---|
      | The rule, active and inactive | `measurable` (scenario L5, runs A and B) |
      | The reduction modulo 256 | `measurable` (scenario L5, runs C and D) |
-     | The six neighbours and the threshold of 4 levels | `measurable` (scenario L5, runs F and K) |
+     | The six neighbours and the threshold of 4 levels | `measurable` (scenario L5: runs F and K for the six neighbours and the refusal at 4 levels; runs L and M for a rise of 3 levels, which is not enough; runs N and O for a rise of more than 4 levels, which counts) |
      | A neighbour outside the map reads level 0 | `measurable` (S-0009 scenario M25 part B) |
      | Row 1: *rock* whatever the land type | `measurable` (scenario L5, run E, with run B's pass over the same cells) |
      | Row 5: only the clear set | `measurable` (scenario L5: runs A and B for *clear*, run E for *road* kept, runs G and H for *water*, *beach* and *ice*) |
@@ -376,7 +375,7 @@ The crusher flag's effect in play is S-0210's (crushing).
    high-bridge cell keeps the land type of its ground (for example *water*), so a class that may
    enter that land passes under the deck. An object that will stand on a bridge deck may enter the
    cell whatever its land type, unless the cell holds a wall overlay that refuses its movement zone
-   (claim 10, conditions (ii) and (iii)). S-0207 says that a vehicle drives on a deck as on
+   and the object is not of the winged class (claim 10, conditions (i) to (iii)). S-0207 says that a vehicle drives on a deck as on
    *road*, and S-0212 treats the deck as its own search layer, so the deck's connectivity does not
    follow the category of the ground cell below. When a low bridge's overlay types have the
    own-land-type flag, row 1 of claim 5 gives a low-bridge cell the overlay's land type (for example
@@ -405,14 +404,34 @@ The crusher flag's effect in play is S-0210's (crushing).
     of the land type: the zones of (iii) are judged as on land type *clear*, and every other zone is
     refused, whatever *M*(*ℓ*, *c*) is. Each test of *M* against 0 is made on the single-precision
     value, so any nonzero value allows entry, a negative one included (Formulas).
-    - Backing: `measurable` (scenarios L2, L4 map 3 and L8; scenario L19 maps 2 and 1W for
-      condition (iii) in every movement zone that the zone table lets reach the wall cell; scenario
-      L13 part B for condition (i) at a wall cell in a zone that (iii) refuses; scenario L6 part A
-      for the bridge deck in condition (ii): the vehicle crosses the high bridge over water whose
-      wheel multiplier is 0; scenario L6 part B for a wall overlay refusing zone *normal* on a
-      bridge deck, against a *crusher* control)
+
+    In symbols, an object of class *c* may enter the cell exactly when
+    *c* = winged, or (¬*W* ∧ (*D* ∨ *M*(*ℓ*, *c*) ≠ 0)), or (*W* ∧ *Z* ∧ (*D* ∨ *M*(clear, *c*) ≠ 0)),
+    where *W* says the cell's overlay type has the wall flag, *D* says the object will stand on the
+    cell's bridge deck, and *Z* says the zone condition of (iii) holds (the zone is
+    *destroyer*, *amphibious-destroyer*, *infantry-destroyer* or *crusher-all*, or it is *crusher* or
+    *amphibious-crusher* and the overlay type is crushable).
+    - Backing: `measurable` (condition (ii): scenarios L2 and L4 map 3, and scenario L6 part A for
+      the bridge deck, where the vehicle crosses the high bridge over water whose wheel multiplier is
+      0; condition (iii) and the wall overlay, in set-ups where S-0212 claim 27 is inert, meaning
+      that the vehicle crushes the wall or has no wall to be stopped by (see below): scenario L19
+      map 1W, a crushable wall, for every zone of (iii) that the zone table lets reach the cell,
+      and for the zones that it refuses; scenario L19 map 2, L8 part A and L22 maps Q4 and Q5 for
+      zone *crusher-all* at a wall that is not crushable; scenario L13 part B for condition (i) at
+      a crushable wall in a zone that (iii) refuses; scenario L6 part B for a wall overlay refusing
+      zone *normal* on a bridge deck, against a *crusher* control). S-0212 claim 27 judges a
+      vehicle that steps into a wall cell by its crusher flag, its weapon and the wall's owner, so
+      it can stop a vehicle that this claim admits. Those scenarios therefore give the vehicles the
+      crusher flag and no weapon, with a crushable wall and a wall that the map places (no owner,
+      which counts as another house's, S-0209), or use zone *crusher-all*, which crushes any wall.
+      In both the outcome of S-0209 claim 5 for the wall is *none*, so a refusal or an admission
+      comes from this claim. `unmeasured`: the admission of the zones *destroyer*,
+      *amphibious-destroyer* and *infantry-destroyer* at a wall that is not crushable. A vehicle of
+      those zones that does not crush it is stopped by S-0212 claim 27 whatever this claim admits
+      (*blocked* without a wall-damaging weapon, an obstacle value with one), and no setting makes
+      that outcome inert for it. The same zones at a crushable wall are covered by map 1W.
     - Confidence: high; medium for the bridge deck in conditions (ii) and (iii) and for the wall
-      overlay on a deck cell
+      overlay on a deck cell; low for the three destroyer zones at a wall that is not crushable
 
 11. **The passability category of a cell.** Each cell's passability category is recomputed at every
     land recompute (claim 5), from the cell as it is after the triggering change. It does not
@@ -664,7 +683,7 @@ The crusher flag's effect in play is S-0210's (crushing).
 | Name (ours) | Value | Unit | Notes |
 |---|---|---|---|
 | Land types | 12 | land types | Labels in Terms; claim 1 |
-| Locomotion classes | 8 | classes | Labels in Terms; claim 1 |
+| Locomotion classes | 8 | classes | Names in Terms; claim 1 |
 | Land multiplier cap | 1.0 | factor | Claim 2 |
 | Winged multiplier | 1.0 | factor | Fixed whenever the section is read; claim 2 |
 | Missing multiplier key | 1.0 | factor | Claim 2 |
@@ -728,9 +747,10 @@ database*; S-0006, claim 10).
   or gem overlays, and any overlay on a cell without a usable tile (claim 5, row 2, and row 3 from
   the next land recompute). For every
   other overlay it matters only through category rule 2. This is original behaviour, not a quirk switch.
-- **A wall overlay under a bridge deck.** A wall overlay in a high-bridge cell refuses every
-  movement zone that claim 10's condition (iii) does not list, also for an object that will stand
-  on the deck above it (claim 10). This is original behaviour, not a quirk.
+- **A wall overlay under a bridge deck.** A wall overlay in a high-bridge cell refuses an object
+  that is not of the winged class whenever its movement zone is not one that claim 10's condition
+  (iii) lists, also when the object will stand on the deck above it (condition (i) admits the
+  winged class whatever its zone). This is original behaviour, not a quirk.
 - **Negative multipliers.** A negative *M* allows entry (claim 10), and it gives a track (S-0207's term) into such a
   cell a negative target fraction (S-0207, claim 9). What follows depends on S-0207's claim 10:
   - **Acceleration flag off:** the speed fraction is clamped to 0 at once, so the vehicle is stuck.
@@ -768,7 +788,7 @@ database*; S-0006, claim 10).
 | building section, key `Naval` | naval flag (claim 13) | boolean | no |
 | building section, key `LaserFence` | laser-fence flag (claim 11) | boolean | no |
 | building section, key `FirestormWall` | firestorm-wall flag (claim 11) | boolean | no |
-| terrain-object section, keys `TemperateOccupationBits`, `SnowOccupationBits` | occupation patterns (claim 11, rule 4) | integer | owned by the terrain-object spec |
+| terrain-object section, keys `TemperateOccupationBits`, `SnowOccupationBits` | occupation patterns (claim 11, rule 4) | integer | 7 (an engine constant; a terrain object without the key gets category 2, claim 11, rule 4) |
 | `[General]`, key `CliffBackImpassability` | cliff-back setting *r* | integer; only its remainder modulo 256 matters (claim 8, Formulas) | 0 (no effect) |
 | Theater tile data, per tile cell | tile land code, slope shape index | public tile format (S-0010) | no image data for a cell: row 3 of claim 5 (claim 6) |
 | Theater data file, the water role | the naval placement range (claim 13) | as in S-0010 | unset: tiles 0 to 12 (claim 13) |
@@ -865,13 +885,15 @@ otherwise.
   vehicle is refused at either row.
 
 **L5: cliff-back (claims 5, 6 and 8).**
-- *Setup:* four maps, with these runs. The cliff-back setting is given by override, as each run
+- *Setup:* six maps, with these runs. The cliff-back setting is given by override, as each run
   states. On every map an override gives the rock land type every multiplier 0.
 
   | Runs | Map | Cliff-back setting |
   |---|---|---|
   | A, B, C, D, E | the cliff map | A 2, B 0, C 258, D 1, E 2 |
   | F, K | the raised-cell map | F 2, K 0 |
+  | L, M | the low-raised map | L 2, M 0 |
+  | N, O | the high-raised map | N 2, O 0 |
   | G, H | the water map | G 2, H 0 |
   | I, J | the tile map | I 2, J 0 |
 
@@ -884,6 +906,8 @@ otherwise.
     level 4 levels above its surroundings (a level written in the map file, with the same tile),
     so no cell has a neighbour 4 levels up except through *p*. The unit is the vehicle of the cliff
     map.
+  - *The low-raised map* and *the high-raised map:* as the raised-cell map, except that *p* is 3
+    levels above its surroundings on the low-raised map and 6 levels above on the high-raised map.
   - *The water map:* a flat map in a theater whose flat tile cells include the tile land codes 9
     (water), 10 (beach) and one of 1 to 4 (ice) (the test author reads the codes from the tile
     files, as in L11). On clear ground, far apart, lie three cells *q* of those three codes, and
@@ -914,8 +938,8 @@ otherwise.
     cell farther from the cliff. Run B also visits run E's cells.
   - Run E: each road foot cell and each overlay foot cell that has one of claim 8's neighbours 4
     levels up.
-  - Runs F and K: each of the eight cells around *p*, the cell *p* + (−2, −2), and a cell farther
-    away.
+  - Runs F, K, L, M, N and O: each of the eight cells around *p*, the cell *p* + (−2, −2), and a
+    cell farther away.
   - Runs G and H: each cell *q*, approached from *q* + (0, 1). Runs I and J: each test cell *s*,
     approached from *s* + (0, 1). No approach cell is behind a cliff: claim 8's six neighbours of
     *q* + (0, 1) do not include the raised cell *q* + (0, −1), and likewise for *s*.
@@ -927,7 +951,9 @@ otherwise.
   - Run F: the vehicle is refused at *p* + (0, 1), *p* + (1, 0), *p* + (−1, 1), *p* + (1, −1),
     *p* + (−1, −1) and *p* + (−2, −2), and enters *p* + (0, −1), *p* + (−1, 0), *p* + (1, 1) and
     the farther cell. A rule over all eight neighbours would also refuse the last three. Run K:
-    every visited cell entered.
+    every visited cell entered. Run N: the same as run F (a rise of 6 levels counts, as one of 4
+    does). Runs L and M: every visited cell entered (a rise of 3 levels is not enough); run O: every
+    visited cell entered.
   - Run G: refused at all three cells *q* (land type *rock*, so *M*(rock, hover) = 0 and category
     6). Run H: all three entered (water, category 4; beach, category 3; ice, category 0).
   - Run I: refused at *s*₁ and *s*₃ (land type *rock*), and entered at *s*₂ and *s*₄ (*road* and
@@ -935,9 +961,10 @@ otherwise.
     *water* in category 4).
 - *Falsified if:* run A gives the same result as run B; the far cell is refused in run A; run C
   differs from run A; run D differs from run B on the cells both visit; in run E a road foot cell is refused or an overlay
-  foot cell is entered; run F enters any of its six refused cells or refuses any of its four
-  entered ones; in run G the vehicle enters a cell *q*; in run I the vehicle enters *s*₁ or *s*₃,
-  or is refused at *s*₂ or *s*₄. A cell refused in the run with setting 0 (runs B, K, H and J) is
+  foot cell is entered; run F or run N enters any of its six refused cells or refuses any of its four
+  entered ones; run L refuses a cell that run M enters (the rule would then act on a rise of less
+  than 4 levels); in run G the vehicle enters a cell *q*; in run I the vehicle enters *s*₁ or *s*₃,
+  or is refused at *s*₂ or *s*₄. A cell refused in the run with setting 0 (runs B, K, M, O, H and J) is
   blocked by something other than the cliff-back rule, and the pair of runs cannot decide for
   that cell.
 
@@ -1001,8 +1028,12 @@ otherwise.
   *normal* whose restricted land type an override sets to road. A wall segment across a road, of a wall type whose override gives it land
   type *wall*, the wall flag on, and the crushable, own-land-type, tiberium, rock and rubble flags
   off; an override gives the wall land type every multiplier 100 %, so only the wall row of rule 2
-  can decide the wall cell's category. A vehicle of zone *normal* and one of zone *destroyer*, both of class wheel and without a
-  restricted land type. *Part B:* a vehicle type of class wheel and zone *normal*, restricted to
+  can decide the wall cell's category. A vehicle of zone *normal* and one of zone *crusher-all*, both of class wheel, without a
+  weapon and without a restricted land type. The wall is placed by the map, so it has no owner and
+  counts as another house's (S-0209). Zone *crusher-all* crushes any wall, so S-0212 claim 27, which
+  would stop a vehicle that does not crush the wall, gives it no outcome (S-0209 claim 5), and its
+  passage comes from claims 10 and 11 alone. A zone *destroyer* vehicle would be stopped by that
+  outcome, so it is not used (claim 10's backing says what stays `unmeasured`). *Part B:* a vehicle type of class wheel and zone *normal*, restricted to
   railroad by override, on a railroad leading into tunnel tiles of land type *tunnel*, with tiles of
   the sizes listed in claim 14 and of one other size; an override gives the railroad and tunnel land
   types every multiplier 100 %. *Part C:* a vehicle of class wheel and zone *normal*, restricted to
@@ -1014,12 +1045,12 @@ otherwise.
   cell. Part C: order the restricted vehicle across each bridge.
 - *Observable:* which cells each vehicle enters (recorder positions).
 - *Expected:* part A: the restricted vehicle never leaves road cells; the *normal* vehicle cannot
-  cross the wall; the *destroyer* vehicle drives through the wall cell.
+  cross the wall; the *crusher-all* vehicle drives through the wall cell.
   Part B: on tiles of the listed sizes only the cell of the listed sub-tile is entered; on the
   other tile every tunnel cell is. Part C: the first bridge is refused; the second, if present, is
   crossed.
 - *Falsified if:* the restricted vehicle enters a clear cell, the *normal* vehicle crosses the wall,
-  the *destroyer* vehicle does not drive through the wall cell, part B admits a tunnel cell of
+  the *crusher-all* vehicle does not drive through the wall cell, part B admits a tunnel cell of
   another sub-tile on a listed tile or refuses a tunnel cell of the other tile, or part C lets the
   vehicle cross the first bridge or refuses the second.
 
@@ -1129,16 +1160,20 @@ otherwise.
 - *Expected:* in both runs the wheel vehicle is slower on rough, and the winged-class vehicle is as
   fast on rough as on clear.
 - *Falsified if:* the winged-class vehicle is slower on rough in either run.
-- *Part B, setup:* a flat clear map with one wall segment across a corridor, of a wall type whose
-  override gives it land type *wall*, the wall flag on, and the crushable, own-land-type, tiberium,
-  rock and rubble flags off; an override gives the wall land type every multiplier 100 %. Two
-  vehicles of zone *fly* and with the acceleration flag off, one of class winged and one of class
-  wheel.
-- *Part B, procedure:* order each vehicle to a cell on the far side of the wall.
+- *Part B, setup:* a flat clear map with one wall segment across a corridor, placed by the map (so
+  it has no owner and counts as another house's, S-0209), of a wall type whose override gives it
+  land type *wall*, the wall flag and the crushable flag on, and the own-land-type, tiberium, rock
+  and rubble flags off; an override gives the wall land type every multiplier 100 %. Two vehicles
+  of zone *fly*, with the acceleration flag off, the crusher flag set and no weapon, one of class
+  winged and one of class wheel. A crushable wall that a crusher vehicle meets gives no outcome
+  under S-0212 claim 27 (S-0209 claim 5), so a refusal at the wall cell comes from claim 10 alone.
+  Category 1 is crossable by zone *fly*.
+- *Part B, procedure:* in two runs, each from a fresh load of the map (crushing may remove the
+  wall, S-0210), order one of the two vehicles to a cell on the far side of the wall.
 - *Part B, observable:* whether each vehicle passes through the wall cell (recorder positions).
 - *Part B, expected:* the winged-class vehicle passes through the wall cell (claim 10's
   condition (i) admits the winged class whatever the overlay, and zone *fly* may cross category
-  2), while the wheel-class vehicle does not enter the wall cell (zone *fly* is not among the
+  1), while the wheel-class vehicle does not enter the wall cell (zone *fly* is not among the
   zones of claim 10's condition (iii)).
 - *Part B, falsified if:* the winged-class vehicle is refused at the wall cell, or the wheel-class
   vehicle enters it. If the winged-class vehicle is refused, a wall overlay refuses the winged class
@@ -1274,7 +1309,15 @@ otherwise.
   near water of maps W0 to W6. Overrides set each type's movement zone. Every unit belongs to a
   computer-controlled house and is a team member, ordered through its team's script, as in S-0212
   scenario P3 run 2. One run per map and unit; units may share a run when they are placed far
-  enough apart that they never meet.
+  enough apart that they never meet, except on maps 1W and 2, which have one unit per run
+  (crushing may remove the overlay of a band cell, S-0210, and open the band to the next unit).
+  S-0212 claim 27 judges a vehicle that steps into a wall cell by its crusher flag, its weapon and
+  the wall's owner. To keep it from stopping a vehicle that claim 10 admits, the walls of maps 1W and
+  2 are placed by the map (no owner, so another house's, S-0209), and every vehicle on those two
+  maps has the crusher flag set and no weapon. The outcome of S-0209 claim 5 for a wall is then
+  *none* for every vehicle on map 1W (the wall is crushable) and, on map 2, only for zone
+  *crusher-all*, which crushes any wall. Any other vehicle that enters a wall cell of map 2 is
+  stopped by that outcome (*blocked*, since it has no weapon).
 - *Procedure:* order each unit to a cell of the far area.
 - *Observable:* whether the unit moves, whether its position is ever in a band cell, whether it
   reaches the destination, the tick its destination is cleared, whether it is still a team member
@@ -1286,23 +1329,28 @@ otherwise.
   - **G**, the gate fails: it takes no step, its destination is cleared in the tick the path is
     first requested, it stays a team member and it gets no new destination (S-0212, claims 6
     and 23, first row).
-  - **P**, the gate passes: C or S, whichever the occupancy rules for the terrain objects give
-    (the occupancy specs own them; this scenario does not decide between C and S here).
+  - **P**, the gate passes: C or S, whichever the occupancy rules give (the occupancy specs own
+    them: for the terrain objects of map 5, and on map 2 for a vehicle that does not crush the
+    wall, S-0212 claim 27 and S-0209 claim 5; this scenario does not decide between C and S
+    there).
 - *Expected:* a *yes* of the zone table gives C, S or P, and a *no* gives G. S appears where
   claim 10 refuses the wall cells to a zone that the table lets reach them (on map 1W, *crusher*
-  and *amphibious-crusher* cross because the wall is crushable):
+  and *amphibious-crusher* cross because the wall is crushable, and the other zones of claim 10's
+  condition (iii) cross because their vehicles crush it). On map 2 an S cannot tell claim 10's
+  refusal from S-0212 claim 27's stop, so those two cells check only that the gate passed and that
+  the unit does not cross; map 1W, where claim 27 is inert, tells them apart:
 
   | movement zone | map 0 | map 1 | map 1W | map 2 | map 3 | map 4 | map 5 | map 6 |
   |---|---|---|---|---|---|---|---|---|
   | normal | C | G | G | G | G | G | G | G |
   | crusher | C | C | C | G | G | G | G | G |
-  | destroyer | C | C | C | C | G | G | G | G |
-  | amphibious-destroyer | C | C | C | C | C | C | P | G |
+  | destroyer | C | C | C | P | G | G | G | G |
+  | amphibious-destroyer | C | C | C | P | C | C | P | G |
   | amphibious-crusher | C | C | C | G | C | C | G | G |
   | amphibious | C | G | G | G | C | C | G | G |
   | subterranean | C | C | S | S | G | G | G | C |
   | infantry | C | G | G | G | G | G | P | G |
-  | infantry-destroyer | C | C | C | C | G | G | P | G |
+  | infantry-destroyer | C | C | C | P | G | G | P | G |
   | fly | C | C | S | S | C | C | P | C |
   | crusher-all | C | C | C | C | G | G | G | G |
   | water (maps W0 to W6) | G | G | — | G | G | C | G | G |
@@ -1310,7 +1358,9 @@ otherwise.
 
 - *Falsified if:* a cell expected G shows any sign that the gate passed (the unit moves, leaves its
   team or gets a new destination); a cell expected C, S or P shows the G outcome; a C cell does not
-  reach the destination; or an S cell crosses the band. A G outcome in the subterranean or fly
+  reach the destination; or an S cell crosses the band. A unit that moved but was stopped at a wall cell counts as not G
+  wherever its cell is not C (a P cell, or an S cell of map 2): it confirms that the gate passed and
+  leaves claim 10 undecided. A G outcome in the subterranean or fly
   row where C or S is expected falsifies either this table or S-0212's region rule, which is of low
   confidence for those two zones (S-0212, claim 3); S-0212 decides between the two. On map 1W, a G
   outcome for *crusher* or *amphibious-crusher* would mean that the wall row of rule 2 came first
@@ -1378,15 +1428,19 @@ otherwise.
   type (row 5 of claim 5), so only rule 2 reads *rough*. Overrides give the clear land type every
   multiplier 100 %. One vehicle of class wheel per map, of the zone the table gives, which starts
   in the near area, belongs to a computer-controlled house and is a team member, ordered through
-  its team's script, as in L19.
+  its team's script, as in L19. The walls of maps Q4 to Q6 are placed by the map (no owner, so
+  another house's, S-0209) and every vehicle has no weapon. Maps Q4 and Q5 use zone *crusher-all*,
+  which crosses categories 2 and not 6 like the destroyer zones do, and crushes any wall, so S-0212
+  claim 27 gives it no outcome (S-0209 claim 5); a vehicle of a destroyer zone would be stopped
+  there. On Q6 the expected outcome is G, which no stop at a wall can change.
 
   | Map | Overlay flags on | Overlay land type | Zone | Expected (rows in the order of claim 11) | If the later row came first |
   |---|---|---|---|---|---|
   | Q1 | crushable, rock | clear | *crusher* | C (category 1) | G (category 6) |
   | Q2 | crushable | rough | *crusher* | C (category 1) | G (category 6) |
   | Q3 | crushable, rubble | clear | *normal* | G (category 1) | C (category 0) |
-  | Q4 | wall | rough | *destroyer* | C (category 2) | G (category 6) |
-  | Q5 | wall, rock | clear | *destroyer* | C (category 2) | G (category 6) |
+  | Q4 | wall | rough | *crusher-all* | C (category 2) | G (category 6) |
+  | Q5 | wall, rock | clear | *crusher-all* | C (category 2) | G (category 6) |
   | Q6 | wall, rubble | clear | *normal* | G (category 2) | S (category 0: the gate passes, and claim 10 refuses the wall cells) |
   | Q7 | rubble | rough | *normal* | G (category 6) | C (category 0) |
   | Q8 | rock, rubble | clear | *normal* | G (category 6) | C (category 0) |
@@ -1400,7 +1454,10 @@ otherwise.
 - *Falsified if:* any map gives the outcome of the column "If the later row came first", or any
   other outcome than the expected one. On Q1, Q2, Q4 and Q5 a C outcome needs the vehicle to enter
   the band cells; claim 10 allows it, because the cells' land type is *clear* (and on Q4 and Q5
-  zone *destroyer* is among the zones of claim 10's condition (iii)).
+  zone *crusher-all* is among the zones of claim 10's condition (iii)). A vehicle that moved but
+  stopped at a band cell of Q4 or Q5 (for example in front of a crushed wall that stays) counts as
+  not G, so it confirms the gate and leaves claim 10 undecided; the outcome S there does not
+  falsify the claim about the order of the rows.
 
 **L23: recompute when an infantry unit or an aircraft is on the ground in a cell (claim 5; named
 test files).**
@@ -1431,18 +1488,7 @@ test files).**
 - Which game events check *M* ≠ 0 and the absence of an overlay before putting a mobile object on a
   cell (for example a unit leaving a factory) belongs to the occupancy and production specs.
 - The difference between *no* and *never* in the zone table belongs to S-0212.
-- A vehicle stepping into a wall cell is also judged by S-0212's outcome for a wall section in
-  the cell (S-0212 claim 27), which reads the vehicle's crusher flag, its weapon and the wall's
-  owner, not its movement zone. Scenarios L8 part A, L13 part B, L19 (maps 1W and 2) and L22
-  (maps Q4 to Q6) do not yet set those fields for their vehicles, so a vehicle that claim 10
-  admits may still be stopped there by that outcome. Which settings make it inert belongs to
-  S-0212 and the combat specs, and the scenarios' set-ups are to be completed with them before
-  they are run. Scenario L6 part B avoids the question with a control that differs only in zone.
-
-## Questions for the project lead
-
-- This spec answers requests Q-0018 and Q-0020 only in part (Summary, *Requests*), like the other
-  specs of the batch that list them. Should the hand-off set either request to answered only once
-  every spec that answers a part of it has been approved?
-- The switch `quirks.restricted_deck_overlay_indices` (claim 14) defaults to the original. Should it
-  exist?
+- Whether a vehicle of zone *destroyer*, *amphibious-destroyer* or *infantry-destroyer* can enter a
+  wall cell that is not crushable has no scenario: S-0212 claim 27 stops any vehicle there that does
+  not crush the wall (claim 10's backing). It is open until the combat or occupancy specs name a
+  vehicle setting that makes that outcome inert for such a vehicle.
