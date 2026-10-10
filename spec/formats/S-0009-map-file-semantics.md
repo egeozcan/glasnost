@@ -2,13 +2,13 @@
 id: S-0009
 title: Map file semantics (geometry, terrain streams, waypoint markers, start positions, preview)
 topic: formats
-revision: 10
+revision: 11
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-10
 measurements: []
-requests: [Q-0018]
+requests: [Q-0010, Q-0016, Q-0018]
 supersedes: []
 ---
 
@@ -22,7 +22,7 @@ the waypoint markers, skirmish start positions, which parts of a map a skirmish 
 which observable order, the fields of the map's object lists with the state in which each
 pre-placed object starts, the cell tags and map trigger variables, what a cell outside the map
 reads as, and the starting units each house receives. Byte-level stream encodings, lighting, tile categories, triggers and the
-map's rules overrides are outside this spec (Open questions and Questions for the project lead).
+map's rules overrides are outside this spec (Open questions).
 
 ## Terms
 
@@ -106,7 +106,7 @@ Terms used as defined in the shared glossary: *cell*, *lepton*, *height level*, 
 - **Decoded stream.** The sequence of values that an encoded map block (terrain, overlay type,
   overlay data or preview) yields once decoded. This spec states the order and meaning of those
   values, not the byte encoding (value widths, compression, block layout), which is outside it
-  (Questions for the project lead). A result that would depend on the byte encoding itself, such as
+  (planned S-0012). A result that would depend on the byte encoding itself, such as
   a stream that ends partway through a value, is unspecified in the original. Our engine treats
   such a partial value as not present, exactly as if the stream had ended just before it, and the
   importer warns (a departure).
@@ -306,11 +306,11 @@ Terms used as defined in the shared glossary: *cell*, *lepton*, *height level*, 
    - A field that names exactly the first missing tileset number gives the theater's tile count
      (S-0010 claim 4, `quirks.role_one_past_end`). That switch therefore changes the fill base tile
      too: with it turned off, such a field gives −1 here as well. A fill tile number at or beyond
-     the map's own theater's tile count is drawn as that theater's clear tile, and the first terrain
-     recalculation replaces it by the no-tile marker 65535 on most cells (claim 8; S-0010 claims 7
-     and 12). When the base tiles come from the map's own theater, which happens when the theater
-     loaded before is the same theater, every fill tile built on such a base tile is drawn as the
-     clear tile.
+     the map's own theater's tile count is replaced by the no-tile marker 65535 on most cells by the
+     first terrain recalculation (claim 8; S-0010 claims 7 and 12); what is painted for such a
+     number is S-0010 claim 24's. When the base tiles come from the map's own theater, which happens
+     when the theater loaded before is the same theater, every fill tile built on such a base tile
+     is of that kind.
    - For the theater with index 5 in the theater list of Import mapping, the water base tile is
      −1 whatever that theater's water-set field says (S-0010, claim 4).
 
@@ -362,7 +362,9 @@ Terms used as defined in the shared glossary: *cell*, *lepton*, *height level*, 
    such a number by the marker 65535 on most cells. When the game decides which tile artwork to
    load:
    - The marker 65535 and numbers at or beyond the theater's tile count count as the theater's
-     clear tile.
+     clear tile. That is the choice of artwork only. What is painted for a cell that holds such a
+     number is S-0010 claim 24's (for a number at or beyond the tile count the original's picture
+     is unspecified there, and our engine paints the clear tile).
    - Negative numbers come from the initial fill of claim 6, or from a terrain record whose tile
      number is negative. They are not caught by that rule. The original's result is
      unspecified. Our engine treats a negative tile number like the marker 65535 (a departure),
@@ -371,7 +373,7 @@ Terms used as defined in the shared glossary: *cell*, *lepton*, *height level*, 
    What these numbers mean for play (land type, slope, the cells that keep an out-of-range number)
    belongs to S-0010 (claims 7 and 8).
    - Backing: `measurable` (scenario M4b) for the identity case, and (its second part) for the
-     clear-tile rule for numbers at or beyond the tile count. The translation is `measurable`
+     artwork choice for numbers at or beyond the tile count. The translation is `measurable`
      with scenario M4c: no stock theater declares a different authored count, so M4c uses a named
      test file, a loose copy of a theater file in which one tileset declares one.
    - Confidence: medium for the translation, low for the art substitution
@@ -519,10 +521,10 @@ Terms used as defined in the shared glossary: *cell*, *lepton*, *height level*, 
     The candidate is x = v + 1, y = u + 11. For W + H ≥ 21 that makes x range over
     11 … W + H − 10 but y over 11 … W + H, an asymmetry (quirk
     `quirks.random_start_asymmetric_range`; smaller maps: see Formulas). The
-    candidate need not be legal. The game then makes the nearby-cell search of S-0212 (claim 25)
-    around it, with these settings: the centre is the candidate, the locomotion class is *track*
-    and the movement zone *normal*, and there is no reach region, no deck mode, no height
-    condition, no further test and no reference cell. A cell qualifies, in place of that claim's single-cell conditions,
+    candidate need not be legal. The game then looks for the entry with the nearby-cell search of
+    S-0212 (claim 25), centred on the candidate, for locomotion class *track* and movement zone
+    *normal*, and with none of that search's optional parts: no reach region, no deck mode, no
+    height condition, no further test and no reference cell. A cell qualifies, in place of that claim's single-cell conditions,
     when it is a usable cell (the height-aware test of claim 4) and every cell of its *start
     area* is clear. The start area of cell (x, y) is the 8 × 8 block of cells (x + i, y + j) for
     i, j = 0 … 7: it has the examined cell as its corner and extends towards increasing x and y. A
@@ -1007,7 +1009,7 @@ Terms used as defined in the shared glossary: *cell*, *lepton*, *height level*, 
 
 ### Pre-placed objects: entry fields and initial state
 
-Claims 34 to 43 give the field layout of the map's object lists and the state in which each
+Claims 34 to 43 give the field positions of the map's object lists and the state in which each
 pre-placed object starts. The owner rules are claim 27's. Each object enters play when its entry is
 read, in the placement order of claim 43, while the game's set-up at game start is in progress
 (S-0108 claim 6). Field positions are numbered from 1. Import mapping lists the sections.
@@ -1030,7 +1032,7 @@ read, in the placement order of claim 43, while the game's set-up at game start 
       limit)
     - Confidence: high (medium for the 127-character limit)
 
-35. **Field layout.** At format version 4 and above, the fields are:
+35. **Field positions.** At format version 4 and above, the fields are:
 
     | Field | Vehicles | Aircraft | Infantry | Buildings |
     |---|---|---|---|---|
@@ -1066,8 +1068,9 @@ read, in the placement order of claim 43, while the game's set-up at game start 
       index are measured through scenarios M23 (variant A), M21 (variants C and D) and M24. The
       positions of the group number, the two recruit flags, the computer-sell, computer-rebuild
       and computer-repair flags, the nominal flag and the searchlight value are `unmeasured`: no
-      rule of our engine acts on them, or the topic that would show their effect has no spec yet
-      (claims 40 and 41), so a misplaced field would show nothing
+      rule of this spec acts on them, and the topic that would show their effect has no spec yet or
+      belongs to another spec (claims 40 and 41; the repair flag's effect is S-0314's), so a
+      misplaced field would show nothing
     - Confidence: high for fields 1 to 6 and for the veterancy, tag and behaviour positions; medium
       for the other optional fields
 
@@ -1182,21 +1185,38 @@ read, in the placement order of claim 43, while the game's set-up at game start 
       searchlight's behaviour. What the values mean belongs to the lighting topic (no spec covers
       searchlights yet, a pointer only).
 
-    The computer-sell, computer-rebuild and computer-repair flags steer only how the original's
-    computer players treat the building. What the nominal flag does in the original is not
-    established here, and no rule of play is known to depend on it. AI houses (glossary) follow the
-    unit rules of human-controlled houses (lead decision of 2026-10-09), so our engine reads these
-    flags and keeps them as map data, and no engine rule acts on them. An AI house may read the
-    three computer flags and choose to reproduce the original's treatment of the building through
-    ordinary orders.
+    The computer-repair flag is read by the original's automatic building repair (S-0314, claim
+    8): a building with the flag set may have its repair switched on by that rule, and the rule is
+    gated by the house skill level. The computer-sell and computer-rebuild flags steer the original's
+    computer players, whose base logic is outside the specs. The *neutral* and *special* houses
+    (glossary, *AI house*, *Player houses only*) keep the original's rules for owners that are not
+    human-controlled. Their house skill level is 0, as for a human-controlled house, because the
+    program's setup gives a level above 0 only to houses of players, so S-0314's gate treats
+    their buildings as it treats a human-controlled house's: with the repair-and-sell threshold
+    above 0, the repair flag has no effect on a building of either house, whatever its value; with
+    a threshold of 0 or below, S-0314 (claim 8) owns the outcome for every house. Of the two
+    other flags, no rule of play is known that acts on a building of the neutral or special house
+    (a passive house also runs no computer logic); whether a non-passive neutral or special house
+    (claim 28) runs the computer players' base logic on its buildings is not established
+    (Open questions). Our engine reads all three flags and keeps them as map data; it applies the
+    repair flag only through S-0314 and acts on the sell and rebuild flags in no house, because
+    AI houses follow the unit rules of human-controlled houses (decision of the project lead,
+    2026-10-09, refined 2026-10-10 for the two non-player houses). What the nominal flag does in
+    the original is not established here, and no rule of play is known to depend on it. An AI
+    house may read the three computer flags and choose to reproduce the original's treatment of
+    the building through ordinary orders.
     - Backing: `measurable` (scenario M21: variant A for the complete idle start, the slot starts
       and the damaged variant, variant B for the sprite turret slot, variant C for the switched-off
-      start, variant D for upgrades and the carried-over field). The *guard* start is
+      start, variant D for upgrades and the carried-over field). The effects of the three
+      computer flags are `unmeasured` here: the repair flag's effect is S-0314's (its scenario
+      H9 measures the gate), and the sell and rebuild flags act only through the computer
+      players' base logic, which no scenario of this spec observes. The *guard* start is
       `unmeasured` here: the observable of *guard* for a building (an armed building firing at an
       enemy that comes into range, S-0215 claim 33) does not separate *guard* from the other
       behaviours a building could start in, so no scenario of this spec can tell them apart
     - Confidence: high for the complete start in the idle state; medium for the slots not started,
-      the switched-on flag and the upgrades; low for the carried-over upgrade field
+      the switched-on flag and the upgrades; low for the carried-over upgrade field; medium for the account of the three computer flags (the repair
+      flag read by S-0314's rule, no known effect of the others on the two non-player houses)
 
 41. **Other object fields.**
     - *Behaviour name* (vehicles, aircraft, infantry): the behaviour the object starts with, by
@@ -1255,10 +1275,10 @@ read, in the placement order of claim 43, while the game's set-up at game start 
       questions). Until it is, our engine removes the link, so that car has no leader (an interim
       rule).
     - *Recruit-no and recruit-yes flags*: in the original they mark whether its computer players
-      may take the object into their teams. Glasnost has no recruitable property (lead decision of
-      2026-10-09), so our engine keeps them as map data, and no engine rule acts on them. An AI
-      house (glossary) may read them and choose to reproduce the original's use of them through
-      ordinary orders.
+      may take the object into their teams. In our engine the recruitable property of S-0215
+      (claim 20) has no effect (glossary, *AI house*), so our engine keeps these flags as map data
+      and no engine rule acts on them. An AI house (glossary) may read them and choose to
+      reproduce the original's use of them through ordinary orders.
     - Backing: `measurable` (scenario M19: variant G for the behaviour name's field and a name that
       matches, and for an unmatched name not being read as that behaviour; variant H for the tag name; variant I for the veterancy value and its absent
       case; scenario M24 for the follow index, observed through S-0212 claim 26). Group number and the recruit flags are `unmeasured` here:
@@ -1392,11 +1412,17 @@ read, in the placement order of claim 43, while the game's set-up at game start 
       it keep theirs; in the third case this house keeps its base unit, and in the second case
       its base unit is removed again after taking its creation draw), and the final ranged draw of
       claim 20 is not taken. Our engine does the same.
-    - **Behaviour.** In the original a starting unit of a human player's house starts in the
-      *guard* behaviour and one of a computer player's house in *area guard* (S-0215). AI houses
-      (glossary) follow the unit rules of human-controlled houses (lead decision of 2026-10-09), so
-      our engine starts every house's starting units in *guard*; an AI house may give them *area
-      guard* through ordinary orders (S-0213). Their experience at creation is S-0311's.
+    - **Behaviour.** In the original the starting behaviour depends on whether the house is
+      human-controlled: a starting unit of a human-controlled house starts in the *guard*
+      behaviour and one of any other house in *area guard* (S-0215). The other houses are the
+      computer players' and the *neutral* and *special* houses (a house reaches this step only if
+      it is not passive, claim 28), which are not human-controlled. Our engine starts the starting
+      units of every player house, human or AI, in *guard* (AI houses follow the unit rules of
+      human-controlled houses, decision of the project lead, 2026-10-09; glossary, *AI house*); an
+      AI house may give them *area guard* through ordinary orders (S-0213). The units of a
+      neutral or special house keep the original's behaviour: *area guard* (glossary, *AI house*,
+      *Player houses only*, decision of the project lead, 2026-10-10). Their experience at
+      creation is S-0311's.
     - Backing: `measurable` (scenario M26 for the pools, the budget, the vehicle-or-infantry rule
       and the type draws; variant B for the base unit and the bases setting; variant E for the
       failure limit and the credits left over; variant F, with a named test file, for the early
@@ -1404,7 +1430,8 @@ read, in the placement order of claim 43, while the game's set-up at game start 
       source, its absent-key default, the signed comparison and the house's tech level of a
       player; variant I for the early stop on empty start pools; scenario M16 variants B and G for
       the neutral house's tech level 1 and variant D with its second part for the special
-      house's). The second early-stop case, a base unit that cannot be placed, is
+      house's; M16 variants B and D also for the *area guard* start of the neutral and special
+      houses' units). The second early-stop case, a base unit that cannot be placed, is
       `unmeasured`: it arises only on a base cell that is not a legal cell, where the original's
       result is unspecified and our engine's rule is a departure (claim 46). It stops the step in
       the same way as the measured cases.
@@ -1436,9 +1463,9 @@ read, in the placement order of claim 43, while the game's set-up at game start 
       with first radius 4.
     - **The placement search** with first radius *r*₀, for the base unit and every other starting
       unit alike, uses this acceptance test: a cell *accepts* the unit when it is a usable cell
-      (the height-aware test of claim 4) and holds no infantry, vehicle, aircraft or building, or
-      when the unit is an infantry unit and the cell's occupant nearest to its centre is an
-      infantry unit. A cell that is not a legal cell is never usable, so it never accepts a unit,
+      (the height-aware test of claim 4) and, in addition, either holds no infantry, vehicle,
+      aircraft or building or, for an infantry unit, has an infantry unit as its occupant nearest
+      to its centre. A cell that is not a legal cell is never usable, so it never accepts a unit,
       not even as the first element *b* of the sequence. The search is one ordered sequence of
       elements, each with the draws that belong to it, defined by the table below. The sequence
       is the start element, followed by the blocks of the radii *r*₀, *r*₀ + 1, …, 31 in that
@@ -1692,6 +1719,8 @@ non-negative remainder. Integers, exact.
 | placement search passes | 2 per radius, 8 candidates each | candidates | the second pass adds the displacement draws (claim 46) |
 | displacement per axis | 0 or 1 | cells | R(0, 1), direction by a percent draw against 50 (claim 46) |
 | displacement direction threshold | 50 | percent | a percent draw below 50 moves the coordinate towards higher values (claim 46; Terms, percent draw) |
+| radius-start draw | 0 … 7 | step directions | one ranged draw *k*ᵣ = R(0, 7) per radius reached; candidate *F*(*r*, *j*) lies along step direction (*k*ᵣ + *j*) mod 8 (claim 46) |
+| final draw after the starting units | 0 … 65535 | draw values (dimensionless) | one ranged draw after the last house, one raw value, its value unused; not taken when the step stops early (claims 20 and 45) |
 | visceroid placement draw | 0 … 29 | draw values (dimensionless) | one per placement of a vehicle of a visceroid type (claim 46) |
 | purchases without a fall in the budget before our engine stops a house | 1000 | consecutive purchases | a limit of our engine, not a constant of the original (Edge cases) |
 | failed random start candidates before our engine gives up | 1000 | candidates (pairs of ranged draws) | a limit of our engine, not a constant of the original, which sets no limit (claim 18) |
@@ -2152,7 +2181,7 @@ that the stream can be computed by S-0202 and compared with what the game shows 
   another water-filled map of the same theater, a theater other than theater 5, in the same
   program run, so that the fill shows real water tiles (claim 6). 1 run. *Expected:* cell (1, 1) is at height level 2 and
   shows a water tile. Cells (2, 2) … (5, 5) are at height level 0 and show no water tile (they hold
-  the no-tile marker, which shows as the theater's clear tile by claim 8). The height levels are
+  the no-tile marker, which paints as S-0010 claim 24 says). The height levels are
   the deciding observable; the tiles confirm them. *Falsified if* cell (1, 1) is not at
   level 2, or any of (2, 2) … (5, 5) is at level 2 or shows a water tile. That the fill then takes
   exactly 1 draw is not observable without the starting state; it follows from the unfilled cells
@@ -2248,7 +2277,8 @@ that the stream can be computed by S-0202 and compared with what the game shows 
   a tile from another position. The translation itself is probed by M4c. *Second part
   (claim 8, low confidence):* one more record whose tile number is at least the theater's tile
   count (count the tiles in the theater data) and below 65535. *Expected:* that cell shows the
-  theater's clear tile. *Falsified if* it shows any other tile, damaged graphics, or the game
+  theater's clear tile (the original's picture of such a cell is unspecified, S-0010 claim 24; this
+  run records it). *Falsified if* it shows any other tile, damaged graphics, or the game
   ends abnormally.
 - **M4c, tile number translation (claim 8), with a named test file.** Named test file: a loose
   copy of the theater file of one stock theater (not theater 5), changed in one way only: one
@@ -2621,7 +2651,8 @@ that the stream can be computed by S-0202 and compared with what the game shows 
   - Variant B, condition control: variant A's map with 2 humans and 1 computer player on fixed
     position 2. *Expected:* the structure and the vehicle are present, the map is revealed after
     the delay, the players start at waypoint markers 0, 1 and 2, and starting units of the neutral
-    house, all of type *V*ₙ or *I*ₙ, appear around waypoint 3's cell, the only free position.
+    house, all of type *V*ₙ or *I*ₙ, appear around waypoint 3's cell, the only free position,
+    each in the *area guard* behaviour (claim 45; read from a save, as in M26).
   - Variant C, passivity control: variant A's game without the neutral country's override section
     (the type override sections stay). *Expected:* the
     structure and the vehicle are present, the map is revealed after the delay, and the neutral
@@ -2636,7 +2667,8 @@ that the stream can be computed by S-0202 and compared with what the game shows 
     trigger. *Expected:* the neutral house's structure and vehicle are gone, the special house's
     structure and vehicle are there, the map is revealed after the delay, and starting units of
     the special house, all of type *V*ₙ or *I*ₙ, appear around waypoint 2's cell (it is the only
-    house that needs a position in the late phase). *Falsified if* the special house's objects are
+    house that needs a position in the late phase), each in the *area guard* behaviour.
+    *Falsified if* the special house's units start in another behaviour, or the special house's objects are
     missing or the map stays hidden (the cleanup removed the special house too: the fixed
     behaviour), or the neutral house's objects are present. Second part, the special house's
     tech level: variant D with the two type override sections giving the tech level 2 instead of
@@ -2673,7 +2705,8 @@ that the stream can be computed by S-0202 and compared with what the game shows 
   house receives starting units in A, or in B around any waypoint but 3, or of a type other than
   *V*ₙ and *I*ₙ. Starting units of the neutral house that are missing in B falsify only the
   starting-units sentence of claim 28 or the neutral house's tech level 1 (Terms), not the
-  cleanup; variant G then says nothing.
+  cleanup; variant G then says nothing. Starting units of the neutral house that appear in B in
+  another behaviour than *area guard* falsify only the behaviour rule of claim 45.
   *Inconclusive if* the pre-placed objects are missing in C as well (the removal then has another
   cause), or the map is not revealed in C (the trigger is at fault, so the trigger sub-tests of A
   and E say nothing). In A, B, C, F and G the special country stays passive (pre-check), so in B
@@ -2978,7 +3011,8 @@ that the stream can be computed by S-0202 and compared with what the game shows 
   *Expected:* each house has its base unit on its base cell and exactly the predicted budget
   units, of the predicted types, on the predicted cells (infantry at their cells' centre
   positions, several sharing a cell where predicted), the human's in *guard* and the computer's
-  in *area guard* (the original's behaviour; our engine gives both *guard*, claim 45), the
+  in *area guard* (the original's behaviour; our engine gives both players' houses *guard*, claim
+  45), the
   predicted credits, and the stream position at the first tick equals the prediction.
   *Falsified if* a type, a cell, the number of units or the stream position differs.
   - Variant B: the bases setting off. *Expected:* no base unit, and the first budget unit of each
@@ -3083,7 +3117,7 @@ that the stream can be computed by S-0202 and compared with what the game shows 
 
 - Outside this spec, with pointers only: lighting (S-0104); tile categories and what tiles mean
   for play (S-0010); triggers and tags (S-0011); and the rules sections a map may override
-  (S-0006). The byte encodings are a question for the project lead (below).
+  (S-0006). The byte encodings are for planned S-0012.
 - The game mode that skips the unused-house cleanup of claim 28 is not identified.
 - What a house that the cleanup removes (claim 28) leaves behind in the start position marks of
   claim 29 is not established. Two cases: whether a house that took a position in the early phase
@@ -3137,15 +3171,11 @@ that the stream can be computed by S-0202 and compared with what the game shows 
   established; claims 45 and 46 describe the standard mode.
 - Whether rules in play change the stand-in cell of claim 44 (for example an effect aimed at a
   cell outside the map) was not looked for. Our engine changes nothing there in any case.
-- Each of the first 50 variable-name entries (claim 32) seems also to give its whole value text
-  (name and state together), as a name only, to the variable of the entry's number in a second set
-  of named variables, possibly the game's global trigger variables. Only names would change, so
-  nothing in play shows it. It is a pointer for a later revision of S-0011 (whose subset does not
-  cover global trigger variables), which should establish what that second set is.
-
-## Questions for the project lead
-
-- The byte encodings of the terrain, overlay and preview blocks (value widths, compression, block
-  layout) are outside this spec, which fixes only the order and meaning of the decoded values
-  (Terms, decoded stream). They need a formats spec of their own, which is not yet planned: should
-  one be added to the plan?
+- Does the variable-name section (claim 32) also name the global trigger variables, so that a
+  global variable's name comes from the entry with the same number? Only names would change, so
+  nothing in play seems to show it. It is a pointer for a later revision of S-0011 (whose subset
+  does not cover global trigger variables).
+- Whether a non-passive neutral or special house (claim 28) runs the original's computer-player
+  base logic, which would act on the computer-sell and computer-rebuild flags of its buildings
+  (claim 40), is not established. A probe: scenario M16 variant B's map with a damaged pre-placed
+  building of the neutral house that has the sell flag set, watched for a sale.
