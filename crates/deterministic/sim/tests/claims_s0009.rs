@@ -502,3 +502,35 @@ fn claims_41_45_state_round_trip() {
     );
     assert!(l.objects.values().any(|o| o.leader.is_some()));
 }
+
+/// spec: S-0009 claims 28 and 45 (a neutral house that is not passive takes a position and receives starting units with tech level 1, in area guard; a player's in guard)
+#[test]
+fn claim_45_neutral_house_area_guard() {
+    let mut s = starting_scene();
+    s.register("countries", "Neutral");
+    s.ruleset
+        .sim
+        .countries
+        .insert("Neutral".into(), Default::default());
+    for t in ["MCV", "TANK"] {
+        let v = s.ruleset.sim.vehicles.get_mut(t).unwrap();
+        v.owner.as_mut().unwrap().push("Neutral".into());
+    }
+    // Beta becomes the neutral house.
+    s.setup.houses[1].name = "Neutral".into();
+    s.setup.houses[1].country = "Neutral".into();
+    s.setup.houses[1].human = false;
+    s.setup.houses[1].role = glasnost_sim::world::HouseRole::Neutral;
+    let w = load(&s).expect("loads");
+    let behaviours = |h: u8| -> Vec<Option<Behaviour>> {
+        w.objects
+            .values()
+            .filter(|o| o.owner == Some(glasnost_sim::world::HouseId(h)))
+            .map(|o| o.beh.current)
+            .collect()
+    };
+    let neutral = behaviours(1);
+    assert!(!neutral.is_empty());
+    assert!(neutral.iter().all(|b| *b == Some(Behaviour::AreaGuard)));
+    assert!(behaviours(0).iter().all(|b| *b == Some(Behaviour::Guard)));
+}

@@ -166,9 +166,18 @@ fn put(w: &mut World, id: ObjectId, c: CellXY, p: u8) {
     let (x, y) = (256 * c.x + u, 256 * c.y + v); // spec: S-0204 claim 3 (a position within the cell)
     let pos = Pos::new(x, y, w.surface_at(x, y));
     let t = w.tick;
+    let player = w
+        .obj(id)
+        .and_then(|o| o.owner)
+        .is_some_and(|h| w.houses[usize::from(h.0)].role == HouseRole::Player);
+    // spec: S-0009 claim 45 (a player house's starting units start in guard, human or AI; the neutral and special houses' in area guard)
+    let b = if player {
+        Behaviour::Guard
+    } else {
+        Behaviour::AreaGuard
+    };
     if let Some(o) = w.obj_mut(id) {
-        // spec: S-0009 claim 45 (our engine starts every house's starting units in guard)
-        o.beh.force(Behaviour::Guard, t);
+        o.beh.force(b, t);
     }
     // spec: S-0009 claim 46 (body facing 0)
     objects::place(w, id, pos, 0);

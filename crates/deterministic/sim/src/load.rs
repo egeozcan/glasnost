@@ -185,8 +185,7 @@ pub fn new_game(
             country,
             allies: Vec::new(),
             human: h.human,
-            // Every house keeps skill level 0: a human-controlled house and an AI house (glossary
-            // *house skill level*); the neutral and special houses meanwhile too (request Q-0045).
+            // spec: S-0009 claim 40 and S-0209 claim 11 (every house of our engine keeps skill level 0: human-controlled, AI, neutral and special houses alike)
             skill: 0,
             start: None,
             role: h.role,
