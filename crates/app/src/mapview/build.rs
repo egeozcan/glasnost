@@ -165,6 +165,7 @@ mod notes {
     pub const HEALTH: &str =
         "Q-0010: the health scale is unknown, so every building is drawn undamaged";
     pub const INITIAL_STATE: &str = "Q-0016: buildings start complete and idle, turrets face as their bodies, objects enter structures first";
+    pub const INITIAL_STATE_LIVE: &str = "Q-0016: buildings are drawn complete and idle, building voxel turrets face the map entry's facing";
     pub const VPL: &str =
         "Q-0014: voxels are lit through the lighting table read by a provisional layout";
     pub const NO_VPL: &str =
@@ -223,14 +224,24 @@ fn derived(import: &Import, kind: Kind, idx: usize, key: &[u8]) -> Option<i64> {
         .derived
 }
 
-/// Every file the scene of `map` may read: tile files, sprites, voxel
+/// Every file the scene of `map` may read: tile files (found with the
+/// suffix fallback of S-0010 claim 3 through `exists`), sprites, voxel
 /// models with their motion files, and the voxel lighting table.
-pub fn wanted_files(map: &Map, import: &Import, catalogue: &Catalogue) -> BTreeSet<Vec<u8>> {
+pub fn wanted_files(
+    map: &Map,
+    import: &Import,
+    catalogue: &Catalogue,
+    exists: &dyn Fn(&[u8]) -> bool,
+) -> BTreeSet<Vec<u8>> {
     let mut out = BTreeSet::new();
+    let mut tiles = BTreeSet::new();
     for (_, cell) in map.cells.iter() {
-        if let Some(t) = catalogue.art_tile(cell.tile)
-            && let Some(f) = catalogue.file_of(t)
-        {
+        if let Some(t) = catalogue.art_tile(cell.tile) {
+            tiles.insert(t);
+        }
+    }
+    for t in tiles {
+        if let Some(f) = catalogue.find_image(t, 0, exists) {
             out.insert(upper(&f));
         }
     }
@@ -437,6 +448,7 @@ pub fn build_parts(inputs: &Inputs, live: bool) -> (Built, Painter) {
     b.built.scene.cell_pass_len = b.built.scene.items.len();
     b.built.notes.insert(notes::NO_SLOT_ANIMS.into());
     if live {
+        b.built.notes.insert(notes::INITIAL_STATE_LIVE.into());
         b.built.ground = ground;
         return (b.built, b.p);
     }
@@ -685,8 +697,14 @@ impl Builder<'_> {
                 );
                 continue;
             };
-            let Some(file) = self.catalogue.file_of(t).map(|f| upper(&f)) else {
-                self.drop_object("cell drawn blank: its tile has no file");
+            let assets = self.assets;
+            // spec: S-0010 claim 3 (the theater's suffix, else the fallback suffixes)
+            let Some(file) = self
+                .catalogue
+                .find_image(t, 0, &|n| assets.get(n).is_some())
+                .map(|f| upper(&f))
+            else {
+                self.drop_object("cell drawn blank: no file holds its tile image");
                 continue;
             };
             if !tmps.contains_key(&file) {
@@ -2002,7 +2020,8 @@ pub fn minimap(map: &Map, catalogue: &Catalogue, assets: &Assets) -> (u32, u32, 
     let mut radar: BTreeMap<Vec<u8>, Option<Tmp>> = BTreeMap::new();
     for (c, cell) in map.cells.iter() {
         let colours = catalogue.art_tile(cell.tile).and_then(|t| {
-            let file = upper(&catalogue.file_of(t)?);
+            // spec: S-0010 claim 3 (the theater's suffix, else the fallback suffixes)
+            let file = upper(&catalogue.find_image(t, 0, &|n| assets.get(n).is_some())?);
             let tmp = radar
                 .entry(file.clone())
                 .or_insert_with(|| assets.get(&file).and_then(|b| Tmp::parse(b).ok()))

@@ -117,7 +117,9 @@ pub async fn load(
     // spec: S-0103 claim 3 (a game in a new theater loads its palettes)
     palettes.start_game(theater, |n| files.get(n).cloned().flatten());
     let mut assets = Assets::default();
-    for name in build::wanted_files(&map, &import, &catalogue) {
+    let exists = |n: &[u8]| vfs.resolve_bytes(n).is_some();
+    let wanted = build::wanted_files(&map, &import, &catalogue, &exists);
+    for name in wanted {
         let Ok(text) = std::str::from_utf8(&name) else {
             continue;
         };
