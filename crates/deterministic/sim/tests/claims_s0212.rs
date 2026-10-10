@@ -4,9 +4,9 @@
 //! of `common`. Rock cells use a tile whose land type has no land row, so
 //! every locomotion class has multiplier 0 there (category *blocked*).
 //!
-//! Not tested here because the simulation does not implement them yet: the
-//! corridor and when it is used (claims 13 and 14, request Q-0017), follower
-//! cars (claim 26), bridge decks, links and tunnel steps in the search.
+//! Not tested here because the simulation does not implement them yet:
+//! follower cars (claim 26), links and tunnel steps in the search, and the
+//! coarse end cells of bridge cells (requests Q-0042 and Q-0043).
 
 mod common;
 
@@ -376,13 +376,16 @@ fn gate_refuses_destination_in_another_reach_region() {
 
 // ----------------------------------------------------------------- the search
 
-// spec: S-0212 claim 7 (open ground: all diagonal steps first, then straight ones; Chebyshev distance steps)
+// spec: S-0212 claim 7 (open ground searched without a corridor: all diagonal steps first, then straight ones; Chebyshev distance steps)
 #[test]
 fn open_ground_path_is_diagonal_first() {
     let mut s = scene();
     s.place_unit(0, CAR, cell(0, 0), 64);
     let mut w = s.build();
     let id = vehicles(&w)[0];
+    // In retreat the unit is in the corridor-disabling state (claim 14), so
+    // its path computation searches without a corridor.
+    w.obj_mut(id).unwrap().beh.current = Some(Behaviour::Retreat);
     let from = cell(0, 0);
     for (dx, dy) in [
         (5, 2),
@@ -1495,4 +1498,261 @@ fn a_vehicle_drives_across_a_deck() {
     assert!(n < 600, "the car never crossed");
     assert!(on_deck, "the car crossed on the deck");
     assert_eq!(w.obj(car).unwrap().layer, Layer::Ground);
+}
+
+// ------------------------------------------------------------- the corridor
+
+use glasnost_sim::corridor::{self, NONE};
+
+fn sector(w: &World, l: usize, c: CellXY) -> u32 {
+    w.regions.sectors.levels[l].sector(w, c)
+}
+
+// spec: S-0212 claim 13b (on open ground each block is one sector, with straight connections to the four blocks beside it and diagonal ones to the four at its corners; each sector lies inside its parent)
+#[test]
+fn sectors_on_open_ground() {
+    let mut s = scene();
+    s.place_unit(0, CAR, cell(0, 0), 64);
+    let mut w = s.build();
+    regions::ensure(&mut w);
+    for l in 0..corridor::LEVELS {
+        let b = corridor::block_size(l);
+        assert_eq!(b, 2 << l);
+        let a = sector(&w, l, cell(0, 0));
+        assert_ne!(a, NONE);
+        // The whole block is one sector; the next block is another.
+        assert_eq!(sector(&w, l, cell(b - 1, b - 1)), a, "level {l}");
+        assert_ne!(sector(&w, l, cell(b, 0)), a, "level {l}");
+        let lv = &w.regions.sectors.levels[l];
+        let conns = &lv.conns[a as usize];
+        assert_eq!(conns.len(), 8, "level {l}");
+        for (dx, dy, diagonal) in [
+            (b, 0, false),
+            (-b, 0, false),
+            (0, b, false),
+            (0, -b, false),
+            (b, b, true),
+            (-b, -b, true),
+            (b, -b, true),
+            (-b, b, true),
+        ] {
+            let t = sector(&w, l, cell(dx, dy));
+            assert!(conns.contains(&(t, diagonal)), "level {l} {dx},{dy}");
+        }
+        if l + 1 < corridor::LEVELS {
+            assert_eq!(lv.parent[a as usize], sector(&w, l + 1, cell(0, 0)));
+        }
+    }
+}
+
+// spec: S-0212 claim 13b (inside a block, cells joined only across a step of 2 levels along cell x are different sectors, with no connection between them)
+#[test]
+fn sectors_split_by_a_two_level_step() {
+    let mut s = scene();
+    s.set_cell(cell(1, 0), 0, 2);
+    s.set_cell(cell(1, 1), 0, 2);
+    s.place_unit(0, CAR, cell(-4, 0), 64);
+    let mut w = s.build();
+    regions::ensure(&mut w);
+    // One region (claim 3 joins along x across 2 levels) ...
+    assert_eq!(region(&w, cell(0, 0)), region(&w, cell(1, 0)));
+    // ... but two sectors of one level-0 block, not connected.
+    let a = sector(&w, 0, cell(0, 0));
+    let b = sector(&w, 0, cell(1, 0));
+    assert_ne!(a, b);
+    let lv = &w.regions.sectors.levels[0];
+    assert!(lv.conns[a as usize].iter().all(|&(t, _)| t != b));
+}
+
+// spec: S-0212 claim 13 (the coarse search: per-category entry costs plus 0.001 across a diagonal connection, so a diagonal neighbour block is entered directly; F9)
+// spec: S-0212 claim 12a (routes of equal cost are taken in recording order)
+#[test]
+fn coarse_search_chains() {
+    let mut s = scene();
+    s.place_unit(0, CAR, cell(0, 0), 64);
+    let mut w = s.build();
+    regions::ensure(&mut w);
+    let secs = w.regions.sectors.clone();
+    let chains = corridor::coarse(
+        &w,
+        &secs,
+        MovementZone::Normal,
+        cell(0, 0),
+        cell(2, 2),
+        &Default::default(),
+    )
+    .expect("a corridor");
+    // Level 0: the start's block, then the diagonal block (1.001 < 2).
+    assert_eq!(
+        chains[0],
+        vec![sector(&w, 0, cell(0, 0)), sector(&w, 0, cell(2, 2))]
+    );
+    // Levels 1 and 2: start and destination share a sector.
+    assert_eq!(chains[1], vec![sector(&w, 1, cell(0, 0))]);
+    assert_eq!(chains[2], vec![sector(&w, 2, cell(0, 0))]);
+    // Straight across three blocks.
+    let chains = corridor::coarse(
+        &w,
+        &secs,
+        MovementZone::Normal,
+        cell(0, 0),
+        cell(4, 0),
+        &Default::default(),
+    )
+    .expect("a corridor");
+    assert_eq!(
+        chains[0],
+        vec![
+            sector(&w, 0, cell(0, 0)),
+            sector(&w, 0, cell(2, 0)),
+            sector(&w, 0, cell(4, 0))
+        ]
+    );
+    // Every level-0 corridor sector's parent is on the level-1 corridor.
+    let lv0 = &secs.levels[0];
+    for &x in &chains[0] {
+        assert!(chains[1].contains(&lv0.parent[x as usize]));
+    }
+    // A zone that cannot use the destination's category: no corridor.
+    assert!(
+        corridor::coarse(
+            &w,
+            &secs,
+            MovementZone::Water,
+            cell(0, 0),
+            cell(4, 0),
+            &Default::default(),
+        )
+        .is_none()
+    );
+}
+
+// spec: S-0212 claim 13 (a cell search with a corridor considers ground cells of corridor sectors only, apart from cells with the corridor exemption)
+#[test]
+fn corridor_confines_the_search() {
+    let mut s = scene();
+    s.place_unit(0, CAR, cell(0, 0), 64);
+    let mut w = s.build();
+    regions::ensure(&mut w);
+    let id = vehicles(&w)[0];
+    let to = cell(9, 4);
+    let p = path::corridor_find(&w, id, to).expect("a path");
+    assert_eq!(*visits(cell(0, 0), &p).last().unwrap(), to);
+    let secs = w.regions.sectors.clone();
+    let chains = corridor::coarse(
+        &w,
+        &secs,
+        MovementZone::Normal,
+        cell(0, 0),
+        to,
+        &Default::default(),
+    )
+    .unwrap();
+    for c in visits(cell(0, 0), &p) {
+        assert!(
+            chains[0].contains(&sector(&w, 0, c)) || corridor::exempt(&w, c),
+            "{c:?} off the corridor"
+        );
+    }
+    // The cells next to the unit have the exemption: it is listed in its cell.
+    assert!(corridor::exempt(&w, cell(1, 1)));
+    assert!(!corridor::exempt(&w, cell(5, 5)));
+}
+
+// spec: S-0212 claim 14 (the corridor is not used in the corridor-disabling state: a unit in retreat, or a train)
+#[test]
+fn corridor_use() {
+    let mut s = scene();
+    s.place_unit(0, CAR, cell(0, 0), 64);
+    let mut w = s.build();
+    let id = vehicles(&w)[0];
+    let to = cell(9, 4);
+    regions::ensure(&mut w);
+    let with = path::corridor_find(&w, id, to).expect("a path");
+    let without = find(&w, id, to, Mode::Fresh, &[]).expect("a path");
+    assert_ne!(with, without, "the corridor shapes this path");
+    // A path computation uses the corridor ...
+    assert_eq!(compute_to(&mut w, id, to, Mode::Fresh), Search::Found);
+    let stored = w.obj(id).unwrap().path.steps.clone();
+    // ... and in retreat it does not.
+    w.obj_mut(id).unwrap().beh.current = Some(Behaviour::Retreat);
+    assert_eq!(compute_to(&mut w, id, to, Mode::Fresh), Search::Found);
+    assert_eq!(w.obj(id).unwrap().path.steps, without);
+    assert_ne!(stored, without);
+}
+
+// spec: S-0212 claim 13a (a whole progress sector closes its connections to every sector its free part does not border)
+#[test]
+fn retry_closes_unbordered_connections() {
+    let mut s = scene();
+    // The level-0 block east of the unit's block is full of enemy buildings,
+    // which give an unarmed vehicle the outcome blocked.
+    for (dx, dy) in [(2, 0), (3, 0), (2, 1), (3, 1)] {
+        s.place_structure(1, HUT, cell(dx, dy));
+    }
+    s.place_unit(0, CAR, cell(0, 0), 64);
+    let mut w = s.build();
+    regions::ensure(&mut w);
+    let id = vehicles(&w)[0];
+    let secs = w.regions.sectors.clone();
+    let me = sector(&w, 0, cell(0, 0));
+    let east = sector(&w, 0, cell(2, 0));
+    let mut closed = Default::default();
+    let chain = vec![me, east];
+    assert!(corridor::retry(
+        &w,
+        &secs,
+        id,
+        MovementZone::Normal,
+        0,
+        cell(0, 0),
+        &chain,
+        &mut closed,
+    ));
+    let pair = (me.min(east), me.max(east));
+    assert!(closed.contains(&pair), "{closed:?}");
+    assert_eq!(closed.len(), 1, "{closed:?}");
+}
+
+// spec: S-0212 claim 24 (a substitute is adopted only when the coarse estimate E is at most the Chebyshev distance plus 6)
+#[test]
+fn substitution_estimate() {
+    for wall in [false, true] {
+        let mut s = scene();
+        // The destination cell(4, 0) holds an idle friendly car and its eight
+        // neighbours are rock or taken, so the nearby search finds cell(2, 0).
+        for c in [
+            cell(3, -1),
+            cell(3, 0),
+            cell(3, 1),
+            cell(4, -1),
+            cell(4, 1),
+            cell(5, -1),
+            cell(5, 1),
+        ] {
+            rock(&mut s, c, 0);
+        }
+        if wall {
+            // A long wall west of the destination: the coarse route from
+            // cell(2, 0) goes round it.
+            for y in -12..=11 {
+                rock(&mut s, cell(3, y), 0);
+            }
+        }
+        s.place_unit(0, CAR, cell(0, 0), 64);
+        s.place_unit(0, CAR, cell(4, 0), 64);
+        s.place_unit(0, CAR, cell(5, 0), 64);
+        let mut w = s.build();
+        let id = vehicles(&w)
+            .into_iter()
+            .find(|&v| w.obj(v).unwrap().pos.cell() == cell(0, 0))
+            .unwrap();
+        compute_to(&mut w, id, cell(4, 0), Mode::Fresh);
+        let goal = w.obj(id).unwrap().path.for_goal;
+        if wall {
+            assert_eq!(goal, Some(cell(4, 0)), "not adopted behind the wall");
+        } else {
+            assert_eq!(goal, Some(cell(2, 0)), "adopted");
+        }
+    }
 }

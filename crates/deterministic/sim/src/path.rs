@@ -7,9 +7,9 @@
 //! (claim 17), the shortening of early detours (claim 18), congestion marks
 //! (claim 19), path storage and retry delays (claims 20, 21), failures
 //! (claim 23), destination substitution (claim 24) and the nearby-cell
-//! search (claim 25). The corridor (claims 13 and 14) and the estimate E of
-//! claim 24 are not implemented yet (Q-0017): every search runs over the
-//! whole map.
+//! search (claim 25), over (cell, search layer) pairs. The corridor (claims
+//! 13 to 14, the estimate E of claim 24) is in [`crate::corridor`]; the
+//! searches of a path computation with it are `corridor_search`'s.
 
 use std::collections::{BTreeMap, BTreeSet, BinaryHeap};
 
@@ -19,6 +19,7 @@ use glasnost_num::{F32, F64, Rounding};
 use glasnost_rules::sim::{LocomotionClass, MovementZone};
 use serde::{Deserialize, Serialize};
 
+use crate::corridor;
 use crate::occupancy::{self, Outcome};
 use crate::regions::{self, Reach, STEPS};
 use crate::rules::{Behaviour, Kind, Locomotor};
@@ -82,7 +83,8 @@ pub trait Pathfinder {
     fn find(&self, w: &World, req: &Request) -> Option<Vec<u8>>;
 }
 
-/// The pathfinder of S-0212 (without the corridor, Q-0017).
+/// The cell search of S-0212, over the whole map (a path computation adds
+/// the corridor, [`compute`]).
 pub struct S0212;
 
 /// Which pathfinder a game uses.
@@ -332,6 +334,44 @@ fn t24(x: F64, mode: Rounding) -> F32 {
 
 impl Pathfinder for S0212 {
     fn find(&self, w: &World, req: &Request) -> Option<Vec<u8>> {
+        let mut progress = req.from;
+        search(w, req, None, &mut progress)
+    }
+}
+
+/// A corridor confining a cell search (S-0212 claim 13).
+pub struct CorridorFilter<'a> {
+    /// The level-0 sectors.
+    pub level0: &'a corridor::SectorLevel,
+    /// The level-0 corridor, from the start's sector to the destination's.
+    pub chain: &'a [u32],
+    /// Whether each level-0 sector is on the corridor.
+    pub on: Vec<bool>,
+}
+
+impl<'a> CorridorFilter<'a> {
+    /// The filter of a level-0 corridor.
+    pub fn new(level0: &'a corridor::SectorLevel, chain: &'a [u32]) -> Self {
+        let mut on = vec![false; level0.category.len()];
+        for &s in chain {
+            if let Some(x) = on.get_mut(s as usize) {
+                *x = true;
+            }
+        }
+        Self { level0, chain, on }
+    }
+}
+
+/// The cell search of S-0212 claims 7 to 12 and 15, inside a corridor when
+/// `corr` is given (claim 13). `progress` receives the search's progress
+/// cell (claim 13).
+fn search(
+    w: &World,
+    req: &Request,
+    corr: Option<&CorridorFilter<'_>>,
+    progress: &mut CellXY,
+) -> Option<Vec<u8>> {
+    {
         let r = w.rules();
         let q = r.quirks;
         let mode = r.mode;
@@ -390,6 +430,9 @@ impl Pathfinder for S0212 {
         });
         let mut expansions = 0u32;
         let mut recorded = 0u32;
+        // spec: S-0212 claim 13 (progress: e₀ is the start cell)
+        *progress = from;
+        let mut next_sector: usize = 1;
         let start_level = pair_level(w, from, from_layer);
         // spec: S-0212 claim 16 (a train may not enter the three cells behind it, on the ground layer unless the start's search layer lies at least 2 levels above the cell)
         let behind: Vec<(CellXY, Layer)> = if train {
@@ -476,6 +519,16 @@ impl Pathfinder for S0212 {
                     }
                     continue;
                 }
+                // spec: S-0212 claim 7 (with a corridor, a ground-layer candidate only in a corridor sector or with the exemption; deck candidates are not restricted)
+                if let Some(cf) = corr
+                    && cl == Layer::Ground
+                {
+                    let sec = cf.level0.sector(w, c);
+                    let on = cf.on.get(sec as usize).copied().unwrap_or(false);
+                    if !on && !corridor::exempt(w, c) {
+                        continue;
+                    }
+                }
                 // spec: S-0212 F1 (c = trunc₂₄(b × τ + ε(d)); τ = 4 on a congestion mark)
                 let tau = if req.congested.contains(&c) { 4 } else { 1 };
                 let b = base_cost(w, req, v, c, cl, train) * tau;
@@ -513,6 +566,14 @@ impl Pathfinder for S0212 {
                     cell: c,
                     layer: cl,
                 });
+                // spec: S-0212 claim 13 (progress: the first recorded candidate in the next corridor sector)
+                if let Some(cf) = corr
+                    && fresh
+                    && cf.chain.get(next_sector).copied() == Some(cf.level0.sector(w, c))
+                {
+                    next_sector += 1;
+                    *progress = c;
+                }
             }
         }
     }
@@ -1262,6 +1323,137 @@ fn congestion(w: &World, id: ObjectId, mode: Mode) -> Option<BTreeSet<CellXY>> {
     )
 }
 
+/// The coarse end cell of a cell (S-0212 claim 13b): the cell itself,
+/// except for a bridge cell (a start on a deck, or a destination on a bridge
+/// cell), whose coarse end cell lies at an end of the bridge. No bridge
+/// links exist and no bridge's axis is kept yet, so no bridge end is found,
+/// and a bridge cell is its own coarse end cell (interim, Q-0043; the
+/// fallback of departure D6).
+fn coarse_end(_w: &World, c: CellXY) -> CellXY {
+    c
+}
+
+/// The estimate test of S-0212 claim 24 for adopting `found` in place of
+/// the destination `dest`: the coarse estimate E is at most their
+/// Chebyshev distance plus 6 cells.
+fn estimate_ok(w: &World, u: &crate::rules::UnitRules, found: CellXY, dest: CellXY) -> bool {
+    // spec: S-0212 claim 24 (E for the unit's own zone; zone normal for a subterranean unit whose destination passes the further test)
+    let zone = if u.zone == MovementZone::Subterranean && burrow_ok(w, dest) {
+        MovementZone::Normal
+    } else {
+        u.zone
+    };
+    // spec: S-0212 claim 24 (the coarse search alone, between the coarse end cells; when it fails the cell is not adopted)
+    let Some(chains) = corridor::coarse(
+        w,
+        &w.regions.sectors,
+        zone,
+        coarse_end(w, found),
+        coarse_end(w, dest),
+        &Default::default(),
+    ) else {
+        return false;
+    };
+    let n = chains[0].len() as i32;
+    let cheb = (found.x - dest.x).abs().max((found.y - dest.y).abs());
+    // spec: S-0212 F8 (the legs: with no bridge end found, the anchor falls back to the coarse end cell, the cell itself, so each leg is 0; interim, Q-0043)
+    let legs = 0;
+    // spec: S-0212 claim 24 (E = max(Chebyshev distance, 2n − 2 + legs); adopted when E ≤ Chebyshev distance + 6)
+    let e = cheb.max(2 * n - 2 + legs);
+    e <= cheb + 6 // spec: S-0212 Constants (substitution detour allowance 6 cells)
+}
+
+/// The cell searches of a fresh path computation with the corridor (S-0212
+/// claims 13 and 14) for unit `id` from its cell to `to`, before
+/// straightening. The regions must be up to date ([`regions::ensure`]).
+pub fn corridor_find(w: &World, id: ObjectId, to: CellXY) -> Option<Vec<u8>> {
+    let o = w.obj(id)?;
+    let u = w.rules().unit(o.kind, o.type_index)?;
+    let from = o.pos.cell();
+    let req = Request {
+        unit: id,
+        from,
+        to,
+        mode: Mode::Fresh,
+        congested: BTreeSet::new(),
+    };
+    // spec: S-0212 claim 13 (a jumpjet infantry type uses zone infantry for the coarse search)
+    let coarse_zone = if o.kind == Kind::Infantry && u.jumpjet {
+        MovementZone::Infantry
+    } else {
+        u.zone
+    };
+    corridor_search(
+        w,
+        &req,
+        coarse_zone,
+        u.zone,
+        coarse_end(w, from),
+        coarse_end(w, to),
+    )
+}
+
+/// The searches of one path computation with the corridor (S-0212 claim
+/// 13, the table of searches): the coarse search, a cell search inside the
+/// corridor, and up to 5 cell searches with retries.
+fn corridor_search(
+    w: &World,
+    req: &Request,
+    coarse_zone: MovementZone,
+    own_zone: MovementZone,
+    start_end: CellXY,
+    dest_end: CellXY,
+) -> Option<Vec<u8>> {
+    let secs = &w.regions.sectors;
+    let mut closed: corridor::Closed = Default::default();
+    let mut progress = req.from;
+    let mut searches = 0;
+    let mut first = true;
+    loop {
+        let Some(chains) = corridor::coarse(w, secs, coarse_zone, start_end, dest_end, &closed)
+        else {
+            // spec: S-0212 claim 13 (a first coarse search that fails: one cell search without a corridor, final; a repeated one: the computation fails)
+            return if first {
+                search(w, req, None, &mut progress)
+            } else {
+                None
+            };
+        };
+        first = false;
+        searches += 1;
+        let level0 = secs.levels.first()?;
+        let filter = CorridorFilter::new(level0, &chains[0]);
+        // spec: S-0212 claim 13 (a cell search inside the corridor; a found path is the result)
+        if let Some(p) = search(w, req, Some(&filter), &mut progress) {
+            return Some(p);
+        }
+        // spec: S-0212 claim 13 (at most 5 cell searches per path computation)
+        if searches >= 5 {
+            return None;
+        }
+        let mut abandoned = false;
+        // spec: S-0212 claim 13 (the retry table applies at each level; the free part uses the unit's own zone, claim 13a)
+        for (l, chain) in chains.iter().enumerate() {
+            if !corridor::retry(
+                w,
+                secs,
+                req.unit,
+                own_zone,
+                l,
+                progress,
+                chain,
+                &mut closed[l],
+            ) {
+                abandoned = true;
+            }
+        }
+        if abandoned {
+            // spec: S-0212 claim 13 (a corridor abandoned at some level: one cell search without a corridor, final, which counts towards the 5)
+            return search(w, req, None, &mut progress);
+        }
+    }
+}
+
 /// A path computation for a unit (S-0212 claims 6, 20, 24): the gate,
 /// destination substitution, the search, flattening and storage.
 pub fn compute(w: &mut World, id: ObjectId, mode: Mode) -> Search {
@@ -1277,9 +1469,18 @@ pub fn compute(w: &mut World, id: ObjectId, mode: Mode) -> Search {
     };
     let from = o.pos.cell();
     regions::ensure(w);
-    // spec: S-0212 claim 6 (the gate compares the reach regions; skipped for a unit outside the usable area)
     let inside = w.cells.usable(from);
-    if inside {
+    // A unit inside the usable area may not step outside it (S-0211 Terms) and
+    // nothing moves the area's edges yet, so a unit has entered the usable
+    // area exactly when it stands inside it (S-0212 claim 14).
+    let entered = inside;
+    // spec: S-0212 claim 14 (the corridor-disabling state: entered, and a train or in retreat; no unit is a loaner or a team member yet)
+    let disabling = entered && (u.train || o.beh.current == Some(Behaviour::Retreat));
+    // spec: S-0212 claim 6 (the gate is skipped for a unit outside the usable area, and in the corridor-disabling state for a legal destination outside it)
+    let gate_skipped =
+        !inside || (disabling && w.cells.cell(goal).is_some() && !w.cells.usable(goal));
+    // spec: S-0212 claim 6 (the gate compares the reach regions of the unit's cell and the destination)
+    if !gate_skipped {
         let a = regions::reach(w, from, u.zone);
         let b = regions::reach(w, goal, u.zone);
         if a != b {
@@ -1318,13 +1519,14 @@ pub fn compute(w: &mut World, id: ObjectId, mode: Mode) -> Search {
             if let Some(c) = nearby(w, goal, NearbyUse::Substitution { unit: id }) {
                 let dx = i64::from(256 * (c.x - goal.x));
                 let dy = i64::from(256 * (c.y - goal.y));
-                // spec: S-0212 F6b (centre to centre); the estimate E needs the corridor (Q-0017)
+                // spec: S-0212 F6b (centre to centre)
                 let d = root_floor(
                     (dx * dx + dy * dy) as u64,
                     r.quirks.table_root_distance,
                     r.mode,
                 ) as i64;
-                if d < du {
+                // spec: S-0212 claim 24 (adopted when nearer than D_u and the coarse estimate E allows it)
+                if d < du && estimate_ok(w, &u, c, goal) {
                     goal = c;
                 }
             }
@@ -1351,7 +1553,26 @@ pub fn compute(w: &mut World, id: ObjectId, mode: Mode) -> Search {
         mode,
         congested: congested.clone(),
     };
+    // spec: S-0212 claim 13b (the coarse end cells of the start and the destination)
+    let start_end = coarse_end(w, from);
+    let dest_end = coarse_end(w, goal);
+    // spec: S-0212 claim 14 (the corridor is used when the unit has entered the usable area, both coarse end cells are inside it, and it is not in the corridor-disabling state)
+    let use_corridor =
+        entered && w.cells.usable(start_end) && w.cells.usable(dest_end) && !disabling;
+    if use_corridor && regions::reach_in(w, from, u.zone) != regions::reach_in(w, goal, u.zone) {
+        // spec: S-0212 claim 14 (with the corridor, reach regions that differ fail the computation at once, as a failed search)
+        return Search::SearchFailed;
+    }
+    // spec: S-0212 claim 13 (a jumpjet infantry type uses zone infantry for the coarse search of a path computation)
+    let coarse_zone = if o.kind == Kind::Infantry && u.jumpjet {
+        MovementZone::Infantry
+    } else {
+        u.zone
+    };
     let found = match w.pathfinder {
+        PathfinderChoice::S0212 if use_corridor => {
+            corridor_search(w, &req, coarse_zone, u.zone, start_end, dest_end)
+        }
         PathfinderChoice::S0212 => S0212.find(w, &req),
     };
     let Some(steps) = found else {

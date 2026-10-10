@@ -23,6 +23,10 @@ pub const EPSILON: [F64; 8] = [
 // spec: S-0212 F1 (μ: the double nearest 1.009)
 pub const PATH_MARGIN: F64 = F64(0x3ff0_24dd_2f1a_9fbe);
 
+/// The extra cost λ of entering a sector across a diagonal connection.
+// spec: S-0212 F9 (λ: the double nearest 0.001)
+pub const DIAGONAL_CONNECTION: F64 = F64(0x3f50_624d_d2f1_a9fc);
+
 /// 0.5 (exact in binary).
 // spec: S-0207 claim 9 (d) (0.5 where g × u = 0) and S-0213 Formulas (the half cell of the look line)
 pub const HALF: F64 = F64(0x3fe0_0000_0000_0000);
@@ -91,10 +95,11 @@ mod tests {
         );
     }
 
-    // spec: S-0212 F1, S-0210 F4, S-0207 F4, S-0211 Formulas, S-0208 F3 (the doubles nearest the decimals)
+    // spec: S-0212 F1 and F9, S-0210 F4, S-0207 F4, S-0211 Formulas, S-0208 F3 (the doubles nearest the decimals)
     #[test]
     fn nearest_doubles() {
         assert_eq!(PATH_MARGIN, nearest_double("1.009"));
+        assert_eq!(DIAGONAL_CONNECTION, nearest_double("0.001"));
         assert_eq!(CRUSH_CAP, nearest_double("0.2"));
         assert_eq!(SEVENTH, nearest_double("0.142857142857142857142857142857"));
         assert_eq!(LOW_MULTIPLIER, nearest_double("0.01"));

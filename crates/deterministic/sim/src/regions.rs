@@ -41,6 +41,8 @@ pub struct Regions {
     pub reach: Vec<[u32; 13]>, // spec: S-0212 claim 4 (a reach region per movement zone)
     /// The categories changed since the last rebuild.
     pub dirty: bool,
+    /// The sectors and connections of the corridor (S-0212 claim 13b).
+    pub sectors: crate::corridor::Sectors,
 }
 
 /// Where a cell lies for one zone, as claim 4 compares them.
@@ -54,13 +56,14 @@ pub enum Reach {
     Region(u32),
 }
 
-struct Dsu(Vec<u32>);
+/// A union-find over dense indices, the smaller label winning.
+pub(crate) struct Dsu(Vec<u32>);
 
 impl Dsu {
-    fn new(n: usize) -> Self {
+    pub(crate) fn new(n: usize) -> Self {
         Self((0..n as u32).collect())
     }
-    fn find(&mut self, x: u32) -> u32 {
+    pub(crate) fn find(&mut self, x: u32) -> u32 {
         let mut r = x;
         while self.0[r as usize] != r {
             r = self.0[r as usize];
@@ -73,7 +76,7 @@ impl Dsu {
         }
         r
     }
-    fn union(&mut self, a: u32, b: u32) {
+    pub(crate) fn union(&mut self, a: u32, b: u32) {
         let (ra, rb) = (self.find(a), self.find(b));
         if ra != rb {
             // Deterministic: the smaller label wins.
@@ -201,7 +204,9 @@ pub fn rebuild(w: &mut World) {
         region,
         reach,
         dirty: false,
+        sectors: Default::default(),
     };
+    w.regions.sectors = crate::corridor::build(w);
 }
 
 /// Recomputes a cell's category after a change; marks the regions dirty

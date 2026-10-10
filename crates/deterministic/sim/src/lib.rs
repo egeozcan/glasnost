@@ -16,6 +16,7 @@
 pub mod behaviour;
 pub mod cells;
 pub mod consts;
+pub mod corridor;
 pub mod crush;
 pub mod drive;
 pub mod infantry;
