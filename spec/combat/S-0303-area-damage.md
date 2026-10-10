@@ -2,13 +2,13 @@
 id: S-0303
 title: Area damage (spread, falloff, cells scanned, walls, bridges and detonation effects)
 topic: combat
-revision: 2
+revision: 3
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-10
 measurements: []
-requests: []
+requests: [Q-0020]
 supersedes: []
 ---
 
@@ -78,7 +78,7 @@ addition:
 - **Nullified detonation.** A detonation that claim 15 restricts to objects under the invulnerability
   effect.
 - **Tracked flying object.** An object that the game registers as flying from the moment it lifts
-  off until it lands: an aircraft-kind object in flight, a jumpjet while it is airborne, and a
+  off until it lands: an aircraft-kind object in flight, a jumpjet between its lift-off and its landing, and a
   rocket-propelled missile object in flight (the movement specs own when each lifts off and lands).
   Each is registered in the *sector* (Formulas F7) of the cell it is over, which the game updates
   as it flies.
@@ -376,8 +376,9 @@ addition:
     value *u* of the scenario random stream (the non-negative remainder, 0 … 255, whether *u* is
     read as signed or unsigned) and no snapping to the cell centre, instead of at *P*. On the
     scenario random stream that raw value comes after every draw of the area damage and before the
-    draw of F5. An electromagnetic warhead takes its one draw of F5 whatever the result of the area
-    damage, so also when the detonation was nullified. When the area damage was nullified (claim 15), the
+    draw of F5. An electromagnetic warhead takes the one draw of F5's electromagnetic case whenever
+    F5 reaches that case with a non-empty animation list, whatever the result of the area damage,
+    so also when the detonation was nullified. When the area damage was nullified (claim 15), the
     game-wide nullify animation appears instead of the chosen one (at the same point), and claim 22
     does not happen. If the projectile is no longer in play after its area damage, none of this and
     nothing of claim 22 happens (S-0306 says when a projectile leaves play).
@@ -476,16 +477,19 @@ Exact integer arithmetic. Units: wall-hit points, damage stages.
 
 **F5. Explosion animation** (claim 21). Let *D* be the projectile's damage amount, *W* the warhead,
 *L* the land type of claim 21 (water, another land type, or none for air) and *Q* = (*q*ₓ, *q*ᵧ,
-*q*_z) the projectile position. With *D* = 0 there is no animation. Otherwise:
+*q*_z) the projectile position. With *D* = 0 there is no animation and no draw. Otherwise the
+animation is given by the first case of this table whose condition holds; *n*ₛ is the length of the
+game-wide splash list and *n*_W the length of *W*'s animation list.
 
-- *Splash.* If *L* is water, *W* has the conventional flag, the cell of *Q* carries no bridge, and
-  *q*_z < (terrain height at *Q*) + 208: with *n* the length of the game-wide splash list, no
-  animation when *n* = 0, else entry trunc(min(*D*, 35*n* − 1) / 35) of that list.
-- Otherwise, if *W* is the game-wide lightning warhead: the game-wide lightning-bolt explosion
-  animation.
-- Otherwise, with *n* the length of *W*'s animation list: no animation when *n* = 0; when *W* has the
-  electromagnetic flag, entry R(0, *n* − 1) (one ranged draw); else entry
-  trunc(min(*D*, 25*n* − 1) / 25).
+| Case | Condition | Animation | Draws |
+|---|---|---|---|
+| Splash | *L* is water, *W* has the conventional flag, the cell of *Q* carries no bridge, and *q*_z < (terrain height at *Q*) + 208 | none when *n*ₛ = 0, else entry trunc(min(*D*, 35*n*ₛ − 1) / 35) of the splash list | none |
+| Lightning | *W* is the game-wide lightning warhead | the game-wide lightning-bolt explosion animation | none |
+| Electromagnetic | *W* has the electromagnetic flag | none when *n*_W = 0, else entry R(0, *n*_W − 1) of *W*'s list | one ranged draw when *n*_W > 0, none when *n*_W = 0 |
+| Graded | any other | none when *n*_W = 0, else entry trunc(min(*D*, 25*n*_W − 1) / 25) of *W*'s list | none |
+
+A case that gives no animation still decides the result: a splash case with an empty splash list
+shows nothing and does not fall through to *W*'s own list.
 
 Integer division truncated toward zero; entries counted from 0. For −24 ≤ *D* ≤ −1 (−34 ≤ *D* ≤ −1
 for the splash list) the entry is 0, a valid entry. For smaller *D* the entry is negative, which
@@ -521,19 +525,21 @@ size, the same along both axes, and the sector of a cell (*x*, *y*):
 Integer division truncated toward zero; a sector is a pair (*i*, *j*) with 0 ≤ *i*, *j* ≤ 19, and
 "the sector (*i* + *a*, *j* + *b*)" below always means that pair with each coordinate clamped to 0 …
 19. For *B* < 20 the sector size is 0 (Edge cases, departure). With (*c*ₓ, *c*ᵧ) the centre cell
-and the search radius ρ = max(trunc(*S*), 1) cells, let *C* = (*C*ₓ, *C*ᵧ) = σ(*c*ₓ, *c*ᵧ). The
-runs are:
+and the search radius ρ = max(trunc(*S*), 1) cells, let *C* = (*C*ₓ, *C*ᵧ) = σ(*c*ₓ, *c*ᵧ).
 
-- the *east run*: the sectors (*i*, *C*ᵧ) for *i* = σₓ(*c*ₓ + ρ), σₓ(*c*ₓ + ρ) − 1, …, *C*ₓ + 1, in
-  that order; *e* = σₓ(*c*ₓ + ρ) − *C*ₓ sectors.
-- the *north run*: the sectors (*C*ₓ, *j*) for *j* = σᵧ(*c*ᵧ − ρ), σᵧ(*c*ᵧ − ρ) + 1, …, *C*ᵧ − 1, in that order.
-  Their number is *n* = *C*ᵧ − σᵧ(*c*ᵧ − ρ) sectors.
-- the *south run*: the sectors (*C*ₓ, *j*) for *j* = σᵧ(*c*ᵧ + ρ), σᵧ(*c*ᵧ + ρ) − 1, …, *C*ᵧ + 1, in that order.
-  Their number is *s* = σᵧ(*c*ᵧ + ρ) − *C*ᵧ sectors.
-- the *west run*: the sectors (*i*, *C*ᵧ) for *i* = σₓ(*c*ₓ − ρ), σₓ(*c*ₓ − ρ) + 1, …, *C*ₓ − 1, in that order.
-  Their number is *u* = *C*ₓ − σₓ(*c*ₓ − ρ) sectors.
+There are four *runs*, one along each map axis direction from *C*. A run is the straight line of
+sectors from its *far sector*, the sector of the cell ρ cells from the centre cell in that
+direction, inwards to the neighbour of *C* on that side, taken in that order (farthest first). Its
+*count* is the number of sectors in it:
 
-A run with a count of 0 is empty. There are also four *diagonal groups*, one per quarter: for the
+| Run | Direction from *C* | Far sector | Count |
+|---|---|---|---|
+| east | map east (increasing *x*) | (σₓ(*c*ₓ + ρ), *C*ᵧ) | *e* = σₓ(*c*ₓ + ρ) − *C*ₓ |
+| north | map north (decreasing *y*) | (*C*ₓ, σᵧ(*c*ᵧ − ρ)) | *n* = *C*ᵧ − σᵧ(*c*ᵧ − ρ) |
+| south | map south (increasing *y*) | (*C*ₓ, σᵧ(*c*ᵧ + ρ)) | *s* = σᵧ(*c*ᵧ + ρ) − *C*ᵧ |
+| west | map west (decreasing *x*) | (σₓ(*c*ₓ − ρ), *C*ᵧ) | *u* = *C*ₓ − σₓ(*c*ₓ − ρ) |
+
+A run with a count of 0 (its far sector is *C* itself) is empty. There are also four *diagonal groups*, one per quarter: for the
 quarter of two runs with counts *a* and *b* and diagonal step (*d*ₓ, *d*ᵧ), the min(*a*, *b*)
 sectors *C* + *k*(*d*ₓ, *d*ᵧ) for *k* = 1, 2, …, each clamped as above, and, when *a* > 1 and
 *b* > 1, the two sectors *C* + (2*d*ₓ, *d*ᵧ) and *C* + (*d*ₓ, 2*d*ᵧ). The quarters are, in this
@@ -644,7 +650,7 @@ recorder sees the draws of a projectile's detonation on the scenario random stre
 | 1 | the effects that the special-warhead specs own (radiation, mind control and the like, which can replace the area damage) | as their specs say |
 | 2 | the area damage above | as in *Order inside one detonation* |
 | 3 | the nearby point of claim 21, for a projectile of the invisible kind only | one raw value |
-| 4 | the choice of the explosion animation (F5) | as F5: one ranged draw when F5 reaches its electromagnetic branch, whatever the result of row 2, nullified included; none otherwise |
+| 4 | the choice of the explosion animation (F5) | as F5: one ranged draw when F5 reaches its electromagnetic case with a non-empty list, whatever the result of row 2, nullified included; none otherwise |
 | 5 | the warhead debris (F6), only when the table below creates it | as F6 |
 
 Before row 1, the warhead's screen-shake ranges take one ranged draw each, horizontal then vertical,
@@ -741,7 +747,8 @@ A projectile that is no longer in play after its area damage creates nothing (cl
 | rules, unit or building type section, `DamageSelf` | self-damage flag (claim 9) | boolean | no |
 | rules, unit type section, `Naval`, `Underwater` | naval flag, underwater flag (claim 21; the same keys as S-0308 and S-0311) | boolean | no |
 | rules, building type section, `InvisibleInGame` | invisible in game (claim 9) | boolean | no |
-| rules, overlay section, `Wall`, `Strength`, `DamageLevels`, `Armor` | wall overlay, *T*, *L*, armour class (F4, claim 16) | boolean, integer, integer, armour name | owned by the overlay specs |
+| rules, overlay section, `Wall`, `Armor` | wall overlay, armour class (F4, claim 16) | boolean, armour name | owned by the overlay specs |
+| rules, overlay section, `Strength`; art data, the overlay type's image section, `DamageLevels` | *T*, *L* (F4) | integer, integer | owned by S-0210 (claim 13, Import mapping): *L* comes from the art data, not the rules section; engine defaults 1 and 1 |
 | rules, overlay section, `ChainReaction`, `Tiberium` | chain-reaction flag, resource overlay (claim 17) | boolean | no |
 | rules, overlay section, `Explodes` | explodes flag (claim 19) | boolean | no |
 | rules, the combat-damage section, `CrushWarhead` | crushing warhead (claim 9) | warhead name | none |
@@ -786,8 +793,9 @@ targets stand in distinct cells and none dies (health above 1000). They have arm
 veteran bonus, and their owner's country has the factor 1.0 for vehicles. *Observable:* health lost by each target. *Expected
 (variant a):* trunc(1000 − 500 × *d* / 1024) for *d* ≤ 1024 (F3; 1000, 875, 823, 750, 720, 646, 625,
 549 and 500), and 0 at 1055. *Falsified if:* any value differs, or the 1055 target is hit.
-*Variant b:* edge fraction 1.0 (expected 1000 for all within 1024). *Variant c:* edge fraction 1.5
-(expected rises with *d*). *Variant d (order of the defences and the falloff):* the country of the
+*Variant b:* edge fraction 1.0 (expected 1000 for all within 1024). *Variant c:* edge fraction 1.5,
+with the targets' health raised above 1500 (expected: F3's value at each recorded *d*, rising with
+*d*; falsified if any value differs from F3). *Variant d (order of the defences and the falloff):* the country of the
 targets' owner has the vehicle armour factor 3.0 (S-0302 claim 3) and everything else as in variant a,
 expected 333, 291, 274, 249, 239, 215, 208, 182, 166 (the falloff on the defended amount 333), where
 a falloff on 1000 followed by the division would give 250, 240 and 183 at distances 512, 572 and
@@ -883,7 +891,8 @@ any differs.
 every scanned wall cell rises by one, whatever its distance; (b) damage below the strength:
 statistical over 200 runs, share of walls damaged ≈ *a* / (*T* + 1) within 3 standard errors,
 (c) the absolute flag: every scanned wall cell is removed; (d) a test overlay type with the
-chain-reaction and resource flags and resource amount: it loses trunc(*D*/10) units; (e) healing
+chain-reaction and resource flags and resource amount, and a warhead with the resource flag (claim
+17): it loses trunc(*D*/10) units; (e) healing
 warheads with the wall flag (damage −50 and then −1) and one with the absolute flag and damage −50:
 the wall's stage is unchanged at −50 (a draw is taken, seen through the recorder), and the wall is
 removed at −1 and with the absolute flag. *Observable:* wall stages and removals, and the
@@ -906,7 +915,10 @@ follows from S-0209's listing order (claim 13): credited if *B* is listed before
 if *A* is listed first. The variant is falsified if the credit disagrees with that order.
 
 **A12. Bridges (claim 18).** *Setup:* destroyable bridges on; a low bridge and a high bridge; a
-warhead with the wall flag and damage *D*. Statistical over 200 runs per value: share destroyed ≈
+warhead with the wall flag and damage *D*. Statistical over 200 runs per value, at a bridge cell
+where the recorder sees one bridge draw per detonation (one bridge test applies) and where a single
+certain attempt destroys a section (variant b's single-attempt detonation shows which cells these
+are): share destroyed ≈
 (*D* − 1) / bridge strength for 1 ≤ *D* ≤ strength, within 3 standard errors; an ion-cannon
 warhead attempts the destruction every time, so it destroys a section whenever the bridge allows
 one. *Observable:* whether the section is destroyed. *Falsified if:* outside, or an ion-cannon
@@ -933,7 +945,9 @@ differs from 25 %, by more than 3 standard errors, or in variant c the warhead's
 does not appear at *P*.
 
 **A14. Explosion animation (claims 21, 23).** *Setup:* a test warhead with an animation list of 4
-distinct stock animations and damage values 1, 24, 25, 74, 75, 99, 100, 1000. *Expected:* entries
+distinct stock animations and damage values 1, 24, 25, 74, 75, 99, 100, 1000. *Observable:* which
+animation the recorder sees created for each detonation and where; in variants e and h also the
+recorder's position on the scenario random stream; in variant f also the debris. *Expected:* entries
 0, 0, 1, 2, 3, 3, 3, 3 (F5). Variant b: over water with the conventional flag and a splash list of 3:
 entries ⌊min(*D*, 104)/35⌋. Variant c: the same over water with a stock naval vehicle in the cell under the
 projectile (the first object listed there) that the detonation hits: the warhead's own list is
@@ -958,7 +972,8 @@ raw value, variant j differs, variant f shows an animation or no debris, variant
 animation appears in variant i.
 
 **A15. Warhead debris (claim 22).** *Setup:* a test warhead with minimum debris 2, maximum 6 and no
-debris types; counted over 200 detonations. *Expected:* counts 2 to 5 only (R(2, 5)), roughly
+debris types; counted over 200 detonations. *Observable:* the number, types and positions of the
+debris animations that the recorder sees created by each detonation. *Expected:* counts 2 to 5 only (R(2, 5)), roughly
 uniform. Variant b: two debris types with maxima 1 and 3, with the recorder reading the raw values
 of the scenario random stream; expected: the two types together number 2 to 5 pieces per
 detonation, and each type's count is the one F6 gives for the raw values read. Variant c (position, claim 22): the projectile
@@ -974,8 +989,9 @@ width and height add up to 61 to 80 (*W* + *H* − 1 from 60 to 79), so the sect
 edge fraction 1.0 and versus 100 % for the aircraft's armour class, fired with the vertical test projectile of S-0306 claim 11 (detonation altitude field set; not of
 the airburst kind of S-0306 claim 21), whose detonation point the recorder reads and which is
 placed by dry runs so that it lies over a cell (*c*ₓ, *c*ᵧ) that is the middle cell of its
-sector *C* along both axes and at least 15 cells from every map edge, so the four runs are each 3
-sectors long. Two stock aircraft hovering at the height of the detonation: one over the cell (*c*ₓ + 8,
+sector *C* along both axes, at least 15 cells from every map edge, and in a sector with
+3 ≤ *C*ₓ ≤ 16 and 3 ≤ *C*ᵧ ≤ 16, so the four runs are each 3 sectors long (the last sector of each
+axis holds every cell from 57 up to *B*, so the distance from the edge alone does not ensure this). Two stock aircraft hovering at the height of the detonation: one over the cell (*c*ₓ + 8,
 *c*ᵧ − 2), which lies in the sector three east and one north of *C* (off the axes, off the
 diagonal and not one of the two extra sectors; about 8.25 cells away, within *R*), the other over
 (*c*ₓ + 5, *c*ᵧ − 5), in the sector two east and two north (on the diagonal). Variant b: an
@@ -993,7 +1009,10 @@ variant-b aircraft is not, or c leaves the firer undamaged. *Runs:* 3 each.
   would then be hit twice, once at the halved distance if it is of the aircraft kind). Scenario A5
   with an aircraft directly over a scanned cell, and A16 with a jumpjet, would settle it.
 - Exactly when each kind of flying object is registered and unregistered (lift-off, landing,
-  leaving the map), which the movement specs own; F7 relies only on the registration order.
+  leaving the map), which the movement specs own; F7 relies only on the registration order. In
+  particular, where an object that crosses into a sector in flight comes in that sector's order
+  (after the objects already registered there, or by its first registration), which fixes the
+  hit order among tracked flying objects (claim 11, medium confidence).
 - The exact set of bridge cells each bridge test of claim 18 accepts, what destroying a section
   does, which attempts fail and what a failed attempt leaves behind (claim 18); this belongs to the
   bridge specs, which are not written.
@@ -1001,7 +1020,7 @@ variant-b aircraft is not, or c leaves the firer undamaged. *Runs:* 3 each.
   the versus step and cap as the original computes them in one expression (F3); S-0302 owns the
   defences (its F2), the versus step and the cap, and must agree.
 - The original hands a projectile's damage to the area damage after scaling it by a per-projectile
-  factor, a fixed-point number with 256 meaning 1.0, which is set to 1.0 when the projectile is
+  factor, a multiple of 1/256, which is 1.0 when the projectile is
   created; the explosion animation (F5) uses the unscaled damage. This spec takes *D* as passed to
   the area damage and assumes the factor stays at 1.0, so that both are the same amount. Whether
   any producer changes the factor is for S-0306 to say.
