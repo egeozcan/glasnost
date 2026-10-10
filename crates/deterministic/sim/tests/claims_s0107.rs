@@ -36,3 +36,38 @@ fn claim_14_fraidycat_idle_scatter() {
     assert!(scattered(&fraidycat(false)));
     assert!(!scattered(&fraidycat(true)));
 }
+
+/// A frightened, walking soldier of a type that can crawl, after one
+/// sequence update while it moves; `human`: its owner's control.
+fn frightened_walker(human: bool) -> Option<Seq> {
+    let mut s = Scene::new();
+    let mut t = unit_type(common::FOOT, 4, 5);
+    for k in ["stand", "walk", "go_prone", "prone", "crawl"] {
+        t.sequences.insert(
+            k.into(),
+            glasnost_rules::sim::SequenceEntry {
+                start: 0,
+                count: 4,
+                multiplier: 0,
+                direction: None,
+            },
+        );
+    }
+    s.infantry("SCARED", t);
+    s.place_infantry(0, "SCARED", cell(0, 0), 0);
+    s.setup.houses[0].human = human;
+    let mut w = s.build();
+    let id = common::objects_of(&w, Kind::Infantry)[0];
+    let st = w.obj_mut(id).unwrap().infantry.as_mut().unwrap();
+    st.seq = Some(Seq::Walk);
+    st.fear = 60;
+    infantry::update(&mut w, id, true, true, true);
+    w.obj(id).unwrap().infantry.as_ref().unwrap().seq
+}
+
+/// spec: S-0107 claim 15 (the lie-down rule: a unit whose owner is not human-controlled, in our engine one of the neutral or special house, lies down whether or not it is moving; one of a human-controlled owner or an AI house waits until it is at rest)
+#[test]
+fn claim_15_non_player_houses_lie_down_while_moving() {
+    assert_eq!(frightened_walker(false), Some(Seq::GoProne));
+    assert_eq!(frightened_walker(true), Some(Seq::Walk));
+}
