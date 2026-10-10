@@ -391,6 +391,16 @@ fn process(w: &mut World, id: ObjectId) -> i32 {
         return NO_RULE_DELAY;
     };
     let cur = o.beh.current;
+    // spec: S-0215 claim 31 (deploying infantry: its rules take precedence in guard and area guard)
+    if o.kind == Kind::Infantry
+        && matches!(
+            cur,
+            Some(Behaviour::Guard | Behaviour::Sticky | Behaviour::AreaGuard)
+        )
+        && let Some(d) = deployer_rule(w, id)
+    {
+        return d;
+    }
     match (cur, o.kind) {
         (Some(Behaviour::Move), _) => process_move(w, id),
         (Some(Behaviour::Attack), Kind::Infantry | Kind::Vehicle) => process_attack(w, id),
@@ -399,6 +409,7 @@ fn process(w: &mut World, id: ObjectId) -> i32 {
             process_guard(w, id)
         }
         (Some(Behaviour::AreaGuard), Kind::Infantry | Kind::Vehicle) => process_area_guard(w, id),
+        (Some(Behaviour::Unload), Kind::Infantry) => process_unload_infantry(w, id),
         (
             Some(Behaviour::Guard | Behaviour::Sticky | Behaviour::AreaGuard | Behaviour::Attack),
             Kind::Building,
@@ -441,6 +452,100 @@ fn process(w: &mut World, id: ObjectId) -> i32 {
             NO_RULE_DELAY
         }
     }
+}
+
+/// The undeploy delay of an infantry unit's type (S-0214 Import mapping:
+/// absent −1, none).
+fn undeploy_delay(w: &World, id: ObjectId) -> i32 {
+    let o = w.obj(id);
+    // spec: S-0214 Import mapping (UndeployDelay absent: −1, none)
+    o.and_then(|o| w.rules().unit(o.kind, o.type_index))
+        .map_or(-1, |u| u.raw.undeploy_delay.unwrap_or(-1))
+}
+
+/// The frame count of an infantry sequence (S-0107 claim 1).
+fn frame_count(w: &World, id: ObjectId, q: Seq) -> i32 {
+    w.obj(id)
+        .and_then(|o| w.rules().unit(o.kind, o.type_index))
+        .and_then(|u| u.sequences.get(q.key()))
+        .map_or(0, |e| e.count)
+}
+
+/// The deployer rules of S-0215 claim 31 for a deployed unit, applied when
+/// one applies (returning its delay); `None` when none applies (an
+/// undeployed unit: the last row is the original's computer owners only).
+fn deployer_rule(w: &mut World, id: ObjectId) -> Option<i32> {
+    let o = w.obj(id)?;
+    let u = w.rules().unit(o.kind, o.type_index)?;
+    if !u.deployer {
+        return None;
+    }
+    let deployed = o
+        .infantry
+        .as_ref()
+        .and_then(|s| s.seq)
+        .is_some_and(Seq::is_deploy);
+    if !deployed {
+        return None;
+    }
+    if undeploy_delay(w, id) >= 0 {
+        // spec: S-0215 claim 31 row 1 (deployed, undeploy delay 0 or more: starts undeploy; its frame count)
+        infantry::request(w, id, Seq::Undeploy, false);
+        return Some(frame_count(w, id, Seq::Undeploy));
+    }
+    let fires = w
+        .obj(id)
+        .and_then(|o| w.rules().unit(o.kind, o.type_index))
+        .is_some_and(|u| {
+            u.raw.deploy_fire.unwrap_or(false) && !u.raw.immune_to_radiation.unwrap_or(false)
+        });
+    if fires {
+        // spec: S-0215 claim 31 row 2 (deploys to fire, not immune to radiation: the deployed-firing rule, M4; the standard delay)
+        return Some(standard_delay(w, id));
+    }
+    // The radiation rows need weapon radiation levels (combat); a type that does not deploy to fire follows claims 24 and 26.
+    None
+}
+
+/// Unload for infantry (S-0215 claim 30).
+fn process_unload_infantry(w: &mut World, id: ObjectId) -> i32 {
+    let t = w.tick;
+    let Some(o) = w.obj(id).cloned() else {
+        return NO_RULE_DELAY;
+    };
+    let deployer = w
+        .rules()
+        .unit(o.kind, o.type_index)
+        .is_some_and(|u| u.deployer);
+    if !deployer {
+        // spec: S-0215 claim 30 (any other infantry unit does nothing in unload: 450 ticks, no draw)
+        return NO_RULE_DELAY;
+    }
+    let deployed = o
+        .infantry
+        .as_ref()
+        .and_then(|s| s.seq)
+        .is_some_and(Seq::is_deploy);
+    let delay = undeploy_delay(w, id);
+    let d = if deployed {
+        if delay < 0 {
+            // spec: S-0215 claim 30 (a deployed unit undeploys only if its undeploy delay is negative)
+            infantry::request(w, id, Seq::Undeploy, false);
+        }
+        // spec: S-0215 claim 30 (deployed: 450 ticks)
+        NO_RULE_DELAY
+    } else {
+        // spec: S-0215 claim 30 (an undeployed unit starts its deploy sequence; area-fire weapons wait for M4)
+        infantry::request(w, id, Seq::Deploy, false);
+        // spec: S-0215 claim 30 (undeployed: the undeploy delay when 0 or more, else 450 ticks)
+        if delay >= 0 { delay } else { NO_RULE_DELAY }
+    };
+    if let Some(ob) = w.obj_mut(id) {
+        // spec: S-0215 claim 30 (in every case it forces guard and clears its destination)
+        ob.beh.force(Behaviour::Guard, t);
+        ob.dest = None;
+    }
+    d
 }
 
 /// Move (S-0215 claim 22).

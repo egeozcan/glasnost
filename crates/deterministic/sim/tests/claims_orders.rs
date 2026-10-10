@@ -602,3 +602,63 @@ fn s0213_cheer_rate_limit() {
     memory.game_start(&w2);
     assert_eq!(memory.last, 51);
 }
+
+// spec: S-0215 claim 30 (unload for a deployer: deploy when undeployed, undeploy when deployed with a negative delay; guard forced, destination cleared, 450 ticks)
+// spec: S-0213 claim 10 (a deploy order queues unload)
+#[test]
+fn s0215_infantry_unload_toggles_deploy() {
+    let mut r = testkit::ruleset();
+    let walker = r.sim.infantry.get_mut("WALKER").unwrap();
+    walker.deployer = Some(true);
+    for (k, n) in [
+        ("deploy", 4),
+        ("deployed", 1),
+        ("undeploy", 4),
+        ("ready", 1),
+        ("guard", 1),
+    ] {
+        walker.sequences.insert(
+            k.into(),
+            glasnost_rules::sim::SequenceEntry {
+                start: 0,
+                count: n,
+                multiplier: 0,
+                direction: None,
+            },
+        );
+    }
+    let rules = Arc::new(SimRules::new(&r, "deployer"));
+    let mut w = new_game(
+        rules,
+        &testkit::map(),
+        testkit::catalogue(),
+        &testkit::setup(1),
+    )
+    .unwrap();
+    while w.tick < 4 {
+        tick::step(&mut w);
+    }
+    let inf = of(&w, 1, Kind::Infantry, 0)[0];
+    let seq = |w: &World| w.obj(inf).unwrap().infantry.as_ref().unwrap().seq;
+    orders::issue(&mut w, BETA, Order::Deploy { actor: inf });
+    tick::step(&mut w);
+    tick::step(&mut w);
+    let o = w.obj(inf).unwrap();
+    assert_eq!(seq(&w), Some(glasnost_sim::infantry::Seq::Deploy));
+    assert_eq!(o.beh.current, Some(Behaviour::Guard));
+    assert_eq!(o.dest, None);
+    assert_eq!(o.beh.last.map(|l| l.1), Some(450));
+    for _ in 0..40 {
+        tick::step(&mut w);
+    }
+    assert!(
+        seq(&w).is_some_and(glasnost_sim::infantry::Seq::is_deploy),
+        "{:?}",
+        seq(&w)
+    );
+    // A second deploy order undeploys the unit (its undeploy delay is absent, so negative).
+    orders::issue(&mut w, BETA, Order::Deploy { actor: inf });
+    tick::step(&mut w);
+    tick::step(&mut w);
+    assert_eq!(seq(&w), Some(glasnost_sim::infantry::Seq::Undeploy));
+}
