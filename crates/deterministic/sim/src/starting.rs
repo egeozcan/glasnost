@@ -106,7 +106,7 @@ fn search(w: &mut World, b: CellXY, r0: i32, infantry: bool) -> Option<(CellXY, 
     // spec: S-0009 Formulas (clamp(v) = min(max(v, 1), W + H − 1))
     let clamp = |v: i32| v.max(1).min(fp.width + fp.height - 1);
     for r in r0..=LAST_RADIUS {
-        // spec: S-0009 claim 46 (the radius start: one draw k = R(0, 7))
+        // spec: S-0009 claim 46 and Constants (radius-start draw: one draw k = R(0, 7) per radius reached)
         let k = w.rng.ranged(0, 7, q.ranged_draw_half_span);
         let mut first = [CellXY::new(0, 0); 8]; // spec: S-0009 Constants (8 candidates per pass)
         for (j, f) in first.iter_mut().enumerate() {
@@ -326,6 +326,6 @@ pub fn give(w: &mut World, bases: &[Option<CellXY>], setup: &GameSetup) {
             w.houses[h].credits = w.houses[h].credits.wrapping_add(left);
         }
     }
-    // spec: S-0009 claim 20 (after the last house one ranged draw over 0 … 65535 whose value has no effect)
+    // spec: S-0009 claim 20 and Constants (final draw after the starting units: one ranged draw over 0 … 65535 after the last house, its value unused)
     let _ = w.rng.ranged(0, 65535, q.ranged_draw_half_span);
 }

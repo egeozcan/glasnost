@@ -372,7 +372,7 @@ pub fn new_game(
     crush::assign_wall_owners(&mut w);
 
     if setup.sandbox {
-        // spec: S-0009 claim 20 (after the last house one ranged draw over 0 … 65535 whose value has no effect)
+        // spec: S-0009 claim 20 and Constants (final draw after the starting units: one ranged draw over 0 … 65535 after the last house, its value unused)
         let _ = w.rng.ranged(0, 65535, q.ranged_draw_half_span);
     } else {
         // Starting units (S-0009 claims 45 and 46).
