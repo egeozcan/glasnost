@@ -43,6 +43,7 @@ jobs:
           -p glasnost-platform-web -p glasnost-app -p glasnost-render -p glasnost-fmt
           -p glasnost-vfs -p glasnost-audio
           -p glasnost-sim -p glasnost-ai -p glasnost-map -p glasnost-rules
+          -p glasnost-num -p glasnost-sim-gate
           -- -D warnings
 
   test:
