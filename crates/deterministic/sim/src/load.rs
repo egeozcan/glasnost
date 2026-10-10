@@ -19,7 +19,7 @@ use crate::passability;
 use crate::rng::Rng;
 use crate::rules::{Kind, SimRules};
 use crate::update::UpdateOrder;
-use crate::world::{GameSetup, House, HouseId, World};
+use crate::world::{GameSetup, House, HouseId, HouseSetup, World};
 
 /// Why a game could not be set up.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -143,6 +143,7 @@ pub fn new_game(
         rules: Some(rules.clone()),
         catalogue: Some(catalogue.clone()),
         regions: Default::default(),
+        scratch: Default::default(),
         pathfinder: Default::default(),
     };
     let q = rules.quirks;
@@ -365,4 +366,60 @@ pub fn kind_name(k: Kind) -> &'static str {
         Kind::Building => "building",
         Kind::Terrain => "terrain object",
     }
+}
+
+/// Our viewer's sandbox setup for a map: one human-controlled house per
+/// owner name that the map's object lists use, in order of first use
+/// (vehicles, infantry, aircraft, structures), each with the country of the
+/// same name, or the first country when no country has that name. This is
+/// a rule of our viewer (no start positions, no players), not of the game;
+/// [`GameSetup::sandbox`] is set. Returns the setup and the owner names
+/// whose country was substituted.
+pub fn sandbox_setup(map: &Map, rules: &SimRules, seed: u32) -> (GameSetup, Vec<String>) {
+    let o = &map.objects;
+    let owners = o
+        .units
+        .iter()
+        .map(|x| &x.placed)
+        .chain(o.infantry.iter().map(|x| &x.placed))
+        .chain(o.aircraft.iter().map(|x| &x.placed))
+        .chain(o.structures.iter().map(|x| &x.placed))
+        .map(|p| p.owner.clone());
+    let mut names: Vec<String> = Vec::new();
+    for owner in owners {
+        if let Ok(n) = String::from_utf8(owner)
+            && !names.contains(&n)
+        {
+            names.push(n);
+        }
+    }
+    let mut substituted = Vec::new();
+    let houses = names
+        .into_iter()
+        .map(|name| {
+            let country = if rules.country_names.contains(&name) {
+                name.clone()
+            } else {
+                substituted.push(name.clone());
+                rules.country_names.first().cloned().unwrap_or_default()
+            };
+            HouseSetup {
+                name,
+                country,
+                human: true,
+                start: None,
+            }
+        })
+        .collect();
+    (
+        GameSetup {
+            seed,
+            // spec: S-0201 claim 7 (a skirmish starts at the lobby's index; the viewer takes the rules' lobby default)
+            game_speed: rules.general.lobby_game_speed,
+            houses,
+            alliances: Vec::new(),
+            sandbox: true,
+        },
+        substituted,
+    )
 }

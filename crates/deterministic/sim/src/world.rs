@@ -245,6 +245,9 @@ pub struct World {
     /// Regions and reach regions (derived; rebuilt on load).
     #[serde(skip)]
     pub regions: Regions,
+    /// Working memory of the path search (not state).
+    #[serde(skip)]
+    pub scratch: std::cell::RefCell<crate::path::SearchScratch>,
 }
 
 impl World {

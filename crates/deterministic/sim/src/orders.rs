@@ -452,8 +452,7 @@ fn spread(w: &mut World, run: &[(usize, ObjectId)], common: CellXY) -> Vec<(usiz
                 F64::from_i64(i64::from(vy), mode).div(r, mode),
             )
         };
-        let half = glasnost_num::decimal::parse("0.5", glasnost_num::decimal::Field::Decimal, mode)
-            .unwrap_or_default();
+        let half = crate::consts::HALF;
         let reference = occupancy::reference_level(w, id);
         let mut fallback: Option<CellXY> = None;
         let mut result: Option<CellXY> = None;

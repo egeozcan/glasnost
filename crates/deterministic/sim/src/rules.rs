@@ -290,6 +290,8 @@ pub struct GeneralRules {
     pub guard_stray: Option<i32>,
     /// Scatter threshold of the house skill level.
     pub iq_scatter: i32,
+    /// The rules' lobby game-speed index (S-0201 claim 7).
+    pub lobby_game_speed: u8,
 }
 
 /// The behaviours of S-0215 table T1, in our order.
@@ -631,6 +633,8 @@ impl SimRules {
             }),
             // spec: S-0209 Import mapping ([IQ] Scatter absent: 3)
             iq_scatter: g.iq_scatter.unwrap_or(3),
+            // spec: S-0201 Constants (rules lobby game speed absent: index 6; claim 7 covers 0 to 6)
+            lobby_game_speed: g.lobby_game_speed.map_or(6, |v| v.clamp(0, 6) as u8),
         };
         // spec: S-0211 claim 2 (start-up row: M = 0 for all eight classes, not buildable)
         let mut land = [LandRules {

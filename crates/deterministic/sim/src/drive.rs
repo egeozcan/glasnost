@@ -4,15 +4,15 @@
 
 use glasnost_map::CellXY;
 use glasnost_map::terrain::land;
+use glasnost_num::F64;
 use glasnost_num::geom::root_floor;
-use glasnost_num::{F64, Rounding};
 use glasnost_rules::sim::{LocomotionClass, MovementZone};
 use serde::{Deserialize, Serialize};
 
 use crate::occupancy::{self, Outcome};
 use crate::path::{self, Mode, Search};
 use crate::regions::STEPS;
-use crate::rules::{SimRules, UnitRules, nearest_double};
+use crate::rules::{SimRules, UnitRules};
 use crate::tracks::{self, Point};
 use crate::world::{Layer, ObjectId, Pos, World};
 
@@ -172,12 +172,7 @@ fn update_claims(w: &mut World, id: ObjectId) {
 /// The braking floor F₀.₃ (single-precision 0.3 widened, S-0207 claim 10).
 fn f03() -> F64 {
     // spec: S-0207 claim 10 (F₀.₃ = 0.300000011920928955078125, single-precision 0.3)
-    glasnost_num::decimal::parse(
-        "0.3",
-        glasnost_num::decimal::Field::Decimal,
-        Rounding::TowardZero,
-    )
-    .unwrap_or_default()
+    crate::consts::BRAKE_FLOOR
 }
 
 /// The target fraction of a track entering `cell` (S-0207 claim 9, F6).
@@ -216,8 +211,7 @@ fn target_fraction(w: &World, id: ObjectId, u: &UnitRules, cell: CellXY) -> F64 
     let gu = g.mul(uf, mode);
     // spec: S-0207 claim 9 (d) (0.5 where g × u = 0 exactly)
     let z = if gu.eq_num(F64::ZERO) {
-        glasnost_num::decimal::parse("0.5", glasnost_num::decimal::Field::Decimal, mode)
-            .unwrap_or_default()
+        crate::consts::HALF
     } else {
         gu
     };
@@ -228,8 +222,7 @@ fn target_fraction(w: &World, id: ObjectId, u: &UnitRules, cell: CellXY) -> F64 
             .div(F64::from_i64(i64::from(strength), mode), mode)
             .le(r.general.condition_yellow);
     let h = if damaged {
-        glasnost_num::decimal::parse("0.75", glasnost_num::decimal::Field::Decimal, mode)
-            .unwrap_or_default()
+        crate::consts::THREE_QUARTERS
     } else {
         one
     };
@@ -267,7 +260,7 @@ fn update_rho(w: &mut World, id: ObjectId, u: &UnitRules) {
         let floor = f03();
         if o.crush_slowdown {
             // spec: S-0207 claim 10 case 1 and S-0210 F4 (min(ρₜ, 0.2); the target takes this value)
-            let cap = nearest_double("0.2");
+            let cap = crate::consts::CRUSH_CAP;
             let x = d.rho_t.min(cap);
             (clamp(x), x)
         } else if braking && (r.quirks.drive_brake_floor_raises || d.rho.gt(floor)) {
@@ -647,7 +640,7 @@ fn spend(w: &mut World, id: ObjectId) -> bool {
             last
         };
         // spec: S-0207 F4 (t = single(A × (1/7)), 1/7 the double nearest; both roundings by the mode)
-        let seventh = nearest_double("0.142857142857142857142857142857");
+        let seventh = crate::consts::SEVENTH;
         let tt = F64::from_i64(i64::from(a), mode)
             .mul(seventh, mode)
             .to_f32(mode)

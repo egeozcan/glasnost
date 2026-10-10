@@ -383,6 +383,17 @@ impl F64 {
     /// than 53 bits.
     pub fn from_i64(v: i64, mode: Rounding) -> F64 {
         let neg = v < 0;
+        let a = v.unsigned_abs();
+        if a == 0 {
+            return F64(0);
+        }
+        if a < 1 << 53 {
+            // Exact: the leading bit sets the exponent, the rest is the fraction.
+            let lead = 63 - a.leading_zeros();
+            let frac = (a << (52 - lead)) & ((1 << 52) - 1);
+            let bits = ((u64::from(lead) + 1023) << 52) | frac;
+            return F64(if neg { bits | 1 << 63 } else { bits });
+        }
         F64(round_pack(
             DOUBLE,
             neg,
@@ -564,6 +575,13 @@ impl F32 {
 
     /// The exact widening to double precision (S-0205 claim 4).
     pub fn to_f64(self) -> F64 {
+        let exp = (self.0 >> 23) & 0xff;
+        if (1..0xff).contains(&exp) {
+            // A normal single: rebias the exponent, widen the fraction.
+            let sign = u64::from(self.0 >> 31) << 63;
+            let frac = u64::from(self.0 & 0x7f_ffff) << 29;
+            return F64(sign | ((u64::from(exp) + 1023 - 127) << 52) | frac);
+        }
         match decode(SINGLE, u64::from(self.0)) {
             Val::NaN => F64(DOUBLE.quiet_nan()),
             Val::Inf(n) => F64(DOUBLE.infinity(n)),
@@ -735,5 +753,45 @@ mod tests {
         assert!(h(1.0).lt(h(2.0)));
         assert!(h(-0.0).eq_num(h(0.0)));
         assert!(!h(f64::NAN).le(h(1.0)));
+    }
+
+    // Exact conversions: widening every kind of single, and integers on both
+    // sides of 2^53, agree with the host.
+    #[test]
+    #[allow(clippy::disallowed_types, clippy::cast_precision_loss)]
+    fn exact_conversions_match_host() {
+        let mut x: u64 = 0x9e37_79b9_7f4a_7c15;
+        for _ in 0..200_000 {
+            x = x
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            let b = (x >> 32) as u32;
+            let host = f64::from(f32::from_bits(b));
+            if !host.is_nan() {
+                assert_eq!(F32(b).to_f64().0, host.to_bits(), "{b:#x}");
+            }
+            let v = x as i64 >> (x % 40);
+            assert_eq!(
+                F64::from_i64(v, Rounding::Nearest).0,
+                (v as f64).to_bits(),
+                "{v}"
+            );
+        }
+        for v in [
+            0i64,
+            1,
+            -1,
+            (1 << 53) - 1,
+            1 << 53,
+            -(1 << 53),
+            i64::MIN,
+            i64::MAX,
+        ] {
+            assert_eq!(
+                F64::from_i64(v, Rounding::Nearest).0,
+                (v as f64).to_bits(),
+                "{v}"
+            );
+        }
     }
 }

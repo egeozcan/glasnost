@@ -120,11 +120,11 @@ pub fn step_point(x: i32, y: i32, f: u16, s: i32, table: bool, mode: Rounding) -
     };
     let theta = if table {
         // spec: S-0208 F3 (θ = (f̂ − 16383) × c₂, c₂ = −2π / 65534 as a double)
-        let c2 = crate::rules::nearest_double("-0.00009587672516830327");
+        let c2 = crate::consts::WALK_C2;
         F64::from_i64(fh - 16383, mode).mul(c2, mode) // spec: S-0208 F3 (f̂ − 16383)
     } else {
         // spec: S-0208 F3 (`quirks.table_direction` off: θ = (f̂ − 16384) × (−2π / 65536))
-        let c = crate::rules::nearest_double("-0.00009587379924285257");
+        let c = crate::consts::WALK_C;
         F64::from_i64(fh - 16384, mode).mul(c, mode) // spec: S-0208 F3 (f̂ − 16384 with the switch off)
     };
     let sf = F64::from_i64(i64::from(s), mode);
@@ -523,10 +523,10 @@ mod tests {
     #[allow(clippy::disallowed_types, clippy::float_arithmetic)]
     #[test]
     fn step_constant() {
-        let c2 = crate::rules::nearest_double("-0.00009587672516830327");
+        let c2 = crate::consts::WALK_C2;
         let want = -2.0 * std::f64::consts::PI / 65534.0;
         assert_eq!(c2.0, want.to_bits());
-        let c = crate::rules::nearest_double("-0.00009587379924285257");
+        let c = crate::consts::WALK_C;
         assert_eq!(c.0, (-2.0 * std::f64::consts::PI / 65536.0).to_bits());
     }
 

@@ -162,7 +162,7 @@ const GROUND_CLASSES: [LocomotionClass; 7] = [
 /// M ≤ the double nearest to 0.01 (S-0211 Formulas, rule 3 threshold).
 fn low(m: F32) -> bool {
     // spec: S-0211 Formulas (category rule 3 threshold: the double nearest 0.01, compared exactly)
-    m.to_f64().le(crate::rules::nearest_double("0.01"))
+    m.to_f64().le(crate::consts::LOW_MULTIPLIER)
 }
 
 /// Whether an object of locomotion class `class` and movement zone `zone`

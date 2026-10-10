@@ -99,15 +99,7 @@ pub const STORED: usize = 24;
 /// The direction term ε(d) of S-0212 table T4.
 fn epsilon(d: usize) -> F64 {
     // spec: S-0212 table T4 (the single-precision values nearest these decimals)
-    const T: [&str; 8] = [
-        "0.001", "0.005", "0.002", "0.006", "0.003", "0.007", "0.004", "0.008",
-    ];
-    glasnost_num::decimal::parse(
-        T[d],
-        glasnost_num::decimal::Field::Decimal,
-        Rounding::TowardZero,
-    )
-    .unwrap_or_default()
+    crate::consts::EPSILON[d % 8]
 }
 
 /// The base cost b(v) of S-0212 claim 8 and table T2.
@@ -221,6 +213,39 @@ pub fn step_outcome(w: &World, id: ObjectId, from: CellXY, to: CellXY, reference
     }
 }
 
+/// Reusable working memory of the cell search, indexed by dense cell index.
+/// Not game state: a search starts from a fresh stamp, so nothing carries
+/// over from one search to the next.
+#[derive(Clone, Debug, Default)]
+pub struct SearchScratch {
+    stamp: u32,
+    /// `seen[i] == stamp`: cell i has a recorded g.
+    seen: Vec<u32>,
+    /// `closed[i] == stamp`: cell i has been expanded.
+    closed: Vec<u32>,
+    g: Vec<F32>,
+    pred: Vec<(CellXY, u8)>,
+}
+
+impl SearchScratch {
+    fn begin(&mut self, len: usize) {
+        if self.seen.len() != len || self.stamp == u32::MAX {
+            *self = Self {
+                stamp: 0,
+                seen: vec![0; len],
+                closed: vec![0; len],
+                g: vec![F32::ZERO; len],
+                pred: vec![(CellXY::new(0, 0), 0); len],
+            };
+        }
+        self.stamp += 1;
+    }
+
+    fn g(&self, i: usize) -> Option<F32> {
+        (self.seen[i] == self.stamp).then(|| self.g[i])
+    }
+}
+
 /// An entry of the search's pending set: ordered by f, then by recording.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct Pending {
@@ -269,12 +294,17 @@ impl Pathfinder for S0212 {
             // spec: S-0212 F2 (h = r((x − xₜ)² + (y − yₜ)²) in cells, the table root whatever the switch)
             table_root((dx * dx + dy * dy) as u64, mode)
         };
-        let mut g: BTreeMap<CellXY, F32> = BTreeMap::new();
-        let mut pred: BTreeMap<CellXY, (CellXY, u8)> = BTreeMap::new();
-        let mut closed: BTreeSet<CellXY> = BTreeSet::new();
+        let mut sc = w.scratch.borrow_mut();
+        sc.begin(w.cells.grid.len());
+        let ix = |c: CellXY| w.cells.idx(c);
+        let fi = ix(from)?;
         let mut heap: BinaryHeap<Pending> = BinaryHeap::new();
         let mut seq = 0u32;
-        g.insert(from, F32::ZERO);
+        let stamp = sc.stamp;
+        sc.seen[fi] = stamp;
+        sc.g[fi] = F32::ZERO;
+        // spec: S-0212 F1 (recorded-pair margin μ = 1.009, the double nearest)
+        let mu = crate::consts::PATH_MARGIN;
         let mut held: Option<Pending> = Some(Pending {
             f: t24(est(from).to_f64(), mode).0,
             seq,
@@ -315,12 +345,13 @@ impl Pathfinder for S0212 {
                 (None, Some(_)) => heap.pop()?,
                 (None, None) => return None,
             };
-            if closed.contains(&next.cell) {
+            let Some(ni) = ix(next.cell) else { continue };
+            if sc.closed[ni] == stamp {
                 continue;
             }
             if !q.path_no_reopen {
                 // A stale entry superseded by a cheaper record.
-                let cur = g.get(&next.cell).copied().unwrap_or(F32::ZERO);
+                let cur = sc.g(ni).unwrap_or(F32::ZERO);
                 if t24(cur.to_f64().add(est(next.cell).to_f64(), mode), mode).0 != next.f {
                     continue;
                 }
@@ -330,18 +361,19 @@ impl Pathfinder for S0212 {
                 if q.path_search_10000_failure && expansions == 10000 {
                     return None;
                 }
-                return Some(reconstruct(&pred, from, to));
+                return Some(reconstruct(&sc, &ix, from, to));
             }
             // spec: S-0212 claim 12 (at most 65527 expansions)
             if expansions >= 65527 {
                 return None;
             }
             expansions += 1;
-            closed.insert(next.cell);
-            let ge = g.get(&next.cell).copied().unwrap_or(F32::ZERO);
+            sc.closed[ni] = stamp;
+            let ge = sc.g(ni).unwrap_or(F32::ZERO);
             let mut best_new: Option<Pending> = None;
             for (d, (dx, dy)) in STEPS.iter().enumerate() {
                 let c = CellXY::new(next.cell.x + dx, next.cell.y + dy);
+                let Some(ci) = ix(c) else { continue };
                 if w.cells.cell(c).is_none() || behind.contains(&c) {
                     continue;
                 }
@@ -349,11 +381,10 @@ impl Pathfinder for S0212 {
                 if v == Outcome::Blocked {
                     // spec: S-0212 claim 15 (a blocked destination is approached; not for passive vehicles)
                     if c == to && !passive && next.cell != from {
-                        let margin_ok = match g.get(&to) {
+                        let margin_ok = match sc.g(ci) {
                             None => true,
                             Some(gr) => {
                                 // spec: S-0212 F1 (recorded-pair margin: g_r ≥ trunc₅₃(g_e + 1.009))
-                                let mu = crate::rules::nearest_double("1.009");
                                 !q.path_no_reopen
                                     || gr.to_f64().ge(ge.to_f64().add(mu, Rounding::TowardZero))
                             }
@@ -362,7 +393,7 @@ impl Pathfinder for S0212 {
                             if expansions == 10000 && q.path_search_10000_failure {
                                 return None;
                             }
-                            return Some(reconstruct(&pred, from, next.cell));
+                            return Some(reconstruct(&sc, &ix, from, next.cell));
                         }
                     }
                     continue;
@@ -373,9 +404,11 @@ impl Pathfinder for S0212 {
                 let cost = t24(F64::from_i64(b, mode).add(epsilon(d), mode), mode);
                 // spec: S-0212 F1 (g(new) = trunc₂₄(g(current) + c))
                 let gn = t24(ge.to_f64().add(cost.to_f64(), mode), mode);
-                let fresh = !g.contains_key(&c);
+                let recorded_g = sc.g(ci);
+                let fresh = recorded_g.is_none();
                 // spec: S-0212 claim 11 (a pair is recorded once; quirks.path_no_reopen)
-                let better = !fresh && !q.path_no_reopen && gn.to_f64().lt(g[&c].to_f64());
+                let better =
+                    recorded_g.is_some_and(|old| !q.path_no_reopen && gn.to_f64().lt(old.to_f64()));
                 if !fresh && !better {
                     continue;
                 }
@@ -387,10 +420,11 @@ impl Pathfinder for S0212 {
                     }
                 }
                 if better {
-                    closed.remove(&c);
+                    sc.closed[ci] = 0;
                 }
-                g.insert(c, gn);
-                pred.insert(c, (next.cell, d as u8));
+                sc.seen[ci] = stamp;
+                sc.g[ci] = gn;
+                sc.pred[ci] = (next.cell, d as u8);
                 seq += 1;
                 // spec: S-0212 F2 (f = trunc₂₄(g + h))
                 let f = t24(gn.to_f64().add(est(c).to_f64(), mode), mode).0;
@@ -410,11 +444,19 @@ impl Pathfinder for S0212 {
     }
 }
 
-fn reconstruct(pred: &BTreeMap<CellXY, (CellXY, u8)>, from: CellXY, to: CellXY) -> Vec<u8> {
+fn reconstruct(
+    sc: &SearchScratch,
+    ix: &dyn Fn(CellXY) -> Option<usize>,
+    from: CellXY,
+    to: CellXY,
+) -> Vec<u8> {
     let mut steps = Vec::new();
     let mut c = to;
     while c != from {
-        let Some(&(p, d)) = pred.get(&c) else { break };
+        let Some(i) = ix(c).filter(|&i| sc.seen[i] == sc.stamp) else {
+            break;
+        };
+        let (p, d) = sc.pred[i];
         steps.push(d);
         c = p;
     }
