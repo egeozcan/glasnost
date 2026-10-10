@@ -1,6 +1,6 @@
 [package]
 name = "glasnost-tools"
-description = "Glasnost developer tools: fixture writer, later headless runner, sync-diff and viewer"
+description = "Glasnost developer tools: fixture writer, local lane and the headless simulation runner"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -14,6 +14,7 @@ glasnost-convert.workspace = true
 glasnost-rules.workspace = true
 glasnost-ini.workspace = true
 glasnost-map.workspace = true
+glasnost-sim.workspace = true
 pollster = "0.4"
 
 [lints]

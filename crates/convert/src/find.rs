@@ -58,7 +58,7 @@ pub async fn find_maps(vfs: &Vfs) -> Vec<Listing> {
                 continue;
             }
             let doc = Document::parse(&bytes, Default::default(), &mut Vec::new());
-            if !glasnost_convert::map::is_map(&doc) {
+            if !crate::map::is_map(&doc) {
                 continue;
             }
             let text = |s: &[u8], k: &[u8]| {

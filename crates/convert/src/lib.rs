@@ -18,6 +18,8 @@
 pub mod art;
 pub mod coverage;
 pub mod emit;
+pub mod find;
+pub mod game;
 pub mod inputs;
 pub mod kinds;
 pub mod layers;

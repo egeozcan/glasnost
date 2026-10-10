@@ -179,9 +179,10 @@ pub fn run(dir: &Path) -> std::io::Result<Report> {
     pollster::block_on(run_async(dir))
 }
 
-async fn run_async(dir: &Path) -> std::io::Result<Report> {
-    let mut report = Report::default();
-    let options = MountOptions::default();
+/// The files at the top of an install folder, for mounting: MIX containers
+/// (by extension) opened, every other file counted by name and never
+/// opened. Returns the picked files and the number of loose files.
+pub fn pick_install(dir: &Path, options: &MountOptions) -> std::io::Result<(Vec<PickedFile>, u64)> {
     let mut picked = Vec::new();
     let mut loose = 0u64;
     let mut entries: Vec<_> = std::fs::read_dir(dir)?
@@ -212,6 +213,23 @@ async fn run_async(dir: &Path) -> std::io::Result<Report> {
             source: Rc::new(FileSource::open(&e.path())?),
         });
     }
+    Ok((picked, loose))
+}
+
+/// Mounts an install folder and builds the game's search order.
+pub async fn mount(dir: &Path) -> std::io::Result<Vfs> {
+    let options = MountOptions::default();
+    let (picked, _) = pick_install(dir, &options)?;
+    let mut vfs = Vfs::new(Default::default(), options);
+    vfs.mount_install(picked).await;
+    vfs.mount_startup(GameOptions::default()).await;
+    Ok(vfs)
+}
+
+async fn run_async(dir: &Path) -> std::io::Result<Report> {
+    let mut report = Report::default();
+    let options = MountOptions::default();
+    let (picked, loose) = pick_install(dir, &options)?;
     report.count("loose files skipped (not opened)", loose);
 
     let mut vfs = Vfs::new(Default::default(), options);
