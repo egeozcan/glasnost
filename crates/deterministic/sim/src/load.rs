@@ -99,7 +99,8 @@ pub fn new_game(
             .country_names
             .iter()
             .position(|n| *n == h.country)
-            .ok_or_else(|| LoadError::UnknownCountry(h.country.clone()))? as u32;
+            .ok_or_else(|| LoadError::UnknownCountry(h.country.clone()))?
+            as u32;
         houses.push(House {
             name: h.name.clone(),
             country,
@@ -188,10 +189,13 @@ pub fn new_game(
         }
         // spec: S-0009 claim 11 (no overlay for format version below 2)
         let keep = map.format_version >= 2
-            && rules.overlays.get(usize::from(cell.overlay)).is_some_and(|o| {
-                // spec: S-0009 claim 12 (artwork or cell animation; crates only in campaign games)
-                o.has_art && !o.crate_
-            });
+            && rules
+                .overlays
+                .get(usize::from(cell.overlay))
+                .is_some_and(|o| {
+                    // spec: S-0009 claim 12 (artwork or cell animation; crates only in campaign games)
+                    o.has_art && !o.crate_
+                });
         if !keep {
             if let Some(cell) = w.cells.grid.get_mut(c) {
                 cell.overlay = NO_OVERLAY;
@@ -273,7 +277,8 @@ fn setup_bases(r: &SimRules, cat: &TileCatalogue, setup: &GameSetup) -> (i32, i3
 fn start_list(map: &Map, players: usize) -> Result<Vec<CellXY>, LoadError> {
     // spec: S-0009 claim 17 (K: start waypoints defined consecutively from 0, at most 8)
     let mut k: usize = 0;
-    while k < 8 && map.waypoints.contains_key(&(k as u16)) { // spec: S-0009 claim 17 (start waypoints 0 … 7, at most 8)
+    // spec: S-0009 claim 17 (start waypoints 0 … 7, at most 8)
+    while k < 8 && map.waypoints.contains_key(&(k as u16)) {
         k += 1;
     }
     let n = players.max(k);
@@ -314,7 +319,11 @@ fn assign_positions(w: &mut World, players: &[usize], list: &[CellXY]) {
                         let (a, b) = (list[i as usize], list[t as usize]);
                         let dx = i64::from(a.x - b.x);
                         let dy = i64::from(a.y - b.y);
-                        root_floor((dx * dx + dy * dy) as u64, q.table_root_distance, w.rules().mode)
+                        root_floor(
+                            (dx * dx + dy * dy) as u64,
+                            q.table_root_distance,
+                            w.rules().mode,
+                        )
                     })
                     .sum();
                 if best.is_none_or(|(s, _)| sum > s) {

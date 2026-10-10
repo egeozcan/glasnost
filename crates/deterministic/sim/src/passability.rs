@@ -148,7 +148,8 @@ pub fn compute_category(w: &World, c: CellXY) -> u8 {
     category::OPEN
 }
 
-const GROUND_CLASSES: [LocomotionClass; 7] = [ // spec: S-0211 claim 2 (the seven classes that move on the ground)
+// spec: S-0211 claim 2 (the seven classes that move on the ground)
+const GROUND_CLASSES: [LocomotionClass; 7] = [
     LocomotionClass::Foot,
     LocomotionClass::Track,
     LocomotionClass::Wheel,
@@ -247,6 +248,9 @@ mod tests {
         assert_eq!(zone_table(Z::WaterBeach, category::BEACH), Answer::Yes);
         assert_eq!(zone_table(Z::Subterranean, category::BLOCKED), Answer::Yes);
         assert_eq!(zone_table(Z::Fly, category::OFF_MAP), Answer::Never);
-        assert_eq!(zone_table(Z::AmphibiousDestroyer, category::BLOCKED), Answer::No);
+        assert_eq!(
+            zone_table(Z::AmphibiousDestroyer, category::BLOCKED),
+            Answer::No
+        );
     }
 }

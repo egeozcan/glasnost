@@ -35,7 +35,9 @@ pub struct ObjectId(pub u32);
 pub struct HouseId(pub u8);
 
 /// A position in leptons (S-0204 claim 1).
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
+)]
 pub struct Pos {
     /// Map x.
     pub x: i32,
@@ -75,7 +77,9 @@ pub enum Target {
 }
 
 /// Which layer of a cell an object is in (S-0209 Terms, *cell layer*).
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
+)]
 pub enum Layer {
     /// The ground layer.
     #[default]
@@ -224,7 +228,9 @@ pub struct World {
     pub cells: Cells,
     /// Orders are blocked up to and including this tick (S-0201 claim 14).
     pub orders_blocked_through: i32,
-    /// Problems met while loading (requests and provisional rules).
+    /// Provisional rules and requests met so far (diagnostics, not game
+    /// state: neither saved nor hashed).
+    #[serde(skip)]
     pub notes: Vec<String>,
     /// The map's theater.
     pub theater: Theater,
@@ -298,7 +304,9 @@ impl World {
 impl World {
     /// An object's reference point (S-0204 claim 4).
     pub fn reference_point(&self, id: ObjectId) -> Pos {
-        let Some(o) = self.obj(id) else { return Pos::default() };
+        let Some(o) = self.obj(id) else {
+            return Pos::default();
+        };
         if o.kind == Kind::Building {
             let (fw, fh) = o.foundation;
             // spec: S-0204 claim 4 (a building: its position plus (128 × (W − 1), 128 × (H − 1), 0))

@@ -8,8 +8,8 @@ use std::sync::Arc;
 use glasnost_map::objects::Placed;
 use glasnost_map::terrain::{Roles, TileCatalogue, TileCell, TileInfo};
 use glasnost_map::{
-    Basic, Cell, CellGrid, CellXY, DEFAULT_HOME_WAYPOINT, Fill, Footprint, Header, Infantry, Lighting, Map,
-    Objects, Theater, Unit,
+    Basic, Cell, CellGrid, CellXY, DEFAULT_HOME_WAYPOINT, Fill, Footprint, Header, Infantry,
+    Lighting, Map, Objects, Theater, Unit,
 };
 use glasnost_rules::schema::Ruleset;
 use glasnost_rules::sim::{Country, LandRow, LandType, LocomotionClass, UnitType};
@@ -26,8 +26,10 @@ pub const SIZE: i32 = 40;
 pub fn rules() -> Arc<SimRules> {
     let mut r = Ruleset::default();
     let reg = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
-    r.registries.insert("countries".into(), reg(&["Alphaland", "Betaland"]));
-    r.registries.insert("vehicles".into(), reg(&["CART", "CRUSHER"]));
+    r.registries
+        .insert("countries".into(), reg(&["Alphaland", "Betaland"]));
+    r.registries
+        .insert("vehicles".into(), reg(&["CART", "CRUSHER", "BUGGY"]));
     r.registries.insert("infantry".into(), reg(&["WALKER"]));
     let s = &mut r.sim;
     s.countries.insert("Alphaland".into(), Country::default());
@@ -58,22 +60,36 @@ pub fn rules() -> Arc<SimRules> {
         primary: Some("Rifle".into()),
         ..Default::default()
     };
+    let buggy = UnitType {
+        strength: Some(120),
+        speed: Some(9),
+        rot: Some(8),
+        locomotion_class: Some(LocomotionClass::Wheel),
+        crushable: Some(true),
+        ..Default::default()
+    };
+    s.vehicles.insert("BUGGY".into(), buggy);
     s.vehicles.insert("CART".into(), cart);
     s.vehicles.insert("CRUSHER".into(), crusher);
     s.infantry.insert("WALKER".into(), walker);
     Arc::new(SimRules::new(&r, "synthetic"))
 }
 
-/// A one-tile catalogue: tile 0 is clear and flat.
+/// A small catalogue: tile 0 is clear and flat, tiles 1 to 4 are clear
+/// ramps with slope shapes 1 to 4.
 pub fn catalogue() -> Arc<TileCatalogue> {
+    let tile = |slope: u8| TileInfo {
+        width: 1,
+        height: 1,
+        has_image: true,
+        cells: vec![Some(TileCell {
+            terrain_code: 0,
+            slope,
+        })],
+        variants: 0,
+    };
     Arc::new(TileCatalogue {
-        tiles: vec![TileInfo {
-            width: 1,
-            height: 1,
-            has_image: true,
-            cells: vec![Some(TileCell { terrain_code: 0, slope: 0 })],
-            variants: 0,
-        }],
+        tiles: (0..=4).map(tile).collect(),
         roles: Roles::default(),
     })
 }
@@ -95,32 +111,59 @@ pub fn cell(dx: i32, dy: i32) -> CellXY {
     CellXY::new(SIZE + dx, SIZE + dy)
 }
 
-/// The synthetic map: flat clear ground; house Alpha's vehicles and
-/// infantry on the left, house Beta's on the right.
+/// The synthetic map: clear ground with a raised plateau and ramps across
+/// the middle; house Alpha's units on the left, house Beta's on the right.
 pub fn map() -> Map {
     let fp = Footprint::new(SIZE, SIZE, [0, 0, SIZE, SIZE]);
     let mut cells = CellGrid::new(fp);
     let all: Vec<CellXY> = cells.iter().map(|(c, _)| c).collect();
     for c in all {
         if let Some(cell) = cells.get_mut(c) {
-            *cell = Cell { tile: 0, ..Cell::BLANK };
+            // Every cell comes from the terrain stream, so the initial fill keeps it.
+            *cell = Cell {
+                tile: 0,
+                stream: true,
+                ..Cell::BLANK
+            };
+        }
+    }
+    // A plateau one level up, with a ramp tile on each side.
+    for y in -3..=3 {
+        for (dx, tile, level) in [(-2, 1, 0), (-1, 0, 1), (0, 0, 1), (1, 0, 1), (2, 3, 0)] {
+            if let Some(cell) = cells.get_mut(cell(dx, y - 6)) {
+                *cell = Cell {
+                    tile,
+                    level,
+                    stream: true,
+                    ..Cell::BLANK
+                };
+            }
         }
     }
     let mut objects = Objects::default();
     let mut k = 0;
     let mut unit = |owner: &str, ty: &str, c: CellXY, f: i32, objects: &mut Objects| {
-        objects.units.push(Unit { placed: placed(owner, ty, c, f, k) });
+        objects.units.push(Unit {
+            placed: placed(owner, ty, c, f, k),
+        });
         k += 1;
     };
-    for i in 0..3 {
-        unit("Alpha", "CART", cell(-6, i * 2 - 2), 64, &mut objects);
-        unit("Beta", "CART", cell(6, i * 2 - 2), 192, &mut objects);
+    for i in 0..5 {
+        unit("Alpha", "CART", cell(-6, i * 2 - 4), 64, &mut objects);
+        unit("Beta", "CART", cell(6, i * 2 - 4), 192, &mut objects);
     }
     unit("Alpha", "CRUSHER", cell(-8, 0), 64, &mut objects);
+    unit("Beta", "BUGGY", cell(-2, 8), 128, &mut objects);
+    for i in 0..6 {
+        objects.infantry.push(Infantry {
+            placed: placed("Beta", "WALKER", cell(2, i - 3), 0, 100 + i as usize),
+            sub_cell: 1 + (i % 3),
+        });
+    }
     for i in 0..4 {
         objects.infantry.push(Infantry {
-            placed: placed("Beta", "WALKER", cell(2, i - 2), 0, 100 + i as usize),
-            sub_cell: 1 + (i % 3),
+            placed: placed("Alpha", "WALKER", cell(-4, i - 2), 128, 200 + i as usize),
+            sub_cell: 2 + (i % 2),
         });
     }
     Map {
@@ -169,7 +212,8 @@ pub fn setup(seed: u32) -> GameSetup {
 
 /// A new game of the scenario.
 pub fn new_game(seed: u32) -> World {
-    crate::load::new_game(rules(), &map(), catalogue(), &setup(seed)).expect("synthetic scenario loads")
+    crate::load::new_game(rules(), &map(), catalogue(), &setup(seed))
+        .expect("synthetic scenario loads")
 }
 
 /// The objects of a house, by ID.
@@ -197,8 +241,15 @@ pub fn scripted_replay(seed: u32, ticks: i32) -> Replay {
     let w = new_game(seed);
     let mut rep = Replay::new(w.rules(), "synthetic", setup(seed));
     let a = house_objects(&w, 0);
-    let b = house_objects(&w, 1);
-    let mut push = |t: i32, h: u8, o: Order| rep.orders.push((t, HouseId(h), o));
+    // Beta's buggy stays where it is, for the crusher.
+    let b: Vec<ObjectId> = house_objects(&w, 1)
+        .into_iter()
+        .filter(|&id| {
+            w.obj(id)
+                .is_some_and(|o| !(o.kind == crate::rules::Kind::Vehicle && o.type_index == 2))
+        })
+        .collect();
+    let mut push = |t: i32, h: u8, o: Order| rep.record(t, HouseId(h), o);
     // Alpha moves as a group to the right, Beta to the left: paths cross.
     for &id in &a {
         push(10, 0, mv(id, cell(8, 0)));
@@ -206,13 +257,33 @@ pub fn scripted_replay(seed: u32, ticks: i32) -> Replay {
     for &id in &b {
         push(12, 1, mv(id, cell(-8, 1)));
     }
+    // The crusher drives onto Beta's crushable buggy.
+    if let Some(&id) = a.iter().find(|&&id| {
+        w.obj(id)
+            .is_some_and(|o| o.type_index == 1 && o.kind == crate::rules::Kind::Vehicle)
+    }) {
+        push(150, 0, mv(id, cell(-2, 8)));
+    }
+    // Two units climb the plateau: a vehicle and an infantry unit.
+    if let Some(&id) = a.get(1) {
+        push(400, 0, mv(id, cell(0, -6)));
+    }
+    if let Some(&id) = a.iter().rev().find(|&&id| {
+        w.obj(id)
+            .is_some_and(|o| o.kind == crate::rules::Kind::Infantry)
+    }) {
+        push(410, 0, mv(id, cell(1, -5)));
+    }
     // A stop, then a new move, for one Alpha unit.
     if let Some(&id) = a.first() {
         push(60, 0, Order::Stop { actor: id });
         push(61, 0, mv(id, cell(0, 8)));
     }
     // Beta's infantry scatter, then guard an area.
-    for &id in b.iter().filter(|&&id| w.obj(id).is_some_and(|o| o.kind == crate::rules::Kind::Infantry)) {
+    for &id in b.iter().filter(|&&id| {
+        w.obj(id)
+            .is_some_and(|o| o.kind == crate::rules::Kind::Infantry)
+    }) {
         push(90, 1, Order::Scatter { actor: id });
         push(
             300,

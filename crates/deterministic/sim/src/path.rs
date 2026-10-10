@@ -99,9 +99,15 @@ pub const STORED: usize = 24;
 /// The direction term ε(d) of S-0212 table T4.
 fn epsilon(d: usize) -> F64 {
     // spec: S-0212 table T4 (the single-precision values nearest these decimals)
-    const T: [&str; 8] = ["0.001", "0.005", "0.002", "0.006", "0.003", "0.007", "0.004", "0.008"];
-    glasnost_num::decimal::parse(T[d], glasnost_num::decimal::Field::Decimal, Rounding::TowardZero)
-        .unwrap_or_default()
+    const T: [&str; 8] = [
+        "0.001", "0.005", "0.002", "0.006", "0.003", "0.007", "0.004", "0.008",
+    ];
+    glasnost_num::decimal::parse(
+        T[d],
+        glasnost_num::decimal::Field::Decimal,
+        Rounding::TowardZero,
+    )
+    .unwrap_or_default()
 }
 
 /// The base cost b(v) of S-0212 claim 8 and table T2.
@@ -200,7 +206,9 @@ pub fn step_outcome(w: &World, id: ObjectId, from: CellXY, to: CellXY, reference
     if !height_ok(w, from, to) {
         return Outcome::Blocked;
     }
-    let Some(o) = w.obj(id) else { return Outcome::Blocked };
+    let Some(o) = w.obj(id) else {
+        return Outcome::Blocked;
+    };
     // spec: S-0211 Terms (a unit inside the usable area may not step outside it)
     if w.cells.usable(from) && !w.cells.usable(to) {
         return Outcome::Blocked;
@@ -346,7 +354,8 @@ impl Pathfinder for S0212 {
                             Some(gr) => {
                                 // spec: S-0212 F1 (recorded-pair margin: g_r ≥ trunc₅₃(g_e + 1.009))
                                 let mu = crate::rules::nearest_double("1.009");
-                                !q.path_no_reopen || gr.to_f64().ge(ge.to_f64().add(mu, Rounding::TowardZero))
+                                !q.path_no_reopen
+                                    || gr.to_f64().ge(ge.to_f64().add(mu, Rounding::TowardZero))
                             }
                         };
                         if margin_ok {
@@ -445,7 +454,8 @@ pub fn flatten(steps: &[u8], straight_v: bool, ok: &ReplaceOk<'_>) -> Vec<u8> {
         let diagonal = d1 % 2 == 1; // spec: S-0212 Terms (odd steps are diagonal)
         // spec: S-0212 claim 17 (a V: a run then a run at a right angle; diagonal runs always open one)
         let can_open = diagonal || (straight_v && straight_ok);
-        if !(rel == 2 || rel == 6) || !can_open { // spec: S-0212 claim 17 (a right angle: two eighths either way)
+        // spec: S-0212 claim 17 (a right angle: two eighths either way)
+        if !(rel == 2 || rel == 6) || !can_open {
             fin = second;
             straight_ok = false;
             continue;
@@ -506,7 +516,10 @@ pub fn goal_cell(w: &World, id: ObjectId) -> Option<CellXY> {
 pub fn heading_point(w: &World, id: ObjectId) -> Option<Pos> {
     let o = w.obj(id)?;
     match o.dest? {
-        Target::Cell(c) => Some(Pos::centre(c, w.surface_at(256 * c.x + 128, 256 * c.y + 128))), // spec: S-0204 claim 3 (the cell centre)
+        Target::Cell(c) => Some(Pos::centre(
+            c,
+            w.surface_at(256 * c.x + 128, 256 * c.y + 128), // spec: S-0204 claim 3 (the cell centre)
+        )),
         Target::Object(t) => w.obj(t).map(|x| x.pos),
     }
 }
@@ -559,7 +572,11 @@ pub fn nearby(w: &mut World, centre: CellXY, use_: NearbyUse) -> Option<CellXY> 
     let q = w.rules().quirks;
     let fp = *w.cells.footprint();
     // spec: S-0212 claim 25 (largest radius 31, or w + h − 1 when w + h < 32)
-    let max_r = if fp.width + fp.height < 32 { fp.width + fp.height - 1 } else { 31 };
+    let max_r = if fp.width + fp.height < 32 {
+        fp.width + fp.height - 1
+    } else {
+        31
+    };
     let (class, zone, reach_ref, deck_mode, height_cond, reference) = match use_ {
         NearbyUse::Substitution { unit } => {
             let o = w.obj(unit)?;
@@ -567,7 +584,14 @@ pub fn nearby(w: &mut World, centre: CellXY, use_: NearbyUse) -> Option<CellXY> 
             let z = simplified(u.zone);
             let rr = regions::reach(w, o.pos.cell(), z);
             let o = w.obj(unit)?;
-            (u.class, z, Some(rr), o.layer == Layer::Deck, true, Some(o.pos.cell()))
+            (
+                u.class,
+                z,
+                Some(rr),
+                o.layer == Layer::Deck,
+                true,
+                Some(o.pos.cell()),
+            )
         }
         NearbyUse::Scatter { class, deck } => {
             // spec: S-0212 table T5 (scatter: zone normal, no reach region, no reference cell)
@@ -577,20 +601,37 @@ pub fn nearby(w: &mut World, centre: CellXY, use_: NearbyUse) -> Option<CellXY> 
             let o = w.obj(unit)?;
             let u = w.rules().unit(o.kind, o.type_index)?.clone();
             // spec: S-0212 table T5 (move order: own zone, subterranean as normal, fly as infantry under an ion storm)
-            let z = if u.zone == MovementZone::Subterranean { MovementZone::Normal } else { u.zone };
+            let z = if u.zone == MovementZone::Subterranean {
+                MovementZone::Normal
+            } else {
+                u.zone
+            };
             let rr = regions::reach(w, o.pos.cell(), z);
             let deck = w.cells.idx(centre).is_some_and(|i| w.cells.deck[i]);
             (u.class, z, Some(rr), deck, true, None)
         }
     };
     let centre_level = w.cells.cell(centre).map_or(0, |c| i32::from(c.level))
-        + if deck_mode && w.cells.idx(centre).is_some_and(|i| w.cells.deck[i]) { 4 } else { 0 }; // spec: S-0207 claim 9 (a deck counts 4 levels above its cell)
+        + if deck_mode && w.cells.idx(centre).is_some_and(|i| w.cells.deck[i]) {
+            4 // spec: S-0207 claim 9 (a deck counts 4 levels above its cell)
+        } else {
+            0
+        };
     let mut collected: Vec<CellXY> = Vec::new();
     let mut stop_after_ring = false;
     'rings: for r in 0..=max_r {
         let ring = ring_cells(centre, r, q.nearby_centre_twice);
         for c in ring {
-            if qualifies(w, c, class, zone, reach_ref, deck_mode, height_cond, centre_level) {
+            if qualifies(
+                w,
+                c,
+                class,
+                zone,
+                reach_ref,
+                deck_mode,
+                height_cond,
+                centre_level,
+            ) {
                 collected.push(c);
                 // spec: S-0212 claim 25 (cut off at the 24th collected cell)
                 if collected.len() >= 24 {
@@ -614,7 +655,11 @@ pub fn nearby(w: &mut World, centre: CellXY, use_: NearbyUse) -> Option<CellXY> 
         .copied()
         .filter(|&c| crate::scatter::screen_cover_passes(w, c))
         .collect();
-    let preferred = if visible.is_empty() { collected } else { visible };
+    let preferred = if visible.is_empty() {
+        collected
+    } else {
+        visible
+    };
     match reference {
         Some(rc) => {
             // spec: S-0212 claim 25 (the preferred cell nearest the reference cell; the first collected on ties)
@@ -682,7 +727,11 @@ fn qualifies(
 fn ring_cells(centre: CellXY, r: i32, centre_twice: bool) -> Vec<CellXY> {
     if r == 0 {
         // spec: S-0212 claim 25 (ring 0 is the centre, which appears twice with quirks.nearby_centre_twice)
-        return if centre_twice { vec![centre, centre] } else { vec![centre] };
+        return if centre_twice {
+            vec![centre, centre]
+        } else {
+            vec![centre]
+        };
     }
     let mut rows = Vec::new();
     let mut cols = Vec::new();
@@ -774,10 +823,16 @@ fn congestion(w: &World, id: ObjectId, mode: Mode) -> Option<BTreeSet<CellXY>> {
 /// A path computation for a unit (S-0212 claims 6, 20, 24): the gate,
 /// destination substitution, the search, flattening and storage.
 pub fn compute(w: &mut World, id: ObjectId, mode: Mode) -> Search {
-    let Some(o) = w.obj(id).cloned() else { return Search::SearchFailed };
-    let Some(mut goal) = goal_cell(w, id) else { return Search::SearchFailed };
+    let Some(o) = w.obj(id).cloned() else {
+        return Search::SearchFailed;
+    };
+    let Some(mut goal) = goal_cell(w, id) else {
+        return Search::SearchFailed;
+    };
     let r = w.rules_arc();
-    let Some(u) = r.unit(o.kind, o.type_index).cloned() else { return Search::SearchFailed };
+    let Some(u) = r.unit(o.kind, o.type_index).cloned() else {
+        return Search::SearchFailed;
+    };
     let from = o.pos.cell();
     // spec: S-0212 claim 6 (the gate compares the reach regions; skipped for a unit outside the usable area)
     let inside = w.cells.usable(from);
@@ -810,14 +865,22 @@ pub fn compute(w: &mut World, id: ObjectId, mode: Mode) -> Search {
             } else {
                 i64::from(o.pos.z - w.surface_at(c.x, c.y))
             };
-            root_floor((dx * dx + dy * dy + dz * dz) as u64, r.quirks.table_root_distance, r.mode) as i64
+            root_floor(
+                (dx * dx + dy * dy + dz * dz) as u64,
+                r.quirks.table_root_distance,
+                r.mode,
+            ) as i64
         };
         if out == Outcome::StationaryFriendly && du > i64::from(r.general.close_enough) {
             if let Some(c) = nearby(w, goal, NearbyUse::Substitution { unit: id }) {
                 let dx = i64::from(256 * (c.x - goal.x));
                 let dy = i64::from(256 * (c.y - goal.y));
                 // spec: S-0212 F6b (centre to centre); the estimate E needs the corridor (Q-0017)
-                let d = root_floor((dx * dx + dy * dy) as u64, r.quirks.table_root_distance, r.mode) as i64;
+                let d = root_floor(
+                    (dx * dx + dy * dy) as u64,
+                    r.quirks.table_root_distance,
+                    r.mode,
+                ) as i64;
                 if d < du {
                     goal = c;
                 }
@@ -833,7 +896,11 @@ pub fn compute(w: &mut World, id: ObjectId, mode: Mode) -> Search {
         Mode::Fresh => BTreeSet::new(),
         _ => congestion(w, id, mode).unwrap_or_default(),
     };
-    let mode = if mode == Mode::Blocked && congested.is_empty() { Mode::Fresh } else { mode };
+    let mode = if mode == Mode::Blocked && congested.is_empty() {
+        Mode::Fresh
+    } else {
+        mode
+    };
     let req = Request {
         unit: id,
         from,
@@ -844,7 +911,9 @@ pub fn compute(w: &mut World, id: ObjectId, mode: Mode) -> Search {
     let found = match w.pathfinder {
         PathfinderChoice::S0212 => S0212.find(w, &req),
     };
-    let Some(steps) = found else { return Search::SearchFailed };
+    let Some(steps) = found else {
+        return Search::SearchFailed;
+    };
     let k = u.threat_avoidance;
     let ok = |path: &[u8], start: usize, d3: u8, j: usize| -> bool {
         // Cells the 2j new steps pass through.
@@ -855,7 +924,8 @@ pub fn compute(w: &mut World, id: ObjectId, mode: Mode) -> Search {
         }
         let reference = occupancy::reference_level(w, id);
         let mut prev = c;
-        for _ in 0..2 * j { // spec: S-0212 claim 17 (2j new steps)
+        // spec: S-0212 claim 17 (2j new steps)
+        for _ in 0..2 * j {
             let (sx, sy) = STEPS[usize::from(d3)];
             let n = CellXY::new(prev.x + sx, prev.y + sy);
             // spec: S-0212 claim 17 (every cell clear, no congestion mark; threat × k below 1.0, no threat records in M3)
@@ -942,11 +1012,17 @@ mod tests {
     // spec: S-0212 claim 17 (worked examples c to f with quirks.flatten_straight_run_v on, and off)
     #[test]
     fn examples_c_to_f() {
-        assert_eq!(flat(&[1, 3, 1, 3, 4, 4, 4], true), vec![2, 2, 3, 3, 3, 3, 4]);
+        assert_eq!(
+            flat(&[1, 3, 1, 3, 4, 4, 4], true),
+            vec![2, 2, 3, 3, 3, 3, 4]
+        );
         assert_eq!(flat(&[1, 3, 2, 4, 4, 4], true), vec![3, 3, 3, 3, 3, 3]);
         assert_eq!(flat(&[5, 7, 0], true), vec![6, 0, 0]);
         assert_eq!(flat(&[7, 1, 6], true), vec![0, 0, 0]);
-        assert_eq!(flat(&[1, 3, 1, 3, 4, 4, 4], false), vec![2, 2, 2, 2, 4, 4, 4]);
+        assert_eq!(
+            flat(&[1, 3, 1, 3, 4, 4, 4], false),
+            vec![2, 2, 2, 2, 4, 4, 4]
+        );
         assert_eq!(flat(&[1, 3, 2, 4, 4, 4], false), vec![2, 2, 2, 4, 4, 4]);
         assert_eq!(flat(&[5, 7, 0], false), vec![6, 6, 0]);
         assert_eq!(flat(&[7, 1, 6], false), vec![0, 0, 6]);
@@ -958,8 +1034,22 @@ mod tests {
         let c = CellXY::new(10, 10);
         assert_eq!(ring_cells(c, 0, true), vec![c, c]);
         let r1 = ring_cells(c, 1, true);
-        let want = [(9, 9), (9, 11), (10, 9), (10, 11), (11, 9), (11, 11), (9, 10), (11, 10)];
-        assert_eq!(r1, want.iter().map(|&(x, y)| CellXY::new(x, y)).collect::<Vec<_>>());
+        let want = [
+            (9, 9),
+            (9, 11),
+            (10, 9),
+            (10, 11),
+            (11, 9),
+            (11, 11),
+            (9, 10),
+            (11, 10),
+        ];
+        assert_eq!(
+            r1,
+            want.iter()
+                .map(|&(x, y)| CellXY::new(x, y))
+                .collect::<Vec<_>>()
+        );
     }
 
     // spec: S-0212 table T4 (direction terms are single-precision values)

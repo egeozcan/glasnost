@@ -257,7 +257,12 @@ impl Cells {
         self.mark_seq += 1;
         let seq = self.mark_seq;
         if let Some(o) = self.occ_mut(c, Layer::Ground) {
-            for (bit, p) in [(1, position::RIGHT), (2, position::LEFT), (4, position::BOTTOM)] { // spec: S-0209 Terms (side-position pattern bits 1, 2 and 4)
+            for (bit, p) in [
+                (1, position::RIGHT),
+                (2, position::LEFT),   // spec: S-0209 Terms (pattern bit 2: left)
+                (4, position::BOTTOM), // spec: S-0209 Terms (pattern bit 4: bottom)
+            ] {
+                // spec: S-0209 Terms (side-position pattern bits 1, 2 and 4)
                 // spec: S-0209 Terms (right ⇔ ⌊p/1⌋ mod 2 = 1, left ⇔ ⌊p/2⌋ mod 2 = 1, bottom ⇔ ⌊p/4⌋ mod 2 = 1)
                 if pattern.div_euclid(bit).rem_euclid(2) == 1 {
                     o.marks[usize::from(p)] = Some(Mark {
@@ -392,12 +397,21 @@ mod tests {
     #[test]
     fn terrain_patterns() {
         let x = CellXY::new(8, 8);
-        for (p, want) in [(7, [true, true, true]), (4, [false, false, true]), (-1, [true, true, true]), (-5, [true, true, false])] {
+        for (p, want) in [
+            (7, [true, true, true]),
+            (4, [false, false, true]),
+            (-1, [true, true, true]),
+            (-5, [true, true, false]),
+        ] {
             let mut c = cells();
             c.mark_terrain(x, ObjectId(9), p);
             let o = c.occ(x, Layer::Ground).unwrap();
             assert_eq!(
-                [o.taken(position::RIGHT), o.taken(position::LEFT), o.taken(position::BOTTOM)],
+                [
+                    o.taken(position::RIGHT),
+                    o.taken(position::LEFT),
+                    o.taken(position::BOTTOM)
+                ],
                 want,
                 "pattern {p}"
             );

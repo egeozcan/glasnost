@@ -59,7 +59,9 @@ impl Behaviours {
             // spec: S-0215 claim 7 (b is none: queue unchanged)
             None => {}
             // spec: S-0215 claim 7 (b is current and nothing or b queued: unchanged)
-            Some(x) if Some(x) == self.current && (self.queued.is_none() || self.queued == Some(x)) => {}
+            Some(x)
+                if Some(x) == self.current && (self.queued.is_none() || self.queued == Some(x)) => {
+            }
             // spec: S-0215 claim 7 (any other case: b replaces any queued behaviour)
             Some(x) => {
                 self.queued = Some(x);
@@ -110,7 +112,12 @@ impl Behaviours {
 
     /// Override (S-0215 claim 10): returns the target and destination to put
     /// aside and replace (the caller swaps them in).
-    pub fn override_with(&mut self, b: Behaviour, refused_retargets: bool, suspends_queued: bool) -> bool {
+    pub fn override_with(
+        &mut self,
+        b: Behaviour,
+        refused_retargets: bool,
+        suspends_queued: bool,
+    ) -> bool {
         let refused = self.current == Some(Behaviour::Selling)
             || (self.current == Some(Behaviour::Wait) && b == Behaviour::Guard);
         if refused {
@@ -197,7 +204,10 @@ mod tests {
             ..Default::default()
         };
         assert!(s.start_next(10));
-        assert_eq!((s.current, s.queued, s.suspended), (Some(B::Move), None, Some(B::Hunt)));
+        assert_eq!(
+            (s.current, s.queued, s.suspended),
+            (Some(B::Move), None, Some(B::Hunt))
+        );
         assert!(s.expired && s.start_tick == 10 && s.progress == 0);
         s.force(B::Selling, 11);
         s.force(B::Guard, 12);
@@ -219,7 +229,10 @@ mod tests {
             ..Default::default()
         };
         assert!(s.override_with(B::Attack, true, true));
-        assert_eq!((s.current, s.queued, s.suspended), (Some(B::Attack), Some(B::Move), Some(B::Move)));
+        assert_eq!(
+            (s.current, s.queued, s.suspended),
+            (Some(B::Attack), Some(B::Move), Some(B::Move))
+        );
         s.aside = Some((None, None));
         assert!(s.revert().is_some());
         assert_eq!((s.current, s.suspended), (Some(B::Move), None));

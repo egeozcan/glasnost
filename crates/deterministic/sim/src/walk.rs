@@ -82,7 +82,9 @@ pub fn walking_speed(w: &World, id: ObjectId) -> i32 {
     let Some(o) = w.obj(id) else { return 0 };
     let r = w.rules();
     let mode = r.mode;
-    let Some(u) = r.unit(o.kind, o.type_index) else { return 0 };
+    let Some(u) = r.unit(o.kind, o.type_index) else {
+        return 0;
+    };
     let kc = o
         .owner
         .and_then(|h| r.countries.get(w.houses[usize::from(h.0)].country as usize))
@@ -111,7 +113,11 @@ pub fn walking_speed(w: &World, id: ObjectId) -> i32 {
 /// The step of S-0208 F3 from (x, y) towards facing `f` at speed `s`.
 pub fn step_point(x: i32, y: i32, f: u16, s: i32, table: bool, mode: Rounding) -> (i32, i32) {
     // spec: S-0208 F3 (f̂ = f or f − 65536)
-    let fh = if f <= 32767 { i64::from(f) } else { i64::from(f) - 65536 };
+    let fh = if f <= 32767 {
+        i64::from(f)
+    } else {
+        i64::from(f) - 65536
+    };
     let theta = if table {
         // spec: S-0208 F3 (θ = (f̂ − 16383) × c₂, c₂ = −2π / 65534 as a double)
         let c2 = crate::rules::nearest_double("-0.00009587672516830327");
@@ -138,31 +144,48 @@ fn dist2(a: (i32, i32), b: (i32, i32)) -> u64 {
     (dx * dx + dy * dy) as u64
 }
 
+/// A walker has arrived when its distance to the walking target is below
+/// this many leptons.
+// spec: S-0208 F2 (arrival when D < 17)
+const ARRIVAL: u64 = 17;
+
 /// One tick of a walker (S-0208 claim 6). Returns whether it moved.
 pub fn tick(w: &mut World, id: ObjectId) -> bool {
     let t = w.tick;
     let r = w.rules_arc();
     let q = r.quirks;
-    let Some(o) = w.obj(id).cloned() else { return false };
-    let Some(ws) = o.walk.clone() else { return false };
+    let Some(o) = w.obj(id).cloned() else {
+        return false;
+    };
+    let Some(ws) = o.walk.clone() else {
+        return false;
+    };
     if let Some(target) = ws.target {
         let here = (o.pos.x, o.pos.y);
         let tp = (target.x, target.y);
         // spec: S-0208 F2 (D = trunc(√̃(Δx² + Δy²)); arrival when D < 17)
         let d = root_floor(dist2(here, tp), q.table_root_distance, r.mode);
-        if d < 17 { // spec: S-0208 F2 (arrival when D < 17)
+        if d < ARRIVAL {
             arrive(w, id, target);
             return true;
         }
         let s = walking_speed(w, id);
         // spec: S-0208 F7 (the facing towards the walking target is S-0204's direction)
-        let f = direction(i64::from(tp.0 - here.0), i64::from(tp.1 - here.1), q.table_direction);
+        let f = direction(
+            i64::from(tp.0 - here.0),
+            i64::from(tp.1 - here.1),
+            q.table_direction,
+        );
         let (mut nx, mut ny) = step_point(here.0, here.1, f, s, q.table_direction, r.mode);
         if !q.walker_overshoot {
             // spec: S-0208 Edge cases (switch off: a step that would end 17 or more beyond ends on the target)
-            let before = i64::from(tp.0 - here.0) * i64::from(nx - here.0) + i64::from(tp.1 - here.1) * i64::from(ny - here.1);
+            let before = i64::from(tp.0 - here.0) * i64::from(nx - here.0)
+                + i64::from(tp.1 - here.1) * i64::from(ny - here.1);
             let travelled = dist2(here, (nx, ny));
-            if before > 0 && travelled > dist2(here, tp) && root_floor(dist2((nx, ny), tp), true, r.mode) >= 17 { // spec: S-0208 Edge cases (17 or more beyond)
+            if before > 0
+                && travelled > dist2(here, tp)
+                && root_floor(dist2((nx, ny), tp), true, r.mode) >= ARRIVAL
+            {
                 nx = tp.0;
                 ny = tp.1;
             }
@@ -228,7 +251,9 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
 fn ask(w: &mut World, id: ObjectId, first: bool) {
     let t = w.tick;
     let Some(o) = w.obj(id).cloned() else { return };
-    let Some(&d) = o.path.steps.first() else { return };
+    let Some(&d) = o.path.steps.first() else {
+        return;
+    };
     let here = o.pos.cell();
     let (dx, dy) = STEPS[usize::from(d % 8)]; // spec: S-0212 Terms (step directions 0 to 7)
     let next = CellXY::new(here.x + dx, here.y + dy);
@@ -265,7 +290,8 @@ fn ask(w: &mut World, id: ObjectId, first: bool) {
                     let first_obj = w.cells.list(next, layer).first().copied();
                     let owner = o.owner;
                     let tgt = match first_obj {
-                        Some(f) => (!w.allied(owner, w.obj(f).and_then(|x| x.owner))).then_some(Target::Object(f)),
+                        Some(f) => (!w.allied(owner, w.obj(f).and_then(|x| x.owner)))
+                            .then_some(Target::Object(f)),
                         None => Some(Target::Cell(next)),
                     };
                     if let Some(ob) = w.obj_mut(id) {
@@ -291,7 +317,11 @@ fn ask(w: &mut World, id: ObjectId, first: bool) {
             if t >= o.path.retry_at {
                 let delay = w.rules().general.blockage_delay;
                 // spec: S-0209 claim 10 (re-path when the retry timer allows; avoid blockers once the delay has run out)
-                let mode = if t.wrapping_sub(since) >= delay { Mode::Avoid } else { Mode::Blocked };
+                let mode = if t.wrapping_sub(since) >= delay {
+                    Mode::Avoid
+                } else {
+                    Mode::Blocked
+                };
                 let res = path::compute(w, id, mode);
                 // spec: S-0212 claim 21 (walker: after a re-path for a moving blocker the delay R starts again)
                 let r = w.rules().general.retry_delay;
@@ -316,10 +346,18 @@ fn stationary_friendly(w: &mut World, id: ObjectId, next: CellXY) {
         let dy = i64::from(dest.y - o.pos.y);
         let dz = i64::from(dest.z - o.pos.z);
         // spec: S-0209 F1 (D = trunc(√̃(Δx² + Δy² + Δz²)), give up when D < close-enough)
-        let d = root_floor((dx * dx + dy * dy + dz * dz) as u64, r.quirks.table_root_distance, r.mode) as i64;
-        let tunnel = w.cells.cell(o.pos.cell()).is_some_and(|c| c.land == land::TUNNEL);
+        let d = root_floor(
+            (dx * dx + dy * dy + dz * dz) as u64,
+            r.quirks.table_root_distance,
+            r.mode,
+        ) as i64;
+        let tunnel = w
+            .cells
+            .cell(o.pos.cell())
+            .is_some_and(|c| c.land == land::TUNNEL);
         // spec: S-0209 claim 8 (within the close-enough distance, in contact with nothing, |Δz| < 208, not a tunnel cell)
-        if d < i64::from(r.general.close_enough) && o.contact.is_none() && dz.abs() < 208 && !tunnel {
+        if d < i64::from(r.general.close_enough) && o.contact.is_none() && dz.abs() < 208 && !tunnel
+        {
             if let Some(ob) = w.obj_mut(id) {
                 ob.dest = None;
                 ob.path.steps.clear();
@@ -345,14 +383,22 @@ fn stationary_friendly(w: &mut World, id: ObjectId, next: CellXY) {
 /// Chooses the walking target in the next cell (S-0208 claims 3 and 4).
 /// Returns whether a target was chosen.
 fn choose_target(w: &mut World, id: ObjectId, d: u8, next: CellXY) -> bool {
-    let Some(o) = w.obj(id).cloned() else { return false };
+    let Some(o) = w.obj(id).cloned() else {
+        return false;
+    };
     let q = w.rules().quirks;
     let (dx, dy) = STEPS[usize::from(d % 8)]; // spec: S-0212 Terms (step directions 0 to 7)
     // spec: S-0208 claim 3 (the desired point: the current position moved by one cell step)
     let desired = (o.pos.x + 256 * dx, o.pos.y + 256 * dy);
     let class = position_class(desired.0.rem_euclid(256), desired.1.rem_euclid(256), true); // spec: S-0204 claim 2 (the position within the cell)
-    let mission = matches!(o.beh.current, Some(crate::rules::Behaviour::Enter | crate::rules::Behaviour::Capture | crate::rules::Behaviour::Sabotage))
-        && path::goal_cell(w, id) == Some(next);
+    let mission = matches!(
+        o.beh.current,
+        Some(
+            crate::rules::Behaviour::Enter
+                | crate::rules::Behaviour::Capture
+                | crate::rules::Behaviour::Sabotage
+        )
+    ) && path::goal_cell(w, id) == Some(next);
     let pos = if mission {
         // spec: S-0208 claim 4 (the mission target's cell: occupants ignored, no draw)
         Some(class)

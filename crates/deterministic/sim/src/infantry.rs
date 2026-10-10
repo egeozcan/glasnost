@@ -137,7 +137,10 @@ impl Seq {
 
     /// Whether the kind is one of the deploy kinds (S-0107 Terms).
     pub fn is_deploy(self) -> bool {
-        matches!(self, Seq::Deploy | Seq::Deployed | Seq::DeployedFire | Seq::DeployedIdle)
+        matches!(
+            self,
+            Seq::Deploy | Seq::Deployed | Seq::DeployedFire | Seq::DeployedIdle
+        )
     }
 }
 
@@ -188,7 +191,7 @@ pub fn normalised(b: i32, s: u8) -> i32 {
         // spec: S-0107 F3 (N(0, s) = 0; table for 1 … 4; ⌊8b / (s + 1)⌋ from 5)
         0 => 0,
         1..=4 => A[(b - 1) as usize][s], // spec: S-0107 F3 (table T3 for b = 1 … 4)
-        _ => 8 * b / (s as i32 + 1), // spec: S-0107 F3 (⌊8b / (s + 1)⌋ from b = 5)
+        _ => 8 * b / (s as i32 + 1),     // spec: S-0107 F3 (⌊8b / (s + 1)⌋ from b = 5)
     }
 }
 
@@ -215,8 +218,7 @@ fn on_wet(w: &World, id: ObjectId) -> bool {
     use glasnost_map::terrain::land;
     let Some(o) = w.obj(id) else { return false };
     o.layer == crate::world::Layer::Ground
-        && w
-            .cells
+        && w.cells
             .cell(o.pos.cell())
             .is_some_and(|c| c.land == land::WATER || c.land == land::BEACH)
 }
@@ -287,7 +289,11 @@ pub fn request(w: &mut World, id: ObjectId, q: Seq, forced: bool) -> bool {
     }
     let (_, b, norm) = resulting.table();
     // spec: S-0107 claim 5 (normalised kinds take N(b, s); every other kind b)
-    s.seq_delay = if norm && normalise { normalised(b, speed) } else { b };
+    s.seq_delay = if norm && normalise {
+        normalised(b, speed)
+    } else {
+        b
+    };
     s.seq = Some(resulting);
     s.seq_t0 = tick;
     // spec: S-0107 Terms (the prone state begins with go-prone and ends with get-up or deploy)
@@ -321,14 +327,22 @@ pub fn update(w: &mut World, id: ObjectId, moving_now: bool, in_progress: bool, 
     }
     if f > 0 {
         // spec: S-0107 claim 15 (lie down at f′ ≥ 50; get up below 50)
-        if !s.prone && !deploying && !u.fraidycat && (!human || (!has_dest && !in_progress)) && f2 >= 50 {
+        if !s.prone
+            && !deploying
+            && !u.fraidycat
+            && (!human || (!has_dest && !in_progress))
+            && f2 >= 50
+        {
             request(w, id, Seq::GoProne, false);
         } else if s.prone && !deploying && f2 < 50 {
             request(w, id, Seq::GetUp, false);
         }
     }
     // Completion follow-up (S-0107 claim 8 and State and ordering).
-    let s = w.obj(id).and_then(|o| o.infantry.clone()).unwrap_or_default();
+    let s = w
+        .obj(id)
+        .and_then(|o| o.infantry.clone())
+        .unwrap_or_default();
     let c = s.seq.map_or(0, |q| count(w, id, q));
     let complete = s.seq.is_none() || s.stage(tick) >= c;
     if complete {
@@ -344,7 +358,9 @@ pub fn update(w: &mut World, id: ObjectId, moving_now: bool, in_progress: bool, 
                 // spec: S-0107 State and ordering ("not moving": no movement in progress)
                 let moving = in_progress;
                 Some(match (moving, s.prone, cur) {
-                    (false, _, Some(Seq::Deployed | Seq::DeployedFire | Seq::DeployedIdle)) => Seq::Deployed,
+                    (false, _, Some(Seq::Deployed | Seq::DeployedFire | Seq::DeployedIdle)) => {
+                        Seq::Deployed
+                    }
                     (false, true, _) => Seq::Prone,
                     (false, false, _) => Seq::Stand,
                     (true, true, _) => Seq::Crawl,
@@ -385,7 +401,10 @@ pub fn update(w: &mut World, id: ObjectId, moving_now: bool, in_progress: bool, 
         }
     }
     // Movement rule (S-0107 claim 10).
-    let s = w.obj(id).and_then(|o| o.infantry.clone()).unwrap_or_default();
+    let s = w
+        .obj(id)
+        .and_then(|o| o.infantry.clone())
+        .unwrap_or_default();
     if !moving_now {
         let rep = match s.seq {
             Some(Seq::Walk | Seq::Fly | Seq::Hover) => Some(Seq::Stand),
@@ -452,19 +471,24 @@ pub fn idle_attempt(w: &mut World, id: ObjectId, in_progress: bool) {
         }
     }
     match r {
-        1 | 2 | 7 => { // spec: S-0107 claim 14 (r = 1, 2 or 7: idle B)
+        // spec: S-0107 claim 14 (r = 1, 2 or 7: idle B)
+        1 | 2 | 7 => {
             request(w, id, Seq::IdleB, false);
         }
-        3..=5 => { // spec: S-0107 claim 14 (r = 3 … 5: idle A)
+        // spec: S-0107 claim 14 (r = 3 … 5: idle A)
+        3..=5 => {
             request(w, id, Seq::IdleA, false);
         }
-        6 | 8..=10 => { // spec: S-0107 claim 14 (r = 6 or 8 … 10: a new facing)
+        // spec: S-0107 claim 14 (δ × 8192)
+        6 | 8..=10 => {
+            // spec: S-0107 claim 14 (r = 6 or 8 … 10: a new facing)
             // spec: S-0107 claim 14 (δ drawn from 0 … 7, the body facing set at once to δ × 8192)
             let d = w.rng.ranged(0, 7, q.ranged_draw_half_span);
             if let Some(o) = w.obj_mut(id) {
                 o.body.set((d as u16) * 8192, tick, keeps); // spec: S-0107 claim 14 (δ × 8192)
             }
-            if r == 8 && is_cow && q.cow_idle { // spec: S-0107 claim 14 (the cow's r = 8 also scatters)
+            // spec: S-0107 claim 14 (the cow's r = 8 also scatters)
+            if r == 8 && is_cow && q.cow_idle {
                 crate::scatter::request(
                     w,
                     id,

@@ -114,7 +114,11 @@ pub fn place(w: &mut World, id: ObjectId, pos: Pos, facing: Facing) {
         Kind::Terrain => {
             let pattern = {
                 let t = &w.rules().terrain[o.type_index as usize];
-                if w.theater_snow() { t.occupation.1 } else { t.occupation.0 }
+                if w.theater_snow() {
+                    t.occupation.1
+                } else {
+                    t.occupation.0
+                }
             };
             w.cells.enter(cell, Layer::Ground, id, false);
             w.cells.mark_terrain(cell, id, pattern);
@@ -234,7 +238,8 @@ pub fn place_map_objects(w: &mut World, map: &Map, sandbox: bool) {
             .position(|h| h.name.as_bytes() == name)
             .map(|i| HouseId(i as u8))
     };
-    let lists: [(Kind, Vec<&glasnost_map::objects::Placed>, Vec<i32>); 4] = [ // spec: S-0009 claim 27 (the four object lists: vehicles, aircraft, infantry, structures)
+    // spec: S-0009 claim 27 (the four object lists: vehicles, aircraft, infantry, structures)
+    let lists: [(Kind, Vec<&glasnost_map::objects::Placed>, Vec<i32>); 4] = [
         (
             Kind::Vehicle,
             map.objects.units.iter().map(|u| &u.placed).collect(),

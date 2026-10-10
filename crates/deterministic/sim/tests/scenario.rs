@@ -11,7 +11,7 @@ use glasnost_sim::world::{HouseId, Target};
 #[test]
 fn map_objects_are_placed_and_rest() {
     let mut w = testkit::new_game(7);
-    assert_eq!(w.objects.len(), 11, "notes: {:?}", w.notes);
+    assert_eq!(w.objects.len(), 22, "notes: {:?}", w.notes);
     for _ in 0..5 {
         tick::step(&mut w);
     }
@@ -102,17 +102,55 @@ fn an_infantry_unit_walks_to_its_destination() {
 
 #[test]
 fn save_load_round_trip_keeps_the_hash_and_the_future() {
-    let rep = testkit::scripted_replay(11, 400);
-    let mut w = rep.run(testkit::rules(), &testkit::map(), testkit::catalogue(), |_| {}).unwrap();
+    // Save in the middle of the replay; the saved and the loaded game then
+    // take the replay's remaining orders and stay identical.
+    let mut rep = testkit::scripted_replay(11, 400);
+    let mut w = rep
+        .run(
+            testkit::rules(),
+            &testkit::map(),
+            testkit::catalogue(),
+            |_| {},
+        )
+        .unwrap();
     let h = save::state_hash(&w);
     let bytes = save::save(&w);
     let mut l = save::load(&bytes, testkit::rules(), testkit::catalogue()).unwrap();
     assert_eq!(save::state_hash(&l), h);
-    for _ in 0..300 {
-        tick::step(&mut w);
-        tick::step(&mut l);
-        assert_eq!(save::state_hash(&w), save::state_hash(&l), "tick {}", w.tick);
-    }
+    rep.ticks = 1200;
+    let mut a = Vec::new();
+    let mut b = Vec::new();
+    rep.run_on(&mut w, rep.ticks, |w| a.push(save::state_hash(w)));
+    rep.run_on(&mut l, rep.ticks, |w| b.push(save::state_hash(w)));
+    assert_eq!(a.len(), 800);
+    assert_eq!(a, b);
+}
+
+// spec: S-0210 claim 3 (a crusher crushes at the centre of the cell it reaches)
+// spec: S-0210 claim 4 (a crushed object is removed on the same tick)
+#[test]
+fn the_crusher_crushes_the_buggy() {
+    let rep = testkit::scripted_replay(11, 900);
+    let w0 = testkit::new_game(11);
+    let buggy = w0
+        .objects
+        .values()
+        .find(|o| o.kind == Kind::Vehicle && o.type_index == 2)
+        .unwrap()
+        .id;
+    let w = rep
+        .run(
+            testkit::rules(),
+            &testkit::map(),
+            testkit::catalogue(),
+            |_| {},
+        )
+        .unwrap();
+    assert!(
+        w.obj(buggy).is_none(),
+        "the buggy survived; notes: {:?}",
+        w.notes
+    );
 }
 
 #[test]
@@ -122,7 +160,19 @@ fn a_replay_runs_the_same_twice() {
     let rep2 = save::Replay::from_bytes(&bytes).unwrap();
     let mut a = Vec::new();
     let mut b = Vec::new();
-    rep.run(testkit::rules(), &testkit::map(), testkit::catalogue(), |w| a.push(save::state_hash(w))).unwrap();
-    rep2.run(testkit::rules(), &testkit::map(), testkit::catalogue(), |w| b.push(save::state_hash(w))).unwrap();
+    rep.run(
+        testkit::rules(),
+        &testkit::map(),
+        testkit::catalogue(),
+        |w| a.push(save::state_hash(w)),
+    )
+    .unwrap();
+    rep2.run(
+        testkit::rules(),
+        &testkit::map(),
+        testkit::catalogue(),
+        |w| b.push(save::state_hash(w)),
+    )
+    .unwrap();
     assert_eq!(a, b);
 }

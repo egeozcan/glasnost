@@ -10,8 +10,9 @@ use glasnost_rules::sim::MovementZone;
 use crate::passability::{self, Answer, category};
 use crate::world::World;
 
+// spec: S-0211 Terms (the thirteen movement zones)
 /// The thirteen movement zones in a fixed order.
-pub const ZONES: [MovementZone; 13] = [ // spec: S-0211 Terms (the thirteen movement zones)
+pub const ZONES: [MovementZone; 13] = [
     MovementZone::Normal,
     MovementZone::Crusher,
     MovementZone::Destroyer,
@@ -84,7 +85,16 @@ impl Dsu {
 
 /// The eight neighbour steps (S-0204 claim 9; S-0212 Terms *step direction*).
 // spec: S-0204 Constants (neighbour steps of 8-directions 0 … 7)
-pub const STEPS: [(i32, i32); 8] = [(0, -1), (1, -1), (1, 0), (1, 1), (0, 1), (-1, 1), (-1, 0), (-1, -1)];
+pub const STEPS: [(i32, i32); 8] = [
+    (0, -1),
+    (1, -1),
+    (1, 0),
+    (1, 1),
+    (0, 1),
+    (-1, 1),
+    (-1, 0),
+    (-1, -1),
+];
 
 /// Rebuilds the regions from the categories.
 pub fn rebuild(w: &mut World) {
@@ -108,7 +118,8 @@ pub fn rebuild(w: &mut World) {
             }
             let diff = (level(w, c) - level(w, nc)).abs();
             // spec: S-0212 claim 3 (same category joins within 1 level; along x also 2 or 3 with quirks.region_join_height_asymmetry)
-            let joins = diff <= 1 || (q.region_join_height_asymmetry && (d == 2 || d == 6) && diff <= 3);
+            let joins =
+                diff <= 1 || (q.region_join_height_asymmetry && (d == 2 || d == 6) && diff <= 3);
             if joins {
                 dsu.union(i as u32, j as u32);
             }
@@ -148,7 +159,8 @@ pub fn rebuild(w: &mut World) {
                 continue;
             }
             let diff = (level(w, c) - level(w, nc)).abs();
-            let blocked = cats[ri as usize] == category::BLOCKED || cats[rj as usize] == category::BLOCKED;
+            let blocked =
+                cats[ri as usize] == category::BLOCKED || cats[rj as usize] == category::BLOCKED;
             // spec: S-0212 claim 3 (adjacent within 1 level, or whatever the heights when one region is blocked)
             if diff <= 1 || blocked {
                 adj.push((ri.min(rj), ri.max(rj)));

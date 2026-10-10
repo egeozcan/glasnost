@@ -16,7 +16,9 @@ use glasnost_rules::sim::{
 };
 
 /// The kinds of type the simulation indexes.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub enum Kind {
     /// Infantry.
     Infantry,
@@ -291,7 +293,9 @@ pub struct GeneralRules {
 }
 
 /// The behaviours of S-0215 table T1, in our order.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
 #[allow(missing_docs)]
 pub enum Behaviour {
     Ambush,
@@ -453,7 +457,8 @@ pub fn land_label(l: LandType) -> u8 {
     }
 }
 
-const LAND_TYPES: [LandType; 12] = [ // spec: S-0211 Terms (the twelve land types)
+// spec: S-0211 Terms (the twelve land types)
+const LAND_TYPES: [LandType; 12] = [
     LandType::Clear,
     LandType::Road,
     LandType::Water,
@@ -568,8 +573,11 @@ impl SimRules {
         let one = F64::from_i64(1, mode);
         let cells = |d: &Option<Decimal>, default: i32| -> i32 {
             // spec: S-0209 F2 (trunc(256 × c), 256 leptons per cell; exact product)
-            d.as_ref()
-                .map_or(default, |d| d.value(mode).mul(F64::from_i64(256, mode), mode).to_i32_common())
+            d.as_ref().map_or(default, |d| {
+                d.value(mode)
+                    .mul(F64::from_i64(256, mode), mode)
+                    .to_i32_common()
+            })
         };
         let general = GeneralRules {
             // spec: S-0209 Import mapping (CloseEnough absent: 640 leptons)
@@ -616,10 +624,11 @@ impl SimRules {
             // spec: S-0215 Import mapping ([IQ] GuardArea; the absent default is request Q-0020, interim 0)
             iq_guard_area: g.iq_guard_area.unwrap_or(0),
             // spec: S-0215 Import mapping (GuardModeStray: cells × 256, truncated; absent default open, Q-0020)
-            guard_stray: g
-                .guard_mode_stray
-                .as_ref()
-                .map(|d| d.value(mode).mul(F64::from_i64(256, mode), mode).to_i32_common()),
+            guard_stray: g.guard_mode_stray.as_ref().map(|d| {
+                d.value(mode)
+                    .mul(F64::from_i64(256, mode), mode)
+                    .to_i32_common()
+            }),
             // spec: S-0209 Import mapping ([IQ] Scatter absent: 3)
             iq_scatter: g.iq_scatter.unwrap_or(3),
         };
@@ -675,9 +684,8 @@ impl SimRules {
                 }
             })
             .collect();
-        let registry = |key: &str| -> Vec<String> {
-            r.registries.get(key).cloned().unwrap_or_default()
-        };
+        let registry =
+            |key: &str| -> Vec<String> { r.registries.get(key).cloned().unwrap_or_default() };
         let country_names = registry("countries");
         let countries = country_names
             .iter()
@@ -693,13 +701,21 @@ impl SimRules {
             })
             .collect();
         let mut names = BTreeMap::new();
-        let units = |kind: Kind, map: &BTreeMap<String, UnitType>, names: &mut BTreeMap<(Kind, String), u32>| {
+        let units = |kind: Kind,
+                     map: &BTreeMap<String, UnitType>,
+                     names: &mut BTreeMap<(Kind, String), u32>| {
             registry(kind.registry())
                 .iter()
                 .enumerate()
                 .map(|(i, n)| {
                     names.insert((kind, n.clone()), i as u32);
-                    unit_rules(kind, n, map.get(n).cloned().unwrap_or_default(), &quirks, mode)
+                    unit_rules(
+                        kind,
+                        n,
+                        map.get(n).cloned().unwrap_or_default(),
+                        &quirks,
+                        mode,
+                    )
                 })
                 .collect::<Vec<_>>()
         };
@@ -808,8 +824,11 @@ fn unit_rules(kind: Kind, name: &str, u: UnitType, q: &Quirks, mode: Rounding) -
     };
     let cells = |d: &Option<Decimal>| -> i32 {
         // spec: S-0215 Import mapping (GuardRange: cells × 256, truncated)
-        d.as_ref()
-            .map_or(0, |d| d.value(mode).mul(F64::from_i64(256, mode), mode).to_i32_common())
+        d.as_ref().map_or(0, |d| {
+            d.value(mode)
+                .mul(F64::from_i64(256, mode), mode)
+                .to_i32_common()
+        })
     };
     UnitRules {
         name: name.to_owned(),
@@ -964,7 +983,12 @@ mod tests {
     #[allow(clippy::disallowed_types)]
     #[test]
     fn nearest_double_matches_host() {
-        for (s, v) in [("0.016", 0.016f64), ("0.083", 0.083), ("0.03", 0.03), ("0.002", 0.002)] {
+        for (s, v) in [
+            ("0.016", 0.016f64),
+            ("0.083", 0.083),
+            ("0.03", 0.03),
+            ("0.002", 0.002),
+        ] {
             assert_eq!(nearest_double(s).0, v.to_bits(), "{s}");
         }
     }

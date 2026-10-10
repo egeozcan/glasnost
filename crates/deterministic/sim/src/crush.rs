@@ -16,7 +16,9 @@ use crate::world::{Layer, ObjectId, Target, World};
 /// A crusher with the driving locomotor begins a track whose first cell's
 /// layer holds infantry: a cell-wide scatter request (S-0210 claim 7).
 pub fn warn_ahead(w: &mut World, id: ObjectId, first: CellXY) {
-    let Some(layer) = w.obj(id).map(|o| o.layer) else { return };
+    let Some(layer) = w.obj(id).map(|o| o.layer) else {
+        return;
+    };
     let infantry = w
         .cells
         .list(first, layer)
@@ -41,7 +43,9 @@ pub fn warn_ahead(w: &mut World, id: ObjectId, first: CellXY) {
 /// locomotor case).
 pub fn entered_cell(w: &mut World, id: ObjectId, c: CellXY) {
     let Some(o) = w.obj(id) else { return };
-    let Some(u) = w.rules().unit(o.kind, o.type_index) else { return };
+    let Some(u) = w.rules().unit(o.kind, o.type_index) else {
+        return;
+    };
     let crush_track = o
         .drive
         .as_ref()
@@ -53,7 +57,11 @@ pub fn entered_cell(w: &mut World, id: ObjectId, c: CellXY) {
     }
     let q = w.rules().quirks;
     // spec: S-0210 claim 9 (the ground layer is looked at, quirks.crush_slowdown_ground_layer)
-    let layer = if q.crush_slowdown_ground_layer { Layer::Ground } else { o.layer };
+    let layer = if q.crush_slowdown_ground_layer {
+        Layer::Ground
+    } else {
+        o.layer
+    };
     let me = id;
     let own_layer = o.layer;
     let vehicle = w.cells.list(c, layer).iter().any(|&x| {
@@ -107,7 +115,9 @@ pub fn at_cell_centre(w: &mut World, id: ObjectId) {
         let r = w.rules_arc();
         let ob = w.obj(x).cloned();
         let Some(ob) = ob else { continue };
-        let thief = r.unit(ob.kind, ob.type_index).is_some_and(|u| u.vehicle_thief);
+        let thief = r
+            .unit(ob.kind, ob.type_index)
+            .is_some_and(|u| u.vehicle_thief);
         let train = r.unit(cr.kind, cr.type_index).is_some_and(|u| u.train);
         if thief && ob.dest == Some(Target::Object(id)) && !train {
             // spec: S-0210 claim 5 (the crusher is taken over instead: the thief disappears, the owner changes at once)
@@ -125,11 +135,15 @@ pub fn at_cell_centre(w: &mut World, id: ObjectId) {
 /// Crushes a cell's overlay (S-0210 claim 8).
 fn crush_overlay(w: &mut World, id: ObjectId, c: CellXY) {
     let r = w.rules_arc();
-    let Some(cell) = w.cells.cell(c).cloned() else { return };
+    let Some(cell) = w.cells.cell(c).cloned() else {
+        return;
+    };
     if cell.overlay == NO_OVERLAY {
         return;
     }
-    let Some(ov) = r.overlays.get(usize::from(cell.overlay)).cloned() else { return };
+    let Some(ov) = r.overlays.get(usize::from(cell.overlay)).cloned() else {
+        return;
+    };
     let all = w
         .obj(id)
         .and_then(|o| r.unit(o.kind, o.type_index))

@@ -24,7 +24,9 @@ pub struct ScatterRequest {
 
 /// The screen-cover check of a cell at its own level (S-0208 Terms).
 pub fn screen_cover_passes(w: &World, c: CellXY) -> bool {
-    let Some(cell) = w.cells.cell(c) else { return true };
+    let Some(cell) = w.cells.cell(c) else {
+        return true;
+    };
     let l = i32::from(cell.level);
     // spec: S-0208 Terms (screen-cover check: C fails when e(C_i) ≥ ℓ + 2i − 1 for some i from 1 to 6)
     for i in 1..=6 {
@@ -51,13 +53,17 @@ fn eighth(f: u16) -> i32 {
 /// Returns whether it accepted.
 pub fn request(w: &mut World, id: ObjectId, req: ScatterRequest) -> bool {
     let t = w.tick;
-    let Some(o) = w.obj(id).cloned() else { return false };
+    let Some(o) = w.obj(id).cloned() else {
+        return false;
+    };
     if o.kind != Kind::Infantry {
         // Q-0019: vehicle scatter acceptance has no spec; vehicles refuse.
         return false;
     }
     let r = w.rules_arc();
-    let Some(u) = r.unit(o.kind, o.type_index).cloned() else { return false };
+    let Some(u) = r.unit(o.kind, o.type_index).cloned() else {
+        return false;
+    };
     let seq = o.infantry.as_ref().and_then(|s| s.seq);
     let moving = occupancy::in_progress(w, id);
     let deploying = seq.is_some_and(Seq::is_deploy);
@@ -65,7 +71,10 @@ pub fn request(w: &mut World, id: ObjectId, req: ScatterRequest) -> bool {
         // spec: S-0208 claim 11 (a forced, move-anywhere request to a deploying unit also requests undeploy)
         infantry::request(w, id, Seq::Undeploy, false);
     }
-    let seq = w.obj(id).and_then(|o| o.infantry.as_ref()).and_then(|s| s.seq);
+    let seq = w
+        .obj(id)
+        .and_then(|o| o.infantry.as_ref())
+        .and_then(|s| s.seq);
     // spec: S-0208 claim 11 (effectively forced: forced and the locomotor not moving)
     let eff_forced = req.forced && !moving;
     // spec: S-0208 claim 11 (permission: player-scatter rule, the scatter ability, or move-anywhere; our engine has no computer owners or teams)
@@ -87,7 +96,11 @@ pub fn request(w: &mut World, id: ObjectId, req: ScatterRequest) -> bool {
     let centre = path::locomotor_destination(w, id).map_or(o.pos.cell(), |p| p.cell());
     let d0 = match req.threat {
         // spec: S-0208 claim 12 (d₀: the facing from the threat point to the unit, rounded)
-        Some(tp) => eighth(direction(i64::from(o.pos.x - tp.x), i64::from(o.pos.y - tp.y), q.table_direction)),
+        Some(tp) => eighth(direction(
+            i64::from(o.pos.x - tp.x),
+            i64::from(o.pos.y - tp.y),
+            q.table_direction,
+        )),
         None => {
             let cc = Pos::centre(o.pos.cell(), 0);
             if (o.pos.x, o.pos.y) == (cc.x, cc.y) {
@@ -95,7 +108,11 @@ pub fn request(w: &mut World, id: ObjectId, req: ScatterRequest) -> bool {
                 eighth(o.body.value(t))
             } else {
                 // spec: S-0208 claim 13 (d₀: the facing from the cell centre to the unit's position)
-                eighth(direction(i64::from(o.pos.x - cc.x), i64::from(o.pos.y - cc.y), q.table_direction))
+                eighth(direction(
+                    i64::from(o.pos.x - cc.x),
+                    i64::from(o.pos.y - cc.y),
+                    q.table_direction,
+                ))
             }
         }
     };
@@ -130,11 +147,14 @@ pub fn request(w: &mut World, id: ObjectId, req: ScatterRequest) -> bool {
 fn neighbours_choice(w: &World, id: ObjectId, centre: CellXY, d: i32) -> Option<CellXY> {
     let reference = occupancy::reference_level(w, id);
     let mut first_q = None;
-    for k in 0..8 { // spec: S-0208 claim 12 (the eight neighbours, from direction d)
-        let (dx, dy) = STEPS[((d + k).rem_euclid(8)) as usize]; // spec: S-0208 claim 12 (directions taken mod 8)
+    // spec: S-0208 claim 12 (directions taken mod 8)
+    for k in 0..8 {
+        // spec: S-0208 claim 12 (the eight neighbours, from direction d)
+        let (dx, dy) = STEPS[((d + k).rem_euclid(8)) as usize];
         let c = CellXY::new(centre.x + dx, centre.y + dy);
         // spec: S-0208 claim 12 (qualifies: inside the usable area and enterable)
-        let qualifies = w.cells.usable(c) && occupancy::infantry_outcome(w, id, c, reference) == Outcome::Clear;
+        let qualifies =
+            w.cells.usable(c) && occupancy::infantry_outcome(w, id, c, reference) == Outcome::Clear;
         if !qualifies {
             continue;
         }

@@ -153,7 +153,10 @@ mod tests {
         }
 
         fn hit_tick(&self, target: u32) -> Option<u32> {
-            self.hits.iter().find(|h| h.0 == ObjectId(target)).map(|h| h.1)
+            self.hits
+                .iter()
+                .find(|h| h.0 == ObjectId(target))
+                .map(|h| h.1)
         }
     }
 

@@ -46,8 +46,17 @@ pub fn layers_for(w: &World, c: CellXY, reference_level: i32) -> (Layer, Layer) 
     }
     let lv = i32::from(cell.level);
     // spec: S-0209 Terms (deck objects when the reference differs by more than 1; deck record when exactly 4 above)
-    let objects = if (reference_level - lv).abs() > 1 { Layer::Deck } else { Layer::Ground };
-    let record = if reference_level - lv == 4 { Layer::Deck } else { Layer::Ground }; // spec: S-0209 Terms (the deck record when the reference is exactly 4 above)
+    let objects = if (reference_level - lv).abs() > 1 {
+        Layer::Deck
+    } else {
+        Layer::Ground
+    };
+    // spec: S-0209 Terms (the deck record when the reference is exactly 4 above)
+    let record = if reference_level - lv == 4 {
+        Layer::Deck
+    } else {
+        Layer::Ground
+    };
     (objects, record)
 }
 
@@ -63,14 +72,17 @@ pub fn reference_level(w: &World, id: ObjectId) -> i32 {
 /// Whether an object has movement in progress (S-0107 Terms) or a
 /// destination.
 pub fn moving_or_dest(w: &World, id: ObjectId) -> bool {
-    w.obj(id).is_some_and(|o| o.dest.is_some() || in_progress(w, id))
+    w.obj(id)
+        .is_some_and(|o| o.dest.is_some() || in_progress(w, id))
 }
 
 /// Whether a unit has movement in progress (S-0107 Terms).
 pub fn in_progress(w: &World, id: ObjectId) -> bool {
     w.obj(id).is_some_and(|o| {
         o.walk.as_ref().is_some_and(|s| s.target.is_some())
-            || o.drive.as_ref().is_some_and(|d| d.track.is_some() || d.turning_in_place)
+            || o.drive
+                .as_ref()
+                .is_some_and(|d| d.track.is_some() || d.turning_in_place)
             || !o.path.steps.is_empty()
     })
 }
@@ -100,7 +112,8 @@ fn walker_armed(w: &World, id: ObjectId) -> bool {
         .iter()
         .map(|n| {
             let wt = w.rules().weapons.get(*n);
-            i64::from(wt.and_then(|x| x.damage).unwrap_or(0)) + i64::from(wt.and_then(|x| x.ambient_damage).unwrap_or(0))
+            i64::from(wt.and_then(|x| x.damage).unwrap_or(0))
+                + i64::from(wt.and_then(|x| x.ambient_damage).unwrap_or(0))
         })
         .sum();
     // spec: S-0209 Terms (mean damage = trunc(Σ (d + a) / n); armed when positive)
@@ -111,24 +124,44 @@ fn walker_armed(w: &World, id: ObjectId) -> bool {
 fn has_primary(w: &World, id: ObjectId) -> bool {
     let Some(o) = w.obj(id) else { return false };
     match o.kind {
-        Kind::Building => w.rules().buildings[o.type_index as usize].raw.primary.is_some(),
-        _ => w.rules().unit(o.kind, o.type_index).is_some_and(|u| u.primary.is_some()),
+        Kind::Building => w.rules().buildings[o.type_index as usize]
+            .raw
+            .primary
+            .is_some(),
+        _ => w
+            .rules()
+            .unit(o.kind, o.type_index)
+            .is_some_and(|u| u.primary.is_some()),
     }
 }
 
 fn primary_warhead_flag(w: &World, id: ObjectId, wall: bool) -> bool {
     let Some(o) = w.obj(id) else { return false };
-    let Some(p) = w.rules().unit(o.kind, o.type_index).and_then(|u| u.primary.clone()) else {
+    let Some(p) = w
+        .rules()
+        .unit(o.kind, o.type_index)
+        .and_then(|u| u.primary.clone())
+    else {
         return false;
     };
     let wh = w.rules().weapons.get(&p).and_then(|x| x.warhead.clone());
     wh.and_then(|h| w.rules().warheads.get(&h).cloned())
-        .is_some_and(|h| if wall { h.wall.unwrap_or(false) } else { h.wood.unwrap_or(false) })
+        .is_some_and(|h| {
+            if wall {
+                h.wall.unwrap_or(false)
+            } else {
+                h.wood.unwrap_or(false)
+            }
+        })
 }
 
 fn primary_hits_ground(w: &World, id: ObjectId) -> bool {
     let Some(o) = w.obj(id) else { return false };
-    let Some(p) = w.rules().unit(o.kind, o.type_index).and_then(|u| u.primary.clone()) else {
+    let Some(p) = w
+        .rules()
+        .unit(o.kind, o.type_index)
+        .and_then(|u| u.primary.clone())
+    else {
         return false;
     };
     let pj = w.rules().weapons.get(&p).and_then(|x| x.projectile.clone());
@@ -163,7 +196,10 @@ pub fn crushable_by(w: &World, crusher: ObjectId, obj: ObjectId) -> bool {
     let omni = cu.is_some_and(|u| u.omni_crusher);
     let (crushable, resistant, deployed_uncrushable) = match o.kind {
         Kind::Building => (
-            w.rules().buildings[o.type_index as usize].raw.crushable.unwrap_or(false),
+            w.rules().buildings[o.type_index as usize]
+                .raw
+                .crushable
+                .unwrap_or(false),
             false,
             false,
         ),
@@ -218,11 +254,13 @@ pub fn infantry_outcome(w: &World, mover: ObjectId, c: CellXY, reference: i32) -
     {
         // Map walls have no owner in M3 (Q-0020): rows WO2 and WO4.
         // spec: S-0209 claim 4 (rows WO2 to WO4: walls by primary weapon and owner)
-        overlay_value = Some(if has_primary(w, mover) && primary_warhead_flag(w, mover, true) {
-            Outcome::EnemyObstacle
-        } else {
-            Outcome::Blocked
-        });
+        overlay_value = Some(
+            if has_primary(w, mover) && primary_warhead_flag(w, mover, true) {
+                Outcome::EnemyObstacle
+            } else {
+                Outcome::Blocked
+            },
+        );
     }
     let mut override_value: Option<(usize, Outcome)> = None;
     for &oid in w.cells.list(c, obj_layer) {
@@ -262,7 +300,11 @@ pub fn infantry_outcome(w: &World, mover: ObjectId, c: CellXY, reference: i32) -
             }
         } else if o.kind == Kind::Terrain {
             // spec: S-0209 claim 4 (rows WP22 and WP27: a terrain object gives none, except to an unarmed walker)
-            if armed { (false, None) } else { (false, Some(Outcome::Blocked)) }
+            if armed {
+                (false, None)
+            } else {
+                (false, Some(Outcome::Blocked))
+            }
         } else if allied {
             match o.kind {
                 Kind::Vehicle => {
@@ -304,11 +346,19 @@ pub fn infantry_outcome(w: &World, mover: ObjectId, c: CellXY, reference: i32) -
     if let Some((k, value)) = override_value {
         // spec: S-0209 claim 4 (an override: blocked when an earlier value is blocked, else the override's value)
         let earlier_blocked = overlay_value == Some(Outcome::Blocked)
-            || values[..k].iter().any(|v| !v.0 && v.1 == Some(Outcome::Blocked));
+            || values[..k]
+                .iter()
+                .any(|v| !v.0 && v.1 == Some(Outcome::Blocked));
         // spec: S-0209 Edge cases (`quirks.occupancy_override_hides_later_blockers` off: any blocked occupant decides)
         let later_blocked = !r.quirks.occupancy_override_hides_later_blockers
-            && values[k + 1..].iter().any(|v| !v.0 && v.1 == Some(Outcome::Blocked));
-        return if earlier_blocked || later_blocked { Outcome::Blocked } else { value };
+            && values[k + 1..]
+                .iter()
+                .any(|v| !v.0 && v.1 == Some(Outcome::Blocked));
+        return if earlier_blocked || later_blocked {
+            Outcome::Blocked
+        } else {
+            value
+        };
     }
     let cval = values
         .iter()
@@ -336,7 +386,11 @@ pub fn infantry_outcome(w: &World, mover: ObjectId, c: CellXY, reference: i32) -
         let allied = w.allied(m.owner, Some(h));
         if !allied {
             // spec: S-0209 claim 4 (rows WR2 and WR3)
-            return if armed { cval.max(Outcome::EnemyObstacle) } else { Outcome::Blocked };
+            return if armed {
+                cval.max(Outcome::EnemyObstacle)
+            } else {
+                Outcome::Blocked
+            };
         }
         if rec.full() && matches!(cval, Outcome::Clear | Outcome::CloakedBlocker) {
             let still = w
@@ -345,13 +399,23 @@ pub fn infantry_outcome(w: &World, mover: ObjectId, c: CellXY, reference: i32) -
                 .iter()
                 .filter(|&&id| {
                     w.obj(id).is_some_and(|o| {
-                        o.kind == Kind::Infantry && w.allied(m.owner, o.owner) && !in_progress(w, id)
+                        o.kind == Kind::Infantry
+                            && w.allied(m.owner, o.owner)
+                            && !in_progress(w, id)
                     })
                 })
                 .count();
             // spec: S-0209 claim 4 (rows WR4 and WR5: exactly three still allies, quirks.stationary_friendly_exactly_three)
-            let stationary = if r.quirks.stationary_friendly_exactly_three { still == 3 } else { still >= 3 };
-            return if stationary { Outcome::StationaryFriendly } else { Outcome::MovingBlocker };
+            let stationary = if r.quirks.stationary_friendly_exactly_three {
+                still == 3
+            } else {
+                still >= 3
+            };
+            return if stationary {
+                Outcome::StationaryFriendly
+            } else {
+                Outcome::MovingBlocker
+            };
         }
     } else if rec.full() && cval == Outcome::Clear {
         // spec: S-0209 claim 4 (row WR6)
@@ -377,7 +441,8 @@ pub fn vehicle_outcome(w: &World, mover: ObjectId, c: CellXY, reference: i32) ->
     };
     let crusher = is_crusher(w, mover);
     let armed = u.primary.is_some() || u.train;
-    let crushes_wall = |crushable: bool| (crushable && crusher) || u.zone == MovementZone::CrusherAll;
+    let crushes_wall =
+        |crushable: bool| (crushable && crusher) || u.zone == MovementZone::CrusherAll;
     let mut overlay_value = None;
     if cell.overlay != NO_OVERLAY
         && let Some(o) = r.overlays.get(usize::from(cell.overlay))
@@ -390,7 +455,9 @@ pub fn vehicle_outcome(w: &World, mover: ObjectId, c: CellXY, reference: i32) ->
         } else if u.primary.is_none() {
             // spec: S-0209 claim 5 (row VO4)
             Some(Outcome::Blocked)
-        } else if primary_warhead_flag(w, mover, true) || (o.wood && primary_warhead_flag(w, mover, false)) {
+        } else if primary_warhead_flag(w, mover, true)
+            || (o.wood && primary_warhead_flag(w, mover, false))
+        {
             // spec: S-0209 claim 5 (row VO5: enemy obstacle for another owner)
             Some(Outcome::EnemyObstacle)
         } else {
@@ -412,7 +479,10 @@ pub fn vehicle_outcome(w: &World, mover: ObjectId, c: CellXY, reference: i32) ->
         let allied = w.allied(m.owner, o.owner);
         let v: Option<Outcome>;
         let mut over = false;
-        if m.beh.current == Some(Behaviour::Enter) && m.dest == Some(Target::Object(oid)) && o.kind == Kind::Vehicle {
+        if m.beh.current == Some(Behaviour::Enter)
+            && m.dest == Some(Target::Object(oid))
+            && o.kind == Kind::Vehicle
+        {
             // spec: S-0209 claim 5 (row VP17: the vehicle it enters)
             over = true;
             v = Some(Outcome::Clear);
@@ -454,7 +524,9 @@ pub fn vehicle_outcome(w: &World, mover: ObjectId, c: CellXY, reference: i32) ->
             } else {
                 Outcome::Blocked
             });
-        } else if m.beh.current == Some(Behaviour::AreaGuard) && m.guard_spot == Some(Target::Object(oid)) {
+        } else if m.beh.current == Some(Behaviour::AreaGuard)
+            && m.guard_spot == Some(Target::Object(oid))
+        {
             // spec: S-0209 claim 5 (row VP18)
             v = Some(Outcome::Blocked);
         } else if allied {
@@ -493,16 +565,28 @@ pub fn vehicle_outcome(w: &World, mover: ObjectId, c: CellXY, reference: i32) ->
     }
     if let Some((k, value)) = override_value {
         // spec: S-0209 claim 5 (the override rule as in claim 4)
-        let earlier_blocked =
-            overlay_value == Some(Outcome::Blocked) || values[..k].contains(&Some(Outcome::Blocked));
+        let earlier_blocked = overlay_value == Some(Outcome::Blocked)
+            || values[..k].contains(&Some(Outcome::Blocked));
         // spec: S-0209 Edge cases (`quirks.occupancy_override_hides_later_blockers` off)
         let later_blocked = !r.quirks.occupancy_override_hides_later_blockers
             && values[k + 1..].contains(&Some(Outcome::Blocked));
-        return if earlier_blocked || later_blocked { Outcome::Blocked } else { value };
+        return if earlier_blocked || later_blocked {
+            Outcome::Blocked
+        } else {
+            value
+        };
     }
-    let cval = values.iter().flatten().copied().chain(overlay_value).max().unwrap_or(Outcome::Clear);
+    let cval = values
+        .iter()
+        .flatten()
+        .copied()
+        .chain(overlay_value)
+        .max()
+        .unwrap_or(Outcome::Clear);
     // spec: S-0209 claim 5 (5a: the zero speed check applies outside the listed cases)
-    if obj_layer == Layer::Ground && !passability::enterable_by_class(r, w, c, u.class, u.zone, false) {
+    if obj_layer == Layer::Ground
+        && !passability::enterable_by_class(r, w, c, u.class, u.zone, false)
+    {
         return Outcome::Blocked;
     }
     if !passability::restricted_allows(w, c, u.restricted_to, obj_layer == Layer::Deck) {
@@ -519,7 +603,11 @@ pub fn vehicle_outcome(w: &World, mover: ObjectId, c: CellXY, reference: i32) ->
     }
     if crushable_occupant && flag {
         // spec: S-0209 claim 5 (row VR2: the first vehicle of the ground layer decides, quirks.crusher_entry_ground_layer)
-        let layer = if r.quirks.crusher_entry_ground_layer { Layer::Ground } else { obj_layer };
+        let layer = if r.quirks.crusher_entry_ground_layer {
+            Layer::Ground
+        } else {
+            obj_layer
+        };
         let first = w
             .cells
             .list(c, layer)
@@ -561,13 +649,19 @@ pub fn vehicle_outcome(w: &World, mover: ObjectId, c: CellXY, reference: i32) ->
         return Outcome::Blocked;
     }
     // spec: S-0209 claim 5 (row VR10)
-    if primary_hits_ground(w, mover) { Outcome::EnemyObstacle } else { Outcome::Blocked }
+    if primary_hits_ground(w, mover) {
+        Outcome::EnemyObstacle
+    } else {
+        Outcome::Blocked
+    }
 }
 
 /// Whether `c` is one of the building's blocking cells (S-0209 Terms).
 fn blocking_cell(w: &World, b: ObjectId, c: CellXY) -> bool {
     let Some(o) = w.obj(b) else { return false };
-    let rows = w.rules().buildings[o.type_index as usize].raw.number_impassable_rows;
+    let rows = w.rules().buildings[o.type_index as usize]
+        .raw
+        .number_impassable_rows;
     let tl = o.pos.cell();
     match rows {
         // spec: S-0209 Terms (no impassable-rows value: every foundation cell blocks)
@@ -587,16 +681,27 @@ pub fn close_case(w: &World, mover: ObjectId, occupant: ObjectId) -> bool {
     let fm = m.body.value(t);
     let fo = o.body.value(t);
     // spec: S-0212 claim 27 (the occupant's facing turned by 32767, or 32768 with quirks.opposite_facing_reversal off)
-    let turn: u16 = if q.opposite_facing_reversal { 32767 } else { 32768 };
+    let turn: u16 = if q.opposite_facing_reversal {
+        32767
+    } else {
+        32768
+    };
     let opposite = glasnost_num::geom::eight_direction(fo.wrapping_add(turn))
         == glasnost_num::geom::eight_direction(fm);
     let dx = i64::from(o.pos.x - m.pos.x);
     let dy = i64::from(o.pos.y - m.pos.y);
     let dz = i64::from(o.pos.z - m.pos.z);
     // spec: S-0212 claim 27 (spatial distance of F6c at most 511 leptons)
-    let d = glasnost_num::geom::root_floor((dx * dx + dy * dy + dz * dz) as u64, q.table_root_distance, w.rules().mode);
-    let ahead = glasnost_num::geom::eight_direction(glasnost_num::geom::direction(dx, dy, q.table_direction))
-        == glasnost_num::geom::eight_direction(fm);
+    let d = glasnost_num::geom::root_floor(
+        (dx * dx + dy * dy + dz * dz) as u64,
+        q.table_root_distance,
+        w.rules().mode,
+    );
+    let ahead = glasnost_num::geom::eight_direction(glasnost_num::geom::direction(
+        dx,
+        dy,
+        q.table_direction,
+    )) == glasnost_num::geom::eight_direction(fm);
     opposite && d <= 511 && ahead // spec: S-0212 claim 27 (at most 511 leptons)
 }
 

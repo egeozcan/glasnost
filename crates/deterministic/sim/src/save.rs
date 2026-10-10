@@ -52,7 +52,10 @@ impl std::fmt::Display for SaveError {
         match self {
             SaveError::Format(e) => write!(f, "not a readable save: {e}"),
             SaveError::RulesMismatch { saved, given } => {
-                write!(f, "saved under rules {saved}, but the rules given are {given}")
+                write!(
+                    f,
+                    "saved under rules {saved}, but the rules given are {given}"
+                )
             }
             SaveError::Load(e) => write!(f, "{e:?}"),
         }
@@ -61,9 +64,11 @@ impl std::fmt::Display for SaveError {
 
 impl std::error::Error for SaveError {}
 
-/// The bytes of a world's state.
+/// The bytes of a world's state. Serialization of plain data cannot fail;
+/// if it ever did, hashing nothing would hide every difference, so it
+/// panics instead.
 fn state_bytes(w: &World) -> Vec<u8> {
-    postcard::to_allocvec(w).unwrap_or_default()
+    postcard::to_allocvec(w).expect("the game state serializes")
 }
 
 /// The state hash: SHA-256 of the state's bytes, hexadecimal.
@@ -89,11 +94,15 @@ pub fn save(w: &World) -> Vec<u8> {
         rules_hash: w.rules().hash.clone(),
         world: w.clone(),
     };
-    postcard::to_allocvec(&s).unwrap_or_default()
+    postcard::to_allocvec(&s).expect("the game state serializes")
 }
 
 /// Loads a game saved by [`save`] under the same rules.
-pub fn load(bytes: &[u8], rules: Arc<SimRules>, catalogue: Arc<TileCatalogue>) -> Result<World, SaveError> {
+pub fn load(
+    bytes: &[u8],
+    rules: Arc<SimRules>,
+    catalogue: Arc<TileCatalogue>,
+) -> Result<World, SaveError> {
     let s: Save = postcard::from_bytes(bytes).map_err(|e| SaveError::Format(e.to_string()))?;
     if s.version != FORMAT_VERSION {
         return Err(SaveError::Format(format!("format version {}", s.version)));
@@ -123,7 +132,8 @@ pub struct Replay {
     pub map: String,
     /// The setup (seed included).
     pub setup: GameSetup,
-    /// Orders as (tick issued, house, order), in issue order.
+    /// Orders as (tick issued, house, order), sorted by tick and in issue
+    /// order within a tick ([`Replay::record`] keeps that order).
     pub orders: Vec<(i32, HouseId, Order)>,
     /// Number of ticks the replay runs.
     pub ticks: i32,
@@ -144,7 +154,7 @@ impl Replay {
 
     /// The replay's bytes.
     pub fn to_bytes(&self) -> Vec<u8> {
-        postcard::to_allocvec(self).unwrap_or_default()
+        postcard::to_allocvec(self).expect("a replay serializes")
     }
 
     /// Reads a replay.
@@ -156,13 +166,32 @@ impl Replay {
         Ok(r)
     }
 
-    /// Runs the replay, calling `each` with the world after every tick.
+    /// Records an order issued in tick `tick`, after every order recorded
+    /// for the same or an earlier tick.
+    pub fn record(&mut self, tick: i32, house: HouseId, order: Order) {
+        let at = self.orders.partition_point(|o| o.0 <= tick);
+        self.orders.insert(at, (tick, house, order));
+    }
+
+    /// Issues the orders recorded for the world's current tick.
+    pub fn issue_due(&self, w: &mut World) {
+        let from = self.orders.partition_point(|o| o.0 < w.tick);
+        for (t, h, o) in &self.orders[from..] {
+            if *t != w.tick {
+                break;
+            }
+            orders::issue(w, *h, o.clone());
+        }
+    }
+
+    /// Runs the replay from a new game, calling `each` with the world after
+    /// every tick.
     pub fn run(
         &self,
         rules: Arc<SimRules>,
         map: &Map,
         catalogue: Arc<TileCatalogue>,
-        mut each: impl FnMut(&World),
+        each: impl FnMut(&World),
     ) -> Result<World, SaveError> {
         if self.rules_hash != rules.hash {
             return Err(SaveError::RulesMismatch {
@@ -171,20 +200,17 @@ impl Replay {
             });
         }
         let mut w = load::new_game(rules, map, catalogue, &self.setup).map_err(SaveError::Load)?;
-        let mut next = 0;
-        for _ in 0..self.ticks {
-            while next < self.orders.len() && self.orders[next].0 == w.tick {
-                let (_, h, o) = self.orders[next].clone();
-                orders::issue(&mut w, h, o);
-                next += 1;
-            }
-            // Orders recorded for a tick already past are skipped.
-            while next < self.orders.len() && self.orders[next].0 < w.tick {
-                next += 1;
-            }
-            crate::tick::step(&mut w);
-            each(&w);
-        }
+        self.run_on(&mut w, self.ticks, each);
         Ok(w)
+    }
+
+    /// Continues the replay on a world (a new game or a loaded save) up to
+    /// tick `until`, calling `each` after every tick.
+    pub fn run_on(&self, w: &mut World, until: i32, mut each: impl FnMut(&World)) {
+        while w.tick < until {
+            self.issue_due(w);
+            crate::tick::step(w);
+            each(w);
+        }
     }
 }

@@ -87,7 +87,8 @@ fn close_range(w: &World, id: ObjectId) -> bool {
     let r = w.rules();
     // spec: S-0215 F3 (an infantry type with the close-range flag; weapon ranges wait for M4)
     let flag = o.kind == Kind::Infantry
-        && r.unit(o.kind, o.type_index).is_some_and(|u| u.raw.close_range.unwrap_or(false));
+        && r.unit(o.kind, o.type_index)
+            .is_some_and(|u| u.raw.close_range.unwrap_or(false));
     if !flag {
         return false;
     }
@@ -95,7 +96,11 @@ fn close_range(w: &World, id: ObjectId) -> bool {
     let dx = i64::from(o.pos.x - tp.x);
     let dy = i64::from(o.pos.y - tp.y);
     // spec: S-0215 F3 and F4 (282 ≤ ρ₂ ≤ 768, ρ₂ the table-root 2-D distance)
-    let rho = root_floor((dx * dx + dy * dy) as u64, r.quirks.table_root_distance, r.mode);
+    let rho = root_floor(
+        (dx * dx + dy * dy) as u64,
+        r.quirks.table_root_distance,
+        r.mode,
+    );
     (282..=768).contains(&rho) // spec: S-0215 F3 (282 ≤ ρ₂ ≤ 768)
 }
 
@@ -107,10 +112,9 @@ fn target_pos(w: &World, t: Target) -> Pos {
         Target::Cell(c) => {
             let raised = w.rules().quirks.negative_level_floor_raised;
             // spec: S-0215 F4 (a cell guard spot: the cell's centre at the cell's height, B(ℓ) of S-0106 F1)
-            let z = w
-                .cells
-                .cell(c)
-                .map_or(0, |cell| crate::surface::surface_height(i32::from(cell.level), 0, 0, 0, raised));
+            let z = w.cells.cell(c).map_or(0, |cell| {
+                crate::surface::surface_height(i32::from(cell.level), 0, 0, 0, raised)
+            });
             Pos::centre(c, z)
         }
     }
@@ -158,14 +162,20 @@ pub fn fall_back(w: &mut World, id: ObjectId, placement: bool) {
 }
 
 fn has_ability(u: &crate::rules::UnitRules, name: &str) -> bool {
-    u.abilities.0.iter().chain(u.abilities.1.iter()).any(|a| a == name)
+    u.abilities
+        .0
+        .iter()
+        .chain(u.abilities.1.iter())
+        .any(|a| a == name)
 }
 
 /// Claim 14 (infantry).
 fn fall_back_infantry(w: &mut World, id: ObjectId) {
     let r = w.rules_arc();
     let Some(o) = w.obj(id).cloned() else { return };
-    let Some(u) = r.unit(o.kind, o.type_index) else { return };
+    let Some(u) = r.unit(o.kind, o.type_index) else {
+        return;
+    };
     let cur = o.beh.current;
     // spec: S-0215 claim 14 (nothing is queued while the current behaviour is patrol or area guard)
     let blocked = matches!(cur, Some(Behaviour::Patrol | Behaviour::AreaGuard));
@@ -181,7 +191,14 @@ fn fall_back_infantry(w: &mut World, id: ObjectId) {
     }
     // spec: S-0215 claim 14 row 2 (a target: attack, or the current sabotage or capture again)
     if o.target.is_some() {
-        queue(w, if again { cur.unwrap_or(Behaviour::Attack) } else { Behaviour::Attack });
+        queue(
+            w,
+            if again {
+                cur.unwrap_or(Behaviour::Attack)
+            } else {
+                Behaviour::Attack
+            },
+        );
         return;
     }
     let mut dest = o.dest;
@@ -195,7 +212,14 @@ fn fall_back_infantry(w: &mut World, id: ObjectId) {
     }
     // spec: S-0215 claim 14 row 4 (a destination: move, or the current sabotage or capture again)
     if dest.is_some() {
-        queue(w, if again { cur.unwrap_or(Behaviour::Move) } else { Behaviour::Move });
+        queue(
+            w,
+            if again {
+                cur.unwrap_or(Behaviour::Move)
+            } else {
+                Behaviour::Move
+            },
+        );
         return;
     }
     // spec: S-0215 claim 14 rows 5 and 6 (guard or area guard; zombie or paralysed: nothing changes)
@@ -217,7 +241,9 @@ fn fall_back_infantry(w: &mut World, id: ObjectId) {
 fn fall_back_vehicle(w: &mut World, id: ObjectId, placement: bool) {
     let r = w.rules_arc();
     let Some(o) = w.obj(id).cloned() else { return };
-    let Some(u) = r.unit(o.kind, o.type_index) else { return };
+    let Some(u) = r.unit(o.kind, o.type_index) else {
+        return;
+    };
     let cur = o.beh.current;
     // spec: S-0215 claim 15 (nothing is queued while patrol, area guard, unload or eaten is current)
     let blocked = matches!(
@@ -255,12 +281,25 @@ fn fall_back_vehicle(w: &mut World, id: ObjectId, placement: bool) {
     }
     if u.harvester {
         // spec: S-0215 claim 15 row 4 (harvesters; the resource land test is skipped in the placement fall-back)
-        if o.contact.is_some() || cur == Some(Behaviour::Harvest) || o.beh.queued == Some(Behaviour::Harvest) {
+        if o.contact.is_some()
+            || cur == Some(Behaviour::Harvest)
+            || o.beh.queued == Some(Behaviour::Harvest)
+        {
             return;
         }
         clear(w);
-        let on_ore = w.cells.cell(o.pos.cell()).is_some_and(|c| c.land == glasnost_map::terrain::land::TIBERIUM);
-        queue(w, if placement || on_ore { Behaviour::Harvest } else { Behaviour::Guard });
+        let on_ore = w
+            .cells
+            .cell(o.pos.cell())
+            .is_some_and(|c| c.land == glasnost_map::terrain::land::TIBERIUM);
+        queue(
+            w,
+            if placement || on_ore {
+                Behaviour::Harvest
+            } else {
+                Behaviour::Guard
+            },
+        );
         return;
     }
     let armed = u.primary.is_some();
@@ -348,17 +387,27 @@ fn second_start(w: &mut World, id: ObjectId) {
 
 /// One processing; returns the delay chosen.
 fn process(w: &mut World, id: ObjectId) -> i32 {
-    let Some(o) = w.obj(id).cloned() else { return NO_RULE_DELAY };
+    let Some(o) = w.obj(id).cloned() else {
+        return NO_RULE_DELAY;
+    };
     let cur = o.beh.current;
     match (cur, o.kind) {
         (Some(Behaviour::Move), _) => process_move(w, id),
         (Some(Behaviour::Attack), Kind::Infantry | Kind::Vehicle) => process_attack(w, id),
         // spec: S-0215 claim 5 (sticky is processed exactly as guard)
-        (Some(Behaviour::Guard | Behaviour::Sticky), Kind::Infantry | Kind::Vehicle) => process_guard(w, id),
+        (Some(Behaviour::Guard | Behaviour::Sticky), Kind::Infantry | Kind::Vehicle) => {
+            process_guard(w, id)
+        }
         (Some(Behaviour::AreaGuard), Kind::Infantry | Kind::Vehicle) => process_area_guard(w, id),
-        (Some(Behaviour::Guard | Behaviour::Sticky | Behaviour::AreaGuard | Behaviour::Attack), Kind::Building) => {
+        (
+            Some(Behaviour::Guard | Behaviour::Sticky | Behaviour::AreaGuard | Behaviour::Attack),
+            Kind::Building,
+        ) => {
             // spec: S-0215 claim 32 (an armed building's guard sets its ready mark); firing waits for M4
-            let armed = w.rules().buildings[o.type_index as usize].raw.primary.is_some();
+            let armed = w.rules().buildings[o.type_index as usize]
+                .raw
+                .primary
+                .is_some();
             if armed && let Some(ob) = w.obj_mut(id) {
                 ob.beh.ready_mark = true;
             }
@@ -366,13 +415,24 @@ fn process(w: &mut World, id: ObjectId) -> i32 {
             standard_delay(w, id)
         }
         // spec: S-0215 claim 5 (queued move and attack move are processed as sleep, quirks.queued_move_sleeps)
-        (Some(Behaviour::QueuedMove | Behaviour::AttackMove), _) if w.rules().quirks.queued_move_sleeps => {
+        (Some(Behaviour::QueuedMove | Behaviour::AttackMove), _)
+            if w.rules().quirks.queued_move_sleeps =>
+        {
             NO_RULE_DELAY
         }
         // spec: S-0215 claim 4 (sleep, harmless, ambush, return, stop, wait and none: 450 ticks, no draw)
-        (None | Some(Behaviour::Sleep | Behaviour::Harmless | Behaviour::Ambush | Behaviour::Return | Behaviour::Stop | Behaviour::Wait), _) => {
-            NO_RULE_DELAY
-        }
+        (
+            None
+            | Some(
+                Behaviour::Sleep
+                | Behaviour::Harmless
+                | Behaviour::Ambush
+                | Behaviour::Return
+                | Behaviour::Stop
+                | Behaviour::Wait,
+            ),
+            _,
+        ) => NO_RULE_DELAY,
         (Some(b), _) => {
             w.note(format!(
                 "S-0215: the processing of {} is not implemented yet; it waits as a behaviour without a processing rule",
@@ -385,9 +445,14 @@ fn process(w: &mut World, id: ObjectId) -> i32 {
 
 /// Move (S-0215 claim 22).
 fn process_move(w: &mut World, id: ObjectId) -> i32 {
-    let Some(o) = w.obj(id).cloned() else { return NO_RULE_DELAY };
+    let Some(o) = w.obj(id).cloned() else {
+        return NO_RULE_DELAY;
+    };
     let deployed = o.kind == Kind::Infantry
-        && o.infantry.as_ref().and_then(|s| s.seq).is_some_and(Seq::is_deploy);
+        && o.infantry
+            .as_ref()
+            .and_then(|s| s.seq)
+            .is_some_and(Seq::is_deploy);
     if deployed {
         // spec: S-0215 claim 22 (deployed infantry: clears its destination, 1 tick)
         if let Some(ob) = w.obj_mut(id) {
@@ -405,9 +470,15 @@ fn process_move(w: &mut World, id: ObjectId) -> i32 {
 
 /// Attack (S-0215 claim 23).
 fn process_attack(w: &mut World, id: ObjectId) -> i32 {
-    let Some(o) = w.obj(id).cloned() else { return NO_RULE_DELAY };
+    let Some(o) = w.obj(id).cloned() else {
+        return NO_RULE_DELAY;
+    };
     if o.kind == Kind::Infantry {
-        let deployed = o.infantry.as_ref().and_then(|s| s.seq).is_some_and(Seq::is_deploy);
+        let deployed = o
+            .infantry
+            .as_ref()
+            .and_then(|s| s.seq)
+            .is_some_and(Seq::is_deploy);
         if deployed && o.target.is_some() {
             // spec: S-0215 claim 23 (deployed infantry: its deployed-firing rule, the standard delay not halved)
             return standard_delay(w, id);
@@ -425,7 +496,9 @@ fn process_attack(w: &mut World, id: ObjectId) -> i32 {
 
 /// Guard (S-0215 claim 24).
 fn process_guard(w: &mut World, id: ObjectId) -> i32 {
-    let Some(o) = w.obj(id).cloned() else { return NO_RULE_DELAY };
+    let Some(o) = w.obj(id).cloned() else {
+        return NO_RULE_DELAY;
+    };
     if o.target.is_none() && o.kind == Kind::Infantry {
         // spec: S-0215 claim 24 (no target: attempts its idle action, S-0107 claim 14)
         let in_progress = moving(w, id);
@@ -439,8 +512,12 @@ fn process_guard(w: &mut World, id: ObjectId) -> i32 {
 fn process_area_guard(w: &mut World, id: ObjectId) -> i32 {
     let t = w.tick;
     let r = w.rules_arc();
-    let Some(o) = w.obj(id).cloned() else { return NO_RULE_DELAY };
-    let Some(u) = r.unit(o.kind, o.type_index).cloned() else { return NO_RULE_DELAY };
+    let Some(o) = w.obj(id).cloned() else {
+        return NO_RULE_DELAY;
+    };
+    let Some(u) = r.unit(o.kind, o.type_index).cloned() else {
+        return NO_RULE_DELAY;
+    };
     let half = r.quirks.ranged_draw_half_span;
     if o.kind == Kind::Vehicle && u.harvester {
         // spec: S-0215 claim 26 row 4 (a harvester: harvest at once; 1 + U(1, 10))
@@ -458,17 +535,24 @@ fn process_area_guard(w: &mut World, id: ObjectId) -> i32 {
         let dy = i64::from(o.pos.y - gp.y);
         let dz = i64::from(o.pos.z - gp.z);
         // spec: S-0215 F4 (ρ₃ to the guard spot, minus 64 × (W + H) for a building, not below 0)
-        let mut dist = root_floor((dx * dx + dy * dy + dz * dz) as u64, r.quirks.table_root_distance, r.mode) as i64;
+        let mut dist = root_floor(
+            (dx * dx + dy * dy + dz * dz) as u64,
+            r.quirks.table_root_distance,
+            r.mode,
+        ) as i64;
         if let Target::Object(x) = gs
             && let Some(g) = w.obj(x)
             && g.kind == Kind::Building
         {
             dist = (dist - 64 * i64::from(g.foundation.0 + g.foundation.1)).max(0); // spec: S-0215 F4 (β = 64 × (W + H))
         }
-        let mobile_spot = matches!(gs, Target::Object(x) if w.obj(x).is_some_and(|g| g.kind.is_mobile()));
+        let mobile_spot =
+            matches!(gs, Target::Object(x) if w.obj(x).is_some_and(|g| g.kind.is_mobile()));
         let leash = if mobile_spot {
             // spec: S-0215 F5 (guarding a mobile actor: the guard stray distance)
-            r.general.guard_stray.unwrap_or_else(|| leash(u.guard_range))
+            r.general
+                .guard_stray
+                .unwrap_or_else(|| leash(u.guard_range))
         } else {
             leash(u.guard_range)
         };
@@ -490,7 +574,9 @@ fn process_area_guard(w: &mut World, id: ObjectId) -> i32 {
             infantry::idle_attempt(w, id, ip);
         }
     }
-    let Some(o) = w.obj(id).cloned() else { return NO_RULE_DELAY };
+    let Some(o) = w.obj(id).cloned() else {
+        return NO_RULE_DELAY;
+    };
     if o.guard_spot.is_none() && o.beh.queued.is_none() {
         // spec: S-0215 claim 26 (no guard spot and nothing queued: takes its own cell)
         if let Some(ob) = w.obj_mut(id) {

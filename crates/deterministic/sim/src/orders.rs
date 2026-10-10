@@ -2,8 +2,8 @@
 //! AI houses, the pending lists, and how orders apply at a tick boundary.
 
 use glasnost_map::CellXY;
-use glasnost_num::geom::{root_floor, table_root};
 use glasnost_num::F64;
+use glasnost_num::geom::{root_floor, table_root};
 use serde::{Deserialize, Serialize};
 
 use crate::occupancy::{self, Outcome};
@@ -67,6 +67,10 @@ impl Order {
     }
 }
 
+/// The smallest run of orders that is spread (S-0213 claim 7).
+// spec: S-0213 Constants (smallest spread group: 2 orders)
+const MIN_RUN: usize = 2;
+
 /// Pending-list capacity (S-0213 claim 2).
 // spec: S-0213 claim 2 (at most 128 pending orders per house)
 pub const PENDING_LIMIT: usize = 128;
@@ -79,7 +83,9 @@ pub fn issue(w: &mut World, house: HouseId, order: Order) -> bool {
         return false;
     }
     let limit = w.rules().quirks.pending_order_limit;
-    let Some(h) = w.houses.get_mut(usize::from(house.0)) else { return false };
+    let Some(h) = w.houses.get_mut(usize::from(house.0)) else {
+        return false;
+    };
     // spec: S-0213 claim 2 (an order issued while the list is full is dropped; quirks.pending_order_limit)
     if limit && h.pending.len() >= PENDING_LIMIT {
         return false;
@@ -95,11 +101,17 @@ pub fn apply_pending(w: &mut World) {
     for hi in 0..w.houses.len() {
         let orders = std::mem::take(&mut w.houses[hi].pending);
         // spec: S-0213 claim 3 (non-behaviour orders first, in issue order)
-        for o in orders.iter().filter(|o| !matches!(o, Order::Behaviour { .. })) {
+        for o in orders
+            .iter()
+            .filter(|o| !matches!(o, Order::Behaviour { .. }))
+        {
             apply_other(w, o);
         }
         // spec: S-0213 claim 3 (then the behaviour orders, in issue order)
-        let behaviour: Vec<Order> = orders.into_iter().filter(|o| matches!(o, Order::Behaviour { .. })).collect();
+        let behaviour: Vec<Order> = orders
+            .into_iter()
+            .filter(|o| matches!(o, Order::Behaviour { .. }))
+            .collect();
         let dests = group_destinations(w, &behaviour);
         for (o, d) in behaviour.iter().zip(dests) {
             apply_behaviour(w, o, d);
@@ -139,13 +151,19 @@ fn apply_other(w: &mut World, o: &Order) {
                 return;
             }
             let t = w.tick;
-            let harvester = w.obj(actor).and_then(|ob| w.rules().unit(ob.kind, ob.type_index)).is_some_and(|u| u.harvester);
+            let harvester = w
+                .obj(actor)
+                .and_then(|ob| w.rules().unit(ob.kind, ob.type_index))
+                .is_some_and(|u| u.harvester);
             let kind = w.obj(actor).map(|ob| ob.kind);
             if kind == Some(Kind::Vehicle) {
                 crate::drive::stop(w, actor);
             }
             if let Some(ob) = w.obj_mut(actor) {
-                if matches!(ob.beh.current, Some(Behaviour::Construction | Behaviour::Selling)) {
+                if matches!(
+                    ob.beh.current,
+                    Some(Behaviour::Construction | Behaviour::Selling)
+                ) {
                     // spec: S-0215 claim 12 (the stop order does nothing in construction or selling)
                     return;
                 }
@@ -158,7 +176,9 @@ fn apply_other(w: &mut World, o: &Order) {
                     ob.queued_dests.clear();
                     ob.path.steps.clear();
                 }
-                if harvester && matches!(ob.beh.current, Some(Behaviour::Harvest | Behaviour::Return)) {
+                if harvester
+                    && matches!(ob.beh.current, Some(Behaviour::Harvest | Behaviour::Return))
+                {
                     // spec: S-0213 claim 8 (a harvester in harvest or return gets guard at once)
                     ob.beh.queue_and_start_at_once(Behaviour::Guard, t);
                 }
@@ -214,7 +234,10 @@ fn on_vehicle_factory(w: &World, id: ObjectId) -> bool {
     w.cells.list(c, Layer::Ground).iter().any(|&x| {
         w.obj(x).is_some_and(|b| {
             b.kind == Kind::Building
-                && w.rules().buildings[b.type_index as usize].raw.weapons_factory.unwrap_or(false)
+                && w.rules().buildings[b.type_index as usize]
+                    .raw
+                    .weapons_factory
+                    .unwrap_or(false)
         })
     })
 }
@@ -233,13 +256,24 @@ fn eligible(w: &World, id: ObjectId) -> bool {
 }
 
 fn apply_behaviour(w: &mut World, o: &Order, dest_override: Option<Target>) {
-    let Order::Behaviour { actor, behaviour, attack_move, target, dest } = *o else { return };
+    let Order::Behaviour {
+        actor,
+        behaviour,
+        attack_move,
+        target,
+        dest,
+    } = *o
+    else {
+        return;
+    };
     let dest = dest_override.or(dest);
     // spec: S-0213 claim 4 (actor valid; a named unit or building target or destination valid)
     if !valid(w, actor) || !target_ok(w, target) || !target_ok(w, dest) {
         return;
     }
-    let Some(ob) = w.obj(actor).cloned() else { return };
+    let Some(ob) = w.obj(actor).cloned() else {
+        return;
+    };
     let mobile = ob.kind.is_mobile();
     // spec: S-0213 claim 6 (the attack-move translation, decided at application)
     let (b, memory) = if attack_move {
@@ -308,7 +342,13 @@ fn apply_behaviour(w: &mut World, o: &Order, dest_override: Option<Target>) {
 fn group_destinations(w: &mut World, orders: &[Order]) -> Vec<Option<Target>> {
     let mut out = vec![None; orders.len()];
     let key = |o: &Order| match *o {
-        Order::Behaviour { behaviour, attack_move, target, dest, .. } => Some((behaviour, attack_move, target, dest)),
+        Order::Behaviour {
+            behaviour,
+            attack_move,
+            target,
+            dest,
+            ..
+        } => Some((behaviour, attack_move, target, dest)),
         _ => None,
     };
     let mut i = 0;
@@ -320,8 +360,7 @@ fn group_destinations(w: &mut World, orders: &[Order]) -> Vec<Option<Target>> {
             j += 1;
         }
         if let Some((_, _, _, Some(Target::Cell(common)))) = k
-            // spec: S-0213 Constants (smallest spread group: 2 orders)
-            && j - i >= 2 // spec: S-0213 Constants (smallest spread group: 2 orders)
+            && j - i >= MIN_RUN
         {
             let run: Vec<(usize, ObjectId)> = (i..j).map(|n| (n, orders[n].actor())).collect();
             for (n, c) in spread(w, &run, common) {
@@ -339,7 +378,11 @@ fn dist(w: &World, a: Pos, b: Pos) -> u64 {
     let dy = i64::from(a.y - b.y);
     let dz = i64::from(a.z - b.z);
     // spec: S-0213 Formulas (d = trunc(√̃(Δx² + Δy² + Δz²)), the approximate root of S-0204)
-    root_floor((dx * dx + dy * dy + dz * dz) as u64, w.rules().quirks.table_root_distance, w.rules().mode)
+    root_floor(
+        (dx * dx + dy * dy + dz * dz) as u64,
+        w.rules().quirks.table_root_distance,
+        w.rules().mode,
+    )
 }
 
 /// Spreads one run over cells (S-0213 claim 7 with our engine's interim
@@ -349,7 +392,11 @@ fn spread(w: &mut World, run: &[(usize, ObjectId)], common: CellXY) -> Vec<(usiz
     // spec: S-0213 claim 7 (members: the mobile actors of the run; the spreading checks no validity)
     let members: Vec<(usize, ObjectId, Pos)> = run
         .iter()
-        .filter_map(|&(n, id)| w.obj(id).filter(|o| o.kind.is_mobile()).map(|o| (n, id, o.pos)))
+        .filter_map(|&(n, id)| {
+            w.obj(id)
+                .filter(|o| o.kind.is_mobile())
+                .map(|o| (n, id, o.pos))
+        })
         .collect();
     if members.is_empty() {
         return Vec::new();
@@ -357,7 +404,11 @@ fn spread(w: &mut World, run: &[(usize, ObjectId)], common: CellXY) -> Vec<(usiz
     let cnt = members.len() as i64;
     let sum = |f: fn(&Pos) -> i32| members.iter().map(|m| i64::from(f(&m.2))).sum::<i64>();
     // spec: S-0213 Formulas (centre: per-axis integer sums divided by n, truncated toward zero)
-    let centre = Pos::new((sum(|p| p.x) / cnt) as i32, (sum(|p| p.y) / cnt) as i32, (sum(|p| p.z) / cnt) as i32);
+    let centre = Pos::new(
+        (sum(|p| p.x) / cnt) as i32,
+        (sum(|p| p.y) / cnt) as i32,
+        (sum(|p| p.z) / cnt) as i32,
+    );
     // spec: S-0213 claim 7 (leader: smallest distance to the centre, the latest in the run on ties)
     let mut leader = 0;
     for (k, m) in members.iter().enumerate() {
@@ -380,7 +431,10 @@ fn spread(w: &mut World, run: &[(usize, ObjectId)], common: CellXY) -> Vec<(usiz
         }
         let (n, id, p) = members[k];
         let mcell = p.cell();
-        let zone = w.obj(id).and_then(|o| w.rules().unit(o.kind, o.type_index)).map(|u| u.zone);
+        let zone = w
+            .obj(id)
+            .and_then(|o| w.rules().unit(o.kind, o.type_index))
+            .map(|u| u.zone);
         let common_reach = zone.map(|z| regions::reach(w, common, z));
         let vx = mcell.x - lcell.x;
         let vy = mcell.y - lcell.y;
@@ -388,10 +442,18 @@ fn spread(w: &mut World, run: &[(usize, ObjectId)], common: CellXY) -> Vec<(usiz
         let (ux, uy) = if (vx, vy) == (0, 0) {
             (F64::ZERO, F64::ZERO)
         } else {
-            let r = table_root((i64::from(vx) * i64::from(vx) + i64::from(vy) * i64::from(vy)) as u64, mode).to_f64();
-            (F64::from_i64(i64::from(vx), mode).div(r, mode), F64::from_i64(i64::from(vy), mode).div(r, mode))
+            let r = table_root(
+                (i64::from(vx) * i64::from(vx) + i64::from(vy) * i64::from(vy)) as u64,
+                mode,
+            )
+            .to_f64();
+            (
+                F64::from_i64(i64::from(vx), mode).div(r, mode),
+                F64::from_i64(i64::from(vy), mode).div(r, mode),
+            )
         };
-        let half = glasnost_num::decimal::parse("0.5", glasnost_num::decimal::Field::Decimal, mode).unwrap_or_default();
+        let half = glasnost_num::decimal::parse("0.5", glasnost_num::decimal::Field::Decimal, mode)
+            .unwrap_or_default();
         let reference = occupancy::reference_level(w, id);
         let mut fallback: Option<CellXY> = None;
         let mut result: Option<CellXY> = None;
@@ -399,8 +461,12 @@ fn spread(w: &mut World, run: &[(usize, ObjectId)], common: CellXY) -> Vec<(usiz
         // spec: S-0213 claim 7 (interim: j = 1 to 6, each step one cell length from the common cell's centre)
         for j in 1..=6 {
             let jj = F64::from_i64(j, mode);
-            let qx = F64::from_i64(i64::from(common.x), mode).add(half, mode).add(jj.mul(ux, mode), mode);
-            let qy = F64::from_i64(i64::from(common.y), mode).add(half, mode).add(jj.mul(uy, mode), mode);
+            let qx = F64::from_i64(i64::from(common.x), mode)
+                .add(half, mode)
+                .add(jj.mul(ux, mode), mode);
+            let qy = F64::from_i64(i64::from(common.y), mode)
+                .add(half, mode)
+                .add(jj.mul(uy, mode), mode);
             // spec: S-0213 Formulas (each point's cell by truncation toward zero, S-0205 claim 7)
             let c = CellXY::new(qx.to_i32_common(), qy.to_i32_common());
             // spec: S-0213 claim 7 (the classes of a look cell, the first that fits)
@@ -472,5 +538,8 @@ fn obstructed(w: &World, id: ObjectId, c: CellXY, reference: i32) -> bool {
         _ => occupancy::vehicle_outcome(w, id, c, reference),
     };
     // spec: S-0213 claim 7 (obstructed: friendly obstacle, enemy obstacle or blocked)
-    matches!(out, Outcome::FriendlyObstacle | Outcome::EnemyObstacle | Outcome::Blocked)
+    matches!(
+        out,
+        Outcome::FriendlyObstacle | Outcome::EnemyObstacle | Outcome::Blocked
+    )
 }

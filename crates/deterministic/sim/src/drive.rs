@@ -97,10 +97,16 @@ pub fn between_steps_or_chain(w: &World, id: ObjectId) -> bool {
 /// Whether a vehicle is at a chain point (S-0209 Terms).
 pub fn at_chain_point(w: &World, id: ObjectId) -> bool {
     let Some(o) = w.obj(id) else { return false };
-    let Some(d) = o.drive.as_ref() else { return false };
-    let Some(t) = d.track.as_ref() else { return false };
+    let Some(d) = o.drive.as_ref() else {
+        return false;
+    };
+    let Some(t) = d.track.as_ref() else {
+        return false;
+    };
     let Some(e) = t.e else { return false };
-    let Some(cp) = tracks::chain_point(t.d, e) else { return false };
+    let Some(cp) = tracks::chain_point(t.d, e) else {
+        return false;
+    };
     // At the chain point: its position is that point (the step after the curve turns again: next stored step).
     let (pts, _) = tracks::track(t.d, Some(e));
     let p = pts[cp];
@@ -112,7 +118,13 @@ pub fn at_chain_point(w: &World, id: ObjectId) -> bool {
 /// Releases every vehicle-present claim of a vehicle.
 pub fn release_claims(w: &mut World, id: ObjectId) {
     let (claims, layer) = match w.obj(id) {
-        Some(o) => (o.drive.as_ref().map(|d| d.claims.clone()).unwrap_or_default(), o.layer),
+        Some(o) => (
+            o.drive
+                .as_ref()
+                .map(|d| d.claims.clone())
+                .unwrap_or_default(),
+            o.layer,
+        ),
         None => return,
     };
     for c in claims {
@@ -137,7 +149,11 @@ fn update_claims(w: &mut World, id: ObjectId) {
         }
     }
     want.sort();
-    let have = o.drive.as_ref().map(|d| d.claims.clone()).unwrap_or_default();
+    let have = o
+        .drive
+        .as_ref()
+        .map(|d| d.claims.clone())
+        .unwrap_or_default();
     for c in &have {
         if !want.contains(c) {
             w.cells.claim_vehicle(*c, layer, false);
@@ -156,8 +172,12 @@ fn update_claims(w: &mut World, id: ObjectId) {
 /// The braking floor F₀.₃ (single-precision 0.3 widened, S-0207 claim 10).
 fn f03() -> F64 {
     // spec: S-0207 claim 10 (F₀.₃ = 0.300000011920928955078125, single-precision 0.3)
-    glasnost_num::decimal::parse("0.3", glasnost_num::decimal::Field::Decimal, Rounding::TowardZero)
-        .unwrap_or_default()
+    glasnost_num::decimal::parse(
+        "0.3",
+        glasnost_num::decimal::Field::Decimal,
+        Rounding::TowardZero,
+    )
+    .unwrap_or_default()
 }
 
 /// The target fraction of a track entering `cell` (S-0207 claim 9, F6).
@@ -167,11 +187,16 @@ fn target_fraction(w: &World, id: ObjectId, u: &UnitRules, cell: CellXY) -> F64 
     let Some(o) = w.obj(id) else { return F64::ZERO };
     let here = o.pos.cell();
     // spec: S-0207 claim 9 (a) (λ: the current cell's level, plus 4 on a deck)
-    let lambda = w.cells.cell(here).map_or(0, |c| i32::from(c.level)) + if o.layer == Layer::Deck { 4 } else { 0 };
+    let lambda = w.cells.cell(here).map_or(0, |c| i32::from(c.level))
+        + if o.layer == Layer::Deck { 4 } else { 0 };
     let entered = w.cells.cell(cell);
     let lv = entered.map_or(0, |c| i32::from(c.level));
     // spec: S-0207 claim 9 (a) (a difference below 2 uses the cell's land type, otherwise road)
-    let l = if (lv - lambda).abs() < 2 { entered.map_or(land::CLEAR, |c| c.land) } else { land::ROAD };
+    let l = if (lv - lambda).abs() < 2 {
+        entered.map_or(land::CLEAR, |c| c.land)
+    } else {
+        land::ROAD
+    };
     let one = F64::from_i64(1, mode);
     let class = u.class.unwrap_or(LocomotionClass::Wheel);
     // spec: S-0207 claim 9 (b) (g = min(M(ℓ, c), 1), widened to double)
@@ -190,14 +215,24 @@ fn target_fraction(w: &World, id: ObjectId, u: &UnitRules, cell: CellXY) -> F64 
     };
     let gu = g.mul(uf, mode);
     // spec: S-0207 claim 9 (d) (0.5 where g × u = 0 exactly)
-    let z = if gu.eq_num(F64::ZERO) { glasnost_num::decimal::parse("0.5", glasnost_num::decimal::Field::Decimal, mode).unwrap_or_default() } else { gu };
+    let z = if gu.eq_num(F64::ZERO) {
+        glasnost_num::decimal::parse("0.5", glasnost_num::decimal::Field::Decimal, mode)
+            .unwrap_or_default()
+    } else {
+        gu
+    };
     // spec: S-0207 claim 9 (e) and S-0108 F3 (0.75 when health / strength ≤ yellow, divided in binary64)
     let strength = u.strength;
     let damaged = strength != 0
         && F64::from_i64(i64::from(o.health), mode)
             .div(F64::from_i64(i64::from(strength), mode), mode)
             .le(r.general.condition_yellow);
-    let h = if damaged { glasnost_num::decimal::parse("0.75", glasnost_num::decimal::Field::Decimal, mode).unwrap_or_default() } else { one };
+    let h = if damaged {
+        glasnost_num::decimal::parse("0.75", glasnost_num::decimal::Field::Decimal, mode)
+            .unwrap_or_default()
+    } else {
+        one
+    };
     h.mul(z, mode)
 }
 
@@ -222,7 +257,11 @@ fn update_rho(w: &mut World, id: ObjectId, u: &UnitRules) {
             let dy = i64::from(p.y - o.pos.y);
             let dz = i64::from(p.z - o.pos.z);
             // spec: S-0207 F5 (dₘ = ⌊r(Δx² + Δy² + Δz²)⌋)
-            root_floor((dx * dx + dy * dy + dz * dz) as u64, r.quirks.table_root_distance, mode) as i64
+            root_floor(
+                (dx * dx + dy * dy + dz * dz) as u64,
+                r.quirks.table_root_distance,
+                mode,
+            ) as i64
         });
         let braking = dm.is_some_and(|dm| dm < i64::from(u.slowdown_distance));
         let floor = f03();
@@ -233,7 +272,10 @@ fn update_rho(w: &mut World, id: ObjectId, u: &UnitRules) {
             (clamp(x), x)
         } else if braking && (r.quirks.drive_brake_floor_raises || d.rho.gt(floor)) {
             // spec: S-0207 claim 10 case 2 (max(ρ − V × η, F₀.₃))
-            (clamp(d.rho.sub(v.mul(u.deceleration, mode), mode).max(floor)), d.rho_t)
+            (
+                clamp(d.rho.sub(v.mul(u.deceleration, mode), mode).max(floor)),
+                d.rho_t,
+            )
         } else {
             // spec: S-0207 claim 10 cases 4 to 6 (accelerating, decelerating, steady)
             let x = if d.rho.lt(d.rho_t) {
@@ -269,7 +311,9 @@ fn progress(w: &World, id: ObjectId, u: &UnitRules) -> i32 {
         .mul(kappa, mode)
         .mul(o.speed_bonus, mode)
         .to_i32_common();
-    F64::from_i64(i64::from(s1), mode).mul(rho, mode).to_i32_common()
+    F64::from_i64(i64::from(s1), mode)
+        .mul(rho, mode)
+        .to_i32_common()
 }
 
 fn cell_of(x: i32, y: i32) -> CellXY {
@@ -300,8 +344,12 @@ fn set_pos(w: &mut World, id: ObjectId, x: i32, y: i32, z: Option<i32>) {
 fn begin_track(w: &mut World, id: ObjectId, u: &UnitRules) -> bool {
     let t = w.tick;
     let r = w.rules_arc();
-    let Some(o) = w.obj(id).cloned() else { return false };
-    let Some(&d) = o.path.steps.first() else { return false };
+    let Some(o) = w.obj(id).cloned() else {
+        return false;
+    };
+    let Some(&d) = o.path.steps.first() else {
+        return false;
+    };
     let here = o.pos.cell();
     let (dx, dy) = STEPS[usize::from(d % 8)]; // spec: S-0212 Terms (step directions 0 to 7)
     let first = CellXY::new(here.x + dx, here.y + dy);
@@ -387,7 +435,10 @@ fn begin_track(w: &mut World, id: ObjectId, u: &UnitRules) -> bool {
         // spec: S-0207 claim 7 (the curve's second cell occupied or being entered: the straight track instead)
         let rec = w.cells.occ(second, o.layer);
         let busy = rec.is_some_and(|x| x.vehicle_present())
-            || w.cells.list(second, o.layer).iter().any(|&x| x != id && w.obj(x).is_some_and(|ob| ob.kind.is_mobile()));
+            || w.cells
+                .list(second, o.layer)
+                .iter()
+                .any(|&x| x != id && w.obj(x).is_some_and(|ob| ob.kind.is_mobile()));
         if busy {
             use_e = None;
         }
@@ -395,7 +446,11 @@ fn begin_track(w: &mut World, id: ObjectId, u: &UnitRules) -> bool {
     let (_, two) = tracks::track(d, use_e);
     let target_cell = if two { second } else { first };
     let target = (256 * target_cell.x + 128, 256 * target_cell.y + 128); // spec: S-0204 claim 3 (a cell centre: (256x + 128, 256y + 128))
-    let cells = if two { vec![first, second] } else { vec![first] };
+    let cells = if two {
+        vec![first, second]
+    } else {
+        vec![first]
+    };
     // spec: S-0212 claim 20 (the drive locomotor recomputes as it begins the last stored step, heading point beyond 512)
     let used = if two { 2 } else { 1 };
     let last_step = o.path.steps.len() <= used;
@@ -430,8 +485,13 @@ fn begin_track(w: &mut World, id: ObjectId, u: &UnitRules) -> bool {
             let dy = i64::from(hp.y - o2.pos.y);
             let dz = i64::from(hp.z - o2.pos.z);
             // spec: S-0212 F6c (the heading point more than 512 leptons away)
-            let dist = root_floor((dx * dx + dy * dy + dz * dz) as u64, r.quirks.table_root_distance, r.mode);
-            if dist > 512 && hp.cell() != target_cell { // spec: S-0212 claim 20 (the heading point more than 512 leptons away)
+            let dist = root_floor(
+                (dx * dx + dy * dy + dz * dz) as u64,
+                r.quirks.table_root_distance,
+                r.mode,
+            );
+            // spec: S-0212 claim 20 (the heading point more than 512 leptons away)
+            if dist > 512 && hp.cell() != target_cell {
                 refresh_from_target(w, id, target_cell);
             }
         }
@@ -474,10 +534,11 @@ fn crush_mode(w: &World, id: ObjectId, u: &UnitRules, first: CellXY, second: Cel
     };
     // spec: S-0207 claim 7 (the second cell: a crushable overlay, or for crusher-all a wall or a vehicle)
     let second_vehicle = all
-        && w.cells
-            .list(second, Layer::Ground)
-            .iter()
-            .any(|&x| x != id && w.obj(x).is_some_and(|o| o.kind == crate::rules::Kind::Vehicle));
+        && w.cells.list(second, Layer::Ground).iter().any(|&x| {
+            x != id
+                && w.obj(x)
+                    .is_some_and(|o| o.kind == crate::rules::Kind::Vehicle)
+        });
     // spec: S-0207 claim 7 (the first cell: a crushable overlay, or for crusher-all a wall; a vehicle there does not count)
     overlay_crush(second, true) || second_vehicle || overlay_crush(first, true)
 }
@@ -499,7 +560,11 @@ fn blocked_step(w: &mut World, id: ObjectId) {
     }
     let delay = w.rules().general.blockage_delay;
     // spec: S-0212 claim 22 (mode 1 while the blockage timer runs, mode 2 once it has run out)
-    let mode = if t.wrapping_sub(since) >= delay { Mode::Avoid } else { Mode::Blocked };
+    let mode = if t.wrapping_sub(since) >= delay {
+        Mode::Avoid
+    } else {
+        Mode::Blocked
+    };
     let res = path::compute(w, id, mode);
     let r = w.rules().general.retry_delay;
     match res {
@@ -521,14 +586,24 @@ fn blocked_step(w: &mut World, id: ObjectId) {
 fn spend(w: &mut World, id: ObjectId) -> bool {
     let r = w.rules_arc();
     let mode = r.mode;
-    let Some(o) = w.obj(id).cloned() else { return false };
-    let Some(dd) = o.drive.clone() else { return false };
-    let Some(tr) = dd.track.clone() else { return false };
+    let Some(o) = w.obj(id).cloned() else {
+        return false;
+    };
+    let Some(dd) = o.drive.clone() else {
+        return false;
+    };
+    let Some(tr) = dd.track.clone() else {
+        return false;
+    };
     let (pts, _) = tracks::track(tr.d, tr.e);
     let remaining = pts.len() - tr.next + 1; // the target included
     let mut a = dd.budget;
     // spec: S-0207 claim 3 (k = 0 when A ≤ 7, else the largest k with A − 7k ≥ 1, at most the points left)
-    let k = if a <= 7 { 0 } else { (((a - 1) / 7) as usize).min(remaining) };
+    let k = if a <= 7 {
+        0
+    } else {
+        (((a - 1) / 7) as usize).min(remaining)
+    };
     a -= 7 * k as i32; // spec: S-0207 claim 3 (7 of the budget per point)
     let mut next = tr.next + k;
     let mut last = tr.last;
@@ -566,12 +641,23 @@ fn spend(w: &mut World, id: ObjectId) -> bool {
         let p = pts[next];
         let pp = (tr.target.0 + p.0, tr.target.1 + p.1);
         let cur = w.obj(id).map_or((0, 0), |o| (o.pos.x, o.pos.y));
-        let q0 = if r.quirks.drive_subpoint_compounding { cur } else { last };
+        let q0 = if r.quirks.drive_subpoint_compounding {
+            cur
+        } else {
+            last
+        };
         // spec: S-0207 F4 (t = single(A × (1/7)), 1/7 the double nearest; both roundings by the mode)
         let seventh = nearest_double("0.142857142857142857142857142857");
-        let tt = F64::from_i64(i64::from(a), mode).mul(seventh, mode).to_f32(mode).to_f64();
-        let ox = F64::from_i64(i64::from(pp.0 - q0.0), mode).mul(tt, mode).to_i32_common();
-        let oy = F64::from_i64(i64::from(pp.1 - q0.1), mode).mul(tt, mode).to_i32_common();
+        let tt = F64::from_i64(i64::from(a), mode)
+            .mul(seventh, mode)
+            .to_f32(mode)
+            .to_f64();
+        let ox = F64::from_i64(i64::from(pp.0 - q0.0), mode)
+            .mul(tt, mode)
+            .to_i32_common();
+        let oy = F64::from_i64(i64::from(pp.1 - q0.1), mode)
+            .mul(tt, mode)
+            .to_i32_common();
         let qn = (q0.0 + ox, q0.1 + oy);
         let qc = cell_of(q0.0, q0.1);
         let pc = cell_of(pp.0, pp.1);
@@ -610,7 +696,8 @@ fn set_facing(w: &mut World, id: ObjectId, f: u8) {
 /// Whether the vehicle's move goes on after a track ends: it has a stored
 /// step and a destination.
 fn move_goes_on(w: &World, id: ObjectId) -> bool {
-    w.obj(id).is_some_and(|o| o.dest.is_some() && !o.path.steps.is_empty())
+    w.obj(id)
+        .is_some_and(|o| o.dest.is_some() && !o.path.steps.is_empty())
 }
 
 /// One tick of a driving vehicle (S-0207 claim 12). Returns whether it
@@ -618,9 +705,15 @@ fn move_goes_on(w: &World, id: ObjectId) -> bool {
 pub fn tick(w: &mut World, id: ObjectId) -> bool {
     let t = w.tick;
     let r = w.rules_arc();
-    let Some(o) = w.obj(id).cloned() else { return false };
-    let Some(u) = r.unit(o.kind, o.type_index).cloned() else { return false };
-    let Some(dd) = o.drive.clone() else { return false };
+    let Some(o) = w.obj(id).cloned() else {
+        return false;
+    };
+    let Some(u) = r.unit(o.kind, o.type_index).cloned() else {
+        return false;
+    };
+    let Some(dd) = o.drive.clone() else {
+        return false;
+    };
     let before = (o.pos.x, o.pos.y);
     let cap = r.quirks.drive_track_end_cap;
     if dd.track.is_some() {
