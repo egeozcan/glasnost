@@ -11,8 +11,8 @@ use crate::rules::Kind;
 use crate::world::{ObjectId, Pos, Target, World};
 
 /// The spin step's target (S-0206 F2).
+// spec: S-0206 F2 (f₂₅₆ = ⌊(f + 128) / 256⌋ mod 256; target = 256 × ((f₂₅₆ + 8) mod 256))
 pub fn spin_target(f: u16) -> u16 {
-    // spec: S-0206 F2 (f₂₅₆ = ⌊(f + 128) / 256⌋ mod 256; target = 256 × ((f₂₅₆ + 8) mod 256))
     let f256 = ((u32::from(f) + 128) / 256) % 256;
     (256 * ((f256 + 8) % 256)) as u16
 }
