@@ -38,6 +38,12 @@ so that a vehicle can drive onto a bridge deck from land at deck level
    the two banks of a high bridge over water are different reach regions,
    and the gate of claim 6 refuses every order across the bridge. Which
    cells are a high bridge's link end cells, and when is the link enabled?
+5. **Reach regions of a deck.** Claim 6 compares reach regions "for the
+   unit's movement zone and search layer", but claims 3 and 4 build regions
+   from cells. Which region does a deck pair lie in: that of the land at the
+   bridge's ends (through the link), or its own? Without an answer, an order
+   onto a deck cell compares the region of the ground under the deck, and
+   the gate refuses it whenever that ground is not reachable by land.
 
 ## Possible observation
 1, 2. S-0212 scenario P4 with a high bridge over dry ground of one level:
@@ -55,4 +61,5 @@ so that a vehicle can drive onto a bridge deck from land at deck level
 3. The level of the search pair being expanded (the unit's own level for
    its first step).
 4. No links: regions join only by claim 3's neighbour rule.
-All four are in the provisional table of `docs/development.md`.
+5. A deck pair is compared by its cell's (ground) region.
+All five are in the provisional table of `docs/development.md`.
