@@ -2,13 +2,13 @@
 id: S-0207
 title: Ground vehicle movement (drive locomotor)
 topic: movement
-revision: 4
+revision: 5
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-10
 measurements: []
-requests: []
+requests: [Q-0019, Q-0020]
 supersedes: []
 ---
 
@@ -17,9 +17,11 @@ supersedes: []
 ## Summary
 
 How a vehicle with the driving locomotor turns its speed field, speed fraction and terrain into
-progress along fixed cell-to-cell tracks (straight, diagonal and two-cell curves), and where it stands
-between track points. Where it may go (S-0211), which steps it takes (S-0212), how fast it turns
-(S-0206) and every other locomotor, hovering vehicles and ships included, are outside this spec.
+progress along fixed cell-to-cell tracks (straight, diagonal and two-cell curves), where it stands
+between track points, and what it does when the cell of its next step may not be entered. It also
+states which locomotor a mobile type has (claim 14) and how every vehicle, whatever its locomotor,
+answers a scatter request (claim 16), while where a vehicle may go (S-0211), which steps it takes
+(S-0212), how fast it turns (S-0206) and every other locomotor are left to other specs.
 
 ## Terms
 
@@ -32,10 +34,38 @@ and claim 9): 8-direction 0 is map north and each next one is 1/8 turn further c
 E, SE, S, SW, W and NW are 0 to 7. The *table square root* *r*(*n*) is S-0204's (Formulas F1). The
 *surface height* *H* is S-0106's (Terms and claim 2). The *crush-slowdown state* is S-0210's
 (claim 9). *Crushable overlay* and the movement zone *crusher-all* are used as in the crushing
-rules of S-0210.
+rules of S-0210. *Scatter request* (with its *threat point* and its *forced* and *move-anywhere*
+options), *infantry*, *aircraft*, *building*, *house*, *departure*, *recorder*, *follower car*
+(with its *leader* and *car chain*), *train type*, *veterancy rank* and *veterancy ability* are used
+as in the glossary. From S-0209: the *entry outcome* and its values (*clear*, *cloaked
+blocker*, *moving blocker*, *closed friendly gate*, *friendly obstacle*, *enemy obstacle*,
+*stationary friendly*, *blocked*), *cell layer*, *listed*, *allied* (the mover's view unless
+stated), *contact*, the *close-enough distance* (its Formulas F2) and the *path retry timer*. From
+S-0208 (Terms): the *scatter centre cell*, the *screen-cover check* and the rounding of a facing to
+the eight step directions (its Formulas F6). From S-0212: the *nearby-cell search* of its claim 25
+and a *fresh search* (its claim 20). From S-0215: *behaviour* and the behaviour names (*sleep*,
+*sticky*, *unload*, *guard*, *move*, *attack*), the *current* and *queued* behaviour (its claim 1),
+the *scatter* and *paralysed* properties of a behaviour, *falling back to rest* (its claim 13), an
+*override* (its claim 10), *target*, *destination* and *approach destinations* (its Terms). From
+S-0211: the land type *tunnel* and the *high-bridge cell* (its claim 15). Whether a drive vehicle
+is *on a bridge deck* (glossary *bridge deck*) is set by claim 5 here.
 
 - **Drive vehicle.** A vehicle whose locomotor is the driving locomotor (wheeled and tracked ground
-  vehicles in stock data). In this spec "vehicle" means a drive vehicle.
+  vehicles in stock data), that is, an object of the vehicle type kind (glossary *vehicle*) that
+  moves with the driving locomotor. In this spec "vehicle" means a drive vehicle, with these
+  exceptions, which the claims themselves state:
+  - claim 14 and its scenario D16 cover the types of every kind (infantry, vehicle and aircraft),
+  - claim 16 and its scenario D18 cover every object of the vehicle type kind, whatever its
+    locomotor,
+  - claim 13 and scenario D12 run 5 also say which objects a speed power-up reaches (mobile
+    ground objects of every kind, aircraft excluded), although only a drive vehicle's progress is
+    this spec's subject,
+  - and claim 1 is a rule of the type's speed field, which holds for the speed field of an
+    infantry type too (S-0208 uses it).
+
+  All other claims cover drive vehicles only. An infantry or aircraft type can also name the
+  driving locomotor (claim 14), but how an object of such a type moves is outside this spec (Open
+  questions).
 - **Step.** A move of one cell in an 8-direction, by S-0204's neighbour step: N decreases cell y,
   E increases cell x, and a diagonal step changes both. S-0212 calls the 8-direction of a step its
   *step direction*. In this spec "the direction of a step" always means its 8-direction.
@@ -59,8 +89,8 @@ rules of S-0210.
 - **Country speed factor** *κ*. The owner's country's speed factor for vehicles, a single-precision
   field (Import mapping).
 - **Veteran speed factor** *ν*. A game-wide double-precision field. It applies to a vehicle that has
-  the *faster* veterancy ability at its current veterancy level. Which ability a veterancy level grants
-  belongs to the veterancy spec.
+  the *faster* veterancy ability at its current veterancy rank. Which rank grants which ability is
+  S-0311's (claims 3 and 4); what the ability does to a vehicle's speed is claim 2 here.
 - **Track.** A fixed list of points that a vehicle drives through to reach a **track target**, which
   is the centre of the cell one step ahead (straight and diagonal tracks) or two steps ahead
   (two-cell curves). Each point is a displacement (*x*, *y*) in leptons from the track target along
@@ -69,8 +99,8 @@ rules of S-0210.
   (Constants, tables T1 and T2). This *track* is unrelated to S-0211's locomotion class *track*,
   which this spec always names with the words "locomotion class".
 - **Move destination.** The point the vehicle's current move order leads to, in leptons. It is used
-  only for braking (claim 10). When the destination cell is a high-bridge cell, its height is the
-  deck's height.
+  for braking (claim 10) and for giving up a move (claim 15). When the destination cell is a
+  high-bridge cell, its height is the deck's height.
 - **Slowdown distance** *D*ₛ, **acceleration factor** *a*, **deceleration factor** *η* and the
   **acceleration flag.** Fields of the vehicle's type (Import mapping), in leptons (*D*ₛ) and as plain
   numbers (*a*, *η*).
@@ -78,11 +108,29 @@ rules of S-0210.
   (claims 8 and 10).
 - **Moving tick.** A tick in which the vehicle is on a track, or begins one, and is not prevented
   from moving (claims 6 and 12).
-- **Sinking.** A state of a vehicle: it is going down in water. This spec only uses the state
-  (claim 10, case 3). Which events set it belongs to no written spec yet (Open questions).
-- **Following car.** A vehicle linked to another vehicle, its *leader*, as a car of the leader's
-  *train*. This spec uses only the speed-fraction copy of claim 10. How the link is made and how a
-  car is steered belong to no written spec yet (Open questions).
+- **Sinking.** A state of a killed vehicle: it is going down in water and stays in play (S-0312,
+  Terms). S-0312 (claim 10) gives the event that sets it at a killing hit; other events that set it
+  are in the Open questions. This spec only uses the state (claim 10, case 3).
+- **Locomotor field, class identifier.** The type field that names a type's locomotor (Import
+  mapping). Its value is a *class identifier*: 32 hexadecimal digits in five groups of 8, 4, 4, 4
+  and 12 digits, joined by hyphens and enclosed in braces, with no spaces. Table T3 lists the eleven
+  class identifiers the original knows.
+- **Step check, first check, repeated check.** On each tick on which a vehicle is not on a track,
+  has a current step and its body faces that step's 8-direction (claim 6), the entry outcome
+  (S-0209 claim 5) of the cell its current step enters decides whether it begins a track on that
+  tick (claim 15). That is its *step check*. The step check of such a tick is a *first check*. When a first check makes the
+  vehicle search a new path at once (claim 15) and that search finds one, the vehicle checks the
+  first step of the new path on the same tick. That check is the *repeated check*. The outcome a
+  step check uses is the entry outcome with the substitutions of S-0209 claim 5 (part 5f).
+- **Crate, speed power-up.** A *crate* is an overlay (glossary) that gives a power-up when it is
+  collected. The *speed power-up* is the power-up that changes speed bonus factors (claim 13). The
+  crate specs own everything else about both.
+- **Capture-the-flag game.** A game started with the capture-the-flag game option on. Whether such
+  a game places flags that a vehicle can carry is an Open question.
+- **Giving up the move.** A vehicle that gives up its move gets no track on that tick. When it has
+  approach destinations, it stops and falls back to rest (S-0215 claim 13, which makes the first
+  approach destination its destination). Otherwise its destination is removed, and what its
+  behaviour then does belongs to S-0215.
 
 ## Behaviour
 
@@ -129,16 +177,21 @@ rules of S-0210.
    to the track target. The correction is negative when *m* > 11. The leftover budget is kept.
    Whether the next track begins in the same tick, and how many tracks one tick can finish, is
    claim 12. The budget is set to 0 in every tick in which the vehicle turns in place (claim 6),
-   and in every other tick in which it has a move to make but neither drives a track nor begins one. A vehicle that comes to rest keeps
-   whatever leftover it had, and that leftover is added to its first tick of progress if its next
+   and in every other tick in which it has a move to make and is due to begin a track but does
+   not, because it waits for a gate or its step check refuses (claim 15), also when it finished a track earlier in that
+   tick. A tick that ends without a track only because claim 12 ends it there keeps the budget. A
+   vehicle that comes to rest keeps whatever leftover it had, and that leftover is added to its first tick of progress if its next
    move begins without a turn in place.
 
    So a track of *n* points whose last point is *m* leptons from its target costs exactly
    7 (*n* + 1) − trunc(7 (1 − *m*/11)) progress units. That is **163** for a straight step
    (curve A of T1) and **227** for a diagonal step (curve B). Over a long straight run at a
    steady *s* well below 163, a vehicle covers one cell per 163/*s* ticks on average. A diagonal run
-   takes 227/*s* ticks per cell. Faster vehicles are limited by claim 12 to one track per tick.
-   - Backing: `measurable` (scenario D1)
+   takes 227/*s* ticks per cell. A vehicle whose *s* is at or above about one track's cost settles
+   into finishing exactly one track per tick (claim 12).
+   - Backing: `measurable` (scenario D1 for the costs; scenario D8, parts b to e, for the leftover
+     kept at rest and for the budget emptied by a turn in place and by a wait, part e for a wait
+     on a tick in which the vehicle has just finished a track)
    - Confidence: high for the costs; low for the leftover kept at rest (the ways of arriving were
      read but not exercised)
 
@@ -164,12 +217,44 @@ rules of S-0210.
    - Confidence: high
 
 5. **Height and facing on a track.** At each point the vehicle's ground position becomes the track
-   target plus the point's displacement. Its height follows the terrain surface (surface height *H*
-   of S-0106, claim 2). Its body facing becomes 256 *f*. Between points
-   (claim 4) the facing does not change.
-   - Backing: `measurable` (scenario D7 for the facing at the end of a curve)
-   - Confidence: high for the ground position and the facing; medium that interpolation leaves the
-     facing unchanged
+   target plus the point's displacement, and its body facing becomes 256 *f*. While it drives, its
+   world height is set whenever it passes a point or reaches the track target (claim 3), and at no
+   other time: it becomes the surface height *H* (S-0106, claim 2) at its new ground position, plus
+   416 leptons (4 height levels, the deck height of the glossary's *bridge deck*) when the vehicle
+   is on a bridge deck at that moment. *H* is the terrain's surface, never the deck's. Between points (claim 4), the
+   facing and the height do not change, also when claim 4 places the vehicle on the next point's
+   ground position without passing it.
+
+   *Getting onto and off a bridge deck.* Whether a drive vehicle is on a bridge deck changes only
+   when its ground position moves from one cell into another, by a point of its track or by claim
+   4, and the change is in force from that move on, so a point that moves it into a new cell
+   already takes the new state into its height:
+   - it gets onto the deck when the cell it moves into is a high-bridge cell (S-0211 claim 15) whose
+     height level is exactly 4 below that of the cell it leaves, which is the step from land at deck
+     level onto the deck,
+   - it gets off the deck when it moves from a high-bridge cell into a cell that is not one,
+   - in every other move, among them a move between two high-bridge cells and a move into a
+     high-bridge cell from a cell at any other height level (from the ground under the deck), the
+     state is kept.
+
+   S-0212 (claim 10) refuses every step between cells whose height levels differ by 2, 3 or more
+   than 4, so the only drivable step into a high-bridge cell from a higher cell is a drop of exactly
+   4 levels. So a vehicle that drives along a deck has world height *H* + 416 at every point on the
+   deck, and a vehicle that drives under a deck stays off it. This state is what claim 9 (a) means by
+   standing on a bridge deck. How a vehicle that is placed by the map, or that leaves a building,
+   starts on a deck belongs to other specs (Open questions).
+   - Backing: `measurable` (scenario D7 for the facing at the end of a curve and for the facing
+     between points; scenario D5 runs 1 to 3 for the height on slopes, run 4 for the height on a
+     deck and getting onto and off it, run 6 for a vehicle that drives under a deck from ground of
+     the same height level). `unmeasured` for these parts, each for the reason given:
+     - that the drop must be exactly 4 levels, not 4 or more: S-0212 claim 10 blocks every step with
+       a larger difference, so no drivable step tells the two apart.
+     - a move into a high-bridge cell from a cell 1 level higher or lower (state kept): it needs a
+       deck over ground that a vehicle reaches by a slope step, and no test map is known that
+       S-0211 claim 15 accepts as a deck over such ground.
+   - Confidence: high for the ground position, the facing and the height set at each point; medium
+     for getting onto and off a deck (read, not exercised) and for the facing and height left
+     unchanged between points
 
 ### Starting a step
 
@@ -177,8 +262,10 @@ rules of S-0210.
    step's 8-direction exactly (8192 × *d* for 8-direction *d*). Otherwise it turns in place towards
    that facing, and makes no progress until the facing matches. The turn, its duration and the tick
    in which the track begins are S-0206's (claim 12). Its budget
-   is held at 0 while it turns (claim 3). Its speed fraction is kept, so a vehicle that stops to turn resumes at the fraction it had.
-   - Backing: `measurable` (scenarios D7 and D9)
+   is held at 0 while it turns (claim 3). Its speed fraction is kept, so a vehicle that stops to
+   turn resumes at the fraction it had.
+   - Backing: `measurable` (scenarios D7 and D9; D7 run 3 for the speed fraction kept through the
+     turn)
    - Confidence: high
 
 7. **Choice of track.** At the start of a step, the current step *d* and the next step *e* choose the
@@ -205,36 +292,41 @@ rules of S-0210.
    - the first cell, which the vehicle is free to enter, holds a crushable overlay, or, for a type
      of movement zone *crusher-all*, a wall overlay. A vehicle in the first cell does not count.
 
-   In crush mode the next step is treated as equal to the current one: the straight or diagonal
-   track for *d* is used and one step is consumed. Crush mode is used by the crushing rules of
+   In crush mode the vehicle takes the straight or diagonal track for *d*, whatever the next step
+   is, and uses only the current step, just as when the next step equals the current one. Crush mode is used by the crushing rules of
    S-0210, among them the start of the crush-slowdown state (S-0210 claim 9), which claim 10 case 1
    reads.
 
-   If the second cell of a two-cell curve cannot be entered at that moment, because it is occupied or
-   being entered by another object, the vehicle takes the straight or diagonal track into the first
-   cell instead. Other refusals lead to a stop or a new path, which the occupancy and pathfinding specs
-   own.
-   - Backing: `measurable` (scenarios D7, D9 and D10)
+   A two-cell curve is taken only when the step check (claim 15) of its first cell gives *clear*
+   and the second cell gives *clear* too. When the second cell gives *moving blocker*, because it is
+   occupied by a moving unit or being entered by another vehicle, the vehicle takes the straight or
+   diagonal track into the first cell instead. The other outcomes of the second cell are claim 15's
+   (table T5).
+   - Backing: `measurable` (scenarios D7, D9 and D10; D10 runs C to F for the cells that decide
+     crush mode, run F for a vehicle in the first cell; D17 part g for the second cell)
    - Confidence: high for the table; medium for crush mode (which cells are checked was read but not
-     exercised); low for the fallback when the second cell is blocked
+     exercised); low for the fallback when the second cell is a moving blocker
 
 8. **No chaining of curves for ordinary vehicles.** Each two-cell curve has a *chain point* and
    names an *entry point* (table T1). A vehicle of a type with the passive flag set may switch,
    when it reaches the chain point, to the next pair's two-cell curve at that curve's entry point. It
    does so when the step after its curve turns again, that pair has a curve with an entry point,
-   and the vehicle can enter the cell that step leads to. It then skips the centre of its current
+   and the cell that step leads to gives *clear* or *moving blocker* (S-0209 claim 5). It then skips the centre of its current
    target, and the track target moves one cell on in the 8-direction of that step. A vehicle without the
    passive flag never does this: every curve runs to its target's centre. Stock data has no passive
    vehicle types, so in stock play no vehicle chains curves. On the tracks of this spec, the speed
    fraction of a passive vehicle whose acceleration flag is on is changed by none of the rules of
    claim 10 (none of its six cases applies). Such a vehicle keeps the fraction it has: a vehicle
-   that starts at rest with *ρ* = 0 (claim 11) never moves, unless it is a following car of a train
-   whose leader copies a fraction to it (claim 10), or a separate track of a building has given it a
-   fraction (Open questions).
+   that starts at rest with *ρ* = 0 (claim 11) never moves, unless it is a follower car to which a
+   vehicle ahead of it in its car chain copies a fraction (claim 10), or a separate track of a
+   building has given it a fraction (Open questions).
 
    **Quirk `quirks.drive_curve_chaining_passive_only`.** Default (original): only passive vehicles
    chain. Off: every vehicle chains as described.
-   - Backing: `measurable` (scenario D9 for the default)
+   - Backing: `measurable` (scenario D9: the ordinary vehicle for the default, control 1 for the
+     chaining itself and its chain and entry points, control 2 for a passive vehicle whose
+     acceleration flag is on, control 3 for a chain refused because the cell cannot be entered,
+     control 4 for a chain taken into a cell that gives *moving blocker*)
    - Confidence: high that ordinary vehicles never chain; medium for the details of chaining
 
 ### Speed fraction
@@ -242,7 +334,7 @@ rules of S-0210.
 9. **Target fraction at the start of each track.** When a vehicle begins a track (claim 7), its
    target fraction is set from the cell its current step enters. It depends on these parts:
    - (a) Land type *ℓ*. Let *λ* be the height level of the vehicle's current cell, plus 4 if the
-     vehicle stands on a bridge deck. If the entered cell's height level differs from *λ* by less
+     vehicle stands on a bridge deck (claim 5). If the entered cell's height level differs from *λ* by less
      than 2, *ℓ* is that cell's land type. Otherwise *ℓ* is *road*, which covers a vehicle driving
      along a bridge deck.
    - (b) Land factor *g* = min(*M*(*ℓ*, *c*), 1) for the vehicle's locomotion class *c* (S-0211),
@@ -260,9 +352,16 @@ rules of S-0210.
    A two-cell curve takes its target from its first cell only, and the value stays in force until
    the next track begins. The damage factor also applies to the fallback, so a damaged vehicle whose
    multiplier is 0 gets 0.375.
-   - Backing: `measurable` (scenarios D3, D5 and D6; S-0211 scenario L1)
+
+   Because part (c) compares terrain heights, a deck counts as the ground under it: a vehicle that
+   drives from land at deck level onto a high bridge over lower ground gets the downhill factor for
+   that track, and one that drives off the deck onto such land gets the uphill factor, although the
+   deck itself is level. Between deck cells over ground of one height level the factor is 1.
+   - Backing: `measurable` (scenarios D3, D5 and D6; S-0211 scenario L1; D5 run 3 for the zero
+     fallback of part (d); D5 run 4 for the road on a bridge deck of part (a) and for the slope
+     factors at the ends of a deck; D5 run 6 for the land type under a deck)
    - Confidence: high for parts (b), (d) and (e); medium for parts (a) and (c) (the reference
-     heights were read but not exercised)
+     heights were read but not exercised), and for the slope factors at the ends of a deck
 
 10. **Updating the speed fraction.** The speed fraction is updated once in each moving tick, and
     that tick's progress *s* (claim 2) is earned at the updated fraction. At some track boundaries
@@ -290,34 +389,38 @@ rules of S-0210.
       it drives into a new cell on a track in crush mode (claim 7) while a vehicle is in that cell,
       the driving vehicle itself counting, so on the ground a single vehicle in the path sets it
       from the cell before; and the state is held across tracks, stops and new orders until the
-      vehicle next crushes an overlay. Case 1 is tested before braking, so the state also overrides
-      the braking floor. The lowered target replaces the target fraction until the next track
+      vehicle next crushes an overlay. Case 1 takes precedence over case 2 (braking), so the state
+      also overrides the braking floor. The lowered target replaces the target fraction until the next track
       begins (claim 9), and every update while the state lasts lowers the new track's target
       again, so the vehicle runs at min(*ρ*ₜ, 0.2) for as long as the state lasts. It drops to that
       value at once when the state begins, and accelerates from it by case 4 when the state ends.
 
       Here *F*₀.₃ = 0.300000011920928955078125 and *F*₀.₁ = 0.100000001490116119384765625
-      (single-precision 0.3 and 0.1 widened to double), and 0.0015ₛ = 0.001500000013038516044616699
-      (single-precision 0.0015). The crushing cap 0.2 is the double nearest to 0.2.
+      (single-precision 0.3 and 0.1 widened to double), and 0.0015ₛ = 0.00150000001303851604461669921875
+      (single-precision 0.0015, exactly 6442451 / 2³²). The crushing cap 0.2 is the double nearest to 0.2.
 
       **Acceleration and deceleration are not symmetric.** Acceleration adds the flat factor *a* per
       tick. Deceleration subtracts *V* × *η*, the type speed times the factor, so faster types brake
       harder per tick for the same field value. The braking floor *F*₀.₃ also *raises* a slower vehicle to
-      *F*₀.₃ once it is within *D*ₛ of its destination (quirk below).
+      *F*₀.₃ once it is within *D*ₛ of its destination (`quirks.drive_brake_floor_raises`, Edge
+      cases and quirks).
     - **Acceleration flag on, vehicle passive:** none of the six cases applies, and *ρ* is not
       changed by this claim. It keeps whatever it had (claim 8).
-    - **Trains.** A vehicle that has following cars (Terms), whose acceleration flag is on and
-      which is not passive, copies its own *ρ* to every car of its train each time this claim updates
-      its own fraction (once or twice per moving tick, claim 12), also when the update leaves *ρ*
-      unchanged (row 6). A leader whose acceleration flag is off, or which is passive, does not
-      copy.
-    - Backing: `measurable` (scenarios D3, D4, D10, D13 and D14), except case 3, which is
-      `unmeasured`: a sinking vehicle is being destroyed and is not normally given steps to drive,
-      so no practical setup puts one on a track while it sinks
+    - **Car chains.** A vehicle that has a follower car (glossary), whose acceleration flag is on
+      and which is not passive, copies its own *ρ* to every follower car behind it in its car chain
+      (its follower car, that car's follower car, and so on) each time this claim updates its own
+      fraction (once or twice per moving tick, claim 12), also when the update leaves *ρ* unchanged
+      (row 6). A vehicle whose acceleration flag is off, or which is passive, does not copy. The map
+      makes the links (S-0009 claim 41), and S-0212 (claim 26) sends the cars after their leader.
+    - Backing: `measurable` (scenarios D3, D4, D10, D13 and D14; D5 run 5 for case 5; D9 control 2
+      for the passive rule; D14 control for a leader whose acceleration flag is off), except case
+      3, which is `unmeasured`: a sinking vehicle has been killed (S-0312 claim 10), and no setup is
+      known that keeps one driving a track while it sinks, so its fraction never reaches a
+      vehicle's progress in a run
     - Confidence: high for the acceleration-off rule, for cases 2, 4 and 5, including the raise
       by the braking floor, for the table square root in *d*ₘ and for the passive rule (no case
-      applies, and a passive leader does not copy); medium for case 1 (the speed rule; when the state
-      begins and ends is S-0210's confidence), for case 3 and for trains
+      applies, and a passive vehicle does not copy); medium for case 1 (the speed rule; when the
+      state begins and ends is S-0210's confidence), for case 3 and for car chains
 
     These rules hold on the tracks of this spec (T1 and T2). The separate tracks that buildings use
     are outside it (Open questions).
@@ -328,9 +431,10 @@ rules of S-0210.
     comes to rest with *ρ* = 0. A vehicle at rest starts every move from *ρ* = 0, accelerating if its
     acceleration flag is on (unless an earlier case of claim 10 applies: a vehicle still in the
     crush-slowdown state, for example, starts at min(*ρ*ₜ, 0.2) at once).
-    - Backing: `measurable` (scenario D11)
-    - Confidence: medium (the stopping rule was read; which orders lead to it belongs to the order
-      specs)
+    - Backing: `measurable` (scenario D11: part a for a move stopped on a track, part b for *ρ* = 0
+      at rest and the next move from 0)
+    - Confidence: medium (the stopping rule was read; which orders lead to it belongs to S-0213
+      and S-0215)
 
 12. **Ticks and track boundaries.** What a moving tick can do depends on whether the vehicle is on
     a track when the tick begins. A tick begins without a track when the vehicle starts moving from
@@ -340,7 +444,7 @@ rules of S-0210.
     | Tick begins | Updates of *ρ* (claim 10) | Progress earned | When a track ends in the tick | Tracks finished, at most |
     |---|---|---|---|---|
     | without a track | one, towards the target fraction (claim 9) of the track the vehicle begins in this tick (claim 7) | *s* once, at the updated fraction | the tick ends there, with no track, and the leftover is kept | one |
-    | on a track | one; and if the track ends and the move goes on, a second, towards the new track's target | *s* once, at the fraction after the first update; nothing more after the second | if the move goes on, the next track begins in the same tick and the leftover is spent on it; if that track ends too, the tick ends there, with no track | two |
+    | on a track | one; and if the track ends and the next track begins in the same tick, a second, towards the new track's target | *s* once, at the fraction after the first update; nothing more after the second | if the move goes on and the vehicle faces its next step and its step check lets it begin, the next track begins in the same tick and the leftover is spent on it; if that track ends too, the tick ends there, with no track. A vehicle that must first turn in place, waits for a gate or is refused by its step check (claim 15) gets no second update and no new track in that tick, and its budget is emptied (claim 3) | two |
 
     A vehicle at rest has *ρ* = 0, so with the acceleration flag on its first tick from rest gives it
     *ρ* = clamp(min(*a*, *ρ*ₜ), 0, 1) and it earns trunc(*s*₂ × *ρ*), unless an earlier row of claim
@@ -349,19 +453,38 @@ rules of S-0210.
     *D*ₛ gets *F*₀.₁.
 
     Consequences: a vehicle that is accelerating (row 4 of claim 10's table in both updates) gains
-    2*a* in a tick in which it reaches a track target and goes on. A vehicle whose *s* is at or above
+    2*a* in a tick in which it reaches a track target and begins its next track. A vehicle whose *s* is at or above
     about one track's cost settles into finishing exactly one track per tick: each tick then finishes its track and the next one begins without a
     track. Its extra budget piles up unused, until it is lost at the next tick in which the vehicle
-    turns in place, or in which it has a move but neither drives a track nor begins one, or kept when
-    it comes to rest (claim 3). On straight and diagonal steps
+    turns in place, waits for a gate or is refused a track by its step check, or kept when it comes to rest (claim
+    3). On straight and diagonal steps
     this caps a vehicle at one cell per tick.
-    - Backing: `measurable` (scenarios D1, D3 and D13)
+    - Backing: `measurable` (scenarios D1, D3 and D13; D8 part e for the budget emptied by a wait
+      after a track ended in the tick)
     - Confidence: medium (the order of the two updates and the cap were inferred from reading, not
       observed; the cap was simulated)
 
-    **Quirk `quirks.drive_track_end_cap`.** Default (original): as above. Off: after every track end
-    within a tick, the next track begins and the leftover is spent on it, with no limit on the number
-    of tracks finished per tick. The fraction updates stay as in the default.
+    **Quirk `quirks.drive_track_end_cap`.** Default (original): as above. Off (a design behaviour,
+    since the original has no such mode): the two rows of the table become one rule, for a tick that
+    begins without a track and for one that begins on a track alike.
+    - The speed fraction is updated once at the start of the tick's movement, towards the target
+      fraction of the track the vehicle is on, or of the track it begins in this tick when it begins
+      the tick without one.
+    - It earns *s* once, at the fraction after that first update.
+    - Each time a track ends within the tick, the move goes on, the vehicle faces its next step and
+      its step check lets it begin, the next track begins in the same tick, the fraction is updated
+      once more, towards the target fraction of that new track, and the leftover is spent on it.
+      There is no limit on the number of tracks finished in a tick, so a tick in which *k* tracks
+      begin after a track end gets 1 + *k* updates.
+    - When, at a track end, the vehicle must first turn in place, waits for a gate or is refused by
+      its step check, it gets no further update and no new track in that tick, and its budget is
+      emptied (claim 3), as in the default. Otherwise the tick's movement ends only when the move
+      ends at a track target, or when the budget left on a track buys no further point (claim 3).
+    - A leader whose fraction is updated copies it to its follower cars at every one of these
+      updates (claim 10, car chains).
+
+    With at most one track end in a tick that began on a track, and none in a tick that began
+    without one, the off rule and the default agree.
 
 13. **Speed power-up.** When a speed power-up takes effect on a vehicle whose speed bonus factor is
     exactly 1.0, the factor is multiplied by the power-up's value. Otherwise it is unchanged, so a
@@ -369,9 +492,246 @@ rules of S-0210.
     acts on the mobile ground objects (aircraft excluded) within an area around the power-up's cell.
     The crate specs own which objects that area covers, the power-up's value and when it is
     collected.
-    - Backing: `measurable` (scenario D12)
+    - Backing: `measurable` (scenario D12; run 5 for the area and for the exclusion of aircraft)
     - Confidence: high for the exactly-1.0 rule; medium that it acts on an area (read, not traced in
       detail)
+
+### Which locomotor a type has
+
+14. **The locomotor field.** Every infantry, vehicle and aircraft type has exactly one locomotor,
+    chosen by its locomotor field (Terms, Import mapping). A value that is one of the class
+    identifiers of table T3 selects the locomotor that T3 names. Letters among the hexadecimal digits
+    may be in either case. The value is read whole, after leading and trailing blanks are removed,
+    and a comma in it is not a list separator.
+    - **Absent.** The type keeps the locomotor in force from an earlier rules layer. Before any
+      layer gives one, a type has the *teleporting* locomotor, whatever its kind: an infantry,
+      vehicle or aircraft type without the field moves by teleporting, not by walking, driving or
+      flying.
+    - **Not a class identifier.** A value that does not have the form of a class identifier (an
+      empty value, a name, digits without braces, a wrong number of digits) is ignored, as if the
+      key were absent: the locomotor in force is kept. The original gives no warning. Our importer
+      reproduces this and gives an importer warning.
+    - **An unknown class identifier.** A value of the right form that is not in T3 replaces the
+      locomotor in force. The original then stops with a program error as soon as an object of that
+      type is created (placed by the map, produced or otherwise made). **Our engine** treats such a
+      value as not given (the locomotor in force is kept) and gives an importer warning. This is a
+      departure (glossary *departure*, bad data), with no switch.
+    - Building types read the field too, but a building never moves with a locomotor, so the field
+      has no effect on buildings. Rules that change the locomotor an object moves with for a while
+      (for example a weapon that seizes a vehicle) belong to the combat specs.
+    - The locomotor is independent of the type's kind and of its locomotion class (S-0211) and
+      movement zone (S-0212): an infantry type may drive, and a vehicle type may walk. How an
+      infantry or aircraft object with the driving locomotor moves is outside this spec (Open
+      questions); this claim only says which locomotor it has.
+    - Backing: `measurable` (scenario D16), except a value with further characters after the closing
+      brace, a comma among them, which is an Open question
+    - Confidence: high for T3, for the teleporting default of every kind and for an ignored value,
+      medium for the program error on an unknown identifier (read, not observed); low for a value
+      with further characters after the closing brace (Open questions)
+
+### A refused step (driving locomotor)
+
+15. **What a driving vehicle does at each entry outcome.** The step check (Terms) decides whether
+    the vehicle begins its track, and its outcome has the result of table T4. A vehicle whose next
+    cell holds a closed gate whose owner is allied with the vehicle's house (the gate owner's view,
+    as in S-0209 row VP9) tells the gate to open, and waits without a track, and without turning, on
+    every tick until the gate is open, whether or not its body already faces the step. So the gate
+    starts to open on the vehicle's first tick in front of it, and a vehicle that arrives facing
+    another way starts turning towards the step (claim 6) only once the gate is open. A vehicle that
+    waits keeps its stored path unless the table says otherwise, gets no track on that tick and
+    makes a first check again on the next tick on which it faces its step. So while an obstacle stays, the reactions of a first
+    check repeat on every such tick.
+
+    **T4. The step check of the first cell.**
+
+    | Outcome | First check | Repeated check |
+    |---|---|---|
+    | clear | it begins the track (claim 7; for a two-cell curve the second cell is checked as in T5) | as the first check |
+    | closed friendly gate | it tells the gate to open and waits | as the first check |
+    | moving blocker | S-0212 claim 22 | S-0212 claim 22 |
+    | friendly obstacle, enemy obstacle | it discards its stored path and makes a fresh search at once, whatever its path retry timer shows (S-0212 owns the search and the timer). When the search finds a path, the repeated check follows on the same tick | it waits in every case. It takes as its target, and attacks by an override of its behaviour (S-0215 claim 10): the first object listed in the cell (S-0209 claim 13) when its house is not allied with that object (a terrain object is never allied), or, when no object is listed and the cell holds a wall, the wall, whatever its owner. When its house is allied with the first listed object, or when no object is listed and the cell holds no wall, it attacks nothing |
+    | stationary friendly | as for an obstacle: it discards its stored path, makes a fresh search at once, and makes the repeated check on the same tick | when the give-up test (F7) holds, it gives up the move (Terms). Otherwise it sends a scatter request with no threat point, forced and move-anywhere, to every object listed in the cell layer it drives on (below), and waits. Which of them receive it is S-0209 claim 11; what a vehicle among them does is claim 16, what an infantry unit does is S-0208 claim 11 |
+    | cloaked blocker | the cloaked objects in the cell become visible to its house, as in S-0209 claim 9 (the visibility specs own for how long). It discards its stored path. The fresh search that follows (S-0212 claims 20 and 21) is made on the same tick only when its path retry timer has run out, and then the repeated check follows | the cloaked objects become visible to its house again, and it gives up the move |
+    | blocked | S-0212 claim 22 (Open questions) | it gives up the move |
+
+    *The cell layer it drives on.* A request goes to the deck layer of the cell when the cell is a
+    high-bridge cell and the vehicle's height level, trunc(*z* / 104) for its world height *z* in
+    leptons as claim 5 sets it (*H* + 416 on a deck), with the division rounded toward zero (so for
+    a negative *z* not a floor), differs
+    from the cell's height level by 3 or more; otherwise it goes to the ground layer.
+
+    *The first cell of a new path.* Whenever a fresh search (S-0212 claim 20) finds a path, the cell
+    that the first step of the new path enters has these effects on the same tick, whatever the
+    vehicle's facing, so before any turn towards the new step. Each row that holds applies.
+
+    | The cell the first step of the new path enters | Effect |
+    |---|---|
+    | holds a closed gate whose owner is allied with the vehicle's house (gate owner's view) | the gate is told to open |
+    | gives *stationary friendly*, the vehicle is not of a train type, the object nearest the cell's centre belongs to a house allied with the vehicle's house, the give-up test (F7) holds and the vehicle is in contact with nothing (S-0209 claim 8 uses the same contact condition) | the vehicle gives up the move |
+    | gives *stationary friendly*, the vehicle is not of a train type, the object nearest the cell's centre belongs to a house allied with the vehicle's house, and the give-up test (F7) fails or the vehicle is in contact with something | the vehicle sends the same scatter request as in T4 |
+    | gives *stationary friendly*, and the vehicle is of a train type, or no object is found, or the nearest object's house is not allied with the vehicle's house | nothing |
+
+    The nearest object is looked for in the cell's deck layer when the vehicle's world height *z*
+    is more than 208 leptons (two height levels) above the surface height *H* (S-0106, claim 2) at
+    the centre of that cell, that is when *z* > *H* + 208 in exact integer leptons, and in its ground
+    layer otherwise. *H* is the terrain's surface, the same quantity as in claim 9 (c), not a
+    bridge deck's height.
+
+    The step check then follows on that tick when the vehicle faces the step: a first check after a
+    fresh search made because it had no stored path, the repeated check after a search made at once
+    by T4. So on a tick of a repeated check
+    against stationary friends the vehicle can send the request twice, once here and once by T4,
+    when the cell still gives *stationary friendly* at the repeated check.
+
+    *The second cell of a two-cell curve* (claim 7) is checked only after its first cell gave
+    *clear*, and only for a curve. Its outcome has the result of table T5.
+
+    **T5. The step check of a curve's second cell.**
+
+    | Outcome of the second cell | First check | Repeated check |
+    |---|---|---|
+    | clear | the curve begins | as the first check |
+    | moving blocker | the straight or diagonal track into the first cell begins instead (claim 7); the stored path is kept | as the first check |
+    | closed friendly gate | the gate is told to open; the vehicle discards its stored path and stops at once with *ρ* = 0 | as the first check |
+    | friendly obstacle, enemy obstacle | it discards its stored path; a fresh search follows once its path retry timer has run out (on the same tick when it already has) | as the first check |
+    | stationary friendly | as in T4: it discards its stored path, searches at once and makes the repeated check | when the give-up test of F7 holds (without the contact condition), it gives up the move (Terms); when it fails, it sends the scatter request of T4 to the second cell. In both cases it also discards its stored path and stops at once with *ρ* = 0, except that a vehicle that gives up and falls back to rest (it has approach destinations) may already have stopped by falling back |
+    | cloaked blocker | as in T4 | as in T4 |
+    | blocked | it discards its stored path and makes a fresh search at once | it gives up the move |
+
+    A train type sees every outcome other than *blocked* as *clear* at a step check (S-0209 part
+    5f), so for a train only the *clear* and *blocked* rows apply. Unlike a walker (S-0209 claim 8),
+    a vehicle's give-up test at a step check does not ask about contact; only the look at the first
+    cell of a new path does.
+    - Backing: `measurable` (scenario D17: part a for the request, part b for giving up, part c for
+      a friend that refuses, part d for an enemy obstacle, part d2 for the wall target, part d3
+      for *blocked* (it tells S-0212 claim 22 from the reading in the Open questions, and, under
+      that reading, shows *blocked* at a repeated check too), part e for the gate before turning,
+      part f for a cloaked blocker, part g for the second cell (its runs 1 to 4 for the T5 rows
+      *stationary friendly*, *moving blocker*, *enemy obstacle* and *cloaked blocker*, run 5 for
+      *closed friendly gate*, run 6 for *blocked*), part h for the cell layer of the request).
+      `unmeasured` for these parts, each for the reason given:
+      - *blocked* at a repeated check of the first cell, if S-0212 claim 22 holds for the first
+        check (Open questions): no repeated check then follows a first check that gave *blocked*,
+        and after any other first check the repeated check looks at the same cell on the same tick,
+        so it gives *blocked* only if the cell's contents change within the tick, which no known
+        setup arranges.
+      - an obstacle whose first listed object is allied with the vehicle's house: that needs an
+        allied unit that counts as moving (S-0212 claim 27) to be listed first in a cell that also
+        gives an obstacle, on the tick of the repeated check, and no setup is known that times this.
+      - an obstacle in a cell that lists no object and holds no wall (no attack): S-0209 gives such
+        a cell an obstacle only through its row VR10, while an infantry unit that the
+        vehicle is not allied with has chosen its walking target in the cell but is not yet listed
+        there. That state lasts only while the infantry unit walks in, and no setup is known that
+        times it to the tick of a repeated check.
+      - the layer in which the look at the first cell of a new path seeks the nearest object (deck
+        or ground, by *z* > *H* + 208): the look's effects, giving up and the request, are also
+        made by the repeated check that follows on the same tick, with the same give-up test and
+        with the request sent to the layer of T4's own rule. Without a contact, the layer of the
+        look shows only when the look gives up or sends the request before a turn that the vehicle
+        would otherwise make first, or through the second request of the double request listed
+        below. The first case needs a fresh search on a bridge deck whose new first step turns
+        the vehicle away from its facing, towards a cell holding a stationary friend, and no setup is known that is sure to give
+        that path.
+      - the contact condition of the look at the first cell of a new path: no situation is known
+        that gives a driving vehicle a contact while it stands in front of a stationary friend
+        within the close-enough distance (scenario D17, switch note).
+      - the double request: a second request shows only through an infantry receiver that accepts
+        the first one, takes its draw (S-0208 claim 13) and finds no qualifying neighbour, so that
+        it stays where it is and the cell still gives *stationary friendly*. Every other receiver
+        that accepts gets a destination and so counts as moving at the repeated check (S-0212
+        claim 27), a vehicle whose search finds no cell takes no draw (claim 16), and a receiver
+        that refuses takes none either. That needs every neighbour of the cell to be closed to the
+        infantry unit while the vehicle still has a path through the cell, and no setup is known
+        that is sure to give both
+    - Confidence: medium for T4 and for the gate opened before turning; low for the look at the
+      first cell of a new path, for the double request and for T5
+
+### Scatter requests (every vehicle)
+
+16. **When a vehicle accepts a scatter request, and where it goes.** This claim holds for every
+    vehicle, whatever its locomotor. A vehicle refuses a scatter request, and does not move, when
+    any of these holds:
+    - (a) its current behaviour, or its queued behaviour when it has no current one, is *sleep*,
+      *sticky* or *unload*, or its type is a train type,
+    - (b) its locomotor is the teleporting locomotor,
+    - (c) the request is not forced and its current behaviour lacks the scatter property (S-0215
+      claim 19 owns this gate),
+    - (d) its body is turning (S-0206),
+    - (e) it has a destination and the request is not move-anywhere,
+    - (f) it is deployed, deploying or undeploying (a vehicle type that deploys in place),
+    - (g) its locomotor is switched off (the specs of the effects that switch a locomotor off own
+      when that happens).
+
+    A request **without a threat point** that is not refused takes no random draw. The vehicle's
+    destination becomes the cell that the nearby-cell search of S-0212 (claim 25) gives around its
+    scatter centre cell (S-0208 Terms, with the vehicle's move destination as its locomotor
+    destination), in the same use as an infantry scatter (S-0212 table T5, row *Scatter*), with the
+    vehicle's own locomotion class. Its behaviours are not changed: no *move* is queued, so it drives
+    there in the behaviour it has. When the search gives no cell, it does not move. A vehicle that
+    had a destination (it accepted a move-anywhere request) loses that destination to the scatter
+    cell.
+
+    A request **with a threat point** is refused in these further cases: (h) its current behaviour
+    has the paralysed property (S-0215 claim 17 owns this refusal), (i) it is unloading passengers,
+    (j) it has a destination and its turret is turning (a move-anywhere request). When (a) to (j)
+    pass and the vehicle has a target and the request is not forced, it takes one ranged draw from
+    the scenario random stream over 1 to 4 and refuses unless the draw gives 1. When it accepts, its
+    first-choice direction is *d* = (*d*₀ + *j* − 1) mod 8, the residue from 0 to 7, in exact integer
+    arithmetic, where *d*₀ is the facing from the threat point to the vehicle's own position rounded
+    to the nearest of the eight step directions (S-0208 Formulas F6) and *j* is one ranged draw from
+    the scenario random stream over 0 to 2, taken after the draw over 1 to 4 when both are taken.
+    The candidates are the eight neighbours of its scatter centre cell in the step directions *d*,
+    *d* + 1, …, *d* + 7 (mod 8), in that order of preference. A candidate qualifies when it lies
+    inside the usable area and the vehicle's entry outcome for it is *clear* (S-0209 claim 5). Its
+    destination is the first qualifying candidate that passes the screen-cover check (S-0208 Terms)
+    and is not a high-bridge cell, or else the first qualifying candidate. It queues *move* and takes
+    that destination. When no candidate qualifies, it does not move.
+
+    Consequences:
+    - The scatter order (S-0213 claim 9: forced, no threat point, not move-anywhere) moves an idle
+      vehicle that stands still, is not turning and is not in *sleep*, *sticky* or *unload*, to the
+      cell the nearby-cell search gives. On open flat ground with no other unit within 2 cells that
+      is the neighbour at position (*N* mod 8) of the search's collection order, *N* being the tick
+      number of the request (S-0212 claim 25). A vehicle that has a destination refuses the order.
+    - The request of a blocked vehicle (claim 15) and the crowding requests of S-0209 claim 12 are
+      move-anywhere, so a vehicle accepts them even when it has a destination.
+    - The scatter off a building of S-0215 claim 28 and the scatter from damage of S-0215 claim 19
+      are forced and have no threat point, so they follow the first case above.
+    - Backing: `measurable` (scenario D18: part a for the search without a draw and the behaviours
+      left unchanged, part b for case e, part c for case a, part d for case b, part e for the
+      threat-point case and its direction draw, part f for case d, part g for case f; scenario D17
+      part a for a move-anywhere request, part c for the refusal in *sticky*; D18 part h for case
+      h). `unmeasured` for these parts, each for the reason given:
+      - case c: every sender of a request to a vehicle whose options are known sends a forced one
+        (S-0209 claim 12, S-0215 claims 19 and 28, claim 15 here), so no setup is known that sends
+        a vehicle a request that is not forced.
+      - case g: which effects switch a locomotor off belongs to specs not yet written, so no setup
+        can yet be defined.
+      - cases i and j and the draw over 1 to 4: the only identified sender of a request with a
+        threat point is the bunker rule of S-0215 claim 17, which sends a forced request that is
+        not move-anywhere. So the draw over 1 to 4 (which needs a request that is not forced) and
+        case j (which needs a move-anywhere request) never happen in a known setup, and no setup is
+        known that times that request to a vehicle that is unloading passengers at that moment
+    - Confidence: medium for cases a to f, h and i, for the search without a draw and for the
+      behaviours left unchanged, and for the threat-point case and its draws (read; the bunker rule
+      of S-0215 claim 17 is the only identified sender). Low for cases g and j
+
+### Engine defaults of the speed-fraction fields
+
+17. **Precision of the engine defaults of the acceleration and deceleration factors.** A vehicle
+    type that no rules layer gives an acceleration factor has *a* equal to the double-precision
+    number nearest to 0.03, and one that no layer gives a deceleration factor has *η* equal to the
+    double-precision number nearest to 0.002 (Constants give both exactly). Neither is a
+    single-precision value widened to double: the engine holds both defaults in double precision
+    from the start. A factor that a layer does give is parsed as the Import mapping says, so a type
+    whose rules write 0.03 can end up with a different *a* from a type that leaves the key out
+    (S-0003, claim 6, gives the parsed value). The engine default of the slowdown distance *D*ₛ is
+    the integer 500 leptons.
+    - Backing: `measurable` (scenario D19: the tick counts for the values 0.03, 0.002 and 500, and
+      the speed fraction read by the recorder for the precision). The precision shows only in the
+      speed fraction itself: the nearest double and the widened single value of each factor differ
+      by less than 10⁻⁹, which changes no tick count in D19
+    - Confidence: high
 
 ## Formulas
 
@@ -379,7 +739,7 @@ Every floating-point operation in this spec, in the claims (the speed-fraction u
 included) as well as in the formulas below, runs in the original's program-wide *round-toward-zero
 mode* (glossary): results are rounded to double precision, toward zero. S-0205 (number domains) owns that
 mode and its switch `quirks.chop_rounding`. Every conversion to an integer truncates toward zero
-whatever the mode.
+whatever the mode. Throughout, clamp(*x*, *p*, *q*) means min(max(*x*, *p*), *q*).
 
 **F1 Type speed** (claim 1). *V* = min(⌊256 × *v*′ / 100⌋, 255), with *v*′ = min(max(*v*, 0), 100),
 for every *v* except −1 (*v* = −1 leaves *V* unchanged). Integer arithmetic, and the division
@@ -409,9 +769,9 @@ scenario D8 can tell the two apart.) Unit: none (*t* is a dimensionless factor).
 **F5 Distance to the destination** (claim 10). *n* = Δ*x*² + Δ*y*² + Δ*z*², the squared
 difference between the vehicle's position and its move destination, an exact integer (the original
 sums the squares in double precision, which is exact here). *d*ₘ = ⌊*r*(*n*)⌋, with *r* the table
-square root of S-0204, Formulas F1: *n* is converted to single precision, its 14 leading significant
-binary digits select the table entry, and the result is truncated to an integer. F1 also states how
-the conversion depends on the rounding mode of S-0205. Unit: leptons. The comparison *d*ₘ < *D*ₛ is
+square root of S-0204, Formulas F1, which owns how *r*(*n*) follows from *n* (with *n* taken in
+single precision) and how that depends on the rounding mode of S-0205. The result is truncated to
+an integer. Unit: leptons. The comparison *d*ₘ < *D*ₛ is
 between integers. S-0204's switch `quirks.table_root_distance` covers this distance too: off, *d*ₘ =
 ⌊√*n*⌋, the exact integer square root.
 
@@ -419,6 +779,15 @@ between integers. S-0204's switch `quirks.table_root_distance` covers this dista
 *z* = 0.5 if *g* × *u* = 0, with *g* = min(*M*, 1), *u* the slope factor (1 when the heights are
 equal) and *h* = 0.75 for a damaged vehicle and 1 otherwise. Double precision throughout. Unit:
 fraction (dimensionless).
+
+**F7 Give-up test** (claim 15). The test holds when all three of these hold:
+> *d*ₘ < *C*, with *d*ₘ the distance of F5 from the vehicle's position to its move destination and
+> *C* the close-enough distance of S-0209 (Formulas F2), both integers in leptons,
+> |*z*ᵈ − *z*ᵛ| < 208, with *z*ᵈ the world height of the move destination and *z*ᵛ the vehicle's
+> world height, an exact integer comparison in leptons (208 is two height levels of 104 leptons),
+> and the land type of the vehicle's own cell is not *tunnel* (S-0211).
+The look at the first cell of a new path (claim 15) adds a fourth condition: the vehicle is in
+contact with nothing. Unit: leptons.
 
 ## Constants
 
@@ -434,11 +803,13 @@ fraction (dimensionless).
 | Interpolation snap threshold | 3 | progress units | Claim 4: snap to the next point if *A* > 3 |
 | Braking floor *F*₀.₃ | 0.300000011920928955078125 | fraction | Claims 10 and 11 |
 | Sinking floor *F*₀.₁ | 0.100000001490116119384765625 | fraction | Claim 10 |
-| Sinking deceleration | 0.001500000013038516044616699 | fraction per progress unit per tick | Multiplied by *V*; claim 10 |
+| Sinking deceleration | 0.00150000001303851604461669921875 (single-precision 0.0015) | fraction per progress unit per tick | Multiplied by *V*; claim 10 |
 | Crushing cap | 0.2 | fraction | Claim 10 |
 | Zero-multiplier fallback | 0.5 | fraction | Claim 9 (d) |
 | Damaged factor | 0.75 | factor | Claim 9 (e) |
 | Deck height | 4 | height levels | Claim 9 (a); the glossary's bridge deck |
+| Height added on a bridge deck | 416 (4 height levels of 104) | leptons | Claim 5: world height *H* + 416 at each point while on a deck |
+| Level drop that puts a vehicle onto a deck | exactly 4 | height levels | Claim 5: the high-bridge cell entered lies exactly 4 levels below the cell left |
 | Level tolerance | 2 | height levels | Claim 9 (a): a difference below 2 uses the cell's land type |
 | Flag-carrier divisor | 2 | divisor (dimensionless) | Claim 2 |
 | Straight step cost | 163 | progress units | F3 |
@@ -446,21 +817,33 @@ fraction (dimensionless).
 | Absent-key default: speed field | type speed 0 | progress units per tick | Claim 1 |
 | Absent-key default: acceleration flag | on | boolean | Claim 10 |
 | Absent-key default: slowdown distance *D*ₛ | 500 | leptons | Claim 10 |
-| Absent-key default: deceleration factor *η* | 0.002 | fraction per progress unit per tick | Claim 10 |
-| Absent-key default: acceleration factor *a* | 0.03 | fraction per tick | Claim 10 |
+| Absent-key default: deceleration factor *η* | 0.00200000000000000004163336342344337026588618755340576171875 (the double nearest 0.002) | fraction per progress unit per tick | Claims 10 and 17 |
+| Absent-key default: acceleration factor *a* | 0.0299999999999999988897769753748434595763683319091796875 (the double nearest 0.03) | fraction per tick | Claims 10 and 17 |
 | Absent-key default: uphill and downhill factors | 1.0 each | factor | Claim 9 (c) |
 | Absent-key default: veteran speed factor *ν* | 1.0 | factor | Claim 2 |
 | Absent-key default: country speed factor *κ* | 1.0 | factor | Claim 2 |
 | Starting speed bonus factor *b* | 1.0 | factor | Claim 13 |
 | Starting speed fraction *ρ* | 0 | fraction | Claim 11 |
+| Absent-key default: locomotor | the teleporting locomotor | locomotor | Claim 14; every infantry, vehicle and aircraft type |
+| Height tolerance of the give-up test | less than 208 (2 height levels of 104) | leptons | F7 |
+| Height level of a vehicle for the cell layer of a request | trunc(*z* / 104), rounded toward zero | height levels | Claim 15 |
+| Level difference that sends a request to the deck layer | 3 or more | height levels | Claim 15 |
+| Height above the surface height *H* at a cell's centre from which the nearest object is looked for in the deck layer | more than 208 (2 height levels of 104) | leptons | Claim 15, first cell of a new path |
+| Range of the target draw of a threat-point scatter | 1 to 4 (accepts on 1) | draw value | Claim 16 |
+| Range of the direction draw of a threat-point scatter | 0 to 2, minus 1 | step directions | Claim 16 |
 
 **T1 Track point lists.** Each point is (*x*, *y*, *f*): displacement from the track target in
 leptons along the map axes (*y* grows towards map south), and facing in 1/256 turn. The lists are in
 driving order, and each track ends at (0, 0), its target, which is not listed. The point *numbers*
-used for the chain, entry and release points count from 0. The release point is where the vehicle
-gives up the cell it came from, which the occupancy specs use. Some points break the regular pattern,
-for example (−129, 129) in curve B and the facings 66 then 64 in curve D. They are part of the
-original data and are kept.
+used for the chain, entry and release points count from 0. The release point is a point inside the
+curve's first cell (the cell its current step enters) at which that cell's occupancy record
+(glossary) stops showing a vehicle present, although the vehicle is still in the cell (S-0209
+claim 1). Some points break the regular pattern,
+for example (−129, 129) in curve B and the facings 66 then 64 in curve D. The first point of curve
+F, (−512, 256, 32), is the track's own start (the centre of the cell the vehicle starts from), where
+every other curve's first point lies one increment along the track: on curve F the first point
+bought costs 7 progress units like any other (F3's 399 includes it) and moves the vehicle 0
+leptons. All of these are part of the original data and are kept.
 
 - **Curve A** (straight, towards map north; 23 points; no chain point): (0, 245, 0), (0, 234, 0),
   (0, 223, 0), (0, 212, 0), (0, 201, 0), (0, 190, 0), (0, 179, 0), (0, 168, 0), (0, 157, 0),
@@ -542,21 +925,57 @@ diagonal tracks. In every "—" case the straight or diagonal track for the curr
 diagonal entry of that row. Each listed transform makes the track start one step (or two) behind
 its target in the direction of travel, and end with facing equal to the last step's 8-direction.
 
+**T3 Class identifiers of the locomotors** (claim 14). Engine constants: the eleven locomotors the
+original knows. Each identifier is shown as its five groups, the digits of a group in blocks of
+four for reading. In the data file the value is written as an opening brace, the five groups
+joined by hyphens, and a closing brace, with no spaces. Seven of them differ only in the last digit
+of the first group.
+
+| Locomotor (ours) | Group 1 (8 digits) | Group 2 | Group 3 | Group 4 | Group 5 (12 digits) |
+|---|---|---|---|---|---|
+| driving (this spec) | 4A58 2741 | 9839 | 11D1 | B709 | 00A0 24DD AFD1 |
+| hovering | 4A58 2742 | 9839 | 11D1 | B709 | 00A0 24DD AFD1 |
+| tunnelling (underground travel, S-0209 part 5b) | 4A58 2743 | 9839 | 11D1 | B709 | 00A0 24DD AFD1 |
+| walking (infantry walking, S-0208) | 4A58 2744 | 9839 | 11D1 | B709 | 00A0 24DD AFD1 |
+| drop pod | 4A58 2745 | 9839 | 11D1 | B709 | 00A0 24DD AFD1 |
+| flying | 4A58 2746 | 9839 | 11D1 | B709 | 00A0 24DD AFD1 |
+| teleporting (the absent-key default) | 4A58 2747 | 9839 | 11D1 | B709 | 00A0 24DD AFD1 |
+| walking vehicle (mechanical walking; S-0210's walking-vehicle locomotor) | 55D1 41B8 | DB94 | 11D1 | AC98 | 0060 0805 5BB5 |
+| ship | 2BEA 74E1 | 7CCA | 11D3 | BE14 | 0010 4B62 A16C |
+| jumpjet | 9261 2C46 | F71F | 11D1 | AC9F | 0060 0805 5BB5 |
+| rocket | B7B4 9766 | E576 | 11D3 | 9BD9 | 0010 4B97 2FE8 |
+
 ## State and ordering
 
 | State | Event | Result |
 |---|---|---|
 | at rest (*ρ* = 0, no track) | move order gives path steps | turn in place until facing equals the current step (claim 6), then begin a track (claim 7) |
-| turning in place | facing reaches the step's 8-direction | begin a track in that tick: *ρ* updated once and *s* earned, as in any moving tick (claim 12) |
+| turning in place | facing reaches the step's 8-direction | begin a track in that tick: *ρ* updated once and *s* earned, as in any moving tick (claim 12); a turn that completes at once begins the track in the next tick (S-0206 claim 12) |
 | on a track | moving tick | it earns *s* at this tick's updated fraction (claim 10), passes the track points that its budget buys (claim 3), and stands between points as claim 4 gives |
-| on a track (tick began on it) | track target reached, move continues | the next track (claim 7) begins in the same tick: *ρ* is updated a second time, and the leftover, with the end correction of claim 3 applied, is spent on the new track (claim 12) |
+| on a track (tick began on it) | track target reached, move continues, facing the next step, step check passes | the next track (claim 7) begins in the same tick: *ρ* is updated a second time, and the leftover, with the end correction of claim 3 applied, is spent on the new track (claim 12) |
 | on a track (tick began without one) | track target reached, move continues | correction of claim 3; the tick ends with no track and the leftover kept; the next track begins next tick (claim 12) |
 | on a track that began in this tick, after the track the tick began on ended | that track's target also reached in the same tick | correction of claim 3; the tick ends with no track (claim 12) |
 | no track, move to make | facing differs from the current step | turn in place, *A* = 0 (claim 6) |
 | on a track | track target reached, no step left | at rest, *ρ* = 0 (claim 11) |
 | on a track | move stopped | target fraction becomes min(*ρ*ₜ, *F*₀.₃), destination cleared, finish the current track (claim 11) |
+| no track, step ahead, allied closed gate in the next cell | any tick | tells the gate to open and waits, without turning (claim 15) |
+| no track, facing the step | first check: friendly obstacle, enemy obstacle, stationary friendly | discards the stored path and searches at once; repeated check on the same tick when the search finds a path (claim 15, T4) |
+| no track, facing the step | first check: blocked | as S-0212 claim 22 gives (claim 15, T4; Open questions) |
+| no track, facing the step | first check: cloaked blocker | reveals the cloaked objects, discards the stored path; searches on the same tick only if the path retry timer has run out |
+| holding a path found on this tick | repeated check: friendly or enemy obstacle | attacks the first listed object if not allied (a wall if nothing is listed), waits |
+| holding a path found on this tick | repeated check: stationary friendly | gives up the move if the give-up test holds (F7), otherwise sends a forced, move-anywhere scatter request to the cell, waits |
+| holding a path found on this tick | repeated check: cloaked blocker or blocked | gives up the move |
+| any object of the vehicle type kind, whatever its locomotor | scatter request accepted, no threat point | destination from the nearby-cell search, behaviours unchanged, no draw (claim 16) |
+| any object of the vehicle type kind, whatever its locomotor | scatter request accepted, threat point | one draw over 0 to 2 (after a draw over 1 to 4 when it has a target and the request is not forced), destination among the eight neighbours, *move* queued (claim 16) |
 
 A change of speed fraction takes effect in the progress of the same tick (claim 10).
+
+Ordering stated as consequences (claim 15): a vehicle reacts to its step check on the tick on
+which its facing first matches the step, so a vehicle that arrives facing another way turns first
+and reacts only then, while an allied closed gate starts opening on its first tick in front of
+the gate, before the vehicle turns. The scatter request of a blocked vehicle reaches every listed
+object on the tick it is sent (S-0209, State and ordering), so an idle friend that accepts it has
+its new destination from that tick.
 
 ## Edge cases and quirks
 
@@ -573,8 +992,10 @@ A change of speed fraction takes effect in the progress of the same tick (claim 
   passed, so *Q*′ = last point + trunc((*P* − last point) × *t*), which gives an even spacing.
 - **`quirks.drive_track_end_cap`** (claim 12). Default (original): a tick finishes at most one
   track if it began without one, and at most two if it began on one, so very fast vehicles move at
-  most one cell per tick on straight and diagonal steps and their extra budget piles up unused. Off:
-  no limit.
+  most one cell per tick on straight and diagonal steps and their extra budget piles up unused. Off
+  (a design behaviour): no limit on the tracks finished in a tick, with one fraction update at the
+  start of the tick and one more at each track that begins after a track end in it, each towards
+  the target fraction of the track that begins (claim 12 gives the full rule).
 - **Leftover kept at rest** (claim 3). A vehicle that stops at its destination keeps its leftover
   budget, which speeds up the first tick of its next move if that move needs no turn in place. This
   is original behaviour and has no switch, because its effect is small. Below the track-end cap the
@@ -588,33 +1009,61 @@ A change of speed fraction takes effect in the progress of the same tick (claim 
   straight step (256 leptons for 163 units) and about 1.6 on a diagonal one (362 for 227). Specs and
   tools that need speed in cells per tick must use F3, not a lepton conversion.
 - **Budget lost when stopping to turn** (claim 6). Leftover progress is discarded whenever the vehicle
-  turns in place, and whenever it has a move to make but neither drives a track nor begins one, so a path with many sharp turns costs slightly more than the track
-  sums. This is original behaviour and has no switch: it is also the only rule that empties the budget
+  turns in place, and whenever it waits for a gate or its step check refuses it a track, so a path with many sharp turns
+  costs slightly more than the track sums. This is original behaviour and has no switch: it is also the only rule that empties the budget
   that piles up above the track-end cap (claim 12), so turning it off would need a new limit of its
   own, which is a design change rather than a quirk.
 - **Odd points in the track data** (T1) are original data, and our engine keeps them.
+- **Slope factors at the ends of a bridge deck** (claim 9 (c)). The slope factor compares terrain
+  heights, so the track onto a high bridge from land at deck level gets the downhill factor and the
+  track off it gets the uphill factor, although the deck is level. This is original behaviour and
+  has no switch: it matters only where the uphill or downhill factors differ from 1, it is how
+  those fields act on every other change of terrain height, and a rule that compared deck heights
+  instead would change what the fields mean for mods tuned with them.
 - **Table root in the braking distance** (claim 10, F5). The distance to the move destination uses
   the table square root, so it can be a lepton or more short of the exact distance from 129 leptons
   on, and a vehicle can start braking slightly before it is within *D*ₛ by the exact distance. This
   spec defines no switch of its own: S-0204's `quirks.table_root_distance` governs it.
+- **An unknown class identifier** (claim 14) stops the original with a program error when an object
+  of the type is created. Our engine keeps the locomotor in force and warns: a departure, with no
+  switch, since no engine reproduces a crash.
+- **A type without a locomotor field teleports** (claim 14), whatever its kind. This is original
+  behaviour and has no switch: it is the meaning of the absent key, and a mod that wants another
+  locomotor names it.
+- **`quirks.drive_giveup_ignores_contact`** (claim 15, F7). Default (original): at a step check the
+  give-up test against stationary friends does not ask about contact, so a vehicle within the
+  close-enough distance of its destination gives up even while it is in contact with another object,
+  and only the look at the first cell of a new path asks. Off: every give-up test of claim 15 also
+  requires the vehicle to be in contact with nothing, as a walker's does (S-0209 claim 8). No stock
+  situation is known that tells the two apart (scenario D17, switch note).
+- **A blocked vehicle can send its request twice in one tick** (claim 15): once when it looks at the
+  first cell of the path it has just found and once at the repeated check, when the cell still
+  gives *stationary friendly* then. Each request reaches every listed object, and each infantry unit
+  that accepts takes its own draw (S-0208 claim 13), so a second request could change the number of
+  draws. This is original behaviour and has no switch: no setup is known in which the second
+  request is observable (claim 15, backing), and no mod is known to need one.
+- **A scatter without a threat point queues no *move*** (claim 16). The vehicle drives to the scatter
+  cell in whatever behaviour it has, so after arriving it does what that behaviour does with no
+  destination (S-0215). Original behaviour, no switch.
 
 ## Import mapping
 
 | User data | Feeds | Form | Absent |
 |---|---|---|---|
 | vehicle section, key `Speed` | speed field *v* (claim 1) | integer (S-0003, claim 3) | keeps value; engine default type speed 0; −1 also keeps |
-| vehicle section, key `Accelerates` | acceleration flag | boolean | yes |
-| vehicle section, key `AccelerationFactor` | *a* | decimal (S-0003, claim 6), widened to double | 0.03 |
-| vehicle section, key `DeaccelerationFactor` (spelled this way) | *η* | decimal, widened to double | 0.002 |
-| vehicle section, key `SlowdownDistance` | *D*ₛ | integer (S-0003, claim 3), leptons | 500 |
-| vehicle section, key `Passive` | passive flag | boolean | no |
+| vehicle section, key `Accelerates` | acceleration flag | boolean | keeps value; engine default yes |
+| vehicle section, key `AccelerationFactor` | *a* | decimal (S-0003, claim 6), widened to double | keeps value; engine default the double nearest 0.03 (claim 17) |
+| vehicle section, key `DeaccelerationFactor` (spelled this way) | *η* | decimal, widened to double | keeps value; engine default the double nearest 0.002 (claim 17) |
+| vehicle section, key `SlowdownDistance` | *D*ₛ | integer (S-0003, claim 3), leptons | keeps value; engine default 500 (claim 17) |
+| vehicle section, key `Passive` | passive flag | boolean | keeps value; engine default no |
 | vehicle section, key `SpeedType` | locomotion class (S-0211) | name | S-0211 claim 3 |
 | `[General]`, keys `TrackedUphill`, `TrackedDownhill`, `WheeledUphill`, `WheeledDownhill` | uphill and downhill factors for class *track* and for every other class (claim 9) | decimal, widened to double | keeps value; engine default 1.0 |
 | `[General]`, key `VeteranSpeed` | *ν* | decimal, widened to double | keeps value; engine default 1.0 |
-| vehicle section, keys `VeteranAbilities`, `EliteAbilities` | whether the *faster* ability applies | list of ability names | owned by the veterancy spec |
+| vehicle section, keys `VeteranAbilities`, `EliteAbilities` | whether the *faster* ability applies | list of ability names (S-0311, Import mapping) | as in S-0311 |
 | `[AudioVisual]`, key `ConditionYellow` | yellow ratio (claim 9 e) | as in S-0108 | as in S-0108 |
-| country section, key `SpeedUnitsMult`; the country's matching keys for infantry and aircraft do not feed this spec | *κ* | decimal (S-0003, claim 6), stored in single precision | 1.0 |
+| country section, key `SpeedUnitsMult`; the country's matching keys for infantry and aircraft do not feed this spec | *κ* | decimal (S-0003, claim 6), stored in single precision | keeps value; engine default 1.0 |
 | land-type sections | *M* | S-0211 | S-0211 |
+| infantry, vehicle and aircraft type sections, key `Locomotor` (building type sections read it too, without effect) | locomotor (claim 14, table T3) | class identifier: hexadecimal digits in groups of 8, 4, 4, 4 and 12, joined by hyphens, in braces, letters in either case; the value is read whole after trimming. A value of another form is ignored; an identifier not in T3 is treated as not given (departure, claim 14); both warn | keeps value in force; engine default the teleporting locomotor |
 
 No other speed field of a country or of a difficulty level enters the formulas of this spec
 (Open questions).
@@ -623,7 +1072,9 @@ No other speed field of a country or of a difficulty level enters the formulas o
 
 All scenarios run under the glossary's *measurement setup* on a purpose-made flat map of clear
 ground, unless the scenario says otherwise, at any game speed (claim G3 of the glossary). A
-*recorder* reads, each tick, the vehicle's position in leptons and its facing. Test values are
+*recorder* reads, each tick, the vehicle's position in leptons and its facing, and, where a
+scenario says so, other state of the units: a vehicle's height, speed fraction *ρ* or speed bonus
+factor *b*, or its stored path. Test values are
 set by override sections in the test map (a named test file, removed after the run). All values
 in them are invented test values:
 - the test vehicle type's speed field (given per scenario), with the acceleration flag off unless
@@ -657,14 +1108,14 @@ cell wide, bounded by cells whose land multiplier for the vehicle's class is 0 (
   claim 3.
 
 **D2: speed field limits (claim 1).**
-- *Setup:* as D1 (straight), with speed fields 150, 100, 1, 0 and −1. For −1, also run a control
-  without the override.
+- *Setup:* as D1 (straight), with speed fields 150, 100, 1, 0, −1 and −5. For −1, also run a
+  control without the override.
 - *Observable:* as D1, arrival tick at cell 20 minus arrival tick at cell 10; for field 0, whether
   the vehicle moves at all.
 - *Expected:* 150 and 100 give the same result. Field 1 (*s* = 2) takes 815 ± 1 ticks for cells 10 to
-  20. Field 0 never moves. Field −1 behaves like the control.
-- *Falsified if:* 150 is faster than 100, field 1 is off by more than a tick, or −1 differs from the
-  control.
+  20. Fields 0 and −5 never move. Field −1 behaves like the control.
+- *Falsified if:* 150 is faster than 100, field 1 is off by more than a tick, −1 differs from the
+  control, or field 0 or −5 moves.
 
 **D3: acceleration from rest (claims 9, 10 and 12).**
 - *Setup:* speed field 20, acceleration flag on, acceleration factor 0.02, deceleration factor 0,
@@ -689,14 +1140,55 @@ cell wide, bounded by cells whose land multiplier for the vehicle's class is 0 (
 - *Falsified if:* the last cells take the same time as the earlier ones, or a time that
   corresponds to a floor other than 0.3.
 
-**D5: slopes (claim 9 c).**
-- *Setup:* a route north that climbs one height level over a slope cell and later descends one.
-  Overrides set the wheeled uphill factor to 0.5 and the wheeled downhill factor to 1.0. Control: a
-  tracked vehicle with the tracked factors left at 1.0.
-- *Observable:* ticks spent on the track into the uphill cell, against a flat cell.
-- *Expected:* about twice as long for the wheeled vehicle (*s* = 25 against 51). The tracked vehicle is
-  not slowed.
-- *Falsified if:* the wheeled vehicle is not slowed uphill, or the tracked control is slowed.
+**D5: slopes, the zero fallback, the bridge deck and deceleration (claims 5, 9 and 10).**
+- *Setup:* run 1: a route north that climbs one height level over a slope cell and later descends
+  one. Overrides set the wheeled uphill factor to 0.5 and the wheeled downhill factor to 1.0. Run 2
+  (control): a tracked vehicle with the tracked factors left at 1.0. Run 3: as run 1 with the
+  wheeled uphill factor 0. Run 4: a purpose-made map with a straight high bridge over flat water,
+  with land at deck level at both ends, as in S-0208 scenario W2 (e). The vehicle starts on the land
+  two cells before the deck and is ordered along the bridge to the land two cells past it.
+  Overrides set the wheel multiplier of the road land type to 100 % and that of water to 0, and
+  the wheeled uphill and downhill factors to 0.5 each. Which cells carry the deck follows from the
+  test map by S-0211 claim 15, and the recorder takes each cell's height level from the test map.
+  Run 5: as run 1, with the acceleration flag on, acceleration factor 1.0, deceleration factor
+  0.001 and slowdown distance 0. Run 6: a purpose-made map with a straight high bridge over flat
+  clear ground at height level *L*, its ends on land at level *L* + 4, and a corridor at level *L*
+  that passes under the deck across the bridge. The vehicle drives along the corridor under the
+  deck. Overrides set the wheel multiplier of the road land type to 50 % (clear stays at 100 %).
+- *Observable:* runs 1 to 4 and 6, the vehicle's position and height read by the recorder on every
+  tick; runs 1 to 3, the ticks spent on the track into the uphill cell, against a flat cell; run 4,
+  the ticks spent on the track from the land onto the first deck cell, on the track from the last
+  deck cell onto the land, and per cell along the middle of the deck; run 5, the speed fraction
+  read by the recorder on each tick of the track into the uphill cell; run 6, the ticks spent on
+  the track into the cell under the deck, against a flat cell.
+- *Expected:* run 1 takes about twice as long uphill (*s* = 25 against 51). The tracked vehicle of
+  run 2 is not slowed. Run 3 climbs at the same rate as run 1 (*z* = 0.5 by part (d), so *s* = 25),
+  and does not stop. In runs 1 to 3, from the first track point on, the height at the end of every
+  tick is the surface height *H* (S-0106, claim 2) at the ground position of the last track point
+  the vehicle passed, track targets included (claim 5). Run 4: along the middle of the deck,
+  163/51, so 3 or 4 ticks per cell (*ℓ* is *road* by part (a), and the slope factor is 1). Where
+  the ground under the first and the last deck cell is flat water 4 height levels below the land,
+  the track onto the first deck cell takes 163/25, so 6 or 7 ticks (downhill factor, claim 9), and
+  so does the track from the last deck cell onto the land (uphill factor). From the first point in
+  the first deck cell to the last point in the last deck cell, the height is *H* of the water
+  under the deck plus 416 leptons, the same world height as on the land at both ends, and on the
+  land it is *H* of the land. In run 5 the fraction falls from 1 by 51 × 0.001 = 0.051 at each
+  update (case 5), not to 0.5 at once; the track ends before it reaches 0.5. Run 6: under the deck
+  the height is *H* of the ground there (no 416 added), and the track into the cell under the deck
+  takes as long as one into a flat clear cell, 3 or 4 ticks (*ℓ* is the ground's clear land type,
+  not *road*). Precondition for run 6: the test map must give a high bridge whose ground cells a
+  wheeled vehicle can drive through; if the vehicle cannot pass under the deck, run 6 is
+  inconclusive.
+- *Falsified if:* the wheeled vehicle of run 1 is not slowed uphill; the tracked control is
+  slowed; run 3 stops in front of the slope or climbs at full speed; in runs 1 to 3 a height
+  differs from *H* at the last point passed; in run 4 a track along the middle of the deck takes
+  about 6 or 7 ticks (the water's multiplier 0 replaced by 0.5), the track onto the first deck cell
+  or off the last one takes 3 or 4 ticks (no slope factor at the ends of a deck), or the height
+  at a point on the deck is *H* of the water without the 416 leptons, or the height on the land
+  past the deck is *H* of the land plus 416 leptons (the vehicle stayed on the deck); in run 5 the fraction drops
+  to 0.5 in one update or falls by 0.001 per update; in run 6 the height under the deck is *H* plus
+  416 leptons, or the track into the cell under the deck takes 6 or 7 ticks (the vehicle treated as
+  on the deck, with *ℓ* = *road*).
 
 **D6: damage (claim 9 e).**
 - *Setup:* as D1 (straight, field 20), with the vehicle's health set by the map at or just below the
@@ -708,77 +1200,154 @@ cell wide, bounded by cells whose land multiplier for the vehicle's class is 0 (
 **D7: curve against turn in place (claims 5 to 7).**
 - *Setup:* field 20, acceleration off. Map A: a corridor one cell wide that runs 5 cells north and
   then 5 cells east (an L). Map B: a corridor 5 cells north, then an open area to the south-east of
-  its end, with the destination 5 cells south-east of the corridor's end.
-- *Observable:* the logged path, the positions through each turn, the ticks from arrival at the cell
-  before the turn to arrival at the cell after it, and the facing at the end of each turn.
+  its end, with the destination 5 cells south-east of the corridor's end. Run 3: map B again, with
+  the acceleration flag on, acceleration factor 0.02, deceleration factor 0 and slowdown distance
+  0; the recorder also reads the speed fraction.
+- *Observable:* the logged path, the positions and facings on every tick through each turn, the
+  ticks from arrival at the cell before the turn to arrival at the cell after it, and the facing at
+  the end of each turn; in run 3, the speed fraction on the tick on which the vehicle reaches the
+  shared cell's centre and on the first tick of the track after its turn in place.
 - *Expected:* at every logged pair (N, E), the vehicle drives one curve (curve D) from the centre of
   the cell before the corner to the centre of the cell after it, without passing the corner cell's
   centre. It takes 273/51, so 5 or 6 ticks, and ends facing map east. At every logged pair whose
   directions differ by 3/8 turn (for example N then SE), it reaches the shared cell's centre, stops,
-  and turns in place (its duration belongs to S-0206, claim 12) before driving on.
-- *Falsified if:* at a logged (N, E) pair the vehicle passes through the corner cell's centre, or at a
-  3/8-turn pair it curves.
+  and turns in place (its duration belongs to S-0206, claim 12) before driving on. On every tick on
+  a curve, the facing is 256 *f* for the last point of the curve (T1, transformed as T2 gives) at
+  or before the tick's position along the curve, so it changes only on ticks on which a point is
+  passed. In run 3, the fraction on the first tick after the turn is the fraction at the shared
+  cell's centre plus the acceleration factor (one update, claim 12; the turn in place makes no
+  update), not the factor alone.
+- *Falsified if:* at a logged (N, E) pair the vehicle passes through the corner cell's centre; at a
+  3/8-turn pair it curves; a facing on a curve lies between the facings of two consecutive
+  points; or in run 3 the fraction after the turn equals the acceleration factor (a restart from 0).
 
-**D8: positions between points (claim 4).**
+**D8: positions between points, and the leftover budget (claims 3 and 4).**
 - *Setup:* speed field 1 (*s* = 2), acceleration off. A map-placed vehicle that has not moved
   before (so it has no leftover budget, claim 3), already facing map north. Straight route north.
-- *Observable:* the displacement from the start for the first eight moving ticks.
-- *Expected:* 3, 7, 10, 12, 16, 20, 21, 25 leptons.
-- *Falsified if:* the sequence differs. An evenly spaced sequence (3, 6, 9, …) indicates the "off"
-  behaviour of `quirks.drive_subpoint_compounding`. A seventh value of 22 instead of 21 indicates that
-  the interpolation factor is rounded to nearest rather than toward zero (F4; S-0205, number domains).
+  Part a: it is ordered 10 cells north. Part b: it is ordered 2 cells north, comes to rest there,
+  and is then ordered 10 cells further north. Part c: as part b, but the second order is to a cell
+  2 cells east, so it turns in place first. Part d: as part b, with a closed gate of its own house
+  placed by the map in the cell north of where it comes to rest, so that it waits for the gate to
+  open before its second move. Part e: a single order 10 cells north, with a closed gate of its own
+  house placed by the map in the third cell north, so that the vehicle reaches the centre of the
+  second cell on a tick that began on a track, finishes that track and is then held by the gate in
+  the same tick (claim 15).
+- *Observable:* the displacement from the start of each move for its first eight moving ticks (in
+  part c, from the first tick of the track after the turn; in part d, after the wait); in part e,
+  the displacement from the second cell's centre for the first eight moving ticks after the wait.
+- *Expected:* part a: 3, 7, 10, 12, 16, 20, 21, 25 leptons. Part b: the first move ends with a
+  leftover of 6 progress units (claims 3 and 12, computed), so the second move's first four values
+  are 12, 16, 20 and 21 leptons. Parts c and d: the turn and the wait empty the budget, so the
+  second move starts like part a (3, 7, 10, …). Part e: the vehicle reaches the second cell's
+  centre with the same leftover of 6 as in part b, and the wait on that tick empties it (claim 3),
+  so after the wait it goes on like part a (3, 7, 10, …).
+- *Falsified if:* the sequence of part a differs. An evenly spaced sequence (3, 6, 9, …) indicates
+  the "off" behaviour of `quirks.drive_subpoint_compounding`. A seventh value of 22 instead of 21
+  indicates that the interpolation factor is rounded to nearest rather than toward zero (F4; S-0205,
+  number domains). In part b, a second move that starts 3, 7, … (the leftover dropped at rest); in
+  part c, d or e, one that starts 12, 16, … (the leftover kept through the turn or the wait).
 
 **D9: no chaining (claims 7 and 8).**
 - *Setup:* field 20, acceleration off (needed for the passive control, see claim 8). A corridor one
   cell wide shaped so that the only path is N, N, NE, E, E, … (two turns in consecutive cells).
-  Control: the same with the passive flag set by override.
-- *Observable:* the logged path, and the ticks at which the vehicle stops and turns at the middle
-  cell of each logged triple, read from the recorder's positions and facings.
+  Control 1: the same with the passive flag set by override. Control 2: as control 1 with the
+  acceleration flag on. Control 3: as control 1, with a vehicle of the same house placed by the map
+  in *sticky* in the cell that the step after the first curve leads to. Control 4: as control 1,
+  with a vehicle of the same house that map triggers drive back and forth through that cell instead,
+  so that the cell gives *moving blocker* while that vehicle is in it with a destination.
+- *Observable:* the logged path, the positions and facings read by the recorder, and from them the
+  ticks at which the vehicle stops and turns at the middle cell of each logged triple; for control
+  2, also the speed fraction; for control 4, also the other vehicle's position and destination and
+  the cell's occupancy record on the tick on which the test vehicle reaches the chain point.
+- *Runs:* 1 each for the ordinary vehicle and controls 1 to 3. Control 4 is repeated, with the
+  order given at varied ticks, until a *qualifying run*, up to 10 runs: one in which, on the tick on
+  which the test vehicle reaches the chain point, the other vehicle is in that cell with a
+  destination and the cell's occupancy record shows a vehicle present, so that S-0209 (rows VP22
+  and VR5) gives *moving blocker*. If no run qualifies, control 4 is inconclusive.
 - *Expected:* at every logged triple (*d*, *e*, *g*) where *e* is 1/8 turn from *d* and *g* ≠ *e*, the
   ordinary vehicle drives the curve of the pair (*d*, *e*) to its target's centre, stops there, turns
-  in place to *g*, and then drives on. The passive control does not stop or turn in place at that cell.
-- *Falsified if:* the ordinary vehicle passes the curve's target without stopping to turn.
+  in place to *g*, and then drives on. Control 1 does not stop or turn in place at that cell: once
+  past the chain point of the first curve (T1), its positions lie on or between consecutive points
+  of the curve of the pair (*e*, *g*) from that curve's entry point on (T1, transformed as T2
+  gives), with the track target one cell further on. Control 2 never moves, and its fraction stays 0 (claims 8 and 10). Control 3
+  does not chain: it drives the first curve to its target's centre. Control 4, in a qualifying run,
+  chains as control 1 does.
+- *Falsified if:* the ordinary vehicle passes the curve's target without stopping to turn; control
+  1 stops at the curve's target, or its positions after the chain point do not lie on the next
+  curve from its entry point; control 2 moves; control 3 follows the next curve past the chain
+  point; or control 4, in a qualifying run, drives the first curve to its target's centre.
 
 **D10: the crush slowdown (claims 7 and 10, case 1; S-0210 claim 9).**
 - *Setup:* a test vehicle type of movement zone *crusher-all*, speed field 20, acceleration flag on,
   acceleration factor 1.0 and slowdown distance 0 (test values). A straight route of 30 clear cells
   north with no overlay on it, destination cell 30. Run A: one enemy vehicle that the test vehicle
-  can crush stands in cell 10. Run C: two infantry units stand in cells 9 and 10. Control: no
+  can crush stands in cell 10. Run B: two infantry units stand in cells 9 and 10. Control: no
   obstacles. The obstacles are given no weapon and no orders by test override, so that they stay in
   place; a run in which an obstacle moves before it is reached is repeated.
-- *Runs:* 3 per run, since the obstacles' own behaviour is not part of this spec.
 - *Observable:* the per-tick displacement, and the cell in which it changes.
 - *Expected:* in the control the vehicle earns 51 progress units per tick all the way (about 3.2
   ticks per cell). In run A, the track from cell 8 into cell 9 is in crush mode (its second cell
   holds the enemy vehicle, claim 7), and from the first tick that begins after the vehicle has
   driven into cell 9 it earns trunc(51 × 0.2) = 10 progress units per tick at once, not after a
   gradual slowdown. It keeps that rate through the crush in cell 10 and up to cell 30 (about 16 ticks
-  per cell), because it crushes no overlay (S-0210 claim 9). In run C there is no slowdown:
+  per cell), because it crushes no overlay (S-0210 claim 9). In run B there is no slowdown:
   infantry neither puts a track into crush mode nor sets the state.
 - *Falsified if:* run A shows no slowdown, a slowdown that begins only in cell 10, a speed that
-  falls over several ticks, or a recovery before cell 30; or run C shows a slowdown. The state's
+  falls over several ticks, or a recovery before cell 30; or run B shows a slowdown. The state's
   persistence across stops and new orders and its end at an overlay are measured by S-0210
   scenario K5.
+- *Runs C to F (the cells that decide crush mode, claim 7):* the same test vehicle type, with the
+  acceleration flag off, in a corridor one cell wide that turns by 1/8 turn at a cell *X* (as in
+  D17 part g), so that the step into *X* and the next one would form a two-cell curve. The test
+  rules file makes one overlay type crushable. Run C: that overlay lies in *X*. Run D: it lies in
+  the cell after *X*. Run E: a wall overlay of the computer player lies in *X*. Run F: no overlay,
+  and an enemy vehicle that the test vehicle can crush, given no weapon and no orders by test
+  override, stands in *X* (a vehicle in the first cell does not count). Control: the corridor with
+  no overlay and no vehicle. *Observable:* the positions and facings through the turn.
+  *Expected:* the control and run F drive the two-cell curve through *X*; in runs C to E the
+  vehicle drives the straight track into *X*, stops at its centre and turns in place before it
+  goes on. *Falsified if:* a run of C to E curves through *X*, or the control or run F does not.
+- *Runs:* 3 per run for runs A, B and F, since the obstacles' own behaviour is not part of this
+  spec; 1 each for runs C to E and the controls.
 
 **D11: stopping (claim 11).**
-- *Setup:* field 20, acceleration off. The vehicle is ordered north, and a stop order is given when
-  it is about 1/3 of the way into a straight step.
-- *Observable:* the vehicle's position each tick from the stop order until it stops.
-- *Expected:* it finishes that step at *s* = 15 and stops at the cell centre.
-- *Falsified if:* it stops at once, or finishes at full speed.
+- *Setup:* part a: field 20, acceleration off. The vehicle is ordered north, and a stop order is
+  given when it is about 1/3 of the way into a straight step. Part b: field 20, acceleration flag
+  on, acceleration factor 0.02, deceleration factor 0 and slowdown distance 0, already facing map
+  north; it is ordered 3 cells north, comes to rest there, and is then ordered 3 cells further
+  north. The recorder also reads the speed fraction *ρ*.
+- *Observable:* part a, the vehicle's position each tick from the stop order until it stops; part
+  b, *ρ* on the fifth tick after the first move reaches its destination (the second order is
+  given later), and *ρ* on the first tick of movement of the second move.
+- *Runs:* 1 each (no random draw is involved).
+- *Expected:* part a: it finishes that step at *s* = 15 and stops at the cell centre. Part b: *ρ* is
+  0 at rest, and 0.02 (the single-precision 0.02 widened, S-0003 claim 6) on the first tick of the
+  second move, which starts from 0 like the first.
+- *Falsified if:* in part a it stops at once, or finishes at full speed; in part b *ρ* is not 0 at
+  rest, or the second move's first fraction is the fraction the vehicle had on arrival plus the
+  factor, or any other value than the factor.
 
 **D12: country factor, veteran factor and speed power-up (claims 2 and 13).**
 - *Setup:* as D1 (straight, field 20). Run 1: country speed factor for vehicles 0.5. Run 2: a map-placed
-  veteran vehicle whose type grants the faster ability at that level, with the veteran speed factor
+  veteran vehicle whose type grants the faster ability at that rank, with the veteran speed factor
   set to 1.5. Run 3: a speed power-up of value 1.5 is placed on the route and picked up before
   cell 10. Run 4: two such power-ups are picked up before cell 10. The power-ups come from crates on
   the route, with a test rules file that leaves the speed power-up as the only one a crate can give
-  and sets its value to 1.5 (which power-up a crate gives belongs to the crate specs). No other
-  mobile object is near the crates (claim 13).
-- *Observable:* as D1, arrival tick at cell 20 minus arrival tick at cell 10.
+  and sets its value to 1.5 (which power-up a crate gives belongs to the crate specs). In runs 1
+  to 4 no other mobile object is near the crates (claim 13). Run 5: as run 3, with a second vehicle
+  *W* of the test type standing idle in a cell next to the crate's cell and a stock aircraft that
+  can land on open ground landed in another cell next to it; the test rules file also sets the
+  size of the crate's area (crate specs) large enough to cover the cells next to the crate. The
+  recorder also reads the speed bonus factor of *W* and of the aircraft.
+- *Observable:* as D1, arrival tick at cell 20 minus arrival tick at cell 10; in run 5, the speed
+  bonus factors after the pick-up, and the same arrival difference for *W* when it is then
+  ordered along the route.
 - *Expected:* run 1 66 ± 1 ticks (*s* = 25). Run 2 22 ± 1 ticks (*s* = 76). Run 3 22 ± 1. Run 4 the
-  same as run 3.
-- *Falsified if:* any run is off by more than one tick, or run 4 is faster than run 3.
+  same as run 3. Run 5: *W*'s factor becomes 1.5 and it takes 22 ± 1 ticks; the aircraft's factor
+  stays 1.0.
+- *Falsified if:* any run is off by more than one tick, run 4 is faster than run 3, *W*'s factor
+  stays 1.0 in run 5, or the aircraft's factor changes. If no stock aircraft can land on open
+  ground, run 5 is run without it and the exclusion of aircraft stays unconfirmed.
 
 **D13: the braking floor raises a slow vehicle (claims 10 and 12, `quirks.drive_brake_floor_raises`).**
 - *Setup:* speed field 20, acceleration flag on, acceleration factor 0.02, deceleration factor 0,
@@ -795,18 +1364,21 @@ cell wide, bounded by cells whose land multiplier for the vehicle's class is 0 (
   tick up to *F*₀.₃) gives 1 lepton in the first tick and 18 and 39 ticks. A vehicle that never
   moves falsifies the case order of claim 10.
 
-**D14: following cars copy the leader's fraction (claim 10, trains).**
-- *Setup:* a test map with a leading vehicle and one following car linked to it by the map's vehicle
-  entries. Both types have speed field 20 and the acceleration flag on. The leader's acceleration
-  factor is 1.0. The car's type has acceleration factor 0.001 and is not passive. Straight route
-  north for the leader.
+**D14: follower cars copy the fraction (claim 10, car chains).**
+- *Setup:* a test map whose vehicle entries make one vehicle the follower car of a leader through
+  the follow-index field (S-0009 claim 41). Both types have speed field 20 and the acceleration
+  flag on. The leader's acceleration factor is 1.0. The car's type has acceleration factor 0.001
+  and is not passive. The leader is ordered along a straight route north, and S-0212 (claim 26)
+  then sends the car after it. Control: the same with the leader's acceleration flag off.
 - *Observable:* the car's displacement per tick over the first 20 ticks of its movement.
 - *Expected:* the car moves at about the leader's pace, about 51 progress units per tick, so it
-  covers a cell in about 3 or 4 ticks. Precondition: the car must follow the leader at all; if it
-  does not move, the scenario is inconclusive, because how a car is steered belongs to no written
-  spec (Terms).
-- *Falsified if:* the car accelerates by its own factor alone: at 0.001 per tick it earns nothing for
-  its first 19 ticks and needs about 90 ticks for its first cell.
+  covers a cell in about 3 or 4 ticks. In the control the leader copies nothing, so the car
+  accelerates by its own factor alone: at 0.001 per tick it earns nothing for its first 19 ticks
+  and needs about 90 ticks for its first cell. Precondition: the car must follow the leader as
+  S-0212 claim 26 gives (its scenario P9 tests this); if it does not move, the scenario is
+  inconclusive for this claim.
+- *Falsified if:* in the main run the car accelerates by its own factor alone, as in the expected
+  control; or the control's car moves at the leader's pace.
 
 **D15: the flag carrier's halving (claim 2).**
 - *Setup:* as D1 (straight, field 20), in a skirmish game with a test rules file that turns on the
@@ -818,33 +1390,236 @@ cell wide, bounded by cells whose land multiplier for the vehicle's class is 0 (
   inconclusive (Open questions).
 - *Falsified if:* a vehicle carrying a flag crosses cells 10 to 20 in 32 ± 1 ticks.
 
+**D16: the locomotor field (claim 14).**
+- *Setup:* a test rules file adds new types to the type lists, each a copy of the fields of an
+  ordinary stock type of its kind except for the locomotor field: vehicle type *A* without the
+  field; vehicle type *B* with the driving identifier of T3 written in lower-case letters; vehicle
+  type *C* with the value "drive"; vehicle type *B*′ with the driving identifier of T3 with blanks
+  before and after it; infantry type *I* and aircraft type *P* without the field; infantry type
+  *J* with the driving identifier. A test map override section gives an ordinary driving stock vehicle type the value "drive" (type *S*).
+  A second test file adds vehicle type *U* whose value is a well-formed class identifier not in T3
+  (for example every digit 0 except the last, 1).
+- *Procedure:* place one unit of each of *A*, *B*, *B*′, *C*, *I*, *J*, *P* and *S* by the test map
+  on open flat ground and order each to a cell 10 cells away. In a separate run, place a unit of type *U* by the map.
+- *Observable:* whether each unit's position moves along the ground from tick to tick or jumps to
+  the destination in one tick (teleporting); for *U*, whether the game runs.
+- *Runs:* 1 each (no random draw decides the outcome).
+- *Expected:* *A*, *C*, *I* and *P* teleport; *B* and *B*′ drive; *S* drives (the ignored value keeps
+  the stock layer's locomotor); *J* moves along the ground and does not teleport (how fast and along
+  which points is outside this spec, Open questions); the run with *U*
+  ends in a program error when the unit is placed.
+- *Falsified if:* *A*, *I* or *P* moves along the ground, *B*, *B*′ or *S* teleports, *C* drives, *J*
+  teleports, or the run with *U* plays normally.
+
+**D17: a refused step (claims 15 and 16).** Common setup: a corridor one cell wide of clear ground,
+with no bypass, along map north, and a cell *X* in it. The mover *M* is a vehicle of the human
+player of an ordinary driving stock type that is not a crusher, ordered by scripted input to a
+corridor cell 10 cells past *X*. A recorder reads every tick: the positions, facings, behaviours,
+targets and destinations of the units, *M*'s stored path, and the scenario random stream's state
+(random-state recorder). *M*'s *arrival* is the first tick on which *M* stands at the centre of the
+cell before *X*.
+- (a) An idle unarmed vehicle *V* of the human player in *guard*, of a driving stock type, stands in
+  *X*. *Expected:* on *M*'s arrival tick (its facing already matches the corridor) *M*'s stored path
+  is replaced and *V* gets a destination in a corridor cell, chosen with no draw from the scenario
+  random stream; *V*'s behaviour stays *guard*; *M* gets no track on that tick. *Falsified if:* *V*
+  gets no destination while *M* waits in front of *X* (as a vehicle that sends no request would),
+  *V*'s behaviour becomes *move*, or a draw is recorded for *V*'s acceptance.
+- (b) As (a), with *M* ordered to *X* itself, so that on its arrival *M* is within the close-enough
+  distance (read from the stock rules; the scenario needs it to be more than one cell). *Expected:*
+  on *M*'s arrival tick *M*'s destination is removed and it stops; *V* gets no destination.
+  *Falsified if:* *V* gets a destination, or *M* keeps a destination.
+- (c) As (a), with *V* placed by the map in *sticky*. *Expected:* *V* never gets a destination
+  (claim 16, case a); *M* stays in front of *X*, its stored path replaced on every tick on which it
+  faces *X*. *Falsified if:* *V* moves.
+- (d) As (a), with *M* armed and *V* replaced by an unarmed vehicle *E* of the computer player that
+  *M* cannot crush. *Expected:* on *M*'s arrival tick *M* takes *E* as its target and its behaviour
+  is overridden to *attack*. *Falsified if:* *M* waits without a target.
+- (d2) As (d), with *M* of a stock type whose primary weapon can damage walls, and *X* holding a
+  wall segment of the human player, placed by the map, and nothing else (a *friendly obstacle*,
+  S-0209 row VO5). *Expected:* on *M*'s arrival tick *M* takes the wall's cell as its target and
+  its behaviour is overridden to *attack*, although the wall belongs to its own house. *Falsified
+  if:* *M* waits without a target. Precondition: *M* must arrive in front of *X*, which needs the pathfinder
+  (S-0212) to give it a path through the wall's cell; if it never arrives, the part is
+  inconclusive.
+- (d3) As (d), with *M* unarmed, so that *E* gives *blocked* (S-0209 row VP26). *Expected under
+  S-0212 claim 22, which T4 cites:* at the end of *M*'s arrival tick *M* has no stored path and
+  keeps its destination, and its next search comes only after the retry delay (S-0212 claim 21).
+  *Under the reading in the Open questions:* *M* searches at once on its arrival tick, and when
+  that search finds a path the repeated check gives *blocked* again and *M* gives up its move on
+  that tick (destination removed). *Falsified (for T4 as written) if:* *M* gets a new stored path
+  or gives up its move on its arrival tick; either result instead supports the reading and goes to
+  S-0212.
+- (e) *X* holds a closed gate of the human player. The corridor turns by 1/4 turn at the cell before
+  *X*, so that *M* arrives there facing another way. *Expected:* the gate starts to open on *M*'s
+  arrival tick, before *M*'s facing starts to change. *Falsified if:* *M* turns before the gate
+  starts to open.
+- (f) As (d), with a test file that makes *E*'s type cloak when idle (the visibility specs own
+  cloaking) and *M* unarmed. *Expected:* on *M*'s arrival tick *E* becomes visible to the human
+  player and *M*'s stored path is cleared; in runs in which *M*'s path retry timer has run out on
+  that tick, *M* gives up its move on the same tick (destination removed). *Falsified if:* *E* stays
+  invisible, or *M* keeps its path.
+- (g) A corridor that turns by 1/8 turn at *X*, so that the step into *X* and the next one form a
+  two-cell curve; *X* itself is clear, and the cell after *X* is the curve's second cell (table
+  T5). The recorder also reads *M*'s speed fraction.
+  - Run 1: *V* of (a) stands in the cell after *X*. *Expected:* on *M*'s arrival tick *V* gets a
+    destination, and *M* stays at the centre of the cell before *X* with no stored path and *ρ* = 0,
+    then drives on after a later search.
+  - Run 2: *V* is replaced by a vehicle that map triggers move back and forth through the cell
+    after *X*. *Expected:* when *M* arrives while that vehicle is in it, *M* drives straight into
+    *X* and turns there.
+  - Run 3: *M* armed, and an unarmed vehicle *E* of the computer player that *M* cannot crush
+    stands in the cell after *X* (an *enemy obstacle*). *Expected:* at the end of *M*'s arrival
+    tick its stored path is empty and it has begun no track (T5 discards the path, where T4 would
+    keep it).
+  - Run 4: as run 3, with *E*'s type cloaking when idle (as in (f)). *Expected:* on *M*'s arrival
+    tick *E* becomes visible to the human player and *M*'s stored path is cleared; in runs in which
+    *M*'s path retry timer has run out on that tick, *M* gives up its move on the same tick.
+  - Run 5: the corridor turns by 1/4 turn at *X* instead, and the cell after *X* holds a closed gate
+    of the human player through which the corridor passes. *Expected:* on *M*'s arrival tick the
+    gate starts to open, and *M* stays at the centre of the cell before *X* with no stored path and
+    *ρ* = 0.
+  - Run 6: as run 3 with *M* unarmed, so that *E* gives *blocked*. *Expected:* on *M*'s arrival
+    tick *M* searches at once; when the search finds a path, the repeated check gives *blocked*
+    again and *M* gives up its move on that tick (destination removed).
+  - *Falsified if:* *M* curves into an occupied cell (runs 1 and 2); *M* keeps its stored path or
+    begins a track on its arrival tick (runs 1 and 3 to 5); in run 4 *E* stays invisible; in run 5
+    the gate does not start to open on that tick; in runs 1 and 5 *ρ* is not 0 at the end of that
+    tick; or in run 6 *M* begins a track on that tick, or ends it with its destination and no
+    stored path (a search left for the retry delay).
+- (h) The cell layer of the request. A purpose-made map with a high bridge over water, with land
+  at deck level at both ends (as in D5 run 4), which *M*, starting on the land at one end, must
+  cross along its deck. Every deck cell of one cross-section of the bridge holds an idle
+  unarmed vehicle of the human player in *guard*, of a driving stock type, and under each of those
+  cells an idle ship of the human player in *guard* stands on the water. *X* is the deck cell of
+  that cross-section that *M*'s path enters. *Expected:* on *M*'s arrival tick, while *M* is on the
+  deck (4 height levels above the water's level, so 3 or more), the vehicle on *X*'s deck gets a
+  destination and the ship under *X* does not. *Falsified if:* the ship under *X* gets a destination
+  on that tick, or the vehicle on *X*'s deck does not.
+- *Switch note:* no situation of the original is known that gives a driving vehicle a contact while
+  it stands in front of a stationary friend within the close-enough distance, so
+  `quirks.drive_giveup_ignores_contact` has no discriminating run; part (b) tests the default
+  without contact.
+- *Runs:* 3 per part and run, with the order given at varied ticks. No part uses infantry, so no
+  scatter draw is expected.
+
+**D18: vehicle scatter (claim 16).**
+- *Setup:* open flat ground; an idle unarmed vehicle *V* of the human player of a driving stock type,
+  in *guard*, with no other unit within 2 cells. Recorder as in D17.
+- *Procedure and expected:*
+  - (a) The scatter order (S-0213 claim 9) by scripted input on tick *N*. *Expected:* *V*'s
+    destination is the neighbour at position (*N* mod 8) of the nearby-cell search's collection
+    order (S-0212 claim 25); no draw from the scenario random stream; *V*'s behaviour stays *guard*.
+  - (b) *V* is first ordered to a cell 20 cells away and given the scatter order while it drives.
+    *Expected:* its destination does not change.
+  - (c) Vehicles placed by the map in *sleep* and in *sticky*, each given the scatter order.
+    *Expected:* neither moves.
+  - (d) An idle vehicle of a stock type whose locomotor is the teleporting one, given the scatter
+    order. *Expected:* it does not move.
+  - (e) A vehicle *W* of the human player stands on a cell of a bunker of its house when another
+    vehicle of the house enters the bunker, so that the bunker rule of S-0215 claim 17 sends *W* a
+    forced request with the bunker's position as threat point. *Expected:* exactly one draw from the
+    scenario random stream at that tick for *W*; *W* queues *move* and takes one of the eight
+    neighbours of its scatter centre cell, in the preference order of claim 16.
+  - (f) An armed vehicle *T* of a stock type without a turret, idle in *guard*, and an enemy unit
+    that map triggers move into *T*'s weapon range behind it, so that *T* turns its body by about
+    1/2 turn to aim at it (S-0310), a turn that lasts several ticks. The scatter order is given by
+    scripted input while the recorder shows *T*'s body turning. Control: the same order given once
+    *T*'s facing has been steady for 10 ticks. *Expected:* *T* gets no destination from the order
+    while it turns (case d); in the control it gets one.
+  - (g) A vehicle of a stock type that deploys where it stands, deployed by scripted input, then
+    given the scatter order. *Expected:* it gets no destination (case f). If no stock vehicle type
+    deploys where it stands, this part is skipped and case f stays unconfirmed.
+  - (h) As (e), with *W* in *guard* and a named test file that gives *guard* the paralysed
+    property (S-0215 claim 17). *Expected:* *W* stays where it is, and no draw is recorded for it (case h).
+- *Runs:* 3 each; (a) at three different *N*.
+- *Falsified if:* in (a) a draw is recorded, the behaviour becomes *move*, or another cell is chosen,
+  in (b) the destination changes, in (c) or (d) a vehicle moves, in (e) no draw, two draws, or no
+  *move*, in (f) *T* gets a destination while it turns or none in the control, in (g) the deployed
+  vehicle gets a destination, in (h) *W* moves or a draw is recorded for it.
+
+**D19: engine defaults of the acceleration fields (claim 17).**
+- *Setup:* as D3 (speed field 20, acceleration flag on, a route of 30 cells north from rest), with
+  the test vehicle type's acceleration factor, deceleration factor and slowdown distance keys left
+  out of every rules layer (run A). Control runs: B gives the three keys explicitly as 0.03, 0.002
+  and 500; C as A but with the slowdown distance key set to 0; D as A but with the acceleration
+  factor key set to 0.02 (the D3 value).
+- *Observable:* ticks from the first tick of movement to the arrival at cells 1, 10 and 30 (the
+  destination). In runs A and B the recorder also reads the speed fraction *ρ* each tick, printed
+  with 17 significant digits or more.
+- *Expected:* A and B give the same three tick counts. C reaches cell 30 sooner than A (no braking
+  in the last two cells, claim 10 case 2), with the same counts at cells 1 and 10. D reaches cells
+  1 and 10 later than A and matches D3 at those cells. The fractions show the precision of claim
+  17:
+  - *ρ* after the first tick of movement is *a* itself (case 4 from *ρ* = 0, far beyond *D*ₛ). In A
+    it is 0.0299999999999999988897769753748434595763683319091796875, the double nearest 0.03. In
+    B it is 0.02999999932944774627685546875, the single nearest 0.03 widened (S-0003 claim 6).
+  - *ρ* is exactly 1 before braking begins (case 4 stops at *ρ*ₜ = 1). The first value below 1 is
+    1 − *V* × *η* with *V* = 51, both steps rounded toward zero (Formulas), or that step taken twice
+    when braking begins on a tick with two updates (claim 12). In A that is
+    0.8979999999999999094058011905872263014316558837890625 (one update) or
+    0.795999999999999818811602381174452602863311767578125 (two). In B, with the single nearest
+    0.002, it is 0.89799999515525996685028076171875 or 0.7959999903105199337005615234375.
+- *Runs:* 1 each (deterministic).
+- *Falsified if:* A and B differ at any cell (another default value), C equals A at cell 30
+  (another slowdown default, or none), or a fraction of run A or of run B differs from the values
+  given for that run (in particular, A showing B's values).
+
 ## Open questions
 
 - Whether any speed field of a country or of a difficulty level other than the country's vehicle
   speed factor reaches a vehicle's speed. None does in the formula of claim 2. It is believed that no
   other rule of the original uses them, but this has not been searched exhaustively. This also bears
   on S-0006 open question 7.
-- The exact rule for the *faster* ability belongs to the veterancy spec.
-- Which events set a vehicle sinking (Terms) and what happens to it afterwards. It appears to be part
-  of a vehicle's destruction, for example when a vehicle that cannot float is teleported onto a water
-  cell that is not a high-bridge cell (inferred from reading, low confidence). No written spec owns
-  this yet; the destruction rules should.
-- How a following car (Terms) is steered along its leader's route, and how the link is made. It
-  appears to come from the map's vehicle entries (inferred from reading, low confidence), which the
-  map-format spec does not cover yet.
+- Which events other than the killing hit of S-0312 (claim 10) set a vehicle sinking (Terms). A
+  reading (low confidence) points to three more: a vehicle of a type that is not naval arriving by
+  teleporting on a water cell that is neither a high-bridge cell nor a road; a unit landing on a
+  cell where it cannot exist; and a parasite releasing a ship it has killed. Each starts the
+  vehicle's destruction. S-0312 owns sinking as a state of destruction, so its next revision, or
+  the specs of those effects, should settle them; what a sinking vehicle does until it leaves play
+  is already an open question of S-0312.
 - Whether a game started with the capture-the-flag option on places flags that a vehicle can carry
   (scenario D15 checks this as its precondition).
-- The fallback when the second cell of a two-cell curve is blocked (claim 7) was read at low
-  confidence.
-- Which cells decide crush mode (claim 7) was read but not exercised. Scenario D10 tests it
-  together with the start of the crush-slowdown state, which S-0210 (claim 9, scenario K5) owns.
+- The reactions to a curve's second cell (claim 15, T5) were read at low confidence.
+- For the outcome *blocked* at a first check, S-0212 claim 22 says that the stored path is cleared
+  and a fresh search follows after the path retry delay. A reading of the original for this request
+  points instead to the reaction to an obstacle: the path is discarded and a fresh search is made
+  at once, followed by the repeated check (low confidence). S-0212 owns that row; its next revision
+  should settle it. Scenario D17 part d3 tells the two apart.
+- Whether a value of the locomotor field with further characters after the closing brace counts as
+  a class identifier (claim 14) was not checked. The answer may depend on how the host system
+  turns the text into an identifier, rather than on the game itself. Our importer treats such a
+  value as not a class identifier and warns. Where the original's answer rests on the host system,
+  this fixed choice is a departure of the host kind (glossary *departure*, host or real time); a
+  check of the original on the reference host would show whether it is one.
+- Whether a vehicle keeps its speed fraction while it waits at a refused step of table T4 (claim
+  15) was not traced; claim 11 covers only a vehicle that comes to rest, and the rows of T5 that
+  stop the vehicle give *ρ* = 0.
+- Which cells decide crush mode (claim 7) was read but not exercised. Scenario D10 tests it (runs
+  C to F for the track, runs A and B together with the start of the crush-slowdown state, which
+  S-0210, claim 9 and scenario K5, owns).
 - The ship locomotor's speed fraction is outside this spec, which covers only the driving
   locomotor. S-0210 claim 9 assumes that the ship locomotor updates its speed fraction like
   claim 10 here, as far as the crush slowdown is concerned; a spec of the ship locomotor should
   state its own rule.
-- Whether a vehicle at rest keeps its leftover budget on every way of arriving (claim 3).
+- How an infantry or aircraft object whose type names the driving locomotor (claim 14) moves. No
+  stock infantry or aircraft type names it, and this spec covers drive vehicles only (Terms). A
+  reading (low confidence, not exercised) points to these differences from claims 2 to 13 and 15:
+  the country speed factor is the owner's country's factor for the object's own kind (for an
+  infantry unit the factor of S-0208 claim 7); the slope factor of claim 9 (c) is 1 for every kind
+  but the vehicle kind; the passive flag, the flag carrier's halving and the copying of the speed
+  fraction to follower cars belong to the vehicle kind only; the progress of an infantry unit in the
+  prone state is changed as S-0208 claim 8 gives; and the step check uses the entry outcome of the
+  object's own kind (S-0209 claim 4 for an infantry mover, and claim 14 for an aircraft, which gives
+  *clear* everywhere). How the occupancy record (S-0209 claim 1) and the release points of T1 work
+  for such an object was not traced. A later revision, or the infantry and aircraft movement specs,
+  should settle this.
+- How a vehicle that the map places on a high-bridge cell, or that leaves a building onto one,
+  starts on or off the bridge deck (claim 5 covers only the changes made while it drives). The
+  specs of map placement (S-0009) and of the structures own this.
+- Whether a vehicle at rest keeps its leftover budget on every way of arriving (claim 3). Scenario
+  D8 part b tests the end of an ordinary move only.
 - Whether interpolation (claim 4) can move a vehicle into a cell that it has not yet claimed under
-  the occupancy rules. The occupancy specs should settle this.
+  the occupancy rules (S-0209). S-0209's next revision should settle this.
 - The tracks used by vehicles leaving factories and other buildings are separate engine data and
   belong to the structures specs. A reading, not exercised (low confidence), points to two rules
   for them. On such a track, a vehicle whose acceleration flag is on gets no update of claim 10 at
