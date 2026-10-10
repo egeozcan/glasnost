@@ -16,13 +16,14 @@
 //! passage state that S-0209's gate rows read, and [`gate_met`] is the
 //! effect of the *closed friendly gate* outcome, for the entry rules to call.
 
+use glasnost_map::CellXY;
 use glasnost_num::geom::root_floor;
 
 use crate::behaviour::Door;
 use crate::infantry::{self, Seq};
 use crate::occupancy;
 use crate::rules::{Behaviour, Kind};
-use crate::world::{ObjectId, Pos, Target, World};
+use crate::world::{Layer, ObjectId, Pos, Target, World};
 
 /// The fixed delay of a behaviour without a processing rule (S-0215 claim 4).
 // spec: S-0215 claim 4 (nothing happens; a delay of exactly 450 ticks, no draw)
@@ -754,6 +755,15 @@ pub fn gate_open(w: &World, gate: ObjectId) -> bool {
     // spec: S-0215 claim 35 (passage state open: open current and the door at rest open)
     w.obj(gate)
         .is_some_and(|o| o.beh.current == Some(Behaviour::Open) && o.beh.gate.door == Door::Open)
+}
+
+/// A closed gate in cell `c` whose owner is allied with `mover`'s house,
+/// the gate owner's view (S-0209 rows WP12 and VP9; S-0207 claim 15).
+pub fn closed_friendly_gate(w: &World, mover: ObjectId, c: CellXY) -> Option<ObjectId> {
+    let owner = w.obj(mover)?.owner;
+    w.cells.list(c, Layer::Ground).iter().copied().find(|&g| {
+        is_gate(w, g) && !gate_open(w, g) && w.allied(w.obj(g).and_then(|x| x.owner), owner)
+    })
 }
 
 /// The *closed friendly gate* outcome of S-0209 has arisen for `gate`

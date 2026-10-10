@@ -2,9 +2,9 @@
 //! neighbouring cell.
 //!
 //! Object states that later milestones own read as their default here:
-//! nothing is cloaked, being erased, invulnerable, a parasite or a slave;
-//! gates read as open (a gate's door is S-0215 claim 35, which the
-//! behaviour processing owns). A wall's owner is S-0210 claim 14.
+//! nothing is cloaked, being erased, invulnerable, a parasite or a slave.
+//! Whether a gate is open is S-0215 claim 35 ([`crate::process::gate_open`]).
+//! A wall's owner is S-0210 claim 14.
 
 use glasnost_map::{CellXY, NO_OVERLAY};
 use glasnost_rules::sim::MovementZone;
@@ -292,9 +292,22 @@ pub fn infantry_outcome(w: &World, mover: ObjectId, c: CellXY, reference: i32) -
             if b.invisible {
                 // spec: S-0209 claim 4 (row WP7: a building invisible in play gives none)
                 (false, None)
-            } else if b.gate {
-                // spec: S-0209 claim 4 (row WP11: an open gate gives none; gates read as open until S-0215 claim 35's door exists)
+            } else if b.gate && crate::process::gate_open(w, oid) {
+                // spec: S-0209 claim 4 (row WP11: an open gate gives none; open or closed by S-0215 claim 35)
                 (false, None)
+            } else if b.gate && w.allied(o.owner, m.owner) {
+                // spec: S-0209 claim 4 (row WP12: a closed gate allied with the walker, the gate owner's view)
+                (false, Some(Outcome::ClosedFriendlyGate))
+            } else if b.gate {
+                // spec: S-0209 claim 4 (rows WP13 and WP14: any other closed gate: enemy obstacle with a primary weapon, else blocked)
+                (
+                    false,
+                    Some(if armed {
+                        Outcome::EnemyObstacle
+                    } else {
+                        Outcome::Blocked
+                    }),
+                )
             } else if b.raw.firestorm_wall.unwrap_or(false) {
                 // spec: S-0209 claim 4 (row WP10: firestorm off gives none)
                 (false, None)
@@ -507,8 +520,21 @@ pub fn vehicle_outcome(w: &World, mover: ObjectId, c: CellXY, reference: i32) ->
             v = Some(Outcome::Clear);
         } else if o.kind == Kind::Building {
             let b = &r.buildings[o.type_index as usize];
-            if b.gate || b.invisible || b.raw.firestorm_wall.unwrap_or(false) {
-                // spec: S-0209 claim 5 (rows VP8, VP13, VP15: open gate, invisible, firestorm off: none)
+            if b.gate && crate::process::gate_open(w, oid) {
+                // spec: S-0209 claim 5 (row VP8: an open gate gives none; open or closed by S-0215 claim 35)
+                v = None;
+            } else if b.gate && w.allied(o.owner, m.owner) {
+                // spec: S-0209 claim 5 (row VP9: a closed gate allied with the vehicle, the gate owner's view)
+                v = Some(Outcome::ClosedFriendlyGate);
+            } else if b.gate {
+                // spec: S-0209 claim 5 (rows VP10 and VP11: any other closed gate: enemy obstacle with a primary weapon, else blocked)
+                v = Some(if armed {
+                    Outcome::EnemyObstacle
+                } else {
+                    Outcome::Blocked
+                });
+            } else if b.invisible || b.raw.firestorm_wall.unwrap_or(false) {
+                // spec: S-0209 claim 5 (rows VP13, VP15: invisible, firestorm off: none)
                 v = None;
             } else if (b.raw.unit_repair.unwrap_or(false) || b.raw.bunker.unwrap_or(false))
                 && !blocking_cell(w, oid, c)

@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::occupancy::{self, Outcome};
 use crate::path::{self, Mode, Search};
+use crate::process;
 use crate::regions::STEPS;
 use crate::rules::{Behaviour, Kind, SimRules, UnitRules};
 use crate::tracks::{self, Point};
@@ -381,14 +382,6 @@ fn checked_outcome(w: &World, id: ObjectId, u: &UnitRules, from: CellXY, to: Cel
     outcome
 }
 
-/// A closed gate whose owner is allied with the vehicle's house in `c`
-/// (S-0207 claim 15). Gates read as open in M3: a gate's door and its
-/// *open* behaviour are S-0215 claim 35, which the behaviour processing
-/// owns, so no gate is closed here yet.
-fn closed_friendly_gate(_w: &World, _id: ObjectId, _c: CellXY) -> Option<ObjectId> {
-    None
-}
-
 /// Begins a track from the vehicle's current cell (S-0207 claims 6, 7 and
 /// 15). Returns `false` when the step cannot begin this tick.
 fn begin_track(w: &mut World, id: ObjectId, u: &UnitRules) -> bool {
@@ -400,8 +393,9 @@ fn begin_track(w: &mut World, id: ObjectId, u: &UnitRules) -> bool {
         return false;
     };
     let first = neighbour(o.pos.cell(), d);
-    if closed_friendly_gate(w, id, first).is_some() {
+    if let Some(gate) = process::closed_friendly_gate(w, id, first) {
         // spec: S-0207 claim 15 (an allied closed gate: told to open; the vehicle waits without a track and without turning)
+        process::gate_met(w, gate);
         wait(w, id);
         return false;
     }
@@ -459,6 +453,9 @@ fn step_check(w: &mut World, id: ObjectId, u: &UnitRules, repeated: bool) -> boo
         Outcome::Clear => {}
         Outcome::ClosedFriendlyGate => {
             // spec: S-0207 claim 15 table T4 (closed friendly gate: it tells the gate to open and waits)
+            if let Some(gate) = process::closed_friendly_gate(w, id, first) {
+                process::gate_met(w, gate);
+            }
             wait(w, id);
             return false;
         }
@@ -532,6 +529,9 @@ fn step_check(w: &mut World, id: ObjectId, u: &UnitRules, repeated: bool) -> boo
             }
             Outcome::ClosedFriendlyGate => {
                 // spec: S-0207 table T5 (closed friendly gate: the gate is told to open; path discarded, stop at once with ρ = 0)
+                if let Some(gate) = process::closed_friendly_gate(w, id, second) {
+                    process::gate_met(w, gate);
+                }
                 stop_at_once(w, id);
                 return false;
             }
@@ -708,7 +708,9 @@ fn first_cell_look(w: &mut World, id: ObjectId, u: &UnitRules) {
     let here = o.pos.cell();
     let cell = neighbour(here, d);
     // spec: S-0207 claim 15 (first cell of a new path: an allied closed gate is told to open)
-    let _ = closed_friendly_gate(w, id, cell);
+    if let Some(gate) = process::closed_friendly_gate(w, id, cell) {
+        process::gate_met(w, gate);
+    }
     // spec: S-0207 claim 15 (stationary friendly, not a train, the object nearest the cell's centre allied)
     if u.train || checked_outcome(w, id, u, here, cell) != Outcome::StationaryFriendly {
         return;

@@ -97,6 +97,7 @@ fn scene() -> Scene {
         ("Shed", b(|_| {})),
         ("Ghost", b(|t| t.invisible_in_game = Some(true))),
         ("Mender", b(|t| t.bridge_repair_hut = Some(true))),
+        ("Door", b(|t| t.gate = Some(true))),
     ];
     for (n, t) in buildings {
         s.register("buildings", n);
@@ -1309,4 +1310,115 @@ fn removed_non_driving_vehicle_clears_its_flag() {
     assert!(ground(&w, cell(0, 0)).vehicle_present());
     objects::remove(&mut w, id);
     assert!(!ground(&w, cell(0, 0)).vehicle_present());
+}
+
+// ---------------------------------------------------------------------------
+// Gates (rows WP11 to WP14 and VP8 to VP11, with S-0215 claim 35)
+
+/// Makes gate `g` open: *open* current and its door at rest open.
+fn open_gate(w: &mut World, g: ObjectId) {
+    let o = w.obj_mut(g).unwrap();
+    o.beh.current = Some(glasnost_sim::rules::Behaviour::Open);
+    o.beh.gate.door = glasnost_sim::behaviour::Door::Open;
+}
+
+// spec: S-0209 claim 4 (rows WP11 to WP14: an open gate gives none; a closed one allied (the gate owner's view) gives closed friendly gate, another enemy obstacle for an armed walker and blocked for an unarmed one)
+#[test]
+fn walker_gate_rows() {
+    for (ty, enemy) in [("Pike", Outcome::EnemyObstacle), ("Mope", Outcome::Blocked)] {
+        let (mut w, m) = asked(Kind::Infantry, ty, |s| {
+            s.place_structure(0, "Door", there());
+            s.place_structure(1, "Door", cell(1, 1));
+        });
+        assert_eq!(inf(&w, m, there()), Outcome::ClosedFriendlyGate, "{ty}");
+        assert_eq!(inf(&w, m, cell(1, 1)), enemy, "{ty}");
+        for c in [there(), cell(1, 1)] {
+            let g = at(&w, Kind::Building, c);
+            open_gate(&mut w, g);
+            assert_eq!(inf(&w, m, c), Outcome::Clear, "{ty} {c:?}");
+        }
+    }
+}
+
+// spec: S-0209 claim 5 (rows VP8 to VP11: an open gate gives none; a closed one allied (the gate owner's view) gives closed friendly gate, another enemy obstacle for an armed vehicle and blocked for an unarmed one)
+#[test]
+fn vehicle_gate_rows() {
+    for (ty, enemy) in [("Ram", Outcome::EnemyObstacle), ("Cart", Outcome::Blocked)] {
+        let (mut w, m) = asked(Kind::Vehicle, ty, |s| {
+            s.place_structure(0, "Door", there());
+            s.place_structure(1, "Door", cell(1, 1));
+        });
+        assert_eq!(veh(&w, m, there()), Outcome::ClosedFriendlyGate, "{ty}");
+        assert_eq!(veh(&w, m, cell(1, 1)), enemy, "{ty}");
+        for c in [there(), cell(1, 1)] {
+            let g = at(&w, Kind::Building, c);
+            open_gate(&mut w, g);
+            assert_eq!(veh(&w, m, c), Outcome::Clear, "{ty} {c:?}");
+        }
+        // Asking changes nothing: the gates stay as they were.
+        let (w, m) = asked(Kind::Vehicle, ty, |s| {
+            s.place_structure(0, "Door", there());
+        });
+        let g = at(&w, Kind::Building, there());
+        let before = w.obj(g).unwrap().beh.clone();
+        let _ = veh(&w, m, there());
+        assert_eq!(w.obj(g).unwrap().beh, before);
+    }
+}
+
+/// A corridor scene with a gate of house `house` in cell(2, 0) and a mover
+/// of `kind`/`ty` (house 0) at cell(-2, 0) ordered to cell(5, 0). Returns
+/// the world, the mover and the gate.
+fn gate_corridor(kind: Kind, ty: &str, house: u8) -> (World, ObjectId, ObjectId) {
+    let mut s = scene();
+    corridor(&mut s);
+    match kind {
+        Kind::Infantry => s.place_infantry(0, ty, cell(-2, 0), 0),
+        _ => s.place_unit(0, ty, cell(-2, 0), 64),
+    };
+    s.place_structure(house, "Door", cell(2, 0));
+    let mut w = s.build();
+    let m = at(&w, kind, cell(-2, 0));
+    let g = at(&w, Kind::Building, cell(2, 0));
+    open_orders(&mut w);
+    order_move(&mut w, m, cell(5, 0));
+    (w, m, g)
+}
+
+// spec: S-0209 claim 9 (a walker meeting a closed friendly gate makes it open, waits and walks on); S-0215 claim 35 (b) (the outcome makes open current)
+#[test]
+fn walker_passes_a_friendly_gate() {
+    let (mut w, m, g) = gate_corridor(Kind::Infantry, "Mope", 0);
+    let mut opened = false;
+    let n = run_until(&mut w, 600, |w| {
+        opened |= w.obj(g).unwrap().beh.current == Some(glasnost_sim::rules::Behaviour::Open);
+        w.obj(m).unwrap().pos.cell() == cell(5, 0)
+    });
+    assert!(n < 600, "the walker never passed the gate");
+    assert!(opened, "the gate never opened");
+    // An enemy gate keeps an unarmed walker out.
+    let (mut w, m, g) = gate_corridor(Kind::Infantry, "Mope", 1);
+    run(&mut w, 300);
+    assert!(w.obj(m).unwrap().pos.x < 256 * cell(2, 0).x);
+    assert_ne!(
+        w.obj(g).unwrap().beh.current,
+        Some(glasnost_sim::rules::Behaviour::Open)
+    );
+}
+
+// spec: S-0207 claim 15 (a vehicle in front of an allied closed gate tells it to open, waits and drives on once it is open)
+#[test]
+fn vehicle_passes_a_friendly_gate() {
+    let (mut w, m, g) = gate_corridor(Kind::Vehicle, "Cart", 0);
+    let mut opened = false;
+    let n = run_until(&mut w, 900, |w| {
+        opened |= w.obj(g).unwrap().beh.current == Some(glasnost_sim::rules::Behaviour::Open);
+        w.obj(m).unwrap().pos.cell() == cell(5, 0)
+    });
+    assert!(n < 900, "the vehicle never passed the gate");
+    assert!(opened, "the gate never opened");
+    // An enemy gate keeps an unarmed vehicle out.
+    let (mut w, m, _) = gate_corridor(Kind::Vehicle, "Cart", 1);
+    run(&mut w, 300);
+    assert!(w.obj(m).unwrap().pos.x < 256 * cell(2, 0).x);
 }

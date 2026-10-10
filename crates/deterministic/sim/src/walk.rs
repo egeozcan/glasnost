@@ -309,7 +309,10 @@ fn ask(w: &mut World, id: ObjectId, first: bool) {
             }
         }
         Outcome::ClosedFriendlyGate => {
-            // spec: S-0209 claim 9 (make the gate open and wait); gates read as open in M3
+            // spec: S-0209 claim 9 (the walker makes the gate open and waits, without searching a new path)
+            if let Some(gate) = crate::process::closed_friendly_gate(w, id, next) {
+                crate::process::gate_met(w, gate);
+            }
         }
         Outcome::MovingBlocker => {
             // spec: S-0209 claim 10 (wait; start the blockage delay on the first such tick)
