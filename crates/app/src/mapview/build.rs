@@ -182,9 +182,10 @@ mod notes {
     pub const UPGRADES: &str = "upgrades a map entry places (S-0009 claim 40) are not drawn: the building upgrade slots of S-0108 need animation playback";
     pub const AIRCRAFT_AIR: &str = "an aircraft on a cell outside the usable area is drawn landed: its flight height has no spec (S-0009 claim 38)";
     pub const VPL: &str =
-        "Q-0014: voxels are lit through the lighting table read by a provisional layout";
-    pub const NO_VPL: &str =
-        "Q-0014: the voxel lighting table was not accepted: voxels show raw colour indices";
+        "Q-0022: voxels are lit through the lighting table read by a provisional byte layout";
+    pub const NO_VPL: &str = "no voxel lighting table, or one whose layout was not recognised (Q-0022): every row reads as zero, so voxels draw nothing (S-0105 claim 38)";
+    pub const VPL_REJECTED: &str = "the voxel lighting table is missing or short and quirks.vpl_unloaded_rows_blank is off: the importer rejects it (S-0105 claim 38)";
+    pub const SHORT_VPL: &str = "the voxel lighting table ends before its last row, or has more than 128 rows: missing rows read as zero (S-0105 claim 38)";
     pub const WATER_FILL: &str = "water-fill variants need the scenario random stream (no spec yet): the base water tile is drawn";
 }
 
@@ -2142,8 +2143,10 @@ impl Builder<'_> {
         m
     }
 
-    /// The voxel lighting table (S-0105 claim 19; its layout is provisional,
-    /// Q-0014).
+    /// The voxel lighting table (S-0105 claims 19 and 38; its byte layout
+    /// is provisional, Q-0022). A missing or unrecognised file gives the
+    /// empty table, whose rows all read as zero (claim 38,
+    /// `quirks.vpl_unloaded_rows_blank`).
     fn vpl(&mut self) -> Option<Vpl> {
         let assets = self.assets;
         let v = self
@@ -2151,12 +2154,32 @@ impl Builder<'_> {
             .vpl
             .get_or_insert_with(|| assets.get(VPL_FILE).and_then(|b| Vpl::parse(b).ok()))
             .clone();
-        self.note(if v.is_some() {
-            notes::VPL
-        } else {
-            notes::NO_VPL
-        });
-        v
+        let blank = VoxelQuirks::default().vpl_unloaded_rows_blank;
+        let v = match v {
+            Some(v) => {
+                self.note(notes::VPL);
+                if v.short {
+                    self.note(if blank {
+                        notes::SHORT_VPL
+                    } else {
+                        notes::VPL_REJECTED
+                    });
+                } else if v.stated_rows > glasnost_fmt::vpl::MAX_ROWS {
+                    // spec: S-0105 claim 38 (more than 128 rows: a departure, the first 128 kept)
+                    self.note(notes::SHORT_VPL);
+                }
+                v
+            }
+            None => {
+                self.note(if blank {
+                    notes::NO_VPL
+                } else {
+                    notes::VPL_REJECTED
+                });
+                Vpl::empty()
+            }
+        };
+        Some(v)
     }
 
     /// Adds a voxel part image to the scene: its index and offset from the
@@ -2192,7 +2215,7 @@ impl Builder<'_> {
             },
             paint,
             group,
-            // provisional (Q-0014: the lighting table's layout)
+            // provisional (Q-0022: the lighting table's byte layout)
             provisional: true,
             object: Some(object),
         }
