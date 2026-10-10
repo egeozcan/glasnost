@@ -197,8 +197,10 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
         }
         let old_cell = o.pos.cell();
         let new_pos = Pos::new(nx, ny, o.pos.z);
+        // spec: S-0206 claim 7 (the infantry body turns at the rate of its rules: 127 with quirks.infantry_fixed_turn_rate)
+        let omega = r.unit(o.kind, o.type_index).map_or(0, |u| u.turn_rate);
         if let Some(ob) = w.obj_mut(id) {
-            ob.body.turn_to(f, t, 127); // spec: S-0206 claim 7 (infantry turn at 127)
+            ob.body.turn_to(f, t, omega);
             ob.pos = new_pos;
             if let Some(s) = ob.walk.as_mut() {
                 s.moved_tick = Some(t);
