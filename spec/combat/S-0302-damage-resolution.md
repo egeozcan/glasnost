@@ -2,7 +2,7 @@
 id: S-0302
 title: Damage resolution (shot damage, defences, versus values, rounding, healing, health thresholds)
 topic: combat
-revision: 8
+revision: 9
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -33,6 +33,9 @@ Shared terms used here are defined in the glossary: *armour class*, *warhead*, *
 *double*, and RN₅₃ and RN₂₄, the round-to-nearest counterparts that replace RZ₅₃ and RZ₂₄ when
 `quirks.chop_rounding` is off (Formulas). In addition:
 
+- **Inert game.** A game whose map sets the inert special flag (Import mapping). Detonations reach
+  no object in it (S-0303, claim 2), and a hit from any other source that does not ignore
+  defences, a sonic wave for example, has a modified amount *m*₀ of 0 (claim 6).
 - **Killed.** An object is *killed* by the hit that takes its last health (claim 14): that hit
   reports *now dead*, or *post-mortem* when it starts a delayed kill (claim 16). A cyborg that
   claim 15 cripples instead is not killed. A killed object can stay in play for a time (S-0203,
@@ -59,7 +62,8 @@ Shared terms used here are defined in the glossary: *armour class*, *warhead*, *
 - **Difficulty row.** The entry of the *difficulty skill block* (glossary) for one difficulty: one
   of the three rules sections *easy*, *normal* and *difficult* (Import mapping), which give the
   factors of that difficulty. The lead's decision on which row a house uses is recorded in the
-  glossary's *difficulty skill block* entry and applied in claim 3.
+  glossary's *difficulty skill block* entry and applied in claim 3: in a skirmish every house uses
+  the normal row, and a row that a map sets for a house is ignored.
 - **Versus value *v*.** The glossary's *versus value* (a double), written *v* in the formulas.
 - **Hit.** One delivery of an amount of damage, with a warhead, to one object, carrying the two
   markers of claim 1. A projectile's detonation delivers one hit to every object it reaches
@@ -125,7 +129,8 @@ Shared terms used here are defined in the glossary: *armour class*, *warhead*, *
    *r*, an optional attacker and attacking house, and two yes/no markers: *ignores defences* (what
    it changes is claim 9) and *no-escape* (Terms). The table gives the markers, the attacker and
    the attacking house of each source known to deliver hits; each owning spec says what else its
-   source delivers.
+   source delivers. The table lists the sources that the specs written so far know about, not
+   every source the original has.
 
    | Source (owner) | Ignores defences | No-escape | Attacker | Attacking house |
    |---|---|---|---|---|
@@ -133,18 +138,22 @@ Shared terms used here are defined in the glossary: *armour class*, *warhead*, *
    | The detonation of an object's death weapon (S-0312, claim 6) | no | no | the dying object | the dying object's house |
    | The detonation that follows the impact of an object that crashes while alive (S-0312, claim 16) | no | no | none | none |
    | The damage of a sonic wave (wave specs) | no | no | the wave's firing object | none |
+   | The detonation of the demolition warhead when a destroyed ore-spawning terrain object bursts (claim 20) | no | no | none | none |
    | A detonation set off by the lightning-storm bolt of the weather superweapon (superweapon specs) | no | no | none | the superweapon's owner |
    | The trigger action that destroys attached objects (S-0011, claim 27) | yes | no | none | none |
    | The destruction of the objects in contact with a destroyed building (S-0312, claim 17) | yes | yes | none | none |
    | The impact of an object that crashes while alive (S-0312, claim 16) | yes | yes | none | none |
    | The elimination of a house's remaining objects, and the destruction of a bridge section (their specs) | yes | yes | none | none |
    | Crushing by trains (S-0210) | yes | S-0210 says | S-0210 says | S-0210 says |
+   | The damage of a damaging animation, such as a burning one (S-0109, claim 17) | not traced | not traced | not traced | not traced |
 
    Other sources are believed to deliver damage that ignores defences too (damage from crates, side
    effects of some superweapons, the surfacing of tunnelling units); their owning specs give their
    markers, attacker and house; a crate source is believed to set the no-escape marker in some
    cases and not in others. A detonation and a wave never ignore defences and never carry the
-   no-escape marker.
+   no-escape marker. Whether the damage of a damaging animation is a detonation in that sense,
+   and which attacker and house it carries, is not traced: S-0109 (claim 17) says what such an
+   animation delivers and when, and the combat specs own the rest.
 
    *The attacker of a projectile's detonation.* The detonation carries the object that fired the
    projectile as its attacker, and that object's owner as its attacking house, unless at some time
@@ -163,24 +172,32 @@ Shared terms used here are defined in the glossary: *armour class*, *warhead*, *
    - Backing: `measurable` (detonations, every scenario below; what a detonation carries, scenarios
      D13, D17 and D24 including the firer loaded into a transport, the infantry firer with a death
      sequence, the death weapon and, in D24 part b5, the cloaking firer; the wave's attacker through
-     D24 part f, and that a wave hit does not ignore defences through D9 part b; the storm bolt's
+     D24 part f, that the ore burst of claim 20 does not ignore defences through D28 part d, the ore burst's two markers, attacker and house through D28 part d (the vehicle
+     next to the burst loses its 100 health, so the burst is a defended hit that lands without a
+     firer), and that a wave hit does not ignore defences through D9 part b; the storm bolt's
      attacking house through D24 part d, and its two markers through D24 parts d2 and d3; the
      trigger kill through S-0011's scenario T9 (claim 9) and D24 part c; the contact destruction
-     and the crash impact through S-0312's scenarios D11 and D12); `unmeasured` (a firer removed
+     and the crash impact through S-0312's scenarios D11 and D12); `unmeasured` (the attacker, the attacking house and the no-escape
+     marker of the ore burst: no scenario reads who is credited for a hit on a vehicle next to the
+     burst, and the marker changes nothing a scenario can see there; a damaging animation's row:
+     no scenario of this spec observes its markers, attacker or house; a firer removed
      from the game in flight by some means other than a killing hit or a cloak: no such means is
      identified, so no scenario can set it up; the markers, attacker and house of the elimination
      of a house's remaining objects and of the destruction of a bridge section: no scenario of
      this spec sets either up, since what triggers them is the subject of specs not yet written, so
      those two rows are the believed values that those specs confirm or correct; the wave's
-     attacking house column: a wave kill credits the attacker whether or not the house is the
-     attacker's owner, so a wave that carries its firer's house is not told apart from one that
-     carries none)
+     attacking house column: a wave kill credits the attacker whether the wave carries its
+     firer's house or none (claim 14), so a wave that carries its firer's house is not told apart
+     from one that carries none)
    - Confidence: high (detonations and waves never ignore defences and never carry no-escape; a
-     detonation of a firer that has not been killed carries it and its owner); medium (a
+     detonation of a firer that has not been killed, removed or started to cloak carries it and its
+     owner); medium (a
      detonation of a firer that has been killed carries neither, and the same for a firer that
      stays in play after its killing hit; the death weapon's attacker; the markers and attacker of
      the trigger kill, the contact destruction, the crash impact and the wave); low (the storm bolt,
-     which the superweapon specs own; the elimination and bridge rows, which come from how
+     which the superweapon specs own; the ore burst's attacker, house and no-escape marker, which
+     follow from claim 20 having no source object and house; the damaging-animation row, which is
+     not traced; the elimination and bridge rows, which come from how
      those sources deliver the damage and which their specs confirm; that the detonations of a
      firer that starts to cloak carry neither attacker nor house; that those of a firer loaded into
      a closed transport still carry it)
@@ -209,8 +226,9 @@ Shared terms used here are defined in the glossary: *armour class*, *warhead*, *
    - Backing: `measurable` (scenario D1 for the plain case; D2 and D19 for the firepower
      multipliers and the order of truncation; D20 for each of the garrison, bunker and open-topped
      multipliers alone and for the sign rule; D15 part c for a firepower crate picked up while the
-     projectile flies); `unmeasured` (a promotion of the firer while the projectile flies: no
-     scenario of this spec times a promotion inside a flight, and the rule is the same as for the
+     projectile flies; D29 parts a and b for the veteran combat factor, and for the rule that the
+     firepower multipliers and the veteran combat factor leave a non-positive *D* unchanged); `unmeasured` (a promotion of the firer while
+     the projectile flies: no scenario of this spec times a promotion inside a flight, and the rule is the same as for the
      crate, so it follows from it only by belief; the 0 carried by sonic-wave and
      fire-particle weapons, which is an amount the projectile carries; what such weapons observably
      deal is the wave's and the particles' own damage, which specs not yet written own, so no
@@ -218,14 +236,15 @@ Shared terms used here are defined in the glossary: *armour class*, *warhead*, *
      three situations, which D20 cannot set up, since no known firer is in any two of them at once)
    - Confidence: high (the plain case, the firepower multipliers, each of the three multipliers
      alone, the sign rule); medium (that a crate picked up in flight changes nothing; the 0 carried
-     by those weapons; the combined result of two or three of the multipliers); low (that a
-     promotion in flight changes nothing)
+     by those weapons); low (that a promotion in flight changes nothing; the combined result of
+     two or three of the multipliers, which no scenario reaches)
 
 3. **House firepower multiplier.** Each house has a firepower multiplier, fixed when the houses are
    set up. In a skirmish the original makes it the product, rounded as the house multiplier formula after F1 says (*F*ₕ), of the firepower
    factor of the house's *difficulty row* and the firepower factor of its country (both
-   imported; 1.0 when absent). In a campaign mission the country factor is not used (campaigns are a pointer
-   only). The row's armour factor and the country's general armour factor are never used by any
+   imported; 1.0 when absent). In a campaign mission the country factor is not used; campaigns are out of
+   scope for now, and which row a campaign house takes is left to the future campaign spec (lead
+   decision, 2026-10-10). The row's armour factor and the country's general armour factor are never used by any
    damage rule: no hit changes with them (the factor that divides a hit is the country's factor for
    the target's kind, claim 5, with the object's multiplier). S-0006 (claim 5) lists the row's
    armour factor among the values with no identified effect and measures the row's firepower factor
@@ -235,13 +254,23 @@ Shared terms used here are defined in the glossary: *armour class*, *warhead*, *
      human-controlled house. By the same decision (the glossary's *AI house* and *difficulty skill
      block*), AI difficulty comes from the AI's strategy modules and never from stat factors. A
      house's row can differ only through an optional per-player handicap setting, which is off by
-     default and is never tied to an AI house's difficulty automatically.
+     default and is never tied to an AI house's difficulty automatically. A difficulty row that a
+     map sets for a house is ignored in a skirmish (lead decision, 2026-10-10): the only thing that
+     can change a house's row is the player's handicap setting, and the map never overrides or
+     replaces it.
    - *The original's rows for computer houses (a departure, no switch).* The original gives each
-     computer-controlled house the row of its lobby difficulty (the rows are in the order easy,
-     normal, difficult), moved one row towards easy when more than one human player is in the game,
-     the rules' computer-easy-bonus flag is on and the row is not already the easy one. Our engine
-     does not reproduce this assignment. The same row also scales other house factors outside this
-     spec.
+     computer-controlled house a row from its lobby difficulty, as the table says. The shift
+     applies when more than one human player is in the game and the rules' computer-easy-bonus flag
+     is on.
+
+     | Lobby difficulty | Row without the shift | Row with the shift |
+     |---|---|---|
+     | easy | easy | easy |
+     | normal | normal | easy |
+     | difficult | difficult | normal |
+
+     Our engine does not reproduce this assignment. The same row also scales other house factors
+     outside this spec.
    - Backing: `measurable` (scenario D2 for the country factor and the rounding of the
      product; D19, parts a and b, for the normal row's firepower factor in the product and for the absence of
      any effect of the row's armour factor and the country's general armour factor; part c for the
@@ -285,8 +314,8 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
    is not changed by the defences.
    - Backing: `measurable` (scenario D2 for the armour factor and the minimum; D21 for the kinds
      of target, among them the defence-building factor against the other-buildings factor; D7 for
-     the prone factor; D25, part c, for a healing hit against an armour factor other than 1.0; the
-     veteran armour bonus through S-0311's scenarios)
+     the prone factor; D25, part c, for a healing hit against an armour factor other than 1.0; D29
+     part c for the veteran armour factor and its own truncation)
    - Confidence: high
 
 6. **Versus value, falloff and cap.** For a hit that does not ignore defences, the defended
@@ -334,7 +363,7 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
      *d*₀ > 0 against a negative versus value is therefore a + hit for every row, although it ends
      as healing (claim 11): on a temporarily invulnerable target, for example, it does nothing.
    - *Stages.* A row's stage says which of the two side effects of claim 10 a hit that the row
-     stops still has. A hit that no stage 1 row stops loses readiness (claim 10), whatever else
+     stops still has. A hit that no stage 1 row stops causes readiness loss (claim 10), whatever else
      holds for it. The side effects of a stopped hit are:
 
      | Rows that hold for the hit | Readiness loss (claim 10) | Berserk effect (claim 10) |
@@ -346,12 +375,28 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
 
      "Yes" under readiness loss means: for a target whose type has the damage-reduces-readiness
      flag. The order of the rows within one stage is not observable, since each stops the hit with
-     the same result. Nor is the stage of the two no-health rows (the building's in stage 1, the
-     other kinds' in stage 4): neither case can arise (the backing below), so that split is only
-     the table's bookkeeping and no engine has to reproduce it.
-   - *Amounts.* Only two things look at an amount: the effect that the temporarily-invulnerable row
-     shows is sized by twice the amount after the defences of claim 5, and the last row looks at the
-     amount after claims 5 to 7. No other row depends on an amount.
+     the same result. The stage of the two no-health rows (the building's in stage 1, the other
+     kinds' in stage 4) is different: it is observable, through the readiness loss and the berserk
+     effect, for a hit that reaches an object with no health, and an engine implements the table as
+     written for such a hit. No known source delivers one (*No-health targets* below), so no
+     scenario sets it up, and the stages of those two rows are low confidence.
+   - *No-health targets.* An object with no health can stay in play after its killing hit (an
+     infantry unit playing its death sequence, a vehicle or aircraft that is crashing, a building
+     that is exploding or being sold, claim 1 and S-0312), so the two rows are not ruled out by
+     "out of play". They are ruled out, for the known sources, by those sources' own filters.
+     S-0303 (claim 9) leaves out of every detonation, so also out of death weapons and storm bolts,
+     a candidate that is not alive or has health 0 or less; the trigger kill acts on present objects
+     only, which exclude destroyed ones (S-0011, Terms and claim 27). An object that stays in play
+     with health left (a sinking vehicle, a building in a delayed-kill countdown, a crippled
+     cyborg, each with at least 1 health) is not a no-health target at all, and takes hits by the
+     other rows. The sources that this spec cannot place under a filter are the sonic wave, the
+     contact destruction, the elimination of a house's objects, the destruction of a bridge section
+     and the train crush (claim 1): whether they skip an object with no health is for their specs
+     (Open questions).
+   - *Amounts.* Only three things in the table look at an amount: the effect that the
+     temporarily-invulnerable row shows is sized by twice the amount after the defences of claim 5,
+     the berserk row's duration is taken from an amount as claim 10 says, and the last row looks at
+     the amount after claims 5 to 7. Whether any other row applies does not depend on an amount.
 
    | Stage | Rule | + | − | I |
    |---|---|---|---|---|
@@ -377,8 +422,8 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
    The last row is what makes a positive hit do nothing when the versus value, the falloff, an
    inert map or a missing warhead took it to 0 (unless claim 7 raised it to 1). A delivered amount
    of 0 is different: when the hit ignores defences it does nothing (except on an undemolishable
-   building, which loses 1, claim 7); otherwise the minimum of claim 5 first raises it to 1, and
-   the versus value then decides (a direct hit against a versus value of 0 or more deals trunc(*v*), at most the cap of claim 6).
+   building, which loses 1, claim 7); otherwise its defended amount is 1 (the minimum of claim 5),
+   and claim 6 applies to that 1 (a direct hit against a versus value of 0 or more deals trunc(*v*), at most the cap of claim 6).
    Detonations never deliver 0 (S-0303 claim 2: a detonation of 0 reaches nobody); claim 17 is the
    one rule known to produce such a hit.
    - Backing: `measurable` (scenario D6 for invulnerability, D8 for the allies rule (with an
@@ -387,13 +432,16 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
      laser-fence and being-erased rows (the trigger kill on an immune bridge repair hut in its own
      last run, d2, which expects the hang), D17 for the radiation, psychic and poison rows and for
      the stages; D26 for the − column of the rows that D6 and D8 do not test); `unmeasured` (the two
-     no-health rows and their stages: an object with no health is out of play before another hit
-     can reach it, so no scenario can set the case up; the − entry of the self-damage row: no known
-     setup makes a building deliver a healing hit to itself)
+     no-health rows and their stages: every source that a scenario of this spec can set up skips an
+     object with no health before the hit (*No-health targets* above), and the sources that might
+     not skip it belong to specs not yet written, so no scenario can deliver a hit to such an
+     object; the − entry of the self-damage row: no known setup makes a building deliver a healing
+     hit to itself)
    - Confidence: high for the + column of every row and for the − and I entries that D6, D8, D16,
      D17 and D26 test; medium for the stages of the rows that only D16 and D17 test, and for the
      vehicle-factory, laser-fence and bridge-repair-hut rows (the conditions are clear; D16 is
-     their first measurement); low for the no-health rows and the − entry of the self-damage row
+     their first measurement); low for the no-health rows (their stages included) and the − entry of
+     the self-damage row
 
 9. **What ignoring defences skips.** A hit that ignores defences skips the defences of claim 5
    (including the minimum of 1 and the prone factor), every part of claim 6 (inert map, falloff,
@@ -406,7 +454,10 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
    without any change of health. The trigger kill of S-0011 (claim 27) has no attacker, so of those
    rows only these can stop it: the immune bridge repair hut, a warhead-kind row (radiation,
    psychic, poison), the berserk row and, after the reset of claim 17, the zero-amount row. A target that survives the trigger kill hangs the original
-   (S-0011, claim 27), so the same hang follows from the immune bridge repair hut, which is a
+   (S-0011, claim 27). The warhead-kind rows and the berserk row stop a trigger kill only when the
+   demolition warhead itself is of that kind, which S-0011 already names (its protections by
+   warhead kind, berserk included), so a demolition warhead that is also flagged as a berserk
+   warhead is no further case. The same hang follows from the immune bridge repair hut, which is a
    property of the type in the map's data and not of the warhead. The hang also follows from a
    building that the demolition warhead puts into a delayed kill (claim 16), if that warhead
    causes delayed kills, and from an airborne infantry unit hit by a demolition warhead of
@@ -414,9 +465,10 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
    firing and go on) applies to every survivor, but its statement that survivors need a demolition
    warhead of an immunity kind, and its importer warning, name only that case: they have to be
    extended to the three further cases above by a revision of S-0011 (Questions for the project
-   lead). The self-damage
-   row cannot stop a trigger kill (it needs an attacker) and the two no-health rows cannot
-   arise.
+   lead). The zero-amount row stops a trigger kill only in the airborne case just named: every other
+   target has health at the trigger kill, so the amount is above 0. The self-damage
+   row cannot stop a trigger kill (it needs an attacker), and the two no-health rows do not apply to
+   it (S-0011 acts on present objects only, *No-health targets* in claim 8).
    - Backing: `measurable` (through S-0011's scenario T9 for its claim 27, and S-0210's scenario K6
      for trains; the immune bridge repair hut through scenario D16, part d2, which expects the
      hang)
@@ -454,19 +506,20 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
       rows, so a target that is immune to all damage still goes berserk. A berserk hit that a stage 1
       or stage 2 row stops, for example one of a radiation warhead on a target immune to radiation,
       causes no berserk state and reports *unaffected*.
-    - **Who goes berserk from ordinary fire.** A detonation whose firer has not been killed
-      carries an attacking house (claim 1), so a berserk warhead never makes the firer's own side
+    - **Who goes berserk from ordinary fire.** A detonation whose firer has not been killed,
+      removed or (believed, low) started to cloak since the shot carries an attacking house
+      (claim 1), so a berserk warhead never makes the firer's own side
       or its allies go berserk. That includes (low) a firer that is out of play but not killed, such
       as one loaded into a closed transport, and the detonation of a death weapon, which carries the
       dying object's house (claim 1). A detonation of a firer that has been killed since the
       shot (claim 1) carries no attacking house: then an allied target goes berserk too (and the
       allies row of claim 8 does not apply to it either, since that row needs an attacker).
-    - Backing: `measurable` (scenario D10 for readiness, D23 part f for the lack of reactions to a berserk hit, D17 for berserk, its duration, its
+    - Backing: `measurable` (scenario D10 for readiness loss, D23 part f for the lack of reactions to a berserk hit, D17 for berserk, its duration, its
       reset, its stages and who goes berserk, including parts g, g2, g3 and g4); `unmeasured` (a *T* of 0 or less: the
       special-abilities specs own being berserk, and no observable of it is known for a state that
       ends at once; and *T* for a hit that ignores defences: no known source delivers a berserk hit
       with the marker)
-    - Confidence: medium (readiness, including that it uses the amount before the versus value
+    - Confidence: medium (readiness loss, including that it uses the amount before the versus value
       and happens even when a later row stops the hit); medium (berserk duration, its reset, and
       the stages); medium (a detonation of a firer that has been killed carries no attacking
       house; one of a death weapon carries the dying object's house); low (that one of a firer in a
@@ -508,7 +561,8 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
       target out of play (a trigger that the hit sets off can destroy it, S-0011), the hit reports
       *post-mortem* instead of the result above. Only the source of the hit receives this result,
       and no effect of it is known in a skirmish, so this part of the claim cannot be told from the
-      other results.
+      other results. An engine need not represent this result (it may report the result above)
+      until an effect of it is found; the claim records the original's value only.
     - Backing: `measurable` (scenario D11 for the thresholds, its parts a to c for the yellow
       threshold, the red threshold and the precedence of red, and for the light source; D23 for
       the loss of the disguise); `unmeasured` (the length of the disguise-disruption countdown: its only effect is on when
@@ -520,12 +574,12 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
     - Confidence: high (the thresholds); medium (the light source and the loss of the disguise); low (the countdown, post-mortem after a reaction)
 
 13. **Damage effect and its draw.** After a hit that reports *now yellow* or *now red*, an object
-    whose health ratio (S-0214, Terms) is at or below the yellow ratio and that has no damage
+    whose health ratio (S-0214, Terms) is at or below the game-wide yellow ratio (Import mapping; unlike the fixed half of claim 12, this is the imported ratio) and that has no damage
     particle effect yet gets one, chosen from its type's list of damage particle systems by one
     ranged draw from the scenario random stream over 0 … *n* − 1, where *n* is the number of
     eligible entries, provided *n* > 0 and the object is less than 10 leptons below the surface
-    (its height above the surface is above −10 leptons; which of the two heights, above the surface
-    or above the terrain, the original uses is not settled, and they differ only on a bridge deck). The eligible entries are the particle system types of the
+    (the object's height is above −10 leptons; whether that height is taken above the surface or
+    above the terrain is not settled, and the two differ only on a bridge deck). The eligible entries are the particle system types of the
     list whose behaviour is *smoke* (Import mapping); a draw of *k* picks the (*k* + 1)-th eligible
     entry counted from the end of the list, so a draw of 0 picks the last one. After a hit that
     leaves the health ratio above the yellow ratio, an existing damage particle effect is removed.
@@ -542,17 +596,18 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
     isometric screen plays no part. For every foundation word of S-0108's vocabulary (Import
     mapping, foundation vocabulary) the cells are the full *W* × *H* rectangle, *W* along map *x*
     and *H* along map *y*, except two: the 8-cell 3 × 3 foundation word (Import mapping), whose
-    cells are the 3 × 3 rectangle without the cell at
-    distance 2 along *x* and 1 along *y* from the top-left cell (8 cells: its three rows have 3, 2
+    cells are the 3 × 3 rectangle without the cell 2 cells along map *x* and 1 cell along map
+    *y* from the top-left cell (8 cells: its three rows have 3, 2
     and 3 cells), and the zero-size foundation, which has no cells and so no draws. S-0108 and S-0312
     may find the same cells and order useful for their own cell-by-cell rules; nothing here
     claims it of them. Each cell's draw is over 0 … *W* + *H* + 5, where *W* × *H* is the
     foundation's size in cells (S-0108, Import mapping, foundation vocabulary). A result from 1 to 5 starts the first of the rules' damage-fire
     animations on that cell, 6 to 8 the second and 9 the third; any other result (0, and every
-    result above 9) starts none. A fire of the first or second kind takes one more ranged draw, over
-    1 … 3, for its number of loops, **immediately after the draw of its own cell and before the next
-    cell's draw**. So the draws of one hit run: cell 1's draw, its loop draw if it started a fire of
-    the first or second kind, cell 2's draw, and so on. The structures specs own the fires
+    result above 9) starts none. A fire of the first or second kind also takes one ranged draw, over
+    1 … 3, for its number of loops. On the stream, that loop draw comes **directly after its own
+    cell's draw and before the next cell's draw**: the hit's draws are, in stream order, the cells'
+    draws in the order above, each followed at once by its cell's loop draw where there is one
+    (scenario D18 tells this order apart from the alternatives). The structures specs own the fires
     themselves (S-0109 gives what a burning animation deals).
 
     **No other draws.** The amount of a hit never depends on a draw. Apart from the two cases
@@ -578,16 +633,16 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
       position of the loop draws and the cells of every non-zero foundation word and their order,
       row by row and within a row by increasing map *x*; the zero-size foundation's lack of
       cells; the removal by a healing hit); low (the depth limit,
-      the removal and non-removal by the hits listed as unmeasured); which of *W* and *H* is
-      which does not matter to the range
+      the removal and non-removal by the hits listed as unmeasured). Which of *W* and *H* is
+      which does not matter to the range.
 
 14. **Death.** A hit that takes the last health reports *now dead*. The kill is credited to the
     attacker when there is one and the attacking house is absent or is the attacker's owner, and
     otherwise to the attacking house; when both are absent nobody is credited. Each hit that takes
     the last health is credited on its own, whether or not the object was killed before (claim 16
     gives the one case that kills an object more than once). So a shot of a firer that has not
-    been killed credits the firer (low for a firer loaded into a closed transport since the
-    shot). A shot of a firer that was killed while the projectile flew credits nobody, even when the firer
+    been killed, removed or (believed, low) started to cloak since the shot credits the firer (low
+    for a firer loaded into a closed transport since the shot). A shot of a firer that was killed while the projectile flew credits nobody, even when the firer
     stays in play for a time (claim 1); a kill by a death weapon credits the dying
     object and its house; a trigger kill credits nobody (S-0011, claim 27); and a lightning-storm
     bolt credits its owner's house (claim 1). A kill of a terrain object credits nobody (claim 20).
@@ -671,16 +726,25 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
     (without the prone factor) and the modification of claim 6 at distance 0. The defences use the
     target's veteran armour bonus, but the house armour factor of the target owner's country for
     the *firer's* kind and the *firer's* object armour multiplier, not the target's (quirk
-    `quirks.expected_damage_firer_armour`, Edge cases). For a weapon whose damage field is 0 or
-    negative, the expected damage is the damage field itself, unchanged; for a sonic-wave or
-    fire-particle weapon it is 0. The target acquisition spec S-0309 owns its use (the target's
+    `quirks.expected_damage_firer_armour`, Edge cases). The cases are disjoint, in this
+    precedence: for a sonic-wave or fire-particle weapon the expected damage is 0, whatever its
+    damage field (also when that is 0 or negative); for any other weapon whose damage field is 0
+    or negative it is the damage field itself, unchanged; for every other weapon it is the
+    positive-damage value above. The target acquisition spec S-0309 owns its use (the target's
     expected remaining health, which automatic searches use to avoid overkill, lowered when a search
     picks the target and when a shot is fired at it: S-0309, claims 4 and 15). It never changes
     health.
-    - Backing: `measurable` (through S-0309's scenario A8, part b, which observes the expected
-      remaining health that the expected damage lowers)
-    - Confidence: medium (high for the formula; medium for its effect, which only S-0309's
-      scenario can show)
+    - Backing: `measurable` (D30, part a, for the firer's kind and armour multiplier in the
+      defences, and part b for the missing prone factor; S-0309's scenario A8, part b, for the
+      lowering of the expected remaining health that the expected damage causes); `unmeasured` (the
+      absence of the garrison, bunker and open-topped multipliers, the damage field passing
+      unchanged for a weapon of 0 or negative damage, the 0 of wave and particle weapons, and
+      that the 0 of a wave or particle weapon takes precedence over the unchanged non-positive
+      damage field: no scenario of this spec or of S-0309 separates them from the plain formula, since the expected
+      value is visible only through the strong-mode pick that D30 uses and these differences are
+      not set up there)
+    - Confidence: medium (the firer's kind and multiplier, the prone factor and the effect); low
+      (the unmeasured parts)
 
 19. **When damage lands.** A detonation's hits are applied in the projectile's own turn, to every
     object it reaches, as S-0203 (claim 5) says; this spec adds no delay. Within one hit, the rules
@@ -697,7 +761,7 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
     ignore defences the delivered amount takes the versus value, the falloff and the cap of claim
     6, a negative amount heals up to the strength, and a hit that ignores defences lands as it is.
     The rest of the target side (claims 5, 7, 8 and 10: the house armour factor and multipliers,
-    the minimum of 1, the invulnerability, bunker, immunity, allies and berserk rows, readiness)
+    the minimum of 1, the invulnerability, bunker, immunity, allies and berserk rows, readiness loss)
     does not apply, so a hit that gets down to an amount of 0 does nothing. A terrain object has
     no owner, so a hit never credits the destruction: no experience, score or count changes for
     anyone. When its health reaches 0 the terrain object is destroyed:
@@ -740,7 +804,8 @@ veteran combat factor (double). *M*<sub>g</sub>, *M*<sub>b</sub>, *M*<sub>t</sub
 > what a degenerating projectile type takes off it in flight.
 
 House firepower multiplier in a skirmish (claim 3): *F*ₕ = RZ₅₃(*φ*ᵣ × *φ*<sub>c</sub>), where *φ*ᵣ is the
-difficulty row's firepower factor and *φ*<sub>c</sub> the country's (doubles).
+difficulty row's firepower factor and *φ*<sub>c</sub> the country's (doubles). Unit: a
+dimensionless factor.
 
 **F2, defences** (claim 5), for a hit that does not ignore defences, with *d*₀ ≥ 0. *P*: the
 warhead's prone factor (double). *A*ₕ: the house armour factor for the target's kind (single,
@@ -757,25 +822,33 @@ factor (double).
 
 For a negative *d*₀, or a hit that ignores defences, *d*₃ = *d*₀ (after claim 17's reset where it
 applies). For a hit that does not ignore defences and has *d*₀ ≥ 0, *d*₃ ≥ 1. The targets are the
-four kinds of the scope paragraph of the target side, for which *A*ₕ is defined.
+four kinds of the scope paragraph of the target side, for which *A*ₕ is defined. For a terrain
+object (claim 20), F2 does not apply and *d*₃ = *d*₀.
 
 **F3, modification** (claim 6). *r*: the distance in leptons (S-0303). *s*: the warhead's spread
 (single, cells). *p*: the warhead's edge percentage (single, a fraction). *v*: the versus value
-(double). *D*ₘₐₓ: the game-wide maximum damage (integer). The cases below are disjoint:
+(double). *D*ₘₐₓ: the game-wide maximum damage (integer). The six cases below are disjoint.
+Cases (iii) to (vi) are for a hit that does not ignore defences, in a game that is not inert, with
+a warhead:
 
-> - For a hit that ignores defences: *m*₀ = *d*₀ (claim 9).
-> - For a hit that does not ignore defences:
->   - in an inert game, or for a hit without a warhead: *m*₀ = 0.
->   - in a game that is not inert, for a hit with a warhead:
->     - *m*₀ = *d*₃ for *d*₃ < 0 and *r* < 8, and *m*₀ = 0 for *d*₃ < 0 and *r* ≥ 8.
->     - *m*₀ = 0 for *d*₃ = 0 (no actual hit reaches this case, since claim 5 raises 0 to 1; it
->       arises only for the berserk duration below).
->     - for *d*₃ > 0: *f* = RZ₂₄(*d*₃) (exact for *d*₃ ≤ 2²⁴), *a* = RZ₂₄(*f* × *p*),
->       *R* = trunc(RZ₅₃(*s* × 256)) leptons; *g* = trunc(RZ₅₃(RZ₅₃(RZ₅₃(RZ₅₃(*f* − *a*) ×
->       (*R* − *r*)) / *R*) + *a*)) when *a* ≠ *f* and *R* ≠ 0, where *R* − *r* is an exact
->       integer, and *g* = *d*₃ otherwise; *m*₀ = min(trunc(RZ₅₃(max(*g*, 0) × *v*)), *D*ₘₐₓ).
+| Case | Hit | *m*₀ |
+|---|---|---|
+| (i) | ignores defences | *d*₀ (claim 9) |
+| (ii) | does not ignore defences, in an inert game or without a warhead | 0 |
+| (iii) | *d*₃ < 0 and *r* < 8 | *d*₃ |
+| (iv) | *d*₃ < 0 and *r* ≥ 8 | 0 |
+| (v) | *d*₃ = 0 (no actual hit reaches this case, since claim 5 raises 0 to 1; it arises only for the berserk duration below) | 0 |
+| (vi) | *d*₃ > 0 | min(trunc(RZ₅₃(max(*g*, 0) × *v*)), *D*ₘₐₓ) |
+
+In case (vi), *g* is the amount after the falloff:
+
+> *f* = RZ₂₄(*d*₃) (exact for *d*₃ ≤ 2²⁴), *a* = RZ₂₄(*f* × *p*), *R* = trunc(RZ₅₃(*s* × 256)) leptons.
 >
-> Unit: health points (*m*₀, *d*₃, *f*, *a*, *g*, *D*ₘₐₓ); leptons (*r*, *R*).
+> *g* = *d*₃ (no falloff) when *R* = 0 or *a* = *f*; otherwise
+> *g* = trunc(RZ₅₃(RZ₅₃(RZ₅₃(RZ₅₃(*f* − *a*) × (*R* − *r*)) / *R*) + *a*)), where *R* − *r* is an
+> exact integer.
+>
+> Unit: health points (*m*₀, *d*₀, *d*₃, *f*, *a*, *g*, *D*ₘₐₓ); leptons (*r*, *R*).
 
 The falloff part (*f*, *a*, *R*, *g*) is shared with S-0303, which owns *r* and which objects are
 hit; the two must agree. Note the two narrowings to single precision (*f* and *a*). For *r* > *R*
@@ -820,7 +893,7 @@ cases). The importer warns for a type with the
 damage-reduces-readiness flag and a strength of 0.
 
 **Berserk duration** (claim 10). *T* is the value of F3's cases for a hit that does not ignore
-defences, with *r* = 0 and with *d* in the place of *d*₃, where *d* is the amount after F2 for a hit
+defences (cases (ii) to (vi)), with *r* = 0 and with *d* in the place of *d*₃, where *d* is the amount after F2 for a hit
 that does not ignore defences and the delivered amount *d*₀ for a hit that does. Whether the hit
 ignores defences changes only *d*, never which of F3's cases applies. No minimum for undemolishable
 buildings applies (buildings are never made berserk, claim 10). Unit: ticks.
@@ -836,12 +909,13 @@ its delay-at-edge factor (single); *s*: its spread (single, cells); *r*: the dis
 
 **F8, expected damage** (claim 18).
 
-> *E* = 0 for a sonic-wave or fire-particle weapon; *E* = *D* for *D* ≤ 0; otherwise *E*₁ as in
+> *E* = 0 for a sonic-wave or fire-particle weapon, whatever *D*; for any other weapon, *E* = *D*
+> when *D* ≤ 0; for any other weapon with *D* > 0, *E* is *E*₁ as in
 > F1 (without *M*<sub>g</sub>, *M*<sub>b</sub>, *M*<sub>t</sub>), taken through F2 without the prone factor, then through F3 with
 > *r* = 0. In F2 here, *A*ₕ is the factor of the target owner's country for the firer's kind,
 > *A*ₒ is the firer's object armour multiplier, and the veteran armour bonus is the target's
 > (`quirks.expected_damage_firer_armour` on, the original). With the switch off, *A*ₕ and *A*ₒ are
-> the target's, as in F2.
+> the target's, as in F2. Unit: health points.
 
 **Dependence on the rounding mode.** F1, F2, F3 (the falloff and the versus product), F5 (*X*), F6
 and F7 depend on `quirks.chop_rounding` (S-0205): with it off, every RZ₅₃ above is RN₅₃ and every
@@ -949,9 +1023,11 @@ Observable consequences within one hit:
   multiplier, as a real hit does (F2). The two agree whenever the firer and the target are of the
   same kind and both object armour multipliers are 1.0.
 - **Maximum damage of 0 or below** (claim 6). The cap then replaces every result, including a
-  result of 0, that is not below it with the maximum itself, so a negative maximum makes every hit
-  that is not stopped before the cap heal by its absolute value, and a maximum of 0 makes every
-  such hit do nothing. Reproduced, and no quirk switch: the maximum is the mod author's own
+  result of 0, that is not below it with the maximum itself (F3, case (vi)). So with a negative
+  maximum, every hit that reaches the cap and whose result is not below the maximum heals by the
+  maximum's absolute value, and with a maximum of 0 every such hit whose result is not negative
+  does nothing. A result already below the maximum (from a negative versus value) keeps its own
+  value. Reproduced, and no quirk switch: the maximum is the mod author's own
   number, a value below 1 is a data error and not a rule that a mod could want played another way,
   and a "fixed" meaning (ignore the cap, or treat it as 1) would replace one meaningless result
   with another of our own invention. The importer warns for a maximum below 1 (scenario D3, part
@@ -970,7 +1046,7 @@ Observable consequences within one hit:
   gives the minimum-damage field a value, or gives either armour factor a value other than 1.0,
   saying that the original ignores it. No switch: a "fixed" meaning
   would be our invention.
-- **Readiness with a strength of 0** (claim 10, F6). A type with the damage-reduces-readiness flag
+- **Readiness loss with a strength of 0** (claim 10, F6). A type with the damage-reduces-readiness flag
   and a strength of 0 loses all its ammunition to any hit that passes stage 1 (F6). Reproduced, with
   an importer warning, because it comes only from data that gives no strength.
 - **A berserk duration of 0 or less** (claim 10). Reproduced as the claim says: the target is made
@@ -1093,9 +1169,10 @@ say how).
   aims the healing weapon of D4 (with the building class at 100 %) at a damaged undemolishable
   building of the own house: it loses 1 per hit. *Falsified if* the undemolishable building loses 0
   in run 1, or heals in run 2.
-- **D6 (claim 8: invulnerability).** A computer vehicle under the invulnerability superweapon effect
-  is hit by D1's weapon at 100 % and healed by D4's weapon. *Expected:* no loss while the effect
-  lasts; the heal applies. *Falsified if* it loses health, or the heal is blocked.
+- **D6 (claim 8: invulnerability).** A computer vehicle of strength 1000, damaged to health 500
+  before the invulnerability superweapon effect starts, is under that effect, hit by D1's weapon at
+  100 % and healed by D4's weapon. *Expected:* no loss while the effect lasts; the heal applies
+  (+20 per hit). *Falsified if* it loses health, or the heal is blocked.
 - **D7 (claim 5: prone factor).** A test warhead with prone factor 50 % and versus 100 %, damage 9,
   hits a standing and a prone infantry unit of one test type (strength 1000). *Expected:* 9 and 4.
   With damage 1: 1 and 1 (trunc(0.5) raised to 1). *Falsified if* the prone unit loses 5, or 0 at
@@ -1116,7 +1193,7 @@ say how).
   undemolishable test building. *Expected:* the vehicle loses nothing; the building loses exactly 1
   per wave hit. *Falsified if* anything loses health in (a), the vehicle loses health in (b), or the
   building loses 0 or more than 1 per wave hit in (b).
-- **D10 (claim 10: readiness).** A test aircraft type with ammunition 10, the damage-reduces-
+- **D10 (claim 10: readiness loss).** A test aircraft type with ammunition 10, the damage-reduces-
   readiness flag and a readiness reduction factor of 1.0, strength 100, is hit by a weapon of damage
   30 with versus 50 % against its class. *Expected:* health loss 15; ammunition from 10 to 7 (F6 with
   the defended amount 30), not to 8 (which the final amount 15 would give). A second run makes the
@@ -1159,7 +1236,8 @@ say how).
     in c1 the intensity changes by the fixed factor of claim 12 (the recorded ratio is the same
     in repeated runs and differs from 1); in c2 it does not change. *Falsified if* the intensity
     changes in c2 (yellow wins over red), or not in c1.
-- **D12 (claim 15).** A test map marks a stock infantry type as a cyborg (strength 200). It is killed
+- **D12 (claim 15).** A test map marks a stock infantry type as a cyborg and sets its strength to
+  200. It is killed
   by a hit of 500: it survives with health 50, prone and crawling, and dies at the next lethal hit. (b) A second
   cyborg of the same type that is not prone is destroyed by the trigger kill of S-0011 (claim 27),
   which ignores defences: it dies at once. In (a) the test map also names a distinct test animation
@@ -1242,7 +1320,7 @@ say how).
   berserk warhead against a temporarily invulnerable target: no berserk state. (e) The berserk
   warhead against a target whose type is marked immune (to all damage): the target goes berserk.
   (f) The radiation-immune target of (c) and the invulnerable target of (d) are of the test
-  aircraft type of D10 (ammunition 10, readiness factor 1.0, strength 100): the ammunition falls
+  aircraft type of D10 (ammunition 10, readiness reduction factor 1.0, strength 100): the ammunition falls
   in (c), and does not fall in (d). (g) The warhead of (b) is fired with a slow test projectile
   (a flight of at least 100 ticks) at a target of an allied house, and a third unit kills the
   firing unit while the projectile flies; the firing unit is a plain test vehicle that neither
@@ -1254,9 +1332,10 @@ say how).
   shot carries no attacking house, and the allied target goes berserk. (g3) As (g), but instead of
   being killed the firing unit (infantry) is ordered into a closed test transport right after
   the shot and has entered it before the shot lands: it is out of play but not killed, so (if
-  loading a passenger leaves the link, as claim 1 believes) the shot carries it and its house, and
-  the allied target does not go berserk; if the allied target goes berserk, loading cuts the link
-  and claims 1, 10 and 14 are to say so. (g4) *The death weapon's house.* A test vehicle
+  loading a passenger does not stop the shot from carrying it as its attacker, as claim 1
+  believes) the shot carries it and its house, and the allied target does not go berserk; if the
+  allied target goes berserk, loading stops the shot from carrying its firer, and claims 1, 10 and
+  14 are to say so. (g4) *The death weapon's house.* A test vehicle
   *F* of the human house has a death weapon (its explodes flag on) whose warhead is the berserk
   warhead of (a) with a spread of 2 cells. A second vehicle *G* of the human house and a vehicle
   *E* of the computer house stand inside the spread, a cell or more from *F* and well away from
@@ -1294,8 +1373,8 @@ say how).
   chi-squared test with 2 degrees of freedom at the 0.001 level (reject above 13.8). A second
   run with a warhead whose sparks flag is off must start no fire and take no draw (the stream
   state is unchanged by the hit). A third run uses the 8-cell 3 × 3 foundation word of claim 13 and checks, by the same replay,
-  that 8 cell draws (not 9) happen, that the cell without a draw is the one at distance 2 along map
-  *x* and 1 along map *y* from the top-left cell (the recorder sees no fire there in any building,
+  that 8 cell draws (not 9) happen, that the cell without a draw is the one 2 cells along map
+  *x* and 1 cell along map *y* from the top-left cell (the recorder sees no fire there in any building,
   and the replay fits only with that cell skipped), and that the draw range is 0 … 11. A fourth run
   (if the test map can place a building of the zero-size foundation) hits such a building with the
   sparks warhead and must show no draw. *Falsified if* a replay differs, a count fails its test, or
@@ -1375,7 +1454,7 @@ say how).
   *A* an infantry unit whose death sequence outlasts the flight: *A* is killed but stays in
   play, so again no experience or count changes. (b3) As (b), but *A* (infantry) is ordered into a
   closed test transport after the shot and enters it before the shot lands, and nothing kills
-  it: the human house's count rises by 1 and *A*'s experience rises if the link is kept, as claim
+  it: the human house's count rises by 1 and *A*'s experience rises if the shot still carries *A* as its attacker, as claim
   1 believes (low). (b5) As (b), with *A* a test vehicle of a type that can cloak, which starts to cloak by
   itself after its shot (the test map makes the delay before cloaking shorter than the
   flight) and is not killed: *expected* (believed, low): no experience or count of the human
@@ -1449,10 +1528,57 @@ say how).
   100 % and its spread to 2 cells, the tree's own cell is the detonation's centre, and the
   vehicle stands in a neighbouring cell at least 100 leptons inside the spread's radius of 512
   leptons, so no boundary is tested); the same
-  vehicle next to a tree type without the flag loses nothing. (e) A sonic-wave weapon of stock
+  vehicle next to a tree type without the flag loses nothing. With the demolition warhead's
+  versus value for the vehicle's class set to 50 % instead, the vehicle loses exactly 50 (the burst
+  does not ignore defences). (e) A sonic-wave weapon of stock
   type fires through a tree (its warhead with the wood flag on, versus 100 % for *wood*): the
   tree loses health. *Falsified if* any of these differs, in particular a loss with the wood flag
-  off in (a) or from the immune tree in (b), any credit in (c), or no damage to the vehicle in (d).
+  off in (a) or from the immune tree in (b), any credit in (c), no damage to the vehicle in (d), or
+  a loss of 100 in (d) with the versus value of 50 %.
+
+- **D29 (claims 2 and 5: veteran factors, and the sign rule of the firing factors).** The test map's
+  general section gives the veteran combat factor 1.5 and the veteran armour factor 2.0, and the
+  human house's country the firepower factor 1.25 (all exact in binary; Import mapping); every other
+  factor is 1.0 unless stated. The test types' veterancy abilities grant the veteran firepower bonus
+  (the firer's type) or the veteran armour bonus (the target's type) at the veteran rank (S-0311
+  owns the list and its form). Each veteran object is brought to the veteran rank as S-0311 gives
+  (for example by its starting experience), and a rookie of the same type is its control.
+  (a) A veteran human test unit with a test weapon of damage 7 (versus 100 %) attacks a computer
+  vehicle (strength 1000) without the armour bonus. *Expected:* loss 12 per hit
+  (trunc(trunc(7 × 1.25) × 1.5) = trunc(8 × 1.5)); the rookie control loses 8. *Falsified if* the
+  veteran's loss is 13 (one truncation of 7 × 1.875 = 13.125), 10 (house factor missing) or 8
+  (veteran factor missing).
+  (b) A veteran and a rookie human unit of a second test type, with the same veterancy abilities
+  and the healing weapon of D4 (damage −20, versus 100 %; legality as in D4), each fire at a
+  damaged own vehicle (health 100 of strength 1000). *Expected:* +20
+  per hit from both. *Falsified if* a heal is 25 (the house factor applied to a negative damage), or
+  30 or 37 (the veteran combat factor applied).
+  (c) A rookie human test unit with a weapon of damage 8 (versus 100 %) hits a computer test vehicle
+  of strength 1000 at the veteran rank whose type has the veteran armour bonus: shot damage
+  trunc(8 × 1.25) = 10, *expected* loss 5 per hit (trunc(10 / 2.0)); the rookie target loses 10.
+  A second test map separates the two truncations of F2: the veteran armour factor 0.625, the
+  computer country's vehicle armour factor 0.625 and the human country's firepower factor 1.0 (a
+  factor below 1 only to separate them), damage 6. *Expected:* loss 14 (trunc(6 / 0.625) = 9,
+  trunc(9 / 0.625) = 14); the rookie target loses 9. *Falsified if* the veteran target loses 10 in
+  the first map, or 15 (one truncation of 6 / 0.390625 = 15.36) or 9 in the second.
+
+- **D30 (claim 18: expected damage).** Reads the strong-mode pick of S-0309's scenario A8, part b:
+  a firer of target-health scan mode *strong* does not pick a target whose expected remaining
+  health is 0 or less. Two human infantry firers of one test type (object armour multiplier 1.0, a
+  slow test projectile with a flight of at least 100 ticks, damage 8, versus 100 % against the
+  target's class) stand in range of one computer test vehicle of strength 10. The test map gives
+  the computer house's country the armour factors 0.5 for vehicles and 1.0 for infantry (exact in
+  binary). The first firer fires; the recorder reads whether the second firer picks the vehicle
+  while the first shot is in flight. (a) *Firer's kind.* The real hit is trunc(8 / 0.5) = 16 and
+  kills the vehicle, but the expected damage divides by the factor for the firer's kind (infantry,
+  1.0): 8, so the expected remaining health is 2. *Expected:* the second firer picks the vehicle at
+  once. With `quirks.expected_damage_firer_armour` off the expected damage is 16 and the second
+  firer does not pick it (the switch's alternative, not a falsifier). (b) *Prone factor.* The
+  target is a prone infantry unit of strength 6 whose country's infantry factor is 1.0, and the
+  warhead's prone factor is 50 %: the real hit is 4. *Expected:* the second firer does not pick it
+  (expected damage 8 without the prone factor, remaining health 0 or less); with the prone factor
+  it would be 4 and the second firer would pick it. *Falsified if* the second firer does not pick
+  the vehicle in (a), or picks the prone unit in (b).
 
 ## Open questions
 
@@ -1480,13 +1606,22 @@ say how).
 - A hit on a unit that carries a parasite can also affect the parasite: S-0315 owns it (claim 6, the
   suppression of the parasite by a hit above the threshold of its type or by a healing hit, and
   claim 7, its release by a sonic warhead and its silent removal when it leaves while suppressed).
-  Those effects come before every rule of this spec, so they happen even when claim 8 then stops
+  Those effects do not depend on any rule of this spec, so they happen even when claim 8 stops
   the hit; this spec does not cover them further.
+- The markers, attacker and attacking house of the damage that a damaging animation delivers (claim
+  1, last table row; S-0109, claim 17) are not traced; the combat and structures specs should
+  confirm them.
 - How long a crumbling terrain object stays in play, and when it leaves (claim 20), is not traced; a
   terrain spec should own it.
 - The value of the fixed factor by which a building's light-source intensity is scaled on *now
   yellow* (claim 12) is not stated in this spec. Scenario D11, part c, records the ratio; the value
   belongs in Constants as an engine constant once known.
+- Whether the sources of claim 1 that no filter of another spec covers (the sonic wave, the
+  contact destruction, the elimination of a house's objects, the destruction of a bridge section
+  and the train crush) skip an object that has no health (claim 8, *No-health targets*) is for
+  their specs. If one does not, the two no-health rows of claim 8 become reachable and that spec
+  should add a scenario that reads the readiness loss and the berserk effect on an infantry unit
+  in a death sequence, or on a crashing vehicle, as D10 and D17 do.
 - Whether the superweapon, wave and elimination sources of claim 1 pass the attacker, house and
   markers that the table gives is for their owning specs to confirm; whether a sonic
   wave stops carrying its firing object in the cases where a projectile's detonation does (claim
@@ -1494,14 +1629,10 @@ say how).
 
 ## Questions for the project lead
 
-- **Handicap row from the map (claim 3).** By the lead's decisions every house uses the normal
-  row, and an optional per-player handicap setting (off by default) can choose another. May a
-  map also set a house's row, and if so does it override the player's setting, or
-  does the player's setting win? Until decided, this spec says only that the default is the normal
-  row for every house.
 - **A revision of S-0011 for the survivors of the trigger kill (claim 9).** Claim 9 finds three
   more cases than S-0011 (claim 27) names in which an object survives the trigger kill and the
   original hangs: the immune bridge repair hut, a building put into a delayed kill, and an infantry
   unit in the air hit by a warhead of infantry-death kind 9. S-0011's statement that survivors need
   a demolition warhead of an immunity kind, and its importer warning, name only the first
-  cause. No request for the revision exists yet. May the S-0011 owner be asked to extend both?
+  cause, the warhead kinds (a demolition warhead that is also a berserk warhead is among them).
+  May the S-0011 owner be asked to extend both?

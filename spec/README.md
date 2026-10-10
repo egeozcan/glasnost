@@ -48,7 +48,6 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0102](rendering/S-0102-draw-order.md) | Draw order, render layers, depth compositing, sprite placement and shadow pixels | rendering | 3 | approved | — |
 | [S-0104](rendering/S-0104-lighting.md) | Lighting | rendering | 9 | approved | — |
 | [S-0105](rendering/S-0105-voxel-rendering.md) | Rendering of voxel models | rendering | 5 | approved | — |
-| [S-0302](combat/S-0302-damage-resolution.md) | Damage resolution (shot damage, defences, versus values, rounding, healing, health thresholds) | combat | 8 | approved | — |
 | [S-0304](combat/S-0304-special-versus-values.md) | Special versus values (what zero and small versus values mean for firing, retaliation and automatic targeting) | combat | 2 | approved | — |
 | [S-0305](combat/S-0305-armour-classes.md) | Armour classes (the class list, its order, and how a type's armour value is read) | combat | 1 | approved | — |
 | [S-0307](combat/S-0307-range.md) | Weapon range test | combat | 1 | approved | — |
@@ -77,3 +76,4 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0212](movement/S-0212-pathfinding.md) | Pathfinding (observable behaviour) | movement | 16 | approved | — |
 | [S-0214](ui/S-0214-order-targeting-rules.md) | Order targeting rules (what a click means for each kind of object, and group orders) | ui | 12 | approved | — |
 | [S-0301](combat/S-0301-firing-cycle.md) | Firing cycle (delay between shots, bursts, ammunition and reloading, the firing check) | combat | 2 | approved | — |
+| [S-0302](combat/S-0302-damage-resolution.md) | Damage resolution (shot damage, defences, versus values, rounding, healing, health thresholds) | combat | 9 | approved | — |
