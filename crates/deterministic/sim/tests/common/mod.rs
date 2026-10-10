@@ -342,3 +342,29 @@ pub const WHEEL: LocomotionClass = LocomotionClass::Wheel;
 pub const TRACK: LocomotionClass = LocomotionClass::Track;
 /// Foot class shorthand.
 pub const FOOT: LocomotionClass = LocomotionClass::Foot;
+
+impl Scene {
+    /// Registers an aircraft type.
+    pub fn aircraft(&mut self, name: &str, t: UnitType) -> &mut Self {
+        self.register("aircraft", name);
+        self.ruleset.sim.aircraft.insert(name.into(), t);
+        self
+    }
+
+    /// Registers a building type.
+    pub fn building(&mut self, name: &str, t: glasnost_rules::sim::BuildingType) -> &mut Self {
+        self.register("buildings", name);
+        self.ruleset.sim.buildings.insert(name.into(), t);
+        self
+    }
+
+    /// Places an aircraft of house 0 ("Alpha") or 1 ("Beta").
+    pub fn place_aircraft(&mut self, house: u8, ty: &str, c: CellXY, facing: i32) -> &mut Self {
+        let placed = self.placed(house, ty, c, facing);
+        self.map
+            .objects
+            .aircraft
+            .push(glasnost_map::objects::Aircraft { placed });
+        self
+    }
+}

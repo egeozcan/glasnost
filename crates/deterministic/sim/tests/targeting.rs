@@ -1,5 +1,7 @@
 //! S-0214 input rules and S-0213 key commands on the synthetic scenario.
 
+mod common;
+
 use glasnost_sim::orders::Order;
 use glasnost_sim::rules::{Behaviour, Kind};
 use glasnost_sim::targeting::{self, Action, ClickOn, KeyCommand, Modifiers};
@@ -59,7 +61,7 @@ fn force_select_toggles() {
 
 // spec: S-0214 claim 2 (each selected object resolves the click itself, in selection order)
 // spec: S-0214 table GC row GC9 (a movable actor on a clear cell: move)
-// spec: S-0214 claim 11 (the destination of a move on a cell comes from the nearby-cell search)
+// spec: S-0214 claim 11 (a move on a cell in reach: the clicked cell itself, no search)
 #[test]
 fn a_cell_click_moves_every_selected_unit() {
     let w = testkit::new_game(3);
@@ -76,9 +78,9 @@ fn a_cell_click_moves_every_selected_unit() {
             Order::Behaviour {
                 actor,
                 behaviour: Behaviour::Move,
-                dest: Some(Target::Cell(_)),
+                dest: Some(Target::Cell(c)),
                 ..
-            } => assert_eq!(*actor, id),
+            } => assert_eq!((*actor, *c), (id, cell)),
             other => panic!("unexpected {other:?}"),
         }
     }
@@ -322,4 +324,402 @@ fn infantry_attack_an_enemy() {
         ),
         Action::Select
     );
+}
+
+// ---------------------------------------------------------------------------
+// S-0214 revision 11: destinations, tote, table M part 1, table BC, click
+// feedback (synthetic scenes of `common`).
+
+mod r11 {
+    use super::*;
+    use crate::common::{FOOT, Scene, WHEEL, cell, code_tile, run, unit_type};
+    use glasnost_map::CellXY;
+    use glasnost_rules::sim::{BuildingType, MovementZone, UnitType};
+    use glasnost_sim::targeting::BuildingCell;
+
+    const CAR: &str = "TESTCAR";
+    const MAN: &str = "TESTMAN";
+
+    fn scene() -> Scene {
+        let mut s = Scene::new();
+        s.vehicle(CAR, unit_type(WHEEL, 40, 6));
+        s.infantry(MAN, unit_type(FOOT, 20, 0));
+        s
+    }
+
+    /// Makes `c` a rock cell (no land row: blocked for every class).
+    fn rock(s: &mut Scene, c: CellXY) {
+        s.set_cell(c, code_tile(7), 0);
+    }
+
+    /// A ring of rock around `c`, so that `c` is an enclosed cell.
+    fn ring(s: &mut Scene, c: CellXY) {
+        for dy in -1..=1 {
+            for dx in -1..=1 {
+                if (dx, dy) != (0, 0) {
+                    rock(s, CellXY::new(c.x + dx, c.y + dy));
+                }
+            }
+        }
+    }
+
+    fn built(s: &Scene) -> World {
+        let mut w = s.build();
+        run(&mut w, 1);
+        w
+    }
+
+    fn at(w: &World, c: CellXY) -> ObjectId {
+        w.objects.values().find(|o| o.pos.cell() == c).unwrap().id
+    }
+
+    fn dest(r: &targeting::ClickResult) -> Option<Target> {
+        match r.orders.as_slice() {
+            [Order::Behaviour { dest, .. }] => *dest,
+            other => panic!("one behaviour order expected: {other:?}"),
+        }
+    }
+
+    // spec: S-0214 claim 11 (on a cell in reach: the clicked cell itself, no search, even when occupied and for a no-move)
+    // spec: S-0214 table GC row GC11 (a movable actor whose entry outcome is not clear: no-move)
+    #[test]
+    fn in_reach_cell_is_the_destination() {
+        let mut s = scene();
+        s.place_unit(0, CAR, cell(0, 0), 64)
+            .place_unit(0, CAR, cell(3, 0), 64);
+        let w = built(&s);
+        let a = at(&w, cell(0, 0));
+        let on = ClickOn::Cell(cell(3, 0));
+        assert_eq!(
+            targeting::action(&w, ALPHA, a, on, Modifiers::default()),
+            Action::NoMove
+        );
+        let r = targeting::click(&w, ALPHA, &[a], on, Modifiers::default());
+        assert_eq!(dest(&r), Some(Target::Cell(cell(3, 0))));
+    }
+
+    // spec: S-0214 claim 11 (a cell not in reach: a cell found by the search; a self-teleporting type moving: the clicked cell itself)
+    #[test]
+    fn enclosed_cell_and_teleporter() {
+        let mut s = scene();
+        let enclosed = cell(6, 0);
+        ring(&mut s, enclosed);
+        s.vehicle(
+            "TESTPORT",
+            UnitType {
+                teleporter: Some(true),
+                ..unit_type(WHEEL, 40, 6)
+            },
+        );
+        s.place_unit(0, CAR, cell(0, 0), 64)
+            .place_unit(0, "TESTPORT", cell(0, 3), 64);
+        let w = built(&s);
+        let car = at(&w, cell(0, 0));
+        let port = at(&w, cell(0, 3));
+        let on = ClickOn::Cell(enclosed);
+        for id in [car, port] {
+            assert_eq!(
+                targeting::action(&w, ALPHA, id, on, Modifiers::default()),
+                Action::Move
+            );
+        }
+        let r = targeting::click(&w, ALPHA, &[car], on, Modifiers::default());
+        let d = dest(&r);
+        assert!(matches!(d, Some(Target::Cell(c)) if c != enclosed), "{d:?}");
+        let r = targeting::click(&w, ALPHA, &[port], on, Modifiers::default());
+        assert_eq!(dest(&r), Some(Target::Cell(enclosed)));
+    }
+
+    // spec: S-0214 claim 11 (a free mover's no-move searches; another actor's no-move on a cell in reach takes the cell itself)
+    // spec: S-0214 Terms (free mover: a jumpjet infantry type)
+    #[test]
+    fn free_mover_no_move_searches() {
+        let mut s = scene();
+        s.infantry(
+            "TESTJET",
+            UnitType {
+                jumpjet: Some(true),
+                ..unit_type(FOOT, 20, 0)
+            },
+        );
+        s.place_infantry(0, MAN, cell(0, 0), 2)
+            .place_infantry(0, "TESTJET", cell(0, 3), 2)
+            .place_unit(0, CAR, cell(3, 0), 64);
+        let w = built(&s);
+        let man = at(&w, cell(0, 0));
+        let jet = at(&w, cell(0, 3));
+        let on = ClickOn::Cell(cell(3, 0));
+        for id in [man, jet] {
+            assert_eq!(
+                targeting::action(&w, ALPHA, id, on, Modifiers::default()),
+                Action::NoMove
+            );
+        }
+        let r = targeting::click(&w, ALPHA, &[man], on, Modifiers::default());
+        assert_eq!(dest(&r), Some(Target::Cell(cell(3, 0))));
+        let r = targeting::click(&w, ALPHA, &[jet], on, Modifiers::default());
+        let d = dest(&r);
+        assert!(
+            matches!(d, Some(Target::Cell(c)) if c != cell(3, 0)),
+            "{d:?}"
+        );
+    }
+
+    // spec: S-0214 claim 11 (a move onto an object on an enclosed cell: a free mover gets the object, a ground unit a searched cell)
+    // spec: S-0214 Terms (underground type: movement zone subterranean, a free mover)
+    #[test]
+    fn object_on_an_enclosed_cell() {
+        let mut s = scene();
+        let enclosed = cell(6, 0);
+        ring(&mut s, enclosed);
+        s.vehicle(
+            "TESTMOLE",
+            UnitType {
+                movement_zone: Some(MovementZone::Subterranean),
+                ..unit_type(WHEEL, 40, 6)
+            },
+        );
+        s.place_unit(0, CAR, cell(0, 0), 64)
+            .place_unit(0, "TESTMOLE", cell(0, 3), 64)
+            .place_unit(1, CAR, enclosed, 64);
+        let w = built(&s);
+        let car = at(&w, cell(0, 0));
+        let mole = at(&w, cell(0, 3));
+        let enemy = at(&w, enclosed);
+        let fm = Modifiers {
+            force_move: true,
+            ..Default::default()
+        };
+        let on = ClickOn::Object(enemy);
+        let r = targeting::click(&w, ALPHA, &[mole], on, fm);
+        assert_eq!(dest(&r), Some(Target::Object(enemy)));
+        let r = targeting::click(&w, ALPHA, &[car], on, fm);
+        assert!(matches!(dest(&r), Some(Target::Cell(_))));
+    }
+
+    // spec: S-0214 table AC rows AC2 and AC3 (a carrier carrying nothing over an allied vehicle: tote, nothing on a vehicle factory's cell)
+    // spec: S-0214 table M part 1 (tote: behaviour move, destination the vehicle)
+    #[test]
+    fn carrier_totes() {
+        let mut s = scene();
+        s.aircraft(
+            "TESTLIFT",
+            UnitType {
+                carryall: Some(true),
+                ..unit_type(glasnost_rules::sim::LocomotionClass::Winged, 40, 6)
+            },
+        );
+        s.building(
+            "TESTPLANT",
+            BuildingType {
+                strength: Some(500),
+                weapons_factory: Some(true),
+                ..Default::default()
+            },
+        );
+        s.place_aircraft(0, "TESTLIFT", cell(0, 0), 64)
+            .place_unit(0, CAR, cell(3, 0), 64)
+            .place_structure(0, "TESTPLANT", cell(6, 6))
+            .place_unit(0, CAR, cell(6, 6), 64);
+        let w = built(&s);
+        let lift = objects_of_kind(&w, Kind::Aircraft)[0];
+        let car = at(&w, cell(3, 0));
+        let parked = w
+            .objects
+            .values()
+            .find(|o| o.kind == Kind::Vehicle && o.pos.cell() == cell(6, 6))
+            .map(|o| o.id);
+        let on = ClickOn::Object(car);
+        assert_eq!(
+            targeting::action(&w, ALPHA, lift, on, Modifiers::default()),
+            Action::Tote
+        );
+        let r = targeting::click(&w, ALPHA, &[lift], on, Modifiers::default());
+        assert_eq!(
+            r.orders,
+            vec![Order::Behaviour {
+                actor: lift,
+                behaviour: Behaviour::Move,
+                attack_move: false,
+                target: None,
+                dest: Some(Target::Object(car)),
+            }]
+        );
+        let parked = parked.expect("the map places a vehicle on the factory's cell");
+        assert_eq!(
+            targeting::action(
+                &w,
+                ALPHA,
+                lift,
+                ClickOn::Object(parked),
+                Modifiers::default()
+            ),
+            Action::Nothing
+        );
+    }
+
+    fn objects_of_kind(w: &World, k: Kind) -> Vec<ObjectId> {
+        w.objects
+            .values()
+            .filter(|o| o.kind == k)
+            .map(|o| o.id)
+            .collect()
+    }
+
+    // spec: S-0214 claim 15 (berserk or melee-linked actors get no order, except tote for a berserk carrier aircraft)
+    // spec: S-0214 Edge cases (quirks.berserk_carrier_tote off: the berserk carrier gets no order either)
+    #[test]
+    fn berserk_carrier_tote_switch() {
+        use targeting::held_without_order as held;
+        assert!(!held(false, false, true, Action::Tote, true));
+        assert!(held(true, false, false, Action::Move, true));
+        assert!(held(false, true, false, Action::Attack, true));
+        assert!(held(true, false, true, Action::Move, true));
+        assert!(!held(true, false, true, Action::Tote, true));
+        assert!(held(true, false, true, Action::Tote, false));
+        assert!(held(true, false, false, Action::Tote, true));
+    }
+
+    // spec: S-0214 table BC (rows BC1 and BC3 to BC7)
+    // spec: S-0214 Edge cases (quirks.building_cell_attack_no_weapon: row BC3 gives attack with no weapon in the first slot; off: nothing)
+    #[test]
+    fn building_cell_table() {
+        use targeting::building_cell as bc;
+        let tower = BuildingCell {
+            first_slot_weapon: true,
+            fires_on_ground: true,
+            ..Default::default()
+        };
+        assert_eq!(bc(Action::Attack, tower, true), Action::Attack);
+        let empty_slot = BuildingCell::default();
+        assert_eq!(bc(Action::Attack, empty_slot, true), Action::Attack);
+        assert_eq!(bc(Action::Attack, empty_slot, false), Action::Nothing);
+        let pulse = BuildingCell {
+            first_slot_weapon: true,
+            ..Default::default()
+        };
+        assert_eq!(bc(Action::Attack, pulse, true), Action::Nothing);
+        let rally = BuildingCell {
+            own_rally: true,
+            ..Default::default()
+        };
+        assert_eq!(bc(Action::NoMove, rally, true), Action::Move);
+        assert_eq!(bc(Action::Nothing, rally, true), Action::Move);
+        // Row BC7: otherwise c, including a move of a building that is not movable.
+        assert_eq!(
+            bc(Action::Move, BuildingCell::default(), true),
+            Action::Move
+        );
+        let hidden = BuildingCell {
+            invisible: true,
+            own_rally: true,
+            ..Default::default()
+        };
+        assert_eq!(bc(Action::Move, hidden, true), Action::Nothing);
+    }
+
+    // spec: S-0214 Edge cases (disarm and heal go through the attack check: an unarmed engineer gets no order from disarm bomb)
+    // spec: S-0214 Edge cases (quirks.disarm_bomb_needs_weapon off: it needs only a movable actor and gives the attack order)
+    // spec: S-0214 table M part 1 (disarm bomb as for attack; none on the actor itself)
+    #[test]
+    fn disarm_bomb_switch() {
+        for quirk in [true, false] {
+            let mut s = scene();
+            s.ruleset.globals.quirks.disarm_bomb_needs_weapon = quirk;
+            s.infantry(
+                "TESTENGI",
+                UnitType {
+                    engineer: Some(true),
+                    ..unit_type(FOOT, 20, 0)
+                },
+            );
+            s.infantry(
+                "TESTARMED",
+                UnitType {
+                    engineer: Some(true),
+                    primary: Some("TestGun".into()),
+                    ..unit_type(FOOT, 20, 0)
+                },
+            );
+            s.place_infantry(0, "TESTENGI", cell(0, 0), 2)
+                .place_infantry(0, "TESTARMED", cell(0, 2), 2)
+                .place_unit(0, CAR, cell(3, 0), 64);
+            let w = built(&s);
+            let engi = at(&w, cell(0, 0));
+            let armed = at(&w, cell(0, 2));
+            let car = at(&w, cell(3, 0));
+            let on = ClickOn::Object(car);
+            let attack = |id| {
+                Some(Order::Behaviour {
+                    actor: id,
+                    behaviour: Behaviour::Attack,
+                    attack_move: false,
+                    target: Some(Target::Object(car)),
+                    dest: None,
+                })
+            };
+            let d = |id| {
+                targeting::order(
+                    &w,
+                    ALPHA,
+                    id,
+                    Action::DisarmBomb,
+                    on,
+                    Modifiers::default(),
+                    false,
+                )
+            };
+            assert_eq!(d(engi), if quirk { None } else { attack(engi) });
+            assert_eq!(d(armed), attack(armed));
+            let own = targeting::order(
+                &w,
+                ALPHA,
+                armed,
+                Action::DisarmBomb,
+                ClickOn::Object(armed),
+                Modifiers::default(),
+                false,
+            );
+            assert_eq!(own, None);
+        }
+    }
+
+    // spec: S-0214 claim 14 (only the first object of the selection acknowledges, only when it gets an order; the marker only for move)
+    #[test]
+    fn click_feedback() {
+        let mut s = scene();
+        s.place_unit(0, CAR, cell(0, 0), 64)
+            .place_unit(0, CAR, cell(0, 2), 64)
+            .place_unit(1, CAR, cell(-6, 0), 64);
+        let w = built(&s);
+        let a = at(&w, cell(0, 0));
+        let b = at(&w, cell(0, 2));
+        let enemy = at(&w, cell(-6, 0));
+        let open = ClickOn::Cell(cell(4, 4));
+        let r = targeting::click(&w, ALPHA, &[a, b], open, Modifiers::default());
+        assert_eq!(r.orders.len(), 2);
+        assert_eq!((r.acknowledge, r.marker), (Some(a), true));
+        // A no-move order: acknowledged, no marker.
+        let r = targeting::click(
+            &w,
+            ALPHA,
+            &[a, b],
+            ClickOn::Cell(cell(0, 2)),
+            Modifiers::default(),
+        );
+        assert_eq!(r.orders.len(), 2);
+        assert_eq!((r.acknowledge, r.marker), (Some(a), false));
+        // The first selected object gets no order: nobody acknowledges.
+        let r = targeting::click(&w, ALPHA, &[enemy, a], open, Modifiers::default());
+        assert_eq!(r.orders.len(), 1);
+        assert_eq!((r.acknowledge, r.marker), (None, false));
+    }
+
+    // spec: S-0214 F5 (i = x mod n, unsigned; none for a type without selection responses)
+    #[test]
+    fn selection_response_choice() {
+        assert_eq!(targeting::selection_response(7, 3), Some(1));
+        assert_eq!(targeting::selection_response(u32::MAX, 2), Some(1));
+        assert_eq!(targeting::selection_response(5, 0), None);
+    }
 }
