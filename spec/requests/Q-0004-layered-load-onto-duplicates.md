@@ -1,9 +1,9 @@
 ---
 id: Q-0004
 title: Which occurrence a lookup returns after a layered load into a table with a repeated name hash
-status: open
+status: answered
 related: [S-0002]
-answered-by: []
+answered-by: [S-0002]
 ---
 
 ## Need
