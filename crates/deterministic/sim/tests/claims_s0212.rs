@@ -1416,3 +1416,83 @@ fn further_test_is_the_burrowing_test() {
         "outside the usable area passes"
     );
 }
+
+// ------------------------------------------------------------- bridge decks
+
+/// Plateau at height level 4 everywhere but a pit at level 0 under
+/// x = 3 … 5, y = −1 … 1; with `deck`, the pit's middle row carries a
+/// bridge deck. A car stands on the plateau at cell(2, 0) facing east.
+fn bridge_scene(deck: bool) -> (World, ObjectId) {
+    let mut s = scene();
+    for c in all_cells(&s) {
+        let pit = (cell(3, 0).x..=cell(5, 0).x).contains(&c.x) && (c.y - cell(0, 0).y).abs() <= 1;
+        s.set_cell(c, 0, if pit { 0 } else { 4 });
+    }
+    s.place_unit(0, CAR, cell(2, 0), 64);
+    let mut w = s.build();
+    if deck {
+        for x in 3..=5 {
+            let i = w.cells.idx(cell(x, 0)).unwrap();
+            w.cells.deck[i] = true;
+        }
+    }
+    regions::ensure(&mut w);
+    let car = vehicles(&w)[0];
+    (w, car)
+}
+
+// spec: S-0212 claim 10 (a difference of 4 levels only between a bridge deck and the ground at a bridge's end)
+// spec: S-0212 claim 7 (a step onto a bridge cell from a pair more than 1 level higher is on its deck; the destination of a bridge cell is its deck)
+#[test]
+fn bridge_deck_steps() {
+    let (w, car) = bridge_scene(true);
+    let r = occupancy::reference_level(&w, car);
+    assert_eq!(r, 4);
+    // From the plateau onto the deck, and along the deck.
+    assert_eq!(
+        path::step_outcome(&w, car, cell(2, 0), cell(3, 0), 4),
+        Outcome::Clear
+    );
+    assert_eq!(
+        path::step_outcome(&w, car, cell(3, 0), cell(4, 0), 4 + 4),
+        Outcome::Clear
+    );
+    // From the ground under the deck up to the plateau: blocked.
+    assert_eq!(
+        path::step_outcome(&w, car, cell(3, 0), cell(2, 0), 0),
+        Outcome::Blocked
+    );
+    // Into a pit cell without a deck: 4 levels down, blocked.
+    assert_eq!(
+        path::step_outcome(&w, car, cell(2, 0), cell(3, 1), 4),
+        Outcome::Blocked
+    );
+    // The search crosses the deck straight; without the deck it goes round.
+    assert_eq!(
+        find(&w, car, cell(6, 0), Mode::Fresh, &[]),
+        Some(vec![2; 4])
+    );
+    let (w, car) = bridge_scene(false);
+    let p = find(&w, car, cell(6, 0), Mode::Fresh, &[]).expect("a way round");
+    assert!(p.len() > 4, "{p:?}");
+}
+
+// spec: S-0207 claim 5 (a vehicle drives onto the deck from land 4 levels higher, at H + 416, and off it again)
+#[test]
+fn a_vehicle_drives_across_a_deck() {
+    use glasnost_sim::world::Layer;
+    let (mut w, car) = bridge_scene(true);
+    open_orders(&mut w);
+    order_move(&mut w, car, cell(6, 0));
+    let mut on_deck = false;
+    let n = common::run_until(&mut w, 600, |w| {
+        let o = w.obj(car).unwrap();
+        if o.pos.cell() == cell(4, 0) && o.layer == Layer::Deck {
+            on_deck = true;
+        }
+        o.pos.cell() == cell(6, 0)
+    });
+    assert!(n < 600, "the car never crossed");
+    assert!(on_deck, "the car crossed on the deck");
+    assert_eq!(w.obj(car).unwrap().layer, Layer::Ground);
+}

@@ -104,7 +104,7 @@ fn epsilon(d: usize) -> F64 {
 }
 
 /// The base cost b(v) of S-0212 claim 8 and table T2.
-fn base_cost(w: &World, req: &Request, v: Outcome, cell: CellXY, train: bool) -> i64 {
+fn base_cost(w: &World, req: &Request, v: Outcome, cell: CellXY, layer: Layer, train: bool) -> i64 {
     if train {
         // spec: S-0212 claim 8 (a train: every outcome but blocked costs 1)
         return 1;
@@ -121,7 +121,7 @@ fn base_cost(w: &World, req: &Request, v: Outcome, cell: CellXY, train: bool) ->
             // spec: S-0212 claim 8 (moving blocker: mode 2 1000, mode 1 4, mode 0 the blocker chain)
             Mode::Avoid => 1000,
             Mode::Blocked => 4,
-            Mode::Fresh => blocker_chain(w, cell),
+            Mode::Fresh => blocker_chain(w, cell, layer),
         },
     }
 }
@@ -146,12 +146,14 @@ fn heading_cell(w: &World, id: ObjectId) -> Option<CellXY> {
     }
 }
 
-/// The blocker chain of S-0212 claim 8 (mode 0 moving blocker cost).
-fn blocker_chain(w: &World, first: CellXY) -> i64 {
+/// The blocker chain of S-0212 claim 8 (mode 0 moving blocker cost), from
+/// the step's target cell on the step's search layer.
+fn blocker_chain(w: &World, first: CellXY, first_layer: Layer) -> i64 {
     let mut c = first;
+    let mut layer = first_layer;
     // spec: S-0212 claim 8 (a chain of at most 10 cells)
     for i in 1..=10 {
-        let Some(&oid) = w.cells.list(c, Layer::Ground).first() else {
+        let Some(&oid) = w.cells.list(c, layer).first() else {
             // spec: S-0212 claim 8 (last cell holds no object: 1)
             return 1;
         };
@@ -168,6 +170,13 @@ fn blocker_chain(w: &World, first: CellXY) -> i64 {
                     // spec: S-0212 claim 8 (i = 10 and still heading on: 4)
                     return 4;
                 }
+                // spec: S-0212 claim 8 (a further bridge cell is read on its deck when the unit heading into it is on a deck or stands at least 3 levels higher)
+                let higher = level(w, o.pos.cell()) - level(w, next) >= 3;
+                layer = if is_bridge(w, next) && (o.layer == Layer::Deck || higher) {
+                    Layer::Deck
+                } else {
+                    Layer::Ground
+                };
                 c = next;
             }
         }
@@ -175,28 +184,73 @@ fn blocker_chain(w: &World, first: CellXY) -> i64 {
     1
 }
 
-/// Whether the height rule of S-0212 claim 10 allows a step.
-fn height_ok(w: &World, a: CellXY, b: CellXY) -> bool {
+/// A cell's height level (0 off the map).
+fn level(w: &World, c: CellXY) -> i32 {
+    w.cells.cell(c).map_or(0, |x| i32::from(x.level))
+}
+
+/// Whether a cell is a bridge cell: it carries a high bridge's deck
+/// (S-0212 Terms; S-0211 claim 15).
+fn is_bridge(w: &World, c: CellXY) -> bool {
+    w.cells.idx(c).is_some_and(|i| w.cells.deck[i])
+}
+
+/// The height level of a search pair: the cell's, plus 4 on a deck (S-0212
+/// Terms, *search layer*).
+fn pair_level(w: &World, c: CellXY, l: Layer) -> i32 {
+    // spec: S-0212 Terms (the deck layer sits 4 height levels above the cell's height level)
+    level(w, c) + if l == Layer::Deck { 4 } else { 0 }
+}
+
+/// The search layer a step onto `c` from a pair at level `from_level` is
+/// on (S-0212 claim 7).
+fn candidate_layer(w: &World, from_level: i32, c: CellXY) -> Layer {
+    // spec: S-0212 claim 7 (onto a bridge cell: its ground when within 1 level of the pair being expanded, its deck otherwise)
+    if is_bridge(w, c) && (from_level - level(w, c)).abs() > 1 {
+        Layer::Deck
+    } else {
+        Layer::Ground
+    }
+}
+
+/// Whether the height rule of S-0212 claim 10 allows a step from the pair
+/// (`a`, `la`) to the pair (`b`, `lb`). The rule compares the two cells'
+/// height levels.
+fn height_ok(w: &World, a: CellXY, la: Layer, b: CellXY, lb: Layer) -> bool {
     let (Some(ca), Some(cb)) = (w.cells.cell(a), w.cells.cell(b)) else {
         return false;
     };
     let diff = (i32::from(ca.level) - i32::from(cb.level)).abs();
+    let (lower, lower_layer, higher) = if ca.level < cb.level {
+        ((a, ca), la, b)
+    } else {
+        ((b, cb), lb, a)
+    };
     match diff {
         0 => true,
         // spec: S-0212 claim 10 (a difference of 1 only when the lower cell is a slope)
-        1 => {
-            let lower = if ca.level < cb.level { ca } else { cb };
-            lower.slope != 0
-        }
-        // spec: S-0212 claim 10 (4 only between a deck and a bridge end; 2, 3 and above 4 blocked)
+        1 => lower.1.slope != 0,
+        // spec: S-0212 claim 10 (4 only between a bridge deck and the ground at a bridge's end; which cells count as the end, interim: Q-0042)
+        4 => lower_layer == Layer::Deck && is_bridge(w, lower.0) && !is_bridge(w, higher),
+        // spec: S-0212 claim 10 (2, 3 and more than 4 levels: blocked)
         _ => false,
     }
 }
 
 /// The entry outcome a unit gets for stepping from `from` into `to`, with
-/// the height rule (S-0212 claim 10; S-0209 claims 4 and 5).
+/// the height rule (S-0212 claim 10; S-0209 claims 4 and 5). `reference`
+/// is the height level the step starts at (the unit's reference height
+/// level for a unit's own step, the expanded pair's level in a search): it
+/// gives the search layers of both cells (S-0212 claim 7) and the cell
+/// layer the entry outcome reads (S-0209 Terms).
 pub fn step_outcome(w: &World, id: ObjectId, from: CellXY, to: CellXY, reference: i32) -> Outcome {
-    if !height_ok(w, from, to) {
+    // spec: S-0212 Terms (a pair 4 levels above its bridge cell is on the deck)
+    let from_layer = if is_bridge(w, from) && reference - level(w, from) == 4 {
+        Layer::Deck
+    } else {
+        Layer::Ground
+    };
+    if !height_ok(w, from, from_layer, to, candidate_layer(w, reference, to)) {
         return Outcome::Blocked;
     }
     let Some(o) = w.obj(id) else {
@@ -214,18 +268,20 @@ pub fn step_outcome(w: &World, id: ObjectId, from: CellXY, to: CellXY, reference
     }
 }
 
-/// Reusable working memory of the cell search, indexed by dense cell index.
+/// Reusable working memory of the cell search, indexed by search pair
+/// (twice the dense cell index, plus 1 for a deck).
 /// Not game state: a search starts from a fresh stamp, so nothing carries
 /// over from one search to the next.
 #[derive(Clone, Debug, Default)]
 pub struct SearchScratch {
     stamp: u32,
-    /// `seen[i] == stamp`: cell i has a recorded g.
+    /// `seen[i] == stamp`: pair i has a recorded g.
     seen: Vec<u32>,
-    /// `closed[i] == stamp`: cell i has been expanded.
+    /// `closed[i] == stamp`: pair i has been expanded.
     closed: Vec<u32>,
     g: Vec<F32>,
-    pred: Vec<(CellXY, u8)>,
+    /// The predecessor pair and the step direction from it.
+    pred: Vec<(CellXY, Layer, u8)>,
 }
 
 impl SearchScratch {
@@ -236,7 +292,7 @@ impl SearchScratch {
                 seen: vec![0; len],
                 closed: vec![0; len],
                 g: vec![F32::ZERO; len],
-                pred: vec![(CellXY::new(0, 0), 0); len],
+                pred: vec![(CellXY::new(0, 0), Layer::Ground, 0); len],
             };
         }
         self.stamp += 1;
@@ -253,6 +309,7 @@ struct Pending {
     f: u32,
     seq: u32,
     cell: CellXY,
+    layer: Layer,
 }
 
 impl Ord for Pending {
@@ -288,17 +345,35 @@ impl Pathfinder for S0212 {
         if from == to {
             return None;
         }
-        let reference = occupancy::reference_level(w, req.unit);
         let est = |c: CellXY| -> F32 {
             let dx = i64::from(c.x - to.x);
             let dy = i64::from(c.y - to.y);
-            // spec: S-0212 F2 (h = r((x − xₜ)² + (y − yₜ)²) in cells, the table root whatever the switch)
+            // spec: S-0212 F2 (h = r((x − xₜ)² + (y − yₜ)²) in cells, the table root whatever the switch; the search layer does not enter h)
             table_root((dx * dx + dy * dy) as u64, mode)
         };
         let mut sc = w.scratch.borrow_mut();
-        sc.begin(w.cells.grid.len());
-        let ix = |c: CellXY| w.cells.idx(c);
-        let fi = ix(from)?;
+        // spec: S-0212 Terms (a bridge cell is two places for the search: its ground and its deck)
+        sc.begin(2 * w.cells.grid.len());
+        // spec: S-0212 Terms (two search layers per cell: ground and deck)
+        let ix = |c: CellXY, l: Layer| {
+            w.cells
+                .idx(c)
+                .map(|i| 2 * i + usize::from(l == Layer::Deck))
+        };
+        // spec: S-0212 claim 7 (the start pair: the unit's cell on the search layer the unit is on)
+        let from_layer = if o.layer == Layer::Deck && is_bridge(w, from) {
+            Layer::Deck
+        } else {
+            Layer::Ground
+        };
+        // spec: S-0212 claim 7 (the destination pair: a bridge cell's deck for every unit that is not an aircraft, else the ground)
+        let to_layer = if is_bridge(w, to) && o.kind != Kind::Aircraft {
+            Layer::Deck
+        } else {
+            Layer::Ground
+        };
+        let to_level = pair_level(w, to, to_layer);
+        let fi = ix(from, from_layer)?;
         let mut heap: BinaryHeap<Pending> = BinaryHeap::new();
         let mut seq = 0u32;
         let stamp = sc.stamp;
@@ -311,19 +386,33 @@ impl Pathfinder for S0212 {
             f: t24(est(from).to_f64(), mode).0,
             seq,
             cell: from,
+            layer: from_layer,
         });
         let mut expansions = 0u32;
         let mut recorded = 0u32;
-        // spec: S-0212 claim 16 (a train may not enter the three cells behind it)
-        let behind = if train {
+        let start_level = pair_level(w, from, from_layer);
+        // spec: S-0212 claim 16 (a train may not enter the three cells behind it, on the ground layer unless the start's search layer lies at least 2 levels above the cell)
+        let behind: Vec<(CellXY, Layer)> = if train {
             behind_cells(w, req.unit, from)
+                .into_iter()
+                .map(|c| {
+                    let l = if is_bridge(w, c) && start_level - level(w, c) >= 2 {
+                        Layer::Deck
+                    } else {
+                        Layer::Ground
+                    };
+                    (c, l)
+                })
+                .collect()
         } else {
             Vec::new()
         };
         loop {
             // spec: S-0212 claims 12 and 12a (the smallest f; among equal f the pair recorded first)
             let next = heap.pop()?;
-            let Some(ni) = ix(next.cell) else { continue };
+            let Some(ni) = ix(next.cell, next.layer) else {
+                continue;
+            };
             if sc.closed[ni] == stamp {
                 continue;
             }
@@ -334,12 +423,12 @@ impl Pathfinder for S0212 {
                     continue;
                 }
             }
-            if next.cell == to {
+            if next.cell == to && next.layer == to_layer {
                 // spec: S-0212 claim 12 (reaching the destination after exactly 10000 expansions fails)
                 if q.path_search_10000_failure && expansions == 10000 {
                     return None;
                 }
-                return Some(reconstruct(&sc, &ix, from, to));
+                return Some(reconstruct(&sc, &ix, (from, from_layer), (to, to_layer)));
             }
             // spec: S-0212 claim 12 (at most 65527 expansions)
             if expansions >= 65527 {
@@ -348,23 +437,24 @@ impl Pathfinder for S0212 {
             expansions += 1;
             sc.closed[ni] = stamp;
             let ge = sc.g(ni).unwrap_or(F32::ZERO);
+            let here_level = pair_level(w, next.cell, next.layer);
             for (d, (dx, dy)) in STEPS.iter().enumerate() {
                 let c = CellXY::new(next.cell.x + dx, next.cell.y + dy);
-                let Some(ci) = ix(c) else { continue };
-                if w.cells.cell(c).is_none() || behind.contains(&c) {
+                let cl = candidate_layer(w, here_level, c);
+                let Some(ci) = ix(c, cl) else { continue };
+                if w.cells.cell(c).is_none() || behind.contains(&(c, cl)) {
                     continue;
                 }
-                let v = step_outcome(w, req.unit, next.cell, c, reference);
+                // The reference height level of the entry outcome: the expanded pair's (interim, Q-0042).
+                let v = step_outcome(w, req.unit, next.cell, c, here_level);
                 if v == Outcome::Blocked {
-                    // spec: S-0212 claim 15 (a blocked destination is approached; not for passive vehicles)
-                    let level = |x: CellXY| w.cells.cell(x).map_or(0, |cell| i32::from(cell.level));
-                    // spec: S-0212 claim 15 (the neighbour's search layer within 1 level of the destination's)
-                    if c == to && !passive && (level(next.cell) - level(to)).abs() <= 1 {
+                    // spec: S-0212 claim 15 (a blocked destination is approached from a neighbour whose search layer is within 1 level of the destination's; not for passive vehicles)
+                    if c == to && !passive && (here_level - to_level).abs() <= 1 {
                         if next.cell == from {
                             // spec: S-0212 claim 15 (already next to it: a path needs a step, claim 12, so the search fails)
                             return None;
                         }
-                        let margin_ok = match sc.g(ci) {
+                        let margin_ok = match ix(to, to_layer).and_then(|ti| sc.g(ti)) {
                             None => true,
                             Some(gr) => {
                                 // spec: S-0212 F1 (recorded-pair margin: g_r ≥ trunc₅₃(g_e + 1.009))
@@ -376,14 +466,19 @@ impl Pathfinder for S0212 {
                             if expansions == 10000 && q.path_search_10000_failure {
                                 return None;
                             }
-                            return Some(reconstruct(&sc, &ix, from, next.cell));
+                            return Some(reconstruct(
+                                &sc,
+                                &ix,
+                                (from, from_layer),
+                                (next.cell, next.layer),
+                            ));
                         }
                     }
                     continue;
                 }
                 // spec: S-0212 F1 (c = trunc₂₄(b × τ + ε(d)); τ = 4 on a congestion mark)
                 let tau = if req.congested.contains(&c) { 4 } else { 1 };
-                let b = base_cost(w, req, v, c, train) * tau;
+                let b = base_cost(w, req, v, c, cl, train) * tau;
                 let cost = t24(F64::from_i64(b, mode).add(epsilon(d), mode), mode);
                 // spec: S-0212 F1 (g(new) = trunc₂₄(g(current) + c))
                 let gn = t24(ge.to_f64().add(cost.to_f64(), mode), mode);
@@ -407,12 +502,17 @@ impl Pathfinder for S0212 {
                 }
                 sc.seen[ci] = stamp;
                 sc.g[ci] = gn;
-                sc.pred[ci] = (next.cell, d as u8);
+                sc.pred[ci] = (next.cell, next.layer, d as u8);
                 seq += 1;
                 // spec: S-0212 F2 (f = trunc₂₄(g + h))
                 let f = t24(gn.to_f64().add(est(c).to_f64(), mode), mode).0;
                 // spec: S-0212 claim 12a (pairs recorded in expansion order, an expansion's candidates in generation order)
-                heap.push(Pending { f, seq, cell: c });
+                heap.push(Pending {
+                    f,
+                    seq,
+                    cell: c,
+                    layer: cl,
+                });
             }
         }
     }
@@ -437,19 +537,19 @@ fn behind_cells(w: &World, id: ObjectId, from: CellXY) -> Vec<CellXY> {
 
 fn reconstruct(
     sc: &SearchScratch,
-    ix: &dyn Fn(CellXY) -> Option<usize>,
-    from: CellXY,
-    to: CellXY,
+    ix: &dyn Fn(CellXY, Layer) -> Option<usize>,
+    from: (CellXY, Layer),
+    to: (CellXY, Layer),
 ) -> Vec<u8> {
     let mut steps = Vec::new();
     let mut c = to;
     while c != from {
-        let Some(i) = ix(c).filter(|&i| sc.seen[i] == sc.stamp) else {
+        let Some(i) = ix(c.0, c.1).filter(|&i| sc.seen[i] == sc.stamp) else {
             break;
         };
-        let (p, d) = sc.pred[i];
+        let (p, pl, d) = sc.pred[i];
         steps.push(d);
-        c = p;
+        c = (p, pl);
     }
     steps.reverse();
     steps
@@ -1266,22 +1366,45 @@ pub fn compute(w: &mut World, id: ObjectId, mode: Mode) -> Search {
         Vec::new()
     };
     let reference = occupancy::reference_level(w, id);
+    // The search layer of each cell the found path passes through (claim 7).
+    let mut layers: BTreeMap<CellXY, Layer> = BTreeMap::new();
+    {
+        let mut c = from;
+        let mut lvl = reference;
+        for &d in &steps {
+            let (sx, sy) = STEPS[usize::from(d % 8)]; // spec: S-0212 Terms (step directions 0 to 7)
+            c = CellXY::new(c.x + sx, c.y + sy);
+            let l = candidate_layer(w, lvl, c);
+            layers.insert(c, l);
+            lvl = pair_level(w, c, l);
+        }
+    }
+    let deck_at = |c: CellXY| layers.get(&c).copied().unwrap_or(Layer::Ground);
     // Whether the steps `shape` from cell `s` enter only clear cells without
     // a congestion mark. No threat records exist before the combat topics
     // (M4), so every cell has threat value 0 and every threat test passes
     // (S-0212 claims 17 and 18, F7).
     let enters_clear = |s: CellXY, shape: &mut dyn Iterator<Item = u8>| -> bool {
         let mut prev = s;
+        // The height level of the search pair the shape starts from: the
+        // unit's own at its start cell, else that of the ground or deck the
+        // path reached (S-0212 claim 7).
+        let mut lvl = if s == from {
+            reference
+        } else {
+            pair_level(w, s, deck_at(s))
+        };
         for d in shape {
             let (sx, sy) = STEPS[usize::from(d % 8)]; // spec: S-0212 Terms (step directions 0 to 7)
             let n = CellXY::new(prev.x + sx, prev.y + sy);
             // spec: S-0212 claims 17 and 18 (every cell entered clear and without a congestion mark)
-            if step_outcome(w, id, prev, n, reference) != Outcome::Clear
+            if step_outcome(w, id, prev, n, lvl) != Outcome::Clear
                 || congested.contains(&n)
                 || excluded.contains(&n)
             {
                 return false;
             }
+            lvl = pair_level(w, n, candidate_layer(w, lvl, n));
             prev = n;
         }
         let _ = k;
