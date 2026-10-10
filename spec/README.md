@@ -27,7 +27,6 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | ID | Title | Topic | Rev | Status | Measurements |
 |---|---|---|---|---|---|
 | [S-0001](rules-import/S-0001-ini-lexical-rules.md) | INI lexical rules | rules-import | 3 | approved | — |
-| [S-0003](rules-import/S-0003-ini-value-forms.md) | INI value forms | rules-import | 3 | approved | — |
 | [S-0004](rules-import/S-0004-type-registration-order.md) | Type registration order | rules-import | 3 | approved | — |
 | [S-0005](rules-import/S-0005-data-file-precedence.md) | Data file precedence (loose files, archive mount order, name lookup) | rules-import | 3 | approved | — |
 | [S-0006](rules-import/S-0006-rules-layering.md) | Rules layering | rules-import | 4 | approved | — |
@@ -41,3 +40,4 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0107](rendering/S-0107-infantry-sprite-sequences.md) | Infantry sprite sequences | rendering | 3 | approved | — |
 | [S-0108](rendering/S-0108-building-sprites.md) | Building sprites | rendering | 3 | approved | — |
 | [S-0002](rules-import/S-0002-ini-duplicates.md) | INI duplicates and name resolution | rules-import | 6 | approved | — |
+| [S-0003](rules-import/S-0003-ini-value-forms.md) | INI value forms | rules-import | 8 | approved | — |
