@@ -11,6 +11,7 @@ use crate::cells::position;
 use crate::occupancy::{self, Outcome};
 use crate::path::{self, Mode, Search};
 use crate::regions::STEPS;
+use crate::rules::Kind;
 use crate::scatter;
 use crate::world::{Layer, ObjectId, Pos, Target, World};
 
@@ -393,14 +394,17 @@ fn choose_target(w: &mut World, id: ObjectId, d: u8, next: CellXY) -> bool {
     // spec: S-0208 claim 3 (the desired point: the current position moved by one cell step)
     let desired = (o.pos.x + 256 * dx, o.pos.y + 256 * dy);
     let class = position_class(desired.0.rem_euclid(256), desired.1.rem_euclid(256), true); // spec: S-0204 claim 2 (the position within the cell)
-    let mission = matches!(
-        o.beh.current,
-        Some(
-            crate::rules::Behaviour::Enter
-                | crate::rules::Behaviour::Capture
-                | crate::rules::Behaviour::Sabotage
-        )
-    ) && path::goal_cell(w, id) == Some(next);
+    // spec: S-0208 claim 4 (a mission target that is a vehicle or aircraft positioned in the cell, or a building occupying it; not a cell or an infantry unit)
+    let mission = match occupancy::mission_target(w, id) {
+        Some(Target::Object(t)) => w.obj(t).is_some_and(|m| match m.kind {
+            Kind::Vehicle | Kind::Aircraft => m.pos.cell() == next,
+            Kind::Building => w.cells.list(next, Layer::Ground).contains(&t),
+            _ => false,
+        }),
+        _ => false,
+    };
+    // The second case of claim 4 (an enslaved unit at its master's unloading cell) needs
+    // enslaved units, which no topic of M3 creates.
     let pos = if mission {
         // spec: S-0208 claim 4 (the mission target's cell: occupants ignored, no draw)
         Some(class)

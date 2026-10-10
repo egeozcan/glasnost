@@ -222,7 +222,8 @@ pub fn crushable_by(w: &World, crusher: ObjectId, obj: ObjectId) -> bool {
     (omni && o.kind != Kind::Building && !resistant) || (crushable && !deployed_uncrushable)
 }
 
-fn mission_target(w: &World, mover: ObjectId) -> Option<Target> {
+/// A unit's mission target (S-0209 Terms).
+pub fn mission_target(w: &World, mover: ObjectId) -> Option<Target> {
     let o = w.obj(mover)?;
     // spec: S-0209 Terms (mission target: the destination or target while in a behaviour with one)
     match o.beh.current {

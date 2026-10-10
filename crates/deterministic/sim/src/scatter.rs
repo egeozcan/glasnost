@@ -80,13 +80,17 @@ pub fn request(w: &mut World, id: ObjectId, req: ScatterRequest) -> bool {
         .and_then(|s| s.seq);
     // spec: S-0208 claim 11 (effectively forced: forced and the locomotor not moving)
     let eff_forced = req.forced && !moving;
-    // spec: S-0208 claim 11 (permission: player-scatter rule, the scatter ability, or move-anywhere; our engine has no computer owners or teams)
-    let permission = r.general.player_scatter || req.anywhere;
+    // S-0208 Terms: an owner that is not human-controlled is a computer-controlled owner; an
+    // AI house counts as human-controlled (glossary *AI house*), the neutral and special houses
+    // do not.
+    let human = o.owner.is_some_and(|h| w.houses[usize::from(h.0)].human);
+    // spec: S-0208 claim 11 (permission: player-scatter rule, the scatter ability, a computer-controlled owner, or move-anywhere; no unit is a team member, and no unit has a veterancy rank before the veterancy topic)
+    let permission = r.general.player_scatter || !human || req.anywhere;
     let scatter_prop = o.beh.current.is_some_and(|b| r.behaviour(b).scatter);
     // spec: S-0208 claim 11 (first case: a sequence that is not undeploy and not interruptible)
     let first = seq.is_some_and(|q| q != Seq::Undeploy && !q.table().0);
     // spec: S-0208 claim 11 (second case: deploying, human owner, not both forced and move-anywhere)
-    let second = seq.is_some_and(Seq::is_deploy) && !(req.forced && req.anywhere);
+    let second = seq.is_some_and(Seq::is_deploy) && human && !(req.forced && req.anywhere);
     // spec: S-0208 claim 11 (third case: not effectively forced and not a permitted fraidycat in a scatter behaviour)
     let third = !eff_forced && (!u.fraidycat || !scatter_prop || !permission);
     if first || second || third {

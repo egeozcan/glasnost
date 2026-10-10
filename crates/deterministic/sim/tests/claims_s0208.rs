@@ -740,6 +740,36 @@ fn scatter_third_case_fraidycat() {
     assert!(ok);
 }
 
+// spec: S-0208 claim 11 (an owner that is not human-controlled, such as the neutral or special house, gives scatter permission and escapes the second case; an AI house counts as human-controlled)
+#[test]
+fn scatter_computer_controlled_owner() {
+    let computer = |w: &mut World, id: ObjectId| {
+        let h = w.obj(id).unwrap().owner.unwrap();
+        w.houses[usize::from(h.0)].human = false;
+    };
+    // Third case: player-scatter rule off, a fraidycat of a computer-controlled
+    // owner in a scatter behaviour accepts a request that is not forced.
+    let mut s = scatter_scene(false);
+    place(&mut s, "TESTCAT", cell(0, 0), 2);
+    let (ok, draws, dest) = send(&s, PLAIN, |w, id| {
+        computer(w, id);
+        set_guard(w, id);
+    });
+    assert!(ok);
+    assert!(draws > 0);
+    assert!(dest.is_some());
+    // Second case: a deployed unit of a computer-controlled owner accepts a
+    // forced request that is not move-anywhere.
+    let mut s = scatter_scene(true);
+    place(&mut s, "TESTDEP", cell(0, 0), 2);
+    let (ok, draws, _) = send(&s, FORCED, |w, id| {
+        computer(w, id);
+        set_seq(w, id, Seq::Deployed);
+    });
+    assert!(ok);
+    assert!(draws > 0);
+}
+
 // ---------------------------------------------------------------------------
 // Scatter destinations
 
@@ -936,16 +966,27 @@ fn scatter_without_threat_uses_the_search() {
 }
 
 /// A soldier at standing position `sub` of cell(0, 0) is ordered to enter a
-/// soldier of its house standing at the right position of cell(1, 0); returns
-/// the standing position of its walking target there.
-fn enter_mission(sub: i32) -> u8 {
+/// unit of its house in cell(1, 0): a vehicle (`vehicle`), or else a soldier
+/// standing at the right position. Returns the standing position of its
+/// walking target there.
+fn enter_mission(sub: i32, vehicle: bool) -> u8 {
     use glasnost_sim::orders::{self, Order};
     use glasnost_sim::world::HouseId;
     let mut s = scene();
+    s.vehicle("TESTVAN", unit_type(common::WHEEL, 4, 6));
     s.place_infantry(0, "TESTMAN", cell(0, 0), sub);
-    s.place_infantry(0, "TESTMAN", cell(1, 0), 2);
+    if vehicle {
+        s.place_unit(0, "TESTVAN", cell(1, 0), 64);
+    } else {
+        s.place_infantry(0, "TESTMAN", cell(1, 0), 2);
+    }
     let mut w = s.build();
-    let (id, friend) = (men(&w)[0], men(&w)[1]);
+    let id = men(&w)[0];
+    let friend = if vehicle {
+        common::objects_of(&w, Kind::Vehicle)[0]
+    } else {
+        men(&w)[1]
+    };
     open_orders(&mut w);
     let o = Order::Behaviour {
         actor: id,
@@ -968,12 +1009,14 @@ fn enter_mission(sub: i32) -> u8 {
     panic!("no walking target; notes: {:?}", w.notes);
 }
 
-// spec: S-0208 claim 4 (into the mission target's cell the walker heads for its class position, occupants ignored)
+// spec: S-0208 claim 4 (into the cell of a mission target that is a vehicle the walker heads for its class position, occupants ignored; a mission target that is an infantry unit does not make the case)
 #[test]
 fn mission_target_cell_ignores_occupants() {
-    // Right class, right taken by the mission target: still right (a normal
-    // walk would fall back to bottom, row S2).
-    assert_eq!(enter_mission(2), position::RIGHT);
+    // Right class into the vehicle's cell (vehicle present): still right.
+    assert_eq!(enter_mission(2, true), position::RIGHT);
     // Centre class: the centre position, which table O never gives.
-    assert_eq!(enter_mission(0), position::CENTRE);
+    assert_eq!(enter_mission(0, true), position::CENTRE);
+    // A mission target that is an infantry unit standing at the right
+    // position: claim 3 applies and row S2 gives the bottom position.
+    assert_eq!(enter_mission(2, false), position::BOTTOM);
 }
