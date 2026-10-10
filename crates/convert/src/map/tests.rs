@@ -448,3 +448,59 @@ fn hostile_maps_never_panic() {
         let _ = decode(&doc, &DecodeContext::default());
     }
 }
+
+/// spec: S-0009 claim 7 and Formulas (selected cell: a record with x beyond 511 acts on the cell with the same stream index, quirks.cell_index_alias)
+#[test]
+fn claim_7_selected_cell() {
+    let mut m = MapText {
+        ini: base_map(""),
+        ..Default::default()
+    };
+    // (517, 10): index 512·10 + 517 = 5637, the cell (5, 11).
+    m.terrain = Some(record_bytes(&[rec(517, 10, 5, 3), rec(0, 0, 0, 0)]));
+    let text = m.text();
+    let d = decode_text(&text);
+    let c = d.map.cells.get(CellXY::new(5, 11)).unwrap();
+    assert_eq!((c.tile, c.level), (5, 3));
+    assert!(!d.warnings.is_empty(), "the importer warns either way");
+    assert_eq!(
+        selected_cell(CellXY::new(527, 10), true),
+        Some(CellXY::new(15, 11))
+    );
+    assert_eq!(selected_cell(CellXY::new(-1, 0), true), None);
+    // Switch off: such a pair selects no cell.
+    let doc = Document::parse(text.as_bytes(), Quirks::default(), &mut Vec::new());
+    let ctx = DecodeContext {
+        quirks: MapQuirks {
+            cell_index_alias: false,
+            ..MapQuirks::default()
+        },
+        ..DecodeContext::default()
+    };
+    let off = decode(&doc, &ctx);
+    let c = off.map.cells.get(CellXY::new(5, 11)).unwrap();
+    assert_eq!((c.tile, c.level), (0, 0));
+    assert_eq!(selected_cell(CellXY::new(527, 10), false), None);
+}
+
+/// spec: S-0009 claims 25 and 29 (all N_h pairs are read; quirks.header_pairs_as_start_marks off: at most 8)
+#[test]
+fn claim_29_header_pairs_read() {
+    let mut pairs = String::new();
+    for i in 1..=10 {
+        pairs.push_str(&format!("Waypoint{i}={i},{i}\n"));
+    }
+    let text = format!("{BASE}[Header]\nNumberStartingPoints=10\n{pairs}");
+    let d = decode_text(&text);
+    assert_eq!(d.map.header.pairs.len(), 10);
+    assert_eq!(d.map.header.pairs[9], Some((10, 10)));
+    let doc = Document::parse(text.as_bytes(), Quirks::default(), &mut Vec::new());
+    let ctx = DecodeContext {
+        quirks: MapQuirks {
+            header_pairs_as_start_marks: false,
+            ..MapQuirks::default()
+        },
+        ..DecodeContext::default()
+    };
+    assert_eq!(decode(&doc, &ctx).map.header.pairs.len(), 8);
+}

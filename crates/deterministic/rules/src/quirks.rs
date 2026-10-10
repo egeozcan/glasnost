@@ -391,6 +391,50 @@ pub struct Quirks {
     // spec: S-0214 Edge cases
     #[serde(default = "on")]
     pub building_cell_attack_no_weapon: bool,
+    /// A pre-placed object whose starting health comes out above its strength less 3 starts at full strength; off: it keeps the computed value.
+    // spec: S-0009 claim 37
+    #[serde(default = "on")]
+    pub near_full_health_rounds_up: bool,
+    /// An absent upgrade name field of a map building entry keeps the type the same field named in an earlier entry; off: it means no upgrade.
+    // spec: S-0009 claim 40
+    #[serde(default = "on")]
+    pub upgrade_fields_carry_over: bool,
+    /// The placed vehicle numbered i takes the follow value numbered i, not its own entry's; off: each vehicle takes its own entry's value.
+    // spec: S-0009 claim 41
+    #[serde(default = "on")]
+    pub follow_index_by_place: bool,
+    /// The start list skips undefined start waypoints and K stops at the first gap; off: position i is waypoint i whenever it is defined.
+    // spec: S-0009 claim 17
+    #[serde(default = "on")]
+    pub start_waypoint_gap: bool,
+    /// A random start candidate's y range runs ten cells further than its x range; off: both from 11 to W + H − 10.
+    // spec: S-0009 claim 18
+    #[serde(default = "on")]
+    pub random_start_asymmetric_range: bool,
+    /// Start positions are resolved twice, from three start lists, the assignment against the early phase's list 2; off: one list after the terrain is loaded.
+    // spec: S-0009 claim 20
+    #[serde(default = "on")]
+    pub double_start_resolution: bool,
+    /// The early phase judges passivity by the base rules' country data only; off: by this game's full rules layering.
+    // spec: S-0009 claim 33
+    #[serde(default = "on")]
+    pub early_phase_stale_country_data: bool,
+    /// In skirmish, pre-placed objects owned by a country name or a player-at-position name vanish; off: they go to the first player of that country or to the player at that position.
+    // spec: S-0009 claim 27
+    #[serde(default = "on")]
+    pub skirmish_drops_country_owned_objects: bool,
+    /// Crate overlays placed by a map never appear in skirmish or multiplayer games; off: they are kept.
+    // spec: S-0009 claim 12
+    #[serde(default = "on")]
+    pub skirmish_drops_map_crates: bool,
+    /// A starting infantry unit stands at its cell's centre position whatever infantry already stand there, with no draw; off: it takes a standing position by S-0208 claim 3, with that claim's draw.
+    // spec: S-0009 claim 46
+    #[serde(default = "on")]
+    pub starting_infantry_share_centre: bool,
+    /// A gate's or wall tower's placement and departure recompute the wall bits of fixed cells around its top-left foundation cell only; off: also every wall beside any of its foundation cells.
+    // spec: S-0112 claim 7
+    #[serde(default = "on")]
+    pub gate_tower_fixed_cells: bool,
 }
 
 impl Default for Quirks {
@@ -489,6 +533,17 @@ impl Default for Quirks {
             disarm_bomb_needs_weapon: true,
             berserk_carrier_tote: true,
             building_cell_attack_no_weapon: true,
+            near_full_health_rounds_up: true,
+            upgrade_fields_carry_over: true,
+            follow_index_by_place: true,
+            start_waypoint_gap: true,
+            random_start_asymmetric_range: true,
+            double_start_resolution: true,
+            early_phase_stale_country_data: true,
+            skirmish_drops_country_owned_objects: true,
+            skirmish_drops_map_crates: true,
+            starting_infantry_share_centre: true,
+            gate_tower_fixed_cells: true,
         }
     }
 }
@@ -698,6 +753,32 @@ impl Quirks {
                 "building_cell_attack_no_weapon",
                 self.building_cell_attack_no_weapon,
             ),
+            (
+                "near_full_health_rounds_up",
+                self.near_full_health_rounds_up,
+            ),
+            ("upgrade_fields_carry_over", self.upgrade_fields_carry_over),
+            ("follow_index_by_place", self.follow_index_by_place),
+            ("start_waypoint_gap", self.start_waypoint_gap),
+            (
+                "random_start_asymmetric_range",
+                self.random_start_asymmetric_range,
+            ),
+            ("double_start_resolution", self.double_start_resolution),
+            (
+                "early_phase_stale_country_data",
+                self.early_phase_stale_country_data,
+            ),
+            (
+                "skirmish_drops_country_owned_objects",
+                self.skirmish_drops_country_owned_objects,
+            ),
+            ("skirmish_drops_map_crates", self.skirmish_drops_map_crates),
+            (
+                "starting_infantry_share_centre",
+                self.starting_infantry_share_centre,
+            ),
+            ("gate_tower_fixed_cells", self.gate_tower_fixed_cells),
         ]
     }
 
@@ -713,7 +794,7 @@ impl Quirks {
 
 /// Quirk switches named in the specs that are owned by the importer or the
 /// renderer rather than the simulation, with their owner.
-// spec: S-0215 claim 21, S-0104, S-0107 claim 22 (the owning specs of these switches)
+// spec: S-0215 claim 21, S-0104, S-0107 claim 22, S-0009 Edge cases (the owning specs of these switches)
 pub const EXTERNAL_QUIRKS: &[(&str, &str)] = &[
     (
         "anti_air_rate_layer_reset",
@@ -725,6 +806,34 @@ pub const EXTERNAL_QUIRKS: &[(&str, &str)] = &[
     ),
     ("sequence_value_length_limit", "importer, S-0107 claim 22"),
     ("case_sensitive_direction", "importer, S-0107 claim 22"),
+    (
+        "absent_rect_is_zero",
+        "importer (convert::map::MapQuirks), S-0009 claim 30",
+    ),
+    (
+        "cell_index_alias",
+        "importer (convert::map::MapQuirks), S-0009 claims 7 and 31",
+    ),
+    (
+        "header_pairs_as_start_marks",
+        "importer (convert::map::MapQuirks), S-0009 claims 25 and 29",
+    ),
+    (
+        "lobby_counts_zero_waypoint",
+        "importer (convert::map::MapQuirks), S-0009 claim 23",
+    ),
+    (
+        "no_overlay_below_format_2",
+        "importer (convert::map::MapQuirks), S-0009 claim 11",
+    ),
+    (
+        "object_empty_fields_collapse",
+        "importer (convert::map::MapQuirks), S-0009 claim 34",
+    ),
+    (
+        "preview_markers_from_header",
+        "importer (convert::map::MapQuirks), S-0009 claim 25",
+    ),
 ];
 
 #[cfg(test)]
@@ -732,8 +841,7 @@ mod tests {
     use super::*;
 
     /// Every `quirks.name` in the simulation specs (S-0201 to S-0215) and in
-    /// the specs whose sim-side rules this crate's users run is a field here
-    /// or listed as owned elsewhere.
+    /// S-0009 is a field here or listed as owned elsewhere.
     #[allow(clippy::disallowed_methods)]
     #[test]
     fn every_spec_quirk_has_a_switch() {
@@ -753,6 +861,16 @@ mod tests {
             }
         }
         assert!(files.len() >= 15, "found {} M3 specs", files.len());
+        // S-0009's switches: the loader's are fields here, the importer's are listed below.
+        for e in std::fs::read_dir(format!("{root}/formats")).expect("spec dir") {
+            let p = e.expect("entry").path();
+            if p.file_name()
+                .and_then(|n| n.to_str())
+                .is_some_and(|n| n.starts_with("S-0009"))
+            {
+                files.push(p);
+            }
+        }
         let q = Quirks::default();
         let have: std::collections::BTreeSet<&str> =
             q.named().into_iter().map(|(n, _)| n).collect();

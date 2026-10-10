@@ -85,6 +85,9 @@ fn claim_37_starting_health() {
         placed: placed("Alpha", "TANK", cell(0, 0), 254, 0),
     });
     assert_eq!(only(&s.build(), Kind::Vehicle).health, 100);
+    // quirks.near_full_health_rounds_up off: the computed value stays.
+    s.ruleset.globals.quirks.near_full_health_rounds_up = false;
+    assert_eq!(only(&s.build(), Kind::Vehicle).health, 99);
 }
 
 /// spec: S-0009 claim 39 (facing 256 × (v mod 256); turrets start at the body facing; infantry field 8)
@@ -137,6 +140,10 @@ fn claim_40_building_initial_state_and_upgrades() {
     assert_eq!(b[1].pos, b[0].pos);
     assert_eq!(b[1].health, 50, "upgrades start at full health");
     assert!(b.iter().all(|o| o.beh.current == Some(Behaviour::Guard)));
+    // quirks.upgrade_fields_carry_over off: the second building gets no upgrade.
+    s.ruleset.globals.quirks.upgrade_fields_carry_over = false;
+    let w = s.build();
+    assert_eq!(w.objects.len(), 3);
 }
 
 /// spec: S-0009 claim 41 (the behaviour name; a name that matches none means none)

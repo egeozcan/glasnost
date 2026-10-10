@@ -982,8 +982,12 @@ impl Builder<'_> {
                 railroad: rule(self.import, k, idx, b"Land")
                     .is_some_and(|v| value::text(v, usize::MAX).eq_ignore_ascii_case(b"Railroad")),
             };
-            // spec: S-0009 claim 12 (crate overlays never appear in skirmish or multiplayer)
-            if self.cells_loaded.is_none() && self.options.skirmish && flags.crate_ {
+            // spec: S-0009 claim 12 (crate overlays never appear in skirmish or multiplayer, quirks.skirmish_drops_map_crates)
+            let drops_crates = self
+                .rules
+                .is_none_or(|r| r.quirks.skirmish_drops_map_crates);
+            if self.cells_loaded.is_none() && self.options.skirmish && flags.crate_ && drops_crates
+            {
                 continue;
             }
             // spec: S-0112 claim 1 (a deck cell: one whose overlay is at a bridge position)
@@ -1352,12 +1356,12 @@ impl Builder<'_> {
         if strength == 0 {
             return (false, false);
         }
-        // spec: S-0009 claim 37 (quirks.near_full_health_rounds_up: on, the original)
+        // spec: S-0009 claim 37 (raised to full strength above S − 3, quirks.near_full_health_rounds_up)
         let (h, _) = starting_health(
             HealthKind::Building,
             value,
             strength,
-            true,
+            r.quirks.near_full_health_rounds_up,
             r.quirks.chop_rounding,
         );
         // spec: S-0108 F3 (h = health / strength in binary64, compared with the ratios)

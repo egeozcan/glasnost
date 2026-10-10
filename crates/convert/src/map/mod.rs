@@ -48,6 +48,18 @@ pub struct MapQuirks {
     pub no_overlay_below_format_2: bool,
     /// `quirks.object_empty_fields_collapse` (claim 34).
     pub object_empty_fields_collapse: bool,
+    /// `quirks.cell_index_alias` (claims 7 and 31): a pair whose x lies
+    /// outside 0 … 511 selects the cell with the same stream position index.
+    pub cell_index_alias: bool,
+    /// `quirks.header_pairs_as_start_marks` (claims 25 and 29): all N_h
+    /// header pairs are read; off: at most 8.
+    pub header_pairs_as_start_marks: bool,
+    /// `quirks.lobby_counts_zero_waypoint` (claim 23). Not consulted yet: our
+    /// engine has no lobby that counts start waypoints.
+    pub lobby_counts_zero_waypoint: bool,
+    /// `quirks.preview_markers_from_header` (claim 25). Not consulted yet:
+    /// our engine draws no preview markers.
+    pub preview_markers_from_header: bool,
 }
 
 impl Default for MapQuirks {
@@ -59,6 +71,10 @@ impl Default for MapQuirks {
             stale_fill_tiles: true,
             no_overlay_below_format_2: true,
             object_empty_fields_collapse: true,
+            cell_index_alias: true,
+            header_pairs_as_start_marks: true,
+            lobby_counts_zero_waypoint: true,
+            preview_markers_from_header: true,
         }
     }
 }
@@ -345,6 +361,7 @@ impl Decoder<'_> {
         let mut terminated = false;
         let mut negative_tile = false;
         let mut negative_level = false;
+        let mut alias_warned = false;
         loop {
             // Read up to six values; `None` once the data runs out.
             let mut vals = [None::<i64>; 6];
@@ -373,14 +390,24 @@ impl Decoder<'_> {
                 // spec: S-0009 claim 7 (nothing, or x only: no cell changes)
                 break;
             };
-            let c = CellXY::new(x as i32, y as i32);
+            let named = CellXY::new(x as i32, y as i32);
             // spec: S-0009 claim 7 (a record naming (0, 0) ends the stream)
-            if c == CellXY::new(0, 0) {
+            if named == CellXY::new(0, 0) {
                 terminated = true;
                 break;
             }
+            // spec: S-0009 claim 7 (the record acts on its selected cell)
+            let selected = selected_cell(named, self.ctx.quirks.cell_index_alias);
+            if named.x > MAX_STREAM_COORDINATE && !alias_warned {
+                alias_warned = true;
+                // spec: S-0009 Edge cases (quirks.cell_index_alias: the importer warns either way)
+                self.warn(
+                    line,
+                    "a terrain record's x lies outside 0 … 511 (S-0009 claim 7, quirks.cell_index_alias)",
+                );
+            }
             let catalogue = self.ctx.catalogue;
-            if let Some(cell) = cells.get_mut(c) {
+            if let Some(cell) = selected.and_then(|c| cells.get_mut(c)) {
                 // spec: S-0009 claim 7 (coordinates of a legal cell but no tile number: the no-tile marker)
                 let raw_tile = vals[2].map_or(NO_TILE, |t| t as i32);
                 negative_tile |= raw_tile < 0;
@@ -586,8 +613,14 @@ impl Decoder<'_> {
             );
         }
         let mut pairs = Vec::new();
-        // spec: S-0009 claim 25 (exactly pairs 1 … N_h are read), claim 29 (our engine stops at 16)
-        for i in 1..=count.min(LAST_HEADER_PAIR) {
+        // spec: S-0009 claim 25 (exactly pairs 1 … N_h are read), claim 29 (our engine stops at 16);
+        // quirks.header_pairs_as_start_marks off: at most 8 pairs
+        let last = if self.ctx.quirks.header_pairs_as_start_marks {
+            LAST_HEADER_PAIR
+        } else {
+            PREVIEW_PAIRS
+        };
+        for i in 1..=count.min(last) {
             let key = format!("Waypoint{i}");
             let stored = self.doc.value(b"Header", key.as_bytes());
             let pair = match stored {
@@ -1032,14 +1065,29 @@ impl Decoder<'_> {
             if self.doc.get(b"Tags", &tag).is_none() {
                 continue;
             }
-            if !footprint.is_legal(CellXY::new(x, y)) {
-                // spec: S-0009 Edge cases (a key decoding to a non-legal cell: ignored, and the importer warns)
+            if !(0..=MAX_STREAM_COORDINATE).contains(&x) {
+                // spec: S-0009 claim 31 (the importer warns about a decoded x outside 0 … 511)
+                self.warn(
+                    Some(entry.line),
+                    format!(
+                        "[CellTags] {}: x lies outside 0 … 511 (S-0009 claim 31, quirks.cell_index_alias)",
+                        show(&entry.key)
+                    ),
+                );
+            }
+            // spec: S-0009 claim 31 (the entry acts on its selected cell)
+            let selected = selected_cell(
+                CellXY::new(wrap_coordinate(x).into(), wrap_coordinate(y).into()),
+                self.ctx.quirks.cell_index_alias,
+            );
+            let Some(CellXY { x, y }) = selected.filter(|&c| footprint.is_legal(c)) else {
+                // spec: S-0009 Edge cases (a key whose selected cell is not legal: ignored, and the importer warns)
                 self.warn(
                     Some(entry.line),
                     format!("[CellTags] {}: not a legal cell; ignored", show(&entry.key)),
                 );
                 continue;
-            }
+            };
             let c = (wrap_coordinate(x), wrap_coordinate(y));
             match first_key.get(&c) {
                 // spec: S-0009 claim 31 (a cell keeps the first tag attached to it)
@@ -1062,6 +1110,26 @@ impl Decoder<'_> {
         }
         out
     }
+}
+
+/// The largest coordinate of a stream position (S-0009 Terms).
+const MAX_STREAM_COORDINATE: i32 = 511; // spec: S-0009 Terms (stream positions 0 … 511 per axis)
+
+/// The selected cell of a coordinate pair (S-0009 Terms, Formulas): the
+/// cell whose stream position index 512·y + x equals the pair's, or none
+/// when that index lies outside 0 … 262143. With `alias` off
+/// (`quirks.cell_index_alias`), a pair with x outside 0 … 511 selects no
+/// cell.
+pub fn selected_cell(c: CellXY, alias: bool) -> Option<CellXY> {
+    if !alias && !(0..=MAX_STREAM_COORDINATE).contains(&c.x) {
+        // spec: S-0009 Edge cases (quirks.cell_index_alias off: x outside 0 … 511 selects no cell)
+        return None;
+    }
+    // spec: S-0009 Formulas (i = 512·y + x; 0 ≤ i ≤ 262143 selects (i rem 512, i quo 512))
+    let i = 512 * i64::from(c.y) + i64::from(c.x);
+    (0..=262_143)
+        .contains(&i)
+        .then(|| CellXY::new((i % 512) as i32, (i / 512) as i32))
 }
 
 /// Characters of an object or smudge entry's value that are read (S-0009

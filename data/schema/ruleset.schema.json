@@ -1929,6 +1929,11 @@
           "type": "boolean",
           "default": true
         },
+        "double_start_resolution": {
+          "description": "Start positions are resolved twice, from three start lists, the assignment against the early phase's list 2; off: one list after the terrain is loaded.",
+          "type": "boolean",
+          "default": true
+        },
         "drive_brake_floor_raises": {
           "description": "Within the slowdown distance the braking floor raises a slower vehicle to the floor.",
           "type": "boolean",
@@ -1954,6 +1959,11 @@
           "type": "boolean",
           "default": true
         },
+        "early_phase_stale_country_data": {
+          "description": "The early phase judges passivity by the base rules' country data only; off: by this game's full rules layering.",
+          "type": "boolean",
+          "default": true
+        },
         "fire_frame_by_stance": {
           "description": "The fire frame is chosen by stance and weapon, not by the playing kind.",
           "type": "boolean",
@@ -1974,6 +1984,11 @@
           "type": "boolean",
           "default": true
         },
+        "follow_index_by_place": {
+          "description": "The placed vehicle numbered i takes the follow value numbered i, not its own entry's; off: each vehicle takes its own entry's value.",
+          "type": "boolean",
+          "default": true
+        },
         "fraidycat_fear_ignores_fearless": {
           "description": "A fearless fraidycat still gets its fear set by a known attacker.",
           "type": "boolean",
@@ -1981,6 +1996,11 @@
         },
         "gate_reverse_snaps": {
           "description": "A gate door that reverses from closing to opening is at rest open at the gate's next update; off: the reopening takes as long as the closing had run.",
+          "type": "boolean",
+          "default": true
+        },
+        "gate_tower_fixed_cells": {
+          "description": "A gate's or wall tower's placement and departure recompute the wall bits of fixed cells around its top-left foundation cell only; off: also every wall beside any of its foundation cells.",
           "type": "boolean",
           "default": true
         },
@@ -2011,6 +2031,11 @@
         },
         "narrow_map_partial_pass": {
           "description": "On a map of width 1 the cell pass visits part of the map.",
+          "type": "boolean",
+          "default": true
+        },
+        "near_full_health_rounds_up": {
+          "description": "A pre-placed object whose starting health comes out above its strength less 3 starts at full strength; off: it keeps the computed value.",
           "type": "boolean",
           "default": true
         },
@@ -2129,6 +2154,11 @@
           "type": "boolean",
           "default": true
         },
+        "random_start_asymmetric_range": {
+          "description": "A random start candidate's y range runs ten cells further than its x range; off: both from 11 to W + H − 10.",
+          "type": "boolean",
+          "default": true
+        },
         "ranged_draw_half_span": {
           "description": "A ranged draw whose bounds differ by exactly 2147483647 takes no value and returns the lower bound plus 2147483648, wrapped.",
           "type": "boolean",
@@ -2164,6 +2194,16 @@
           "type": "boolean",
           "default": true
         },
+        "skirmish_drops_country_owned_objects": {
+          "description": "In skirmish, pre-placed objects owned by a country name or a player-at-position name vanish; off: they go to the first player of that country or to the player at that position.",
+          "type": "boolean",
+          "default": true
+        },
+        "skirmish_drops_map_crates": {
+          "description": "Crate overlays placed by a map never appear in skirmish or multiplayer games; off: they are kept.",
+          "type": "boolean",
+          "default": true
+        },
         "slow_walker_stall": {
           "description": "A walker of speed 1 heading between east and south stalls.",
           "type": "boolean",
@@ -2176,6 +2216,16 @@
         },
         "stale_fill_tiles": {
           "description": "The fill uses the base tiles of the theater loaded before.",
+          "type": "boolean",
+          "default": true
+        },
+        "start_waypoint_gap": {
+          "description": "The start list skips undefined start waypoints and K stops at the first gap; off: position i is waypoint i whenever it is defined.",
+          "type": "boolean",
+          "default": true
+        },
+        "starting_infantry_share_centre": {
+          "description": "A starting infantry unit stands at its cell's centre position whatever infantry already stand there, with no draw; off: it takes a standing position by S-0208 claim 3, with that claim's draw.",
           "type": "boolean",
           "default": true
         },
@@ -2261,6 +2311,11 @@
         },
         "update_order_removal_skip": {
           "description": "Each counting removal during the turn pass costs one later object its turn, and an object that re-enters play takes a second turn.",
+          "type": "boolean",
+          "default": true
+        },
+        "upgrade_fields_carry_over": {
+          "description": "An absent upgrade name field of a map building entry keeps the type the same field named in an earlier entry; off: it means no upgrade.",
           "type": "boolean",
           "default": true
         },

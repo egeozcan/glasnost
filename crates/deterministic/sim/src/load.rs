@@ -190,15 +190,15 @@ pub fn new_game(
         if cell.overlay == NO_OVERLAY {
             continue;
         }
-        // spec: S-0009 claim 11 (no overlay for format version below 2)
-        let keep = map.format_version >= 2
-            && rules
-                .overlays
-                .get(usize::from(cell.overlay))
-                .is_some_and(|o| {
-                    // spec: S-0009 claim 12 (artwork or cell animation; crates only in campaign games)
-                    o.has_art && !o.crate_
-                });
+        // S-0009 claim 11 (no overlay below format version 2) is the importer's
+        // (convert::map::MapQuirks, quirks.no_overlay_below_format_2).
+        let keep = rules
+            .overlays
+            .get(usize::from(cell.overlay))
+            .is_some_and(|o| {
+                // spec: S-0009 claim 12 (artwork or cell animation; crates only in campaign games, quirks.skirmish_drops_map_crates)
+                o.has_art && !(o.crate_ && q.skirmish_drops_map_crates)
+            });
         if !keep {
             if let Some(cell) = w.cells.grid.get_mut(c) {
                 cell.overlay = NO_OVERLAY;

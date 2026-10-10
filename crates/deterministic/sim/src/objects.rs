@@ -308,8 +308,8 @@ fn set_starting_health(w: &mut World, id: ObjectId, kind: Kind, value: i32) {
     let Some(strength) = w.obj(id).map(|o| o.health) else {
         return;
     };
-    // spec: S-0009 claim 37 (quirks.near_full_health_rounds_up: on, the original; its switch belongs to rules::Quirks)
-    let near_full = true;
+    // spec: S-0009 claim 37 (raised to full strength above S − 3, quirks.near_full_health_rounds_up)
+    let near_full = w.rules().quirks.near_full_health_rounds_up;
     let (h, unspecified) = starting_health(hk, value, strength, near_full, chop);
     if unspecified {
         w.note("S-0009 claim 37: a pre-placed object's starting health is unspecified in the original; it starts with 1");
@@ -366,8 +366,8 @@ pub fn place_map_objects(w: &mut World, map: &Map, sandbox: bool) {
             upgrade_fields.push((m.is_some() && !human_dropped, fields.upgrades.clone()));
             matched.push(m);
         }
-        // spec: S-0009 claim 40 (quirks.upgrade_fields_carry_over: on, the original; its switch belongs to rules::Quirks)
-        let upgrades = resolve_upgrades(&upgrade_fields, true);
+        // spec: S-0009 claim 40 (an absent upgrade field carries over, quirks.upgrade_fields_carry_over)
+        let upgrades = resolve_upgrades(&upgrade_fields, r.quirks.upgrade_fields_carry_over);
         for (n, p) in entries.iter().enumerate() {
             let fields = map.objects.fields(lk, n);
             // spec: S-0009 claims 27 and 36 (an unmatched owner or type drops the entry; no creation draw)
@@ -471,8 +471,8 @@ pub fn place_map_objects(w: &mut World, map: &Map, sandbox: bool) {
             }
         }
     }
-    // spec: S-0009 claim 41 (quirks.follow_index_by_place: on, the original; its switch belongs to rules::Quirks)
-    let links = follow_links(&follow, true);
+    // spec: S-0009 claim 41 (the placed vehicle numbered i takes follow value i, quirks.follow_index_by_place)
+    let links = follow_links(&follow, r.quirks.follow_index_by_place);
     if links.leaders.iter().any(Option::is_some) {
         w.note("S-0009 claim 41: follower-car links are worked out but an object has no leader field yet (S-0212 claim 26)");
     }
