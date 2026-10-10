@@ -38,7 +38,11 @@ impl UpdateOrder {
     /// An object leaves play. During a turn pass, a removal of the current
     /// object or of one before it is a counting removal: with
     /// `quirks.update_order_removal_skip` it costs the next object its turn
-    /// (S-0203 claim 10).
+    /// (S-0203 claim 10). When a destroyed object leaves play is S-0203
+    /// claim 6: at the moment of the damage as a rule, later for the
+    /// exceptions S-0312 owns (sinking, crashing, exploding or sold
+    /// buildings, passengers that get out); the combat code (M4) calls this
+    /// at that moment.
     pub fn leave(&mut self, id: ObjectId, removal_skip: bool) {
         let Some(p) = self.order.iter().position(|o| *o == id) else {
             return;

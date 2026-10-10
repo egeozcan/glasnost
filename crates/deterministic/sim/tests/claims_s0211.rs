@@ -573,6 +573,7 @@ fn terrain_type(s: &mut Scene, name: &str, temperate: i32, snow: i32) {
         TerrainObjectType {
             temperate_occupation_bits: Some(temperate),
             snow_occupation_bits: Some(snow),
+            ..Default::default()
         },
     );
 }

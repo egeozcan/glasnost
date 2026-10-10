@@ -833,6 +833,9 @@ pub struct TerrainObjectType {
     /// `SnowOccupationBits`.
     #[serde(default)]
     pub snow_occupation_bits: Option<i32>,
+    /// `SpawnsTiberium`, the spawns-resources flag (S-0203 claim 2).
+    #[serde(default)]
+    pub spawns_tiberium: Option<bool>,
 }
 
 /// A weapon's simulation fields read by M3 rules.

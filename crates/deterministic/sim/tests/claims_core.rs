@@ -433,3 +433,45 @@ fn s0205_double_range() {
     }
     assert_eq!(y.0, 0x7ff0_0000_0000_0000);
 }
+
+// spec: S-0203 claim 2 (a terrain object takes turns exactly when its type has the spawns-resources flag)
+// spec: S-0203 Import mapping (SpawnsTiberium absent: no)
+#[test]
+fn s0203_spawning_terrain_objects_take_turns() {
+    let mut r = testkit::ruleset();
+    r.registries.insert(
+        "terrain_objects".into(),
+        vec!["TREE".into(), "GROWER".into()],
+    );
+    r.sim
+        .terrain_objects
+        .insert("TREE".into(), TerrainObjectType::default());
+    r.sim.terrain_objects.insert(
+        "GROWER".into(),
+        TerrainObjectType {
+            spawns_tiberium: Some(true),
+            ..Default::default()
+        },
+    );
+    let rules = Arc::new(SimRules::new(&r, "synthetic+growers"));
+    let mut map = testkit::map();
+    for (name, c) in [
+        ("TREE", testkit::cell(10, 10)),
+        ("GROWER", testkit::cell(12, 10)),
+    ] {
+        map.objects.terrain.push(TerrainObject {
+            cell: c,
+            type_name: name.as_bytes().to_vec(),
+        });
+    }
+    let w = new_game(rules, &map, testkit::catalogue(), &testkit::setup(9)).unwrap();
+    let at = |c| {
+        w.objects
+            .values()
+            .find(|o| o.kind == Kind::Terrain && o.pos.cell() == c)
+            .unwrap()
+            .id
+    };
+    assert!(!w.update.contains(at(testkit::cell(10, 10))));
+    assert!(w.update.contains(at(testkit::cell(12, 10))));
+}

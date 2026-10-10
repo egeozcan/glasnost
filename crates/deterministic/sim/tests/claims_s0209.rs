@@ -109,6 +109,7 @@ fn scene() -> Scene {
             TerrainObjectType {
                 temperate_occupation_bits: Some(bits),
                 snow_occupation_bits: Some(bits),
+                ..Default::default()
             },
         );
     }

@@ -2391,6 +2391,14 @@
           "format": "int32",
           "default": null
         },
+        "spawns_tiberium": {
+          "description": "`SpawnsTiberium`, the spawns-resources flag (S-0203 claim 2).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
         "temperate_occupation_bits": {
           "description": "`TemperateOccupationBits`.",
           "type": [

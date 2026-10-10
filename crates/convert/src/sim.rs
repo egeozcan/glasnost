@@ -423,6 +423,8 @@ const OVERLAY_FIELDS: &[(&str, &str, Form)] = &[
 const TERRAIN_OBJECT_FIELDS: &[(&str, &str, Form)] = &[
     ("temperate_occupation_bits", "TemperateOccupationBits", Int),
     ("snow_occupation_bits", "SnowOccupationBits", Int),
+    // spec: S-0203 Import mapping (SpawnsTiberium)
+    ("spawns_tiberium", "SpawnsTiberium", Bool),
 ];
 
 /// Weapon fields.

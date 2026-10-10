@@ -153,8 +153,13 @@ pub fn place(w: &mut World, id: ObjectId, pos: Pos, facing: Facing) {
         obj.body.set(facing, tick, keeps);
         obj.turret.set(facing, tick, keeps);
     }
-    // spec: S-0203 claim 2 (terrain objects take no turns unless they spawn resources, Q-0018)
-    if o.kind != Kind::Terrain {
+    // spec: S-0203 claim 2 (a terrain object takes turns exactly when its type has the spawns-resources flag)
+    let takes_turns = o.kind != Kind::Terrain
+        || w.rules()
+            .terrain
+            .get(o.type_index as usize)
+            .is_some_and(|t| t.spawns_resources);
+    if takes_turns {
         w.update.enter(id);
     }
     // spec: S-0211 claim 5 (an object put into a cell recomputes it)

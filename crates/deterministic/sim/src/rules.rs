@@ -225,6 +225,8 @@ pub struct TerrainRules {
     pub name: String,
     /// Occupation pattern, temperate and snow.
     pub occupation: (i32, i32),
+    /// The spawns-resources flag (S-0203 claim 2).
+    pub spawns_resources: bool,
 }
 
 /// One behaviour's properties (S-0215 claims 6, 16 to 21).
@@ -778,6 +780,8 @@ impl SimRules {
                         t.temperate_occupation_bits.unwrap_or(7),
                         t.snow_occupation_bits.unwrap_or(7),
                     ),
+                    // spec: S-0203 Import mapping (SpawnsTiberium absent: no)
+                    spawns_resources: t.spawns_tiberium.unwrap_or(false),
                 }
             })
             .collect();

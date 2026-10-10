@@ -386,6 +386,15 @@ fn wall_data_and_wall_owner_flag() {
     );
 }
 
+/// spec: S-0203 Import mapping (SpawnsTiberium, a terrain type's spawns-resources flag)
+#[test]
+fn terrain_spawns_resources_flag() {
+    let base = "[TerrainTypes]\n0=Tree\n1=Grower\n[Tree]\nSpawnsTiberium=no\n[Grower]\nSpawnsTiberium=yes\n";
+    let (s, _) = sim(base, "", "");
+    assert_eq!(s.terrain_objects["Tree"].spawns_tiberium, Some(false));
+    assert_eq!(s.terrain_objects["Grower"].spawns_tiberium, Some(true));
+}
+
 /// spec: S-0211 claim 4 and Import mapping (zone names, restricted land types)
 #[test]
 fn zones_and_restrictions() {
