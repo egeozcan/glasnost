@@ -2,13 +2,13 @@
 id: S-0104
 title: Lighting
 topic: rendering
-revision: 8
+revision: 9
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-10
 measurements: []
-requests: []
+requests: [Q-0013]
 supersedes: []
 ---
 
@@ -64,7 +64,7 @@ How the map's ambient light, tint and height factors, the light sources and the 
    - Ambient and tint channels are kept in **hundredths**.
    - Ground bias and level factor are kept in **thousandths**.
 
-   A decimal value *v* from the map is stored as ⌊*v* × 100 + 0.01⌋ (hundredths) or ⌊*v* × 1000 + 0.01⌋ (thousandths), where *v* is the single-precision decimal of S-0003, claim 6. The calculation is in double precision, truncating toward zero, under the original's round-toward-zero mode (glossary; S-0003, claim 17), whose switch `quirks.chop_rounding` belongs to S-0205 (number domains, claim 5), a draft in the same batch as this revision (Formulas, "Precision of decimal conversions"). The nuke flash set is fixed and cannot be changed by the map. Absent keys take the engine defaults in Constants.
+   A decimal value *v* from the map is stored as ⌊*v* × 100 + 0.01⌋ (hundredths) or ⌊*v* × 1000 + 0.01⌋ (thousandths), where *v* is the single-precision decimal of S-0003, claim 6. The calculation is in double precision, truncating toward zero, under the original's round-toward-zero mode (glossary; S-0003, claim 17), whose switch `quirks.chop_rounding` belongs to S-0205 (number domains, claim 5); see Formulas, "Precision of decimal conversions". The nuke flash set is fixed and cannot be changed by the map. Absent keys take the engine defaults in Constants.
    - Backing: `measurable` (Scenario L1)
    - Confidence: high
 
@@ -176,7 +176,7 @@ How the map's ambient light, tint and height factors, the light sources and the 
     - Backing: `measurable` (Scenario L8) for the ground level and the ion-storm exception, and (Scenario L8 Part A, the bridge deck) for the raised level's use of the dominator's level factor.
     - Confidence: high
 
-11. **Light-source falloff.** A light source affects (reaches) a cell when the horizontal distance from the light's position to the cell centre is at most the radius *R*, exactly: Δx² + Δy² ≤ *R*², in leptons². Height is ignored. For the falloff the distance is *d*, the *tabulated square root* of Δx² + Δy² (the table square root of S-0105, F1, S-0009, claim 19, and S-0204, claim 5; S-0204, coordinates and facing, is a draft in the same batch as this revision), truncated to an integer (Formulas, "Cell light"). It is not always the Euclidean distance truncated:
+11. **Light-source falloff.** A light source affects (reaches) a cell when the horizontal distance from the light's position to the cell centre is at most the radius *R*, exactly: Δx² + Δy² ≤ *R*², in leptons². Height is ignored. For the falloff the distance is *d*, the *tabulated square root* of Δx² + Δy² (the table square root of S-0105, F1, S-0009, claim 19, and S-0204 (coordinates and facing), claim 5), truncated to an integer (Formulas, "Cell light"). It is not always the Euclidean distance truncated:
     - *d* equals the integer square root (the largest integer whose square is at most Δx² + Δy²) for every squared distance below 16641 leptons² (129 leptons). From there on it is one lower at scattered values, from 536987929 leptons² (23173 leptons) up to two lower and from 2147673649 leptons² (46343 leptons) up to three lower. It is never higher in the original's round-toward-zero mode, so every cell a light reaches has *d* ≤ *R* and reach itself does not depend on the table.
     - **Building lights.** For a building's light (claim 12), the only kind of light source this spec covers, *d* equals the integer square root at every cell closer than 16388 leptons (64 cells) to the light, and the rounding mode never changes it (Formulas, "Cell light"). With the default radius of 5000 leptons the table therefore makes no difference.
     - A lower *d* raises the falloff below by at most ⌈1000/*R*⌉ ‰ per lepton of shortfall. S-0204's switch `quirks.table_root_distance` (default on, the original): off, *d* is the integer square root.
@@ -209,6 +209,7 @@ How the map's ambient light, tint and height factors, the light sources and the 
     - **Buildings.** Write *T* for the building's top-left foundation cell (glossary, foundation). The building's light comes from *T* alone, whatever the light on its other foundation cells (`quirks.building_light_from_top_left_cell`). No extra-light value and no height term is added.
       - An ordinary building: *b* = *U* of *T*, for every part of it: the body painted in the cell pass, the parts drawn as sprites in the object pass, and the parts drawn as voxel models (turrets and the like).
       - A terrain-palette building: its body and its parts drawn as sprites take the **scaled** ground level of the cell under the building's centre, the cell whose tile shade table they are drawn with (S-0103, claim 8). With an even foundation width or depth the centre lies on a cell edge, and the cell with the larger coordinate counts. Its parts drawn as voxel models still take *U* of *T*.
+    - **Terrain tiles.** The ground image of a cell, including the extra image some tile cells carry (S-0010, claim 23), is drawn with the cell's tile shade table at the cell's **scaled** ground level, the same value as a terrain animation on that cell and a plain terrain object standing on it. It is never drawn at the unscaled level *U*. Under a map tint that is not white the unscaled level and the tile's own level differ by the factor *K* of claim 8. Cells that a second, separate pass draws again, if any, use the scaled ground level too (Open questions). The terrain tile, its animations and its terrain objects therefore always agree on brightness, including after an incremental update (claim 9), which scales the unclamped ground.
     - **Terrain objects.** A plain terrain object, such as a tree: its cell's **scaled** ground level, drawn with its cell's tile shade table, so it takes the cell's tint as terrain does (claim 3). An ore-spawning terrain object: its cell's **unscaled** ground level *U*, drawn with a palette that is not its cell's tile shade table; which palette, and whether it takes any tint, is not covered here (Open questions).
     - **Overlays:**
       - Ore and gem overlays: always 1000, whatever the cell's light.
@@ -225,8 +226,8 @@ How the map's ambient light, tint and height factors, the light sources and the 
     - **Not covered here:** changes to an object's brightness while it flashes, while it is protected by the invulnerability superweapon, or while it is the target of an air strike. These apply on top of the values above (Open questions).
     - The extra-light values are stored as ⌊*v* × 1000⌋ ‰ with no rounding allowance, where *v* is the single-precision decimal of S-0003, so a value such as 0.57 becomes 569.
     - All additions are integer additions. *b* is not clamped here; the row mapping of claim 15 treats any *b* ≤ 0 as 0.
-    - Backing: `measurable` (Scenarios L9 for the animations, L10, L14, L15 for vehicles and infantry in shadowed cells, L23 for buildings, terrain objects, wall and other overlays, deck overlays and the animations of row 3, L3 Setup A for the tint of plain terrain objects)
-    - Confidence: high for vehicles on and off bridge decks, for the −500 being added (not replacing the brightness) and for ore and gems; high for the 208-lepton height step and the infantry and aircraft rules; high for an ordinary building's top-left cell; medium for the animation rules, terrain-palette buildings, terrain objects, wall, deck and other overlays; medium for which cells count as shadowed (Terms)
+    - Backing: `measurable` (Scenarios L9 for the animations and the terrain tile, L10, L14, L15 for vehicles and infantry in shadowed cells, L23 for buildings, terrain objects, wall and other overlays, deck overlays and the animations of row 3, L3 Setup A for the tint of plain terrain objects)
+    - Confidence: high for vehicles on and off bridge decks, for the −500 being added (not replacing the brightness) and for ore and gems; high for the 208-lepton height step and the infantry and aircraft rules; high for an ordinary building's top-left cell; high for terrain tiles (the only tile-drawing path reads the scaled value); medium for the animation rules, terrain-palette buildings, terrain objects, wall, deck and other overlays; medium for which cells count as shadowed (Terms)
 
 14. **Trigger-action ambient changes.** The effect lighting sets are read once with the map. Trigger actions that change the base ambient set the target as well, unless an ion storm is in force, in which case only the base changes. Fading then proceeds as in claim 4.
     - Backing: `measurable` (Scenario L13)
@@ -353,7 +354,7 @@ For green- or blue-largest tints the divisor *K* is truncated, so *K* ≤ *X*·6
 *K* and the normalised tint come from the raw cell tint (Tint normalisation), and the tile table from the normalised tint (Tile table choice). A full recompute gives each cell three light values, each finally clamped to [0, 2000]:
 
 - *unscaled ground* = ground (used by vehicles, infantry, aircraft, ordinary buildings, the voxel parts of terrain-palette buildings, ore-spawning terrain objects, wall overlays, anim-palette animations and the own animations of claim 13),
-- *scaled ground* = ⌊min(ground, 2000)·*K* / 65536⌋ (used by vein animations, by animations created as part of a cell's terrain, by plain terrain objects, by the body and sprite parts of terrain-palette buildings and by overlays other than walls, ore, gems and deck overlays, claim 13),
+- *scaled ground* = ⌊min(ground, 2000)·*K* / 65536⌋ (used by terrain tiles, by vein animations, by animations created as part of a cell's terrain, by plain terrain objects, by the body and sprite parts of terrain-palette buildings and by overlays other than walls, ore, gems and deck overlays, claim 13),
 - *scaled raised* = ⌊raised·*K* / 65536⌋ (no clamp before scaling; used by the overlays of deck cells, claim 13).
 
 For negative values the rounding direction of these three divisions never shows: the final clamp turns any negative result into 0.
@@ -363,7 +364,7 @@ For negative values the rounding direction of these three divisions never shows:
 - the zeroing of the scaled ground for a near-black raw cell tint (*X* ≤ 1 above) is not repeated, because the stored *K* is then 65536: the scaled ground equals the ground again after the next incremental update.
 - the dominator's level factor is used correctly (claim 10).
 
-Which of the ground values the terrain tile itself is drawn with is open (Open questions); Scenario L9's secondary observable decides it.
+The terrain tile itself is drawn with the scaled ground value (claim 13), so under a non-white map tint a tile's level differs from the unscaled value by the factor *K*/65536 (darker when *K* < 65536, brighter when *K* > 65536), and the row a tile shows is that of the scaled value.
 
 **Object brightness** (claim 13), all integer, with *U* the unscaled ground level and *h* the height above the surface in leptons:
 
@@ -380,6 +381,7 @@ Which of the ground values the terrain tile itself is drawn with is open (Open q
 | ordinary building, every part | *U* of its top-left foundation cell |
 | terrain-palette building, body and sprite parts | scaled ground of the cell under its centre |
 | terrain-palette building, voxel parts | *U* of its top-left foundation cell |
+| terrain tile (ground image and extra image) | scaled ground of its cell |
 | plain terrain object | scaled ground of its cell |
 | ore-spawning terrain object | *U* of its cell |
 | ore and gem overlays | 1000 |
@@ -609,14 +611,14 @@ The nuke flash set has no keys (fixed constants). The rows whose source is the r
   - an anim-palette animation (row 5 of the table in S-0103, claim 8), played in that cell by a trigger action,
   - a stock animation whose art sets the use-normal-light flag and which S-0103 places in row 5, played in that cell by a trigger action,
   - an infantry unit,
-  - a plain ground tile (secondary observable).
+  - a plain ground tile (terrain tile, claim 13).
 - *Observable:* the shade row of each subject in each run.
 - *Expected:* at 2, 4 and 6 cells the falloff is *f* = 800, 600 and 400 ‰, the light adds 240, 180 and 120 ‰, and the ground level is 740, 680 and 620 ‰ (rows 19, 17 and 16) in both runs. In run 1 every channel of the raw cell tint is clamped to 2000, so the cells use the neutral tile table with *K* = 131072 and their scaled ground level is 1480, 1360 and 1240 (rows 38, 35 and 32). So:
   - the terrain animation and the vein animation are at rows 38, 35 and 32 in run 1, and at rows 19, 17 and 16 in run 2,
   - the anim-palette animation and the infantry unit are at rows 19, 17 and 16 in both runs,
   - the use-normal-light animation is at row 26 in both runs, at every distance.
 - *Falsified if:* in run 1 the terrain or vein animation is at the same row as in run 2 (no doubling: the absent tint is not 1000.0, or these animations do not read the scaled level); or the anim-palette animation or the infantry unit differ between the runs; or the use-normal-light animation is at any row other than 26.
-- *Secondary observable:* the plain tile is at rows 38, 35 and 32 in run 1 if terrain tiles are drawn with the scaled ground level, and at rows 19, 17 and 16 if they use the unscaled one. Either result answers the open question; neither falsifies a claim.
+- *Terrain tile:* the plain ground tile at each distance is a further subject. *Expected:* rows 38, 35 and 32 in run 1 and rows 19, 17 and 16 in run 2, the same as the terrain animation. *Falsified if:* the plain tile is at rows 19, 17 and 16 in run 1 (the tile uses the unscaled level, not the scaled one), or at a different row from the terrain animation at the same cell in either run.
 
 **Scenario L10: object brightness** (claim 13). One run per part.
 - *Setup:* neutral test lighting, except where a part says otherwise.
@@ -693,7 +695,7 @@ The nuke flash set has no keys (fixed constants). The rows whose source is the r
 
 **Scenario L17: incremental update scales the unclamped ground** (claim 9, Formulas, "Incremental update"). One run.
 - *Setup:* map ambient 2.50, map tint (0.80, 0.80, 0.80), ground bias 0, level factor 0, flat map with at least one tile that the theater animates, detail high, extra light 0. Normalisation gives *K* = 52428 and a white normalised tint (800 is not in 𝒟, claim 8), so the cells use the neutral tile table, which has 53 rows. Change step 0.1 and change rate 0.2 game minutes (180 ticks), stated in the test map's audio-visual override section. A trigger action lowers the base ambient to 2.40 at a fixed tick.
-- *Subject:* an animation created as part of a cell's terrain (claim 13), which certainly uses the scaled ground level. If Scenario L9 has shown that terrain tiles also use it, a plain tile serves as well.
+- *Subject:* an animation created as part of a cell's terrain (claim 13), which uses the scaled ground level. A plain tile serves as well (claim 13).
 - *Observable:* the subject's shade row at three times: before the trigger action (after a full recompute, for example after toggling the detail level from high to low and back), after the ambient step, and after a further toggle to low and back.
 - *Expected:* before the step, scaled ground ⌊2000 × 52428 / 65536⌋ = 1599, row 41. After the step, ⌊2400 × 52428 / 65536⌋ = 1919, row 49 (the unclamped ground is scaled). After the detail-level changes, 1599 and row 41 again, although the ambient is still 2.40.
 - *Falsified if:* the row after the step is 41 (the ground was clamped before scaling), or the row after the detail-level changes is still 49.
@@ -711,7 +713,7 @@ The nuke flash set has no keys (fixed constants). The rows whose source is the r
   - *Falsified if:* Part B's pixels are darker than the control's. In particular, a channel that shows *u* − 1 in the control run would show ⌊*u* × 58720 / 65536⌋ (248 → 222). That is the quantised-white table (896, 896, 896) at row 26, which the run would show if the table were chosen by the raw cell tint (0, 0, 0) instead.
 
 **Scenario L19: grey map tints and the red-largest rounding** (claim 8, red-largest rounding). Three runs.
-- *Setup:* neutral test lighting (map ambient 1.00), except for the map tint. Detail low from the start of the game (set with the settings-file key before it starts, Common setup). Subject: a plain ground tile. The tints are chosen so that the tile is at row 26 whether terrain tiles use the scaled or the unscaled ground level (Open questions).
+- *Setup:* neutral test lighting (map ambient 1.00), except for the map tint. Detail low from the start of the game (set with the settings-file key before it starts, Common setup). Subject: a plain ground tile. The tints are chosen so that the tile is at row 26 whether terrain tiles use the scaled or the unscaled ground level (claim 13 gives the scaled one; this scenario does not depend on it).
   - Run 1: map tint (1.01, 1.01, 1.01). 1010 is in 𝒟, so the normalised tint is (1000, 999, 999). *K* = 66191, scaled ground 1009 and unscaled ground 1000, both row 26.
   - Run 2: map tint (1.03, 1.03, 1.03). 1030 is not in 𝒟, so the normalised tint is white. *K* = 67502, scaled ground 1029 and unscaled ground 1000, both row 26.
   - Run 3 (control): map tint white. Ground 1000, row 26.
@@ -802,7 +804,7 @@ The nuke flash set has no keys (fixed constants). The rows whose source is the r
 - The brightness of other drawn things that claim 13 does not list, such as smudges and animations drawn from voxel models.
 - What lighting the original gives a position outside the map's legal cells (S-0009, claim 1).
 - Light radii of about 32000 leptons (125 cells) or more. The squared distances then exceed the range of the original's integer arithmetic when it selects the cells a light change recomputes (claim 12), and from about 65500 leptons also in the reach test (claim 11). Which cells it then recomputes and reaches is not established; claims 11 and 12 hold for smaller radii.
-- Which cell light value terrain tiles are drawn with (scaled or unscaled ground). Scenario L9's secondary observable answers it.
+- Which cells the second, separate tile-drawing pass draws again (claim 13, terrain tiles), and what it is for. It draws a tile with the cell's scaled ground level and the first tile shade table the game made (not necessarily the cell's own), with no extra image; what selects those cells is not established.
 - Which tile shade table a cell gets when its table is chosen again after a trigger-action tint change, before the next detail change (claim 17).
 - What tint a house-colour or named palette takes if it is built after a trigger-action tint change (claim 17). Such palettes are normally all built when the game starts; whether any is built later is not established.
 - Whether anything other than the overlays of deck cells reads a cell's raised light level (claims 9 and 10).

@@ -1,9 +1,9 @@
 ---
 id: Q-0013
 title: Which cell light value terrain tiles are drawn with
-status: open
+status: answered
 related: [S-0104]
-answered-by: []
+answered-by: [S-0104]
 ---
 
 ## Need
