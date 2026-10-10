@@ -274,7 +274,7 @@ Provisional rules of the simulation, each tied to a request:
 | `drive` | the attack override of a refused step (S-0207 table T4) gives no destination; no step check follows the search made after a curve's second cell gives an obstacle (table T5) | Q-0035 |
 | `crush` | a map wall takes the owner of the nearest qualifying building at any distance (S-0210 claim 14) | Q-0036 |
 | `process` | a gate's door moves at the start of the gate's turn, before its per-tick start and processing | Q-0030 |
-| `objects` | pre-placed objects (S-0009 claims 34 to 43) carry no veterancy value, tag or bridge flag, start switched on, and aircraft stand landed; follower cars carry their leader (claim 41) but are not sent after it (S-0212 claim 26 is a seam); a terrain object starts with health 0 (no strength field yet) | — |
+| `objects` | pre-placed objects (S-0009 claims 34 to 43) carry no veterancy value or tag (a vehicle with the bridge flag stands on the deck where its cell has one, else on the ground), start switched on, and aircraft stand landed; follower cars carry their leader (claim 41) but are not sent after it (S-0212 claim 26 is a seam); a terrain object starts with health 0 (no strength field yet) | Q-0023 |
 
 ## Tests
 

@@ -504,6 +504,20 @@ pub fn place_map_objects(w: &mut World, map: &Map, sandbox: bool) {
                     o.beh.force(b, t);
                 }
             }
+            let mut pos = pos;
+            if kind == Kind::Vehicle && fields.bridge == Some(true) {
+                let deck = w.cells.idx(p.cell).is_some_and(|i| w.cells.deck[i]);
+                if deck {
+                    // spec: S-0009 claim 38 (a vehicle whose bridge flag is set stands on the bridge deck)
+                    // spec: S-0207 claim 5 (on a deck: the surface height plus 416 leptons)
+                    pos.z += 416;
+                    if let Some(o) = w.obj_mut(id) {
+                        o.layer = Layer::Deck;
+                    }
+                } else {
+                    w.note("S-0009 claim 38: a vehicle's bridge flag on a cell without a bridge deck is not specified; it stands on the ground");
+                }
+            }
             place(w, id, pos, facing);
             visceroid_draw(w, id);
             if kind == Kind::Vehicle {
@@ -512,9 +526,6 @@ pub fn place_map_objects(w: &mut World, map: &Map, sandbox: bool) {
                     value: fields.follow,
                     placed: true,
                 });
-                if fields.bridge == Some(true) {
-                    w.note("S-0009 claim 38: a vehicle's bridge flag needs bridge decks (Q-0020); it stands on the ground");
-                }
             }
             if kind == Kind::Aircraft {
                 w.note("S-0009 claim 38: aircraft stand landed on their cell; one placed in the air needs its type's flight height (aircraft specs)");

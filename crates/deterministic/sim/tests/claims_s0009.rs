@@ -616,3 +616,52 @@ fn claim_27_country_owned_objects() {
         .map(|i| glasnost_sim::world::HouseId(i as u8));
     assert_eq!(owners, [Some(glasnost_sim::world::HouseId(1)), at_a]);
 }
+
+// spec: S-0009 claim 38 (a vehicle whose bridge flag is set stands on the bridge deck, else on the ground)
+// spec: S-0207 claim 5 (on a deck: the surface height plus 416 leptons)
+#[test]
+fn claim_38_bridge_flag_puts_a_vehicle_on_the_deck() {
+    let mut s = scene();
+    // Invented overlay types up to list index 24, a high-bridge index
+    // (S-0211 claim 15), with artwork so loading keeps them.
+    for i in 0..=24 {
+        let name = format!("OV{i}");
+        s.register("overlays", &name);
+        s.ruleset.sim.overlays.insert(
+            name,
+            glasnost_rules::sim::OverlayType {
+                has_art: Some(true),
+                ..Default::default()
+            },
+        );
+    }
+    s.cell_mut(cell(0, 0)).overlay = 24;
+    for (c, flag) in [(cell(0, 0), true), (cell(0, 6), true), (cell(0, 8), false)] {
+        s.map.objects.units.push(Unit {
+            placed: placed("Alpha", "TANK", c, 256, 0),
+        });
+        s.map.objects.unit_fields.push(EntryFields {
+            bridge: Some(flag),
+            ..Default::default()
+        });
+    }
+    let w = s.build();
+    let at = |c: glasnost_map::CellXY| {
+        w.objects
+            .values()
+            .find(|o| o.kind == Kind::Vehicle && o.pos.cell() == c)
+            .expect("vehicle")
+    };
+    let on_deck = at(cell(0, 0));
+    assert_eq!(on_deck.layer, glasnost_sim::world::Layer::Deck);
+    assert_eq!(
+        on_deck.pos.z,
+        w.surface_at(on_deck.pos.x, on_deck.pos.y) + 416
+    );
+    // The flag on a cell without a deck, and no flag: on the ground.
+    for c in [cell(0, 6), cell(0, 8)] {
+        let o = at(c);
+        assert_eq!(o.layer, glasnost_sim::world::Layer::Ground);
+        assert_eq!(o.pos.z, w.surface_at(o.pos.x, o.pos.y));
+    }
+}
