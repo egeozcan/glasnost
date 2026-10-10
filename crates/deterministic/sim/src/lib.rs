@@ -37,6 +37,7 @@ pub mod testkit;
 pub mod tick;
 pub mod tracks;
 pub mod turning;
+pub mod turret;
 pub mod update;
 pub mod walk;
 pub mod world;

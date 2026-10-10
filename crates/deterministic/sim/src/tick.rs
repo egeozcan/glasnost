@@ -8,7 +8,7 @@
 
 use crate::rules::{Kind, Locomotor};
 use crate::world::{ObjectId, World};
-use crate::{drive, infantry, occupancy, orders, process, walk};
+use crate::{drive, infantry, occupancy, orders, process, turret, walk};
 
 /// Runs one tick (S-0203 claim 1, the draw order of its rows).
 pub fn step(w: &mut World) {
@@ -58,6 +58,10 @@ fn object_turn(w: &mut World, id: ObjectId) {
         Some(Locomotor::Walk) => walk::tick(w, id),
         _ => false,
     };
+    if kind == Kind::Vehicle {
+        // The turret's target at the end of the tick (S-0206 claim 9), after the movement.
+        turret::tick(w, id);
+    }
     if kind == Kind::Infantry && w.obj(id).is_some() {
         let in_progress = occupancy::in_progress(w, id);
         let has_dest = w.obj(id).is_some_and(|o| o.dest.is_some());
