@@ -23,6 +23,7 @@ pub mod kinds;
 pub mod layers;
 pub mod map;
 pub mod names;
+pub mod sim;
 pub mod theater;
 
 #[cfg(test)]
@@ -202,6 +203,20 @@ async fn look_up_art(
         &arts,
         theater,
     );
+    // The art-dependent simulation fields, now with each type's art (S-0007).
+    let (sim_node, sim_warnings) = sim::build(sim::SimInputs {
+        outcome: &import.outcome,
+        art: &art_doc,
+        arts: Some(&arts),
+        quirks: &options.quirks,
+        art_quirks: &options.art,
+    });
+    sim::attach(&mut import.tree, sim_node);
+    for w in sim_warnings {
+        if !import.warnings.contains(&w) {
+            import.warnings.push(w);
+        }
+    }
     import.arts = arts;
 }
 
@@ -399,7 +414,16 @@ pub fn convert(inputs: &Inputs, options: &ImportOptions) -> Import {
     }));
     warnings.extend(outcome.warnings.iter().cloned());
 
-    let (tree, provenance) = emit::emit(&outcome, &record, &art);
+    let (mut tree, provenance) = emit::emit(&outcome, &record, &art);
+    let (sim_node, sim_warnings) = sim::build(sim::SimInputs {
+        outcome: &outcome,
+        art: &art,
+        arts: None,
+        quirks: &options.quirks,
+        art_quirks: &options.art,
+    });
+    sim::attach(&mut tree, sim_node);
+    warnings.extend(sim_warnings);
     let base_doc = layers.first().map(|l| &l.doc);
     let coverage = base_doc
         .map(|b| coverage::rows(b, &art, &outcome))

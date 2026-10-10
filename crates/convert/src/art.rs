@@ -19,7 +19,7 @@ use crate::layers::{Outcome, TypeRec, What};
 use crate::names::show;
 
 /// Longest image name (S-0007 Constants).
-const IMAGE_MAX: usize = 24; // spec: S-0007 Constants (image name length)
+pub(crate) const IMAGE_MAX: usize = 24; // spec: S-0007 Constants (image name length)
 /// Longest building art-section image key and secondary sprite name.
 const BUILDING_NAME_MAX: usize = 63; // spec: S-0007 Constants (building names)
 /// Longest build-up sprite name.
@@ -79,6 +79,13 @@ pub struct ArtQuirks {
     pub building_tur_search_skips_four: bool,
     /// `quirks.loading_archive_sprites_vanish` (S-0005 claim 13).
     pub loading_archive_sprites_vanish: bool,
+    /// `quirks.sequence_value_length_limit` (S-0107 claim 22): the
+    /// `Sequence=` value and each kind value are read as at most 31
+    /// characters. Off: read whole.
+    pub sequence_value_length_limit: bool,
+    /// `quirks.case_sensitive_direction` (S-0107 claim 22): a declared
+    /// direction is recognised only in exact upper case. Off: any case.
+    pub case_sensitive_direction: bool,
 }
 
 impl Default for ArtQuirks {
@@ -95,13 +102,16 @@ impl Default for ArtQuirks {
             building_turret_without_tur_in_barrel_role: true,
             building_tur_search_skips_four: true,
             loading_archive_sprites_vanish: true,
+            // spec: S-0107 claim 22 (both switches default to the original)
+            sequence_value_length_limit: true,
+            case_sensitive_direction: true,
         }
     }
 }
 
 impl ArtQuirks {
     /// The switches by name.
-    pub fn named(&self) -> [(&'static str, bool); 10] {
+    pub fn named(&self) -> [(&'static str, bool); 12] {
         [
             (
                 "art_generic_fallback_any_name",
@@ -140,6 +150,11 @@ impl ArtQuirks {
                 "loading_archive_sprites_vanish",
                 self.loading_archive_sprites_vanish,
             ),
+            (
+                "sequence_value_length_limit",
+                self.sequence_value_length_limit,
+            ),
+            ("case_sensitive_direction", self.case_sensitive_direction),
         ]
     }
 }
@@ -252,7 +267,7 @@ fn section_text(s: Option<&Section>, key: &str, limit: usize) -> Option<Vec<u8>>
 }
 
 /// The stored value a type's rules section gave `key` in layer `layer`.
-fn given_at<'a>(t: &'a TypeRec, key: &str, layer: usize) -> Option<&'a [u8]> {
+pub(crate) fn given_at<'a>(t: &'a TypeRec, key: &str, layer: usize) -> Option<&'a [u8]> {
     t.keys
         .get(key.as_bytes())?
         .history
@@ -266,7 +281,7 @@ fn given_at<'a>(t: &'a TypeRec, key: &str, layer: usize) -> Option<&'a [u8]> {
 
 /// A boolean key's value in force after layer `layer` (S-0003 claim 2: an
 /// unrecognised value keeps the value in force).
-fn bool_as_of(t: &TypeRec, key: &str, layer: usize, default: bool) -> bool {
+pub(crate) fn bool_as_of(t: &TypeRec, key: &str, layer: usize, default: bool) -> bool {
     let Some(k) = t.keys.get(key.as_bytes()) else {
         return default;
     };

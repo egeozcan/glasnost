@@ -104,6 +104,11 @@ pub struct LayerQuirks {
     /// start makes the game skip its game-mode layer and leaves the
     /// colour-adjustment table to the map alone.
     pub bad_language_rules_skips_mode: bool,
+    /// `quirks.anti_air_rate_layer_reset` (S-0215 claim 21): a layer that
+    /// contains a behaviour's section but gives no anti-air rate, or gives
+    /// 0, sets the anti-air rate to the rate after that layer. Off: an
+    /// absent anti-air rate keeps the held value.
+    pub anti_air_rate_layer_reset: bool,
 }
 
 impl Default for LayerQuirks {
@@ -120,13 +125,15 @@ impl Default for LayerQuirks {
             reread_truncates_light_values: true,
             colour_redefinition_ignored: true,
             bad_language_rules_skips_mode: true,
+            // spec: S-0215 Edge cases (anti_air_rate_layer_reset defaults on)
+            anti_air_rate_layer_reset: true,
         }
     }
 }
 
 impl LayerQuirks {
     /// The switches by name, for the import record.
-    pub fn named(&self) -> [(&'static str, bool); 10] {
+    pub fn named(&self) -> [(&'static str, bool); 11] {
         [
             ("unlisted_reference_unread", self.unlisted_reference_unread),
             ("long_name_duplicates", self.long_name_duplicates),
@@ -150,6 +157,7 @@ impl LayerQuirks {
                 "bad_language_rules_skips_mode",
                 self.bad_language_rules_skips_mode,
             ),
+            ("anti_air_rate_layer_reset", self.anti_air_rate_layer_reset),
         ]
     }
 }
@@ -370,6 +378,64 @@ const COLOR_ADD: &[u8] = b"ColorAdd"; // spec: S-0006 Import mapping
 /// The maximum number of players, read from the base rules only (S-0006
 /// claim 2).
 const MAXIMUMS_PLAYERS: (&[u8], &[u8]) = (b"Maximums", b"Players"); // spec: S-0006 Import mapping
+/// The combat-damage section (S-0004 Import mapping).
+pub const COMBAT_DAMAGE: &[u8] = b"CombatDamage"; // spec: S-0004 Import mapping (the combat-damage section)
+
+/// How a "not given" value is compared (S-0006 claim 3: on the number the
+/// key's value form gives, exactly).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum NotGivenForm {
+    /// An integer key whose value −1 is "not given".
+    IntegerMinusOne,
+    /// A decimal key whose value −1 is "not given".
+    DecimalMinusOne,
+    /// A decimal key whose value 0 is "not given".
+    DecimalZero,
+}
+
+/// Type keys with a "not given" value, by kind (S-0006 claim 3 and the
+/// topic specs that name further keys).
+fn type_not_given(kind: Kind, key: &[u8]) -> Option<NotGivenForm> {
+    use NotGivenForm::*;
+    match (kind, key) {
+        // spec: S-0006 claim 3 (a superweapon's recharge time: 0)
+        (Kind::Superweapons, b"RechargeTime") => Some(DecimalZero),
+        // spec: S-0207 claim 1 (vehicle speed field: −1 keeps the held value), S-0208 Import mapping (infantry)
+        (Kind::Vehicles | Kind::Infantry, b"Speed") => Some(IntegerMinusOne),
+        // spec: S-0215 Import mapping (GuardRange: absent or −1 keeps the held value; a type section)
+        (Kind::Infantry | Kind::Vehicles | Kind::Aircraft | Kind::Buildings, b"GuardRange") => {
+            Some(DecimalMinusOne)
+        }
+        _ => None,
+    }
+}
+
+/// Game-wide keys with a "not given" value. S-0006 claim 3 says no
+/// game-wide key has one; the topic specs below name these.
+fn global_not_given(section: &[u8], key: &[u8]) -> Option<NotGivenForm> {
+    match (section, key) {
+        // spec: S-0209 Import mapping (`[General]` CloseEnough: −1 is the "not given" value)
+        (b"General", b"CloseEnough") => Some(NotGivenForm::DecimalMinusOne),
+        // spec: S-0215 Import mapping (`[General]` GuardModeStray: absent or −1 keeps the held value)
+        (b"General", b"GuardModeStray") => Some(NotGivenForm::DecimalMinusOne),
+        // spec: S-0210 Import mapping, F2 (combat-damage `Crush`: exactly −1 counts as absent)
+        (COMBAT_DAMAGE, b"Crush") => Some(NotGivenForm::DecimalMinusOne),
+        _ => None,
+    }
+}
+
+/// Whether `stored` is the "not given" value of its form (S-0006 claim 3:
+/// every spelling that reads as that number counts).
+fn is_not_given(form: NotGivenForm, stored: &[u8]) -> bool {
+    match form {
+        NotGivenForm::IntegerMinusOne => value::integer(stored) == Some(-1),
+        NotGivenForm::DecimalMinusOne => match value::decimal(stored, DecimalField::Double) {
+            Decimal::Value { value, .. } => value.to_exact_decimal() == "-1",
+            Decimal::NoNumber => false,
+        },
+        NotGivenForm::DecimalZero => is_zero(stored),
+    }
+}
 
 /// ⌊v × 1000 + 0.1⌋ truncated toward zero, in double precision rounded
 /// toward zero (S-0104 claim 12, Formulas "Precision of decimal
@@ -788,11 +854,8 @@ impl Run<'_> {
             given.push((e.key.clone(), winner.value.clone(), winner.line));
         }
         for (key, stored, line) in &given {
-            let what = if kind == Kind::Superweapons
-                && key.as_slice() == b"RechargeTime"
-                && is_zero(stored)
-            {
-                // spec: S-0006 claim 3 (a recharge time of 0 is "not given")
+            let what = if type_not_given(kind, key).is_some_and(|f| is_not_given(f, stored)) {
+                // spec: S-0006 claim 3 (a "not given" value keeps the held value)
                 What::NotGiven(stored.clone())
             } else {
                 What::Set(stored.clone())
@@ -1142,6 +1205,15 @@ impl Run<'_> {
                     });
                     continue;
                 }
+                if global_not_given(&name, key).is_some_and(|f| is_not_given(f, stored)) {
+                    // spec: S-0209, S-0210 and S-0215 Import mapping (a "not given" value keeps the held value)
+                    state.history.push(Event {
+                        layer: li,
+                        line: *line,
+                        what: What::NotGiven(stored.clone()),
+                    });
+                    continue;
+                }
                 state.value = Some(stored.clone());
                 state.reset = false;
                 state.history.push(Event {
@@ -1298,7 +1370,7 @@ impl Run<'_> {
 }
 
 /// Whether a decimal stored value is zero (either sign).
-fn is_zero(stored: &[u8]) -> bool {
+pub fn is_zero(stored: &[u8]) -> bool {
     match value::decimal(stored, DecimalField::Double) {
         Decimal::Value { value, .. } => {
             let sign = match value.format {

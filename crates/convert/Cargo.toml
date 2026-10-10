@@ -13,6 +13,7 @@ glasnost-vfs.workspace = true
 glasnost-ini.workspace = true
 glasnost-rules.workspace = true
 glasnost-map.workspace = true
+glasnost-num.workspace = true
 base64 = "0.23"
 sha1 = "0.11"
 sha2 = "0.11"

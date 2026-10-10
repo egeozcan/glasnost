@@ -1,94 +1,175 @@
-//! A theater's tile catalogue: which file holds each tile number, the fill
-//! base tiles and the tile number translation.
+//! A theater's tile catalogue (S-0010 claims 1 to 5): the theater data file,
+//! the declared tilesets and tile numbers, the tile image files and their
+//! variants, and the role starts; with S-0009's fill base tiles (claim 6)
+//! and tile number translation (claim 8, Formulas).
 //!
-//! S-0009 gives the base tiles (claim 6), the translation (claim 8,
-//! Formulas) and the keys they read; the glossary numbers tiles
-//! consecutively across tilesets in declaration order. Which file holds the
-//! theater's data, which tileset sections exist and how tile files are
-//! named belong to the planned theater spec and are asked in Q-0009. Until it is
-//! answered this module uses the loader layout of OpenRA's
-//! `OpenRA.Mods.Cnc/UtilityCommands/LegacyTilesetImporter.cs` (Copyright (c)
-//! The OpenRA Developers and Contributors, GPL-3.0-or-later): sections
-//! `TileSet0000`, `TileSet0001`, … read until the first missing number,
-//! `TilesInSet` defaulting to 1, and tile *i* (1-based) of a set in the file
-//! `FileName` ‖ two-digit *i* ‖ `.` ‖ extension. Everything taken from there
-//! is marked `provisional (Q-0009)`.
+//! [`Catalogue::read`] reads the theater data file. [`Catalogue::images`]
+//! finds each tile's image files through a file-existence test (the game's
+//! search order, S-0005), and [`Catalogue::tile_catalogue`] reads the tile
+//! files into the simulation's [`TileCatalogue`] (the terrain code and slope
+//! code of every tile cell).
+
+use std::collections::BTreeMap;
 
 use glasnost_ini::Document;
 use glasnost_ini::value;
+use glasnost_map::terrain::{
+    Roles, TileCatalogue, TileCell, TileInfo, UNSET, UNSET_DESTROYABLE_CLIFF,
+};
+use glasnost_vfs::Vfs;
 use glasnost_vfs::theater::Theater;
 
-/// Theater index whose water base tile is always unset (S-0009 claim 6).
-const NO_WATER_THEATER: Theater = Theater::Lunar; // spec: S-0009 Constants (theater 5)
+/// The theater whose seven roles are forced unset (S-0010 claim 4).
+const FORCED_UNSET_THEATER: Theater = Theater::Lunar; // spec: S-0010 claim 4 (the theater with index 5)
 
 /// The unset base tile (S-0009 claim 6).
-pub const UNSET_BASE_TILE: i32 = -1; // spec: S-0009 Constants (unset base tile)
+pub const UNSET_BASE_TILE: i32 = UNSET; // spec: S-0009 Constants (unset base tile), S-0010 claim 4
 
-/// One tileset of a theater.
+/// Tile count of a tileset section without the count key (S-0010 Import
+/// mapping): it ends the list.
+const END_OF_LIST: i32 = -1; // spec: S-0010 claim 2, Import mapping (TilesInSet absent: −1)
+/// Longest file-name stem and set name (S-0010 Import mapping).
+const NAME_MAX: usize = 63; // spec: S-0010 Import mapping (FileName and SetName, limit 63 bytes)
+/// File-name stem of a tileset without the key (S-0010 Import mapping).
+const DEFAULT_FILE_NAME: &[u8] = b"TILE"; // spec: S-0010 Import mapping (FileName absent: TILE)
+/// Set name of a tileset without the key (S-0010 Import mapping).
+const DEFAULT_SET_NAME: &[u8] = b"No Name"; // spec: S-0010 Import mapping (SetName absent: No Name)
+/// Non-height-view field without the key (S-0010 Import mapping).
+const DEFAULT_NON_HEIGHT_VIEW: i32 = 65535; // spec: S-0010 Import mapping (NonMarbleMadness absent: 65535)
+/// The suffixes tried after the theater's fallback suffix: those of
+/// theaters 0 and 2 (S-0010 claim 3, table T).
+const LAST_RESORT_SUFFIXES: [&str; 2] = ["TEM", "URB"]; // spec: S-0010 Constants table T (TEM, then URB)
+
+/// Highest tileset section number tried (four digits, S-0010 claim 2).
+const MAX_TILESETS: u32 = 10_000; // spec: S-0010 Constants (tileset section number width: 4 digits)
+/// Variant letters tried after the plain image (`a` to `z`; a bound of our
+/// own: claim 3 stops at the first letter without a file).
+const MAX_VARIANTS: u8 = 26; // nocite: bound of our own design (the letters a to z)
+
+/// The theater data file and the tile suffixes (S-0010 table T).
+fn table_t(theater: Theater) -> (&'static str, &'static str, &'static str) {
+    // spec: S-0010 Constants table T (theater data file, tile suffix, fallback suffix)
+    match theater {
+        Theater::Temperate => ("TEMPERATMD.INI", "TEM", "MMT"),
+        Theater::Snow => ("SNOWMD.INI", "SNO", "MMS"),
+        Theater::Urban => ("URBANMD.INI", "URB", "MMU"),
+        Theater::Desert => ("DESERTMD.INI", "DES", "MMD"),
+        Theater::NewUrban => ("URBANNMD.INI", "UBN", "MMT"),
+        Theater::Lunar => ("LUNARMD.INI", "LUN", "MML"),
+    }
+}
+
+/// Quirk switches of S-0010 that the catalogue implements. Each defaults to
+/// the original's behaviour.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TheaterQuirks {
+    /// `quirks.role_one_past_end` (S-0010 claim 4): a role naming the first
+    /// missing tileset number starts at the tile count. Off: it is unset.
+    pub role_one_past_end: bool,
+}
+
+impl Default for TheaterQuirks {
+    fn default() -> Self {
+        // spec: S-0010 Edge cases (role_one_past_end defaults to the original)
+        Self {
+            role_one_past_end: true,
+        }
+    }
+}
+
+/// One declared tileset of a theater (S-0010 claim 2).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Tileset {
     /// Section number (`TileSetNNNN`).
     pub number: u32,
-    /// The tileset's file-name key (provisional, Q-0009).
+    /// The file-name stem (S-0010 claim 3).
     pub file_name: Vec<u8>,
-    /// The tileset's name key, for display only.
+    /// The set name.
     pub set_name: Vec<u8>,
-    /// Actual tile count C (S-0009 Import mapping, `TilesInSet`).
+    /// Tile count C as given (a negative count contributes no tile).
     pub count: i32,
-    /// Authored tile count A, if given (`LastTilesInSet`).
+    /// Authored tile count A, if given (`LastTilesInSet`, S-0009 claim 8).
     pub authored: Option<i32>,
     /// First tile number of the set in the theater's order.
     pub first: i32,
+    /// The non-height-view field: 0 disables the file fallback (S-0010
+    /// claim 3).
+    pub non_height_view: i32,
 }
 
 /// A theater's catalogue.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Catalogue {
-    /// Tilesets in declaration order.
+    /// Declared tilesets in declaration order.
     pub tilesets: Vec<Tileset>,
     /// Total tile count of the theater.
     pub tile_count: i32,
-    /// Clear base tile (S-0009 claim 6).
+    /// Clear base tile (S-0009 claim 6): the clear role's start.
     pub clear_base: i32,
-    /// Water base tile (S-0009 claim 6).
+    /// Water base tile (S-0009 claim 6): the water role's start.
     pub water_base: i32,
-    /// Tileset number of the clear tileset, if named.
+    /// Tileset number the clear role names, if given.
     pub clear_set: Option<i32>,
     /// Translation pairs (t_i, δ_i) of S-0009 Formulas.
     pub translation: Vec<(i32, i32)>,
-    /// Extension of tile files.
+    /// The theater's tile suffix (S-0010 table T).
     pub extension: String,
+    /// The suffixes of the file fallback in order of preference (S-0010
+    /// claim 3).
+    pub fallback: Vec<String>,
+    /// Role starts (S-0010 claim 4, table R).
+    pub roles: Roles,
+    /// Importer warnings about the theater data file.
+    pub warnings: Vec<String>,
 }
 
-/// The theater data file's name candidates (provisional, Q-0009): the
-/// control name of S-0005 Table 2 with `MD.INI`, then with `.INI`.
-pub fn data_file_names(theater: Theater) -> [String; 2] {
-    let c = theater.control_name();
-    [format!("{c}MD.INI"), format!("{c}.INI")]
+/// The theater data file's name (S-0010 claim 1, table T), resolved like
+/// any data file.
+pub fn data_file_names(theater: Theater) -> [String; 1] {
+    [table_t(theater).0.to_owned()]
 }
 
-/// Highest tileset section number tried (a bound of our own against
-/// hostile files; provisional Q-0009 reading stops at the first gap anyway).
-const MAX_TILESETS: u32 = 10_000; // nocite: bound of our own design
+/// A tile's image files as found (S-0010 claim 3).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct TileImages {
+    /// The plain image's file, if found.
+    pub plain: Option<Vec<u8>>,
+    /// The variants' files, letters `a`, `b`, … in order.
+    pub variants: Vec<Vec<u8>>,
+}
 
 impl Catalogue {
-    /// Reads the catalogue from the theater's data document.
+    /// Reads the catalogue from the theater's data document, with the
+    /// original's behaviour.
     pub fn read(doc: &Document, theater: Theater) -> Self {
+        Self::read_with(doc, theater, &TheaterQuirks::default())
+    }
+
+    /// Reads the catalogue with the given switches.
+    pub fn read_with(doc: &Document, theater: Theater, quirks: &TheaterQuirks) -> Self {
+        let mut warnings = Vec::new();
         let mut tilesets = Vec::new();
         let mut first = 0i32;
         let mut authored_first = 0i32;
         let mut translation = Vec::new();
         for number in 0..MAX_TILESETS {
-            // provisional (Q-0009): sections are read until the first missing number
+            // spec: S-0010 claim 2 (fixed prefix and a four-digit zero-padded number from 0)
             let name = format!("TileSet{number:04}");
-            let Some(section) = doc.section(name.as_bytes()) else {
+            let section = doc.section(name.as_bytes());
+            let count = section
+                .and_then(|s| s.value(b"TilesInSet"))
+                .and_then(value::integer)
+                .unwrap_or(END_OF_LIST);
+            // spec: S-0010 claim 2 (the first section without a count, or with −1, ends the list)
+            let Some(section) = section.filter(|_| count != END_OF_LIST) else {
                 break;
             };
-            // provisional (Q-0009): `TilesInSet` absent counts 1
-            let count = section
-                .value(b"TilesInSet")
-                .and_then(value::integer)
-                .unwrap_or(1);
+            if count < 0 {
+                // spec: S-0010 claim 2 (a negative count other than −1 contributes none; the importer warns)
+                warnings.push(format!(
+                    "[{name}] TilesInSet is {count}: the tileset contributes no tile (S-0010 claim 2)"
+                ));
+            }
             let authored = section.value(b"LastTilesInSet").and_then(value::integer);
             // spec: S-0009 Formulas (tile translation: pairs where A differs from C)
             if let Some(a) = authored
@@ -97,38 +178,117 @@ impl Catalogue {
                 translation.push((authored_first.saturating_add(a), count.saturating_sub(a)));
             }
             authored_first = authored_first.saturating_add(authored.unwrap_or(count));
+            let text = |key: &[u8], default: &[u8]| {
+                section
+                    .value(key)
+                    .map_or_else(|| default.to_vec(), |v| value::text(v, NAME_MAX).to_vec())
+            };
             tilesets.push(Tileset {
                 number,
-                file_name: section.value(b"FileName").unwrap_or_default().to_vec(),
-                set_name: section.value(b"SetName").unwrap_or_default().to_vec(),
+                file_name: text(b"FileName", DEFAULT_FILE_NAME),
+                set_name: text(b"SetName", DEFAULT_SET_NAME),
                 count,
                 authored,
                 first,
+                non_height_view: section
+                    .value(b"NonMarbleMadness")
+                    .and_then(value::integer)
+                    .unwrap_or(DEFAULT_NON_HEIGHT_VIEW),
             });
             first = first.saturating_add(count.max(0));
         }
-        let general = |key: &[u8]| doc.value(b"General", key).and_then(value::integer);
-        let first_of = |set: Option<i32>| {
-            set.and_then(|n| usize::try_from(n).ok())
-                .and_then(|n| tilesets.get(n))
-                .map_or(UNSET_BASE_TILE, |t| t.first)
+        let tile_count = first;
+        let general = |key: &str| {
+            doc.value(b"General", key.as_bytes())
+                .and_then(value::integer)
         };
-        let clear_set = general(b"ClearTile");
-        // spec: S-0009 claim 6 (first tile of the named tileset; absent or unknown: −1)
-        let clear_base = first_of(clear_set);
-        // spec: S-0009 claim 6 (theater 5: the water base tile is always −1)
-        let water_base = if theater == NO_WATER_THEATER {
-            UNSET_BASE_TILE
-        } else {
-            first_of(general(b"WaterSet"))
+        let mut start = |key: &str, unset: i32| -> i32 {
+            let Some(n) = general(key) else {
+                // spec: S-0010 claim 4 (an absent key leaves the role unset)
+                return unset;
+            };
+            if n < 0 {
+                // spec: S-0010 claim 4 (a negative number names no tileset; the importer warns)
+                warnings.push(format!(
+                    "[General] {key}={n} names no tileset: the role is unset (S-0010 claim 4)"
+                ));
+                return unset;
+            }
+            match usize::try_from(n).ok().and_then(|i| tilesets.get(i)) {
+                // spec: S-0010 claim 4 (a role's start is the first tile of the tileset it names)
+                Some(t) => t.first,
+                // spec: S-0010 claim 4 (`quirks.role_one_past_end`: the first missing number gives the tile count)
+                None if quirks.role_one_past_end && n as usize == tilesets.len() => tile_count,
+                // spec: S-0010 claim 4 (a number beyond the declaration leaves the role unset)
+                None => unset,
+            }
         };
+        // spec: S-0010 Import mapping (the general section's role keys)
+        let mut roles = Roles {
+            clear: start("ClearTile", UNSET),
+            water: start("WaterSet", UNSET),
+            ramp: start("RampBase", UNSET),
+            smooth_ramp: start("RampSmooth", UNSET),
+            cliff: start("CliffSet", UNSET),
+            shore: start("ShorePieces", UNSET),
+            water_bridge: start("WaterBridge", UNSET),
+            misc_pave: start("MiscPaveTile", UNSET),
+            pave_ground: start("PaveTile", UNSET),
+            paved_road: start("PavedRoads", UNSET),
+            paved_road_end: start("PavedRoadEnds", UNSET),
+            paved_road_slope: start("PavedRoadSlopes", UNSET),
+            median: start("Medians", UNSET),
+            dirt_road_junction: start("DirtRoadJunction", UNSET),
+            dirt_road_curve: start("DirtRoadCurve", UNSET),
+            dirt_road_straight: start("DirtRoadStraight", UNSET),
+            bridge: start("BridgeSet", UNSET),
+            wooden_bridge: start("WoodBridgeSet", UNSET),
+            // spec: S-0010 claim 4 (the destroyable-cliff role's unset start is −2)
+            destroyable_cliff: start("DestroyableCliffs", UNSET_DESTROYABLE_CLIFF),
+            tunnels: [
+                start("Tunnels", UNSET),
+                start("TrackTunnels", UNSET),
+                start("DirtTunnels", UNSET),
+                start("DirtTrackTunnels", UNSET),
+            ],
+            rough_ground: start("RoughTile", UNSET),
+            rough_transition: start("ClearToRoughLat", UNSET),
+            sand_ground: start("SandTile", UNSET),
+            sand_transition: start("ClearToSandLat", UNSET),
+            green_ground: start("GreenTile", UNSET),
+            green_transition: start("ClearToGreenLat", UNSET),
+            pave_transition: start("ClearToPaveLat", UNSET),
+        };
+        if theater == FORCED_UNSET_THEATER {
+            // spec: S-0010 claim 4 (theater 5: bridge, cliff, shore, water, water bridge and wooden bridge are unset;
+            // the water cliff role has no start in `Roles`)
+            for r in [
+                &mut roles.bridge,
+                &mut roles.cliff,
+                &mut roles.shore,
+                &mut roles.water,
+                &mut roles.water_bridge,
+                &mut roles.wooden_bridge,
+            ] {
+                *r = UNSET;
+            }
+        }
+        let (_, suffix, fallback) = table_t(theater);
         Self {
-            tile_count: first,
-            clear_base,
-            water_base,
-            clear_set,
+            tile_count,
+            // spec: S-0010 claim 4, S-0009 claim 6 (the clear and water roles give the fill base tiles)
+            clear_base: roles.clear,
+            water_base: roles.water,
+            clear_set: general("ClearTile"),
             translation,
-            extension: theater.extension().to_owned(),
+            extension: suffix.to_owned(),
+            // spec: S-0010 claim 3 (the fallback suffix, then TEM, then URB)
+            fallback: std::iter::once(fallback)
+                .chain(LAST_RESORT_SUFFIXES)
+                .map(str::to_owned)
+                .collect(),
+            roles,
+            warnings,
             tilesets,
         }
     }
@@ -158,7 +318,7 @@ impl Catalogue {
     pub fn art_tile(&self, stored: i32) -> Option<i32> {
         // spec: S-0009 claim 8 (65535, numbers ≥ tile count and, in our engine, negatives: the clear tile)
         if stored < 0 || stored >= self.tile_count {
-            (self.clear_base >= 0).then_some(self.clear_base)
+            (self.clear_base >= 0 && self.clear_base < self.tile_count).then_some(self.clear_base)
         } else {
             Some(stored)
         }
@@ -172,29 +332,172 @@ impl Catalogue {
             .checked_sub(1)?;
         let set = self.tilesets.get(i)?;
         let pos = t - set.first;
-        (pos < set.count).then_some((set, pos + 1))
+        (pos >= 0 && pos < set.count).then_some((set, pos + 1))
     }
 
-    /// The file name of tile `t` (provisional, Q-0009).
-    pub fn file_of(&self, t: i32) -> Option<Vec<u8>> {
+    /// The file name of tile `t`'s image `variant` (0 for the plain image)
+    /// with `suffix` (S-0010 claim 3): the file-name stem, the position in
+    /// the set with at least two digits, the variant letter, a dot and the
+    /// suffix.
+    pub fn image_name(&self, t: i32, variant: u8, suffix: &str) -> Option<Vec<u8>> {
         let (set, ordinal) = self.locate(t)?;
-        // provisional (Q-0009): FileName ‖ two-digit ordinal ‖ . ‖ extension
         let mut name = set.file_name.clone();
-        name.extend_from_slice(format!("{ordinal:02}.{}", self.extension).as_bytes());
+        // spec: S-0010 claim 3 (k in decimal, zero-padded to at least two digits)
+        name.extend_from_slice(format!("{ordinal:02}").as_bytes());
+        if variant > 0 {
+            // spec: S-0010 claim 3 (variant 1 is `a`, variant 2 `b`, …)
+            name.push(b'a' + (variant - 1));
+        }
+        name.push(b'.');
+        name.extend_from_slice(suffix.as_bytes());
         Some(name)
     }
+
+    /// The plain image's file name of tile `t` with the theater's own suffix.
+    pub fn file_of(&self, t: i32) -> Option<Vec<u8>> {
+        self.image_name(t, 0, &self.extension)
+    }
+
+    /// The file that holds tile `t`'s image `variant`: the name with the
+    /// theater's suffix, or else, when the tileset's non-height-view field is
+    /// not 0, the first found with the fallback suffixes (S-0010 claim 3).
+    pub fn find_image(
+        &self,
+        t: i32,
+        variant: u8,
+        exists: &dyn Fn(&[u8]) -> bool,
+    ) -> Option<Vec<u8>> {
+        let (set, _) = self.locate(t)?;
+        let own = self.image_name(t, variant, &self.extension)?;
+        if exists(&own) {
+            return Some(own);
+        }
+        // spec: S-0010 claim 3 (the fallback applies when the non-height-view field is not 0)
+        if set.non_height_view == 0 {
+            return None;
+        }
+        self.fallback
+            .iter()
+            .filter_map(|s| self.image_name(t, variant, s))
+            .find(|n| exists(n))
+    }
+
+    /// Each tile's image files, by tile number (S-0010 claim 3): the plain
+    /// image and the variants up to the first letter without a file.
+    pub fn images(&self, exists: &dyn Fn(&[u8]) -> bool) -> Vec<TileImages> {
+        (0..self.tile_count.max(0))
+            .map(|t| {
+                let plain = self.find_image(t, 0, exists);
+                let mut variants = Vec::new();
+                if plain.is_some() {
+                    for v in 1..=MAX_VARIANTS {
+                        // spec: S-0010 claim 3 (variants stop at the first letter without a file)
+                        match self.find_image(t, v, exists) {
+                            Some(f) => variants.push(f),
+                            None => break,
+                        }
+                    }
+                }
+                TileImages { plain, variants }
+            })
+            .collect()
+    }
+
+    /// The simulation's tile catalogue from the tiles' images (from
+    /// [`Catalogue::images`]) and a reader of their files. Each tile cell
+    /// takes the terrain code and slope code of its tile file (S-0010 Terms,
+    /// *tile cell*); a tile whose plain image is missing or unreadable has no
+    /// image and no tile cells (S-0010 claims 3 and 7). Returns importer
+    /// warnings too.
+    pub fn tile_catalogue(
+        &self,
+        images: &[TileImages],
+        read: &dyn Fn(&[u8]) -> Option<Vec<u8>>,
+    ) -> (TileCatalogue, Vec<String>) {
+        let mut warnings = Vec::new();
+        let mut tiles = Vec::with_capacity(images.len());
+        for (t, img) in images.iter().enumerate() {
+            let mut info = TileInfo::default();
+            if let Some(name) = &img.plain {
+                let show = String::from_utf8_lossy(name).into_owned();
+                match read(name).map(|b| tile_info(&b)) {
+                    Some(Ok(mut i)) => {
+                        i.variants = u8::try_from(img.variants.len()).unwrap_or(u8::MAX);
+                        info = i;
+                    }
+                    Some(Err(e)) => warnings.push(format!(
+                        "tile {t}: {show} cannot be read ({e}); the tile has no image (S-0010 claim 7)"
+                    )),
+                    None => warnings.push(format!(
+                        "tile {t}: {show} cannot be read; the tile has no image (S-0010 claim 7)"
+                    )),
+                }
+            }
+            tiles.push(info);
+        }
+        (
+            TileCatalogue {
+                tiles,
+                roles: self.roles,
+            },
+            warnings,
+        )
+    }
+
+    /// [`Catalogue::images`] and [`Catalogue::tile_catalogue`] through the
+    /// game's search order (S-0005).
+    pub async fn tile_catalogue_from(&self, vfs: &Vfs) -> (TileCatalogue, Vec<String>) {
+        let images = self.images(&|n| vfs.resolve_bytes(n).is_some());
+        let mut bytes: BTreeMap<Vec<u8>, Vec<u8>> = BTreeMap::new();
+        for name in images.iter().filter_map(|i| i.plain.as_ref()) {
+            if bytes.contains_key(name) {
+                continue;
+            }
+            if let Some(r) = vfs.resolve_bytes(name)
+                && let Ok(b) = vfs.read_resolved(&r).await
+            {
+                bytes.insert(name.clone(), b);
+            }
+        }
+        self.tile_catalogue(&images, &|n| bytes.get(n).cloned())
+    }
+}
+
+/// A tile's size and cells from its tile file.
+fn tile_info(bytes: &[u8]) -> Result<TileInfo, String> {
+    let tmp = glasnost_fmt::tmp::Tmp::parse(bytes).map_err(|e| e.to_string())?;
+    let size = |v: u32| {
+        u8::try_from(v).map_err(|_| format!("a template of {v} cells across is too large"))
+    };
+    Ok(TileInfo {
+        width: size(tmp.cells_x)?,
+        height: size(tmp.cells_y)?,
+        has_image: true,
+        cells: tmp
+            .tiles
+            .iter()
+            .map(|c| {
+                c.map(|c| TileCell {
+                    terrain_code: c.terrain_type,
+                    slope: c.ramp_type,
+                })
+            })
+            .collect(),
+        variants: 0,
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use glasnost_fmt::tmp::{TmpTile, TmpWriter, WriteTile};
     use glasnost_ini::Quirks;
 
     fn doc(text: &str) -> Document {
         Document::parse(text.as_bytes(), Quirks::default(), &mut Vec::new())
     }
 
-    /// spec: S-0009 claim 6 (base tiles), claim 8 (identity translation, clear-tile rule)
+    /// spec: S-0009 claim 6 (base tiles), claim 8 (identity translation, clear-tile rule); S-0010 claim 4
     #[test]
     fn base_tiles_and_clear_rule() {
         let d = doc("[General]\nClearTile=1\nWaterSet=2\n\
@@ -210,9 +513,12 @@ mod tests {
         assert_eq!(c.art_tile(-1), Some(3));
         assert_eq!(c.art_tile(8), Some(8));
         assert_eq!(c.file_of(4), Some(b"bb02.TEM".to_vec()));
-        // spec: S-0009 claim 6 (theater 5: water base tile −1)
+        // spec: S-0010 claim 4 (theater 5: the water role is forced unset)
         assert_eq!(Catalogue::read(&d, Theater::Lunar).water_base, -1);
-        let none = Catalogue::read(&doc("[TileSet0000]\nFileName=aa\n"), Theater::Snow);
+        let none = Catalogue::read(
+            &doc("[TileSet0000]\nFileName=aa\nTilesInSet=1\n"),
+            Theater::Snow,
+        );
         assert_eq!((none.clear_base, none.water_base), (-1, -1));
     }
 
@@ -230,5 +536,190 @@ mod tests {
         assert_eq!(c.translate(4), 4);
         assert_eq!(c.translate(5), 8);
         assert_eq!(c.translate(65535), 65535);
+    }
+
+    /// spec: S-0010 claim 1, table T
+    #[test]
+    fn data_files() {
+        assert_eq!(data_file_names(Theater::Temperate), ["TEMPERATMD.INI"]);
+        assert_eq!(data_file_names(Theater::NewUrban), ["URBANNMD.INI"]);
+        let c = Catalogue::read(&doc(""), Theater::NewUrban);
+        assert_eq!(c.extension, "UBN");
+        assert_eq!(c.fallback, ["MMT", "TEM", "URB"]);
+    }
+
+    /// spec: S-0010 claim 2 (declaration ends at a missing count or −1; negative counts contribute none)
+    #[test]
+    fn tileset_declaration() {
+        let d = doc(
+            "[TileSet0000]\nTilesInSet=2\nFileName=abcd\n[TileSet0001]\nTilesInSet=0\n\
+             [TileSet0002]\nTilesInSet=-3\n[TileSet0003]\nTilesInSet=4\n\
+             [TileSet0004]\nFileName=x\n[TileSet0005]\nTilesInSet=9\n",
+        );
+        let c = Catalogue::read(&d, Theater::Temperate);
+        assert_eq!(c.tilesets.len(), 4);
+        assert_eq!(c.tile_count, 6);
+        assert_eq!(c.tilesets[3].first, 2);
+        assert!(c.warnings.iter().any(|w| w.contains("TileSet0002")));
+        // Defaults of the name keys.
+        assert_eq!(c.tilesets[1].file_name, b"TILE");
+        assert_eq!(c.tilesets[1].set_name, b"No Name");
+        assert_eq!(c.tilesets[0].non_height_view, 65535);
+        // An explicit −1 ends the list too; a higher section has no effect.
+        let d = doc("[TileSet0000]\nTilesInSet=-1\n[TileSet0001]\nTilesInSet=5\n");
+        assert_eq!(Catalogue::read(&d, Theater::Temperate).tile_count, 0);
+    }
+
+    /// spec: S-0010 claim 4 (role starts, unset values, one past the end, theater 5)
+    #[test]
+    fn roles() {
+        let d = doc(
+            "[General]\nClearTile=0\nRampBase=1\nRampSmooth=2\nCliffSet=3\nShorePieces=1\n\
+             WaterBridge=1\nBridgeSet=1\nWoodBridgeSet=1\nWaterSet=1\nTunnels=1\nDirtTrackTunnels=-4\n\
+             PavedRoads=9\nClearToRoughLat=2\n\
+             [TileSet0000]\nTilesInSet=2\n[TileSet0001]\nTilesInSet=5\n[TileSet0002]\nTilesInSet=1\n",
+        );
+        let c = Catalogue::read(&d, Theater::Temperate);
+        let r = c.roles;
+        assert_eq!((r.clear, r.ramp, r.smooth_ramp), (0, 2, 7));
+        // One past the end: the tile count.
+        assert_eq!(r.cliff, 8);
+        assert_eq!(r.rough_transition, 7);
+        // Beyond: unset; negative: unset with a warning; absent: unset.
+        assert_eq!(r.paved_road, -1);
+        assert_eq!(r.tunnels, [2, -1, -1, -1]);
+        assert!(c.warnings.iter().any(|w| w.contains("DirtTrackTunnels=-4")));
+        assert_eq!(r.median, -1);
+        assert_eq!(r.destroyable_cliff, -2);
+        assert_eq!((r.shore, r.water, r.bridge), (2, 2, 2));
+        // Switch off: one past the end is unset.
+        let off = Catalogue::read_with(
+            &d,
+            Theater::Temperate,
+            &TheaterQuirks {
+                role_one_past_end: false,
+            },
+        );
+        assert_eq!(off.roles.cliff, -1);
+        // Theater 5 forces six roles unset.
+        let lunar = Catalogue::read(&d, Theater::Lunar).roles;
+        assert_eq!(
+            [
+                lunar.bridge,
+                lunar.cliff,
+                lunar.shore,
+                lunar.water,
+                lunar.water_bridge,
+                lunar.wooden_bridge
+            ],
+            [-1; 6]
+        );
+        assert_eq!((lunar.ramp, lunar.tunnels[0]), (2, 2));
+    }
+
+    fn header(terrain: u8, ramp: u8) -> TmpTile {
+        TmpTile {
+            offset: 0,
+            x: 0,
+            y: 0,
+            extra_offset: 0,
+            depth_offset: 0,
+            extra_depth_offset: 0,
+            extra_x: 0,
+            extra_y: 0,
+            extra_width: 0,
+            extra_height: 0,
+            flags: 0,
+            height: 0,
+            terrain_type: terrain,
+            ramp_type: ramp,
+            radar_left: [0; 3],
+            radar_right: [0; 3],
+        }
+    }
+
+    /// A synthetic tile file of `w` × `h` cells; `None` marks an empty cell.
+    fn tmp(w: u32, h: u32, cells: &[Option<(u8, u8)>]) -> Vec<u8> {
+        TmpWriter {
+            cells_x: w,
+            cells_y: h,
+            tile_width: 4,
+            tile_height: 2,
+            tiles: cells
+                .iter()
+                .map(|c| {
+                    c.map(|(t, r)| WriteTile {
+                        header: header(t, r),
+                        diamond: vec![1; 4],
+                        depth: None,
+                        extra: None,
+                    })
+                })
+                .collect(),
+        }
+        .write()
+    }
+
+    /// spec: S-0010 claim 3 (file names, variants, the gap rule and the fallback), Terms (tile cells)
+    #[test]
+    fn tile_files_and_cells() {
+        let d = doc("[General]\nClearTile=0\n\
+             [TileSet0000]\nTilesInSet=3\nFileName=gr\n\
+             [TileSet0001]\nTilesInSet=101\nFileName=big\nNonMarbleMadness=0\n");
+        let c = Catalogue::read(&d, Theater::Snow);
+        assert_eq!(c.image_name(102, 0, "SNO"), Some(b"big100.SNO".to_vec()));
+        assert_eq!(c.image_name(1, 2, "SNO"), Some(b"gr02b.SNO".to_vec()));
+        let files: BTreeMap<Vec<u8>, Vec<u8>> = [
+            ("GR01.SNO", tmp(2, 1, &[Some((9, 0)), None])),
+            ("gr01a.sno", tmp(1, 1, &[Some((0, 0))])),
+            ("gr01c.sno", tmp(1, 1, &[Some((0, 0))])),
+            // Tile 1 only in the fallback suffix's file; tile 2 only in the last resort.
+            ("gr02.mms", tmp(1, 1, &[Some((11, 3))])),
+            ("gr03.urb", tmp(1, 1, &[Some((6, 0))])),
+            // Tile 4 of the set without the fallback exists only with another suffix.
+            ("big02.mms", tmp(1, 1, &[Some((1, 0))])),
+            ("big03.sno", b"not a tile file".to_vec()),
+        ]
+        .into_iter()
+        .map(|(n, b)| (n.to_ascii_lowercase().into_bytes(), b))
+        .collect();
+        let exists = |n: &[u8]| files.contains_key(&n.to_ascii_lowercase());
+        let images = c.images(&exists);
+        assert_eq!(images.len(), 104);
+        assert_eq!(images[0].plain, Some(b"gr01.SNO".to_vec()));
+        // The gap rule: `c` without `b` is never used.
+        assert_eq!(images[0].variants, [b"gr01a.SNO".to_vec()]);
+        assert_eq!(images[1].plain, Some(b"gr02.MMS".to_vec()));
+        assert_eq!(images[2].plain, Some(b"gr03.URB".to_vec()));
+        assert_eq!(images[4].plain, None);
+        let read = |n: &[u8]| files.get(&n.to_ascii_lowercase()).cloned();
+        let (cat, warnings) = c.tile_catalogue(&images, &read);
+        assert_eq!(cat.tile_count(), 104);
+        let t0 = &cat.tiles[0];
+        assert_eq!(
+            (t0.width, t0.height, t0.has_image, t0.variants),
+            (2, 1, true, 1)
+        );
+        assert_eq!(
+            t0.cells,
+            vec![
+                Some(TileCell {
+                    terrain_code: 9,
+                    slope: 0
+                }),
+                None
+            ]
+        );
+        assert_eq!(
+            cat.tile_cell(1, 0).map(|c| (c.terrain_code, c.slope)),
+            Some((11, 3))
+        );
+        assert_eq!(cat.tile_cell(0, 1), None);
+        // No image: a tile number with no cells.
+        assert!(!cat.tiles[4].has_image && cat.tiles[4].cells.is_empty());
+        // An unreadable file: no image, with a warning.
+        assert!(!cat.tiles[5].has_image);
+        assert!(warnings.iter().any(|w| w.contains("big03.SNO")));
+        assert_eq!(cat.roles.clear, 0);
     }
 }
