@@ -833,7 +833,12 @@ fn congestion(w: &World, id: ObjectId, mode: Mode) -> Option<BTreeSet<CellXY>> {
         }
         // spec: S-0212 claim 19 (i: the cells its remaining stored steps lead through, after the cell it moves into)
         let mut c = heading_cell(w, oid).unwrap_or(u.pos.cell());
-        for &s in u.path.steps.iter().take(STORED) {
+        // A unit at rest moves into the cell of its first stored step, so its
+        // remaining steps are the ones after that step (claim 8's heading cell).
+        let at_rest = !(u.drive.as_ref().is_some_and(|d| d.track.is_some())
+            || u.walk.as_ref().is_some_and(|s| s.target.is_some()));
+        let skip = usize::from(at_rest);
+        for &s in u.path.steps.iter().skip(skip).take(STORED) {
             let (sx, sy) = STEPS[usize::from(s % 8)]; // spec: S-0212 Terms (step directions 0 to 7)
             c = CellXY::new(c.x + sx, c.y + sy);
             *counts.entry(c).or_insert(0) += 1;
