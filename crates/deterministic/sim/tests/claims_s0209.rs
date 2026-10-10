@@ -585,7 +585,7 @@ fn walker_walks_on_into_clear_cell() {
     assert_eq!(t, arrived + 2);
 }
 
-// spec: S-0209 claim 7 (blocked next cell: a new path at once, whatever the retry timer, and no tick lost)
+// spec: S-0209 claim 7 and the walker table of State and ordering (blocked next cell: a new path at once, whatever the retry timer; on a repeated ask that gives clear with a position free, the walking target is chosen in the new path's first cell on the same asking tick, so no tick is lost)
 #[test]
 fn walker_repaths_at_once() {
     let (t0, c0, _) = second_target(false);
@@ -1421,4 +1421,60 @@ fn vehicle_passes_a_friendly_gate() {
     let (mut w, m, _) = gate_corridor(Kind::Vehicle, "Cart", 1);
     run(&mut w, 300);
     assert!(w.obj(m).unwrap().pos.x < 256 * cell(2, 0).x);
+}
+
+// ---------------------------------------------------------------------------
+// Row WO1 and the neutral and special houses (claims 4 and 11)
+
+/// A scene with a crate overlay (registration index 0, with art) in
+/// `there()` and a walker of house 0 in `here()`; `human`: house 0's
+/// control. The map's crates are kept (quirks.skirmish_drops_map_crates
+/// off), since claim 4 is about a crate in the cell, however it came there.
+fn crate_scene(human: bool) -> (World, ObjectId) {
+    asked(Kind::Infantry, "Pike", |s| {
+        s.register("overlays", "Box");
+        s.ruleset.sim.overlays.insert(
+            "Box".into(),
+            glasnost_rules::sim::OverlayType {
+                crate_: Some(true),
+                has_art: Some(true),
+                ..Default::default()
+            },
+        );
+        s.ruleset.globals.quirks.skirmish_drops_map_crates = false;
+        s.map.has_overlay_data = true;
+        s.cell_mut(there()).overlay = 0;
+        s.setup.houses[0].human = human;
+    })
+}
+
+// spec: S-0209 claim 4 (row WO1: a crate blocks a walker whose owner is not human-controlled, in our engine a walker of the neutral or special house; a human-controlled or AI house's walker gets no value from it)
+#[test]
+fn crate_blocks_walkers_of_non_player_houses() {
+    let (w, m) = crate_scene(false);
+    assert_eq!(w.cells.cell(there()).unwrap().overlay, 0, "crate placed");
+    assert_eq!(inf(&w, m, there()), Outcome::Blocked);
+    let (w, m) = crate_scene(true);
+    assert_eq!(inf(&w, m, there()), Outcome::Clear);
+}
+
+// spec: S-0209 claim 11 (the neutral and special houses keep skill level 0: a crusher's warning, not move-anywhere, reaches their idle infantry only when the scatter threshold is 0 or less, as for a human player's; scenario C7 (c))
+#[test]
+fn non_player_houses_keep_skill_zero_for_the_crusher_warning() {
+    for threshold in [3, 0] {
+        let (mut w, ids) = idle_pair(|s| {
+            s.setup.houses[1].human = false;
+            s.ruleset.sim.general.iq_scatter = Some(threshold);
+            s.place_unit(0, "Roller", cell(-1, 0), 64);
+        });
+        assert_eq!(w.houses[1].skill, 0);
+        let roller = at(&w, Kind::Vehicle, cell(-1, 0));
+        crush::warn_ahead(&mut w, roller, cell(0, 0));
+        let reached = threshold <= 0;
+        assert_eq!(
+            obeyed(&w, &ids),
+            [reached, reached],
+            "threshold {threshold}"
+        );
+    }
 }

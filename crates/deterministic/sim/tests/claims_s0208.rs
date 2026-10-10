@@ -1020,3 +1020,40 @@ fn mission_target_cell_ignores_occupants() {
     // position: claim 3 applies and row S2 gives the bottom position.
     assert_eq!(enter_mission(2, false), position::BOTTOM);
 }
+
+/// spec: S-0208 Edge cases (quirks.top_position_counts_as_centre: once the unit sharing the record's centre entry leaves, the record shows the centre free; the remaining unit, standing still, still keeps an allied vehicle out through its own row, so the switch changes nothing for a vehicle); S-0209 claim 5 (row VP20)
+#[test]
+fn remaining_top_unit_keeps_allied_vehicle_out_either_way() {
+    for quirk in [true, false] {
+        let mut s = scene();
+        s.vehicle("CART", unit_type(common::TRACK, 6, 10));
+        s.place_unit(0, "CART", cell(0, 0), 64);
+        s.ruleset.globals.quirks.top_position_counts_as_centre = quirk;
+        let mut w = s.build();
+        let ty = w.rules().index_of(Kind::Infantry, "TESTMAN").unwrap();
+        let c = cell(1, 0);
+        let put = |w: &mut World, p: u8| {
+            let id = glasnost_sim::objects::create(
+                w,
+                Kind::Infantry,
+                ty,
+                Some(glasnost_sim::world::HouseId(0)),
+            );
+            let (x, y) = at(c, p);
+            glasnost_sim::objects::place(w, id, Pos::new(x, y, 0), Default::default());
+            id
+        };
+        let _top = put(&mut w, position::TOP);
+        let centre = put(&mut w, position::CENTRE);
+        glasnost_sim::objects::remove(&mut w, centre);
+        let occ = *w.cells.occ(c, glasnost_sim::world::Layer::Ground).unwrap();
+        // With the switch on, the record lost the shared centre entry.
+        assert_eq!(
+            occ.taken(position::CENTRE) || occ.taken(position::TOP),
+            !quirk
+        );
+        let cart = common::objects_of(&w, Kind::Vehicle)[0];
+        let out = occupancy::vehicle_outcome(&w, cart, c, occupancy::reference_level(&w, cart));
+        assert_eq!(out, Outcome::StationaryFriendly, "switch {quirk}");
+    }
+}

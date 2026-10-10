@@ -280,6 +280,7 @@ fn ask(w: &mut World, id: ObjectId, first: bool) {
                     ob.path.steps.clear();
                 }
                 match path::compute(w, id, Mode::Fresh) {
+                    // spec: S-0209 State and ordering (the repeated ask on the same tick: clear with a position free chooses the walking target in the new path's first cell)
                     Search::Found => ask(w, id, false),
                     other => path::failed(w, id, other, false),
                 }

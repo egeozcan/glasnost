@@ -258,7 +258,15 @@ pub fn infantry_outcome(w: &World, mover: ObjectId, c: CellXY, reference: i32) -
     let mut values: Vec<(bool, Option<Outcome>)> = Vec::new();
     // 4b: overlays (index 0, ahead of every occupant).
     let mut overlay_value = None;
+    let not_human = m.owner.is_some_and(|h| !w.houses[usize::from(h.0)].human);
     if cell.overlay != NO_OVERLAY
+        && let Some(o) = r.overlays.get(usize::from(cell.overlay))
+        && o.crate_
+        && not_human
+    {
+        // spec: S-0209 claim 4 (row WO1: a crate blocks a walker whose owner is not human-controlled; in our engine the neutral and special houses' walkers, an AI house counting as human-controlled)
+        overlay_value = Some(Outcome::Blocked);
+    } else if cell.overlay != NO_OVERLAY
         && let Some(o) = r.overlays.get(usize::from(cell.overlay))
         && o.wall
     {
