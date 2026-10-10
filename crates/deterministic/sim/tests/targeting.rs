@@ -723,3 +723,46 @@ mod r11 {
         assert_eq!(targeting::selection_response(5, 0), None);
     }
 }
+
+// S-0214 revision 12: the term *can be selected*.
+
+mod r12 {
+    use super::*;
+    use crate::common::{Scene, WHEEL, cell, run, unit_type};
+    use glasnost_rules::sim::BuildingType;
+
+    // spec: S-0214 Terms (can be selected: a building whose type is invisible in the game is not) and claim 3 (nothing over an object that cannot be selected does nothing; select over one that can)
+    #[test]
+    fn invisible_building_cannot_be_selected() {
+        let mut s = Scene::new();
+        s.vehicle("TESTCAR", unit_type(WHEEL, 40, 6));
+        for (n, hidden) in [("TESTHUT", false), ("TESTGHOST", true)] {
+            s.register("buildings", n);
+            s.ruleset.sim.buildings.insert(
+                n.into(),
+                BuildingType {
+                    strength: Some(300),
+                    foundation: Some([1, 1]),
+                    invisible_in_game: Some(hidden),
+                    ..Default::default()
+                },
+            );
+        }
+        s.place_structure(0, "TESTHUT", cell(4, 0))
+            .place_structure(0, "TESTGHOST", cell(6, 0));
+        let mut w = s.build();
+        run(&mut w, 1);
+        let find = |c| w.objects.values().find(|o| o.pos.cell() == c).unwrap().id;
+        let (hut, ghost) = (find(cell(4, 0)), find(cell(6, 0)));
+        assert!(targeting::selectable(&w, hut));
+        assert!(!targeting::selectable(&w, ghost));
+        let click =
+            |on| targeting::click(&w, ALPHA, &[], ClickOn::Object(on), Modifiers::default());
+        assert_eq!(click(hut).selection, Some(vec![hut]));
+        assert_eq!(click(ghost).selection, None);
+        assert_eq!(
+            targeting::cursor(&w, ALPHA, &[], ClickOn::Object(ghost), Modifiers::default()),
+            Action::Nothing
+        );
+    }
+}

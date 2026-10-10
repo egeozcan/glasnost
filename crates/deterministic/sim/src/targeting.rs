@@ -228,10 +228,16 @@ fn other_house(w: &World, actor: ObjectId, target: ObjectId) -> bool {
     t.is_some() && t != a
 }
 
-/// Whether the acting house can select the object: a live unit or
-/// building on the map.
+/// Whether the object can be selected (S-0214 Terms, *can be selected*):
+/// a live unit or building on the map, but not a building whose type is
+/// invisible in the game. Whether a unit below the surface or a cloaked
+/// one can be selected is an open question of S-0214; M3 has neither
+/// state, so such units count as selectable.
 pub fn selectable(w: &World, id: ObjectId) -> bool {
-    unit_or_building(w, id) && w.obj(id).is_some_and(|o| o.on_map && o.health > 0)
+    // spec: S-0214 Terms (can be selected: units and buildings; a building whose type is invisible in the game is believed not to be, low)
+    unit_or_building(w, id)
+        && !invisible(w, id)
+        && w.obj(id).is_some_and(|o| o.on_map && o.health > 0)
 }
 
 /// A vehicle-like building: it undeploys into a vehicle and has a 1 × 1
