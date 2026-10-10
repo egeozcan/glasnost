@@ -315,11 +315,23 @@ fn s0215_new_actor_slots() {
     assert_eq!((b.current, b.queued, b.suspended), (None, None, None));
 }
 
+/// A synthetic game from a changed copy of the synthetic ruleset.
+fn game_with(r: &glasnost_rules::schema::Ruleset, seed: u32) -> World {
+    new_game(
+        Arc::new(SimRules::new(r, "claims")),
+        &testkit::map(),
+        testkit::catalogue(),
+        &testkit::setup(seed),
+    )
+    .unwrap()
+}
+
 // spec: S-0215 claim 14 (infantry rest in guard: rows 11 and 12, no ability, no area-guard default)
-// spec: S-0215 claim 15 (armed vehicles at skill 0 and threshold 0 rest in area guard, row 12; unarmed ones in guard, row 7)
+// spec: S-0215 claim 15 (armed vehicles at skill 0 and a threshold of 0 given by the data rest in area guard, row 12; unarmed ones in guard, row 7)
 #[test]
 fn s0215_placement_fall_back() {
     let mut w = testkit::new_game(1);
+    assert_eq!(w.rules().general.iq_guard_area, 0);
     tick::step(&mut w);
     let inf = of(&w, 1, Kind::Infantry, 0)[0];
     let cart = of(&w, 0, Kind::Vehicle, 0)[0];
@@ -327,6 +339,63 @@ fn s0215_placement_fall_back() {
     assert_eq!(w.obj(inf).unwrap().beh.current, Some(Behaviour::Guard));
     assert_eq!(w.obj(cart).unwrap().beh.current, Some(Behaviour::AreaGuard));
     assert_eq!(w.obj(crusher).unwrap().beh.current, Some(Behaviour::Guard));
+}
+
+// spec: S-0215 claim 36 (a) (the area-guard threshold given by no layer is 4: skill level 3 rests in guard, 4 in area guard)
+// spec: S-0215 claim 15 (rows 10 and 12: below the threshold guard, else area guard)
+#[test]
+fn s0215_area_guard_threshold() {
+    let mut r = testkit::ruleset();
+    r.sim.general.iq_guard_area = None;
+    let mut w = game_with(&r, 1);
+    assert_eq!(w.rules().general.iq_guard_area, 4);
+    // Skill level 0 of every house of our engine: the armed cart rests in guard.
+    tick::step(&mut w);
+    let cart = of(&w, 0, Kind::Vehicle, 0)[0];
+    assert_eq!(w.obj(cart).unwrap().beh.current, Some(Behaviour::Guard));
+    for (skill, rest) in [(3, Behaviour::Guard), (4, Behaviour::AreaGuard)] {
+        let mut w = game_with(&r, 1);
+        while w.tick < 4 {
+            tick::step(&mut w);
+        }
+        w.houses[0].skill = skill;
+        let cart = of(&w, 0, Kind::Vehicle, 0)[0];
+        let t = w.tick;
+        w.obj_mut(cart).unwrap().beh.force(Behaviour::Move, t);
+        process::fall_back(&mut w, cart, false);
+        assert_eq!(w.obj(cart).unwrap().beh.queued, Some(rest), "skill {skill}");
+    }
+}
+
+// spec: S-0215 Import mapping (cells to leptons: w(trunc(c × 256)); 4.5 cells give 1152 and 0.3 cells give 76)
+// spec: S-0215 F9 (gate times: 0.1 game minutes give 90 ticks, 0.2 give 180; a wrapped product is negative; 0 at 2⁶³ or more)
+// spec: S-0215 Constants (absent-key defaults: gate deploy time and close delay 0)
+#[test]
+fn s0215_guard_stray_and_gate_times() {
+    let dec = |s: &str| Some(glasnost_rules::sim::Decimal(s.into()));
+    let mut r = testkit::ruleset();
+    r.sim.general.guard_mode_stray = dec("4.5");
+    assert_eq!(SimRules::new(&r, "x").general.guard_stray, Some(1152));
+    r.sim.general.guard_mode_stray = dec("0.3");
+    assert_eq!(SimRules::new(&r, "x").general.guard_stray, Some(76));
+    r.sim.general.guard_mode_stray = None;
+    assert_eq!(SimRules::new(&r, "x").general.guard_stray, None);
+    r.registries.insert("buildings".into(), vec!["DOOR".into()]);
+    let gate = |td: Option<&str>, tc: Option<&str>| glasnost_rules::sim::BuildingType {
+        gate: Some(true),
+        deploy_time: td.and_then(dec),
+        gate_close_delay: tc.and_then(dec),
+        ..Default::default()
+    };
+    for (td, tc, want) in [
+        (Some("0.1"), Some("0.2"), (90, 180)),
+        (None, None, (0, 0)),
+        (Some("2400000"), Some("20000000000000000"), (-2134967296, 0)),
+    ] {
+        r.sim.buildings.insert("DOOR".into(), gate(td, tc));
+        let b = &SimRules::new(&r, "x").buildings[0];
+        assert_eq!((b.gate_door_time, b.gate_close_delay), want);
+    }
 }
 
 // spec: S-0215 claim 3 (a start before the processing is processed in the same tick)
@@ -465,7 +534,8 @@ fn s0215_area_guard() {
     assert!((15..=19).contains(&d), "{d}");
 }
 
-// spec: S-0215 claim 17 (a zombie or paralysed behaviour is never left by falling back to rest)
+// spec: S-0215 claim 17 (an armed vehicle in a zombie behaviour reaches row 9 of claim 15: nothing queued, the behaviour stays current)
+// spec: S-0215 claim 17 (rows before row 9 take precedence: an unarmed vehicle queues guard by row 7, and a destination queues move)
 #[test]
 fn s0215_zombie_keeps_its_behaviour() {
     let mut r = testkit::ruleset();
@@ -490,6 +560,16 @@ fn s0215_zombie_keeps_its_behaviour() {
     process::fall_back(&mut w, id, false);
     assert_eq!(w.obj(id).unwrap().beh.queued, None);
     assert_eq!(w.obj(id).unwrap().beh.current, Some(Behaviour::Sleep));
+    // The unarmed crusher in the same behaviour: row 7 comes first.
+    let crusher = of(&w, 0, Kind::Vehicle, 1)[0];
+    w.obj_mut(crusher).unwrap().beh.force(Behaviour::Sleep, t);
+    process::fall_back(&mut w, crusher, false);
+    assert_eq!(w.obj(crusher).unwrap().beh.queued, Some(Behaviour::Guard));
+    assert_eq!(w.obj(crusher).unwrap().beh.current, Some(Behaviour::Sleep));
+    // The armed cart with a destination: row 3 comes first.
+    w.obj_mut(id).unwrap().dest = Some(Target::Cell(testkit::cell(2, 2)));
+    process::fall_back(&mut w, id, false);
+    assert_eq!(w.obj(id).unwrap().beh.queued, Some(Behaviour::Move));
 }
 
 // spec: S-0215 claim 20 (the recruitable property has no effect in our engine)

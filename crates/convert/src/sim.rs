@@ -358,6 +358,8 @@ const UNIT_FIELDS: &[(&str, &str, Form)] = &[
     ("elite_secondary", "EliteSecondary", Text),
     ("turret_count", "TurretCount", Int),
     ("weapon_count", "WeaponCount", Int),
+    // spec: S-0214 Import mapping (Teleporter)
+    ("teleporter", "Teleporter", Bool),
 ];
 
 /// Building rules fields (`glasnost_rules::sim::BuildingType`). `Factory`
@@ -403,6 +405,9 @@ const BUILDING_FIELDS: &[(&str, &str, Form)] = &[
     ("immune", "Immune", Bool),
     ("legal_target", "LegalTarget", Bool),
     ("crushable", "Crushable", Bool),
+    // spec: S-0215 Import mapping (DeployTime and GateCloseDelay, game minutes, S-0003 decimal form)
+    ("deploy_time", "DeployTime", Dec),
+    ("gate_close_delay", "GateCloseDelay", Dec),
 ];
 
 /// Overlay rules fields other than `Land` (`glasnost_rules::sim::OverlayType`).
@@ -742,6 +747,12 @@ impl Builder<'_> {
             let what = format!("[{}] {key}", show(section));
             if let Some(n) = self.field(state, form, &what) {
                 rec.put(field, n);
+            } else if key == "GuardModeStray" {
+                // spec: S-0215 claim 36 (b) and Questions for the project lead (decided: no layer gives the guard stray distance: the area-guard leash, and the importer warns)
+                self.warn(0, 0, format!(
+                    "[{}] {key} is given by no rules layer: the original's value is unspecified; our engine uses the area-guard leash instead (S-0215 claim 36, a departure)",
+                    show(section)
+                ));
             }
             let Some(state) = state else { continue };
             for e in &state.history {

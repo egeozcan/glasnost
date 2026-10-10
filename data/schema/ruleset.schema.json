@@ -416,6 +416,17 @@
           ],
           "default": null
         },
+        "deploy_time": {
+          "description": "`DeployTime`, game minutes: a gate's door time (S-0215 F9).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "emp_cannon": {
           "description": "`EMPulseCannon`.",
           "type": [
@@ -469,6 +480,17 @@
             "null"
           ],
           "default": null
+        },
+        "gate_close_delay": {
+          "description": "`GateCloseDelay`, game minutes: a gate's close delay (S-0215 F9).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "grinding": {
           "description": "`Grinding`.",
@@ -1724,6 +1746,16 @@
           "type": "boolean",
           "default": true
         },
+        "berserk_carrier_tote": {
+          "description": "A berserk carrier aircraft can still get tote and its move order; off: it gets no order, like every berserk object.",
+          "type": "boolean",
+          "default": true
+        },
+        "building_cell_attack_no_weapon": {
+          "description": "A building with no weapon in its first slot gets attack over a cell whose generic result is attack (row BC3); off: nothing.",
+          "type": "boolean",
+          "default": true
+        },
         "cell_layer_split_on_uneven_deck": {
           "description": "On a deck over uneven ground, objects come from the deck layer and the record from the ground layer.",
           "type": "boolean",
@@ -1814,6 +1846,11 @@
           "type": "boolean",
           "default": true
         },
+        "disarm_bomb_needs_weapon": {
+          "description": "Disarm bomb gives its attack order only to an actor able to fire; off: it needs only that the actor is movable.",
+          "type": "boolean",
+          "default": true
+        },
         "drive_brake_floor_raises": {
           "description": "Within the slowdown distance the braking floor raises a slower vehicle to the floor.",
           "type": "boolean",
@@ -1856,6 +1893,11 @@
         },
         "fraidycat_fear_ignores_fearless": {
           "description": "A fearless fraidycat still gets its fear set by a known attacker.",
+          "type": "boolean",
+          "default": true
+        },
+        "gate_reverse_snaps": {
+          "description": "A gate door that reverses from closing to opening is at rest open at the gate's next update; off: the reopening takes as long as the closing had run.",
           "type": "boolean",
           "default": true
         },
@@ -2935,6 +2977,14 @@
         },
         "stupid_hunt": {
           "description": "`StupidHunt`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "teleporter": {
+          "description": "`Teleporter`: a self-teleporting type (S-0214 claim 11).",
           "type": [
             "boolean",
             "null"

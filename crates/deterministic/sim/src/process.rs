@@ -655,6 +655,7 @@ fn process_area_guard(w: &mut World, id: ObjectId) -> i32 {
             matches!(gs, Target::Object(x) if w.obj(x).is_some_and(|g| g.kind.is_mobile()));
         let leash = if mobile_spot {
             // spec: S-0215 F5 (guarding a mobile actor: the guard stray distance)
+            // spec: S-0215 claim 36 (b) and Questions for the project lead (decided: given by no layer, the area-guard leash instead)
             r.general
                 .guard_stray
                 .unwrap_or_else(|| leash(u.guard_range))

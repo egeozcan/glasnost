@@ -361,6 +361,22 @@ pub struct Quirks {
     // spec: S-0009 claim 28
     #[serde(default = "on")]
     pub cleanup_skips_next_house: bool,
+    /// A gate door that reverses from closing to opening is at rest open at the gate's next update; off: the reopening takes as long as the closing had run.
+    // spec: S-0215 claim 35
+    #[serde(default = "on")]
+    pub gate_reverse_snaps: bool,
+    /// Disarm bomb gives its attack order only to an actor able to fire; off: it needs only that the actor is movable.
+    // spec: S-0214 Edge cases
+    #[serde(default = "on")]
+    pub disarm_bomb_needs_weapon: bool,
+    /// A berserk carrier aircraft can still get tote and its move order; off: it gets no order, like every berserk object.
+    // spec: S-0214 claim 15
+    #[serde(default = "on")]
+    pub berserk_carrier_tote: bool,
+    /// A building with no weapon in its first slot gets attack over a cell whose generic result is attack (row BC3); off: nothing.
+    // spec: S-0214 Edge cases
+    #[serde(default = "on")]
+    pub building_cell_attack_no_weapon: bool,
 }
 
 impl Default for Quirks {
@@ -452,6 +468,10 @@ impl Default for Quirks {
             stale_fill_tiles: true,
             observer_position_handoff: true,
             cleanup_skips_next_house: true,
+            gate_reverse_snaps: true,
+            disarm_bomb_needs_weapon: true,
+            berserk_carrier_tote: true,
+            building_cell_attack_no_weapon: true,
         }
     }
 }
@@ -645,6 +665,13 @@ impl Quirks {
             ("stale_fill_tiles", self.stale_fill_tiles),
             ("observer_position_handoff", self.observer_position_handoff),
             ("cleanup_skips_next_house", self.cleanup_skips_next_house),
+            ("gate_reverse_snaps", self.gate_reverse_snaps),
+            ("disarm_bomb_needs_weapon", self.disarm_bomb_needs_weapon),
+            ("berserk_carrier_tote", self.berserk_carrier_tote),
+            (
+                "building_cell_attack_no_weapon",
+                self.building_cell_attack_no_weapon,
+            ),
         ]
     }
 

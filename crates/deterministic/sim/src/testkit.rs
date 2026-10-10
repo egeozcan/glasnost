@@ -42,6 +42,9 @@ pub fn ruleset() -> Ruleset {
     s.countries.insert("Betaland".into(), Country::default());
     s.land_types.insert(LandType::Clear, LandRow::default());
     s.land_types.insert(LandType::Road, LandRow::default());
+    // The scenario's data gives an area-guard threshold of 0, so that its armed vehicles rest in
+    // area guard (S-0215 claim 15 row 12); the engine default of claim 36 (a) would give guard.
+    s.general.iq_guard_area = Some(0);
     let cart = UnitType {
         strength: Some(300),
         speed: Some(7),

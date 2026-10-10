@@ -198,7 +198,7 @@ Provisional rules of the simulation, each tied to a request:
 | `path` | no corridor of claim 13; pending pairs of equal cost in recording order after the held candidate; the shortening of early detours (claim 18) is not applied | Q-0017 |
 | `load` | a start list that needs a random start cell is refused (`LoadError::RandomStartCell`); low-bridge end markers complete no bridge; vein seeds are cleared and not rebuilt; off-map neighbours count as blank cells in recalculation | Q-0018 |
 | `rules`, `drive`, `scatter` | the locomotor follows the kind (vehicles drive, infantry walk, aircraft do not move); a driving vehicle meets any blocked outcome other than *blocked* as a moving blocker; vehicles refuse scatter requests; a vehicle's vehicle-present claims are its position's cell and its step's cells | Q-0019 |
-| `rules`, `occupancy`, `cells` | the acceleration and deceleration defaults are the doubles nearest their decimals; `[IQ] GuardArea` absent is 0 and `GuardModeStray` absent falls back to the leash; overlay damage levels absent 1, strength 0; no bridge decks; walls belong to no house; gates read as open | Q-0020 |
+| `rules`, `occupancy`, `cells` | the acceleration and deceleration defaults are the doubles nearest their decimals; overlay damage levels absent 1, strength 0; no bridge decks; walls belong to no house; gates read as open | Q-0020 |
 | `objects`, `load` | pre-placed objects start at full strength, facing value × 256, with the placement fall-back as their behaviour | Q-0010, Q-0016 |
 
 ## Tests
