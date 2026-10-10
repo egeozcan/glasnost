@@ -113,8 +113,11 @@ pub struct Built {
     /// Provisional choices and gaps that this map met.
     pub notes: BTreeSet<String>,
     /// Objects dropped (unknown type, no art, or an owner no skirmish house
-    /// carries).
+    /// carries), and cells drawn without a tile image.
     pub dropped: BTreeMap<String, usize>,
+    /// With a live simulation: the static objects' ground-layer entries
+    /// (building voxel parts), not merged into the items.
+    pub ground: Vec<GroundEntry>,
 }
 
 /// The fixed house names of S-0009 Import mapping (claim 27).
@@ -325,18 +328,35 @@ struct Rows {
     houses: BTreeMap<[u8; 3], (usize, usize)>,
 }
 
+/// What a scene's builder keeps for drawing more items later: the art file,
+/// cell lights, palette rows and the images already added to the scene.
+pub struct Painter {
+    art: Document,
+    lights: Lights,
+    rows: Rows,
+    images: BTreeMap<(Vec<u8>, usize, u8), Option<u32>>,
+    /// Voxel part images by pose, with their offsets.
+    voxels: BTreeMap<VoxelKey, Option<(u32, [i32; 2])>>,
+    /// Parsed voxel models by file.
+    models: BTreeMap<Vec<u8>, Option<std::rc::Rc<voxel::VoxelModel>>>,
+    /// The voxel lighting table, once read.
+    vpl: Option<Option<Vpl>>,
+}
+
+/// A vehicle part image's pose: the type, the part, the 32-step body and
+/// turret facings and the raw barrel elevation (S-0105 Terms and claims 3
+/// to 6: the poses depend on facings only through their 32-step values).
+type VoxelKey = (Kind, usize, u8, u8, u8, u16);
+
 struct Builder<'a> {
     map: &'a Map,
     import: &'a Import,
     catalogue: &'a Catalogue,
     palettes: &'a PaletteState,
     assets: &'a Assets,
-    art: Document,
     options: &'a Options,
-    lights: Lights,
-    rows: Rows,
+    p: Painter,
     built: Built,
-    images: BTreeMap<(Vec<u8>, usize, u8), Option<u32>>,
 }
 
 /// A decoded tile cell: diamond image, its depth data and template
@@ -355,13 +375,17 @@ type TileImages = (
 type SpriteFrame = (u32, (i32, i32), (i32, i32));
 
 /// One entry of the object pass's ground layer (S-0102 claims 5 and 6).
-struct GroundEntry {
-    key: i64,
-    items: Vec<Item>,
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct GroundEntry {
+    /// Sort key (S-0102 claim 5).
+    pub key: i64,
+    /// Items, in drawing order.
+    pub items: Vec<Item>,
+    /// The object the entry draws ([`Item::object`]).
+    pub object: Option<u32>,
 }
 
 /// Builds the scene of `map`.
-#[allow(clippy::too_many_arguments)]
 pub fn build(
     map: &Map,
     import: &Import,
@@ -370,25 +394,38 @@ pub fn build(
     assets: &Assets,
     options: &Options,
 ) -> Built {
-    let art = match &import.art_file {
-        Some(f) => Document::parse(&f.bytes, Default::default(), &mut Vec::new()),
-        None => Document::empty(Default::default()),
-    };
-    let mut b = Builder {
+    let inputs = Inputs {
         map,
         import,
         catalogue,
         palettes,
         assets,
-        art,
         options,
-        lights: Lights {
-            side: 0,
-            cells: Vec::new(),
-        },
-        rows: Rows::default(),
+    };
+    build_parts(&inputs, false).0
+}
+
+/// Builds the scene of a map. With `live`, the map-placed vehicles,
+/// infantry and aircraft are left out (a simulation draws them) and the
+/// ground-layer entries of the static objects are kept in
+/// [`Built::ground`] instead of being merged into the items, which then
+/// hold the cell pass only. Returns the painter that draws more items into
+/// the scene later.
+pub fn build_parts(inputs: &Inputs, live: bool) -> (Built, Painter) {
+    let import = inputs.import;
+    let art = match &import.art_file {
+        Some(f) => Document::parse(&f.bytes, Default::default(), &mut Vec::new()),
+        None => Document::empty(Default::default()),
+    };
+    let mut b = Builder {
+        map: inputs.map,
+        import,
+        catalogue: inputs.catalogue,
+        palettes: inputs.palettes,
+        assets: inputs.assets,
+        options: inputs.options,
+        p: Painter::new(art),
         built: Built::default(),
-        images: BTreeMap::new(),
     };
     b.light_cells();
     b.tiles();
@@ -398,6 +435,11 @@ pub fn build(
     let mut ground = Vec::new();
     b.structures(&mut ground);
     b.built.scene.cell_pass_len = b.built.scene.items.len();
+    b.built.notes.insert(notes::NO_SLOT_ANIMS.into());
+    if live {
+        b.built.ground = ground;
+        return (b.built, b.p);
+    }
     b.mobiles(&mut ground);
     // spec: S-0102 claim 6 (an entering object goes before the first strictly greater key: a stable sort);
     // provisional (Q-0016): objects enter in the order structures, vehicles, infantry, aircraft
@@ -405,9 +447,8 @@ pub fn build(
     for g in ground {
         b.built.scene.items.extend(g.items);
     }
-    b.built.notes.insert(notes::NO_SLOT_ANIMS.into());
     b.built.notes.insert(notes::INITIAL_STATE.into());
-    b.built
+    (b.built, b.p)
 }
 
 impl Builder<'_> {
@@ -478,11 +519,11 @@ impl Builder<'_> {
                 &q,
             ));
         }
-        self.lights = Lights { side, cells };
+        self.p.lights = Lights { side, cells };
     }
 
     fn tile_row(&mut self, table: TileTable, brightness: i32) -> usize {
-        let (base, n) = match self.rows.tiles.get(&table) {
+        let (base, n) = match self.p.rows.tiles.get(&table) {
             Some(r) => *r,
             None => {
                 // spec: S-0103 claim 8 (terrain tiles use the tile palette, shaded by their cell's table)
@@ -491,7 +532,7 @@ impl Builder<'_> {
                 for row in &t {
                     self.built.scene.add_row(row565(row));
                 }
-                self.rows.tiles.insert(table, (base, t.len()));
+                self.p.rows.tiles.insert(table, (base, t.len()));
                 (base, t.len())
             }
         };
@@ -499,7 +540,7 @@ impl Builder<'_> {
     }
 
     fn house_row(&mut self, hsv: [u8; 3], brightness: i32) -> usize {
-        let (base, n) = match self.rows.houses.get(&hsv) {
+        let (base, n) = match self.p.rows.houses.get(&hsv) {
             Some(r) => *r,
             None => {
                 let pal = house_palette(&self.palettes.unit, hsv);
@@ -509,7 +550,7 @@ impl Builder<'_> {
                 for row in &t {
                     self.built.scene.add_row(row565(row));
                 }
-                self.rows.houses.insert(hsv, (base, t.len()));
+                self.p.rows.houses.insert(hsv, (base, t.len()));
                 (base, t.len())
             }
         };
@@ -558,7 +599,7 @@ impl Builder<'_> {
         let f = *shp.frames.get(frame)?;
         let canvas = (i32::from(shp.width), i32::from(shp.height));
         let key = (upper(file), frame, 0u8);
-        let id = match self.images.get(&key) {
+        let id = match self.p.images.get(&key) {
             Some(id) => *id,
             None => {
                 let id = shp
@@ -566,7 +607,7 @@ impl Builder<'_> {
                     .ok()
                     .filter(|i| i.width() > 0 && i.height() > 0)
                     .map(|i| self.built.scene.add_image(i));
-                self.images.insert(key, id);
+                self.p.images.insert(key, id);
                 id
             }
         };
@@ -638,9 +679,14 @@ impl Builder<'_> {
         }
         for (c, cell) in all {
             let Some(t) = self.catalogue.art_tile(cell.tile) else {
+                // spec: S-0009 claim 8 (an out-of-range number shows the clear tile, which this theater lacks)
+                self.drop_object(
+                    "cell drawn blank: its tile and the clear tile are outside the catalogue",
+                );
                 continue;
             };
             let Some(file) = self.catalogue.file_of(t).map(|f| upper(&f)) else {
+                self.drop_object("cell drawn blank: its tile has no file");
                 continue;
             };
             if !tmps.contains_key(&file) {
@@ -669,6 +715,10 @@ impl Builder<'_> {
                 v.as_ref()
                     .map(|v| v.get(usize::from(cell.sub_tile)).copied().flatten())
             }) else {
+                self.drop_object(match tmps.get(&file) {
+                    Some(Some(_)) => "cell drawn blank: its sub-tile has no image in the tile file",
+                    _ => "cell drawn blank: its tile file is missing or unreadable",
+                });
                 continue;
             };
             let level = i32::from(cell.level);
@@ -679,7 +729,7 @@ impl Builder<'_> {
             let left = qx - w / 2;
             // spec: S-0102 F3 (t = the tile's top row as drawn plus 15 × its height level)
             let reference_row = top + TERRAIN_LIFT * level;
-            let (table, b) = match self.lights.get(c) {
+            let (table, b) = match self.p.lights.get(c) {
                 // provisional (Q-0013): the scaled ground level
                 Some(l) => (l.table, l.scaled_ground),
                 None => (TileTable::Neutral, NEUTRAL_BRIGHTNESS),
@@ -760,7 +810,7 @@ impl Builder<'_> {
             } else {
                 -17 - TERRAIN_LIFT * level
             };
-            let light = self.lights.get(c);
+            let light = self.p.lights.get(c);
             // spec: S-0104 claim 13 (ore and gems 1000; walls U; others the scaled ground level)
             let b = if tiberium {
                 NEUTRAL_BRIGHTNESS
@@ -847,7 +897,7 @@ impl Builder<'_> {
                 continue;
             };
             let level = i32::from(cell.level);
-            let light = self.lights.get(s.cell);
+            let light = self.p.lights.get(s.cell);
             let row = self.tile_row(
                 light.map_or(TileTable::Neutral, |l| l.table),
                 light.map_or(NEUTRAL_BRIGHTNESS, |l| l.scaled_ground),
@@ -903,7 +953,7 @@ impl Builder<'_> {
                 continue;
             };
             let z = LEVEL_LEPTONS * i32::from(cell.level);
-            let light = self.lights.get(t.cell).copied();
+            let light = self.p.lights.get(t.cell).copied();
             let spawns = rule_bool(
                 self.import,
                 Kind::TerrainObjects,
@@ -1004,7 +1054,7 @@ impl Builder<'_> {
             ("0x0", (0, 0)),
         ]; // spec: S-0108 Import mapping (foundation vocabulary)
         let read = |section: &[u8]| {
-            let v = self.art.value(section, b"Foundation")?;
+            let v = self.p.art.value(section, b"Foundation")?;
             // spec: S-0108 Import mapping (text cut to 31 characters, compared ignoring case)
             let v = value::text(v, 31);
             Some(
@@ -1029,7 +1079,7 @@ impl Builder<'_> {
 
     fn art_value(&self, kind: Kind, idx: usize, key: &[u8]) -> Option<&[u8]> {
         let image = self.import.arts.get(&(kind, idx))?.image.clone();
-        let doc: &Document = &self.art;
+        let doc: &Document = &self.p.art;
         doc.value(&image, key)
     }
 
@@ -1075,6 +1125,7 @@ impl Builder<'_> {
             // spec: S-0108 claim 8 (centred on the foundation's top corner, 128 leptons before the top-left cell's centre)
             let anchor = project_lifted(256 * p.cell.x, 256 * p.cell.y, z);
             let u = self
+                .p
                 .lights
                 .get(p.cell)
                 .map_or(NEUTRAL_BRIGHTNESS, |l| l.unscaled_ground);
@@ -1087,7 +1138,7 @@ impl Builder<'_> {
                 let (w, h) = self.foundation(i);
                 let (cx, cy) = light::building_centre_cell((p.cell.x, p.cell.y), (w, h));
                 let centre = CellXY::new(cx, cy);
-                let l = self.lights.get(centre);
+                let l = self.p.lights.get(centre);
                 self.tile_row(
                     l.map_or(TileTable::Neutral, |l| l.table),
                     l.map_or(NEUTRAL_BRIGHTNESS, |l| l.scaled_ground),
@@ -1194,7 +1245,11 @@ impl Builder<'_> {
                     + if turret_voxel { 32 } else { 0 }
                     - if gate { 16 } else { 0 };
                 if !items.is_empty() {
-                    ground.push(GroundEntry { key, items });
+                    ground.push(GroundEntry {
+                        key,
+                        items,
+                        object: Some(object),
+                    });
                 }
             }
         }
@@ -1236,6 +1291,7 @@ impl Builder<'_> {
         let elevation = voxel::ELEVATION_LEVEL;
         let name = self.import.outcome.registries[&k][idx].name.clone();
         let depth_buffered = self
+            .p
             .art
             .value(&name, b"UseBuffer")
             .and_then(value::boolean)
@@ -1272,25 +1328,26 @@ impl Builder<'_> {
         items
     }
 
-    /// Vehicles, infantry and aircraft in the ground layer (S-0102 claims 3
-    /// and 5): on the ground, every one of them is in the ground layer.
+    /// Map-placed vehicles, infantry and aircraft in the ground layer
+    /// (S-0102 claims 3 and 5) in their initial state: on the ground, every
+    /// one of them is in the ground layer.
     fn mobiles(&mut self, ground: &mut Vec<GroundEntry>) {
         self.note(notes::OBJECTS);
         let units = self.map.objects.units.clone();
         for u in &units {
-            if let Some(g) = self.vehicle(Kind::Vehicles, &u.placed) {
+            if let Some(g) = self.placed_mobile(Kind::Vehicles, &u.placed) {
                 ground.push(g);
             }
         }
         let infantry = self.map.objects.infantry.clone();
         for i in &infantry {
-            if let Some(g) = self.infantry(i) {
+            if let Some(g) = self.placed_mobile(Kind::Infantry, &i.placed) {
                 ground.push(g);
             }
         }
         let aircraft = self.map.objects.aircraft.clone();
         for a in &aircraft {
-            if let Some(g) = self.vehicle(Kind::Aircraft, &a.placed) {
+            if let Some(g) = self.placed_mobile(Kind::Aircraft, &a.placed) {
                 ground.push(g);
             }
         }
@@ -1301,7 +1358,7 @@ impl Builder<'_> {
         &mut self,
         kind: Kind,
         p: &glasnost_map::objects::Placed,
-    ) -> Option<(usize, glasnost_convert::art::TypeArt, glasnost_map::Cell)> {
+    ) -> Option<(usize, glasnost_map::Cell)> {
         if !self.owner_kept(&p.owner) {
             self.drop_object("owner no skirmish house carries");
             return None;
@@ -1310,15 +1367,76 @@ impl Builder<'_> {
             self.drop_object("unknown unit type");
             return None;
         };
-        let Some(art) = self.import.arts.get(&(kind, i)).cloned() else {
+        if !self.import.arts.contains_key(&(kind, i)) {
             self.drop_object("unit without art");
             return None;
-        };
+        }
         let Some(cell) = self.map.cells.get(p.cell).copied() else {
             self.drop_object("unit on a non-legal cell");
             return None;
         };
-        Some((i, art, cell))
+        Some((i, cell))
+    }
+
+    /// A map-placed mobile in its initial state, before any tick.
+    fn placed_mobile(
+        &mut self,
+        kind: Kind,
+        p: &glasnost_map::objects::Placed,
+    ) -> Option<GroundEntry> {
+        let (i, cell) = self.mobile_start(kind, p)?;
+        let (x, y) = cell_centre(p.cell.x, p.cell.y);
+        let z = LEVEL_LEPTONS * i32::from(cell.level);
+        // provisional (Q-0010): the facing value on the scale of glossary claim G1 (× 256)
+        let facing = ((p.facing & 0xFF) * 256) as u16;
+        let fire_angle = rule_int(
+            self.import,
+            kind,
+            i,
+            b"FireAngle",
+            voxel::DEFAULT_FIRE_ANGLE,
+        );
+        let infantry = (kind == Kind::Infantry).then(|| {
+            // spec: S-0107 claim 2 (no current sequence: the stand entry; water cells need land types, Q-0009)
+            let (start, count, multiplier) = self.sequence_entry(i, b"Ready");
+            InfantryFrame {
+                start,
+                count,
+                multiplier,
+                stage: 0,
+            }
+        });
+        let object = self.add_object(ObjectInfo {
+            kind: match kind {
+                Kind::Infantry => "infantry",
+                Kind::Aircraft => "aircraft",
+                _ => "vehicle",
+            },
+            type_name: String::from_utf8_lossy(&p.type_name).into_owned(),
+            owner: String::from_utf8_lossy(&p.owner).into_owned(),
+            cell: p.cell,
+            entry: p
+                .raw
+                .iter()
+                .map(|f| String::from_utf8_lossy(f).into_owned())
+                .collect::<Vec<_>>()
+                .join(","),
+            notes: vec![notes::OBJECTS.into(), notes::PLACEMENT.into()],
+        });
+        let m = Mobile {
+            kind,
+            idx: i,
+            owner: p.owner.clone(),
+            pos: (x, y, z),
+            body: facing,
+            // provisional (Q-0016): the turret's starting facing is taken as the body's.
+            turret: facing,
+            // spec: S-0105 claim 6 (placed level, then turned toward the fire angle; no tick has run)
+            elevation: voxel::barrel_elevation_after(fire_angle, 0),
+            infantry,
+            object,
+        };
+        Some(self.mobile(&m))
     }
 
     /// The unit depth adjustment *U* = −L(z) + s + F (S-0102 claim 14) for a
@@ -1359,50 +1477,82 @@ impl Builder<'_> {
             .map_or(0, |v| v as i32)
     }
 
-    /// An infantry unit in its initial state (S-0107 claims 1 to 3, 19).
-    fn infantry(&mut self, inf: &glasnost_map::Infantry) -> Option<GroundEntry> {
-        let p = &inf.placed;
-        let (i, art, cell) = self.mobile_start(Kind::Infantry, p)?;
-        let sprite = art.sprite.clone()?;
-        let n = self.sprite_frames(&sprite).unwrap_or(0);
-        // provisional (Q-0010): the facing value on the scale of glossary claim G1 (× 256)
-        let facing = (p.facing & 0xFF) * 256;
-        // spec: S-0107 claim 2 (no current sequence: the stand entry; water cells need land types, Q-0009)
-        let (start, count, mult) = self.sequence_entry(i, b"Ready");
-        // spec: S-0107 F2 (g = (7 − ⌊(φ + 5120) / 8192⌋) mod 8)
-        let g = (7 - (facing + 5120) / 8192).rem_euclid(8);
-        // spec: S-0107 F1 (frame = S + (k mod max(C, 1)) + [M > 0]·M·g, stage k = 0)
-        let k = 0;
-        let frame = start + k % count.max(1) + if mult > 0 { mult * g } else { 0 };
-        let frame = usize::try_from(frame).ok()?;
-        let (x, y) = cell_centre(p.cell.x, p.cell.y);
-        let z = LEVEL_LEPTONS * i32::from(cell.level);
+    /// The sequence entry (start, count, multiplier) of `key` for infantry
+    /// type `idx` (S-0107 Import mapping; claim 1: absent fields are 0).
+    fn sequence_entry(&self, idx: usize, key: &[u8]) -> (i32, i32, i32) {
+        // spec: S-0107 Import mapping (values read as at most 31 characters)
+        const VALUE_LIMIT: usize = 31; // spec: S-0107 Constants (value length limit)
+        let Some(seq) = self.art_value(Kind::Infantry, idx, b"Sequence") else {
+            // spec: S-0107 claim 1 (no sequence table: every entry is zero)
+            return (0, 0, 0);
+        };
+        let seq = value::text(seq, VALUE_LIMIT).to_vec();
+        let Some(v) = self.p.art.value(&seq, key) else {
+            return (0, 0, 0);
+        };
+        let v = &v[..v.len().min(VALUE_LIMIT)];
+        // spec: S-0107 Import mapping (a missing or unparseable field keeps it and every later field at 0)
+        let [s, c, m] = value::int_tuple::<3>(v);
+        match (s, c, m) {
+            (Some(s), Some(c), Some(m)) => (s, c, m),
+            (Some(s), Some(c), None) => (s, c, 0),
+            (Some(s), None, _) => (s, 0, 0),
+            _ => (0, 0, 0),
+        }
+    }
+
+    /// A mobile object's ground-layer entry: its items and sort key.
+    fn mobile(&mut self, m: &Mobile) -> GroundEntry {
+        let (x, y, z) = m.pos;
         let point = project_lifted(x, y, z);
-        let u = self.unit_depth(Kind::Infantry, i, p.cell, z);
-        let (hsv, _) = self.owner_colour(&p.owner);
-        // spec: S-0104 claim 13 (infantry: U + extra infantry light; shadowed cells need the theater spec)
-        let b = self
+        let cell = CellXY::new(x / 256, y / 256); // spec: S-0204 claim 2 (the cell holding a position)
+        let u = self.unit_depth(m.kind, m.idx, cell, z);
+        let (hsv, _) = self.owner_colour(&m.owner);
+        let ground = self
+            .p
             .lights
-            .get(p.cell)
-            .map_or(NEUTRAL_BRIGHTNESS, |l| l.unscaled_ground)
-            + self.extra_light(b"ExtraInfantryLight");
-        let row = self.house_row(hsv, b);
-        let object = self.add_object(ObjectInfo {
-            kind: "infantry",
-            type_name: String::from_utf8_lossy(&p.type_name).into_owned(),
-            owner: String::from_utf8_lossy(&p.owner).into_owned(),
-            cell: p.cell,
-            entry: p
-                .raw
-                .iter()
-                .map(|f| String::from_utf8_lossy(f).into_owned())
-                .collect::<Vec<_>>()
-                .join(","),
-            notes: vec![notes::OBJECTS.into(), notes::PLACEMENT.into()],
-        });
+            .get(cell)
+            .map_or(NEUTRAL_BRIGHTNESS, |l| l.unscaled_ground);
+        let items = if m.kind == Kind::Infantry {
+            // spec: S-0104 claim 13 (infantry: U + extra infantry light; shadowed cells need the theater spec)
+            let row = self.house_row(hsv, ground + self.extra_light(b"ExtraInfantryLight"));
+            self.infantry_items(m, point, u, row)
+        } else {
+            // spec: S-0104 claim 13 (vehicles: U + extra unit light; aircraft on the ground: U + extra aircraft light)
+            let extra = if m.kind == Kind::Aircraft {
+                self.extra_light(b"ExtraAircraftLight")
+            } else {
+                self.extra_light(b"ExtraUnitLight")
+            };
+            let row = self.house_row(hsv, ground + extra);
+            self.vehicle_items(m, point, u, row)
+        };
+        GroundEntry {
+            // spec: S-0102 claim 5 (sort key X + Y of the position; height plays no part)
+            key: i64::from(x) + i64::from(y),
+            items,
+            object: Some(m.object),
+        }
+    }
+
+    /// An infantry unit's body and shadow sprites (S-0107 claims 2, 3, 19).
+    fn infantry_items(&mut self, m: &Mobile, point: (i32, i32), u: i32, row: usize) -> Vec<Item> {
+        let Some(sprite) = self
+            .import
+            .arts
+            .get(&(m.kind, m.idx))
+            .and_then(|a| a.sprite.clone())
+        else {
+            return Vec::new();
+        };
+        let n = self.sprite_frames(&sprite).unwrap_or(0);
+        let f = m.infantry.unwrap_or_default();
+        let Ok(frame) = usize::try_from(infantry_frame(&f, m.body)) else {
+            return Vec::new();
+        };
         let mut items = Vec::new();
         // spec: S-0107 claim 19 (on the ground: shadow frame + ⌊L/2⌋ at the same position, unless suppressed)
-        if !rule_bool(self.import, Kind::Infantry, i, b"NoShadow", false)
+        if !rule_bool(self.import, m.kind, m.idx, b"NoShadow", false)
             && let Some(item) = self.place_sprite(
                 &sprite,
                 frame + n / 2,
@@ -1417,7 +1567,7 @@ impl Builder<'_> {
                 Paint::Shadow,
                 Group::Shadows,
                 true,
-                Some(object),
+                Some(m.object),
             )
         {
             items.push(item);
@@ -1436,88 +1586,28 @@ impl Builder<'_> {
             Paint::Row(row),
             Group::Infantry,
             true,
-            Some(object),
+            Some(m.object),
         ) {
             items.push(item);
         }
         self.note(notes::SHADOW);
         self.note(notes::PLACEMENT);
-        // spec: S-0102 claim 5 (sort key X + Y of the position)
-        Some(GroundEntry {
-            key: i64::from(x) + i64::from(y),
-            items,
-        })
+        items
     }
 
-    /// The sequence entry (start, count, multiplier) of `key` for infantry
-    /// type `idx` (S-0107 Import mapping; claim 1: absent fields are 0).
-    fn sequence_entry(&self, idx: usize, key: &[u8]) -> (i32, i32, i32) {
-        // spec: S-0107 Import mapping (values read as at most 31 characters)
-        const VALUE_LIMIT: usize = 31; // spec: S-0107 Constants (value length limit)
-        let Some(seq) = self.art_value(Kind::Infantry, idx, b"Sequence") else {
-            // spec: S-0107 claim 1 (no sequence table: every entry is zero)
-            return (0, 0, 0);
+    /// A vehicle's or aircraft's items: voxel parts (S-0105), or a sprite
+    /// showing image frame 0 (provisional, Q-0011).
+    fn vehicle_items(&mut self, m: &Mobile, point: (i32, i32), u: i32, row: usize) -> Vec<Item> {
+        let Some(art) = self.import.arts.get(&(m.kind, m.idx)).cloned() else {
+            return Vec::new();
         };
-        let seq = value::text(seq, VALUE_LIMIT).to_vec();
-        let Some(v) = self.art.value(&seq, key) else {
-            return (0, 0, 0);
-        };
-        let v = &v[..v.len().min(VALUE_LIMIT)];
-        // spec: S-0107 Import mapping (a missing or unparseable field keeps it and every later field at 0)
-        let [s, c, m] = value::int_tuple::<3>(v);
-        match (s, c, m) {
-            (Some(s), Some(c), Some(m)) => (s, c, m),
-            (Some(s), Some(c), None) => (s, c, 0),
-            (Some(s), None, _) => (s, 0, 0),
-            _ => (0, 0, 0),
-        }
-    }
-
-    /// A vehicle or aircraft on the ground (S-0105 for voxel models; a
-    /// sprite-drawn one shows image frame 0, provisional Q-0011).
-    fn vehicle(&mut self, kind: Kind, p: &glasnost_map::objects::Placed) -> Option<GroundEntry> {
-        let (i, art, cell) = self.mobile_start(kind, p)?;
-        let (x, y) = cell_centre(p.cell.x, p.cell.y);
-        let z = LEVEL_LEPTONS * i32::from(cell.level);
-        let point = project_lifted(x, y, z);
-        let u = self.unit_depth(kind, i, p.cell, z);
-        let (hsv, _) = self.owner_colour(&p.owner);
-        let extra = if kind == Kind::Aircraft {
-            self.extra_light(b"ExtraAircraftLight")
-        } else {
-            self.extra_light(b"ExtraUnitLight")
-        };
-        // spec: S-0104 claim 13 (vehicles: U + extra unit light; aircraft on the ground: U + extra aircraft light)
-        let b = self
-            .lights
-            .get(p.cell)
-            .map_or(NEUTRAL_BRIGHTNESS, |l| l.unscaled_ground)
-            + extra;
-        let row = self.house_row(hsv, b);
-        let object = self.add_object(ObjectInfo {
-            kind: if kind == Kind::Aircraft {
-                "aircraft"
-            } else {
-                "vehicle"
-            },
-            type_name: String::from_utf8_lossy(&p.type_name).into_owned(),
-            owner: String::from_utf8_lossy(&p.owner).into_owned(),
-            cell: p.cell,
-            entry: p
-                .raw
-                .iter()
-                .map(|f| String::from_utf8_lossy(f).into_owned())
-                .collect::<Vec<_>>()
-                .join(","),
-            notes: vec![notes::OBJECTS.into()],
-        });
-        let group = if kind == Kind::Aircraft {
+        let group = if m.kind == Kind::Aircraft {
             Group::Aircraft
         } else {
             Group::Vehicles
         };
-        let items = if art.voxels.contains_key("body") {
-            self.vehicle_voxels(kind, i, &art, p, point, u, row, group, object)
+        if art.voxels.contains_key("body") {
+            self.vehicle_voxels(m, &art, point, u, row, group)
         } else if let Some(sprite) = art.sprite.clone() {
             self.note(notes::PLACEMENT);
             // spec: S-0102 claim 13 (a unit drawn as a sprite: U − 2, upright, reader)
@@ -1534,38 +1624,46 @@ impl Builder<'_> {
                 Paint::Row(row),
                 group,
                 true,
-                Some(object),
+                Some(m.object),
             )
             .into_iter()
             .collect()
         } else {
             Vec::new()
-        };
-        // spec: S-0102 claim 5 (sort key X + Y of the position)
-        Some(GroundEntry {
-            key: i64::from(x) + i64::from(y),
-            items,
-        })
+        }
     }
 
-    /// A parsed voxel model and its motion file from the assets.
-    fn voxel_model(&self, file: &[u8]) -> Option<voxel::VoxelModel> {
-        let vxl = Vxl::parse(self.assets.get(file)?).ok()?;
-        let hva = self
-            .assets
-            .get(&hva_name(file))
-            .and_then(|b| Hva::parse(b).ok());
-        Some(voxel::VoxelModel::new(
-            &vxl,
-            hva.as_ref(),
-            &VoxelQuirks::default(),
-        ))
+    /// A parsed voxel model and its motion file from the assets, parsed
+    /// once.
+    fn voxel_model(&mut self, file: &[u8]) -> Option<std::rc::Rc<voxel::VoxelModel>> {
+        let key = upper(file);
+        if let Some(m) = self.p.models.get(&key) {
+            return m.clone();
+        }
+        let m = Vxl::parse(self.assets.get(file)?).ok().map(|vxl| {
+            let hva = self
+                .assets
+                .get(&hva_name(file))
+                .and_then(|b| Hva::parse(b).ok());
+            std::rc::Rc::new(voxel::VoxelModel::new(
+                &vxl,
+                hva.as_ref(),
+                &VoxelQuirks::default(),
+            ))
+        });
+        self.p.models.insert(key, m.clone());
+        m
     }
 
     /// The voxel lighting table (S-0105 claim 19; its layout is provisional,
     /// Q-0014).
     fn vpl(&mut self) -> Option<Vpl> {
-        let v = self.assets.get(VPL_FILE).and_then(|b| Vpl::parse(b).ok());
+        let assets = self.assets;
+        let v = self
+            .p
+            .vpl
+            .get_or_insert_with(|| assets.get(VPL_FILE).and_then(|b| Vpl::parse(b).ok()))
+            .clone();
         self.note(if v.is_some() {
             notes::VPL
         } else {
@@ -1574,26 +1672,31 @@ impl Builder<'_> {
         v
     }
 
-    /// A voxel part image as a scene item at `point` (S-0105 claim 25, F6;
-    /// S-0102 F2: the drawing rectangle is the copy rectangle).
-    fn voxel_item(
-        &mut self,
-        img: &voxel::PartImage,
-        point: (i32, i32),
-        bias: i32,
-        paint: Paint,
-        group: Group,
-        object: u32,
-    ) -> Option<Item> {
+    /// Adds a voxel part image to the scene: its index and offset from the
+    /// draw point (S-0105 claim 25, F6).
+    fn add_part(&mut self, img: &voxel::PartImage) -> Option<(u32, [i32; 2])> {
         let image = IndexedImage::new(img.width, img.height, img.pixels.clone()).ok()?;
         if image.width() == 0 || image.height() == 0 {
             return None;
         }
         let id = self.built.scene.add_image(image);
-        Some(Item {
-            image: id,
-            x: point.0 + img.offset[0] as i32,
-            y: point.1 + img.offset[1] as i32,
+        Some((id, [img.offset[0] as i32, img.offset[1] as i32]))
+    }
+
+    /// A voxel part image placed at `point` (S-0105 claim 25, F6; S-0102 F2:
+    /// the drawing rectangle is the copy rectangle).
+    fn part_item(
+        part: (u32, [i32; 2]),
+        point: (i32, i32),
+        bias: i32,
+        paint: Paint,
+        group: Group,
+        object: u32,
+    ) -> Item {
+        Item {
+            image: part.0,
+            x: point.0 + part.1[0],
+            y: point.1 + part.1[1],
             test: DepthTest::Reader,
             depth: ItemDepth::Profile {
                 profile: Profile::Upright,
@@ -1605,32 +1708,53 @@ impl Builder<'_> {
             // provisional (Q-0014: the lighting table's layout; shadows also Q-0015)
             provisional: true,
             object: Some(object),
-        })
+        }
     }
 
-    /// A vehicle's or aircraft's voxel body, turret, barrel and shadow in its
-    /// initial pose (S-0105 claims 3 to 11, 16, 29 to 31; S-0102 claims 13,
-    /// 18).
-    #[allow(clippy::too_many_arguments)]
+    /// A voxel part image as a scene item at `point`.
+    fn voxel_item(
+        &mut self,
+        img: &voxel::PartImage,
+        point: (i32, i32),
+        bias: i32,
+        paint: Paint,
+        group: Group,
+        object: u32,
+    ) -> Option<Item> {
+        let part = self.add_part(img)?;
+        Some(Self::part_item(part, point, bias, paint, group, object))
+    }
+
+    /// A vehicle part image for a pose, drawn once per pose and kept.
+    fn cached_part(
+        &mut self,
+        key: VoxelKey,
+        draw: impl FnOnce(&mut Self) -> Option<voxel::PartImage>,
+    ) -> Option<(u32, [i32; 2])> {
+        if let Some(p) = self.p.voxels.get(&key) {
+            return *p;
+        }
+        let part = draw(self).and_then(|img| self.add_part(&img));
+        self.p.voxels.insert(key, part);
+        part
+    }
+
+    /// A vehicle's or aircraft's voxel body, turret, barrel and shadow
+    /// (S-0105 claims 3 to 11, 16, 29 to 31; S-0102 claims 13, 18).
     fn vehicle_voxels(
         &mut self,
-        kind: Kind,
-        idx: usize,
+        m: &Mobile,
         art: &glasnost_convert::art::TypeArt,
-        p: &glasnost_map::objects::Placed,
         point: (i32, i32),
         u: i32,
         row: usize,
         group: Group,
-        object: u32,
     ) -> Vec<Item> {
         let q = VoxelQuirks::default();
-        let vpl = self.vpl();
-        let Some(body) = art.voxels.get("body").and_then(|f| self.voxel_model(f)) else {
+        let (kind, idx) = (m.kind, m.idx);
+        let Some(body_file) = art.voxels.get("body").cloned() else {
             return Vec::new();
         };
-        // Glossary claim G1: a pre-placed vehicle faces v × 256 facing units.
-        let facing = ((p.facing & 0xFF) * 256) as u16;
         let art_int = |b: &Self, key: &[u8], d: i32| {
             b.art_value(kind, idx, key)
                 .and_then(value::integer)
@@ -1638,67 +1762,228 @@ impl Builder<'_> {
         };
         // spec: S-0105 Import mapping (TurretOffset, Art [image], default 0)
         let offset = art_int(self, b"TurretOffset", 0);
-        // spec: S-0105 claim 6 (placed level, then turned toward the fire angle; no tick has run)
-        let fire_angle = rule_int(
-            self.import,
-            kind,
-            idx,
-            b"FireAngle",
-            voxel::DEFAULT_FIRE_ANGLE,
-        );
-        let elevation = voxel::barrel_elevation_after(fire_angle, 0);
-        // provisional (Q-0016): the turret's starting facing is taken as the body's.
-        let pose = voxel::vehicle_parts(facing, facing, offset, elevation, &q);
         let name = self.import.outcome.registries[&kind][idx].name.clone();
         // spec: S-0105 Import mapping (UseBuffer is read from the art section of the type's own name)
         let depth_buffered = self
+            .p
             .art
             .value(&name, b"UseBuffer")
             .and_then(value::boolean)
             .unwrap_or(false);
+        let (b32, t32) = (voxel::facing32(m.body), voxel::facing32(m.turret));
+        let (body_raw, turret_raw, elevation) = (m.body, m.turret, m.elevation);
+        let pose = move || voxel::vehicle_parts(body_raw, turret_raw, offset, elevation, &q);
+        let object = m.object;
         let mut items = Vec::new();
         // spec: S-0105 claims 29 to 31 (the main body's shadow section in frame 0; skipped with the no-shadow option)
         if !rule_bool(self.import, kind, idx, b"NoShadow", false) {
             let section = art_int(self, b"ShadowIndex", 0).max(0) as usize;
             let aircraft_like = rule_bool(self.import, kind, idx, b"ConsideredAircraft", false);
-            if let Some(img) = voxel::draw_shadow(&body, section, &pose.shadow, 0, aircraft_like, &q)
+            let file = body_file.clone();
+            let key = (kind, idx, PART_SHADOW, b32, 0, 0);
+            if let Some(part) = self.cached_part(key, |b| {
+                let body = b.voxel_model(&file)?;
+                voxel::draw_shadow(&body, section, &pose().shadow, 0, aircraft_like, &q)
+            }) {
                 // spec: S-0102 claim 18 (the voxel shadow: bias U, upright, a reader, in the object's own drawing)
-                && let Some(item) = self.voxel_item(&img, point, u, Paint::Shadow, Group::Shadows, object)
-            {
-                items.push(item);
+                items.push(Self::part_item(
+                    part,
+                    point,
+                    u,
+                    Paint::Shadow,
+                    Group::Shadows,
+                    object,
+                ));
                 self.note(notes::VOXEL_SHADOW_POINT);
                 self.note(notes::SHADOW);
             }
         }
-        // spec: S-0105 claim 16 (walk counter 0: body frame 0)
-        if let Some(img) = voxel::draw_model(&body, 0, &pose.body, vpl.as_ref(), depth_buffered, &q)
+        // spec: S-0105 claim 16 (walk counter 0: body frame 0; the simulation keeps no walk counter yet)
+        let key = (kind, idx, PART_BODY, b32, 0, 0);
+        if let Some(part) = self.cached_part(key, |b| {
+            let body = b.voxel_model(&body_file)?;
+            let vpl = b.vpl();
+            voxel::draw_model(&body, 0, &pose().body, vpl.as_ref(), depth_buffered, &q)
+        }) {
             // spec: S-0102 claim 13 (a voxel vehicle: bias U, upright, a reader)
-            && let Some(item) = self.voxel_item(&img, point, u, Paint::Row(row), group, object)
-        {
-            items.push(item);
+            items.push(Self::part_item(
+                part,
+                point,
+                u,
+                Paint::Row(row),
+                group,
+                object,
+            ));
         }
         // spec: S-0105 claims 4, 8 (a turret part only with the turret flag)
         if rule_bool(self.import, kind, idx, b"Turret", false) {
-            let turret = art.voxels.get("turret").and_then(|f| self.voxel_model(f));
-            let barrel = art.voxels.get("barrel").and_then(|f| self.voxel_model(f));
-            let mut parts = vec![(turret, pose.turret), (barrel, pose.barrel)];
+            let mut parts = vec![(PART_TURRET, "turret"), (PART_BARREL, "barrel")];
             // spec: S-0105 claim 11 (turret first when its 4-step facing is 1 or 2)
-            if !pose.turret_first {
+            if !voxel::turret_drawn_first(m.turret) {
                 parts.reverse();
             }
-            for (model, draw) in parts {
+            for (part_id, part_name) in parts {
+                let Some(file) = art.voxels.get(part_name).cloned() else {
+                    continue;
+                };
+                let elev = if part_id == PART_BARREL { elevation } else { 0 };
+                let key = (kind, idx, part_id, b32, t32, elev);
                 // spec: S-0105 claim 16 (turret frame 0 before any attack; barrels in frame 0)
-                if let Some(m) = model
-                    && let Some(img) =
-                        voxel::draw_model(&m, 0, &draw, vpl.as_ref(), depth_buffered, &q)
-                    && let Some(item) =
-                        self.voxel_item(&img, point, u, Paint::Row(row), group, object)
-                {
-                    items.push(item);
+                if let Some(part) = self.cached_part(key, |b| {
+                    let model = b.voxel_model(&file)?;
+                    let vpl = b.vpl();
+                    let p = pose();
+                    let draw = if part_id == PART_BARREL {
+                        p.barrel
+                    } else {
+                        p.turret
+                    };
+                    voxel::draw_model(&model, 0, &draw, vpl.as_ref(), depth_buffered, &q)
+                }) {
+                    items.push(Self::part_item(
+                        part,
+                        point,
+                        u,
+                        Paint::Row(row),
+                        group,
+                        object,
+                    ));
                 }
             }
         }
         items
+    }
+}
+
+/// A type's fire angle (S-0105 claim 6, Import mapping: `FireAngle`,
+/// default 8).
+pub fn fire_angle(inputs: &Inputs, kind: Kind, idx: usize) -> i32 {
+    rule_int(
+        inputs.import,
+        kind,
+        idx,
+        b"FireAngle",
+        voxel::DEFAULT_FIRE_ANGLE,
+    )
+}
+
+/// Voxel parts, for [`VoxelKey`].
+const PART_BODY: u8 = 0;
+const PART_TURRET: u8 = 1;
+const PART_BARREL: u8 = 2;
+const PART_SHADOW: u8 = 3;
+
+/// The sequence entry and stage an infantry unit is drawn with (S-0107
+/// claims 1 to 4).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct InfantryFrame {
+    /// Start image frame *S*.
+    pub start: i32,
+    /// Frame count *C*.
+    pub count: i32,
+    /// Facing multiplier *M*.
+    pub multiplier: i32,
+    /// Stage *k*.
+    pub stage: i32,
+}
+
+/// The displayed body image frame of an infantry unit facing `facing`
+/// (S-0107 claim 2, F1, F2).
+pub fn infantry_frame(f: &InfantryFrame, facing: u16) -> i32 {
+    // spec: S-0107 F2 (g = (7 − ⌊(φ + 5120) / 8192⌋) mod 8)
+    let g = (7 - (i32::from(facing) + 5120) / 8192).rem_euclid(8);
+    // spec: S-0107 F1 (frame = S + (k mod max(C, 1)) + [M > 0]·M·g)
+    f.start
+        + f.stage.max(0).rem_euclid(f.count.max(1))
+        + if f.multiplier > 0 {
+            f.multiplier * g
+        } else {
+            0
+        }
+}
+
+/// A mobile object to draw: its type, owner, position and pose.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Mobile {
+    /// Kind: vehicles, infantry or aircraft.
+    pub kind: Kind,
+    /// Registration index in the import.
+    pub idx: usize,
+    /// Owner's house name (for the house colour, S-0103 claim 10).
+    pub owner: Vec<u8>,
+    /// Position in leptons (x, y, z; S-0204 claim 1).
+    pub pos: (i32, i32, i32),
+    /// Body facing (S-0206).
+    pub body: u16,
+    /// Turret facing (S-0206).
+    pub turret: u16,
+    /// Raw barrel elevation (S-0105 claim 6).
+    pub elevation: u16,
+    /// For infantry: the entry and stage to show.
+    pub infantry: Option<InfantryFrame>,
+    /// The object code its items carry ([`Item::object`]).
+    pub object: u32,
+}
+
+/// The inputs a scene is drawn from.
+#[derive(Clone, Copy)]
+pub struct Inputs<'a> {
+    /// The decoded map.
+    pub map: &'a Map,
+    /// The rules import.
+    pub import: &'a Import,
+    /// The theater's catalogue.
+    pub catalogue: &'a Catalogue,
+    /// The palettes in force.
+    pub palettes: &'a PaletteState,
+    /// Files read for the scene.
+    pub assets: &'a Assets,
+    /// Viewer options.
+    pub options: &'a Options,
+}
+
+impl Painter {
+    fn new(art: Document) -> Self {
+        Self {
+            art,
+            lights: Lights {
+                side: 0,
+                cells: Vec::new(),
+            },
+            rows: Rows::default(),
+            images: BTreeMap::new(),
+            voxels: BTreeMap::new(),
+            models: BTreeMap::new(),
+            vpl: None,
+        }
+    }
+
+    /// Draws `mobiles` into `scene` (adding the images and palette rows they
+    /// need, reusing those added before) and returns their ground-layer
+    /// entries in the same order, with the notes they met.
+    pub fn mobiles(
+        &mut self,
+        inputs: &Inputs,
+        scene: &mut Scene,
+        mobiles: &[Mobile],
+    ) -> (Vec<GroundEntry>, BTreeSet<String>) {
+        let mut b = Builder {
+            map: inputs.map,
+            import: inputs.import,
+            catalogue: inputs.catalogue,
+            palettes: inputs.palettes,
+            assets: inputs.assets,
+            options: inputs.options,
+            p: std::mem::replace(self, Painter::new(Document::empty(Default::default()))),
+            built: Built {
+                scene: std::mem::take(scene),
+                ..Default::default()
+            },
+        };
+        let entries = mobiles.iter().map(|m| b.mobile(m)).collect();
+        *self = b.p;
+        *scene = b.built.scene;
+        (entries, b.built.notes)
     }
 }
 

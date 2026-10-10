@@ -104,7 +104,7 @@ fn rec(x: u16, y: u16, level: u8) -> Record {
     }
 }
 
-fn context() -> (glasnost_convert::Import, Catalogue, Assets) {
+pub(super) fn context() -> (glasnost_convert::Import, Catalogue, Assets) {
     let mut import = convert(
         &Inputs {
             base: input("rules.ini", RULES),
@@ -161,7 +161,8 @@ fn build_text(text: &[u8], options: &Options) -> (Built, glasnost_map::Map) {
     )
 }
 
-fn scene(options: &Options) -> (Built, glasnost_map::Map) {
+/// The test map's text.
+pub(super) fn scene_map_text() -> Vec<u8> {
     let m = MapText {
         ini: "[Basic]\nNewINIFormat=4\n[Map]\nSize=0,0,10,10\nLocalSize=0,0,10,10\n\
               [Structures]\n0=Neutral,HUTX,256,6,10,0\n1=Americans,HUTX,256,8,12,0\n\
@@ -172,7 +173,11 @@ fn scene(options: &Options) -> (Built, glasnost_map::Map) {
         overlay_data: Some(overlay_stream(0, &[(5, 9, 3)])),
         ..Default::default()
     };
-    build_text(m.text().as_bytes(), options)
+    m.text().into_bytes()
+}
+
+fn scene(options: &Options) -> (Built, glasnost_map::Map) {
+    build_text(&scene_map_text(), options)
 }
 
 fn items_of(b: &Built, kind: &str) -> Vec<Item> {
