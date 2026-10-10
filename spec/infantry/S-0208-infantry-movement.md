@@ -2,7 +2,7 @@
 id: S-0208
 title: Infantry movement (standing positions, walking step and speed, crawling, scatter destinations)
 topic: infantry
-revision: 12
+revision: 13
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -23,8 +23,10 @@ which scatter requests damage sends it.
 ### Scope and cited specs
 
 Which sequence an infantry unit shows while it walks, and when fear makes it lie down, get up or
-panic, belong to S-0107 (claims 7, 10, 15 and 16). How many infantry a cell holds and what a blocked
-walker does belong to S-0209. This spec owns the infantry scatter from damage (claims 11 and 15).
+panic, belong to S-0107 (claims 7, 10, 15 and 16). How many infantry a cell holds, what a blocked
+walker does and every entry outcome of a cell belong to S-0209, which owns occupancy outcomes (a
+decision under the delegated sign-off, 2026-10-10): where this spec names such an outcome, it
+points to S-0209 and S-0209 decides. This spec owns the infantry scatter from damage (claims 11 and 15).
 
 Every spec cited here is approved, and the claim, formula, table and scenario numbers cited are
 those of the approved revisions in the spec index: S-0003 (INI value forms), S-0006 (rules
@@ -34,8 +36,7 @@ sequences, revision 4, which drops its damage-scatter passages and points here),
 speed and tick rate), S-0202 (the random streams), S-0204 (coordinates, distance and facing),
 S-0205 (number domains), S-0207 (ground vehicle movement), S-0209 (cell occupancy and crowding),
 S-0210 (crushing), S-0211 (land types and passability), S-0212 (pathfinding), S-0215 (behaviours)
-and S-0311 (veterancy). Where a later revision of one of them, being prepared in the same batch,
-is cited for something its approved revision lacks, the text names that revision.
+and S-0311 (veterancy).
 
 ## Terms
 
@@ -52,11 +53,12 @@ used by this spec:
   it tests only whether the owner is human-controlled (claims 11 and 15). Where a rule below names a computer-controlled owner, it states what
   the original does. Our engine departs from it for AI houses only: an AI house counts as
   human-controlled (glossary *AI house*, the project lead's decision), so for units of an AI house
-  our engine follows the rule for human-controlled owners. That decision does not cover the neutral
-  and special houses, which are neither played by a person nor AI houses. Until the project lead
-  decides (Questions for the project lead), our engine treats them as the original does, as
-  computer-controlled owners. The departure is stated in claim 11 and recalled in claim 15, the
-  only claims of this spec with an owner condition.
+  our engine follows the rule for human-controlled owners. That decision covers player houses only.
+  The neutral and special houses, which are neither played by a person nor AI houses, keep the
+  original's rules for owners that are not human-controlled (the project lead's decision of
+  2026-10-10), so our engine treats them as computer-controlled owners, as the original does. The
+  departure for AI houses is stated in claim 11 and recalled in claim 15, the only claims of this
+  spec with an owner condition.
 - **Position within a cell.** A point (*u*, *v*) with *u* = *x* mod 256 and *v* = *y* mod 256, where
   (*x*, *y*) is the unit's world position in leptons. (128, 128) is the cell centre.
 - **Standing position.** One of five fixed positions within a cell where infantry stand (Constants,
@@ -147,8 +149,9 @@ used by this spec:
   claim 11 gives (the glossary's *scatter request* defines them in general terms). Claim 15 here says which
   requests damage sends, S-0107 claim 15 the request of the flee rule, S-0107 claim 14 the
   requests of the idle scatters (of a frightened fraidycat whose owner is not human-controlled, and
-  of the cow), S-0215 claim 28 the scatter off a building, and S-0209 and S-0210 the requests of
-  crowding and crushing, each with its options. The flee rule, the idle scatters and the scatter
+  of the cow), S-0215 claim 28 the scatter off a building (sent to an actor in *capture*,
+  *sabotage* or *eaten* that falls back to rest while its position is on a cell that holds a
+  building), and S-0209 and S-0210 the requests of crowding and crushing, each with its options. The flee rule, the idle scatters and the scatter
   off a building send forced requests without a threat point that are not move-anywhere.
 - **Scatter centre cell.** The cell around which a scattering unit looks for a destination (claims 12
   and 13): the cell of its locomotor destination, when it has one, and otherwise the unit's own
@@ -170,9 +173,9 @@ used by this spec:
   needs to reach *C*, so the check roughly asks whether a raised cell in front hides *C* on the
   screen. The *visibility test* of the nearby-cell search (S-0212 claim 25) is this check, applied
   to a candidate cell at its own height level. This entry owns the check's arithmetic; S-0212
-  claim 25 in its revision 15, prepared in the same batch, cites it for its visibility test. Reading
-  a cell outside the map as level 0 and not a high-bridge cell agrees with how S-0009 claim 44 (its
-  revision 10, prepared in the same batch) has our engine read every cell outside the map.
+  claim 25 cites it for its visibility test. Reading
+  a cell outside the map as level 0 and not a high-bridge cell agrees with how S-0009 claim 44 has
+  our engine read every cell outside the map.
 - **Approximate square root √̃, table sine sinT, table cosine cosT.** The original's table square
   root (S-0204 claim 5 and Formulas F1, the same function as S-0105's table square root) and table
   trigonometry (S-0105 Formulas F1). See Formulas F3 and F8. S-0209 and S-0210 use √̃ too.
@@ -418,16 +421,16 @@ used by this spec:
     request that is not effectively forced (for example request B of claim 15) unless one of those
     three holds, where the original's computer-owned fraidycat accepts it. The original's rule is
     recorded for AI designers, who may reproduce it through ordinary orders. Units of the neutral and
-    special houses are not covered by the decision: our engine gives them the original's rule for a
-    computer-controlled owner, until the project lead decides otherwise (Terms; Questions for the
-    project lead).
+    special houses are not covered by that decision: by the project lead's decision of 2026-10-10,
+    our engine gives them the original's rule for a computer-controlled owner (Terms).
 
     The cases combine yes/no answers; their order carries no meaning. So a request that is not
     effectively forced moves only fraidycats. The threat-point request that damage with a known
     attacker sends (claim 15, request B) is of that kind, so only fraidycats act on it. The general
-    damage request (claim 15, request A), the request of the flee rule (S-0107 claim 15) and the
-    requests of the idle scatters (S-0107 claim 14) are forced and have no threat point, so they can
-    move any infantry unit whose locomotor is not moving.
+    damage request (claim 15, request A), the request of the flee rule (S-0107 claim 15), the
+    requests of the idle scatters (S-0107 claim 14) and the scatter off a building (S-0215 claim
+    28) are forced and have no threat point, so they can move any infantry unit whose locomotor is
+    not moving.
     - Backing: `measurable` (scenario W7: parts a, c, e, g and m for acceptance and refusal; part a
       for a forced request refused while the locomotor is moving; parts b and r for the third case
       accepting a fraidycat with a computer-controlled owner, part r with a forced request while
@@ -484,7 +487,7 @@ used by this spec:
         negative height level whose diagonal towards the bottom of the screen leaves the map
         within 6 cells. In the original every cell outside the map reads the same values, which
         other rules can change during play, and not every rule that changes them is known (S-0009
-        claim 44, revision 10), so a measured value could not tell this rule apart from such an
+        claim 44), so a measured value could not tell this rule apart from such an
         earlier change. Our engine reads the blank cell of that claim.
       - the tunnel exit as scatter centre cell (Terms *locomotor destination*): whether a unit in
         a tunnel can be sent a scatter request at all belongs to S-0212 and the movement specs,
@@ -598,7 +601,7 @@ used by this spec:
     not computer-controlled (the departure of claim 11), so for a unit of an AI house the second case
     needs the player-scatter rule on or the scatter veterancy ability, as for a unit of a
     human-controlled house. Units of the neutral and special houses keep the original's owner
-    condition (Terms). The first case is the same in our engine. S-0215 claim 19 states the same
+    condition (Terms, the project lead's decision of 2026-10-10). The first case is the same in our engine. S-0215 claim 19 states the same
     rule for all mobile actors and points here for infantry.
 
     Request A is forced, so by claim 11 it moves an infantry unit that is not a fraidycat when its
@@ -783,9 +786,11 @@ replaces request A's destination (scenarios W7, part j, and W9, part c).
   - The nearby-cell search of S-0212 (claim 25) asks for a cell whose whole record is empty, so it
     can give that cell, for example as the destination of a scatter without a threat point (claim
     13). Scenario W2(b) tests this; medium confidence (claim 2).
-  - For a vehicle, S-0209 claim 5 and its consequences for infantry in the cell decide. While the
-    remaining unit does not count as moving, it keeps an allied vehicle out through its own row
-    (row VP20), whatever the record shows. While it counts as moving, its own row gives a value only
+  - For a vehicle, S-0209 claim 5 and its consequences for infantry in the cell decide, since S-0209
+    owns occupancy outcomes (Scope). While the remaining unit does not count as moving, it keeps an
+    allied vehicle out through its own row (row VP20), whatever the record shows, so the switch
+    changes nothing for a vehicle then, and no vehicle drives into the cell of a remaining unit that
+    stands still. While it counts as moving, its own row gives a value only
     in the cases S-0209 names (the close case of S-0212 claim 27, and a unit at a chain point, row
     VP22); otherwise the record decides, and a record that shows no position taken gives *clear*
     (row VR4) where a record with the centre taken would give *moving blocker* (row VR6, when the
@@ -890,7 +895,7 @@ All run under the *measurement setup*, on purpose-made flat maps of one theater 
 unless stated, with one human player and one computer player whose start position is far away,
 besides the neutral and special houses that every skirmish has (glossary *house*). The expected values for
 computer-owned units are the original's, and in our engine they hold for units of the neutral and
-special houses too (Terms). Our engine's departure for AI houses (claims 11 and 15) is not
+special houses too (Terms, the project lead's decision of 2026-10-10). Our engine's departure for AI houses (claims 11 and 15) is not
 measurable against the original, which has no such houses.
 Observations are taken with a *recorder* that reads unit world positions per tick (or from
 screenshots when stated). Where a scenario counts ticks "from the first step to arrival", the count
@@ -943,7 +948,10 @@ cases).**
     player stand in the three cells west of *T* on its row, each at sub-cell 2 as in W1. Order them
     into *T* one after another, each after the previous one has stopped.
   - (b) The record after the unit at the top position leaves (Edge cases,
-    `quirks.top_position_counts_as_centre`). A separate game per run, on open flat ground. A
+    `quirks.top_position_counts_as_centre`). The record is read through the nearby-cell search, not
+    through a vehicle: a remaining unit that stands still keeps an allied vehicle out through its own
+    row whatever the record shows (S-0209 claim 5, row VP20), so a vehicle cannot show the record. A
+    separate game per run, on open flat ground. A
     computer-owned fraidycat civilian *F* of an unarmed type stands in *guard* at the right
     position of a cell *X*, with the named test file of W7 part (c). The cell *T* map east of *X*
     holds two idle infantry of *F*'s house, of a type that is not a fraidycat, pre-placed at
@@ -1084,7 +1092,8 @@ cases).**
 - *Observable:* ticks from the first step to arrival.
 - *Runs:* 1.
 - *Expected:* equal.
-- *Falsified if:* the unit on the slower land type takes longer.
+- *Falsified if:* the two counts differ (in particular, the unit on the slower land type takes
+  longer).
 
 **Scenario W7: scatter acceptance, destinations and damage requests (claims 11 to 13, 15).**
 - *Setup:* Unless a part says otherwise, units are at the lowest veterancy rank, and the
@@ -1603,18 +1612,3 @@ cases).**
   specs (a pointer only). It appears to happen on the tick on which the walker chooses its walking target
   there, before it arrives, but this spec makes no claim about it and it was not confirmed. W4(c)
   needs only that the crate is taken during the walk.
-
-## Questions for the project lead
-
-- **Units of the neutral and special houses.** The decision recorded in the glossary entry *AI
-  house* makes AI houses follow the rules for human-controlled owners. It does not say how our
-  engine treats the two non-player houses that every skirmish creates (glossary *house*). In the
-  original they are not human-controlled, so their units take the computer-controlled branch of the
-  owner conditions of claims 11 and 15. With the player-scatter rule off (its absent-key default),
-  for example, a fraidycat civilian of the neutral house in a behaviour with the scatter property
-  acts on request B, and an idle unit of either house that may not retaliate is sent request A by
-  its second case, whereas units of a human-controlled house or an AI house do neither. Should our
-  engine keep the original's rule for these two houses, or treat their units like those of
-  human-controlled houses? Until this is decided, this spec keeps the original's rule for them
-  (Terms). S-0107's fear rules for an owner that is not human-controlled (its claims 14 and 15)
-  raise the same question.
