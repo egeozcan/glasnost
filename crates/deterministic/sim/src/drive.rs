@@ -12,9 +12,9 @@ use serde::{Deserialize, Serialize};
 use crate::occupancy::{self, Outcome};
 use crate::path::{self, Mode, Search};
 use crate::regions::STEPS;
-use crate::rules::{SimRules, UnitRules};
+use crate::rules::{Behaviour, Kind, SimRules, UnitRules};
 use crate::tracks::{self, Point};
-use crate::world::{Layer, ObjectId, Pos, World};
+use crate::world::{Layer, ObjectId, Pos, Target, World};
 
 /// The track a vehicle is on.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -326,22 +326,64 @@ fn set_pos(w: &mut World, id: ObjectId, x: i32, y: i32, z: Option<i32>) {
     }
 }
 
-/// Begins a track from the vehicle's current cell (S-0207 claims 6 and 7).
-/// Returns `false` when the step cannot begin this tick.
+/// The cell one step from `c` in step direction `d`.
+fn neighbour(c: CellXY, d: u8) -> CellXY {
+    let (dx, dy) = STEPS[usize::from(d % 8)]; // spec: S-0212 Terms (step directions 0 to 7)
+    CellXY::new(c.x + dx, c.y + dy)
+}
+
+/// The facing of 8-direction `d` (S-0207 claim 6: 8192 × d).
+fn facing_of(d: u8) -> u16 {
+    // spec: S-0207 claim 6 (a track begins only when the body facing equals 8192 × d exactly)
+    u16::from(d % 8) * 8192
+}
+
+/// The entry outcome a step check uses, with the substitutions of S-0209
+/// claim 5f (S-0207 Terms, *step check*).
+fn checked_outcome(w: &World, id: ObjectId, u: &UnitRules, from: CellXY, to: CellXY) -> Outcome {
+    let r = w.rules();
+    let reference = occupancy::reference_level(w, id);
+    let mut outcome = path::step_outcome(w, id, from, to, reference);
+    if u.train && outcome != Outcome::Blocked {
+        // spec: S-0209 claim 5f (a train: every outcome other than blocked counts as clear)
+        outcome = Outcome::Clear;
+    }
+    if u.crusher
+        && r.quirks.crusher_overlay_index0_clear
+        && matches!(outcome, Outcome::FriendlyObstacle | Outcome::EnemyObstacle)
+        && w.cells.cell(to).is_some_and(|c| c.overlay == 0)
+    {
+        // spec: S-0209 claim 5f (a crusher-flag vehicle: obstacles count as clear on overlay index 0)
+        outcome = Outcome::Clear;
+    }
+    outcome
+}
+
+/// A closed gate whose owner is allied with the vehicle's house in `c`
+/// (S-0207 claim 15). Gates read as open in M3: a gate's door and its
+/// *open* behaviour are S-0215 claim 35, which the behaviour processing
+/// owns, so no gate is closed here yet.
+fn closed_friendly_gate(_w: &World, _id: ObjectId, _c: CellXY) -> Option<ObjectId> {
+    None
+}
+
+/// Begins a track from the vehicle's current cell (S-0207 claims 6, 7 and
+/// 15). Returns `false` when the step cannot begin this tick.
 fn begin_track(w: &mut World, id: ObjectId, u: &UnitRules) -> bool {
     let t = w.tick;
-    let r = w.rules_arc();
     let Some(o) = w.obj(id).cloned() else {
         return false;
     };
     let Some(&d) = o.path.steps.first() else {
         return false;
     };
-    let here = o.pos.cell();
-    let (dx, dy) = STEPS[usize::from(d % 8)]; // spec: S-0212 Terms (step directions 0 to 7)
-    let first = CellXY::new(here.x + dx, here.y + dy);
-    // spec: S-0207 claim 6 (a track begins only when the body facing equals 8192 × d exactly)
-    let want = u16::from(d % 8) * 8192;
+    let first = neighbour(o.pos.cell(), d);
+    if closed_friendly_gate(w, id, first).is_some() {
+        // spec: S-0207 claim 15 (an allied closed gate: told to open; the vehicle waits without a track and without turning)
+        wait(w, id);
+        return false;
+    }
+    let want = facing_of(d);
     if o.body.value(t) != want {
         // A turn in place towards another facing (the path changed) is replaced.
         if !o.drive.as_ref().is_some_and(|x| x.turning_in_place) || o.body.target != want {
@@ -366,9 +408,7 @@ fn begin_track(w: &mut World, id: ObjectId, u: &UnitRules) -> bool {
         // spec: S-0206 claim 12 (a turn completing at once begins the track in tick t₀ + 1; otherwise in t₀ + Θ)
         let begin = if dur == 0 { t0 + 1 } else { t0 + dur };
         if t < begin {
-            if let Some(dd) = w.obj_mut(id).and_then(|o| o.drive.as_mut()) {
-                dd.budget = 0;
-            }
+            wait(w, id);
             return false;
         }
         if let Some(dd) = w.obj_mut(id).and_then(|o| o.drive.as_mut()) {
@@ -376,59 +416,149 @@ fn begin_track(w: &mut World, id: ObjectId, u: &UnitRules) -> bool {
             dd.turn = None;
         }
     }
-    // The entry check at the start of a step (S-0209 claim 5f).
-    let reference = occupancy::reference_level(w, id);
-    let mut outcome = path::step_outcome(w, id, here, first, reference);
-    if u.train && outcome != Outcome::Blocked {
-        // spec: S-0209 claim 5f (a train: every outcome other than blocked counts as clear)
-        outcome = Outcome::Clear;
-    }
-    if u.crusher
-        && r.quirks.crusher_overlay_index0_clear
-        && matches!(outcome, Outcome::FriendlyObstacle | Outcome::EnemyObstacle)
-        && w.cells.cell(first).is_some_and(|c| c.overlay == 0)
-    {
-        // spec: S-0209 claim 5f (a crusher-flag vehicle: obstacles count as clear on overlay index 0)
-        outcome = Outcome::Clear;
-    }
-    match outcome {
+    step_check(w, id, u, false)
+}
+
+/// The step check (S-0207 claim 15, tables T4 and T5): a first check, or
+/// the repeated check that follows a search made at once. Begins the track
+/// when the check lets it; returns whether it did.
+fn step_check(w: &mut World, id: ObjectId, u: &UnitRules, repeated: bool) -> bool {
+    let t = w.tick;
+    let r = w.rules_arc();
+    let Some(o) = w.obj(id).cloned() else {
+        return false;
+    };
+    let Some(&d) = o.path.steps.first() else {
+        return false;
+    };
+    let here = o.pos.cell();
+    let first = neighbour(here, d);
+    match checked_outcome(w, id, u, here, first) {
         Outcome::Clear => {}
-        Outcome::Blocked => {
-            // spec: S-0212 claim 22 (outcome blocked clears the stored path; a fresh search follows after the delay)
-            if let Some(ob) = w.obj_mut(id) {
-                ob.path.steps.clear();
-                if let Some(dd) = ob.drive.as_mut() {
-                    dd.budget = 0;
+        Outcome::ClosedFriendlyGate => {
+            // spec: S-0207 claim 15 table T4 (closed friendly gate: it tells the gate to open and waits)
+            wait(w, id);
+            return false;
+        }
+        Outcome::MovingBlocker => {
+            // spec: S-0207 claim 15 table T4 (moving blocker: S-0212 claim 22)
+            blocked_step(w, id);
+            return false;
+        }
+        outcome @ (Outcome::FriendlyObstacle
+        | Outcome::EnemyObstacle
+        | Outcome::StationaryFriendly) => {
+            if !repeated {
+                // spec: S-0207 claim 15 table T4 (first check: discard the path, search at once whatever the retry timer, then the repeated check)
+                return search_and_recheck(w, id, u);
+            }
+            wait(w, id);
+            if outcome == Outcome::StationaryFriendly {
+                // spec: S-0207 claim 15 table T4 (repeated check, stationary friendly: give up, or a scatter request to the cell)
+                // spec: S-0207 Edge cases (`quirks.drive_giveup_ignores_contact`: the step check's give-up test does not ask about contact)
+                let contact = !r.quirks.drive_giveup_ignores_contact;
+                if give_up_test(w, id, contact) {
+                    give_up(w, id);
+                } else {
+                    request_scatter(w, id, first);
                 }
+            } else {
+                // spec: S-0207 claim 15 table T4 (repeated check, obstacle: wait, and attack what blocks)
+                attack_obstacle(w, id, first);
             }
             return false;
         }
-        _ => {
-            // spec: S-0212 claim 22 (moving blocker: blockage timer, re-path modes 1 and 2); Q-0019 for the others
-            blocked_step(w, id);
+        Outcome::CloakedBlocker => {
+            // spec: S-0207 claim 15 table T4 (cloaked blocker; nothing is cloaked in M3, so there is nothing to reveal)
+            if repeated {
+                give_up(w, id);
+                return false;
+            }
+            discard_path(w, id);
+            wait(w, id);
+            // spec: S-0207 claim 15 table T4 (the fresh search on the same tick only when the path retry timer has run out)
+            if t >= o.path.retry_at {
+                return search_and_recheck(w, id, u);
+            }
+            return false;
+        }
+        Outcome::Blocked => {
+            if repeated {
+                // spec: S-0207 claim 15 table T4 (repeated check, blocked: it gives up the move)
+                give_up(w, id);
+                return false;
+            }
+            // spec: S-0207 claim 15 table T4 and S-0212 claim 22 (blocked clears the stored path; a fresh search follows after the delay)
+            discard_path(w, id);
+            wait(w, id);
             return false;
         }
     }
     // spec: S-0207 claim 7 (the next step chooses the track; crush mode drives straight)
     let e = o.path.steps.get(1).copied();
-    let second = {
-        let g = e.unwrap_or(d);
-        let (sx, sy) = STEPS[usize::from(g % 8)]; // spec: S-0212 Terms (step directions 0 to 7)
-        CellXY::new(first.x + sx, first.y + sy)
-    };
+    let second = neighbour(first, e.unwrap_or(d));
     let crush = crush_mode(w, id, u, first, second);
     let mut use_e = if crush { None } else { e };
     let (_, two) = tracks::track(d, use_e);
     if two {
-        // spec: S-0207 claim 7 (the curve's second cell occupied or being entered: the straight track instead)
-        let rec = w.cells.occ(second, o.layer);
-        let busy = rec.is_some_and(|x| x.vehicle_present())
-            || w.cells
-                .list(second, o.layer)
-                .iter()
-                .any(|&x| x != id && w.obj(x).is_some_and(|ob| ob.kind.is_mobile()));
-        if busy {
-            use_e = None;
+        // spec: S-0207 claim 15 table T5 (the second cell of a curve, checked after the first gave clear)
+        match checked_outcome(w, id, u, first, second) {
+            Outcome::Clear => {}
+            Outcome::MovingBlocker => {
+                // spec: S-0207 claim 7 and table T5 (moving blocker: the straight or diagonal track into the first cell; path kept)
+                use_e = None;
+            }
+            Outcome::ClosedFriendlyGate => {
+                // spec: S-0207 table T5 (closed friendly gate: the gate is told to open; path discarded, stop at once with ρ = 0)
+                stop_at_once(w, id);
+                return false;
+            }
+            Outcome::FriendlyObstacle | Outcome::EnemyObstacle => {
+                // spec: S-0207 table T5 (obstacle: discard the path; a fresh search once the retry timer has run out)
+                discard_path(w, id);
+                wait(w, id);
+                if t >= o.path.retry_at {
+                    // Q-0035: no step check follows this search on the same tick (interim).
+                    fresh_search(w, id, u);
+                }
+                return false;
+            }
+            Outcome::StationaryFriendly => {
+                if !repeated {
+                    // spec: S-0207 table T5 (stationary friendly, first check: as in T4)
+                    return search_and_recheck(w, id, u);
+                }
+                // spec: S-0207 table T5 (repeated check: the give-up test of F7 without contact, or the request to the second cell; stop at once)
+                if give_up_test(w, id, false) {
+                    give_up(w, id);
+                } else {
+                    request_scatter(w, id, second);
+                }
+                stop_at_once(w, id);
+                return false;
+            }
+            Outcome::CloakedBlocker => {
+                // spec: S-0207 table T5 (cloaked blocker: as in T4)
+                if repeated {
+                    give_up(w, id);
+                    return false;
+                }
+                discard_path(w, id);
+                wait(w, id);
+                if t >= o.path.retry_at {
+                    return search_and_recheck(w, id, u);
+                }
+                return false;
+            }
+            Outcome::Blocked => {
+                if repeated {
+                    // spec: S-0207 table T5 (repeated check, blocked: it gives up the move)
+                    give_up(w, id);
+                    return false;
+                }
+                // spec: S-0207 table T5 (blocked: discard the path and search at once)
+                return search_and_recheck(w, id, u);
+            }
         }
     }
     let (_, two) = tracks::track(d, use_e);
@@ -453,7 +583,7 @@ fn begin_track(w: &mut World, id: ObjectId, u: &UnitRules) -> bool {
                 target_cell,
                 next: 0,
                 last: (ob.pos.x, ob.pos.y),
-                cells,
+                cells: cells.clone(),
                 crush,
             });
             dd.rho_t = rho_t;
@@ -462,11 +592,7 @@ fn begin_track(w: &mut World, id: ObjectId, u: &UnitRules) -> bool {
         ob.path.blocked_since = None;
     }
     // spec: S-0209 claim 1 (a step sets the flag of the cell it enters at once; a two-cell curve both cells)
-    for c in if two {
-        vec![first, second]
-    } else {
-        vec![first]
-    } {
+    for c in cells {
         claim(w, id, c);
     }
     // spec: S-0210 claim 7 (a crusher warns the infantry of the first cell each time it begins a track, crush mode or not)
@@ -492,6 +618,251 @@ fn begin_track(w: &mut World, id: ObjectId, u: &UnitRules) -> bool {
         }
     }
     true
+}
+
+/// A vehicle that waits gets no track on this tick and its budget is
+/// emptied (S-0207 claims 3 and 15).
+fn wait(w: &mut World, id: ObjectId) {
+    set_budget_zero(w, id);
+}
+
+/// Discards the stored path.
+fn discard_path(w: &mut World, id: ObjectId) {
+    if let Some(ob) = w.obj_mut(id) {
+        ob.path.steps.clear();
+    }
+}
+
+/// Discards the path and stops at once with ρ = 0 (S-0207 table T5).
+fn stop_at_once(w: &mut World, id: ObjectId) {
+    discard_path(w, id);
+    if let Some(d) = w.obj_mut(id).and_then(|o| o.drive.as_mut()) {
+        // spec: S-0207 table T5 (it discards its stored path and stops at once with ρ = 0)
+        d.rho = F64::ZERO;
+        d.budget = 0;
+    }
+}
+
+/// A first check's reaction to an obstacle or stationary friends (S-0207
+/// table T4): the stored path is discarded, a fresh search is made at once,
+/// and when it finds a path the repeated check follows on the same tick if
+/// the vehicle faces the new step.
+fn search_and_recheck(w: &mut World, id: ObjectId, u: &UnitRules) -> bool {
+    let t = w.tick;
+    discard_path(w, id);
+    wait(w, id);
+    if fresh_search(w, id, u) != Search::Found {
+        return false;
+    }
+    let Some(o) = w.obj(id) else { return false };
+    let Some(&d) = o.path.steps.first() else {
+        return false;
+    };
+    // spec: S-0207 claim 15 (the repeated check follows on that tick when the vehicle faces the step)
+    if o.body.value(t) != facing_of(d) || o.dest.is_none() {
+        return false;
+    }
+    step_check(w, id, u, true)
+}
+
+/// A fresh search (S-0212 claim 20) and, when it finds a path, the look at
+/// the first cell of the new path (S-0207 claim 15).
+fn fresh_search(w: &mut World, id: ObjectId, u: &UnitRules) -> Search {
+    let res = path::compute(w, id, Mode::Fresh);
+    if res != Search::Found {
+        path::failed(w, id, res, false);
+        return res;
+    }
+    first_cell_look(w, id, u);
+    res
+}
+
+/// The look at the first cell of a new path (S-0207 claim 15).
+fn first_cell_look(w: &mut World, id: ObjectId, u: &UnitRules) {
+    let Some(o) = w.obj(id).cloned() else { return };
+    let Some(&d) = o.path.steps.first() else {
+        return;
+    };
+    let here = o.pos.cell();
+    let cell = neighbour(here, d);
+    // spec: S-0207 claim 15 (first cell of a new path: an allied closed gate is told to open)
+    let _ = closed_friendly_gate(w, id, cell);
+    // spec: S-0207 claim 15 (stationary friendly, not a train, the object nearest the cell's centre allied)
+    if u.train || checked_outcome(w, id, u, here, cell) != Outcome::StationaryFriendly {
+        return;
+    }
+    let Some(near) = nearest_object(w, id, cell) else {
+        return;
+    };
+    let near_owner = w.obj(near).and_then(|x| x.owner);
+    if !w.allied(o.owner, near_owner) {
+        return;
+    }
+    // spec: S-0207 claim 15 and F7 (the look's give-up test adds contact with nothing)
+    if give_up_test(w, id, true) {
+        give_up(w, id);
+    } else {
+        request_scatter(w, id, cell);
+    }
+}
+
+/// The object nearest the centre of `c`, looked for in the deck layer when
+/// the vehicle's world height is more than 208 leptons above the surface
+/// height at that centre, otherwise in the ground layer (S-0207 claim 15).
+/// Ties go to the object listed first.
+fn nearest_object(w: &World, id: ObjectId, c: CellXY) -> Option<ObjectId> {
+    let o = w.obj(id)?;
+    let r = w.rules();
+    let cx = 256 * c.x + 128; // spec: S-0204 claim 3 (a cell centre: (256x + 128, 256y + 128))
+    let cy = 256 * c.y + 128; // spec: S-0204 claim 3 (a cell centre)
+    let h = w.surface_at(cx, cy);
+    // spec: S-0207 claim 15 (the deck layer when z > H + 208 in exact integer leptons)
+    let layer = if o.pos.z > h + 208 {
+        Layer::Deck
+    } else {
+        Layer::Ground
+    };
+    let mut best: Option<(u64, ObjectId)> = None;
+    for &x in w.cells.list(c, layer) {
+        if x == id {
+            continue;
+        }
+        let Some(ob) = w.obj(x) else { continue };
+        let dx = i64::from(ob.pos.x - cx);
+        let dy = i64::from(ob.pos.y - cy);
+        let dz = i64::from(ob.pos.z - h);
+        // spec: S-0204 claim 5 (the distance with the table square root)
+        let dist = root_floor(
+            (dx * dx + dy * dy + dz * dz) as u64,
+            r.quirks.table_root_distance,
+            r.mode,
+        );
+        if best.is_none_or(|(b, _)| dist < b) {
+            best = Some((dist, x));
+        }
+    }
+    best.map(|b| b.1)
+}
+
+/// The give-up test of S-0207 F7; `contact` adds the condition that the
+/// vehicle is in contact with nothing.
+fn give_up_test(w: &World, id: ObjectId, contact: bool) -> bool {
+    let Some(o) = w.obj(id) else { return false };
+    let r = w.rules();
+    let Some(dest) = path::heading_point(w, id) else {
+        return false;
+    };
+    let dx = i64::from(dest.x - o.pos.x);
+    let dy = i64::from(dest.y - o.pos.y);
+    let dz = i64::from(dest.z - o.pos.z);
+    // spec: S-0207 F7 (dₘ of F5 below the close-enough distance)
+    let dm = root_floor(
+        (dx * dx + dy * dy + dz * dz) as u64,
+        r.quirks.table_root_distance,
+        r.mode,
+    ) as i64;
+    let tunnel = w
+        .cells
+        .cell(o.pos.cell())
+        .is_some_and(|c| c.land == land::TUNNEL);
+    // spec: S-0207 F7 (dₘ < C, |zᵈ − zᵛ| < 208, the vehicle's own cell not a tunnel)
+    dm < i64::from(r.general.close_enough)
+        && dz.abs() < 208
+        && !tunnel
+        && (!contact || o.contact.is_none())
+}
+
+/// Giving up the move (S-0207 Terms): no track on this tick; with approach
+/// destinations it stops and falls back to rest (S-0215 claim 13),
+/// otherwise its destination is removed.
+fn give_up(w: &mut World, id: ObjectId) {
+    let approach = w.obj(id).is_some_and(|o| !o.queued_dests.is_empty());
+    if let Some(ob) = w.obj_mut(id) {
+        ob.path.steps.clear();
+        ob.dest = None;
+        if let Some(d) = ob.drive.as_mut() {
+            // spec: S-0207 claim 11 (a vehicle at a track target with no further step is at rest: ρ = 0)
+            d.rho = F64::ZERO;
+            d.budget = 0;
+        }
+    }
+    if approach {
+        // spec: S-0207 Terms (giving up with approach destinations: it stops and falls back to rest)
+        crate::process::fall_back(w, id, false);
+    }
+}
+
+/// The scatter request of a blocked vehicle (S-0207 claim 15): no threat
+/// point, forced and move-anywhere, to every object listed in the cell layer
+/// it drives on.
+fn request_scatter(w: &mut World, id: ObjectId, c: CellXY) {
+    let Some(o) = w.obj(id) else { return };
+    let deck = w.cells.idx(c).is_some_and(|i| w.cells.deck[i]);
+    let cell_level = w.cells.cell(c).map_or(0, |x| i32::from(x.level));
+    // spec: S-0207 claim 15 (the vehicle's height level trunc(z / 104), rounded toward zero)
+    let level = o.pos.z / 104;
+    // spec: S-0207 claim 15 (the deck layer of a high-bridge cell when the levels differ by 3 or more)
+    let layer = if deck && (level - cell_level).abs() >= 3 {
+        Layer::Deck
+    } else {
+        Layer::Ground
+    };
+    crate::scatter::cell_request(
+        w,
+        c,
+        layer,
+        crate::scatter::ScatterRequest {
+            threat: None,
+            forced: true,
+            anywhere: true,
+        },
+    );
+}
+
+/// The target of a vehicle refused by an obstacle at its repeated check
+/// (S-0207 table T4): the first object listed in the cell when the
+/// vehicle's house is not allied with it, else, with no object listed, the
+/// cell's wall whatever its owner. It attacks by an override (S-0215 claim
+/// 10).
+fn attack_obstacle(w: &mut World, id: ObjectId, c: CellXY) {
+    let Some(o) = w.obj(id).cloned() else { return };
+    let r = w.rules_arc();
+    let reference = occupancy::reference_level(w, id);
+    let layer = occupancy::layers_for(w, c, reference).0;
+    let target = match w.cells.list(c, layer).first().copied() {
+        // spec: S-0207 table T4 (the first listed object when its house is not allied; a terrain object is never allied)
+        Some(f) => {
+            let fo = w.obj(f);
+            let allied = fo.is_some_and(|x| x.kind != Kind::Terrain && w.allied(o.owner, x.owner));
+            (!allied).then_some(Target::Object(f))
+        }
+        // spec: S-0207 table T4 (no object listed: the cell's wall, whatever its owner)
+        None => w
+            .cells
+            .cell(c)
+            .filter(|cell| {
+                r.overlays
+                    .get(usize::from(cell.overlay))
+                    .is_some_and(|ov| ov.wall)
+            })
+            .map(|_| Target::Cell(c)),
+    };
+    let Some(target) = target else { return };
+    let q = r.quirks;
+    if let Some(ob) = w.obj_mut(id) {
+        // spec: S-0215 claim 10 (an override puts the target and destination aside and replaces them)
+        if ob.beh.override_with(
+            Behaviour::Attack,
+            q.refused_override_retargets,
+            q.override_suspends_queued,
+        ) {
+            ob.beh.aside = Some((ob.target, ob.dest));
+            ob.target = Some(target);
+            // Q-0035: the override's destination is not stated; interim none.
+            ob.dest = None;
+            ob.path.steps.clear();
+        }
+    }
 }
 
 /// The immediate recomputation of S-0212 claim 20, taken from where the
@@ -539,7 +910,7 @@ fn crush_mode(w: &World, id: ObjectId, u: &UnitRules, first: CellXY, second: Cel
 }
 
 /// A driving unit's next step is blocked by a moving blocker (S-0212 claim
-/// 22); the other outcomes take the same course until Q-0019 is answered.
+/// 22, S-0207 table T4).
 fn blocked_step(w: &mut World, id: ObjectId) {
     let t = w.tick;
     let Some(o) = w.obj(id).cloned() else { return };
@@ -764,9 +1135,8 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
                 set_budget_zero(w, id);
                 return false;
             }
-            let res = path::compute(w, id, Mode::Fresh);
-            if res != Search::Found {
-                path::failed(w, id, res, false);
+            // spec: S-0207 claim 15 (a fresh search that finds a path looks at the new path's first cell)
+            if fresh_search(w, id, &u) != Search::Found {
                 set_budget_zero(w, id);
                 return false;
             }

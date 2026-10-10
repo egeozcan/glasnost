@@ -56,8 +56,11 @@ pub fn request(w: &mut World, id: ObjectId, req: ScatterRequest) -> bool {
     let Some(o) = w.obj(id).cloned() else {
         return false;
     };
+    if o.kind == Kind::Vehicle {
+        return vehicle_request(w, id, req);
+    }
     if o.kind != Kind::Infantry {
-        // Q-0019: vehicle scatter acceptance has no spec; vehicles refuse.
+        // The aircraft specs own how an aircraft answers a scatter request.
         return false;
     }
     let r = w.rules_arc();
@@ -140,6 +143,116 @@ pub fn request(w: &mut World, id: ObjectId, req: ScatterRequest) -> bool {
             ob.path.steps.clear();
             ob.beh.queue(Some(Behaviour::Move));
         }
+    }
+    true
+}
+
+/// A vehicle, whatever its locomotor, receives a scatter request (S-0207
+/// claim 16). Returns whether it accepted.
+pub fn vehicle_request(w: &mut World, id: ObjectId, req: ScatterRequest) -> bool {
+    let t = w.tick;
+    let Some(o) = w.obj(id).cloned() else {
+        return false;
+    };
+    let r = w.rules_arc();
+    let Some(u) = r.unit(o.kind, o.type_index).cloned() else {
+        return false;
+    };
+    let q = r.quirks;
+    // spec: S-0207 claim 16 (a): the current behaviour, or the queued one when there is no current one
+    let slot = o.beh.current.or(o.beh.queued);
+    let a = matches!(
+        slot,
+        Some(Behaviour::Sleep | Behaviour::Sticky | Behaviour::Unload)
+    ) || u.train;
+    // spec: S-0207 claim 16 (b): the teleporting locomotor
+    let b = u.type_locomotor() == glasnost_rules::sim::Locomotor::Teleport;
+    // spec: S-0207 claim 16 (c): not forced and the current behaviour lacks the scatter property (S-0215 claim 19)
+    let c = !req.forced && !o.beh.current.is_some_and(|x| r.behaviour(x).scatter);
+    // spec: S-0207 claim 16 (d): its body is turning
+    let d = o.body.turning(t);
+    // spec: S-0207 claim 16 (e): a destination and a request that is not move-anywhere
+    let e = o.dest.is_some() && !req.anywhere;
+    // spec: S-0207 claim 16 (f) and (g): deployed, deploying or undeploying, and a locomotor switched off, have no state in M3
+    let (f, g) = (false, false);
+    if a || b || c || d || e || f || g {
+        return false;
+    }
+    // spec: S-0208 Terms (scatter centre cell: the locomotor destination's cell, else its own; S-0207 claim 16)
+    let centre = path::locomotor_destination(w, id).map_or(o.pos.cell(), |p| p.cell());
+    let Some(threat) = req.threat else {
+        // spec: S-0207 claim 16 (no threat point: no draw; the nearby-cell search's cell; behaviours unchanged)
+        crate::regions::ensure(w);
+        let dest = path::nearby(
+            w,
+            centre,
+            NearbyUse::Scatter {
+                class: u.class,
+                deck: o.layer == Layer::Deck,
+            },
+        );
+        if let Some(cell) = dest
+            && let Some(ob) = w.obj_mut(id)
+        {
+            ob.dest = Some(Target::Cell(cell));
+            ob.path.steps.clear();
+        }
+        return true;
+    };
+    // spec: S-0207 claim 16 (h): the current behaviour has the paralysed property (S-0215 claim 17)
+    let h = o.beh.current.is_some_and(|x| r.behaviour(x).paralysed);
+    // spec: S-0207 claim 16 (i): unloading passengers has no state in M3
+    let i = false;
+    // spec: S-0207 claim 16 (j): a destination and its turret turning
+    let j = o.dest.is_some() && o.turret.turning(t);
+    if h || i || j {
+        return false;
+    }
+    if o.target.is_some() && !req.forced {
+        // spec: S-0207 claim 16 (a target and a request not forced: one draw over 1 to 4, refused unless 1)
+        let k = w.rng.ranged(1, 4, q.ranged_draw_half_span);
+        if k != 1 {
+            return false;
+        }
+    }
+    // spec: S-0207 claim 16 (the direction draw j over 0 to 2, after the draw over 1 to 4)
+    let jj = w.rng.ranged(0, 2, q.ranged_draw_half_span);
+    // spec: S-0207 claim 16 (d₀: the facing from the threat point to its own position, rounded, S-0208 F6)
+    let d0 = eighth(direction(
+        i64::from(o.pos.x - threat.x),
+        i64::from(o.pos.y - threat.y),
+        q.table_direction,
+    ));
+    // spec: S-0207 claim 16 (d = (d₀ + j − 1) mod 8, the residue from 0 to 7)
+    let dir = (d0 + jj - 1).rem_euclid(8);
+    let reference = occupancy::reference_level(w, id);
+    let mut first_q = None;
+    let mut chosen = None;
+    // spec: S-0207 claim 16 (the eight neighbours in the step directions d, d + 1, …, d + 7)
+    for k in 0..8 {
+        let (dx, dy) = STEPS[((dir + k).rem_euclid(8)) as usize];
+        let cell = CellXY::new(centre.x + dx, centre.y + dy);
+        // spec: S-0207 claim 16 (qualifies: inside the usable area and the vehicle's entry outcome clear)
+        if !w.cells.usable(cell)
+            || occupancy::vehicle_outcome(w, id, cell, reference) != Outcome::Clear
+        {
+            continue;
+        }
+        let high = w.cells.idx(cell).is_some_and(|x| w.cells.deck[x]);
+        // spec: S-0207 claim 16 (the first that passes the screen-cover check and is not a high-bridge cell)
+        if screen_cover_passes(w, cell) && !high {
+            chosen = Some(cell);
+            break;
+        }
+        first_q.get_or_insert(cell);
+    }
+    if let Some(cell) = chosen.or(first_q)
+        && let Some(ob) = w.obj_mut(id)
+    {
+        // spec: S-0207 claim 16 (it queues move and takes that destination)
+        ob.dest = Some(Target::Cell(cell));
+        ob.path.steps.clear();
+        ob.beh.queue(Some(Behaviour::Move));
     }
     true
 }

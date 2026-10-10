@@ -361,6 +361,10 @@ pub struct Quirks {
     // spec: S-0009 claim 28
     #[serde(default = "on")]
     pub cleanup_skips_next_house: bool,
+    /// A driving vehicle's give-up test at a step check ignores contact.
+    // spec: S-0207 claim 15, Edge cases
+    #[serde(default = "on")]
+    pub drive_giveup_ignores_contact: bool,
 }
 
 impl Default for Quirks {
@@ -452,6 +456,7 @@ impl Default for Quirks {
             stale_fill_tiles: true,
             observer_position_handoff: true,
             cleanup_skips_next_house: true,
+            drive_giveup_ignores_contact: true,
         }
     }
 }
@@ -645,6 +650,10 @@ impl Quirks {
             ("stale_fill_tiles", self.stale_fill_tiles),
             ("observer_position_handoff", self.observer_position_handoff),
             ("cleanup_skips_next_house", self.cleanup_skips_next_house),
+            (
+                "drive_giveup_ignores_contact",
+                self.drive_giveup_ignores_contact,
+            ),
         ]
     }
 

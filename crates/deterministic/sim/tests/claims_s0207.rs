@@ -502,12 +502,17 @@ fn curve_ends_facing_its_second_step_then_turns() {
     assert!(turned);
 }
 
-// spec: S-0207 claim 7 (the second cell of a curve occupied: the straight track into the first cell)
+// spec: S-0207 claim 7 (the second cell of a curve being entered by another vehicle, a moving blocker: the straight track into the first cell)
+// spec: S-0207 table T5 (moving blocker: the straight or diagonal track; the stored path is kept)
 #[test]
 fn occupied_second_cell_takes_straight_track() {
-    let mut s = scene(car(WHEEL, 10, false), 0);
-    s.place_unit(0, "TESTCAR", cell(1, -2), 0);
-    let (t, left) = first_track(&s, &[N, NE, NE]);
+    let s = scene(car(WHEEL, 10, false), 0);
+    let (mut w, id) = start(&s, &[N, NE, NE]);
+    // Another vehicle's step into the second cell sets its flag (S-0209 claim 1, row VR5).
+    w.cells
+        .claim_vehicle(cell(1, -2), glasnost_sim::world::Layer::Ground, true);
+    let sn = first_moving_tick(&mut w, id);
+    let (t, left) = (sn.track.expect("track"), sn.steps);
     assert!(!t.crush, "the occupancy fallback, not crush mode");
     assert_eq!(tracks::track(t.d, t.e).0.len(), 23);
     assert_eq!(t.target_cell, cell(0, -1));
@@ -922,4 +927,309 @@ fn locomotor_field_selects_how_a_type_moves() {
         d0,
         "a driving vehicle drives"
     );
+}
+
+// ---------------------------------------------------------------------------
+// A refused step (claim 15) and vehicle scatter (claim 16)
+
+/// A corridor one cell wide along map north through the middle column
+/// (cells (0, 2) to (0, −14)); every cell beside it is rock, whose row is
+/// left at the start-up row (every multiplier 0, S-0211 claim 2).
+fn corridor() -> Scene {
+    let mut s = Scene::new();
+    // spec: S-0211 claim 5 (terrain code 15: rock)
+    let rock = code_tile(15);
+    for y in -15..=3 {
+        for x in [-1, 1] {
+            s.set_cell(cell(x, y), rock, 0);
+        }
+    }
+    s.set_cell(cell(0, -15), rock, 0);
+    s.set_cell(cell(0, 3), rock, 0);
+    let mut armed = car(WHEEL, 30, false);
+    armed.primary = Some("Pea".into());
+    s.vehicle("MOVER", car(WHEEL, 30, false))
+        .vehicle("ARMED", armed)
+        .vehicle("IDLER", car(WHEEL, 30, false));
+    let sim = &mut s.ruleset.sim;
+    sim.weapons.insert(
+        "Pea".into(),
+        glasnost_rules::sim::WeaponType {
+            damage: Some(5),
+            warhead: Some("Soft".into()),
+            ..Default::default()
+        },
+    );
+    sim.warheads
+        .insert("Soft".into(), glasnost_rules::sim::WarheadType::default());
+    s
+}
+
+/// Places `mover` of house 0 at (0, 0) facing map north and `blocker` of
+/// `house` at (0, −1); builds and orders the mover to `dest`. Returns the
+/// world, mover and blocker.
+fn blocked_scene(
+    s: &mut Scene,
+    mover: &str,
+    blocker: &str,
+    house: u8,
+    dest: CellXY,
+) -> (World, ObjectId, ObjectId) {
+    s.place_unit(0, mover, cell(0, 0), 0);
+    s.place_unit(house, blocker, cell(0, -1), 0);
+    let mut w = s.build();
+    let at = |w: &World, c: CellXY| object_in(w, c).expect("object");
+    let (m, b) = (at(&w, cell(0, 0)), at(&w, cell(0, -1)));
+    open_orders(&mut w);
+    order_move(&mut w, m, dest);
+    (w, m, b)
+}
+
+/// Runs until the mover reacts to the blocker (gives up, attacks, or the
+/// blocker gets a destination).
+fn until_blocked(w: &mut World, m: ObjectId, b: ObjectId) {
+    let b0 = w.obj(b).map(|o| (o.dest, o.target));
+    for _ in 0..40 {
+        tick::step(w);
+        let o = w.obj(m).expect("mover");
+        let bo = w.obj(b).map(|o| (o.dest, o.target));
+        if o.dest.is_none() || bo != b0 || o.target.is_some() {
+            return;
+        }
+    }
+    panic!("no reaction");
+}
+
+// spec: S-0207 claim 15 table T4 (stationary friendly: the path is replaced, a forced move-anywhere request without threat point reaches the friend; no track)
+// spec: S-0207 claim 16 (no threat point: no draw, the nearby-cell search, behaviours unchanged)
+#[test]
+fn stationary_friend_gets_a_scatter_request() {
+    let mut s = corridor();
+    let (mut w, m, v) = blocked_scene(&mut s, "MOVER", "IDLER", 0, cell(0, -10));
+    let beh = w.obj(v).expect("v").beh.current;
+    until_blocked(&mut w, m, v);
+    let mo = w.obj(m).expect("m");
+    assert!(mo.dest.is_some(), "the mover keeps its move");
+    assert_eq!(mo.pos.cell(), cell(0, 0));
+    assert!(
+        mo.drive.as_ref().expect("d").track.is_none(),
+        "no track on that tick"
+    );
+    let vo = w.obj(v).expect("v");
+    let Some(glasnost_sim::world::Target::Cell(c)) = vo.dest else {
+        panic!("the friend got no destination: {:?}", vo.dest);
+    };
+    assert_ne!(c, cell(0, -1));
+    assert_eq!(vo.beh.current, beh, "its behaviour is unchanged");
+}
+
+// spec: S-0207 claim 15 table T4 and F7 (within the close-enough distance the repeated check gives up the move; no request)
+#[test]
+fn stationary_friend_near_the_destination_gives_up() {
+    let mut s = corridor();
+    let (mut w, m, v) = blocked_scene(&mut s, "MOVER", "IDLER", 0, cell(0, -2));
+    until_blocked(&mut w, m, v);
+    assert_eq!(w.obj(m).expect("m").dest, None, "the move is given up");
+    assert_eq!(w.obj(v).expect("v").dest, None, "no request was sent");
+}
+
+// spec: S-0207 Edge cases (`quirks.drive_giveup_ignores_contact`: default gives up in contact; off it requires no contact)
+// spec: S-0207 claim 16 (a): a vehicle in sticky refuses the request
+#[test]
+fn give_up_and_contact_quirk() {
+    for ignores in [true, false] {
+        let mut s = corridor();
+        s.ruleset.globals.quirks.drive_giveup_ignores_contact = ignores;
+        let (mut w, m, v) = blocked_scene(&mut s, "MOVER", "IDLER", 0, cell(0, -2));
+        w.obj_mut(v).expect("v").beh.current = Some(glasnost_sim::rules::Behaviour::Sticky);
+        // In contact with the friend (S-0215 Terms).
+        w.obj_mut(m).expect("m").contact = Some(v);
+        let mut gave_up = false;
+        for _ in 0..40 {
+            tick::step(&mut w);
+            w.obj_mut(m).expect("m").contact = Some(v);
+            if w.obj(m).expect("m").dest.is_none() {
+                gave_up = true;
+                break;
+            }
+        }
+        assert_eq!(gave_up, ignores, "quirk {ignores}");
+        assert_eq!(w.obj(v).expect("v").dest, None, "sticky refuses");
+    }
+}
+
+// spec: S-0207 claim 15 table T4 (obstacle at the repeated check: waits and attacks the first listed object not allied, by an override)
+#[test]
+fn enemy_obstacle_is_attacked() {
+    let mut s = corridor();
+    let (mut w, m, e) = blocked_scene(&mut s, "ARMED", "IDLER", 1, cell(0, -10));
+    until_blocked(&mut w, m, e);
+    let mo = w.obj(m).expect("m");
+    assert_eq!(mo.target, Some(glasnost_sim::world::Target::Object(e)));
+    assert_eq!(mo.beh.current, Some(glasnost_sim::rules::Behaviour::Attack));
+    assert_eq!(mo.pos.cell(), cell(0, 0));
+}
+
+// spec: S-0207 claim 15 table T4 (blocked: the first check clears the path; the mover keeps its destination and does not enter)
+#[test]
+fn blocked_step_keeps_the_destination() {
+    let mut s = corridor();
+    let (mut w, m, e) = blocked_scene(&mut s, "MOVER", "IDLER", 1, cell(0, -10));
+    let mut seen = false;
+    for _ in 0..40 {
+        tick::step(&mut w);
+        let mo = w.obj(m).expect("m");
+        assert_eq!(mo.pos.cell(), cell(0, 0), "never enters");
+        assert!(mo.target.is_none(), "an unarmed mover attacks nothing");
+        // The first check's tick: stored path cleared, destination kept.
+        seen |= mo.path.steps.is_empty() && mo.dest.is_some();
+    }
+    assert!(seen);
+    assert_eq!(w.obj(e).expect("e").pos.cell(), cell(0, -1));
+}
+
+// spec: S-0207 claim 16 (the scatter order moves an idle vehicle to the nearby-cell search's cell; one with a destination refuses; sleep and the teleporting locomotor refuse)
+#[test]
+fn vehicle_scatter_order() {
+    use glasnost_sim::world::Target;
+    let mut s = scene(car(WHEEL, 30, false), 0);
+    let mut tele = car(WHEEL, 30, false);
+    tele.locomotor = Some(glasnost_rules::sim::Locomotor::Teleport);
+    s.vehicle("TELE", tele);
+    s.place_unit(0, "TESTCAR", cell(6, 0), 0);
+    s.place_unit(0, "TELE", cell(-6, 0), 0);
+    s.place_unit(0, "TESTCAR", cell(0, 6), 0);
+    let mut w = s.build();
+    open_orders(&mut w);
+    let at = |w: &World, c: CellXY| object_in(w, c).expect("object");
+    let (idle, driving, tp, sleeper) = (
+        at(&w, cell(0, 0)),
+        at(&w, cell(6, 0)),
+        at(&w, cell(-6, 0)),
+        at(&w, cell(0, 6)),
+    );
+    w.obj_mut(sleeper).expect("s").beh.current = Some(glasnost_sim::rules::Behaviour::Sleep);
+    order_move(&mut w, driving, cell(6, -12));
+    run(&mut w, 2);
+    let far = w.obj(driving).expect("d").dest;
+    let beh = w.obj(idle).expect("i").beh.current;
+    // A request without a threat point takes no draw (checked on a copy).
+    let mut copy = w.clone();
+    let rng = copy.rng.clone();
+    assert!(glasnost_sim::scatter::vehicle_request(
+        &mut copy,
+        idle,
+        glasnost_sim::scatter::ScatterRequest {
+            threat: None,
+            forced: true,
+            anywhere: false,
+        }
+    ));
+    assert_eq!(copy.rng, rng, "no draw");
+    for id in [idle, driving, tp, sleeper] {
+        assert!(orders::issue(
+            &mut w,
+            HouseId(0),
+            Order::Scatter { actor: id }
+        ));
+    }
+    tick::step(&mut w);
+    let io = w.obj(idle).expect("i");
+    let Some(Target::Cell(c)) = io.dest else {
+        panic!("the idle vehicle got no destination");
+    };
+    assert!(
+        (c.x - 40).abs() <= 1 && (c.y - 40).abs() <= 1 && c != cell(0, 0),
+        "a neighbour: {c:?}"
+    );
+    assert_eq!(io.beh.current, beh, "no move is queued");
+    assert_eq!(
+        w.obj(driving).expect("d").dest,
+        far,
+        "a destination refuses the order"
+    );
+    assert_eq!(
+        w.obj(tp).expect("t").dest,
+        None,
+        "the teleporting locomotor refuses"
+    );
+    assert_eq!(w.obj(sleeper).expect("s").dest, None, "sleep refuses");
+}
+
+// spec: S-0207 claim 16 (a threat point: one draw over 0 to 2, the neighbours from d = (d₀ + j − 1) mod 8, move queued)
+#[test]
+fn vehicle_scatter_with_threat_point() {
+    use glasnost_sim::scatter::{ScatterRequest, vehicle_request};
+    use glasnost_sim::world::{Pos, Target};
+    let s = scene(car(WHEEL, 30, false), 0);
+    let mut w = s.build();
+    let id = objects_of(&w, Kind::Vehicle)[0];
+    let mut probe = w.rng.clone();
+    // spec: S-0202 claim 4 (ranged draws)
+    let j = probe.ranged(0, 2, true);
+    // The threat point lies map west of the vehicle: d₀ is map east (2).
+    let o = w.obj(id).expect("v").pos;
+    let threat = Pos::new(o.x - 300, o.y, o.z);
+    assert!(vehicle_request(
+        &mut w,
+        id,
+        ScatterRequest {
+            threat: Some(threat),
+            forced: true,
+            anywhere: false,
+        }
+    ));
+    assert_eq!(w.rng, probe, "exactly one draw");
+    let d = (2 + j - 1).rem_euclid(8) as usize;
+    let (dx, dy) = STEPS[d];
+    let ob = w.obj(id).expect("v");
+    assert_eq!(ob.dest, Some(Target::Cell(CellXY::new(40 + dx, 40 + dy))));
+    assert_eq!(ob.beh.queued, Some(glasnost_sim::rules::Behaviour::Move));
+}
+
+// spec: S-0207 claim 15 (the first cell of a new path: stationary friends make the vehicle give up, or get the request, on the search's tick, before any turn)
+#[test]
+fn first_cell_of_a_new_path_acts_before_turning() {
+    for (dest, gives_up) in [(cell(0, -2), true), (cell(0, -10), false)] {
+        let mut s = corridor();
+        s.place_unit(0, "MOVER", cell(0, 0), 64); // facing map east
+        s.place_unit(0, "IDLER", cell(0, -1), 0);
+        let mut w = s.build();
+        let m = object_in(&w, cell(0, 0)).expect("m");
+        let v = object_in(&w, cell(0, -1)).expect("v");
+        open_orders(&mut w);
+        order_move(&mut w, m, dest);
+        let east = w.obj(m).expect("m").body.target;
+        for _ in 0..3 {
+            tick::step(&mut w);
+            let reacted =
+                w.obj(m).expect("m").dest.is_none() || w.obj(v).expect("v").dest.is_some();
+            if reacted {
+                break;
+            }
+        }
+        let mo = w.obj(m).expect("m");
+        // The tick just run is w.tick − 1: the search, the reaction and (when
+        // it goes on) the start of the turn all fall on it.
+        let turn = mo.drive.as_ref().and_then(|d| d.turn);
+        if gives_up {
+            assert_eq!(
+                mo.body.target, east,
+                "a vehicle that gives up does not turn"
+            );
+            assert_eq!(mo.dest, None);
+            assert_eq!(w.obj(v).expect("v").dest, None);
+        } else {
+            assert!(mo.dest.is_some());
+            assert!(
+                w.obj(v).expect("v").dest.is_some(),
+                "the friend got the request"
+            );
+            assert_eq!(
+                turn.map(|t| t.0),
+                Some(w.tick - 1),
+                "the turn starts on the request's tick"
+            );
+        }
+    }
 }
