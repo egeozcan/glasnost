@@ -299,12 +299,8 @@ pub fn infantry_outcome(w: &World, mover: ObjectId, c: CellXY, reference: i32) -
                 (false, Some(Outcome::EnemyObstacle))
             }
         } else if o.kind == Kind::Terrain {
-            // spec: S-0209 claim 4 (rows WP22 and WP27: a terrain object gives none, except to an unarmed walker)
-            if armed {
-                (false, None)
-            } else {
-                (false, Some(Outcome::Blocked))
-            }
+            // spec: S-0209 claim 4 (row WP27: a terrain object gives none; row WP22 excludes terrain objects)
+            (false, None)
         } else if allied {
             match o.kind {
                 Kind::Vehicle => {
@@ -343,6 +339,14 @@ pub fn infantry_outcome(w: &World, mover: ObjectId, c: CellXY, reference: i32) -
         }
         values.push(v);
     }
+    // spec: S-0209 claim 4 (4a: the zero walker speed check applies outside the listed cases, also when the mission-target override WP3 decides)
+    if let Some(u) = w.rules().unit(m.kind, m.type_index)
+        && let Some(class) = u.class
+        && !passability::enterable_by_class(r, w, c, Some(class), u.zone, false)
+        && obj_layer == Layer::Ground
+    {
+        return Outcome::Blocked;
+    }
     if let Some((k, value)) = override_value {
         // spec: S-0209 claim 4 (an override: blocked when an earlier value is blocked, else the override's value)
         let earlier_blocked = overlay_value == Some(Outcome::Blocked)
@@ -367,14 +371,6 @@ pub fn infantry_outcome(w: &World, mover: ObjectId, c: CellXY, reference: i32) -
         .chain(overlay_value)
         .max()
         .unwrap_or(Outcome::Clear);
-    // spec: S-0209 claim 4 (4a: the zero walker speed check applies outside the listed cases)
-    if let Some(u) = w.rules().unit(m.kind, m.type_index)
-        && let Some(class) = u.class
-        && !passability::enterable_by_class(r, w, c, Some(class), u.zone, false)
-        && obj_layer == Layer::Ground
-    {
-        return Outcome::Blocked;
-    }
     let Some(rec) = w.cells.occ(c, rec_layer) else {
         return Outcome::Blocked;
     };
