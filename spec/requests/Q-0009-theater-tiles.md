@@ -1,9 +1,9 @@
 ---
 id: Q-0009
 title: Theater data file, tile numbering, tile files and tile placement (planned S-0010)
-status: open
+status: answered
 related: [S-0009, S-0101, S-0102, S-0104]
-answered-by: []
+answered-by: [S-0010]
 ---
 
 ## Need
