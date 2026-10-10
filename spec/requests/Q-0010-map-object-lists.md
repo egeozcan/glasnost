@@ -1,9 +1,9 @@
 ---
 id: Q-0010
 title: Field layout and meaning of a map's object lists
-status: open
+status: answered
 related: [S-0009, S-0102, S-0107, S-0108]
-answered-by: []
+answered-by: [S-0009]
 ---
 
 ## Need

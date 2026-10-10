@@ -1,9 +1,9 @@
 ---
 id: Q-0016
 title: The initial state of objects a map places
-status: open
+status: answered
 related: [S-0105, S-0108, S-0102, S-0009]
-answered-by: []
+answered-by: [S-0009]
 ---
 
 ## Need
