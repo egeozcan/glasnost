@@ -1,0 +1,1206 @@
+//! Claim tests for pathfinding (S-0212), on synthetic data.
+//!
+//! Invented types (TESTCAR, TESTHUT, TESTTREE, ...) on the flat 40 × 40 map
+//! of `common`. Rock cells use a tile whose land type has no land row, so
+//! every locomotion class has multiplier 0 there (category *blocked*).
+//!
+//! Not tested here because the simulation does not implement them yet: the
+//! corridor and when it is used (claims 13 and 14, request Q-0017), the
+//! shortening of early detours (claim 18), follower cars (claim 26), bridge
+//! decks, links and tunnel steps.
+
+mod common;
+
+use common::unit_type;
+use common::{Scene, WHEEL, cell, code_tile, objects_of, open_orders, order_move, slope_tile};
+use glasnost_map::CellXY;
+use glasnost_rules::sim::{
+    BuildingType, Decimal, LandRow, LandType, MovementZone, TerrainObjectType, UnitType,
+};
+use glasnost_sim::occupancy::{self, Outcome};
+use glasnost_sim::passability::category;
+use glasnost_sim::path::{self, Mode, Pathfinder, Request, S0212, Search};
+use glasnost_sim::regions::{self, Reach, STEPS};
+use glasnost_sim::rules::{Behaviour, Kind};
+use glasnost_sim::world::{ObjectId, Target, World};
+
+const CAR: &str = "TESTCAR";
+const HUT: &str = "TESTHUT";
+const TREE: &str = "TESTTREE";
+
+/// A scene with the vehicle type TESTCAR (wheel, invented speed 40, turn
+/// rate 6, no weapon) and the one-cell building type TESTHUT.
+fn scene() -> Scene {
+    let mut s = Scene::new();
+    s.vehicle(CAR, unit_type(WHEEL, 40, 6));
+    s.register("buildings", HUT);
+    s.ruleset.sim.buildings.insert(
+        HUT.into(),
+        BuildingType {
+            strength: Some(200),
+            ..Default::default()
+        },
+    );
+    s
+}
+
+/// Makes `c` a flat rock cell at height level `level` (land type rock, no
+/// land row: multiplier 0 for every class).
+fn rock(s: &mut Scene, c: CellXY, level: i8) {
+    s.set_cell(c, code_tile(7), level);
+}
+
+/// The cells at Chebyshev distance `r` from `centre`.
+fn ring(centre: CellXY, r: i32) -> Vec<CellXY> {
+    let mut v = Vec::new();
+    for dy in -r..=r {
+        for dx in -r..=r {
+            if dx.abs().max(dy.abs()) == r {
+                v.push(CellXY::new(centre.x + dx, centre.y + dy));
+            }
+        }
+    }
+    v
+}
+
+/// All cells of the map grid.
+fn all_cells(s: &Scene) -> Vec<CellXY> {
+    s.map.cells.iter().map(|(c, _)| c).collect()
+}
+
+fn vehicles(w: &World) -> Vec<ObjectId> {
+    objects_of(w, Kind::Vehicle)
+}
+
+/// Runs the S-0212 cell search for unit `id` from its own cell.
+fn find(w: &World, id: ObjectId, to: CellXY, mode: Mode, marks: &[CellXY]) -> Option<Vec<u8>> {
+    let from = w.obj(id).unwrap().pos.cell();
+    S0212.find(
+        w,
+        &Request {
+            unit: id,
+            from,
+            to,
+            mode,
+            congested: marks.iter().copied().collect(),
+        },
+    )
+}
+
+/// The cells a path visits after its start, in order.
+fn visits(from: CellXY, steps: &[u8]) -> Vec<CellXY> {
+    let mut c = from;
+    steps
+        .iter()
+        .map(|&d| {
+            let (dx, dy) = STEPS[usize::from(d)];
+            c = CellXY::new(c.x + dx, c.y + dy);
+            c
+        })
+        .collect()
+}
+
+fn region(w: &World, c: CellXY) -> u32 {
+    w.regions.region[w.cells.idx(c).unwrap()]
+}
+
+/// Gives unit `id` the destination cell `c` and runs a path computation.
+fn compute_to(w: &mut World, id: ObjectId, c: CellXY, mode: Mode) -> Search {
+    w.obj_mut(id).unwrap().dest = Some(Target::Cell(c));
+    path::compute(w, id, mode)
+}
+
+/// Makes unit `id` count as moving while it stays where it is: it has a
+/// far destination, no stored path and a retry delay that never ends.
+fn hold_as_moving(w: &mut World, id: ObjectId) {
+    let o = w.obj_mut(id).unwrap();
+    o.dest = Some(Target::Cell(cell(-20, 10)));
+    o.path.steps.clear();
+    o.path.retry_at = i32::MAX;
+}
+
+fn chebyshev(a: CellXY, b: CellXY) -> i32 {
+    (a.x - b.x).abs().max((a.y - b.y).abs())
+}
+
+// ---------------------------------------------------------------- connectivity
+
+// spec: S-0212 claim 1 (buildings and units leave cells open, so a ring of buildings separates nothing)
+#[test]
+fn ring_of_buildings_does_not_split_regions() {
+    let mut s = scene();
+    for c in ring(cell(0, 0), 1) {
+        s.place_structure(0, HUT, c);
+    }
+    s.place_unit(0, CAR, cell(0, 0), 64);
+    let w = s.build();
+    assert_eq!(objects_of(&w, Kind::Building).len(), 8);
+    for c in ring(cell(0, 0), 1).into_iter().chain([cell(0, 0)]) {
+        assert_eq!(w.cells.category[w.cells.idx(c).unwrap()], category::OPEN);
+    }
+    let inside = regions::reach_in(&w, cell(0, 0), MovementZone::Normal);
+    assert!(matches!(inside, Reach::Region(_)));
+    assert_eq!(
+        inside,
+        regions::reach_in(&w, cell(6, 3), MovementZone::Normal)
+    );
+}
+
+// spec: S-0212 claim 2 (no and never both keep cells out of the reach regions; off-map cells form no region)
+#[test]
+fn no_and_never_keep_cells_out_of_reach_regions() {
+    let mut s = scene();
+    // Shrink the usable area so that the grid's edge cells are off-map.
+    let fp = glasnost_map::Footprint::new(
+        common::SIZE,
+        common::SIZE,
+        [4, 4, common::SIZE - 8, common::SIZE - 8],
+    );
+    let mut grid = glasnost_map::CellGrid::new(fp);
+    for c in all_cells(&s) {
+        if let Some(x) = grid.get_mut(c) {
+            *x = *s.map.cells.get(c).unwrap();
+        }
+    }
+    s.map.footprint = fp;
+    s.map.cells = grid;
+    s.set_cell(cell(3, 0), code_tile(9), 0); // water
+    s.place_unit(0, CAR, cell(0, 0), 64);
+    let mut w = s.build();
+    let id = vehicles(&w)[0];
+    let off = all_cells(&s)
+        .into_iter()
+        .find(|&c| !w.cells.usable(c))
+        .expect("an off-map cell");
+    assert_eq!(
+        w.cells.category[w.cells.idx(off).unwrap()],
+        category::OFF_MAP
+    );
+    assert_eq!(region(&w, off), u32::MAX);
+    let z = MovementZone::Normal;
+    assert_eq!(regions::reach_in(&w, off, z), Reach::OffMap);
+    assert_eq!(regions::reach_in(&w, cell(3, 0), z), Reach::None);
+    assert_ne!(Reach::OffMap, Reach::None);
+    // Both make a destination unreachable for the gate.
+    assert_eq!(
+        compute_to(&mut w, id, cell(3, 0), Mode::Fresh),
+        Search::GateFailed
+    );
+    assert_eq!(compute_to(&mut w, id, off, Mode::Fresh), Search::GateFailed);
+}
+
+/// A scene whose cells at `pick` are raised to `level`.
+fn raised(pick: impl Fn(CellXY) -> bool, level: i8) -> World {
+    let mut s = scene();
+    for c in all_cells(&s) {
+        if pick(c) {
+            s.set_cell(c, 0, level);
+        }
+    }
+    s.build()
+}
+
+// spec: S-0212 claim 3 (same category joins within 1 level; along cell x also at 2 or 3 levels; otherwise never)
+#[test]
+fn regions_join_by_height_and_along_cell_x() {
+    let row = |c: CellXY| c.y == cell(0, 1).y; // neighbours across it lie along cell y
+    let col = |c: CellXY| c.x == cell(1, 0).x; // neighbours across it lie along cell x
+    // A raised row: joined to the ground only within 1 level.
+    let w = raised(row, 1);
+    assert_eq!(region(&w, cell(0, 1)), region(&w, cell(0, 0)));
+    let w = raised(row, 2);
+    assert_ne!(region(&w, cell(0, 1)), region(&w, cell(0, 0)));
+    assert_eq!(region(&w, cell(0, 1)), region(&w, cell(5, 1)));
+    // A raised column: joined along cell x up to 3 levels, not at 4.
+    for level in [2, 3] {
+        let w = raised(col, level);
+        assert_eq!(
+            region(&w, cell(1, 0)),
+            region(&w, cell(0, 0)),
+            "level {level}"
+        );
+    }
+    let w = raised(col, 4);
+    assert_ne!(region(&w, cell(1, 0)), region(&w, cell(0, 0)));
+}
+
+// spec: S-0212 claim 3 (a region of category blocked is adjacent to its neighbours whatever the heights)
+#[test]
+fn blocked_region_adjacent_across_any_height() {
+    let island = |code: u8, level: i8| {
+        let mut s = scene();
+        for c in ring(cell(0, 0), 2) {
+            s.set_cell(c, code_tile(code), level);
+        }
+        s.build()
+    };
+    // Rock ring three levels up: subterranean (open and blocked) still joins
+    // inside and outside; normal does not.
+    let w = island(7, 3);
+    let sub = MovementZone::Subterranean;
+    assert_eq!(
+        regions::reach_in(&w, cell(0, 0), sub),
+        regions::reach_in(&w, cell(5, 0), sub)
+    );
+    assert_ne!(
+        regions::reach_in(&w, cell(0, 0), MovementZone::Normal),
+        regions::reach_in(&w, cell(5, 0), MovementZone::Normal)
+    );
+    // A water ring three levels up is not adjacent to the open ground for
+    // amphibious; at level 0 it is.
+    let amph = MovementZone::Amphibious;
+    let w = island(9, 3);
+    assert_ne!(
+        regions::reach_in(&w, cell(0, 0), amph),
+        regions::reach_in(&w, cell(5, 0), amph)
+    );
+    let w = island(9, 0);
+    assert_eq!(
+        regions::reach_in(&w, cell(0, 0), amph),
+        regions::reach_in(&w, cell(5, 0), amph)
+    );
+}
+
+// spec: S-0212 claim 4 (reach regions per movement zone; cells of a no-answer region lie in no reach region)
+#[test]
+fn reach_regions_differ_by_movement_zone() {
+    let mut s = scene();
+    for c in ring(cell(0, 0), 2) {
+        s.set_cell(c, code_tile(9), 0); // water
+    }
+    let w = s.build();
+    let (inside, outside, water, water2) = (cell(0, 0), cell(5, 0), cell(2, 0), cell(-2, 1));
+    let n = MovementZone::Normal;
+    assert_ne!(
+        regions::reach_in(&w, inside, n),
+        regions::reach_in(&w, outside, n)
+    );
+    assert_eq!(regions::reach_in(&w, water, n), Reach::None);
+    // Two cells of no reach region compare as the same.
+    assert_eq!(
+        regions::reach_in(&w, water, n),
+        regions::reach_in(&w, water2, n)
+    );
+    // The same regions joined into one reach region for amphibious.
+    let a = MovementZone::Amphibious;
+    let r = regions::reach_in(&w, inside, a);
+    assert!(matches!(r, Reach::Region(_)));
+    assert_eq!(r, regions::reach_in(&w, outside, a));
+    assert_eq!(r, regions::reach_in(&w, water, a));
+}
+
+// spec: S-0212 claim 5 (a destroyed terrain object updates connectivity for a path computation later in the same tick)
+#[test]
+fn destroyed_terrain_objects_reconnect_at_once() {
+    let mut s = scene();
+    s.register("terrain_objects", TREE);
+    s.ruleset
+        .sim
+        .terrain_objects
+        .insert(TREE.into(), TerrainObjectType::default());
+    for c in ring(cell(0, 0), 1) {
+        s.place_terrain(TREE, c);
+    }
+    s.place_unit(0, CAR, cell(0, 0), 64);
+    let mut w = s.build();
+    let id = vehicles(&w)[0];
+    assert_eq!(
+        compute_to(&mut w, id, cell(5, 0), Mode::Fresh),
+        Search::GateFailed
+    );
+    for t in objects_of(&w, Kind::Terrain) {
+        glasnost_sim::objects::remove(&mut w, t);
+    }
+    // No tick in between.
+    assert_eq!(
+        compute_to(&mut w, id, cell(5, 0), Mode::Fresh),
+        Search::Found
+    );
+}
+
+// spec: S-0212 claim 5 (a destroyed building changes no category, so connectivity stays as it was)
+#[test]
+fn destroyed_building_changes_no_category() {
+    let mut s = scene();
+    s.place_structure(0, HUT, cell(2, 0));
+    let mut w = s.build();
+    let i = w.cells.idx(cell(2, 0)).unwrap();
+    let before = w.regions.region.clone();
+    assert_eq!(w.cells.category[i], category::OPEN);
+    let b = objects_of(&w, Kind::Building)[0];
+    glasnost_sim::objects::remove(&mut w, b);
+    assert_eq!(w.cells.category[i], category::OPEN);
+    assert!(!w.regions.dirty);
+    assert_eq!(w.regions.region, before);
+}
+
+// ------------------------------------------------------------------- the gate
+
+// spec: S-0212 claim 6 (no search across reach regions; a destination failing the gate is never replaced)
+#[test]
+fn gate_refuses_destination_in_another_reach_region() {
+    let mut s = scene();
+    for c in ring(cell(0, 0), 2) {
+        rock(&mut s, c, 0);
+    }
+    s.place_unit(0, CAR, cell(6, 0), 64);
+    // An allied parked vehicle on the destination would start substitution
+    // if the gate passed.
+    s.place_unit(0, CAR, cell(0, 0), 64);
+    let mut w = s.build();
+    let id = vehicles(&w)
+        .into_iter()
+        .find(|&v| w.obj(v).unwrap().pos.cell() == cell(6, 0))
+        .unwrap();
+    assert_eq!(
+        compute_to(&mut w, id, cell(0, 0), Mode::Fresh),
+        Search::GateFailed
+    );
+    let o = w.obj(id).unwrap();
+    assert!(o.path.steps.is_empty());
+    assert_eq!(o.path.for_goal, None);
+    // The same destination passes when the ring has a gap.
+    let mut s2 = scene();
+    for c in ring(cell(0, 0), 2) {
+        if c != cell(2, 0) {
+            rock(&mut s2, c, 0);
+        }
+    }
+    s2.place_unit(0, CAR, cell(6, 0), 64);
+    let mut w2 = s2.build();
+    let id2 = vehicles(&w2)[0];
+    assert_eq!(
+        compute_to(&mut w2, id2, cell(0, 0), Mode::Fresh),
+        Search::Found
+    );
+}
+
+// ----------------------------------------------------------------- the search
+
+// spec: S-0212 claim 7 (open ground: all diagonal steps first, then straight ones; Chebyshev distance steps)
+#[test]
+fn open_ground_path_is_diagonal_first() {
+    let mut s = scene();
+    s.place_unit(0, CAR, cell(0, 0), 64);
+    let mut w = s.build();
+    let id = vehicles(&w)[0];
+    let from = cell(0, 0);
+    for (dx, dy) in [
+        (5, 2),
+        (-3, 7),
+        (14, -9),
+        (0, 6),
+        (-8, 0),
+        (-14, -14),
+        (2, -13),
+    ] {
+        let to = cell(dx, dy);
+        let steps = find(&w, id, to, Mode::Fresh, &[]).expect("a path");
+        assert_eq!(steps.len() as i32, chebyshev(from, to), "to {dx},{dy}");
+        assert_eq!(*visits(from, &steps).last().unwrap(), to);
+        let diag = steps.iter().take_while(|&&d| d % 2 == 1).count();
+        assert_eq!(diag as i32, dx.abs().min(dy.abs()), "to {dx},{dy}");
+        assert!(steps[diag..].iter().all(|&d| d % 2 == 0));
+        // Neither straightening pass changes it.
+        assert_eq!(compute_to(&mut w, id, to, Mode::Fresh), Search::Found);
+        assert_eq!(w.obj(id).unwrap().path.steps, steps);
+    }
+}
+
+// spec: S-0212 claim 7 (candidates whose entry outcome is blocked are not considered)
+#[test]
+fn path_goes_around_blocked_cells() {
+    let mut s = scene();
+    for dy in -3..=3 {
+        rock(&mut s, cell(2, dy), 0);
+    }
+    s.place_unit(0, CAR, cell(0, 0), 64);
+    let w = s.build();
+    let id = vehicles(&w)[0];
+    let steps = find(&w, id, cell(4, 0), Mode::Fresh, &[]).expect("a path");
+    let cells = visits(cell(0, 0), &steps);
+    assert_eq!(*cells.last().unwrap(), cell(4, 0));
+    assert!(
+        cells
+            .iter()
+            .all(|c| c.x != cell(2, 0).x || (c.y - cell(0, 0).y).abs() > 3)
+    );
+}
+
+// spec: S-0212 claim 8 (a stationary friendly costs 8, more than a one-step detour)
+#[test]
+fn stationary_friendly_is_avoided_when_a_detour_is_cheaper() {
+    let mut s = scene();
+    s.place_unit(0, CAR, cell(0, 0), 64);
+    s.place_unit(0, CAR, cell(2, 0), 64);
+    let w = s.build();
+    let id = vehicles(&w)
+        .into_iter()
+        .find(|&v| w.obj(v).unwrap().pos.cell() == cell(0, 0))
+        .unwrap();
+    let r = occupancy::reference_level(&w, id);
+    assert_eq!(
+        path::step_outcome(&w, id, cell(1, 0), cell(2, 0), r),
+        Outcome::StationaryFriendly
+    );
+    let steps = find(&w, id, cell(4, 0), Mode::Fresh, &[]).expect("a path");
+    assert!(!visits(cell(0, 0), &steps).contains(&cell(2, 0)));
+    assert_eq!(steps.len(), 4);
+}
+
+// spec: S-0212 claim 8 (for a train every outcome other than blocked costs 1)
+#[test]
+fn train_steps_cost_one_whatever_the_outcome() {
+    let mut s = scene();
+    s.vehicle(
+        "TESTTRAIN",
+        UnitType {
+            is_train: Some(true),
+            ..unit_type(WHEEL, 40, 6)
+        },
+    );
+    s.place_unit(0, "TESTTRAIN", cell(0, 0), 64);
+    s.place_unit(0, CAR, cell(2, 0), 64);
+    let w = s.build();
+    let id = vehicles(&w)
+        .into_iter()
+        .find(|&v| w.obj(v).unwrap().pos.cell() == cell(0, 0))
+        .unwrap();
+    assert_eq!(
+        find(&w, id, cell(4, 0), Mode::Fresh, &[]),
+        Some(vec![2, 2, 2, 2])
+    );
+}
+
+// spec: S-0212 claim 8 (land multipliers play no part in the step cost)
+#[test]
+fn slow_land_costs_the_same_as_clear() {
+    let base = || {
+        let mut s = scene();
+        s.place_unit(0, CAR, cell(0, 0), 64);
+        s
+    };
+    let w = base().build();
+    let id = vehicles(&w)[0];
+    let plain = find(&w, id, cell(6, 3), Mode::Fresh, &[]).unwrap();
+    // Every cell of that path, and its whole neighbourhood, made slow land.
+    let mut s = base();
+    s.ruleset.sim.land_types.insert(
+        LandType::Rough,
+        LandRow {
+            wheel: Some(Decimal("0.25".into())),
+            ..Default::default()
+        },
+    );
+    for c in visits(cell(0, 0), &plain) {
+        s.set_cell(c, code_tile(14), 0); // rough
+    }
+    let w = s.build();
+    let id = vehicles(&w)[0];
+    assert_eq!(find(&w, id, cell(6, 3), Mode::Fresh, &[]).unwrap(), plain);
+}
+
+/// A unit at cell(0, 0) facing east, a rock wall across cell x + 2 from
+/// cell y − `half` to y + `half` with a gap at cell(2, 0), and an allied
+/// unit of the same type held in the gap as a moving unit with no path
+/// when `blocker` is set.
+fn gap_scene(half: i32, blocker: bool) -> (World, ObjectId, Option<ObjectId>) {
+    let mut s = scene();
+    for dy in -half..=half {
+        if dy != 0 {
+            rock(&mut s, cell(2, dy), 0);
+        }
+    }
+    s.place_unit(0, CAR, cell(0, 0), 64);
+    if blocker {
+        s.place_unit(0, CAR, cell(2, 0), 64);
+    }
+    let mut w = s.build();
+    let at = |w: &World, c: CellXY| {
+        vehicles(w)
+            .into_iter()
+            .find(|&v| w.obj(v).unwrap().pos.cell() == c)
+    };
+    let id = at(&w, cell(0, 0)).unwrap();
+    let b = at(&w, cell(2, 0));
+    if let Some(b) = b {
+        hold_as_moving(&mut w, b);
+    }
+    (w, id, b)
+}
+
+// spec: S-0212 claim 8 (moving blocker: mode 2 costs 1000, mode 1 costs 4, mode 0 follows the blocker chain)
+#[test]
+fn moving_blocker_cost_by_search_mode() {
+    // The detour around the wall is 6 steps longer than the way through the gap.
+    let (w, id, _) = gap_scene(4, true);
+    let r = occupancy::reference_level(&w, id);
+    assert_eq!(
+        path::step_outcome(&w, id, cell(1, 0), cell(2, 0), r),
+        Outcome::MovingBlocker
+    );
+    let through =
+        |p: &Option<Vec<u8>>| visits(cell(0, 0), p.as_ref().unwrap()).contains(&cell(2, 0));
+    // Mode 0: the blocker heads nowhere, so the chain ends as an empty cell (1).
+    let p0 = find(&w, id, cell(4, 0), Mode::Fresh, &[]);
+    assert_eq!(p0, Some(vec![2, 2, 2, 2]));
+    // Mode 1: 4, still cheaper than the detour.
+    let p1 = find(&w, id, cell(4, 0), Mode::Blocked, &[]);
+    assert!(through(&p1), "mode 1 path {p1:?}");
+    // Mode 2: 1000, the detour is taken.
+    let p2 = find(&w, id, cell(4, 0), Mode::Avoid, &[]);
+    assert!(!through(&p2), "mode 2 path {p2:?}");
+    // Without the wall, mode 1's cost 4 already loses to a one-step detour.
+    let mut s = scene();
+    s.place_unit(0, CAR, cell(0, 0), 64);
+    s.place_unit(0, CAR, cell(2, 0), 64);
+    let mut w = s.build();
+    let vs = vehicles(&w);
+    let (id, b) = if w.obj(vs[0]).unwrap().pos.cell() == cell(0, 0) {
+        (vs[0], vs[1])
+    } else {
+        (vs[1], vs[0])
+    };
+    hold_as_moving(&mut w, b);
+    let p1 = find(&w, id, cell(4, 0), Mode::Blocked, &[]);
+    assert!(!through(&p1), "open mode 1 path {p1:?}");
+}
+
+// spec: S-0212 claim 9 (a congestion mark makes a step cost four times its base cost)
+#[test]
+fn congestion_mark_costs_four_times() {
+    // Open ground: a marked cell (4) loses to a one-step detour.
+    let (w, id, _) = gap_scene(0, false);
+    assert_eq!(
+        find(&w, id, cell(4, 0), Mode::Fresh, &[]),
+        Some(vec![2, 2, 2, 2])
+    );
+    let p = find(&w, id, cell(4, 0), Mode::Fresh, &[cell(2, 0)]).unwrap();
+    assert!(!visits(cell(0, 0), &p).contains(&cell(2, 0)), "{p:?}");
+    // A marked gap (4) still beats a detour 6 steps longer.
+    let (w, id, _) = gap_scene(4, false);
+    let p = find(&w, id, cell(4, 0), Mode::Fresh, &[cell(2, 0)]).unwrap();
+    assert!(visits(cell(0, 0), &p).contains(&cell(2, 0)), "{p:?}");
+}
+
+// spec: S-0212 claim 10 (a one-level step needs a slope as the lower cell; two or more levels are blocked)
+#[test]
+fn height_rule_for_a_step() {
+    let mut s = scene();
+    // Row y + 0: flat 0 -> flat 1.
+    s.set_cell(cell(1, 0), 0, 1);
+    // Row y + 2: slope 0 -> flat 1.
+    s.set_cell(cell(0, 2), slope_tile(1), 0);
+    s.set_cell(cell(1, 2), 0, 1);
+    // Row y + 4: flat 0 -> slope 1 (the slope is the higher cell).
+    s.set_cell(cell(1, 4), slope_tile(1), 1);
+    // Row y + 6: slope 0 -> flat 2.
+    s.set_cell(cell(0, 6), slope_tile(1), 0);
+    s.set_cell(cell(1, 6), 0, 2);
+    s.place_unit(0, CAR, cell(-3, 0), 64);
+    let w = s.build();
+    assert_ne!(w.cells.cell(cell(0, 2)).unwrap().slope, 0);
+    let id = vehicles(&w)[0];
+    let r = occupancy::reference_level(&w, id);
+    let out = |a: CellXY, b: CellXY| path::step_outcome(&w, id, a, b, r);
+    assert_eq!(out(cell(0, 0), cell(1, 0)), Outcome::Blocked);
+    assert_eq!(out(cell(0, 2), cell(1, 2)), Outcome::Clear);
+    // Whichever cell the step starts from.
+    assert_eq!(out(cell(1, 2), cell(0, 2)), Outcome::Clear);
+    assert_eq!(out(cell(0, 4), cell(1, 4)), Outcome::Blocked);
+    assert_eq!(out(cell(1, 4), cell(0, 4)), Outcome::Blocked);
+    assert_eq!(out(cell(0, 6), cell(1, 6)), Outcome::Blocked);
+}
+
+/// The cost of a path in thousandths of a cost unit by F1 on clear cells:
+/// 1000 × τ plus the direction term of table T4.
+fn clear_cost_milli(from: CellXY, steps: &[u8], marks: &[CellXY]) -> i64 {
+    // spec: S-0212 table T4 (direction terms 0.001 … 0.008 by step direction)
+    const EPS: [i64; 8] = [1, 5, 2, 6, 3, 7, 4, 8];
+    visits(from, steps)
+        .iter()
+        .zip(steps)
+        .map(|(c, &d)| {
+            // spec: S-0212 F1 (τ = 4 on a congestion mark)
+            let tau = if marks.contains(c) { 4 } else { 1 };
+            1000 * tau + EPS[usize::from(d)]
+        })
+        .sum()
+}
+
+// spec: S-0212 claim 11 (a recorded pair keeps the cost of its first recording, so the path found need not be the cheapest)
+#[test]
+fn recorded_pair_is_not_reopened() {
+    let mk = |no_reopen: bool| {
+        let mut s = scene();
+        s.ruleset.globals.quirks.path_no_reopen = no_reopen;
+        s.place_unit(0, CAR, cell(0, 0), 64);
+        s.build()
+    };
+    let (on, off) = (mk(true), mk(false));
+    let id = vehicles(&on)[0];
+    let (to, marks) = (cell(6, -2), [cell(4, -2)]);
+    let a = find(&on, id, to, Mode::Fresh, &marks).unwrap();
+    let b = find(&off, id, to, Mode::Fresh, &marks).unwrap();
+    for p in [&a, &b] {
+        let v = visits(cell(0, 0), p);
+        assert_eq!(p.len(), 6);
+        assert_eq!(*v.last().unwrap(), to);
+        assert!(!v.contains(&marks[0]));
+    }
+    // A cheaper route to a cell of the path was found later and ignored.
+    let (ca, cb) = (
+        clear_cost_milli(cell(0, 0), &a, &marks),
+        clear_cost_milli(cell(0, 0), &b, &marks),
+    );
+    assert!(
+        ca > cb,
+        "no-reopen {a:?} costs {ca}, reopen {b:?} costs {cb}"
+    );
+}
+
+// spec: S-0212 claim 12 (a found path has at least one step; a search with no route fails)
+#[test]
+fn search_needs_a_step_and_fails_without_a_route() {
+    let mut s = scene();
+    for c in ring(cell(5, 0), 1) {
+        rock(&mut s, c, 0);
+    }
+    s.place_unit(0, CAR, cell(0, 0), 64);
+    let w = s.build();
+    let id = vehicles(&w)[0];
+    assert_eq!(find(&w, id, cell(0, 0), Mode::Fresh, &[]), None);
+    assert_eq!(find(&w, id, cell(5, 0), Mode::Fresh, &[]), None);
+}
+
+// spec: S-0212 claim 15 (a blocked destination is approached to a neighbour, not for passive vehicles)
+#[test]
+fn blocked_destination_is_approached() {
+    let mut s = scene();
+    s.vehicle(
+        "TESTSHY",
+        UnitType {
+            passive: Some(true),
+            ..unit_type(WHEEL, 40, 6)
+        },
+    );
+    s.place_structure(0, HUT, cell(4, 0));
+    s.place_unit(0, CAR, cell(0, 0), 64);
+    s.place_unit(0, "TESTSHY", cell(0, 3), 64);
+    let w = s.build();
+    let at = |c: CellXY| {
+        vehicles(&w)
+            .into_iter()
+            .find(|&v| w.obj(v).unwrap().pos.cell() == c)
+            .unwrap()
+    };
+    let (car, shy) = (at(cell(0, 0)), at(cell(0, 3)));
+    let r = occupancy::reference_level(&w, car);
+    assert_eq!(
+        path::step_outcome(&w, car, cell(5, 0), cell(4, 0), r),
+        Outcome::Blocked
+    );
+    let p = find(&w, car, cell(4, 0), Mode::Fresh, &[]).expect("approach path");
+    let end = *visits(cell(0, 0), &p).last().unwrap();
+    assert_eq!(chebyshev(end, cell(4, 0)), 1);
+    // A passive vehicle does not approach.
+    assert_eq!(find(&w, shy, cell(4, 0), Mode::Fresh, &[]), None);
+}
+
+// spec: S-0212 claim 16 (a train never enters the three cells behind it during the search)
+#[test]
+fn train_search_excludes_cells_behind() {
+    let mut s = scene();
+    s.vehicle(
+        "TESTTRAIN",
+        UnitType {
+            is_train: Some(true),
+            ..unit_type(WHEEL, 40, 6)
+        },
+    );
+    s.place_unit(0, "TESTTRAIN", cell(0, 0), 64); // facing east
+    s.place_unit(0, CAR, cell(0, 6), 64);
+    let w = s.build();
+    let at = |c: CellXY| {
+        vehicles(&w)
+            .into_iter()
+            .find(|&v| w.obj(v).unwrap().pos.cell() == c)
+            .unwrap()
+    };
+    let train = at(cell(0, 0));
+    let f8 = glasnost_num::geom::eight_direction(w.obj(train).unwrap().body.value(w.tick));
+    assert_eq!(f8, 2);
+    let behind = [cell(-1, 1), cell(-1, 0), cell(-1, -1)];
+    for c in behind {
+        assert_eq!(find(&w, train, c, Mode::Fresh, &[]), None, "{c:?}");
+    }
+    let p = find(&w, train, cell(-4, 0), Mode::Fresh, &[]).expect("a path");
+    let d = i32::from(p[0]);
+    assert!(!matches!((d - 2).rem_euclid(8), 3..=5), "first step {d}");
+    assert!(visits(cell(0, 0), &p).iter().all(|c| !behind.contains(c)));
+    // A car facing the same way reverses at once.
+    let car = at(cell(0, 6));
+    assert_eq!(
+        find(&w, car, cell(-4, 6), Mode::Fresh, &[]),
+        Some(vec![6, 6, 6, 6])
+    );
+}
+
+// ------------------------------------------------------- re-paths, congestion
+
+/// A unit A at cell(0, 0) facing east and a unit B of type `b_type` at
+/// cell(1, 0) facing east with `b_steps` stored steps east.
+fn congestion_scene(b_type: &str, b_steps: usize) -> (World, ObjectId) {
+    let mut s = scene();
+    s.vehicle("TESTSLOW", unit_type(WHEEL, 20, 6));
+    s.place_unit(0, CAR, cell(0, 0), 64);
+    s.place_unit(0, b_type, cell(1, 0), 64);
+    let mut w = s.build();
+    let at = |w: &World, c: CellXY| {
+        vehicles(w)
+            .into_iter()
+            .find(|&v| w.obj(v).unwrap().pos.cell() == c)
+            .unwrap()
+    };
+    let a = at(&w, cell(0, 0));
+    let b = at(&w, cell(1, 0));
+    hold_as_moving(&mut w, b);
+    w.obj_mut(b).unwrap().path.steps = vec![2; b_steps];
+    (w, a)
+}
+
+// spec: S-0212 claim 19 (mode 2: the stored path of a vehicle with two or more steps in the cell ahead is made costly)
+#[test]
+fn mode_two_marks_the_path_of_the_unit_ahead() {
+    let marked = [cell(3, 0), cell(4, 0), cell(5, 0)];
+    let dest = cell(6, 0);
+    // One stored step: the unit does not qualify, the route rejoins the row.
+    let (mut w, a) = congestion_scene(CAR, 1);
+    assert_eq!(compute_to(&mut w, a, dest, Mode::Avoid), Search::Found);
+    let short = visits(cell(0, 0), &w.obj(a).unwrap().path.steps);
+    assert!(short.iter().any(|c| marked.contains(c)), "{short:?}");
+    // Seven stored steps: those cells carry the mark and are avoided.
+    let (mut w, a) = congestion_scene(CAR, 7);
+    assert_eq!(compute_to(&mut w, a, dest, Mode::Avoid), Search::Found);
+    let long = visits(cell(0, 0), &w.obj(a).unwrap().path.steps);
+    assert!(!long.iter().any(|c| marked.contains(c)), "{long:?}");
+    assert_eq!(*long.last().unwrap(), dest);
+}
+
+// spec: S-0212 claim 19 (mode 1: a unit of the same type does not qualify, so the search runs as mode 0)
+#[test]
+fn mode_one_without_a_qualifying_unit_runs_as_mode_zero() {
+    let dest = cell(6, 0);
+    let (mut w, a) = congestion_scene(CAR, 7);
+    assert_eq!(compute_to(&mut w, a, dest, Mode::Blocked), Search::Found);
+    let same = w.obj(a).unwrap().path.steps.clone();
+    let (mut w0, a0) = congestion_scene(CAR, 7);
+    assert_eq!(compute_to(&mut w0, a0, dest, Mode::Fresh), Search::Found);
+    assert_eq!(same, w0.obj(a0).unwrap().path.steps);
+    // A slower unit of another type qualifies: its path is marked.
+    let (mut w, a) = congestion_scene("TESTSLOW", 7);
+    assert_eq!(compute_to(&mut w, a, dest, Mode::Blocked), Search::Found);
+    let cells = visits(cell(0, 0), &w.obj(a).unwrap().path.steps);
+    assert!(
+        !cells
+            .iter()
+            .any(|c| [cell(3, 0), cell(4, 0), cell(5, 0)].contains(c)),
+        "{cells:?}"
+    );
+    assert_ne!(w.obj(a).unwrap().path.steps, same);
+}
+
+// -------------------------------------------------------- storage and timing
+
+// spec: S-0212 claim 20 (a unit keeps at most 24 steps of a found path)
+#[test]
+fn stored_path_keeps_24_steps() {
+    let mut s = scene();
+    s.place_unit(0, CAR, cell(-15, -15), 64);
+    let mut w = s.build();
+    let id = vehicles(&w)[0];
+    let full = find(&w, id, cell(15, 15), Mode::Fresh, &[]).unwrap();
+    assert_eq!(full.len(), 30);
+    assert_eq!(
+        compute_to(&mut w, id, cell(15, 15), Mode::Fresh),
+        Search::Found
+    );
+    assert_eq!(w.obj(id).unwrap().path.steps, full[..24].to_vec());
+}
+
+// spec: S-0212 claim 20 (the drive locomotor computes a new path as it begins the last stored step, so it arrives beyond 24 steps)
+#[test]
+fn driving_unit_arrives_beyond_24_steps() {
+    let mut s = scene();
+    s.place_unit(0, CAR, cell(-15, -15), 64);
+    let mut w = s.build();
+    open_orders(&mut w);
+    let id = vehicles(&w)[0];
+    order_move(&mut w, id, cell(15, 15));
+    let mut longest = 0;
+    let n = common::run_until(&mut w, 3000, |w| {
+        longest = longest.max(w.obj(id).unwrap().path.steps.len());
+        w.obj(id).unwrap().pos.cell() == cell(15, 15)
+    });
+    assert!(n < 3000, "did not arrive");
+    assert!(longest <= 24);
+}
+
+// spec: S-0212 claim 21 (R = trunc(P × 900); it runs after a failed fresh search, not after a found path)
+#[test]
+fn retry_delay_after_fresh_searches() {
+    let mut s = scene();
+    s.ruleset.sim.general.path_delay = Some(Decimal("0.05".into()));
+    for c in ring(cell(5, 0), 1) {
+        rock(&mut s, c, 0);
+    }
+    s.place_unit(0, CAR, cell(0, 0), 64);
+    let mut w = s.build();
+    common::run(&mut w, 7);
+    let t = w.tick;
+    let id = vehicles(&w)[0];
+    assert_eq!(w.rules().general.retry_delay, 45);
+    // Found: no delay.
+    let r = compute_to(&mut w, id, cell(-5, 0), Mode::Fresh);
+    assert_eq!(r, Search::Found);
+    path::failed(&mut w, id, r, false);
+    assert!(w.obj(id).unwrap().path.retry_at <= t);
+    // Gate failed after a fresh search: R from this tick.
+    let r = compute_to(&mut w, id, cell(5, 0), Mode::Fresh);
+    assert_eq!(r, Search::GateFailed);
+    path::failed(&mut w, id, r, false);
+    assert_eq!(w.obj(id).unwrap().path.retry_at, t + 45);
+    // Gate failed after a re-path of the drive locomotor: no delay.
+    w.obj_mut(id).unwrap().path.retry_at = 0;
+    let r = compute_to(&mut w, id, cell(5, 0), Mode::Blocked);
+    assert_eq!(r, Search::GateFailed);
+    path::failed(&mut w, id, r, true);
+    assert_eq!(w.obj(id).unwrap().path.retry_at, 0);
+}
+
+// spec: S-0212 claim 21 (a re-path for a blocked step waits for the delay and restarts it)
+// spec: S-0212 claim 22 (moving blocker: re-paths in mode 1 while the blockage timer runs, mode 2 once it has run out)
+#[test]
+fn moving_blocker_wait_then_detour() {
+    let mut s = scene();
+    s.place_unit(0, CAR, cell(0, 0), 64);
+    s.place_unit(0, CAR, cell(1, 0), 64);
+    let mut w = s.build();
+    open_orders(&mut w);
+    let vs = vehicles(&w);
+    let (a, b) = if w.obj(vs[0]).unwrap().pos.cell() == cell(0, 0) {
+        (vs[0], vs[1])
+    } else {
+        (vs[1], vs[0])
+    };
+    order_move(&mut w, a, cell(4, 0));
+    hold_as_moving(&mut w, b);
+    let start = w.obj(a).unwrap().pos;
+    let r = w.rules().general.retry_delay;
+    let delay = w.rules().general.blockage_delay;
+    let mut since = None;
+    let mut retry_log = Vec::new();
+    let mut moved_at = None;
+    for _ in 0..200 {
+        common::run(&mut w, 1);
+        let t = w.tick - 1;
+        let o = w.obj(a).unwrap();
+        assert!(
+            w.obj(b).unwrap().dest.is_some(),
+            "the blocker stays a moving unit"
+        );
+        if since.is_none() {
+            since = o.path.blocked_since;
+        }
+        if retry_log.last() != Some(&o.path.retry_at) {
+            retry_log.push(o.path.retry_at);
+        }
+        if o.pos != start {
+            moved_at = Some(t);
+            break;
+        }
+    }
+    let since = since.expect("a blockage began");
+    let moved_at = moved_at.expect("the unit went round");
+    // Re-paths every R ticks from the blockage, each restarting the delay.
+    let expected: Vec<i32> = (0..)
+        .map(|k| since + k * r)
+        .take_while(|&t| t - since < delay + r)
+        .map(|t| t + r)
+        .collect();
+    assert_eq!(&retry_log[1..], &expected[..], "retry log {retry_log:?}");
+    // The detour comes only from the first mode-2 re-path.
+    let first_mode2 = (0..)
+        .map(|k| since + k * r)
+        .find(|&t| t - since >= delay)
+        .unwrap();
+    assert!(
+        moved_at >= first_mode2,
+        "moved at {moved_at}, mode 2 at {first_mode2}"
+    );
+    let o = w.obj(a).unwrap();
+    assert_ne!(o.pos.cell(), cell(1, 0));
+}
+
+// spec: S-0212 claim 21 (a fresh search waits for the retry delay to be over)
+// spec: S-0212 claim 22 (a next step with outcome blocked clears the stored path; a fresh search follows after the delay)
+#[test]
+fn blocked_next_step_clears_the_path() {
+    let mut s = scene();
+    rock(&mut s, cell(1, 0), 0);
+    s.place_unit(0, CAR, cell(0, 0), 64);
+    let mut w = s.build();
+    open_orders(&mut w);
+    let id = vehicles(&w)[0];
+    let start = w.obj(id).unwrap().pos;
+    let t = w.tick;
+    {
+        let o = w.obj_mut(id).unwrap();
+        o.dest = Some(Target::Cell(cell(4, 0)));
+        o.path.steps = vec![2, 2, 2, 2]; // the first step leads onto the rock
+        o.path.retry_at = t + 5;
+    }
+    common::run(&mut w, 1);
+    let o = w.obj(id).unwrap();
+    assert!(o.path.steps.is_empty());
+    assert_eq!(o.pos, start);
+    assert!(o.dest.is_some());
+    // While the retry delay runs no new path is computed.
+    common::run(&mut w, 3);
+    assert!(w.obj(id).unwrap().path.steps.is_empty());
+    // Once it is over, a fresh search goes round the rock.
+    common::run_until(&mut w, 5, |w| !w.obj(id).unwrap().path.steps.is_empty());
+    let o = w.obj(id).unwrap();
+    assert!(!o.path.steps.is_empty() || o.pos != start);
+    if let Some(&d) = o.path.steps.first() {
+        assert_ne!(d, 2);
+    }
+}
+
+// ------------------------------------------------------------------ failures
+
+// spec: S-0212 claim 23 (gate failure: the driving unit's destination is cleared and it does not give up)
+#[test]
+fn gate_failure_clears_destination_only() {
+    let mut s = scene();
+    for c in ring(cell(5, 0), 1) {
+        rock(&mut s, c, 0);
+    }
+    s.place_unit(0, CAR, cell(0, 0), 64);
+    let mut w = s.build();
+    let id = vehicles(&w)[0];
+    w.obj_mut(id).unwrap().beh.queued = None;
+    let r = compute_to(&mut w, id, cell(5, 0), Mode::Fresh);
+    assert_eq!(r, Search::GateFailed);
+    path::failed(&mut w, id, r, false);
+    let o = w.obj(id).unwrap();
+    assert_eq!(o.dest, None);
+    assert_eq!(o.beh.queued, None);
+}
+
+// spec: S-0212 claim 23 (search failure more than 1 cell away: the unit gives up and queues guard)
+#[test]
+fn search_failure_far_away_gives_up() {
+    let mut s = scene();
+    // Allied buildings leave the ring's cells open: the gate passes, the
+    // search cannot get in.
+    for c in ring(cell(5, 0), 1) {
+        s.place_structure(0, HUT, c);
+    }
+    s.place_unit(0, CAR, cell(0, 0), 64);
+    let mut w = s.build();
+    let id = vehicles(&w)[0];
+    w.obj_mut(id).unwrap().beh.queued = None;
+    let r = compute_to(&mut w, id, cell(5, 0), Mode::Fresh);
+    assert_eq!(r, Search::SearchFailed);
+    path::failed(&mut w, id, r, false);
+    let o = w.obj(id).unwrap();
+    assert_eq!(o.dest, None);
+    assert_eq!(o.beh.queued, Some(Behaviour::Guard));
+    assert_eq!(o.path.retry_at, w.tick + w.rules().general.retry_delay);
+}
+
+// spec: S-0212 claim 23 (search failure within 1 cell: the unit stops without giving up; a driving unit's destination is cleared)
+#[test]
+fn search_failure_within_one_cell_does_not_give_up() {
+    let mut s = scene();
+    s.place_unit(0, CAR, cell(0, 0), 64);
+    let mut w = s.build();
+    let id = vehicles(&w)[0];
+    {
+        let o = w.obj_mut(id).unwrap();
+        o.beh.queued = None;
+        o.dest = Some(Target::Cell(cell(1, 1)));
+    }
+    path::failed(&mut w, id, Search::SearchFailed, false);
+    let o = w.obj(id).unwrap();
+    assert_eq!(o.dest, None);
+    assert_eq!(o.beh.queued, None);
+    assert_eq!(o.path.retry_at, w.tick + w.rules().general.retry_delay);
+}
+
+// spec: S-0212 claim 15 (a unit already next to its blocked destination gets no path: the search fails)
+#[test]
+fn next_to_blocked_destination_gets_no_path() {
+    let mut s = scene();
+    s.place_unit(1, CAR, cell(1, 0), 64); // an enemy: blocked for an unarmed car
+    s.place_unit(0, CAR, cell(0, 0), 64);
+    s.place_structure(0, HUT, cell(4, 0));
+    s.place_unit(0, CAR, cell(3, 0), 64);
+    let w = s.build();
+    let at = |c: CellXY| {
+        vehicles(&w)
+            .into_iter()
+            .find(|&v| w.obj(v).unwrap().pos.cell() == c)
+            .unwrap()
+    };
+    let r = occupancy::reference_level(&w, at(cell(0, 0)));
+    assert_eq!(
+        occupancy::vehicle_outcome(&w, at(cell(0, 0)), cell(1, 0), r),
+        Outcome::Blocked
+    );
+    assert_eq!(find(&w, at(cell(0, 0)), cell(1, 0), Mode::Fresh, &[]), None);
+    assert_eq!(find(&w, at(cell(3, 0)), cell(4, 0), Mode::Fresh, &[]), None);
+}
+
+// ------------------------------------------------------------- substitution
+
+/// A unit at `unit` and an allied parked TESTCAR at cell(6, 0), or an allied
+/// TESTHUT there when `hut` is set; `kind` is the moving unit's type.
+fn substitution_scene(unit: CellXY, hut: bool, kind: &str) -> (World, ObjectId) {
+    let mut s = scene();
+    s.vehicle(
+        "TESTTRAIN",
+        UnitType {
+            is_train: Some(true),
+            ..unit_type(WHEEL, 40, 6)
+        },
+    );
+    if hut {
+        s.place_structure(0, HUT, cell(6, 0));
+    } else {
+        s.place_unit(0, CAR, cell(6, 0), 64);
+    }
+    s.place_unit(0, kind, unit, 64);
+    let w = s.build();
+    let id = vehicles(&w)
+        .into_iter()
+        .find(|&v| w.obj(v).unwrap().pos.cell() == unit)
+        .unwrap();
+    (w, id)
+}
+
+// spec: S-0212 claim 24 (a stationary friendly on the destination: the nearby cell nearest the unit is adopted when farther than close enough)
+#[test]
+fn stationary_friendly_destination_is_replaced() {
+    let (mut w, id) = substitution_scene(cell(0, 0), false, CAR);
+    assert_eq!(
+        compute_to(&mut w, id, cell(6, 0), Mode::Fresh),
+        Search::Found
+    );
+    let o = w.obj(id).unwrap();
+    assert_eq!(o.path.for_goal, Some(cell(5, 0)));
+    assert_eq!(
+        *visits(cell(0, 0), &o.path.steps).last().unwrap(),
+        cell(5, 0)
+    );
+    // Within the close-enough distance (2 cells = 512 leptons < 640): kept.
+    let (mut w, id) = substitution_scene(cell(4, 0), false, CAR);
+    assert_eq!(
+        compute_to(&mut w, id, cell(6, 0), Mode::Fresh),
+        Search::Found
+    );
+    assert_eq!(w.obj(id).unwrap().path.for_goal, Some(cell(6, 0)));
+}
+
+// spec: S-0212 claim 24 (a blocked building cell is always replaced, with no distance test; trains are never substituted)
+#[test]
+fn building_destination_is_always_replaced() {
+    for start in [cell(0, 0), cell(4, 0)] {
+        let (mut w, id) = substitution_scene(start, true, CAR);
+        assert_eq!(
+            compute_to(&mut w, id, cell(6, 0), Mode::Fresh),
+            Search::Found
+        );
+        assert_eq!(
+            w.obj(id).unwrap().path.for_goal,
+            Some(cell(5, 0)),
+            "{start:?}"
+        );
+    }
+    let (mut w, id) = substitution_scene(cell(0, 0), false, "TESTTRAIN");
+    let _ = compute_to(&mut w, id, cell(6, 0), Mode::Fresh);
+    assert_ne!(w.obj(id).unwrap().path.for_goal, Some(cell(5, 0)));
+}
+
+// --------------------------------------------------------- entry outcomes
+
+// spec: S-0212 claim 27 (allied vehicles: stationary friendly, moving blocker, the close case blocked; allied buildings blocked)
+#[test]
+fn vehicle_entry_outcomes() {
+    let mut s = scene();
+    s.place_unit(0, CAR, cell(0, 0), 64); // mover, facing east
+    s.place_unit(0, CAR, cell(1, 0), 64); // allied, parked, same facing
+    s.place_unit(0, CAR, cell(0, 2), 64); // allied, will be moving
+    s.place_unit(0, CAR, cell(1, -2), 192); // allied, facing west, ahead and close
+    s.place_unit(0, CAR, cell(2, -4), 192); // allied, facing west, ahead but 2 cells away
+    s.place_structure(0, HUT, cell(-1, 0));
+    let mut w = s.build();
+    let at = |w: &World, c: CellXY| {
+        vehicles(w)
+            .into_iter()
+            .find(|&v| w.obj(v).unwrap().pos.cell() == c)
+            .unwrap()
+    };
+    let m = at(&w, cell(0, 0));
+    for c in [cell(0, 2), cell(1, -2), cell(2, -4)] {
+        let id = at(&w, c);
+        hold_as_moving(&mut w, id);
+    }
+    let r = occupancy::reference_level(&w, m);
+    let out = |w: &World, c: CellXY| occupancy::vehicle_outcome(w, m, c, r);
+    assert_eq!(out(&w, cell(1, 0)), Outcome::StationaryFriendly);
+    assert_eq!(out(&w, cell(-1, 0)), Outcome::Blocked);
+    // Move the mover next to each moving unit in turn (same facing east).
+    let place = |w: &mut World, c: CellXY| {
+        let o = w.obj_mut(m).unwrap();
+        o.pos = glasnost_sim::world::Pos::centre(c, 0);
+    };
+    place(&mut w, cell(-1, 2));
+    assert_eq!(out(&w, cell(0, 2)), Outcome::MovingBlocker);
+    place(&mut w, cell(0, -2));
+    assert!(occupancy::close_case(&w, m, at(&w, cell(1, -2))));
+    assert_eq!(out(&w, cell(1, -2)), Outcome::Blocked);
+    place(&mut w, cell(0, -4));
+    assert!(!occupancy::close_case(&w, m, at(&w, cell(2, -4))));
+    assert_eq!(out(&w, cell(2, -4)), Outcome::MovingBlocker);
+}
+
+// spec: S-0212 claim 27 (a wall section gives blocked to a vehicle without a weapon that does not crush it)
+#[test]
+fn wall_blocks_an_unarmed_vehicle() {
+    let mut s = scene();
+    s.register("overlays", "TESTFENCE");
+    s.ruleset.sim.overlays.insert(
+        "TESTFENCE".into(),
+        glasnost_rules::sim::OverlayType {
+            wall: Some(true),
+            ..Default::default()
+        },
+    );
+    s.map.has_overlay_data = true;
+    s.cell_mut(cell(1, 0)).overlay = 0;
+    s.place_unit(0, CAR, cell(0, 0), 64);
+    let w = s.build();
+    let id = vehicles(&w)[0];
+    assert_eq!(w.cells.cell(cell(1, 0)).unwrap().overlay, 0);
+    let r = occupancy::reference_level(&w, id);
+    assert_eq!(
+        occupancy::vehicle_outcome(&w, id, cell(1, 0), r),
+        Outcome::Blocked
+    );
+    assert_eq!(
+        occupancy::vehicle_outcome(&w, id, cell(1, 1), r),
+        Outcome::Clear
+    );
+}
