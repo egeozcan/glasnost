@@ -1233,3 +1233,52 @@ fn first_cell_of_a_new_path_acts_before_turning() {
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// Engine defaults of the speed-fraction fields
+
+// spec: S-0207 claim 17 (absent: a and η the doubles nearest 0.03 and 0.002, not widened singles; Dₛ 500)
+// spec: S-0207 Constants (absent-key defaults of a, η and Dₛ)
+#[test]
+fn acceleration_defaults_are_doubles() {
+    let mut s = Scene::new();
+    s.vehicle("BARE", car(WHEEL, 20, true));
+    let mut given = car(WHEEL, 20, true);
+    given.acceleration_factor = dec("0.03");
+    given.deacceleration_factor = dec("0.002");
+    given.slowdown_distance = Some(500);
+    s.vehicle("GIVEN", given);
+    let r = s.sim_rules();
+    let bare = r.unit(Kind::Vehicle, 0).expect("bare").clone();
+    let given = r.unit(Kind::Vehicle, 1).expect("given").clone();
+    // The values claim 17 states, exactly.
+    let a = nearest_double("0.0299999999999999988897769753748434595763683319091796875");
+    let eta = nearest_double("0.00200000000000000004163336342344337026588618755340576171875");
+    assert_eq!(bare.acceleration, a);
+    assert_eq!(bare.deceleration, eta);
+    assert_eq!(bare.slowdown_distance, 500);
+    // A layer that writes 0.03 gives the single nearest 0.03, widened (S-0003 claim 6).
+    assert_eq!(
+        given.acceleration,
+        nearest_double("0.02999999932944774627685546875")
+    );
+    assert_ne!(given.acceleration, bare.acceleration);
+    assert_ne!(given.deceleration, bare.deceleration);
+    // Scenario D19 run A: the first braking value 1 − V × η with V = 51, rounded toward zero.
+    let mode = r.mode;
+    let v = F64::from_i64(51, mode);
+    assert_eq!(
+        ONE.sub(v.mul(bare.deceleration, mode), mode),
+        nearest_double("0.8979999999999999094058011905872263014316558837890625")
+    );
+    // The first tick from rest far from the destination: ρ = a (case 4).
+    let mut s2 = scene(car(WHEEL, 20, true), 0);
+    s2.ruleset
+        .sim
+        .vehicles
+        .get_mut("TESTCAR")
+        .expect("car")
+        .slowdown_distance = None;
+    let (mut w, id) = start(&s2, &[N; 20]);
+    assert_eq!(first_moving_tick(&mut w, id).rho, a);
+}

@@ -883,12 +883,12 @@ fn unit_rules(kind: Kind, name: &str, u: UnitType, q: &Quirks, mode: Rounding) -
         deployed_crushable: u.deployed_crushable.unwrap_or(true),
         // spec: S-0207 Constants (acceleration flag absent: on)
         accelerates: u.accelerates.unwrap_or(true),
-        // spec: S-0207 Constants (acceleration factor absent: 0.03; Q-0020 for its precision)
+        // spec: S-0207 claim 17 (acceleration factor absent: the double nearest 0.03)
         acceleration: dec(&u.acceleration_factor, mode).unwrap_or_else(|| nearest_double("0.03")),
-        // spec: S-0207 Constants (deceleration factor absent: 0.002; Q-0020 for its precision)
+        // spec: S-0207 claim 17 (deceleration factor absent: the double nearest 0.002)
         deceleration: dec(&u.deacceleration_factor, mode)
             .unwrap_or_else(|| nearest_double("0.002")),
-        // spec: S-0207 Constants (slowdown distance absent: 500 leptons)
+        // spec: S-0207 claim 17 (slowdown distance absent: the integer 500 leptons)
         slowdown_distance: u.slowdown_distance.unwrap_or(500),
         passive: b(u.passive),
         train: b(u.is_train),
