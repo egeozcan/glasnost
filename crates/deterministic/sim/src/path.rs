@@ -610,7 +610,8 @@ pub enum NearbyUse {
 }
 
 /// The nearby-cell search (S-0212 claim 25).
-pub fn nearby(w: &mut World, centre: CellXY, use_: NearbyUse) -> Option<CellXY> {
+/// The regions must be up to date ([`regions::ensure`]).
+pub fn nearby(w: &World, centre: CellXY, use_: NearbyUse) -> Option<CellXY> {
     let q = w.rules().quirks;
     let fp = *w.cells.footprint();
     // spec: S-0212 claim 25 (largest radius 31, or w + h − 1 when w + h < 32)
@@ -624,7 +625,7 @@ pub fn nearby(w: &mut World, centre: CellXY, use_: NearbyUse) -> Option<CellXY> 
             let o = w.obj(unit)?;
             let u = w.rules().unit(o.kind, o.type_index)?.clone();
             let z = simplified(u.zone);
-            let rr = regions::reach(w, o.pos.cell(), z);
+            let rr = regions::reach_in(w, o.pos.cell(), z);
             let o = w.obj(unit)?;
             (
                 u.class,
@@ -648,7 +649,7 @@ pub fn nearby(w: &mut World, centre: CellXY, use_: NearbyUse) -> Option<CellXY> 
             } else {
                 u.zone
             };
-            let rr = regions::reach(w, o.pos.cell(), z);
+            let rr = regions::reach_in(w, o.pos.cell(), z);
             let deck = w.cells.idx(centre).is_some_and(|i| w.cells.deck[i]);
             (u.class, z, Some(rr), deck, true, None)
         }
@@ -727,7 +728,7 @@ pub fn nearby(w: &mut World, centre: CellXY, use_: NearbyUse) -> Option<CellXY> 
 /// Whether a cell qualifies for the nearby-cell search (S-0212 claim 25).
 #[allow(clippy::too_many_arguments)]
 fn qualifies(
-    w: &mut World,
+    w: &World,
     c: CellXY,
     class: Option<LocomotionClass>,
     zone: MovementZone,
@@ -751,7 +752,7 @@ fn qualifies(
         return true;
     }
     if let Some(rr) = reach_ref
-        && regions::reach(w, c, zone) != rr
+        && regions::reach_in(w, c, zone) != rr
     {
         return false;
     }
@@ -876,6 +877,7 @@ pub fn compute(w: &mut World, id: ObjectId, mode: Mode) -> Search {
         return Search::SearchFailed;
     };
     let from = o.pos.cell();
+    regions::ensure(w);
     // spec: S-0212 claim 6 (the gate compares the reach regions; skipped for a unit outside the usable area)
     let inside = w.cells.usable(from);
     if inside {

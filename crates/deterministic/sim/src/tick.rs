@@ -21,6 +21,9 @@ pub fn step(w: &mut World) {
     orders::apply_pending(w);
     // spec: S-0203 claim 1 (after the last part the tick number grows by 1)
     w.tick = w.tick.wrapping_add(1);
+    // Derived data, not state: the regions are brought up to date between
+    // ticks, so that input rules can read them (crate::targeting).
+    crate::regions::ensure(w);
 }
 
 /// The turn pass (S-0203 claims 2 to 4, 10 and 11).

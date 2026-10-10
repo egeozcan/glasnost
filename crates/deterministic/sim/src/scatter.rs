@@ -118,6 +118,7 @@ pub fn request(w: &mut World, id: ObjectId, req: ScatterRequest) -> bool {
     };
     // spec: S-0208 claim 12 (d = (d₀ + j − 2) mod 8)
     let d = (d0 + j - 2).rem_euclid(8);
+    crate::regions::ensure(w);
     let dest = if req.threat.is_none() {
         // spec: S-0208 claim 13 (the nearby-cell search of S-0212 claim 25, scatter use)
         path::nearby(

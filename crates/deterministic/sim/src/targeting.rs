@@ -5,13 +5,33 @@
 //! [`crate::orders::issue`] like any other.
 //!
 //! Selection is input-side state, not game state (S-0213 Terms): the caller
-//! keeps it and passes it in, in selection order.
+//! keeps it and passes it in, in selection order. Call these functions
+//! between ticks (they read the regions that every tick leaves current).
+//!
+//! The tables are implemented row by row. Rows whose conditions need state
+//! our engine does not have yet evaluate as that state makes them: nothing is
+//! berserk, melee-linked, being erased, phasing in, disabled, falling,
+//! disguised, bomb-carrying or a loaner; there is no shroud, fog of war or
+//! route mode; no docking answer is given (no contact exchange exists yet,
+//! so the answer is neither); weapon ranges, damage and warhead flags are
+//! not imported (combat, milestone M4), so nothing is in range by itself,
+//! no weapon heals and the combat firing rules never rule a target illegal;
+//! every object is at rookie rank; vehicles have no deploy state; building
+//! factory kinds have no vocabulary yet (no building is a factory).
 
 use glasnost_map::CellXY;
+use glasnost_map::terrain::land;
+use glasnost_num::F64;
+use glasnost_num::geom::root_floor;
+use glasnost_rules::sim::MovementZone;
 
+use crate::infantry::Seq;
+use crate::occupancy::{self, Outcome};
 use crate::orders::Order;
-use crate::rules::{Behaviour, Kind};
-use crate::world::{HouseId, ObjectId, Target, World};
+use crate::path::{self, NearbyUse};
+use crate::regions::{self, Reach};
+use crate::rules::{Behaviour, BuildingRules, Kind, UnitRules};
+use crate::world::{HouseId, ObjectId, Pos, Target, World};
 
 /// What was clicked.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -57,8 +77,10 @@ impl Modifiers {
     }
 }
 
-/// An action (S-0214 table A).
+/// An action (S-0214 table A). Sidebar-mode actions arrive with the economy
+/// topic.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Action {
     /// Nothing.
     Nothing,
@@ -80,10 +102,50 @@ pub enum Action {
     Deploy,
     /// Deploy, refused.
     NoDeploy,
-    /// Area guard.
+    /// Area guard (escort an object or guard a cell).
     AreaGuard,
-    /// Capture.
+    /// Patrol (route mode).
+    Patrol,
+    /// Capture, garrison, infiltrate or hijack.
     Capture,
+    /// Damaging entry.
+    DamagingEntry,
+    /// Repair building.
+    RepairBuilding,
+    /// Repair, refused.
+    NoRepair,
+    /// Recycle.
+    Recycle,
+    /// Heal.
+    Heal,
+    /// Repair vehicle.
+    RepairVehicle,
+    /// Sabotage.
+    Sabotage,
+    /// Bomb.
+    Bomb,
+    /// Bomb, refused.
+    NoBomb,
+    /// Detonate.
+    Detonate,
+    /// Disarm bomb.
+    DisarmBomb,
+    /// Tote.
+    Tote,
+    /// Harvest.
+    Harvest,
+    /// Enter tunnel.
+    EnterTunnel,
+    /// Enter tunnel, refused.
+    NoEnterTunnel,
+    /// Area attack.
+    AreaAttack,
+    /// Demolish.
+    Demolish,
+    /// Airstrike.
+    Airstrike,
+    /// Idle.
+    Idle,
 }
 
 /// The result of a click.
@@ -108,95 +170,906 @@ pub enum KeyCommand {
     Deploy,
 }
 
-/// Whether `id` is an own object of `house` (S-0214 Terms).
+// ---------------------------------------------------------------------------
+// Properties (S-0214 Terms)
+
+fn unit(w: &World, id: ObjectId) -> Option<&UnitRules> {
+    let o = w.obj(id)?;
+    w.rules().unit(o.kind, o.type_index)
+}
+
+fn building(w: &World, id: ObjectId) -> Option<&BuildingRules> {
+    let o = w.obj(id)?;
+    if o.kind != Kind::Building {
+        return None;
+    }
+    w.rules().buildings.get(o.type_index as usize)
+}
+
+fn kind(w: &World, id: ObjectId) -> Option<Kind> {
+    w.obj(id).map(|o| o.kind)
+}
+
+/// An own object of the acting house (S-0214 Terms).
 fn own(w: &World, house: HouseId, id: ObjectId) -> bool {
     w.obj(id).is_some_and(|o| o.owner == Some(house))
 }
 
-/// Whether the acting house can select the object: a live unit or building
-/// on the map.
+/// A unit or building (S-0213 Terms).
+fn unit_or_building(w: &World, id: ObjectId) -> bool {
+    kind(w, id).is_some_and(|k| k != Kind::Terrain)
+}
+
+/// Allied with the actor: the houses are allied or the same (S-0214
+/// Terms). A target without a house is an enemy.
+fn allied(w: &World, actor: ObjectId, target: ObjectId) -> bool {
+    let a = w.obj(actor).and_then(|o| o.owner);
+    let t = w.obj(target).and_then(|o| o.owner);
+    w.allied(a, t)
+}
+
+/// Whether the target belongs to another house than the actor.
+fn other_house(w: &World, actor: ObjectId, target: ObjectId) -> bool {
+    let a = w.obj(actor).and_then(|o| o.owner);
+    let t = w.obj(target).and_then(|o| o.owner);
+    t.is_some() && t != a
+}
+
+/// Whether the acting house can select the object: a live unit or
+/// building on the map.
 pub fn selectable(w: &World, id: ObjectId) -> bool {
-    w.obj(id)
-        .is_some_and(|o| o.kind != Kind::Terrain && o.on_map && o.health > 0)
+    unit_or_building(w, id) && w.obj(id).is_some_and(|o| o.on_map && o.health > 0)
 }
 
-/// Movable (S-0214 Terms), for the states our engine has so far: an own,
-/// live, on-map infantry unit or vehicle. Buildings are not movable until
-/// rally points exist.
+/// A vehicle-like building: it undeploys into a vehicle and has a 1 × 1
+/// foundation (S-0214 Terms).
+fn vehicle_like(w: &World, id: ObjectId) -> bool {
+    building(w, id).is_some_and(|b| b.raw.undeploys_into.is_some() && b.foundation == (1, 1))
+}
+
+/// Rally-capable (S-0214 Terms): a factory of infantry or vehicles (no
+/// factory vocabulary yet), a cloning building or a repair depot.
+fn rally_capable(w: &World, id: ObjectId) -> bool {
+    building(w, id)
+        .is_some_and(|b| b.raw.cloning.unwrap_or(false) || b.raw.unit_repair.unwrap_or(false))
+}
+
+/// Movable (S-0214 Terms).
 pub fn movable(w: &World, house: HouseId, id: ObjectId) -> bool {
-    own(w, house, id)
-        && w.obj(id)
-            .is_some_and(|o| matches!(o.kind, Kind::Infantry | Kind::Vehicle) && o.on_map)
-}
-
-/// Armed (S-0214 Terms): a weapon in its first slot.
-pub fn armed(w: &World, id: ObjectId) -> bool {
-    let Some(o) = w.obj(id) else { return false };
-    let r = w.rules();
-    match o.kind {
-        Kind::Building => r
-            .buildings
-            .get(o.type_index as usize)
-            .is_some_and(|b| b.raw.primary.is_some()),
-        Kind::Terrain => false,
-        _ => r
-            .unit(o.kind, o.type_index)
-            .is_some_and(|u| u.primary.is_some()),
+    if !own(w, house, id) {
+        return false;
+    }
+    match kind(w, id) {
+        // spec: S-0214 Terms (movable mobile object: not disabled, not a spawned aircraft type, not a slave unit, …)
+        Some(Kind::Infantry | Kind::Vehicle) => true,
+        Some(Kind::Aircraft) => !unit(w, id).is_some_and(|u| u.raw.spawned.unwrap_or(false)),
+        // spec: S-0214 Terms (a building: rally-capable or undeploys into a vehicle; a construction yard also needs the lobby option, which our setup lacks)
+        Some(Kind::Building) => {
+            let b = building(w, id);
+            let yard = b.is_some_and(|b| b.raw.construction_yard.unwrap_or(false));
+            rally_capable(w, id) || (b.is_some_and(|b| b.raw.undeploys_into.is_some()) && !yard)
+        }
+        _ => false,
     }
 }
 
-/// Able to fire (S-0214 Terms): own and armed.
+/// Armed (S-0214 Terms): a weapon in the slot it uses (its first slot).
+pub fn armed(w: &World, id: ObjectId) -> bool {
+    match kind(w, id) {
+        Some(Kind::Building) => building(w, id).is_some_and(|b| b.raw.primary.is_some()),
+        Some(Kind::Terrain) | None => false,
+        _ => unit(w, id).is_some_and(|u| u.primary.is_some()),
+    }
+}
+
+/// Able to fire (S-0214 Terms): own, armed, not disabled, not falling.
 pub fn able_to_fire(w: &World, house: HouseId, id: ObjectId) -> bool {
     own(w, house, id) && armed(w, id)
 }
 
-/// The action of one selected actor on a target (S-0214 claims 4 to 9).
-///
-/// First version: own units move to cells and to allied objects, attack
-/// enemy units and buildings, and select own objects; the full tables G, I,
-/// V, AC, B, GC, IC, VC, ACC and BC replace it.
-pub fn action(w: &World, house: HouseId, actor: ObjectId, on: ClickOn, mods: Modifiers) -> Action {
-    let mods = mods.counted();
-    if !own(w, house, actor) {
-        return match on {
-            ClickOn::Object(t) if selectable(w, t) => Action::Select,
-            _ => Action::Nothing,
-        };
-    }
-    match on {
-        ClickOn::Cell(_) => {
-            if mods.force_fire && able_to_fire(w, house, actor) {
-                Action::Attack
-            } else if movable(w, house, actor) {
-                Action::Move
-            } else {
-                Action::Nothing
-            }
-        }
-        ClickOn::Object(t) => {
-            if mods.force_select {
-                return Action::ToggleSelect;
-            }
-            let enemy = w
-                .obj(t)
-                .is_some_and(|x| x.owner.is_some() && !w.allied(Some(house), x.owner));
-            if (mods.force_fire || enemy) && able_to_fire(w, house, actor) && t != actor {
-                Action::Attack
-            } else if mods.force_move && movable(w, house, actor) {
-                Action::Move
-            } else if selectable(w, t) && own(w, house, t) {
-                Action::Select
-            } else if movable(w, house, actor) {
-                Action::Move
-            } else {
-                Action::Nothing
-            }
-        }
+/// A healer: its default weapon does negative damage (weapon damage is not
+/// imported yet, so no weapon heals).
+fn healer(_w: &World, _id: ObjectId) -> bool {
+    false
+}
+
+fn uflag(w: &World, id: ObjectId, f: impl Fn(&UnitRules) -> bool) -> bool {
+    unit(w, id).is_some_and(f)
+}
+
+fn engineer(w: &World, id: ObjectId) -> bool {
+    kind(w, id) == Some(Kind::Infantry) && uflag(w, id, |u| u.engineer)
+}
+
+/// An in-place deployer (S-0214 Terms).
+fn in_place_deployer(w: &World, id: ObjectId) -> bool {
+    match kind(w, id) {
+        // spec: S-0214 Import mapping (infantry Deployer, vehicle IsSimpleDeployer)
+        Some(Kind::Infantry) => uflag(w, id, |u| u.deployer),
+        Some(Kind::Vehicle) => uflag(w, id, |u| u.simple_deployer),
+        _ => false,
     }
 }
 
-/// The representative's action, which the cursor shows (S-0214 claim 1).
-/// With an empty selection: *select* over a selectable object.
+fn seq(w: &World, id: ObjectId) -> Option<Seq> {
+    w.obj(id)
+        .and_then(|o| o.infantry.as_ref())
+        .and_then(|s| s.seq)
+}
+
+/// An in-place deployer in its deployed state (vehicles have no deploy
+/// state yet).
+fn deployed_ipd(w: &World, id: ObjectId) -> bool {
+    in_place_deployer(w, id) && seq(w, id).is_some_and(|q| q == Seq::Deployed)
+}
+
+fn has_undeploy_delay(w: &World, id: ObjectId) -> bool {
+    // spec: S-0214 Import mapping (UndeployDelay: present when 0 or more)
+    unit(w, id).is_some_and(|u| u.raw.undeploy_delay.is_some_and(|d| d >= 0))
+}
+
+fn passengers(w: &World, id: ObjectId) -> bool {
+    // spec: S-0214 Import mapping (Passengers: a transport when more than 0)
+    unit(w, id).is_some_and(|u| u.passengers > 0)
+}
+
+fn immune(w: &World, id: ObjectId) -> bool {
+    // spec: S-0214 Import mapping (Immune absent: no)
+    unit(w, id).is_some_and(|u| u.raw.immune.unwrap_or(false))
+}
+
+fn legal_target(w: &World, id: ObjectId) -> bool {
+    // spec: S-0214 Import mapping (LegalTarget absent: yes)
+    unit(w, id).is_none_or(|u| u.raw.legal_target.unwrap_or(true))
+}
+
+fn invisible(w: &World, id: ObjectId) -> bool {
+    building(w, id).is_some_and(|b| b.raw.invisible_in_game.unwrap_or(false))
+}
+
+/// The health ratio compared with a value (S-0214 F2): −1, 0 or 1.
+fn health_cmp(w: &World, id: ObjectId, c: F64) -> std::cmp::Ordering {
+    let Some(o) = w.obj(id) else {
+        return std::cmp::Ordering::Equal;
+    };
+    let strength = match o.kind {
+        Kind::Building => building(w, id).map_or(0, |b| b.strength),
+        _ => unit(w, id).map_or(0, |u| u.strength),
+    };
+    if strength == 0 {
+        return std::cmp::Ordering::Equal;
+    }
+    let mode = w.rules().mode;
+    // spec: S-0214 F2 (h = p / P in double precision)
+    let h = F64::from_i64(i64::from(o.health), mode)
+        .div(F64::from_i64(i64::from(strength), mode), mode);
+    if h.lt(c) {
+        std::cmp::Ordering::Less
+    } else if h.gt(c) {
+        std::cmp::Ordering::Greater
+    } else {
+        std::cmp::Ordering::Equal
+    }
+}
+
+fn below_full(w: &World, id: ObjectId) -> bool {
+    let mode = w.rules().mode;
+    // spec: S-0214 Constants (full health: a health ratio of exactly 1)
+    health_cmp(w, id, F64::from_i64(1, mode)) == std::cmp::Ordering::Less
+}
+
+/// Counts as a vehicle (S-0214 Terms).
+fn counts_as_vehicle(w: &World, id: ObjectId) -> bool {
+    match kind(w, id) {
+        Some(Kind::Vehicle) => !uflag(w, id, |u| u.raw.non_vehicle.unwrap_or(false)),
+        // Aircraft stand on the ground in our engine so far.
+        Some(Kind::Aircraft) => true,
+        Some(Kind::Building) => vehicle_like(w, id),
+        _ => false,
+    }
+}
+
+/// The height above the surface (S-0214 F3).
+fn height_above_surface(w: &World, id: ObjectId) -> i32 {
+    w.obj(id)
+        .map_or(0, |o| o.pos.z - w.surface_at(o.pos.x, o.pos.y))
+}
+
+fn attackable_height(w: &World, id: ObjectId) -> bool {
+    // spec: S-0214 F3 (z_s > −20)
+    height_above_surface(w, id) > -20
+}
+
+fn moving(w: &World, id: ObjectId) -> bool {
+    occupancy::in_progress(w, id)
+}
+
+/// The scenery check and fallback move (S-0214 Terms); nothing is
+/// disguised in our engine yet, so the scenery check gives *no-move*.
+fn fallback_move(w: &World, house: HouseId, actor: ObjectId) -> Action {
+    if movable(w, house, actor) {
+        Action::NoMove
+    } else {
+        Action::Nothing
+    }
+}
+
+/// Engineer-friendly building (S-0214 table I).
+fn engineer_friendly(w: &World, actor: ObjectId, t: ObjectId) -> bool {
+    let Some(b) = building(w, t) else {
+        return false;
+    };
+    // spec: S-0214 Import mapping (Repairable absent: yes)
+    let repairable = b.raw.repairable.unwrap_or(true) && !vehicle_like(w, t);
+    let passive_neutral = w
+        .obj(t)
+        .and_then(|o| o.owner)
+        .and_then(|h| w.houses.get(usize::from(h.0)))
+        .and_then(|h| w.rules().countries.get(h.country as usize))
+        .is_some_and(|c| c.passive);
+    // spec: S-0214 table I (repairable, not vehicle-like, allied; or of a passive neutral house and garrisonable)
+    (repairable && allied(w, actor, t))
+        || (passive_neutral && b.raw.can_be_occupied.unwrap_or(false))
+}
+
+// ---------------------------------------------------------------------------
+// Table G and the attack rule (claims 4 and 6)
+
+/// The attack rule (S-0214 claim 6).
+fn attack_rule(w: &World, house: HouseId, actor: ObjectId, t: ObjectId, mods: Modifiers) -> bool {
+    let enemy = !allied(w, actor, t);
+    let u = unit(w, actor);
+    // spec: S-0214 claim 6 (may attack as a friend: the attack-friendlies or attack-cursor-on-friendlies flag)
+    let friend_ok = u.is_some_and(|u| {
+        u.raw.attack_friendlies.unwrap_or(false)
+            || u.raw.attack_cursor_on_friendlies.unwrap_or(false)
+    });
+    // spec: S-0214 claim 6 (a) (force-fire; or enemy or friend-attack, the disguise rule, and a legal target)
+    let a = mods.force_fire || ((enemy || friend_ok) && legal_target(w, t));
+    // spec: S-0214 claim 6 (b) (attackable at all: F3)
+    let b = attackable_height(w, t);
+    // spec: S-0214 claim 6 (c) (armed, or an infiltrating infantry type)
+    let c = armed(w, actor)
+        || (kind(w, actor) == Some(Kind::Infantry)
+            && uflag(w, actor, |u| u.raw.infiltrate.unwrap_or(false)));
+    // spec: S-0214 claim 6 (d) (movable, or the target already in range)
+    let d = movable(w, house, actor);
+    a && b && c && d
+}
+
+/// The generic result g on an object (S-0214 table G).
+fn generic(
+    w: &World,
+    house: HouseId,
+    sel: &[ObjectId],
+    actor: ObjectId,
+    t: ObjectId,
+    mods: Modifiers,
+) -> Action {
+    let is_own = own(w, house, actor);
+    let only = sel.len() == 1 && sel[0] == actor;
+    // spec: S-0214 table G row G4 (force-select, own actor, not a loaner)
+    if mods.force_select && is_own {
+        return Action::ToggleSelect;
+    }
+    // spec: S-0214 table G row G5 (the actor itself, the only one selected, own)
+    if t == actor && only && is_own {
+        return Action::Deploy;
+    }
+    // spec: S-0214 table G row G6 (force-move and force-fire on an allied object: escort)
+    if mods.force_move
+        && mods.force_fire
+        && allied(w, actor, t)
+        && movable(w, house, actor)
+        && kind(w, actor) != Some(Kind::Aircraft)
+    {
+        return Action::AreaGuard;
+    }
+    // spec: S-0214 table G row G7 (force-move, own and movable)
+    if mods.force_move && movable(w, house, actor) {
+        return Action::Move;
+    }
+    // spec: S-0214 table G row G8 (the attack rule)
+    if is_own && attack_rule(w, house, actor, t, mods) {
+        return Action::Attack;
+    }
+    // spec: S-0214 table G row G9 (armed and own, the target another house's)
+    if is_own && armed(w, actor) && other_house(w, actor, t) {
+        return Action::Nothing;
+    }
+    // spec: S-0214 table G row G10 (selectable, not selected yet)
+    if selectable(w, t) && !sel.contains(&t) {
+        return Action::Select;
+    }
+    // spec: S-0214 table G row G11
+    Action::Nothing
+}
+
+// ---------------------------------------------------------------------------
+// Kind tables on an object (claims 7 and 8)
+
+/// Infantry on an object (S-0214 table I).
+fn infantry_on(
+    w: &World,
+    house: HouseId,
+    actor: ObjectId,
+    t: ObjectId,
+    g: Action,
+    mods: Modifiers,
+) -> Action {
+    let r = w.rules();
+    let tb = building(w, t);
+    let is_bld = tb.is_some();
+    // spec: S-0214 table I value e (row e4: a hospital, no force-fire, the actor at full health; armories and docking answers need contact exchanges)
+    let e = (is_bld
+        && allied(w, actor, t)
+        && tb.is_some_and(|b| b.raw.hospital.unwrap_or(false))
+        && !mods.force_fire
+        && !below_full(w, actor))
+    .then_some(Action::NoEnter);
+    // spec: S-0214 table I (g₁ = e where defined, else g)
+    let g1 = e.unwrap_or(g);
+    // spec: S-0214 table I value v (deploy: area attack, deploys in place, else nothing)
+    let v = if g1 != Action::Deploy {
+        g1
+    } else if uflag(w, actor, |u| u.deployer) {
+        Action::Deploy
+    } else {
+        Action::Nothing
+    };
+    // spec: S-0214 table I value x (rows x1 and x2; x3 and x4 need a docking answer)
+    let x = (unit_or_building(w, t)
+        && allied(w, actor, t)
+        && passengers(w, t)
+        && movable(w, house, actor)
+        && !matches!(v, Action::Attack | Action::AreaGuard | Action::NoEnter))
+    .then(|| {
+        // spec: S-0214 table I rows x1 and x2 (a balloon-hovering type; a moving mobile target)
+        if uflag(w, actor, |u| u.raw.balloon_hover.unwrap_or(false))
+            || (kind(w, t).is_some_and(Kind::is_mobile) && moving(w, t))
+        {
+            Some(Action::NoEnter)
+        } else {
+            None
+        }
+    })
+    .flatten();
+    // spec: S-0214 table I (g₂ = x where defined, else v)
+    let g2 = x.unwrap_or(v);
+    let eng = engineer(w, actor);
+    let target_building_repairable =
+        tb.is_some_and(|b| b.raw.repairable.unwrap_or(true)) && !vehicle_like(w, t);
+    // spec: S-0214 table I row I1
+    if g == Action::ToggleSelect {
+        return Action::ToggleSelect;
+    }
+    // Row I2 needs a planted bomb, which no object carries yet.
+    // spec: S-0214 table I row I3 (a bridge repair hut: no bridge is destroyed in our engine yet)
+    if eng
+        && target_building_repairable
+        && tb.is_some_and(|b| b.raw.bridge_repair_hut.unwrap_or(false))
+    {
+        return Action::NoRepair;
+    }
+    let friendly = eng && engineer_friendly(w, actor, t);
+    // spec: S-0214 table I row I4 (an engineer below full health; an engineer-friendly hospital)
+    if friendly && below_full(w, actor) && tb.is_some_and(|b| b.raw.hospital.unwrap_or(false)) {
+        return Action::Enter;
+    }
+    // spec: S-0214 table I row I5 (an engineer-friendly building at full health)
+    if friendly && !below_full(w, t) {
+        return if tb.is_some_and(|b| b.raw.grinding.unwrap_or(false)) {
+            Action::Recycle
+        } else {
+            Action::NoRepair
+        };
+    }
+    // spec: S-0214 table I row I6
+    if friendly {
+        return Action::RepairBuilding;
+    }
+    // spec: S-0214 table I row I7 (capture if h ≤ c, else damaging entry)
+    if eng && target_building_repairable && tb.is_some_and(|b| b.raw.capturable.unwrap_or(false)) {
+        return if health_cmp(w, t, r.general.engineer_capture) != std::cmp::Ordering::Greater {
+            Action::Capture
+        } else {
+            Action::DamagingEntry
+        };
+    }
+    // spec: S-0214 table I row I8 (a building this infantry can garrison; no force-fire)
+    if tb.is_some_and(|b| b.raw.can_be_occupied.unwrap_or(false))
+        && uflag(w, actor, |u| u.raw.occupier.unwrap_or(false))
+        && !mods.force_fire
+    {
+        return Action::Capture;
+    }
+    // spec: S-0214 table I row I9
+    if eng && g == Action::Attack {
+        return Action::NoMove;
+    }
+    if healer(w, actor) {
+        // Rows I10 to I13: no weapon heals until weapon damage is imported.
+    }
+    let thief = uflag(w, actor, |u| u.vehicle_thief);
+    // spec: S-0214 table I row I14 (a vehicle thief on a train)
+    if thief && counts_as_vehicle(w, t) && uflag(w, t, |u| u.train) {
+        return Action::Select;
+    }
+    // spec: S-0214 table I row I15 (hijack a vehicle of another house; quirks.hijack_truce_harvester_check)
+    if thief && counts_as_vehicle(w, t) && other_house(w, actor, t) {
+        return Action::Capture;
+    }
+    // Rows I16 to I18 need the charge flag (not imported) and weapon cursor flags (combat).
+    // spec: S-0214 table I row I19 (a bomb planter: bomb if the type accepts bombs and carries none)
+    if uflag(w, actor, |u| u.raw.ivan.unwrap_or(false)) && g1 == Action::Attack {
+        // spec: S-0214 Import mapping (Bombable absent: yes)
+        let bombable = unit(w, t).is_none_or(|u| u.raw.bombable.unwrap_or(true));
+        return if bombable {
+            Action::Bomb
+        } else {
+            Action::NoBomb
+        };
+    }
+    let dipd = deployed_ipd(w, actor);
+    // spec: S-0214 table I row I20
+    if dipd && g1 == Action::Move {
+        return Action::NoMove;
+    }
+    // spec: S-0214 table I row I21 (does not fire while deployed; ranges are not imported)
+    if dipd && g1 == Action::Attack && !uflag(w, actor, |u| u.raw.deploy_fire.unwrap_or(false)) {
+        return Action::NoMove;
+    }
+    // spec: S-0214 table I row I22 (deployed, with an undeploy delay)
+    if dipd && g1 == Action::Deploy && has_undeploy_delay(w, actor) {
+        return Action::NoDeploy;
+    }
+    // spec: S-0214 table I row I23 (undeploying, with an undeploy delay)
+    if in_place_deployer(w, actor)
+        && has_undeploy_delay(w, actor)
+        && seq(w, actor) == Some(Seq::Undeploy)
+        && g1 == Action::Deploy
+    {
+        return Action::NoDeploy;
+    }
+    let infiltrator = uflag(w, actor, |u| u.raw.infiltrate.unwrap_or(false));
+    // spec: S-0214 table I row I24 (infiltrate an enemy spyable or capturable building)
+    if infiltrator && g2 == Action::Attack && is_bld && !allied(w, actor, t) {
+        let spy = uflag(w, actor, |u| u.raw.agent.unwrap_or(false));
+        let ok = tb.is_some_and(|b| {
+            if spy {
+                b.raw.spyable.unwrap_or(false)
+            } else {
+                b.raw.capturable.unwrap_or(false)
+            }
+        });
+        if ok {
+            return Action::Capture;
+        }
+    }
+    // spec: S-0214 table I row I25
+    if infiltrator && !armed(w, actor) && g2 == Action::Attack {
+        return fallback_move(w, house, actor);
+    }
+    // spec: S-0214 table I row I26 (a recycling building)
+    if g2 == Action::Select
+        && tb.is_some_and(|b| b.raw.grinding.unwrap_or(false))
+        && !vehicle_like(w, t)
+    {
+        return if own(w, house, t) {
+            Action::Recycle
+        } else {
+            Action::NoEnter
+        };
+    }
+    // spec: S-0214 table I row I27
+    if g2 == Action::Attack && immune(w, t) {
+        return Action::NoMove;
+    }
+    // spec: S-0214 table I row I28
+    if g2 == Action::Nothing {
+        return fallback_move(w, house, actor);
+    }
+    // spec: S-0214 table I row I29
+    g2
+}
+
+/// A vehicle clicked on itself (S-0214 table VD).
+fn vehicle_deploy(w: &World, actor: ObjectId) -> Action {
+    let on_tunnel = w
+        .obj(actor)
+        .and_then(|o| w.cells.cell(o.pos.cell()))
+        .is_some_and(|c| c.land == land::TUNNEL);
+    // spec: S-0214 Terms (deploy readiness: never on a tunnel cell)
+    let ready = !on_tunnel;
+    let deploy_weapon = uflag(w, actor, |u| u.raw.deploy_fire.unwrap_or(false));
+    // spec: S-0214 table VD row VD3 (deploys in place)
+    if uflag(w, actor, |u| u.simple_deployer) {
+        return if ready {
+            Action::Deploy
+        } else {
+            Action::NoDeploy
+        };
+    }
+    // spec: S-0214 table VD row VD4 (no passengers, no deploy weapon, not in a bunker)
+    if !passengers(w, actor) && !deploy_weapon {
+        return Action::Nothing;
+    }
+    // spec: S-0214 table VD row VD5 (no passengers and a deploy weapon)
+    if !passengers(w, actor) && deploy_weapon {
+        return if ready {
+            Action::Deploy
+        } else {
+            Action::NoDeploy
+        };
+    }
+    // spec: S-0214 table VD row VD6 (a transport that carries no passengers now; transports hold none yet)
+    Action::NoDeploy
+}
+
+/// A vehicle on an object (S-0214 table V).
+fn vehicle_on(w: &World, house: HouseId, actor: ObjectId, t: ObjectId, g: Action) -> Action {
+    let fire = able_to_fire(w, house, actor);
+    let crush = occupancy::is_crusher(w, actor) && occupancy::crushable_by(w, actor, t);
+    // spec: S-0214 table V value k
+    let k = match g {
+        Action::Attack if !fire && crush => Action::Move,
+        Action::Attack if !fire => Action::Select,
+        Action::Deploy => vehicle_deploy(w, actor),
+        _ => g,
+    };
+    // spec: S-0214 table V values b and n (no healers; no docking answers yet)
+    let n = k;
+    // spec: S-0214 table V value q (row q1: a moving transport refuses)
+    let q = if !matches!(
+        n,
+        Action::Attack | Action::RepairVehicle | Action::AreaGuard | Action::NoEnter
+    ) && unit_or_building(w, t)
+        && allied(w, actor, t)
+        && t != actor
+        && passengers(w, t)
+        && kind(w, t).is_some_and(Kind::is_mobile)
+        && moving(w, t)
+    {
+        Action::NoEnter
+    } else {
+        n
+    };
+    // spec: S-0214 table V row V1
+    if g == Action::ToggleSelect {
+        return Action::ToggleSelect;
+    }
+    // spec: S-0214 table V row V4
+    if q == Action::Nothing {
+        return fallback_move(w, house, actor);
+    }
+    // spec: S-0214 table V row V6
+    if q == Action::Attack && immune(w, t) {
+        return Action::NoMove;
+    }
+    // spec: S-0214 table V row V7
+    q
+}
+
+/// An aircraft on an object (S-0214 table AC).
+fn aircraft_on(
+    w: &World,
+    house: HouseId,
+    sel: &[ObjectId],
+    actor: ObjectId,
+    t: ObjectId,
+    g: Action,
+    mods: Modifiers,
+) -> Action {
+    match g {
+        // spec: S-0214 table AC row AC1
+        Action::ToggleSelect => Action::ToggleSelect,
+        // spec: S-0214 table AC rows AC5 and AC6 (the aircraft's action on the target's cell)
+        Action::Nothing => {
+            let Some(c) = w.obj(t).map(|o| o.pos.cell()) else {
+                return Action::Nothing;
+            };
+            let a = cell_action(w, house, sel, actor, c, mods);
+            if a == Action::Attack && immune(w, t) {
+                Action::NoMove
+            } else {
+                a
+            }
+        }
+        // spec: S-0214 table AC row AC7
+        Action::Deploy => {
+            if passengers(w, actor) {
+                Action::Deploy
+            } else {
+                Action::Nothing
+            }
+        }
+        // spec: S-0214 table AC row AC8
+        Action::Attack if unit(w, actor).is_some_and(|u| u.primary.is_none()) => Action::Nothing,
+        // spec: S-0214 table AC row AC9
+        Action::Attack if immune(w, t) => Action::NoMove,
+        // spec: S-0214 table AC row AC10 (a repair depot: the dock list is not imported yet, so no-enter)
+        Action::Select if building(w, t).is_some_and(|b| b.raw.unit_repair.unwrap_or(false)) => {
+            Action::NoEnter
+        }
+        // spec: S-0214 table AC row AC11
+        other => other,
+    }
+}
+
+/// A building on an object (S-0214 table B).
+fn building_on(w: &World, actor: ObjectId, t: ObjectId, g: Action) -> Action {
+    // spec: S-0214 table B row B1
+    if invisible(w, actor) || invisible(w, t) {
+        return Action::Nothing;
+    }
+    match g {
+        // spec: S-0214 table B row B2
+        Action::ToggleSelect => Action::ToggleSelect,
+        // spec: S-0214 table B rows B4 to B6 (no power, absorbed units, occupants or factories yet)
+        Action::Deploy => Action::Nothing,
+        // spec: S-0214 table B row B7 (a pulse cannon)
+        Action::Attack if building(w, actor).is_some_and(|b| b.raw.emp_cannon.unwrap_or(false)) => {
+            Action::Nothing
+        }
+        // spec: S-0214 table B row B8
+        Action::Attack if immune(w, t) => Action::NoMove,
+        // spec: S-0214 table B row B13
+        other => other,
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Cells (claim 9)
+
+/// The generic cell result c (S-0214 table GC).
+fn generic_cell(w: &World, house: HouseId, actor: ObjectId, c: CellXY, mods: Modifiers) -> Action {
+    // spec: S-0214 table GC row GC2
+    if !own(w, house, actor) {
+        return Action::Nothing;
+    }
+    let mv = movable(w, house, actor);
+    let rally = rally_capable(w, actor);
+    // spec: S-0214 table GC row GC3 (force-move and force-fire: area guard; no route points yet)
+    if mods.force_move
+        && mods.force_fire
+        && mv
+        && (able_to_fire(w, house, actor) || engineer(w, actor))
+    {
+        return Action::AreaGuard;
+    }
+    // spec: S-0214 table GC row GC4 (a weapon, force-fire or an attackable cell, movable or in range)
+    if armed(w, actor) && (mods.force_fire || attackable_cell(w, c)) && mv {
+        return Action::Attack;
+    }
+    // spec: S-0214 table GC row GC6 (outside the usable area)
+    if (mv || rally) && !w.cells.usable(c) {
+        return Action::NoMove;
+    }
+    // spec: S-0214 table GC row GC7
+    if (mv || rally) && mods.force_select {
+        return Action::Move;
+    }
+    // spec: S-0214 table GC row GC8
+    if rally && mods.force_move {
+        return Action::Move;
+    }
+    if mv {
+        let reference = occupancy::reference_level(w, actor);
+        let out = match kind(w, actor) {
+            Some(Kind::Infantry) => occupancy::infantry_outcome(w, actor, c, reference),
+            Some(Kind::Aircraft) => Outcome::Clear,
+            _ => occupancy::vehicle_outcome(w, actor, c, reference),
+        };
+        // spec: S-0214 table GC row GC9 (entry outcome clear or cloaked blocker)
+        if matches!(out, Outcome::Clear | Outcome::CloakedBlocker) {
+            return Action::Move;
+        }
+    }
+    // spec: S-0214 table GC row GC11
+    if mv || rally {
+        return Action::NoMove;
+    }
+    // spec: S-0214 table GC row GC12
+    Action::Nothing
+}
+
+/// An attackable cell without force-fire (S-0214 table GC): a
+/// destroyable-cliff cell without an overlay (warhead flags are not imported,
+/// and walls have no owner yet).
+fn attackable_cell(w: &World, c: CellXY) -> bool {
+    let Some(cell) = w.cells.cell(c) else {
+        return false;
+    };
+    let cat = w.catalogue.as_deref();
+    let (s, n) = cat.map_or((0, 0), |k| (k.roles.destroyable_cliff, k.tile_count()));
+    // spec: S-0214 Terms (destroyable-cliff cell: s ≤ t ≤ s + 1 and 0 ≤ t < N)
+    let cliff = cell.tile >= s && cell.tile <= s + 1 && cell.tile >= 0 && cell.tile < n;
+    cliff && cell.overlay == glasnost_map::NO_OVERLAY
+}
+
+/// The final action on a cell by kind (S-0214 tables IC, VC, ACC and BC);
+/// no shroud, so c′ = c.
+fn cell_action(
+    w: &World,
+    house: HouseId,
+    _sel: &[ObjectId],
+    actor: ObjectId,
+    c: CellXY,
+    mods: Modifiers,
+) -> Action {
+    let g = generic_cell(w, house, actor, c, mods);
+    let tunnel = w.cells.cell(c).is_some_and(|x| x.land == land::TUNNEL);
+    match kind(w, actor) {
+        Some(Kind::Infantry) => {
+            let jumpjet = uflag(w, actor, |u| u.jumpjet);
+            let dipd = deployed_ipd(w, actor);
+            // spec: S-0214 table IC row IC5 (a jumpjet type on a tunnel cell)
+            if jumpjet && matches!(g, Action::Move | Action::NoMove) && tunnel {
+                return Action::Nothing;
+            }
+            // spec: S-0214 table IC row IC6
+            if dipd && g == Action::Move {
+                return Action::NoMove;
+            }
+            // spec: S-0214 table IC row IC7
+            if dipd
+                && g == Action::Attack
+                && !uflag(w, actor, |u| u.raw.deploy_fire.unwrap_or(false))
+            {
+                return Action::NoMove;
+            }
+            // spec: S-0214 table IC row IC8
+            if g == Action::Nothing && !jumpjet && movable(w, house, actor) {
+                return Action::NoMove;
+            }
+            // spec: S-0214 table IC row IC9
+            g
+        }
+        Some(Kind::Vehicle) => {
+            let cell = w.cells.cell(c);
+            // spec: S-0214 table VC row VC2 (ore land and a harvester, or weed land and a weeder)
+            if g == Action::Move
+                && cell.is_some_and(|x| {
+                    (x.land == land::TIBERIUM && uflag(w, actor, |u| u.harvester))
+                        || (x.land == land::WEEDS
+                            && uflag(w, actor, |u| u.raw.weeder.unwrap_or(false)))
+                })
+            {
+                return Action::Harvest;
+            }
+            // spec: S-0214 table VC row VC7
+            g
+        }
+        Some(Kind::Aircraft) => {
+            // spec: S-0214 table ACC (attack without a weapon in the first slot: nothing)
+            if g == Action::Attack && !armed(w, actor) {
+                Action::Nothing
+            } else {
+                g
+            }
+        }
+        Some(Kind::Building) => {
+            // spec: S-0214 table BC row BC1
+            if invisible(w, actor) {
+                return Action::Nothing;
+            }
+            // spec: S-0214 table BC row BC3 (attack without a weapon in the first slot)
+            if g == Action::Attack && !armed(w, actor) {
+                return Action::Attack;
+            }
+            // spec: S-0214 table BC row BC4
+            if g == Action::Attack
+                && !building(w, actor).is_some_and(|b| b.raw.emp_cannon.unwrap_or(false))
+            {
+                return Action::Attack;
+            }
+            // spec: S-0214 table BC row BC5 (an own rally-capable building)
+            if own(w, house, actor) && rally_capable(w, actor) {
+                return Action::Move;
+            }
+            // spec: S-0214 table BC rows BC6 and BC7
+            if g == Action::Attack || (g == Action::Move && !movable(w, house, actor)) {
+                return Action::Nothing;
+            }
+            // spec: S-0214 table BC row BC8
+            g
+        }
+        _ => Action::Nothing,
+    }
+}
+
+/// The action of one selected actor on a target, with the whole selection
+/// in view (S-0214 claims 4 to 9).
+fn action_in(
+    w: &World,
+    house: HouseId,
+    sel: &[ObjectId],
+    actor: ObjectId,
+    on: ClickOn,
+    mods: Modifiers,
+) -> Action {
+    let mods = mods.counted();
+    match on {
+        ClickOn::Object(t) => {
+            let g = generic(w, house, sel, actor, t, mods);
+            // spec: S-0214 claim 4 (an actor that is not own: g is the final action)
+            if !own(w, house, actor) {
+                return g;
+            }
+            match kind(w, actor) {
+                Some(Kind::Infantry) => infantry_on(w, house, actor, t, g, mods),
+                Some(Kind::Vehicle) => vehicle_on(w, house, actor, t, g),
+                Some(Kind::Aircraft) => aircraft_on(w, house, sel, actor, t, g, mods),
+                Some(Kind::Building) => building_on(w, actor, t, g),
+                _ => Action::Nothing,
+            }
+        }
+        ClickOn::Cell(c) => cell_action(w, house, sel, actor, c, mods),
+    }
+}
+
+/// The action of one actor on a target, judged as if it were the only
+/// selected object.
+pub fn action(w: &World, house: HouseId, actor: ObjectId, on: ClickOn, mods: Modifiers) -> Action {
+    action_in(w, house, &[actor], actor, on, mods)
+}
+
+// ---------------------------------------------------------------------------
+// The representative, the click and table M (claims 1 to 3, 5, 10 to 12)
+
+/// The representative rank (S-0214 table R).
+fn rank(w: &World, id: ObjectId) -> u8 {
+    // spec: S-0214 table R (0 not a unit or building; 2 not armed; 3 an armed building; 4 or 5 an armed unit)
+    if !unit_or_building(w, id) {
+        0
+    } else if !armed(w, id) {
+        2
+    } else if kind(w, id) == Some(Kind::Building) {
+        3
+    } else {
+        let damage = unit(w, id)
+            .and_then(|u| u.primary.as_ref())
+            .and_then(|p| w.rules().weapons.get(p))
+            .and_then(|wp| wp.damage);
+        // spec: S-0214 table R (a weapon doing zero or negative damage, or without damage: rank 4)
+        if damage.is_some_and(|d| d > 0) { 5 } else { 4 }
+    }
+}
+
+/// The representative distance (S-0214 F1).
+fn rep_distance(w: &World, id: ObjectId, on: ClickOn) -> u64 {
+    let a = w.reference_point(id);
+    let b = match on {
+        ClickOn::Object(t) => w.reference_point(t),
+        // spec: S-0214 F1 (a cell target: its centre at height 0)
+        ClickOn::Cell(c) => Pos::centre(c, 0),
+    };
+    let dx = i64::from(a.x - b.x);
+    let dy = i64::from(a.y - b.y);
+    let dz = i64::from(a.z - b.z);
+    // spec: S-0214 F1 (d = ⌊r(n)⌋, the table square root)
+    root_floor((dx * dx + dy * dy + dz * dz) as u64, true, w.rules().mode)
+}
+
+/// The representative (S-0214 claim 1): highest rank, then nearest to the
+/// target, then selected earliest.
+fn representative(w: &World, sel: &[ObjectId], on: ClickOn) -> Option<ObjectId> {
+    let mut best: Option<(u8, u64, ObjectId)> = None;
+    for &id in sel.iter().filter(|&&id| w.obj(id).is_some()) {
+        let key = (rank(w, id), rep_distance(w, id, on));
+        let better = match best {
+            None => true,
+            Some((r, d, _)) => key.0 > r || (key.0 == r && key.1 < d),
+        };
+        if better {
+            best = Some((key.0, key.1, id));
+        }
+    }
+    best.map(|b| b.2)
+}
+
+/// The action the cursor shows (S-0214 claim 1). With an empty selection:
+/// *select* over a selectable object.
 pub fn cursor(
     w: &World,
     house: HouseId,
@@ -204,9 +1077,8 @@ pub fn cursor(
     on: ClickOn,
     mods: Modifiers,
 ) -> Action {
-    let rep = selection.iter().copied().find(|&id| w.obj(id).is_some());
-    match rep {
-        Some(id) => action(w, house, id, on, mods),
+    match representative(w, selection, on) {
+        Some(id) => action_in(w, house, selection, id, on, mods),
         None => match on {
             ClickOn::Object(t) if selectable(w, t) => Action::Select,
             _ => Action::Nothing,
@@ -214,8 +1086,15 @@ pub fn cursor(
     }
 }
 
+/// Attack-move eligibility (S-0214 claim 5).
+fn eligible(w: &World, id: ObjectId) -> bool {
+    matches!(kind(w, id), Some(Kind::Infantry | Kind::Vehicle))
+        && armed(w, id)
+        && !uflag(w, id, |u| u.raw.prevent_attack_move.unwrap_or(false))
+}
+
 /// A click: each selected object resolves it itself (S-0214 claims 2, 3,
-/// 10 and 12).
+/// 5, 9 to 12).
 pub fn click(
     w: &World,
     house: HouseId,
@@ -224,16 +1103,10 @@ pub fn click(
     mods: Modifiers,
 ) -> ClickResult {
     let shown = cursor(w, house, selection, on, mods);
+    let first_own = selection.first().is_some_and(|&f| own(w, house, f));
     match (shown, on) {
-        // spec: S-0214 claim 12 (select replaces the selection with the clicked object)
-        (Action::Select, ClickOn::Object(t)) => {
-            return ClickResult {
-                orders: Vec::new(),
-                selection: Some(vec![t]),
-            };
-        }
-        // spec: S-0214 claim 12 (toggle select adds or removes the clicked object)
-        (Action::ToggleSelect, ClickOn::Object(t)) => {
+        // spec: S-0214 claim 12 (toggle select acts only when the first selected object is own)
+        (Action::ToggleSelect, ClickOn::Object(t)) if first_own => {
             let mut s: Vec<ObjectId> = selection.to_vec();
             if let Some(i) = s.iter().position(|&x| x == t) {
                 s.remove(i);
@@ -245,47 +1118,200 @@ pub fn click(
                 selection: Some(s),
             };
         }
+        // spec: S-0214 claim 12 (select replaces the selection; a toggle that does not act is a select)
+        (Action::Select | Action::ToggleSelect, ClickOn::Object(t)) => {
+            return ClickResult {
+                orders: Vec::new(),
+                selection: Some(vec![t]),
+            };
+        }
+        // spec: S-0214 claim 3 (nothing over a selectable object not selected yet acts as select)
+        (Action::Nothing, ClickOn::Object(t)) => {
+            if selectable(w, t) && !selection.contains(&t) {
+                return ClickResult {
+                    orders: Vec::new(),
+                    selection: Some(vec![t]),
+                };
+            }
+            return ClickResult::default();
+        }
         // spec: S-0214 claim 3 (nothing over a cell does nothing)
-        (Action::Nothing, _) => return ClickResult::default(),
+        (Action::Nothing, ClickOn::Cell(_)) => return ClickResult::default(),
         _ => {}
     }
+    // spec: S-0214 claim 5 (the gesture only when every selected unit or building is eligible)
     let am = mods.attack_move()
-        && selection.iter().all(|&id| {
-            w.obj(id)
-                .is_some_and(|o| matches!(o.kind, Kind::Infantry | Kind::Vehicle))
-                && armed(w, id)
-        });
+        && selection
+            .iter()
+            .all(|&id| !unit_or_building(w, id) || eligible(w, id));
     let mut orders = Vec::new();
     // spec: S-0214 claim 2 (every selected object in selection order resolves the click itself)
     for &id in selection {
-        let a = action(w, house, id, on, mods);
-        let target = match on {
-            ClickOn::Object(t) => Target::Object(t),
-            ClickOn::Cell(c) => Target::Cell(c),
-        };
-        // spec: S-0214 table M (move: behaviour move with the destination; attack: behaviour attack with the target)
-        let order = match a {
-            Action::Move => Some(Order::Behaviour {
-                actor: id,
-                behaviour: Behaviour::Move,
-                attack_move: am,
-                target: None,
-                dest: Some(target),
-            }),
-            Action::Attack => Some(Order::Behaviour {
-                actor: id,
-                behaviour: Behaviour::Attack,
-                attack_move: am,
-                target: Some(target),
-                dest: None,
-            }),
-            _ => None,
-        };
-        orders.extend(order);
+        if w.obj(id).is_none() {
+            continue;
+        }
+        let a = action_in(w, house, selection, id, on, mods);
+        orders.extend(order_for(w, house, id, a, on, mods, am));
     }
     ClickResult {
         orders,
         selection: None,
+    }
+}
+
+/// The move destination of claim 11.
+fn move_destination(
+    w: &World,
+    house: HouseId,
+    actor: ObjectId,
+    on: ClickOn,
+    a: Action,
+    mods: Modifiers,
+) -> Option<Target> {
+    let o = w.obj(actor)?;
+    let zone = unit(w, actor).map_or(MovementZone::Normal, |u| u.zone);
+    match on {
+        ClickOn::Cell(c) => {
+            // spec: S-0214 claim 11 (on a cell: the nearby-cell search of S-0212 claim 25; none found, no order)
+            path::nearby(w, c, NearbyUse::MoveOrder { unit: actor }).map(Target::Cell)
+        }
+        ClickOn::Object(t) => {
+            let tc = w.obj(t)?.pos.cell();
+            // spec: S-0214 claim 11 (an underground zone counts as ground)
+            let z = if zone == MovementZone::Subterranean {
+                MovementZone::Normal
+            } else {
+                zone
+            };
+            let reachable = matches!(regions::reach_in(w, tc, z), Reach::Region(_))
+                && regions::reach_in(w, tc, z) == regions::reach_in(w, o.pos.cell(), z);
+            let infantry_force = o.kind == Kind::Infantry && mods.force_move;
+            let flies = o.kind == Kind::Aircraft
+                || zone == MovementZone::Subterranean
+                || (o.kind == Kind::Infantry && uflag(w, actor, |u| u.jumpjet));
+            // spec: S-0214 claim 11 (the object itself when moving there is possible; else a nearby cell, else the object)
+            if a == Action::Move && (flies || (w.cells.usable(tc) && reachable && !infantry_force))
+            {
+                Some(Target::Object(t))
+            } else {
+                let _ = house;
+                Some(
+                    path::nearby(w, tc, NearbyUse::MoveOrder { unit: actor })
+                        .map_or(Target::Object(t), Target::Cell),
+                )
+            }
+        }
+    }
+}
+
+/// The order an action gives (S-0214 table M), with claim 9's rule for
+/// cells outside the usable area and the attack-move translation of claim 5.
+#[allow(clippy::too_many_arguments)]
+fn order_for(
+    w: &World,
+    house: HouseId,
+    id: ObjectId,
+    a: Action,
+    on: ClickOn,
+    mods: Modifiers,
+    am: bool,
+) -> Option<Order> {
+    let k = kind(w, id)?;
+    let target = match on {
+        ClickOn::Object(t) => Target::Object(t),
+        ClickOn::Cell(c) => Target::Cell(c),
+    };
+    let on_self = on == ClickOn::Object(id);
+    let behaviour = |b: Behaviour, target: Option<Target>, dest: Option<Target>| {
+        Some(Order::Behaviour {
+            actor: id,
+            behaviour: b,
+            attack_move: am && matches!(b, Behaviour::Move | Behaviour::Attack),
+            target,
+            dest,
+        })
+    };
+    if let ClickOn::Cell(c) = on
+        && k.is_mobile()
+        && !w.cells.usable(c)
+        && a != Action::NoMove
+    {
+        // spec: S-0214 claim 9 (outside the usable area only a no-move gives an order)
+        return None;
+    }
+    let mv = movable(w, house, id);
+    let fire = able_to_fire(w, house, id);
+    if k == Kind::Building {
+        // spec: S-0214 table M part 3 (buildings)
+        return match (a, on) {
+            (Action::Attack, _) => behaviour(Behaviour::Attack, Some(target), None),
+            // A guard-spot order: the factory search of S-0213 claim 20 waits for the factory vocabulary; the clicked place is used.
+            (Action::Move, _) | (Action::Harvest, ClickOn::Cell(_)) if rally_capable(w, id) => {
+                Some(Order::GuardSpot {
+                    actor: id,
+                    spot: target,
+                })
+            }
+            _ => None,
+        };
+    }
+    // spec: S-0214 table M part 1 (no order on the actor itself for attack, heal, disarm, and for a vehicle also no-move and repair)
+    let self_none = match k {
+        Kind::Infantry => matches!(a, Action::Attack | Action::Heal | Action::DisarmBomb),
+        Kind::Vehicle => matches!(
+            a,
+            Action::Attack | Action::NoMove | Action::Heal | Action::RepairVehicle
+        ),
+        _ => false,
+    };
+    if on_self && self_none {
+        return None;
+    }
+    // spec: S-0214 table M part 1 (a deployed in-place deployer's no-move on a cell gives no order)
+    if deployed_ipd(w, id) && a == Action::NoMove && matches!(on, ClickOn::Cell(_)) {
+        return None;
+    }
+    if k == Kind::Aircraft && matches!(on, ClickOn::Object(_)) {
+        // spec: S-0214 table M part 1 (aircraft on an object)
+        match a {
+            Action::NoMove => return None,
+            Action::Enter => return behaviour(Behaviour::Enter, None, Some(target)),
+            Action::Deploy => return behaviour(Behaviour::Unload, None, None),
+            Action::Tote => return behaviour(Behaviour::Move, None, Some(target)),
+            _ => {}
+        }
+    }
+    // spec: S-0214 table M part 1 (the infantry and vehicle "as for" rows)
+    let a = match (k, a) {
+        (Kind::Infantry, Action::DamagingEntry | Action::RepairBuilding) => Action::Capture,
+        (Kind::Infantry, Action::Heal | Action::DisarmBomb)
+        | (Kind::Vehicle, Action::Heal | Action::RepairVehicle) => Action::Attack,
+        _ => a,
+    };
+    // spec: S-0214 table M part 2 (infantry, vehicles and aircraft, with their needs)
+    match a {
+        Action::Move | Action::NoMove if mv => {
+            let dest = move_destination(w, house, id, on, a, mods)?;
+            behaviour(Behaviour::Move, None, Some(dest))
+        }
+        Action::Attack | Action::Bomb | Action::Demolish | Action::Airstrike if fire => {
+            behaviour(Behaviour::Attack, Some(target), None)
+        }
+        Action::Enter if mv => behaviour(Behaviour::Enter, None, Some(target)),
+        Action::Capture if mv => behaviour(Behaviour::Capture, None, Some(target)),
+        Action::Recycle if mv => behaviour(Behaviour::Eaten, None, Some(target)),
+        Action::Sabotage => behaviour(Behaviour::Sabotage, None, Some(target)),
+        Action::AreaGuard => match on {
+            ClickOn::Object(_) if fire && mv => behaviour(Behaviour::AreaGuard, Some(target), None),
+            ClickOn::Cell(_) if mv && (armed(w, id) || engineer(w, id)) => {
+                behaviour(Behaviour::AreaGuard, Some(target), None)
+            }
+            _ => None,
+        },
+        Action::Deploy | Action::AreaAttack => behaviour(Behaviour::Unload, None, None),
+        Action::Harvest => behaviour(Behaviour::Harvest, None, Some(target)),
+        Action::Idle => behaviour(Behaviour::Guard, Some(Target::Object(id)), None),
+        _ => None,
     }
 }
 
@@ -308,10 +1334,7 @@ pub fn key_command(
             // spec: S-0213 table T2 (scatter: movable)
             KeyCommand::Scatter if mv => Some(Order::Scatter { actor: id }),
             KeyCommand::Guard => {
-                let harvester = o.kind == Kind::Vehicle
-                    && w.rules()
-                        .unit(o.kind, o.type_index)
-                        .is_some_and(|u| u.harvester);
+                let harvester = o.kind == Kind::Vehicle && unit(w, id).is_some_and(|u| u.harvester);
                 // spec: S-0213 table T2 (guard: movable, able to fire and not a building; or a harvester vehicle)
                 ((mv && fire && o.kind != Kind::Building) || harvester).then(|| Order::Behaviour {
                     actor: id,

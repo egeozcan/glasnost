@@ -206,9 +206,21 @@ pub fn cell_changed(w: &mut World, c: CellXY) {
 
 /// Where a cell lies for a zone (S-0212 claim 4), rebuilding first if dirty.
 pub fn reach(w: &mut World, c: CellXY, z: MovementZone) -> Reach {
+    ensure(w);
+    reach_in(w, c, z)
+}
+
+/// Rebuilds the regions if a category changed since the last rebuild.
+pub fn ensure(w: &mut World) {
     if w.regions.dirty || w.regions.region.is_empty() {
         rebuild(w);
     }
+}
+
+/// Where a cell lies for a zone, from regions that [`ensure`] has brought
+/// up to date (every tick ends with them up to date).
+pub fn reach_in(w: &World, c: CellXY, z: MovementZone) -> Reach {
+    debug_assert!(!w.regions.dirty, "regions queried while out of date");
     let Some(i) = w.cells.idx(c) else {
         return Reach::OffMap;
     };
