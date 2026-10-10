@@ -339,7 +339,12 @@ pub fn new_game(
     // Late phase: list 3 and the late assignments (S-0009 claims 20, 28 and 29).
     let mut bases: Vec<Option<CellXY>> = vec![None; w.houses.len()];
     if !setup.sandbox {
-        // S-0009 claim 28 (the unused-house cleanup) is not implemented.
+        if (0..w.houses.len())
+            .any(|h| w.houses[h].role != HouseRole::Player && !late_passive(&w, h))
+        {
+            // S-0009 claim 28 (the unused-house cleanup, which can reach only these houses) is not implemented.
+            w.note("S-0009 claim 28: the unused-house cleanup is not implemented (request Q-0045 asks its condition in our engine)");
+        }
         let list3 = starts::build_list(&mut w, map, players)?;
         let n = list3.len();
         let mut order = Vec::new();

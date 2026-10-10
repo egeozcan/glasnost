@@ -348,6 +348,20 @@ fn set_starting_health(w: &mut World, id: ObjectId, kind: Kind, value: i32) {
     }
 }
 
+/// The player-at-position names of triggers and teams, positions 0 … 7
+/// (S-0009 Import mapping: fixed text of the original's program).
+// spec: S-0009 Import mapping (the player-at-position names <Player @ A> … <Player @ H>)
+const PLAYER_AT: [&str; 8] = [
+    "<Player @ A>",
+    "<Player @ B>",
+    "<Player @ C>",
+    "<Player @ D>",
+    "<Player @ E>",
+    "<Player @ F>",
+    "<Player @ G>",
+    "<Player @ H>",
+];
+
 /// Places the map's objects (S-0009 claims 27 and 34 to 43): terrain
 /// objects, then vehicles, aircraft, infantry and buildings (each building's
 /// upgrades directly after it), each kind in entry order (claim 43).
@@ -370,9 +384,34 @@ pub fn place_map_objects(w: &mut World, map: &Map, sandbox: bool) {
     }
     let owner_of = |w: &World, name: &[u8]| -> Option<HouseId> {
         // spec: S-0009 claim 27 (owner matched exactly and case-sensitively; the first house in order)
-        w.houses
+        let exact = w
+            .houses
             .iter()
             .position(|h| h.name.as_bytes() == name)
+            .map(|i| HouseId(i as u8));
+        if exact.is_some() || r.quirks.skirmish_drops_country_owned_objects {
+            return exact;
+        }
+        // spec: S-0009 Edge cases (quirks.skirmish_drops_country_owned_objects off: "player at position X" to that player, a country name to its first player)
+        if let Some(k) = PLAYER_AT
+            .iter()
+            .position(|p| p.as_bytes() == name)
+            .map(|k| k as u32)
+        {
+            return w
+                .houses
+                .iter()
+                .position(|h| h.start == Some(k))
+                .map(|i| HouseId(i as u8));
+        }
+        w.houses
+            .iter()
+            .position(|h| {
+                h.role == crate::world::HouseRole::Player
+                    && r.country_names
+                        .get(h.country as usize)
+                        .is_some_and(|c| c.as_bytes() == name)
+            })
             .map(|i| HouseId(i as u8))
     };
     let mut bad_sub = false;

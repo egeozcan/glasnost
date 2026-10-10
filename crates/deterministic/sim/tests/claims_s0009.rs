@@ -534,3 +534,85 @@ fn claim_45_neutral_house_area_guard() {
     assert!(neutral.iter().all(|b| *b == Some(Behaviour::AreaGuard)));
     assert!(behaviours(0).iter().all(|b| *b == Some(Behaviour::Guard)));
 }
+
+/// spec: S-0009 claim 19 (the first house on random takes R(0, N − 1); a later one the free position whose distance sum is largest)
+#[test]
+fn claim_19_farthest_sum() {
+    let mut s = skirmish();
+    for (k, x) in [(0u16, 30i16), (1, 40), (2, 60)] {
+        s.map.waypoints.insert(k, (x, 40));
+    }
+    let w = load(&s).expect("loads");
+    let first = w.houses[0].start.expect("a position");
+    let second = w.houses[1].start.expect("a position");
+    // Positions 0, 1, 2 lie at x = 30, 40, 60: the farthest from 0 or 1 is 2, from 2 it is 0.
+    let want = if first == 2 { 0 } else { 2 };
+    assert_eq!(second, want, "first {first}");
+}
+
+/// spec: S-0009 claim 20 (the early phase's random-position draw comes before the initial fill's draws; quirks.double_start_resolution off: one assignment after the terrain)
+#[test]
+fn claim_20_early_draws_before_the_fill() {
+    let mut s = skirmish();
+    s.map.fill = glasnost_map::Fill::Water;
+    s.map.waypoints.insert(0, (30, 40));
+    s.map.waypoints.insert(1, (50, 40));
+    // N = 2 and no random entry: the position draw R(0, 1) takes one raw value.
+    let mut r = glasnost_sim::rng::Rng::new(s.setup.seed);
+    let raws: Vec<u32> = (0..3200).map(|_| r.raw()).collect();
+    let fill = 40 * (2 * 40 - 1); // H · (2W − 1) visited cells, one draw each
+    let w = load(&s).expect("loads");
+    assert_eq!(w.houses[0].start, Some(raws[0] % 2));
+    s.ruleset.globals.quirks.double_start_resolution = false;
+    let w = load(&s).expect("loads");
+    assert_eq!(w.houses[0].start, Some(raws[fill] % 2));
+}
+
+/// spec: S-0009 claim 33 (the early phase judges passivity by the base rules' country data, quirks.early_phase_stale_country_data; a house passive in the late phase receives no starting units)
+#[test]
+fn claim_33_early_phase_country_data() {
+    let mut s = starting_scene();
+    let beta = s.ruleset.sim.countries.get_mut("Betaland").unwrap();
+    beta.multiplay_passive = Some(true);
+    beta.multiplay_passive_base = Some(false);
+    let w = load(&s).expect("loads");
+    assert!(
+        w.houses[1].start.is_some(),
+        "a position taken in the early phase"
+    );
+    assert!(
+        !w.objects
+            .values()
+            .any(|o| o.owner == Some(glasnost_sim::world::HouseId(1))),
+        "passive in the late phase: no starting units"
+    );
+    s.ruleset.globals.quirks.early_phase_stale_country_data = false;
+    let w = load(&s).expect("loads");
+    assert_eq!(w.houses[1].start, None);
+}
+
+/// spec: S-0009 claim 27 (an object owned by a country name other than the neutral and special houses' is dropped; quirks.skirmish_drops_country_owned_objects off: it goes to the first player of that country, and "player at position X" to that player)
+#[test]
+fn claim_27_country_owned_objects() {
+    let mut s = skirmish();
+    s.map.waypoints.insert(0, (30, 40));
+    s.map.waypoints.insert(1, (50, 40));
+    for owner in ["Betaland", "<Player @ A>"] {
+        s.map.objects.units.push(Unit {
+            placed: placed(owner, "TANK", cell(0, 0), 256, 0),
+        });
+    }
+    assert!(load(&s).expect("loads").objects.is_empty());
+    s.ruleset
+        .globals
+        .quirks
+        .skirmish_drops_country_owned_objects = false;
+    let w = load(&s).expect("loads");
+    let owners: Vec<_> = w.objects.values().map(|o| o.owner).collect();
+    let at_a = w
+        .houses
+        .iter()
+        .position(|h| h.start == Some(0))
+        .map(|i| glasnost_sim::world::HouseId(i as u8));
+    assert_eq!(owners, [Some(glasnost_sim::world::HouseId(1)), at_a]);
+}
