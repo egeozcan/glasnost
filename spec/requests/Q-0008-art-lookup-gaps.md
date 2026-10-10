@@ -1,9 +1,9 @@
 ---
 id: Q-0008
 title: Building secondary sprites at later type reads, and the art of the kinds S-0007 leaves out
-status: open
+status: answered
 related: [S-0007]
-answered-by: []
+answered-by: [S-0007]
 ---
 
 ## Need
