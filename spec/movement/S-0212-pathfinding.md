@@ -2,7 +2,7 @@
 id: S-0212
 title: Pathfinding (observable behaviour)
 topic: movement
-revision: 15
+revision: 16
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -68,11 +68,13 @@ claim, and S-0104 (lighting) for the *ion storm*, a global effect (table T5). Th
 - From S-0209 (occupancy and crowding): the **entry outcome** a unit gets for a neighbouring cell,
   with its eight names *clear*, *cloaked blocker*, *moving blocker*, *closed friendly gate*, *friendly
   obstacle*, *enemy obstacle*, *stationary friendly* and *blocked*, in that order of severity; the
-  *occupancy record* of a cell layer (its Terms); the *close-enough distance* and the *blockage
+  *occupancy record* of a cell layer, and a vehicle that is *between steps* or *at a chain point*
+  (its Terms); the *close-enough distance* and the *blockage
   delay*, which S-0209 imports (its Formulas F2 and
   Import mapping); the *path retry timer*, whose length this spec gives (claim 21). Which situation
-  gives which outcome belongs to S-0209 for an infantry mover. For a vehicle mover, claim 27 gives
-  the rows this spec relies on, and the rest belongs to the movement specs. To keep the two
+  gives which outcome belongs to S-0209: claim 4 for an infantry mover, claim 5 for a vehicle
+  mover. Claim 27 here summarises the rows of S-0209 claim 5 that this spec relies on; where the
+  summary and S-0209 differ, S-0209 is meant. To keep the two
   *blocked*s apart, this spec always writes "outcome *blocked*" or "category *blocked*".
 - From S-0215 (behaviours): *behaviour* and the behaviour names *move*, *guard*, *area guard* and
   *retreat*, to *queue* a behaviour, to *fall back to rest*; *destination*.
@@ -81,8 +83,9 @@ claim, and S-0104 (lighting) for the *ion storm*, a global effect (table T5). Th
   a unit is ordered, and when an order applies, belong to S-0213 and S-0214.
 - From S-0010 (theater and tileset semantics): the **destroyable-cliff role** of a theater's tiles
   (its claim 4 and table R), the *bridge* and *wooden bridge* roles of the same table (Terms,
-  *bridge ends*), and the burrowing test of its claim 17, which is the further test of claim 25. From S-0214 (order targeting rules): the *destroyable-cliff cell*, a
-  cell whose tile is the first tile of that role or the tile after it (its Terms).
+  *bridge ends*), and the burrowing test of its claim 17, which is the further test of claim 25.
+- From S-0214 (order targeting rules): the *destroyable-cliff cell*, a cell whose tile is the
+  first tile of that role or the tile after it (its Terms).
 
 Terms specific to this spec:
 
@@ -168,6 +171,15 @@ Terms specific to this spec:
   (claim 25).
 - **Loaner:** a unit only lent to its house for a while, which leaves the map again afterwards
   (claim 14).
+- **Terms defined where they are used:** *generation order* (claim 7); *blocker chain* and a unit
+  *heading into* a cell (claim 8); *recorded-pair margin* (claim 11); *progress* and *progress
+  cell* (claim 13); *free part*, *borders*, *probe cell*, *whole* and *split* (claim 13a); *lane
+  cells* (claim 13b); *run*, *V* and *final* step (claim 17); *stretch*, *diagonal-first* and
+  *straight-first* shapes, *removed step*, *leg*, *turns back*, *reference distance*, *record*,
+  *triggers*, *new maximum* and *closing stretch* (claim 18); *cell ahead* and *qualifies* for a
+  re-path (claim 19); *deck mode*, *simplified movement zone*, *scan order*, *row cell*, *column
+  cell*, a cell that *qualifies*, *height condition*, *further test*, *collected cells* and
+  *visibility test* (claim 25); *close case* (claim 27).
 
 ## Behaviour
 
@@ -214,7 +226,8 @@ Terms specific to this spec:
    four one reach region for a movement zone that allows *open* and *crushable*. The original leaves
    (x, y) on its own. The adjacency of a region of category *blocked* across a height difference of
    2 or more is affected in the same way: the original records it in some labelling orders and not
-   in others. Departure D4 (proposed) makes our engine follow the rule.
+   in others. Departure D4 (accepted by the project lead, 2026-10-10) makes our engine follow the
+   rule.
    - Backing: `measurable` (scenario P4, maps F, F3, F5, I and H)
    - Confidence: high for the height limits 1 and 3. Medium that the rule matches the original's
      reach regions on stock maps for movement zones that do not allow the category *blocked*. Low
@@ -280,11 +293,11 @@ Terms specific to this spec:
    movement zone and search layer. When they differ, no search is made: the unit gets no path, and
    the gate-failure row of claim 23 applies. Only a destination that passes the comparison can be
    replaced by a nearby cell (claim 24); one that fails it never is. The comparison is
-   skipped (the destination counts as reachable) in these cases:
-   - the unit's type has no movement zone (Import mapping, departure D1),
-   - the unit's cell is outside the usable area but a legal cell,
-   - the unit is in the state that disables the corridor (claim 14), its cell is inside the usable
-     area, and the destination is a legal cell outside it.
+   skipped (the destination counts as reachable) in three cases, the *exceptions* of this claim:
+   first, the unit's type has no movement zone (Import mapping, departure D1); second, the unit's
+   cell is outside the usable area but a legal cell; third, the unit is in the state that disables
+   the corridor (claim 14), its cell is inside the usable area, and the destination is a legal cell
+   outside it.
    - Backing: `measurable` (scenarios P3, P7 run 7, P11 run 1 for the second exception, P11 run 2
      for the third). `unmeasured` for the first exception, which only data outside the vocabulary
      reaches, and which departure D1 replaces in our engine
@@ -675,7 +688,7 @@ Terms specific to this spec:
       levels apart. The third is common wherever a region's border meets a block's left or right
       edge, but it changes only the extra cost of 0.001. On ground whose neighbouring cells differ
       by at most 1 level, the original's sectors and connections are those of the rule. Our engine
-      follows the rule (departure D4).
+      follows the rule (departure D4, accepted).
     - Backing: `measurable` only in aggregate, through the routes of scenarios P1 and P12 and their
       secondary checks. `unmeasured` for the coarse end cells on a bridge: a corridor that starts
       in the wrong sector changes only which corridor is chosen, and a coarse search that fails
@@ -887,18 +900,18 @@ Terms specific to this spec:
     new leg at the cell it starts from, and is then the first step of that new leg; the first step
     of a leg never turns back.
 
-    *Reference distance and triggers.* Each examined step has a *reference distance*, compared with
-    a *record*:
+    *Reference distance, record and triggers.* Each examined step has a *reference distance* and a
+    *record*. A step whose reference distance is not larger than its record *triggers* a
+    replacement of the stretch that ends on the cell the step ends on:
     - In the first and second legs, the reference distance of a step is the Chebyshev distance from
-      the start cell to the cell the step ends on, and the record starts at 0.
-    - When the third or a later leg begins, at cell *p*, let *q* be the first cell of the leg before
-      it. The record is set to the Chebyshev distance between *q* and *p*. From then on the
-      reference distance of a step ending on cell *e* is the Chebyshev distance from *q* to the
-      cell 2*p* − *e*, the end cell mirrored through *p* (`quirks.detour_mirrored_reference`; with
-      the switch off, the distance from *q* to *e* itself).
-    - A step whose reference distance is larger than the record raises the record to it. A step
-      whose reference distance is not larger *triggers* a replacement of the stretch that ends on
-      the cell the step ends on.
+      the start cell to the cell the step ends on. Its record is the largest of 0 and the reference
+      distances of the earlier examined steps of these two legs.
+    - In the third and every later leg, let *p* be the leg's first cell and *q* the first cell of
+      the leg before it. The reference distance of a step ending on cell *e* is the Chebyshev
+      distance from *q* to the cell 2*p* − *e*, the end cell mirrored through *p*
+      (`quirks.detour_mirrored_reference`; with the switch off, the distance from *q* to *e*
+      itself). Its record is the largest of the Chebyshev distance between *q* and *p* and the
+      reference distances of the earlier examined steps of the same leg.
 
     *The stretch of a trigger.* A stretch is a run of consecutive places of the path. The stretch
     of a trigger ends with the trigger step's place, on its end cell *e*. Its *earliest place* is,
@@ -924,7 +937,8 @@ Terms specific to this spec:
     earliest place being the place of the last leg's first step, its last place the last examined
     place, and its threat limit 3.
 
-    *Tunnel steps.* A tunnel step ends every leg and the reference: the pass starts afresh after it,
+    *Tunnel steps.* A tunnel step ends every leg, and with it the reference distances and records:
+    the pass starts afresh after it,
     with the next step's place as the earliest place, as on a new path that begins at the cell to the north
     of the tunnel entrance instead of the tunnel exit (`quirks.detour_after_tunnel_position`; with
     the switch off, at the tunnel exit). A tunnel step is never part of a stretch.
@@ -933,16 +947,18 @@ Terms specific to this spec:
     clear, no congestion mark, no threat, switches at their defaults):
     - (a) The path 1, 3, 4, 5, 4, 4 from (*x*, *y*), ending at (*x* + 1, *y* + 4), with the cell
       (*x* + 1, *y*) not clear, so that claim 17 leaves it as it is (the path of scenario P9, train
-      run 4). The first step ends at distance 1 from the start and sets the record
-      to 1. The second step (3) turns back, since the y component of the leg shrinks from 1 to 0, so
-      the second leg begins at (*x* + 1, *y* − 1); its end cell (*x* + 2, *y*) raises the record to 2.
-      The third step ends on (*x* + 2, *y* + 1), also at distance 2: it triggers. From that cell
+      run 4). The first step ends at distance 1 from the start, above its record
+      0. The second step (3) turns back, since the y component of the leg shrinks from 1 to 0, so
+      the second leg begins at (*x* + 1, *y* − 1); its end cell (*x* + 2, *y*) lies at distance 2,
+      above its record 1. The third step ends on (*x* + 2, *y* + 1), also at distance 2, not above
+      its record 2: it triggers. From that cell
       the distances *d* to the cells where the three steps start are 2, 2 and 1 in path order, so
       *σ*₁ is the only step that is not a new maximum, no step comes before it, and the stretch
       begins at the earliest place, the path's first: the stretch 1, 3, 4 becomes the diagonal-first shape 3, 2 with one removed step. The fourth step
       (5) turns back, since x shrinks, so the third leg begins at *p* = (*x* + 2, *y* + 1) with
-      *q* = (*x* + 1, *y* − 1) and record 2. The fourth step ends on (*x* + 1, *y* + 2), whose mirror
-      through *p* is (*x* + 3, *y*), at distance 2 from *q*: it triggers, and its earliest place is the
+      *q* = (*x* + 1, *y* − 1), and the fourth step's record is 2, the distance between *q* and *p*.
+      The fourth step ends on (*x* + 1, *y* + 2), whose mirror through *p* is (*x* + 3, *y*), at
+      distance 2 from *q*: it triggers, and its earliest place is the
       second. The steps from there are the 2 at the second place and the 5 at the fourth, with
       *d* = 1 and 1, so the stretch begins at the earliest place, and the stretch (2, a removed
       step, 5) becomes the single step 4. The fifth and sixth steps trigger in the same way and keep the stretch straight. The stored
@@ -950,10 +966,11 @@ Terms specific to this spec:
       `quirks.detour_mirrored_reference` off, the third leg's steps reach distances 3, 4 and 5 from
       *q*, nothing more triggers, and the stored path is 3, 2, 5, 4, 4.
     - (b) The path 2, 4, 4, 5, 4, 4, 4 from (*x*, *y*) (scenario P9, train run 2, after claim 17).
-      The first step sets the record to 1. The second step ends on (*x* + 1, *y* + 1), also at
-      distance 1: it triggers, the distances *d* are 1 and 1, so the stretch begins at the earliest
-      place, and the stretch 2, 4 becomes
-      the single step 3. The third step raises the record to 2. The fourth step (5) turns back, since
+      The first step ends at distance 1, above its record 0. The second step ends on
+      (*x* + 1, *y* + 1), also at distance 1, not above its record 1: it triggers, the distances
+      *d* are 1 and 1, so the stretch begins at the earliest place, and the stretch 2, 4 becomes
+      the single step 3. The third step ends at distance 2, above its record 1. The fourth step
+      (5) turns back, since
       x shrinks, so the second leg begins at (*x* + 1, *y* + 2); its steps end at distances 3, 4, 5
       and 6 from the start and trigger nothing. The closing stretch has *m* = 4 and distance 4, so it
       is left alone. The stored path is 3, 4, 5, 4, 4, 4.
@@ -1302,15 +1319,24 @@ Terms specific to this spec:
 
 27. **The rows this spec relies on.** For a ground vehicle asking to enter a cell, the objects on
     the cell's search layer give these outcomes. "Allied" includes the vehicle's own house.
-    - An allied vehicle or infantry unit that does not count as moving (it has no destination, is
-      not turning and its locomotor is not moving) gives *stationary friendly*.
-    - An allied unit that counts as moving gives *moving blocker*, except in one close case, which
-      gives *blocked*. The close case needs all three of these: with *f*ₒ the occupant's body
+    S-0209 claim 5 gives the full table and owns these outcomes. This claim summarises it, and where
+    the two differ, S-0209 claim 5 is meant.
+    - An allied vehicle, infantry unit or aircraft that does not count as moving (it has no
+      destination, is not turning and its locomotor is not moving) gives *stationary friendly*.
+    - An allied unit that counts as moving gives *blocked* in one close case. The close case needs
+      all three of these: with *f*ₒ the occupant's body
       facing and *f*ₘ the mover's, the 8-direction of the facing (*f*ₒ + 32767) mod 65536 equals the
       8-direction of *f*ₘ (the two face roughly opposite ways, `quirks.opposite_facing_reversal`), the spatial distance between their
       positions (F6c) is at most 511 leptons, and the 8-direction of the direction of the occupant
       from the mover (S-0204) equals the 8-direction of the mover's body facing (the occupant lies
       ahead).
+    - Outside the close case, an allied unit that counts as moving gives *moving blocker* when it is
+      a vehicle (or, with low confidence, an aircraft) that is between steps, or any unit that is at a chain point (both terms
+      of S-0209). Any other allied unit that counts as moving, among them every moving allied
+      infantry unit and a vehicle in the middle of a step that is not at a chain point, gives no outcome of its own. The outcome
+      then comes from the cell's other objects and its occupancy record (S-0209 claim 5, part 5e):
+      for example *moving blocker* through the cell's vehicle-present flag or through an allied
+      infantry house, and *clear* when nothing gives a value.
     - An allied building that is not a gate gives *blocked*, unless the building is the target the
       vehicle's behaviour aims to reach (those exemptions belong to the behaviour specs).
     - A wall section in the cell gives, for a vehicle that does not crush it, *blocked* when the
@@ -1323,13 +1349,16 @@ Terms specific to this spec:
       section, and an enemy wall section adds no outcome.
     - When the objects give different outcomes, the most severe counts, in S-0209's order. An object
       giving *blocked* therefore makes the outcome *blocked*, whatever the others give. Terrain checks
-      (height steps, land multipliers, the usable area) come from claim 10, S-0211 and S-0209. Allied
-      infantry for a vehicle mover is S-0209 claim 5.
+      (height steps, land multipliers, the usable area) come from claim 10, S-0211 and S-0209.
     - Backing: `measurable` (scenario P7 runs 1 to 4, the held blocker of P6, P14 runs 1 to 4 for a
       unit ahead that faces the same way, P14 run 5 for the close case itself, and P9's train
-      refresh run for an allied wall section and a vehicle without a weapon)
+      refresh run for an allied wall section and a vehicle without a weapon). For moving allied
+      units without an outcome of their own, S-0209 claim 5 (its scenario C20 (b) for infantry); the
+      split between moving units with and without an outcome of their own has the backing of S-0209
+      rows VP22 and VP23
     - Confidence: medium for the stationary-vehicle and building rows, the wall row for a vehicle
-      without a weapon, the close case and the "most severe" rule. Low for the other parts of the
+      without a weapon, the close case, the rows for moving allied units and the "most severe"
+      rule. Low for the other parts of the
       wall row (which weapons count, the crusher case) and for the behaviour-target exemptions
 
 ## Formulas
@@ -1665,15 +1694,15 @@ Ordering consequences:
   undefined. Our engine keeps the destination unchanged, so the search approaches the building
   under claim 15. This needs no importer warning, because the cause is the game situation, not the
   data.
-- **Departure D4 (proposed): labelling-order cases of regions and sectors.** In rare height
+- **Departure D4 (accepted): labelling-order cases of regions and sectors.** In rare height
   configurations the original's regions differ from the rule of claim 3 (smallest known case in
   claim 3). Its sectors and connections can differ from the rule of claim 13b in the three ways that
   claim lists: two of them need neighbouring cells 2 or more height levels apart, while the third,
   a connection that the original makes diagonal although a straight pair exists, is common but
   changes only the extra cost of 0.001 in the coarse search. Each difference comes from the order
   in which the original labels the map, and reproducing it would mean reproducing that labelling
-  exactly. Our engine follows the rules of claims 3 and 13b. Whether to accept this departure is a
-  question for the project lead.
+  exactly. Our engine follows the rules of claims 3 and 13b. The project lead accepted this
+  departure (decision of 2026-10-10). Route costs and every formula stay exact.
 - **Departure D6: coarse end cell of a bridge cell with no answer.** When the coarse end cell of
   claim 13b is sought for a bridge cell that belongs to no bridge link and neither of whose bridge
   ends lies inside the usable area, the original reads undefined data. Our engine uses the bridge
@@ -1694,7 +1723,7 @@ Ordering consequences:
   queues *guard*, gets no destination from its house and always uses its own coefficient. There is
   no switch. Our AI may reproduce the original's result through ordinary orders. The measurement
   scenarios that use a computer-controlled house measure the original.
-- **Departure D7 (proposed): order among exactly equal entries.** Claim 12a gives our engine's
+- **Departure D7 (accepted): order among exactly equal entries.** Claim 12a gives our engine's
   order among pending entries of exactly the same cost: the entry recorded first goes first, and in
   the coarse search a route's new routes are recorded in the order of the sectors' first cells. The
   original breaks the same ties by an order of its own, which depends on how it keeps its pending
@@ -1707,7 +1736,8 @@ Ordering consequences:
   hold a diagonal connection and a link's straight one side by side. That changes no route cost,
   only the count of pending routes towards the limit of 9999 (claim 13). There is no quirk switch,
   because a switch would need the original's order stated as behaviour, which this spec cannot do.
-  Whether to accept this departure is a question for the project lead.
+  The project lead accepted this departure (decision of 2026-10-10). Route costs and every formula
+  stay exact.
 - **Threat with a zero coefficient.** A unit with threat coefficient 0 ignores threat in every
   claim: the coarse threat term is skipped and every threat test of claims 17 and 18 passes.
 
@@ -2476,30 +2506,18 @@ draws (claim 25), so one run per variant is enough unless stated.
 
 ## Questions for the project lead
 
-- **Departure D7.** Accept that our engine breaks exact ties between pending entries by the order
-  of claim 12a (the entry recorded first goes first, and coarse routes are recorded in the order of
-  the sectors' first cells), and so can choose other routes than the original where a search meets
-  an exact tie? In the cell search such ties are rare because of the direction terms (T4). In the
-  coarse search (claim 13) they are the normal case on open ground: sector costs are small whole
-  numbers (T3) and there is no estimate, so many corridors tie and the chosen corridor decides the
-  route. The alternative is to reproduce the original's order, which fixes the data structures of
-  both searches and needs the original's labelling order (departure D4). This spec cannot state that
-  order as behaviour, so choosing it would also mean waiving the rule that a spec describes no data
-  structure, for this one passage.
-- **Departure D4.** Accept that our engine builds regions by the rule of claim 3, and sectors and
-  connections by the rule of claim 13b, or reproduce the original's labelling order exactly, which
-  fixes how regions and sectors are built?
-- **Scope of tunnels and trains.** Stock data is not known to use tunnels or trains. Should this
-  spec keep their rules (claims 7, 9, 14, 16, 20, 26) or move them to a later revision with test
-  data?
-- **Three behaviours that read like defects.** Claim 27 reverses the facing with 32767 rather than a
-  half turn (32768), claim 13 records a cost for a route at the 9999 limit that is then never
-  pending, and claim 16 applies the train exclusion to the search only, so straightening can give
-  the stored path a reversing first step. Each has a switch with a corrected alternative, default
-  original (`quirks.opposite_facing_reversal`, `quirks.coarse_limit_records_cost`,
-  `quirks.train_exclusion_search_only`). Are the names and the alternatives acceptable?
-- **Two further behaviours of claim 18 that read like defects.** From the third leg on, the
-  reference distance is measured to the step's end cell mirrored through the leg's first cell, and
-  after a tunnel step the pass carries on from the cell north of the tunnel entrance. Each has a
-  switch with a corrected alternative, default original (`quirks.detour_mirrored_reference`,
-  `quirks.detour_after_tunnel_position`). Are the names and the alternatives acceptable?
+- Decided (project lead, 2026-10-10): departure D7 is accepted. Exact ties between pending entries
+  go to the entry recorded first (claim 12a); route costs and every formula stay exact.
+- Decided (project lead, 2026-10-10): departure D4 is accepted. Regions, sectors and connections
+  are built by the rules of claims 3 and 13b, not by the original's labelling order.
+- Decided (delegated sign-off, 2026-10-10): the rules for tunnels and trains (claims 7, 9, 14, 16,
+  20 and 26) stay in this spec.
+- Decided (delegated sign-off, 2026-10-10): the five switches for behaviours that read like defects
+  are accepted with their names and corrected alternatives, default original:
+  `quirks.opposite_facing_reversal`, `quirks.coarse_limit_records_cost`,
+  `quirks.train_exclusion_search_only`, `quirks.detour_mirrored_reference` and
+  `quirks.detour_after_tunnel_position`.
+- Decided (delegated sign-off, 2026-10-10): S-0209 owns the entry outcomes. Claim 27 now agrees
+  with S-0209 claim 5 for allied units that count as moving, and points to it for the full table.
+
+No question remains open.
