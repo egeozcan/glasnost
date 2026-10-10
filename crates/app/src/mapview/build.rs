@@ -34,7 +34,8 @@ use glasnost_render::overlay::{
 };
 use glasnost_render::palette::{PaletteState, TINT_EXEMPT, house_palette};
 use glasnost_render::projection::{
-    LEVEL_LEPTONS, TERRAIN_LIFT, cell_centre, cell_top, height_lift, project_lifted,
+    LEVEL_LEPTONS, ProjectionQuirks, TERRAIN_LIFT, cell_centre, cell_top, height_lift,
+    project_lifted,
 };
 use glasnost_render::scene::{Group, Item, ItemDepth, Scene};
 use glasnost_render::voxel::{self, VoxelQuirks};
@@ -1056,7 +1057,11 @@ impl Builder<'_> {
             let depth_level = if deck { level + DECK_LEVELS } else { level };
             // spec: S-0102 claim 13 (overlay biases: −2 − 15ℓ, or −17 − 15ℓ for other upright types;
             // quirks.overlay_lift_exact_levels)
-            let lift = overlay_depth_lift(depth_level, &ViewQuirks::default());
+            let lift = overlay_depth_lift(
+                depth_level,
+                &ViewQuirks::default(),
+                &ProjectionQuirks::default(),
+            );
             let bias = if flat || flags.wall || rock || flags.tiberium {
                 -2 - lift
             } else {

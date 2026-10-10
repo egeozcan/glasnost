@@ -97,14 +97,15 @@ pub fn cliff_factor(high_one: bool, high_two: bool, q: &ViewQuirks) -> i32 {
 }
 
 /// The lift an overlay's depth bias takes for `level` height levels
-/// (S-0102 claim 13: 15 per level).
-pub fn overlay_depth_lift(level: i32, q: &ViewQuirks) -> i32 {
+/// (S-0102 claim 13: 15 per level). `p` gives the objects' lift L(z),
+/// which the overlay takes with the switch off.
+pub fn overlay_depth_lift(level: i32, q: &ViewQuirks, p: &ProjectionQuirks) -> i32 {
     if q.overlay_lift_exact_levels {
         // spec: S-0102 claim 13 (overlay biases lift by 15 per level)
         TERRAIN_LIFT * level
     } else {
         // spec: S-0102 Edge cases (quirks.overlay_lift_exact_levels off: the objects' lift L(z), S-0101 F2)
-        height_lift_with(LEVEL_LEPTONS * level, &ProjectionQuirks::default())
+        height_lift_with(LEVEL_LEPTONS * level, p)
     }
 }
 
@@ -437,15 +438,22 @@ mod tests {
     fn overlay_lift_switch() {
         let on = ViewQuirks::default();
         let off = off();
+        let p = ProjectionQuirks::default();
         // Up to level 19 the two lifts agree; from level 20 they differ.
         for level in 0..20 {
             assert_eq!(
-                overlay_depth_lift(level, &on),
-                overlay_depth_lift(level, &off)
+                overlay_depth_lift(level, &on, &p),
+                overlay_depth_lift(level, &off, &p)
             );
         }
-        assert_eq!(overlay_depth_lift(20, &on), 300);
-        assert_eq!(overlay_depth_lift(20, &off), 299);
+        assert_eq!(overlay_depth_lift(20, &on, &p), 300);
+        assert_eq!(overlay_depth_lift(20, &off, &p), 299);
+        // Off, with the exact object lift (S-0101 quirks.height_lift_float_scale off).
+        let exact = ProjectionQuirks {
+            height_lift_float_scale: false,
+            ..p
+        };
+        assert_eq!(overlay_depth_lift(20, &off, &exact), 300);
     }
 
     /// spec: S-0108 claim 2, Edge cases (quirks.occupiable_hurt_rule)
