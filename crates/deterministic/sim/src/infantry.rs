@@ -460,7 +460,26 @@ pub fn idle_attempt(w: &mut World, id: ObjectId, in_progress: bool) {
     if let Some(st) = w.obj_mut(id).and_then(|o| o.infantry.as_mut()) {
         st.idle_until = tick.wrapping_add(t);
     }
-    // spec: S-0107 claim 14 (a fraidycat above fear 50 whose owner is not human-controlled scatters; never in our engine)
+    // S-0107 claim 14: an owner that is not human-controlled is one of the neutral and special
+    // houses in our engine (an AI house counts as human-controlled, glossary *AI house*).
+    let fraidycat = w
+        .obj(id)
+        .and_then(|o| w.rules().unit(o.kind, o.type_index))
+        .is_some_and(|u| u.fraidycat);
+    let not_human = w
+        .obj(id)
+        .and_then(|o| o.owner)
+        .is_some_and(|h| !w.houses[usize::from(h.0)].human);
+    let idle_scatter = crate::scatter::ScatterRequest {
+        threat: None,
+        forced: true,
+        anywhere: false,
+    };
+    // spec: S-0107 claim 14 (a fraidycat above fear 50 whose owner is not human-controlled scatters, and nothing else happens: the timer draw only)
+    if fraidycat && not_human && s.fear > 50 {
+        crate::scatter::request(w, id, idle_scatter);
+        return;
+    }
     // spec: S-0107 claim 14 (r and e drawn from 0 … 10)
     let mut r = w.rng.ranged(0, 10, q.ranged_draw_half_span);
     if is_cow && q.cow_idle {
@@ -487,17 +506,9 @@ pub fn idle_attempt(w: &mut World, id: ObjectId, in_progress: bool) {
             if let Some(o) = w.obj_mut(id) {
                 o.body.set((d as u16) * 8192, tick, keeps); // spec: S-0107 claim 14 (δ × 8192)
             }
-            // spec: S-0107 claim 14 (the cow's r = 8 also scatters)
-            if r == 8 && is_cow && q.cow_idle {
-                crate::scatter::request(
-                    w,
-                    id,
-                    crate::scatter::ScatterRequest {
-                        threat: None,
-                        forced: true,
-                        anywhere: false,
-                    },
-                );
+            // spec: S-0107 claim 14 (r = 8 also scatters the cow, and a fraidycat whose owner is not human-controlled)
+            if r == 8 && ((is_cow && q.cow_idle) || (fraidycat && not_human)) {
+                crate::scatter::request(w, id, idle_scatter);
             }
         }
         _ => {}
