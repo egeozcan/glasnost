@@ -2,7 +2,7 @@
 id: glossary
 title: Glossary of shared terms
 topic: rules-import        # cross-cutting; every topic uses these terms
-revision: 9
+revision: 10
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -35,7 +35,8 @@ meaning, the spec says so and wins for that spec.
   pointer to one is a pointer only: in an entry with such a pointer, every statement about the original is a
   claim G1 to G3 or a claim of a written spec that the entry names, and the rest is vocabulary. At
   sign-off every S-number a spec cites must be an approved spec listed in `spec/README.md`, a draft
-  in the same batch or a planned spec of this list. A draft in the batch is cited by its number and
+  in the same batch or a planned spec that the citing text labels as planned in one of the two forms
+  above. A draft in the batch is cited by its number and
   claim like an approved spec, never as planned, because calling it planned would take away the
   claims it owns.
 - A pointer to a planned spec that has since been approved reads as a plain pointer. The same holds
@@ -44,11 +45,12 @@ meaning, the spec says so and wins for that spec.
   word. This covers every spec of the first two batches, all of them now approved, among them
   S-0010, S-0106, S-0109, S-0201, S-0202, S-0204, S-0205 and S-0206, which earlier revisions of
   this glossary listed as planned; S-0301, which revision 7 listed as planned; and every draft of
-  this batch, S-0301 to S-0315. A draft of a later batch is still planned.
-- This revision of the glossary cites the specs of its batch, the third (combat), as they stand
-  in it: the drafts S-0301 to S-0315; any revision of an approved spec made in the batch; and every
-  other approved spec of the index in `spec/README.md` at its current revision. It is signed off in
-  the same batch as those drafts and revisions.
+  the third batch (combat), S-0301 to S-0315. A draft of a later batch is still planned.
+- This revision of the glossary cites the specs of its batch, a batch of follow-up revisions, as
+  they stand in it: every approved spec of the index in `spec/README.md` at its current
+  revision, any revision of an approved spec made in the batch, and S-0309, the one combat draft
+  not yet approved, as a draft of the batch. It is signed off in the same batch as those revisions
+  and that draft.
 - Open questions are questions about the original's behaviour that a spec leaves open. They need
   no Q-ID: Q-IDs number the implementers' spec requests only, and a spec's `requests` field lists
   just the Q-IDs it answers. Specs therefore don't say that no request tracks a question.
@@ -93,12 +95,17 @@ human-controlled house. This is a rule of our engine, not a claim about the orig
 - *The original's computer behaviours.* What the original's computer player gets from such rules is
   recorded in the specs as behaviour of the original. Our AI may choose to reproduce it by giving
   ordinary orders.
+- *Player houses only.* The ruling covers the houses of the players. The two non-player houses that
+  every skirmish creates, the *neutral house* and the *special house* (see *house*), are not AI
+  houses: they keep the original's rules for owners that are not human-controlled (decision of the
+  project lead, 2026-10-10; for example S-0208, claims 11 and 15, and S-0107, claims 14 and 15).
 
 The decision was taken on claims of S-0213 and S-0215, and their next revisions apply it there. It is
 a general rule of our engine, so it holds in every spec. Where a spec gives a rule for
 computer-controlled owners, that rule describes the original, and an AI house follows the rule the
 spec gives for human-controlled owners. The spec's next revision marks such a rule as the
-original's only. In particular an AI house has the house skill level of a human-controlled house:
+original's only, except for units of the neutral and special houses, which keep it in our engine
+(see *Player houses only* above). In particular an AI house has the house skill level of a human-controlled house:
 0 in a skirmish or network game (see *house skill level*). By default it also uses the *normal
 row* of the difficulty skill block, as a human-controlled house in a skirmish does (see *difficulty
 row* and *difficulty skill block*).
@@ -244,7 +251,8 @@ How it is reset and filled at each game start is owned by S-0006 (claims 2 and 1
 person. The specs use the word for the original: a rule given for a "computer-controlled owner"
 states what the original does for units of such a house. In our engine the computer plays *AI
 houses*, which follow the unit rules and order legality of human-controlled houses (see *AI
-house*). The opposite of *human-controlled*.
+house*). Units of the neutral and special houses keep such a rule in our engine too (*AI house*,
+*Player houses only*). The opposite of *human-controlled*.
 
 **confidence.** How sure the spec author is of a claim: high, medium or low. Low-confidence claims
 should have an open question or a measurement scenario.
@@ -347,9 +355,10 @@ AI, uses by default the row the original gives a human-controlled house in a ski
 row*. AI difficulty comes from the AI's strategy modules, never from these factors. Choosing
 another row per difficulty is available only as an optional per-player handicap setting, off by
 default, and is never tied to AI difficulty automatically (decided 2026-10-10). This is a rule of
-our engine, not a claim about the original. What the default means in a campaign mission, where the
-original gives the player's house the row of the chosen difficulty (S-0301, claim 3), is a question
-for the project lead (see the end of this glossary).
+our engine, not a claim about the original. In a skirmish, a difficulty row that a map sets for a
+house is ignored; only the optional handicap applies (decided by the project lead, 2026-10-10).
+Rows in a campaign mission are deferred to the future campaign spec, since campaigns are out of
+scope for now (decided by the project lead, 2026-10-10).
 
 **direction.** The direction of a point *Q* from a point *P* is the facing that the original
 computes for the way from *P* to *Q*. It is close to the exact angle, but not always equal to it.
@@ -426,10 +435,11 @@ so.
 Each field has a value form (integer, percent, boolean, list and so on, see S-0003) and an absent-key
 default. Specs refer to stock numbers only through the field: "the weapon's rate-of-fire field".
 
-**fire point.** The world position at which a shot's projectile starts. S-0313 owns it and the
-muzzle positions it is built from (Terms, claim 1). S-0306 places the projectile there and aims
-from it (claims 5 and 8), except that a steering or dropping projectile starts from the firer's
-own position (claim 5). S-0307 (claim 8) does not use it: the range test measures from the source
+**fire point.** The world position from which a shot is fired, where its projectile normally
+starts. S-0313 owns it and the muzzle positions it is built from (Terms, claim 1). S-0306 places
+the projectile there (claim 8), and launches a projectile whose turn rate is 0 and that does not
+drop from it towards the impact point (claim 5). A steering projectile also starts at the fire
+point; only a dropping projectile starts from the firer's own position instead (claim 5). S-0307 (claim 8) does not use it: the range test measures from the source
 point that claim gives.
 
 **firer, shot, void shot.** A *firer* is an object that fires a weapon: a vehicle, infantry unit,
@@ -459,12 +469,18 @@ the linked group (see *train*).
 
 **foundation.** The cells a building occupies, within a bounding rectangle of W × H cells, W along
 the map x axis and H along y (S-0108, Import mapping, gives the sizes). The cells are normally the
-full rectangle, but not always: in its building-fire draws S-0302 (claim 13) gives a zero-size
-foundation no cells and one 3 × 3 foundation only 8, leaving out one cell of its rectangle. Which
+full rectangle, but not always: in its building-fire draws S-0302 (claim 13) gives the zero-size
+foundation word no cells, and the 8-cell 3 × 3 foundation word only 8 of the 9 cells of its
+rectangle. S-0108's vocabulary has two 3 × 3 words (Import mapping, foundation vocabulary); in
+those draws the other one, the plain 3 × 3 word, has all 9 cells. Which
 cells a building occupies for placement and movement belongs to the placement specs. Its top-left cell is the foundation cell with the smallest x and y. "Top-left" refers to the map
 axes: on the screen that cell is the topmost cell of the footprint, not the leftmost. The
 foundation's *top corner* is the top corner of its top-left cell, the topmost point of the footprint
 on the screen.
+
+**free mover.** An actor that the click rules of S-0214 treat apart when it is sent to a cell or an
+object: one that is in the air, is an aircraft, is of an *underground type* or is of a jumpjet infantry type,
+with the conditions S-0214 gives. S-0214 owns the term (Terms) and its rules (claim 11).
 
 **game.** One match, from the moment the map is loaded until it ends. Several games can run in one
 session.
@@ -530,7 +546,10 @@ claim 26).
 **healer, healer for acquisition.** An object whose *mean weapon damage* is below 0. S-0308 owns
 the mean weapon damage and the test (claim 15, where the object is called a *healer for
 acquisition*); the two names mean the same test. S-0309 uses it for automatic searches (claim 6),
-S-0214 for its healer rows of the cursor and order rules, and S-0314 owns healing in combat.
+and S-0314 owns healing in combat. S-0214 does not use this test: its healer rows of the cursor and
+order rules use its own test, the *healing actor* (S-0214, Terms), which looks at the weapon the
+object would use by default. S-0308 (claim 15) notes that the two tests can differ. S-0314 (Terms)
+uses the word *healer* in S-0214's sense and says so.
 
 **health, strength, health ratio.** An object's *health* is its current hit points, an integer from
 0 to its *strength*, the maximum its type gives (S-0302, Terms). Its *health ratio* is health
@@ -838,7 +857,8 @@ overlay and contents: *open*, *crushable*, *wall-like*, *beach*, *water*, *parti
 **prerequisite.** A type that a house must own (usually a building) before another type can be built.
 Which types are prerequisites of which comes from imported fields.
 
-**projectile.** The object that carries a shot from its fire point to where it detonates. S-0203
+**projectile.** The object that carries a shot from where it is launched (normally its fire point,
+S-0306 claim 5) to where it detonates. S-0203
 (Terms) names it, S-0306 owns its launch, flight and detonation, and most combat specs use it.
 
 **prone state.** The lying-down state of an infantry unit. S-0107 (Terms) owns its sequences and
@@ -1056,9 +1076,9 @@ That system is out of scope for glasnost, so specs note only where membership ch
 game. An *AI house* of our engine has no such teams, so a rule's exception for team members never
 applies to its units. See S-0215 (Terms).
 
-**terrain animation.** An animation that the game creates as part of a cell's terrain when the
-map's terrain is set up, such as the animation of a tile that the theater animates, rather than one
-created by an object or an event. Not the same thing as an *animated terrain object*, which is a
+**terrain animation.** An animation that the game creates as part of a cell's terrain, when the
+map's terrain is set up or when a cell is recalculated in play (S-0010, claim 19), such as the
+animation of a tile that the theater animates, rather than one created by an object or an event. Not the same thing as an *animated terrain object*, which is a
 terrain object. See S-0103 and S-0104.
 
 **tether link, tethered.** A link that two objects in *contact* both hold during some exchanges.
@@ -1132,6 +1152,11 @@ exceptions: their keys carry meaning (S-0004, claims 9 and 10). See S-0002 and S
 of the type's own section, and the name other fields use to refer to it.
 
 **type section.** The rules section named after a type, holding that type's fields. See S-0006.
+
+**underground type.** A type whose movement zone is *subterranean* (see *movement zone*; S-0211,
+claim 12). The property is the zone itself, so it is a property of the type in the surface state
+as well as below the surface. S-0214 owns the term (Terms) and uses it in its click rules (claims 6
+and 11).
 
 **unspecified.** The original produces a value that depends on unrelated internal state and cannot be
 reproduced. A spec that calls a result unspecified also says what our engine does instead: a safe,
@@ -1529,12 +1554,4 @@ scenario T6, part G.
 
 ## Questions for the project lead
 
-- **Difficulty row in a campaign mission.** The decision of 2026-10-10 gives every house by default
-  the row the original gives a human-controlled house. In a skirmish that is the normal row, which
-  S-0301 and S-0302 (claim 3) apply. In a campaign mission the original gives the player's house the
-  row of the difficulty the player chose, and the computer houses the row of the mission's
-  computer difficulty (S-0301, claim 3). Does our engine's default stay the normal row for every
-  house in a campaign mission too, or does the player's chosen campaign difficulty select the
-  player's row (and, if so, which row the AI houses use)? Campaigns are a pointer only in the
-  current specs, so until this is decided the specs state the normal row as the default for every
-  house.
+No question for the project lead remains open in this revision.
