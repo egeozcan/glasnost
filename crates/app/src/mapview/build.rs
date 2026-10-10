@@ -24,6 +24,7 @@ use glasnost_ini::value;
 use glasnost_map::objects::{HealthKind, ListKind, facing_from_value, starting_health};
 use glasnost_map::{CellGrid, CellXY, Map, NO_OVERLAY};
 use glasnost_num::F64;
+use glasnost_num::geom::n_step;
 use glasnost_render::compose::{DIAMOND_WIDTH, DepthTest, Paint, Profile, row565};
 
 use glasnost_render::light::{self, DetailLevel, LightQuirks, LightSource, TileTable};
@@ -162,6 +163,8 @@ pub const VPL_FILE: &[u8] = b"voxels.vpl"; // spec: S-0105 Import mapping
 /// The notes a scene can carry: gaps in the specs (with their request) and
 /// parts our viewer does not draw yet.
 mod notes {
+    pub const STANDING_POSE: &str =
+        "Q-0021: a vehicle drawn as a sprite is taken to be in its standing pose (provisional)";
     pub const TILES_UNLOADED: &str = "no game was set up: tiles are drawn as the map stores them, before the load's terrain recalculation and smoothing (S-0010 claim 12)";
     pub const OVERLAY_SHADOW_DEPTH: &str =
         "Q-0021: an overlay shadow's depth bias is taken as its overlay's, flat (provisional)";
@@ -677,7 +680,7 @@ impl Builder<'_> {
     }
 
     /// Places a sprite frame with its canvas centred on world pixel `p`
-    /// (provisional, Q-0011; S-0108 claim 8 for buildings).
+    /// (S-0102 claim 19, F6: the frame at (x − ⌊W/2⌋ + c, y − ⌊H/2⌋ + r); S-0108 claim 8 for buildings).
     #[allow(clippy::too_many_arguments)]
     fn place_sprite(
         &mut self,
@@ -694,6 +697,7 @@ impl Builder<'_> {
         let (image, (fx, fy), (cw, ch)) = self.sprite_frame(file, frame)?;
         Some(Item {
             image,
+            // spec: S-0102 F6 (⌊W/2⌋ and ⌊H/2⌋: W and H are positive, so truncation is the floor)
             x: p.0 - cw / 2 + fx,
             y: p.1 - ch / 2 + fy,
             test,
@@ -1917,7 +1921,10 @@ impl Builder<'_> {
         }
     }
 
-    /// An infantry unit's body and shadow sprites (S-0107 claims 2, 3, 19).
+    /// An infantry unit's body and own shadow (S-0107 claims 2, 3, 19;
+    /// S-0102 claims 13, 20 and 28): the shadow right after the body, both
+    /// centred on the draw point. Units in the viewer stand on the ground
+    /// (height above the surface 0).
     fn infantry_items(&mut self, m: &Mobile, point: (i32, i32), u: i32, row: usize) -> Vec<Item> {
         let Some(sprite) = self
             .import
@@ -1932,29 +1939,9 @@ impl Builder<'_> {
         let Ok(frame) = usize::try_from(infantry_frame(&f, m.body)) else {
             return Vec::new();
         };
+        let lz = height_lift(m.pos.2);
         let mut items = Vec::new();
-        // spec: S-0107 claim 19 (on the ground: shadow frame + ⌊L/2⌋ at the same position, unless suppressed)
-        if !rule_bool(self.import, m.kind, m.idx, b"NoShadow", false)
-            && let Some(item) = self.place_sprite(
-                &sprite,
-                frame + n / 2,
-                point,
-                DepthTest::Reader,
-                // spec: S-0102 claim 13 (infantry shadow: U − 2, flat)
-                ItemDepth::Profile {
-                    profile: Profile::Flat,
-                    bias: u - 2,
-                    companion: None,
-                },
-                Paint::Shadow,
-                Group::Shadows,
-                true,
-                Some(m.object),
-            )
-        {
-            items.push(item);
-        }
-        // spec: S-0102 claim 13 (infantry drawn as a sprite: U − 2, upright, reader)
+        // spec: S-0102 claim 13 (infantry body, h = 0: U − 12, upright, reader)
         if let Some(item) = self.place_sprite(
             &sprite,
             frame,
@@ -1962,21 +1949,44 @@ impl Builder<'_> {
             DepthTest::Reader,
             ItemDepth::Profile {
                 profile: Profile::Upright,
-                bias: u - 2,
+                bias: u - 12,
                 companion: None,
             },
             Paint::Row(row),
             Group::Infantry,
-            true,
+            false,
             Some(m.object),
         ) {
+            items.push(item);
+        }
+        // spec: S-0107 claim 19 (on the ground: shadow frame + ⌊L/2⌋ at the same position, unless suppressed);
+        // S-0102 claims 20 and 28 (drawn right after the body; it darkens the body's own pixels)
+        if !rule_bool(self.import, m.kind, m.idx, b"NoShadow", false)
+            && let Some(item) = self.place_sprite(
+                &sprite,
+                frame + n / 2,
+                point,
+                DepthTest::Reader,
+                // spec: S-0102 claim 13 (own shadow of an infantry unit, h = 0: −L(z) − 4, flat)
+                ItemDepth::Profile {
+                    profile: Profile::Flat,
+                    bias: -lz - 4,
+                    companion: None,
+                },
+                Paint::Shadow,
+                Group::Shadows,
+                false,
+                Some(m.object),
+            )
+        {
             items.push(item);
         }
         items
     }
 
-    /// A vehicle's or aircraft's items: voxel parts (S-0105), or a sprite
-    /// showing image frame 0 (provisional, Q-0011).
+    /// A vehicle's or aircraft's items: voxel parts (S-0105), or for a
+    /// vehicle a sprite (S-0102 claims 21 and 22). An aircraft whose art is
+    /// not a voxel model shows no body (claim 21).
     fn vehicle_items(&mut self, m: &Mobile, point: (i32, i32), u: i32, row: usize) -> Vec<Item> {
         let Some(art) = self.import.arts.get(&(m.kind, m.idx)).cloned() else {
             return Vec::new();
@@ -1988,11 +1998,97 @@ impl Builder<'_> {
         };
         if art.voxels.contains_key("body") {
             self.vehicle_voxels(m, &art, point, u, row, group)
-        } else if let Some(sprite) = art.sprite.clone() {
-            // spec: S-0102 claim 13 (a unit drawn as a sprite: U − 2, upright, reader)
-            self.place_sprite(
-                &sprite,
-                0,
+        } else if m.kind == Kind::Vehicles
+            && let Some(sprite) = art.sprite.clone()
+        {
+            self.sprite_vehicle(m, &sprite, point, u, row)
+        } else {
+            // spec: S-0102 claim 21 (an aircraft is never drawn as a sprite)
+            Vec::new()
+        }
+    }
+
+    /// A vehicle drawn as a sprite (S-0102 claims 13, 21, 22 and 28).
+    fn sprite_vehicle(
+        &mut self,
+        m: &Mobile,
+        sprite: &[u8],
+        point: (i32, i32),
+        u: i32,
+        row: usize,
+    ) -> Vec<Item> {
+        let (k, i) = (m.kind, m.idx);
+        let n = self.sprite_frames(sprite).unwrap_or(0);
+        let art_int = |b: &Self, key: &[u8]| b.art_value(k, i, key).and_then(value::integer);
+        let turret = rule_bool(self.import, k, i, b"Turret", false);
+        // spec: S-0102 Import mapping (WalkFrames 12, FiringFrames 0)
+        let walk_frames = art_int(self, b"WalkFrames").unwrap_or(12);
+        let firing_frames = art_int(self, b"FiringFrames").unwrap_or(0);
+        // spec: S-0102 Import mapping (Facings 8, but 1 without firing frames and turret)
+        let facings =
+            art_int(self, b"Facings").unwrap_or(if firing_frames == 0 && !turret { 1 } else { 8 });
+        // spec: S-0102 Import mapping (standing frames 0, or 1 with firing frames; walking start 0;
+        // standing start F_w·n with standing frames, else the walking start)
+        let standing_frames = i32::from(firing_frames > 0);
+        let walk_start = 0;
+        let stand_start = if standing_frames > 0 {
+            walk_frames * facings
+        } else {
+            walk_start
+        };
+        // spec: S-0102 claim 22 (facing part: (f₈ + 1) mod 8 with 8 facings, else 0;
+        // quirks.sprite_vehicle_eight_facings_only)
+        let d = if facings == 8 {
+            (n_step(m.body, 8) as i32 + 1) % 8
+        } else {
+            0
+        };
+        // spec: S-0102 Import mapping (IdleRate absent: 0)
+        let idle_rate = rule_int(self.import, k, i, b"IdleRate", 0);
+        // spec: S-0102 claim 22 (frame table: no tick has run, so the walk counter w is 0, nothing fires
+        // or dies; the standing-pose state is taken as on, Q-0021)
+        let frame = if idle_rate != 0 {
+            walk_start + d * walk_frames
+        } else if standing_frames > 0 {
+            stand_start + d * standing_frames
+        } else {
+            walk_start + d * walk_frames
+        };
+        self.note(notes::STANDING_POSE);
+        let Ok(frame) = usize::try_from(frame) else {
+            return Vec::new();
+        };
+        let lz = height_lift(m.pos.2);
+        // spec: S-0102 claim 21 (no own shadow with the no-shadow flag or either visceroid flag)
+        let shadowed = !rule_bool(self.import, k, i, b"NoShadow", false)
+            && !rule_bool(self.import, k, i, b"SmallVisceroid", false)
+            && !rule_bool(self.import, k, i, b"LargeVisceroid", false);
+        let shadow_item = |b: &mut Self, bias: i32| {
+            if !shadowed {
+                return None;
+            }
+            // spec: S-0102 claim 21 (the shadow is the body frame + ⌊N/2⌋, centred on the same point)
+            b.place_sprite(
+                sprite,
+                frame + n / 2,
+                point,
+                DepthTest::Reader,
+                ItemDepth::Profile {
+                    profile: Profile::Flat,
+                    bias,
+                    companion: None,
+                },
+                Paint::Shadow,
+                Group::Shadows,
+                false,
+                Some(m.object),
+            )
+        };
+        let body = |b: &mut Self, f: usize| {
+            // spec: S-0102 claim 13 (a vehicle drawn as a sprite, h = 0: U − 2, upright, reader)
+            b.place_sprite(
+                sprite,
+                f,
                 point,
                 DepthTest::Reader,
                 ItemDepth::Profile {
@@ -2001,15 +2097,27 @@ impl Builder<'_> {
                     companion: None,
                 },
                 Paint::Row(row),
-                group,
+                Group::Vehicles,
                 true,
                 Some(m.object),
             )
-            .into_iter()
-            .collect()
+        };
+        let mut items = Vec::new();
+        if turret {
+            // spec: S-0102 claim 22 (a turret vehicle: body and turret frame ((t₃₂ + 4) mod 32) + 8·F_w
+            // combined into one image; its shadow, U − 2, never darkens them, so it goes first)
+            items.extend(shadow_item(self, u - 2));
+            items.extend(body(self, frame));
+            let t = (n_step(m.turret, 32) as i32 + 4) % 32 + 8 * walk_frames;
+            if let Ok(t) = usize::try_from(t) {
+                items.extend(body(self, t));
+            }
         } else {
-            Vec::new()
+            // spec: S-0102 claims 21 and 28 (the own shadow right after the body: −L(z) − 4, flat)
+            items.extend(body(self, frame));
+            items.extend(shadow_item(self, -lz - 4));
         }
+        items
     }
 
     /// A parsed voxel model and its motion file from the assets, parsed

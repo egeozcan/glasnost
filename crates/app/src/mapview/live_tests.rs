@@ -174,7 +174,7 @@ fn dynamic_pass_places_mobiles_at_their_projected_point() {
     assert_eq!(e.key, i64::from(pos.0 + pos.1));
     let body = e.items.iter().find(|i| i.paint != Paint::Shadow).unwrap();
     let (px, py) = project_lifted(pos.0, pos.1, pos.2);
-    // Canvas 20 × 20 centred on the point (Q-0011), frame rectangle at (9, 9).
+    // Canvas 20 × 20 centred on the point (S-0102 claim 19), frame rectangle at (9, 9).
     assert_eq!((body.x, body.y), (px - 10 + 9, py - 10 + 9));
     assert_eq!(body.object, Some(sim_code(ObjectId(7))));
     // Frame 3 + 2 × group 5 = 13 (pixel value frame + 1).

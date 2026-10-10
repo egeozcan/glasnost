@@ -21,14 +21,14 @@ use glasnost_vfs::theater::Theater;
 
 use super::build::{Assets, Built, Options, build};
 
-const RULES: &str = "[BuildingTypes]\n1=HUTX\n[InfantryTypes]\n1=MANX\n[OverlayTypes]\n0=OREX\n1=CRATEX\n2=FENCEX\n\
+const RULES: &str = "[BuildingTypes]\n1=HUTX\n[InfantryTypes]\n1=MANX\n[VehicleTypes]\n1=CARX\n[OverlayTypes]\n0=OREX\n1=CRATEX\n2=FENCEX\n\
     [OREX]\nTiberium=yes\n[CRATEX]\nCrate=yes\n[FENCEX]\nDrawFlat=no\n\
     [SmudgeTypes]\n0=CRATERX\n[CRATERX]\nWidth=2\n[TerrainTypes]\n0=TREEX\n1=MINEX\n[MINEX]\nSpawnsTiberium=yes\n\
     [Colors]\nC0=1,2,3\nC1=10,200,200\nC2=20,200,200\nC3=30,200,200\nC4=40,200,200\nC5=50,200,200\n\
     C6=60,200,200\nC7=70,200,200\nC8=80,200,200\nC9=90,200,200\nC10=100,200,200\nC11=110,200,200\n\
     C12=120,200,200\nC13=130,200,200\nC14=140,200,200\nLightGrey=0,0,150\n";
-const ART: &str =
-    "[HUTX]\nFoundation=2x2\nAnimIdle=1,1,0\n[MANX]\nSequence=MANSEQ\n[MANSEQ]\nReady=3,1,2\n";
+const ART: &str = "[HUTX]\nFoundation=2x2\nAnimIdle=1,1,0\n[MANX]\nSequence=MANSEQ\n[MANSEQ]\nReady=3,1,2\n\
+    [CARX]\nFacings=8\nWalkFrames=2\n";
 const THEATER: &str = "[General]\nClearTile=0\n[TileSet0000]\nFileName=clr\nTilesInSet=1\n";
 
 fn shp(canvas: (u16, u16), frames: usize, frame_size: (u32, u32), at: (u16, u16)) -> Vec<u8> {
@@ -127,6 +127,7 @@ pub(super) fn context() -> (glasnost_convert::Import, Catalogue, Assets) {
         ((Kind::Overlays, 0), art("OREX", "orex.shp")),
         ((Kind::Overlays, 1), art("CRATEX", "cratex.shp")),
         ((Kind::Overlays, 2), art("FENCEX", "fencex.shp")),
+        ((Kind::Vehicles, 0), art("CARX", "carx.shp")),
         ((Kind::Smudges, 0), art("CRATERX", "craterx.shp")),
         ((Kind::TerrainObjects, 0), art("TREEX", "treex.shp")),
         ((Kind::TerrainObjects, 1), art("MINEX", "minex.shp")),
@@ -144,6 +145,7 @@ pub(super) fn context() -> (glasnost_convert::Import, Catalogue, Assets) {
     assets.insert(b"cratex.shp", shp((10, 10), 2, (2, 2), (4, 4)));
     assets.insert(b"fencex.shp", shp((10, 10), 2, (2, 2), (4, 4)));
     assets.insert(b"craterx.shp", shp((10, 10), 1, (2, 2), (4, 4)));
+    assets.insert(b"carx.shp", shp((10, 10), 32, (2, 2), (4, 4)));
     assets.insert(b"treex.shp", shp((10, 10), 2, (2, 2), (4, 4)));
     assets.insert(b"minex.shp", shp((10, 10), 2, (2, 2), (4, 4)));
     (import, catalogue, assets)
@@ -251,7 +253,7 @@ fn building_body_shadow_and_bib() {
     assert_eq!(items_of(&all, "building").len(), 6);
 }
 
-/// spec: S-0107 claims 2, 3, 19 (stand entry, facing group, shadow frame); S-0102 claim 13
+/// spec: S-0107 claims 2, 3, 19 (stand entry, facing group, shadow frame); S-0102 claims 13, 20, 28
 #[test]
 fn infantry_standing_frame_and_shadow() {
     let (b, _) = scene(&Options::default());
@@ -266,10 +268,13 @@ fn infantry_standing_frame_and_shadow() {
     assert_eq!(b.scene.images[body.image as usize].pixels()[0], 14);
     // Shadow frame 13 + 20 = 33.
     assert_eq!(b.scene.images[shadow.image as usize].pixels()[0], 34);
-    // U = −L(0) − 1 + F; the cell two steps toward the viewer is not high.
-    assert_eq!(bias(body), (Profile::Upright, -3));
-    assert_eq!(bias(shadow), (Profile::Flat, -3));
+    // U = −L(0) − 1 + F; the cell two steps toward the viewer is not high. Body U − 12.
+    assert_eq!(bias(body), (Profile::Upright, -13));
+    // The own shadow: −L(z) − 4, flat, drawn right after the body (claim 28).
+    assert_eq!(bias(shadow), (Profile::Flat, -4));
     assert_eq!(body.test, DepthTest::Reader);
+    let at = |i: &Item| b.scene.items.iter().position(|x| x == i).unwrap();
+    assert_eq!(at(shadow), at(body) + 1);
 }
 
 /// spec: S-0102 claim 6 (the ground layer is sorted by X + Y; equal keys keep insertion order)
@@ -518,6 +523,26 @@ fn terrain_objects_placement_and_tables() {
     let shadow = items.iter().find(|i| i.paint == Paint::Shadow).unwrap();
     assert_eq!(b.scene.images[shadow.image as usize].pixels()[0], 2);
     assert_eq!(bias(shadow), (Profile::Flat, -3));
+}
+
+/// spec: S-0102 claims 21 and 22 (a sprite vehicle's facing part and frame; its own shadow right after it)
+#[test]
+fn sprite_vehicle_frame_and_shadow() {
+    let (b, _) = build_text(
+        b"[Basic]\nNewINIFormat=4\n[Map]\nSize=0,0,10,10\nLocalSize=0,0,10,10\n\
+          [Units]\n0=Neutral,CARX,256,6,9,64\n",
+        &Options::default(),
+    );
+    let items = items_of(&b, "vehicle");
+    assert_eq!(items.len(), 2);
+    let (body, shadow) = (items[0], items[1]);
+    // Facing 16384: f₈ = 2, d = 3; walking frames 2, no standing frames: frame 3·2 = 6 (pixel 7).
+    assert_eq!(b.scene.images[body.image as usize].pixels()[0], 7);
+    // Shadow: 6 + ⌊32/2⌋ = 22 (pixel 23), −L(z) − 4, flat.
+    assert_eq!(shadow.paint, Paint::Shadow);
+    assert_eq!(b.scene.images[shadow.image as usize].pixels()[0], 23);
+    assert_eq!(bias(&shadow), (Profile::Flat, -4));
+    assert_eq!(bias(&body), (Profile::Upright, -3));
 }
 
 /// Builds `text` with typed rules in which HUTX has strength 100.
