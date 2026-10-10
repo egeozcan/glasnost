@@ -380,7 +380,13 @@ impl Pathfinder for S0212 {
                 let v = step_outcome(w, req.unit, next.cell, c, reference);
                 if v == Outcome::Blocked {
                     // spec: S-0212 claim 15 (a blocked destination is approached; not for passive vehicles)
-                    if c == to && !passive && next.cell != from {
+                    let level = |x: CellXY| w.cells.cell(x).map_or(0, |cell| i32::from(cell.level));
+                    // spec: S-0212 claim 15 (the neighbour's search layer within 1 level of the destination's)
+                    if c == to && !passive && (level(next.cell) - level(to)).abs() <= 1 {
+                        if next.cell == from {
+                            // spec: S-0212 claim 15 (already next to it: a path needs a step, claim 12, so the search fails)
+                            return None;
+                        }
                         let margin_ok = match sc.g(ci) {
                             None => true,
                             Some(gr) => {
