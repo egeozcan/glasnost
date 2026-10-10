@@ -1282,3 +1282,110 @@ fn acceleration_defaults_are_doubles() {
     let (mut w, id) = start(&s2, &[N; 20]);
     assert_eq!(first_moving_tick(&mut w, id).rho, a);
 }
+
+// ---------------------------------------------------------------------------
+// Getting onto and off a bridge deck (claim 5)
+
+/// A high bridge along map north over ground at level 0: the vehicle's
+/// column x = 0 has land at level 4 at y = 0 and y = −5 and the four
+/// high-bridge cells y = −1 … −4 (an overlay of index 24 at y = −2, S-0211
+/// claim 15) at level 0 between them.
+fn bridge_scene() -> Scene {
+    let mut s = Scene::new();
+    for i in 0..=24 {
+        let name = format!("OV{i}");
+        s.register("overlays", &name);
+        s.ruleset.sim.overlays.insert(
+            name,
+            glasnost_rules::sim::OverlayType {
+                has_art: Some(true),
+                ..Default::default()
+            },
+        );
+    }
+    for y in [0, 1, -5, -6] {
+        s.set_cell(cell(0, y), 0, 4);
+    }
+    s.cell_mut(cell(0, -2)).overlay = 24;
+    s
+}
+
+// spec: S-0207 claim 5 (world height H + 416 on the deck, kept between high-bridge cells; off the deck into a cell that is not a high-bridge cell)
+// (Getting onto a deck from land 4 levels higher needs S-0212 claim 10's step between a deck and a
+// bridge end, which the pathfinder does not take yet.)
+#[test]
+fn driving_along_and_off_a_bridge_deck() {
+    use glasnost_sim::world::Layer;
+    let mut s = bridge_scene();
+    // The far end at the deck's ground level, so the vehicle can drive off.
+    for y in [-5, -6] {
+        s.set_cell(cell(0, y), 0, 0);
+    }
+    s.vehicle("TESTCAR", car(WHEEL, 30, false));
+    s.place_unit(0, "TESTCAR", cell(0, -1), 0);
+    let (mut w, id) = start(&s, &[N; 4]);
+    // Put the vehicle on the deck, as a vehicle that has driven onto it.
+    let c0 = cell(0, -1);
+    w.cells.leave(c0, Layer::Ground, id);
+    w.cells.enter(c0, Layer::Deck, id, false);
+    let ob = w.obj_mut(id).expect("v");
+    ob.layer = Layer::Deck;
+    ob.pos.z = 416;
+    let mut seen_deck = 0;
+    for _ in 0..200 {
+        tick::step(&mut w);
+        let o = w.obj(id).expect("v");
+        let y = o.pos.cell().y - 40;
+        if (-4..=-1).contains(&y) {
+            assert_eq!(o.layer, Layer::Deck, "on the deck at y = {y}");
+            assert_eq!(o.pos.z, 416, "H + 416 on the deck");
+            seen_deck += 1;
+        } else {
+            assert_eq!(o.layer, Layer::Ground, "off the deck at y = {y}");
+            assert_eq!(o.pos.z, 0);
+        }
+        if y == -5 && o.drive.as_ref().is_some_and(|d| d.track.is_none()) {
+            break;
+        }
+    }
+    assert!(seen_deck > 0);
+    assert_eq!(w.obj(id).expect("v").pos.cell(), cell(0, -5));
+}
+
+// spec: S-0207 claim 5 (a move into a high-bridge cell from ground at its own level keeps the vehicle off the deck)
+#[test]
+fn driving_under_a_bridge_deck() {
+    let mut s = bridge_scene();
+    s.vehicle("TESTCAR", car(WHEEL, 30, false));
+    s.place_unit(0, "TESTCAR", cell(-2, -2), 64);
+    let mut w = s.build();
+    let id = objects_of(&w, Kind::Vehicle)[0];
+    open_orders(&mut w);
+    order_move(&mut w, id, cell(2, -2));
+    tick::step(&mut w);
+    w.obj_mut(id).expect("vehicle").path.steps = vec![E; 4];
+    for _ in 0..200 {
+        tick::step(&mut w);
+        let o = w.obj(id).expect("v");
+        assert_eq!(o.layer, glasnost_sim::world::Layer::Ground);
+        assert_eq!(o.pos.z, 0, "under the deck: the ground's height");
+        if o.pos.cell() == cell(2, -2) {
+            return;
+        }
+    }
+    panic!("the vehicle did not pass under the deck");
+}
+
+// spec: S-0207 claim 3 (the budget is emptied only when the vehicle is due to begin a track and waits or is refused; without a path it is kept)
+#[test]
+fn budget_kept_while_waiting_for_a_path() {
+    let s = scene(car(WHEEL, 30, false), 0);
+    let (mut w, id) = start(&s, &[N, N]);
+    let t = w.tick;
+    let ob = w.obj_mut(id).expect("v");
+    ob.path.steps.clear();
+    ob.path.retry_at = t + 50;
+    ob.drive.as_mut().expect("d").budget = 40;
+    run(&mut w, 5);
+    assert_eq!(snap(&w, id).budget, 40);
+}

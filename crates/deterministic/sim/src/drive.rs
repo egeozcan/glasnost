@@ -308,19 +308,39 @@ fn cell_of(x: i32, y: i32) -> CellXY {
 }
 
 /// Moves the vehicle to a new ground position, handling the cell change
-/// (S-0209 claim 13, S-0211 claim 5, S-0210 claim 9).
-fn set_pos(w: &mut World, id: ObjectId, x: i32, y: i32, z: Option<i32>) {
+/// (S-0209 claim 13, S-0211 claim 5, S-0210 claim 9) and getting onto or
+/// off a bridge deck (S-0207 claim 5). `at_point`: the position is a track
+/// point or the track target, where the world height is set (claim 5);
+/// between points (claim 4) the height is kept.
+fn set_pos(w: &mut World, id: ObjectId, x: i32, y: i32, at_point: bool) {
     let Some(o) = w.obj(id).cloned() else { return };
     let old = o.pos.cell();
-    let z = z.unwrap_or(o.pos.z);
-    let np = Pos::new(x, y, z);
-    if let Some(ob) = w.obj_mut(id) {
-        ob.pos = np;
+    let new = cell_of(x, y);
+    let mut layer = o.layer;
+    if new != old {
+        let high = |c: CellXY| w.cells.idx(c).is_some_and(|i| w.cells.deck[i]);
+        let level = |c: CellXY| w.cells.cell(c).map_or(0, |x| i32::from(x.level));
+        // spec: S-0207 claim 5 (onto the deck: into a high-bridge cell exactly 4 levels below the cell left)
+        if high(new) && level(new) == level(old) - 4 {
+            layer = Layer::Deck;
+        } else if high(old) && !high(new) {
+            // spec: S-0207 claim 5 (off the deck: from a high-bridge cell into one that is not)
+            layer = Layer::Ground;
+        }
     }
-    let new = np.cell();
+    let z = if at_point {
+        // spec: S-0207 claim 5 (the surface height H, plus 416 leptons on a bridge deck)
+        w.surface_at(x, y) + if layer == Layer::Deck { 416 } else { 0 }
+    } else {
+        o.pos.z
+    };
+    if let Some(ob) = w.obj_mut(id) {
+        ob.pos = Pos::new(x, y, z);
+        ob.layer = layer;
+    }
     if new != old {
         w.cells.leave(old, o.layer, id);
-        w.cells.enter(new, o.layer, id, false);
+        w.cells.enter(new, layer, id, false);
         crate::load::recalc_cells(w, &[old, new]);
         crate::crush::entered_cell(w, id, new);
     }
@@ -993,13 +1013,12 @@ fn spend(w: &mut World, id: ObjectId) -> bool {
         if next > pts.len() {
             // spec: S-0207 claim 3 (the track target reached: A′ = A + trunc(7 × (1 − m/11)))
             a += tracks::end_correction(&pts);
-            let z = w.surface_at(tr.target.0, tr.target.1);
             if let Some(d2) = w.obj_mut(id).and_then(|ob| ob.drive.as_mut()) {
                 d2.budget = a;
                 d2.track = None;
                 d2.between_steps = true;
             }
-            set_pos(w, id, tr.target.0, tr.target.1, Some(z));
+            set_pos(w, id, tr.target.0, tr.target.1, true);
             if let Some(&(_, _, f)) = pts.last() {
                 set_facing(w, id, f);
             }
@@ -1009,8 +1028,7 @@ fn spend(w: &mut World, id: ObjectId) -> bool {
         let p: Point = pts[next - 1];
         let (x, y) = (tr.target.0 + p.0, tr.target.1 + p.1);
         // spec: S-0207 claim 5 (at a point: ground position target + displacement, height H, facing 256f)
-        let z = w.surface_at(x, y);
-        set_pos(w, id, x, y, Some(z));
+        set_pos(w, id, x, y, true);
         set_facing(w, id, p.2);
         last = (x, y);
     }
@@ -1052,7 +1070,7 @@ fn spend(w: &mut World, id: ObjectId) -> bool {
             q0
         };
         if dest != cur {
-            set_pos(w, id, dest.0, dest.1, None);
+            set_pos(w, id, dest.0, dest.1, false);
         }
     }
     if let Some(d2) = w.obj_mut(id).and_then(|o| o.drive.as_mut()) {
@@ -1131,13 +1149,12 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
                 return false;
             }
             // spec: S-0212 claims 20 and 21 (a fresh search once the retry delay is over)
+            // spec: S-0207 claim 3 (without a path the vehicle is not due to begin a track: its budget is kept)
             if t < o.path.retry_at {
-                set_budget_zero(w, id);
                 return false;
             }
             // spec: S-0207 claim 15 (a fresh search that finds a path looks at the new path's first cell)
             if fresh_search(w, id, &u) != Search::Found {
-                set_budget_zero(w, id);
                 return false;
             }
         }
@@ -1179,7 +1196,7 @@ fn add_budget(w: &mut World, id: ObjectId, s: i32) {
 
 fn set_budget_zero(w: &mut World, id: ObjectId) {
     if let Some(d) = w.obj_mut(id).and_then(|o| o.drive.as_mut()) {
-        // spec: S-0207 claim 3 (a move to make but no track driven or begun: the budget is 0)
+        // spec: S-0207 claim 3 (due to begin a track but waiting for a gate or refused by the step check: the budget is 0)
         d.budget = 0;
     }
 }
