@@ -1565,7 +1565,6 @@ fn sectors_split_by_a_two_level_step() {
 }
 
 // spec: S-0212 claim 13 (the coarse search: per-category entry costs plus 0.001 across a diagonal connection, so a diagonal neighbour block is entered directly; F9)
-// spec: S-0212 claim 12a (routes of equal cost are taken in recording order)
 #[test]
 fn coarse_search_chains() {
     let mut s = scene();
@@ -1755,4 +1754,38 @@ fn substitution_estimate() {
             assert_eq!(goal, Some(cell(2, 0)), "adopted");
         }
     }
+}
+
+// spec: S-0212 claim 12a (coarse routes of exactly equal cost: the one recorded first goes first, and a route's new routes are recorded in the order of their sectors' first cells)
+#[test]
+fn coarse_tie_goes_to_the_first_recorded() {
+    let mut s = scene();
+    // Rock on the corner where the level-0 blocks of cell(0, 0) and
+    // cell(2, 2) touch: no diagonal connection between them, so the routes
+    // through the block east (first cell on an earlier row) and the block
+    // south both cost exactly 2.
+    rock(&mut s, cell(2, 2), 0);
+    s.place_unit(0, CAR, cell(0, 0), 64);
+    let mut w = s.build();
+    regions::ensure(&mut w);
+    let secs = w.regions.sectors.clone();
+    // One level-1 sector holds all four level-0 blocks.
+    assert_eq!(sector(&w, 1, cell(0, 0)), sector(&w, 1, cell(3, 3)));
+    let a = sector(&w, 0, cell(0, 0));
+    let d = sector(&w, 0, cell(3, 3));
+    assert!(
+        secs.levels[0].conns[a as usize]
+            .iter()
+            .all(|&(t, _)| t != d)
+    );
+    let chains = corridor::coarse(
+        &w,
+        &secs,
+        MovementZone::Normal,
+        cell(0, 0),
+        cell(3, 3),
+        &Default::default(),
+    )
+    .expect("a corridor");
+    assert_eq!(chains[0], vec![a, sector(&w, 0, cell(2, 0)), d]);
 }

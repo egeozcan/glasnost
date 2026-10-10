@@ -347,10 +347,10 @@ pub fn exempt(w: &World, c: CellXY) -> bool {
             return false;
         };
         // spec: S-0212 claim 13 (a wall section in a neighbour)
-        let wall = r
-            .overlays
-            .get(usize::from(cell.overlay))
-            .is_some_and(|o| o.wall);
+        let wall = cell.overlay != glasnost_map::NO_OVERLAY
+            && r.overlays
+                .get(usize::from(cell.overlay))
+                .is_some_and(|o| o.wall);
         wall || [crate::world::Layer::Ground, crate::world::Layer::Deck]
             .iter()
             .flat_map(|&l| w.cells.list(n, l).iter())

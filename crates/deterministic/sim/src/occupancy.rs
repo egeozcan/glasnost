@@ -763,7 +763,15 @@ pub fn first_free(w: &World, c: CellXY, l: Layer, row: &[u8]) -> Option<u8> {
 pub fn no_position_by_flags(w: &World, c: CellXY, walker_layer: Layer) -> bool {
     let rec = w.cells.occ(c, walker_layer);
     let ground = w.cells.occ(c, Layer::Ground);
-    rec.is_some_and(|r| r.vehicle_present()) || ground.is_some_and(|g| g.others > 0)
+    // spec: S-0209 claim 3 (the object-present flag keeps walkers out unless an open gate stands in the cell)
+    let open_gate = || {
+        w.cells
+            .list(c, Layer::Ground)
+            .iter()
+            .any(|&g| crate::process::gate_open(w, g))
+    };
+    rec.is_some_and(|r| r.vehicle_present())
+        || (ground.is_some_and(|g| g.others > 0) && !open_gate())
 }
 
 /// The side positions (used by tests).
