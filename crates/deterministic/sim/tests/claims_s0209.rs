@@ -1289,3 +1289,24 @@ fn wall_rows_follow_the_wall_owner() {
         );
     }
 }
+
+// spec: S-0209 claim 1 (a vehicle without the driving locomotor, taken off the map, clears its cell's flag)
+#[test]
+fn removed_non_driving_vehicle_clears_its_flag() {
+    let mut s = Scene::new();
+    let mut t = unit_type(TRACK, 6, 10);
+    t.locomotor = Some(glasnost_rules::sim::Locomotor::Hover);
+    s.raw_unit("vehicles", "Skimmer", t);
+    s.place_unit(0, "Skimmer", cell(0, 0), 0);
+    let mut w = s.build();
+    let id = w
+        .objects
+        .values()
+        .find(|o| o.kind == Kind::Vehicle)
+        .map(|o| o.id)
+        .expect("vehicle");
+    assert!(w.obj(id).expect("v").drive.is_none());
+    assert!(ground(&w, cell(0, 0)).vehicle_present());
+    objects::remove(&mut w, id);
+    assert!(!ground(&w, cell(0, 0)).vehicle_present());
+}

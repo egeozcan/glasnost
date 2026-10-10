@@ -118,6 +118,8 @@ pub fn at_chain_point(w: &World, id: ObjectId) -> bool {
 /// Releases every vehicle-present claim of a vehicle.
 pub fn release_claims(w: &mut World, id: ObjectId) {
     let (claims, layer) = match w.obj(id) {
+        // spec: S-0209 claim 1 (a vehicle taken out of a cell's list while between steps clears that cell's flag; one without the driving locomotor never advanced)
+        Some(o) if o.drive.is_none() && o.kind == Kind::Vehicle => (vec![o.pos.cell()], o.layer),
         Some(o) => (
             o.drive
                 .as_ref()
