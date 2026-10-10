@@ -7,7 +7,10 @@
 //! (`render::projection::ProjectionQuirks`, `render::compose::ComposeQuirks`,
 //! `render::light::LightQuirks`, `render::voxel::VoxelQuirks` and
 //! `RecoilQuirks`, `render::overlay::OverlayQuirks`,
-//! `render::palette::PaletteQuirks`).
+//! `render::palette::PaletteQuirks`). [`NOT_IMPLEMENTED`] lists the named
+//! switches of the rendering specs that have no field, with the reason;
+//! the test at the end of this file checks that every switch the rendering
+//! specs name is one or the other.
 
 use glasnost_render::projection::{
     LEVEL_LEPTONS, ProjectionQuirks, TERRAIN_LIFT, height_lift_with,
@@ -127,8 +130,281 @@ pub fn drawn_body_frame(f: usize, n: usize, q: &ViewQuirks) -> usize {
     }
 }
 
+/// Named switches of the rendering specs (`spec/rendering/S-01*.md`) that
+/// have no field in a quirk struct, with the reason: the behaviour they
+/// switch is not implemented yet, or another part of the engine owns them.
+/// Mirrored in `docs/development.md`.
+pub const NOT_IMPLEMENTED: &[(&str, &str)] = &[
+    // S-0101
+    (
+        "screen_band_tests_position_only",
+        "S-0101 claim 6: our renderer does no on-screen culling (no screen band or ground box)",
+    ),
+    (
+        "screen_to_ground_not_exact_inverse",
+        "S-0101 claim 9: no F6 lepton position is used; the cell under a pixel is F7's pixel formula, the same in both settings",
+    ),
+    // S-0102
+    (
+        "unsorted_upper_layers",
+        "S-0102 claim 7: every mobile object is drawn in the ground layer; the upper layers are not modelled",
+    ),
+    (
+        "layer_change_on_events_only",
+        "S-0102 claim 4: render layer membership is not modelled (the moments of claim 4 may be simulation state)",
+    ),
+    (
+        "remembered_animation_in_cell_pass",
+        "S-0102 claim 16: no fog, so no remembered animations",
+    ),
+    (
+        "slot_values_replace_animation_adjustments",
+        "S-0102 claim 17: building slot animations are not drawn",
+    ),
+    (
+        "sprite_vehicle_eight_facings_only",
+        "S-0102 claim 22: the on state is drawn; the off state's facing part for counts 2 and 4 is asked in Q-0050",
+    ),
+    // S-0103
+    (
+        "deploy_animation_neutral_brightness",
+        "S-0103 claim 8: deploy and undeploy animations are not drawn",
+    ),
+    (
+        "parachute_brightness_fixed",
+        "S-0103 claim 8: parachutes are not drawn",
+    ),
+    // S-0104
+    (
+        "zero_rate_freezes_ambient",
+        "S-0104 claim 4: the ambient fade's timing is not modelled (render::light::ambient_step takes one step)",
+    ),
+    (
+        "dominator_rate_thousandths",
+        "S-0104 claim 4: no dominator effect and no fade timing",
+    ),
+    (
+        "split_effect_priority",
+        "S-0104 claim 2: the lighting effects in force (nuke, dominator, ion storm, chrono flash) are not modelled",
+    ),
+    (
+        "chrono_flash_no_reevaluation",
+        "S-0104 claims 2 and 5: no chrono flash and no lighting re-evaluations",
+    ),
+    (
+        "dominator_height_terms_linger",
+        "S-0104 claim 16: no dominator effect",
+    ),
+    (
+        "trigger_tint_retints_all_tables",
+        "S-0104 claim 17: trigger actions do not change the lighting",
+    ),
+    (
+        "infantry_height_light_limited",
+        "S-0104 claim 13: the on state is drawn; the off state at a height of 208 leptons in a shadowed cell is asked in Q-0050",
+    ),
+    // S-0105
+    (
+        "turret_recoil_leaves_barrel",
+        "S-0105 claim 27: recoil placement in a pose is not applied (no firing yet)",
+    ),
+    (
+        "vehicle_no_recoil",
+        "S-0105 claim 28: recoil placement is not applied; vehicles never recoil, as with the switch on",
+    ),
+    (
+        "barrel_only_no_recoil",
+        "S-0105 claim 37: recoil placement is not applied; a barrel without a turret never recoils, as with the switch on",
+    ),
+    (
+        "alt_body_turret_model",
+        "S-0105 claim 12: the alternative body and spawned-aircraft docking are not drawn; the main body always is",
+    ),
+    (
+        "voxel_single_pixel",
+        "S-0105 claim 22: the on state is drawn; the off state (no gaps in magnified sections) is not implemented",
+    ),
+    (
+        "voxel_no_intersection_depth",
+        "S-0105 claim 23: the on state is drawn; the off state (a depth test between sections) is not implemented",
+    ),
+    (
+        "voxel_buffer_wrap",
+        "S-0105 claim 22: the on state is drawn; which off state the switch selects is a question for the lead in S-0105",
+    ),
+    (
+        "barrel_pivot_frame_mixup",
+        "S-0105 claim 10: the on state is drawn; which off state the switch selects is a question for the lead in S-0105",
+    ),
+    (
+        "depth_mode_leak",
+        "S-0105 claim 32: every voxel draw is fresh, and the caller says whether it is depth-buffered; the off state is a question for the lead in S-0105",
+    ),
+    (
+        "voxel_cache_frame_mod32",
+        "S-0105 claim 26: the image cache is not modelled, every voxel image is drawn fresh (as with the switch off)",
+    ),
+    (
+        "voxel_cache_alt_turret_frame",
+        "S-0105 claim 26: the image cache is not modelled, every voxel image is drawn fresh (as with the switch off)",
+    ),
+    (
+        "barrel_cache_ignores_elevation",
+        "S-0105 claims 26 and 37: the image cache is not modelled, every voxel image is drawn fresh (as with the switch off)",
+    ),
+    (
+        "voxel_depth_plane_partial_clear",
+        "S-0105 claim 34: no depth plane is kept between voxel draws (as with the switch off)",
+    ),
+    (
+        "no_turret_shadow",
+        "S-0105 claim 29: turrets and barrels cast no shadow, as with the switch on; the off state's shadow is not specified",
+    ),
+    // S-0106
+    (
+        "slope_tilt_angles",
+        "S-0106 claim 4: voxel bodies are not tilted on slopes",
+    ),
+    (
+        "tilter_flag_ignored",
+        "S-0106 claim 10: voxel bodies are not tilted on slopes",
+    ),
+    (
+        "tilt_transition_restart_jump",
+        "S-0106 claim 6: no tilt state (it may belong to the simulation's locomotors)",
+    ),
+    // S-0107
+    (
+        "refused_death_keeps_unit",
+        "S-0107 claim 17: the simulation's death handling (no combat yet); not a field of rules::Quirks yet",
+    ),
+    // S-0108
+    (
+        "unbuildable_occupied_damaged_frame",
+        "S-0108 claim 2: no building is occupied in our engine yet",
+    ),
+    (
+        "full_state_unmaxed",
+        "S-0108 claim 2: buildings are drawn in their idle state only",
+    ),
+    (
+        "gate_double_reverse",
+        "S-0108 claim 4: buildings are not sold",
+    ),
+    (
+        "building_wrap_normalisation",
+        "S-0108 claim 6: building body ranges are not played",
+    ),
+    (
+        "turret_building_no_body_wrap",
+        "S-0108 claim 6: building body ranges are not played",
+    ),
+    (
+        "turret_start_clears_damaged",
+        "S-0108 claims 11 and 12: building slot animations are not drawn",
+    ),
+    (
+        "enable_unfreezes_unpowered",
+        "S-0108 claim 13: building slot animations are not drawn",
+    ),
+    (
+        "damage_swap_drops_occupied",
+        "S-0108 claims 11 and 12: building slot animations are not drawn",
+    ),
+    (
+        "roof_unload_no_fallback",
+        "S-0108 claim 22: units do not unload from buildings",
+    ),
+    (
+        "theater_refresh_buildup_range",
+        "S-0108 claim 5: no theater refresh",
+    ),
+    // S-0109
+    (
+        "anim_damage_starts_at_one",
+        "S-0109: animation playback is not implemented",
+    ),
+    (
+        "anim_erasure_late_slots_opaque",
+        "S-0109: animation playback is not implemented",
+    ),
+    (
+        "anim_fast_rate_freezes",
+        "S-0109: animation playback is not implemented",
+    ),
+    (
+        "anim_followup_keeps_step",
+        "S-0109: animation playback is not implemented",
+    ),
+    (
+        "anim_followup_start_doubled",
+        "S-0109: animation playback is not implemented",
+    ),
+    (
+        "anim_hide_at_level_15",
+        "S-0109: animation playback is not implemented",
+    ),
+    (
+        "anim_loop_count_wrap",
+        "S-0109: animation playback is not implemented",
+    ),
+    (
+        "anim_loop_end_from_sprite",
+        "S-0109: animation playback is not implemented",
+    ),
+    (
+        "anim_low_detail_shows_cloaked",
+        "S-0109: animation playback is not implemented",
+    ),
+    (
+        "anim_pingpong_lower_turn",
+        "S-0109: animation playback is not implemented",
+    ),
+    (
+        "anim_random_rate_collapse",
+        "S-0109: animation playback is not implemented",
+    ),
+    (
+        "anim_reverse_raw_loop_end",
+        "S-0109: animation playback is not implemented",
+    ),
+    (
+        "anim_translucency_levels",
+        "S-0109: animation playback is not implemented",
+    ),
+    // S-0110
+    (
+        "shroud_on_flat_grid",
+        "S-0110: shroud and fog are not drawn",
+    ),
+    (
+        "shroud_point_cell_wrap",
+        "S-0110: shroud and fog are not drawn",
+    ),
+    // S-0111
+    (
+        "building_resource_pips_hidden",
+        "S-0111: in-game overlays (bars, pips) are not drawn",
+    ),
+    (
+        "passenger_overflow_hides_pips",
+        "S-0111: in-game overlays (bars, pips) are not drawn",
+    ),
+    (
+        "pip_colour_default_shift",
+        "S-0111: in-game overlays (bars, pips) are not drawn",
+    ),
+    // S-0112
+    (
+        "persist_tiberium_overrides",
+        "owned by S-0006 claim 10 (importer): the import covers one game, with no session that carries tiberiums between games",
+    ),
+];
+
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeSet;
+
     use super::*;
 
     fn off() -> ViewQuirks {
@@ -193,5 +469,88 @@ mod tests {
         assert_eq!(drawn_body_frame(3, 4, &on), 2);
         assert_eq!(drawn_body_frame(3, 4, &off()), 1);
         assert_eq!(drawn_body_frame(0, 1, &off()), 0);
+    }
+
+    /// Every `quirks.name` that a rendering spec names is a field of a quirk
+    /// struct (render, mapview, the importer's or the simulation's) or is
+    /// listed in [`NOT_IMPLEMENTED`] with its reason.
+    #[test]
+    fn every_rendering_spec_quirk_has_a_switch() {
+        use glasnost_convert::art::ArtQuirks;
+        use glasnost_convert::layers::LayerQuirks;
+        use glasnost_render::compose::ComposeQuirks;
+        use glasnost_render::light::LightQuirks;
+        use glasnost_render::overlay::OverlayQuirks;
+        use glasnost_render::palette::PaletteQuirks;
+        use glasnost_render::voxel::{RecoilQuirks, VoxelQuirks};
+
+        // The switches of the renderer and the map viewer.
+        let ours: Vec<(&str, bool)> = [
+            ViewQuirks::default().named().to_vec(),
+            ProjectionQuirks::default().named().to_vec(),
+            ComposeQuirks::default().named().to_vec(),
+            LightQuirks::default().named().to_vec(),
+            VoxelQuirks::default().named().to_vec(),
+            RecoilQuirks::default().named().to_vec(),
+            OverlayQuirks::default().named().to_vec(),
+            PaletteQuirks::default().named().to_vec(),
+        ]
+        .concat();
+        assert!(
+            ours.iter().all(|(_, v)| *v),
+            "every default is the original"
+        );
+        // Their owners elsewhere: the importer's and the simulation's.
+        let mut have: BTreeSet<&str> = ours.iter().map(|(n, _)| *n).collect();
+        have.extend(LayerQuirks::default().named().map(|(n, _)| n));
+        have.extend(ArtQuirks::default().named().map(|(n, _)| n));
+        let sim = glasnost_rules::quirks::Quirks::default();
+        have.extend(sim.named().iter().map(|(n, _)| *n));
+        // A listed name must not also be a field.
+        for (n, _) in NOT_IMPLEMENTED {
+            assert!(!have.contains(n), "{n} is a field and also listed");
+        }
+
+        let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../../spec/rendering");
+        let mut files: Vec<_> = std::fs::read_dir(root)
+            .expect("spec/rendering")
+            .map(|e| e.expect("entry").path())
+            .filter(|p| {
+                p.file_name()
+                    .and_then(|n| n.to_str())
+                    .is_some_and(|n| n.starts_with("S-01") && n.ends_with(".md"))
+            })
+            .collect();
+        files.sort();
+        assert!(files.len() >= 12, "found {} rendering specs", files.len());
+        let mut missing = BTreeSet::new();
+        let mut seen = BTreeSet::new();
+        for f in files {
+            let text = std::fs::read_to_string(&f).expect("read spec");
+            let mut rest = text.as_str();
+            while let Some(i) = rest.find("quirks.") {
+                rest = &rest[i + 7..];
+                let name: String = rest
+                    .chars()
+                    .take_while(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || *c == '_')
+                    .collect();
+                if name.is_empty() {
+                    continue;
+                }
+                seen.insert(name.clone());
+                if !have.contains(name.as_str()) && !NOT_IMPLEMENTED.iter().any(|(n, _)| *n == name)
+                {
+                    missing.insert(format!("{} in {}", name, f.display()));
+                }
+            }
+        }
+        assert!(missing.is_empty(), "quirks without a switch: {missing:#?}");
+        // The list holds no stale names.
+        for (n, _) in NOT_IMPLEMENTED {
+            assert!(
+                seen.contains(*n),
+                "{n} is listed but no rendering spec names it"
+            );
+        }
     }
 }

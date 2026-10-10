@@ -73,9 +73,10 @@ const DELTA_BITS: u64 = 0x3F50_624D_D2F1_A9FC;
 ///
 /// `quirks.infantry_height_light_limited` is not offered: its off state is
 /// not fully stated (whether the shadowed-cell penalty replaces or adds to
-/// the height term at 208 leptons), so infantry always follow the on state.
-/// The other switches of S-0104 act on simulation state, the importer or
-/// the effect state machine, outside this module.
+/// the height term at 208 leptons, asked in Q-0050), so infantry always
+/// follow the on state. The other switches of S-0104 act on simulation
+/// state, the importer or the effect state machine, outside this module
+/// (`app::mapview::quirks::NOT_IMPLEMENTED`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct LightQuirks {
     /// `quirks.tile_table_kept_on_relight` (claim 8): a full recompute

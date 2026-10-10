@@ -164,6 +164,44 @@ impl Default for VoxelQuirks {
     }
 }
 
+impl VoxelQuirks {
+    /// The switches by name.
+    pub fn named(&self) -> [(&'static str, bool); 18] {
+        [
+            ("table_trig_negative_bias", self.table_trig_negative_bias),
+            ("hva_scale_first_section", self.hva_scale_first_section),
+            ("voxel_light_ignores_hva", self.voxel_light_ignores_hva),
+            ("voxel_eye_in_model_frame", self.voxel_eye_in_model_frame),
+            (
+                "voxel_light_first_section_mode",
+                self.voxel_light_first_section_mode,
+            ),
+            ("voxel_stale_normal_shades", self.voxel_stale_normal_shades),
+            ("voxel_x_carry_into_y", self.voxel_x_carry_into_y),
+            ("voxel_section_sort_ties", self.voxel_section_sort_ties),
+            ("voxel_depth_double_width", self.voxel_depth_double_width),
+            ("voxel_depth_zero_hidden", self.voxel_depth_zero_hidden),
+            ("voxel_mode0_misread", self.voxel_mode0_misread),
+            (
+                "voxel_topdown_column_origin",
+                self.voxel_topdown_column_origin,
+            ),
+            ("shadow_double_width", self.shadow_double_width),
+            ("shadow_frame_zero", self.shadow_frame_zero),
+            (
+                "building_turret_shift_eighths",
+                self.building_turret_shift_eighths,
+            ),
+            (
+                "barrel_elevation_quantised",
+                self.barrel_elevation_quantised,
+            ),
+            ("barrel_frame_zero", self.barrel_frame_zero),
+            ("vpl_unloaded_rows_blank", self.vpl_unloaded_rows_blank),
+        ]
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Facings (Terms)
 // ---------------------------------------------------------------------------
@@ -2191,6 +2229,16 @@ impl Default for RecoilQuirks {
             recoil_hold_one_skipped: true,
             recoil_refire_accumulates: true,
         }
+    }
+}
+
+impl RecoilQuirks {
+    /// The switches by name.
+    pub fn named(&self) -> [(&'static str, bool); 2] {
+        [
+            ("recoil_hold_one_skipped", self.recoil_hold_one_skipped),
+            ("recoil_refire_accumulates", self.recoil_refire_accumulates),
+        ]
     }
 }
 
