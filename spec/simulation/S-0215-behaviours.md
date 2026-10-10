@@ -2,13 +2,13 @@
 id: S-0215
 title: Behaviours (standing orders) and their processing
 topic: simulation
-revision: 10
+revision: 11
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-10
 measurements: []
-requests: []
+requests: [Q-0019, Q-0020]
 supersedes: []
 ---
 
@@ -18,10 +18,12 @@ supersedes: []
 
 Every infantry unit, vehicle, aircraft and building carries a *behaviour*, a standing order such as
 guard, hunt, move or attack, and this spec covers how behaviours are held, queued, started,
-forced, overridden and reverted, when and with which random delay an object processes its behaviour, which
-resting behaviour it falls back to, and the per-behaviour properties that the rules data can set.
-It also says what the general-purpose behaviours do at each processing, and only points to the
-topics that own the others (harvesting, structures, superweapons, team scripts).
+forced, overridden and reverted, when and with which random delay an object processes its
+behaviour, which resting behaviour it falls back to, and the per-behaviour properties that the
+rules data can set. It also gives what the general-purpose behaviours and a gate's *open* behaviour
+do at each processing, the area-guard threshold's engine default (the guard stray distance has
+none in the original), and pointers to the topics
+that own the other behaviours (harvesting, structures, superweapons, team scripts).
 
 ## Terms
 
@@ -33,12 +35,21 @@ setup*, *departure*, *importer warning*, *quirk switch*, *unspecified* and *roun
 *Sequence kind*, *interruptible*, *deploy kinds*, *frame count* and *idle action* are used as S-0107
 defines them. *Turn* and *turn pass* are used as S-0203 (tick order) defines them.
 
-Other specs cited: S-0202 (random streams), S-0203 (tick order), S-0204 (coordinates, distance
-and facing), S-0205 (number domains), S-0206 (turn rates), S-0207 (ground vehicle movement), S-0208 (infantry
-movement), S-0213 (human orders) and S-0214 (order targeting rules) are drafts in the same batch
-as this spec. S-0001, S-0003, S-0006, S-0105 and S-0107 are approved. S-0301 (the firing cycle,
-planned) is cited as a pointer only: it owns no claim that this spec relies on, and every
-statement this spec makes about the firing check (Terms) is vocabulary or a claim of this spec.
+Other specs cited: S-0001, S-0003, S-0006, S-0007, S-0009, S-0105, S-0107, S-0202 (random
+streams), S-0203 (tick order), S-0204 (coordinates, distance and facing), S-0205 (number domains),
+S-0206 (turn rates), S-0207 (ground vehicle movement), S-0208 (infantry movement), S-0209
+(occupancy and crowding), S-0213 (human orders), S-0214 (order targeting rules) and S-0301 (the
+firing cycle). All of them are approved. S-0207 and S-0209 also have revisions in the same batch
+as this revision (for requests Q-0019 and Q-0020); this spec cites S-0207 claim 16 (a vehicle's
+answer to a scatter request) and S-0209's gate rows (claims 4 and 5) as those revisions state them.
+
+**Requests.** This revision answers request Q-0020 in two of its parts: the engine default of the
+area-guard threshold (claim 36 a) and the gate's *open* behaviour, which decides when a gate is
+open (claim 35). Its third part, the guard stray distance, has no engine default in the original
+and goes to the project lead (claim 36 b). It answers request Q-0019 in its part on behaviours:
+which behaviours make a vehicle refuse every scatter request, and that the paralysed property
+refuses only requests with a threat point (claims 17 and 19), with the vehicle's acceptance and
+destination left to S-0207 claim 16.
 
 **Queueing wording.** Throughout this spec, "queues *b*" without further words means a queue
 request (claim 7) *without* an immediate start. A rule that asks for the readiness-dependent
@@ -81,7 +92,7 @@ Terms used by this spec:
   it has the unit rules and order legality of a human-controlled house (houses in our engine,
   above). Where this spec gives a rule for a "computer-controlled owner", the rule describes the
   original, and an AI house follows the rule given for human-controlled owners.
-- **House skill level:** an integer per house that some automatic behaviours of its units compare
+- **House skill level** (glossary; this spec owns the claims about it, claim 15): an integer per house that some automatic behaviours of its units compare
   with game-wide thresholds of the AI settings (below). Every house starts with level 0. In a
   skirmish of the original, every computer-controlled house gets the maximum skill level of the AI
   settings when the houses are set up, and every human-controlled house keeps 0. In a campaign
@@ -114,11 +125,20 @@ Terms used by this spec:
 - **Progress count:** a per-actor integer with which some processing rules remember how far they
   have got within the current behaviour (for example a SAM building's aim-then-fire cycle, claim
   32). Every behaviour start sets it to 0; an override or a revert leaves it as it was. Its other
-  values are internal to those rules, which state only their observable effects. Two rules look at
-  the value itself: claim 13 asks whether a *patrol*'s count is still 0, and claim 32 names the two
+  values are internal to those rules, which state only their observable effects. Three rules look
+  at the value itself: claim 13 asks whether a *patrol*'s count is still 0, claim 32 names the two
   stages (0 and 1) of a SAM building's *attack*, because a value outside them decides an observable
-  delay. There is one progress count per actor, shared by all its
-  behaviours, not one per behaviour.
+  delay, and claim 35 names the stages of a gate's *open*, which are the values 0 to 5 in the order
+  of its table (*start* 0, *opening* 1, *waiting* 2, *closing-start* 3, *closing* 4, *finished* 5).
+  The rules behave as if there were one progress count per actor, shared by all its behaviours,
+  not one per behaviour. Among the rules of this spec, the sharing is observable only through
+  claim 32's out-of-stage rule, that is, only for a building whose *attack* became current by an
+  override while another behaviour's rule had left a value other than 0 and 1. Of the behaviours this spec states, only a gate's *open* leaves such values
+  (its stages 2 to 5); of the building behaviours of other topics, the processings of *repair* and
+  *missile* leave some at certain stages, and those specs (structures and superweapons) own them.
+- **Gate, door, passage state, close countdown:** a gate is as S-0209 (Terms) defines it; its door,
+  passage state and close countdown are defined in claim 35, which owns when a gate is open or
+  closed.
 - **Ready mark:** a per-building yes/no state that makes a building ready to change (claim 11).
   Some building processings set it (claim 32); a successful per-tick start of the building clears
   it. It is internal state; only its effect on when queued behaviours start is observable.
@@ -129,7 +149,7 @@ Terms used by this spec:
   type (infantry or vehicle, with a weapon in its first slot, not marked as preventing attack-move; never
   a building or aircraft).
 - **Distributed-fire candidates:** for an actor whose type has the distributed-fire flag, the list
-  of candidate targets that its automatic target search collected, over which it spreads
+  of candidate targets that its automatic search (glossary) collected, over which it spreads
   its fire. The target-acquisition specs own how the list is filled and emptied; this spec uses
   only whether it is empty (claim 24).
 - **Behaviour properties:** the eight values per behaviour that the rules data can set: the
@@ -139,7 +159,7 @@ Terms used by this spec:
 - **Rate delay** *D*<sub>r</sub>: the processing delay derived from the current behaviour's rate
   (Formulas F1).
 - **Draw *U*(*a*, *b*):** one ranged draw from the scenario random stream, uniform over the integers
-  *a* to *b* inclusive. S-0202 (random streams, a draft in the same batch) owns the generator and
+  *a* to *b* inclusive. S-0202 (random streams) owns the generator and
   the reduction to a range; this spec states which draws happen and in which order.
 - **Ready to change:** an actor's per-kind condition for letting its queued behaviour become current
   (claim 11).
@@ -177,8 +197,9 @@ Terms used by this spec:
   transport specs). A building can hold several contacts at once; the rules of this spec look only
   at a mobile actor's contact, which is one at most. An actor "in contact with nothing" holds no
   such pairing.
-- **Bunker:** a building whose type has the bunker flag (Import mapping), which one vehicle at a
-  time can occupy. "In a bunker" means occupying one. In this spec "bunker" always means this kind
+- **Bunker:** a *tank bunker* (glossary): a building whose type has the bunker flag (Import
+  mapping), which one vehicle at a time can occupy. "In a bunker" means occupying one, that is,
+  being *bunkered* (glossary). In this spec "bunker" always means this kind
   of building; buildings that infantry occupy are the *occupiable buildings* below.
 - **Absorbing building:** a building whose type has the infantry-absorb flag or the unit-absorb
   flag (Import mapping): a building that takes in units as passengers, for example to draw power
@@ -209,21 +230,22 @@ Terms used by this spec:
   the map and is not meant to stay. Which actors are marked belongs to the reinforcement and
   aircraft specs.
 - **Targeting timer:** a per-actor countdown, separate from the processing timer, that paces the
-  automatic target search (claim 33).
+  automatic search (claim 33).
 - **Rearm time remaining:** the number of ticks until the actor's weapon may fire again after its
-  last shot. The firing cycle (planned S-0301) owns the countdown; this spec uses
+  last shot. The firing cycle owns the countdown (S-0301, claims 1 and 2); this spec uses
   only its remaining value.
 - **Firing check:** the test that decides whether an actor can fire a given weapon at a given
   target now. Its answer is one of twelve categories, listed here in alphabetical order: *busy*,
   *can fire*, *cloaked*, *illegal*, *impossible*, *moving*, *must deploy*, *not facing*, *out of
-  ammunition*, *out of range*, *rearming* and *still turning*. Which situations give which answer belongs to the combat
-  topic (the firing cycle, planned S-0301) and to S-0214. This spec uses only the category: claim
-  32 says what a building in *attack* does with each one.
+  ammunition*, *out of range*, *rearming* and *still turning*. These are the answer names of
+  S-0301 (claim 9), which owns the check, which situations give which answer and the precedence
+  among them; S-0214 and the other combat specs give the answers of their own topics. This spec
+  uses only the category: claim 32 says what a building in *attack* does with each one.
 - **Armed:** as S-0214 (Terms) defines it: the actor has a weapon in the weapon slot it currently
   uses (its first slot, or, for a type that switches between weapons, the current one). A building
   that holds occupants and whose type lets them fire from inside also counts as armed. Every rule
-  of this spec that says "armed" or "unarmed" (claims 11, 14, 15, 21 and 32) asks this one
-  question.
+  of this spec that says "armed" or "unarmed" (claims 11, 14, 15, 17, 21, 32 and 36 a) asks this
+  one question.
 - **Primary, secondary and deploy weapon:** an actor's *primary weapon* is the weapon in its first
   weapon slot and its *secondary weapon* the weapon in its second slot, in both cases the elite
   weapon of that slot instead when the actor is elite and its type gives one (the combat and
@@ -261,17 +283,25 @@ Terms used by this spec:
   *stupid-guard-mode*, *stupid-hunt*, *close-range*, *distributed-fire* and *opportunity-fire*
   flags, each mean the imported type field of that role in the Import mapping. What those fields
   do outside this spec belongs to the specs that own them.
+- **Fraidycat:** an infantry type whose type has the fraidycat flag, as S-0107 (Terms) defines
+  it; S-0208 (claim 11) uses the same word in its acceptance rule for scatter requests. This spec
+  uses the word only in scenario B29, to keep such types out of that test.
+- **Short of power:** a house is short of power when its power output is less than the power its
+  buildings drain (the ratio of output to drain is below 1). The power rules belong to the
+  structures topic; this spec uses only whether a house is short of power (claim 32).
 - **Construction yard:** a building whose type is in the computer player's list of
   construction-yard types (Import mapping). "A vehicle that deploys into a construction yard"
   is a vehicle whose deploys-into type is in that list. Base building belongs to the structures
   and production topics.
 - **Automatic base building:** a per-house setting of the original's computer player under which
   it builds its own base. Only rules marked as the original's only (claims 24 and 27) look at it; the
-  computer player's rules own it.
+  computer player's rules own it, including when it is switched on (in a skirmish that can be
+  from the start of the game, depending on the house's skill level), so this spec makes no claim
+  about it; scenario B11, case f, reads it with the recorder.
 - **Mind control:** an actor's capture of an enemy actor, which then changes owner to the
   capturer's house. The combat topic owns it; this spec uses only that a takeover gives the
   captured actor a guard reset (claim 9).
-- **Being erased:** the state of an object that an erasing weapon (a temporal weapon) has locked
+- **Being erased** (glossary): the state of an object that an erasing weapon (a temporal weapon) has locked
   onto, from the moment the first such weapon locks on until the last one lets go or the object is
   removed. The combat topic owns erasing weapons.
 - **Chrono move, leaving stage, phase-in:** a chrono move teleports an actor to another place, by a
@@ -320,7 +350,7 @@ Terms used by this spec:
    - Confidence: high
 
 2. **When an actor processes its behaviour.** On each tick on which an actor's own update runs (its
-   turn in the turn pass of S-0203, tick order, a draft in the same batch, which says which objects
+   turn in the turn pass of S-0203, tick order, which says which objects
    take turns, in which order, and when an object loses a turn), the actor
    processes its current behaviour if, and only if, all of these hold:
    - the actor is alive and its health is above 0,
@@ -329,10 +359,10 @@ Terms used by this spec:
    - it is not an infantry unit or vehicle that is being erased, or that is in the leaving stage of a
      chrono move (Terms). Such an actor also drops its target and destination on each such tick.
 
-   The per-tick start of claim 11 is skipped on the ticks on which the tunnel, erasing or
-   leaving-stage exclusion holds (the last two bullets above), and on no other tick without a
-   processing: on a tick on which only the timer has not expired, the per-tick start still runs
-   (claim 3a, scenario B3, case k). The phase-in of a chrono move does
+   On a tick on which the tunnel, erasing or leaving-stage exclusion holds (the last two bullets
+   above), the per-tick start of claim 11 takes no effect. On every other tick on which the actor
+   does not process, the per-tick start still takes effect: for example on a tick on which only the
+   timer has not expired (claim 3a, scenario B3, case k). The phase-in of a chrono move does
    not stop processing: an actor processes during its phase-in as at any other time. One edge (low
    confidence): when a chrono move reaches its phase-in while the actor is being erased, the
    exclusion ends for an infantry unit at once and for a vehicle when the phase-in ends, although
@@ -356,10 +386,11 @@ Terms used by this spec:
 3. **A behaviour start is processed at once, unless the processing that caused it chooses later.**
    A behaviour start (start-next, claim 8, or force, claim 9) sets the processing timer to "expired
    now". So:
-   - (a) a start that happens on tick *t* before the actor's processing for tick *t* leads to a
-     processing of the new behaviour on tick *t*. For infantry, vehicles and buildings, the
-     per-tick start of a queued behaviour (claim 11) happens before the processing of the same tick,
-     so a queued behaviour that starts there is processed on the same tick,
+   - (a) a start on tick *t* that precedes the actor's processing for tick *t* (for example one
+     caused by another actor's update earlier in the tick) leads to a processing of the new
+     behaviour on tick *t*. In particular, a queued behaviour that an infantry unit, vehicle or
+     building makes current at its per-tick start (claim 11; for a building, its first per-tick
+     start of the tick) is processed on that same tick,
    - (b) a start that happens after the actor's processing for tick *t* (for example one caused by
      another actor's update later in the tick, or a building's second per-tick start, claim 11) is
      processed on tick *t* + 1 (or in a second turn of the same tick, claim 2),
@@ -447,11 +478,14 @@ Terms used by this spec:
    approaching a target, an idle action or a scatter request, whose number belongs to their own
    specs. So in an *area guard* processing whose search runs, the targeting timer's *U*(0, 2) is
    drawn before the delay's *U*(1, 5).
-   - Backing: `measurable` (scenario B2 for the rate delay and the standard delay; scenarios B11
+   - Backing: `measurable` (scenario B2 for the rate delay and the standard delay, its third run
+     for a rate written with a percent sign under the original's rounding; scenarios B11
      case e and B21 for the rate of a behaviour the processing has started, and scenario B22 for the rate of the
      current behaviour under a shared processing; scenarios B9 case b, B11 case b and B21 for fixed
      delays taking no draw; scenario B27, case d, for the delay's draw coming after the search's
-     draw in *area guard*). That the delay's draw also follows the search of *hunt* and the draws
+     draw in *area guard*; scenario B30, case a, for a rate whose product with 900 reaches 2⁶³,
+     which F1 turns into 0). The not-a-number case of F1 and F9 is `unmeasured`: S-0003's decimal
+     form never yields a not-a-number, so imported data cannot reach it (F1). That the delay's draw also follows the search of *hunt* and the draws
      of approaching, idle actions and scatter requests is `unmeasured`: the normal search of *hunt*
      looks at candidates beyond any fixed reach, and the target-acquisition specs, which own the
      draws it takes per candidate, do not state them, nor do the specs of the other rules state
@@ -503,7 +537,12 @@ Terms used by this spec:
    and to harvesting slaves through the slave rules (economy topic); and the processings of claims 23 and 27 (their original-only rules), which force *capture*, and of claim 30, which forces *guard*. No
    player's order is known to force a behaviour on the actor it is given to (claim 12); the stop
    order given to a slave master gives its harvesting slaves a guard reset.
-   - Backing: `measurable` (scenario B3, cases f and i)
+   - Backing: `measurable` (scenario B3, cases f and i, for the force and the mind-control guard
+     reset; case g for the stop order's guard reset of a slave master's slaves). The other users
+     of the list are `unmeasured` here: deactivation, reactivation, entering an open-topped
+     transport, the replacement of a locomotor and the slave rules are each started by a rule of
+     another topic (combat, transport, locomotion and economy), which owns when it happens; this
+     claim names them only as users of the force, which B3 backs.
    - Confidence: high (the rule); medium (the list of rules that force)
 
 10. **Override and revert.** An override puts a temporary behaviour *b* in place with a new target
@@ -527,7 +566,10 @@ Terms used by this spec:
     effect, when the actor's target object ceases to exist (it is destroyed or removed from the map)
     or becomes untargetable. Clearing the target by any other rule (the leash of claim 26, an order)
     does not revert. Other users (team logic, some movement situations) are outside this spec.
-    - Backing: `measurable` (scenario B7)
+    - Backing: `measurable` (scenario B7; case h for a target cleared by an order, which does not
+      revert). The revert when the target becomes untargetable is `unmeasured`: which states make
+      a target untargetable belongs to the target-acquisition specs, and none is established here.
+      Other users of override and revert are outside this spec.
     - Confidence: high (the slot rules and the target replacement); medium (the list of users and
       of revert causes)
 
@@ -536,9 +578,9 @@ Terms used by this spec:
     by a start-next, its **per-tick start**. The behaviour that this start makes current is the one
     processed on that tick (claim 3a). For a building this start also needs the building to have
     left its construction state. A building also has a second per-tick start on the same tick,
-    after its processing and without the construction-state condition, so a behaviour that the
-    second start makes current is first processed on the next tick (claim 3b); see the building
-    rule below. Aircraft have no such general per-tick start: their queued behaviours
+    without the construction-state condition, which sees the ready mark as that tick's processing
+    has left it; a behaviour that the second start makes current is not the one processed on that
+    tick, and is first processed on the next tick (claim 3b); see the building rule below. Aircraft have no such general per-tick start: their queued behaviours
     start through aircraft rules (aircraft spec), using the readiness below. An infantry unit that
     is ready to change and has neither a current nor a queued behaviour falls back to rest (claims
     13 and 14) at its per-tick start, and the behaviour that this fall-back queues, if any, becomes
@@ -600,7 +642,11 @@ Terms used by this spec:
       second per-tick start is `unmeasured`: it is observable only when a behaviour
       is queued while the mark is clear and the same tick's processing sets it, and no input or
       data sequence that produces this is known (buildings take only attack orders, and an order
-      for the current behaviour changes no slot).
+      for the current behaviour changes no slot). Of the infantry conditions, being in the middle
+      of firing, falling and a sequence that is not interruptible are `unmeasured`: the first and
+      the last last only as long as a firing or a sequence that S-0107 and the combat specs own,
+      and no setup here can time an order inside them, and whether the input can give an order to
+      an infantry unit while it falls is not established.
     - Confidence: high (infantry, and the vehicle conditions on *sticky* or *rescue* and on
       moving); medium (the list of three vehicle transitions, the unload or deploy cycle, the
       vehicle-factory conditions and buildings); low (the two *unload* rules, the vehicle below the
@@ -643,7 +689,13 @@ Terms used by this spec:
     - Backing: `measurable` (scenario B3; scenario B14, case b, for the two attack-move orders that
       input creates). The attack-move orders that input cannot create (an order with neither target
       nor destination, an ineligible actor, a building) are `unmeasured` here: the measurement setup
-      cannot issue them, and S-0213 owns their translation.
+      cannot issue them, and S-0213 owns their translation. The stop order's exemption for
+      *construction* and *selling* is `unmeasured`: a building has no destination, queued
+      destinations or route for the stop order to clear, and whether the input can give the stop
+      order to a building that is being built or sold is not established; a mobile actor carries
+      these behaviours only when data places it in them (claim 4), and any order that gives it a
+      target or a destination also queues a behaviour that replaces them at its next per-tick
+      start, so no state is known in which the exemption would show.
     - Confidence: high (queue without start; the stop order changes no slot); medium (the effect on
       a moving vehicle, which follows from claim 11, the clearing rules and the stop order's
       exceptions)
@@ -671,11 +723,15 @@ Terms used by this spec:
     same tick none of them happens, and only the table of claim 14 or 15 applies. An actor using a temporal
     weapon also lets its victim go, and an actor with attack-move memory may resume its attack move; the
     combat and order specs own those effects.
-    - Backing: `measurable` (scenario B15: case a for the guard-spot row, case b for the route
-      row). The locomotor row and the approach row are `unmeasured`: which situations replace an
+    - Backing: `measurable` (scenario B15: cases a and d for the guard-spot row, case b for the
+      route row). The locomotor row and the approach row are `unmeasured`: which situations replace an
       actor's locomotor for a while, and which fill a vehicle's approach destinations, are not
       established (Open questions), so no setup is known that puts an actor in either situation
-      at a fall-back to rest.
+      at a fall-back to rest. Also `unmeasured`: the route row's condition on a *patrol* that has
+      begun, because the *patrol* processing belongs to other topics (claim 34), and the rule of at
+      most once per tick, which needs two fall-backs of one actor in one tick, which no setup is
+      known to time. Scenario B15, case d, backs the guard-spot row for a unit whose current
+      behaviour is not *area guard*.
     - Confidence: medium (the effects and which destination remains); high (that no scatter request
       is sent); low (the locomotor row and its effect on the guard-spot row, and which rules fill
       the approach destinations)
@@ -712,12 +768,20 @@ Terms used by this spec:
     engineer or a vehicle thief, and in *guard* otherwise; it rests in *guard* in every case when it
     is a harvesting slave or when the house's skill level is below the area-guard threshold (rows
     7 to 10). Our AI can get the same result by ordering its resting infantry to guard an area.
-    - Backing: `measurable` (scenario B4; row 4 by scenario B15 case c). Three parts are `unmeasured`:
-      row 3, the queued destinations, which the order rules fill (S-0213) and for which no input
-      is known here, row 1's attack-move memory, whose life belongs to S-0213 and S-0214 (it is cleared and set by
-      the order rules, so a fall-back test here could not tell the memory from an ordinary
-      stop), and row 8, the harvesting slave of a computer-controlled owner, which is the
-      original's only and which only the economy topic's units can be put into.
+    - Backing: `measurable` (scenario B4 for rows 7, 9, 10, 11 and 12; row 4 by scenario B15 case
+      c; row 6 by scenario B6 case e; scenario B29, case a, for row 2, for row 5 (a3) and for the
+      *area guard* exception with a target). These parts are `unmeasured`:
+      - the *patrol* exception, because the *patrol* processing belongs to other topics (claim 34)
+        and may queue a behaviour of its own at the same moment,
+      - row 3, the queued destinations, which the order rules fill (S-0213) and for which no input
+        is known here,
+      - row 1's attack-move memory, whose life belongs to S-0213 and S-0214 (it is cleared and set
+        by the order rules, so a fall-back test here could not tell the memory from an ordinary
+        stop), and row 1's *wait* case, which differs from the later rows only for a unit with a
+        target or a destination (claim 7 already refuses a queued *guard* under *wait*), while no
+        setup is known that gives a unit in *wait* a target or a destination at a fall-back to rest,
+      - row 8, the harvesting slave of a computer-controlled owner, which is the original's only
+        and which only the economy topic's units can be put into.
     - Confidence: high (rows 1 to 6, 11 and 12); medium (rows 7 to 10)
 
 15. **Falling back to rest: vehicles.** When a vehicle falls back to rest, after the common effects of
@@ -743,12 +807,13 @@ Terms used by this spec:
     yet stand on that bunker's cell; the clearing of target and destination in rows 4 and 7 still
     happens then. Every "queue" of this table is a queue without an immediate start. Unlike
     infantry, rows 10 to 12 do not look at whether the owner is human-controlled; only the owner's
-    house skill level counts. In skirmish and multiplayer games of the original a human-controlled
-    house has skill level 0 and every computer-controlled house has the maximum skill level of the
-    AI settings; in a campaign mission each house has the level its map gives (absent: 0, a value
-    above the maximum: 1). So, whenever the area-guard threshold is above 0, an armed vehicle of a
-    human-controlled owner in skirmish rests in *guard* unless it has the guard-area ability or its
-    type defaults to area guard.
+    house skill level counts. In a skirmish of the original a human-controlled house has skill
+    level 0 and every computer-controlled house has the maximum skill level of the AI settings.
+    So, whenever the area-guard threshold is above 0, an armed vehicle of a human-controlled owner
+    in skirmish rests in *guard* unless it has the guard-area ability or its type defaults to area
+    guard. For the future campaign spec only (campaigns are out of scope for now): in a campaign
+    mission of the original each house that the map defines has the level its map gives (absent:
+    0, a value above the maximum: 1).
 
     **In our engine** the rows apply to the vehicles of every house as written, with these
     consequences of the houses rule (Terms):
@@ -764,18 +829,34 @@ Terms used by this spec:
     is at or above the area-guard threshold (rows 10 and 12); and an armed team member rests in
     *guard* (row 11). Our AI can get these results by ordering its harvesters to harvest and its
     resting vehicles to guard an area.
-    - Backing: `measurable` (scenario B4; row 3 by scenario B15 case b). Four parts are
-      `unmeasured`: row 2, the queued destinations (see claim 14), row 1's attack-move memory
-      (see claim 14), row 5, because which actors are
-      loaners is not established (Open questions) and so no setup is known that has a loaner with
-      passengers fall back to rest, and the slave-master part of row 11, which is the economy
-      topic's unit.
+    - Backing: `measurable` (scenario B4 for rows 4, 7, 10, 12, the team-member part of row 11
+      and the skirmish skill levels, row 3 by scenario B15 case b, row 9 by scenario B6 case e; scenario B29 for row 8, row 12's
+      bunker variant and the exceptions for *area guard* and *eaten*). These parts are
+      `unmeasured`:
+      - row 2, the queued destinations, and row 1's attack-move memory (see claim 14),
+      - row 4's case of a harvester in contact with another object or with *harvest* current or
+        queued: the processings that would make such a harvester fall back to rest belong to the
+        economy topic's harvest cycle, so no setup here can time a fall-back in that state,
+      - row 5, because which actors are loaners is not established (Open questions) and so no
+        setup is known that has a loaner with passengers fall back to rest,
+      - row 6: a vehicle that is deploying, or in *unload* with a deploys-into type, falls back
+        to rest only through the deploy and transport specs' rules, which no setup here can time,
+        and the case of *area guard* has the same outcome as row 7 under the *area guard* exception
+        (nothing queued) and cannot be told apart from it,
+      - the slave-master and harvesting-slave parts of row 11, which concern the economy topic's
+        units,
+      - the exceptions for *patrol*, *unload* and *enter* towards a bunker: the *patrol* and
+        vehicle *unload* processings belong to other topics (claim 34), which may queue a
+        behaviour of their own at the same moment, and the *enter* case lasts only while the
+        vehicle drives onto the bunker's cell, which no setup here can time a fall-back into,
+      - the campaign skill levels: campaigns are out of scope for now (decision of the project
+        lead), and the measurement setup runs skirmish games.
     - Confidence: medium (the rows and the skill level of houses); low (the loaner row)
 
 ### Behaviour properties
 
 16. **No-threat.** While an actor's current behaviour has the no-threat property, no other actor's
-    automatic target search picks it as a target. When a mobile actor that is not a team member, with
+    automatic search picks it as a target. When a mobile actor that is not a team member, with
     the no-threat property but not the zombie property, takes damage from a known attacker and
     survives, it falls back to rest at once (claims 13 to 15), which normally ends the no-threat
     behaviour.
@@ -783,10 +864,22 @@ Terms used by this spec:
     - Confidence: high (the search exclusion and the fall-back); medium (the exact damage outcomes
       that trigger the fall-back: any damage that changes health and leaves the actor alive)
 
-17. **Zombie and paralysed.** An actor whose current behaviour has the zombie or the paralysed
-    property never leaves it by falling back to rest (claims 14 and 15, rows 6 and 9). Orders and
-    other rules can still replace it through the queue or by force, subject to readiness (claim
-    11). In addition:
+17. **Zombie and paralysed.** At a fall-back to rest, the zombie or the paralysed property of the
+    current behaviour matters only through its row in the tables of claims 14 and 15 (row 6 for
+    infantry, row 9 for vehicles): when that row is the first that matches, nothing is queued and
+    the behaviour stays current. The rows before it take precedence, so in these cases those rows
+    decide, whatever the property says:
+    - an infantry unit that has a target (row 2 queues *attack*), or a destination or queued
+      destinations (rows 3 and 4 queue *move*),
+    - a vehicle that has a destination or queued destinations (rows 2 and 3 queue *move*), a
+      harvester (row 4), and an unarmed vehicle (rows 5 to 7; row 9 is for armed vehicles only, so
+      an unarmed vehicle in such a behaviour queues *guard* by row 7 unless row 5 or 6 applies).
+
+    A behaviour that those rows queue becomes current at the actor's next per-tick start at which
+    it is ready to change (claim 11). Rows 1 and 5 of claim 14, rows 1 and 8 of claim 15 and the
+    behaviours for which those tables queue nothing keep the current behaviour whatever its
+    properties. Orders and other rules can replace a zombie or paralysed behaviour through the
+    queue or by force, subject to readiness (claim 11). In addition:
     - a vehicle with the paralysed property refuses every scatter request that has a threat point,
       forced or not. A request without a threat point is not checked this way, and infantry and
       aircraft have no such check. The request that damage sends to a vehicle never has a threat
@@ -797,12 +890,20 @@ Terms used by this spec:
       bunker's cells, other than the entering unit, is sent a forced request, not move-anywhere,
       with the bunker's position as threat point. The structures specs own that rule,
     - the no-threat fall-back of claim 16 does not happen while the zombie property holds.
-    - Backing: `measurable` (scenario B6: parts a and b for the fall-back rows and the damage
-      scatter of a paralysed vehicle, part c for the refusal of a request with a threat point, and
-      scenario B5, case b, for the zombie property suppressing the no-threat fall-back)
-    - Confidence: high for the fall-back rows and for the request from damage having no threat
-      point; medium for the refusal of a request with a threat point; low for the bunker rule as an
-      example
+    - Backing: `measurable` (scenario B6: part e for the fall-back rows, with an infantry unit and
+      an armed vehicle reaching row 6 or 9 and an unarmed vehicle reaching row 7 first; part b for
+      the damage scatter of a paralysed vehicle; part c for the refusal of a request with a threat
+      point; scenario B5, case b, for the zombie property suppressing the no-threat fall-back). The
+      precedence of a target, a destination or queued destinations over the zombie and paralysed
+      rows is `unmeasured`: *attack* falls back to rest only without a target and *move* only
+      without a destination, the fall-back of *capture*, *sabotage* and *eaten* (claim 28) happens
+      with a target only for an actor without a destination whose target is not a building it can
+      take, which no known order or rule sets up in those behaviours, and no other setup is known that makes an actor in a zombie or paralysed
+      behaviour fall back to rest while it holds a target or a destination. It is the row order of
+      claims 14 and 15, which states it.
+    - Confidence: high for the fall-back rows, their order, and the request from damage having no
+      threat point; medium for the refusal of a request with a threat point; low for the bunker
+      rule as an example
 
 18. **Retaliate.** An actor retaliates against an attacker only while its current behaviour has the
     retaliate property, among the other retaliation conditions that the target-acquisition specs
@@ -823,7 +924,9 @@ Terms used by this spec:
     house: its behaviour list, a target it already has and its distance to the attacker do not
     stop it from retaliating, and it overrides at once. The other retaliation conditions, owned by
     the target-acquisition specs, still apply to it.
-    - Backing: `measurable` (scenario B7, case g for an actor that already has a target)
+    - Backing: `measurable` (scenario B7: cases a to d for the behaviour list, the player
+      return-fire setting and the distance rule, case g for an actor that already has a target,
+      and its computer-controlled runs for the original-only part)
     - Confidence: high (the property and the behaviour list); medium (the distance rule and the
       rule about an existing target)
 
@@ -832,8 +935,9 @@ Terms used by this spec:
     Acceptance depends on the kind of actor:
     - A vehicle refuses a request that is not forced unless its current behaviour has the scatter
       property. The property does not decide about a forced request. The vehicle's other
-      acceptance conditions, and where it then goes, belong to the vehicle movement specs, which
-      do not state them yet (Open questions).
+      acceptance conditions, and where it then goes, are S-0207 claim 16. Among them, a vehicle
+      whose current behaviour (or, with none current, its queued behaviour) is *sleep*, *sticky* or
+      *unload* refuses every request, forced or not.
     - For an infantry unit, S-0208 claim 11 gives the whole acceptance rule. There a forced request
       counts as not forced while the unit's locomotor is moving, so the property can refuse it then.
     - What an aircraft does with a scatter request belongs to the aircraft spec.
@@ -862,7 +966,8 @@ Terms used by this spec:
     An infantry unit can also be sent request B of S-0208 claim 15, which has the attacker's
     position as threat point and is not forced. Damage sends no other actor a request with a
     threat point. The request of both cases is forced, so the scatter property never makes a
-    vehicle refuse it once sent. In case 2 the property is tested before the request is sent, so
+    vehicle refuse it once sent, though the vehicle's other refusals (S-0207 claim 16) still apply.
+    In case 2 the property is tested before the request is sent, so
     an actor whose behaviour lacks it is not sent the request in that case.
 
     **In our engine** (non-infantry actors; S-0208 claim 15 for infantry) the last condition of case 2 reads "the player-scatter setting is on, or the
@@ -871,8 +976,9 @@ Terms used by this spec:
     computer-controlled house meet that condition always, so they are sent the request of case 2
     whatever the player-scatter setting says (whether they accept it is decided as for any
     other actor).
-    - Backing: `measurable` (scenario B6 for vehicles, case 2 in part b and case 1 in part d, and
-      S-0208 scenario W7 for infantry)
+    - Backing: `measurable` (scenario B6 for vehicles, case 2 in part b, with its variant for the
+      original's computer-controlled owners, and case 1 in part d; S-0208 scenario W7 for
+      infantry)
     - Confidence: high (the gate on requests that are not forced, for vehicles; the options of the
       request from damage); medium (the conditions of the two cases, for non-infantry actors)
 
@@ -882,18 +988,22 @@ Terms used by this spec:
     computer player's choice of which actors to send to defend its base when the base is attacked,
     and which to put into teams: an actor whose current behaviour lacks the property is never
     picked. Our AI may honour it when it picks units for such tasks.
-    - Backing: `measurable` (scenario B20, for the original's base defence)
+    - Backing: `measurable` (scenario B20, for the original's base defence). The teams part is
+      `unmeasured`: it concerns only the original's computer-player team system, which is out of
+      scope, and no scenario here sets up the recruiting of a team, so no setup can show which
+      actors a team takes (Open questions).
     - Confidence: medium (base defence); low (teams)
 
 21. **The anti-air rate is used by buildings only.** The anti-air rate replaces the rate in the
     delay of an armed building's *guard* processing, which also serves its *sticky* and *area guard*
     (each reading its own behaviour's anti-air rate), and in one rare case of the *attack*
     processing of a building whose type has the SAM flag (claim 32, out-of-stage rule). No other processing of
-    any actor kind uses it. A layer of rules data that contains a behaviour's section but gives no
-    anti-air rate, or gives 0, sets the anti-air rate to the rate as it stands after that layer
+    any actor kind uses it. The anti-air rate is reset on override (glossary): a layer of rules
+    data that contains a behaviour's section but gives no anti-air rate, or gives 0, sets the
+    anti-air rate to the rate as it stands after that layer
     (`quirks.anti_air_rate_layer_reset`, Import mapping).
-    - Backing: `measurable` (scenarios B8 and B13). The SAM case is `unmeasured`: no situation that
-      reaches it is known (claim 32), so it cannot be set up.
+    - Backing: `measurable` (scenarios B8 and B13; scenario B16, case m, for the SAM case, which
+      only a test building type reaches, claim 32).
     - Confidence: high
 
 ### What the general-purpose behaviours do
@@ -1015,7 +1125,7 @@ to the actors of every house.
     | the type has the distributed-fire flag and the actor's distributed-fire candidates (Terms) are not empty | 0 | 0 |
     | any other case | the standard delay | 1 |
 
-    *Guard* takes no target by itself in its processing. The automatic target search for an actor in
+    *Guard* takes no target by itself in its processing. The automatic search for an actor in
     *guard* runs on its targeting timer (claim 33).
     - **Infantry** of a type that deploys: the deployer rules of claim 31 take precedence. When one
       of them applies, it decides the outcome and the delay, and nothing else of this claim happens.
@@ -1063,7 +1173,9 @@ to the actors of every house.
     target by itself (unless that setting is on); in our engine that holds for the actors of every
     house. In the original, one of a computer-controlled owner takes a target only by retaliating
     (claim 18, original only). Further differences come only from the imported properties of
-    *sticky*: if they mark it paralysed, the actor never falls back to rest out of it (claim 17).
+    *sticky*: if they mark it zombie or paralysed, a fall-back to rest that reaches the row for
+    those properties keeps it current (claim 17). Since an actor in *sticky* is never ready to
+    change, a behaviour that a fall-back queues does not start while *sticky* lasts in any case.
     - Backing: `measurable` (scenarios B6 and B17)
     - Confidence: high (readiness); medium (the target consequence)
 
@@ -1144,13 +1256,18 @@ to the actors of every house.
     - **Computer-controlled owners** (original only) also have the computer-owner effects of the
       table above, in the processings that the table marks, and at no other processing.
     - Backing: `measurable` (scenario B10, with case h for the close-range shortening, case i for
-      the aircraft factor and case j for the bunker row; row 3 is the rule of claim 24, scenario
+      the aircraft factor, case j for the bunker row and case k for the 1-tick delay after a search
+      that finds a target; row 3 is the rule of claim 24, scenario
       B21; scenario B24, case b for the charge target; scenario B26, cases b and c for the
       original-only row 5 and the guard spot moved off an allied building). Row 1, the slave
       master's wake-up and the "wakes its slaves anyway" effect are `unmeasured` for the reason
       given in claim 24 (the wake-up condition belongs to the economy topic). The computer-owner
       effect on queued destinations is `unmeasured`: no setup is known that has the guard spot as
-      a computer-controlled unit's first queued destination.
+      a computer-controlled unit's first queued destination. That the 1-tick delay after a search
+      that finds a target takes no draw is `unmeasured`: the delay itself is measured (case k),
+      but the search on that tick takes draws per candidate that the target-acquisition specs own
+      and do not state, so a scenario cannot tell a draw of the delay from one of the search (as
+      for *hunt*, claim 6).
     - Confidence: high (the guard spot and delay rules); medium (the leash, the order of leash and
       search, the slave-master rows, the computer-only rules and the harvester rule)
 
@@ -1170,7 +1287,7 @@ to the actors of every house.
       actor of a computer-controlled owner moves towards a cell its house picks for attack, if the house has
       one: it queues *move* there with an immediate start, and a slave master also gives its
       harvesting slaves a guard reset. If the house has no such cell nothing happens. In every other
-      case the actor only attempts its idle action. So in skirmish and multiplayer games a hunting
+      case the actor only attempts its idle action. So in a skirmish a hunting
       actor that finds nothing stays put; in our engine that holds in every game, for every house.
 
     The delay of this general rule is always the standard delay, with the rate of the behaviour
@@ -1210,15 +1327,19 @@ to the actors of every house.
     **In our engine** the campaign move, the per-tick *hunt* of base-building vehicles and the two
     infantry rules never apply (Terms, houses in our engine). **Original only (note for AI
     designers):** with them the original's computer player sends hunting units towards its attack
-    cell in campaign missions, puts a base-building vehicle whose house has lost its last
-    construction yard into *hunt* (so that it looks for a place to deploy), sends its building
+    cell in campaign missions, puts a base-building vehicle whose house has no construction yard
+    (at the start of a skirmish, or after losing its last one) into *hunt* (so that it looks for a
+    place to deploy), sends its building
     takers straight for a building they have as target, and packs up its deployed infantry when
     it hunts without a target. Our AI can get these results through move, deploy, capture and
     undeploy orders.
     - Backing: `measurable` (scenario B11; cases b and c for the infantry rules, case d for the
-      vehicle deploy rule, case e for the general with-target outcome). The refused deploy is `unmeasured`: the vehicle first looks for a spot
-      where the building fits, and no setup is known in which the spot it reaches then refuses the
-      building (Open questions).
+      vehicle deploy rule, case e for the general with-target outcome, case f for the original's
+      per-tick *hunt* of base-building vehicles). Two parts are `unmeasured`:
+      - the refused deploy: the vehicle first looks for a spot where the building fits, and no
+        setup is known in which the spot it reaches then refuses the building (Open questions),
+      - the campaign rule (original only): campaigns are out of scope for now (decision of the
+        project lead), and the measurement setup runs skirmish games.
     - Confidence: high (the general rule and the skirmish case); medium (the special cases, and
       that deploying makes no other behaviour current); low (the refused deploy)
 
@@ -1239,8 +1360,8 @@ to the actors of every house.
     not move-anywhere. The cell tested is the one that holds the actor's position after its
     fall-back to rest. An infantry unit judges the request by S-0208 claim 11 and, when it accepts,
     finds its destination by S-0208 claim 13 (the case without a threat point). For a vehicle the
-    scatter property does not decide, since the request is forced (claim 19); its other acceptance conditions and its
-    destination belong to the vehicle movement specs, which do not state them yet (Open questions).
+    scatter property does not decide, since the request is forced (claim 19); its other acceptance
+    conditions and its destination are S-0207 claim 16 (the nearby-cell search, without a draw).
 
     **Hunt rule (original only):** an actor of a computer-controlled owner, other than one of an
     occupier infantry type, has its destination cleared and queues *hunt*. Where it has fallen back
@@ -1255,7 +1376,8 @@ to the actors of every house.
     actor reaches the building (the special-abilities specs). *Eaten* is processed by the same table,
     except that occupiers, assaulters and infiltrators do not count as building takers and the hunt
     rule never applies. Its second row sends the same scatter request.
-    - Backing: `measurable` (scenario B12)
+    - Backing: `measurable` (scenario B12; scenario B29, case c, for *eaten* and for the
+      fall-back of a vehicle in *capture*)
     - Confidence: medium (the table); high (the options of the scatter request)
 
 29. **Enter.** An actor in *enter* keeps asking the object it is meant to enter (a transport, a
@@ -1288,7 +1410,10 @@ to the actors of every house.
     draw, as the default processing of claim 4 does.
     What *unload* does for vehicles (transports unloading, deploying vehicles) and buildings belongs
     to the transport, deploy and structures specs (claim 34).
-    - Backing: `measurable` (scenario B12; case f for the slot that gives the deploy weapon)
+    - Backing: `measurable` (scenario B12; case b for the rows of an undeploy delay of 0 or more
+      and of a deploy weapon without the area-fire flag, case c for the type singled out by name,
+      case f for the slot that gives the deploy weapon and for the 450 ticks of an area-fire deploy
+      weapon of any other type)
     - Confidence: high (the delay table and the forced *guard*); medium (the area-fire target rule
       and the choice of the deploy weapon)
 
@@ -1321,8 +1446,9 @@ to the actors of every house.
     designers):** the original's computer infantry of such a type deploys by itself once it has
     stood on its guard spot, in *guard* or *area guard*, for longer than the auto-deploy delay of its
     house's difficulty since that behaviour started; our AI can get the same with a deploy order.
-    - Backing: `measurable` (scenarios B12 and B19; case d of B19 for the radiation-immune unit
-      that the firing rules do not let fire)
+    - Backing: `measurable` (scenario B12, case b, for the first row and its delay; scenario B19
+      for the other rows, with case d for the radiation-immune unit that the firing rules do not
+      let fire)
     - Confidence: high (the first row and the auto-deploy row's delays); medium (the radiation rows
       and the auto-deploy conditions)
 
@@ -1362,8 +1488,8 @@ to the actors of every house.
       angle between its turret facing and the direction to the target in facing units, taken the
       shorter way round (0 to 32 768). If its type's turn-rate field is 0, or *ε* is within the
       snap bound *b* of Formulas F8, its turret facing is set exactly onto the direction of the
-      target at once (no turning over ticks) and the firing check is asked again in the same
-      processing; the row of the table above is then chosen by the second answer, so the building
+      target at once (no turning over ticks), and the processing has the outcome of the row of the
+      table above that the firing check's answer for the new facing selects, so the building
       can fire in this processing (first row, 1 tick) instead of turning (second row, 2 ticks).
       Otherwise the first answer stands. No other answer, and no building without a voxel turret,
       takes this snap. *Rearming*, which shares the second row, never snaps.
@@ -1375,14 +1501,19 @@ to the actors of every house.
 
       | Stage | Condition | Result | Stage afterwards |
       |---|---|---|---|
-      | *aiming* | the type needs power and its owner is short of power | nothing | *aiming* |
+      | *aiming* | the type needs power, it drains power (its type's power value is negative, Import mapping), and its owner is short of power (Terms) | nothing: the processing starts no turn and drops no target, even one that is no longer suitable | *aiming* |
       | *aiming* | no suitable target | drops its target, queues *guard* and starts it at once, whether or not it is ready to change | (*guard* is current) |
       | *aiming* | a suitable target | turns towards it | *aimed* once it has stopped turning and its facing is within 8192 facing units of the direction to the target; else *aiming* |
       | *aimed* | no longer a suitable target | drops the target | *aiming*, where the next processing queues *guard* |
-      | *aimed* | the firing check answers *can fire* | fires both its weapons, primary and secondary, in this processing (the combat specs own the shots and their order) | *aiming* |
+      | *aimed* | the firing check answers *can fire* | fires both its weapons, primary and secondary, in this processing (see below; the combat specs own the shots themselves) | *aiming* |
       | *aimed* | the firing check answers *not facing* | nothing | *aiming* |
       | *aimed* | the firing check answers *illegal*, *impossible* or *out of range* | drops the target | *aiming* |
       | *aimed* | any other answer (*rearming* included) | nothing | *aimed* |
+
+      In the *aimed* stage the firing check is asked once, for the primary weapon. On *can fire*
+      the building fires the primary weapon and then the secondary weapon in the same processing.
+      The secondary shot is made without a firing check of its own, although the primary shot has
+      just started the rearm countdown (Questions for the project lead).
 
       **Out-of-stage rule.** When, at a processing, the progress count holds neither stage (a
       value other than 0 and 1), the building does nothing in that processing, leaves the count
@@ -1391,22 +1522,39 @@ to the actors of every house.
       so this happens only when *attack* became current by an override (which keeps the count,
       claim 10) from a behaviour whose own rule had left another value; since the count stays as
       it is, every later processing of that *attack* does the same until a behaviour start
-      resets the count. Whether any stock situation does this is open (Open questions).
+      resets the count. Among the behaviours this spec states, only a gate's *open* leaves such a
+      value (its stages *waiting* to *finished*, claim 35); the *repair* and *missile* processings
+      of buildings also leave some (structures and superweapons specs). Whether any stock situation
+      reaches the rule is open (Open questions).
 
       The combat specs own the firing itself.
-    - Backing: `measurable` (scenarios B8 and B16, cases b and f for the unarmed delays, case g for
-      an armed *guard* building that starts *attack* by its own processing, case e for the
-      out-of-range row, case h for the turret snap). Two parts are `unmeasured`: the progress-count rule of SAM *attack* (a
-      value other than 0 and 1), because no situation that reaches it is known, and the buildings
-      that choose the anti-air delay even with a target (the electromagnetic-pulse cannon, the
-      superweapon buildings and the empty occupiable building), because the only observable
-      difference from the general rule needs such a building to hold a target at a processing, and
-      no setup is known that gives one.
+    - Backing: `measurable` (scenarios B8 and B16: cases b and f for the unarmed delays, case g for
+      an armed *guard* building that starts *attack* by its own processing, case a for the rows
+      *can fire* and *rearming*, case e for the out-of-range row, case h for the turret snap and
+      the row *not facing*, case i for *still turning* in the row of other answers; for SAM
+      *attack*, case c for the 1-tick intervals and the return to *guard*, case j for the power
+      row, case k for the aiming tolerance, case l for firing both weapons and case m for the
+      out-of-stage rule, with a test gate type that has the SAM flag; no stock type reaches that
+      rule). These parts are `unmeasured`:
+      - the out-of-stage rule after a *repair* or *missile* processing: the structures and
+        superweapons specs own those processings and the values they leave, so no setup here can
+        put a building in such a stage on purpose,
+      - the buildings that choose the anti-air delay even with a target (the electromagnetic-pulse
+        cannon, the superweapon buildings and the empty occupiable building), because the only
+        observable difference from the general rule needs such a building to hold a target at a
+        processing, and no setup is known that gives one,
+      - in the non-SAM row of other answers, the answers *busy*, *cloaked*, *moving* and *must
+        deploy*. S-0301 (claim 9) gives *moving* only to a firer that moves and *must deploy* only
+        to a vehicle, so no building gets them; it gives *busy* to a firer launching spawned
+        aircraft, and no building is known to launch any; and when a building is cloaked, and
+        whether it uncloaks to fire, belongs to the cloaking rules of another topic, which no spec
+        states, so no setup here can give a building *cloaked* at a known processing. The row keeps
+        the table total.
     - Confidence: medium (armed and unarmed *guard*, the ready mark, non-SAM *attack* and its delay
-      table, SAM *attack* every tick and its stages); low (the turret snap and its bound F8, the SAM
-      aiming tolerance, the power condition and the out-of-stage rule)
+      table, SAM *attack* every tick and its stages, firing both weapons); low (the turret snap and
+      its bound F8, the SAM aiming tolerance, the power condition and the out-of-stage rule)
 
-33. **Automatic target search under behaviours.** Separately from processing, on every tick an actor
+33. **Automatic search under behaviours.** Separately from processing, on every tick an actor
     whose targeting timer has run out and whose current behaviour is *move*, *harvest* or *guard*
     runs the opportunity search of the target-acquisition specs, if those specs allow it to search
     passively (nearly always for *guard*; for *move* and *harvest* only under conditions those specs
@@ -1447,8 +1595,8 @@ to the actors of every house.
 34. **Pointers.** The processing of these behaviours is part of other topics and is not specified
     here. Their properties (claims 16 to 21) and the slot rules (claims 7 to 11) still apply.
     - *harvest*: economy, the harvest cycle,
-    - *construction*, *selling*, *repair*, *open*: structures (build-up, selling, repair bays and
-      service depots, gates),
+    - *construction*, *selling*, *repair*: structures (build-up, selling, repair bays and service
+      depots); *open* for buildings is claim 35,
     - *unload* for vehicles and buildings: transports, vehicle deploying, and structures,
     - *missile*: buildings only (superweapons and structures); infantry, vehicles and aircraft
       process it by the default rule of claim 4 (table T1),
@@ -1468,11 +1616,109 @@ to the actors of every house.
     - Confidence: high (that these behaviours have their own processing); low (the *patrol*
       restart, as for *move* in claim 22)
 
+### Gates
+
+35. **Gate state and the *open* behaviour.** A gate (S-0209 Terms) has a *door* that is, at any
+    moment, at rest closed, at rest open, opening or closing. Its *passage state* is **open** when
+    its current behaviour is *open* and its door is at rest open; in every other case it is
+    **closed**. The passage state is what the gate rows of S-0209 (claims 4 and 5) call an open or
+    a closed gate. So a gate whose door is still moving, in either direction, is closed for S-0209,
+    and so is a gate whose door stands open while another behaviour is current.
+    - (a) **Start.** Every gate starts with its door at rest closed, whether the map places it or a
+      house builds it. Only the *open* processing below moves the door.
+    - (b) **Who opens it.** The *closed friendly gate* outcome of S-0209 makes the gate open; no
+      other rule is known to start *open* on a gate, apart from data that names *open* as a
+      placed building's behaviour (Import mapping, behaviour names). When that outcome arises and the
+      gate's current behaviour is not *open*, or its door is closing or at rest closed, the gate
+      drops any queued behaviour, and *open* becomes current at once, whether or not the gate is
+      ready to change (a behaviour start, so the progress count is 0 and the gate is processed at
+      the next opportunity, claim 3). When *open* is already current and the door is opening or
+      at rest open, nothing changes.
+    - (c) **Processing of *open*.** A building that is not a gate queues *guard* and chooses a delay of
+      1 tick. A gate is processed in stages; the stage is its progress count, and every
+      behaviour start puts it in stage *start*. *T*<sub>d</sub> is the door time and
+      *T*<sub>c</sub> the close delay of F9, and "Std" is the standard delay of claim 6, with the
+      rate of *open*.
+
+      | Stage | Situation at the processing | Effect | Next stage | Delay |
+      |---|---|---|---|---|
+      | start | door at rest open | close countdown restarted | waiting | Std |
+      | start | door at rest closed | door starts opening (it will take *T*<sub>d</sub> ticks); close countdown restarted | opening | 0 |
+      | start | door opening | close countdown restarted | opening | 0 |
+      | start | door closing | door reverses to opening (see the quirk below); close countdown restarted | opening | 0 |
+      | opening | door at rest open | none | waiting | 0 |
+      | opening | door at rest closed | queues *guard* | finished | 0 |
+      | opening | door still moving | none | opening | 0 |
+      | waiting | an object other than the gate is in the ground layer (S-0209 Terms, cell layer) of one of the gate's foundation cells | close countdown restarted | waiting | Std |
+      | waiting | no such object, and the close countdown has run out | none | closing-start | Std |
+      | waiting | no such object, countdown still running | none | waiting | Std |
+      | closing-start | any | door starts closing (*T*<sub>d</sub> ticks) | closing | 0 |
+      | closing | door at rest closed | queues *guard* | finished | 0 |
+      | closing | otherwise | none | closing | 0 |
+
+      The close countdown is restarted with length *T*<sub>c</sub> and has run out once at least
+      *T*<sub>c</sub> ticks have passed since its last restart; with *T*<sub>c</sub> = 0 it has run
+      out at once. It is looked at only in stage *waiting*: the first *waiting* processing that
+      finds the countdown run out and the cells empty moves the gate to stage *closing-start*, and
+      the door starts closing at the next processing, one Std later. The
+      countdown starts when the door starts opening, not when it is fully open. A *finished* gate
+      changes nothing at any further processing in *open*, and each such processing takes the
+      delay Std; the queued *guard* becomes current by the slot rules (claims 7 to 11).
+      Each Std takes one draw *U*(0, 2) from the scenario random stream (F2); the other delays (0,
+      and 1 for a building that is not a gate) take none. A delay of 0 means processing again at
+      the gate's next turn, as a delay of 1 does, except in a second turn of the same tick (claim
+      2).
+    - (d) **Door motion.** A door that starts opening or closing reaches rest open or rest closed
+      at the gate's own update on the first tick on which *T*<sub>d</sub> ticks have passed since
+      the motion began (with *T*<sub>d</sub> = 0, at its first update after the start). Where that
+      update falls within the tick is S-0203's. The drawn stage of the gate, from the stage-count
+      field (Import mapping), is drawing only.
+    - (e) **Consequences.** A friendly unit at a closed gate waits about *T*<sub>d</sub> ticks
+      (S-0209: it waits without a new path search) and then passes. A gate stays open as long as
+      something stands in its foundation cells, and closes no earlier than *T*<sub>c</sub> ticks
+      after it began to open and no later than one Std after the last processing that found its
+      cells empty with the countdown run out. A unit that reaches a closing gate makes it reverse
+      by (b).
+
+    **Quirk `quirks.gate_reverse_snaps`** (default on, the original). A door that reverses from
+    closing to opening reaches rest open at the gate's next update (part d), however far it had
+    closed. Off: the reopening takes as many ticks as the closing had run until the reversal, so
+    the door retraces its path. Drawing
+    follows the door either way.
+    - Backing: `measurable` (scenario B28: case a for parts a and b and the opening time, case b for the
+      close delay and its counting from the opening start, case c for the open-while-occupied rule,
+      case d for the reversal quirk, case f for the conversion of a gate time that does not fit,
+      and scenario B30, case b, for a gate time whose product with 900 reaches 2⁶³).
+      `unmeasured`: the non-gate row of (c), since no stock rule
+      gives a building that is not a gate the behaviour *open* and a map that does would show no
+      effect beyond a later *guard*; and the "door at rest closed" row of stage *opening*, which no
+      known situation reaches (only a reversal stops an opening door, and only stage *start*
+      reverses)
+    - Confidence: high for part a, the passage state and the door time; medium for part b (stated as its
+      net effect on the slots), the stage table, the countdown rules and the
+      quirk; medium for where in the tick the gate's update moves the door (part d; S-0203)
+
+### Game-wide settings with engine defaults
+
+36. **Area-guard threshold and guard stray distance when no layer gives them.**
+    - (a) The area-guard threshold of claims 14 and 15 has the engine default 4. So, when no rules
+      layer gives it, an armed vehicle whose owner's house skill level is 3 or lower rests in
+      *guard* by row 10 of claim 15 (unless it has the guard-area ability or a type that defaults
+      to area guard), and one whose owner's level is 4 or higher rests in *area guard* by row 12.
+    - (b) The guard stray distance of F5 has **no engine default in the original**: when no rules
+      layer gives the key, the value the original uses is unspecified (Terms): it depends on
+      unrelated internal state and cannot be reproduced. Stock data always gives the key, so stock games never meet this. What
+      our engine does when no layer gives it is a question for the project lead (Questions for
+      the project lead); this spec does not choose a value.
+    - Backing: (a) `measurable` (scenario B28, case e). (b) `unmeasured`: the original's value in
+      this case is not defined, so no measurement can confirm a value
+    - Confidence: high
+
 ## Formulas
 
 Notation: RZ₅₃(*z*) is *z* rounded toward zero to a double, as in S-0003 (the original's
 round-toward-zero mode, whose single switch `quirks.chop_rounding` belongs to S-0205, number
-domains, a draft in the same batch). trunc(*z*) is *z* truncated toward zero to an integer. *U*(*a*, *b*) is one
+domains). trunc(*z*) is *z* truncated toward zero to an integer. *U*(*a*, *b*) is one
 ranged draw (Terms).
 
 **F0. Integer domain of delays.** Every delay value, and every sum, product and quotient formed from
@@ -1495,7 +1741,16 @@ where *w*(*q*) is the integer congruent to *q* modulo 2³² in −2³¹ … 2³�
 The product is one double-precision multiplication, rounded toward zero with
 `quirks.chop_rounding` on (the original) and to nearest with it off (S-0205). For a rate without
 a percent sign the product is exact, so both settings give the same *p* (S-0205, claim 9); they
-differ only for a rate with a percent sign. trunc truncates toward zero. For |*r* × 900| below 2³¹ the wrap does nothing. Example: a rate written as 0.06 is held as the single 0.0599999986588955; times
+differ only for a rate with a percent sign. trunc truncates toward zero. For |*r* × 900| below 2³¹ the wrap does nothing.
+The 0 for |*p*| ≥ 2⁶³ covers every rate of 2⁶³ / 900 game minutes (about 1.02 × 10¹⁶) or more,
+and an infinite rate (S-0003 claim 6 turns a value beyond the largest finite single into
+infinity). For a rate without a percent sign it agrees with the wrap: such a single is a whole
+multiple of 2³⁰, so its product with 900 is a whole multiple of 2³² and *w* of it would be 0 too.
+For a rate with a percent sign the product need not be such a multiple, so there the 0 and the
+wrap can differ. Either way the 0 differs from a conversion that saturates (which would give
+2³¹ − 1). *p* is never "not a number" for imported data: S-0003's decimal form
+gives a finite value or an infinity, never a not-a-number, and so does its product with 900.
+That case is listed only to make the conversion total. Example: a rate written as 0.06 is held as the single 0.0599999986588955; times
 900 that is 53.99999879…, so *D*<sub>r</sub> = 53. A rate written as 0.05 is held as
 0.0500000007450581 and gives 45. The engine default rate is the double nearest to 0.016 (not a
 single), which gives 14. The anti-air delay *D*<sub>aa</sub> of claim 32 is this same formula
@@ -1522,7 +1777,7 @@ root, a true distance of exactly 282 leptons gives ρ₂ = 281 and is not shorte
 where *r* is the table square root: *r*(0) = 0, and for *n* ≥ 1, *r*(*n*) is *n* truncated toward
 zero to 14 significant binary digits, then its exact square root truncated toward zero to 24
 significant binary digits. This is the function that approved S-0105 (F1) uses, and that S-0204
-(coordinates, distance and facing, a draft in the same batch) gives in exact integer form (its F1)
+(coordinates, distance and facing) gives in exact integer form (its F1)
 and analyses (its claim 5); whether our engine uses it is S-0204's switch
 `quirks.table_root_distance` (default original), and this spec adds none. ρ is never more than ⌊√*n*⌋. For *n* below 536 987 929 (distances
 below 23 173 leptons) it is never less than ⌊√*n*⌋ − 1; at that *n* it first falls 2 short, and
@@ -1569,6 +1824,21 @@ For example *v* = 5 gives *b* = 1280, and *v* = 128 gives *w*₈ = −128 and *b
 *ε* meets. A field that is a multiple of 256 other than 0 gives *b* = 0, so only an exact aim
 snaps.
 
+**F9. Gate times** (claim 35). Let *t*<sub>d</sub> be the gate type's deploy time and
+*t*<sub>c</sub> its gate close delay, both in game minutes as parsed by S-0003's decimal form
+(Import mapping). Then
+
+> *p*<sub>d</sub> = RZ₅₃(*t*<sub>d</sub> × 900),  *p*<sub>c</sub> = RZ₅₃(*t*<sub>c</sub> × 900)
+>
+> *T*<sub>d</sub> = *w*(trunc(*p*<sub>d</sub>)) ticks,  *T*<sub>c</sub> = *w*(trunc(*p*<sub>c</sub>)) ticks, each 0 instead when |*p*| ≥ 2⁶³ or *p* is not a number
+
+each one double-precision multiplication, rounded as in F1 (toward zero with `quirks.chop_rounding`
+on), then converted to a signed 32-bit integer exactly as F1 converts *p*: truncated toward zero
+and wrapped by *w* of F1, or 0 when the product is too large for that conversion or not a number
+(F1 says which values reach that case; a gate time of about 1.02 × 10¹⁶ game minutes or more gives
+0). No stock gate comes near the wrap. A negative result behaves as 0 (the door is at rest at its first
+update; the countdown has run out at once).
+
 ## Constants
 
 | Name (ours) | Value | Unit | Notes |
@@ -1587,6 +1857,11 @@ snaps.
 | Area-guard close-range divisor | 6 | dimensionless | Claim 26, F3 |
 | Area-guard rate factor *k* | 2 for aircraft, 1 otherwise | dimensionless | Claim 26, F3 |
 | Unarmed building rate factor | 3 | dimensionless | Claim 32; 3 × *D*<sub>r</sub> + *U*(0, 2) |
+| Ticks per game minute for gate times | 900 | ticks per game minute | F9 |
+| Delay of *open* for a building that is not a gate | 1 | ticks | Claim 35 (c); no draw |
+| Delay of a gate's *open* stages other than Std | 0 | ticks | Claim 35 (c); no draw |
+| Absent-key default: area-guard threshold | 4 | house skill levels | Claims 14 and 15 |
+| Absent-key defaults: gate flag, deploy time, gate close delay | no, 0, 0 | boolean, game minutes, game minutes | Claim 35, F9 |
 | Close-range band | 282 to 768 | leptons | F3, 2-D distance |
 | Close-range weapon threshold | 512 | leptons | F3, primary weapon range at most this |
 | Leash cap before the factor | 4096 | leptons | F5, *G* |
@@ -1601,9 +1876,9 @@ snaps.
 | Turret snap bound maximum | 32 768 | facing units | F8 (half a turn) |
 | Normal targeting delay absent-key default | 27 | ticks | F6, engine default |
 | Area-guard targeting delay absent-key default | 36 | ticks | F6, engine default |
-| Campaign house skill level: absent key | 0 | house skill level | Claim 15 |
-| Campaign house skill level above the maximum | becomes 1 | house skill level | Claim 15 |
-| Human-controlled house skill level in skirmish and multiplayer | 0 | house skill level | Claim 15; also every AI house of our engine in a skirmish |
+| Campaign house skill level: absent key | 0 | house skill level | Claim 15; for the future campaign spec (campaigns out of scope for now) |
+| Campaign house skill level above the maximum | becomes 1 | house skill level | Claim 15; for the future campaign spec |
+| Human-controlled house skill level in a skirmish | 0 | house skill level | Claim 15; also every AI house of our engine in a skirmish |
 | Charge-target search | 8 | cells | Claims 24, 26: the neighbouring cells |
 
 **T1. Behaviours and which actor kinds have a processing rule.** "—" means the default processing
@@ -1631,7 +1906,8 @@ properties (rate, anti-air rate) of the behaviour that is current (claim 5).
 | rescue | own | own | own | — | 34 |
 | patrol | own | own | own | — | 34 |
 | harvest | own | own | — | — | 34 |
-| construction, selling, missile, open | — | — | — | own | 34 |
+| construction, selling, missile | — | — | — | own | 34 |
+| open | — | — | — | own | 35 |
 | repair | — | own | — | own | 34 |
 | paradrop approach, paradrop overfly, spy-plane approach, spy-plane overfly | — | — | own | — | 34 |
 
@@ -1710,7 +1986,7 @@ human-controlled owner):
 | *hunt* (skirmish) | no target found | stays in *hunt*, idles, searches again next processing (claim 27) |
 | a behaviour with the no-threat property | damaged by a known attacker | falls back to rest (claim 16) |
 | *sticky* | any order | queued but never started while *sticky* lasts (claim 25) |
-| a behaviour with the zombie property | nothing | stays until forced or ordered while ready (claim 17) |
+| a behaviour with the zombie or paralysed property | falls back to rest with no target, destination or queued destinations (infantry), or as an armed vehicle that is not a harvester, with no destination or queued destinations | the behaviour stays current and nothing is queued (claim 17) |
 
 **Ordering within a tick, as observed.** This list only gathers, for one infantry unit, vehicle or
 building on one tick, the order statements that the claims named in each item make and back; it
@@ -1762,9 +2038,11 @@ orders).
   rate keeps the held value (S-0006, claim 3), and only a behaviour whose anti-air rate was never
   given, or is given as 0, uses the rate.
 - **Rates and delays that do not fit.** If *r* × 900 is 2³¹ or more (or below −2³¹), the rate delay
-  wraps as F1 states; sums and products formed from it wrap as F0 states, and a negative delay means
+  wraps as F1 states, and it is 0 when the product's magnitude is 2⁶³ or more; sums and products formed from it wrap as F0 states, and a negative delay means
   processing on every tick (claim 2). Our engine reproduces this. The importer warns for any rate
-  whose |*D*<sub>r</sub>| (F1) is above 715 827 875, and for any negative rate. That bound is
+  whose |*r* × 900| (F1, before the conversion) is above 715 827 875, and for any negative rate,
+  so a rate whose delay wraps, or becomes 0 at 2⁶³ or more, is warned about although its
+  *D*<sub>r</sub> is small. That bound is
   conservative: no delay of this spec can wrap at or below it, and the first that can,
   3 × *D*<sub>r</sub> + 2, wraps only for *D*<sub>r</sub> above 715 827 881. This is a consequence
   of the integer domain of F0, not a quirk of its own, and it has no switch of its own here.
@@ -1793,6 +2071,10 @@ orders).
   when it deploys with an area-fire deploy weapon it takes its own cell as its target, and its
   delay is the one claim 30's table gives for "any other type" (450 ticks when its undeploy delay
   is negative, else the undeploy delay). The switch changes nothing else.
+- **A reopening gate door snaps open** (claim 35). A gate door that reverses from closing to
+  opening reaches rest open at the gate's next update (claim 35 d), however far it had closed. Proposed
+  switch `quirks.gate_reverse_snaps` (default on = original). With it off, the reopening takes as
+  many ticks as the closing had run until the reversal, so the door retraces its path.
 
 ## Import mapping
 
@@ -1841,22 +2123,32 @@ The same 32 names, matched without regard to case, are how data names a behaviou
 example for objects that a map places. A name that matches none of them means *none*. Which data
 fields name behaviours belongs to the specs of those fields.
 
+**Fields owned by this spec** (area-guard threshold, guard stray distance and gate times; S-0006 layering applies, so an
+absent key keeps the value the earlier layers left).
+
+| Key | Section | Feeds | Form | Absent key |
+|---|---|---|---|---|
+| `GuardArea` | `[IQ]` | area-guard threshold of claims 14 and 15 | integer (S-0003, claim 3) | held value; engine default 4 |
+| `GuardModeStray` | `[General]` | guard stray distance, the leash when guarding a mobile actor (F5) | cells, in S-0003's decimal form (claims 6 and 7), converted to leptons as stated below the table; −1 also keeps the held value | held value; the original has no engine default (claim 36) |
+| `GateCloseDelay` | building type section | gate close delay *t*<sub>c</sub> (F9) | decimal, game minutes (S-0003, claim 6) | held value; engine default 0 |
+| `DeployTime` | building type section (the key exists for every type kind; this spec reads it only for gates) | gate door time *t*<sub>d</sub> (F9) | decimal, game minutes | held value; engine default 0 |
+
 **Other fields used by this spec** (owned by other specs; listed so the references above resolve).
 
 | Key | Section | Use here | Form and absent key |
 |---|---|---|---|
 | `NormalTargetingDelay` | `[General]` | *N* of F6 | integer ticks; engine default 27 |
 | `GuardAreaTargetingDelay` | `[General]` | *N* of F6 in *area guard* | integer ticks; engine default 36 |
-| `GuardModeStray` | `[General]` | leash when guarding a mobile actor (F5) | cells, converted to leptons by × 256 and truncation; absent or −1 keeps the held value; engine default open (Open questions) |
 | `AIAutoDeployFrameDelay` | `[General]` | auto-deploy delay list *A* of claim 31 (original only; read by no rule of our engine) | list of integers in ticks, entries for hard, normal and easy in that order; absent keeps the held list; engine default open (Open questions) |
 | `PlayerReturnFire` | combat-damage settings section (S-0006) | lifts the behaviour restriction of claim 18 | boolean |
 | `PlayerScatter` | combat-damage settings section (S-0006) | player-scatter setting of claim 19 (the scatter from damage; S-0208 claims 11 and 15 for infantry) | boolean |
-| `GuardArea` | `[IQ]` | area-guard threshold of claims 14 and 15 | integer |
-| `MaxIQLevels` | `[IQ]` | house skill level of computer-controlled houses of the original in skirmish and multiplayer (claim 15); not used for AI houses of our engine | integer |
-| `IQ` | a map's house section | house skill level of that house in a campaign mission (claim 15) | integer; absent 0; above the maximum level becomes 1 |
+| `MaxIQLevels` | `[IQ]` | house skill level of computer-controlled houses of the original in a skirmish (claim 15); not used for AI houses of our engine | integer |
+| `IQ` | a map's house section | house skill level of that house in a campaign mission (claim 15; for the future campaign spec, campaigns being out of scope for now) | integer; absent 0; above the maximum level becomes 1 |
 | `BuildConst` | `[AI]` | construction-yard types for the vehicle rules of claims 24 and 27 (the original-only rules, and claim 27's deploy rule) | list of building types |
-| `GuardRange` | type section | *g* of F5 | cells, converted to leptons by × 256 and truncation; absent or −1 keeps the held value; engine default 0 |
+| `GuardRange` | type section | *g* of F5 | cells, in S-0003's decimal form (claims 6 and 7), converted to leptons as stated below the table; absent or −1 keeps the held value; engine default 0 |
 | `DefaultToGuardArea` | type section | claims 14 and 15 | boolean |
+| `Gate` | building type section | whether a building is a gate (claim 35) | owned by S-0209 (Import mapping) |
+| `GateStages` | the building's image section in the art data (S-0007) | the gate's drawn stage count (claim 35, d): drawing only, read by no rule of this spec | integer, stages; absent keeps the held value; engine default 9 stages; owned by the rendering topic |
 | `StupidHunt` | type section | claim 27 | boolean |
 | `HoverAttack` | type section | claims 23 and 24 | boolean |
 | `CloseRange` | infantry type section | F3 | boolean |
@@ -1875,13 +2167,22 @@ fields name behaviours belongs to the specs of those fields.
 | `WeaponsFactory`, `Bunker` | building type section | claims 11, 15 | boolean |
 | `ElectricAssault` | warhead section | the secondary weapon's warhead that marks a charging weapon (claims 24, 26) | boolean |
 | `HasStupidGuardMode`, `UnitRepair`, `SAM`, `CanBeOccupied`, `Powered`, `EMPulseCannon` | building type section | claim 32 | boolean |
+| `Power` | building type section | claim 32: the building drains power when the value is negative (the power rules belong to the structures topic) | integer |
 | `ImmuneToRadiation` | type section | claim 31 | boolean |
 | `RadLevel` | weapon section | *W* of claim 31 (of the secondary weapon) | integer |
 | `AreaFire` | weapon section | claim 30 (of the deploy weapon, Terms) | boolean |
-| the key spelled "Spray" and "Attack" run together | type section | spray-attack flag: picks the first weapon slot as the deploy weapon (Terms; claim 30) | boolean; absent no |
+| `SprayAttack` | type section | spray-attack flag: picks the first weapon slot as the deploy weapon (Terms; claim 30) | boolean; absent no |
 | `Turret` | building type section (and the building types installed on it as upgrades) | turret flag of a turreted building (Terms; claim 32) | boolean; absent no |
 | `TurretAnimIsVoxel` | art, the building type's image section | voxel turret (Terms; claim 32) | boolean; absent no |
 | `ROT` | building type section | turn-rate field *v* of F8 (claim 32) | integer; absent 0 |
+
+**Cells to leptons** (`GuardRange` and `GuardModeStray`). The value is read as S-0003's decimal
+form: a single-precision value widened exactly to double, or, with a percent sign, the
+double-precision product of S-0003 claim 7. A value equal to −1 exactly keeps the held value.
+Any other value *c* gives *w*(trunc(*c* × 256)) leptons, with *w* of F1, or 0 when
+|*c* × 256| ≥ 2⁶³: the product is formed in double precision and is exact (256 is a power of
+two), and it is converted to a signed 32-bit integer as F1 converts *p*.
+For example 4.5 cells give 1152 leptons and 0.3 cells (held as 0.300000011920929) give 76.
 
 The infantry type singled out by name in claim 30 is the one whose type name is `DESO`, compared
 without regard to case. This name is fixed in the original's program, not taken from data: a mod
@@ -1923,14 +2224,16 @@ more raw values on average than the comparison ticks.
   slot before anything sets them. A run in which another rule (for example an aircraft rule) changes the
   behaviour before 20 intervals have been recorded keeps the intervals recorded until then. Runs:
   one per kind and behaviour.
-- **B2 (claim 6, F1, F2).** Named test file: rules that set the rate of *move* to 0.06 for one run
-  and 0.05 for another. Order a vehicle back and forth between two cells 40 cells apart and
+- **B2 (claim 6, F1, F2).** Named test file: rules that set the rate of *move* to 0.06 for one run,
+  0.05 for another and `6%` (written with a percent sign) for a third. Order a vehicle back and forth between two cells 40 cells apart and
   record its processing intervals while it moves, counting only intervals between two *move*
   processings of the same move. Expected: intervals of 53, 54 or 55 for 0.06 and of 45, 46 or 47
   for 0.05, each value seen at roughly a third of the time over 300 intervals. Falsified by any interval
   outside the expected set of its rate, in particular any 56 with 0.06, or by no 53 at all in 300
-  intervals with 0.06 (which would mean decimal rather than single-precision arithmetic). Runs: as
-  many moves as needed for 300 intervals per rate.
+  intervals with 0.06 (which would mean decimal rather than single-precision arithmetic). For
+  `6%`, a double product rounded toward zero (claim 6, F1): expected 53, 54 or 55 as for 0.06,
+  falsified by any 56 or by no 53 in 300 intervals. Runs: as many moves as needed for 300 intervals
+  per rate.
 - **B3 (claims 3, 7 to 9, 11, 12, 22).** (a) Order a stationary *guard* vehicle to move; expected:
   *move* becomes current at the vehicle's first update after the order takes effect (S-0203,
   claim 7) and is processed on that tick.
@@ -1945,7 +2248,8 @@ more raw values on average than the comparison ticks.
   was moving (not ready to change). (g) Stop order: give a moving vehicle in *move* the stop order.
   Expected: no slot changes on that tick, destination empty; at a processing after it has stopped
   moving, its resting behaviour is queued. Repeat with a harvester in *harvest*; expected: *guard*
-  current on that tick. (h) Factory exit cell: a test map places an armed vehicle, in contact with
+  current on that tick. Repeat with a slave master whose harvesting slaves are out working,
+  expected: on that tick every slave has *guard* current and an empty target and destination. (h) Factory exit cell: a test map places an armed vehicle, in contact with
   nothing, on the cell (*x*, *y* + 1) of a vehicle factory whose foundation's top-left cell is
   (*x*, *y*), and a second one on a cell next to the factory; give both an attack order on an enemy
   in range. Expected: the second vehicle's *attack* becomes current on that tick, the first one's
@@ -1973,7 +2277,10 @@ more raw values on average than the comparison ticks.
   processed on the tick it becomes current (case a), by a queued behaviour
   becoming current while the actor moves (cases b, c), by no resting behaviour queued at the first
   processing after the vehicle stops, or by one that does not become current on the next tick
-  (case e), by any slot change in (d) or (g), by *guard*
+  (case e), by any slot change in (d) or (g) (except the harvester's *guard*, the slaves'
+  *guard*, and the *guard* of a slave master whose own type is a harvester in *harvest*),
+  by a slave without *guard* current, or with a target or destination, on the tick of the stop
+  order in (g), by *guard*
   not current at once in (f), by the first vehicle of (h) starting *attack* on its cell, by *guard*
   queued or current in (i), by the move order not being queued in (i), by *attack* queued in
   (j), by a first *move* processing in (k) only when the *guard* timer runs out, or in (l) by
@@ -1996,12 +2303,17 @@ more raw values on average than the comparison ticks.
     ore and arriving there: expected *guard*.
 
   Computer-controlled house (the original-only rows, notes for the AI designers): the test map
-  places an armed infantry unit, an engineer and an armed vehicle in *move* with no destination,
-  so that their first *move* processing falls back to rest (claim 22) without any team or
-  trigger: expected *area guard* in T0 and T1, *guard* in T6.
-  Falsified by any other resting behaviour. A run in which the recorder shows a skill level other
-  than 0 for the human-controlled house or 5 for the computer-controlled house is invalid. Runs:
-  one per case and run.
+  places an armed infantry unit, an engineer, a vehicle thief and an armed vehicle in *move* with
+  no destination, so that their first *move* processing falls back to rest (claim 22) without any
+  team or trigger: expected *area guard* in T0 and T1, *guard* in T6 (claim 14 rows 7 and 9,
+  claim 15 rows 10 and 12). The same map also places an unarmed infantry unit that is neither an
+  engineer nor a vehicle thief: expected *guard* in every run (claim 14 rows 7 and 10). A second
+  armed infantry unit and armed vehicle of that house, members of a test-map team whose script
+  only waits, placed the same way: expected *guard* in every run (claim 14 row 12, claim 15 row
+  11).
+  Falsified by any other resting behaviour, or by a recorded skill level other than 0 for the
+  human-controlled house or 5 for the computer-controlled house (claim 15 gives those levels in a
+  skirmish). Runs: one per case and run.
 - **B5 (claim 16).** Named test file: rules giving *harmless* the no-threat property and not the
   zombie property. Test map: a unit of one house placed in *harmless* next to an enemy unit in
   *guard*. Expected: the guarding unit never targets it by itself over 2000 ticks. Then damage the
@@ -2012,38 +2324,64 @@ more raw values on average than the comparison ticks.
   fall back to rest, *harmless* stays current, and the guarding unit still never targets it by
   itself over 2000 ticks. Falsified by a fall-back after the damage. Runs: three.
 - **B6 (claims 17, 19, 25).** Named test file: rules giving *sticky* the paralysed and the scatter
-  properties and turning its retaliate property off, and giving *sleep* the zombie property, the
-  scatter property and no retaliate property, and turning the player-scatter setting on (case 2
-  of claim 19 then holds for a human-controlled owner, as it does for every house in our engine).
-  Test map places an unarmed vehicle of the human-controlled house in *sticky* and one in *sleep*.
-  (a) Give each a move order. Expected: the *sticky* vehicle never starts
-  *move* (the move stays queued); the *sleep* vehicle, if ready, starts *move*.
-  (b) Damage both from out of their range while they stand still with no destination. Expected:
-  both move away to scatter (the scatter from damage names no point, so the paralysed refusal of
-  claim 17 does not apply), and neither leaves its behaviour by itself through a fall-back to
-  rest. Repeat with the scatter property off for both: expected no scatter (case 2 of claim 19
-  needs the property).
-  (c) The *sticky* vehicle stands on a cell of a bunker of its own house that has room for one
-  vehicle and no other unit on its cells; another vehicle of the same house is ordered into the
-  bunker. Expected: once the entering vehicle has stopped on the bunker's cell, the *sticky*
-  vehicle stays where it is. Control run with a test file that turns the paralysed property of
-  *sticky* off: expected it moves away from the bunker.
-  Falsified by the sticky vehicle starting *move* in (a), by the *sleep* vehicle not starting *move*
-  at a per-tick start at which it is ready, by a fall-back out of either behaviour, by a scatter
-  with the property off in (b), by either vehicle not scattering with the property on in (b) in a
-  run in which the vehicle movement specs' acceptance conditions (claim 19) held, or in (c) by the
-  *sticky* vehicle moving away with the paralysed property on. A (c) control run in which it does
-  not move either leaves claim 17's refusal untested. (d) Case 1 of claim 19: named test file
-  turning the player-scatter setting on. An armed vehicle of the human-controlled house stands in
-  *guard* with no target and no destination. An enemy unit whose weapon outranges the vehicle's
-  fires at it from beyond the vehicle's weapon range and beyond (*S* + 0.5) × 256 leptons, *S*
-  its sight (F7), so it does not retaliate. Expected: the vehicle moves away to scatter, with no
-  override to *attack* (the suspended slot stays empty). Control 1: the player-scatter setting
-  off and no scatter veterancy ability: expected no move. Control 2: the attacker within
-  (*S* + 0.5) × 256 leptons but beyond the weapon range: expected an override to *attack* and no
-  scatter move. Falsified by no move in the main run (in a run in which the vehicle movement
-  specs' acceptance conditions of claim 19 held), by a move in control 1, or by a scatter move
-  instead of the override in control 2. Runs: three each.
+  properties and turning its retaliate property off, giving *sleep* the zombie property, the
+  scatter property and no retaliate property, giving *guard* the paralysed and the scatter
+  properties with no retaliate property, giving *area guard* the zombie and the scatter properties
+  with no retaliate property, and turning the player-scatter setting on (case 2 of claim 19 then
+  holds for a human-controlled owner, as it does for every house in our engine). Test map places
+  unarmed vehicles of the human-controlled house of an ordinary driving stock type: *K* in
+  *sticky*, *Z* in *sleep*, *G* in *guard* and *A* in *area guard*, each on open ground with no unit
+  within 2 cells.
+  (a) Give *K* and *Z* a move order. Expected: *K* never starts *move* (the move stays queued); *Z*,
+  if ready, starts *move*.
+  (b) Damage *G*, *A*, *K* and *Z* from out of their range while they stand still with no
+  destination. Expected: *G* and *A* move away to scatter (the scatter from damage names no point,
+  so the paralysed refusal of claim 17 does not apply, and S-0207 claim 16 lets them accept). *K*
+  and *Z* do not move: a vehicle in *sticky* or *sleep* refuses every scatter request (S-0207
+  claim 16, case a). Repeat with the scatter property off for *G* and *A*: expected no scatter
+  (case 2 of claim 19 needs the property). Original-only variant (claim 19, case 2 for a
+  computer-controlled owner): repeat the damage of *G* and *A* with the player-scatter setting off
+  (a second test file that differs only in that setting), once with *G* and *A* owned by a
+  computer-controlled house that has no AI activity on the test map and once with them owned by
+  the human-controlled house. Expected: the computer-controlled *G* and *A* scatter, the
+  human-controlled ones do not.
+  (c) *G* stands on a cell of a bunker of its own house that has room for one vehicle and no other
+  unit on its cells; another vehicle of the same house is ordered into the bunker. Expected: once
+  the entering vehicle has stopped on the bunker's cell, *G* stays where it is. Control run with a
+  test file that turns the paralysed property of *guard* off: expected *G* moves away from the
+  bunker.
+  Falsified by *K* starting *move* in (a), by *Z* not starting *move* at a per-tick start at which it
+  is ready, by a scatter of *G* or *A* with the property off in (b), by *G* or *A* not scattering
+  with the property on in (b), by *K* or *Z* scattering in (b), in the variant of (b) by a
+  computer-controlled *G* or *A* that does not scatter or a human-controlled one that does, or in
+  (c) by *G* moving away with the paralysed property on. A (c) control
+  run in which *G* does not move either leaves claim 17's refusal untested. (d) Case 1 of claim 19:
+  named test file turning the player-scatter setting on. An armed vehicle of the human-controlled
+  house stands in *guard* with no target and no destination. An enemy unit whose weapon outranges
+  the vehicle's fires at it from beyond the vehicle's weapon range and beyond (*S* + 0.5) × 256
+  leptons, *S* its sight (F7), so it does not retaliate. Expected: the vehicle moves away to
+  scatter, with no override to *attack* (the suspended slot stays empty). Control 1: the
+  player-scatter setting off and no scatter veterancy ability: expected no move. Control 2: the
+  attacker within (*S* + 0.5) × 256 leptons but beyond the weapon range: expected an override to
+  *attack* and no scatter move. Falsified by no move in the main run, by a move in control 1, or by
+  a scatter move instead of the override in control 2. Runs: three each.
+  (e) Fall-back rows (claim 17; claim 14 row 6, claim 15 rows 7 and 9): a named test file gives
+  *move* the zombie property (run Z), a second one gives it the paralysed property (run P), and the
+  stock rules serve as control (run C). On a test map with no object of another house, the
+  human-controlled house has an armed infantry unit of a type that does not default to area guard
+  and has no guard-area veterancy ability, an armed vehicle that is not a harvester, and an unarmed
+  vehicle that is not a harvester, a loaner or a deployer. Each is ordered to move 5 cells and
+  arrives. Expected in Z and in P: at the first *move* processing after it has stopped, the
+  infantry unit and the armed vehicle queue nothing, *move* stays current and the next processing
+  comes 1 tick later, and so on over 20 processings (each one falls back to rest again and reaches
+  row 6 or 9); the unarmed vehicle queues *guard* at that processing (row 7 comes before row 9),
+  which becomes current on the next tick. Expected in C: all three queue a resting behaviour at
+  that processing (*guard* for the infantry unit, *area guard* or *guard* for the armed vehicle by
+  claim 15 rows 10 and 12, *guard* for the unarmed vehicle). A run in which the recorder shows a
+  target, a destination or queued destinations at that processing is invalid. Falsified in Z or P
+  by a behaviour queued for the infantry unit or the armed vehicle, by *move* not staying current,
+  or by no *guard* queued for the unarmed vehicle; in C by nothing queued. Runs: three per run and
+  unit.
 - **B7 (claims 10, 18).** (a) A human-controlled armed vehicle in *move* (long route) is fired at by
   an enemy within its weapon range; expected: no retaliation, *move* continues. (b) The same vehicle
   in *guard*; expected: an override to *attack* (the suspended slot shows *guard*), and a revert to
@@ -2072,8 +2410,15 @@ more raw values on average than the comparison ticks.
     and inside its sight, then fires at it. Expected: no override, the target stays A and the
     suspended slot stays empty. Repeat with a vehicle of the computer-controlled house (the
     original-only part of claim 18): expected an override to *attack* with B as target at once.
-    Falsified in the first run by an override to *attack* or by B becoming the target, and in the
-    second by no override. Runs: three per case.
+    A third run with the computer-controlled vehicle, with B beyond (*S* + 0.5) × 256 leptons and
+    beyond its weapon range: expected an override at once as well (the distance rule does not hold
+    back a computer-controlled actor). Falsified in the first run by an override to *attack* or by
+    B becoming the target, and in the second and third by no override.
+    (h) Order during an override: repeat (b) and, while the override is in effect, give the
+    vehicle a move order (which clears its target, S-0213). Expected: *guard* never becomes
+    current by a revert; *move* becomes current through the queue (claim 12), and the suspended
+    slot still shows *guard* after that. Falsified by an empty suspended slot after the order (a
+    revert empties it). Runs: three per case.
 - **B8 (claims 21, 32).** Named test file: rules that give *guard* an anti-air rate different from
   its rate (for example rate 0.07, anti-air rate 0.2). Record the processing intervals of an armed
   building without targets. Expected: 180, 181 or 182; an armed vehicle in *guard* at the same time
@@ -2147,8 +2492,19 @@ more raw values on average than the comparison ticks.
   its own house (ordered in); give it an area-guard order. Expected: *area guard* becomes current,
   and at its first processing *guard* becomes current on that tick, the next processing coming
   exactly 1 tick later (and the guard spot not taken as its own cell, claim 26). Falsified by
-  *area guard* staying current, or by another interval. Runs: three.
-- **B11 (claim 27).** Skirmish: a computer-controlled unit placed in *hunt* on an island it cannot
+  *area guard* staying current, or by another interval. Runs: three. (k) Search that finds a
+  target (claim 26, T2): named test file giving *area guard* the rate 0.07 (*D*<sub>r</sub> = 63).
+  The same file turns the no-threat property of *sleep* off, so that the search may pick an actor
+  in *sleep* (claim 16). A test map places an armed vehicle of the human-controlled house in *area
+  guard* on its own cell, and an enemy vehicle of a computer-controlled house that has no AI
+  activity on the test map, in *sleep* (which does nothing by itself, claim 4), within the first
+  vehicle's weapon range.
+  Expected: at the processing whose search first finds the enemy (the recorder shows the target
+  from that tick on), the next processing comes exactly 1 tick later, not 64 to 68 ticks (nor 10
+  or 11 under the close-range condition of F3). A run in which the target first appears on a tick
+  on which the vehicle does not process, or never appears, is invalid. Falsified by any other interval after that
+  processing. Runs: 20.
+- **B11 (claim 27).** (a) Skirmish: a computer-controlled unit placed in *hunt* on an island it cannot
   leave, with no enemy reachable or in range. Expected: it stays in *hunt* without moving; with a
   test file setting the stupid-hunt flag on its type, also no target is taken when an enemy comes
   into range. Falsified by the unit moving towards the enemy base, or by target searches with the
@@ -2180,12 +2536,27 @@ more raw values on average than the comparison ticks.
   was not ready to change) is set aside; in it the interval is 63 to 65. Falsified by an interval
   of 63 to 65 in a run that is not set aside. Runs: 20 per unit kind, with each of the three
   values seen at least once.
+  (f) Per-tick *hunt* of base-building vehicles (the original's only): a skirmish on a test map
+  with no pre-placed objects and the fewest starting units, so that each house starts with only
+  its base-building vehicle (a vehicle whose type deploys into a construction-yard type) and no
+  building. The recorder also reads each house's automatic base-building setting and its number of
+  construction yards. Expected: on the first tick on which the computer-controlled house's setting
+  is on, its vehicle (whose current behaviour is then neither *hunt* nor *unload*) ends the tick
+  with *hunt* current, or with *hunt* queued if it is not ready to change, and then deploys
+  through the vehicle rule of claim 27. The human-controlled house's vehicle, left without orders,
+  never has *hunt* queued. A run in which the computer-controlled vehicle has *hunt* or *unload*
+  current before the setting turns on, or the setting never turns on (it is the computer player's,
+  Terms), is invalid. Falsified by a valid run in which that tick ends with *hunt* neither current
+  nor queued, or ends with *hunt* queued while the vehicle is ready to change, or by *hunt* queued
+  for the human-controlled vehicle. Runs: three.
 - **B12 (claims 28 to 31; part e for the scatter off a building).** (a) A computer-controlled
   engineer placed in *capture* without a target: expected *hunt* queued at its first processing.
   (b) A deployer infantry type given *unload* while undeployed, with a test file that removes the area-fire flag from its deploy
   weapon, once with its undeploy delay set to 30 and once to −1. Expected: it deploys and *guard*
   becomes current on that tick. In the first case the first processing of *guard* comes 30 ticks
-  later and the unit then starts *undeploy* by itself (claim 31, first row). In the second case the
+  later and the unit then starts *undeploy* by itself (claim 31, first row), and its next
+  processing comes exactly the frame count of its *undeploy* sequence (S-0107) after that one.
+  In the second case the
   first processing of *guard* comes 450 ticks later and the unit stays deployed; *unload* again
   then gives *guard*, an *undeploy* sequence and the next processing 450 ticks later. (c) The type
   singled out by name, with its area-fire deploy weapon and an undeploy delay of −1, given *unload*
@@ -2200,7 +2571,8 @@ more raw values on average than the comparison ticks.
   Expected, on the ordinary cell: it falls back to rest and stays on its cell. Falsified, case by case: (a)
   by anything other than *hunt* queued at the first processing; (b) by *guard* not current on the
   tick of the deploy, by a first *guard* processing other than 30 ticks later in the first run or 450 ticks later in the second, by no
-  self-undeploy in the first run, or by an undeploy without a new *unload* in the second; (c) by a
+  self-undeploy in the first run, by an interval after the self-undeploy other than the frame
+  count of the *undeploy* sequence, or by an undeploy without a new *unload* in the second; (c) by a
   first *guard* processing at any other interval, or by the target becoming the unit's own cell; (d)
   by the unit staying in *enter*, or entering; (e) by no move from the gate cell, by a destination
   other than the one S-0208 claim 13 gives, or by a move from the ordinary cell. Runs: three each.
@@ -2208,19 +2580,25 @@ more raw values on average than the comparison ticks.
   not the one singled out by name an undeploy delay of −1, an area-fire weapon in its first slot
   only (its second slot holding a weapon without the area-fire flag) and the spray-attack flag. The
   unit, undeployed, is given *unload*. Expected: on the tick of the deploy its target becomes
-  its own cell. Control: the same file without the spray-attack flag: expected its target does not
-  become its own cell. Second control: the area-fire weapon in the second slot only, without the
-  spray-attack flag: expected its own cell as target. Falsified by the own-cell target in the first
-  control, or by its absence in the main run or the second control. Runs: three each.
+  its own cell, *guard* becomes current, and the first processing of *guard* comes exactly 450
+  ticks later (claim 30, the row of an area-fire deploy weapon of any other type). Control: the
+  same file without the spray-attack flag: expected its target does not become its own cell, and
+  450 ticks again (the row of a deploy weapon without the area-fire flag). Second control: the
+  area-fire weapon in the second slot only, without the spray-attack flag: expected its own cell as
+  target and 450 ticks. Falsified by the own-cell target in the first control, by its absence in
+  the main run or the second control, or by a first *guard* processing other than 450 ticks after
+  the deploy in any of the three. Runs: three each.
 - **B13 (claim 21, Import mapping).** A test map whose override section gives the *guard*
   behaviour's section a rate of 0.2 and nothing else. Expected: an armed building in *guard* shows intervals 180, 181 or 182 (the anti-air rate
   followed the new rate). With the override also giving an anti-air rate of 0.07, expected
-  63, 64 or 65. Falsified by the building keeping the base rules' anti-air rate in the first case,
-  or by an interval other than 63, 64 or 65 in the second.
+  63, 64 or 65. With the override giving an anti-air rate of 0 instead: expected 180, 181 or 182
+  (an explicit 0 also becomes the rate). Falsified by the building keeping the base rules'
+  anti-air rate in the first or third case, or by an interval other than 63, 64 or 65 in the
+  second.
   Runs: 100 intervals each.
 - **B14 (claims 5, 12).** (a) A test map places a vehicle with the behaviour name for *queued move*,
   and another with the name for *attack move*. Expected for both: that behaviour current,
-  processing every 450 ticks, no movement and no automatic target search over 3000 ticks with an
+  processing every 450 ticks, no movement and no automatic search over 3000 ticks with an
   enemy in range. (b) With the attack-move gesture (S-0214), give an armed vehicle of a type
   eligible for attack-move an attack-move order on an empty cell 10 cells away; then give it one on
   an enemy unit out of its weapon range. Expected: after the first order *move* becomes current,
@@ -2248,13 +2626,24 @@ more raw values on average than the comparison ticks.
   stays there; in (b) and (c) by an actor that stops at the first point, by *guard* (or *area
   guard*) queued at that fall-back, by an empty destination after it, or by one that heads on
   only through a non-empty list of queued destinations (that would be the queued-destinations
-  row of claims 14 and 15, not the route row). Runs: three each.
-- **B16 (claims 11, 32, buildings).** (a) Record the processing intervals of an armed defensive
+  row of claims 14 and 15, not the route row). (d) Guard-spot row outside *area guard*: the
+  recorder also reads the guard spot. An armed infantry unit of the human-controlled house, of a
+  type that does not default to area guard, is given an area-guard order on a cell 5 cells away
+  and arrives. An enemy unit beyond its weapon range and within (*S* + 0.5) × 256 leptons (F7)
+  fires at it, so that it overrides to *attack* (claims 10 and 18) and walks off the guard spot's
+  cell towards the attacker. Once it is at least 2 cells from that cell, it is given the stop order
+  (claim 12: target and destination cleared, guard spot kept, no revert). Expected: at its next
+  *attack* processing, which falls back to rest, its destination becomes the guard spot's cell,
+  *move* is queued, and the guard spot is empty. A run in which the recorder shows no guard spot,
+  or a current behaviour other than *attack*, just before that processing is invalid. Falsified
+  by a destination other than the guard spot's cell, by no *move* queued, or by a guard spot kept.
+  Runs: three each.
+- **B16 (claims 11 and 32, buildings).** (a) Record the processing intervals of an armed defensive
   building without the SAM flag while it attacks a stationary target in range, with a weapon whose
   rate-of-fire field (in a named test file) is 20 ticks or more: expected an interval of 1 tick
   after each processing at which it fires and 2 ticks after processings while its weapon rearms,
   never a rate delay. (b) An unarmed building whose type has the stupid-guard-mode flag: expected exactly
-  100 ticks every time. (c) A SAM building attacking an aircraft in flight: expected every interval
+  100 ticks every time. (c) A SAM building of a house with full power attacking an aircraft in flight: expected every interval
   1 tick until the target is gone, then *guard* current at most 2 ticks after the target's loss
   (at the building's next processing if it was in *aiming*, one processing later if it was in
   *aimed*, claim 32). (d) An armed defensive building
@@ -2294,6 +2683,57 @@ more raw values on average than the comparison ticks.
   same files without the voxel art mark: expected at least one 2-tick interval (turning) before
   the first shot. Falsified by a 2-tick interval before the first shot in the main run, or by
   none in the control. Runs: five each.
+  (i) *Still turning* (claim 32, the row of other answers): the control of (h), with a turn-rate
+  field small enough that the half turn takes at least 20 ticks (S-0206), and the recorder also
+  reading the turret facing. Expected: the first *attack* processing (answer *not facing*) is
+  followed 2 ticks later by the next; every later processing at which the recorder shows the
+  turret facing still changing (answer *still turning*, S-0301 claim 9) is followed 1 tick later
+  by the next, until the first shot. Falsified by a 2-tick interval after a processing at which
+  the turret is still turning, other than the first. Runs: five.
+  (j) SAM power row: a test map gives a computer-controlled house that has no AI activity a SAM
+  building whose type needs power and drains power, and one power plant, so that it has full
+  power. A named test file gives an aircraft type of the human-controlled house that can stand
+  landed a strength high enough to survive the test. The aircraft flies into the building's range.
+  A timed map trigger destroys the power plant, so that the house is short of power, at a time
+  chosen so that the building is then attacking the aircraft, and the aircraft is then ordered
+  to land on open ground within the building's range. Expected: after the first processing that
+  follows the loss of power, no shot is fired, every processing interval is 1 tick, and *attack*
+  stays current for as long as the house is short of power, also after the aircraft has landed
+  (world height 0), whether or not the building still holds it as target. Control: the same with
+  a second test file that removes the needs-power flag from the SAM type: after the aircraft has
+  landed, *guard* is current at most 2 ticks later. A run in which the building is not in *attack*
+  when the power plant is destroyed is invalid. Falsified by *guard* current while the house is
+  short of power, or by a shot after the first processing that follows the loss of power, in the
+  main run; or by *attack* still current more than 2 ticks after the landing in the control. Runs:
+  three each.
+  (k) SAM aiming tolerance: a named test file gives the SAM building type a small turn-rate field
+  and the aircraft type a high speed. The recorder also reads the building's progress count, the
+  facing it turns towards its target, whether that facing is turning, and the direction to the
+  target (S-0204). Aircraft of the human-controlled house pass close to the building, which has
+  full power. Take every processing in *aiming* (count 0) at which the facing is not turning, the
+  target is suitable, and the aim error ε (as in F8: the difference between the facing and the
+  direction, taken the shorter way round) is known. Expected: the count is 1 (*aimed*) after that
+  processing if and only if ε ≤ 8192 facing units. Falsified by *aimed* after an ε above 8192, or
+  by *aiming* kept after an ε of 8192 or less. Runs: until 30 such processings with ε above 8192
+  and 30 with ε at most 8192 are recorded.
+  (l) SAM firing both weapons: a named test file gives the SAM building type a secondary weapon
+  that can hit aircraft and whose shots the recorder can tell from the primary's (for example a
+  different projectile type). With full power it attacks aircraft in flight. Expected: on every
+  tick on which it fires, one shot of each weapon. Control: the same type without a secondary
+  weapon: one shot. Falsified by a firing tick that shows only the primary weapon's shot, or only
+  the secondary's, in the main run. Runs: 20 firing ticks.
+  (m) Out-of-stage rule: named test files give a gate type that the human-controlled house can
+  build the SAM flag and a weapon that can hit aircraft, and give *attack* an anti-air rate of 0.2
+  (*D*<sub>aa</sub> = 180). The human player builds the gate and walks an infantry unit through
+  it, so that the gate is in *open*. An aircraft of an enemy house attacks the gate (for example
+  one that the test map places in *hunt* with the gate the only target within its reach). The
+  recorder also reads the gate's progress count. Take a run in which the gate retaliates (an
+  override to *attack*, the suspended slot showing *open*) while its count is 2 to 5. Expected:
+  for as long as that *attack* stays current, every processing interval is 180, 181 or 182 ticks,
+  the count does not change, and the gate fires no shot. A run in which the override comes while
+  the count is 0 or 1 is set aside (the stages of claim 32 then apply); if no run gives an override
+  at all, the case is recorded as not applicable. Falsified by a 1-tick interval, a change of the
+  count or a shot during such an *attack*. Runs: until three runs are not set aside, at most 20.
 - **B17 (claim 25).** A human-controlled armed vehicle placed in *sticky* (test map), player
   return fire off, with an enemy unit driven into its weapon range and firing at it: expected no
   target taken over 2000 ticks. The same with a computer-controlled vehicle (the original-only
@@ -2486,6 +2926,121 @@ more raw values on average than the comparison ticks.
     (*N*<sub>a</sub> the area-guard targeting delay) and processing delay 63 + *u*. Only ticks on
     which the two orders give different readings count. Falsified by *N*<sub>a</sub> + *t*′ and
     63 + *u*′ on valid ticks. Runs: until 30 valid processings.
+- **B28 (claims 35 and 36: gates; the area-guard threshold default).** Named test file for cases a
+  to d: rules giving the test gate type a deploy time of 0.1 (*T*<sub>d</sub> = 90 ticks) and a
+  gate close delay of 0.2 (*T*<sub>c</sub> = 180 ticks), and *open* a rate of 0.05
+  (*D*<sub>r</sub> = 45). The test map: a corridor one cell wide, closed across by a map-placed
+  gate of a computer-controlled house that is on the human-controlled house's team in the game
+  set-up (so the two are allied from the start, and the gate rows of S-0209 give the human
+  player's units *closed friendly gate*), with no other way round. A map-placed structure of the
+  human-controlled house itself would not be placed in a skirmish (S-0009). Besides the common recorder, the
+  recorder reads the gate's drawn stage on every tick and the tick on which each unit first
+  enters and last leaves a cell of the gate's foundation.
+  - (a) An infantry unit of the human-controlled house is placed on the near side and ordered to
+    the far side on the first tick. Expected: the gate's drawn stage is the closed one until the
+    unit reaches the gate (the gate starts closed); the gate's behaviour becomes *open* on the
+    tick on which the unit first gets the entry outcome *closed friendly gate* (S-0209) for a cell
+    of the gate; the drawn stage reaches fully open 90 or 91 ticks
+    after that (the door time, plus at most the tick before the first processing), and the unit
+    enters the gate's cells no earlier than that, after the wait that S-0209 gives a unit at a *closed friendly gate*. A
+    second run with a deploy time of 0.2 must show the fully-open stage 90 ticks later than the
+    first. Falsified by a gate that is open at the start, by the unit passing without waiting, or
+    by a door time other than 90 (or 180) ticks, give or take 1.
+  - (b) After the unit of (a) has left the gate's cells, record the tick on which the drawn stage
+    first moves towards closed. Expected: no earlier than 180 ticks after the tick on which *open*
+    started (the countdown counts from the opening start, not from the door being open), and no
+    later than 180 + 45 + 2 ticks after the later of that tick and the tick the unit left the
+    cells; the processing ticks of *open* in stage *waiting* are 45 + *U*(0, 2) apart, one draw
+    each. Falsified by a closing start before 180 ticks, or one later than the bound.
+  - (c) As (a), but a second unit of the house is ordered onto a foundation cell of the gate and
+    stays there. Expected: the gate does not start closing while the unit stands there, and starts
+    closing within 180 + 47 ticks after it leaves. Falsified by a closing start while the cell is
+    occupied.
+  - (d) As (b), and a second infantry unit of the house is ordered through the gate so that it
+    reaches the gate 30 ticks after the closing starts. Expected: the drawn stage jumps to fully
+    open on the tick after the unit first gets the entry outcome *closed friendly gate* for a cell
+    of the closing gate (or on that tick), and the unit
+    enters the gate's cells within 2 ticks of that. Off-switch result for comparison: the stage
+    retraces over 30 ticks. Falsified by a door that takes 30 ticks or more to reopen.
+  - (e) Area-guard threshold default (claim 36 a): named test files that leave the area-guard
+    threshold key out of every rules layer and set the maximum skill level of the AI settings to 3
+    (run L3) or to 4 (run L4). Skirmish. The computer-controlled house's armed vehicle placed in
+    *move* with no destination, as in scenario B4. Expected: *guard* in L3, *area guard* in L4.
+    Falsified by the same result in both runs, or by the reverse. A run in which the recorder shows
+    another skill level for the computer-controlled house is invalid. Runs: one each.
+  - (f) Gate time that wraps (F9): as (a), with a named test file giving the gate type a deploy
+    time of 2 400 000 game minutes (an integer, so held exactly in single precision; times 900 it
+    is 2 160 000 000, above 2³¹ − 1, so the wrap of F1 gives a negative door time, which behaves as
+    0). For this case the recorder also reads whether the gate's door is moving or at rest, and
+    in which position (the drawn stage is not used, since its drawing from a negative door time
+    belongs to the rendering topic). Expected: the door is at rest open at most 2 ticks after the
+    gate's behaviour becomes *open*, and the unit then passes. Falsified by a door that is still
+    moving, or still closed, more than 2 ticks after *open* becomes current, which would mean a
+    conversion that saturates or keeps the large value.
+  - Runs for cases a to d and f: three each.
+
+- **B29 (claims 14 and 15: rows and exceptions reached through other fall-backs).** Named test file
+  for cases a and b: *guard* and *area guard* get the no-threat property, not the zombie property,
+  and lose the retaliate and the scatter properties, so that damage from a known attacker makes the
+  unit fall back to rest at once (claim 16) without retaliating and without a scatter request from
+  the damage (claim 19 case 2 and S-0208 claim 15 need the scatter property once retaliation is
+  ruled out); the subjects are of types that are not fraidycats (Terms); the area-guard threshold is 0, so that the
+  human-controlled house's armed vehicles otherwise rest in *area guard* (claim 15 row 12). The
+  damage comes from a second unit of the human-controlled house given a force-fire order on the
+  subject, with a weapon too weak to kill it in one shot. The recorder reads the subject's slots
+  on the tick of the damage and on the next tick. A run in which the subject processes on the tick
+  of the damage, dies, or has its destination changed on that tick by anything other than the rows
+  under test, is set aside. In (a1) and (a2), a run in which the unit holds no target on the tick
+  of the damage is invalid.
+  - (a) Infantry (claim 14). (a1) An armed infantry unit of a type that does not default to area
+    guard, in *guard*, holding as target an unarmed enemy building in its weapon range (taken by its
+    own per-tick search): expected *attack* queued on the tick of the damage (row 2), current by
+    the next tick unless the unit is not ready to change. (a2) The same unit in *area guard* on its
+    own cell, holding the same kind of target: expected nothing queued and *area guard* still
+    current (the exception for *area guard*). (a3) An armed infantry unit whose type the test file
+    marks as defaulting to area guard, in *guard* with no target and no object of another house
+    within its sight: expected nothing queued (row 5; without it, row 11 would queue *area
+    guard*). Falsified by *attack* neither queued nor current by the next tick in (a1), by *attack*
+    queued in (a2), or by *area
+    guard* queued in (a3).
+  - (b) Vehicles (claim 15). (b1) An armed vehicle that is not a harvester, given an area-guard
+    order on a cell 10 cells away, with no object of another house within its sight, is damaged
+    while it drives there with that cell as destination: expected nothing queued (the exception for
+    *area guard*; without it, row 3, which comes before row 8, would queue *move*).
+    (b2) An armed vehicle that is not a harvester, in *guard* with no target and no object of
+    another house within its sight: expected nothing queued (row 8; without it, row 12 would queue
+    *area guard*). Falsified by *move* queued in (b1) or *area guard* queued in (b2).
+  - (c) *Eaten* (claims 15 and 28). A test map places an unarmed vehicle that is not a harvester, a
+    loaner or a deployer, of the human-controlled house, in *eaten* on open ground, with no target
+    and no destination; a second one is placed in *capture* the same way. Expected: at each
+    processing the vehicle in *eaten* falls back to rest and nothing is queued (the exception for
+    *eaten*), so *eaten* stays current over 10 processings; the vehicle in *capture* queues
+    *guard* at its first processing (row 7; the hunt rule of claim 28 does not apply to a
+    human-controlled owner). Falsified by *guard* queued for the vehicle in *eaten*, or by nothing
+    queued for the vehicle in *capture*.
+  - (d) Bunker variant of row 12. The test file of cases a and b. An armed vehicle of the
+    human-controlled house that is not a harvester is ordered into an empty bunker of its own
+    house and then ordered to attack an enemy unit within its weapon range, which a map trigger
+    destroys a few ticks later. Expected: at its first *attack* processing after the loss of the
+    target it queues *guard*. Control: the same vehicle standing on open ground: it queues *area
+    guard*. A run in which the recorder shows the vehicle out of contact with the bunker, or with
+    a destination, at that processing is invalid. Falsified by *area guard* queued in the bunker,
+    or by *guard* queued in the control.
+  - Runs: three per case.
+
+- **B30 (F1 and F9: products of 2⁶³ or more).** (a) Named test file: rate of *guard*
+  20000000000000000 game minutes (held as a single near 2.0 × 10¹⁶; times 900 about 1.8 × 10¹⁹,
+  above 2⁶³, so *D*<sub>r</sub> = 0). An armed vehicle of the human-controlled house rests in
+  *guard* with no object of another house within its sight and its weapon not rearming. Expected:
+  processing intervals of 1 or 2 ticks (the standard delay 0, 1 or 2, where a delay of 1 or less
+  means the next tick), 1 about twice as often as 2. A second run with the rate written as
+  2000000000000000000% (a double-precision product, F1) gives the same. Falsified by any interval
+  above 2, in particular by no further processing at all (a conversion that saturates at
+  2³¹ − 1). (b) As scenario B28, case f, with the gate's deploy time 20000000000000000 game
+  minutes instead. Expected: the door is at rest open at most 2 ticks after the gate's behaviour
+  becomes *open*, and the unit then passes. Falsified by a door that is still moving, or still
+  closed, more than 2 ticks after *open* becomes current. Runs: 100 intervals per run in (a),
+  three in (b).
 
 ## Open questions
 
@@ -2501,9 +3056,12 @@ more raw values on average than the comparison ticks.
   after a retaliation) might bring back the behaviour that was current before the retaliation. The
   full conditions of the revert on target loss are not established well enough to state this as a
   claim.
-- Whether any situation reaches the out-of-stage rule of a SAM building's *attack* (claim 32): a
-  building behaviour whose rule leaves the progress count outside 0 and 1, followed by an override
-  to *attack* (for example a retaliation) while that value stands.
+- Whether any stock situation reaches the out-of-stage rule of a SAM building's *attack* (claim 32): a
+  building with the SAM flag in a behaviour whose rule leaves the progress count outside 0 and 1
+  (a gate's *open* in its stages 2 to 5, or a *repair* or *missile* processing), followed by an
+  override to *attack* (for example a retaliation) while that value stands. No stock type combines
+  them; scenario B16 (m) reaches the rule only with a test gate type, and only if the retaliation
+  rules allow the override while the gate is in *open*.
 - Which rules of the structures specs set or clear a building's ready mark (claim 11). In
   particular, an unarmed building's own *guard* processing never sets it, so what makes a queued
   behaviour of an unarmed building current is not established here.
@@ -2513,21 +3071,15 @@ more raw values on average than the comparison ticks.
   actor's locomotor (claim 13).
 - Which actors are marked as loaners (claim 15, row 5), and whether any fall-back other than the
   placement fall-back skips the land-type test of claim 15, row 4.
-- The absent-key defaults of the guard stray distance and of the auto-deploy delay list: no engine
-  default is known.
+- The absent-key default of the auto-deploy delay list: no engine default is known. (The guard
+  stray distance has none in the original: claim 36 and Questions for the project lead.)
 - Aircraft readiness (claim 11): which flight phases do not allow a change of behaviour. The
   aircraft spec owns the phases, and no scenario here tests aircraft readiness.
-- How a vehicle accepts a scatter request and where it then goes (claims 19 and 28). No spec states
-  it yet: S-0207 has no scatter rule. Apart from the gate on requests that are not forced
-  (claim 19) and the paralysed refusal (claim 17), the vehicle's own conditions were only partly
-  studied for this spec and are not stated here.
 - The bunker rule of claim 17, the only identified sender of a scatter request with a threat point
   to a vehicle, and so the only way known to observe the paralysed refusal (scenario B6, part c).
   The structures specs own it and its exact conditions.
 - Whether the recruitable property also keeps actors out of the computer player's teams (claim 20); scenario
   B20 tests base defence only.
-- The SAM aiming tolerance of 8192 facing units and the power condition of claim 32; scenario B16
-  does not test them.
 - The vehicle *unload* processing (transports, deploying vehicles), *retreat*, *patrol* and the entry
   protocol of *enter*: claims 29, 30 and 34 point to other topics.
 - The refused deploy of claim 27 (vehicles): which situations let a deploying vehicle in *hunt*
@@ -2547,28 +3099,20 @@ more raw values on average than the comparison ticks.
   search table of the same processing, or whether that processing does none of the table (no
   search, no idle action). The two differ in the draws and the targeting-timer restart of that
   first processing; scenario B10 (g) checks only the guard spot afterwards.
-- Claim 32's rows cover every answer category of the firing check (Terms), each in exactly one
-  row. Which situations give which answer, in particular *illegal* and *impossible*, is not stated
-  here; it belongs to the combat topic (the firing cycle, planned S-0301) and to S-0214.
 
 ## Questions for the project lead
 
-- S-0107, claim 14 names the guard and area-guard behaviours as the trigger of idle actions. By
-  claim 27 here, *hunt* without a target also attempts the idle action (and so do the processings
-  of claims 24 and 26 in their own cases). Should S-0107, claim 14 gain *hunt* in its next
-  revision?
-- Claim 30's rule for the infantry type singled out by name now has the proposed switch
-  `quirks.named_deploy_area_fire` (Edge cases and quirks), whose alternative singles out no type.
-  Please confirm the default (on = original). A data-driven alternative, such as a type flag of
-  our own format, would need a new field that the user's data does not have, so this draft does
-  not propose one.
-- S-0006, claim 5 lists the keys that reset on a layer. Claim 21's anti-air rate reset is another
-  "reset to another key's value" rule; should S-0006's list gain a pointer to this spec in its next
-  revision?
-- One change to S-0208 that follows from claim 28 here, for its next revision: the list of
-  scatter-request senders in S-0208 Terms could add claim 28 here, the scatter off a building in
-  *capture*, *sabotage* and *eaten*, forced, not move-anywhere and without a threat point. The
-  scatter from damage is request A, which that list already names, and S-0208 owns its
-  statement for infantry.
-- Vehicle scatter has no owner yet (Open questions). Should S-0207 take it over in its next
-  revision: which requests a vehicle accepts, where it goes, and the paralysed refusal of claim 17?
+Decided under the project lead's delegated sign-off (2026-10-10); recorded on the spec side:
+
+- Claim 36 (b), Q-0020, guard stray distance absent from every rules layer: our engine uses the
+  area-guard leash of F5 in its place and the importer warns. This is a documented departure, since
+  the original's value is unspecified.
+- S-0107, claim 14 gains *hunt* without a target (claim 27 here) as a trigger of idle actions in its
+  next revision.
+- `quirks.named_deploy_area_fire` (claim 30) is confirmed, default on (the original).
+- S-0006, claim 5 gains a pointer to claim 21's anti-air rate reset in its next revision.
+- The SAM building's unchecked secondary shot (claim 32, scenario B16 case l) is stated here, and
+  this spec owns it. S-0301, claim 9 gains a pointer to it as an exception in its next revision.
+- S-0208 Terms gains claim 28's scatter off a building in *capture*, *sabotage* and *eaten* as a
+  scatter-request sender in its next revision.
+- Claim 32's out-of-stage rule stays a rule with no switch of its own, as the wrap of F0 does.
