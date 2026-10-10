@@ -1,0 +1,1111 @@
+---
+id: S-0109
+title: Animation playback
+topic: rendering
+revision: 6
+sources-class: [decomp]
+status: approved
+approved-by: Claude (delegated by project lead)
+approved-on: 2026-10-10
+measurements: []
+requests: []
+supersedes: []
+---
+
+# S-0109: Animation playback
+
+## Summary
+
+How an animation plays its sprite over time (stage delay, random rates, game-speed normalisation,
+passes, reversed and ping-pong play, loop delays, follow-up types, its end, and the start and middle
+events tied to its stages), which sprite its derived playback fields come from, and which image frame
+it draws and how (translucency, shadow, detail level, attachment to another object). Render layers
+and depth are S-0102's, palettes and brightness S-0103's and S-0104's, building slot animations
+S-0108's, and sprite lookup and the theater refresh S-0007's.
+
+## Terms
+
+*Tick*, *drawn frame*, *image frame*, *sprite*, *detail level*, *game speed* (index *s*), *scenario
+random stream*, *draw*, *ranged draw*, *fog of war*, *departure*, *importer
+warning*, *quirk switch*, *art database*, *type name*, *local player*, *house*,
+*trigger* and *trigger action* are used as in the glossary. *Render layer* and *slot animation* are as in S-0102 and S-0108, the slot kinds
+*freeze-unpowered* and *light-unpowered* (scenario AN16) as in S-0108,
+*waypoint marker* as in S-0009, *type read*, *theater refresh*, *theater flag* and *new-theater flag*
+as in S-0007, *turn pass* and *update order* as in S-0203.
+
+| Term | Meaning |
+|---|---|
+| animation | An object whose type is of the animation type kind (glossary *type kind*). Its type's fields come from the art database (S-0006, claim 8). |
+| *N* | The number of image frames in a sprite. Claim 25 says which of the type's sprites each derived value uses. |
+| sprite end *E*<sub>s</sub> | *N*, or ⌊*N* / 2⌋ for a shadow type (claim 10): the value that an absent end field takes (claim 25). |
+| start field *a*, end field *E*, loop start λ<sub>s</sub>, loop end λ<sub>e</sub>, loop count *L* | The type's imported playback fields after their absent-key defaults are applied (Import mapping, claim 25, Formulas F2). *a*, λ<sub>s</sub> and λ<sub>e</sub> are used as image-frame numbers; *E* is used as a count of stages from *a* (claim 6). |
+| middle image frame μ | ⌊*N* / 2⌋ of the sprite that claim 25 names (claim 14). No field sets it. |
+| stage *k* | An integer per animation, the position in its playback. The image frame shown is *a* + *k* (claim 1). |
+| step σ | +1 or −1: the amount added to *k* at each advance. |
+| advance | One change of *k* by σ. |
+| stage delay *d* | The number of ticks between two advances, an integer ≥ 0 (claims 2 to 4). |
+| pass | One run of the stage from its starting value to its end limit (claim 6). |
+| remaining passes *r* | An integer per animation: from 0 to 255, where 255 means endless (claim 7). With `quirks.anim_loop_count_wrap` off it is any non-negative integer, or endless. |
+| repeat factor *m* | An integer that the creator of an animation may give with it (default 1): the number of times the type's passes are repeated. A factor below 1 counts as 1. |
+| loop delay | A count of updates during which an animation does not advance, after its creation (when its creator asks for one) or between two passes (claim 11). |
+| update | The processing an animation receives in its turn (S-0203, Terms): animations take turns and enter the update order of S-0203 when they are created (S-0203, claims 2 to 4). So an animation receives one update per tick while it exists, except a tick whose turn a removal costs it (S-0203, claim 10) and a tick in which it is created after the turn pass. |
+| start event, middle event | Effects tied to playback (claims 13 and 14): the start event plays the type's start sound and the type's resource chain reaction, and the middle event creates the type's particles, scorch marks and craters. Those effects belong to their own specs; this spec says when they happen. |
+| follow-up type | The type named by the animation type's follow-up field (claim 15). |
+| current type | The type an animation plays as: its creation type, or the follow-up type after a follow-up switch, claim 15. |
+| reversed | An animation is reversed while its current type has the reverse flag or its creator asked for reverse play. The test is made against the current type, so it can change when the animation switches to a follow-up type, claim 15. The step σ is separate state. |
+| shadow type | A type with the shadow flag: the second half of its sprite holds the shadows of the first half (claim 10). |
+| bouncing type | A type with the bouncer flag or the meteor flag. Such an animation follows its own motion, and its landing ends it (the specs of projectiles and debris own both). Until then its stage plays by claims 5 to 16 like any other animation's, but its advances produce no middle event (claim 14) and no damage by claim 17. The middle event that the start event produces when μ = 0 (claim 13) still happens. |
+| trigger-played animation | An animation created by a trigger action that plays an animation at a waypoint marker, including the action that shows the drop-zone animation (the trigger specs own both actions). It has no start sound, no chain reaction and no damage (claims 13 and 17). |
+| erasing weapon | A weapon that removes its target over time instead of damaging it (the temporal weapon of the combat specs, which own it). |
+| owner | The object an animation is attached to, if any (claim 22). |
+| translucency code | 0, 1, 2 or 3: opaque, 25 %, 50 % or 75 % translucent drawing (claim 20). Two codes combine to the larger of the two, except that 1 and 2 combine to 3. |
+| translucency level *t* | An integer per animation from 0 to 16, 0 unless its building sets it (claim 20). |
+| building fade level | An integer from 0 to 15 that a building keeps for drawing itself see-through: it rises step by step to 15 while the building cloaks. No approved spec defines when it changes; the cloaking and structures specs will (Open questions). This spec uses it only as the source of *t* (claim 20). |
+| cloak | To become invisible to other players over a few steps; a building that cloaks raises its fade level step by step (below). Which objects can cloak, and when, is the cloaking specs' business. |
+| sensors | Coverage of cells by which a house sees cloaked objects in them. Which objects give it, and over which cells, is the visibility specs' business. |
+| campaign mission | A game played as a mission of the single-player campaign, not a skirmish or multiplayer game. |
+| cloaked from the viewer | A building is cloaked from the viewer when its fade level is 15 and it is drawn as invisible to the local player. In the original that holds unless the local player owns the building, or the local player's sensors cover its cell, or, outside campaign missions, the local player's house and the building's house are allied with each other in both directions; those players see the building see-through instead. When it holds is the cloaking specs' business; this spec uses it only in claim 20. It depends on the local player, so it changes only what is drawn. |
+| being erased | A building is being erased from the moment an erasing weapon locks onto it until the last erasing weapon that locked onto it lets go, or until it is removed. When erasing weapons lock on and let go is the combat specs' business. |
+| new-theater type | An animation type with the new-theater flag and without the theater flag. Only such a type gets a sprite again, with letter substitution, at the theater refresh (S-0007, claim 14). |
+
+## Behaviour
+
+1. **Image frame and stage.** At every drawn frame an animation shows image frame *a* + *k*. A
+   new animation starts with *k* = 0 and σ = +1, unless it is reversed (claim 8). Stage timing
+   follows ticks, not drawn frames: *k* changes only in updates. An image frame index outside 0 to
+   *N* − 1 draws nothing, neither the image nor its shadow (claim 10), and is not an error: the
+   animation keeps playing.
+   - Backing: `measurable` (scenario AN1)
+   - Confidence: high
+
+2. **Stage delay from the rate field.** The type's rate field ρ gives image frames per game minute.
+   The stage delay is *d* = ⌊900 / ρ⌋ ticks when ρ > 0 and *d* = 0 when ρ ≤ 0, except −1 (Formulas F1). A
+   type without the field has *d* = 1. The value −1 counts as not given and keeps the value held
+   (S-0006, claim 3). A delay of 0 means the animation never advances: it shows its first image
+   frame for as long as it exists and never ends on its own. Consequently a rate above 900 also
+   freezes the animation, since ⌊900 / ρ⌋ = 0 (`quirks.anim_fast_rate_freezes`, Edge cases).
+   - Backing: `measurable` (scenarios AN1, AN2)
+   - Confidence: high
+
+3. **Random rate.** A type can give a random rate as a pair (ρ<sub>1</sub>, ρ<sub>2</sub>). Each
+   value is converted like the rate field (F1) into *d*<sub>1</sub> and *d*<sub>2</sub>, except
+   that −1 leaves that end as it was. The pair then gives the range [*d*<sub>1</sub>′,
+   *d*<sub>2</sub>′] with *d*<sub>2</sub>′ = max(*d*<sub>2</sub>, 0) and *d*<sub>1</sub>′ =
+   min(*d*<sub>1</sub>, *d*<sub>2</sub>′) (Formulas F1). When *d*<sub>1</sub>′ and *d*<sub>2</sub>′
+   are not both 0, the animation's stage delay is a ranged draw from the scenario random stream over
+   [*d*<sub>1</sub>′, *d*<sub>2</sub>′] ticks instead of the value of claim 2. When *d*<sub>1</sub>′
+   = *d*<sub>2</sub>′, no number is taken from the stream and the delay is that value. Because a
+   larger rate gives a shorter delay, a pair written in ascending order (ρ<sub>1</sub> <
+   ρ<sub>2</sub>) converts to *d*<sub>1</sub> ≥ *d*<sub>2</sub>, so the range collapses to the
+   constant delay *d*<sub>2</sub>, with no draw (`quirks.anim_random_rate_collapse`). Only a
+   descending pair gives a random delay. The delay is chosen when the animation is created and again
+   when it switches to a follow-up type (claim 15), never at a new pass.
+   - Draws. A creation or follow-up switch whose range has *d*<sub>1</sub>′ ≠ *d*<sub>2</sub>′
+     takes exactly one ranged draw over [*d*<sub>1</sub>′, *d*<sub>2</sub>′] and no other draw for
+     the delay; the raw values that ranged draw consumes follow the range rule of S-0202 (claim 4),
+     rejected values included. With *d*<sub>1</sub>′ = *d*<sub>2</sub>′ the delay takes no raw
+     value.
+   - Backing: `measurable` (scenario AN3) for the delays and, through a recorder that reads the
+     state of the scenario random stream, for the number and order of the draws
+   - Confidence: high
+
+4. **Game-speed normalisation.** If the type is marked normalised, the delay chosen by claim 2 or 3
+   is replaced by N(*d*, *s*), the game-speed normalisation (S-0107, Formulas F3), with *s* the
+   game speed at the tick the delay is chosen. A later change of game speed does not change the
+   delay of a running animation. This is one of the speed-normalised delays of glossary claim G3.
+   With `quirks.speed_normalised_delays` off, the delay stays *d* at every game speed.
+   - Backing: `measurable` (scenario AN4)
+   - Confidence: high
+
+5. **When the stage advances.** An animation advances on an update when at least *d* ticks have
+   passed since its last advance, or since its creation if it has not advanced yet, and none of
+   the following holds on that update: it is its first update after creation; it is in a loop delay
+   or ends one (claim 11); it is held (claim 23); *d* = 0. A loop delay does not restart this clock.
+   So in steady play every image frame is shown for exactly *d* ticks. A tick whose update a removal
+   costs the animation (S-0203, claim 10) delays the advance due in it to the next update, and the
+   clock then runs from that later advance, so the image frame shown is held one tick longer.
+   - **The first image frame.** It is shown for *d* ticks when *d* ≥ 2, and also when *d* = 1 and the
+     animation receives its first update in the tick it is created. It is shown for 2 ticks when
+     *d* = 1 and that first update comes in the next tick instead. Which case holds follows from the
+     tick order of S-0203. An animation created before the turn pass of its tick (by a trigger action
+     that the polling of map triggers sets off, S-0203 claim 1) or during it (by another
+     object's turn, S-0203 claims 3 and 4) takes its first turn in the turn pass of that tick, after
+     every object already in the update order, unless a removal costs it that turn. An animation created after the turn pass takes its first
+     turn in the next tick. Which part of a tick creates the animations of each creator is for the
+     creator's spec to say.
+   - Backing: `measurable` (scenario AN1) for the steady-state period, for the first image frame
+     when *d* ≥ 2 and for the first image frame of an animation created before the turn pass.
+     `unmeasured` for the longer hold after a lost turn, for the reason S-0203 gives in claim 2's
+     backing: no setup is known that puts an animation directly after an object that leaves play
+     at a tick it can predict. `unmeasured` for an animation created during or after the turn
+     pass, until a creator's spec names a creator whose place in the tick and in the update order is
+     known (Open questions)
+   - Confidence: high for the steady-state period *d*, for the first image frame when *d* ≥ 2, for
+     the first image frame of an animation created before or during the turn pass, and for the
+     longer hold after a lost turn (the clock runs from the tick of each advance); medium for an
+     animation created after the turn pass
+
+6. **Passes and their end limits.** The first pass starts at *k* = 0, so it shows image frame *a*
+   first. A pass ends on the advance after which *k* is at or above its end limit:
+   - while *r* ≥ 2, the end limit is λ<sub>e</sub> − *a*, so the pass shows image frames up to
+     λ<sub>e</sub> − 1,
+   - on the last pass (*r* ≤ 1) it is *E*, so the pass shows image frames up to *a* + *E* − 1.
+
+   A new pass starts at *k* = λ<sub>s</sub> − *a*, showing image frame λ<sub>s</sub> first. So with
+   *L* passes the animation shows *a* … λ<sub>e</sub> − 1, then λ<sub>s</sub> … λ<sub>e</sub> − 1
+   for each middle pass, and λ<sub>s</sub> … *a* + *E* − 1 on the last pass. With one pass it shows
+   *a* … *a* + *E* − 1 and the loop fields play no part. The image frame at the end limit is never
+   drawn: the pass ends, or the animation ends, in the same update. Shadow types (claim 10) and
+   reversed animations (claim 8) have further end rules, and ping-pong animations turn instead
+   (claim 9). The rules are collected in Formulas F3.
+
+   An absent loop end takes the sprite end *E*<sub>s</sub>, not the end field *E* (claim 25,
+   `quirks.anim_loop_end_from_sprite`). So a type that gives an end field but no loop end, and has
+   more than one pass (claim 7), plays every pass but the last up to image frame *E*<sub>s</sub> − 1, past its own end field,
+   and only its last pass stops at *a* + *E* − 1.
+   - Backing: `measurable` (scenarios AN1, AN5)
+   - Confidence: high; medium for the absent loop end (scenario AN5 checks it)
+
+7. **Remaining passes and endless animations.** At creation *r* = max(1, (*L* × max(*m*, 1)) mod
+   256), where mod gives the least non-negative residue. A pass that ends with *r* ≥ 2 is followed
+   by a new pass, and *r* goes down by 1, except at 255, where it stays. A pass that ends with *r* ≤
+   1 is the last. So a type whose loop count is −1 (or any value congruent to 255 modulo 256) loops
+   for ever when *m* = 1. With *m* = 2 the same type gives *r* = 254 and stops after 254 passes, a
+   loop count of 256 gives one pass, and so does a repeat factor of 256 with any loop count
+   (`quirks.anim_loop_count_wrap`). After the last pass the animation switches to its follow-up
+   type, or ends (claims 15 and 16).
+   - Backing: `measurable` (scenario AN5); the case *m* ≥ 2 needs a creator that gives a repeat
+     factor, which is `unmeasured` until the specs that own such creators say which ones do
+   - Confidence: high
+
+8. **Reversed play.** A reversed animation starts at *k* = λ<sub>e</sub> − 1 with σ = −1: its first
+   image frame is *a* + λ<sub>e</sub> − 1, which is λ<sub>e</sub> − 1 only when *a* = 0. A pass of
+   a reversed animation ends on the advance after which *k* ≤ 0, so image frame *a* itself is never
+   drawn. It also ends, as in claim 6, when *k* is at or above the end limit of claim 6. Each new
+   pass starts at *k* = λ<sub>e</sub>, one stage beyond the first pass's start
+   (`quirks.anim_reverse_raw_loop_end`). With *a* ≥ 2 and *r* ≥ 2 the first advance already brings
+   *k* to or above the end limit λ<sub>e</sub> − *a*, so the first pass shows one image frame only.
+   - Backing: `measurable` (scenario AN6)
+   - Confidence: high
+
+9. **Ping-pong play.** A type with the ping-pong flag turns at the ends of its range. After an
+   advance, σ is negated when:
+   - on the last pass (*r* ≤ 1): *k* ≥ *E* or *k* = 0,
+   - while *r* ≥ 2: *k* ≥ λ<sub>e</sub> − *a*, or *k* equals the start field *a* itself (not 0).
+
+   An advance that turns never ends the pass. On an advance that does not turn, the end rules of F3
+   apply as to any other animation. The stage keeps the value at which it turned, so the turning
+   image frame (*a* + *E* or λ<sub>e</sub>) is shown for one stage delay, and draws nothing if it is
+   *N* or more. Consequences:
+   - a ping-pong animation that is neither a shadow type nor reversed never ends a pass, so its
+     remaining passes never change and it never ends on its own,
+   - a shadow type still ends a pass when *k* is at or above λ<sub>e</sub> − *a* without turning (claim
+     10). On the last pass that happens when λ<sub>e</sub> − *a* < *E*; with absent end and loop-end
+     fields, that is whenever *a* > 0,
+   - a reversed type still ends a pass when its stage comes down to 0 or below without turning,
+   - with *a* > 0 and *r* ≥ 2, the lower turn needs *k* = *a* exactly. A stage coming down from the
+     upper turn passes *a* only when it turned above *a*, so an animation that turns at
+     λ<sub>e</sub> − *a* ≤ *a* runs down past 0 into image frames below *a* and then below 0, which
+     draw nothing, and stays blank (`quirks.anim_pingpong_lower_turn`).
+   - Backing: `measurable` (scenario AN7)
+   - Confidence: high
+
+10. **Shadow types.** For a shadow type, the sprite end is ⌊*N* / 2⌋ instead of *N*
+    (*E*<sub>s</sub>, claim 25). Wherever image frame *f* = *a* + *k* is drawn, image frame *f* +
+    ⌊*N* / 2⌋ is also drawn at the same place as its shadow (darkening the pixels below it), never
+    translucent, whatever claims 20 and 21 give for the image. How the shadow is composited is S-0102's
+    (Open questions). A type that is also drawn flat or tiled (S-0102) draws no shadow image at
+    all. Its last pass also ends when *k* is at or above λ<sub>e</sub> − *a*, as the other passes
+    do, unless it is reversed. The middle image frame (claim 14) is not
+    halved.
+    - Backing: `measurable` (scenarios AN1, AN8)
+    - Confidence: high for the shadow image frame, the flat and tiled exception and the end; medium
+      for the darkening style, which belongs to the shadow drawing of S-0102
+
+11. **Loop delays.** A loop delay of *D* updates starts:
+    - at creation, when the creator asks for one (*D* > 0), and
+    - at the end of every pass that is followed by a new pass (claim 7), when the type's random
+      loop delay pair (*D*<sub>1</sub>, *D*<sub>2</sub>) is not (0, 0). *D* is then a ranged draw
+      from the scenario random stream over the two values, in either order. The pair counts
+      updates (Terms), never normalised. A drawn *D* of 0 gives no loop delay: the new pass plays at once and has no
+      start event.
+
+    During a loop delay the animation does not advance, and it is drawn at its current stage: the
+    first image frame of the new pass, or image frame *a* (*a* + λ<sub>e</sub> − 1 if reversed) at
+    creation. Each update counts *D* down by one. On the update that brings it to 0 the start event
+    happens (claim 13), and the animation does not advance on that update. The clock of claim 5 is
+    not restarted, so the first image frame of a pass that follows a loop delay of *D* is shown for
+    max(*d*, *D* + 1) ticks. A loop delay given at creation is counted only from the second update
+    (claim 5), so its start event comes on update *D* + 1 after creation.
+    - Backing: `measurable` (scenario AN9) for the loop delays between passes; the loop delay given
+      at creation is `unmeasured` until the specs that own the creators say which creator asks for
+      one (Open questions), since no test data can request it
+    - Confidence: high for the order of events; medium for the drawing during the delay
+
+12. **No random starting image frame.** No field and no creator makes an animation start at a
+    random stage. Randomness in playback comes only from claims 3 and 11.
+    - Backing: `measurable` (scenario AN3: every run starts at image frame 0)
+    - Confidence: medium
+
+13. **Start event.** The start event happens when the animation is created with no loop delay, when
+    a loop delay ends (claim 11), and when it switches to a follow-up type (claim 15). It plays the
+    type's start sound, starts the type's resource chain reaction if the type has one (which at
+    least removes all the resource in the animation's cell when there is any; the economy specs own
+    the rest of its effect), and also produces the middle event at once when μ = 0 (claim 14). So an
+    animation plays its start sound once for each type it plays as: at creation (or at the end of
+    the loop delay its creator gave), and at each follow-up switch. One with random loop delays also
+    plays it at every pass that follows a delay *D* > 0. A trigger-played animation has no start
+    sound and no chain reaction (and delivers no damage, claim 17), but its middle events happen as
+    for any other animation.
+    - Backing: `measurable` (scenarios AN9, AN10, and AN21 for the chain reaction)
+    - Confidence: high; medium for the chain reaction, whose effect the economy specs own
+
+14. **Middle event.** The middle event happens on every advance after which *a* + *k* = μ,
+    provided μ ≠ 0, so it can happen once per pass, and for reversed and ping-pong animations on the
+    way down as well. μ is ⌊*N* / 2⌋ of the sprite that claim 25 names, whatever the type's fields
+    say. It does not happen on the advances of a bouncing type (the start event's middle event of
+    claim 13 still does). An animation that never shows image frame μ (because *a* > μ, or its loop
+    range excludes it) has no middle event, except through claim 13.
+    The scorch marks and craters of the middle event appear only when the animation's height above
+    the terrain (glossary) is less than 30 leptons; their specs own the rest. The test uses the height
+    above the terrain, not above the surface, so an animation on a high bridge's deck, about one
+    deck height above the terrain of its cell, makes no scorch mark or crater, while one created on
+    raised ground at that ground's height makes them as on flat ground.
+    - Backing: `measurable` (scenarios AN10, AN19)
+    - Confidence: high; medium for the height condition
+
+15. **Follow-up type.** When an animation's last pass ends and its type names a follow-up type, the
+    same animation continues as that type, at the same place and with the same owner. The start
+    event happens in that update (claim 13), and the switch sets:
+
+    | Quantity | After the switch |
+    |---|---|
+    | stage *k* | the follow-up type's start field value *a*′, so the first image frame shown is 2*a*′ (`quirks.anim_followup_start_doubled`) |
+    | step σ | the same sign as before (`quirks.anim_followup_keeps_step`) |
+    | reversed | decided afresh from the follow-up type's reverse flag and the creator's request (Terms) |
+    | remaining passes *r* | *L*′ mod 256 (least non-negative residue), *L*′ being the follow-up type's loop count, with no repeat factor and no raising to 1; a value of 0 behaves as 1, because a pass that ends with *r* ≤ 1 is the last (claim 7) |
+    | stage delay *d* | chosen afresh from the follow-up type (claims 2 to 4, including a random draw and normalisation) |
+    | clock of claim 5 | restarted at that tick, so the follow-up type's first image frame is shown for its own *d* ticks |
+    | damage accumulator (claim 17) | 0 |
+
+    The image frame at the old type's end limit is never drawn; the first image frame of the
+    follow-up type is drawn from that update on. Because σ and the reversed test are separate:
+    - an animation that its creator reversed stays reversed and plays the follow-up type downwards
+      from 2*a*′, ending its pass when *k* ≤ 0,
+    - an animation reversed only by its old type's flag, whose follow-up type lacks the flag, keeps
+      σ = −1 but is no longer reversed. If the follow-up type is neither ping-pong (claim 9) nor a
+      shadow type (claim 10), its stage only goes down, so it ends its pass on the first advance
+      when the follow-up type's end limit is *a*′ − 1 or less, and otherwise never ends.
+      Once its image frame *a*′ + *k* is below 0 it draws nothing, while it still delivers damage
+      (claim 17),
+    - an animation that was not reversed, whose follow-up type has the flag, keeps σ = +1 and is
+      reversed from then on, so the reversed end rule and restart of claim 8 apply to it.
+    - Backing: `measurable` (scenario AN11)
+    - Confidence: high
+
+16. **End of an animation.** An animation whose last pass ends and whose type names no follow-up
+    type ends in that update and is removed. An animation whose type makes infantry creates it then, as
+    the infantry specs will say. The last image frame drawn is the one shown before that update.
+    The lifetime of an animation with one pass, no loop delay, delay *d* ≥ 1, *E* ≥ 1 and *a* = 0, that is
+    neither reversed nor ping-pong and, if it is a shadow type, has λ<sub>e</sub> ≥ *E*, is therefore
+    *E* × *d* ticks. It is *E* × *d* + 1 ticks when *d* = 1 and the first update comes in the tick
+    after creation (claim 5).
+    - Backing: `measurable` (scenario AN1)
+    - Confidence: high
+
+17. **Damage over time.** An animation whose type has a damage value δ > 0, and which is not a
+    bouncing type, delivers damage at its own position on every advance. It keeps a floating-point
+    accumulator that starts at 1.0. On each advance δ is added (5δ when the animation is attached to
+    a terrain object), and when the accumulator is 1.0 or more its whole part is delivered and
+    subtracted (Formulas F5). So after *n* advances the total delivered is close to ⌊1 + *n*δ⌋ for
+    an unattached animation, and the first advance already delivers 1 when δ < 1
+    (`quirks.anim_damage_starts_at_one`). The advance that
+    ends the animation delivers too. A trigger-played animation delivers no damage. The warhead is
+    one of two game-wide warheads (Import mapping), chosen by the animation's type name; the type's
+    own warhead field plays no part here. When the chosen warhead is not given, the amount is still
+    taken from the accumulator but no damage is done. The area, warhead effect and damage rules
+    belong to the combat specs.
+    - Backing: `measurable` (scenarios AN4, AN12, and AN20 for the factor 5)
+    - Confidence: high for the accumulator, the per-advance timing and the warhead choice; medium
+      for the factor 5 (the kind test is clear, which objects count as terrain objects is the terrain
+      specs' business)
+
+18. **Playback timing reaches game state.** Several effects of an animation wait on its stages, so
+    for a type marked normalised (claim 4) they depend on the game speed, as glossary claim G3
+    allows:
+    - damage is delivered per advance (claim 17), so its rate in ticks follows N(*d*, *s*),
+    - the middle event creates craters, which remove resource from cells, and decides between a
+      scorch mark and a crater with a draw from the scenario random stream (the terrain and combat
+      specs own both); its tick follows the stages,
+    - the start event at the end of a loop delay and the ranged draw of claim 11 happen at pass ends,
+    - the follow-up switch, with its possible random rate, and the creation of infantry at the end
+      (claim 16) happen at the end.
+
+    Every machine of a multiplayer game shares one game speed, so this does not desynchronise them,
+    but a normalised animation with any of these effects runs a different number of ticks at
+    different speeds. With `quirks.speed_normalised_delays` off, none of these timings depends on
+    the game speed.
+    - Backing: `measurable` (scenarios AN4, AN12)
+    - Confidence: high for damage and the end; medium for the middle-event effects, whose own specs
+      are not written
+
+19. **Detail level.** An animation whose type's detail field is greater than the player's detail
+    level is not drawn, but it is updated as usual, so nothing but its picture changes. The original
+    also stops drawing every animation whose detail field is above 1 while its measured drawing rate
+    of the screen falls below a configured minimum (with a band above it before it resumes). That
+    depends on the host machine and real time, so our engine never enters that reduced mode. This is
+    a departure, with no switch.
+    - Backing: `measurable` (scenario AN13) for the detail field; the reduced mode is `unmeasured`
+      (it depends on the machine's speed, and our engine leaves it out)
+    - Confidence: high
+
+20. **Translucency.** When the player's detail level is at least the type's translucency detail
+    field, an animation gets the translucency code and hide rule of the first row of this table that
+    fits its current type:
+
+    | Current type | Translucency code | Not drawn when |
+    |---|---|---|
+    | has the translucent flag | fade by progress: the highest code *c* of 3, 2 and 1 whose threshold *k* exceeds, the thresholds being 0.6 *E*, 0.4 *E* and 0.2 *E* respectively, and 0 when *k* exceeds none; compared in floating point (Formulas F4) | *t* ≥ 15 |
+    | translucency field > 0 | 1, 2 or 3 for a field of 25, 50 or 75; 0 for any other positive value | *t* ≥ 15 |
+    | neither (translucency field ≤ 0) | from the translucency level: 0 when *t* = 0, 1 when 1 ≤ *t* ≤ 5, 2 when 6 ≤ *t* ≤ 15 (`quirks.anim_translucency_levels`) | *t* > 15 |
+
+    Only one row applies; the rows do not combine with each other. The different hide boundaries,
+    *t* ≥ 15 for the first two rows and *t* > 15 for the last, are the original's
+    (`quirks.anim_hide_at_level_15`), so a translucent-flag or translucency-field type is hidden at
+    *t* = 15 while a type with neither is drawn at 50 %. Below the translucency detail field the
+    table does not apply: the code is 0 and the animation is drawn even when *t* ≥ 15. In both cases
+    the code is then combined (Terms) with the code of claim 21.
+
+    A building's slot animations take the building fade level (Terms) as *t*, except that they take
+    16 while the building is cloaked from the viewer (Terms). Other animations have *t* = 0. *t*
+    follows the fade level: it is set again when a slot animation of the building starts and when the
+    building refreshes its animations, which it does at each change of its fade level. So, at a
+    fade level of 15:
+    - a viewer from whom the building is cloaked sees none of its slot animations, whatever their
+      type, as long as the table applies,
+    - a viewer who sees the building see-through (the player who owns it, for example) sees its translucent-flag
+      and translucency-field slot animations hidden and the others at 50 %,
+    - a slot animation whose type's translucency detail field is above the player's detail level is
+      drawn opaque even while its building is cloaked from the viewer, since the table does not
+      apply to it (`quirks.anim_low_detail_shows_cloaked`).
+
+    Below a fade level of 15, *t* is the level itself whatever the viewer. If the cloaking specs
+    stop drawing the building itself earlier for some viewers (in the original, from fade level 11
+    on for a viewer it is cloaked from), such a viewer still sees its slot animations at fade levels
+    11 to 14: those of the neither row at 50 %, the others with their own codes.
+
+    Since *t* depends on the local player, it changes only what is drawn, never game state.
+    - Backing: `measurable` (scenarios AN14, and AN22 for the source of *t*)
+    - Confidence: high for the table and the fade thresholds; medium for the source of *t* and for
+      which viewers the building is cloaked from (the cloaking specs own that rule); low for the
+      visibility of slot animations at fade levels 11 to 14, which depends on how the cloaking specs
+      draw the building
+
+21. **Erasure.** When an erasing weapon locks onto a building (Terms, *being erased*), every slot
+    animation the building has at that moment is drawn from then on with translucency code 2, or 3
+    if its type has the double-thick flag, combined (Terms) with the code of claim 20, at every
+    detail level, and is held (claim 23). Both end when the building stops being erased: the slot
+    animations are drawn as before and are released. A slot animation that starts while its
+    building is already being erased starts held but is drawn without the erasure translucency,
+    until the next lock-on of any erasing weapon onto the building (a further shot of the same
+    weapon included, if it fires again), which marks every slot animation the building has then
+    (`quirks.anim_erasure_late_slots_opaque`).
+    - Backing: `measurable` (scenarios AN14, AN16)
+    - Confidence: medium (when weapons lock on and let go is the combat specs' business)
+
+22. **Attached animations.** An animation can be attached to an owner object. While attached, its
+    position is the owner's position plus the displacement it had from the owner when it was
+    attached, in leptons and including height, so it follows the owner. It is in the ground render
+    layer (S-0102). When it is detached it stays where it is. When the owner is removed from the game,
+    the animation disappears at once and is deleted at its next update, whatever its stage. That
+    update does nothing else of this spec's: no advance, no damage, no start or middle event, no
+    loop-delay count, no follow-up switch and no infantry (claim 16).
+    - Backing: `measurable` (scenario AN15) for the position, the removal and the absence of an
+      advance; the absence of damage, events and infantry at that last update is `unmeasured` (it
+      would need an attached animation due to deliver or end on the very tick its owner is removed,
+      which cannot be timed from outside); the render layer is S-0102's claim and is measured there
+    - Confidence: high
+
+23. **Held animations.** A building's slot animation is held while it is frozen by S-0108, claim 13
+    (which covers both a building without power and a disabled building), and while its building is
+    being erased (claim 21). The two causes are independent: the animation is released only when
+    neither applies, so a slot animation of an unpowered building stays frozen when its building
+    stops being erased. A held animation does not advance, so nothing that follows from an advance
+    happens: no damage, no middle event from an advance, no end of a pass, no follow-up switch and no
+    end. Everything else goes on as usual: its first update after creation is still skipped, a loop
+    delay still counts down, and the start event at the end of that delay still happens (with its
+    sound, chain reaction and, when μ = 0, middle event). Its clock (claim 5) keeps running, so
+    when it is released it advances on its first update if *d* ticks or more have passed since its
+    last advance.
+    - Backing: `measurable` (scenario AN16)
+    - Confidence: medium; high for the loop delay and start event going on while held
+
+24. **Fog.** An animation that its building marks as hidden under fog of war is not drawn when its
+    type has the fog-remove flag (set when absent), and it is drawn otherwise. The remembered images of
+    S-0102 show such animations instead.
+    - Backing: `measurable` (scenario AN17)
+    - Confidence: low
+
+25. **Which sprite the derived fields come from.** In each game, an animation type gets a sprite at
+    each of its type reads and may get another at the theater refresh (S-0007, claim 14). The
+    derived values follow one rule. A *sprite-found moment* is a type read that finds a sprite for
+    the type, or the theater refresh of a new-theater type (Terms) when it finds one. Let
+    *E*⁻ and λ<sub>e</sub>⁻ be the end field and loop end in force just before that moment (0 for
+    both before the first type read of the game; at a type read, what the previous type read left),
+    and *n* the image-frame count of the sprite found. The moment gives
+
+    > *E*⁺ = E<sub>s</sub>(*n*) when *E*⁻ = 0, and *E*⁻ otherwise,
+    > λ<sub>e</sub>⁺ = *E*⁺ when λ<sub>e</sub>⁻ = 0, and λ<sub>e</sub>⁻ otherwise,
+    > μ = ⌊*n* / 2⌋.
+
+    At a type read, an end field or loop end that the read gives takes precedence over *E*⁺ or
+    λ<sub>e</sub>⁺, and one it does not give is *E*⁺ or λ<sub>e</sub>⁺. At the new-theater refresh,
+    *E*⁺ and λ<sub>e</sub>⁺ stand. A type read that finds no sprite changes only the fields it
+    gives. The theater refresh of a type with the theater flag replaces the sprite that is drawn
+    (S-0007) but none of these values. A value of −1 counts as a value here, not as 0; it is
+    resolved from the sprite that is drawn, the first time an animation plays as the type in the
+    game. The consequences:
+    - an **absent end field** takes *E*<sub>s</sub> of the first sprite found for the type in the
+      game, normally that of its first type read,
+    - an **absent loop end** takes the same *E*<sub>s</sub> when the first type read found the
+      sprite, even when an end field is given (claim 6, `quirks.anim_loop_end_from_sprite`). If
+      one or more earlier type reads found no sprite, it takes the end field given at the last of
+      them when that field is not 0 (−1 included, which then resolves as below), and
+      *E*<sub>s</sub> of the first sprite found when that field is 0 or absent,
+    - an **end field of −1** takes *E*<sub>s</sub> of the sprite that is drawn the first time an
+      animation plays as the type in the game, by being created as it or by switching to it (claim
+      15). That is the sprite after the theater refresh, so it can differ from an absent end field
+      for theater and new-theater types. A loop end of −1 then takes *E*,
+    - an **explicit 0** in the end field or the loop end is kept (an end field of 0 gives the last
+      pass an end limit of 0, claim 6). The exception is a new-theater type whose sprite is
+      found at the theater refresh. Its end field of 0 then takes *E*<sub>s</sub> of the refreshed
+      sprite, and a loop end of 0 then takes the end field,
+    - **μ** comes from the last sprite found at a type read or at a new-theater refresh,
+    - a type that never finds a sprite at those moments keeps an end field and loop end of 0 when
+      they are absent or 0, and has μ = 0, so its start event also produces the middle event (claim
+      13).
+
+    These cases differ from the simple reading (every value from the sprite that is drawn) only when
+    the sprites a type gets in one game have different image-frame counts, or when a type read
+    finds no sprite.
+    - Backing: `measurable` (scenario AN18)
+    - Confidence: medium (the order of the type reads and the refresh is S-0007's; the rule itself
+      is clear)
+
+## Formulas
+
+**F1. Stage delay** (integer arithmetic, ticks). ρ is the rate value as read (S-0003 integer form).
+
+> *d* = ⌊900 / ρ⌋ for ρ > 0, *d* = 0 for ρ ≤ 0 and ρ ≠ −1
+
+The division is integer division of positive values, so truncation and the floor agree. ρ = −1
+keeps the held *d*; with no value ever given, *d* = 1. A random pair is converted per end into
+*d*<sub>1</sub> and *d*<sub>2</sub>, which give the range [*d*<sub>1</sub>′, *d*<sub>2</sub>′]
+(claim 3):
+
+> *d*<sub>2</sub>′ = max(*d*<sub>2</sub>, 0),  *d*<sub>1</sub>′ = min(*d*<sub>1</sub>, *d*<sub>2</sub>′)
+
+Normalisation replaces *d* by N(*d*, *s*) (S-0107, F3).
+
+**F2. Playback fields in play** (integers). *N*<sub>1</sub> is the image-frame count of the first
+sprite found for the type in the game, *N*<sub>d</sub> that of the sprite that is drawn the first
+time an animation plays as the type, and *N*<sub>r</sub> that of the sprite found at the theater
+refresh of a new-theater type (claim 25). E<sub>s</sub>(*n*) = *n*, or ⌊*n* / 2⌋ for a shadow type.
+The case "the first type read found the sprite" is assumed; claim 25 gives the other.
+
+| End field as given | *E* in play |
+|---|---|
+| absent | E<sub>s</sub>(*N*<sub>1</sub>) |
+| −1 | E<sub>s</sub>(*N*<sub>d</sub>) |
+| 0, new-theater type whose sprite is found at the refresh | E<sub>s</sub>(*N*<sub>r</sub>) |
+| 0, any other type | 0 |
+| any other value *v* | *v* |
+
+| Loop end as given | λ<sub>e</sub> in play |
+|---|---|
+| absent | E<sub>s</sub>(*N*<sub>1</sub>) |
+| −1 | *E* |
+| 0, new-theater type whose sprite is found at the refresh | *E* |
+| 0, any other type | 0 |
+| any other value *v* | *v* |
+
+μ = ⌊*n* / 2⌋ with *n* the image-frame count of the last sprite found at a type read or new-theater
+refresh, and 0 when none was found. The divisions are integer divisions of non-negative values. A
+type that has no sprite at all uses *N* = 0 everywhere.
+
+**F3. End of a pass** (integers, exact arithmetic). After an advance to stage *k*, with *r* the
+remaining passes:
+
+> limit = λ<sub>e</sub> − *a* when *r* ≥ 2, limit = *E* when *r* ≤ 1
+>
+> the pass ends ⇔ *k* ≥ limit, or (reversed and *k* ≤ 0), or (shadow type, not reversed and
+> *k* ≥ λ<sub>e</sub> − *a*)
+
+For a ping-pong type, an advance that turns (claim 9) never ends the pass; on any other advance the
+rule above applies. A new pass starts when the pass ends with *r* ≥ 2; a pass that ends with *r* ≤ 1
+is the last (claims 15 and 16). The new pass starts with
+
+> *r*′ = *r* − 1 for 2 ≤ *r* ≤ 254, *r*′ = 255 for *r* = 255
+>
+> *k*′ = λ<sub>s</sub> − *a* (not reversed), *k*′ = λ<sub>e</sub> (reversed)
+
+Initial values, with mod giving the least non-negative residue:
+
+> *k*<sub>0</sub> = 0 (not reversed), *k*<sub>0</sub> = λ<sub>e</sub> − 1 (reversed)
+>
+> *r*<sub>0</sub> = max(1, (*L* × max(*m*, 1)) mod 256)
+
+**F4. Translucent fade.** The normative rule is the comparison of claim 20: *k* and *E* are integers
+converted exactly to floating point, and
+
+> *P*<sub>c</sub> = *E* × *c*, formed with a 53-bit significand (S-0205, claim 4) in the
+> round-toward-zero mode (glossary; S-0205, claim 5),
+
+where *c* is the binary64 value nearest to 0.6, 0.4 or 0.2. The value for 0.6 lies just below 0.6,
+the other two just above. Then
+
+> code = the largest *c* of 1, 2 and 3 with *k* > *P*<sub>(*c*)</sub>, or 0 when there is none,
+> where *P*<sub>(3)</sub> = *P*<sub>0.6</sub>, *P*<sub>(2)</sub> = *P*<sub>0.4</sub> and
+> *P*<sub>(1)</sub> = *P*<sub>0.2</sub>.
+
+For integers this reduces to:
+
+| *E* | Code 3 | Code 2 (not 3) | Code 1 (not 2 or 3) |
+|---|---|---|---|
+| *E* > 0 | 5*k* ≥ 3*E* | 5*k* > 2*E* | 5*k* > *E* |
+| *E* = 0 | *k* > 0 | never | never |
+| *E* < 0 | 5*k* > 3*E* | 5*k* > 2*E* | 5*k* > *E* |
+
+The reduction holds for every 32-bit integer *E* and every 32-bit integer *k*. When *E* = 0 every
+product is 0.
+
+For *E* > 0 the ≥ of code 3 is a consequence of the constant lying below 0.6 and of the rounding
+mode: the product stays just below 0.6 *E* when 0.6 *E* is a whole number. With round-to-nearest
+(`quirks.chop_rounding` off, S-0205) the product would round up to exactly 0.6 *E*, and code 3
+would need 5*k* > 3*E*. For *E* < 0 rounding toward zero raises each product, so it lies at or just
+above the exact multiple 0.6 *E*, 0.4 *E* or 0.2 *E*, and all three comparisons are strict. A negative *E* comes only from an explicit negative
+end field, which the importer warns about.
+
+**F5. Damage accumulator** (floating point, binary64, round-toward-zero mode of S-0205, claim
+5). With δ the damage value (S-0003 decimal form, so a single-precision value
+held exactly in binary64) and *c* = 1 (unattached) or 5 (attached to a terrain object), at the
+*j*-th advance:
+
+> *A*<sub>0</sub> = 1.0,  *B*<sub>*j*</sub> = *A*<sub>*j*−1</sub> + *c*δ
+>
+> *n*<sub>*j*</sub> = trunc(*B*<sub>*j*</sub>) is delivered when *B*<sub>*j*</sub> ≥ 1.0, and
+> nothing is delivered when *B*<sub>*j*</sub> < 1.0
+>
+> *A*<sub>*j*</sub> = *B*<sub>*j*</sub> − *n*<sub>*j*</sub> when *B*<sub>*j*</sub> ≥ 1.0, and
+> *A*<sub>*j*</sub> = *B*<sub>*j*</sub> when *B*<sub>*j*</sub> < 1.0
+
+Each sum and difference is a binary64 value rounded toward zero. In exact arithmetic the total after
+*j* advances would be ⌊1 + *jc*δ⌋; the binary64 sums can differ from it by one when *jc*δ lies
+within rounding error of a whole number. For example δ = 0.375 or 0.25 (exact in binary) gives the
+delivery patterns 1, 0, 1, 0, 0, 1, 0, 1, 0, 0 and 1, 0, 0, 1, 0, 0, 0, 1 over the first advances,
+and δ written as 0.4 gives 1, 0, 1, 0, 1, 0, 0, 1, 0, 1. After a follow-up switch the accumulator
+restarts at 0.0 instead of 1.0. With `quirks.anim_damage_starts_at_one` off, *A*<sub>0</sub> = 0.0.
+
+## Constants
+
+| Name (ours) | Value | Unit | Notes |
+|---|---|---|---|
+| Rate conversion | 900 | ticks per game minute | F1; the rate field is image frames per game minute |
+| Stage delay when the rate field is absent | 1 | tick | F1 |
+| "Not given" rate | −1 | rate value | S-0006, claim 3 |
+| Remaining-pass modulus | 256 | passes | claim 7 |
+| Endless pass count | 255 | passes | claim 7 |
+| Smallest repeat factor | 1 | factor | claim 7; smaller factors count as 1 |
+| Middle image frame | ⌊*N* / 2⌋ | image frame | claims 14, 25 |
+| Fade thresholds | 0.6, 0.4, 0.2 | fraction of *E* | claim 20, F4 |
+| Translucency field values | 25, 50, 75 | per cent | claim 20; other positive values are opaque |
+| Translucency level bands | 1–5, 6–15, > 15 | level | claim 20 |
+| Hide threshold for translucent-flag and translucency-field types | 15 | level | claim 20 |
+| Translucency level of a slot animation while its building is cloaked from the viewer | 16 | level | claim 20 |
+| Building fade level of a fully cloaked building | 15 | level | Terms, claim 20 |
+| Height limit for scorch marks and craters | 30 | leptons, height above the terrain | claim 14; the middle event makes them only below it |
+| Damage accumulator start | 1.0 | damage points | F5 |
+| Damage accumulator after a follow-up switch | 0.0 | damage points | F5 |
+| Damage factor when attached to a terrain object | 5 | factor | claim 17 |
+| Detail level above which the reduced mode hides animations | 1 | detail level | claim 19 (departure) |
+
+## State and ordering
+
+**Playback states of one animation.**
+
+| State | Event | Result |
+|---|---|---|
+| created | creator gives a loop delay *D* > 0 | *delayed*; the first update after creation is skipped, then *D* updates count down |
+| created | no loop delay | start event in the same tick; *playing* |
+| *delayed* | count reaches 0 | start event; no advance on that update; *playing*. The count and the start event go on while the animation is held (claim 23) |
+| *playing* | held (claim 23) | no advance on that update; the clock of claim 5 keeps running |
+| *playing* | *d* ticks since the last advance, update not skipped, not held, *d* > 0 | advance; in the same update, damage (claim 17), the middle event if *a* + *k* = μ, and the turn (ping-pong, claim 9) or, without a turn, the end of the pass (F3) |
+| *playing* | pass ends with *r* ≥ 2 | new pass (F3); if the random loop delay pair is not (0, 0), ranged draw of *D*, and *delayed* when *D* > 0 |
+| *playing* | pass ends with *r* ≤ 1, follow-up type named | follow-up switch of claim 15, start event, *playing* |
+| *playing* | pass ends with *r* ≤ 1, no follow-up type | infantry created if the type makes infantry; removed |
+| any | owner removed | not drawn from then on; removed at the next update, which has no advance, damage, event, follow-up switch or infantry (claim 22) |
+
+**Observable order within one update.** Damage, the middle event and the end test all follow the
+advance of the same update. So:
+- an animation delivers damage on the advance that ends it,
+- when μ lies at the end limit, the middle event and the end (or the follow-up switch) happen in the
+  same tick,
+- the image frame at the end limit of a pass that ends there is never drawn, and the follow-up
+  type's first image frame is drawn from the tick of the switch.
+
+## Edge cases and quirks
+
+- **`quirks.anim_fast_rate_freezes`** (default: on). A rate field above 900 gives a delay of 0, so
+  the animation never advances and never ends (claim 2). Off: a positive rate gives *d* =
+  max(1, ⌊900 / ρ⌋). Rates of 0 or below still give 0 in both settings.
+- **`quirks.anim_random_rate_collapse`** (default: on). A random rate pair is clamped after
+  conversion, so an ascending pair collapses to its faster end and takes no draw (claim 3). Off:
+  the converted pair is put in order and the delay is a ranged draw over [min(*d*<sub>1</sub>,
+  *d*<sub>2</sub>), max(*d*<sub>1</sub>, *d*<sub>2</sub>)], with no draw when they are equal.
+  Turning it off changes the number of draws, so it must be the same on every machine of a game.
+- **`quirks.anim_loop_count_wrap`** (default: on). The remaining-pass count is taken modulo 256
+  and 255 means endless (claim 7). Off: the count is an unbounded integer. At creation it is
+  max(1, *L* × max(*m*, 1)) when *L* ≥ 0, and the animation is endless when *L* < 0. Every pass end
+  with *r* ≥ 2 lowers it by 1, so 255 is an ordinary count. At a follow-up switch *r* = *L*′ when
+  *L*′ ≥ 0, and endless when *L*′ < 0.
+- **`quirks.anim_reverse_raw_loop_end`** (default: on). A reversed animation starts at
+  λ<sub>e</sub> − 1 and restarts at λ<sub>e</sub>, without subtracting *a*, and never shows image
+  frame *a* (claim 8). Off: it starts and restarts at *k* = λ<sub>e</sub> − *a* − 1 and its pass ends
+  when *k* < 0, so it shows λ<sub>e</sub> − 1 down to *a*.
+- **`quirks.anim_pingpong_lower_turn`** (default: on). While *r* ≥ 2 the lower turn of a ping-pong
+  animation compares the stage with the start field instead of with the loop start, so it can miss
+  the turn and run blank (claim 9). Off: the lower turn while *r* ≥ 2 happens when *k* ≤
+  λ<sub>s</sub> − *a*.
+- **`quirks.anim_loop_end_from_sprite`** (default: on). An absent loop end takes the sprite end
+  *E*<sub>s</sub> even when the end field is given (claims 6 and 25). Off: an absent loop end
+  takes the end field *E*. Stock data is affected only where a type gives an end field without a
+  loop end and loops, is reversed or is a shadow type.
+- **Explicit end field or loop end 0** (no switch). Kept as 0, except for new-theater types at the
+  theater refresh (claim 25). Both are what the original does; the importer warns about an explicit
+  0.
+- **`quirks.anim_followup_start_doubled`** (default: on). The follow-up type starts at *k* = *a*′,
+  showing image frame 2*a*′ (claim 15). Off: it starts at *k*<sub>0</sub> of F3 for the follow-up
+  type: *k* = 0, or *k* = λ<sub>e</sub>′ − 1 when the animation is reversed under the follow-up
+  type (Terms).
+- **`quirks.anim_followup_keeps_step`** (default: on). At a follow-up switch σ keeps its sign while
+  the reversed test follows the follow-up type (claim 15), so an animation reversed by its old type's
+  flag can run down for ever, invisible. Off: σ is set afresh at the switch, −1 when the animation
+  is reversed under the follow-up type and +1 otherwise.
+- **`quirks.anim_translucency_levels`** (default: on). Translucency levels 11 to 15 give code 2,
+  like 6 to 10 (claim 20). Off: 11 to 15 give code 3.
+- **`quirks.anim_hide_at_level_15`** (default: on). Translucent-flag and translucency-field types
+  are hidden at *t* ≥ 15, a type with neither only at *t* > 15 (claim 20), so the owner of a fully
+  cloaked building sees some of its slot animations and not others. Off: every row hides at *t* >
+  15, so at *t* = 15 the first two rows draw with their own codes.
+- **`quirks.anim_low_detail_shows_cloaked`** (default: on). Below the translucency detail field the
+  hide rules of claim 20 do not apply, so a slot animation of a building cloaked from the viewer is
+  drawn, opaque. Off: an animation with *t* > 15 is not drawn at any detail level; below the
+  translucency detail field the code stays 0 otherwise.
+- **`quirks.anim_erasure_late_slots_opaque`** (default: on). A slot animation that starts while its
+  building is being erased is held but drawn without the erasure translucency until the next
+  lock-on of an erasing weapon onto the building (claim 21). Off: it is drawn with the erasure translucency from its start, like
+  the others.
+- **`quirks.anim_damage_starts_at_one`** (default: on). The damage accumulator starts at 1.0 when an
+  animation is created, so the first advance delivers at least 1, but at 0.0 after a follow-up switch
+  (claim 17, F5). Off: it starts at 0.0 in both cases, so the total after *n* advances is close to
+  ⌊*n c* δ⌋.
+- **`quirks.speed_normalised_delays`** (default: on, shared with S-0107, S-0108 and S-0111; glossary
+  claim G3). Claims 4 and 18.
+  Off: every animation uses its unnormalised delay at every game speed.
+- **Round-toward-zero mode** (no switch here). F4 and F5 depend on the mode; the switch
+  `quirks.chop_rounding` belongs to S-0205 (claim 5).
+- **Reduced drawing on slow machines** (departure, no switch). Claim 19.
+- **Unknown follow-up or missing type.** A follow-up name that names no animation in the list creates
+  an animation type of that name with absent-key defaults (S-0004). If no sprite resolves for it, it
+  draws nothing and its end field is 0 (claim 25), so after the switch it ends on its first advance,
+  unless it keeps σ = −1 without being reversed (claim 15), in which case it never ends.
+  An animation created with no type at all is removed by the original at once. Our engine does the
+  same, and the importer warns about the reference that caused it where the cause is in the data.
+- **Sprite missing.** An animation whose sprite cannot be resolved is updated but draws nothing; by
+  claim 25 an absent end field is then 0, so an animation created as such a type, with one pass and
+  without the ping-pong flag, ends on its first advance (claims 7 and 9 give the other cases). An end field or loop
+  end of −1 on a type that has no sprite when an animation first plays as it makes the original
+  crash. Our engine resolves it with *N* = 0, so *E* = 0, and the importer warns. This is a departure,
+  with no switch.
+
+## Import mapping
+
+All keys are in the animation's art section in the art database (S-0006, claim 8; S-0007). Value
+forms are those of S-0003.
+
+| Key | Form | Feeds | Absent |
+|---|---|---|---|
+| `Rate` | integer | ρ, stage delay (F1) | delay 1 tick; −1 keeps the held value |
+| `RandomRate` | two integers | random delay pair (claim 3) | no random rate; −1 in either place keeps that end |
+| `Normalized` | boolean | claim 4 | no |
+| `Start` | integer | *a* | 0 |
+| `End` | integer | *E* | *E*<sub>s</sub> of the first sprite found, *N* or ⌊*N*/2⌋ with `Shadow`; −1 gives *E*<sub>s</sub> of the drawn sprite; 0 is kept except for new-theater types (Terms, claim 25, F2) |
+| `LoopStart` | integer | λ<sub>s</sub> | 0 |
+| `LoopEnd` | integer | λ<sub>e</sub> | *E*<sub>s</sub> of the first sprite found, not `End` (`quirks.anim_loop_end_from_sprite`; claim 25 for a type whose earlier reads found no sprite); −1 gives *E*; 0 is kept except for new-theater types (Terms, claim 25, F2) |
+| `LoopCount` | integer | *L* (claim 7) | 0, which gives one pass |
+| `Reverse` | boolean | reversed (claim 8) | no |
+| `PingPong` | boolean | claim 9 | no |
+| `Shadow` | boolean | shadow type (claim 10) | no |
+| `RandomLoopDelay` | two integers, updates | loop delay pair (claim 11) | 0,0 (none) |
+| `Next` | type name | follow-up type (claim 15) | none |
+| `Damage` | decimal | δ (claim 17) | 0 |
+| `DetailLevel` | integer | detail field (claim 19) | 0 |
+| `TranslucencyDetailLevel` | integer | translucency detail field (claim 20) | 0 |
+| `Translucent` | boolean | fade by progress (claim 20) | no |
+| `Translucency` | integer | translucency field (claim 20) | 0 |
+| `DoubleThick` | boolean | claim 21 | no |
+| `ShouldFogRemove` | boolean | fog-remove flag (claim 24) | yes |
+| `Report` | sound name | start sound (claim 13) | none |
+| `TiberiumChainReaction` | boolean | resource chain reaction of the start event (claim 13; economy specs) | no |
+| `SpawnsParticle`, `NumParticles`, `Scorch`, `Crater`, `ForceBigCraters` | as in their own specs | middle event effects (claim 14) | none |
+| `Bouncer`, `IsMeteor` | boolean | bouncing type (Terms) | no |
+| `MakeInfantry` | integer | infantry created at the end (claim 16) | −1 (none) |
+| `Theater`, `NewTheater` | boolean | which sprites the type gets (S-0007), and so claim 25 | no |
+
+Game-wide keys:
+
+| Section and key | Form | Feeds | Absent |
+|---|---|---|---|
+| rules, combat-damage section, `C4Warhead` | warhead name | warhead of claim 17 for the type named `INVISO` | none: no damage is done |
+| rules, combat-damage section, `FlameDamage2` | warhead name | warhead of claim 17 for every other type | none: no damage is done |
+| settings file, detail level | integer | claim 19 (S-0104 Import mapping) | as in S-0104 |
+
+The type name `INVISO` is compared exactly, byte for byte, as the original's built-in name.
+
+The importer warns, so that a mod author learns of each quirk, for:
+- a `RandomRate` pair written in ascending order (claim 3),
+- a `Rate` above 900 (claim 2),
+- a `LoopCount` outside 0 to 255 other than −1 (claim 7),
+- a ping-pong type with `Start` greater than 0 (claim 9),
+- a `Next` type with `Start` greater than 0 (claim 15),
+- a `Next` type whose `Reverse` differs from that of the type naming it (claim 15),
+- `End=0` or `LoopEnd=0` written explicitly (claim 25),
+- an `End` below −1 (F4),
+- `End=-1` or `LoopEnd=-1` on a type whose sprite cannot be resolved (Edge cases),
+- a type that gives `End` but no `LoopEnd` while it loops, is reversed or has `Shadow` (claim 6).
+
+## Measurement scenarios
+
+**Common setup.** The glossary's *measurement setup*. Animations are played on open flat ground of a
+tiny purpose-made map by a trigger action that plays an animation at a waypoint marker (the trigger
+specs own its form), or by the object that normally creates them. Trigger-played animations have no
+start sound and no damage (claims 13 and 17), so scenarios that observe either use another creator:
+the explosion animation of one stock weapon, fired by a unit. Such scenarios assume the weapon's
+explosion is created with a repeat factor of 1, no loop delay and no reverse play; a pilot run with
+the unchanged animation (its pass count and first image frame) checks that. Because rules layers
+cannot change animation fields (S-0006, claim 8), every scenario that needs particular field values
+uses named test data: a **test expansion archive** holding a copy of the art database with the
+listed test sections added (as in S-0103 and S-0007), each naming a stock sprite; the archive is
+removed after the run. Record per tick, with a recorder that reads the running game's state (the
+animation's image frame, a target's health) at the same point of every tick, or with a screen
+capture that keeps every drawn frame together with the tick counter. The *hold* of an image frame is
+the number of consecutive ticks on which it is recorded. A sprite with *N* image frames whose image
+frames are visibly different is chosen for each test section; *N* is read from the sprite at measurement
+time. Game speed 4 unless stated. Runs: one run per listed case, since playback is deterministic,
+unless a scenario gives another number. Where a scenario needs particular rules values (a
+building that can cloak), it sets them in the test map's override section, which rules layering allows.
+
+- **AN1 (claims 1, 2, 5, 6, 10, 16).** Test types T1 (rate 100, no loop fields), T2 (rate 300, end 6),
+  T3 (rate 300, end *N* + 2), T4 (rate 300, shadow flag, a sprite with shadows), T5 (rate 900). Play
+  each once, in a run of its own, by a trigger action of a one-time polled trigger whose only event is
+  elapsed-time (S-0011, claim 13). The polling of map triggers sets it off, so the animation is
+  created before the turn pass of its tick (S-0203, claim 1), and no object leaves play on the test map during the
+  run, so no removal costs it a turn (S-0203, claim 10).
+  - Observable: the sequence of image frames, the hold of each, lifetime in ticks.
+  - Runs: one per type; T5 three times, with different event values.
+  - Expected: T1 shows 0 … *N* − 1 with every image frame, the first included, held ⌊900/100⌋ = 9
+    ticks, and its lifetime is exactly 9*N* ticks. T2 shows 0 … 5, 3 ticks each. T3 shows 0 … *N* −
+    1 and then nothing for 2 × 3 ticks before it ends. T4 shows image frames 0 … ⌊*N*/2⌋ − 1, each
+    with a shadow taken from the second half. T5 holds its first image frame exactly 1 tick in every
+    run, since it takes its first turn in the tick it is created (claim 5), and every later one
+    exactly 1 tick.
+  - Falsified if: any hold of T1 or T2 differs from ⌊900/ρ⌋, T5's first hold is not 1 in any run
+    (a first hold of 2 would mean that the animation took its first turn only in the next tick) or a
+    later hold is not 1, the image frame at the end limit is ever drawn, T3 ends without showing
+    nothing for exactly 2 × 3 ticks after image frame *N* − 1, or T4 plays into its shadow image
+    frames.
+- **AN2 (claim 2).** Test type with rate 1000, played by a trigger action.
+  - Observable: the image frame per tick for 600 ticks, and whether the animation is removed.
+  - Runs: one.
+  - Expected: it shows its first image frame on every one of the 600 ticks and is not removed.
+  - Falsified if: any other image frame is recorded, or it is removed within the 600 ticks.
+- **AN3 (claims 3, 12).** Test types R1 (random rate 225, 450: ascending) and R2 (random rate 450,
+  225: descending), played by a trigger action.
+  - Observable: the hold per image frame of each run, and its first image frame; with a recorder
+    that reads the state of the scenario random stream, the raw values the scenario random stream consumes between the tick
+    before the run's animation is created and the tick it is created, compared with the
+    raw values S-0202's range rule predicts for the state recorded before that tick.
+  - Runs: 30 per type, in separate games or at separate times.
+  - Expected: R1 always holds ⌊900/450⌋ = 2 ticks. Each run of R2 holds one of 2, 3 or 4 ticks
+    throughout, and all three values occur in the 30 runs (under the hypothesis a value is missing
+    with probability at most 3 × (2/3)<sup>30</sup>, about 0.002 %). Every run starts at image
+    frame 0.
+  - Expected (draws): R1 consumes no raw value for the delay (no ranged draw); R2 consumes the raw
+    values of one ranged draw over its converted range, which the recorded state before creation
+    predicts value for value.
+  - Falsified if: R1 consumes a raw value for the delay, R2 consumes values the range rule does not
+    predict from the recorded state, R1 ever holds 3 or 4 ticks, an R2 run holds a value outside 2 to 4, fewer than
+    three distinct values occur in R2's 30 runs, or a run starts elsewhere.
+- **AN4 (claims 4, 17, 18).** Test types U (rate 90, not normalised) and V (rate 90, normalised),
+  played by a trigger action at game speeds 0, 3 and 6. In a second part, the test copy of the art
+  database gives the explosion animation of one stock weapon the fields of V plus damage 0.25, end
+  8 and one pass; a unit fires the weapon at a stock building that the game-wide warhead damages
+  (checked in a pilot run), at game speeds 0 and 6.
+  - Observable: the hold per image frame of U and V; in the second part, the ticks at which the
+    building's health drops, apart from the weapon's own impact tick.
+  - Runs: one per type and speed; the second part three shots per speed.
+  - Expected: U holds 10 ticks at every speed. V holds N(10, *s*) = ⌊80/(*s* + 1)⌋ ticks: 80, 20 and
+    11. In the second part the health drops on the 1st, 4th and 8th advance (F5), so the drops
+    are 3 × N(10, *s*) and then 4 × N(10, *s*) ticks apart: 240 and 320 ticks at speed 0, 33 and 44
+    at speed 6.
+  - Falsified if: U's hold changes with speed, V's does not follow N, or the drops fall on other
+    advances or other spacings.
+- **AN5 (claims 6, 7).** Test types, all with rate 300 and played by a trigger action: W1 with start
+  2, loop start 4, loop end 7, end 9, loop count 3, on a sprite with *N* ≥ 12; W2 with loop count
+  256; W3 with loop count −1; W4 with end 6, loop count 2 and no loop start or loop end, on a sprite
+  with *N* ≥ 10.
+  - Observable: the sequence of image frames and whether and when the animation is removed.
+  - Runs: one per type; W3 watched for 2000 ticks.
+  - Expected: W1 shows 2 3 4 5 6, 4 5 6, 4 5 6 7 8 9 10, then is removed. W2 plays one pass and is
+    removed. W3 is still looping after 2000 ticks. W4 shows 0 … *N* − 1 and then 0 … 5 (the absent
+    loop end is *N*, claim 6), then is removed.
+  - Falsified if: any pass of W1 deviates, W2 plays more than one pass, W3 ends, or W4's first pass
+    stops at 5.
+- **AN6 (claim 8).** Test types Q1 (reverse flag, start 0, end 8, loop end 8, loop count 2, rate
+  300) and Q2 (start 3, otherwise as Q1), on a sprite with *N* ≥ 12, played by a trigger action.
+  - Observable: the sequence of image frames until removal.
+  - Runs: one per type.
+  - Expected: Q1 shows 7 … 1, then 8 … 1, then is removed; image frame 0 never shown. Q2 shows 10
+    (its first pass ends on the first advance, claim 8), then 11, 10, 9 … 4, then is removed.
+  - Falsified if: Q1 shows image frame 0, Q1's first pass starts at 8, or Q2's sequence differs.
+- **AN7 (claim 9).** Test types P1 (ping-pong, loop count 1, end 6, rate 300), P2 (ping-pong, loop
+  count −1, start 0, loop end 5, rate 300), P3 (ping-pong, loop count −1, start 4, loop start 4,
+  loop end 8, rate 300), P4 (ping-pong, shadow flag, loop count 1, end 6, loop end 3, rate 300, a
+  sprite with shadows and *N* ≥ 12), played by a trigger action.
+  - Observable: the sequence of image frames, and whether the animation is removed within 2000
+    ticks.
+  - Runs: one per type.
+  - Expected: P1 cycles 0 … 6, 5 … 0, 1 … without ending, image frame 6 drawn only if *N* > 6; P2
+    cycles 0 … 5 … 0 without ending; P3 shows 4 … 8, then 7 … 0, then nothing, without ending; P4
+    shows 0, 1, 2 and is removed, without turning.
+  - Falsified if: P3 turns at image frame 4 coming down, P1, P2 or P3 is removed, or P4 shows image
+    frame 3 or keeps playing.
+- **AN8 (claim 10).** Test types S1 (shadow flag, loop end 3, end 6, loop count 1, rate 300), S2
+  (shadow and flat flags) and S3 (shadow and tiled flags), each on a sprite with shadows, played by
+  a trigger action.
+  - Observable: the sequence of image frames of S1; whether any shadow pixels appear under S2 and
+    S3 (screen capture against flat ground).
+  - Runs: one per type.
+  - Expected: S1 shows 0, 1, 2 and is removed. No shadow is drawn under S2 or S3.
+  - Falsified if: S1 shows image frame 3, or a shadow appears under S2 or S3.
+- **AN9 (claims 11, 13).** The test copy of the art database gives the explosion animation of one
+  stock weapon a loop count of 3, a random loop delay of 30, 60, a start sound and a rate of 300; a
+  unit fires that weapon at open ground. A second run plays the same animation by a trigger action.
+  - Observable: ticks between passes, start sounds heard, image frame during the gap.
+  - Runs: 20 animations per run.
+  - Expected: every gap is max(3, *D* + 1) with *D* from 30 to 60, the loop start image frame is
+    shown during the gap, and the sound plays at creation and after each of the two gaps (three
+    times per animation). The trigger-played run shows the same gaps and image frames and no start
+    sound.
+  - Falsified if: a gap lies outside 31 … 61, the animation vanishes during a gap, the weapon run's
+    sound plays once per animation, or the trigger-played run plays the sound.
+- **AN10 (claims 13, 14).** A test type with the scorch flag (no crater flag), rate 300, on a sprite
+  with *N* ≥ 4, played by a trigger action, once with start 0 (M1) and once with start ⌊*N*/2⌋ + 1
+  (M2).
+  - Observable: the tick at which a scorch mark appears in the animation's cell, read by the
+    recorder from the cell's state, and the tick each image frame is first shown.
+  - Runs: one per type.
+  - Expected: for M1 a scorch mark appears on the tick image frame ⌊*N*/2⌋ is first shown; M2 never
+    makes one. This also shows that trigger-played animations keep their middle events.
+  - Falsified if: M1 makes no scorch mark or makes it on another tick, or M2 makes one.
+- **AN11 (claim 15).** Test types F (rate 300, end 4, follow-up G) and G (start 2, loop count 0, rate
+  150, no end field, sprite with *N*<sub>G</sub> image frames); a second pair F2 (reverse flag, end
+  4, loop end 4, rate 300, follow-up G2) and G2 (start 2, end 6, rate 300, no reverse flag). F and F2
+  are played by a trigger action.
+  - Observable: the image frames shown, their holds, and whether the animation is removed within
+    2000 ticks.
+  - Runs: one per pair.
+  - Expected: F shows 0 1 2 3, then G shows image frames 4, 5, … *N*<sub>G</sub> + 1 at 6 ticks each
+    (the last two blank), one pass, then removal. F2 shows 3, 2, 1, then G2 shows 4, 3, 2, 1, 0 and
+    then nothing, and is not removed.
+  - Falsified if: G starts at image frame 2 or plays two passes, G2 plays upwards, or G2 ends.
+- **AN12 (claims 17, 18).** The test copy of the art database gives the explosion animation of one
+  stock weapon a damage of 0.375, rate 300, one pass and end 10. A unit fires the weapon at a stock
+  building that the game-wide warhead damages (checked in a pilot run). A control run plays the same
+  animation by a trigger action next to the building.
+  - Observable: the building's health per tick, read by the recorder, and the ticks of image frame
+    changes.
+  - Runs: three shots, one control.
+  - Expected: apart from the weapon's own impact tick, health drops on the 1st, 3rd, 6th and 8th
+    advances and on no others (F5's pattern 1, 0, 1, 0, 0, 1, 0, 1, 0, 0), each on the tick of an
+    image frame change. The control run delivers nothing.
+  - Falsified if: the first advance delivers nothing, a drop falls on another advance or between
+    advances, or the control run delivers damage. (Totals are not compared, since warhead scaling of
+    a 1-point hit belongs to the combat specs.)
+- **AN13 (claim 19).** Test type with detail field 2, rate 300, played by a trigger action at detail
+  levels 1 and 2.
+  - Observable: whether the animation's pixels appear (screen capture), and its lifetime in ticks
+    from the recorder.
+  - Runs: one per detail level.
+  - Expected: no pixels at level 1, visible at level 2, and the same lifetime at both.
+  - Falsified if: it is drawn at level 1, not drawn at level 2, or the lifetimes differ.
+- **AN14 (claims 20, 21, F4).** Test types: X1 translucent flag, end 10, rate 300; X2..X5
+  translucency 25, 50, 75, 40; X6 translucent flag with translucency detail field 2, at detail level
+  1; X7 translucent flag, explicit end 0, rate 9 (100 ticks). A test building with two slot
+  animations, one with the double-thick flag and one without, is hit by an erasing weapon.
+  - Observable: the blend of each image frame against a uniform background (screen capture).
+  - Runs: one per type; the erasure case one run.
+  - Expected: X1 opaque for stages 0–2, 25 % for 3–4, 50 % for 5, 75 % for 6–9. X2..X4 at 25, 50,
+    75 %; X5 opaque; X6 opaque. X7 shows stage 0 opaque for 100 ticks and ends. From the tick the
+    erasing weapon locks on, the double-thick slot animation is drawn at 75 % and the other at 50 %.
+  - Falsified if: stage 6 of X1 is drawn at 50 % (that would mean round-to-nearest at 53 or 24
+    bits), stage 2 is translucent, X7 is drawn translucent, the erased building's slot animations
+    keep their earlier look, or a value differs.
+- **AN15 (claim 22).** A stock vehicle with an attached animation (for example a burning or smoking
+  animation a damaged vehicle carries), driven across the map and then destroyed.
+  - Observable: per tick, the animation's position and the vehicle's position (recorder), and the
+    tick on which each is removed.
+  - Runs: three.
+  - Expected: the difference between the two positions stays constant while the vehicle moves; the
+    animation is no longer drawn from the tick the vehicle is removed, and it is gone from the game
+    no later than the next tick, with no image frame change in between.
+  - Falsified if: the difference changes while attached, the animation is drawn after the vehicle's
+    removal, or its image frame changes after that.
+- **AN16 (claims 21, 23).** A test building that needs power, with test slot animations of rate 9
+  (100 ticks each image frame).
+  - Part (a), power: one *freeze-unpowered* slot; power is cut for 250 ticks just after an advance.
+  - Part (b), erasure: the same building, powered, is hit by an erasing weapon whose firer is
+    destroyed 150 ticks after it locks on, before the building is erased. A second run cuts the
+    power before the weapon locks on and restores it only 300 ticks after the firer is destroyed.
+  - Part (c), late slot: a slot that starts when power comes back (*light-unpowered*), with power
+    cut before the erasing weapon locks on and restored while the building is being erased.
+  - Part (d), loop delay while held: a *freeze-unpowered* slot of a test type with loop count −1,
+    random loop delay 200, 200, a start sound and rate 300; power is cut within the 200 ticks after a
+    pass ends and restored 400 ticks later.
+  - Observable: the slot animations' image frames per tick, their blend (screen capture), start
+    sounds, and the ticks at which the erasing weapon fires (recorder).
+  - Runs: one per part.
+  - Expected: (a) no advance while unpowered; one advance on the first tick after power returns.
+    (b) no advance during the erasure; one advance on the first tick after the firer is destroyed
+    and the translucency gone from then on; in the second run no advance until the power returns.
+    (c) the slot starts on its first image frame, opaque, stays opaque at least until the erasing
+    weapon's next shot, if it fires again, and does not advance until the firer is destroyed. (d) the start sound plays 200 updates after the pass end although the building is
+    unpowered; the image frame stays on the loop start until power returns.
+  - Falsified if: (a) or (b) waits a further 100 ticks after release, an image frame changes while
+    held, the second run of (b) advances before power returns, the late slot of (c) is drawn
+    translucent before any further shot of an erasing weapon or advances while the building is being
+    erased, or (d) plays no start sound while unpowered.
+- **AN17 (claim 24).** With fog of war on, two test buildings with slot animations, once seen and then
+  fogged. The test copy of the art database leaves the fog-remove flag absent (so set) on the first
+  building's slot animation types and sets it off on the second's.
+  - Observable: whether the live slot animations are drawn while the buildings are under fog
+    (screen capture), and whether their image frames change on screen.
+  - Runs: one.
+  - Expected: the first building's live slot animations are not drawn while fogged (the remembered
+    image shows instead); the second building's slot animations keep animating under fog.
+  - Falsified if: the first building's slot animations keep animating under fog, or the second's
+    stop.
+- **AN18 (claim 25).** The test expansion archive also holds two stock sprites copied under new
+  names: one with *N*<sub>1</sub> image frames under an image name *I* to which S-0007's letter
+  substitution applies, and one with *N*<sub>2</sub> ≠ *N*<sub>1</sub> image frames under the name
+  that letter substitution gives *I* in the test map's theater (S-0007 claim 14, scenario A8). Four
+  test types name *I*, each with rate 300, one pass and no theater flag: Y1 with the new-theater
+  flag and no end field, Y2 with the new-theater flag and end −1, Y3 with the new-theater flag and
+  end 0, Y4 without the new-theater flag and end 0. Each is played by a trigger action.
+  - Observable: the image frames shown and the number of advances before removal.
+  - Runs: one per type.
+  - Expected: Y1, Y2 and Y3 draw the *N*<sub>2</sub> sprite. Y1 ends after *N*<sub>1</sub>
+    advances, Y2 and Y3 after *N*<sub>2</sub>. Y4 draws the *N*<sub>1</sub> sprite's image frame
+    0 for 3 ticks and ends on its first advance.
+  - Falsified if: Y1 ends after *N*<sub>2</sub> advances, Y2 after *N*<sub>1</sub>, Y3 on its
+    first advance, or Y4 plays more than one image frame.
+- **AN19 (claim 14, height condition).** The test copy of the art database gives the explosion
+  animation of one stock weapon the scorch flag (and no crater flag). A unit fires the weapon (a) at
+  a unit on open flat ground, (b) at a unit on raised ground at least one height level up, (c) at a
+  unit standing on a high bridge's deck, and (d) at an aircraft in flight over open ground. If that
+  weapon cannot hit aircraft, (d) uses a stock anti-air weapon whose explosion animation the test
+  copy gives the same scorch flag. Weapon impacts are used, not a trigger action, so that the
+  animation is created at the target's height.
+  - Observable: whether a scorch mark appears in the impact cell, read per tick by the recorder from
+    the cell's state (a mark under a deck may be hidden on screen).
+  - Runs: ten shots per case.
+  - Expected: runs (a) and (b) leave scorch marks; runs (c) and (d) leave none.
+  - Falsified if: (b) makes none (the test would then use the world height), (c) makes one (it would
+    then use the height above the surface), or (d) makes one (no height test). If the smudge specs
+    show that a scorch mark is never placed in a bridge cell, (c) cannot tell the two heights apart
+    and the choice stays at medium confidence.
+- **AN20 (claim 17, factor 5).** A stock tree is set on fire with a weapon that ignites trees (found
+  in a pilot run). A burning tree carries a fire animation attached to it, taken from a game-wide
+  list of tree-fire animations. The test copy of the art database gives every animation of that list
+  a damage of 0.5 and a rate of 300. A control run with the unchanged fire animations records the
+  drops the tree takes without the test damage.
+  - Observable: the tree's health per tick (recorder) and the ticks of the fire animation's image
+    frame changes.
+  - Runs: three trees, one control.
+  - Expected: beyond the control's drops, the tree's health drops on every advance of the fire
+    animation, each on the tick of an image frame change (F5 with *c*δ = 2.5: deliveries 3, 3, 2, 3,
+    2, 3, 2, …, all exact in binary).
+  - Falsified if: some advance brings no extra drop, in particular the 3rd and 5th (unattached, F5
+    with δ = 0.5 delivers 1, 1, 0, 1, 0, 1, 0, …), or an extra drop falls on a tick without an
+    advance. A pilot run checks that a 2-point delivery of the game-wide warhead damages the tree.
+    If it does not, the scenario is inconclusive.
+- **AN21 (claim 13, chain reaction).** The test copy of the art database gives the explosion
+  animation of one stock weapon the chain-reaction flag (no crater or scorch flag). A unit fires the
+  weapon at a cell holding resource; a second run plays the same animation by a trigger action on
+  another cell holding resource; a control run fires the weapon with its unchanged explosion
+  animation.
+  - Observable: the amount of resource in the target cell per tick, read by the recorder.
+  - Runs: one each.
+  - Expected: in the first run the cell holds no resource from the tick the explosion animation is
+    created (its start event, claim 13). The trigger-played run and the control leave the cell's
+    resource unchanged.
+  - Falsified if: resource remains in the cell after the first run's explosion, or the trigger-played
+    run or the control removes it.
+- **AN22 (claim 20, cloaked buildings).** A skirmish on a test map whose override section makes a
+  stock building type that has slot animations able to cloak. The test copy of the art database gives
+  its slot animations three test types: K1 with neither the translucent flag nor a translucency field,
+  K2 with the translucent flag, K3 like K1 but with a translucency detail field above the detail
+  level, played at detail level 1 (so K3's translucency detail field is 2, the others' 0). Three
+  copies of the building stand on the map: one owned by the measuring player, one by a computer
+  house allied with the measuring player in both directions, one by an enemy computer house; each
+  stands where the measuring player sees it, and no sensors of the measuring player cover it. A pilot run confirms that
+  the building cloaks (it is drawn see-through to its owner once cloaked).
+  - Observable: per drawn frame, whether each slot animation's pixels appear and their blend
+    against the ground (screen capture), once each building is fully cloaked; in the enemy view also
+    during the cloaking steps, together with whether the building itself is drawn.
+  - Runs: one.
+  - Expected: own and allied building: K1 at 50 %, K2 not drawn, K3 drawn opaque. Enemy building:
+    K1 and K2 not drawn, K3 drawn opaque. During the last steps before full cloak, the enemy view
+    may show K1 at 50 % and K2 with its fade code while the building itself is no longer drawn
+    (recorded for the cloaking specs; it does not falsify this spec).
+  - Falsified if: any K1 or K2 of the enemy building is drawn, the own or allied building's K1 is
+    not drawn at 50 % or its K2 is drawn, or K3 is hidden. If the building does not cloak in the
+    pilot run, the scenario is inconclusive. The campaign case (an allied building cloaked from the
+    viewer) needs a test mission; it is not covered here.
+
+## Open questions
+
+- Whether the first image frame is held one extra tick when *d* = 1 depends on the part of the tick
+  that creates the animation (claim 5). The specs of the creators (combat, structures, triggers)
+  should say which part that is for each creator. For the animations that a shot or a death creates
+  it also depends on whether the animation enters play before or after the projectile or object
+  that comes with it, which S-0203 (claim 2) leaves open: if the projectile leaves play in its own
+  turn and the new animation directly follows it in the update order at the end of that turn, that
+  removal costs the animation its first turn (S-0203, claim 10).
+- Which creators give a repeat factor *m* > 1 or reverse play, and which give an initial loop delay,
+  is not listed here; the specs of those creators (combat, structures) should say so.
+- The terrain specs can end the looping of the animations attached to a terrain object early, by
+  making their current pass the last (the fire on a burning tree). When that happens is theirs to
+  say and to measure.
+- A creator can also ask for translucent drawing of its own, which would combine with the codes of
+  claims 20 and 21 as in Terms. No creator is known to ask for one; the creators' specs should confirm it.
+- Where exactly the shadow image is darkened, and with which depth bias, belongs to S-0102; this spec
+  says only that it is drawn.
+- A "random start" of animations has been suggested. No random starting image frame exists (claim 12); if a
+  measurement shows one, this spec needs a revision.
+- When a building's fade level changes, and exactly which viewers a fully cloaked building is
+  cloaked from (Terms; the campaign case is not covered by AN22), should be settled by the cloaking
+  and structures specs. This spec only takes *t* from them (claim 20).
+- When an erasing weapon locks onto a building and lets go, and how several erasing weapons on one
+  building interact, belong to the combat specs; this spec uses only the resulting *being erased*
+  state (claims 21 and 23).
