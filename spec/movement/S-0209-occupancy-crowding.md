@@ -2,13 +2,13 @@
 id: S-0209
 title: Cell occupancy and crowding (capacity, entry outcomes, waiting, re-routing, scatter requests)
 topic: movement
-revision: 13
+revision: 14
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-10
 measurements: []
-requests: []
+requests: [Q-0019, Q-0020]
 supersedes: []
 ---
 
@@ -24,20 +24,18 @@ and scatter destinations to S-0208, and crushing to S-0210.
 
 ## Terms
 
-Cited specs: S-0003, S-0004, S-0006, S-0105 and S-0107 are approved. S-0203 (tick order), S-0204
-(coordinates and facing), S-0205 (number domains), S-0207 (ground vehicle movement), S-0208 (infantry movement), S-0210 (crushing), S-0211 (land types and passability),
-S-0212 (pathfinding), S-0213 (human orders), S-0214 (order targeting rules) and S-0215 (behaviours)
-are drafts of the same batch. Claim, formula, table and row labels cited from drafts are those of
-their current drafts. S-0204 and S-0205 in particular are cited by claim and formula as drafts of
-the batch, not as planned specs: glossary revision 6 (Conventions) lists them among the drafts of
-the batch, where earlier revisions of the glossary listed them as planned. This spec is signed off
-together with that glossary revision and with those drafts.
+Cited specs: S-0003, S-0004, S-0006, S-0105, S-0107, S-0203 (tick order), S-0204 (coordinates and
+facing), S-0205 (number domains), S-0207 (ground vehicle movement), S-0208 (infantry movement),
+S-0210 (crushing), S-0211 (land types and passability), S-0212 (pathfinding), S-0213 (human
+orders), S-0214 (order targeting rules) and S-0215 (behaviours) are approved specs of the index in
+`spec/README.md`. Claim, formula, table and row labels cited from them are those of the revisions
+that index lists. This revision of the spec is signed off together with glossary revision 9.
 
-The glossary cited is glossary revision 6, a draft of the same batch. Its terms are used as defined
+The glossary cited is glossary revision 9. Its terms are used as defined
 there, in particular *cell*, *lepton*, *tick*, *infantry*, *vehicle*, *building*, *aircraft*,
 *overlay*, *house*, *human-controlled*, *bridge deck*, *scatter*, *disguise*, *height level*,
 *locomotor*, *recorder*, *computer-controlled* and *movement zone*. Three of the terms this spec
-relies on first appear in that revision: *AI house* and *house skill level*, which record the
+relies on first appeared in glossary revision 6: *AI house* and *house skill level*, which record the
 project lead's decision that AI houses follow the unit rules of human-controlled houses (both are
 repeated in the list below), and the *measurement setup* with its five allowances, among them
 named test files and scripted input. Earlier revisions of the glossary
@@ -45,7 +43,8 @@ lack them. Terms from S-0208:
 *standing position* (centre, top, right, left, bottom, numbered 0 to 4 in that order in its table
 P), *position class*, *side positions*, *walking target*, *scatter request* (with its *threat point*
 and its *forced* and *move-anywhere* options), *enterable*, *tether link*, *target*,
-*destination* and *locomotor destination*. From S-0107: *has movement in progress*, *fraidycat*, and the veterancy ranks. From
+*destination* and *locomotor destination*. From S-0107: *has movement in progress* and *fraidycat*. The veterancy ranks are those of the
+glossary (*veterancy rank*). From
 S-0207: *track*, *track target*, *two-cell curve*, a curve's *chain point* and *entry point* (its
 claim 8), and a vehicle type's *passive flag*. From S-0204: an object's *position* (its claims 1 and 3; a building's position is the centre of
 the top-left cell of its foundation) and a building's *reference point* (its claim 4). From
@@ -57,7 +56,7 @@ terrain-object type, the *laser-fence flag* and *firestorm-wall flag* of a build
 house's *firestorm*, the passability categories (*wall-like* among them) and the movement zones
 (*infantry* and *infantry-destroyer* among them) of its claims 11 and 12. From S-0212: *train* (a type marked as a train), *search layer* (its Terms: the ground or the deck of a bridge cell, as a place for the path search), and from its claim 27 what *counts as moving* for an occupant (it has a destination, is turning, or its locomotor reports it moving; a building never counts as moving) and its *close case*. From S-0210 (claim 1): *crusher* and *crushable* by a crusher. From S-0004: an overlay type's *registration index*. Terms used by this spec:
 
-- **AI house, house skill level.** These two terms are those of glossary revision 6, repeated here
+- **AI house, house skill level.** These two terms are those of the glossary (revision 9; first given in revision 6), repeated here
   in the form this spec uses them, so that the spec can be read with an earlier glossary
   revision. Where the two texts differ, the glossary entries are meant.
   - An *AI house* is a house of our engine that our own AI plays, in place of the original's
@@ -144,6 +143,9 @@ house's *firestorm*, the passability categories (*wall-like* among them) and the
     of claims 4 and 5.
 
   An object without an owner, such as a terrain object, is allied with no house, in either view.
+  A wall's owner is the house that S-0210 (claim 14) gives it; a wall without an owner, which
+  includes every map-placed wall with no qualifying building, counts as owned by another house
+  in the wall rows.
   So a terrain object always falls under the enemy rows of claims 4 and 5, and the attack test of
   claim 9 finds it not allied.
   - Confidence: high for each of these views, and for objects without an owner.
@@ -174,7 +176,8 @@ house's *firestorm*, the passability categories (*wall-like* among them) and the
   truncated mean damage of its weapons, not their plain sum, and for a vehicle a primary weapon or
   the train flag. A walker is *armed* when its *mean damage* is positive. Let *W* be the set of weapons
   the walker has in its primary and secondary slots at its current veterancy rank (an elite unit has
-  the elite weapon of a slot when its type gives one, otherwise the ordinary one; S-0107 ranks), *n*
+  the elite weapon of a slot when its type gives one, otherwise the ordinary one; glossary *veterancy
+rank* and *elite weapon*), *n*
   the number of weapons in *W* (0, 1 or 2), and *d*(*w*) and *a*(*w*) the damage field and the
   ambient-damage field of a weapon *w*:
 
@@ -245,24 +248,27 @@ house's *firestorm*, the passability categories (*wall-like* among them) and the
   sabotage or otherwise reach. Here it is the unit's destination or target, while the unit is in a
   behaviour that has a mission target. The behaviour specs own which behaviours have one (Open
   questions).
-- **Gate.** A building type that units can pass through while it is open. Opening and closing
-  belong to the structure specs.
+- **Gate.** A building type that units can pass through while it is open. When a gate is open or
+  closed, how it starts (closed) and how it opens and closes are S-0215's (claim 35); the
+  *closed friendly gate* outcome of this spec is what makes it open.
 - **Close-enough distance.** A game-wide imported distance in leptons (Import mapping). A unit
   within it of its destination counts as having arrived when the last cells are occupied.
 - **Blockage delay.** A game-wide imported number of ticks (Import mapping). A unit waits this long
   behind moving blockers before it searches a path that avoids them.
 - **Path retry timer.** A per-unit timer that delays the next path search after a failed one. Its
   length belongs to S-0212.
-- **Elite.** A unit whose veterancy rank is the highest (S-0107).
+- **Elite.** A unit whose veterancy rank is the highest (glossary *veterancy rank*).
 - **Scatter veterancy ability.** An ability that a unit type can be given for a veterancy rank in the
   imported data (Import mapping). A unit has it when the data gives it to the unit's type at the
-  unit's current veterancy rank; the veterancy specs own the abilities and how the ranks share them.
+  unit's current veterancy rank; the spec that glossary *veterancy ability* names owns the
+  abilities and which rank grants each.
   This spec uses only this one (claim 11).
-- **Invulnerable.** Protected by an effect that makes an object take no damage for a time (the
-  superweapon specs own these effects).
+- **Invulnerable.** Protected by an effect that makes an object take no damage for a time: the
+  glossary's *temporarily invulnerable*. How the effects start and end belongs to
+  the superweapon specs.
 - **Parasite, victim.** A unit whose weapon attaches it to another unit, which it then damages from
-  inside, is a *parasite*; the unit it is attached to is its *victim*. The combat specs own
-  parasites. Here the walker is the parasite.
+  inside, is a *parasite*; the unit it is attached to is its *victim*. Parasites belong to
+  the specs that glossary *parasite, victim* names. Here the walker is the parasite.
 - **Enslaved unit, master, master's unloading cell.** An *enslaved unit* is a unit that works for
   another object, its *master* (for example the slaves of a slave-miner harvester); the economy specs
   own them. The *master's unloading cell* is the cell the master stands in, or, for a master that is
@@ -342,7 +348,22 @@ house's *firestorm*, the passability categories (*wall-like* among them) and the
    - *Vehicles.* A vehicle sets the vehicle-present flag of the cell layer its position is in. When it
      starts a movement step into a neighbouring cell, it also sets that cell's flag at once, before
      its position is in it. When the step is a two-cell curve (S-0207 claim 7), it sets the flag of
-     both cells of the curve at once.
+     both cells of the curve at once. A vehicle that drives on tracks clears a flag at three
+     moments, each time in the cell layer of its position at that moment:
+     - when it passes the first point of a track (S-0207 claim 3) while it is between steps (Terms),
+       it clears the flag of the cell it stands in, which is the cell it is leaving. Its position is
+       then still in that cell, and stays there for about half a step,
+     - on a two-cell curve, when it reaches the curve's release point (S-0207 table T1), it clears
+       the flag of the curve's first cell, while its position is still in that cell,
+     - when it is taken out of a cell's list while it is between steps (for example when it leaves
+       the map), it clears the flag of that cell.
+
+     So a vehicle at rest keeps the flag of its cell, the target cell of its last track keeps the
+     flag until the vehicle makes progress on its next track, and a cell it is leaving loses the
+     flag before the vehicle's position leaves it. While the vehicle is still listed there, the
+     occupant rows of claims 4 and 5 (row VP1 for the vehicle itself) still see it. Moving into a
+     new cell during a track clears nothing. When hovering vehicles, ships and walking vehicles
+     clear their flags is not established (Open questions).
    - *Buildings.* A building sets the building-present flag of its foundation cells.
    - *Terrain objects.* A terrain object marks the side positions that its type's side-position
      pattern (Terms) gives, in the ground layer of its cell. It never sets the infantry house, and it
@@ -362,13 +383,15 @@ house's *firestorm*, the passability categories (*wall-like* among them) and the
      for "the most recent one's house wins"; scenario C26, parts b to f, for a reserved position and
      its house before the walker is listed), for the vehicle flag (scenario C2, parts c and d; scenario C26, parts a1 and a2, for the flag set
      at the start of a step), for
-     the building flag (scenario C10, part c, through the free-cell test of S-0212 claim 25) and for
+     the building flag (scenario C10, part c, through the free-cell test of S-0212 claim 25), for the
+     moments at which a driving vehicle clears its flag (scenario C28), and for
      the terrain marks (scenario C16). `unmeasured` for the
      object-present flag: every stock object known to set it, an aircraft on the ground, also gets a
      value of its own in claim 4, so the flag's own effect (claim 6's no-position case) has no known
      stock trigger.
    - Confidence: high for the infantry part and the terrain marks. Medium for the vehicle, building
-     and object-present flags: when a vehicle clears its flag is not known.
+     and object-present flags, and for the three moments at which a driving vehicle clears its flag
+     (inferred, not observed). Low for the clearing when a vehicle is taken out of a cell's list.
 
 2. **Three side positions make a cell full for infantry.** A cell layer counts as full for an
    arriving infantry unit when its right, left and bottom positions are all taken. The centre and the
@@ -671,7 +694,7 @@ house's *firestorm*, the passability categories (*wall-like* among them) and the
    | VP18 | the object that is the guard spot of the vehicle, its behaviour *area guard* | blocked | medium | C24 (e) |
    | | **Allied occupants** (the vehicle's view) | | | |
    | VP19 | allied building that does not count as moving | blocked | medium | S-0212 scenario P7 |
-   | VP20 | allied vehicle, infantry unit or aircraft that does not count as moving (S-0212 claim 27) | stationary friendly | medium | S-0212 scenario P7 (vehicles); C20 (a) (infantry), (d) (aircraft); C25 (c) for the view |
+   | VP20 | allied vehicle, infantry unit or aircraft that does not count as moving (S-0212 claim 27) | stationary friendly | medium | S-0212 scenario P7 (vehicles); C20 (a1), (a2) (infantry), (d1), (d2) (aircraft); C25 (c) for the view |
    | VP21 | allied unit that counts as moving, in the close case of S-0212 claim 27 | blocked | medium | S-0212 scenario P14 run 5 |
    | VP22 | allied vehicle (or aircraft, low) that counts as moving and is between steps, or any allied unit that counts as moving and is at a chain point (Terms) | moving blocker | medium | C5 (a) with a vehicle (scenario C20); S-0212 scenario P14; U6 for the split from row VP23 |
    | VP23 | any other allied unit that counts as moving (an infantry unit among them) | none (the record table then decides) | medium | C20 (b); U6 for the split from row VP22 |
@@ -740,8 +763,9 @@ house's *firestorm*, the passability categories (*wall-like* among them) and the
 
    *5f. The outcome that governs the start of a step.* When a vehicle whose locomotor drives, moves
    as a ship, or walks begins a movement step, the next cell's entry outcome is checked. The value
-   that governs the step is that outcome with the substitutions of this table. What the vehicle does
-   with that value belongs to the vehicle-movement specs (S-0207). The substitutions hold for this
+   that governs the step is that outcome with the substitutions of this table. What a driving
+   vehicle does with that value is S-0207 claim 15. For the ship and walking-vehicle locomotors it
+   belongs to their own movement specs, which are not written yet. The substitutions hold for this
    check only: path costs (S-0212) and order targeting (S-0213, S-0214) use the entry outcome
    unchanged.
 
@@ -902,11 +926,12 @@ house's *firestorm*, the passability categories (*wall-like* among them) and the
     - A walker sends one under claim 8: move-anywhere, forced, no threat point.
     - A crushing vehicle sends one ahead of itself (S-0210 claim 7): forced, not move-anywhere, no
       threat point.
-    - A ground vehicle blocked by friendly units sends move-anywhere, forced requests too. That
-      belongs to the vehicle-movement specs (S-0207).
+    - A driving vehicle whose next cell gives *stationary friendly* sends one: move-anywhere,
+      forced, no threat point (S-0207 claim 15). Whether a vehicle that receives a request moves,
+      and where, is S-0207 claim 16.
     - Other senders belong to the specs of those events, for example a factory clearing its exit.
     - Backing: `measurable` (scenarios C4 and C7) for the walker's and the crushing vehicle's
-      requests. The ground vehicle's requests and the other senders are pointers: S-0207 and the
+      requests. The driving vehicle's request and the other senders are pointers: S-0207 and the
       specs of those events own them and their backing.
     - Confidence: high for the walker's and the crushing vehicle's requests. Low for the list being
       complete for movement.
@@ -1108,7 +1133,7 @@ Ordering stated as consequences:
 | Rules, terrain-object type sections, `TemperateOccupationBits`, `SnowOccupationBits` | side-position pattern (Terms, claim 1) | integer, pattern value | keeps the value in force; before any rules layer gives it, 7 (pattern value: all three side positions) |
 | Rules, unit type sections, `VeteranAbilities` / `EliteAbilities` containing `SCATTER` | scatter veterancy ability (Terms, claim 11) | list | none |
 | Rules, building type sections, `UnitAbsorb`, `Grinding`, `UnitRepair`, `Bunker`, `Bib` | building that absorbs units, grinds units, repairs vehicles, is a bunker, has a bib (claim 5) | boolean | no |
-| Rules, building type sections, `NumberImpassableRows` | impassable-rows value of the blocking cells (Terms, claim 5) | integer | keeps the value in force; before any rules layer gives it, none (every foundation cell is a blocking cell) |
+| Rules, building type sections, `NumberImpassableRows` | impassable-rows value of the blocking cells (Terms, claim 5) | integer, cells counted along x from the top-left cell (Terms *blocking cell*) | keeps the value in force; before any rules layer gives it, none (every foundation cell is a blocking cell) |
 | Rules, vehicle type sections, `SmallVisceroid` | small-visceroid flag (claim 5) | boolean | no |
 | Rules, vehicle type sections, `Crusher` | the crusher flag of claim 5's locomotor rule (S-0210 owns the rest) | boolean | no |
 | Rules, projectile sections, `AG` | the primary weapon's projectile can hit ground targets (claim 5) | boolean | as the combat specs give it |
@@ -1935,7 +1960,7 @@ backed by C5 (a) "with a vehicle", is tested in the same way by scenario C5 (a),
 infantry and no side passage: the vehicle waits behind *V*₁ and sends it no request (*V*₁'s
 recorded destination does not change while the vehicle waits), which a *stationary friendly* would
 make it send (claim 12). What the vehicle does instead of entering belongs
-to S-0207.
+to S-0212 claim 22 (moving blocker) and S-0207 claim 15.
 - *Setup:*
   - (a1) *X* holds one idle infantry of the human player, placed by the map. Bypass 3 cells longer.
   - (a2) As (a1), with a bypass 20 cells longer.
@@ -2496,6 +2521,32 @@ That moment is called the *window*. Common setup:
   there, in a pair of runs in which the control stopped too. If the control enters *X* while *V*
   stands there, or *T* does not set out, the part cannot decide.
 
+**Scenario C28: when a driving vehicle clears its flag (claim 1).**
+- *Setup:* a vehicle *U* of the human player, of an ordinary driving stock type, with a test file
+  that sets its speed field to 1 and its acceleration flag off (as in S-0207 scenario D8). *U* is
+  placed by the map, already facing map north, and has not moved before, so it has no leftover
+  progress. (a) A straight route of 5 cells along map north. (b) A corridor one cell wide that makes
+  *U* drive a two-cell curve (S-0207 curve D: a step north, then a step east). (c) *U* stands still
+  in a cell, and a test map trigger destroys it.
+- *Recorder:* on every tick, *U*'s position, the vehicle-present flags of the ground layer of the
+  cells of the route, and the tick number.
+- *Procedure:* order *U* along the route (parts a and b) and record until it arrives.
+- *Observable:* the tick on which each cell's flag is set and cleared, against *U*'s position.
+- *Runs:* 1 each (no random draw is involved).
+- *Expected:*
+  - (a) The flag of the start cell stays set through *U*'s first three ticks of movement, in which
+    its position already moves (3, 7 and 10 leptons, S-0207 claim 4), and is cleared on the fourth,
+    the first tick in which *U* passes a track point (progress 8, above 7). The next cell's flag is
+    set from the tick on which the step starts. Each later cell keeps its flag from the start of the
+    step into it until the first track point of the step out of it.
+  - (b) The flag of the curve's first cell is cleared on the tick on which *U* reaches the release
+    point of the curve (S-0207 table T1), while *U*'s position is still in that cell. The target
+    cell of the curve keeps its flag.
+  - (c) The flag of *U*'s cell is cleared when *U* is removed.
+- *Falsified if:* in (a) the start cell's flag clears on the first tick of movement, or only when
+  *U*'s position leaves the cell, in (b) the first cell's flag clears at another point, or in (c)
+  the flag stays set after *U* is gone.
+
 ## Open questions
 
 - The exact list of behaviours that have a mission target in claim 4 belongs to the behaviour specs.
@@ -2508,8 +2559,9 @@ That moment is called the *window*. Common setup:
   laser-fence flag.
 - A human-controlled house that the computer takes over during the game appears to be given the
   maximum skill level then. That belongs to the future network-game spec.
-- When a vehicle clears its vehicle-present flag (claim 1) is not known. It matters for how long a
-  passing vehicle blocks infantry.
+- When hovering vehicles, ships and walking vehicles clear their vehicle-present flags (claim 1) is
+  not established. The driving vehicle's moments are claim 1's. Whether a vehicle that is removed from
+  the map in the middle of a track clears the flags it set ahead of itself is not established either.
 - The underground locomotor's rule (claim 5, part 5b): which cells it makes *blocked*, the
   game-wide setting that turns it off, and the situations in which it applies belong to the specs
   of underground travel. Stock data gives no unit type that locomotor.
@@ -2549,15 +2601,17 @@ That moment is called the *window*. Common setup:
   scenario W2 (b)) expects an allied vehicle to drive into a cell in which one infantry unit still
   stands at the centre once the unit sharing its record entry has left. Claim 5 here gives that
   remaining unit *stationary friendly* through its own row (VP20) whenever it does not count as
-  moving, whatever the record shows, so the vehicle stays out. This spec keeps claim 5; S-0208's
-  expectation and the consequence it draws from its quirk need its owner's revision before both are
-  signed off.
+  moving, whatever the record shows, so the vehicle stays out. This spec keeps claim 5. S-0208 is
+  already approved (revision 8 in `spec/README.md`), so its expectation and the consequence it draws
+  from its quirk need a revision by its owner; until then the two specs disagree on this case.
 - **Agreement with S-0212.** S-0212 claim 27 says that an allied unit that counts as moving gives a
   vehicle *moving blocker*. Claim 5 here gives that only to an allied vehicle (or aircraft) between
   steps and to a unit at a chain point. Other allied units that count as moving, infantry among
   them, give no value of their own outside the close case, and moving allied infantry gives *moving
   blocker* only through an allied infantry house in the record. Claim 5 says that its tables are
-  meant where S-0212's summary differs; S-0212 claim 27 needs its owner's revision to match.
+  meant where S-0212's summary differs. S-0212 is already approved (revision 14 in `spec/README.md`),
+  so its claim 27 needs a revision by its owner to match; until then the two specs disagree on this
+  case.
 - **Switch for objects and record from different cell layers.** If the bridge specs show that a
   deck can span uneven ground (Open questions), should there be a switch
   `quirks.cell_layer_split_on_uneven_deck` (default: the original), whose alternative would read the

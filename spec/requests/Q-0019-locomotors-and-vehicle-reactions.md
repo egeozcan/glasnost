@@ -3,7 +3,7 @@ id: Q-0019
 title: Which locomotor a type has, and what a driving vehicle does at a blocked step
 status: answered
 related: [S-0207, S-0209, S-0210, S-0212, S-0213, S-0215]
-answered-by: [S-0207]
+answered-by: [S-0207, S-0209]
 ---
 
 ## Need
