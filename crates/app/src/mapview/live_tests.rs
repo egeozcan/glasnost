@@ -16,6 +16,7 @@ use glasnost_sim::{save, testkit};
 
 use super::build::{InfantryFrame, Inputs, Mobile, Options, build_parts, infantry_frame};
 use super::live::{Entrant, GroundLayer, Live, Pacer, period_ms, sim_code};
+use super::quirks::ViewQuirks;
 use super::tests::{context, scene_map_text};
 
 /// spec: S-0201 claims 2, 4 and 5 (16 × s ms at s = 1 … 6, 8 ms at index 0)
@@ -84,14 +85,40 @@ fn ground_layer_pass() {
     }
     // Object 1 moves far back in one pass.
     g.set_key(o(1), 45);
-    g.pass();
+    g.pass(&ViewQuirks::default());
     assert_eq!(g.order().collect::<Vec<_>>(), [o(2), o(3), o(4), o(1)]);
     // Object 1 drops to the front: one place per pass.
     g.set_key(o(1), 0);
-    g.pass();
+    g.pass(&ViewQuirks::default());
     assert_eq!(g.order().collect::<Vec<_>>(), [o(2), o(3), o(1), o(4)]);
-    g.pass();
+    g.pass(&ViewQuirks::default());
     assert_eq!(g.order().collect::<Vec<_>>(), [o(2), o(1), o(3), o(4)]);
+}
+
+/// spec: S-0102 Edge cases (quirks.ground_layer_single_pass_sort off: the
+/// layer is fully sorted every tick, stable, by key)
+#[test]
+fn ground_layer_full_sort_switch() {
+    let o = |n| Entrant::Object(ObjectId(n));
+    let off = ViewQuirks {
+        ground_layer_single_pass_sort: false,
+        ..ViewQuirks::default()
+    };
+    let mut g = GroundLayer::default();
+    for (n, k) in [(1, 10), (2, 20), (3, 30), (4, 40)] {
+        g.enter(o(n), k);
+    }
+    // A shrunk key reaches its place in one tick, not one place per tick.
+    g.set_key(o(4), 0);
+    let mut on = g.clone();
+    on.pass(&ViewQuirks::default());
+    assert_eq!(on.order().collect::<Vec<_>>(), [o(1), o(2), o(4), o(3)]);
+    g.pass(&off);
+    assert_eq!(g.order().collect::<Vec<_>>(), [o(4), o(1), o(2), o(3)]);
+    // Equal keys keep their order (stable).
+    g.set_key(o(2), 10);
+    g.pass(&off);
+    assert_eq!(g.order().collect::<Vec<_>>(), [o(4), o(1), o(2), o(3)]);
 }
 
 /// spec: S-0107 F1, F2 (frame from stage, count and facing group)

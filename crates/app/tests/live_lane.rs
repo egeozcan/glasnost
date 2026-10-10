@@ -20,7 +20,7 @@ use std::time::Instant;
 
 use glasnost_app::mapview::{find, load, png};
 use glasnost_render::compose::{ComposeQuirks, Frame};
-use glasnost_render::projection::{ScrollQuirks, limit_centre, project_lifted, view_origin};
+use glasnost_render::projection::{ProjectionQuirks, limit_centre, project_lifted, view_origin};
 use glasnost_render::scene::{Filter, View};
 use glasnost_sim::targeting::{ClickOn, Modifiers};
 use glasnost_sim::world::ObjectId;
@@ -68,7 +68,7 @@ fn view_at(map: &glasnost_map::Map, centre: (i32, i32)) -> View {
         size,
         map.footprint.width,
         map.footprint.local,
-        &ScrollQuirks::default(),
+        &ProjectionQuirks::default(),
     );
     let origin = view_origin(c, size);
     View {
@@ -235,7 +235,7 @@ fn live_maps_move_and_draw() {
                         (640, 400),
                         loaded.map.footprint.width,
                         loaded.map.footprint.local,
-                        &ScrollQuirks::default(),
+                        &ProjectionQuirks::default(),
                     );
                     let origin = view_origin(c, (640, 400));
                     let v = View {

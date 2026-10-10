@@ -34,11 +34,16 @@ use glasnost_render::overlay::{
 };
 use glasnost_render::palette::{PaletteState, TINT_EXEMPT, house_palette};
 use glasnost_render::projection::{
-    LEVEL_LEPTONS, TERRAIN_LIFT, cell_centre, cell_top, height_lift, project_lifted,
+    LEVEL_LEPTONS, ProjectionQuirks, TERRAIN_LIFT, cell_centre, cell_top, height_lift,
+    project_lifted,
 };
 use glasnost_render::scene::{Group, Item, ItemDepth, Scene};
 use glasnost_render::voxel::{self, VoxelQuirks};
 use glasnost_sim::rules::{Kind as SimKind, SimRules};
+
+use super::quirks::{
+    ViewQuirks, cliff_factor, drawn_body_frame, occupiable_hurt, overlay_depth_lift,
+};
 
 /// File bytes read for a scene, by upper-case name.
 #[derive(Clone, Debug, Default)]
@@ -155,8 +160,6 @@ const CLIFF_LEVELS: i32 = 3; // spec: S-0102 Constants (cliff fudge test)
 const DEFAULT_CLIFF_FUDGE: i32 = 10; // spec: S-0102 claim 14 (absent fudge values: cliff 10)
 /// Default light radius of building lights (S-0104 claim 12).
 const DEFAULT_LIGHT_RADIUS: i32 = 5000; // spec: S-0104 Constants (building light radius default)
-/// Building light tint default, 1000.0 as stored (S-0104 claim 12).
-const DEFAULT_LIGHT_TINT: i32 = 1_000_000; // spec: S-0104 claim 12 (tint default 1000.0, stored 1 000 000 ‰)
 /// Voxel lighting table file (S-0105 Import mapping).
 pub const VPL_FILE: &[u8] = b"voxels.vpl"; // spec: S-0105 Import mapping
 
@@ -539,9 +542,10 @@ impl Builder<'_> {
                 continue;
             }
             let (w, h) = self.foundation(i);
-            let tint = |k: &[u8]| {
-                derived(self.import, Kind::Buildings, i, k).map_or(DEFAULT_LIGHT_TINT, |v| v as i32)
-            };
+            // spec: S-0104 claim 12 (an absent tint's default, quirks.building_light_tint_default_1000)
+            let absent = light::building_light_tint_default(&LightQuirks::default());
+            let tint =
+                |k: &[u8]| derived(self.import, Kind::Buildings, i, k).map_or(absent, |v| v as i32);
             let c = s.placed.cell;
             // spec: S-0104 claim 12 (one light at the building's centre, counting at detail 2)
             sources.push(LightSource::building(
@@ -1051,11 +1055,17 @@ impl Builder<'_> {
                 && (flags.tiberium || rule_bool(self.import, k, idx, b"DrawFlat", true));
             // spec: S-0102 Constants (overlay depth bias: level + 4 for bridge decks)
             let depth_level = if deck { level + DECK_LEVELS } else { level };
-            // spec: S-0102 claim 13 (overlay biases: −2 − 15ℓ, or −17 − 15ℓ for other upright types)
+            // spec: S-0102 claim 13 (overlay biases: −2 − 15ℓ, or −17 − 15ℓ for other upright types;
+            // quirks.overlay_lift_exact_levels)
+            let lift = overlay_depth_lift(
+                depth_level,
+                &ViewQuirks::default(),
+                &ProjectionQuirks::default(),
+            );
             let bias = if flat || flags.wall || rock || flags.tiberium {
-                -2 - TERRAIN_LIFT * depth_level
+                -2 - lift
             } else {
-                -17 - TERRAIN_LIFT * depth_level
+                -17 - lift
             };
             // spec: S-0102 claim 24 (the cell's centre at level 0, lifted 15 rows per level, plus the shift s)
             let (shift, shadow_offset) = draw_shift(o, flags, deck, d);
@@ -1522,7 +1532,13 @@ impl Builder<'_> {
             let f = if occupiable {
                 // spec: S-0108 Import mapping (TechLevel absent: 255)
                 let tech = rule_int(self.import, Kind::Buildings, i, b"TechLevel", 255);
-                usize::from(if tech <= 0 { badly } else { damaged })
+                // spec: S-0108 claim 2 (quirks.occupiable_hurt_rule)
+                usize::from(occupiable_hurt(
+                    tech,
+                    damaged,
+                    badly,
+                    &ViewQuirks::default(),
+                ))
             } else if gate {
                 if damaged {
                     self.note(notes::GATE_DAMAGED);
@@ -1531,8 +1547,8 @@ impl Builder<'_> {
             } else {
                 k + usize::from(damaged)
             };
-            // spec: S-0108 claim 3 (drawn frame min(f, ⌊N/2⌋))
-            let body_frame = f.min(n / 2);
+            // spec: S-0108 claim 3 (drawn frame min(f, ⌊N/2⌋), quirks.building_frame_clamp_to_shadow)
+            let body_frame = drawn_body_frame(f, n, &ViewQuirks::default());
             let normal_z = self
                 .art_value(Kind::Buildings, i, b"NormalZAdjust")
                 .and_then(value::integer)
@@ -1845,14 +1861,8 @@ impl Builder<'_> {
         let own = level(0).unwrap_or(0);
         // spec: S-0102 claim 14 (a cell is high when more than 3 levels above the unit's cell)
         let high = |dx: i32| level(dx).is_some_and(|l| l - own > CLIFF_LEVELS);
-        // spec: S-0102 claim 14 (cliff factor: two-step high 1, else one-step high 2, else 0)
-        let factor = if high(2) {
-            1
-        } else if high(1) {
-            2
-        } else {
-            0
-        };
+        // spec: S-0102 claim 14 (cliff factor, quirks.cliff_fudge_far_cliff_weaker)
+        let factor = cliff_factor(high(1), high(2), &ViewQuirks::default());
         let fudge = rule_int(self.import, kind, idx, b"ZFudgeCliff", DEFAULT_CLIFF_FUDGE);
         // spec: S-0102 claim 14 (U = −L(z) + s + F, F the largest fudge)
         -height_lift(z) + SITUATIONAL + (factor * fudge).max(0)

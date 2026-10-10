@@ -386,6 +386,30 @@ fn light_values_truncate_on_re_read() {
     assert_eq!(layers::building_light_thousandths(b"-3.0"), Some(-2999));
 }
 
+/// spec: S-0104 claim 13, Edge cases (quirks.extra_light_truncation: 0.57
+/// becomes 569; off, round to nearest)
+#[test]
+fn extra_light_truncation_switch() {
+    assert_eq!(layers::extra_light_thousandths(b"0.57", true), Some(569));
+    assert_eq!(layers::extra_light_thousandths(b"0.57", false), Some(570));
+    assert_eq!(layers::extra_light_thousandths(b"-0.57", true), Some(-569));
+    assert_eq!(layers::extra_light_thousandths(b"-0.57", false), Some(-570));
+    assert_eq!(layers::extra_light_thousandths(b"0.2504", false), Some(250));
+    assert_eq!(layers::extra_light_thousandths(b"0.0026", false), Some(3));
+    assert_eq!(layers::extra_light_thousandths(b"x", false), None);
+    let base = "[AudioVisual]\nExtraUnitLight=0.57\n";
+    let derived = |q: LayerQuirks| {
+        let o = apply_with(&[layer(Role::Base, base)], "", GameKind::Skirmish, q);
+        o.globals[&b"AudioVisual"[..]][&b"ExtraUnitLight"[..]].derived
+    };
+    assert_eq!(derived(LayerQuirks::default()), Some(569));
+    let off = LayerQuirks {
+        extra_light_truncation: false,
+        ..LayerQuirks::default()
+    };
+    assert_eq!(derived(off), Some(570));
+}
+
 /// spec: S-0006 claim 8, S-0007 Terms (animations read the art file in every layer)
 #[test]
 fn animations_read_art_in_every_layer() {

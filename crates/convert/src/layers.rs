@@ -76,8 +76,8 @@ pub struct Layer {
     pub doc: Document,
 }
 
-/// Quirk switches of S-0004, S-0006, S-0103 claim 5, S-0104 claim 12 and
-/// S-0105 claim 27 that this pass implements. Each defaults to the
+/// Quirk switches of S-0004, S-0006, S-0103 claim 5, S-0104 claims 12 and
+/// 13, S-0105 claim 27 and S-0215 claim 21 that this pass implements. Each defaults to the
 /// original's behaviour.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct LayerQuirks {
@@ -124,6 +124,10 @@ pub struct LayerQuirks {
     /// `quirks.mode_number_first_wins` (S-0006 claim 13). Not consulted:
     /// the mode list is not read (Q-0006).
     pub mode_number_first_wins: bool,
+    /// `quirks.extra_light_truncation` (S-0104 claim 13): the extra-light
+    /// values are stored as ⌊v × 1000⌋, so a value such as 0.57 loses a
+    /// unit. Off: v × 1000 rounded to nearest.
+    pub extra_light_truncation: bool,
 }
 
 impl Default for LayerQuirks {
@@ -147,13 +151,15 @@ impl Default for LayerQuirks {
             persist_tiberium_overrides: true,
             mission_rules_before_reset: true,
             mode_number_first_wins: true,
+            // spec: S-0104 Edge cases (extra_light_truncation defaults on)
+            extra_light_truncation: true,
         }
     }
 }
 
 impl LayerQuirks {
     /// The switches by name, for the import record.
-    pub fn named(&self) -> [(&'static str, bool); 15] {
+    pub fn named(&self) -> [(&'static str, bool); 16] {
         [
             ("unlisted_reference_unread", self.unlisted_reference_unread),
             ("long_name_duplicates", self.long_name_duplicates),
@@ -188,6 +194,7 @@ impl LayerQuirks {
                 self.mission_rules_before_reset,
             ),
             ("mode_number_first_wins", self.mode_number_first_wins),
+            ("extra_light_truncation", self.extra_light_truncation),
         ]
     }
 }
@@ -484,15 +491,25 @@ pub fn building_light_thousandths(stored: &[u8]) -> Option<i64> {
         .trunc_to_i64()
 }
 
-/// ⌊v × 1000⌋ truncated toward zero (S-0104 Import mapping, extra-light
-/// values).
-pub fn extra_light_thousandths(stored: &[u8]) -> Option<i64> {
+/// ⌊v × 1000⌋ truncated toward zero (S-0104 claim 13, Import mapping,
+/// extra-light values). With `truncate` false
+/// (`quirks.extra_light_truncation` off) v × 1000 is rounded to the nearest
+/// integer instead, halves away from zero.
+pub fn extra_light_thousandths(stored: &[u8], truncate: bool) -> Option<i64> {
     let Decimal::Value { value, .. } = value::decimal(stored, DecimalField::Double) else {
         return None;
     };
-    value
-        .mul_rz(&Binary::from_i64(Format::Double, PER_MILLE), Format::Double)
-        .trunc_to_i64()
+    let p = value.mul_rz(&Binary::from_i64(Format::Double, PER_MILLE), Format::Double);
+    if truncate {
+        // spec: S-0104 claim 13 (stored as ⌊v × 1000⌋ with no rounding allowance)
+        return p.trunc_to_i64();
+    }
+    // spec: S-0104 Edge cases (quirks.extra_light_truncation off: round to nearest)
+    // 2p is exact, and trunc(2p) decides the nearest integer: sgn(q)·⌊(|q| + 1)/2⌋.
+    let q = p
+        .mul_rz(&Binary::from_i64(Format::Double, 2), Format::Double)
+        .trunc_to_i64()?;
+    Some(q.signum() * ((q.abs() + 1) / 2))
 }
 
 fn tenth_double() -> Binary {
@@ -1255,7 +1272,7 @@ impl Run<'_> {
                     && EXTRA_LIGHT_KEYS
                         .iter()
                         .any(|k| k.as_bytes() == key.as_slice())
-                    && let Some(t) = extra_light_thousandths(stored)
+                    && let Some(t) = extra_light_thousandths(stored, quirks.extra_light_truncation)
                 {
                     state.derived = Some(t);
                 }

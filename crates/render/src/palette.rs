@@ -71,6 +71,24 @@ impl Default for PaletteQuirks {
     }
 }
 
+impl PaletteQuirks {
+    /// The switches by name.
+    pub fn named(&self) -> [(&'static str, bool); 4] {
+        [
+            ("palette_component_wrap", self.palette_component_wrap),
+            (
+                "missing_unit_palette_remultiplied",
+                self.missing_unit_palette_remultiplied,
+            ),
+            (
+                "alt_palette_first_definition",
+                self.alt_palette_first_definition,
+            ),
+            ("veins_local_player_colour", self.veins_local_player_colour),
+        ]
+    }
+}
+
 /// One file component as a palette component (S-0103 claim 1).
 pub fn load_component(c: u8, quirks: &PaletteQuirks) -> u8 {
     if quirks.palette_component_wrap || c <= 63 {

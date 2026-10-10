@@ -49,6 +49,27 @@ impl Default for OverlayQuirks {
     }
 }
 
+impl OverlayQuirks {
+    /// The switches by name.
+    pub fn named(&self) -> [(&'static str, bool); 4] {
+        [
+            ("wall_local_player_colour", self.wall_local_player_colour),
+            (
+                "resource_palettes_from_start",
+                self.resource_palettes_from_start,
+            ),
+            (
+                "overlay_shadow_from_stored_type",
+                self.overlay_shadow_from_stored_type,
+            ),
+            (
+                "image_two_keeps_sloped_run",
+                self.image_two_keeps_sloped_run,
+            ),
+        ]
+    }
+}
+
 /// The row of the overlay drawing table a cell meets (S-0112 claim 1).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Row {

@@ -144,7 +144,73 @@ The importer turns the user's install into our rules format (PLAN.md 4.3, 4.6):
 7. `convert::sim` writes the typed `sim` section (`rules::sim`): the simulation fields of the rules and art data, each written only when the layered data gives it, folded over its history (values a form cannot read and "not given" values keep the held value), with decimals as text in our grammar that reads as S-0003 reads the stored text (a test cross-checks `num::decimal` against `ini::value::decimal`). Land-type rows take only the keys of the last layer that gives the section (S-0211 claim 2), the anti-air rate follows S-0215 claim 21, locomotion classes S-0211 claim 3, the locomotor field S-0207 claim 14 (a class identifier of table T3; another form or an unknown identifier keeps the locomotor in force, with a warning), and the art fields (infantry sequences, fire frames, `Crawls`, building foundations, overlay `has_art`, an overlay's `DamageLevels` from its image section, S-0210 claim 13) are rebuilt once the art lookup has run. Animation types take the fields their creation draws read from their art sections (`RandomRate`, the bouncing flags, the chain reaction and the middle-event effects, S-0109 Import mapping). Type-name lists and references (a type's `Owner`, `[General] BaseUnit`, the gate and wall tower types of S-0112) are resolved to type keys by S-0003 claim 14's comparison, unknown names dropped with a warning; the game's tech level (`[MultiplayerDialogSettings] TechLevel`) and the early phase's passive field (`multiplay_passive_base`, S-0009 claim 33) take the base rules' value only.
 8. `rules::resolve_ruleset` applies mod patch layers, inheritance and set operations (only in our own collections, never inside imported INI data), types, validates, interns IDs and hashes.
 
-Every quirk switch of the implemented specs has a field in `ini::Quirks`, `vfs::GameQuirks`, `convert::layers::LayerQuirks`, `convert::art::ArtQuirks`, `convert::theater::TheaterQuirks`, `convert::map::MapQuirks` or `render::palette::PaletteQuirks`, defaulting to the original's behaviour; the import records them under `import.quirks`. `rules::quirks::tests::every_spec_quirk_has_a_switch` checks that every switch the simulation specs, S-0006, S-0009, S-0010 and S-0107 name is a field of `rules::Quirks` or listed with its owner in `EXTERNAL_QUIRKS`. Two S-0009 switches of `MapQuirks` are not consulted yet, because our engine has no lobby and draws no preview markers: `lobby_counts_zero_waypoint` and `preview_markers_from_header`. Four S-0006 switches of `LayerQuirks` are not consulted either, because the importer imports one game, the first of its session, without campaigns or the mode list (Q-0006): `persist_global_overrides`, `persist_tiberium_overrides`, `mission_rules_before_reset` and `mode_number_first_wins`. The importer warns about an infantry type whose die-1 or die-2 sequence entry has no image frames (S-0107 claim 17).
+Every quirk switch of the implemented specs has a field in `ini::Quirks`, `vfs::GameQuirks`, `convert::layers::LayerQuirks`, `convert::art::ArtQuirks`, `convert::theater::TheaterQuirks`, `convert::map::MapQuirks` or `render::palette::PaletteQuirks`, defaulting to the original's behaviour; the import records them under `import.quirks`. The renderer's and the map viewer's switches are fields of `render::projection::ProjectionQuirks` (S-0101), `render::compose::ComposeQuirks` (S-0102 compositing), `render::light::LightQuirks` (S-0104), `render::voxel::VoxelQuirks` and `render::voxel::RecoilQuirks` (S-0105), `render::overlay::OverlayQuirks` (S-0112), `render::palette::PaletteQuirks` (S-0103) and `app::mapview::quirks::ViewQuirks` (S-0102 draw order and placement, S-0108 building frames), each with `named()`. `rules::quirks::tests::every_spec_quirk_has_a_switch` checks that every switch the simulation specs, S-0006, S-0009, S-0010 and S-0107 name is a field of `rules::Quirks` or listed with its owner in `EXTERNAL_QUIRKS`; `app::mapview::quirks::tests::every_rendering_spec_quirk_has_a_switch` checks that every switch `spec/rendering/S-01*.md` names is a field of one of the structs above (or of `rules::Quirks`, `LayerQuirks` or `ArtQuirks`) or is listed in `app::mapview::quirks::NOT_IMPLEMENTED` with its reason (the table below). Two S-0009 switches of `MapQuirks` are not consulted yet, because our engine has no lobby and draws no preview markers: `lobby_counts_zero_waypoint` and `preview_markers_from_header`. Four S-0006 switches of `LayerQuirks` are not consulted either, because the importer imports one game, the first of its session, without campaigns or the mode list (Q-0006): `persist_global_overrides`, `persist_tiberium_overrides`, `mission_rules_before_reset` and `mode_number_first_wins`. The importer warns about an infantry type whose die-1 or die-2 sequence entry has no image frames (S-0107 claim 17).
+
+**Named switches of specs whose behaviour is not implemented yet.** These switches of the rendering specs have no field: the behaviour they switch is not drawn yet, its off state is open (a request or a question for the lead in the spec), or another part of the engine owns them. Where our code already draws one setting, the reason says which.
+
+| Switch | Spec | Why it has no field |
+|---|---|---|
+| `screen_band_tests_position_only` | S-0101 claim 6 | our renderer does no on-screen culling (no screen band or ground box) |
+| `screen_to_ground_not_exact_inverse` | S-0101 claim 9 | no F6 lepton position is used; the cell under a pixel is F7's pixel formula, the same in both settings |
+| `unsorted_upper_layers` | S-0102 claim 7 | every mobile object is drawn in the ground layer; the upper layers are not modelled |
+| `layer_change_on_events_only` | S-0102 claim 4 | render layer membership is not modelled (the moments of claim 4 may be simulation state) |
+| `remembered_animation_in_cell_pass` | S-0102 claim 16 | no fog, so no remembered animations |
+| `slot_values_replace_animation_adjustments` | S-0102 claim 17 | building slot animations are not drawn |
+| `sprite_vehicle_eight_facings_only` | S-0102 claim 22 | the on state is drawn; the off state's facing part for counts 2 and 4 is asked in Q-0050 |
+| `deploy_animation_neutral_brightness` | S-0103 claim 8 | deploy and undeploy animations are not drawn |
+| `parachute_brightness_fixed` | S-0103 claim 8 | parachutes are not drawn |
+| `zero_rate_freezes_ambient` | S-0104 claim 4 | the ambient fade's timing is not modelled (render::light::ambient_step takes one step) |
+| `dominator_rate_thousandths` | S-0104 claim 4 | no dominator effect and no fade timing |
+| `split_effect_priority` | S-0104 claim 2 | the lighting effects in force (nuke, dominator, ion storm, chrono flash) are not modelled |
+| `chrono_flash_no_reevaluation` | S-0104 claims 2 and 5 | no chrono flash and no lighting re-evaluations |
+| `dominator_height_terms_linger` | S-0104 claim 16 | no dominator effect |
+| `trigger_tint_retints_all_tables` | S-0104 claim 17 | trigger actions do not change the lighting |
+| `infantry_height_light_limited` | S-0104 claim 13 | the on state is drawn; the off state at a height of 208 leptons in a shadowed cell is asked in Q-0050 |
+| `turret_recoil_leaves_barrel` | S-0105 claim 27 | recoil placement in a pose is not applied (no firing yet) |
+| `vehicle_no_recoil` | S-0105 claim 28 | recoil placement is not applied; vehicles never recoil, as with the switch on |
+| `barrel_only_no_recoil` | S-0105 claim 37 | recoil placement is not applied; a barrel without a turret never recoils, as with the switch on |
+| `alt_body_turret_model` | S-0105 claim 12 | the alternative body and spawned-aircraft docking are not drawn; the main body always is |
+| `voxel_single_pixel` | S-0105 claim 22 | the on state is drawn; the off state (no gaps in magnified sections) is not implemented |
+| `voxel_no_intersection_depth` | S-0105 claim 23 | the on state is drawn; the off state (a depth test between sections) is not implemented |
+| `voxel_buffer_wrap` | S-0105 claim 22 | the on state is drawn; which off state the switch selects is a question for the lead in S-0105 |
+| `barrel_pivot_frame_mixup` | S-0105 claim 10 | the on state is drawn; which off state the switch selects is a question for the lead in S-0105 |
+| `depth_mode_leak` | S-0105 claim 32 | every voxel draw is fresh, and the caller says whether it is depth-buffered; the off state is a question for the lead in S-0105 |
+| `voxel_cache_frame_mod32` | S-0105 claim 26 | the image cache is not modelled, every voxel image is drawn fresh (as with the switch off) |
+| `voxel_cache_alt_turret_frame` | S-0105 claim 26 | the image cache is not modelled, every voxel image is drawn fresh (as with the switch off) |
+| `barrel_cache_ignores_elevation` | S-0105 claims 26 and 37 | the image cache is not modelled, every voxel image is drawn fresh (as with the switch off) |
+| `voxel_depth_plane_partial_clear` | S-0105 claim 34 | no depth plane is kept between voxel draws (as with the switch off) |
+| `no_turret_shadow` | S-0105 claim 29 | turrets and barrels cast no shadow, as with the switch on; the off state's shadow is not specified |
+| `slope_tilt_angles` | S-0106 claim 4 | voxel bodies are not tilted on slopes |
+| `tilter_flag_ignored` | S-0106 claim 10 | voxel bodies are not tilted on slopes |
+| `tilt_transition_restart_jump` | S-0106 claim 6 | no tilt state (it may belong to the simulation's locomotors) |
+| `unbuildable_occupied_damaged_frame` | S-0108 claim 2 | no building is occupied in our engine yet |
+| `full_state_unmaxed` | S-0108 claim 2 | buildings are drawn in their idle state only |
+| `gate_double_reverse` | S-0108 claim 4 | buildings are not sold |
+| `building_wrap_normalisation` | S-0108 claim 6 | building body ranges are not played |
+| `turret_building_no_body_wrap` | S-0108 claim 6 | building body ranges are not played |
+| `turret_start_clears_damaged` | S-0108 claims 11 and 12 | building slot animations are not drawn |
+| `enable_unfreezes_unpowered` | S-0108 claim 13 | building slot animations are not drawn |
+| `damage_swap_drops_occupied` | S-0108 claims 11 and 12 | building slot animations are not drawn |
+| `roof_unload_no_fallback` | S-0108 claim 22 | units do not unload from buildings |
+| `theater_refresh_buildup_range` | S-0108 claim 5 | no theater refresh |
+| `anim_damage_starts_at_one` | S-0109 | animation playback is not implemented |
+| `anim_erasure_late_slots_opaque` | S-0109 | animation playback is not implemented |
+| `anim_fast_rate_freezes` | S-0109 | animation playback is not implemented |
+| `anim_followup_keeps_step` | S-0109 | animation playback is not implemented |
+| `anim_followup_start_doubled` | S-0109 | animation playback is not implemented |
+| `anim_hide_at_level_15` | S-0109 | animation playback is not implemented |
+| `anim_loop_count_wrap` | S-0109 | animation playback is not implemented |
+| `anim_loop_end_from_sprite` | S-0109 | animation playback is not implemented |
+| `anim_low_detail_shows_cloaked` | S-0109 | animation playback is not implemented |
+| `anim_pingpong_lower_turn` | S-0109 | animation playback is not implemented |
+| `anim_random_rate_collapse` | S-0109 | animation playback is not implemented |
+| `anim_reverse_raw_loop_end` | S-0109 | animation playback is not implemented |
+| `anim_translucency_levels` | S-0109 | animation playback is not implemented |
+| `shroud_on_flat_grid` | S-0110 | shroud and fog are not drawn |
+| `shroud_point_cell_wrap` | S-0110 | shroud and fog are not drawn |
+| `building_resource_pips_hidden` | S-0111 | in-game overlays (bars, pips) are not drawn |
+| `passenger_overflow_hides_pips` | S-0111 | in-game overlays (bars, pips) are not drawn |
+| `pip_colour_default_shift` | S-0111 | in-game overlays (bars, pips) are not drawn |
 
 **Coverage.** `convert::coverage` gives every (category, key) of the rules and art files an outcome: `field` and `render` for keys interpreted per an approved spec, `folded` for type lists and similar, `unsupported` for keys kept as INI text because no approved spec maps them yet (the `spec` column names the specs whose import mapping mentions a key that is not converted yet).
 
@@ -167,7 +233,7 @@ Every quirk switch of the implemented specs has a field in `ini::Quirks`, `vfs::
 
 - `glasnost-map` (a simulation crate) holds the decoded map: footprint, legal and usable cells and their visiting order (S-0009 claims 1 to 4), the cell grid after the initial fill and the terrain stream, overlay stream values, waypoints, header, preview, lighting values in hundredths and thousandths (S-0104 claim 1) and the object lists as read.
 - `convert::map` decodes a map document with importer warnings, the object lists by S-0009 claims 34 to 36, 40 and 42; `convert::theater` reads a theater's tile catalogue per S-0010 claims 1 to 5 (theater data file, declared tilesets, tile files with variants and the suffix fallback, role starts) with S-0009's base tiles and tile translation, builds the simulation's `map::terrain::TileCatalogue` (terrain and slope code of every tile cell, and each tile's animation and attaches-to sub-tile from the section its tileset's set name names, S-0010 claim 19) from the tile files, and holds the variant choice of claims 13 and 14 (the 4 × 4 pattern and the 8 × 8 pattern built from the unsynchronised stream, S-0202 claim 11).
-- `render::projection` (S-0101), `render::light` (S-0104), `render::compose` (the CPU reference of S-0102's depth compositing), `render::scene` (items in world pixels) and `render::map_gpu` (the WebGL2 map pass, tested pixel for pixel against the CPU reference on a real or software GPU). Both honour `render::compose::ComposeQuirks` (`upright_depth_anchor_after_clip`, and `cell_pass_shadows_write_depth` of S-0102 claim 27: the GPU draws a writer shadow with a pipeline that blends and stores depth).
+- `render::projection` (S-0101), `render::light` (S-0104), `render::compose` (the CPU reference of S-0102's depth compositing), `render::scene` (items in world pixels) and `render::map_gpu` (the WebGL2 map pass, tested pixel for pixel against the CPU reference on a real or software GPU). Both honour `render::compose::ComposeQuirks` (`upright_depth_anchor_after_clip`, and `cell_pass_shadows_write_depth` of S-0102 claim 27: the GPU draws a writer shadow with a pipeline that blends and stores depth; `depth_reference_reset_on_jump` decides the depth reference the map pane sets at a view jump).
 - `app::mapview` builds a map's scene from the decoded map, the rules import and the theater's files; the viewer's *Map viewer* mode lists the install's maps, loads one, scrolls within S-0101's limits, shows a minimap, layer toggles and object info with `rules explain`. Everything that rests on a request is marked provisional and can be hidden. Tiles are drawn from the cells after loading (S-0010 claim 12, when the game was set up; as stored otherwise): the image of claim 13, the tile cell of claim 24 (the clear tile for a cell without a usable tile), diamonds painted whole, index 0 included (claim 22, `Paint::Diamond`), extra images after their diamond (claim 23), at the scaled ground level (S-0104 claim 13). Pre-placed objects are drawn in their S-0009 initial state (claims 37 to 43), with buildings damaged when their starting health says so (S-0108 claim 2).
 
 - **Live sandbox game (M3).** Loading a map also starts the simulation's sandbox game (`glasnost_sim::load::sandbox_setup`: one house per object owner, human-controlled except the neutral and special houses, fixed seed) from the same game inputs (`convert::game::load`). `app::mapview::build` keeps the static part of the scene (cell pass and building voxel parts) and a `Painter` with its caches; `app::mapview::live` draws vehicles, infantry and aircraft from the simulation after each tick (position from the lepton position, S-0101; voxel poses from the body and turret facings, cached per 32-step pose, S-0105; infantry frames from the sequence state, S-0107), keeps the object pass's ground layer as S-0102 claim 6 says (entry before the first greater key, one swap pass per tick on the previous keys) and paces ticks by S-0201 (16 × s ms, no catch-up; at most one tick per drawn frame, so index 0, whose period is 8 ms, runs at the display rate instead of 125 ticks per second). The GPU map pass uploads only the images and palette rows a scene gained (`MapRenderer::sync`). Problems that keep the game from starting are listed and the static view stays. While a game runs, every owner's objects are drawn, whatever the skirmish-view option says.
