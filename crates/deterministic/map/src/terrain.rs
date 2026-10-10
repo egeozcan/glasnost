@@ -65,6 +65,22 @@ pub struct TileInfo {
     pub cells: Vec<Option<TileCell>>,
     /// Number of variant images besides the plain one (render only).
     pub variants: u8,
+    /// The tile's animation, if its plain image names one (S-0010 claim 19).
+    #[serde(default)]
+    pub anim: Option<TileAnim>,
+}
+
+/// A tile's animation (S-0010 claim 19 and Import mapping): the animation
+/// type's name as written and the sub-tile it attaches to (−1 when absent:
+/// the animation never starts). Its displacement and depth adjustment are
+/// the renderer's.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TileAnim {
+    /// The animation type's name as written (bytes 128 to 255 as U+F780 to
+    /// U+F7FF).
+    pub name: String,
+    /// The attaches-to sub-tile.
+    pub attaches_to: i32,
 }
 
 /// The role starts of S-0010 table R (claim 4), as tile numbers; an unset
@@ -526,6 +542,7 @@ mod tests {
                 slope,
             })],
             variants: 0,
+            anim: None,
         };
         let mut tiles = vec![one(0, 0), one(9, 0), one(11, 0), one(14, 0)];
         for s in 1..=4 {
@@ -623,6 +640,7 @@ mod tests {
                 slope: 7,
             })],
             variants: 0,
+            anim: None,
         });
         let ov = |i: u8| {
             (i == 3).then_some(OverlayLand {
@@ -739,6 +757,7 @@ mod tests {
                     slope: 0,
                 })],
                 variants: 0,
+                anim: None,
             });
         }
         cat.roles.rough_ground = 3;

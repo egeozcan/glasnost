@@ -136,6 +136,7 @@ impl Scene {
                 slope,
             })],
             variants: 0,
+            anim: None,
         };
         let mut tiles: Vec<TileInfo> = (0..=4).map(|s| tile(0, s)).collect();
         tiles.extend((0..16).map(|k| tile(k, 0)));

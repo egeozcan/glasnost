@@ -108,6 +108,15 @@ pub struct Cells {
     pub mark_seq: u32,
     /// The owner of each cell's wall (S-0210 claim 14); `None`: no owner.
     pub wall_owner: Vec<Option<HouseId>>,
+    /// Whether a cell has started its tile animation since the map load's
+    /// second recalculation pass (S-0010 claim 19: at most one until the
+    /// next map load).
+    pub anim_started: Vec<bool>,
+    /// While a map loads, before its second recalculation pass: whether a
+    /// cell has been recalculated yet (S-0202 table, a tile animation starts
+    /// at the first recalculation of its cell). Not state: `None` after.
+    #[serde(skip)]
+    pub anim_first: Option<Vec<bool>>,
 }
 
 /// The high-bridge overlay indices and their marking directions (S-0211
@@ -136,6 +145,8 @@ impl Cells {
             deck: vec![false; n],
             mark_seq: 0,
             wall_owner: vec![None; n],
+            anim_started: vec![false; n],
+            anim_first: None,
         }
     }
 

@@ -788,6 +788,7 @@ impl Builder<'_> {
             Kind::Weapons,
             Kind::Projectiles,
             Kind::Warheads,
+            Kind::Animations,
         ] {
             let node = self.kind(kind);
             root.push((kind.key().to_owned(), node));
@@ -1037,6 +1038,7 @@ impl Builder<'_> {
                 Kind::Weapons => self.fields(&mut rec, t, kind, WEAPON_FIELDS),
                 Kind::Projectiles => self.fields(&mut rec, t, kind, PROJECTILE_FIELDS),
                 Kind::Warheads => self.fields(&mut rec, t, kind, WARHEAD_FIELDS),
+                Kind::Animations => self.animation(&mut rec, t),
                 _ => {}
             }
             if !rec.0.is_empty() {
@@ -1335,6 +1337,45 @@ impl Builder<'_> {
                 .get(&(Kind::Overlays, index))
                 .is_some_and(|a| a.sprite.is_some());
             rec.put("has_art", jsonc::boolean(has));
+        }
+    }
+
+    /// An animation type's fields that its creation draws read (S-0109
+    /// Import mapping; S-0202 claim 10), from its section of the art
+    /// database: the random rate pair, each end keeping the value held when
+    /// it is −1 (S-0109 claim 3), the bouncing flags, the resource chain
+    /// reaction and the middle-event effects.
+    fn animation(&mut self, rec: &mut Rec, t: &TypeRec) {
+        let Some(sec) = self.art_section(&t.name) else {
+            return;
+        };
+        if let Some(v) = sec.value(b"RandomRate") {
+            // spec: S-0109 claim 3 and Import mapping (two integers; −1 in either place keeps that end)
+            let read = value::int_tuple::<2>(v);
+            let pair = read.map(|e| e.filter(|&x| x != -1).unwrap_or(0));
+            rec.put(
+                "random_rate",
+                jsonc::array(pair.iter().map(|&x| int_node(x)).collect()),
+            );
+        }
+        for (field, key) in [
+            ("bouncer", "Bouncer"),
+            ("is_meteor", "IsMeteor"),
+            ("tiberium_chain_reaction", "TiberiumChainReaction"),
+            ("scorch", "Scorch"),
+            ("crater", "Crater"),
+        ] {
+            // spec: S-0109 Import mapping (booleans; absent: no)
+            if let Some(b) = sec.value(key.as_bytes()).and_then(value::boolean) {
+                rec.put(field, jsonc::boolean(b));
+            }
+        }
+        if let Some(v) = sec.value(b"SpawnsParticle") {
+            // spec: S-0109 Import mapping (SpawnsParticle: a particle type name; none: no particle)
+            let name = value::text(v, value::COMMON_TEXT_LIMIT);
+            if !name.is_empty() && !value::is_no_type(name) {
+                rec.put("spawns_particle", jsonc::boolean(true));
+            }
         }
     }
 

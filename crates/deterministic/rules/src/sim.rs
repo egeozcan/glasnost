@@ -203,6 +203,39 @@ pub struct SimData {
     /// Warheads by name.
     #[serde(default)]
     pub warheads: BTreeMap<String, WarheadType>,
+    /// Animation types by type name (their art sections, S-0109).
+    #[serde(default)]
+    pub animations: BTreeMap<String, AnimationType>,
+}
+
+/// An animation type's fields that its creation draws read (S-0109; S-0202
+/// claim 10).
+#[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct AnimationType {
+    /// `RandomRate`: the random rate pair (ρ₁, ρ₂), a −1 already replaced by
+    /// the end held (S-0109 claim 3).
+    // spec: S-0109 Import mapping (RandomRate: two integers)
+    #[serde(default)]
+    pub random_rate: Option<[i32; 2]>,
+    /// `Bouncer`.
+    #[serde(default)]
+    pub bouncer: Option<bool>,
+    /// `IsMeteor`.
+    #[serde(default)]
+    pub is_meteor: Option<bool>,
+    /// `TiberiumChainReaction`: the start event's resource chain reaction.
+    #[serde(default)]
+    pub tiberium_chain_reaction: Option<bool>,
+    /// `Scorch`: a middle-event effect.
+    #[serde(default)]
+    pub scorch: Option<bool>,
+    /// `Crater`: a middle-event effect.
+    #[serde(default)]
+    pub crater: Option<bool>,
+    /// `SpawnsParticle` names a particle type: a middle-event effect.
+    #[serde(default)]
+    pub spawns_particle: Option<bool>,
 }
 
 /// Game-wide values (keys of `[General]`, `[AI]`, `[IQ]`, `[AudioVisual]`,

@@ -124,3 +124,71 @@ fn claim_10_visceroid_draw() {
     let _ = r.ranged(0, 65535, true);
     assert_eq!(w.rng, r);
 }
+
+/// spec: S-0010 claim 19 and S-0202 claim 10 (a tile animation starts at its cell's first recalculation before the second pass and again in the second pass, with its creation draws: the stage-delay draw of S-0109 claim 3 when d₁′ ≠ d₂′, a bouncing type's three raw values and three ranged draws over −65535 … 65535; afterwards at most one per cell)
+#[test]
+fn claim_10_tile_animation_draws() {
+    use glasnost_map::terrain::TileAnim;
+    use glasnost_rules::sim::AnimationType;
+    let mut s = Scene::new();
+    // Tile 0 (every cell's flat tile) keeps no animation; tile 1 names SPARK on sub-tile 0, tile 2 ROCK.
+    s.catalogue.tiles[1].anim = Some(TileAnim {
+        name: "spark".into(),
+        attaches_to: 0,
+    });
+    s.catalogue.tiles[2].anim = Some(TileAnim {
+        name: "ROCK".into(),
+        attaches_to: 0,
+    });
+    s.register("animations", "SPARK");
+    s.register("animations", "ROCK");
+    // A descending pair: ρ = 2 and 1 give d = 450 and 900, a random delay.
+    s.ruleset.sim.animations.insert(
+        "SPARK".into(),
+        AnimationType {
+            random_rate: Some([2, 1]),
+            ..Default::default()
+        },
+    );
+    s.ruleset.sim.animations.insert(
+        "ROCK".into(),
+        AnimationType {
+            bouncer: Some(true),
+            ..Default::default()
+        },
+    );
+    s.set_cell(cell(0, 0), 1, 0);
+    let mut w = s.build();
+    let mut r = Rng::new(s.setup.seed);
+    // The first pass, then the second pass.
+    let _ = r.ranged(450, 900, true);
+    let _ = r.ranged(450, 900, true);
+    let _ = r.ranged(0, 65535, true);
+    assert_eq!(w.rng, r);
+    // In play the cell has started its animation: no second one.
+    glasnost_sim::load::recalc_cells(&mut w, &[cell(0, 0)]);
+    assert_eq!(w.rng, r);
+    // A bouncing type.
+    s.set_cell(cell(0, 0), 2, 0);
+    let w = s.build();
+    let mut r = Rng::new(s.setup.seed);
+    for _ in 0..2 {
+        for _ in 0..3 {
+            let _ = r.raw();
+        }
+        for _ in 0..3 {
+            let _ = r.ranged(-65535, 65535, true);
+        }
+    }
+    let _ = r.ranged(0, 65535, true);
+    assert_eq!(w.rng, r);
+    // An ascending pair collapses to a constant delay: no draw.
+    s.ruleset
+        .sim
+        .animations
+        .get_mut("SPARK")
+        .unwrap()
+        .random_rate = Some([1, 2]);
+    s.set_cell(cell(0, 0), 1, 0);
+    assert_eq!(s.build().rng.taken(), 1);
+}

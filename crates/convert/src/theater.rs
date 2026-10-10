@@ -14,7 +14,7 @@ use std::collections::BTreeMap;
 use glasnost_ini::Document;
 use glasnost_ini::value;
 use glasnost_map::terrain::{
-    Roles, TileCatalogue, TileCell, TileInfo, UNSET, UNSET_DESTROYABLE_CLIFF,
+    Roles, TileAnim, TileCatalogue, TileCell, TileInfo, UNSET, UNSET_DESTROYABLE_CLIFF,
 };
 use glasnost_vfs::Vfs;
 use glasnost_vfs::theater::Theater;
@@ -175,6 +175,8 @@ pub struct Tileset {
     /// The non-height-view field: 0 disables the file fallback (S-0010
     /// claim 3).
     pub non_height_view: i32,
+    /// Each tile's animation, tiles 1 … C in order (S-0010 claim 19).
+    pub anims: Vec<Option<TileAnim>>,
 }
 
 /// A theater's catalogue.
@@ -263,10 +265,13 @@ impl Catalogue {
                     .value(key)
                     .map_or_else(|| default.to_vec(), |v| value::text(v, NAME_MAX).to_vec())
             };
+            let set_name = text(b"SetName", DEFAULT_SET_NAME);
+            let anims = tile_anims(doc, &set_name, count);
             tilesets.push(Tileset {
                 number,
                 file_name: text(b"FileName", DEFAULT_FILE_NAME),
-                set_name: text(b"SetName", DEFAULT_SET_NAME),
+                set_name,
+                anims,
                 count,
                 authored,
                 first,
@@ -518,6 +523,17 @@ impl Catalogue {
                     )),
                 }
             }
+            // spec: S-0010 claim 19 (a tile's animation, from its tileset's animation section)
+            info.anim = self
+                .tilesets
+                .iter()
+                .find(|s| (s.first..s.first.saturating_add(s.count.max(0))).contains(&(t as i32)))
+                .and_then(|s| {
+                    s.anims
+                        .get((t as i32 - s.first) as usize)
+                        .cloned()
+                        .flatten()
+                });
             tiles.push(info);
         }
         (
@@ -548,6 +564,38 @@ impl Catalogue {
     }
 }
 
+/// The bytes of a tile animation's name that are read (S-0010 Import
+/// mapping).
+const ANIM_NAME_MAX: usize = 127; // spec: S-0010 Import mapping (the animation name: text, limit 127 bytes)
+
+/// The tile animations of a tileset (S-0010 claim 19): read from the section
+/// named by its set name, keys `TileNNAnim` and `TileNNAttachesTo` with NN
+/// the tile's number within the set from 01, at least two digits. An empty
+/// or absent animation name gives none; an absent attaches-to key −1.
+fn tile_anims(doc: &Document, set_name: &[u8], count: i32) -> Vec<Option<TileAnim>> {
+    let section = doc.section(set_name);
+    (1..=count.max(0))
+        .map(|k| {
+            let section = section?;
+            // spec: S-0010 Import mapping (TileNNAnim, NN from 01 with at least two digits)
+            let name = section.value(format!("Tile{k:02}Anim").as_bytes())?;
+            let name = value::text(name, ANIM_NAME_MAX);
+            if name.is_empty() {
+                return None;
+            }
+            // spec: S-0010 Import mapping (TileNNAttachesTo absent: −1, the animation never starts)
+            let attaches_to = section
+                .value(format!("Tile{k:02}AttachesTo").as_bytes())
+                .and_then(value::integer)
+                .unwrap_or(-1);
+            Some(TileAnim {
+                name: crate::names::encode(name),
+                attaches_to,
+            })
+        })
+        .collect()
+}
+
 /// A tile's size and cells from its tile file.
 fn tile_info(bytes: &[u8]) -> Result<TileInfo, String> {
     let tmp = glasnost_fmt::tmp::Tmp::parse(bytes).map_err(|e| e.to_string())?;
@@ -569,6 +617,7 @@ fn tile_info(bytes: &[u8]) -> Result<TileInfo, String> {
             })
             .collect(),
         variants: 0,
+        anim: None,
     })
 }
 
@@ -673,6 +722,31 @@ mod tests {
             Theater::Snow,
         );
         assert_eq!((none.clear_base, none.water_base), (-1, -1));
+    }
+
+    /// spec: S-0010 claim 19 and Import mapping (tile animations from the section named by the set name: TileNNAnim, TileNNAttachesTo, absent −1; an empty name gives none)
+    #[test]
+    fn claim_19_tile_animations() {
+        let d = doc(
+            "[TileSet0000]\nTilesInSet=1\n[TileSet0001]\nTilesInSet=3\nSetName=Foo\n\
+             [Foo]\nTile01Anim=Spark\nTile02Anim=Glow\nTile02AttachesTo=2\nTile03Anim=\n",
+        );
+        let c = Catalogue::read(&d, Theater::Temperate);
+        let a = &c.tilesets[1].anims;
+        assert_eq!(a.len(), 3);
+        assert_eq!(
+            a[0].as_ref().map(|x| (x.name.as_str(), x.attaches_to)),
+            Some(("Spark", -1))
+        );
+        assert_eq!(
+            a[1].as_ref().map(|x| (x.name.as_str(), x.attaches_to)),
+            Some(("Glow", 2))
+        );
+        assert_eq!(a[2], None);
+        let images = c.images(&|_| false);
+        let (cat, _) = c.tile_catalogue(&images, &|_| None);
+        assert_eq!(cat.tiles[0].anim, None);
+        assert_eq!(cat.tiles[2].anim.as_ref().map(|x| x.attaches_to), Some(2));
     }
 
     /// spec: S-0009 Formulas (tile number translation)

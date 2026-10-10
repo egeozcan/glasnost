@@ -283,6 +283,27 @@ pub struct CountryRules {
     pub passive_base: bool,
 }
 
+/// An animation type's resolved creation-draw fields (S-0109; S-0202
+/// claim 10).
+#[derive(Clone, Debug, Default)]
+pub struct AnimRules {
+    /// Type name.
+    pub name: String,
+    /// The random delay range [d₁′, d₂′] in ticks (S-0109 claim 3, F1).
+    pub random_delay: (i32, i32),
+    /// A bouncing type: the bouncer or the meteor flag (S-0109 Terms).
+    pub bouncing: bool,
+    /// Its start event can take draws that no approved spec states: a
+    /// resource chain reaction or a middle-event effect (request Q-0046).
+    pub start_effects: bool,
+}
+
+/// The stage delay d of a rate value ρ (S-0109 F1).
+pub fn anim_delay(rho: i32) -> i32 {
+    // spec: S-0109 F1 (d = ⌊900 / ρ⌋ for ρ > 0, 0 for ρ ≤ 0)
+    if rho > 0 { 900 / rho } else { 0 }
+}
+
 /// The gate and wall tower types that walls join (S-0112 claim 7), by
 /// building registration index.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -572,6 +593,8 @@ pub struct SimRules {
     pub game_tech_level: i32,
     /// The gate and wall tower types (S-0112 claim 7).
     pub gates: GateTypes,
+    /// Animation types by registration index.
+    pub animations: Vec<AnimRules>,
     /// The ruleset's `sim_rules_hash`.
     pub hash: String,
 }
@@ -855,10 +878,34 @@ impl SimRules {
             soviet_two: index(Kind::Building, &g.soviet_gate_two),
             tower: index(Kind::Building, &g.wall_tower),
         };
+        let animations = registry("animations")
+            .iter()
+            .map(|n| {
+                let a = s.animations.get(n).cloned().unwrap_or_default();
+                // spec: S-0109 Import mapping (RandomRate absent: no random rate, the range (0, 0))
+                let [r1, r2] = a.random_rate.unwrap_or([0, 0]);
+                let (d1, d2) = (anim_delay(r1), anim_delay(r2));
+                // spec: S-0109 F1 (d₂′ = max(d₂, 0), d₁′ = min(d₁, d₂′))
+                let d2p = d2.max(0);
+                let d1p = d1.min(d2p);
+                AnimRules {
+                    name: n.clone(),
+                    random_delay: (d1p, d2p),
+                    // spec: S-0109 Terms (a bouncing type: the bouncer flag or the meteor flag)
+                    bouncing: a.bouncer.unwrap_or(false) || a.is_meteor.unwrap_or(false),
+                    // spec: S-0109 claims 13 and 14 (the start event's chain reaction and middle-event effects)
+                    start_effects: a.tiberium_chain_reaction.unwrap_or(false)
+                        || a.scorch.unwrap_or(false)
+                        || a.crater.unwrap_or(false)
+                        || a.spawns_particle.unwrap_or(false),
+                }
+            })
+            .collect();
         Self {
             quirks,
             mode,
             general,
+            animations,
             base_units,
             // spec: S-0009 Terms and Import mapping (the game's tech level: the base rules' value, 10 when they omit it)
             game_tech_level: g.multiplayer_tech_level.unwrap_or(10),
@@ -895,6 +942,14 @@ impl SimRules {
             _ => return None,
         };
         v.get(index as usize)
+    }
+
+    /// The animation type a name names (S-0003 claim 14: ASCII case
+    /// folding), if the rules list it.
+    pub fn animation(&self, name: &str) -> Option<&AnimRules> {
+        self.animations
+            .iter()
+            .find(|a| a.name.eq_ignore_ascii_case(name))
     }
 
     /// A type's registration index by kind and name.

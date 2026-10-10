@@ -155,6 +155,75 @@
     "schema"
   ],
   "$defs": {
+    "AnimationType": {
+      "description": "An animation type's fields that its creation draws read (S-0109; S-0202\nclaim 10).",
+      "type": "object",
+      "properties": {
+        "bouncer": {
+          "description": "`Bouncer`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "crater": {
+          "description": "`Crater`: a middle-event effect.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "is_meteor": {
+          "description": "`IsMeteor`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "random_rate": {
+          "description": "`RandomRate`: the random rate pair (ρ₁, ρ₂), a −1 already replaced by\nthe end held (S-0109 claim 3).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "maxItems": 2,
+          "minItems": 2
+        },
+        "scorch": {
+          "description": "`Scorch`: a middle-event effect.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "spawns_particle": {
+          "description": "`SpawnsParticle` names a particle type: a middle-event effect.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "tiberium_chain_reaction": {
+          "description": "`TiberiumChainReaction`: the start event's resource chain reaction.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "additionalProperties": false
+    },
     "Armament": {
       "description": "One armament slot.",
       "type": "object",
@@ -2475,6 +2544,13 @@
           "type": "object",
           "additionalProperties": {
             "$ref": "#/$defs/UnitType"
+          }
+        },
+        "animations": {
+          "description": "Animation types by type name (their art sections, S-0109).",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/AnimationType"
           }
         },
         "behaviours": {

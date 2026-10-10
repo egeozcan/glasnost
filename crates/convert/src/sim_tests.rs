@@ -757,3 +757,17 @@ fn starting_unit_gate_and_vein_fields() {
     assert_eq!(alpha.multiplay_passive_base, Some(false));
     assert_eq!(s.overlays["VEIN"].is_veins, Some(true));
 }
+
+/// spec: S-0109 Import mapping and claim 3 (an animation type's random rate pair, −1 keeping that end; the bouncing flags, the chain reaction and the middle-event effects)
+#[test]
+fn animation_fields() {
+    let base = "[Animations]\n0=SPARK\n1=ROCK\n";
+    let art = "[SPARK]\nRandomRate=-1,30\nTiberiumChainReaction=yes\n[ROCK]\nIsMeteor=yes\nSpawnsParticle=none\n";
+    let (s, _) = sim(base, "", art);
+    let spark = &s.animations["SPARK"];
+    assert_eq!(spark.random_rate, Some([0, 30]));
+    assert_eq!(spark.tiberium_chain_reaction, Some(true));
+    let rock = &s.animations["ROCK"];
+    assert_eq!(rock.is_meteor, Some(true));
+    assert_eq!(rock.spawns_particle, None);
+}

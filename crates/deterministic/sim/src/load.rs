@@ -63,7 +63,9 @@ pub fn overlay_land(r: &SimRules, i: u8) -> Option<OverlayLand> {
     })
 }
 
-/// Runs a land recompute over cells in order (S-0211 claim 5).
+/// Runs a land recompute over cells in order (S-0211 claim 5), each cell
+/// starting its tile animation, with that animation's creation draws, when
+/// S-0010 claim 19 says (see [`tile_anim_due`]).
 pub fn recalc_cells(w: &mut World, order: &[CellXY]) {
     let rules = w.rules_arc();
     let cat = w.catalogue_arc();
@@ -74,7 +76,87 @@ pub fn recalc_cells(w: &mut World, order: &[CellXY]) {
         cliff_back: rules.general.cliff_back,
         quirks: terrain_quirks(&rules),
     };
-    recalc_pass(&mut w.cells.grid, order, &rr);
+    for &c in order {
+        let anim = tile_anim_due(w, &cat, c);
+        recalc_pass(&mut w.cells.grid, &[c], &rr);
+        if let Some(name) = anim {
+            anim_creation_draws(w, &name);
+        }
+    }
+}
+
+/// Whether the recalculation of `c` that is about to run starts the cell's
+/// tile animation (S-0010 claim 19): the cell is of the tile case (claim
+/// 8: a usable tile and no row-1 overlay) as the recalculation begins, its
+/// tile names an animation and its sub-tile is the tile's attaches-to
+/// value. While the map loads, before the second pass, only a cell's first
+/// recalculation can start one (S-0202 table); from the second pass on, a
+/// cell starts at most one. Returns the animation type's name.
+fn tile_anim_due(w: &mut World, cat: &TileCatalogue, c: CellXY) -> Option<String> {
+    let i = w.cells.idx(c)?;
+    let cell = *w.cells.cell(c)?;
+    let first = match &mut w.cells.anim_first {
+        Some(seen) => {
+            // spec: S-0202 table (before the second pass a tile animation starts at the first recalculation of its cell)
+            let was = seen[i];
+            seen[i] = true;
+            !was
+        }
+        // spec: S-0010 claim 19 (from the second pass until the next map load, at most one per cell)
+        None => !w.cells.anim_started[i],
+    };
+    if !first {
+        return None;
+    }
+    let tile = cat.tiles.get(usize::try_from(cell.tile).ok()?)?;
+    let anim = tile.anim.as_ref()?;
+    // spec: S-0010 claim 19 (the cell's sub-tile equals the tile's attaches-to value)
+    if anim.attaches_to != i32::from(cell.sub_tile) {
+        return None;
+    }
+    let row_one = cell.overlay != NO_OVERLAY
+        && overlay_land(w.rules(), cell.overlay).is_some_and(|o| o.is_row_one());
+    // spec: S-0010 claim 8 (only a tile-case cell starts a tile animation)
+    if row_one || cat.tile_cell(cell.tile, cell.sub_tile).is_none() {
+        return None;
+    }
+    if w.cells.anim_first.is_none() {
+        w.cells.anim_started[i] = true;
+    }
+    Some(anim.name.clone())
+}
+
+/// The creation draws of an animation created with no loop delay (S-0202
+/// claim 10, *Animation creation draws*): the stage-delay draw of S-0109
+/// claim 3 when its range holds more than one value, then a bouncing type's
+/// three raw values and three ranged draws over −65535 … 65535. The start
+/// event's draws are not stated by any approved spec (request Q-0046): none
+/// is taken. An animation type the rules do not list has no fields (S-0004
+/// claim 3) and takes no draw.
+pub fn anim_creation_draws(w: &mut World, name: &str) {
+    let rules = w.rules_arc();
+    let Some(a) = rules.animation(name) else {
+        return;
+    };
+    let q = rules.quirks;
+    let (d1, d2) = a.random_delay;
+    if d1 != d2 {
+        // spec: S-0109 claim 3 (one ranged draw over [d₁′, d₂′] when d₁′ ≠ d₂′)
+        let _ = w.rng.ranged(d1, d2, q.ranged_draw_half_span);
+    }
+    if a.bouncing {
+        // spec: S-0202 claim 10 (a bouncing type: three raw values, then three ranged draws R(−65535, 65535))
+        for _ in 0..3 {
+            let _ = w.rng.raw(); // spec: S-0202 Constants (animation bounce draws: 3 raw values)
+        }
+        // spec: S-0202 Constants (then 3 ranged draws over −65535 … 65535)
+        for _ in 0..3 {
+            let _ = w.rng.ranged(-65535, 65535, q.ranged_draw_half_span);
+        }
+    }
+    if a.start_effects {
+        w.note("S-0109 claim 13: an animation's start-event draws (chain reaction, middle-event effects) are not taken (request Q-0046)");
+    }
 }
 
 /// Sets up a new game on `map` (S-0009, S-0202 claim 8): the early phase
@@ -148,7 +230,11 @@ pub fn new_game(
         objects: Default::default(),
         next_id: 1,
         update: UpdateOrder::default(),
-        cells: Cells::new(grid),
+        cells: Cells {
+            // spec: S-0202 table (before the second pass a tile animation starts at a cell's first recalculation)
+            anim_first: Some(vec![false; grid.len()]),
+            ..Cells::new(grid)
+        },
         // spec: S-0201 claim 14 (orders blocked during the cycles of ticks 0 to 3)
         orders_blocked_through: 3,
         notes: Vec::new(),
@@ -246,7 +332,9 @@ pub fn new_game(
     // (S-0009 claim 43; S-0203 claim 3; S-0202 table).
     objects::place_map_objects(&mut w, map, setup.sandbox);
 
-    // Second recalculation pass (S-0010 claim 12).
+    // Second recalculation pass (S-0010 claim 12): its tile animations
+    // replace those started before it (S-0010 claim 19).
+    w.cells.anim_first = None;
     recalc_cells(&mut w, &order);
 
     // Late phase: list 3 and the late assignments (S-0009 claims 20, 28 and 29).

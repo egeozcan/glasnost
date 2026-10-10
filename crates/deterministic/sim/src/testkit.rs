@@ -100,6 +100,7 @@ pub fn catalogue() -> Arc<TileCatalogue> {
             slope,
         })],
         variants: 0,
+        anim: None,
     };
     Arc::new(TileCatalogue {
         tiles: (0..=4).map(tile).collect(),
