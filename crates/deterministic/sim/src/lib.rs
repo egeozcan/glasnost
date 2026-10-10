@@ -13,4 +13,28 @@
 //! networking, file formats or the importer. `cargo xtask check` and the
 //! `xtask` tests enforce that rule.
 
+pub mod behaviour;
+pub mod cells;
+pub mod crush;
+pub mod drive;
+pub mod infantry;
+pub mod load;
+pub mod objects;
+pub mod occupancy;
+pub mod orders;
+pub mod passability;
+pub mod path;
+pub mod process;
+pub mod regions;
 pub mod rng;
+pub mod rules;
+pub mod save;
+pub mod scatter;
+pub mod surface;
+pub mod testkit;
+pub mod tick;
+pub mod tracks;
+pub mod turning;
+pub mod update;
+pub mod walk;
+pub mod world;

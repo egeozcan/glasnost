@@ -1,0 +1,516 @@
+//! Infantry sequences, idle actions and fear (S-0107 claims 1, 4 to 10, 14
+//! and 15). Sequences are part of game state: they decide readiness (S-0215
+//! claim 11) and gate idle actions, which draw from the scenario random
+//! stream. Drawing them is the renderer's (S-0107 claims 2, 3).
+
+use glasnost_num::F64;
+use glasnost_rules::sim::MovementZone;
+use serde::{Deserialize, Serialize};
+
+use crate::world::{ObjectId, World};
+
+/// The 42 sequence kinds (S-0107 Terms), with our snake-case names.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[allow(missing_docs)]
+pub enum Seq {
+    Stand,
+    Guard,
+    Prone,
+    Walk,
+    FireStanding,
+    GoProne,
+    Crawl,
+    GetUp,
+    FireProne,
+    IdleA,
+    IdleB,
+    Die1,
+    Die2,
+    Die3,
+    Die4,
+    Die5,
+    Tread,
+    Swim,
+    WetIdleA,
+    WetIdleB,
+    WetDie1,
+    WetDie2,
+    WetFire,
+    Hover,
+    Fly,
+    Tumble,
+    FireAirborne,
+    Deploy,
+    Deployed,
+    DeployedFire,
+    DeployedIdle,
+    Undeploy,
+    Cheer,
+    Parachute,
+    AirDeathStart,
+    AirDeathFall,
+    AirDeathEnd,
+    Panic,
+    Shovel,
+    Carry,
+    SecondaryFire,
+    SecondaryFireProne,
+}
+
+impl Seq {
+    /// Our name (the key of a type's `sequences`).
+    pub fn key(self) -> &'static str {
+        use Seq::*;
+        match self {
+            Stand => "stand",
+            Guard => "guard",
+            Prone => "prone",
+            Walk => "walk",
+            FireStanding => "fire_standing",
+            GoProne => "go_prone",
+            Crawl => "crawl",
+            GetUp => "get_up",
+            FireProne => "fire_prone",
+            IdleA => "idle_a",
+            IdleB => "idle_b",
+            Die1 => "die_1",
+            Die2 => "die_2",
+            Die3 => "die_3",
+            Die4 => "die_4",
+            Die5 => "die_5",
+            Tread => "tread",
+            Swim => "swim",
+            WetIdleA => "wet_idle_a",
+            WetIdleB => "wet_idle_b",
+            WetDie1 => "wet_die_1",
+            WetDie2 => "wet_die_2",
+            WetFire => "wet_fire",
+            Hover => "hover",
+            Fly => "fly",
+            Tumble => "tumble",
+            FireAirborne => "fire_airborne",
+            Deploy => "deploy",
+            Deployed => "deployed",
+            DeployedFire => "deployed_fire",
+            DeployedIdle => "deployed_idle",
+            Undeploy => "undeploy",
+            Cheer => "cheer",
+            Parachute => "parachute",
+            AirDeathStart => "air_death_start",
+            AirDeathFall => "air_death_fall",
+            AirDeathEnd => "air_death_end",
+            Panic => "panic",
+            Shovel => "shovel",
+            Carry => "carry",
+            SecondaryFire => "secondary_fire",
+            SecondaryFireProne => "secondary_fire_prone",
+        }
+    }
+
+    /// (interruptible, base delay b, normalised) of S-0107 table T1.
+    pub fn table(self) -> (bool, i32, bool) {
+        use Seq::*;
+        // spec: S-0107 Constants table T1 (interruptible, base delay, normalised by game speed)
+        match self {
+            Stand | Guard => (true, 0, false),
+            Prone => (true, 6, false),
+            Walk => (true, 3, false),
+            FireStanding | Crawl | FireProne | Swim | WetFire | Fly | Tumble | FireAirborne => {
+                (true, 1, false)
+            }
+            GoProne | GetUp => (false, 1, false),
+            IdleA | IdleB | WetIdleA | WetIdleB => (true, 3, true),
+            Die1 | Die2 | Die3 | Die4 | Die5 | WetDie1 | WetDie2 => (false, 1, false),
+            Tread => (true, 3, false),
+            Hover => (true, 2, true),
+            Deploy | Undeploy => (false, 1, false),
+            Deployed | DeployedFire | DeployedIdle | Parachute => (true, 1, false),
+            Cheer => (false, 3, true),
+            AirDeathStart | AirDeathEnd => (false, 3, false),
+            AirDeathFall => (false, 1, false),
+            Panic => (true, 4, false),
+            Shovel => (true, 6, false),
+            Carry => (true, 3, false),
+            SecondaryFire | SecondaryFireProne => (true, 1, false),
+        }
+    }
+
+    /// Whether the kind is one of the deploy kinds (S-0107 Terms).
+    pub fn is_deploy(self) -> bool {
+        matches!(self, Seq::Deploy | Seq::Deployed | Seq::DeployedFire | Seq::DeployedIdle)
+    }
+}
+
+/// An infantry unit's sequence and fear state.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct InfantryState {
+    /// Current sequence.
+    pub seq: Option<Seq>,
+    /// Tick at which the stage last restarted.
+    pub seq_t0: i32,
+    /// Stage delay d.
+    pub seq_delay: i32,
+    /// Fear level, 0 … 300.
+    pub fear: i32,
+    /// Prone state.
+    pub prone: bool,
+    /// Attack state (S-0107 claim 11, combat).
+    pub attack: bool,
+    /// Tick at which the idle timer has run out (S-0107 claim 14).
+    pub idle_until: i32,
+    /// The water record of an amphibious-destroyer type (S-0107 claim 7).
+    pub wet: Option<bool>,
+}
+
+impl InfantryState {
+    /// The stage seen after the updates of tick `t` (S-0107 claim 4).
+    pub fn stage(&self, t: i32) -> i32 {
+        // spec: S-0107 claim 4 (stage = ⌊(t − tᵣ) / d⌋; a delay of 0 freezes it at 0)
+        if self.seq_delay >= 1 {
+            t.wrapping_sub(self.seq_t0).max(0) / self.seq_delay
+        } else {
+            0
+        }
+    }
+}
+
+/// The game-speed normalisation N(b, s) of S-0107 F3.
+pub fn normalised(b: i32, s: u8) -> i32 {
+    // spec: S-0107 Constants table T3 (A(b, s) for 1 ≤ b ≤ 4)
+    const A: [[i32; 8]; 4] = [
+        [2, 2, 1, 1, 1, 1, 1, 1],
+        [3, 3, 3, 2, 2, 2, 1, 1],
+        [5, 4, 4, 3, 3, 2, 2, 1],
+        [7, 6, 5, 4, 4, 4, 3, 2],
+    ];
+    let s = usize::from(s.min(7)); // spec: S-0107 F3 (s above 7 reads column 7)
+    match b {
+        // spec: S-0107 F3 (N(0, s) = 0; table for 1 … 4; ⌊8b / (s + 1)⌋ from 5)
+        0 => 0,
+        1..=4 => A[(b - 1) as usize][s], // spec: S-0107 F3 (table T3 for b = 1 … 4)
+        _ => 8 * b / (s as i32 + 1), // spec: S-0107 F3 (⌊8b / (s + 1)⌋ from b = 5)
+    }
+}
+
+/// A sequence entry's frame count C for a unit (0 when absent).
+fn count(w: &World, id: ObjectId, q: Seq) -> i32 {
+    let Some(o) = w.obj(id) else { return 0 };
+    w.rules()
+        .unit(o.kind, o.type_index)
+        .and_then(|u| u.sequences.get(q.key()))
+        .map_or(0, |e| e.count)
+}
+
+fn entry_dir(w: &World, id: ObjectId, q: Seq) -> Option<u8> {
+    let o = w.obj(id)?;
+    w.rules()
+        .unit(o.kind, o.type_index)
+        .and_then(|u| u.sequences.get(q.key()))
+        .and_then(|e| e.direction)
+}
+
+/// Whether the unit's cell is a wet cell (S-0107 Terms) and it is not on a
+/// bridge deck.
+fn on_wet(w: &World, id: ObjectId) -> bool {
+    use glasnost_map::terrain::land;
+    let Some(o) = w.obj(id) else { return false };
+    o.layer == crate::world::Layer::Ground
+        && w
+            .cells
+            .cell(o.pos.cell())
+            .is_some_and(|c| c.land == land::WATER || c.land == land::BEACH)
+}
+
+/// The substitution of S-0107 claim 7 for a requested kind.
+fn substitute(w: &World, id: ObjectId, q: Seq) -> Seq {
+    let Some(o) = w.obj(id) else { return q };
+    let Some(u) = w.rules().unit(o.kind, o.type_index) else {
+        return q;
+    };
+    let fear = o.infantry.as_ref().map_or(0, |s| s.fear);
+    // spec: S-0107 claim 7 (carrying: enslaved units only; none in M3)
+    // spec: S-0107 claim 7 (water: amphibious-destroyer types on a wet cell)
+    if u.zone == MovementZone::AmphibiousDestroyer && on_wet(w, id) {
+        let wet = match q {
+            Seq::Walk | Seq::Crawl => Some(Seq::Swim),
+            Seq::Prone | Seq::Stand => Some(Seq::Tread),
+            Seq::IdleA => Some(Seq::WetIdleA),
+            Seq::IdleB => Some(Seq::WetIdleB),
+            Seq::Die1 => Some(Seq::WetDie1),
+            Seq::Die2 => Some(Seq::WetDie2),
+            Seq::FireStanding | Seq::FireProne => Some(Seq::WetFire),
+            _ => None,
+        };
+        if let Some(x) = wet {
+            return x;
+        }
+    }
+    // spec: S-0107 claim 7 (hovering: airborne units only; no airborne infantry in M3)
+    // spec: S-0107 claim 7 (panic: walk becomes panic above fear 199)
+    if q == Seq::Walk && fear > 199 {
+        return Seq::Panic;
+    }
+    q
+}
+
+/// A start request (S-0107 claim 6). Returns whether the kind started.
+pub fn request(w: &mut World, id: ObjectId, q: Seq, forced: bool) -> bool {
+    let tick = w.tick;
+    let speed = w.game_speed;
+    let normalise = w.rules().quirks.speed_normalised_delays;
+    // spec: S-0107 claim 6 (row 1: the requested kind's own entry has C = 0)
+    if count(w, id, q) == 0 {
+        return false;
+    }
+    let crawls = w
+        .obj(id)
+        .and_then(|o| w.rules().unit(o.kind, o.type_index))
+        .is_some_and(|u| u.crawls);
+    // spec: S-0107 claim 6 (row 3: go-prone for a type that cannot crawl)
+    if q == Seq::GoProne && !crawls {
+        return false;
+    }
+    let resulting = substitute(w, id, q);
+    let wet = on_wet(w, id);
+    let Some(s) = w.obj_mut(id).and_then(|o| o.infantry.as_mut()) else {
+        return false;
+    };
+    // spec: S-0107 claim 7 (the water record is updated by every request that rows 1 to 3 do not turn down)
+    s.wet = Some(wet);
+    // spec: S-0107 claim 6 (row 4: the resulting kind is the current one)
+    if s.seq == Some(resulting) {
+        return false;
+    }
+    // spec: S-0107 claim 6 (row 5: not forced, and the current kind is not interruptible)
+    if !forced && s.seq.is_some_and(|c| !c.table().0) {
+        return false;
+    }
+    let (_, b, norm) = resulting.table();
+    // spec: S-0107 claim 5 (normalised kinds take N(b, s); every other kind b)
+    s.seq_delay = if norm && normalise { normalised(b, speed) } else { b };
+    s.seq = Some(resulting);
+    s.seq_t0 = tick;
+    // spec: S-0107 Terms (the prone state begins with go-prone and ends with get-up or deploy)
+    match resulting {
+        Seq::GoProne => s.prone = true,
+        Seq::GetUp | Seq::Deploy => s.prone = false,
+        _ => {}
+    }
+    true
+}
+
+/// The per-tick sequence rules of one infantry unit, after its movement for
+/// the tick (S-0107 claims 8 to 10 and 15). `moving_now`: physically moving
+/// on this tick; `in_progress`: has movement in progress.
+pub fn update(w: &mut World, id: ObjectId, moving_now: bool, in_progress: bool, has_dest: bool) {
+    let tick = w.tick;
+    let keeps = w.rules().quirks.set_facing_keeps_target;
+    let Some(o) = w.obj(id) else { return };
+    let Some(u) = w.rules().unit(o.kind, o.type_index).cloned() else {
+        return;
+    };
+    let human = o.owner.is_some_and(|h| w.houses[usize::from(h.0)].human);
+    let Some(s) = o.infantry.clone() else { return };
+    // Fear (S-0107 claim 15).
+    // spec: S-0107 claim 15 (f′ = f − 1 when f > 0 and the type is not fearless)
+    let f = s.fear;
+    let f2 = if f > 0 && !u.fearless { f - 1 } else { f };
+    let deploying = s.seq.is_some_and(Seq::is_deploy);
+    if let Some(st) = w.obj_mut(id).and_then(|o| o.infantry.as_mut()) {
+        st.fear = f2;
+    }
+    if f > 0 {
+        // spec: S-0107 claim 15 (lie down at f′ ≥ 50; get up below 50)
+        if !s.prone && !deploying && !u.fraidycat && (!human || (!has_dest && !in_progress)) && f2 >= 50 {
+            request(w, id, Seq::GoProne, false);
+        } else if s.prone && !deploying && f2 < 50 {
+            request(w, id, Seq::GetUp, false);
+        }
+    }
+    // Completion follow-up (S-0107 claim 8 and State and ordering).
+    let s = w.obj(id).and_then(|o| o.infantry.clone()).unwrap_or_default();
+    let c = s.seq.map_or(0, |q| count(w, id, q));
+    let complete = s.seq.is_none() || s.stage(tick) >= c;
+    if complete {
+        let cur = s.seq;
+        let follow = match cur {
+            Some(Seq::Deploy) => Some(Seq::Deployed),
+            Some(Seq::Undeploy) => Some(Seq::Stand),
+            Some(Seq::AirDeathStart) => Some(Seq::AirDeathFall),
+            Some(Seq::Die1 | Seq::Die2 | Seq::Die3 | Seq::Die4 | Seq::Die5)
+            | Some(Seq::WetDie1 | Seq::WetDie2 | Seq::AirDeathEnd)
+            | Some(Seq::Parachute) => None,
+            _ => {
+                // spec: S-0107 State and ordering ("not moving": no movement in progress)
+                let moving = in_progress;
+                Some(match (moving, s.prone, cur) {
+                    (false, _, Some(Seq::Deployed | Seq::DeployedFire | Seq::DeployedIdle)) => Seq::Deployed,
+                    (false, true, _) => Seq::Prone,
+                    (false, false, _) => Seq::Stand,
+                    (true, true, _) => Seq::Crawl,
+                    (true, false, _) => Seq::Walk,
+                })
+            }
+        };
+        // spec: S-0107 claim 9 (a completed kind's declared direction is snapped in the "any other kind" rows)
+        let generic = !matches!(
+            cur,
+            Some(
+                Seq::Die1
+                    | Seq::Die2
+                    | Seq::Die3
+                    | Seq::Die4
+                    | Seq::Die5
+                    | Seq::WetDie1
+                    | Seq::WetDie2
+                    | Seq::AirDeathEnd
+                    | Seq::Deploy
+                    | Seq::Undeploy
+                    | Seq::AirDeathStart
+                    | Seq::Parachute
+                    | Seq::Shovel
+            )
+        );
+        if generic
+            && let Some(q) = cur
+            && let Some(d) = entry_dir(w, id, q)
+        {
+            // spec: S-0107 claim 9 (body facing set at once to D × 8192)
+            if let Some(o) = w.obj_mut(id) {
+                o.body.set(u16::from(d) * 8192, tick, keeps);
+            }
+        }
+        if let Some(q) = follow {
+            request(w, id, q, true);
+        }
+    }
+    // Movement rule (S-0107 claim 10).
+    let s = w.obj(id).and_then(|o| o.infantry.clone()).unwrap_or_default();
+    if !moving_now {
+        let rep = match s.seq {
+            Some(Seq::Walk | Seq::Fly | Seq::Hover) => Some(Seq::Stand),
+            Some(Seq::Crawl) => Some(Seq::Prone),
+            Some(Seq::Swim) => Some(Seq::Tread),
+            _ => None,
+        };
+        if let Some(q) = rep {
+            request(w, id, q, false);
+        }
+    } else {
+        // spec: S-0107 claim 10 (moving: crawl when prone, walk otherwise; jumpjets ask for hover or fly)
+        let q = if s.prone { Seq::Crawl } else { Seq::Walk };
+        request(w, id, q, false);
+    }
+}
+
+/// The idle timer length T of S-0107 F4 from a drawn unit-interval value.
+pub fn idle_length(w: &World, u: F64) -> i32 {
+    let mode = w.rules().mode;
+    let r = w.rules().general.idle_frequency;
+    // spec: S-0107 F4 (P = R × 1800, Q = R × 450, T = trunc(Q + (P − Q) × u), all rounded by the mode)
+    let p = r.mul(F64::from_i64(1800, mode), mode);
+    let q = r.mul(F64::from_i64(450, mode), mode); // spec: S-0107 F4 (Q = R × 450)
+    q.add(p.sub(q, mode).mul(u, mode), mode).to_i32_common()
+}
+
+/// An idle-action attempt (S-0107 claim 14), from a behaviour processing.
+pub fn idle_attempt(w: &mut World, id: ObjectId, in_progress: bool) {
+    let tick = w.tick;
+    let q = w.rules().quirks;
+    let mode = w.rules().mode;
+    let keeps = q.set_facing_keeps_target;
+    let Some(o) = w.obj(id) else { return };
+    let Some(s) = o.infantry.clone() else { return };
+    let is_cow = w
+        .rules()
+        .unit(o.kind, o.type_index)
+        // spec: S-0107 Import mapping (the cow: type identifier COW, compared case-insensitively)
+        .is_some_and(|u| u.name.eq_ignore_ascii_case("COW"));
+    // spec: S-0107 claim 14 (conditions: timer run out, no movement in progress, not prone, not attacking, stand/guard/tread)
+    let goes = tick >= s.idle_until
+        && !in_progress
+        && !s.prone
+        && !s.attack
+        && matches!(s.seq, Some(Seq::Stand | Seq::Guard | Seq::Tread));
+    if !goes {
+        return;
+    }
+    // spec: S-0107 F4 (the timer draw: R(0, 2147483646) times c)
+    let u = w.rng.unit(mode);
+    let t = idle_length(w, u);
+    if let Some(st) = w.obj_mut(id).and_then(|o| o.infantry.as_mut()) {
+        st.idle_until = tick.wrapping_add(t);
+    }
+    // spec: S-0107 claim 14 (a fraidycat above fear 50 whose owner is not human-controlled scatters; never in our engine)
+    // spec: S-0107 claim 14 (r and e drawn from 0 … 10)
+    let mut r = w.rng.ranged(0, 10, q.ranged_draw_half_span);
+    if is_cow && q.cow_idle {
+        let e = w.rng.ranged(0, 10, q.ranged_draw_half_span); // spec: S-0107 claim 14 (the cow's e drawn from 0 … 10)
+        // spec: S-0107 claim 14 (the cow: when e < 5 the outcome of r = 8)
+        if e < 5 {
+            r = 8;
+        }
+    }
+    match r {
+        1 | 2 | 7 => { // spec: S-0107 claim 14 (r = 1, 2 or 7: idle B)
+            request(w, id, Seq::IdleB, false);
+        }
+        3..=5 => { // spec: S-0107 claim 14 (r = 3 … 5: idle A)
+            request(w, id, Seq::IdleA, false);
+        }
+        6 | 8..=10 => { // spec: S-0107 claim 14 (r = 6 or 8 … 10: a new facing)
+            // spec: S-0107 claim 14 (δ drawn from 0 … 7, the body facing set at once to δ × 8192)
+            let d = w.rng.ranged(0, 7, q.ranged_draw_half_span);
+            if let Some(o) = w.obj_mut(id) {
+                o.body.set((d as u16) * 8192, tick, keeps); // spec: S-0107 claim 14 (δ × 8192)
+            }
+            if r == 8 && is_cow && q.cow_idle { // spec: S-0107 claim 14 (the cow's r = 8 also scatters)
+                crate::scatter::request(
+                    w,
+                    id,
+                    crate::scatter::ScatterRequest {
+                        threat: None,
+                        forced: true,
+                        anywhere: false,
+                    },
+                );
+            }
+        }
+        _ => {}
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // spec: S-0107 F3 (the normalisation table and the formula from b = 5)
+    #[test]
+    fn normalisation() {
+        assert_eq!(normalised(0, 3), 0);
+        assert_eq!(normalised(3, 0), 5);
+        assert_eq!(normalised(3, 6), 2);
+        assert_eq!(normalised(4, 0), 7);
+        assert_eq!(normalised(5, 0), 40);
+        assert_eq!(normalised(2, 7), 1);
+    }
+
+    // spec: S-0107 claim 4 (stage timing)
+    #[test]
+    fn stage() {
+        let s = InfantryState {
+            seq: Some(Seq::Walk),
+            seq_t0: 10,
+            seq_delay: 3,
+            ..Default::default()
+        };
+        assert_eq!(s.stage(10), 0);
+        assert_eq!(s.stage(12), 0);
+        assert_eq!(s.stage(13), 1);
+        let z = InfantryState {
+            seq_delay: 0,
+            ..Default::default()
+        };
+        assert_eq!(z.stage(100), 0);
+    }
+}

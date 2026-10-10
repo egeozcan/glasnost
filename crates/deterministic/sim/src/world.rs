@@ -1,0 +1,310 @@
+//! The game state: houses, objects, cells and the scenario random stream.
+//!
+//! Everything here is plain data that serializes deterministically: ordered
+//! containers only, object IDs from a counter (never from addresses). The
+//! rules ([`SimRules`]) are held beside the state and are not saved.
+
+use std::collections::BTreeMap;
+use std::sync::Arc;
+
+use glasnost_map::terrain::TileCatalogue;
+use glasnost_map::{CellXY, Theater};
+use glasnost_num::F64;
+use glasnost_num::geom::Facing;
+use serde::{Deserialize, Serialize};
+
+use crate::behaviour::Behaviours;
+use crate::cells::Cells;
+use crate::drive::DriveState;
+use crate::infantry::InfantryState;
+use crate::orders::Order;
+use crate::path::{PathState, PathfinderChoice};
+use crate::regions::Regions;
+use crate::rng::Rng;
+use crate::rules::{Kind, SimRules};
+use crate::turning::Turning;
+use crate::update::UpdateOrder;
+use crate::walk::WalkState;
+
+/// An object's stable ID, assigned from a counter at creation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct ObjectId(pub u32);
+
+/// A house's index in house order (S-0009 claim 19).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct HouseId(pub u8);
+
+/// A position in leptons (S-0204 claim 1).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct Pos {
+    /// Map x.
+    pub x: i32,
+    /// Map y.
+    pub y: i32,
+    /// World height.
+    pub z: i32,
+}
+
+impl Pos {
+    /// A position.
+    pub fn new(x: i32, y: i32, z: i32) -> Self {
+        Self { x, y, z }
+    }
+
+    /// The cell that contains the position (S-0204 claim 2: truncation
+    /// toward zero).
+    pub fn cell(self) -> CellXY {
+        // spec: S-0204 claim 2 (cell = (trunc(x / 256), trunc(y / 256)))
+        CellXY::new(self.x / 256, self.y / 256)
+    }
+
+    /// The centre of a cell at height `z` (S-0204 claim 3).
+    pub fn centre(c: CellXY, z: i32) -> Self {
+        // spec: S-0204 claim 3 (centre = (256x + 128, 256y + 128))
+        Self::new(256 * c.x + 128, 256 * c.y + 128, z)
+    }
+}
+
+/// What a target, destination or guard spot names (S-0215 Terms).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub enum Target {
+    /// An object.
+    Object(ObjectId),
+    /// A cell.
+    Cell(CellXY),
+}
+
+/// Which layer of a cell an object is in (S-0209 Terms, *cell layer*).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub enum Layer {
+    /// The ground layer.
+    #[default]
+    Ground,
+    /// The bridge-deck layer.
+    Deck,
+}
+
+/// A house.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct House {
+    /// The name pre-placed objects match (S-0009 claim 27).
+    pub name: String,
+    /// Country registration index.
+    pub country: u32,
+    /// Houses this house counts as allies, itself included (S-0209 Terms).
+    pub allies: Vec<HouseId>,
+    /// Human-controlled (an AI house of our engine counts as one, glossary
+    /// *AI house*).
+    pub human: bool,
+    /// House skill level (S-0209 Terms; 0 for every house of our engine in
+    /// a skirmish).
+    pub skill: i32,
+    /// Start position index, if it has one.
+    pub start: Option<u32>,
+    /// Orders waiting to be applied (S-0213 claim 2).
+    pub pending: Vec<Order>,
+}
+
+impl House {
+    /// Whether this house counts `other` as allied (this house's view).
+    pub fn allied_with(&self, other: HouseId) -> bool {
+        self.allies.binary_search(&other).is_ok()
+    }
+}
+
+/// An object in the world.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Object {
+    /// Stable ID.
+    pub id: ObjectId,
+    /// Kind.
+    pub kind: Kind,
+    /// Type registration index within its kind.
+    pub type_index: u32,
+    /// Owner (terrain objects have none).
+    pub owner: Option<HouseId>,
+    /// Position in leptons.
+    pub pos: Pos,
+    /// Cell layer.
+    pub layer: Layer,
+    /// Hit points.
+    pub health: i32,
+    /// On the map (S-0213 Terms).
+    pub on_map: bool,
+    /// Body facing.
+    pub body: Turning,
+    /// Turret facing.
+    pub turret: Turning,
+    /// Tick of the last shot (−100 for one that never fired, S-0206 claim 9).
+    pub last_fired: i32,
+    /// Behaviour slots and processing (S-0215).
+    pub beh: Behaviours,
+    /// Current target.
+    pub target: Option<Target>,
+    /// Current destination.
+    pub dest: Option<Target>,
+    /// Guard spot.
+    pub guard_spot: Option<Target>,
+    /// Queued destinations.
+    pub queued_dests: Vec<Target>,
+    /// Attack-move memory (S-0213 claim 6).
+    pub attack_move: Option<Target>,
+    /// The object it is in contact with (S-0215 Terms).
+    pub contact: Option<ObjectId>,
+    /// Path state (S-0212).
+    pub path: PathState,
+    /// Drive locomotor state (S-0207).
+    pub drive: Option<DriveState>,
+    /// Walk locomotor state (S-0208).
+    pub walk: Option<WalkState>,
+    /// Infantry state (S-0107).
+    pub infantry: Option<InfantryState>,
+    /// The crush-slowdown state (S-0210 claim 9).
+    pub crush_slowdown: bool,
+    /// Tick at which the targeting timer has run out (S-0215 claim 33).
+    pub targeting_timer: i32,
+    /// Tick of the object's last turn (S-0203 claim 11).
+    pub last_turn: i32,
+    /// For a building: its foundation size.
+    pub foundation: (i32, i32),
+    /// Speed multiplier (S-0208 Terms) or speed bonus factor (S-0207
+    /// claim 13), a double; 1.0 at creation.
+    pub speed_bonus: F64,
+}
+
+/// One house in the game setup.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HouseSetup {
+    /// Name pre-placed objects match.
+    pub name: String,
+    /// Country type name.
+    pub country: String,
+    /// Human-controlled (AI houses count as human, glossary *AI house*).
+    pub human: bool,
+    /// Chosen start position, or `None` for random.
+    pub start: Option<u32>,
+}
+
+/// How a game is set up: everything the simulation needs besides rules and
+/// map. Our engine takes the seed from the setup (S-0202 claim 8,
+/// departure).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GameSetup {
+    /// The game seed (S-0202 claim 8).
+    pub seed: u32,
+    /// Game-speed index 0 … 6 (S-0201).
+    pub game_speed: u8,
+    /// Houses in house order (S-0009 claim 19).
+    pub houses: Vec<HouseSetup>,
+    /// Alliances: pairs of house indices allied both ways.
+    pub alliances: Vec<(u8, u8)>,
+    /// Our viewer's sandbox: skip the start positions of S-0009 claims 17 to
+    /// 20 and starting units, so that a map can be watched without players.
+    pub sandbox: bool,
+}
+
+/// The game state.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct World {
+    /// Tick number (S-0201 claim 1).
+    pub tick: i32,
+    /// The scenario random stream (S-0202).
+    pub rng: Rng,
+    /// Game-speed index.
+    pub game_speed: u8,
+    /// Houses in house order.
+    pub houses: Vec<House>,
+    /// Objects by ID.
+    pub objects: BTreeMap<ObjectId, Object>,
+    /// Next object ID.
+    pub next_id: u32,
+    /// The update order (S-0203 claim 3).
+    pub update: UpdateOrder,
+    /// Cells.
+    pub cells: Cells,
+    /// Orders are blocked up to and including this tick (S-0201 claim 14).
+    pub orders_blocked_through: i32,
+    /// Problems met while loading (requests and provisional rules).
+    pub notes: Vec<String>,
+    /// The map's theater.
+    pub theater: Theater,
+    /// The pathfinder in use (S-0212, behind a swappable interface).
+    pub pathfinder: PathfinderChoice,
+    /// The rules (not saved).
+    #[serde(skip)]
+    pub rules: Option<Arc<SimRules>>,
+    /// The theater's tile catalogue (not saved; given again on load).
+    #[serde(skip)]
+    pub catalogue: Option<Arc<TileCatalogue>>,
+    /// Regions and reach regions (derived; rebuilt on load).
+    #[serde(skip)]
+    pub regions: Regions,
+}
+
+impl World {
+    /// The rules.
+    pub fn rules(&self) -> &SimRules {
+        self.rules.as_deref().expect("world has rules")
+    }
+
+    /// A shared handle on the rules.
+    pub fn rules_arc(&self) -> Arc<SimRules> {
+        self.rules.clone().expect("world has rules")
+    }
+
+    /// An object.
+    pub fn obj(&self, id: ObjectId) -> Option<&Object> {
+        self.objects.get(&id)
+    }
+
+    /// An object, for writing.
+    pub fn obj_mut(&mut self, id: ObjectId) -> Option<&mut Object> {
+        self.objects.get_mut(&id)
+    }
+
+    /// Whether house `a` counts house `b` as allied (`a`'s view; S-0209
+    /// Terms). An object without an owner is allied with no house.
+    pub fn allied(&self, a: Option<HouseId>, b: Option<HouseId>) -> bool {
+        match (a, b) {
+            (Some(a), Some(b)) => self
+                .houses
+                .get(usize::from(a.0))
+                .is_some_and(|h| h.allied_with(b)),
+            _ => false,
+        }
+    }
+
+    /// The facing an object's body has now.
+    pub fn body_facing(&self, id: ObjectId) -> Facing {
+        self.obj(id).map_or(0, |o| o.body.value(self.tick))
+    }
+
+    /// A new object ID.
+    pub fn new_id(&mut self) -> ObjectId {
+        let id = ObjectId(self.next_id);
+        self.next_id += 1;
+        id
+    }
+
+    /// Records a note (a provisional rule met or a request that applies).
+    pub fn note(&mut self, text: impl Into<String>) {
+        let t = text.into();
+        if !self.notes.contains(&t) {
+            self.notes.push(t);
+        }
+    }
+}
+
+impl World {
+    /// An object's reference point (S-0204 claim 4).
+    pub fn reference_point(&self, id: ObjectId) -> Pos {
+        let Some(o) = self.obj(id) else { return Pos::default() };
+        if o.kind == Kind::Building {
+            let (fw, fh) = o.foundation;
+            // spec: S-0204 claim 4 (a building: its position plus (128 × (W − 1), 128 × (H − 1), 0))
+            Pos::new(o.pos.x + 128 * (fw - 1), o.pos.y + 128 * (fh - 1), o.pos.z)
+        } else {
+            o.pos
+        }
+    }
+}

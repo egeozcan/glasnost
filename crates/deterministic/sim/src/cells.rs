@@ -1,0 +1,407 @@
+//! Per-cell state of play: terrain, passability category, the occupancy
+//! record of each cell layer and the objects each layer lists (S-0209).
+
+use glasnost_map::{Cell, CellGrid, CellXY, Footprint};
+use serde::{Deserialize, Serialize};
+
+use crate::world::{HouseId, Layer, ObjectId};
+
+/// Standing positions (S-0208 table P).
+pub mod position {
+    /// Centre.
+    pub const CENTRE: u8 = 0; // spec: S-0208 table P (0 centre)
+    /// Top.
+    pub const TOP: u8 = 1; // spec: S-0208 table P (1 top)
+    /// Right.
+    pub const RIGHT: u8 = 2; // spec: S-0208 table P (2 right)
+    /// Left.
+    pub const LEFT: u8 = 3; // spec: S-0208 table P (3 left)
+    /// Bottom.
+    pub const BOTTOM: u8 = 4; // spec: S-0208 table P (4 bottom)
+    /// The three side positions (S-0208 Terms).
+    pub const SIDES: [u8; 3] = [RIGHT, LEFT, BOTTOM]; // spec: S-0208 Terms (side positions)
+}
+
+/// What marked a standing position.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Marker {
+    /// An infantry unit and its house.
+    Infantry(ObjectId, HouseId),
+    /// A terrain object (S-0209 claim 1).
+    Terrain(ObjectId),
+}
+
+/// A mark with the order in which it was made.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Mark {
+    /// Who marked.
+    pub by: Marker,
+    /// Marking order (for `quirks.occupancy_house_stale` off).
+    pub seq: u32,
+}
+
+/// The occupancy record of one cell layer (S-0209 Terms).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Occupancy {
+    /// The five standing positions.
+    pub marks: [Option<Mark>; 5], // spec: S-0209 claim 1 (one mark per standing position; five positions, S-0208 table P)
+    /// Vehicles that set the vehicle-present flag (S-0209 claim 1).
+    pub vehicles: u8,
+    /// Buildings that set the building-present flag.
+    pub buildings: u8,
+    /// Objects that set the object-present flag.
+    pub others: u8,
+    /// The infantry house.
+    pub house: Option<HouseId>,
+}
+
+impl Occupancy {
+    /// Whether a standing position is taken.
+    pub fn taken(&self, p: u8) -> bool {
+        self.marks[usize::from(p)].is_some()
+    }
+
+    /// Whether the three side positions are all taken (S-0209 claim 2).
+    pub fn full(&self) -> bool {
+        position::SIDES.iter().all(|&p| self.taken(p))
+    }
+
+    /// Whether the record is empty as a whole (S-0212 claim 25).
+    pub fn empty(&self) -> bool {
+        self.marks.iter().all(Option::is_none)
+            && self.vehicles == 0
+            && self.buildings == 0
+            && self.others == 0
+    }
+
+    /// The vehicle-present flag.
+    pub fn vehicle_present(&self) -> bool {
+        self.vehicles > 0
+    }
+}
+
+/// The switches the occupancy record reads.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct OccupancyQuirks {
+    /// `quirks.occupancy_house_side_positions_only` (S-0209 Edge cases).
+    pub side_positions_only: bool,
+    /// `quirks.occupancy_house_stale` (S-0209 Edge cases).
+    pub stale: bool,
+}
+
+/// Per-cell state of play.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Cells {
+    /// Terrain and overlay of every legal cell.
+    pub grid: CellGrid,
+    /// Passability category (S-0211 claim 11) by dense index.
+    pub category: Vec<u8>,
+    /// Occupancy records (ground, deck) by dense index.
+    pub occ: Vec<[Occupancy; 2]>, // spec: S-0209 Terms (two cell layers: ground and bridge deck)
+    /// Listed objects (ground, deck) by dense index, in listing order
+    /// (S-0209 claim 13).
+    pub lists: Vec<[Vec<ObjectId>; 2]>, // spec: S-0209 Terms (two cell layers)
+    /// Whether a cell carries a high bridge's deck (Q-0020: none in M3).
+    pub deck: Vec<bool>,
+    /// Marking counter.
+    pub mark_seq: u32,
+}
+
+fn li(l: Layer) -> usize {
+    match l {
+        Layer::Ground => 0,
+        Layer::Deck => 1,
+    }
+}
+
+impl Cells {
+    /// Cells for a grid.
+    pub fn new(grid: CellGrid) -> Self {
+        let n = grid.len();
+        Self {
+            grid,
+            category: vec![0; n],
+            occ: vec![[Occupancy::default(); 2]; n], // spec: S-0209 Terms (two cell layers)
+            lists: vec![[Vec::new(), Vec::new()]; n],
+            deck: vec![false; n],
+            mark_seq: 0,
+        }
+    }
+
+    /// The map's footprint.
+    pub fn footprint(&self) -> &Footprint {
+        self.grid.footprint()
+    }
+
+    /// The dense index of a legal cell.
+    pub fn idx(&self, c: CellXY) -> Option<usize> {
+        self.grid.index(c)
+    }
+
+    /// A cell's terrain.
+    pub fn cell(&self, c: CellXY) -> Option<&Cell> {
+        self.grid.get(c)
+    }
+
+    /// Whether a legal cell is inside the usable area (S-0211 Terms; S-0009
+    /// claim 4 with the cell's height and slope).
+    pub fn usable(&self, c: CellXY) -> bool {
+        match self.grid.get(c) {
+            Some(cell) => self
+                .footprint()
+                .is_usable(c, i32::from(cell.level), cell.slope != 0),
+            None => false,
+        }
+    }
+
+    /// A cell layer's occupancy record.
+    pub fn occ(&self, c: CellXY, l: Layer) -> Option<&Occupancy> {
+        self.idx(c).map(|i| &self.occ[i][li(l)])
+    }
+
+    /// A cell layer's occupancy record, for writing.
+    pub fn occ_mut(&mut self, c: CellXY, l: Layer) -> Option<&mut Occupancy> {
+        let i = self.idx(c)?;
+        Some(&mut self.occ[i][li(l)])
+    }
+
+    /// The objects a cell layer lists, in listing order.
+    pub fn list(&self, c: CellXY, l: Layer) -> &[ObjectId] {
+        match self.idx(c) {
+            Some(i) => &self.lists[i][li(l)],
+            None => &[],
+        }
+    }
+
+    /// An object enters a cell layer (S-0209 claim 13): a non-building goes
+    /// to the front, a building to the end.
+    pub fn enter(&mut self, c: CellXY, l: Layer, id: ObjectId, building: bool) {
+        if let Some(i) = self.idx(c) {
+            let list = &mut self.lists[i][li(l)];
+            if list.contains(&id) {
+                return;
+            }
+            // spec: S-0209 claim 13 (non-buildings most recent first, then buildings in placement order)
+            if building {
+                list.push(id);
+            } else {
+                list.insert(0, id);
+            }
+        }
+    }
+
+    /// An object leaves a cell layer.
+    pub fn leave(&mut self, c: CellXY, l: Layer, id: ObjectId) {
+        if let Some(i) = self.idx(c) {
+            self.lists[i][li(l)].retain(|o| *o != id);
+        }
+    }
+
+    /// An infantry unit marks a standing position, setting the infantry
+    /// house (S-0209 claim 1).
+    pub fn mark_infantry(&mut self, c: CellXY, l: Layer, p: u8, id: ObjectId, house: HouseId) {
+        self.mark_seq += 1;
+        let seq = self.mark_seq;
+        if let Some(o) = self.occ_mut(c, l) {
+            o.marks[usize::from(p)] = Some(Mark {
+                by: Marker::Infantry(id, house),
+                seq,
+            });
+            // spec: S-0209 claim 1 (the most recent mark's house wins)
+            o.house = Some(house);
+        }
+    }
+
+    /// An infantry unit's mark is cleared (S-0209 claim 1 and Edge cases).
+    pub fn clear_infantry(&mut self, c: CellXY, l: Layer, id: ObjectId, q: OccupancyQuirks) {
+        let Some(o) = self.occ_mut(c, l) else {
+            return;
+        };
+        let mut cleared = false;
+        for m in o.marks.iter_mut() {
+            if matches!(m, Some(Mark { by: Marker::Infantry(who, _), .. }) if *who == id) {
+                *m = None;
+                cleared = true;
+            }
+        }
+        if !cleared {
+            return;
+        }
+        // spec: S-0209 claim 1 (the house goes to none only when no side position stays taken)
+        let none_left = if q.side_positions_only {
+            !position::SIDES.iter().any(|&p| o.taken(p))
+        } else {
+            // spec: S-0209 Edge cases (switch off: cleared only when no standing position is taken)
+            o.marks.iter().all(Option::is_none)
+        };
+        if none_left {
+            o.house = None;
+        } else if !q.stale {
+            // spec: S-0209 Edge cases (`quirks.occupancy_house_stale` off: the most recent infantry still holding a position)
+            o.house = o
+                .marks
+                .iter()
+                .flatten()
+                .filter_map(|m| match m.by {
+                    Marker::Infantry(_, h) => Some((m.seq, h)),
+                    Marker::Terrain(_) => None,
+                })
+                .max()
+                .map(|(_, h)| h);
+        }
+    }
+
+    /// A terrain object marks the side positions of its pattern (S-0209
+    /// claim 1, Terms *side-position pattern*).
+    pub fn mark_terrain(&mut self, c: CellXY, id: ObjectId, pattern: i32) {
+        self.mark_seq += 1;
+        let seq = self.mark_seq;
+        if let Some(o) = self.occ_mut(c, Layer::Ground) {
+            for (bit, p) in [(1, position::RIGHT), (2, position::LEFT), (4, position::BOTTOM)] { // spec: S-0209 Terms (side-position pattern bits 1, 2 and 4)
+                // spec: S-0209 Terms (right ⇔ ⌊p/1⌋ mod 2 = 1, left ⇔ ⌊p/2⌋ mod 2 = 1, bottom ⇔ ⌊p/4⌋ mod 2 = 1)
+                if pattern.div_euclid(bit).rem_euclid(2) == 1 {
+                    o.marks[usize::from(p)] = Some(Mark {
+                        by: Marker::Terrain(id),
+                        seq,
+                    });
+                }
+            }
+        }
+    }
+
+    /// A terrain object's marks are cleared; the infantry house is left as
+    /// it is (S-0209 claim 1).
+    pub fn clear_terrain(&mut self, c: CellXY, id: ObjectId) {
+        if let Some(o) = self.occ_mut(c, Layer::Ground) {
+            for m in o.marks.iter_mut() {
+                if matches!(m, Some(Mark { by: Marker::Terrain(who), .. }) if *who == id) {
+                    *m = None;
+                }
+            }
+        }
+    }
+
+    /// Adds or removes a vehicle-present claim (S-0209 claim 1).
+    pub fn claim_vehicle(&mut self, c: CellXY, l: Layer, add: bool) {
+        if let Some(o) = self.occ_mut(c, l) {
+            o.vehicles = if add {
+                o.vehicles.saturating_add(1)
+            } else {
+                o.vehicles.saturating_sub(1)
+            };
+        }
+    }
+
+    /// Adds or removes a building-present claim.
+    pub fn claim_building(&mut self, c: CellXY, add: bool) {
+        if let Some(o) = self.occ_mut(c, Layer::Ground) {
+            o.buildings = if add {
+                o.buildings.saturating_add(1)
+            } else {
+                o.buildings.saturating_sub(1)
+            };
+        }
+    }
+
+    /// The passability category of a cell (S-0211 claim 11).
+    pub fn category(&self, c: CellXY) -> Option<u8> {
+        self.idx(c).map(|i| self.category[i])
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn cells() -> Cells {
+        Cells::new(CellGrid::new(Footprint::new(8, 8, [0, 0, 8, 8])))
+    }
+
+    const Q: OccupancyQuirks = OccupancyQuirks {
+        side_positions_only: true,
+        stale: true,
+    };
+
+    // spec: S-0209 claim 13 (listing order: non-buildings most recent first, buildings in placement order)
+    #[test]
+    fn listing_order() {
+        let mut c = cells();
+        let x = CellXY::new(8, 8);
+        c.enter(x, Layer::Ground, ObjectId(1), true);
+        c.enter(x, Layer::Ground, ObjectId(2), false);
+        c.enter(x, Layer::Ground, ObjectId(3), true);
+        c.enter(x, Layer::Ground, ObjectId(4), false);
+        assert_eq!(
+            c.list(x, Layer::Ground),
+            &[ObjectId(4), ObjectId(2), ObjectId(1), ObjectId(3)]
+        );
+    }
+
+    // spec: S-0209 claim 1 (the infantry house clears only when no side position stays taken; it can be forgotten)
+    #[test]
+    fn infantry_house() {
+        let mut c = cells();
+        let x = CellXY::new(8, 8);
+        c.mark_infantry(x, Layer::Ground, position::CENTRE, ObjectId(1), HouseId(0));
+        c.mark_infantry(x, Layer::Ground, position::RIGHT, ObjectId(2), HouseId(1));
+        assert_eq!(c.occ(x, Layer::Ground).unwrap().house, Some(HouseId(1)));
+        c.clear_infantry(x, Layer::Ground, ObjectId(2), Q);
+        // The centre unit stays, but the house is forgotten.
+        assert_eq!(c.occ(x, Layer::Ground).unwrap().house, None);
+        // With the switch off, it clears only when no position is taken.
+        let mut d = cells();
+        d.mark_infantry(x, Layer::Ground, position::CENTRE, ObjectId(1), HouseId(0));
+        d.mark_infantry(x, Layer::Ground, position::RIGHT, ObjectId(2), HouseId(1));
+        d.clear_infantry(
+            x,
+            Layer::Ground,
+            ObjectId(2),
+            OccupancyQuirks {
+                side_positions_only: false,
+                stale: true,
+            },
+        );
+        assert_eq!(d.occ(x, Layer::Ground).unwrap().house, Some(HouseId(1)));
+    }
+
+    // spec: S-0209 Edge cases (the house outlasts its infantry; `quirks.occupancy_house_stale` off)
+    #[test]
+    fn stale_house() {
+        let x = CellXY::new(8, 8);
+        let mut c = cells();
+        c.mark_infantry(x, Layer::Ground, position::RIGHT, ObjectId(1), HouseId(0));
+        c.mark_infantry(x, Layer::Ground, position::LEFT, ObjectId(2), HouseId(1));
+        c.clear_infantry(x, Layer::Ground, ObjectId(2), Q);
+        assert_eq!(c.occ(x, Layer::Ground).unwrap().house, Some(HouseId(1)));
+        let mut d = cells();
+        d.mark_infantry(x, Layer::Ground, position::RIGHT, ObjectId(1), HouseId(0));
+        d.mark_infantry(x, Layer::Ground, position::LEFT, ObjectId(2), HouseId(1));
+        d.clear_infantry(
+            x,
+            Layer::Ground,
+            ObjectId(2),
+            OccupancyQuirks {
+                side_positions_only: true,
+                stale: false,
+            },
+        );
+        assert_eq!(d.occ(x, Layer::Ground).unwrap().house, Some(HouseId(0)));
+    }
+
+    // spec: S-0209 Terms (side-position pattern bits; only p mod 8 counts, negatives included)
+    #[test]
+    fn terrain_patterns() {
+        let x = CellXY::new(8, 8);
+        for (p, want) in [(7, [true, true, true]), (4, [false, false, true]), (-1, [true, true, true]), (-5, [true, true, false])] {
+            let mut c = cells();
+            c.mark_terrain(x, ObjectId(9), p);
+            let o = c.occ(x, Layer::Ground).unwrap();
+            assert_eq!(
+                [o.taken(position::RIGHT), o.taken(position::LEFT), o.taken(position::BOTTOM)],
+                want,
+                "pattern {p}"
+            );
+            assert_eq!(o.house, None);
+        }
+    }
+}
