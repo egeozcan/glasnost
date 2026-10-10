@@ -20,8 +20,10 @@ pub mod explain;
 pub mod hash;
 pub mod hostile;
 pub mod jsonc;
+pub mod quirks;
 pub mod resolve;
 pub mod schema;
+pub mod sim;
 pub mod validate;
 
 use jsonc::Node;

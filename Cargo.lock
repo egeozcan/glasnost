@@ -1011,6 +1011,7 @@ dependencies = [
 name = "glasnost-rules"
 version = "0.0.0"
 dependencies = [
+ "glasnost-num",
  "schemars",
  "serde",
  "serde_json",

@@ -121,6 +121,10 @@
         "$ref": "#/$defs/Side"
       }
     },
+    "sim": {
+      "description": "Simulation data: typed fields of the user's data and our own\n(converted by the importer, patchable by mods).",
+      "$ref": "#/$defs/SimData"
+    },
     "types": {
       "description": "Imported types per kind, by type name.",
       "type": "object",
@@ -243,6 +247,436 @@
         "image"
       ]
     },
+    "BehaviourProps": {
+      "description": "A behaviour's properties (S-0215 claims 6 and 16 to 21).",
+      "type": "object",
+      "properties": {
+        "aa_rate": {
+          "description": "`AARate`, game minutes (already reset to the rate where S-0215 claim\n21 says).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "no_threat": {
+          "description": "`NoThreat`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "paralysed": {
+          "description": "`Paralyzed`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "rate": {
+          "description": "`Rate`, game minutes.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "recruitable": {
+          "description": "`Recruitable`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "retaliate": {
+          "description": "`Retaliate`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "scatter": {
+          "description": "`Scatter`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "zombie": {
+          "description": "`Zombie`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "additionalProperties": false
+    },
+    "BuildingType": {
+      "description": "A building type's simulation fields.",
+      "type": "object",
+      "properties": {
+        "armory": {
+          "description": "`Armory`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "bib": {
+          "description": "`Bib` (S-0204 Terms).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "bridge_repair_hut": {
+          "description": "`BridgeRepairHut`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "bunker": {
+          "description": "`Bunker`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "can_be_occupied": {
+          "description": "`CanBeOccupied`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "can_c4": {
+          "description": "`CanC4`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "can_occupy_fire": {
+          "description": "`CanOccupyFire`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "capturable": {
+          "description": "`Capturable`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "cloning": {
+          "description": "`Cloning`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "construction_yard": {
+          "description": "`ConstructionYard`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "crushable": {
+          "description": "`Crushable`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "emp_cannon": {
+          "description": "`EMPulseCannon`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "factory": {
+          "description": "`Factory`, the kind it builds (`infantry`, `vehicle`, `aircraft`,\n`building`).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "firestorm_wall": {
+          "description": "`FirestormWall`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "foundation": {
+          "description": "Art `Foundation`, width and height in cells.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "maxItems": 2,
+          "minItems": 2
+        },
+        "gap_generator": {
+          "description": "`GapGenerator`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "gate": {
+          "description": "`Gate`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "grinding": {
+          "description": "`Grinding`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "hospital": {
+          "description": "`Hospital`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "immune": {
+          "description": "`Immune`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "infantry_absorb": {
+          "description": "`InfantryAbsorb`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "invisible_in_game": {
+          "description": "`InvisibleInGame`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "laser_fence": {
+          "description": "`LaserFence`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "legal_target": {
+          "description": "`LegalTarget`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "naval": {
+          "description": "`Naval`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "number_impassable_rows": {
+          "description": "`NumberImpassableRows` (S-0209 Terms); absent: none.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "powered": {
+          "description": "`Powered`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "primary": {
+          "description": "`Primary`.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "repairable": {
+          "description": "`Repairable`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "rot": {
+          "description": "`ROT`.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "sam": {
+          "description": "`SAM`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "secondary": {
+          "description": "`Secondary`.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "spyable": {
+          "description": "`Spyable`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "strength": {
+          "description": "`Strength`.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "stupid_guard_mode": {
+          "description": "`HasStupidGuardMode`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "tech_level": {
+          "description": "`TechLevel`.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "toggle_power": {
+          "description": "`TogglePower`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "turret": {
+          "description": "`Turret`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "undeploys_into": {
+          "description": "`UndeploysInto`.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "unit_absorb": {
+          "description": "`UnitAbsorb`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "unit_repair": {
+          "description": "`UnitRepair`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "weapons_factory": {
+          "description": "`WeaponsFactory`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "additionalProperties": false
+    },
     "ColourDefinition": {
       "description": "An imported colour definition (S-0103 claim 4).",
       "type": "object",
@@ -270,9 +704,314 @@
         "hsv"
       ]
     },
+    "Country": {
+      "description": "A country's simulation fields.",
+      "type": "object",
+      "properties": {
+        "multiplay_passive": {
+          "description": "`MultiplayPassive` (S-0009, S-0214).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "speed_infantry_mult": {
+          "description": "`SpeedInfantryMult` (S-0208 F5), a single.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "speed_units_mult": {
+          "description": "`SpeedUnitsMult` (S-0207 claim 2), a single.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "Decimal": {
+      "description": "A decimal written as text, `-?digits[.digits][e±digits][%]`, whose value\nis the one S-0003 gives that text (claims 6 and 7).",
+      "type": "string"
+    },
     "Empty": {
       "description": "An empty object.",
       "type": "object",
+      "additionalProperties": false
+    },
+    "General": {
+      "description": "Game-wide values (keys of `[General]`, `[AI]`, `[IQ]`, `[AudioVisual]`,\nthe combat-damage section and `[MultiplayerDialogSettings]`).",
+      "type": "object",
+      "properties": {
+        "blockage_path_delay": {
+          "description": "`[AI] BlockagePathDelay`, ticks (S-0209).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "cliff_back_impassability": {
+          "description": "`CliffBackImpassability` (S-0211 claim 8).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "close_enough": {
+          "description": "`CloseEnough`, cells (S-0209 F2).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "condition_red": {
+          "description": "`[AudioVisual] ConditionRed` (S-0107 F5).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "condition_yellow": {
+          "description": "`[AudioVisual] ConditionYellow` (S-0108 F3, S-0207 claim 9).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "crush_range": {
+          "description": "`Crush`, cells (S-0210 F2).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "engineer_capture_level": {
+          "description": "`EngineerCaptureLevel` (S-0214 F2).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "guard_area_targeting_delay": {
+          "description": "`GuardAreaTargetingDelay`, ticks (S-0206 claim 9, S-0215 F6).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "guard_mode_stray": {
+          "description": "`GuardModeStray`, cells (S-0215 F5).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "idle_action_frequency": {
+          "description": "`[AudioVisual] IdleActionFrequency`, game minutes (S-0107 F4).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "iq_auto_crush": {
+          "description": "`[IQ] AutoCrush` (S-0210 claim 11; the original's computer houses only).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "iq_guard_area": {
+          "description": "`[IQ] GuardArea` (S-0215 claims 14 and 15).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "iq_max": {
+          "description": "`[IQ] MaxIQLevels` (S-0209 claim 11).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "iq_scatter": {
+          "description": "`[IQ] Scatter` (S-0209 claim 11).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "lobby_game_speed": {
+          "description": "`[MultiplayerDialogSettings] GameSpeed` (S-0201 claim 7).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "maximum_cheer_rate": {
+          "description": "`MaximumCheerRate`, ticks (S-0213 claim 19).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "normal_targeting_delay": {
+          "description": "`NormalTargetingDelay`, ticks (S-0215 F6).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "path_delay": {
+          "description": "`[AI] PathDelay`, game minutes (S-0212 F3).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "player_auto_crush": {
+          "description": "`PlayerAutoCrush` (S-0210 claim 11).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "player_return_fire": {
+          "description": "`PlayerReturnFire` (S-0215 claim 18).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "player_scatter": {
+          "description": "`PlayerScatter` (S-0208 claim 11).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "tracked_downhill": {
+          "description": "`TrackedDownhill` (S-0207 claim 9).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "tracked_uphill": {
+          "description": "`TrackedUphill` (S-0207 claim 9).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "veteran_speed": {
+          "description": "`VeteranSpeed` (S-0207 claim 2, S-0208 F5).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "wheeled_downhill": {
+          "description": "`WheeledDownhill` (S-0207 claim 9).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "wheeled_uphill": {
+          "description": "`WheeledUphill` (S-0207 claim 9).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
       "additionalProperties": false
     },
     "Globals": {
@@ -298,12 +1037,8 @@
           "default": {}
         },
         "quirks": {
-          "description": "Quirk switches by name.",
-          "type": "object",
-          "additionalProperties": {
-            "type": "boolean"
-          },
-          "default": {}
+          "description": "Quirk switches of the simulation; absent ones take the original's\nbehaviour.",
+          "$ref": "#/$defs/Quirks"
         }
       },
       "additionalProperties": false
@@ -462,6 +1197,278 @@
         "sha256"
       ]
     },
+    "LandRow": {
+      "description": "One land type's row (S-0211 claim 2): multipliers per locomotion class and\nthe buildable flag. A present row was given by some rules layer; its\nmissing keys are 1.0 and *no*.",
+      "type": "object",
+      "properties": {
+        "amphibious": {
+          "description": "`Amphibious`.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "buildable": {
+          "description": "`Buildable`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "float": {
+          "description": "`Float`.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "float_beach": {
+          "description": "`FloatBeach`.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "foot": {
+          "description": "`Foot`.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "hover": {
+          "description": "`Hover`.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "track": {
+          "description": "`Track`.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "wheel": {
+          "description": "`Wheel`.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "LandType": {
+      "description": "The twelve land types (S-0211 Terms).",
+      "oneOf": [
+        {
+          "description": "Clear.",
+          "type": "string",
+          "const": "clear"
+        },
+        {
+          "description": "Road.",
+          "type": "string",
+          "const": "road"
+        },
+        {
+          "description": "Water.",
+          "type": "string",
+          "const": "water"
+        },
+        {
+          "description": "Rock.",
+          "type": "string",
+          "const": "rock"
+        },
+        {
+          "description": "Wall.",
+          "type": "string",
+          "const": "wall"
+        },
+        {
+          "description": "Tiberium (resource ground).",
+          "type": "string",
+          "const": "tiberium"
+        },
+        {
+          "description": "Beach.",
+          "type": "string",
+          "const": "beach"
+        },
+        {
+          "description": "Rough.",
+          "type": "string",
+          "const": "rough"
+        },
+        {
+          "description": "Ice.",
+          "type": "string",
+          "const": "ice"
+        },
+        {
+          "description": "Railroad.",
+          "type": "string",
+          "const": "railroad"
+        },
+        {
+          "description": "Tunnel.",
+          "type": "string",
+          "const": "tunnel"
+        },
+        {
+          "description": "Weeds.",
+          "type": "string",
+          "const": "weeds"
+        }
+      ]
+    },
+    "LocomotionClass": {
+      "description": "The eight locomotion classes (S-0211 Terms).",
+      "oneOf": [
+        {
+          "description": "Foot.",
+          "type": "string",
+          "const": "foot"
+        },
+        {
+          "description": "Track.",
+          "type": "string",
+          "const": "track"
+        },
+        {
+          "description": "Wheel.",
+          "type": "string",
+          "const": "wheel"
+        },
+        {
+          "description": "Hover.",
+          "type": "string",
+          "const": "hover"
+        },
+        {
+          "description": "Winged.",
+          "type": "string",
+          "const": "winged"
+        },
+        {
+          "description": "Float.",
+          "type": "string",
+          "const": "float"
+        },
+        {
+          "description": "Amphibious.",
+          "type": "string",
+          "const": "amphibious"
+        },
+        {
+          "description": "Float-on-beach.",
+          "type": "string",
+          "const": "float_beach"
+        }
+      ]
+    },
+    "MovementZone": {
+      "description": "The thirteen movement zones (S-0211 claim 12).",
+      "oneOf": [
+        {
+          "description": "Normal.",
+          "type": "string",
+          "const": "normal"
+        },
+        {
+          "description": "Crusher.",
+          "type": "string",
+          "const": "crusher"
+        },
+        {
+          "description": "Destroyer.",
+          "type": "string",
+          "const": "destroyer"
+        },
+        {
+          "description": "Amphibious destroyer.",
+          "type": "string",
+          "const": "amphibious_destroyer"
+        },
+        {
+          "description": "Amphibious crusher.",
+          "type": "string",
+          "const": "amphibious_crusher"
+        },
+        {
+          "description": "Amphibious.",
+          "type": "string",
+          "const": "amphibious"
+        },
+        {
+          "description": "Subterranean.",
+          "type": "string",
+          "const": "subterranean"
+        },
+        {
+          "description": "Infantry.",
+          "type": "string",
+          "const": "infantry"
+        },
+        {
+          "description": "Infantry destroyer.",
+          "type": "string",
+          "const": "infantry_destroyer"
+        },
+        {
+          "description": "Fly.",
+          "type": "string",
+          "const": "fly"
+        },
+        {
+          "description": "Water.",
+          "type": "string",
+          "const": "water"
+        },
+        {
+          "description": "Water and beach.",
+          "type": "string",
+          "const": "water_beach"
+        },
+        {
+          "description": "Crusher-all.",
+          "type": "string",
+          "const": "crusher_all"
+        }
+      ]
+    },
     "Object": {
       "description": "An object (our own format). Fields without a spec carry no default.",
       "type": "object",
@@ -571,9 +1578,614 @@
         }
       ]
     },
+    "OverlayType": {
+      "description": "An overlay type's simulation fields.",
+      "type": "object",
+      "properties": {
+        "armor": {
+          "description": "`Armor`, the armour name as written.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "crate": {
+          "description": "`Crate`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "crushable": {
+          "description": "`Crushable`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "damage_levels": {
+          "description": "`DamageLevels`.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "has_art": {
+          "description": "Whether the type has artwork or a cell animation (S-0009 claim 12),\nas the importer's art lookup found.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "land": {
+          "description": "`Land`; absent: clear (S-0211 claim 4; `<none>` is read as clear by\nthe importer, with a warning).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LandType"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "no_use_tile_land_type": {
+          "description": "`NoUseTileLandType`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "rock": {
+          "description": "`IsARock`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "rubble": {
+          "description": "`IsRubble`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "strength": {
+          "description": "`Strength`.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "tiberium": {
+          "description": "`Tiberium`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "wall": {
+          "description": "`Wall`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "additionalProperties": false
+    },
     "Owner": {
       "description": "An owner (our own format).",
       "type": "object",
+      "additionalProperties": false
+    },
+    "ProjectileType": {
+      "description": "A projectile's simulation fields read by M3 rules.",
+      "type": "object",
+      "properties": {
+        "ag": {
+          "description": "`AG`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "rot": {
+          "description": "`ROT`.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        }
+      },
+      "additionalProperties": false
+    },
+    "Quirks": {
+      "description": "The quirk switches. Absent fields take the original's behaviour.",
+      "type": "object",
+      "properties": {
+        "air_death_fall_generic_follow_up": {
+          "description": "The falling air death has the generic completion follow-up.",
+          "type": "boolean",
+          "default": true
+        },
+        "cell_layer_split_on_uneven_deck": {
+          "description": "On a deck over uneven ground, objects come from the deck layer and the record from the ground layer.",
+          "type": "boolean",
+          "default": true
+        },
+        "cheer_memory_spans_session": {
+          "description": "The last accepted cheer tick carries over between games of a session.",
+          "type": "boolean",
+          "default": true
+        },
+        "chop_rounding": {
+          "description": "Every floating-point result rounds toward zero (the original's program-wide mode); off: round to nearest, ties to even.",
+          "type": "boolean",
+          "default": true
+        },
+        "chrono_flash_keeps_order_block": {
+          "description": "A chrono flash restores the order block in force when it started, so a block from game start or an earlier run outlasts it.",
+          "type": "boolean",
+          "default": true
+        },
+        "cleanup_skips_next_house": {
+          "description": "The unused-house cleanup keeps the house after a removed one.",
+          "type": "boolean",
+          "default": true
+        },
+        "cliff_back_case_sets": {
+          "description": "Behind a cliff, row 1 of claim 5 becomes rock whatever its land type.",
+          "type": "boolean",
+          "default": true
+        },
+        "coarse_limit_records_cost": {
+          "description": "A coarse route found at the pending limit still sets the sector's cost.",
+          "type": "boolean",
+          "default": true
+        },
+        "corridor_free_part_unusable_cells": {
+          "description": "Cells of an unusable category belong to the free part.",
+          "type": "boolean",
+          "default": true
+        },
+        "corridor_split_probe": {
+          "description": "Whether the progress sector is split is decided at the probe cell.",
+          "type": "boolean",
+          "default": true
+        },
+        "cow_idle": {
+          "description": "The hard-coded cow type's idle action can scatter it.",
+          "type": "boolean",
+          "default": true
+        },
+        "crush_slowdown_counts_self": {
+          "description": "The driving vehicle counts itself as a vehicle in the cell it drives into.",
+          "type": "boolean",
+          "default": true
+        },
+        "crush_slowdown_first_overlay": {
+          "description": "Ship and walking-vehicle crush slowdown is set by the overlay type of registration index 0.",
+          "type": "boolean",
+          "default": true
+        },
+        "crush_slowdown_ground_layer": {
+          "description": "The crush slowdown looks at the ground layer whichever layer the vehicle is in.",
+          "type": "boolean",
+          "default": true
+        },
+        "crush_slowdown_persists": {
+          "description": "The crush-slowdown state ends only when the vehicle next crushes an overlay.",
+          "type": "boolean",
+          "default": true
+        },
+        "crushable_overlay_stays": {
+          "description": "A crushed crushable overlay that is not a wall stays in its cell.",
+          "type": "boolean",
+          "default": true
+        },
+        "crusher_entry_ground_layer": {
+          "description": "Row VR2 reads the first vehicle of the ground layer even when the deck layer counts.",
+          "type": "boolean",
+          "default": true
+        },
+        "crusher_overlay_index0_clear": {
+          "description": "A crusher reads obstacle outcomes as clear in cells whose overlay has registration index 0.",
+          "type": "boolean",
+          "default": true
+        },
+        "detonate_in_planter_name": {
+          "description": "A detonate order is issued in the planter's house's name.",
+          "type": "boolean",
+          "default": true
+        },
+        "drive_brake_floor_raises": {
+          "description": "Within the slowdown distance the braking floor raises a slower vehicle to the floor.",
+          "type": "boolean",
+          "default": true
+        },
+        "drive_curve_chaining_passive_only": {
+          "description": "Only passive vehicles chain two-cell curves.",
+          "type": "boolean",
+          "default": true
+        },
+        "drive_subpoint_compounding": {
+          "description": "The step towards the next track point is taken from the current, possibly interpolated, position.",
+          "type": "boolean",
+          "default": true
+        },
+        "drive_track_end_cap": {
+          "description": "A tick finishes at most one track if it began without one, two if it began on one.",
+          "type": "boolean",
+          "default": true
+        },
+        "fire_frame_by_stance": {
+          "description": "The fire frame is chosen by stance and weapon, not by the playing kind.",
+          "type": "boolean",
+          "default": true
+        },
+        "first_comment_only": {
+          "description": "Only the type's first idle comment sound is used.",
+          "type": "boolean",
+          "default": true
+        },
+        "flatten_straight_run_v": {
+          "description": "Some straight runs open a V that flattening replaces.",
+          "type": "boolean",
+          "default": true
+        },
+        "flatten_threat_start_cell": {
+          "description": "Flattening reads the threat value at the new steps' first cell.",
+          "type": "boolean",
+          "default": true
+        },
+        "fraidycat_fear_ignores_fearless": {
+          "description": "A fearless fraidycat still gets its fear set by a known attacker.",
+          "type": "boolean",
+          "default": true
+        },
+        "hijack_truce_harvester_check": {
+          "description": "The harvester-truce exception of row I15 never applies.",
+          "type": "boolean",
+          "default": true
+        },
+        "hover_needs_nonzero_start": {
+          "description": "The hover substitution needs a hover entry starting at a frame other than 0.",
+          "type": "boolean",
+          "default": true
+        },
+        "infantry_facing_sector_skew": {
+          "description": "Infantry facing groups are skewed 1024 facing units counter-clockwise.",
+          "type": "boolean",
+          "default": true
+        },
+        "infantry_fixed_turn_rate": {
+          "description": "Infantry bodies turn at the fixed rate 127.",
+          "type": "boolean",
+          "default": true
+        },
+        "named_deploy_area_fire": {
+          "description": "The deploy area-fire rule singles out one infantry type by name.",
+          "type": "boolean",
+          "default": true
+        },
+        "narrow_map_partial_pass": {
+          "description": "On a map of width 1 the cell pass visits part of the map.",
+          "type": "boolean",
+          "default": true
+        },
+        "nearby_centre_twice": {
+          "description": "The nearby-cell search examines its centre twice.",
+          "type": "boolean",
+          "default": true
+        },
+        "negative_level_floor_raised": {
+          "description": "The level base below level 0 is one lepton higher.",
+          "type": "boolean",
+          "default": true
+        },
+        "observer_position_handoff": {
+          "description": "An observer's drawn position is handed to the next player needing one.",
+          "type": "boolean",
+          "default": true
+        },
+        "occupancy_house_side_positions_only": {
+          "description": "The infantry house clears when no side position stays taken.",
+          "type": "boolean",
+          "default": true
+        },
+        "occupancy_house_stale": {
+          "description": "The infantry house stays that of the last infantry unit to mark, even after it left.",
+          "type": "boolean",
+          "default": true
+        },
+        "occupancy_override_hides_later_blockers": {
+          "description": "An overriding occupant hides blockers listed after it.",
+          "type": "boolean",
+          "default": true
+        },
+        "omnicrusher_needs_crusher": {
+          "description": "The omni-crusher flag alone makes no vehicle a crusher.",
+          "type": "boolean",
+          "default": true
+        },
+        "one_sided_building_distance": {
+          "description": "The building reduction applies only to the second object of a distance.",
+          "type": "boolean",
+          "default": true
+        },
+        "opposite_facing_reversal": {
+          "description": "The close case reverses the occupant's facing by 32767, not 32768.",
+          "type": "boolean",
+          "default": true
+        },
+        "override_suspends_queued": {
+          "description": "An override suspends the queued behaviour when one is queued.",
+          "type": "boolean",
+          "default": true
+        },
+        "passability_laser_fence_lost": {
+          "description": "Laser-fence sections leave the passability category alone.",
+          "type": "boolean",
+          "default": true
+        },
+        "passability_wheel_column": {
+          "description": "The passability category judges every class by the wheel column.",
+          "type": "boolean",
+          "default": true
+        },
+        "path_congestion_toggle": {
+          "description": "Congestion marks follow the parity of each cell's count.",
+          "type": "boolean",
+          "default": true
+        },
+        "path_no_reopen": {
+          "description": "A recorded search pair keeps its first cost and is never reopened.",
+          "type": "boolean",
+          "default": true
+        },
+        "path_refresh_keeps_old_step": {
+          "description": "A path recomputed as the last step begins keeps the old step and drops the new path's first.",
+          "type": "boolean",
+          "default": true
+        },
+        "path_search_10000_failure": {
+          "description": "A search that reaches the destination after exactly 10000 expansions fails.",
+          "type": "boolean",
+          "default": true
+        },
+        "pending_order_limit": {
+          "description": "Each house's pending list holds at most 128 orders.",
+          "type": "boolean",
+          "default": true
+        },
+        "permadisguise_attack_cursor": {
+          "description": "A permanently disguised target passes the disguise rule.",
+          "type": "boolean",
+          "default": true
+        },
+        "prone_attack_state_persists": {
+          "description": "A prone unit stays in the attack state and can fire again without a new firing sequence.",
+          "type": "boolean",
+          "default": true
+        },
+        "prone_noncrawler_speedup": {
+          "description": "A prone unit whose type cannot crawl walks half as fast again.",
+          "type": "boolean",
+          "default": true
+        },
+        "queued_move_sleeps": {
+          "description": "Queued move and attack move are processed as sleep.",
+          "type": "boolean",
+          "default": true
+        },
+        "ramp_shape_zero": {
+          "description": "A ramp-range tile of shape 0 becomes the tile just before the ramp range.",
+          "type": "boolean",
+          "default": true
+        },
+        "random_magnitude_overflow": {
+          "description": "The 'magnitude first' remainder keeps the negative sign of −2147483648.",
+          "type": "boolean",
+          "default": true
+        },
+        "ranged_draw_half_span": {
+          "description": "A ranged draw whose bounds differ by exactly 2147483647 takes no value and returns the lower bound plus 2147483648, wrapped.",
+          "type": "boolean",
+          "default": true
+        },
+        "refused_override_retargets": {
+          "description": "A refused override still replaces the target and destination.",
+          "type": "boolean",
+          "default": true
+        },
+        "region_join_height_asymmetry": {
+          "description": "Cells along cell x join one region across 2 or 3 height levels.",
+          "type": "boolean",
+          "default": true
+        },
+        "repeat_direction_snap": {
+          "description": "A completed sequence's declared direction is snapped on every tick it stays current.",
+          "type": "boolean",
+          "default": true
+        },
+        "restricted_deck_overlay_indices": {
+          "description": "Restricted vehicles may use a deck only above overlays of registration indices 237 and 238.",
+          "type": "boolean",
+          "default": true
+        },
+        "role_one_past_end": {
+          "description": "A role naming the first missing tileset starts at the tile count.",
+          "type": "boolean",
+          "default": true
+        },
+        "set_facing_keeps_target": {
+          "description": "Setting a facing at once to its current interpolated value during a turn ends the turn at its target.",
+          "type": "boolean",
+          "default": true
+        },
+        "slow_walker_stall": {
+          "description": "A walker of speed 1 heading between east and south stalls.",
+          "type": "boolean",
+          "default": true
+        },
+        "speed_normalised_delays": {
+          "description": "Game speed reaches game state through speed-normalised delays and a chrono flash stepping in frozen cycles.",
+          "type": "boolean",
+          "default": true
+        },
+        "stale_fill_tiles": {
+          "description": "The fill uses the base tiles of the theater loaded before.",
+          "type": "boolean",
+          "default": true
+        },
+        "stationary_friendly_exactly_three": {
+          "description": "Stationary friendly needs exactly three allied infantry without movement in progress.",
+          "type": "boolean",
+          "default": true
+        },
+        "substitution_centre_ground_level": {
+          "description": "Destination substitution judges heights around the ground of a bridge-cell destination.",
+          "type": "boolean",
+          "default": true
+        },
+        "substitution_distance_flat_destination": {
+          "description": "Destination substitution measures to the destination cell at world height 0.",
+          "type": "boolean",
+          "default": true
+        },
+        "table_direction": {
+          "description": "Directions follow the tabulated arctangent and the short facing scale; off: the exact angle.",
+          "type": "boolean",
+          "default": true
+        },
+        "table_root_distance": {
+          "description": "Distances use the table square root; off: the exact integer square root.",
+          "type": "boolean",
+          "default": true
+        },
+        "table_trig_negative_bias": {
+          "description": "The table sine and cosine of a negative angle can land two steps short.",
+          "type": "boolean",
+          "default": true
+        },
+        "top_position_counts_as_centre": {
+          "description": "A unit standing at the top position is recorded as taking the centre.",
+          "type": "boolean",
+          "default": true
+        },
+        "track_body_turn_stops_at_target": {
+          "description": "A turret-less track-class body turn that passes exactly through its target's direction stops there.",
+          "type": "boolean",
+          "default": true
+        },
+        "train_exclusion_search_only": {
+          "description": "The exclusion of the cells behind a train holds for the search only.",
+          "type": "boolean",
+          "default": true
+        },
+        "tread_default_water_only": {
+          "description": "The tread entry is used for no current sequence on water only, not beach.",
+          "type": "boolean",
+          "default": true
+        },
+        "turn_rate_negative_wrap": {
+          "description": "A negative turn-rate field acts through its remainder modulo 256.",
+          "type": "boolean",
+          "default": true
+        },
+        "turret_reaim_after_turn": {
+          "description": "A turret still turning at the end of the previous tick is not re-aimed by the target rows.",
+          "type": "boolean",
+          "default": true
+        },
+        "turret_spin_quantised": {
+          "description": "A spinning turret turns by the quantised steps of claim 11.",
+          "type": "boolean",
+          "default": true
+        },
+        "two_sound_cues": {
+          "description": "At most two sound cues per sequence entry.",
+          "type": "boolean",
+          "default": true
+        },
+        "unchecked_substitute": {
+          "description": "A substituted sequence kind is not checked for an empty frame count.",
+          "type": "boolean",
+          "default": true
+        },
+        "unset_role_range": {
+          "description": "An unset role's range still counts tile numbers from its unset start.",
+          "type": "boolean",
+          "default": true
+        },
+        "update_order_removal_skip": {
+          "description": "Each counting removal during the turn pass costs one later object its turn, and an object that re-enters play takes a second turn.",
+          "type": "boolean",
+          "default": true
+        },
+        "walker_overshoot": {
+          "description": "A fast walker can step past its walking target and swing back.",
+          "type": "boolean",
+          "default": true
+        },
+        "walker_targets_allied_wall": {
+          "description": "A walker that meets an allied wall with no object listed takes the wall as its target.",
+          "type": "boolean",
+          "default": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "SequenceEntry": {
+      "description": "One sequence entry of an infantry type (S-0107 claim 1).",
+      "type": "object",
+      "properties": {
+        "count": {
+          "description": "Frame count C.",
+          "type": "integer",
+          "format": "int32",
+          "default": 0
+        },
+        "direction": {
+          "description": "Declared direction, 0 = N … 7 = NW.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint8",
+          "default": null,
+          "maximum": 255,
+          "minimum": 0
+        },
+        "multiplier": {
+          "description": "Facing multiplier M.",
+          "type": "integer",
+          "format": "int32",
+          "default": 0
+        },
+        "start": {
+          "description": "Start image frame S.",
+          "type": "integer",
+          "format": "int32",
+          "default": 0
+        }
+      },
       "additionalProperties": false
     },
     "Side": {
@@ -598,6 +2210,826 @@
         "name"
       ]
     },
+    "SimData": {
+      "description": "Every simulation field of the ruleset.",
+      "type": "object",
+      "properties": {
+        "aircraft": {
+          "description": "Aircraft types by type name.",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/UnitType"
+          }
+        },
+        "behaviours": {
+          "description": "Behaviour properties by behaviour name (S-0215 Import mapping: our\nnames, snake case).",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/BehaviourProps"
+          }
+        },
+        "buildings": {
+          "description": "Building types by type name.",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/BuildingType"
+          }
+        },
+        "countries": {
+          "description": "Countries by type name.",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/Country"
+          }
+        },
+        "general": {
+          "description": "Game-wide values.",
+          "$ref": "#/$defs/General"
+        },
+        "infantry": {
+          "description": "Infantry types by type name.",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/UnitType"
+          }
+        },
+        "land_types": {
+          "description": "Land-type rows by land type (S-0211 claim 2). A missing row has the\nstart-up row.",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/LandRow"
+          }
+        },
+        "overlays": {
+          "description": "Overlay types by type name.",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/OverlayType"
+          }
+        },
+        "projectiles": {
+          "description": "Projectiles by name.",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/ProjectileType"
+          }
+        },
+        "terrain_objects": {
+          "description": "Terrain-object types by type name.",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/TerrainObjectType"
+          }
+        },
+        "vehicles": {
+          "description": "Vehicle types by type name.",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/UnitType"
+          }
+        },
+        "warheads": {
+          "description": "Warheads by name.",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/WarheadType"
+          }
+        },
+        "weapons": {
+          "description": "Weapons by name.",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/WeaponType"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "TerrainObjectType": {
+      "description": "A terrain-object type's simulation fields.",
+      "type": "object",
+      "properties": {
+        "snow_occupation_bits": {
+          "description": "`SnowOccupationBits`.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "temperate_occupation_bits": {
+          "description": "`TemperateOccupationBits`.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        }
+      },
+      "additionalProperties": false
+    },
+    "UnitType": {
+      "description": "An infantry, vehicle or aircraft type's simulation fields.",
+      "type": "object",
+      "properties": {
+        "accelerates": {
+          "description": "`Accelerates`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "acceleration_factor": {
+          "description": "`AccelerationFactor`.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "agent": {
+          "description": "`Agent`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "assaulter": {
+          "description": "`Assaulter`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "attack_cursor_on_friendlies": {
+          "description": "`AttackCursorOnFriendlies`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "attack_friendlies": {
+          "description": "`AttackFriendlies`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "auto_crush": {
+          "description": "`AutoCrush`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "balloon_hover": {
+          "description": "`BalloonHover`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "bombable": {
+          "description": "`Bombable`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "c4": {
+          "description": "`C4`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "carryall": {
+          "description": "`Carryall`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "close_range": {
+          "description": "`CloseRange`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "crawls": {
+          "description": "Art `Crawls` (S-0107 Import mapping).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "crushable": {
+          "description": "`Crushable`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "crusher": {
+          "description": "`Crusher`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "cyborg": {
+          "description": "`Cyborg`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "deacceleration_factor": {
+          "description": "`DeaccelerationFactor`.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "default_to_guard_area": {
+          "description": "`DefaultToGuardArea`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "deploy_fire": {
+          "description": "`DeployFire`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "deployed_crushable": {
+          "description": "`DeployedCrushable`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "deployer": {
+          "description": "`Deployer`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "deploys_into": {
+          "description": "`DeploysInto`.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "distributed_fire": {
+          "description": "`DistributedFire`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "elite_abilities": {
+          "description": "`EliteAbilities`, upper-case ability names.",
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        },
+        "elite_primary": {
+          "description": "`ElitePrimary`.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "elite_secondary": {
+          "description": "`EliteSecondary`.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "engineer": {
+          "description": "`Engineer`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "fearless": {
+          "description": "`Fearless`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "fire_frames": {
+          "description": "Art fire frames: standing, prone, secondary, secondary-prone (S-0107\nclaim 11).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "maxItems": 4,
+          "minItems": 4
+        },
+        "fraidycat": {
+          "description": "`Fraidycat`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "guard_range": {
+          "description": "`GuardRange`, cells.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "harvester": {
+          "description": "`Harvester`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "hover_attack": {
+          "description": "`HoverAttack`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "immune": {
+          "description": "`Immune`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "immune_to_radiation": {
+          "description": "`ImmuneToRadiation`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "infiltrate": {
+          "description": "`Infiltrate`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "is_simple_deployer": {
+          "description": "`IsSimpleDeployer`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "is_train": {
+          "description": "`IsTrain`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "ivan": {
+          "description": "`Ivan`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "jumpjet": {
+          "description": "`JumpJet`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "jumpjet_turn_rate": {
+          "description": "`JumpjetTurnRate` (S-0206 claim 14).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "legal_target": {
+          "description": "`LegalTarget`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "locomotion_class": {
+          "description": "The locomotion class as S-0211 claim 3 leaves it; absent: no class.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LocomotionClass"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "locomotor": {
+          "description": "`Locomotor`, the identifier as written (its meaning: request Q-0019).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "move_to_shroud": {
+          "description": "`MoveToShroud`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "movement_restricted_to": {
+          "description": "`MovementRestrictedTo` (S-0211 claim 14); absent: no restriction.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LandType"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "movement_zone": {
+          "description": "`MovementZone` (S-0211 claim 4).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MovementZone"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "non_vehicle": {
+          "description": "`NonVehicle`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "not_human": {
+          "description": "`NotHuman`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "occupier": {
+          "description": "`Occupier`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "omni_crush_resistant": {
+          "description": "`OmniCrushResistant`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "omni_crusher": {
+          "description": "`OmniCrusher`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "open_topped": {
+          "description": "`OpenTopped`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "opportunity_fire": {
+          "description": "`OpportunityFire`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "passengers": {
+          "description": "`Passengers`.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "passive": {
+          "description": "`Passive`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "perma_disguise": {
+          "description": "`PermaDisguise`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "prevent_attack_move": {
+          "description": "`PreventAttackMove`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "primary": {
+          "description": "`Primary`.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "pushy": {
+          "description": "`Pushy`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "rot": {
+          "description": "`ROT`, the turn-rate field (S-0206 claim 6).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "secondary": {
+          "description": "`Secondary`.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "sequences": {
+          "description": "Art sequence entries by our kind name (S-0107 claim 1).",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/SequenceEntry"
+          }
+        },
+        "sight": {
+          "description": "`Sight`, cells.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "slowdown_distance": {
+          "description": "`SlowdownDistance`, leptons.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "small_visceroid": {
+          "description": "`SmallVisceroid`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "spawned": {
+          "description": "`Spawned`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "speed": {
+          "description": "`Speed`, the speed field v (S-0207 claim 1, S-0208 F4).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "spray_attack": {
+          "description": "`SprayAttack`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "storage": {
+          "description": "`Storage`.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "strength": {
+          "description": "`Strength`.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "stupid_hunt": {
+          "description": "`StupidHunt`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "threat_avoidance_coefficient": {
+          "description": "`ThreatAvoidanceCoefficient`, a single.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "tilts_when_crushes": {
+          "description": "`TiltsWhenCrushes`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "turret": {
+          "description": "`Turret`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "turret_count": {
+          "description": "`TurretCount`.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "turret_spins": {
+          "description": "`TurretSpins`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "undeploy_delay": {
+          "description": "`UndeployDelay`, ticks.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "vehicle_thief": {
+          "description": "`VehicleThief`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "veteran_abilities": {
+          "description": "`VeteranAbilities`, upper-case ability names.",
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        },
+        "weapon_count": {
+          "description": "`WeaponCount`.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "weeder": {
+          "description": "`Weeder`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "additionalProperties": false
+    },
     "Warhead": {
       "description": "A warhead (our own format).",
       "type": "object",
@@ -610,6 +3042,70 @@
             "format": "int64"
           },
           "default": {}
+        }
+      },
+      "additionalProperties": false
+    },
+    "WarheadType": {
+      "description": "A warhead's simulation fields read by M3 rules.",
+      "type": "object",
+      "properties": {
+        "electric_assault": {
+          "description": "`ElectricAssault`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "fire": {
+          "description": "`Fire`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "inf_death": {
+          "description": "`InfDeath`.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "ivan_bomb": {
+          "description": "`IvanBomb`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "sonic": {
+          "description": "`Sonic`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "wall": {
+          "description": "`Wall`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "wood": {
+          "description": "`Wood`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
         }
       },
       "additionalProperties": false
@@ -646,6 +3142,72 @@
         },
         "warhead": {
           "description": "Warhead.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "additionalProperties": false
+    },
+    "WeaponType": {
+      "description": "A weapon's simulation fields read by M3 rules.",
+      "type": "object",
+      "properties": {
+        "ambient_damage": {
+          "description": "`AmbientDamage`.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "area_fire": {
+          "description": "`AreaFire`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "damage": {
+          "description": "`Damage`.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "omni_fire": {
+          "description": "`OmniFire`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "projectile": {
+          "description": "`Projectile`.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "rad_level": {
+          "description": "`RadLevel`.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "warhead": {
+          "description": "`Warhead`.",
           "type": [
             "string",
             "null"

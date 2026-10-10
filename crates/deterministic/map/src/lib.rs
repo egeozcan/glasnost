@@ -15,6 +15,7 @@ use serde::{Deserialize, Serialize};
 
 pub mod geometry;
 pub mod objects;
+pub mod terrain;
 
 pub use geometry::{CellXY, Footprint};
 pub use objects::{Aircraft, Infantry, Objects, Smudge, Structure, TerrainObject, Unit};
@@ -100,6 +101,14 @@ pub struct Cell {
     pub overlay: u8,
     /// Overlay data value (claim 13).
     pub overlay_data: u8,
+    /// Whether a terrain stream record set this cell (S-0009 claim 7); the
+    /// cells it did not set keep the initial fill (claim 6).
+    pub stream: bool,
+    /// Slope shape after the last terrain recalculation (S-0010 claim 6).
+    pub slope: u8,
+    /// Land type after the last terrain recalculation (S-0211 claim 5), as
+    /// [`terrain::land`] numbers it.
+    pub land: u8,
 }
 
 impl Cell {
@@ -113,6 +122,9 @@ impl Cell {
         ice: false,
         overlay: NO_OVERLAY,
         overlay_data: 0,
+        stream: false,
+        slope: 0,
+        land: terrain::land::CLEAR,
     };
 
     /// World height of the cell's flat floor in leptons (claim 9).

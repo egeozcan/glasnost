@@ -382,6 +382,7 @@ impl Decoder<'_> {
                 negative_tile |= raw_tile < 0;
                 // spec: S-0009 claim 8 (translation; 65535 kept)
                 cell.tile = catalogue.map_or(raw_tile, |cat| cat.translate(raw_tile));
+                cell.stream = true;
                 if let Some(s) = vals[3] {
                     cell.sub_tile = s as u8;
                 }

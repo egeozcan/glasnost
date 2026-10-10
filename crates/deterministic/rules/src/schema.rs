@@ -81,6 +81,10 @@ pub struct Ruleset {
     /// Game-wide settings (our own format).
     #[serde(default)]
     pub globals: Globals,
+    /// Simulation data: typed fields of the user's data and our own
+    /// (converted by the importer, patchable by mods).
+    #[serde(default)]
+    pub sim: crate::sim::SimData,
 }
 
 /// An empty object.
@@ -307,9 +311,10 @@ pub struct Globals {
     /// Production.
     #[serde(default)]
     pub production: BTreeMap<String, i64>,
-    /// Quirk switches by name.
+    /// Quirk switches of the simulation; absent ones take the original's
+    /// behaviour.
     #[serde(default)]
-    pub quirks: BTreeMap<String, bool>,
+    pub quirks: crate::quirks::Quirks,
 }
 
 /// A mod or ruleset manifest.
