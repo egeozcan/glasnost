@@ -170,7 +170,7 @@ pub fn load_map(
 ) -> Task {
     Box::pin(async move {
         let bytes = vfs.read(&file).await.unwrap_or_default();
-        let loaded = crate::mapview::load::load(&mut vfs, bytes, origin, &options).await;
+        let loaded = crate::mapview::load::load(&mut vfs, bytes, origin, &options, true).await;
         TaskResult::MapLoaded(Box::new((vfs, loaded)))
     })
 }

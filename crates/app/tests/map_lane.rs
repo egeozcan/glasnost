@@ -152,7 +152,7 @@ fn map_lane() {
                 ..build::Options::default()
             };
             let loaded = {
-                let fut = load::load(&mut vfs, bytes, m.archive.clone(), &options);
+                let fut = load::load(&mut vfs, bytes, m.archive.clone(), &options, false);
                 // A panic inside the load is counted, not propagated.
                 std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| pollster::block_on(fut)))
             };

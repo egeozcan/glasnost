@@ -4,6 +4,9 @@
 
 pub mod build;
 pub mod find;
+pub mod live;
+#[cfg(test)]
+mod live_tests;
 pub mod load;
 pub mod png;
 #[cfg(test)]

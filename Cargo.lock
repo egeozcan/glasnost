@@ -920,6 +920,7 @@ dependencies = [
  "glasnost-map",
  "glasnost-render",
  "glasnost-rules",
+ "glasnost-sim",
  "glasnost-vfs",
  "js-sys",
  "log",
