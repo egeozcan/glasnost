@@ -10,9 +10,15 @@
 //! *capture*, *sabotage*, *enter*, and *unload* for vehicles, are processed as behaviours
 //! without a processing rule until their topics are implemented; that is
 //! recorded as a note on the world.
+//!
+//! Gates (claim 35): a gate's *open* runs its stages here, the door moves at
+//! the start of the gate's turn (request Q-0030), [`gate_open`] gives the
+//! passage state that S-0209's gate rows read, and [`gate_met`] is the
+//! effect of the *closed friendly gate* outcome, for the entry rules to call.
 
 use glasnost_num::geom::root_floor;
 
+use crate::behaviour::Door;
 use crate::infantry::{self, Seq};
 use crate::occupancy;
 use crate::rules::{Behaviour, Kind};
@@ -339,6 +345,9 @@ pub fn turn(w: &mut World, id: ObjectId) {
     if kind == Kind::Terrain || kind == Kind::Aircraft {
         return;
     }
+    if kind == Kind::Building {
+        door_update(w, id);
+    }
     // spec: S-0215 claim 11 (the per-tick start of infantry, vehicles and buildings)
     let ready_now = ready(w, id);
     let Some(o) = w.obj(id) else { return };
@@ -425,6 +434,10 @@ fn process(w: &mut World, id: ObjectId) -> i32 {
             w.note("S-0215 claim 32: building guard and attack processings are partial until combat (M4)");
             standard_delay(w, id)
         }
+        // spec: S-0215 claim 35 (c) (open for buildings)
+        (Some(Behaviour::Open), Kind::Building) => process_open(w, id),
+        // spec: S-0215 claim 4 and table T1 (open for infantry and vehicles: no processing rule, 450 ticks)
+        (Some(Behaviour::Open), _) => NO_RULE_DELAY,
         // spec: S-0215 claim 5 (queued move and attack move are processed as sleep, quirks.queued_move_sleeps)
         (Some(Behaviour::QueuedMove | Behaviour::AttackMove), _)
             if w.rules().quirks.queued_move_sleeps =>
@@ -694,6 +707,215 @@ fn process_area_guard(w: &mut World, id: ObjectId) -> i32 {
     let d = dr.wrapping_add(w.rng.ranged(1, 5, half));
     // spec: S-0215 F3 (trunc(D / 6) under the close-range condition)
     if close_range(w, id) { d / 6 } else { d }
+}
+
+// ---------------------------------------------------------------------------
+// Gates (S-0215 claim 35)
+
+/// The stages of a gate's *open*, held in the progress count (S-0215 Terms,
+/// *progress count*: start 0, opening 1, waiting 2, closing-start 3,
+/// closing 4, finished 5).
+mod stage {
+    // spec: S-0215 Terms (progress count: the stages of a gate's open are 0 to 5 in the order of its table)
+    pub const START: i32 = 0;
+    pub const OPENING: i32 = 1; // spec: S-0215 Terms (stage opening 1)
+    pub const WAITING: i32 = 2; // spec: S-0215 Terms (stage waiting 2)
+    pub const CLOSING_START: i32 = 3; // spec: S-0215 Terms (stage closing-start 3)
+    pub const CLOSING: i32 = 4; // spec: S-0215 Terms (stage closing 4)
+    pub const FINISHED: i32 = 5; // spec: S-0215 Terms (stage finished 5)
+}
+
+/// Whether a building is a gate (S-0209 Terms, the gate flag).
+fn is_gate(w: &World, id: ObjectId) -> bool {
+    w.obj(id).is_some_and(|o| {
+        o.kind == Kind::Building
+            && w.rules()
+                .buildings
+                .get(o.type_index as usize)
+                .is_some_and(|b| b.gate)
+    })
+}
+
+/// A gate's door time Td and close delay Tc in ticks, a negative value
+/// behaving as 0 (S-0215 F9).
+fn gate_times(w: &World, id: ObjectId) -> (i32, i32) {
+    w.obj(id)
+        .and_then(|o| w.rules().buildings.get(o.type_index as usize))
+        // spec: S-0215 F9 (a negative result behaves as 0)
+        .map_or((0, 0), |b| {
+            (b.gate_door_time.max(0), b.gate_close_delay.max(0))
+        })
+}
+
+/// A gate's passage state (S-0215 claim 35): open when its current
+/// behaviour is *open* and its door is at rest open, closed otherwise. This
+/// is what S-0209's gate rows call an open or a closed gate.
+pub fn gate_open(w: &World, gate: ObjectId) -> bool {
+    // spec: S-0215 claim 35 (passage state open: open current and the door at rest open)
+    w.obj(gate)
+        .is_some_and(|o| o.beh.current == Some(Behaviour::Open) && o.beh.gate.door == Door::Open)
+}
+
+/// The *closed friendly gate* outcome of S-0209 has arisen for `gate`
+/// (S-0215 claim 35 (b)): unless *open* is current with the door opening or
+/// at rest open, the gate drops any queued behaviour and *open* becomes
+/// current at once, whatever its readiness (a behaviour start). The entry
+/// rules call this when the outcome arises for a unit's move, never while
+/// only asking for an outcome (S-0214 claim 2: asking changes nothing).
+pub fn gate_met(w: &mut World, gate: ObjectId) {
+    let t = w.tick;
+    if !is_gate(w, gate) {
+        return;
+    }
+    let Some(o) = w.obj_mut(gate) else { return };
+    let moving_open = matches!(o.beh.gate.door, Door::Opening { .. } | Door::Open);
+    // spec: S-0215 claim 35 (b) (open current with the door opening or at rest open: nothing changes)
+    if o.beh.current == Some(Behaviour::Open) && moving_open {
+        return;
+    }
+    // spec: S-0215 claim 35 (b) (drops any queued behaviour; open current at once, a behaviour start)
+    o.beh.queued = None;
+    o.beh.force(Behaviour::Open, t);
+}
+
+/// The door motion at the gate's own update (S-0215 claim 35 (d)): a
+/// moving door is at rest on the first tick on which its time has passed
+/// since the motion began. Within the update it moves before the per-tick
+/// start and the processing (request Q-0030: S-0203 does not place it).
+fn door_update(w: &mut World, id: ObjectId) {
+    let t = w.tick;
+    let Some(o) = w.obj_mut(id) else { return };
+    // spec: S-0215 claim 35 (d) (at rest once Td ticks have passed since the motion began; placement in the update: Q-0030)
+    o.beh.gate.door = match o.beh.gate.door {
+        Door::Opening { since, ticks } if t.wrapping_sub(since) >= ticks => Door::Open,
+        Door::Closing { since, ticks } if t.wrapping_sub(since) >= ticks => Door::Closed,
+        d => d,
+    };
+}
+
+/// Whether an object other than the gate is in the ground layer of one of
+/// its foundation cells (S-0215 claim 35, stage *waiting*).
+fn gate_cells_taken(w: &World, id: ObjectId) -> bool {
+    let Some(o) = w.obj(id) else { return false };
+    crate::objects::foundation_cells(o.pos.cell(), o.foundation)
+        .into_iter()
+        .any(|c| {
+            w.cells
+                .list(c, crate::world::Layer::Ground)
+                .iter()
+                .any(|&x| x != id)
+        })
+}
+
+/// *Open* for a building (S-0215 claim 35 (c)); returns the delay.
+fn process_open(w: &mut World, id: ObjectId) -> i32 {
+    let t = w.tick;
+    if !is_gate(w, id) {
+        if let Some(ob) = w.obj_mut(id) {
+            ob.beh.queue(Some(Behaviour::Guard));
+        }
+        // spec: S-0215 claim 35 (c) and Constants (a building that is not a gate: queues guard, 1 tick, no draw)
+        return 1;
+    }
+    let (td, tc) = gate_times(w, id);
+    let snaps = w.rules().quirks.gate_reverse_snaps;
+    let Some(o) = w.obj(id).cloned() else {
+        return NO_RULE_DELAY;
+    };
+    let gate = o.beh.gate;
+    let set = |w: &mut World, next: i32, door: Door, restart: bool| {
+        if let Some(ob) = w.obj_mut(id) {
+            ob.beh.progress = next;
+            ob.beh.gate.door = door;
+            if restart {
+                ob.beh.gate.countdown = t;
+            }
+        }
+    };
+    let queue_guard = |w: &mut World| {
+        if let Some(ob) = w.obj_mut(id) {
+            ob.beh.queue(Some(Behaviour::Guard));
+        }
+    };
+    // spec: S-0215 Constants (the delay of a gate's open stages other than Std: 0 ticks, no draw)
+    const NOW: i32 = 0;
+    // spec: S-0215 claim 35 (c) (the stage table; Std is the standard delay with the rate of open, one draw)
+    match o.beh.progress {
+        stage::START => match gate.door {
+            Door::Open => {
+                // spec: S-0215 claim 35 (c) (start, at rest open: countdown restarted, waiting, Std)
+                set(w, stage::WAITING, Door::Open, true);
+                standard_delay(w, id)
+            }
+            Door::Closed => {
+                // spec: S-0215 claim 35 (c) (start, at rest closed: the door starts opening, Td ticks; countdown restarted)
+                let door = Door::Opening {
+                    since: t,
+                    ticks: td,
+                };
+                set(w, stage::OPENING, door, true);
+                NOW
+            }
+            Door::Opening { .. } => {
+                // spec: S-0215 claim 35 (c) (start, opening: countdown restarted)
+                set(w, stage::OPENING, gate.door, true);
+                NOW
+            }
+            Door::Closing { since, .. } => {
+                // spec: S-0215 claim 35 (quirks.gate_reverse_snaps: the reversed door is at rest open at the next update; off: it retraces the closing's ticks)
+                let ticks = if snaps {
+                    0
+                } else {
+                    t.wrapping_sub(since).max(0)
+                };
+                set(w, stage::OPENING, Door::Opening { since: t, ticks }, true);
+                NOW
+            }
+        },
+        stage::OPENING => {
+            match gate.door {
+                // spec: S-0215 claim 35 (c) (opening, at rest open: waiting)
+                Door::Open => set(w, stage::WAITING, Door::Open, false),
+                // spec: S-0215 claim 35 (c) (opening, at rest closed: queues guard, finished)
+                Door::Closed => {
+                    queue_guard(w);
+                    set(w, stage::FINISHED, Door::Closed, false);
+                }
+                // spec: S-0215 claim 35 (c) (opening, still moving: unchanged)
+                _ => {}
+            }
+            NOW
+        }
+        stage::WAITING => {
+            if gate_cells_taken(w, id) {
+                // spec: S-0215 claim 35 (c) (waiting, an object in the ground layer of a foundation cell: countdown restarted)
+                set(w, stage::WAITING, gate.door, true);
+            } else if t.wrapping_sub(gate.countdown) >= tc {
+                // spec: S-0215 claim 35 (c) (waiting, cells empty and the countdown run out: closing-start)
+                set(w, stage::CLOSING_START, gate.door, false);
+            }
+            standard_delay(w, id)
+        }
+        stage::CLOSING_START => {
+            // spec: S-0215 claim 35 (c) (closing-start: the door starts closing, Td ticks)
+            let door = Door::Closing {
+                since: t,
+                ticks: td,
+            };
+            set(w, stage::CLOSING, door, false);
+            NOW
+        }
+        stage::CLOSING => {
+            if gate.door == Door::Closed {
+                // spec: S-0215 claim 35 (c) (closing, at rest closed: queues guard, finished)
+                queue_guard(w);
+                set(w, stage::FINISHED, Door::Closed, false);
+            }
+            NOW
+        }
+        // spec: S-0215 claim 35 (c) (a finished gate changes nothing and takes Std)
+        _ => standard_delay(w, id),
+    }
 }
 
 /// The area-guard leash L (S-0215 F5) for a guard range g in leptons;

@@ -199,6 +199,7 @@ Provisional rules of the simulation, each tied to a request:
 | `load` | a start list that needs a random start cell is refused (`LoadError::RandomStartCell`); low-bridge end markers complete no bridge; vein seeds are cleared and not rebuilt; off-map neighbours count as blank cells in recalculation | Q-0018 |
 | `rules`, `drive`, `scatter` | the locomotor follows the kind (vehicles drive, infantry walk, aircraft do not move); a driving vehicle meets any blocked outcome other than *blocked* as a moving blocker; vehicles refuse scatter requests; a vehicle's vehicle-present claims are its position's cell and its step's cells | Q-0019 |
 | `rules`, `occupancy`, `cells` | the acceleration and deceleration defaults are the doubles nearest their decimals; overlay damage levels absent 1, strength 0; no bridge decks; walls belong to no house; gates read as open | Q-0020 |
+| `process` | a gate's door moves at the start of the gate's turn, before its per-tick start and processing | Q-0030 |
 | `objects`, `load` | pre-placed objects start at full strength, facing value × 256, with the placement fall-back as their behaviour | Q-0010, Q-0016 |
 
 ## Tests
