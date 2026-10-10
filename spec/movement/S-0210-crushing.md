@@ -2,13 +2,13 @@
 id: S-0210
 title: Crushing (who crushes whom, when, the outcome, walls, warnings, slowdown and automatic crushing)
 topic: movement
-revision: 11
+revision: 12
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-10
 measurements: []
-requests: []
+requests: [Q-0020]
 supersedes: []
 ---
 
@@ -20,7 +20,9 @@ Which vehicles can crush, which objects they can crush, the moment at which crus
 happens to the crushed object, how crushing vehicles flatten crushable overlays and walls, how they
 warn infantry ahead of them, when crushing slows a vehicle down, and when a vehicle chooses on its
 own to drive over a crushable enemy. The entry outcomes that let a crushing vehicle treat a cell of
-crushable enemies as clear are in S-0209 (claim 5).
+crushable enemies as clear are in S-0209 (claim 5). It also gives where a wall type's damage-stage
+count and strength come from, with their engine defaults, and which house owns a wall that the map
+places.
 
 ## Terms
 
@@ -53,10 +55,13 @@ S-0107: *crushable* (the flag), *deploying*. Terms used by this spec:
 - **Crushable overlay.** An overlay type with the crushable flag (for example a fence).
 - **Wall overlay.** An overlay type marked as a wall.
 - **Damage stage, damage-stage count.** A wall type has a *damage-stage count* *D*, an imported
-  integer (Import mapping). A cell holding a wall overlay is at a *damage stage* *s*, an integer from
+  integer (claim 13, Import mapping). A cell holding a wall overlay is at a *damage stage* *s*, an integer from
   0 (undamaged) to *D* − 1, its *last stage*. How *s* is held in the cell's overlay data value is
   claim 8. How other damage changes *s* belongs to the overlay specs.
-- **Wall strength.** A wall type's imported strength field (Import mapping), in wall-hit points.
+- **Wall strength.** A wall type's imported strength field (claim 13, Import mapping), in wall-hit
+  points.
+- **Wall owner.** The house that a wall cell belongs to, or none (claim 14). S-0209's wall rows
+  compare it with the mover's house.
 - **Crusher-all movement zone.** The movement-zone value that lets a unit pass through walls by
   crushing them (Import mapping).
 - **Driving, ship and walking-vehicle locomotors.** The ways a vehicle type can move that this spec
@@ -94,7 +99,7 @@ S-0107: *crushable* (the flag), *deploying*. Terms used by this spec:
    nothing by driving over it. Infantry never crush.
    - Backing: `measurable` (scenario K1, part d for the omni-crusher flag alone, part e for the
      veterancy ability, part l for infantry)
-   - Confidence: high for the requirement, medium for "infantry never crush" (traced only for the
+   - Confidence: high for the requirement, medium for "infantry never crush" (examined only for the
      walking locomotor)
 
 2. **Who can be crushed.** An object in a crusher's path can be crushed by that crusher when it is a
@@ -389,6 +394,47 @@ S-0107: *crushable* (the flag), *deploying*. Terms used by this spec:
       the driving locomotor's tip staying below π/10)
     - Confidence: medium for the two limits, low for "the tips of this spec stay below π/10"
 
+### Wall data and wall owners
+
+13. **Damage-stage count and wall strength: where they come from, and their engine defaults.**
+    An overlay type's damage-stage count *D* is read from the art data, from the section of the
+    overlay type's image (S-0007), not from the overlay type's rules section. Its wall strength
+    *S* is read from the overlay type's rules section. Both follow rules layering (S-0006 for the
+    rules data, S-0007 for the art data): a layer without the key keeps the value in force. When
+    no layer gives them, *D* = 1 and *S* = 1. These are the values the walls of claim 8, F3 and the
+    other specs that read them (S-0209, S-0303) use.
+
+    Consequences: a wall type left at *D* = 1 has only stage 0, so claim 8's first row never
+    applies to it and crushing it hits no neighbour; and with *S* = 1 every wall hit of F3
+    succeeds without a draw. A *D* written in the overlay's rules section has no effect.
+    - Backing: `measurable` (scenario K11)
+    - Confidence: high
+
+14. **Owner of a wall.** Each wall cell has a wall owner: a house, or none.
+    - (a) **Walls the map places.** Once the map's buildings have been placed and before any
+      starting unit of a skirmish is created (S-0009), each cell that holds a wall overlay gets as
+      its owner the owner of the nearest building that, at that moment, is on the map and not
+      destroyed, and whose owner's country (house type) has the wall-owner flag (Import mapping).
+      Distance is the 3-D distance of S-0204 from the building's reference point (the centre of
+      its foundation, at the building's height) to the centre of the wall's cell at the terrain
+      surface height there (S-0106), without the building reduction of S-0204, compared after
+      truncation to whole leptons. On equal distances the building created earliest wins (for
+      map-placed buildings, the order in which the map lists them). When no building qualifies, the wall has no owner. This happens
+      once per map load; later changes of building ownership, new buildings and destroyed
+      buildings do not change the owner of a map-placed wall.
+    - (b) **Consequences.** In a skirmish, the human player's own map-placed structures are not
+      placed (S-0009), and every player starts without buildings, so a map-placed wall belongs to
+      a house of the map (for example a neutral or civilian house) when one of its buildings
+      qualifies, and otherwise to no house. A wall without an owner is allied with no house, so
+      S-0209's wall rows treat it as a wall of another house for every mover (the mover's view of
+      S-0209 Terms, *allied*).
+    - (c) A wall that loses its last damage stage, is sold or is removed has no owner from then
+      on. Who owns a wall that a house builds during play belongs to the structures specs.
+    - Backing: `measurable` (scenario K12)
+    - Confidence: high for the rule and the time it applies; medium for the tie rule (order of the
+      building list, read), and for the cell height used (a difference of height between wall
+      cell and building changes the result only when two buildings are almost equally near)
+
 ## Formulas
 
 **F1. Horizontal crush distance (claim 3).** An object is close enough when
@@ -442,6 +488,9 @@ applies. Unit: fraction of full speed.
 | Body tilt added per overlay crushed | 0.02 | tilt units per tick (rendering) | claim 8; a single-precision real |
 | Wall hit on undamaged neighbours | 200 | wall-hit points | claim 8, F3 |
 | Damage-stage divisor of the overlay data value | 16 | overlay data value per stage | claim 8 |
+| Damage-stage count, absent-key default | 1 | stages | claim 13 |
+| Wall strength, absent-key default | 1 | wall-hit points | claim 13 |
+| Wall-owner flag of a country, absent-key default | yes | boolean | claim 14 |
 | Forward rocking angle limit in the crush-slowdown state | π/10 (otherwise π/4) | radians (rendering) | claim 12; single-precision reals |
 | Auto-crush threshold, absent-key default | 2 | house skill level | claim 11, the original's computer-controlled houses only |
 | Player-auto-crush rule, absent-key default | off | boolean | claim 11 |
@@ -566,8 +615,9 @@ Ordering stated as consequences:
 | Rules, unit type sections, `IsTrain` | train | boolean | no |
 | Rules, infantry type sections, `VehicleThief` | vehicle thief | boolean | no |
 | Rules, overlay sections, `Crushable`, `Wall` | crushable overlay, wall overlay | boolean | no |
-| Rules, overlay sections, `DamageLevels` | damage-stage count *D* (claim 8) | integer | owned by the overlay specs |
-| Rules, overlay sections, `Strength` | wall strength *S* (F3) | integer | owned by the overlay specs |
+| Art data, the section of the overlay type's image (S-0007), `DamageLevels` | damage-stage count *D* (claims 8 and 13) | integer (S-0003, claim 3) | keeps the value in force; engine default 1. The same key in the rules overlay section is not read |
+| Rules, overlay sections, `Strength` | wall strength *S* (F3, claim 13) | integer | keeps the value in force; engine default 1 |
+| Rules, country (house type) sections, the wall-owner key (its name is the words Wall and Owner written together, each capitalised; it waits for an entry in the allowed-key list, Questions for the project lead) | wall-owner flag of the country (claim 14) | boolean | keeps the value in force; engine default yes |
 | Rules, the combat-damage section, `Crush` | crush range *c* (F2) | real, cells; exactly −1 counts as absent | keeps the value in force; before any rules layer gives it, 384 leptons |
 | Rules, the combat-damage section, `PlayerAutoCrush` | player-auto-crush rule | boolean | no |
 | Rules, unit type sections, `AutoCrush` | auto-crush flag | boolean | no |
@@ -985,15 +1035,62 @@ type of index 0" means the overlay type with registration index 0 in the data in
   *k* − 1 may not have been in crush mode: which cell layer the second-cell rule of S-0207 claim 7 reads
   on a bridge deck is not stated there.
 
+**Scenario K11: damage-stage count and wall strength defaults (claim 13).**
+- *Setup:* a test wall overlay type (the slot of a stock wall type, through a named test file)
+  whose rules section has the wall and crushable flags and no wall-strength key, and whose image
+  section in the art data has no damage-stage-count key (Import mapping); every layer is checked
+  for both keys. The map places a straight line of five such wall cells, linked to each other.
+  - Run A: a crusher vehicle of the human player is ordered across the middle cell.
+  - Run B: as A, with the image section of the art data giving a damage-stage count of 3 and the
+    rules section a wall strength of 1000, and the middle cell's overlay data value set by the map
+    to stage 1.
+  - Run C: as B, but the damage-stage count of 3 written in the rules section of the overlay type
+    instead of the art data.
+  - Run D: no crusher; a test weapon whose warhead can damage walls and whose damage amount is 0 is
+    fired once at the middle wall (S-0303 F4).
+  - Run E: as D, with a damage amount of 50.
+- *Observable:* the overlay data values and presence of the five wall cells after the event, and the
+  number of raw values taken from the scenario random stream on the event tick (the recorder reads
+  the stream position).
+- *Expected:* A: the middle wall is removed, the neighbours keep stage 0 and no draw is taken. B: the
+  two neighbours each take a wall hit with one draw each (*S* = 1000 > 200; claim 8's first row,
+  stage *D* − 2 = 1). C: as A (the key in the rules section is not read). D: one draw and no change
+  (amount 0 is below *S* = 1, and 0 > *r* never holds). E: no draw, and the middle wall is removed
+  at once although it links to its neighbours (stage 1 reaches *D* = 1).
+- *Falsified if:* A shows a hit or a draw, B shows no draws, C behaves as B, D shows no draw or a
+  stage change (a strength of 0), or E leaves the middle wall standing (a count above 1).
+- *Runs:* one each; B three times (draws vary).
+
+**Scenario K12: owner of map-placed walls (claim 14).**
+- *Setup:* skirmish, human player and one computer player far away. The map places, for a map
+  house *N* whose country has the wall-owner flag (stock default) and a map house *P* whose
+  country is given the flag off through the map's override section, one building each: *P*'s
+  building 3 cells from a wall cell *w*₁, *N*'s building 6 cells from *w*₁; a second wall cell
+  *w*₂ more than 6 cells from every building of *N* and *P*, with *N*'s building the nearest
+  qualifying one; and a third wall cell *w*₃ on a part of the map with no building within 40 cells,
+  on a map with no other buildings. Neither map house is allied with the human player.
+- *Procedure:* a human-player tank with a weapon that can damage walls is ordered through each of
+  the three walls in turn, from a cell next to it; a second run makes *N* allied with the human
+  player through a map trigger at the start.
+- *Observable:* the recorder's owner of each wall cell after loading, and each tank's reaction
+  (enemy obstacle: attacks the wall; friendly obstacle: does not attack, re-routes or waits; S-0209
+  rows WO3, WO4 and the vehicle rows).
+- *Expected:* *w*₁ and *w*₂ owned by *N* (*P* is skipped although nearer), *w*₃ owned by no house.
+  First run: the tank treats all three as walls of another house. Second run: *w*₁ and *w*₂ as
+  friendly, *w*₃ still as another house's.
+- *Falsified if:* *w*₁ owned by *P*, any owner for *w*₃, or *w*₃ treated as friendly in the second
+  run.
+- *Runs:* one each.
+
 ## Open questions
 
 - **Ship speed outside the crush-slowdown state.** S-0207 covers only the driving locomotor, so
   claim 9 states the ship locomotor's speed update only as far as the state is concerned. The rest
   of the ship locomotor's speed rules belong to a movement spec not yet written.
 - Whether other locomotors that carry vehicles over the ground (for example hovering vehicles) crush
-  at cell centres the same way was traced only for the driving locomotor. For the ship and
+  at cell centres the same way was examined only for the driving locomotor. For the ship and
   walking-vehicle locomotors only the crush-slowdown state of claim 9 and the warning of claim 7 were
-  traced, so whether a ship crushes the overlay of K10 part b at the cell centre is open.
+  examined, so whether a ship crushes the overlay of K10 part b at the cell centre is open.
 - Whether a balloon-hover type that is also an omni-crusher follows the omni-crusher variant of
   claim 11 is not established. The original treats balloon-hover types specially in some of its
   target-choice rules, and which of them reach the variant was not examined. Until it is, claim 11
@@ -1016,3 +1113,10 @@ type of index 0" means the overlay type with registration index 0 in the data in
   which S-0209 owns; it is not specified here.
 - What "appears friendly" means in claim 11 (for example a disguised unit) is shared with S-0209
   claim 4 and should be defined by the disguise specs.
+
+## Questions for the project lead
+
+- **Key of the wall-owner flag.** The key of the wall-owner flag (Import mapping, claim 14) is a
+  genuine key of the original that stock data mentions only in a comment, so it is not yet on the
+  spec side's list of keys allowed in Import mapping and is spelled out in words. The next revision
+  names it once the list has it. Should the key be added to that list?
