@@ -2,7 +2,7 @@
 id: S-0209
 title: Cell occupancy and crowding (capacity, entry outcomes, waiting, re-routing, scatter requests)
 topic: movement
-revision: 14
+revision: 15
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -24,14 +24,17 @@ and scatter destinations to S-0208, and crushing to S-0210.
 
 ## Terms
 
-Cited specs: S-0003, S-0004, S-0006, S-0105, S-0107, S-0203 (tick order), S-0204 (coordinates and
+Cited specs: S-0003, S-0004, S-0006, S-0009 (map file semantics), S-0105, S-0107, S-0203 (tick order), S-0204 (coordinates and
 facing), S-0205 (number domains), S-0207 (ground vehicle movement), S-0208 (infantry movement),
 S-0210 (crushing), S-0211 (land types and passability), S-0212 (pathfinding), S-0213 (human
 orders), S-0214 (order targeting rules) and S-0215 (behaviours) are approved specs of the index in
 `spec/README.md`. Claim, formula, table and row labels cited from them are those of the revisions
-that index lists. This revision of the spec is signed off together with glossary revision 9.
+that index lists, except S-0208 and S-0212, which are cited at revisions 13 and 16, revised in the
+same batch as this revision to agree with claim 5. Their claim, table and row labels are unchanged
+from the revisions the index lists. This revision of the spec is signed off together with glossary
+revision 10, revised in the same batch.
 
-The glossary cited is glossary revision 9. Its terms are used as defined
+The glossary cited is glossary revision 10. Its terms are used as defined
 there, in particular *cell*, *lepton*, *tick*, *infantry*, *vehicle*, *building*, *aircraft*,
 *overlay*, *house*, *human-controlled*, *bridge deck*, *scatter*, *disguise*, *height level*,
 *locomotor*, *recorder*, *computer-controlled* and *movement zone*. Three of the terms this spec
@@ -56,9 +59,11 @@ terrain-object type, the *laser-fence flag* and *firestorm-wall flag* of a build
 house's *firestorm*, the passability categories (*wall-like* among them) and the movement zones
 (*infantry* and *infantry-destroyer* among them) of its claims 11 and 12. From S-0212: *train* (a type marked as a train), *search layer* (its Terms: the ground or the deck of a bridge cell, as a place for the path search), and from its claim 27 what *counts as moving* for an occupant (it has a destination, is turning, or its locomotor reports it moving; a building never counts as moving) and its *close case*. From S-0210 (claim 1): *crusher* and *crushable* by a crusher. From S-0004: an overlay type's *registration index*. Terms used by this spec:
 
-- **AI house, house skill level.** These two terms are those of the glossary (revision 9; first given in revision 6), repeated here
+- **AI house, house skill level.** These two terms are those of the glossary (revision 10; first given in revision 6), repeated here
   in the form this spec uses them, so that the spec can be read with an earlier glossary
-  revision. Where the two texts differ, the glossary entries are meant.
+  revision. Where the two texts differ, the glossary entries are meant, with one exception: for
+  the skill level of the neutral and special houses, claim 11 is meant, and the glossary's "every
+  computer-controlled house" gets the maximum reads as "the house of every computer player".
   - An *AI house* is a house of our engine that our own AI plays, in place of the original's
     computer player. By decision of the project lead (recorded in the glossary entry *AI house*),
     an AI house has the same unit rules and the same order legality as a human-controlled house.
@@ -66,12 +71,18 @@ house's *firestorm*, the passability categories (*wall-like* among them) and the
     to its units, and our AI may reproduce the original's computer behaviour by giving ordinary
     orders. This is a rule of our engine, not a claim about the original, and it holds in every
     spec. It is not a quirk switch and not a departure, and this spec defines no switch for it.
+  - The ruling covers player houses only. The *neutral house* and the *special house* (glossary
+    *house*), which every skirmish creates after the players, are not AI houses. They keep the
+    original's rules for owners that are not human-controlled (the project lead's decision of
+    2026-10-10; glossary *AI house*, *Player houses only*). In this spec that means row WO1 of claim
+    4 (a crate blocks their walkers) and their house skill level in claim 11.
   - The *house skill level* is an integer per house that gates some automatic behaviours of its
     units by comparison with game-wide thresholds from the rules data (claim 11). In a skirmish or
-    network game of the original, every computer-controlled house gets the rules' maximum skill
-    level when the houses are set up, and every human-controlled house keeps the level 0 that every
-    house starts with (claim 11). In our engine an AI house in a skirmish or network game has the
-    level 0 of a human-controlled house, by the rule above.
+    network game of the original, the house of every computer player gets the rules' maximum skill
+    level when the houses are set up. Every human-controlled house, and the neutral and special
+    houses, keep the level 0 that every house starts with (claim 11). In our engine an AI house in
+    a skirmish or network game has the level 0 of a human-controlled house, by the rule above, and
+    the neutral and special houses keep the original's level 0.
   - In this spec the rule changes the outcome for our engine in row WO1 of claim 4 (and row VO1 of
     claim 5, campaign games only) and in the last condition of claim 11. Those claims state the
     original's behaviour, which scenarios C6 and C7 measure; the AI house's behaviour needs no
@@ -287,6 +298,8 @@ rank* and *elite weapon*), *n*
   not, is medium confidence. Vehicles that move in other ways (for example by jumping or flying)
   are not known ever to leave the state (low). Otherwise this definition has the confidence and
   backing of the rows that use it: rows WP17 and WP18 of claim 4 and rows VP22 and VP23 of claim 5.
+  For vehicles that do not drive on tracks, that backing is U6 (claim 4's list): claim 1 uses the state
+  only for vehicles that drive on tracks, so for the others it shows only in the split of those rows.
 - **At a chain point.** A vehicle that drives on tracks is *at a chain point* while its position is
   the chain point of its current two-cell curve, the step after that curve turns again, and the next
   pair of steps has a curve with an entry point (S-0207 claim 8). Whether the vehicle's type has the
@@ -471,7 +484,8 @@ rank* and *elite weapon*), *n*
    that holds in every spec, not a quirk of this spec, so this spec defines no switch for it. Row
    WO1 states the original's behaviour, which scenario C6 measures. The original's computer
    player thereby keeps its walkers off crates; our AI may choose to do the same through the
-   destinations it orders.
+   destinations it orders. Walkers of the neutral and special houses keep row WO1 in our engine
+   (Terms, the project lead's decision of 2026-10-10).
 
    A walker reacts to *friendly obstacle* and *enemy obstacle* alike when it reaches the cell
    (claims 7 and 9). C3 (c2) and (c4) show that a wall gives one of the two obstacle values, and not
@@ -901,11 +915,16 @@ rank* and *elite weapon*), *n*
     Skill levels:
     - A human-controlled house has skill level 0. So for units of a human player the last condition
       holds only when the threshold is 0 or less.
-    - In a skirmish or network game of the original, every computer-controlled house's skill
-      level is the game-wide maximum, given when the houses are set up. So the last condition holds
-      for every computer-owned unit when the threshold is at most that maximum. This is the
-      original's computer behaviour: computer-owned units make room when a friendly walker or a
-      crushing vehicle asks, where a human player's units of the same rank stay.
+    - In a skirmish or network game of the original, the skill level of the house of every computer
+      player is the game-wide maximum, given when the houses are set up. So the last condition holds
+      for every unit of a computer player when the threshold is at most that maximum. This is the
+      original's computer behaviour: units of a computer player make room when a friendly walker or
+      a crushing vehicle asks, where a human player's units of the same rank stay.
+    - The neutral and special houses (Terms) are computer-controlled, but they are not computer
+      players: in the original they keep skill level 0, the level every house starts with, since
+      the map's per-house definitions are not read in a skirmish (S-0009, claim 26). So for their
+      units the last condition holds only when the threshold is 0 or less, as for a human player's.
+      Our engine keeps this (the project lead's decision of 2026-10-10, Terms).
     - In our engine an AI house has skill level 0, as a human-controlled house does (glossary *AI
       house* and *house skill level*), so the last condition treats its units as a human player's.
       This follows from the project lead's decision recorded in the glossary entry *AI house*: a
@@ -918,8 +937,9 @@ rank* and *elite weapon*), *n*
     which of the others are asked.
     - Backing: `measurable` (scenario C4, parts a and c, and scenario C19, part c, for move-anywhere
       requests reaching every occupant on one tick; scenario C7 for the other conditions and the
-      skill levels of the original, part b3 for two occupants of one request). The skill level of an
-      AI house is a rule of our engine, not a claim about the original, and needs no backing.
+      skill levels of the original, part b3 for two occupants of one request, parts c and c2 for the
+      neutral and special houses). The skill level of an AI house is a rule of our engine, not a
+      claim about the original, and needs no backing.
     - Confidence: medium (high for the skill levels given to houses at setup in the original)
 
 12. **Who sends them.**
@@ -965,7 +985,9 @@ rank* and *elite weapon*), *n*
     overlays and occupants. No other value arises. In a campaign game a cell can also give *blocked*
     to some aircraft when the cell is under shroud (low; Open questions).
     - Specs that read "the actor's entry outcome" for an aircraft (S-0213 claim 7, S-0214 row GC9) therefore always see *clear* for it in this batch's game modes.
-    - Backing: `measurable` (scenario C21, part a)
+    - Backing: `measurable` (scenario C21, part a) for skirmish and network games. `unmeasured` for
+      the campaign case: campaign games are outside this batch (the project lead's decision of
+      2026-10-10; Open questions), as for row VO1 of claim 5 (U7).
     - Confidence: high for skirmish and network games; low for the campaign case
 
 ## Formulas
@@ -1019,6 +1041,7 @@ delay is an imported integer in ticks, used as read.
 | walking, path step ahead | clear, position free | walking target chosen on the asking tick; the first step towards it follows as S-0208 claim 6 says |
 | walking | clear, no position free | stops this tick, asks again next tick |
 | walking, or waiting after a repeated ask on an earlier tick | first ask: stationary friendly, friendly obstacle, enemy obstacle, blocked | stops, discards the path, searches a new one on the asking tick whatever the retry timer shows, and makes the repeated ask on that tick too |
+| holding a path searched on this asking tick | repeated ask: clear, position free | walking target chosen in the first cell of the new path on the same asking tick (claim 7), so it stands still exactly as long as at a free cell boundary |
 | holding a path searched on this asking tick | repeated ask: stationary friendly | gives up within the close-enough distance (claim 8), otherwise sends a cell-wide request and waits for the rest of the tick; on the next tick it asks again as a first reaction |
 | holding a path searched on this asking tick | repeated ask: friendly obstacle, enemy obstacle | stops and discards the path. On the same tick it attacks the first listed object when the walker's house is not allied with that object (a terrain object included), takes the wall as its target when no object is listed, and attacks nothing when the walker's house is allied with the first listed object (claim 9) |
 | holding a path searched on this asking tick | repeated ask: blocked | keeps the path and waits for the rest of the tick; on the next tick it asks again as a first reaction |
@@ -1122,7 +1145,7 @@ Ordering stated as consequences:
 | Rules, `[AI]`, `BlockagePathDelay` | blockage delay | integer, ticks | keeps the value in force; before any rules layer gives it, 60 ticks |
 | Rules, the combat-damage section (as S-0210's Import mapping names it), `PlayerScatter` | player-scatter rule (claim 11) | boolean | keeps the value in force; before any rules layer gives it, no |
 | Rules, `[IQ]`, `Scatter` | scatter threshold of the house skill level (claim 11) | integer, skill levels | keeps the value in force; before any rules layer gives it, 3 skill levels |
-| Rules, `[IQ]`, `MaxIQLevels` | the maximum house skill level, which the original gives to every computer-controlled house in a skirmish or network game; an AI house keeps 0 by the rule of glossary *AI house* (claim 11) | integer, skill levels | keeps the value in force; before any rules layer gives it, 5 skill levels |
+| Rules, `[IQ]`, `MaxIQLevels` | the maximum house skill level, which the original gives to the house of every computer player in a skirmish or network game (not to the neutral and special houses, which keep 0); an AI house keeps 0 by the rule of glossary *AI house* (claim 11) | integer, skill levels | keeps the value in force; before any rules layer gives it, 5 skill levels |
 | Rules, overlay sections, `Crate`, `Wall` | crate overlay, wall overlay (claims 4 and 5) | boolean | no |
 | Rules, overlay sections, `Armor` | the overlay type's armour, of which only "wood" matters here (claim 5, row VO5) | armour name | as the combat specs give it |
 | Rules, building type sections, `Gate` | gate (claim 4) | boolean | no |
@@ -1484,9 +1507,15 @@ receives it and accepts it (S-0208 claim 11) steps aside. One that does not rece
   - (b4) As (b), with a test file that gives the infantry type the scatter veterancy ability at
     veteran rank, and the map making the unit a veteran.
   - (b5) As (b), with a test file that sets the scatter threshold to 0.
+  - (c) As (b), with the infantry pre-placed by the map as a unit of the neutral house (S-0009,
+    claim 27), of a stock type that is not a fraidycat (S-0107 Terms), and the crusher owned by the
+    human player. A computer player takes part, so that the
+    unused-house cleanup of S-0009 claim 28 does not run and the infantry stays on the map.
+  - (c2) As (c), with the infantry a unit of the special house.
 - *Procedure:* run until the crusher has passed the cell.
 - *Observable:* whether each infantry unit survives (steps aside) or is crushed.
-- *Runs:* 3 each.
+- *Runs:* 3 each. In (c) and (c2) a run counts only when the recorder shows the infantry present at
+  the start and not moving before the crusher reaches its cell.
 - *Expected:*
   - (a) survives, provided the stock scatter threshold is at most the stock maximum skill level.
   - (a′) crushed, provided the stock infantry type has no scatter veterancy ability at the rank the
@@ -1495,8 +1524,13 @@ receives it and accepts it (S-0208 claim 11) steps aside. One that does not rece
     scatter veterancy ability at the rank the map gives the unit (both read from the stock data when
     the scenario is built).
   - (b2), (b3), (b4) and (b5) survives; in (b3) both units survive.
+  - (c) and (c2) crushed, with the two provisions of (b), and provided the infantry's house is not
+    allied with the human player's house (no spec states the alliances of the neutral and special
+    houses; the recorder reads them).
 - *Falsified if:*
   - (b) the infantry survives while both provisions of its expectation hold,
+  - (c) or (c2) the infantry survives while the three provisions of its expectation hold (that
+    would show the house at the maximum skill level, as a computer player's),
   - (a′) the infantry survives while the provision of its expectation holds,
   - any of (b2) to (b5) the infantry is crushed,
   - (a) the infantry is crushed while the stock threshold is at most the stock maximum.
@@ -2558,7 +2592,8 @@ That moment is called the *window*. Common setup:
   states, the laser-fence rows become measurable with a test file that gives a building type the
   laser-fence flag.
 - A human-controlled house that the computer takes over during the game appears to be given the
-  maximum skill level then. That belongs to the future network-game spec.
+  maximum skill level then. That belongs to the future network-game spec (network games are out of
+  scope for now, the project lead's decision of 2026-10-09).
 - When hovering vehicles, ships and walking vehicles clear their vehicle-present flags (claim 1) is
   not established. The driving vehicle's moments are claim 1's. Whether a vehicle that is removed from
   the map in the middle of a track clears the flags it set ahead of itself is not established either.
@@ -2580,8 +2615,8 @@ That moment is called the *window*. Common setup:
 - The blocking cells of a building (Terms) count the impassable-rows value along x from the
   top-left cell. Whether that matches the rows a player sees as impassable was not checked.
 - In a campaign game an aircraft can get *blocked* for a cell under shroud (claim 14). The
-  conditions involve state of the aircraft that was not identified. Campaigns are outside this
-  batch.
+  conditions involve state of the aircraft that was not identified. Campaigns are out of scope for
+  now (the project lead's decision of 2026-10-10).
 - A building as an actor (for example one that undeploys into a vehicle, S-0214 row GC9) has an
   entry outcome of its own that this spec does not give.
 - Row VP29 of claim 5 asks about the weapon a vehicle would use against a terrain object. For a
@@ -2597,21 +2632,17 @@ That moment is called the *window*. Common setup:
 
 ## Questions for the project lead
 
-- **Agreement with S-0208.** S-0208 (its Edge cases on `quirks.top_position_counts_as_centre` and
-  scenario W2 (b)) expects an allied vehicle to drive into a cell in which one infantry unit still
-  stands at the centre once the unit sharing its record entry has left. Claim 5 here gives that
-  remaining unit *stationary friendly* through its own row (VP20) whenever it does not count as
-  moving, whatever the record shows, so the vehicle stays out. This spec keeps claim 5. S-0208 is
-  already approved (revision 8 in `spec/README.md`), so its expectation and the consequence it draws
-  from its quirk need a revision by its owner; until then the two specs disagree on this case.
-- **Agreement with S-0212.** S-0212 claim 27 says that an allied unit that counts as moving gives a
-  vehicle *moving blocker*. Claim 5 here gives that only to an allied vehicle (or aircraft) between
-  steps and to a unit at a chain point. Other allied units that count as moving, infantry among
-  them, give no value of their own outside the close case, and moving allied infantry gives *moving
-  blocker* only through an allied infantry house in the record. Claim 5 says that its tables are
-  meant where S-0212's summary differs. S-0212 is already approved (revision 14 in `spec/README.md`),
-  so its claim 27 needs a revision by its owner to match; until then the two specs disagree on this
-  case.
+- **Agreement with S-0208:** decided (delegated sign-off, 2026-10-10: S-0209 owns occupancy
+  outcomes). S-0208 revision 13 agrees with claim 5: its Edge case on
+  `quirks.top_position_counts_as_centre` gives a remaining unit that stands still *stationary
+  friendly* for an allied vehicle (row VP20) whatever the record shows, and its scenario W2 (b) reads
+  the record through the nearby-cell search instead of through a vehicle.
+- **Agreement with S-0212:** decided (delegated sign-off, 2026-10-10: S-0209 owns occupancy
+  outcomes). S-0212 revision 16 claim 27 agrees with claim 5: an allied unit that counts as moving
+  gives *moving blocker* of its own only when it is a vehicle (or aircraft) between steps or a unit
+  at a chain point (row VP22), outside the close case (row VP21); no outcome of its own comes from
+  any other allied unit that counts as moving, infantry among them (row VP23), and it points
+  to claim 5 for the full table.
 - **Switch for objects and record from different cell layers.** If the bridge specs show that a
   deck can span uneven ground (Open questions), should there be a switch
   `quirks.cell_layer_split_on_uneven_deck` (default: the original), whose alternative would read the
