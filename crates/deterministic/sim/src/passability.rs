@@ -97,7 +97,13 @@ pub fn compute_category(w: &World, c: CellXY) -> u8 {
         if o.wall {
             return category::WALL_LIKE;
         }
-        if !nonzero(r.multiplier(o.land, wheel)) {
+        let zero = if r.quirks.passability_wheel_column {
+            !nonzero(r.multiplier(o.land, wheel))
+        } else {
+            // spec: S-0211 claim 11 (`quirks.passability_wheel_column` off: rule 2 also needs M = 0 for every ground class)
+            GROUND_CLASSES.iter().all(|&c| !nonzero(r.multiplier(o.land, c)))
+        };
+        if zero {
             return category::BLOCKED;
         }
         if o.rock {
