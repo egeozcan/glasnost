@@ -62,6 +62,8 @@ pub struct Pacer {
 
 impl Pacer {
     /// Whether a tick is due at host time `now_ms` at game speed `speed`.
+    /// At index 0 the display rate limits the ticks (one per drawn frame),
+    /// below S-0201 claim 5's 125 per second.
     /// When it is, a new cycle starts at `now_ms`: time lost to a late call
     /// is not made up (S-0201 claim 3). Call once per drawn frame, so at most
     /// one tick runs per frame.
@@ -539,13 +541,17 @@ impl Live {
         }
     }
 
-    /// The first house that owns a mobile object, else the first house.
+    /// The first house in house order that owns a mobile object on the
+    /// map, else the first house.
     pub fn default_house(&self) -> HouseId {
-        self.world
-            .objects
-            .values()
-            .find(|o| o.kind.is_mobile() && o.owner.is_some())
-            .and_then(|o| o.owner)
+        (0..self.world.houses.len())
+            .map(|i| HouseId(i as u8))
+            .find(|&h| {
+                self.world
+                    .objects
+                    .values()
+                    .any(|o| o.kind.is_mobile() && o.on_map && o.owner == Some(h))
+            })
             .unwrap_or(HouseId(0))
     }
 

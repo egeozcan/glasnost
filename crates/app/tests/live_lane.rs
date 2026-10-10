@@ -8,7 +8,10 @@
 //! `GLASNOST_LIVE_MAPS=n` (default 3) is the number of maps with units to
 //! run, `GLASNOST_LIVE_TICKS=n` (default 240) the ticks after the order, and
 //! `GLASNOST_LIVE_FILTER=text` keeps only maps whose name contains `text`,
-//! and `GLASNOST_LIVE_INFANTRY=1` only maps with infantry.
+//! `GLASNOST_LIVE_INFANTRY=1` only maps with infantry, and
+//! `GLASNOST_LIVE_TURRETS=1` only maps with turreted vehicles (whose owner's
+//! turreted vehicles are then ordered). A 640 × 400 close-up of the first
+//! ordered unit is written during the move.
 
 #![cfg(not(target_arch = "wasm32"))]
 
@@ -98,6 +101,7 @@ fn live_maps_move_and_draw() {
     let want = env_num("GLASNOST_LIVE_MAPS", 3);
     let ticks = env_num("GLASNOST_LIVE_TICKS", 240) as i32;
     let need_infantry = std::env::var_os("GLASNOST_LIVE_INFANTRY").is_some();
+    let need_turrets = std::env::var_os("GLASNOST_LIVE_TURRETS").is_some();
     let filter = std::env::var("GLASNOST_LIVE_FILTER")
         .unwrap_or_default()
         .to_ascii_lowercase();
@@ -144,7 +148,21 @@ fn live_maps_move_and_draw() {
                     *infantry.entry(o.owner).or_default() += 1;
                 }
             }
-            let house = infantry
+            let turreted = |o: &glasnost_sim::world::Object| {
+                o.kind == glasnost_sim::rules::Kind::Vehicle
+                    && live
+                        .rules
+                        .unit(o.kind, o.type_index)
+                        .is_some_and(|u| u.turret)
+            };
+            let mut turrets: std::collections::BTreeMap<_, usize> = Default::default();
+            for o in live.world.objects.values() {
+                if turreted(o) && o.on_map {
+                    *turrets.entry(o.owner).or_default() += 1;
+                }
+            }
+            let by = if need_turrets { &turrets } else { &infantry };
+            let house = by
                 .iter()
                 .max_by_key(|(_, n)| **n)
                 .and_then(|(h, _)| *h)
@@ -154,6 +172,7 @@ fn live_maps_move_and_draw() {
                 .objects
                 .values()
                 .filter(|o| o.kind.is_mobile() && o.owner == Some(house) && o.on_map)
+                .filter(|o| !need_turrets || turreted(o))
                 .collect();
             let near = |a: glasnost_sim::world::Pos, b: glasnost_sim::world::Pos| {
                 (a.x - b.x).abs() <= 8 * 256 && (a.y - b.y).abs() <= 8 * 256
@@ -164,7 +183,10 @@ fn live_maps_move_and_draw() {
                 .map(|o| o.id)
                 .take(8)
                 .collect();
-            if own.is_empty() || (need_infantry && infantry.is_empty()) {
+            if own.is_empty()
+                || (need_infantry && infantry.is_empty())
+                || (need_turrets && turrets.is_empty())
+            {
                 continue;
             }
             done += 1;
@@ -207,6 +229,30 @@ fn live_maps_move_and_draw() {
             for t in 0..ticks {
                 if t == 24 {
                     let live = loaded.live.as_ref().unwrap();
+                    let p = live.world.obj(own[0]).map(|o| o.pos).unwrap_or_default();
+                    let c = limit_centre(
+                        project_lifted(p.x, p.y, p.z),
+                        (640, 400),
+                        loaded.map.footprint.width,
+                        loaded.map.footprint.local,
+                        &ScrollQuirks::default(),
+                    );
+                    let origin = view_origin(c, (640, 400));
+                    let v = View {
+                        origin,
+                        size: (640, 400),
+                        reference: Frame::reset_reference(origin.1),
+                    };
+                    let f = loaded.built.scene.compose(
+                        &v,
+                        &Filter::default(),
+                        &ComposeQuirks::default(),
+                    );
+                    std::fs::write(
+                        out_dir.join(format!("live-{n}-closeup.png")),
+                        png::png(640, 400, &f.to_rgba()),
+                    )
+                    .unwrap();
                     let v = view_at(&loaded.map, middle(&live.world, &own));
                     during = Some((
                         v,
