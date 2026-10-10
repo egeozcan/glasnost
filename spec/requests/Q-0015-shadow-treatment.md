@@ -1,9 +1,9 @@
 ---
 id: Q-0015
 title: How a shadow image changes the pixels under it
-status: open
+status: answered
 related: [S-0102, S-0104, S-0105, S-0107, S-0108]
-answered-by: []
+answered-by: [S-0102]
 ---
 
 ## Need

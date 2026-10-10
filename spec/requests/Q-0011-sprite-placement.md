@@ -1,9 +1,9 @@
 ---
 id: Q-0011
 title: Where sprites are drawn relative to their object, and sprite vehicle facings
-status: open
+status: answered
 related: [S-0101, S-0102, S-0107, S-0108]
-answered-by: []
+answered-by: [S-0102]
 ---
 
 ## Need
