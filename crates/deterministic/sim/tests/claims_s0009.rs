@@ -264,3 +264,241 @@ fn claims_42_43_placement_order() {
     let c = cell(8, 0);
     assert_eq!((t.pos.x, t.pos.y), (256 * c.x + 128, 256 * c.y + 128));
 }
+
+/// A scene set up as a skirmish: houses Alpha and Beta are players on
+/// random positions; no sandbox.
+fn skirmish() -> Scene {
+    let mut s = scene();
+    s.setup.sandbox = false;
+    s
+}
+
+fn load(s: &Scene) -> Result<World, glasnost_sim::load::LoadError> {
+    glasnost_sim::load::new_game(
+        s.sim_rules(),
+        &s.map,
+        std::sync::Arc::new(s.catalogue.clone()),
+        &s.setup,
+    )
+}
+
+/// spec: S-0009 claim 18 (random start cells: candidates (v + 1, u + 11) from two ranged draws; on blank cells the candidate itself when usable)
+#[test]
+fn claim_18_random_start_on_blank_cells() {
+    let s = scene();
+    let mut w = s.build();
+    // The early phase's view: every legal cell a blank cell.
+    w.cells = glasnost_sim::cells::Cells::new(glasnost_map::CellGrid::new(s.map.footprint));
+    let mut probe = w.rng.clone();
+    let span = 2 * common::SIZE;
+    let u = probe.ranged(0, span - 11, true);
+    let v = probe.ranged(10, span - 11, true);
+    let candidate = glasnost_map::CellXY::new(v + 1, u + 11);
+    let list = glasnost_sim::starts::build_list(&mut w, &s.map, 1).expect("a start cell");
+    if w.cells.usable(candidate) {
+        assert_eq!(list, vec![candidate]);
+        assert_eq!(w.rng, probe, "the search takes no draw");
+    }
+    assert!(w.cells.usable(list[0]));
+}
+
+/// spec: S-0009 claims 17 and 18 (defined start waypoints need no random cell; a map without a clear 8 × 8 area is refused by our engine)
+#[test]
+fn claim_18_no_start_cell_refused() {
+    let mut s = skirmish();
+    let all: Vec<_> = s.map.cells.iter().map(|(c, _)| c).collect();
+    for c in all {
+        // Water (terrain code 9), which the start-up land row closes to tracks.
+        s.set_cell(c, common::code_tile(9), 0);
+    }
+    assert_eq!(
+        load(&s).err(),
+        Some(glasnost_sim::load::LoadError::NoStartCell)
+    );
+    s.map.waypoints.insert(0, (40, 40));
+    s.map.waypoints.insert(1, (50, 40));
+    let w = load(&s).expect("start waypoints for both players");
+    let mut starts: Vec<_> = w.houses.iter().map(|h| h.start).collect();
+    starts.sort();
+    assert_eq!(starts, [Some(0), Some(1)]);
+}
+
+/// The starting-unit rules of claims 45 and 46: base unit MCV, TANK (cost
+/// 100) and MAN (cost 50), every type owned by both countries.
+fn starting_scene() -> Scene {
+    let mut s = skirmish();
+    for (name, cost) in [("MCV", 500), ("TANK", 100)] {
+        let mut t = unit_type(TRACK, 4, 5);
+        t.cost = Some(cost);
+        t.tech_level = Some(1);
+        t.owner = Some(vec!["Alphaland".into(), "Betaland".into()]);
+        s.vehicle(name, t);
+    }
+    let mut man = unit_type(common::FOOT, 4, 5);
+    man.cost = Some(50);
+    man.tech_level = Some(1);
+    man.owner = Some(vec!["Alphaland".into(), "Betaland".into()]);
+    s.infantry("MAN", man);
+    s.ruleset.sim.general.base_unit = Some(vec!["MCV".into()]);
+    s.map.waypoints.insert(0, (40, 40));
+    s.map.waypoints.insert(1, (52, 40));
+    s.setup.unit_count = 2;
+    s.setup.bases = true;
+    s
+}
+
+/// spec: S-0009 claim 45 (base unit, budget B = trunc((trunc(n / 2) + C) / n) × U, vehicles while R > trunc(B / 3), then infantry); claim 46 (the base unit at its base cell, the others by the placement search, facing 0, guard)
+#[test]
+fn claims_45_46_starting_units() {
+    let s = starting_scene();
+    let w = load(&s).expect("loads");
+    let r = w.rules_arc();
+    // n = 2 (TANK, MAN; MCV is a base unit), C = 150: B = trunc(151 / 2) × 2 = 150.
+    for h in 0..2u8 {
+        let mut names: Vec<String> = w
+            .objects
+            .values()
+            .filter(|o| o.owner == Some(glasnost_sim::world::HouseId(h)))
+            .map(|o| r.unit(o.kind, o.type_index).unwrap().name.clone())
+            .collect();
+        names.sort();
+        assert_eq!(names, ["MAN", "MCV", "TANK"], "house {h}");
+        assert_eq!(w.houses[usize::from(h)].credits, 0);
+    }
+    let base_cells: Vec<_> = w
+        .objects
+        .values()
+        .filter(|o| r.unit(o.kind, o.type_index).unwrap().name == "MCV")
+        .map(|o| o.pos.cell())
+        .collect();
+    assert!(base_cells.contains(&glasnost_map::CellXY::new(40, 40)));
+    assert!(base_cells.contains(&glasnost_map::CellXY::new(52, 40)));
+    for o in w.objects.values() {
+        assert_eq!(o.beh.current, Some(Behaviour::Guard));
+        assert_eq!(o.body.value(0), 0);
+    }
+}
+
+/// spec: S-0009 claim 45 (early stop: no base-unit type qualifies for the house; no units for it or later houses, and no final draw)
+#[test]
+fn claim_45_early_stop() {
+    let mut s = starting_scene();
+    s.ruleset.sim.vehicles.get_mut("MCV").unwrap().owner = Some(vec!["Betaland".into()]);
+    let stopped = load(&s).expect("loads");
+    assert!(stopped.objects.is_empty());
+    // Without bases the step runs to the end, with the final draw.
+    s.setup.bases = false;
+    let full = load(&s).expect("loads");
+    assert!(!full.objects.is_empty());
+}
+
+/// spec: S-0009 claim 41 (follow values make placed vehicles follower cars of the placed vehicle they name)
+#[test]
+fn claim_41_follower_links_stored() {
+    let mut s = scene();
+    for (k, follow) in [(0, -1), (2, 0)] {
+        s.map.objects.units.push(Unit {
+            placed: placed("Alpha", "TANK", cell(k, 0), 256, 0),
+        });
+        s.map.objects.unit_fields.push(EntryFields {
+            follow: Some(follow),
+            ..Default::default()
+        });
+    }
+    let w = s.build();
+    let v: Vec<_> = w
+        .objects
+        .values()
+        .filter(|o| o.kind == Kind::Vehicle)
+        .collect();
+    assert_eq!(v[0].leader, None);
+    assert_eq!(v[1].leader, Some(v[0].id));
+}
+
+/// spec: S-0009 claim 27 and Import mapping (the neutral and special houses answer to their country names); S-0208 Terms (they are not human-controlled)
+#[test]
+fn claim_27_sandbox_neutral_house() {
+    let mut s = scene();
+    s.register("countries", "Neutral");
+    s.ruleset
+        .sim
+        .countries
+        .insert("Neutral".into(), Default::default());
+    s.map.objects.units.push(Unit {
+        placed: placed("Neutral", "TANK", cell(0, 0), 256, 0),
+    });
+    s.map.objects.units.push(Unit {
+        placed: placed("Alpha", "TANK", cell(2, 0), 256, 0),
+    });
+    let (setup, _) = glasnost_sim::load::sandbox_setup(&s.map, &s.sim_rules(), 1);
+    assert_eq!(setup.houses[0].name, "Neutral");
+    assert!(!setup.houses[0].human);
+    assert_eq!(
+        setup.houses[0].role,
+        glasnost_sim::world::HouseRole::Neutral
+    );
+    assert!(setup.houses[1].human);
+}
+
+/// spec: S-0009 claim 12 (an overlay is created only where the cell's slope shape as it stands is at most 4, or for the type at position 178; only an earlier placement's recalculation can make it stand above 4)
+#[test]
+fn claim_12_slope_condition() {
+    let build = |slope: u8| {
+        let mut s = scene();
+        for i in 0..200 {
+            let name = format!("O{i}");
+            s.register("overlays", &name);
+            s.ruleset.sim.overlays.insert(
+                name,
+                glasnost_rules::sim::OverlayType {
+                    has_art: Some(true),
+                    ..Default::default()
+                },
+            );
+        }
+        // A marker of position 124 (its end row runs along x) west of a sloped cell holding type 7.
+        s.cell_mut(cell(0, 0)).overlay = 124;
+        s.set_cell(cell(1, 0), common::slope_tile(slope), 0);
+        s.cell_mut(cell(1, 0)).overlay = 7;
+        // A sloped cell no placement recalculated before: its overlay is created.
+        s.set_cell(cell(5, 0), common::slope_tile(9), 0);
+        s.cell_mut(cell(5, 0)).overlay = 7;
+        s.build()
+    };
+    let w = build(9);
+    assert_eq!(w.cells.cell(cell(1, 0)).unwrap().overlay, 96, "refused");
+    assert_eq!(w.cells.cell(cell(5, 0)).unwrap().overlay, 7);
+    let w = build(1);
+    assert_eq!(w.cells.cell(cell(1, 0)).unwrap().overlay, 7);
+}
+
+/// spec: S-0009 claims 41 and 45 (starting units, credits, house roles and follower-car links are game state: the state hash survives a save/load round trip)
+#[test]
+fn claims_41_45_state_round_trip() {
+    let mut s = starting_scene();
+    s.map.objects.units.push(Unit {
+        placed: placed("Alpha", "TANK", cell(-8, 6), 256, 0),
+    });
+    s.map.objects.units.push(Unit {
+        placed: placed("Alpha", "TANK", cell(-6, 6), 256, 0),
+    });
+    s.map.objects.unit_fields.push(EntryFields::default());
+    s.map.objects.unit_fields.push(EntryFields {
+        follow: Some(0),
+        ..Default::default()
+    });
+    s.setup.unit_count = 1;
+    let w = load(&s).expect("loads");
+    let bytes = glasnost_sim::save::save(&w);
+    let l = glasnost_sim::save::load(
+        &bytes,
+        s.sim_rules(),
+        std::sync::Arc::new(s.catalogue.clone()),
+    )
+    .expect("loads back");
+    assert_eq!(
+        glasnost_sim::save::state_hash(&w),
+        glasnost_sim::save::state_hash(&l)
+    );
+    assert!(l.objects.values().any(|o| o.leader.is_some()));
+}

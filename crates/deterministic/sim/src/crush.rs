@@ -190,9 +190,17 @@ fn crush_overlay(w: &mut World, id: ObjectId, c: CellXY) {
 
 /// Removes a cell's overlay and updates passability (S-0211, S-0212).
 fn remove_overlay(w: &mut World, c: CellXY) {
+    let wall = w
+        .cells
+        .cell(c)
+        .is_some_and(|x| crate::walls::is_wall(w, x.overlay));
     if let Some(cell) = w.cells.grid.get_mut(c) {
         cell.overlay = NO_OVERLAY;
         cell.overlay_data = 0;
+    }
+    if wall {
+        // spec: S-0112 claim 7 (a wall removed by a wall hit, crushing included, recomputes every cell within two edge steps)
+        crate::walls::wall_removed(w, c);
     }
     if let Some(i) = w.cells.idx(c) {
         // spec: S-0210 claim 14 (c) (a wall that is removed has no owner from then on)

@@ -100,19 +100,7 @@ pub const STEPS: [(i32, i32); 8] = [
 ];
 
 /// Rebuilds the regions from the categories.
-///
-/// The first rebuild of a game, at the end of the map's load, also makes
-/// the marks that the load gives: the high-bridge cells of the placed
-/// high-bridge overlays (S-0211 claim 15) and, with the map's buildings
-/// placed and before any starting unit, the owners of the map's walls
-/// (S-0210 claim 14). They are made here until the loader makes them at
-/// those moments itself.
 pub fn rebuild(w: &mut World) {
-    if !w.cells.load_marks_done {
-        w.cells.load_marks_done = true;
-        w.cells.mark_all_high_bridges();
-        crate::crush::assign_wall_owners(w);
-    }
     let q = w.rules().quirks;
     let n = w.cells.grid.len();
     let cells: Vec<CellXY> = w.cells.grid.iter().map(|(c, _)| c).collect();

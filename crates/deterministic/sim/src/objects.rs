@@ -76,6 +76,7 @@ pub fn create(w: &mut World, kind: Kind, type_index: u32, owner: Option<HouseId>
         targeting_timer: 0,
         last_turn: -1,
         foundation,
+        leader: None,
         // spec: S-0207 Constants (starting speed bonus factor b = 1.0); S-0208 Terms (speed multiplier 1.0 at creation)
         speed_bonus: F64::from_i64(1, w.rules().mode),
     };
@@ -171,6 +172,8 @@ pub fn place(w: &mut World, id: ObjectId, pos: Pos, facing: Facing) {
     for c in touched {
         crate::regions::cell_changed(w, c);
     }
+    // spec: S-0112 claim 7 (a gate or wall tower placed recomputes the wall bits of its fixed cells)
+    crate::walls::building_placed(w, id);
     if o.kind.is_mobile() {
         // spec: S-0215 Terms (the placement fall-back: an actor falls back to rest when placed)
         crate::process::fall_back(w, id, true);
@@ -224,6 +227,32 @@ pub fn remove(w: &mut World, id: ObjectId) {
     crate::load::recalc_cells(w, &touched);
     for c in touched {
         crate::regions::cell_changed(w, c);
+    }
+    if o.kind == Kind::Building
+        && o.health <= 0
+        && let Some(j) = crate::walls::joiner(w, o.type_index)
+    {
+        // spec: S-0112 claim 7 (a destroyed gate or tower that leaves the map recomputes its fixed cells, without it)
+        crate::walls::joiner_changed(w, j, cell, o.foundation);
+        if j == crate::walls::Joiner::Tower {
+            // The wall hits of a departing wall tower (S-0112 claim 7, S-0303 F4) need wall damage (M4).
+            w.note("S-0112 claim 7: a departing wall tower's wall hits need wall damage (S-0303 F4, M4)");
+        }
+    }
+}
+
+/// Placing a vehicle of a type with either visceroid flag while the map
+/// loads takes one ranged draw R(0, 29) (S-0202 claim 10, map-loading table;
+/// S-0009 claim 46).
+pub fn visceroid_draw(w: &mut World, id: ObjectId) {
+    let Some(o) = w.obj(id) else { return };
+    if o.kind != Kind::Vehicle {
+        return;
+    }
+    let r = w.rules_arc();
+    if r.unit(o.kind, o.type_index).is_some_and(|u| u.visceroid) {
+        // spec: S-0202 Constants (visceroid placement draw R(0, 29))
+        let _ = w.rng.ranged(0, 29, r.quirks.ranged_draw_half_span);
     }
 }
 
@@ -348,6 +377,7 @@ pub fn place_map_objects(w: &mut World, map: &Map, sandbox: bool) {
     };
     let mut bad_sub = false;
     let mut follow: Vec<FollowEntry> = Vec::new();
+    let mut placed_vehicles: Vec<ObjectId> = Vec::new();
     // spec: S-0009 claim 43 (vehicles, then aircraft, then infantry, then buildings, each in entry order)
     for lk in ListKind::ORDER {
         let kind = list_kind(lk);
@@ -436,7 +466,9 @@ pub fn place_map_objects(w: &mut World, map: &Map, sandbox: bool) {
                 }
             }
             place(w, id, pos, facing);
+            visceroid_draw(w, id);
             if kind == Kind::Vehicle {
+                placed_vehicles.push(id);
                 follow.push(FollowEntry {
                     value: fields.follow,
                     placed: true,
@@ -473,8 +505,17 @@ pub fn place_map_objects(w: &mut World, map: &Map, sandbox: bool) {
     }
     // spec: S-0009 claim 41 (the placed vehicle numbered i takes follow value i, quirks.follow_index_by_place)
     let links = follow_links(&follow, r.quirks.follow_index_by_place);
+    for (i, leader) in links.leaders.iter().enumerate() {
+        // spec: S-0009 claim 41 (the placed vehicle numbered i becomes a follower car of the placed vehicle numbered n)
+        let leader = leader.and_then(|n| placed_vehicles.get(n).copied());
+        if let Some(&id) = placed_vehicles.get(i)
+            && let Some(o) = w.obj_mut(id)
+        {
+            o.leader = leader;
+        }
+    }
     if links.leaders.iter().any(Option::is_some) {
-        w.note("S-0009 claim 41: follower-car links are worked out but an object has no leader field yet (S-0212 claim 26)");
+        w.note("S-0212 claim 26: follower cars are linked to their leaders but not sent after them yet");
     }
     if !links.unspecified.is_empty() || links.mixed {
         w.note("S-0009 claim 41: some vehicle entries lack the follow-index field; the vehicles beyond the follow values have no leader (a departure)");

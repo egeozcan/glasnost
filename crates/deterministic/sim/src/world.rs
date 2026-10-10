@@ -105,8 +105,27 @@ pub struct House {
     pub skill: i32,
     /// Start position index, if it has one.
     pub start: Option<u32>,
+    /// The house's role in the game (S-0009 claim 19).
+    pub role: HouseRole,
+    /// Credits (S-0009 claim 45: a left-over starting-unit budget).
+    pub credits: i32,
     /// Orders waiting to be applied (S-0213 claim 2).
     pub pending: Vec<Order>,
+}
+
+/// A house's role (S-0009 claim 19, glossary *house*).
+#[derive(
+    Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
+)]
+pub enum HouseRole {
+    /// A player: a human player's house or a computer player's (an AI house
+    /// of our engine).
+    #[default]
+    Player,
+    /// The neutral house.
+    Neutral,
+    /// The special house.
+    Special,
 }
 
 impl House {
@@ -171,6 +190,8 @@ pub struct Object {
     pub last_turn: i32,
     /// For a building: its foundation size.
     pub foundation: (i32, i32),
+    /// A follower car's leader (S-0009 claim 41, glossary *follower car*).
+    pub leader: Option<ObjectId>,
     /// Speed multiplier (S-0208 Terms) or speed bonus factor (S-0207
     /// claim 13), a double; 1.0 at creation.
     pub speed_bonus: F64,
@@ -187,6 +208,8 @@ pub struct HouseSetup {
     pub human: bool,
     /// Chosen start position, or `None` for random.
     pub start: Option<u32>,
+    /// The house's role (S-0009 claim 19).
+    pub role: HouseRole,
 }
 
 /// How a game is set up: everything the simulation needs besides rules and
@@ -205,6 +228,10 @@ pub struct GameSetup {
     /// Our viewer's sandbox: skip the start positions of S-0009 claims 17 to
     /// 20 and starting units, so that a map can be watched without players.
     pub sandbox: bool,
+    /// The unit-count setting U (S-0009 claim 45).
+    pub unit_count: i32,
+    /// The bases setting (S-0009 claim 45).
+    pub bases: bool,
 }
 
 /// The game state.

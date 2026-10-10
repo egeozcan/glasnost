@@ -16,6 +16,7 @@ use std::time::Instant;
 use glasnost_sim::load::{new_game, sandbox_setup};
 use glasnost_sim::rules::SimRules;
 use glasnost_sim::save::{self, Replay};
+use glasnost_sim::world::GameSetup;
 use glasnost_sim::{testkit, tick};
 
 /// Per-tick state hashes of the synthetic scenario's scripted replay.
@@ -78,6 +79,8 @@ pub struct MapRun {
     pub skirmish_objects: usize,
     /// The skirmish pass: milliseconds for `new_game`.
     pub skirmish_ms: u128,
+    /// The skirmish pass: starting units created.
+    pub skirmish_starting_units: usize,
 }
 
 /// Runs every map of the install for `ticks` ticks.
@@ -212,6 +215,18 @@ fn skirmish_pass(
         new_game(rules.clone(), map, Arc::new(tiles.clone()), &setup).map(|w| w.objects.len())
     }));
     run.skirmish_ms = t.elapsed().as_millis();
+    // The same game without starting units, to count them.
+    let bare = GameSetup {
+        unit_count: 0,
+        bases: false,
+        ..setup.clone()
+    };
+    let without = catch_unwind(AssertUnwindSafe(|| {
+        new_game(rules.clone(), map, Arc::new(tiles.clone()), &bare).map(|w| w.objects.len())
+    }));
+    if let (Ok(Ok(a)), Ok(Ok(b))) = (&result, &without) {
+        run.skirmish_starting_units = a.saturating_sub(*b);
+    }
     match result {
         Ok(Ok(objects)) => run.skirmish_objects = objects,
         Ok(Err(e)) => run.skirmish_refused = Some(format!("{e:?}")),
@@ -226,12 +241,8 @@ fn skirmish_pass(
 /// *AI house*), with the rules' countries that are not passive in turn; then
 /// the neutral and special houses, not human-controlled (S-0009 claims 19
 /// and 27).
-pub fn skirmish_setup(
-    map: &glasnost_map::Map,
-    rules: &SimRules,
-    seed: u32,
-) -> glasnost_sim::world::GameSetup {
-    use glasnost_sim::world::{GameSetup, HouseSetup};
+pub fn skirmish_setup(map: &glasnost_map::Map, rules: &SimRules, seed: u32) -> GameSetup {
+    use glasnost_sim::world::{HouseRole, HouseSetup};
     let defined = (0..8u16).filter(|k| map.waypoints.contains_key(k)).count();
     let players = if defined == 0 { 8 } else { defined };
     let countries: Vec<&String> = rules
@@ -256,15 +267,20 @@ pub fn skirmish_setup(
             country,
             human: true,
             start: None,
+            role: HouseRole::Player,
         });
     }
-    for name in ["Neutral", "Special"] {
+    for (name, role) in [
+        (glasnost_sim::load::NEUTRAL, HouseRole::Neutral),
+        (glasnost_sim::load::SPECIAL, HouseRole::Special),
+    ] {
         if rules.country_names.iter().any(|n| n == name) {
             houses.push(HouseSetup {
                 name: name.into(),
                 country: name.into(),
                 human: false,
                 start: None,
+                role,
             });
         }
     }
@@ -274,8 +290,13 @@ pub fn skirmish_setup(
         houses,
         alliances: Vec::new(),
         sandbox: false,
+        unit_count: SMOKE_UNIT_COUNT,
+        bases: true,
     }
 }
+
+/// The unit-count setting of the smoke run's skirmish (our tool's choice).
+const SMOKE_UNIT_COUNT: i32 = 10;
 
 /// The tick in which the smoke run orders its moves (the first tick after
 /// the order block of S-0201 claim 14).
@@ -369,6 +390,11 @@ fn report(mount_ms: u128, runs: &[MapRun], ticks: i32) -> String {
         }
     }
     let skirmish_ms: u128 = tried.iter().map(|r| r.skirmish_ms).sum();
+    let units: usize = tried.iter().map(|r| r.skirmish_starting_units).sum();
+    let with_units = tried
+        .iter()
+        .filter(|r| r.skirmish_starting_units > 0)
+        .count();
     let _ = writeln!(
         s,
         "skirmish pass: {} maps set up, {} loaded, {refused} refused ({random} need a random start cell, {random_refused} of them refused); new_game {skirmish_ms} ms in all",
@@ -378,6 +404,10 @@ fn report(mount_ms: u128, runs: &[MapRun], ticks: i32) -> String {
     for (e, n) in reasons {
         let _ = writeln!(s, "  refused {n}: {e}");
     }
+    let _ = writeln!(
+        s,
+        "skirmish starting units: {units} on {with_units} maps (unit count {SMOKE_UNIT_COUNT}, bases on)"
+    );
     let _ = writeln!(
         s,
         "index  objects  end  houses  subst  notes  problems  inputs_ms  new_game_ms  ticks_ms  ordered  moved  settled  result"

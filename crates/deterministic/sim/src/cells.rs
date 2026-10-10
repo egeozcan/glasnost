@@ -108,9 +108,6 @@ pub struct Cells {
     pub mark_seq: u32,
     /// The owner of each cell's wall (S-0210 claim 14); `None`: no owner.
     pub wall_owner: Vec<Option<HouseId>>,
-    /// Whether the marks a map's load gives (high-bridge cells, wall owners)
-    /// have been made.
-    pub load_marks_done: bool,
 }
 
 /// The high-bridge overlay indices and their marking directions (S-0211
@@ -139,7 +136,6 @@ impl Cells {
             deck: vec![false; n],
             mark_seq: 0,
             wall_owner: vec![None; n],
-            load_marks_done: false,
         }
     }
 
@@ -156,19 +152,6 @@ impl Cells {
             if let Some(i) = self.idx(CellXY::new(c.x + k * dx, c.y + k * dy)) {
                 self.deck[i] = true;
             }
-        }
-    }
-
-    /// Marks the high-bridge cells of every high-bridge overlay on the map
-    /// (S-0211 claim 15). Marking only adds, so marking again is harmless.
-    pub fn mark_all_high_bridges(&mut self) {
-        let placed: Vec<(CellXY, u8)> = self
-            .grid
-            .iter()
-            .map(|(c, cell)| (c, cell.overlay))
-            .collect();
-        for (c, o) in placed {
-            self.mark_high_bridge(c, o);
         }
     }
 

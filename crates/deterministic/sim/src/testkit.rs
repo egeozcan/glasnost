@@ -17,7 +17,7 @@ use glasnost_rules::sim::{Country, LandRow, LandType, LocomotionClass, Locomotor
 use crate::orders::Order;
 use crate::rules::{Behaviour, SimRules};
 use crate::save::Replay;
-use crate::world::{GameSetup, HouseId, HouseSetup, ObjectId, Target, World};
+use crate::world::{GameSetup, HouseId, HouseRole, HouseSetup, ObjectId, Target, World};
 
 /// Map size of the scenario.
 pub const SIZE: i32 = 40;
@@ -186,7 +186,7 @@ pub fn map() -> Map {
         fill: Fill::Clear,
         footprint: fp,
         cells,
-        has_overlay_data: false,
+        has_overlay_data: true,
         waypoints: BTreeMap::new(),
         home_waypoint: DEFAULT_HOME_WAYPOINT,
         header: Header::default(),
@@ -210,16 +210,20 @@ pub fn setup(seed: u32) -> GameSetup {
                 country: "Alphaland".into(),
                 human: true,
                 start: None,
+                role: HouseRole::Player,
             },
             HouseSetup {
                 name: "Beta".into(),
                 country: "Betaland".into(),
                 human: true,
                 start: None,
+                role: HouseRole::Player,
             },
         ],
         alliances: Vec::new(),
         sandbox: true,
+        unit_count: 0,
+        bases: false,
     }
 }
 

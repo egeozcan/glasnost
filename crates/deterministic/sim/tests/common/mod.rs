@@ -20,7 +20,7 @@ use glasnost_rules::sim::{Country, LandRow, LandType, LocomotionClass, Locomotor
 use glasnost_sim::orders::{self, Order};
 use glasnost_sim::rules::{Behaviour, Kind, SimRules};
 use glasnost_sim::tick;
-use glasnost_sim::world::{GameSetup, HouseId, HouseSetup, ObjectId, Target, World};
+use glasnost_sim::world::{GameSetup, HouseId, HouseRole, HouseSetup, ObjectId, Target, World};
 
 /// Map size of a scene (width and height of the footprint).
 pub const SIZE: i32 = 40;
@@ -115,7 +115,7 @@ impl Scene {
             fill: Fill::Clear,
             footprint: fp,
             cells,
-            has_overlay_data: false,
+            has_overlay_data: true,
             waypoints: BTreeMap::new(),
             home_waypoint: DEFAULT_HOME_WAYPOINT,
             header: Header::default(),
@@ -154,16 +154,20 @@ impl Scene {
                     country: "Alphaland".into(),
                     human: true,
                     start: None,
+                    role: HouseRole::Player,
                 },
                 HouseSetup {
                     name: "Beta".into(),
                     country: "Betaland".into(),
                     human: true,
                     start: None,
+                    role: HouseRole::Player,
                 },
             ],
             alliances: Vec::new(),
             sandbox: true,
+            unit_count: 0,
+            bases: false,
         };
         Scene {
             ruleset: r,

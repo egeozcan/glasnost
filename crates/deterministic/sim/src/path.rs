@@ -1250,6 +1250,130 @@ fn ring_cells(centre: CellXY, r: i32, centre_twice: bool) -> Vec<CellXY> {
     rows
 }
 
+/// The start area's side (S-0009 claim 18: 8 × 8 cells).
+const START_AREA: i32 = 8; // spec: S-0009 Constants (random start clear area 8 × 8)
+
+/// Which cells of the map are clear for a start area (S-0009 claim 18), as
+/// prefix sums of the cells that are not, so that an 8 × 8 block is tested
+/// at once. Built once per start list from the cells as they stand.
+pub struct StartAreas {
+    side: i32,
+    /// Prefix sums over the coordinate square of the cells that are not
+    /// clear, (side + 1)² entries.
+    blocked: Vec<u32>,
+}
+
+impl StartAreas {
+    /// The clear cells of `w` as they stand: a legal cell is clear when it
+    /// passes the class rule (S-0211 claim 10) for class *track* with
+    /// movement zone *normal*, a bridge cell judged on its deck, and its
+    /// occupancy record (S-0209), the deck's for a bridge cell, is empty.
+    /// Every other cell is clear (S-0009 claim 44).
+    pub fn new(w: &World) -> Self {
+        let r = w.rules_arc();
+        let side = i32::from(w.cells.footprint().coordinate_side());
+        let n = (side + 1) as usize;
+        let mut blocked = vec![0u32; n * n];
+        for y in 0..side {
+            let mut row = 0u32;
+            for x in 0..side {
+                let c = CellXY::new(x, y);
+                let clear = match w.cells.idx(c) {
+                    None => true,
+                    Some(i) => {
+                        let deck = w.cells.deck[i];
+                        let layer = if deck { Layer::Deck } else { Layer::Ground };
+                        // spec: S-0009 claim 18 (clear: the class rule for track, zone normal, a bridge cell on its deck; an empty occupancy record)
+                        crate::passability::enterable_by_class(
+                            &r,
+                            w,
+                            c,
+                            Some(LocomotionClass::Track),
+                            MovementZone::Normal,
+                            deck,
+                        ) && w.cells.occ(c, layer).is_some_and(|o| o.empty())
+                    }
+                };
+                row += u32::from(!clear);
+                let above = blocked[y as usize * n + x as usize + 1];
+                blocked[(y as usize + 1) * n + x as usize + 1] = above + row;
+            }
+        }
+        Self { side, blocked }
+    }
+
+    fn sum(&self, x: i32, y: i32) -> u32 {
+        let n = (self.side + 1) as usize;
+        let x = x.clamp(0, self.side) as usize;
+        let y = y.clamp(0, self.side) as usize;
+        self.blocked[y * n + x]
+    }
+
+    /// Whether every cell of the start area with corner `c` is clear: the
+    /// cells (x + i, y + j), i, j = 0 … 7 (S-0009 claim 18).
+    pub fn clear(&self, c: CellXY) -> bool {
+        let (x0, y0) = (c.x, c.y);
+        let (x1, y1) = (c.x + START_AREA, c.y + START_AREA);
+        let blocked = self.sum(x1, y1) + self.sum(x0, y0) - self.sum(x0, y1) - self.sum(x1, y0);
+        blocked == 0
+    }
+}
+
+/// The start-cell variant of the nearby-cell search (S-0009 claim 18): the
+/// rings, scan order, 24-cell limit, visibility test and ring cut-off of
+/// S-0212 claim 25 around `centre`, with no reach region, no deck mode, no
+/// height condition, no further test and no reference cell. A cell
+/// qualifies when it is usable (the height-aware test of S-0009 claim 4)
+/// and its start area is clear. The result is the preferred cell at
+/// position (t mod n), t the tick number. No draw is taken.
+pub fn start_cell(w: &World, areas: &StartAreas, centre: CellXY) -> Option<CellXY> {
+    let q = w.rules().quirks;
+    let fp = *w.cells.footprint();
+    // spec: S-0212 claim 25 (largest radius 31, or w + h − 1 when w + h < 32)
+    let max_r = if fp.width + fp.height < 32 {
+        fp.width + fp.height - 1
+    } else {
+        31
+    };
+    let mut collected: Vec<CellXY> = Vec::new();
+    let mut stop_after_ring = false;
+    'rings: for r in 0..=max_r {
+        for c in ring_cells(centre, r, q.nearby_centre_twice) {
+            // spec: S-0009 claim 18 (qualifies: a usable corner, height-aware, and a clear start area)
+            if w.cells.usable(c) && areas.clear(c) {
+                collected.push(c);
+                // spec: S-0212 claim 25 (cut off at the 24th collected cell)
+                if collected.len() >= 24 {
+                    break 'rings;
+                }
+                // spec: S-0212 claim 25 (the ring with a collected cell passing the visibility test ends the collection; no deck mode)
+                if crate::scatter::screen_cover_passes(w, c) {
+                    stop_after_ring = true;
+                }
+            }
+        }
+        if stop_after_ring {
+            break;
+        }
+    }
+    if collected.is_empty() {
+        return None;
+    }
+    let visible: Vec<CellXY> = collected
+        .iter()
+        .copied()
+        .filter(|&c| crate::scatter::screen_cover_passes(w, c))
+        .collect();
+    let preferred = if visible.is_empty() {
+        collected
+    } else {
+        visible
+    };
+    // spec: S-0212 claim 25 (no reference cell: the preferred cell at position t mod n); S-0009 claim 18 (t is 0 during loading)
+    let n = preferred.len() as i32;
+    preferred.get(w.tick.rem_euclid(n) as usize).copied()
+}
+
 /// The congestion marks of S-0212 claim 19 for a re-path.
 fn congestion(w: &World, id: ObjectId, mode: Mode) -> Option<BTreeSet<CellXY>> {
     let o = w.obj(id)?;

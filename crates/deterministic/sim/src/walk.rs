@@ -63,7 +63,7 @@ pub fn position_class(u: i32, v: i32, top_quirk: bool) -> u8 {
 }
 
 /// Table O of S-0208 (claim 3): the rows S2, S3, S4 and R0 … R3.
-fn row_for(class: u8, draw: i32) -> &'static [u8] {
+pub(crate) fn row_for(class: u8, draw: i32) -> &'static [u8] {
     use position::{BOTTOM, LEFT, RIGHT};
     // spec: S-0208 table O (fallback orders)
     match class {
