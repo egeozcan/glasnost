@@ -1,9 +1,9 @@
 ---
 id: Q-0018
 title: Map-loading draws and terrain rules that no spec states yet
-status: open
+status: answered
 related: [S-0009, S-0010, S-0202, S-0203, S-0211]
-answered-by: []
+answered-by: [S-0009]
 ---
 
 ## Need

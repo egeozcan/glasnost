@@ -2,13 +2,13 @@
 id: S-0009
 title: Map file semantics (geometry, terrain streams, waypoint markers, start positions, preview)
 topic: formats
-revision: 9
+revision: 10
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-10
 measurements: []
-requests: [Q-0010, Q-0016]
+requests: [Q-0018]
 supersedes: []
 ---
 
@@ -18,9 +18,10 @@ supersedes: []
 
 How the original game interprets a map file once it has been split into sections and keys: the
 map's footprint and playable area, terrain height, the decoded terrain, overlay and preview values,
-the waypoint markers, skirmish start positions, and which parts of a map a skirmish game reads in
-which observable order, and the fields of the map's object lists with the state in which each
-pre-placed object starts. Byte-level stream encodings, lighting, tile categories, triggers and the
+the waypoint markers, skirmish start positions, which parts of a map a skirmish game reads in
+which observable order, the fields of the map's object lists with the state in which each
+pre-placed object starts, the cell tags and map trigger variables, what a cell outside the map
+reads as, and the starting units each house receives. Byte-level stream encodings, lighting, tile categories, triggers and the
 map's rules overrides are outside this spec (Open questions and Questions for the project lead).
 
 ## Terms
@@ -28,8 +29,8 @@ map's rules overrides are outside this spec (Open questions and Questions for th
 Terms used as defined in the shared glossary: *cell*, *lepton*, *height level*, *theater*, *house*,
 *country*, *skirmish*, *lobby*, *overlay*, *overlay data value*, *tileset*, *sub-tile*, *slope*,
 *cell tag*, *type*, *scenario random stream* (with *draw* and *ranged draw*), *behaviour*,
-*follower car*, *leader* and *car chain*, *quirk switch*, *measurement setup*, *engine constant*
-and *absent-key default*. The terms below are specific to this spec.
+*follower car*, *leader* and *car chain*, *quirk switch*, *measurement setup*, *engine constant*,
+*absent-key default*, *AI house* and *step direction*. The terms below are specific to this spec.
 
 - **Cell coordinates (x, y).** Integer cell position on the isometric grid. Increasing x runs
   towards the lower right of the screen, increasing y towards the lower left.
@@ -69,6 +70,13 @@ and *absent-key default*. The terms below are specific to this spec.
   number in that range (S-0202, claim 4). It takes no raw value when the range holds a single
   number, exactly one raw value when the range size is a power of two from 2 on, and may take more
   than one otherwise, because it rejects raw values that fall outside the range.
+- **R(a, b).** As in S-0202 (Terms, *ranged draw R(a, b)*): one ranged draw over the inclusive
+  range a … b on the scenario random stream, by the range rule. For example R(0, 7) gives one of
+  0 … 7 and takes exactly one raw value, and R(0, 1) gives 0 or 1 and takes exactly one raw value.
+- **Percent draw.** As in S-0202 (Terms and claim 6): the ranged draw R(0, 99), compared with an
+  integer percentage. Its range holds 100 numbers, which is not a power of two, so by the range
+  rule one percent draw may take more than one raw value. "A percent draw below 50" holds for 50
+  of its 100 equally likely results, 0 … 49.
 - **Creation draw.** The one raw value that every creation of an infantry, vehicle, aircraft or
   building object takes from the scenario random stream at the moment of creation, whatever else
   that creation draws (S-0202, claim 10). An object that is never created takes none.
@@ -85,7 +93,8 @@ and *absent-key default*. The terms below are specific to this spec.
 - **Farthest-sum rule.** The rule by which a player without a chosen start position is given one
   (claim 19).
 - **House number.** A house's place in the creation order of claim 19, counting from 0: the
-  players first, then the neutral house, then the special house.
+  players first (an observer's house among them, in the human part of the house order of
+  claim 19), then the neutral house, then the special house.
 - **Observer.** A human participant whom the lobby sets to watch the game instead of playing it.
   The original still creates a house for an observer, in the human part of the house order of
   claim 19, but an observer does not count towards the player count P of claim 17 and receives no
@@ -106,6 +115,13 @@ and *absent-key default*. The terms below are specific to this spec.
 - **Cell animation.** An animation that the rules data attaches to an overlay type and that plays
   on each cell holding that overlay. An overlay type with a cell animation counts as displayable
   even when it has no artwork of its own (claim 12).
+- **Terrain recalculation.** As in S-0010 (Terms, and claim 12 for the passes at map load): the
+  step that derives a cell's slope shape and land type from its tile, height and neighbours.
+- **Tile animation.** As in S-0202 (Terms) and S-0010 (claim 19): the animation that a cell's tile
+  names and that the cell starts when it is recalculated.
+- **End marker, end row, bridge piece.** As in S-0202 (Terms and claim 10): the overlay types that
+  complete a low bridge, the row of cells that an end marker writes, and the cells between two
+  end rows.
 - **Unset base tile.** The value −1 that a fill base tile takes when no tileset supplies it
   (claim 6). It is an ordinary signed tile number, distinct from the no-tile marker 65535.
 - **Stream position.** One of the 512 × 512 places (x, y), 0 ≤ x ≤ 511 and 0 ≤ y ≤ 511, that the
@@ -118,8 +134,9 @@ and *absent-key default*. The terms below are specific to this spec.
   index lies outside 0 … 262143 selects no cell.
 - **Mark.** The integer that each of the start positions 0 … 15 carries during start position
   resolution (claim 29).
-- **Base cell.** The cell around which a house's starting units are placed: for a player, its
-  start cell (claims 19, 20 and 29).
+- **Base cell.** The cell around which a house's starting units are placed: for a player, and for
+  a neutral or special house that holds a start position (claim 28), its start cell (claims 19,
+  20 and 29).
 - **Header pair.** One of the numbered coordinate pairs of the header block (claim 25). An
   *applied pair* is a header pair numbered 9 … min(N_h, 16) that is present in the map, and so
   sets two marks (claim 29).
@@ -144,7 +161,10 @@ and *absent-key default*. The terms below are specific to this spec.
 - **Flight height.** The height above the terrain at which an aircraft type flies, a field of its
   type (aircraft specs, none yet; a pointer only).
 - **Stand-in cell.** The one cell, existing on no map, that the original uses wherever a rule
-  refers to a cell that does not exist (Edge cases, cell-tag key whose selected cell is not legal).
+  refers to a cell that does not exist (claim 44; Edge cases, cell-tag key whose selected cell is
+  not legal).
+- **Start area.** The 8 × 8 block of cells that a random start cell needs clear, with the examined
+  cell as its corner (claim 18).
 - **Placed vehicles.** The vehicles that the map's vehicle list has put on the map, in entry order,
   numbered from 0 (claim 41).
 - **Follow values.** The follow-index fields of the map's vehicle entries that give one, in entry
@@ -153,8 +173,32 @@ and *absent-key default*. The terms below are specific to this spec.
   map's tag definitions, which carries that definition's triggers. A *tag name* in a map entry
   names a tag definition (claims 31 and 41).
 - **Starting units.** The units a house receives around its base cell when a skirmish or
-  multiplayer game starts, after the map is loaded (claim 20). Which units they are and where each
-  one appears belong to the starting-unit rules, which have no spec yet (a pointer only).
+  multiplayer game starts, after the map is loaded (claim 20): its base unit, if any, and the
+  units bought with its budget (claims 45 and 46).
+- **Base unit.** The one vehicle a house receives first, at its base cell, when the game's bases
+  setting is on (claim 45).
+- **Budget, start pools.** The budget is the amount of credits' worth of starting units every
+  house receives besides its base unit. The budget pool is the set of types whose costs set it,
+  and a house's start pools are its vehicle pool and its infantry pool, from which its units are
+  drawn (claim 45).
+- **Placement search.** The search of claim 46 for a cell next to a base cell on which a starting
+  unit can be put.
+- **Game's tech level.** One integer for the whole program run, with which the budget pool of
+  claim 45 compares each type's tech level. The original copies it once, when the program starts,
+  from the base rules' multiplayer tech level (Import mapping), which is 10 when the base rules
+  omit it. Nothing later reaches that copy: not the language rules file, the game-mode file or the
+  map's rules overrides, and not a later game of the same program run. S-0006 (claim 10) restores
+  the *rules value* of that key at every game start, but the game's tech level is a copy taken at
+  program start and does not follow the rules value. The original's skirmish setup screen offers
+  no tech-level choice, and no other way of changing it in a skirmish game is known. Our engine
+  does the same.
+- **House's tech level.** One integer per house, with which that house's start pools (claim 45)
+  compare each type's tech level. Every house created from the lobby, whether a human player's,
+  an observer's or a computer player's, takes the game's tech level when it is created. The
+  neutral and special houses have tech level 1, a fixed value of the program, since the map's
+  per-house definitions are not read in skirmish (claim 26). The two tech levels therefore differ
+  only for those two houses, and that matters only when one of them receives starting units
+  (claim 28).
 - **Campaign mission.** A single-player game played on a mission of the game's campaigns, as
   opposed to a skirmish. Campaign missions are outside this spec except where a rule differs
   between them and skirmish: crate overlays (claim 12), the player name setting (State and
@@ -359,7 +403,8 @@ and *absent-key default*. The terms below are specific to this spec.
 ### Overlay
 
 11. **Overlay is read only for format version ≥ 2.** If the map's format version is below 2 (it
-    defaults to 0 when absent), the game reads no overlay at all, from either overlay stream.
+    defaults to 0 when absent), the game reads no overlay at all, from either overlay stream (quirk
+    `quirks.no_overlay_below_format_2`).
     - Backing: `measurable` (scenario M6)
     - Confidence: high
 
@@ -368,27 +413,34 @@ and *absent-key default*. The terms below are specific to this spec.
     increasing x: counting from 0, the value at index 512·y + x belongs to stream position (x, y).
     The value 255 means "no overlay". Any other value is an index into the rules' overlay type list, which makes the list *order* part of
     the format. An overlay is created on a cell only when all of these hold: the cell is legal, the
-    overlay type has artwork or a cell animation, and the game is a campaign mission or the type is
-    not a crate type. Crate overlays placed on a map therefore never appear in skirmish or
-    multiplayer games. Where the decoded stream is shorter than a position, that position has no
+    overlay type has artwork or a cell animation, the game is a campaign mission or the type is
+    not a crate type, and the cell's slope shape (S-0106) as it stands at that moment is at most 4
+    or the overlay type is the one at list index 178. A cell's slope shape is 0 until its first
+    terrain recalculation (S-0010, claim 12), so while the overlay stream is read the slope
+    condition can only refuse an overlay on a cell that an earlier placement has already
+    recalculated, which only a low bridge's end row or pieces do (S-0202 claim 10). In play it
+    applies to every overlay placed. Crate overlays placed on a map therefore never appear in skirmish or
+    multiplayer games (quirk `quirks.skirmish_drops_map_crates`). Where the decoded stream is shorter than a position, that position has no
     overlay, and the importer warns about a short stream. Creating the
     overlay applies its normal placement effects (wall linking and similar). Some of them take draws
     from the scenario random stream while the map loads, in the order of the overlay type stream:
     an end marker that completes a low bridge, an overlay type with a cell animation, and the
     recalculation of the cell that every placement causes, which can start the cell's tile
-    animation (S-0202, claim 10 and its table "Draws during map loading", states those draws).
+    animation (S-0202, claim 10 and its table "Draws during map loading", states those draws and
+    the low-bridge rules they depend on).
     Placing the vein overlay takes no draw of its own here (claim 14 covers veins). For the overlay types
     at list indices 24, 25, 237 and 238, creation leaves the cell's own overlay data value as it
     was before the overlay was created.
-    - Backing: `measurable` (scenarios M6, including its short-stream save, and M6c)
+    - Backing: `measurable` (scenarios M6, including its short-stream save, and M6c; scenario M6d
+      for the slope condition)
     - Confidence: high (the crate exclusion and the four data-preserving indices are medium until
-      measured)
+      measured; medium for the slope condition and its exception)
 
 13. **Overlay data stream.** Same size and order. Every legal cell's overlay data value (0 … 255) is
     set from its value in the stream, whether or not the cell has an overlay. When the map has an overlay data
     stream, its values are final with respect to overlay creation and its placement effects: no
-    data value that they set survives on any legal cell. The vein rebuild of claim 14 comes after the
-    stream and changes the data values of vein cells again. Where the
+    data value that they set survives on any legal cell. On every cell that the vein rebuild of
+    claim 14 clears or re-patterns, the data value that the rebuild leaves replaces the stream's. Where the
     decoded stream is shorter than a position, the value is 0, and the importer warns. When the map has no overlay data
     stream at all, every cell keeps the data value it had after overlay creation (0 unless
     placement set one).
@@ -409,8 +461,9 @@ and *absent-key default*. The terms below are specific to this spec.
     stream, and S-0202 (claim 10, *vein patterns*) states those draws, their order within one seed and the data
     values they give. The test looks at the cell and its four edge neighbours, and it sees the
     cleared cells, the terrain after the first recalculation pass, every other overlay of the map
-    and the veins put back for the seeds before it in that order (the test itself belongs to the vein
-    rules, which have no spec yet; a pointer only). A seed that fails the test stays empty.
+    and the veins put back for the seeds before it in that order. The test, the neighbours a passing
+    seed re-patterns and the connection pattern that sets their data are S-0202's (claim 10, *vein
+    patterns*). A seed that fails the test stays empty.
     Consequences: a vein cell whose data value is below 48 keeps a vein after loading only when a
     passing seed next to it re-patterns it; and the vein cells' data values after loading are the
     ones these draws give, not the ones the overlay data stream gave (claim 13). The rebuild creates
@@ -418,8 +471,7 @@ and *absent-key default*. The terms below are specific to this spec.
     - Backing: `measurable` (scenario M6b for the clearing, the threshold and the re-patterned
       neighbours; S-0202's scenario R8, part B, for the draws, their order within a seed and the
       reverse visiting order across seeds)
-    - Confidence: medium (low for which neighbours a passing seed re-patterns when they are not
-      flat, clear and empty)
+    - Confidence: medium (the test and the re-patterned neighbours carry S-0202's confidence)
 
 ### The waypoint markers
 
@@ -453,7 +505,8 @@ and *absent-key default*. The terms below are specific to this spec.
     cells. The start list holds, in increasing waypoint order, the cells of the defined waypoint markers
     among 0 … N − 1. If that gives fewer than N entries, random start cells are added until it has N
     (claim 18). Start position i means the i-th entry of this list, not waypoint i. With a gap in
-    the start waypoint markers, positions after the gap shift down and the missing ones become random.
+    the start waypoint markers, positions after the gap shift down and the missing ones become random
+    (quirk `quirks.start_waypoint_gap`).
     Example: waypoint markers 0, 1, 3 and 5 are defined and there are 4 players. Then K = 2,
     N = 4, the list is [wp0, wp1, wp3, random], position 2 is waypoint 3 and position 3 is a random
     cell (waypoint 5 lies beyond N − 1 = 3, so it is not used).
@@ -464,22 +517,47 @@ and *absent-key default*. The terms below are specific to this spec.
     random stream (each by the stream's range rule, which may consume more than one raw value).
     First u is drawn uniformly from 0 … (W + H − 11), then v uniformly from 10 … (W + H − 11).
     The candidate is x = v + 1, y = u + 11. For W + H ≥ 21 that makes x range over
-    11 … W + H − 10 but y over 11 … W + H, an asymmetry (smaller maps: see Formulas). The
-    candidate need not be legal. The game then searches outward from it for the nearest cell
-    where an 8 × 8 cell area is clear for tracked vehicles (bridges allowed), using the general
-    nearby-free-area search (placement rules, which have no spec yet; a pointer only). The entry
-    is the cell found for the first candidate whose search succeeds. Each candidate whose search
-    fails still uses up its pair of draws, and the original sets no limit on the number of candidates.
+    11 … W + H − 10 but y over 11 … W + H, an asymmetry (quirk
+    `quirks.random_start_asymmetric_range`; smaller maps: see Formulas). The
+    candidate need not be legal. The game then makes the nearby-cell search of S-0212 (claim 25)
+    around it, with these settings: the centre is the candidate, the locomotion class is *track*
+    and the movement zone *normal*, and there is no reach region, no deck mode, no height
+    condition, no further test and no reference cell. A cell qualifies, in place of that claim's single-cell conditions,
+    when it is a usable cell (the height-aware test of claim 4) and every cell of its *start
+    area* is clear. The start area of cell (x, y) is the 8 × 8 block of cells (x + i, y + j) for
+    i, j = 0 … 7: it has the examined cell as its corner and extends towards increasing x and y. A
+    cell of the start area is clear when it passes the class rule (S-0211 claim 10) for class
+    *track* with movement zone *normal*, a bridge cell being judged on its deck, and its
+    occupancy record (S-0209) is empty, the deck's for a bridge cell. So bridge cells are allowed,
+    a wall overlay blocks, and no other overlay plays a part. Only the corner is tested against
+    the usable area. The other 63 cells may lie outside it, and a cell outside the map is read as
+    claim 44 says (in our engine always clear). The ring order, the scan order, the limit of 24
+    collected cells, the visibility test and the ring cut-off are those of S-0212 claim 25. With no
+    reference cell, that claim takes the preferred cell at position (*t* mod *n*) of the
+    collection, with *t* the tick number. The tick number is 0 throughout loading, so the result
+    is the first preferred cell in collection order: the first collected cell that passes the
+    visibility test, or the first collected cell when none does. Among the qualifying cells of
+    the first ring that has one, the scan order decides, not the distance to the candidate. The
+    search takes no draw. When no cell qualifies, the candidate fails.
+    The entry is the cell found for the first candidate whose search succeeds. Each candidate
+    whose search fails still uses up its pair of draws, and the original sets no limit on the
+    number of candidates.
     On a map with no such area the original never finishes loading. That is bad data, and our engine
     does not reproduce the endless load (a departure, no quirk switch): after 1000 consecutive failed
     candidates (a fixed limit of our engine, not a constant of the original, so the outcome is
     deterministic) it refuses to start the
     game and reports that no start cell could be found, naming the map. The importer also warns when
     it can already tell, from the map's size and terrain alone, that no 8 × 8 clear area exists. A
-    map on which some candidate succeeds is unaffected, and its draws are the original's. In the early phase (claim 20) the search runs on a map of
-    blank cells.
-    - Backing: `measurable` (scenario M9)
-    - Confidence: high for the draws and ranges, medium for the search parameters
+    map on which some candidate succeeds is unaffected, and its draws are the original's.
+    In the early phase (claim 20) every legal cell is a blank cell, so every start area is clear.
+    The entry is then the candidate itself when it is a usable cell (ring 0, which S-0212 lists
+    twice), and otherwise the first usable cell, in scan order, of the first ring that has one,
+    since on a flat map every cell passes the visibility test.
+    - Backing: `measurable` (scenario M9; scenario M9d for the start area's corner and direction,
+      the scan-order choice and the settings of the search)
+    - Confidence: high for the draws and ranges, the search settings, the start area and the tick
+      number 0; medium for the early-phase consequence, which leans on the visibility test of
+      S-0212 claim 25 on a flat map
 
 19. **Assigning positions to players.** Houses are created in a fixed order: human players in
     increasing order of their chosen colour index (on a tie, the earlier lobby slot first), then
@@ -490,7 +568,7 @@ and *absent-key default*. The terms below are specific to this spec.
     | Positions taken when the player's turn comes | Position the player gets |
     |---|---|
     | none | the result of one ranged draw over 0 … N − 1 (which takes no raw value when N = 1 and may consume more than one when N is not a power of two; Terms, range rule) |
-    | at least one | the free position whose *distance sum* to all taken positions is largest. A tie, or all sums equal, goes to the lowest-numbered position. The distance sum is defined under Formulas: per pair, a tabulated square root of the squared cell distance, truncated to an integer. That is the truncated Euclidean distance for every pair less than 129 cells apart; from 129 cells on it is sometimes one less |
+    | at least one | the free position whose *distance sum* to all taken positions is largest. A tie, or all sums equal, goes to the lowest-numbered position. The distance sum is defined under Formulas: per pair, a tabulated square root of the squared cell distance, truncated to an integer. For two legal cells that is the truncated Euclidean distance for every pair less than 129 cells apart; from 129 cells on it is sometimes one less. A start cell far outside the map follows the wider rule below |
 
     Each position, once given, counts as taken for later players. The player's base cell, where its
     starting units are placed, is its start cell. Passive houses (Terms) get no position, whatever
@@ -501,15 +579,27 @@ and *absent-key default*. The terms below are specific to this spec.
     terms, and the tie then goes to the lower-numbered position (quirk
     `quirks.table_root_distance`, owned by S-0204). The first such pair of distances is 128 and 129
     cells.
-    - Backing: `measurable` (scenario M10; scenario M10b for the tabulated square root)
+    **Start cells far outside the map.** A start waypoint marker can name a cell far outside the
+    map (claims 1 and 15), with a coordinate anywhere in −32768 … 32767. For a pair that involves
+    such a cell, three more rules of Formulas (*Distance sum*) apply, and our engine reproduces the
+    first two. First, each coordinate difference is reduced modulo 65536 into −32768 … 32767
+    before it is squared, so a difference of 32775 counts as −32761. Second, each term, once
+    truncated to an integer, is reduced the same way, so a term of 32768 or more counts as a
+    negative number. Third, when every free position's sum is then below 0, the original's choice
+    is unspecified. Our engine gives the lowest-numbered free position, and the importer's warning
+    about a start waypoint on a non-legal cell covers the case (Edge cases; a departure).
+    - Backing: `measurable` (scenario M10; scenario M10b for the tabulated square root; scenario
+      M10c for the two reductions of a pair with a start cell far outside the map). The case in
+      which every sum is below 0 is `unmeasured`: the original's result is unspecified, so there is
+      nothing to compare with.
     - Confidence: high for the rule and the tabulated square root, medium for the colour-index
-      ordering of humans
+      ordering of humans and for the two reductions
 
 20. **Start positions are resolved in two phases, from three start lists.** The *early phase*
     runs after the map size, the header block, the local area and the waypoint markers are read, and
     before the initial fill (claim 6). The *late phase* runs after the terrain, the overlay and all
     pre-placed objects exist. Each phase builds start lists by claims 17 and 18, each build a fresh
-    list with new random entries and new draws (one game mode places players its own way at the
+    list with new random entries and new draws (quirk `quirks.double_start_resolution`; one game mode places players its own way at the
     early phase; see Open questions):
     - The early phase builds list 1, from which players who chose a position get that entry, and
       then list 2, against whose cells the players left on random are assigned positions (claim 19).
@@ -525,8 +615,8 @@ and *absent-key default*. The terms below are specific to this spec.
       that is created** (claim 27), in the order the table "Start position resolution" (State and
       ordering) gives and S-0202's table "Draws during map loading" details; then list 3's random
       entries, then any late re-assignment draws of claims 28 and 29; then the starting units
-      house by house, one creation draw for each, and after the last house one ranged draw over
-      0 … 65535 whose value has no effect. The creation draw is the one every creation of such an
+      house by house, with the draws of claim 46, and after the last house one ranged draw over
+      0 … 65535 whose value has no effect (not taken when generation stops early, claim 45). The creation draw is the one every creation of such an
       object takes (S-0202, random streams, claim 10), so it is taken for map objects and starting
       units alike.
     - **What the early phase sees.** Every legal cell is a blank cell (Terms): no fill, no terrain,
@@ -547,7 +637,7 @@ and *absent-key default*. The terms below are specific to this spec.
       during map loading".
     - Confidence: high for the three builds and the draw order, including the place of the
       creation draws. Medium for the blank-cell terrain seen by the early phase (the cell state is
-      clear; how the search treats it belongs to the placement rules, which have no spec yet)
+      clear, and claim 18 gives what the search makes of it)
 
 21. **Player-at-position references.** Triggers and team definitions may name the house "player at
     position A" … "player at position H". These mean the house that holds start position 0 … 7 in
@@ -574,7 +664,7 @@ and *absent-key default*. The terms below are specific to this spec.
     spelling rule as the game (claim 15: the plain decimal number, so an entry named "01" is not
     found). It uses a different "undefined" test from the game itself: an entry counts when it is
     present with any value other than −1, so a stored 0 *counts* here although the game treats it
-    as undefined. If none counts, the limit
+    as undefined (quirk `quirks.lobby_counts_zero_waypoint`). If none counts, the limit
     is the random-map player count setting, or 8 when that is 0 or absent. The game mode may lower
     the limit further. The map's own minimum and maximum player settings are used to label the map
     in the map list (one number when they are equal, a range otherwise). No use of them to limit
@@ -591,10 +681,11 @@ and *absent-key default*. The terms below are specific to this spec.
     original (they keep whatever the image held before); our engine makes them black (red, green
     and blue 0), and the importer warns (a departure). The preview appears in the map
     selection screen and on the loading screen.
-    - Backing: `measurable` (scenario M13)
-    - Confidence: high for the pixel order. Low for the short-stream result (the original shows a
-      shortened preview, but there are signs that it counts the preview as one that failed to
-      load, and no observable consequence of that, or of the shortening otherwise, is known).
+    - Backing: `measurable` (scenario M13: its channel-order map for the red, green and blue order
+      and the row order, its shortened stream for the short-stream result)
+    - Confidence: high for the pixel order. Low for the short-stream result: the original treats
+      the reading of a shortened stream as having failed, yet it still shows the decoded pixels,
+      and nothing observable is known to follow from that failure.
 
 25. **Preview start markers come from the header, not from the waypoint markers.** The numbered markers the
     selection screen draws over the preview come from a separate header block. It holds a marker
@@ -602,7 +693,8 @@ and *absent-key default*. The terms below are specific to this spec.
     only when 1 ≤ N_h ≤ 8, labelled 1 … N_h. Pair i is drawn at the preview position given under
     Formulas. Header pairs 1 … 8 never affect where players start, and the header count affects it
     only through claim 29. A map whose
-    header disagrees with its start waypoint markers shows markers in the wrong places. When the
+    header disagrees with its start waypoint markers shows markers in the wrong places (quirk
+    `quirks.preview_markers_from_header`). When the
     header block is absent, the count, origin and extent read as −1, so no markers are drawn. An
     extent of 0 (Wh = 0 or Hh = 0) with 1 ≤ N_h ≤ 8 makes the original crash when it draws the
     markers. Our engine draws no preview markers for such a map and changes nothing
@@ -612,8 +704,9 @@ and *absent-key default*. The terms below are specific to this spec.
     those up to the sixteenth act as start position marks that can change which player holds which
     start position (claim 29, which also covers pairs from the seventeenth on; quirk
     `quirks.header_pairs_as_start_marks`).
-    - Backing: `measurable` (scenario M13, including its extent-0 variant; scenario M13b variants C
-      and D for which pairs are read)
+    - Backing: `measurable` (scenario M13, including its extent-0 variant and its wrap variant
+      for the integer width of the marker formula; scenario M13b variants C and D for which pairs
+      are read)
     - Confidence: high for the marker source and the −1 defaults. Medium for the formula and the
       extent-0 crash.
 
@@ -635,19 +728,22 @@ and *absent-key default*. The terms below are specific to this spec.
     players (in online games a human house carries the player's online name instead); if several
     players share a placeholder, the first in house order matches. An object whose owner matches no
     house is silently dropped. In particular, objects owned by "player at position X" or by a
-    country name other than the neutral and special houses' own names do not appear in skirmish.
+    country name other than the neutral and special houses' own names do not appear in skirmish
+    (quirk `quirks.skirmish_drops_country_owned_objects`).
     The same applies in multiplayer games. In addition, in a skirmish or multiplayer game a
     pre-placed **structure** whose owner is a human player's house is dropped, while vehicles,
     aircraft and infantry with that owner appear (for multiplayer games this is a departure, Edge
     cases). A dropped object is never created, so it takes no creation draw (claim 20).
-    - Backing: `measurable` (scenario M14, including its human-owned structure and vehicle; for
+    - Backing: `measurable` (scenario M14, including its human-owned structure and
+      vehicle; scenario M26 variant G for the dropped object taking no creation draw; for
       multiplayer games, scenario M16, where the neutral house's pre-placed objects appear in a
       network game). The online-name rule is `unmeasured`: online games need an online game
       service, which the measurement setup does not include.
     - Confidence: medium
 
 28. **Unused-house cleanup.** If the game has no computer players and fewer human slots (observers
-    included) than the rules' maximum player count, a cleanup runs once all map objects are placed,
+    included) than the rules' maximum player count (Import mapping: an integer taken from the base
+    rules only, S-0006 claim 2, and 8 when they omit it), a cleanup runs once all map objects are placed,
     before the late phase of claim 20. (One special game mode skips it; it is not identified here,
     see Open questions.) Call a house *eligible* when it is neither human-controlled nor passive.
     The cleanup removes a house from the game exactly when the house is eligible and the house just
@@ -689,12 +785,15 @@ and *absent-key default*. The terms below are specific to this spec.
     non-passive is instead assigned a position there, by claim 19 like a player on "random" (after
     every player, in house order), and, unless the cleanup removes it, keeps that position index in
     the late phase like a player. Its start cell is then a base cell like a player's, so it receives
-    starting units there, after the cleanup, by the starting-unit rules (no spec yet; a pointer
-    only). When every position below N is already taken at its turn, the third unspecified case of
+    starting units there, after the cleanup, by claims 45 and 46, with its own tech level 1 (Terms,
+    house's tech level); when no type qualifies for its country, claim 45's early stop applies at
+    it. When every position below N is already taken at its turn, the third unspecified case of
     claim 29 applies to it.
     - Backing: `measurable` (scenario M16: variants A to C for the condition, the removal and the
       late-phase position; variant D for the kept special house; variant E for a trigger of a tag
-      created at the end of loading)
+      created at the end of loading; variant F for the maximum player count, its source and the
+      strict "fewer than"; variant G with variant B, and variant D with its second part, for the
+      starting units' tech level 1)
     - Confidence: high that a removed house is gone with its objects and that the house after a
       removed one is kept; medium for the condition; low for the trigger removal (including that tags created
       at the end of loading escape it), the use of the map's override, the late-phase position and
@@ -923,9 +1022,10 @@ read, in the placement order of claim 43, while the game's set-up at game start 
     (quirk `quirks.object_empty_fields_collapse`). Spaces belong to the field they are in. A numeric
     field is read leniently as its leading integer, like a cell-tag key (claim 31): its value is
     the integer written by its longest beginning of the form *spaces (possibly none), an optional
-    sign, one or more digits*, and anything after that beginning is ignored. A field that does not
-    begin in that form (no digit right after its leading spaces and sign) reads as 0. A name field
-    is compared as written, spaces included.
+    sign, one or more digits*, and anything after that beginning is ignored. The result is a signed
+    32-bit integer: a number outside −2147483648 … 2147483647 wraps as S-0003 claim 4 says for the
+    decimal form. A field that does not begin in that form (no digit right after its leading
+    spaces and sign) reads as 0. A name field is compared as written, spaces included.
     - Backing: `measurable` (scenario M19, variant D for the empty field and the 127-character
       limit)
     - Confidence: high (medium for the 127-character limit)
@@ -959,8 +1059,15 @@ read, in the placement order of claim 43, while the game's set-up at game start 
     later field is optional: when it is absent, the object takes the default of Import mapping. A
     behaviour name and a tag name are matched by S-0215 and S-0011 (claim 41). The veterancy value
     is S-0311's (claim 11 there).
-    - Backing: `measurable` (scenario M19 for the positions of owner, type, health, cell, facing,
-      standing position and veterancy; scenario M20 for format versions below 4)
+    - Backing: `measurable` (scenario M19: variants A to F for the positions of owner, type,
+      health, cell, facing and standing position, variant G for the behaviour name, variant H for
+      the tag name, variant I for the veterancy value; scenario M20 for format versions below 4).
+      The positions of the bridge flag, the switched-on flag, the upgrade fields and the follow
+      index are measured through scenarios M23 (variant A), M21 (variants C and D) and M24. The
+      positions of the group number, the two recruit flags, the computer-sell, computer-rebuild
+      and computer-repair flags, the nominal flag and the searchlight value are `unmeasured`: no
+      rule of our engine acts on them, or the topic that would show their effect has no spec yet
+      (claims 40 and 41), so a misplaced field would show nothing
     - Confidence: high for fields 1 to 6 and for the veterancy, tag and behaviour positions; medium
       for the other optional fields
 
@@ -973,18 +1080,24 @@ read, in the placement order of claim 43, while the game's set-up at game start 
     original, which does not survive it. Our engine drops the entry and the importer warns (a
     departure). The dropped entry takes the draws that the original has taken for it when it fails:
     one creation draw for a vehicle, aircraft or infantry entry, none for a building entry.
-    - Backing: `measurable` (scenario M19, variant C for the wrong-kind and letter-case cases). The
+    - Backing: `measurable` (scenario M19, variant C for the wrong-kind and letter-case
+      cases; scenario M26 variant G for the dropped entry taking no creation draw). The
       short entry is `unmeasured`: the original does not survive it, so it yields no recordable
       result.
     - Confidence: high for the lookup, medium for the short entry
 
 37. **Starting health.** Let *S* be the type's strength (its full hit points) and *H* the entry's
-    health value. The health value is on a scale where 256 means full strength. The object starts
-    with health *h*, given by Formulas (object health): *H* × *S* / 256, truncated toward zero, then
-    raised to full strength *S* whenever it comes out above *S* − 3 (quirk
-    `quirks.near_full_health_rounds_up`). So a health value can never give more than full strength,
-    a value of 256 or more always gives full strength, and a value a little below 256 can too:
-    with *S* = 100, a value of 254 gives 100, not 99. The low end depends on the kind:
+    health value. The health value is on a scale where 256 means full strength. For a building, a
+    value above 256 is first replaced by 256. The object starts with health *h*, given by Formulas
+    (object health): *H* × *S* / 256, truncated toward zero, then raised to full strength *S*
+    whenever it comes out above *S* − 3 (quirk `quirks.near_full_health_rounds_up`). The truncated
+    result is a signed 32-bit integer: a truncated quotient outside −2147483648 … 2147483647 wraps
+    (Formulas). Only a health value far outside 0 … 256 reaches that, and for a building only a very
+    negative one. Our engine reproduces the wrap. So a health value never gives more than full strength. A value
+    of 256 or more gives full strength for a building always, and for the other kinds whenever the
+    quotient does not wrap. A value a little below 256 can give full strength too: with *S* = 100,
+    a value of 254 gives 100, not 99. The low end depends on the kind (a wrapped quotient can be
+    negative):
     - An infantry unit whose result is below 1 starts with 1.
     - A vehicle or aircraft whose result is 0 starts with 1. A negative result is unspecified in
       the original.
@@ -995,8 +1108,10 @@ read, in the placement order of claim 43, while the game's set-up at game start 
     departure). The ratio *h* / *S* is the health ratio that S-0108 (claims 2 and 12) compares with
     the condition ratios, so a building whose health value puts it at or below the damaged
     threshold is drawn damaged from the first tick.
-    - Backing: `measurable` (scenario M19, variants A and B)
-    - Confidence: high for the scale, the truncation and the near-full rule; medium for the low end
+    - Backing: `measurable` (scenario M19, variants A and B; variant J for the wrap and for the
+      building's replacement of a value above 256)
+    - Confidence: high for the scale, the truncation and the near-full rule; medium for the low
+      end, the wrap and the building's replacement
 
 38. **Position.** Let (x, y) be the entry's cell, after the coordinate wrap of Formulas (object
     cell).
@@ -1069,14 +1184,17 @@ read, in the placement order of claim 43, while the game's set-up at game start 
 
     The computer-sell, computer-rebuild and computer-repair flags steer only how the original's
     computer players treat the building. What the nominal flag does in the original is not
-    established here, and no rule of play is known to depend on it. Glasnost's computer players
-    follow the same rules as human players (lead decision of 2026-10-09), so our engine reads these
-    flags and keeps them as map data, and no engine rule acts on them. Our computer players may read
-    the three computer flags and choose to reproduce the original's treatment of the building
-    through ordinary orders.
+    established here, and no rule of play is known to depend on it. AI houses (glossary) follow the
+    unit rules of human-controlled houses (lead decision of 2026-10-09), so our engine reads these
+    flags and keeps them as map data, and no engine rule acts on them. An AI house may read the
+    three computer flags and choose to reproduce the original's treatment of the building through
+    ordinary orders.
     - Backing: `measurable` (scenario M21: variant A for the complete idle start, the slot starts
       and the damaged variant, variant B for the sprite turret slot, variant C for the switched-off
-      start, variant D for upgrades and the carried-over field)
+      start, variant D for upgrades and the carried-over field). The *guard* start is
+      `unmeasured` here: the observable of *guard* for a building (an armed building firing at an
+      enemy that comes into range, S-0215 claim 33) does not separate *guard* from the other
+      behaviours a building could start in, so no scenario of this spec can tell them apart
     - Confidence: high for the complete start in the idle state; medium for the slots not started,
       the switched-on flag and the upgrades; low for the carried-over upgrade field
 
@@ -1094,18 +1212,18 @@ read, in the placement order of claim 43, while the game's set-up at game start 
     - *Follow index* (vehicles): makes vehicles *follower cars* of a *leader* (glossary). This
       spec gives only which vehicle becomes a follower car of which. How a follower car is sent
       after its leader is S-0212's (claim 26), and how it copies its leader's speed fraction is
-      S-0207's (claim 10). The links are made once the whole vehicle list has been read, and they
-      are worked out from two numbered sequences (Terms), both counted from 0:
+      S-0207's (claim 10). A vehicle's leader can be any placed vehicle of the list, wherever its
+      entry stands. The links are worked out from two numbered sequences (Terms), both counted
+      from 0:
       - The *follow values*: one for each vehicle entry that matches an owner and a vehicle type
         (claims 27 and 36) and gives a follow-index field, in entry order. An entry dropped for
         its owner or its type gives none. An entry without the field gives none either; after the
         collapse of claim 34 that is an entry that ends before field 12 (field 11 below format
         version 4). An entry whose vehicle is created but not placed still gives its value; in
         our engine that is an entry whose cell is not legal (claim 38).
-      - The *placed vehicles*: the vehicles the vehicle list has put on the map, in entry order.
-        No other vehicle exists at that point: the starting units come later (claim 20), and the
-        cleanup of claim 28 has not run yet, so the vehicles of a house that it later removes are
-        counted.
+      - The *placed vehicles*: all the vehicles that the whole vehicle list puts on the map, in
+        entry order, and no others. Starting units (claim 20) are never among them, and the
+        vehicles of a house that the cleanup of claim 28 later removes are among them.
 
       The placed vehicle numbered i takes the follow value numbered i. A value n with
       0 ≤ n < V, where V is the number of placed vehicles, makes it a follower car of the placed
@@ -1138,13 +1256,18 @@ read, in the placement order of claim 43, while the game's set-up at game start 
       rule).
     - *Recruit-no and recruit-yes flags*: in the original they mark whether its computer players
       may take the object into their teams. Glasnost has no recruitable property (lead decision of
-      2026-10-09), so our engine keeps them as map data, and no engine rule acts on them. Our
-      computer players may read them and choose to reproduce the original's use of them through
+      2026-10-09), so our engine keeps them as map data, and no engine rule acts on them. An AI
+      house (glossary) may read them and choose to reproduce the original's use of them through
       ordinary orders.
-    - Backing: `measurable` (scenario M19 for behaviour and tag, scenario M24 for the follow index,
-      observed through S-0212 claim 26). Group number and the recruit flags are `unmeasured` here:
+    - Backing: `measurable` (scenario M19: variant G for the behaviour name's field and a name that
+      matches, and for an unmatched name not being read as that behaviour; variant H for the tag name; variant I for the veterancy value and its absent
+      case; scenario M24 for the follow index, observed through S-0212 claim 26). Group number and the recruit flags are `unmeasured` here:
       their observables belong to specs that do not exist yet or to behaviour glasnost does not
-      reproduce. The loop and the vehicle that is its own leader are `unmeasured`: they follow from
+      reproduce. That an unmatched behaviour name gives *none*, rather than some other behaviour
+      that is ready to change, is `unmeasured`: a mobile actor in *none* makes the placement
+      fall-back of S-0215 and rests in a behaviour that follows orders, so it shows the same as any
+      such behaviour, and no scenario of this spec can tell them apart. The loop and the vehicle
+      that is its own leader are `unmeasured`: they follow from
       the link rule and S-0212 claim 26, and a car that is never sent shows nothing.
     - Confidence: high for behaviour, tag and veterancy; medium for the follow index (which value
       a vehicle takes, the counting of n). The car whose leader is removed is an open question, not
@@ -1170,7 +1293,13 @@ read, in the placement order of claim 43, while the game's set-up at game start 
       0 ≤ j < h, where w and h are its type's width and height, and it is placed without any test
       of whether those cells may take a smudge. An entry with an x field but no y field is
       unspecified in the original; our engine places nothing and the importer warns (a departure).
-    - Backing: `measurable` (scenario M22, variants A and B)
+    - Backing: `measurable` (scenario M22: variant A for the terrain objects, variant B for the
+      smudge fields and covered cells, variant C for the untested placement). Two parts are
+      `unmeasured`: the terrain object type created from an unknown name, because such a type has
+      no artwork and no rules data, so nothing on screen shows it, and whether it blocks its cell
+      belongs to the terrain-object rules, which have no spec yet; and the terrain object's full
+      strength, because a terrain object shows no health bar and the hits it takes belong to
+      those same rules
     - Confidence: high for the terrain-object key and value, medium for the smudge fields, the
       covered cells and the untested placement
 
@@ -1185,9 +1314,196 @@ read, in the placement order of claim 43, while the game's set-up at game start 
     - Confidence: high for the placement order, medium for its use as the insertion order of
       drawing
 
+### Cells outside the map
+
+44. **What a cell outside the map reads as.** Wherever a rule reads a cell that is not a legal
+    cell (claim 1), it reads the stand-in cell (Terms). The cases that matter at map load are an
+    edge neighbour across the map's edge in a terrain recalculation (ground and ramp smoothing,
+    S-0010 claim 10, and the cliff-back rule, S-0211 claim 8), a cell of a start area (claim 18),
+    an edge neighbour in the vein placement test (S-0202 claim 10) and an end-row or piece cell of
+    a low bridge (S-0202 claim 10). In our engine the stand-in always reads as a blank cell
+    (Terms): the no-tile marker 65535, sub-tile 0, height level 0, flat (slope shape 0), clear
+    land, no overlay (overlay data 0) and no objects. So in smoothing an off-map neighbour holds
+    the no-tile marker, which lies in no tile range, and is flat; in the cliff-back rule its ground
+    level is 0, so it puts a cell behind a cliff only when that cell's own level is −4 or lower; a
+    start area's off-map cells are clear; and the vein placement test passes an off-map neighbour.
+    In the original the stand-in is one shared cell whose state rules can also change, and no
+    rule is known that resets it. At map load the only known change comes from a low bridge whose
+    end row or pieces reach outside the map: each such cell gives the stand-in that end-row or
+    piece overlay and recalculates it (S-0202 claim 10), and every later read of any off-map
+    cell, in the same game or in a later game of the same program run, sees that state. Our
+    engine never changes a cell outside the map, so every read sees the blank cell (a departure,
+    no switch). The
+    importer warns when an end row or a bridge piece of a map's low bridge would fall outside the
+    map.
+    - Backing: `measurable` for the blank-cell reading (scenario M25: smoothing at the map's edge
+      and the cliff-back rule at level −4). `unmeasured` for the original's changes to the shared
+      stand-in, because our engine departs from them and a measurement would need a later read
+      whose result depends on them
+    - Confidence: high that every off-map read goes to one stand-in that starts as a blank cell,
+      medium that low bridges are the only change at map load (changes in play were not looked for)
+
+### Starting units
+
+45. **Which starting units a house receives.** After the late phase (claim 20), each house in
+    house order (claim 19) that is neither passive nor an observer's receives starting units
+    around its base cell (Terms). A house that the cleanup of claim 28 removed is no longer in the
+    game and receives none; passivity here is judged by the country data in force for the late
+    phase (claim 33):
+    - **Base unit.** When the game's bases setting (a setup value, Import mapping) is on, the house
+      first receives one vehicle: the first type in the rules' base-unit list whose owner list
+      includes the house's country. The base unit is not paid from the budget. When no type of
+      the list qualifies, or the base unit cannot be placed (claim 46), the step stops early
+      (below).
+    - **Budget.** Every house gets the same budget *B* = trunc((trunc(*n* / 2) + *C*) / *n*) × *U*
+      (Formulas, *Starting-unit budget*; trunc rounds toward zero), where *U* is the game's
+      unit-count setting (a setup value) and *C* the sum of the costs of the *n* types of the budget pool (*n* taken as 1 when
+      the pool is empty). The budget pool holds every vehicle type and every infantry type that is
+      allowed to start in multiplayer games, whose owner list includes the country of at least
+      one house that is not passive, and whose tech level (the type's field, Import mapping) is at
+      most the game's tech level (Terms), with the vehicle types of the base-unit list left out.
+    - **Start pools.** A house's vehicle pool holds, in type registration order (S-0004), every
+      vehicle type that is allowed to start in multiplayer games, whose owner list includes the
+      house's own country, whose tech level is at most the house's tech level (Terms) and which is
+      not in the base-unit list. Its infantry pool holds the infantry types that meet the same
+      conditions, the base-unit list aside. Tech levels are compared as signed integers, so a type
+      whose tech level is negative always meets the tech-level condition. For a player's house the
+      two tech levels are the same value. A neutral or special house that receives starting units
+      (claim 28) compares with its tech level 1, so its pools hold only types of tech level 1 or
+      lower whose owner lists include its country; when both are empty and *B* > 0, the early
+      stop below applies at that house.
+    - **Buying.** The house buys budget units one at a time, for as long as its remaining budget
+      *R* (in credits, *B* before the first purchase) is above 0 and fewer than 20 of its
+      placements have failed. A positive *R* left when buying ends is given to the house as
+      credits. Each purchase follows this table:
+
+      | Part of one purchase | Rule |
+      |---|---|
+      | Pool | the vehicle pool when *R* > trunc(*B* / 3) and the vehicle pool is not empty; the infantry pool otherwise |
+      | Type | the pool's entry at the index given by one ranged draw R(0, pool size − 1) |
+      | Creation | the unit is created (its creation draw) and then placed by claim 46 |
+      | Placement succeeds | *R* falls by the type's cost |
+      | Placement fails | the unit is removed again, its creation draw stays taken, and the failure counts towards the 20 |
+
+    - **Early stop.** The whole starting-unit step stops at a house in three cases: the bases
+      setting is on and no type of the base-unit list qualifies for the house; its base unit
+      cannot be placed (claim 46); or *B* > 0 and its vehicle pool and infantry pool are both
+      empty. That house and every house after it then receive no budget units (the houses before
+      it keep theirs; in the third case this house keeps its base unit, and in the second case
+      its base unit is removed again after taking its creation draw), and the final ranged draw of
+      claim 20 is not taken. Our engine does the same.
+    - **Behaviour.** In the original a starting unit of a human player's house starts in the
+      *guard* behaviour and one of a computer player's house in *area guard* (S-0215). AI houses
+      (glossary) follow the unit rules of human-controlled houses (lead decision of 2026-10-09), so
+      our engine starts every house's starting units in *guard*; an AI house may give them *area
+      guard* through ordinary orders (S-0213). Their experience at creation is S-0311's.
+    - Backing: `measurable` (scenario M26 for the pools, the budget, the vehicle-or-infantry rule
+      and the type draws; variant B for the base unit and the bases setting; variant E for the
+      failure limit and the credits left over; variant F, with a named test file, for the early
+      stop when no type of the base-unit list qualifies; variant H for the game's tech level, its
+      source, its absent-key default, the signed comparison and the house's tech level of a
+      player; variant I for the early stop on empty start pools; scenario M16 variants B and G for
+      the neutral house's tech level 1 and variant D with its second part for the special
+      house's). The second early-stop case, a base unit that cannot be placed, is
+      `unmeasured`: it arises only on a base cell that is not a legal cell, where the original's
+      result is unspecified and our engine's rule is a departure (claim 46). It stops the step in
+      the same way as the measured cases.
+    - Confidence: high for the budget formula, the pools, the one-third rule, the failure limit,
+      the type draw and the early stop, and that a player's house has the game's tech level; medium
+      for the left-over credits, for the setup values' path from the setup screen (Import
+      mapping), for the game's tech level being copied once at program start and changed by
+      nothing later, and for the neutral and special houses' tech level 1
+
+46. **Where starting units are placed, and their draws.** All placements of this step happen while
+    the map is still loading. Putting an object on a cell then ignores the cell's land type and
+    occupants (the entry test that play applies is skipped during loading). So putting a unit
+    directly on its base cell, or on a cell that the placement search below has accepted, is not
+    known to fail in any established case. Apart from a base cell that is not a legal cell (the
+    base-unit bullet below), a placement fails only when the search finds no cell that accepts the
+    unit.
+    - **The base unit** is put directly at the centre of its base cell, with body facing 0
+      (S-0204), with no search and no draw. Only if that direct placement fails does the placement
+      search below run for it, with first radius 1. If the search fails as well, the base unit is
+      removed and the step stops early (claim 45). On a legal base cell the direct placement
+      succeeds in every established case, so the base unit's search and its draws do not occur.
+      A base cell that is not a legal cell (a start waypoint marker on a non-legal cell, claims 1
+      and 17) is unspecified in the original (Open questions). Our engine treats the direct
+      placement on such a cell as failed: the search with first radius 1 runs, with its draws, and
+      when it fails too, the base unit is removed and the step stops early at this house, so this
+      house and every later house receive no budget units and the final draw of claim 20 is not
+      taken (claim 45). The importer warns (a departure; Edge cases).
+    - **Every other starting unit** is placed by the placement search around the base cell *b*
+      with first radius 4.
+    - **The placement search** with first radius *r*₀, for the base unit and every other starting
+      unit alike, uses this acceptance test: a cell *accepts* the unit when it is a usable cell
+      (the height-aware test of claim 4) and holds no infantry, vehicle, aircraft or building, or
+      when the unit is an infantry unit and the cell's occupant nearest to its centre is an
+      infantry unit. A cell that is not a legal cell is never usable, so it never accepts a unit,
+      not even as the first element *b* of the sequence. The search is one ordered sequence of
+      elements, each with the draws that belong to it, defined by the table below. The sequence
+      is the start element, followed by the blocks of the radii *r*₀, *r*₀ + 1, …, 31 in that
+      order, where the block of radius *r* is *ρ*(*r*), *F*(*r*, 0), …, *F*(*r*, 7),
+      *G*(*r*, 0), …, *G*(*r*, 7). The unit is put at
+      the centre of the first candidate in that sequence that accepts it, at the terrain's height
+      there, with body facing 0. A candidate equal to *b* other than the start element never takes
+      the unit. The draws taken are those of every element of the sequence up to and including
+      the candidate that takes the unit, a candidate equal to *b* that is passed over included,
+      and none after it. When no candidate accepts the unit, the placement fails (claim 45), and
+      every draw of the sequence has been taken.
+
+      | Element of the sequence | Candidate | Draws taken on reaching it |
+      |---|---|---|
+      | the start element | *b* itself | none |
+      | the radius start *ρ*(*r*), *r*₀ ≤ *r* ≤ 31 | none | one draw *k*ᵣ = R(0, 7) |
+      | the first-pass candidate *F*(*r*, *j*), *j* = 0 … 7 | *b* moved *r* cells along the step direction (glossary) (*k*ᵣ + *j*) mod 8 (along both axes for a diagonal), each coordinate clamped into 1 … W + H − 1 (claim 2's range; Formulas, *placement search candidate*) | none |
+      | the second-pass candidate *G*(*r*, *j*), *j* = 0 … 7 | *F*(*r*, *j*) with its x moved by *a*ₓ cells (towards higher x when *p*ₓ is below 50, towards lower x otherwise) and clamped again, then its y moved in the same way by *a*ᵧ with *p*ᵧ (Formulas) | four draws in this order: *a*ₓ = R(0, 1), the percent draw *p*ₓ (Terms), *a*ᵧ = R(0, 1), the percent draw *p*ᵧ |
+
+    - **Draws of a placement itself.** Putting a vehicle of a type with either visceroid flag
+      (Import mapping) on the map takes one draw R(0, 29) at that moment, right after the draws
+      of its search, if any. A placement that fails puts nothing on the map and takes no such
+      draw. Putting an infantry unit on the map takes no draw while the map loads: it stands at
+      the centre standing position of its cell (S-0208), whatever infantry already stand there,
+      so several starting infantry units can share one cell's centre position
+      (`quirks.starting_infantry_share_centre`, Edge cases).
+    - **Draw order.** House by house, in house order: the base unit's creation draw, then the
+      draws of its placement search (only when its direct placement fails), then its visceroid
+      draw, if any; then, for each unit bought, its type draw, its creation draw, the draws of its
+      placement search and its visceroid draw, if any. After the last house comes the draw
+      R(0, 65535) of claim 20. Crediting a left-over budget takes no draw.
+    - Backing: `measurable` (scenario M26: the cells, the standing positions and the count of raw
+      values taken; variant C for the land type being ignored while the map loads; variant D for
+      radii beyond the first and the second pass, which pre-placed objects around the base cell
+      force; variant E for a placement that fails). The base unit's search is `unmeasured`: on a
+      legal base cell no established case makes the direct placement fail, and on a base cell
+      that is not legal the original's result is unspecified (above), so no setup gives a result
+      of the original to compare with.
+    - Confidence: high for the search's order, radii, clamping and draws; medium for the
+      acceptance rule (the occupant test), for the placement always succeeding while the map
+      loads, and for the visceroid draw being the only draw of a vehicle's placement
+
 ## Formulas
 
-**Cell number decoding.** For an integer n:
+**Starting-unit budget** (claim 45). With *n* ≥ 1 the number of types in the budget pool (1 when
+it is empty), *C* the sum of their costs and *U* the unit-count setting, all signed 32-bit integers:
+
+> *B* = trunc((trunc(*n* / 2) + *C*) / *n*) × *U*
+
+where trunc rounds toward zero. Every intermediate sum, the quotient and the product are signed 32-bit
+integers, and a result outside −2147483648 … 2147483647 wraps (S-0205 claim 1, *wrap*); so does the
+remaining budget *R* when a cost is subtracted from it. Stock data stays far inside the range, and the
+importer warns when the costs of the budget pool, or *B*, would leave it. *B* is the same for every house. A unit comes from the vehicle pool
+while *R* > trunc(*B* / 3) (and the vehicle pool is not empty). Example: a pool of 4 types costing
+in all 2002 credits gives trunc((2 + 2002) / 4) = 501 per unit of *U*.
+
+**Placement search candidate** (claim 46). For base cell *b* = (*b*ₓ, *b*ᵧ), radius *r* and step
+direction *e* with unit step (*s*ₓ, *s*ᵧ) (glossary *step direction*, both components −1, 0 or 1),
+the first-pass candidate is (clamp(*b*ₓ + *r*·*s*ₓ), clamp(*b*ᵧ + *r*·*s*ᵧ)) with clamp(*v*) =
+min(max(*v*, 1), W + H − 1). The second-pass candidate replaces its x by clamp(x + *a*ₓ) when
+*p*ₓ < 50 and by clamp(x − *a*ₓ) otherwise, and its y likewise with *a*ᵧ and *p*ᵧ. Integers, exact.
+
+**Cell number decoding.** For an integer n, a signed 32-bit integer (a waypoint value read as an
+integer by S-0003 claims 3 and 4, or a cell-tag or terrain-object key read as its leading decimal
+integer, which wraps in the same way):
 x = n rem 1000 and y = n quo 1000. Both are integer operations: quo truncates toward zero and rem
 takes the sign of n. A negative n therefore gives negative coordinates, which are never legal. The
 encoding used when the game writes a map is n = x + 1000·y.
@@ -1217,32 +1533,52 @@ upper bound is below the lower bound, the range rule takes the two bounds in eit
 happens for u when W + H < 11 and for v when W + H < 21, so on maps with W + H < 21 the range of v
 is W + H − 11 … 10. Candidate cell (v + 1, u + 11), integers.
 
-**Distance sum (claim 19).** For a free position p and the set T of taken positions, with cells
-(x_p, y_p) and (x_t, y_t):
-S(p) = Σ over t in T of ⌊r(n_t)⌋, with n_t = (x_p − x_t)² + (y_p − y_t)² (an exact integer).
-Here r is the *table square root*: r(0) = 0, and for n ≥ 1, with e = ⌊log₂ n⌋ and z = ⌊e / 2⌋,
+**Distance sum (claim 19).** For a free position p and the set T of taken positions, with start
+cells (x_p, y_p) and (x_t, y_t), integers in −32768 … 32767 (claim 15):
+S(p) = Σ over t in T of v_t, with v_t = w(⌊r(n_t)⌋), n_t = Δx² + Δy², Δx = w(x_p − x_t) and
+Δy = w(y_p − y_t).
+Here w is the wrap of the cell number decoding above (reduction modulo 65536 into
+−32768 … 32767), so n_t is an exact integer in 0 … 2³¹. And r is the *table square root*: r(0) = 0,
+and for n ≥ 1, with e = ⌊log₂ n⌋ and z = ⌊e / 2⌋,
 r(n) = 2^z × ⌊√m′ × 2²³⌋ / 2²³, where m′ = ⌊n × 2^k / 4^z⌋ / 2^k, with k = 13 when e is even and
 k = 12 when e is odd.
 So n / 4^z, which lies in 1 … 4 (4 excluded), is truncated toward zero to a multiple of 2⁻¹³ (below 2)
 or 2⁻¹² (from 2 on), and its square root is truncated toward zero to 24 significant binary digits.
-All of this is exact rational arithmetic; ⌊r(n)⌋ is an integer. The chosen position is the
-lowest-indexed p with maximal S(p).
+All of this is exact rational arithmetic; ⌊r(n)⌋ is an integer. S(p) is a sum of fewer than 8
+terms (N is at most 8, claim 17), each in −32768 … 32767, formed exactly. The chosen position is the lowest-indexed p with maximal
+S(p) when that maximum is 0 or more. When every free position's S(p) is below 0, the original's
+choice is unspecified, and our engine chooses the lowest-indexed free position (claim 19).
 
-Properties, for every squared distance a supported map can produce (claim 2): ⌊r(n)⌋ is never more
-than ⌊√n⌋ and never less than ⌊√n⌋ − 1. It equals ⌊√n⌋ for every
-n below 16641 = 129², so for every pair less than 129 cells apart. The first n where it is one less
-is 16641 itself (a distance of exactly 129 cells gives a term of 128). For larger n the shortfall
-occurs at scattered values, not only at perfect squares.
+Pairs of legal cells. Both cells of a pair are legal cells in every case except a start waypoint
+marker on a non-legal cell, since a random start cell is a usable cell (claim 18). On a supported
+map their coordinates lie in 1 … 511 (claim 2), so |Δx| and |Δy| are at most 510, neither wrap
+changes anything, every term is ⌊r(n_t)⌋ ≥ 0, and n_t ≤ 2 × 510² = 520200, below 2²⁴. For every n below 2²⁴, ⌊r(n)⌋ is never more
+than ⌊√n⌋ and never less than ⌊√n⌋ − 1. It equals ⌊√n⌋ for every n below 16641 = 129², so for
+every pair less than 129 cells apart. The first n where it is one less is 16641 itself (a distance
+of exactly 129 cells gives a term of 128). For larger n the shortfall occurs at scattered values,
+not only at perfect squares.
 
-Number domain in the original: the squared distance is formed in double-precision floating point,
-the root comes from a table of single-precision values, and each term is truncated toward zero to an
-integer, whatever the rounding mode in force. Every intermediate value is exact for any squared distance a
-supported map can produce (below 2²⁴), so no rounding mode enters: the result does not depend on the
-round-toward-zero mode (glossary; owned by S-0205, number domains), and the formula above
-reproduces it exactly in integer arithmetic. It is the same tabulated square root that S-0105 (F1)
-uses, restricted to integer inputs, and the same function that S-0204 (Terms, *table square root*,
-claim 5 and F1) uses for distances between objects. Without `quirks.table_root_distance` (S-0204) the
-term is ⌊√n⌋, the largest integer whose square is at most n.
+Start cells far outside the map. A start waypoint marker on a non-legal cell (claims 1 and 15) can
+give a coordinate difference of 32768 or more in absolute value, which the first wrap reduces (a
+difference of 32775 gives −32761), and n_t up to 2³¹. From 2²⁴ on, ⌊r(n)⌋ can be more than one
+less than ⌊√n⌋, and a term ⌊r(n_t)⌋ of 32768 or more becomes negative through the second wrap
+(32769 gives −32767). Example: start cells (20, 20) and (−500, −32747) give Δx = 520 in absolute
+value, Δy = −32767, n = 1073946689, ⌊r(n)⌋ = 32769 and the term −32767.
+
+Number domain in the original: the coordinate differences and the terms are integers reduced as
+above; the squared distance is formed in double-precision floating point, which is exact because
+it is below 2⁵³; it is then narrowed to single precision, the root comes from a table of
+single-precision values, and the result is truncated toward zero to an integer, whatever the
+rounding mode in force. Under the round-toward-zero mode (glossary; S-0205 claim 5) the narrowing
+truncates, and r above already includes that truncation (S-0204, F1), so the formula reproduces
+the original exactly in integer arithmetic for every n. For n below 2²⁴, which covers every pair of
+legal cells, the narrowing is exact and the result does not depend on the rounding mode. For n of
+2²⁴ or more, which only a start cell far outside the map gives, the result with
+`quirks.chop_rounding` (S-0205) off follows the rule that S-0204's F1 gives for that mode; this spec
+defines no switch of its own for it. It is the same tabulated square root that S-0105 (F1) uses,
+restricted to integer inputs, and the same function that S-0204 (Terms, *table square root*, claim 5
+and F1) uses for distances between objects. Without `quirks.table_root_distance` (S-0204) the term
+is w(⌊√n⌋), where ⌊√n⌋ is the largest integer whose square is at most n.
 
 **Tile number translation (claim 8).** The theater's tilesets, in declaration order, define a list of
 pairs (t_i, δ_i), one for each tileset whose authored tile count A differs from its actual tile count
@@ -1259,9 +1595,18 @@ Integers only. m = 65535 is kept.
 its top-left at (left, top) in screen pixels:
 px = trunc(trunc((xi − X0)·1000 / Wh) · pw / 1000) + left − 9
 py = trunc(trunc((yi − Y0)·1000 / Hh) · ph / 1000) + top − 6.
-All integer; trunc rounds toward zero (this differs from ⌊ ⌋ when xi < X0 or yi < Y0). The inner
-quotient is the pair's displacement from the origin in per-mille (‰) of the marker extent, and the outer
-one turns it into pixels of the drawn preview. The −9/−6 terms place the marker graphic's corner.
+All values are signed 32-bit integers (the header values as read by S-0003 claims 3 and 9, the preview
+size and position in screen pixels). Every difference, product and sum wraps modulo 2³² into
+−2147483648 … 2147483647 (S-0205 claim 1, *wrap*), and each quotient is truncated toward zero
+(S-0205 claim 2; this differs from ⌊ ⌋ when xi < X0 or yi < Y0). A divisor of 0 is the crash of
+claim 25, and the one quotient that overflows, −2147483648 divided by −1, is S-0205 claim 3's.
+Apart from a divisor of 0, where our engine draws no markers (claim 25), our engine reproduces all
+of this. The
+inner quotient is the pair's displacement from the origin in per-mille (‰) of the marker extent,
+and the outer one turns it into pixels of the drawn preview. The −9/−6 terms place the marker
+graphic's corner. Example of the wrap: X0 = −2147484, Wh = 1000 and xi = 2147984 give
+xi − X0 = 4295468, whose product with 1000 wraps to 500704, so the inner quotient is 500, as for a
+pair halfway across the extent.
 
 **Floor height (claim 9).** For a flat cell of height level ℓ (an integer), the floor height is
 104 × ℓ leptons when ℓ ≥ 0 and 104 × ℓ + 1 leptons when ℓ < 0. In the original this is 104 × ℓ + 0.5,
@@ -1277,16 +1622,26 @@ over 0 … 3 for a water fill. Exact signed integer sum, no rounding.
 **Header pair marks (claim 29).** Header pair i, for 9 ≤ i ≤ min(N_h, 16), sets the marks of start
 positions 2(i − 9) and 2(i − 9) + 1. Integers; a mark is taken exactly as written in the pair.
 
-**Object health (claim 37).** For a type strength *S* (hit points, an integer) and a health value
-*H* (an integer):
-h₀ = trunc(*H* × *S* / 256), and h = *S* when h₀ > *S* − 3, otherwise h = h₀.
-trunc rounds toward zero. Then the low end of claim 37 applies: for infantry h < 1 gives 1, for
-vehicles and aircraft h = 0 gives 1. Without `quirks.near_full_health_rounds_up`, h = min(h₀, *S*).
-Number domain in the original: the product and the division by 256 are formed in floating point
-and the result is truncated toward zero whatever the rounding mode in force. Every intermediate
-value is exact while |*H* × *S*| < 2⁵³, so exact integer arithmetic with truncating division gives
-the same result. Example: *S* = 300 and *H* = 128 give h₀ = 150 and h = 150; *S* = 300 and
-*H* = 255 give h₀ = 298 > 297, so h = 300.
+**Object health (claim 37).** For a type strength *S* (hit points) and a health value *H*, both
+signed 32-bit integers (claim 34), with *H* first replaced by min(*H*, 256) for a building:
+h₀ = w₃₂(trunc(RZ₅₃(*H* × *S*) / 256)), and h = *S* when h₀ > *S* − 3, otherwise h = h₀.
+trunc rounds toward zero. RZ₅₃ rounds the exact product toward zero to 53 significant binary digits
+(S-0205 claim 5); it changes nothing while |*H* × *S*| < 2⁵³, and while |*H* × *S*| < 2⁶¹ the
+result is the same as trunc(*H* × *S* / 256). w₃₂ is the wrap of S-0205 (claims 1 and 7): the
+integer in −2147483648 … 2147483647 congruent to its argument modulo 2³², which changes nothing
+while the quotient lies in that range. *S* − 3 is a signed 32-bit integer too. Then the low end of
+claim 37 applies: for infantry h < 1 gives 1, for vehicles and aircraft h = 0 gives 1. Without
+`quirks.near_full_health_rounds_up`, h = min(h₀, *S*).
+Number domain in the original: the product is formed in floating point under the round-toward-zero
+mode, the division by 256 is exact, and the conversion to an integer is S-0205 claim 7's common
+form: truncation toward zero, then the wrap (the quotient is always below 2⁵⁴ in absolute value,
+so the conversion's zero result for 2⁶³ and above never arises). With `quirks.chop_rounding`
+(S-0205) off, the product is rounded by S-0205's rule for that mode instead of RZ₅₃, which can
+change the result only when |*H* × *S*| ≥ 2⁵³; this spec defines no switch of its own for it.
+Examples: *S* = 300 and *H* = 128 give h₀ = 150 and h = 150; *S* = 300 and *H* = 255 give
+h₀ = 298 > 297, so h = 300. A vehicle with *S* = 1000 and *H* = 1099511756 gives
+*H* × *S* / 256 = 4294967796.875 and h₀ = w₃₂(4294967796) = 500, so h = 500, half strength; a
+building with the same *H* and *S* has *H* replaced by 256 and starts at full strength.
 
 **Object cell (claims 35, 38 and 42).** At format version 4 and above, an object entry's x and y
 are its two cell fields, and a terrain-object key n gives x = n rem 1000 and y = n quo 1000. Below
@@ -1313,7 +1668,7 @@ non-negative remainder. Integers, exact.
 | format version that switches cell-tag decoding | 4 | format version | |
 | default format version | 0 | format version | when absent |
 | supported coordinate range per axis | 512 | cells | coordinates 0 … 511 |
-| coordinate wrap | 65536 | cells | each decoded coordinate of a waypoint marker, cell-tag key, object entry, terrain-object key or smudge entry is reduced modulo 65536 into −32768 … 32767 (claims 15, 31, 38 and 42; Formulas) |
+| coordinate wrap | 65536 | cells | each decoded coordinate of a waypoint marker, cell-tag key, object entry, terrain-object key or smudge entry is reduced modulo 65536 into −32768 … 32767 (claims 15, 31, 38 and 42; Formulas), and so are the coordinate differences and the terms of the distance sum (claim 19; Formulas) |
 | overlay stream size | 512 × 512 | values (stream positions) | the value at index 512·y + x belongs to stream position (x, y) |
 | no-overlay value | 255 | overlay type stream value | |
 | no-tile marker | 65535 | tile number | in the terrain stream's tile number |
@@ -1323,8 +1678,22 @@ non-negative remainder. Integers, exact.
 | overlay indices whose data value survives creation | 24, 25, 237, 238 | overlay list index | creation leaves the cell's data value unchanged (claim 12) |
 | vein overlay index | 126 | overlay list index | claim 14; S-0202 claim 10 |
 | vein seed threshold | 48 | overlay data value | data ≥ 48 → vein seed (claim 14) |
+| largest slope shape that takes an overlay | 4 | slope shape (S-0106) | an overlay is created on a cell whose slope shape is above 4 only for the overlay type at list index 178 (claim 12) |
+| overlay index exempt from the slope condition | 178 | overlay list index | claim 12 |
 | random start margin | 10 | cells | see the random start candidate formula |
-| random start clear area | 8 × 8 | cells | tracked-vehicle passability, bridges allowed |
+| random start clear area | 8 × 8 | cells | the start area: corner cell and the cells towards increasing x and y (claim 18) |
+| tick number during loading | 0 | ticks | the choice by tick number of the nearby-cell search picks the first preferred cell (claim 18) |
+| starting-unit failure limit | 20 | failed placements per house | claim 45 |
+| game's tech level when the base rules omit it | 10 | tech level (the integer scale of the types' tech-level field) | absent-key default (Terms, game's tech level; Import mapping) |
+| tech level of the neutral and special houses | 1 | tech level | fixed in the program (Terms, house's tech level) |
+| maximum player count when the base rules omit it | 8 | players | absent-key default (claim 28; Import mapping) |
+| vehicle share of the budget | everything above trunc(*B* / 3) | credits | units come from the infantry pool once *R* ≤ trunc(*B* / 3) (claim 45) |
+| placement search radii | first radius … 31 | cells | first radius 4 for budget units, 1 for a base unit whose direct placement fails (claim 46) |
+| placement search passes | 2 per radius, 8 candidates each | candidates | the second pass adds the displacement draws (claim 46) |
+| displacement per axis | 0 or 1 | cells | R(0, 1), direction by a percent draw against 50 (claim 46) |
+| displacement direction threshold | 50 | percent | a percent draw below 50 moves the coordinate towards higher values (claim 46; Terms, percent draw) |
+| visceroid placement draw | 0 … 29 | draw values (dimensionless) | one per placement of a vehicle of a visceroid type (claim 46) |
+| purchases without a fall in the budget before our engine stops a house | 1000 | consecutive purchases | a limit of our engine, not a constant of the original (Edge cases) |
 | failed random start candidates before our engine gives up | 1000 | candidates (pairs of ranged draws) | a limit of our engine, not a constant of the original, which sets no limit (claim 18) |
 | preview marker scale | 1000 | ‰ of the marker extent | per-mille step of a header pair's displacement (Formulas, preview marker position) |
 | preview marker corner shift | (9, 6) | pixels | subtracted from the marker position: −9 horizontally, −6 vertically (Formulas) |
@@ -1342,7 +1711,7 @@ non-negative remainder. Integers, exact.
 | map trigger variables | 100 | variables | numbered 0 … 99 (claim 32) |
 | longest specified variable name | 39 | characters | longer names: unspecified in the original; our engine cuts them to 39 characters and the importer warns (claim 32) |
 | water fill draw range | 0 … 3 | tile numbers | added to the water base tile; one raw value per ranged draw |
-| health value of full strength | 256 | health-value units | claim 37; larger values also give full strength |
+| health value of full strength | 256 | health-value units | claim 37; a building's larger values are replaced by 256; for the other kinds larger values give full strength while the quotient of Formulas (object health) does not wrap |
 | near-full margin | 3 | hit points | a starting health above *S* − 3 becomes *S* (claim 37) |
 | object entry characters read | 127 | characters | of each object or smudge entry's value (claim 34) |
 | legacy object cell base | 128 | cell-number units per unit of y | object cell fields and terrain-object keys below format version 4 |
@@ -1366,7 +1735,7 @@ can see.
 | Lighting | yes | see S-0104 | — |
 | ***Terrain and overlay*** | | | |
 | Terrain stream (current and legacy) | yes | tiles, heights | overrides the initial fill. The last record for a cell wins |
-| Overlay type and data streams | only at format version ≥ 2 | overlays | the data stream's values replace every data value that overlay creation set (claim 13); the vein rebuild of claim 14 comes after both streams |
+| Overlay type and data streams | only at format version ≥ 2 | overlays | the data stream's values replace every data value that overlay creation set (claim 13); on every cell that the vein rebuild clears or re-patterns, the overlay and data value it leaves replace the streams' (claim 14) |
 | Tube (tunnel) definitions | yes | tunnels | — |
 | Terrain objects (trees and similar) | yes | terrain objects (claim 42) | placed before every vehicle, aircraft, infantry unit and building (claim 43) |
 | Smudges | yes | smudges (claim 42) | placed after every building (claim 43) |
@@ -1400,7 +1769,7 @@ reproduce the draw order and the consequences that claims 20, 28, 29 and 33 stat
 | Initial fill (claim 6) | the early phase's decisions | the fill of every visited cell | one per visited cell, for a water fill only |
 | Map content (claims 7 to 14, 27, 31 and 34 to 43) | the fill | the cell tags, the terrain, the overlay, the vein rebuild, the terrain objects, the pre-placed objects and the smudges | the draws that S-0202 (random streams, its table "Draws during map loading") lists between the initial fill and the late phase, in its order. Among them, in this relative order: the tags created by cell tags (S-0011, map triggers, claim 34); the overlay placement draws of claim 12 and the tile animations of the first terrain recalculation pass (S-0010, claim 12); the vein pattern draws of claim 14; then the draws of the pre-placed objects: all vehicles' draws, then all aircraft's, then all infantry's, then all structures', and within one kind in entry order; and last the tile animations of the second terrain recalculation pass. Every pre-placed object that is created takes one creation draw (S-0202 claim 10), and it comes before the draws of that object's tag (S-0011 claim 34) and of its placement. An object that claim 27 drops takes no draw. An object that is created but cannot be placed does not appear in the game, yet its creation draw has been taken |
 | Late phase (claim 20) | the terrain, the overlay and every pre-placed object; this game's full rules layering with the map's overrides (claim 33); the unused-house cleanup of claim 28, already applied when its condition holds | the marks of the applied header pairs, applied again (claim 29); every player keeps its position index, and its base cell is that index's entry in list 3, which is built on the real terrain; a non-passive house without a position (its position was overwritten by a mark, or it was passive in the early phase, claim 28) is assigned anew by claim 19 against list 3; a house that the cleanup removed takes no part (claim 28) | list 3's random entries; the re-assignment draws of claims 28 and 29 |
-| Starting units | every base cell | units appear around each base cell (starting-unit rules, no spec yet; a pointer only) | house by house, in house order (claim 19): that house's starting units, each taking one creation draw (S-0202 claim 10), plus whatever else the starting-unit rules draw for that house; then, after the last house, one ranged draw over 0 … 65535 (one raw value) whose value has no effect. Later loading steps (crates, the end-of-loading tags of S-0011 claim 34) draw after these |
+| Starting units | every base cell | each house's base unit and budget units, placed around its base cell (claims 45 and 46) | house by house, in house order (claim 19), the draws of claim 46: the base unit's creation draw, the draws of its placement search (only when its direct placement fails) and any visceroid draw, then for each unit bought its type draw, creation draw, placement search draws and any visceroid draw; then, after the last house, one ranged draw over 0 … 65535 (one raw value) whose value has no effect (not taken when the step stops early, claim 45). Later loading steps (crates, the end-of-loading tags of S-0011 claim 34) draw after these |
 
 ## Edge cases and quirks
 
@@ -1489,9 +1858,11 @@ Every quirk switch below defaults to the original (YR) behaviour described first
 - **`quirks.table_root_distance` (owned by S-0204).** This spec has no switch of its own for the
   table square root. The farthest-sum rule follows S-0204's switch, which also governs the distances
   between objects. With the switch on (the original), each pair is measured with the table square
-  root of Formulas, which falls one short of the truncated Euclidean distance for some pairs 129 or
-  more cells apart (claim 19). Ties it creates go to the lower-numbered position. With it off, each
-  term is ⌊√n⌋, the exact truncated distance. For start positions this changes which player holds
+  root of Formulas, which falls one short of the truncated Euclidean distance for some pairs of
+  legal cells 129 or more cells apart (claim 19), and can fall further short for a pair with a
+  start cell far outside the map. Ties it creates go to the lower-numbered position. With it off,
+  each term is ⌊√n⌋, the exact truncated distance, with the same reductions modulo 65536 of the
+  differences and of the term (Formulas). For start positions this changes which player holds
   which position only on maps with start positions at least 129 cells apart, and never the number
   of draws.
 - **`quirks.negative_level_floor_raised` (owned by S-0106).** This spec has no switch of its own
@@ -1509,8 +1880,31 @@ Every quirk switch below defaults to the original (YR) behaviour described first
   No draw depends on the switch directly; a kept special house can take a late-phase position and
   starting units, with their draws (claims 20 and 28).
 - **Start waypoint on a non-legal cell.** Such a waypoint is still defined and becomes a start
-  cell (claims 1, 15 and 17), and the player's base cell is that cell. Where its starting units
-  then appear is not established here and belongs to the starting-unit rules, which have no spec yet. The importer warns.
+  cell (claims 1, 15 and 17), and the player's base cell is that cell. The placement search of
+  claim 46 tries only usable cells, so the budget units appear on usable cells within its radii,
+  or fail. What the original does with the base unit, whose direct placement aims at the
+  non-legal cell, is unspecified (Open questions). Our engine treats that direct placement as
+  failed, so the base unit's placement search runs, and when it fails as well the step stops
+  early (claims 45 and 46; a departure). Such a start cell can also lie far outside the map, and
+  then the distance sums of claim 19 follow the wider rule of Formulas, with one unspecified case
+  that our engine replaces (a departure). The importer warns about every start waypoint marker
+  on a non-legal cell.
+- **`quirks.starting_infantry_share_centre`** (default on, the original). A starting infantry unit
+  placed into a cell that already holds infantry stands at that cell's centre position together
+  with them (claim 46), with no draw. *Alternative:* it gets the standing position that S-0208
+  claim 3 gives for a desired point of class centre, with that claim's draw, and a cell with no
+  free position for it does not accept it. The draws of the step then differ from the original's.
+- **Empty infantry pool when infantry is due** (departure, no switch). When a house's remaining
+  budget is at or below trunc(*B* / 3), or its vehicle pool is empty, the original takes the next
+  unit from the infantry pool even when that pool is empty, with an unspecified result. Our engine
+  takes it from the vehicle pool instead (the ranged draw is then over the vehicle pool), and the
+  importer warns when a country that a house can have gets an empty infantry pool and a non-empty
+  vehicle pool.
+- **Budget that does not fall** (departure, no switch). A type of cost 0 or less does not lower
+  the remaining budget, so a pool of such types can keep a house buying forever in the original.
+  Our engine stops a house's buying after 1000 consecutive successful purchases that did not lower
+  its remaining budget (a limit of our engine), and the importer warns about every type in a start
+  pool whose cost is 0 or less.
 - **Human-owned pre-placed structures in multiplayer games.** The original drops a pre-placed
   structure whose owner is a human player's house only on the computer of the player who holds
   that house, and creates it on every other computer, so the computers disagree about which
@@ -1653,6 +2047,15 @@ Keys from other files that this spec relies on (theater file and rules file):
 | rules overlay type: its cell-animation key | cell animation (claim 12) | animation type name | none |
 | rules country: MultiplayPassive | passive house (claims 19, 28) | boolean | false when the country is created; when a later read or rules layer omits the key, the value already in force is kept (S-0006 claim 3) |
 | rules smudge type: Width, Height | the w × h cells a smudge covers (claim 42) | integers | 1 and 1 |
+| rules [General] BaseUnit | the base-unit list (claim 45): its first type that a house's country owns is the house's base unit; its types are left out of the budget pool and the vehicle pools | list of vehicle type names | empty: no base unit |
+| rules vehicle or infantry type: AllowedToStartInMultiplayer | whether the type may be in the budget pool and a start pool (claim 45) | boolean | yes |
+| rules vehicle or infantry type: Owner | the owner list: the countries that own the type (claim 45) | list of country names | empty: no country |
+| rules vehicle or infantry type: TechLevel | the type's tech level, compared as a signed integer with the game's tech level and the house's tech level (Terms; claim 45) | integer | 255, so that the type qualifies only where the tech level it is compared with is 255 or more (medium confidence) |
+| rules [MultiplayerDialogSettings] TechLevel | the game's tech level (Terms; claim 45): the base rules' value, copied once when the program starts. Later layers (the language rules file, the game-mode file, the map's overrides) and later games change only the rules value (S-0006 claim 10), not the copy | integer | 10 |
+| rules [Maximums] Players | the maximum player count of the unused-house cleanup (claim 28), taken from the base rules only (S-0006 claim 2) | integer | 8 |
+| rules vehicle or infantry type: Cost | the cost summed into the budget and taken from the remaining budget (claim 45) | integer | 0 |
+| rules vehicle type: SmallVisceroid, LargeVisceroid | either one on: the placement draw R(0, 29) of claim 46 | boolean each | no |
+| rules [MultiplayerDialogSettings] UnitCount, Bases | the defaults that the setup screen offers for the unit-count setting *U* and the bases setting (claim 45); the game uses the setup's values | integer; boolean | not established |
 
 House names matched by pre-placed objects in skirmish (claim 27): the neutral and special houses
 answer to their country names (Neutral, Special). The original finds those two countries by
@@ -1668,7 +2071,9 @@ from the data files.
 All scenarios run under the measurement setup (glossary): an unmodified install with no engine
 add-ons, stock data, and tiny purpose-made test maps (e.g. a 20 × 20 flat clear map) with format
 version 4, unless stated otherwise. No loose file overrides shipped data, except a named test file
-that a scenario lists (M4c, M16b variant C), which is removed after that scenario's runs. A
+that a scenario lists (M4c, M16 variant F2, M16b variant C, M26 variants F and H, and M19
+variant J and M21 variant E when they use one),
+which is removed after that scenario's runs. A
 presentation-only display compatibility layer may be used, and the measurement record names it
 generically, by what it does. Positions are read from the game's own coordinate display or
 by placing a marker unit. "Runs" counts game launches. Deterministic results need one run per
@@ -1683,11 +2088,15 @@ first two numbers 0.
   loading (claim 18).
 - Every scenario keeps its participants, players and observers alike, within the lobby limit of
   claim 23. Each scenario that departs from the default states its start waypoint markers.
+- The map's local area entry covers the whole map, (0, 0, W, H), so that claim 30's absent entry
+  (no usable cell) does not apply. A scenario that gives its own local area or removes the entry
+  says so (M3, M3b, M3c, M23 variant B, M26 variant E).
 - Scenarios that read the minimap (M1, M3, M3c) set the map's free-radar switch, so the minimap is
   shown without a radar building.
 - Scenarios that read tiles, heights or overlays away from the players' starting units give the
   map a trigger that reveals the whole map to the human player at the start. M11, M13b variants
-  E and F, M16, M17 and M18 use a reveal as their observable and have no such trigger.
+  E and F, M16, M17, M18 and M19 variant H use a reveal as their observable and have no such
+  trigger.
 
 **Statistical sub-tests.** The scenario random stream starts from a different state in every
 run, and the measurement setup never fixes that state (glossary, *measurement setup*,
@@ -1900,6 +2309,23 @@ that the stream can be computed by S-0202 and compared with what the game shows 
   *Falsified if* any indexed cell differs between A and B. If the wall control shows no
   difference, the run is inconclusive, not a pass. The test cannot detect a type whose creation
   would itself set 0.
+- **M6d, slope condition for overlays (claim 12).** Format version 4, a 30 × 30 map. *T* is an
+  overlay type with artwork that is neither a resource (its land type is not *tiberium*) nor a
+  wall, has no cell animation and is not at list index 178; check this in the rules data first,
+  because a recalculation removes a resource overlay from a sloped cell (S-0211 claim 7) and a
+  wall has placement checks of its own. Part A: the terrain stream gives a row of cells the slope
+  shapes 0 to 20 (S-0106), and the overlay type stream puts *T* on each of them. Part B: an end
+  marker of position 124 on a flat cell (*x*, *y*) whose east neighbour (*x* + 1, *y*) has a slope
+  shape above 4, and *T* on (*x* + 1, *y*), which comes after the marker in the overlay type
+  stream. Part C, the control: the same as part B with a slope shape of 1 at (*x* + 1, *y*).
+  1 run, read from a save at the first tick.
+  *Expected:* in part A every cell holds *T*, because no cell had been recalculated when its
+  overlay was placed, so each slope shape still read 0. In part B, (*x* + 1, *y*) still holds the
+  end-row type 96 of S-0202 claim 10: the end row's recalculation gave it its slope shape, and *T*
+  was refused. In part C it holds *T*, which replaced the end-row overlay. *Falsified if* a part-A
+  cell lacks *T*, or the part-B cell holds *T* while the part-C cell does. *Inconclusive if* the
+  part-C cell keeps type 96 (then a placement does not replace an end-row overlay, and part B
+  shows nothing).
 - **M7, waypoint encoding and home (claims 15, 16).** A map with waypoint 699 undefined and no home
   setting. 1 run. *Expected:* the initial view, before it moves to the player, is centred on cell
   (⌊(W+H)/2⌋, ⌊(W+H)/2⌋). A variant defines waypoint 699 at a legal cell at least 5 cells from that
@@ -2000,6 +2426,20 @@ that the stream can be computed by S-0202 and compared with what the game shows 
   *inconclusive if* the computed stream
   fails to match the fill at every k (S-0202's recurrence is then at fault, which its scenario R1
   checks).
+- **M9d, the start-cell search (claim 18), with the random-state recorder.** A 40 × 40 map, all
+  water except one land block of 10 × 8 clear, flat cells (10 along x, 8 along y) at least 12
+  cells from every edge, with no start waypoint markers, one human and one computer player, the
+  bases setting on. Lists 1 and 2 are found on blank cells, so the late phase's list 3 is the one
+  that sees the block. The only corners whose start area is clear are the three cells
+  (*x*₀, *y*₀), (*x*₀ + 1, *y*₀) and (*x*₀ + 2, *y*₀) of the block's corner of lowest x and y.
+  20 runs. From the recorded seed compute every list-3 candidate and, by claim 18, the ring and
+  the cell that the scan order picks (or the candidate's failure, with its pair of draws).
+  *Expected:* each player's base unit stands on one of the three corner cells, the one predicted
+  for its list-3 entry, in every run. Under a start area centred on the examined cell, the
+  base units would stand about four cells further into the block. Under a choice by distance, the
+  picked corner would differ from the scan-order pick in the runs where the two rules disagree
+  (expected in several of 20 runs). *Falsified if* a base unit stands elsewhere than the predicted
+  corner.
 - **M10, farthest-sum (claim 19).** 4 start waypoint markers at known cells, 3 players (1 human,
   2 computers) all on "random", 50 runs. House order is the human, then the computers in lobby-slot
   order. *Expected:* the human's position is roughly uniform over the 4 (each between 5 and 20 of
@@ -2019,6 +2459,29 @@ that the stream can be computed by S-0202 and compared with what the game shows 
   1's cell in every run. *Falsified if* it starts at waypoint 2's cell (exact distances). Control:
   waypoint 2 moved to (210, 150), squared distance 130² = 16900, term 130, 1 run. *Expected:* the
   computer starts at waypoint 2's cell. *Inconclusive if* the control gives waypoint 1.
+- **M10c, start cells far outside the map (claim 19, Formulas, *distance sum*).** A 20 × 20 flat
+  clear map with the bases setting off, so that no base unit is placed on a non-legal cell (claim
+  46). 2 players, 1 human and 1 computer: the player on fixed position 0 and the player on
+  "random" are named per variant. Start waypoint markers 0, 1 and 2 are defined and no others, so
+  K = N = 3 and no random start cell is needed. Read from a save at the first tick.
+  *Inconclusive if* the game does not finish loading, or ends before the first tick can be saved.
+  - Variant A, the reduction of a difference: waypoint 0 holds the cell number −32760005, which
+    names the non-legal cell (−5, −32760) (Formulas, cell number decoding); waypoint 1 holds 15025,
+    cell (25, 15), and waypoint 2 holds 35025, cell (25, 35), both legal (s = 40 and 60). From
+    waypoint 0, the y differences 32775 and 32795 reduce to −32761 and −32741, so the terms are
+    32760 for waypoint 1 and 32740 for waypoint 2. The computer is on fixed position 0, the cell
+    far outside the map, and the human on "random", so the human is placed by the farthest-sum
+    rule and its view and units are on a legal cell. 3 runs. *Expected:* the human's starting
+    units stand around waypoint 1's cell in every run. *Falsified if* they stand around waypoint
+    2's cell in any run (the differences were not reduced).
+  - Variant B, the reduction of a term: waypoint 0 holds 20020, cell (20, 20); waypoint 1 holds
+    −32747500, the non-legal cell (−500, −32747); waypoint 2 holds 25030, cell (30, 25). From
+    waypoint 0, waypoint 1 gives Δx = −520 and Δy = −32767, n = 1073946689 and ⌊r(n)⌋ = 32769,
+    which reduces to the term −32767; waypoint 2 gives the term 11. The human is on fixed
+    position 0 and the computer on "random". 3 runs. *Expected:* the
+    computer's starting units stand around waypoint 2's cell in every run. *Falsified if* the
+    computer is placed at waypoint 1 in any run, which shows as no computer units around
+    waypoint 2's cell (the term was not reduced).
 - **M11, player at position (claim 21).** A trigger that reveals the map to "player at position B",
   2 players with fixed positions 0 and 1, then the same with the positions exchanged. 2 runs.
   *Expected:* the player at position 1 gets the reveal both times. *Falsified if* the reveal follows
@@ -2040,6 +2503,19 @@ that the stream can be computed by S-0202 and compared with what the game shows 
   preview image is shown in the map selection screen (claim 30). *Falsified if* the markers follow
   the waypoint cells, the shortened preview disappears entirely or is shown complete, markers
   appear without a header block, or a preview image appears without a preview size entry.
+  *Channel-order map:* the first map with a preview of 32 × 16 pixels whose decoded values give
+  the left half of the top 8 rows the colour (255, 0, 0), the right half of those rows (0, 255, 0)
+  and the bottom 8 rows (0, 0, 255), each written in stream order as three values, 1 run.
+  *Expected:* in the map selection screen the preview's top left quarter is red, its top right
+  quarter green and its bottom half blue. *Falsified if* red and blue are exchanged (the values
+  read in the order blue, green, red), or the green part appears in the bottom half or the blue
+  part runs from top to bottom on one side (rows and columns exchanged).
+  *Wrap variant (Formulas, preview marker position):* the first map with N_h = 1, marker origin
+  X0 = −2147484 and Y0 = 0, marker extent Wh = Hh = 1000, and pair 1 = (2147984, 500), 1 run,
+  then a control with X0 = 0 and pair 1 = (500, 500), the rest unchanged, 1 run. *Expected:*
+  marker 1 is drawn at the same place in both, near the centre of the preview (inner quotients 500 and
+  500). *Falsified if* the two markers are drawn at different places, or the wrap variant draws no
+  marker on the preview while the control does (the product then did not wrap).
   *Extent-0 variant:* the first map with N_h = 2 and the marker extent Wh set to 0 (Import mapping), 1 run.
   Select the map in the map selection screen. *Expected:* the original crashes when the preview
   markers would be drawn. *Falsified if* the screen shows the preview with or without markers
@@ -2109,10 +2585,17 @@ that the stream can be computed by S-0202 and compared with what the game shows 
   position) in every run, and the computer always starts at the waypoint farthest from waypoint 2,
   as if no observer were present. *Falsified if* the observer is first shown another position, or
   the computer starts anywhere else in any run.
-- **M16, unused-house cleanup (claim 28).** Before running, check that the rules data's maximum
-  player count is above 2, and that the rules data marks both the neutral country and the special
-  country passive. If any check fails, the variants below do not separate the cases and the
-  scenario has to be redesigned.
+- **M16, unused-house cleanup (claim 28).** Before running, check that the base rules' maximum
+  player count (Import mapping; 8 when they omit it) is above 2, and that the rules data marks both
+  the neutral country and the special country passive. If any check fails, the variants below do
+  not separate the cases and the scenario has to be redesigned. Also choose, from the rules data,
+  a vehicle type *V*ₙ and an infantry type *I*ₙ that are in the budget pool of claim 45 for the
+  players' countries and whose tech levels are above 1, and check that no other vehicle or
+  infantry type that is allowed to start in multiplayer games has tech level 2 or lower and the
+  neutral or special country in its owner list.
+  The bases setting is off in every variant: with it on, a non-passive neutral or special house
+  would need a base-unit type that its country owns, and the early stop of claim 45 would hide
+  its starting units.
   Map: 30 × 30, local area the whole map, format version 4. Start waypoint markers 0 … 3 at cells
   (20, 20), (40, 40), (40, 20) and (25, 35). Their distance sums (Formulas) to waypoint markers 0 and 1
   are 20 + 20 = 40 for waypoint 2 and 15 + 15 = 30 for waypoint 3. Owned by the neutral house (by
@@ -2123,17 +2606,24 @@ that the stream can be computed by S-0202 and compared with what the game shows 
   cleanup runs (claim 28; a tag that nothing carries would be created after the cleanup and keep
   its trigger, variant E). The map has an override section for the neutral country that sets its
   passive field (Import mapping) to false. The special country is not overridden, except in
-  variant D. Players on fixed positions 0 and 1. Each variant runs once, in a fresh game launch,
-  so that no country data from an earlier game is in force.
+  variant D. The map also has type override sections (S-0006) for *V*ₙ and *I*ₙ. Each gives the
+  type's owner list from the rules data with the neutral country added (in variant D the special
+  country as well), and the tech level 1. The players' pools keep both types, since the game's
+  tech level is above 1 (the pre-check found types above 1 in the budget pool), and a neutral
+  house that receives starting units has exactly *V*ₙ as its vehicle pool and *I*ₙ as its
+  infantry pool (claim 45, with its tech level 1). Players on fixed positions 0 and 1. Each
+  variant runs once, in a fresh game launch, so that no country data from an earlier game is in
+  force.
   - Variant A: a network game with 2 humans and no computer player. *Expected:* once the map has
     loaded, neither the structure at (35, 30) nor the vehicle at (36, 30) is there, the map is never
     revealed, the humans start at waypoint 0's and waypoint 1's cells, and the neutral house
     receives no starting units anywhere (the cleanup removed it).
   - Variant B, condition control: variant A's map with 2 humans and 1 computer player on fixed
     position 2. *Expected:* the structure and the vehicle are present, the map is revealed after
-    the delay, the players start at waypoint markers 0, 1 and 2, and starting units of the neutral house
-    appear around waypoint 3's cell, the only free position.
-  - Variant C, passivity control: variant A's game without the override section. *Expected:* the
+    the delay, the players start at waypoint markers 0, 1 and 2, and starting units of the neutral
+    house, all of type *V*ₙ or *I*ₙ, appear around waypoint 3's cell, the only free position.
+  - Variant C, passivity control: variant A's game without the neutral country's override section
+    (the type override sections stay). *Expected:* the
     structure and the vehicle are present, the map is revealed after the delay, and the neutral
     house gets no starting units.
   - Variant D, both houses non-passive (`quirks.cleanup_skips_next_house`): variant A's game, with
@@ -2144,27 +2634,52 @@ that the stream can be computed by S-0202 and compared with what the game shows 
     neutral one. Its tag is attached through a cell tag to another legal cell that no unit enters.
     Variant A shows that the neutral trigger is removed, so a reveal here comes from the special
     trigger. *Expected:* the neutral house's structure and vehicle are gone, the special house's
-    structure and vehicle are there, the map is revealed after the delay, and starting units of the special house appear around waypoint 2's cell (it is the only house
-    that needs a position in the late phase). *Falsified if* the special house's objects are missing
-    or the map stays hidden (the cleanup removed the special house too: the fixed behaviour), or the
-    neutral house's objects are present.
+    structure and vehicle are there, the map is revealed after the delay, and starting units of
+    the special house, all of type *V*ₙ or *I*ₙ, appear around waypoint 2's cell (it is the only
+    house that needs a position in the late phase). *Falsified if* the special house's objects are
+    missing or the map stays hidden (the cleanup removed the special house too: the fixed
+    behaviour), or the neutral house's objects are present. Second part, the special house's
+    tech level: variant D with the two type override sections giving the tech level 2 instead of
+    1. *Expected:* as in variant D, except that the special house receives no starting units
+    anywhere (empty pools at its tech level 1, claim 45). *Falsified if* starting units of the
+    special house appear while they appear in variant D.
   - Variant E, a trigger created at the end of loading: variant A's game, with the cell-tag entry
     removed, so that nothing carries the neutral trigger's tag and the tag is created at the end of
     loading. *Expected:* the structure and the vehicle are gone as in A, but the map is revealed
     after the delay: the trigger survives the cleanup although its owner house is gone. *Falsified
     if* the map stays hidden while it is revealed in C. *Inconclusive if* S-0011 makes the reveal
     action depend on the trigger's owner house; the variant then needs an action that does not.
+  - Variant F, the maximum player count. (F1) Variant A's game, with a rules override section in
+    the map that sets the maximum player count (Import mapping) to 2. *Expected:* as in variant A,
+    because the count comes from the base rules only. (F2) Variant A's game with a named test
+    file: a loose copy of the rules file with one change, the maximum player count set to 2; the
+    program is started with it in place, and it is removed after the run. *Expected:* the cleanup
+    does not run, because 2 human slots are not fewer than 2: the structure and the vehicle are
+    present, the map is revealed after the delay, and the neutral house takes the late-phase
+    position by the farthest-sum rule (claim 19: waypoint 2, sum 40, against 30 for waypoint 3),
+    so its starting units appear around waypoint 2's cell. *Falsified if* the structure or the
+    vehicle is present in F1 (the map reached the count), or either is missing in F2 (the count
+    does not come from that key, or the cleanup also runs when the slots equal the count).
+  - Variant G, the neutral house's tech level: variant B, with the two type override sections
+    giving the tech level 2 instead of 1. *Expected:* everything as in variant B, except that the
+    neutral house receives no starting units anywhere: its pools are empty, because its tech level
+    is 1 (claim 45, early stop at its turn). *Falsified if* starting units of the neutral house
+    appear (its tech level would then be 2 or more) while they appear in B. Together with B, which
+    shows that types of tech level 1 qualify, this fixes the neutral house's tech level at 1.
 
   *Falsified if* the structure or the vehicle is present in variant A, either is missing in
   variant B while both are present in C, a player in A or B starts elsewhere than at the waypoint
   of its chosen position, the map is revealed in A although it is revealed in C, the neutral
-  house receives starting units in A, or in B around any waypoint but 3. Starting units of the
-  neutral house that are missing in B falsify the starting-units sentence of claim 28 only.
+  house receives starting units in A, or in B around any waypoint but 3, or of a type other than
+  *V*ₙ and *I*ₙ. Starting units of the neutral house that are missing in B falsify only the
+  starting-units sentence of claim 28 or the neutral house's tech level 1 (Terms), not the
+  cleanup; variant G then says nothing.
   *Inconclusive if* the pre-placed objects are missing in C as well (the removal then has another
   cause), or the map is not revealed in C (the trigger is at fault, so the trigger sub-tests of A
-  and E say nothing). In A, B and C the special country stays passive (pre-check), so in B the
-  neutral house is the only house besides the players that needs a position, and it finds one free
-  position; in D the special house is the only one, and it finds two. No house needs a position
+  and E say nothing). In A, B, C, F and G the special country stays passive (pre-check), so in B
+  and G the neutral house is the only house besides the players that needs a position, and it
+  finds one free position; in F2 it is the only one and finds two, and in D the special house is
+  the only one and finds two. No house needs a position
   after it, so the unspecified all-taken case of claim 29 cannot arise.
 - **M16b, country data seen by the early phase (claim 33).** M16's map and start waypoint
   markers, without the neutral country's override section. 3 players: 1 human of country C0 on
@@ -2253,10 +2768,9 @@ that the stream can be computed by S-0202 and compared with what the game shows 
   variable 5's corner or not variable 0's, variant B or D does not reveal variable 5's corner or
   reveals variable 1's, or variant C reveals variable 1's corner.
 - **M19, object entry fields and starting health (claims 34 to 39, 41).** A 20 × 20 flat clear map,
-  format version 4, revealed to the human player. Pre-placed objects owned by the computer
-  placeholder name, each on its own cell at known coordinates, with known behaviour names (a
-  resting behaviour), one carrying a tag whose trigger reveals a marked cell when the object is
-  destroyed, and one at veterancy value 100. Health is read from the health bar (S-0111) and, where the bar's
+  format version 4, revealed to the human player except in variant H. Pre-placed objects owned by
+  the computer placeholder name unless a variant says otherwise, each on its own cell at known
+  coordinates. Health is read from the health bar (S-0111) and, where the bar's
   resolution is not enough, by counting the shots of a known weapon that destroy the object; each
   type's strength *S* is known from the rules data. 1 run per variant.
   - (A) One vehicle of each of three stock types with different strengths, each of at least 5
@@ -2279,17 +2793,71 @@ that the stream can be computed by S-0202 and compared with what the game shows 
     east (facing value 64); the padded entry's tag is not attached. *Falsified if* the first vehicle
     is missing or stands anywhere but (10, 12), or faces otherwise (the empty field counted), or the
     padded entry carries its tag.
-  - (E) Facing values 0, 64, 128, 192, 320 and −64 on six vehicles, and infantry facing values 0,
-    64 and absent. *Expected:* body facings 0, 16384, 32768, 49152, 16384 and 49152 facing units
+  - (E) Facing values 0, 64, 128, 192, 320 and −64 on six vehicles, facing values 64 and 192 on
+    two aircraft of a type that stands landed on open ground, and infantry facing values 0, 64 and
+    absent. *Expected:* vehicle body facings 0, 16384, 32768, 49152, 16384 and 49152 facing units
     (map north, east, south, west by glossary claim G1), turrets matching their bodies; the
-    infantry face north, east and north. *Falsified if* 320 or −64 face anywhere else, or a
-    turret differs from its body on the first tick.
+    aircraft face east and west; the infantry face north, east and north. *Falsified if* 320 or
+    −64 face anywhere else, an aircraft or an infantry unit faces otherwise, or a turret differs
+    from its body on the first tick.
   - (F) Infantry at standing position numbers 0 to 4 in five cells. *Expected:* the positions of
     S-0208 table P (scenario W2 there covers the details). *Falsified if* any stands elsewhere.
+  - (G) Behaviour name (claims 35 and 41). Objects owned by the human placeholder name (claim 27
+    keeps them), each with every field up to the behaviour name and no later field, on open
+    ground at least 4 cells from every other object: an unarmed vehicle, an infantry unit and an
+    aircraft of a type that stands landed on open ground, each once with the behaviour name
+    written as S-0215's import name of *sticky* and once with a name that matches no behaviour
+    (the same name with its last letter changed). No enemy comes near them. Give each, in turn, a
+    move order to a cell 6 cells away. *Expected:* the three objects placed in *sticky* never
+    leave their cells, because an actor in *sticky* is never ready to change, so the move order
+    stays queued (S-0215 claim 25); the three objects with the unmatched name start the move and
+    reach the cell, because the unmatched name is not read as *sticky* (by claim 41 it means
+    *none*, and the placement fall-back of S-0215 then gives a resting behaviour that a move order
+    can follow; this variant cannot tell *none* from another such behaviour). *Falsified if* a *sticky* object
+    starts the move, or an object with the unmatched name does not. A *sticky* object that moves
+    falsifies the field position (field 7) or the name matching.
+  - (H) Tag name (claims 35 and 41). The map is not revealed. Four objects owned by the computer
+    placeholder name stand within 6 cells of the human's start: a vehicle (tag in field 8), an
+    aircraft standing landed (field 8), an infantry unit (field 9) and a building (field 7). Each
+    carries its own tag, whose trigger is owned by the human's country and has the single event
+    destroyed-by-anything (S-0011 claim 19) and the action that reveals the area around its own
+    waypoint (S-0011 claim 26). The four waypoint markers are numbered 10 to 13, so they are not
+    start waypoint markers and leave the start list and the lobby limit unchanged, and they lie
+    in four different shrouded corners, each farther from the human's start than
+    the human's units can see. A fifth object, a vehicle with no tag field, is the control. The
+    human destroys the control first, then the four tagged objects one by one, with its starting
+    units. *Expected:* nothing is revealed when the control is destroyed; each tagged object's
+    destruction reveals the area around its own waypoint, and only that one. *Falsified if* a
+    corner is revealed before its object is destroyed, or stays hidden after it. *Inconclusive*
+    for an object that the computer player moves out of the human's reach before it is
+    destroyed.
+  - (I) Veterancy value (claims 35 and 41). The computer player's country is set in the lobby to
+    a fixed country chosen before running. Before running, choose for that country a vehicle type
+    and an infantry type that are in none of that country's veteran lists (S-0311
+    claim 11; check in the rules data). Vehicles of that type with veterancy values 99, 100 and
+    200 in field 9, and infantry units of that type with values 99, 100 and 200 in field 10.
+    *Expected:* by S-0311 (claim 11 and F5, experience *n* × 0.01, so 0.99, exactly 1 and exactly
+    2), the objects with 99 show no veterancy insignia, those with 100 the veteran insignia and
+    those with 200 the elite insignia (S-0111 claim 18). *Falsified if* any of the six shows
+    another insignia. *Absent field:* if the rules data give the computer's country a vehicle type
+    in its veteran list for vehicles, one vehicle of that type whose entry ends before field 9.
+    *Expected:* the veteran insignia (the experience its type and country give it). *Falsified
+    if* it shows none.
+  - (J) Wrap of the starting health, and a building's replacement of a value above 256 (claim 37).
+    Choose a vehicle type and a building type whose strengths *S* are above 600 (check in the rules
+    data). If no stock type of a kind qualifies, use a named test file: a loose copy of the rules
+    file in which one type of each kind that lacks a qualifying stock type has strength 1000 (both
+    changes in the one copy when both kinds need it), removed after the run. For each
+    of the two types write the health value *H* = ⌈256 × (2³² + ⌊*S* / 2⌋) / *S*⌉ of its own
+    *S*, which lies below 2³¹ because *S* is above 512. *Expected:* the vehicle starts at the
+    health that Formulas (object health) gives, about half strength (*H* × *S* / 256 lies just
+    above 2³² + ⌊*S* / 2⌋, which wraps to about *S* / 2); the building starts at full strength,
+    because its *H* is replaced by 256. *Falsified if* the vehicle starts at full strength (no
+    wrap) or the building at about half strength (no replacement).
 - **M20, format versions below 4 (claim 35).** M19 variant A's map saved at format version 3, with
   each object's two cell fields replaced by one cell number n = x + 128·y. *Expected:* every
   object at the same cell as in M19, with the same health and facing. *Falsified if* any object is
-  displaced or its later fields are misread (wrong facing or behaviour).
+  displaced or its later fields are misread (wrong health or facing).
 - **M21, initial state of pre-placed buildings (claims 38, 39, 40).** A 20 × 20 flat clear map
   revealed to the human player. Buildings owned by the computer placeholder name. Screenshots of
   the first visible tick and of tick 30. 1 run per variant.
@@ -2328,6 +2896,10 @@ that the stream can be computed by S-0202 and compared with what the game shows 
     second entry at (15, 12) with piece number 1. All the cells involved are legal (s = 24 … 27).
     *Expected:* the first covers (12, 12) to (13, 13); the second places nothing. *Falsified if*
     the first covers other cells or the second appears.
+  - (C) The same smudge type at cell (12, 12) with piece number 0, on a map where (13, 12) and
+    (13, 13) are water cells and the cells around them are clear ground. *Expected:* the smudge
+    covers all four cells, the water cells included, since its placement tests no cell (claim 42).
+    *Falsified if* it is missing or covers only the clear cells.
 - **M23, heights, shared cells and placement order (claims 38, 43).** A 20 × 20 flat clear map
   with one high bridge, revealed to the human player. 1 run per variant.
   - (A) A vehicle on a bridge cell with the bridge flag 1 and one with the flag 0. *Expected:* the
@@ -2377,6 +2949,135 @@ that the stream can be computed by S-0202 and compared with what the game shows 
   its own entry's value); in variant B neither A nor B moves while variant A passed; or in variant C
   Q stays while variant A passed (n counted the dropped entry). *Inconclusive if* Q does not move in
   variant A: either the link or S-0212 claim 26 is then at fault, and variants B and C say nothing.
+- **M25, cells outside the map (claim 44).** Two maps, read from a save at the first tick.
+  - (A) *Smoothing at the edge.* A 20 × 20 map of a theater whose rough transition role is set
+    (S-0010 claim 4): a patch of rough ground cells that runs up to the map's edge on one side and
+    is surrounded by clear ground on the others. *Expected:* each rough cell on the edge gets the
+    transition tile that S-0010 claim 10 gives when every neighbour outside the map holds the
+    no-tile marker (so does not belong to the rough pair) and is flat, the same as for a clear
+    neighbour. *Falsified if* an edge cell gets the tile it would get with its off-map neighbours
+    counted as rough.
+  - (B) *Cliff-back at the edge.* A 20 × 20 map whose rules data sets the cliff-back setting so
+    that the rule of S-0211 claim 8 is active, with a cell of level −4 on the map's edge whose on-map neighbours are all at
+    level −4, and a second such cell at level −3. *Expected:* the level −4 cell's land type is
+    *rock* (an off-map neighbour at level 0 is 4 levels higher), the level −3 cell's is not.
+    *Falsified if* either differs. Check the levels with S-0009 scenario M4's method first, since
+    negative levels are not used by stock maps.
+- **M26, starting units (claims 45 and 46), with the random-state recorder.** A 40 × 40 flat clear
+  map with start waypoint markers 0 and 1 far apart and well inside the usable area, one human
+  and one computer player of different countries, a small unit-count setting, the bases setting
+  on, no pre-placed objects and no crates. Before running, read from the rules data the
+  base-unit list, for every vehicle and infantry type its multiplayer-start flag, owner list,
+  tech level and cost, and the game's tech level *t* (the base rules' multiplayer tech level,
+  Import mapping; 10 when they omit it). Both players' houses have tech level *t* (Terms, house's
+  tech level). Build the budget pool and both houses' start pools by claim 45 (these values stay
+  in the measurement record). 5 runs, read from a save at the first tick.
+  From the recorded seed, replay the load's draws up to the starting units (scenario M9c) and
+  then predict, house by house, every type draw, the remaining budget, every creation draw and
+  every placement search with its draws, and the final ranged draw.
+  *Expected:* each house has its base unit on its base cell and exactly the predicted budget
+  units, of the predicted types, on the predicted cells (infantry at their cells' centre
+  positions, several sharing a cell where predicted), the human's in *guard* and the computer's
+  in *area guard* (the original's behaviour; our engine gives both *guard*, claim 45), the
+  predicted credits, and the stream position at the first tick equals the prediction.
+  *Falsified if* a type, a cell, the number of units or the stream position differs.
+  - Variant B: the bases setting off. *Expected:* no base unit, and the first budget unit of each
+    house stands on its base cell, with no search draw. *Falsified if* any house has a base unit,
+    a house's first budget unit stands elsewhere than on its base cell, or the stream position at
+    the first tick fits a search draw for that unit.
+  - Variant C: the same map with water on every cell within 5 cells (Chebyshev distance) of base
+    cell 0 except the base cell itself. *Expected:* house 0's budget units stand on the cells the
+    placement search predicts, water cells at radius 4 and 5 included, because placing ignores the
+    land type while the map loads (claim 46). *Falsified if* house 0's units avoid the water and
+    stand only at radius 6 or more, or stand on cells the search does not predict.
+  - Variant D, radii beyond the first and the second pass: the same map with pre-placed objects
+    owned by the neutral house (by its country name, claim 27; vehicles, or buildings where a
+    foundation covers several cells with one entry) on every legal cell at Chebyshev distance 3, 4
+    or 5 from base cell 0. Every candidate of radius 4, in either pass, and of radius 5's first
+    pass then lies on an occupied cell. 3 runs. The pre-placed objects take map-content draws
+    (S-0202's table "Draws during map loading"), so the place of the starting units' first draw
+    is found as in M9c: the smallest number of raw values after the recorded seed for which the
+    prediction matches what the save shows. *Expected:* house 0's first budget unit stands on the
+    cell that the prediction gives, at Chebyshev distance 6 (a second-pass candidate of radius 5,
+    or a first-pass candidate of radius 6 when no second-pass candidate of radius 5 is free), and
+    every later unit where the prediction puts it. *Falsified if* any of house 0's budget units
+    stands on a cell other than the predicted one, or at distance 5 or less. *Inconclusive if* no
+    number of raw values makes the prediction match (an unexplained map-content draw).
+  - Variant E, failure limit and left-over credits: the same map with the local area made 2
+    widths wide and 1 height tall (Lw = 2, Lh = 1), placed so that it holds base cell 0. By the
+    usable-cell test of claim 4 its usable cells then lie within Chebyshev distance 2 of base
+    cell 0, while every candidate of the placement search other than the base cell lies at
+    distance 3 or more, and base cell 0 holds the base unit. Base cell 1 lies outside the local
+    area. So every purchase of either house fails, the remaining budget stays *B*, above
+    trunc(*B* / 3), and only vehicles are bought. 3 runs. *Expected:* each house has its base unit
+    and no budget unit; the stream holds exactly 20 failed purchases per house (each with its type
+    draw, its creation draw and every draw of the placement search, radii 4 to 31, both passes),
+    and each house's credits at the first tick are above the lobby's starting credits by exactly
+    *B*. *Falsified if* a budget unit appears, the stream position at the first tick fits 19 or 21
+    failures of a house better than 20, or a house's credits differ from the lobby's credits plus
+    *B*. *Inconclusive if* the game
+    does not finish loading with such a local area.
+  - Variant F, early stop, with a named test file: a loose copy of the rules file with one
+    change, a base-unit list (Import mapping) that holds only types whose owner lists include the
+    human's country and not the computer's (for example only the construction vehicle of the
+    human's side, with the computer of a country of another side); it is removed after the runs.
+    The pools are built from the test file's data, so the construction vehicle types left out of
+    the list can be in them. 3 runs. *Expected:* the human (house 0) receives its base unit and
+    its budget units as predicted; the computer (house 1) receives no unit at all, its credits
+    are the lobby's starting credits, and the stream position at the first tick equals the
+    prediction without the final draw R(0, 65535) of claim 20. *Falsified if* the computer
+    receives any starting unit or credits, or the stream position fits the prediction with the
+    final draw.
+  - Variant G, dropped entries take no draw (claims 27 and 36): M26's map with five vehicle
+    entries that are dropped (three whose owner names no house in the game, two whose type is an
+    infantry type) and one vehicle entry owned by the neutral house (by its country name) of a
+    type without either visceroid flag, which is created, all at least 12 cells from both base
+    cells. 3 runs. *Expected:* the stream position at the first tick equals the prediction in which
+    the neutral vehicle takes one creation draw and the dropped entries none. *Falsified if* it
+    equals instead the prediction in which each dropped entry takes one creation draw (five raw
+    values more before the starting units). *Inconclusive if* it equals neither prediction (an
+    unexplained draw, which the main runs then have to locate).
+  - Variant H, the game's tech level (Terms; claim 45). Choose a vehicle type *X* that is in the
+    budget pool and in the human's vehicle pool. Every sub-variant gives the map a type override
+    section (S-0006) for *X* that sets its tech level as stated. Each is predicted from the
+    recorded seed twice, with every pool built at a game's tech level, and so a player's house
+    tech level, of *t* and of *t* + 1, and with *X* at its overridden level; 1 run each.
+    (H1) *X* at *t* + 1. *Expected:* the prediction at *t* holds (it leaves *X* out) and no unit of
+    type *X* appears. Control: *X* at *t*, where the prediction at *t* includes *X*. *Expected:* it
+    holds. (H2) As H1, with *t* + 1 also given to the game's tech level key by one later layer at a
+    time: (a) a rules override section of the map; (b) instead, a named test file, a loose copy of
+    the game-mode file of the mode played with that key set to *t* + 1; (c) instead, a named test
+    file, a language rules file that holds only that key, with a valid digest formed as S-0005
+    (claim 21b) gives, so that S-0006 (claim 1) applies it. Each is played as the second game of
+    its program run, after a game of M26's main map. *Expected:* the prediction at *t* holds in
+    all three. (H3) As H1, with a named test file: a loose copy of the rules file whose game's
+    tech level key is *t* + 1, in place when the program starts. *Expected:* the prediction at
+    *t* + 1 holds. (H4) A named test file: a loose copy of the rules file without the game's tech
+    level key, in place when the program starts. Two runs, with *X* at 10 and at 11, each
+    predicted with every pool built at a game's tech level of 10, and once more with the pools
+    built at the level that puts *X* on the other side (9 for the first run, 11 for the second).
+    *Expected:* the predictions at 10 hold in both runs. (H5) *X* at −1. *Expected:* the
+    prediction at *t*, which includes *X*, holds (signed comparison).
+    *Falsified if* in H1 the prediction at *t* fails or a unit of type *X* appears, or its control
+    fails; in any part of H2 the prediction at *t* + 1 holds instead of the one at *t* (a later
+    layer reached the game's tech level); in H3 the prediction at *t* holds instead of the one at
+    *t* + 1 (the copy does not come from the base rules); in H4 either run fits its other
+    prediction (the absent-key default is not 10); or in H5 the prediction without *X* holds (an
+    unsigned comparison). *Inconclusive if* the two predictions of a sub-variant coincide (choose
+    another *X*).
+  - Variant I, early stop for a house with empty start pools (claim 45): M26's map with a third
+    start waypoint marker, number 2, far from the other two and well inside the usable area, and
+    an override section for the neutral country that sets its passive field (Import mapping) to
+    false. The bases setting is off. Before running, check in the rules data that no vehicle or
+    infantry type that is allowed to start in multiplayer games has tech level 1 or lower and the
+    neutral country in its owner list, and that *B* > 0. The early phase saw the neutral country
+    passive (claim 33), so the neutral house is assigned the one free position, 2, in the late
+    phase, with no draw (claims 28 and 29). There is a computer player, so the cleanup of claim 28
+    does not run. 3 runs. *Expected:* both players receive their predicted units; the neutral
+    house receives none, its pools being empty at its tech level 1; and the stream position at
+    the first tick equals the prediction without the final draw R(0, 65535) of claim 20.
+    *Falsified if* a starting unit of the neutral house appears, or the stream position fits the
+    prediction with the final draw.
 
 ## Open questions
 
@@ -2413,6 +3114,9 @@ that the stream can be computed by S-0202 and compared with what the game shows 
   how an aircraft type flagged as a spawned missile is placed
   (claim 38 covers other aircraft) are not established. Our engine places such a missile like any
   other aircraft and the importer warns.
+- What the original does with a base unit whose base cell is not a legal cell (claim 46): whether
+  its direct placement there succeeds, putting the unit at a position outside the map, or fails
+  and starts the placement search. Our engine treats it as failed (claim 46).
 - The game mode that places players its own way in the early phase instead of building list 2 (one
   stock mode uses its own placement) is not identified. It needs a per-mode check.
 - Maps wider or taller than 63 cells might behave differently from smaller maps in some way
@@ -2424,11 +3128,15 @@ that the stream can be computed by S-0202 and compared with what the game shows 
   them in a skirmish game (Import mapping); whether a campaign mission uses them is outside this
   spec. The effect of the fill-silos and multiplayer-only switches is not established here.
 - The full list of draws in the map-content row of the table "Start position resolution" belongs
-  to S-0202 (its table "Draws during map loading"); what each pre-placed object's placement and
-  each starting unit's placement draw belongs to the placement and starting-unit rules, which have
-  no spec yet. Whether further loading steps draw is not established. The random-state recorder
-  (scenario M9c) can count the draws of a whole load once the placement and starting-unit rules
-  state theirs; until then an unexplained surplus cannot be assigned to a step.
+  to S-0202 (its table "Draws during map loading"); what each pre-placed object's placement draws
+  belongs to the placement rules, which have no spec yet, apart from what S-0202's table states.
+  The starting units' draws are claim 46's. Whether further loading steps draw is not established.
+  The random-state recorder (scenario M9c) can count the draws of a whole load; an unexplained
+  surplus cannot yet be assigned to a step.
+- Which game modes other than the standard skirmish change the starting units (claim 45) is not
+  established; claims 45 and 46 describe the standard mode.
+- Whether rules in play change the stand-in cell of claim 44 (for example an effect aimed at a
+  cell outside the map) was not looked for. Our engine changes nothing there in any case.
 - Each of the first 50 variable-name entries (claim 32) seems also to give its whole value text
   (name and state together), as a name only, to the variable of the entry's number in a second set
   of named variables, possibly the game's global trigger variables. Only names would change, so
