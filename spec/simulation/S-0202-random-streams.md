@@ -2,13 +2,13 @@
 id: S-0202
 title: Random streams (generator, seeding, ranged draws, which systems draw from which stream)
 topic: simulation
-revision: 5
+revision: 7
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-10
 measurements: []
-requests: []
+requests: [Q-0018]
 supersedes: []
 ---
 
@@ -19,16 +19,18 @@ supersedes: []
 The original runs several independent copies, or *streams*, of one pseudo-random generator; this
 spec gives the generator exactly, the rule that turns raw values into ranged draws and their derived
 forms, when and from what the streams are seeded, and which game systems draw from the scenario
-random stream and which from the unsynchronised random stream. It also states two kinds of draw that
-no feature spec lists yet: the creation draw of an object and the draws of overlay placement
+random stream and which from the unsynchronised random stream. It also states three kinds of draw that
+no feature spec lists yet: the creation draw of an object, the draws of overlay placement (with the
+low-bridge and vein placement rules they depend on) and the creation draws of an animation
 (claim 10).
 
 ## Terms
 
 Shared terms used here are defined in the glossary: *scenario random stream* (with *draw* and
 *ranged draw*), *unsynchronised random stream*, *game*, *game start*, *session*, *skirmish*,
-*object*, *tick*, *departure*, *importer warning*, *quirk switch*, *recorder*, *measurement setup*,
-*round-toward-zero mode*. In addition:
+*object*, *tick*, *departure*, *importer warning*, *quirk switch*, *recorder*, *measurement setup*
+(with its *random-state recorder*), *multiplayer game, network game*, *round-toward-zero mode*. In
+addition:
 
 - **Stream.** One copy of the generator with its own state. The original has three that matter
   here: the scenario random stream, the unsynchronised random stream, and the *map-generator stream*
@@ -49,34 +51,50 @@ Shared terms used here are defined in the glossary: *scenario random stream* (wi
 - **List pick.** A raw value, read as unsigned, reduced modulo a list length *n* to an index 0 … *n*−1.
 - **Suspended.** A state of a stream in which every raw value it is asked for is 0 and its state
   does not change (claim 7).
-- **Network game.** A multiplayer game played over a local network or the internet, as opposed to a
-  skirmish or a campaign mission.
 - **Overlay type stream, overlay data stream.** The map's stream of overlay types and its stream of
   overlay data values, as S-0009 uses them (claims 12 and 13). Pointers only.
-- **Visiting order.** The order in which S-0009 visits a map's cells (S-0009, claim 6, and its
+- **Visiting order.** The order in which S-0009 visits a map's cells (S-0009, claim 3, and its
   scenario M2, sub-test "visiting order"). A pointer only.
 - **Tile animation.** The animation that a cell's tile names and that the cell starts when it is
   recalculated (S-0010, claim 19). It is a *terrain animation* in the glossary's sense.
 - **Cell animation.** The animation that the rules data attaches to an overlay type and that plays
   on each cell holding that overlay, as S-0009 defines it (Terms).
+- **Edge neighbour.** One of the four cells one straight step away from a cell: the cells in step
+  directions 0, 2, 4 and 6 (glossary *step direction*), that is map north, map east, map south and
+  map west.
 - **End row, bridge piece.** For the low bridges of claim 10: the end row is the row of three cells
-  across the bridge's line that an end marker writes where it is placed; a bridge piece is one of
-  the three cells across of each cell step between two end rows. The shape of an end row (which
-  three cells, and when it can be written) belongs to the bridge rules, which have no spec yet; a
-  pointer only.
+  across the bridge's line, centred on the end marker's own cell, that the marker writes where it
+  is placed; a bridge piece is one of the three cells across of each cell step between two end
+  rows. Claim 10 and the Formulas table *Low-bridge end markers* give which three cells, when they
+  can be written and how a marker finds its partner. What a finished bridge does in play belongs
+  to the bridge rules, which have no spec yet; a pointer only.
+- **Line, search direction.** Each end marker builds along a fixed *line*, the map's x axis or its
+  y axis, and looks for its partner in a fixed *search direction* along that line, one of the
+  step directions map north, map east, map south and map west (glossary *step direction*).
 - **Vein, vein cell.** A cell holding the vein overlay, the overlay type at position 126 of the
   overlay type list (claim 10). "Loses its vein" means the cell no longer holds any overlay. The
   vein rules, which have no spec yet, own what veins do; a pointer only.
 - **Pattern centre.** A vein cell whose overlay data is 48 or more. A placement (claim 10) gives this
   to the placed cell, flat (48 … 50) or sloped, and also to every sloped neighbour it sets (their data
-  is 53 or more, formula *Vein pattern values*). The re-patterned and kept flat cells have data below
-  48 and are not pattern centres. Neither is a flat placed cell that gets 46 under
+  is 53 or more, formula *Vein pattern values*). The flat cells that a placement sets or
+  re-patterns, and those that a recompute keeps, have data below 48 and are not pattern centres. Neither is a flat placed cell that gets 46 under
   `quirks.random_magnitude_overflow` (Edge cases).
+- **Veins flag.** A flag of an overlay type in the rules data (Import mapping) that marks it as part
+  of the vein family. The vein overlay itself is identified by its position 126, whatever its flag
+  says. The flag matters for the other types that carry it and, in exactly two places of claim 10,
+  for the vein overlay too: (i) in the vein placement test, a cell or edge neighbour that already
+  holds the vein overlay passes only when the vein overlay type has the flag; (ii) in the vein
+  connection pattern, a sloped neighbour holding a pattern centre counts only when the vein
+  overlay type has the flag (the table *Vein connections* in claim 10).
+- **Vein candidate.** At map load, a cell that holds the vein overlay with overlay data 48 or more
+  once the overlay data stream has been read (S-0009 calls these cells vein seeds; this spec keeps
+  the word *seed* for a stream's seed). Claim 10, *Map loading*, gives what a candidate holds
+  when its placement is tried.
 - **Vein placement test.** The condition a cell must meet for a vein placement to take effect there
-  (claim 10). It belongs to the vein rules; a pointer only.
-- **Vein connection pattern.** The integer 0 … 15 that the vein rules derive for a flat vein cell from
-  its vein edge neighbours, written *c* in the formula *Vein pattern values*. It belongs to the vein
-  rules; a pointer only.
+  (claim 10, which states it).
+- **Vein connection pattern.** The integer 0 … 15, written *c*, that claim 10 derives for a cell
+  from which of its four edge neighbours count as vein connections; it enters the formula *Vein
+  pattern values*.
 - **The veinhole monster.** The map object that the rules data's veinhole-monster overlay type creates
   where it is placed: the stationary object that grows veins around it during play, which S-0009
   (Terms) calls the veinhole. What it does belongs to the vein rules; a pointer only. Creating it
@@ -85,6 +103,13 @@ Shared terms used here are defined in the glossary: *scenario random stream* (wi
   Between two matching fence posts within range the original builds a line of fence-section
   buildings, the fence line. Stock data has no such building type. The fence rules have no spec yet,
   a pointer only.
+- **Visceroid flags.** Two flags of a vehicle type in the rules data (Import mapping). A type has
+  "either visceroid flag" when at least one of the two is on.
+- **Animation terms of S-0109.** *Bouncing type* (S-0109, Terms), *random rate* and *random rate
+  pair* (S-0109, claim 3), *loop delay* (S-0109, claim 11), *start event* (S-0109, claim 13) and
+  *middle event*, and the quantity μ of S-0109 claim 14, mean what S-0109 defines. Pointers only.
+- **Stand-in cell.** The cell that the original writes to, and reads, in place of a cell outside
+  the map, in the sense of S-0009 (claim 44). A pointer only.
 
 ## Behaviour
 
@@ -172,19 +197,24 @@ Shared terms used here are defined in the glossary: *scenario random stream* (wi
    - *Low bits*: one raw value, keeping some of its lowest bits.
    - Backing: `measurable` for the unit-interval value through scenario R5's recorder (the draw
      is a ranged draw whose raw values R5 predicts); the other forms are definitions that the topic
-     specs measure in their own scenarios
+     specs measure in their own scenarios, except the negative "magnitude first" remainder for the
+     raw value whose signed reading is −2147483648 (Edge cases), which is `unmeasured`: it needs
+     that one raw value in 2³², and the measurement setup cannot choose the seed (claim 8), so no
+     scenario can practically make it occur. That this list covers every form in use is
+     `unmeasured` too: no finite number of runs can confirm a list of every form in use
    - Confidence: high (the forms); medium (that this list covers every form in use)
 
-7. **Suspended while a game is cleared.** Every game start, from the menus or as a campaign
-   continuation, clears what the previous game left before the map is read. While that clearing
-   runs, the scenario random stream is suspended: anything that asks it for a raw value then
-   receives 0 (so a ranged draw under claim 4 returns its lower bound) and the stream does not advance.
-   Consequence: clearing a game takes no draws, and the stream has the same state when the clearing
-   ends as when it began. In the original the clearing comes after the seeding of claim 8 on a
-   start from the menus; because the clearing takes no draws, nothing observable in the scenario
-   random stream depends on that order. Our engine takes no draws from the scenario random stream
-   while it clears a game.
-   - Backing: `unmeasured` (the state recorder of the Measurement scenarios gives only the number
+7. **No draws while a game is cleared.** Every game start, from the menus or as a campaign
+   continuation, clears what the previous game left before the map is read. Clearing a game takes
+   no draws from the scenario random stream: the stream has the same state when the clearing ends
+   as when it began. In the original the clearing comes after the seeding of claim 8 on a start
+   from the menus; because the clearing takes no draws, nothing observable in the scenario random
+   stream depends on that order. Our engine takes no draws from the scenario random stream while it
+   clears a game. (In the original this holds because the stream is suspended, Terms, while the
+   clearing runs: anything that asks it for a raw value then receives 0, so a ranged draw under
+   claim 4 returns its lower bound, and the stream does not advance. Our engine need not have this
+   state.)
+   - Backing: `unmeasured` (the random-state recorder of the Measurement scenarios gives only the number
      of raw values taken since the seeding, modulo 250, so draws during the clearing, had there
      been any, could not be told apart from the map loading's own draws that follow)
    - Confidence: medium
@@ -213,7 +243,9 @@ Shared terms used here are defined in the glossary: *scenario random stream* (wi
      for a skirmish or campaign mission either, and keeps the seed it already has.
    - *Campaign continuation:* when a campaign mission is followed directly by the next mission
      after a win, or is restarted after a loss, without returning to the menus, the streams are not
-     reseeded: they continue from the state the previous mission left. Our engine does the same.
+     reseeded: they continue from the state the previous mission left. Campaigns are out of scope
+     for now: this is recorded as the original's behaviour, and the future campaign spec decides
+     what our engine does.
 
    Backing and confidence by part:
 
@@ -250,7 +282,7 @@ Shared terms used here are defined in the glossary: *scenario random stream* (wi
     effects that look like presentation also draw from it: animations, particles and particle
     systems, debris, smudges, and the overlay placement effects below. Consequence for our engine:
     these presentation-like effects must run inside the deterministic simulation, in the
-    original's order, or every later draw of the stream shifts. Two kinds of draw are stated here
+    original's order, or every later draw of the stream shifts. Three kinds of draw are stated here
     because no feature spec lists them yet:
     - **The creation draw.** Every creation of an infantry, vehicle, aircraft or building object
       takes one raw value, whatever else that creation draws, at the moment the object is created.
@@ -260,8 +292,8 @@ Shared terms used here are defined in the glossary: *scenario random stream* (wi
         draw comes before the draws of its own tag (S-0011, claim 34) and before any draw its
         placement takes. An entry that names no house of the game (S-0009, claim 27) or an unknown
         type creates nothing and takes no draw; an entry that is created but cannot be placed has
-        still taken its draw. The players' starting units take their creation draws when they are
-        placed. The table *Draws during map loading* (State and ordering) places all of these
+        still taken its draw. The players' starting units take their creation draws as S-0009
+        (claim 46) orders them. The table *Draws during map loading* (State and ordering) places all of these
         relative to S-0009's phases and S-0011's tag draws.
       - *Production.* A produced object is created when its production begins, not when it leaves
         the building that produced it. Its creation draw therefore falls in whatever part of the
@@ -274,33 +306,105 @@ Shared terms used here are defined in the glossary: *scenario random stream* (wi
       placing it on a cell do:
       - *Bridge-building end markers.* The overlay types at positions 122 … 125 and 233 … 236 of
         the overlay type list are end markers for two families of low bridges. They pair up as 122
-        with 123, 124 with 125, 233 with 234 and 235 with 236. A placed marker writes its end row
-        (Terms), which takes no draw of its own (its cells are recalculated, as the pieces' cells
-        are below), and looks along its line for the end row of its partner. When
-        it finds one, the *d* cells between the two end rows (*d* ≥ 1, counted along the line) are
-        filled with bridge pieces, three across for every cell step, so 3*d* pieces. Each piece takes
-        one raw value: its overlay type is the base type *t*₀ of its marker pair plus the lowest two
-        bits of that raw value (the *low bits* form; formula *Bridge piece type*), so completing a
-        bridge takes 3*d* raw values. The pieces take their raw values one cell step after another,
-        starting next to the partner's end row and moving toward the marker just placed, and within
-        a step in the order of their place across the bridge (their overlay data 0, 1, 2). The
-        pieces do not count as placed overlays: they set off none of the other effects in this
-        list. Each piece's cell is recalculated as the piece appears, though, which can start that
-        cell's tile animation; that animation's creation draws then come right after the piece's
-        own raw value. This also happens during map loading, where the
-        marker that comes later in the overlay type stream completes the bridge.
+        with 123, 124 with 125, 233 with 234 and 235 with 236. The Formulas table *Low-bridge end
+        markers* gives each marker's line, end-row cells, end-row overlay type, search direction
+        and the type it looks for. Placing a marker on cell (*x*, *y*) has these effects:
+        - *End row.* Its end row is the three cells across its line centred on its own cell:
+          (*x*, *y* − 1), (*x*, *y*), (*x*, *y* + 1) for a marker whose line is the x axis, and
+          (*x* − 1, *y*), (*x*, *y*), (*x* + 1, *y*) for one whose line is the y axis. What the
+          marker does depends only on whether any of the three holds an overlay:
+
+          | End-row cells | Result | Draw |
+          |---|---|---|
+          | none holds an overlay | the end row is written: each of the three cells gets the marker's end-row overlay type, with overlay data 0, 1 and 2 in order of increasing *y* or *x*, and is recalculated as it is written; the partner rules below then apply | none of its own (the recalculation can start a tile animation, below) |
+          | any holds an overlay | nothing is written, and nothing else follows: no partner, no pieces | none |
+        - *The marker itself.* The marker's own overlay type is never left on a cell. After a
+          written end row its own cell is the end row's middle cell (the end-row type with overlay
+          data 1), until pieces replace it in the case *m* = 1 below, and after an unwritten one it
+          holds whatever it held before.
+        - *Partner.* A marker that has written its end row has a partner when one exists: the
+          nearest legal cell, on the marker's own row (line along x) or column (line along y) and
+          in its search direction, that holds the partner's end-row type with overlay data 1 (the middle
+          of the partner's end row) and is separated from the marker's cell only by legal cells
+          (S-0009, claim 1). Overlays of any other kind between them make no difference, and
+          there is no distance limit. When there is no such cell, the marker has no partner and
+          nothing more happens. A partner whose end
+          row was written later than the marker, by a marker later in the overlay type stream, is
+          found by that later marker, so a bridge is completed by whichever of its two markers
+          comes second.
+        - *Pieces.* When the middle of the partner's end row lies *m* cells from the marker's own
+          cell, *d* = max(*m* − 1, 1) cell steps become bridge pieces. For *m* ≥ 2 these are
+          exactly the *d* = *m* − 1 cells strictly between the two end rows' middles. For *m* = 1
+          (the two end rows side by side) the one step is the marker's own end row, whose three
+          cells become pieces. At each step the three cells across the line become pieces, whatever
+          they held, so 3*d* pieces in all. Each piece takes one raw value: its overlay type is the
+          base type *t*₀ of its marker pair plus the lowest two bits of that raw value (the *low
+          bits* form; formula *Bridge piece type*), so completing a bridge takes 3*d* raw values.
+          Their stream order is step by step, from the step next to the partner's middle cell on
+          the marker's side toward the marker, and within a step in order of increasing *y* or *x*
+          (overlay data 0, 1, 2); this is the numbering *j* of the formula. The pieces do not count as placed overlays: they set off none of the
+          other effects in this list. Each piece's cell is recalculated as the piece appears,
+          though, which can start that cell's tile animation; that animation's creation draws
+          then come right after the piece's own raw value.
+        - *Cells outside the map.* An end-row cell or a piece cell across the line can lie outside
+          the map at its edge. The original then writes to its stand-in cell (S-0009, claim 44).
+          Our engine writes nothing outside the map and counts such a cell as holding no overlay
+          for the end-row test (S-0009, claim 44, a departure); in the original that is so as long
+          as nothing has written to the stand-in. In both, a piece there still takes its raw
+          value.
+        This happens during map loading too, in the order of the overlay type stream. An overlay is
+        placed only where S-0009 claim 12 allows one, which includes the slope condition stated
+        there.
       - *Vein patterns.* The vein overlay is the overlay type at position 126 of the list (the
-        type S-0009, claim 14, reads as a marker). Placing it during play on a cell that passes the
-        vein placement test takes one raw value for that cell. On a flat cell it then takes one
-        more for each of the cell's four edge neighbours that the placement re-patterns, visiting
-        them in the order map north, map east, map south, map west (which neighbours are
-        re-patterned, and their connection pattern, belong to the vein rules, which have no spec
-        yet; a flat neighbour that holds no overlay is always re-patterned); a sloped placed cell
-        re-patterns no neighbour. A cell that fails the test takes no draw. The draws set the
-        cells' overlay data by the formula *Vein pattern values*: a flat placed cell uses the
-        "magnitude first" remainder modulo 3, a flat neighbour the "magnitude after" remainder
-        modulo 3, and a sloped cell the lowest bit.
-        A neighbour that is already a pattern centre (Terms) is never re-patterned. During play
+        type whose cells S-0009, claim 14, rebuilds). "Land type" below is the cell's land type as it
+        stands (S-0211), and a cell's slope shape is its index of S-0106 (0 is flat).
+        *The vein placement test.* A placement on cell *C* takes effect only when all of these
+        hold; otherwise it changes nothing and takes no draw:
+        - *C*'s slope shape is at most 4, its land type is none of *water*, *rock*, *beach* and
+          *ice*, and it holds no overlay or one whose type has the veins flag (Terms),
+        - each of *C*'s four edge neighbours has a land type other than *water*, *rock*, *beach*
+          and *ice*, and holds no overlay or one whose type has the veins flag,
+        - when *C* is flat, no edge neighbour has a slope shape above 4 while holding no overlay.
+
+        An edge neighbour that lies outside the map is read as S-0009 claim 44 says (in our
+        engine a blank cell, which passes).
+        *The vein connection pattern* of a cell is *c* = Σ 2<sup>*i*</sup> over the edge
+        neighbours *i* = 0 (map north), 1 (map east), 2 (map south) and 3 (map west) that count as
+        a *connection*. Whether a neighbour counts depends on what it holds and on whether it is
+        flat (slope shape 0) or sloped (any other slope shape):
+
+        | Edge neighbour holds | Flat neighbour counts | Sloped neighbour counts |
+        |---|---|---|
+        | no overlay | no | no |
+        | the vein overlay with overlay data 48 or more (a pattern centre, Terms) | yes | only when the vein overlay type has the veins flag |
+        | the vein overlay with overlay data below 48 | no | no |
+        | an overlay of another type that has the veins flag | yes | yes |
+        | an overlay of another type without the veins flag | no | no |
+
+        This is the table *Vein connections*. So *c* records only the pattern centres and the other
+        vein-family overlays around a cell.
+        *The placement.* A cell that passes the test gets the vein overlay and takes one raw value
+        (formula *Vein pattern values*). A sloped placed cell does nothing more. For a flat one,
+        each edge neighbour then has the result of the table below. Their raw values follow the
+        placed cell's, in the order map north, map east, map south, map west, and each
+        neighbour's *c* counts the placed cell with its data already set. Because the placed cell
+        passed the test, each neighbour holds no overlay, the vein overlay or an overlay of
+        another type that has the veins flag, so exactly one row applies to it:
+
+        | Edge neighbour | Result | Draw |
+        |---|---|---|
+        | a pattern centre, or holding an overlay of another type that has the veins flag | unchanged | none |
+        | sloped, holding no overlay or a vein that is not a pattern centre | gets the vein overlay, data by the sloped row of *Vein pattern values* | one raw value |
+        | flat, holding no overlay | gets the vein overlay, data 3*c* + remainder, with *c* its connection pattern at that moment | one raw value |
+        | flat vein cell that is not a pattern centre (data below 48), whose ⌊data / 3⌋ differs from its connection pattern *c* at that moment | re-patterned: data 3*c* + remainder | one raw value |
+        | flat vein cell that is not a pattern centre (data below 48), whose ⌊data / 3⌋ equals *c* | unchanged | none |
+
+        The placed cell is a pattern centre by then, so every flat neighbour's *c* has at least
+        the bit pointing back at it (except for the one raw value of
+        `quirks.random_magnitude_overflow`, Edge cases). Two edge neighbours of one cell are
+        never edge neighbours of each other, so the order of the four does not change any *c*:
+        it fixes only the order of the raw values. A neighbour that is already a pattern centre
+        is never re-patterned. During play
         this placement happens when the vein rules grow veins (around a veinhole monster); what
         sets it off belongs to those rules.
         *Recompute.* The veins around a cell are recomputed during play when a unit that harvests
@@ -310,8 +414,8 @@ Shared terms used here are defined in the glossary: *scenario random stream* (wi
         lines*).
         A recompute concerns the recomputed cell and those of its edge neighbours that are flat
         vein cells and not pattern centres. Each of them takes at most one raw value; the overlay
-        data of one that keeps its vein follows the formula *Vein pattern values* (row "a
-        re-patterned or kept cell, flat"):
+        data of one that keeps its vein follows the formula *Vein pattern values* (row "a flat
+        cell set, re-patterned or kept"):
 
         | Cell | Condition | Draw | Result |
         |---|---|---|---|
@@ -321,37 +425,73 @@ Shared terms used here are defined in the glossary: *scenario random stream* (wi
         | A flat vein edge neighbour that is not a pattern centre | a vein connection | one raw value (same form) | keeps its vein |
 
         In stream order, the recomputed cell's raw value, if it takes one, comes first, then the
-        neighbours' in the order map north, map east, map south, map west. How the connection
-        pattern is derived belongs to the vein rules.
-        *Map loading.* Placing a vein from the overlay type stream takes no draw; instead the pass
-        of S-0009 claim 14, which runs after the overlay data stream has been read, places the
-        vein again on every candidate cell that passes its test, with the placement draws above,
-        one candidate after another in the reverse visiting order. The data values these draws set
-        are therefore the ones in force after loading, for those cells.
+        neighbours' in the order map north, map east, map south, map west. The connection pattern
+        is the one defined above, taken at the moment each cell is treated.
+        *Map loading.* Placing a vein from the overlay type stream takes no draw. The vein
+        overlays are instead rebuilt by the pass of S-0009 claim 14, which runs after the overlay
+        data stream has been read and the first recalculation pass has run. The vein candidates
+        (Terms) are the cells that hold the vein overlay with overlay data 48 or more at that
+        point. The pass's veins and draws are those of trying a placement as above, with its test
+        and its draws, on each candidate in the reverse visiting order, on the map with every vein
+        removed: every cell that held the vein overlay, candidate or not, holds no overlay and
+        overlay data 0 unless a placement of the pass gives it a vein. So when its
+        placement is tried, a candidate holds no overlay and overlay data 0, unless the placement
+        of an earlier candidate in that order has already put a vein on it as an edge neighbour.
+        Such a vein makes the candidate pass the first condition of the test only when the vein
+        overlay type has the veins flag. The data values these draws set are therefore the ones in
+        force after loading, for those cells. A vein cell with data below 48 is not a candidate:
+        it keeps no vein unless a passing candidate next to it gives it one.
       - *Cell animations.* An overlay type with a cell animation starts that animation when it is
-        placed, during map loading too; the animation takes whatever draws its creation takes
-        (the animation specs).
+        placed, during map loading too, with no loop delay; the animation takes the creation draws
+        of the next bullet.
       - Walls, ore and gem fields, crates, the high bridge overlays and the veinhole-monster overlay
         take no draw of their own when placed; the veinhole monster that the last one creates takes
         none either. (Placing any overlay recalculates its cell, which can start that cell's tile
         animation; see the map-loading table.)
-    - Backing: `measurable` for the creation draw (scenario R5 variant b); for the bridge draws
-      (scenario R8 part A: their number, form, order and base types); for the vein placement draws
-      (R8 part B, which tests the placement rule through the load-time pass, the same rule as a
-      placement during play); for walls, ore and gems taking no draw (R8 part C). `unmeasured`:
-      that crates, the high bridge overlays and the veinhole-monster overlay (and the monster it
-      creates) take no draw (each needs set-up conditions of rules that have no spec yet; a later
-      revision can add them to R8 C); what
-      sets off a vein placement during play, and the recompute draws (the recompute's triggers are
-      bound up with other effects, such as a harvesting unit's or a veinhole monster's own draws,
-      that no spec lists yet, and one recompute gives at most five values, each telling only its
-      remainder modulo 3, too few to find its place in the stream the way R8 does). The
-      classification is the union of the topic specs' claims.
+    - **Animation creation draws.** Creating an animation (S-0109) takes, in this order:
+      - the stage-delay draw of S-0109 claim 3, when the type's random rate gives a range there
+        (one ranged draw),
+      - for a bouncing type (S-0109 Terms), the draws that set its starting motion: three raw
+        values, then three ranged draws R(−65535, 65535) (each may consume more than one raw value,
+        claim 4). What the motion does belongs to the debris and projectile specs,
+      - when the animation is created with no loop delay (S-0109 claim 11), the draws of its start
+        event (S-0109 claim 13), which happens at once: first those of the middle event that the
+        start event produces when μ = 0 (S-0109 claim 14), then those of the type's resource chain
+        reaction. The specs of those effects (particles, scorch marks, craters, the chain
+        reaction) own their draws.
+
+      No other draw comes with an animation's creation. A tile animation (S-0010, claim 19) and a
+      cell animation are both created with no loop delay, so each takes the whole list at the
+      moment it starts, during map loading included: nothing in loading holds animations back.
+    - Backing, by part:
+
+      | Part | Backing |
+      |---|---|
+      | The creation draw is taken when an object is created | `measurable` (R5 b; R8 G for its exact count) |
+      | A produced object is created, with its draw, when its production begins | `measurable` (R5 c) |
+      | Pre-placed objects: an entry that is dropped takes no draw, a visceroid-flagged vehicle takes one R(0, 29), an infantry unit takes no placement draw, a building's upgrade takes its own creation draw | `measurable` (R8 G) |
+      | Pre-placed objects: one that is created but cannot be placed has still taken its creation draw | `unmeasured` (no case is established in which the original creates a pre-placed object and then fails to place it: an entry on a cell that is not legal is unspecified there, and a vehicle is placed whatever occupies its cell, S-0009 claim 38) |
+      | Bridges: number, form, order and base types of the piece draws | `measurable` (R8 A) |
+      | Bridges: the end-row test, the partner, the case *m* = 1 | `measurable` (R8 D) |
+      | Bridges: a tile animation started by a piece draws right after that piece's raw value | `measurable` (R8 H) |
+      | Bridges: a piece outside the map still takes its raw value | `measurable` (R8 D, case vi) |
+      | Veins: the placement draws, their order within a placement and across candidates | `measurable` (R8 B; the load-time pass uses the same placement rule as a placement during play) |
+      | Veins: the placement test, the table *Vein connections* and what a candidate holds when it is tried | `measurable` (R8 E) |
+      | Walls, ore and gems take no draw | `measurable` (R8 C) |
+      | Crates, the high bridge overlays and the veinhole-monster overlay (and the monster it creates) take no draw | `unmeasured` (map crates are never created in a skirmish, S-0009 claim 12, and the high bridges and the veinhole monster need set-up conditions of rules that have no spec yet, so no scenario can yet place them in a known state) |
+      | What sets off a vein placement during play; the recompute draws | `unmeasured` (the recompute's triggers are bound up with other effects, such as a harvesting unit's or a veinhole monster's own draws, that no spec lists yet, and one recompute gives at most five values, each telling only its remainder modulo 3, too few to find its place in the stream the way R8 does) |
+      | Animation creation: the stage-delay draw, and nothing else for a type without start-event effects | `measurable` (R8 F) |
+      | Animation creation: the bouncing draws | `measurable` (R8 F, variant ii) |
+      | Animation creation: the start-event draws come at once, before any later draw | `unmeasured` (they are the draws of particles, scorch marks, craters and chain reactions, which no approved spec states draw by draw, so no scenario can predict how many raw values they take) |
+      | The list of systems that draw from the scenario random stream | `unmeasured` (no finite number of runs can confirm a list of every system that draws; each system's draws are backed by the topic spec that states them) |
     - Confidence: high (the creation draw is taken; a produced object is created when its
       production begins; the overlay draw counts and forms); medium (the list of kinds; which
-      vein neighbours are re-patterned and in which order; the order of the bridge pieces and the
-      base types; where each map-loading group sits in the stream; the recompute: its draws, order
-      and list of triggers)
+      vein neighbours are set or re-patterned and in which order, the placement test and the connection
+      pattern; the end-row cells, the partner search and the *m* = 1 case; the order of the
+      bridge pieces and the base types; where each map-loading group sits in the stream; the
+      recompute: its draws, order and list of triggers; the animation creation draws, whose
+      bouncing and start-event parts are well established, while how an animation is placed on
+      the map is only partly established)
 
 11. **Unsynchronised random stream: presentation during play and at map load, setup values
     before play.** No draw from this stream that changes game state has been found. Its uses:
@@ -370,7 +510,7 @@ Shared terms used here are defined in the glossary: *scenario random stream* (wi
       different ground images for the whole game. Our engine builds the pattern afresh at every
       map load (Edge cases).
     - *Before play, on the setup screens:* setup values: the defaults offered by the random-map
-      setup screen, a random map seed (claim 13), the default network port range, and one ranged
+      setup screen and its random map seed (claim 13), the default network port range, and one ranged
       draw over 1 … 32767 from which a setup screen derives a game seed (through the third
       generator of claim 13; for a local-network game this gives the seed of claim 8). These draws
       use the stream in whatever state the previous game left it or, before the first game of a
@@ -379,12 +519,21 @@ Shared terms used here are defined in the glossary: *scenario random stream* (wi
       game only through the setup; in our engine these values are interface choices (claim 8's
       departure).
 
-    Our engine runs this stream on each machine from the game's seed (claim 8) with the same
-    algorithm, does not synchronise it between the machines of a network game, and lets none of
-    its draws reach game state.
-    - Backing: `measurable` (scenario R6); the map-load use through S-0010's scenario V2: part A for
-      the pattern's properties, part B for the draws themselves, with the state recorder's reading
-      of the unsynchronised stream (Measurement scenarios)
+    Our engine runs this stream from the game's seed (claim 8) with the same algorithm and lets
+    none of its draws reach game state. How it runs on the machines of a network game is for the
+    future multiplayer spec (network games are out of scope for now).
+    - Backing: `measurable` (scenario R6 a) that no draw of this stream reaches the scenario random
+      stream; `measurable` (R6 b) for voice responses and the choice of music track; the map-load use through S-0010's scenario V2: part A for the
+      pattern's properties, part B for the draws themselves, with the random-state recorder's
+      reading of the unsynchronised stream (Measurement scenarios); the random map seed through
+      R9 b; the seeding at program start through R9 d; the local-network seed's range through
+      R2 b. `unmeasured`: the screen shake, the electric-bolt and radiation-beam jitter, the flicker
+      colour, the default network port range and how a setup screen derives the game seed (each
+      combat effect comes with a sound whose variant is drawn from the same stream in the same
+      tick, so the effect's own draws cannot be told apart from the sound's; the objects that
+      flicker and the moment the port range is chosen are not identified, so no scenario can set
+      them off on purpose; and the seed derivation passes through the third generator of claim
+      13, which shows only through the resulting seed)
     - Confidence: medium (every use was classified, but some only briefly; Open questions); high
       for the map-load use
 
@@ -403,12 +552,31 @@ Shared terms used here are defined in the glossary: *scenario random stream* (wi
     - Confidence: medium (two per tick, network games only); low (the condition of the extra draw)
 
 13. **Map-generator stream.** The random-map generator has a stream of its own with the same
-    algorithm. It is seeded from the random map's 16-bit seed setting, or, when that setting is 0,
-    from a ranged draw R(0, 65535) of the unsynchronised random stream. It is used for nothing but
-    generating the random map, whose rules belong to a future spec. A third generator of a different
-    kind serves only the original's setup screens (to choose a network game's seed, claim 8),
-    visual effects and the names of saved-game files; our engine need not reproduce it.
-    - Backing: `unmeasured` (random maps are outside the current scope)
+    algorithm (claims 1 to 3). In a skirmish the generator can be reached from the map selection
+    of the setup screens, through a random-map setup screen, in a game mode that offers it. When
+    the game starts, the stream is seeded from the random map's 16-bit seed setting,
+    from 0 to 65535, or, when that setting is 0, from a ranged draw R(0, 65535) of the
+    unsynchronised random stream, taken after that stream has been seeded for the game (claim 8).
+    The random-map setup screen shows no seed and offers no way to type one. It chooses a new
+    setting itself, with a ranged draw R(0, 65535) of the unsynchronised random stream (claim 11),
+    whenever the player asks it to choose all its settings at random. Until it has made such a
+    choice in a session the setting is 0, so a random map generated without one is played from a
+    seed drawn at game start. The
+    map-generator stream is used for nothing but generating the random map, whose rules belong to
+    a future spec. A third generator of a different kind serves only the original's setup screens
+    (to choose a network game's seed, claim 8), visual effects and the names of saved-game files.
+    Our engine need not reproduce it.
+
+    | Part | Backing | Confidence |
+    |---|---|---|
+    | The skirmish setup screens can reach the generator, in a game mode that offers it | `measurable` (R9) | medium |
+    | Same algorithm; seeded from the seed setting, which lies in 0 … 65535 | `measurable` (R9 a) | medium |
+    | The random-map setup screen chooses the setting with a ranged draw R(0, 65535) of the unsynchronised stream | `measurable` (R9 b) | medium |
+    | The setting is 0 until the screen's first such choice in a session, and a setting of 0 is replaced at game start by a ranged draw R(0, 65535) of the newly seeded unsynchronised stream | `measurable` (R9 e) | low |
+    | Used for nothing but generating the random map | `measurable` (R9 c) | medium |
+    | The third generator and its uses | `unmeasured` (a list of the only uses a generator has cannot be confirmed by any finite number of runs; its one use that reaches a game, the local-network seed, shows through that seed's range in R2 b) | medium |
+    - Backing: `measurable` (scenario R9) for the parts so marked above; the rest `unmeasured`,
+      with the reasons given above
     - Confidence: medium
 
 ## Formulas
@@ -515,18 +683,40 @@ among the pieces.
 | 233 and 234 | 205 | 205 … 208 |
 | 235 and 236 | 214 | 214 … 217 |
 
+**Low-bridge end markers** (claim 10). All values are positions in the overlay type list, apart
+from the line and the search direction. The end-row cells are listed in the order of their overlay
+data 0, 1, 2, for a marker on cell (*x*, *y*).
+
+| Marker | Line | End-row cells | End-row type written | Search direction | Partner | Type looked for, with data 1 |
+|---|---|---|---|---|---|---|
+| 122 | x axis | (*x*, *y* − 1), (*x*, *y*), (*x*, *y* + 1) | 92 | map west (*x* − 1) | 123 | 94 |
+| 123 | x axis | as for 122 | 94 | map east (*x* + 1) | 122 | 92 |
+| 124 | y axis | (*x* − 1, *y*), (*x*, *y*), (*x* + 1, *y*) | 96 | map south (*y* + 1) | 125 | 98 |
+| 125 | y axis | as for 124 | 98 | map north (*y* − 1) | 124 | 96 |
+| 233 | x axis | as for 122 | 223 | map west | 234 | 225 |
+| 234 | x axis | as for 122 | 225 | map east | 233 | 223 |
+| 235 | y axis | as for 124 | 227 | map south | 236 | 229 |
+| 236 | y axis | as for 124 | 229 | map north | 235 | 227 |
+
+The pieces of one step lie on the same three cells across the line as the end row, displaced
+from the step's cell on the line by (0, −1),
+(0, 0), (0, +1) for the x-axis markers, and (−1, 0), (0, 0),
+(+1, 0) for the y-axis markers. With the middle of the partner's end row *m* ≥ 1 cells away, the
+number of steps is *d* = max(*m* − 1, 1), an integer.
+
 **Vein pattern values** (claim 10). For one raw value *x* per cell, with *c* the cell's vein
-connection pattern (an integer 0 … 15, from the vein rules) and *s* its slope shape (S-0106; 0
+connection pattern (an integer 0 … 15, claim 10) and *s* its slope shape (S-0106; 0
 is flat):
 
 | Cell | Overlay data |
 |---|---|
 | The placed cell, flat | 48 + (\|*σ*(*x*)\| rem 3) ("magnitude first"): 48 … 50, or 46 for *x* = 2147483648 |
-| A re-patterned or kept cell, flat | 3*c* + \|*σ*(*x*) rem 3\| ("magnitude after"): 3*c* … 3*c* + 2 |
+| A flat cell set, re-patterned or kept (a flat edge neighbour that a placement sets or re-patterns, or a flat cell that keeps its vein in a recompute) | 3*c* + \|*σ*(*x*) rem 3\| ("magnitude after"): 3*c* … 3*c* + 2 |
 | A cell set by a placement, sloped (*s* ≥ 1) | 51 + 2*s* + (*x* mod 2) |
 
 One placement on a flat cell uses consecutive raw values: the placed cell's first, then one for each
-re-patterned edge neighbour in the order map north, map east, map south, map west.
+edge neighbour that takes one (each neighbour that the placement sets or re-patterns, claim 10), in
+the order map north, map east, map south, map west.
 
 ## Constants
 
@@ -546,10 +736,16 @@ re-patterned edge neighbour in the order map north, map east, map south, map wes
 | Bridge end-marker positions | 122 … 125 and 233 … 236 | positions in the overlay type list | Claim 10; pairs 122–123, 124–125, 233–234, 235–236 |
 | Bridge piece base types *t*₀ | 74, 83, 205, 214 | positions in the overlay type list | Formulas table *Bridge piece type* |
 | Bridge pieces per cell step | 3 | pieces (one raw value each) | Claim 10 |
+| End-row types | 92, 94, 96, 98 and 223, 225, 227, 229 | positions in the overlay type list | Formulas table *Low-bridge end markers* |
+| End-row and piece width | 3 | cells across the line | Claim 10 |
+| Partner search limit | none | cells | Ends at the first cell that is not legal (claim 10) |
+| Vein placement slope limit | 4 | slope shape index (S-0106) | Claim 10: at most 4 for the placed cell; above 4 blocks a flat placed cell's empty neighbour |
+| Animation bounce draws | 3 raw values, then 3 ranged draws over −65535 … 65535 | draws | Claim 10, bouncing types only |
+| Visceroid placement draw | 0 … 29 | ranged-draw result (integer) | One ranged draw R(0, 29) when a vehicle of a type with either visceroid flag is placed (claim 10, map-loading table) |
 | Vein overlay position | 126 | position in the overlay type list | Claim 10; S-0009, claim 14 |
 | Vein data base, flat placed cell | 48 | overlay data value | 46 for the one raw value of `quirks.random_magnitude_overflow` |
 | Vein data base, sloped cell | 51 | overlay data value | Plus 2*s* and the lowest bit |
-| Vein data step per connection pattern | 3 | overlay data values | Flat re-patterned cell: 3*c* plus the remainder |
+| Vein data step per connection pattern | 3 | overlay data values | Flat cell set, re-patterned or kept: 3*c* plus the remainder |
 
 ## State and ordering
 
@@ -558,7 +754,7 @@ re-patterned edge neighbour in the order map north, map east, map south, map wes
 | Any | Game start from the setup or menu screens | Both streams seeded with the game's seed; next raw value is x₀ (claim 8) |
 | Any | Campaign continuation (next mission or restart) | No seeding; both streams continue (claim 8) |
 | Running | A raw value is requested | Returns x<sub>n</sub>, advances to x<sub>n+1</sub> |
-| Running | Clearing of the previous game begins (at a game start, before the map is read) | Scenario random stream suspended (claim 7; the original's mechanism: our engine takes no draws while clearing and need not have this state) |
+| Running | Clearing of the previous game begins (at a game start, before the map is read) | No draws until the clearing ends, and the same state then as now (claim 7). In the original the scenario random stream is suspended for that time; our engine need not have this state |
 | Suspended | A raw value is requested | Returns 0; no advance (the original) |
 | Suspended | Clearing ends | Running again, with the state it had when the clearing began (the original) |
 | Running | Saved game loaded | Scenario random stream state replaced by the saved state (claim 9) |
@@ -578,28 +774,29 @@ order is the one given. Rows marked "pointer" belong to a spec that does not yet
 | S-0009 early phase | list 1, list 2, random positions | S-0009, claim 20 |
 | Initial fill | one per visited cell, water fill only | S-0009, claim 6 |
 | Tags of cell tags | the draws of each tag created by a cell tag | S-0011, claim 34 |
-| Overlay type stream | in the stream's order: the bridge pieces of each bridge completed by an end marker (3 per cell step) and the creation draws of cell animations | claim 10; animation specs (pointer) |
-| First recalculation pass | the creation draws of tile animations (S-0010, claims 12 and 19). In this pass and in everything before the second pass, a tile animation starts at the first recalculation of its cell; a cell recalculated earlier in loading (for example by an overlay placement or a bridge piece) starts it there, among that group's draws (low confidence) | animation specs (pointer) |
+| Overlay type stream | in the stream's order: the bridge pieces of each bridge completed by an end marker (3 per cell step) and the creation draws of cell animations (claim 10, *Animation creation draws*) | claim 10 |
+| First recalculation pass | the creation draws of tile animations (S-0010, claims 12 and 19). In this pass and in everything before the second pass, a tile animation starts at the first recalculation of its cell; a cell recalculated earlier in loading (for example by an overlay placement or a bridge piece) starts it there, among that group's draws (low confidence). Each takes the animation creation draws of claim 10 | S-0010, claims 12 and 19; claim 10 |
 | Vein candidates | for each candidate cell that passes the test, in reverse visiting order: the vein pattern draws of claim 10 | S-0009, claim 14; claim 10 |
 | Terrain objects | none found (medium confidence) | — |
-| Pre-placed objects | kind by kind as in S-0203, claim 3 (vehicles, aircraft, infantry, buildings), each kind in entry order; for each object: its creation draw, then its tag's draws, then its placement's draws. A building's upgrades are created after that building's tag and take their own creation draws | claim 10; S-0011, claim 34; placement specs (pointer) |
+| Pre-placed objects | kind by kind as in S-0009 claim 43 and S-0203 claim 3 (vehicles, aircraft, infantry, buildings), each kind in entry order; for each object: its creation draw, then its tag's draws, then its placement's draws. Of the placement draws, a vehicle of a type with either visceroid flag (Import mapping) takes one ranged draw R(0, 29) when it is placed (the rule S-0009 claim 46 states for starting units), and an infantry unit placed while the map loads takes none (its standing position comes from the map, S-0208 claim 5); the other placement draws belong to the placement specs (medium confidence). A building's upgrades are created after that building's tag and take their own creation draws | claim 10; S-0011, claim 34; placement specs (pointer) |
 | Smudges | none found (medium confidence) | — |
-| Second recalculation pass | the creation draws of the tile animations that S-0010's second pass (claim 12) starts; these replace the ones started earlier in loading (S-0010, claim 19) | S-0010, claims 12 and 19; animation specs (pointer) |
+| Second recalculation pass | the creation draws of the tile animations that S-0010's second pass (claim 12) starts; these replace the ones started earlier in loading (S-0010, claim 19). Each takes the animation creation draws of claim 10 | S-0010, claims 12 and 19; claim 10 |
 | S-0009 late phase | list 3, late re-assignments | S-0009, claim 20 |
-| Starting units | house by house: each starting unit's creation draw and its placement's draws, then any further draws S-0009 lists for this step | claim 10; S-0009; starting-unit rules (pointer) |
+| Starting units | house by house, as S-0009 claim 46 orders them: each house's base unit and other starting units, each with its type choice, creation draw and placement draws; after the last house, one ranged draw over 0 … 65535 whose value has no effect | S-0009, claims 45 and 46; claim 10 |
 | Later loading steps | crates and similar (pointer) | S-0009 |
 | Fence lines | for each fence post on the map that can link to a matching post: the creation draws of the fence sections built between them, and the recompute draws of claim 10 for vein cells the line crosses. Stock data has no fence posts, so this row is empty with stock data (low confidence) | fence rules (pointer); claim 10 |
 | End of loading | the tags created at the end of loading, in registration order | S-0011, claim 34 |
 
-S-0009 (its draft revision 5) points to this table for the rows between the initial fill and the
-late phase. S-0011's table *Load-time draw order* lists no draws for the overlays and leaves the
-vein candidates open; it needs a matching addition (Open questions). Creating terrain objects,
+S-0009 points to this table for the rows between the initial fill and the late phase, and states
+the starting units' draws itself (claim 46). S-0011's table *Load-time draw order* lists no draws
+for the overlays and leaves the vein candidates open; this table gives them. Creating terrain objects,
 smudges and tunnels from the map was not found to take draws (medium confidence). Neither S-0009
 nor S-0011 lists the *Fence lines* row; it matters only for data with fence posts. Where each group
-sits is `unmeasured`, apart from what scenario R8 shows (the bridge and vein groups' own draws, and
-that each bridge or vein site follows the one before it in the stream, and that the overlays of
-R8 C take no draw): a group's position shows
-only as a shift of later draws.
+sits is `unmeasured`, apart from what scenario R8 shows (the bridge and vein groups' own draws,
+that each bridge or vein site follows the one before it in the stream, that the overlays of R8 C
+take no draw and, through R8 G, the total of the pre-placed objects' draws before the starting
+units): a group's position shows only as a shift of later draws, and the groups between the
+overlay type stream and the starting units are not yet predicted draw by draw on one map.
 
 ## Edge cases and quirks
 
@@ -621,7 +818,8 @@ only as a shift of later draws.
   pattern centre (Terms), so a later placement or recompute treats it as an ordinary flat vein
   cell.
 - **Seed from the host's clock** (departure, claim 8): the seed is a game-setup value in our engine.
-- **Terrain-image pattern kept for the session** (departure, no switch; claim 11). The original
+- **Terrain-image pattern kept for the session** (departure, no switch; claim 11; a design choice
+  of scope in the glossary's sense, which the project lead accepts case by case). The original
   builds S-0010's 8 × 8 pattern once per session, so the ground images of a game depend on earlier
   games in the same program run and can differ between the machines of a network game. Our engine
   builds the pattern at every map load, at the point S-0010 names, from the unsynchronised stream
@@ -635,22 +833,31 @@ only as a shift of later draws.
 
 ## Import mapping
 
-The streams read no rules or art keys. Claim 10 names overlay types by their position in the
-rules' overlay type list (the end markers 122 … 125 and 233 … 236, the vein overlay 126 and the
-bridge piece types of the Formulas table), as S-0009 does, so the list order is part of the data
-format; the positions are fixed in the original, whatever types the data puts there. The
-map-generator seed (claim 13) is a setting of the random-map setup screen, not a rules key. The
+The streams themselves read no rules or art keys. Claim 10 names overlay types by their position
+in the rules' overlay type list (the end markers 122 … 125 and 233 … 236, their end-row types, the
+vein overlay 126 and the bridge piece types of the Formulas tables), as S-0009 does, so the list
+order is part of the data format; the positions are fixed in the original, whatever types the data
+puts there. The placement rules of claim 10 read these keys:
+
+| Key | Section | Form | Absent | Feeds |
+|---|---|---|---|---|
+| `IsVeins` | an overlay type's section | boolean | no | the veins flag (Terms) of the vein placement test and the connection pattern |
+| `SmallVisceroid`, `LargeVisceroid` | a vehicle type's section | boolean each | no | either one on: placing a vehicle of the type takes one ranged draw R(0, 29) (map-loading table, pre-placed objects; S-0009 claim 46 for starting units) |
+
+The land types and slope shapes that the vein placement test reads come from S-0211 and S-0106. The
+map-generator seed (claim 13) is chosen by the random-map setup screen, not read from a rules key. The
 game seed is a game-setup value (claim 8).
 
 ## Measurement scenarios
 
-All scenarios use the measurement setup. Scenarios R2, R3, R5, R6, R7 and R8 use a *state recorder*: a
-read-only program that reads, without changing anything, the running original's seed of the current
+All scenarios use the measurement setup. Scenarios R2, R3, R5, R6, R7, R8 and R9 use the glossary's *random-state
+recorder*, which here means a read-only program that reads, without changing anything, the running original's seed of the current
 game and the current state of the scenario random stream: the 250 values x<sub>N−250</sub> …
 x<sub>N−1</sub>, seed values included, where *N* is the number of raw values taken since the
 seeding; the recorder gives *N* only modulo 250 (its *position*). It reads the unsynchronised
-random stream's state in the same way (S-0010's scenario V2 part B uses this). This is a recorder
-in the glossary's sense: it fixes no random state, and every scenario takes the seed the game chose.
+random stream's state in the same way (S-0010's scenario V2 part B uses this), and, where a
+scenario says so, the map-generator stream's seed and state (scenario R9). It is a
+recorder in the glossary's sense: it fixes no random state, and every scenario takes the seed the game chose.
 The recorder is part of the measurement setup (the project lead has approved it); it is a read-only observer of the original.
 
 - **R1, recurrence on the water fill (claims 2, 4).** Use S-0009's scenario M2, sub-test "visiting
@@ -662,7 +869,7 @@ The recorder is part of the measurement setup (the project lead has approved it)
   if* any equation fails. (A wrong lag pair fails about three in four of them.)
 - **R2, seeding function and recurrence (claims 1, 2, 3, 8).**
   (a) *Skirmish.* Any skirmish map, 3 fresh launches plus 2 further skirmish games in the same
-  session. With the state recorder, read the seed and the stream state at the first tick of each
+  session. With the random-state recorder, read the seed and the stream state at the first tick of each
   game, and note the host's wall-clock time and its uptime in milliseconds at that moment. Compute
   the 250 seed values F(seed, *k*) and advance the recurrence step by step. The recorder gives the
   number of raw values taken only modulo 250 (its position): find the smallest count *N*, congruent
@@ -678,13 +885,15 @@ The recorder is part of the measurement setup (the project lead has approved it)
   *Secondary expectation* (for the counter's starting point only): each seed equals the host's
   uptime in milliseconds at the first tick, modulo 2³², minus at most 60 seconds of loading time. If
   it does not, only the medium-confidence part of claim 8 about the counter's start is wrong.
-  (b) *Local network.* 3 local-network games of two machines, with the state recorder on both.
+  (b) *Local network* (kept for the future multiplayer spec, not required of the skirmish engine).
+  3 local-network games of two machines, with the random-state recorder on both.
   *Expected:* in each game both machines give the same seed, in 0 … 32767, and the same stream
   state at the first tick. If the seed were any 32-bit value instead, all three seeds would fall
   in 0 … 32767 with chance 2⁻⁵¹, so three games confirm the range.
   *Falsified if* the seeds or states of the two machines differ in some game, or a seed exceeds
   32767.
-  (c) *Campaign continuation.* Win a short campaign mission and let the next one start; read the
+  (c) *Campaign continuation* (kept for the future campaign spec, not required of the skirmish
+  engine). Win a short campaign mission and let the next one start; read the
   seed and state at the last tick of the first mission and at the next mission's first tick. Then
   lose a short campaign mission and restart it without returning to the menus; read the seed and
   state at the lost mission's last tick and at the restarted mission's first tick. 1 run of each.
@@ -692,7 +901,7 @@ The recorder is part of the measurement setup (the project lead has approved it)
   advanced by some count. *Falsified if,* in either, the seed changes or the state matches a fresh
   seeding.
 - **R3, saved games (claim 9).** A small test map with one human house and ten infantry of a type
-  with idle animations, no computer players, no crates and no other moving objects, with the state
+  with idle animations, no computer players, no crates and no other moving objects, with the random-state
   recorder.
   *Procedure:* at tick 300, read the recorder, save the game, and read the recorder again. Let that
   run continue without loading for 1800 ticks (2 game minutes), video-recorded (run 0). Then load
@@ -711,7 +920,7 @@ The recorder is part of the measurement setup (the project lead has approved it)
   has probability far below 1 % if the seed changes per launch). *Falsified if* any two launches
   repeat the pattern, or the pattern is the same every launch.
 - **R5, range rule, unit-interval value and the creation draw (claims 4, 6, 10).** (a) A test map
-  with no computer players and nothing that moves or animates. With the state recorder, read the
+  with no computer players and nothing that moves or animates. With the random-state recorder, read the
   stream position at every tick. Control interval: for the first 300 ticks the map holds no
   infantry. *Expected:* the position does not advance in any of those ticks (this shows that no
   other system draws every tick on this map). *Falsified if* it advances, in which case the
@@ -724,18 +933,31 @@ The recorder is part of the measurement setup (the project lead has approved it)
   idle attempt comes at the tick that S-0107's timer formula gives from the predicted unit-interval
   value. *Falsified if* any advance differs from the prediction (for example by counting one raw
   value per ranged draw, or none for rejections), or an attempt comes at another tick. (b) At the
-  tick the infantry is placed, *expected:* the position advances by the creation draw (one) plus
-  whatever that infantry's creation draws according to its specs. *Falsified if* the advance is one
-  less than that.
-- **R6, unsynchronised draws stay out of game state (claim 11).** The map and recorder of R5 (a),
+  tick the infantry is placed, *expected:* the position advances by at least one (its creation
+  draw; R8 G checks the exact count of a creation, where nothing else draws). *Falsified if* the
+  position does not advance in that tick. (c) *Production.* The same map, with the human house
+  also owning a power plant and an infantry-producing building from the start, both pre-placed.
+  The control interval must still show no advance with them in place (otherwise the part is
+  inconclusive). After the control interval, scripted input starts the production of one
+  infantry unit. *Expected:* the position advances by at least one in the tick the production
+  begins (the unit's creation draw), before the unit leaves the building. *Falsified if* the
+  position does not advance in that tick (for example because the creation draw comes only when
+  the finished unit leaves the building).
+- **R6, unsynchronised draws stay out of game state (claim 11).** (a) The map and recorder of R5 (a),
   with two infantry instead of one. 4 runs of 2 game minutes: in 2 runs keep the infantry selected
   and click them repeatedly so that they give voice responses (each response takes draws from the
   unsynchronised stream); in 2 runs never select them. *Expected:* in every run the per-tick
   advance of the scenario random stream equals R5's prediction from the idle attempts alone, and
   ticks in which a voice response starts show no extra advance. *Falsified if* any voice response
   coincides with an advance that the idle attempts do not explain.
+  (b) *Play uses.* With the random-state recorder reading the unsynchronised stream, on R5 (a)'s
+  map, where nothing else plays a sound, set off each of these once, at least 30 ticks apart: a
+  voice response (selecting a unit) and the start of a new music track when the previous one
+  ends (with the music set to random play). 3 runs. *Expected:* the unsynchronised
+  stream's position advances in the tick each effect starts. *Falsified if* an effect starts in a
+  tick in which the unsynchronised stream does not advance.
 - **R7, network checksum draws (claim 12; kept for the future multiplayer spec, not required of the skirmish engine).** Two machines in a network game on R5 (a)'s map,
-  with the state recorder on one machine (it reads that machine's stream; both machines hold the
+  with the random-state recorder on one machine (it reads that machine's stream; both machines hold the
   same state). During the control interval, *expected:* the position advances by exactly 2 in
   every tick, apart from occasional ticks with one more ranged draw R(0, 2) (whose raw values the
   recorded state predicts). Repeat on the same map as a skirmish: *expected:* no advance.
@@ -743,16 +965,19 @@ The recorder is part of the measurement setup (the project lead has approved it)
   skirmish shows any advance in the control interval.
 
 - **R8, overlay placement draws (claim 10, map-loading table)** *(statistical runs)*. No run
-  needs a chosen seed: each run uses the seed the game chose, which the state recorder reads.
+  needs a chosen seed: each run uses the seed the game chose, which the random-state recorder reads.
   *Setup common to all parts:* a skirmish on a small purpose-made map of a theater whose clear and
-  water tiles name no tile animation (check in the theater data), with the state recorder; no
+  water tiles name no tile animation (check in the theater data), with the random-state recorder; no
   overlay other than the ones named. Before running, check in the rules data that the end-marker,
   vein and other overlay types used have no cell animation; otherwise the part that uses them is
   inconclusive. *Procedure for each run:* read the seed and the state at the first tick, find *N* as
   in R2 (a), compute x₀ … x<sub>*N*−1</sub> from the seed (claims 2 and 3), and read every piece's
   or vein cell's overlay type and data from a saved game made at the first tick.
   - (A) *Bridges.* Two bridges over water, each a pair of matching end markers of the family at
-    positions 122 and 123 with *d* = 4 water cells between their end rows; both markers of the
+    positions 122 and 123 with *d* = 4 water cells between their end rows, the marker of position
+    123 on the west side (lower x) of the one of position 122, as the search directions of the
+    table *Low-bridge end markers* require (for the other pairs: 124 north of 125, 234 west of 233,
+    235 north of 236); both markers of the
     first bridge come before both markers of the second in the overlay type stream (S-0009, claim
     12). 5 runs, then 5 more with the pair 233 and 234. *Expected:* there is a position *p* such
     that the first bridge's 12 pieces, in the order of claim 10, have overlay types *t*₀ +
@@ -765,7 +990,9 @@ The recorder is part of the measurement setup (the project lead has approved it)
     than *p* + 12. The pieces' overlay data is not checked, because the map's overlay data stream
     sets it afterwards (S-0009, claim 13). *Inconclusive if* no bridge appears: the marker types
     are then not created on this map (S-0009, claim 12).
-  - (B) *Veins.* Four vein overlays (position 126) with overlay data 48, each on a flat clear cell
+  - (B) *Veins.* Four vein overlays (position 126), each with overlay data 48 in the map's
+    overlay data stream, which makes it a vein candidate (Terms); the load-time pass empties these
+    cells before it tries their placements (claim 10, *Map loading*). Each lies on a flat clear cell
     whose four edge neighbours are flat, clear and empty, every two sites at least four cells apart
     in x or in y. 5 runs. *Expected:* there is a position *p* such that, taking the sites in
     the reverse of S-0009's visiting order and each site's raw values in the order of the Formulas
@@ -773,11 +1000,11 @@ The recorder is part of the measurement setup (the project lead has approved it)
     x<sub>*p*</sub> … x<sub>*p*+19</sub> give every cell's data by the *Vein pattern values*: the
     placed cell's data is 48 + (|*σ*(*x*)| rem 3) (46 for the one raw value of
     `quirks.random_magnitude_overflow`), and each neighbour's data, taken modulo 3, is
-    |*σ*(*x*) rem 3| (the neighbour's 3*c* depends on the vein rules and drops out). A wrong
+    |*σ*(*x*) rem 3| (the neighbours' 3*c* is checked in part E). A wrong
     position matches with chance 3⁻²⁰, so exactly one *p* ≤ *N* − 20 should match. Each site's 5
     values following straight on the previous site's shows that a site with four empty flat
     neighbours takes exactly 5 raw values, so this also tests that all four such neighbours are
-    re-patterned (claim 10, medium confidence). *Falsified if* no *p* matches in some run, or the
+    set (claim 10, medium confidence). *Falsified if* no *p* matches in some run, or the
     match needs a gap or another neighbour order.
   - (C) *Overlays that take no draw.* The map of part A, with these overlays added on land cells
     that lie off both bridges' lines and end rows, and in the overlay type stream after the
@@ -786,6 +1013,123 @@ The recorder is part of the measurement setup (the project lead has approved it)
     x<sub>*p*+12</sub> … x<sub>*p*+23</sub>, so the overlays placed between the two bridges took
     no raw value (their cells hold no tile animation, by the setup). *Falsified if* the second
     bridge starts at a later position than *p* + 12.
+  - (D) *End rows and the partner search.* The map of part A with six changes, all in the
+    overlay type stream after the first bridge's second marker and before the second bridge's
+    first marker unless stated: (i) one wall overlay on the second bridge's line between its two
+    end rows, placed before the second bridge's later marker (the search passes it; it is then
+    overwritten by a piece); (ii) a lone marker of position 124 whose column holds no marker of
+    position 125; (iii) a marker of position 122 one of whose end-row cells already holds an ore
+    overlay placed earlier in the stream; (iv) a third bridge of the pair 122 and 123 whose two
+    end rows are side by side (*m* = 1), after the second bridge (the marker of position 123 first
+    in the overlay type stream); (v) a reversed pair: a marker of
+    position 122 west of one of position 123, 4 water cells apart, in a row of its own; (vi) a
+    fourth bridge of the pair 122 and 123 with *m* = 1, after the third, the marker of position
+    123 first in the overlay type stream and lying west of the other, placed where the map's
+    edge runs diagonally to the axes (S-0009 claim 1) so that the earlier marker's end row lies
+    wholly inside the map and exactly one cell of the later marker's end row lies outside it. 5
+    runs, each the first game of a fresh launch (so the stand-in cell of S-0009 claim 44 holds no
+    overlay when read). Read the overlay types
+    of every end-row and piece cell from the first-tick save. *Expected:* the second bridge's
+    pieces still match x<sub>*p*+12</sub> … x<sub>*p*+23</sub> (so (ii) and (iii) took no raw
+    value) and the wall's cell holds a piece; marker (ii)'s end row holds type 96 in its three
+    cells, marker (iii)'s three cells hold what they held before (the ore cell keeps its ore, the
+    others no overlay), and no cell holds a marker type; the third bridge takes 3 raw values right
+    after the second bridge's 12, and its pieces replace the later marker's own end row (types
+    74 … 77 on the three cells of that row, the earlier marker's row keeping type 94); the
+    reversed pair (v) writes its two end rows and no pieces, and takes no raw value, because each
+    marker searches away from the other; the fourth bridge (vi) takes 3 raw values right after
+    the third bridge's 3, and the two cells of the later marker's end row that lie inside the map
+    hold piece types 74 … 77.
+    *Falsified if* the second bridge's pieces start later than *p* + 12, an end row or marker
+    cell holds another type than expected, the reversed pair holds pieces, the third bridge
+    takes another number of raw values or fills other cells, or the fourth bridge takes 2 raw
+    values (none for its piece outside the map) or none.
+  - (E) *Vein placement test and connection pattern.* The map of part B with three additions:
+    (i) a fifth site, between two of part B's sites in the visiting order, whose map-north
+    neighbour is a water cell (it fails the test); (ii) a sixth site whose map-east neighbour holds
+    a wall overlay (it fails the test); (iii) a pair of sites two cells apart along x, at (*x*, *y*)
+    and (*x* + 2, *y*), both flat on flat clear land with flat clear empty neighbours, so that they
+    share the edge neighbour (*x* + 1, *y*). 5 runs. *Expected:* sites (i) and (ii) hold no vein
+    after loading and take no raw value (part B's 20-value match still holds, with the pair's
+    values inserted at its place in the reverse visiting order); the pair takes 5 raw values for
+    the site at (*x* + 2, *y*), which comes first, and then 5 for the site at (*x*, *y*), because
+    the shared neighbour, set with *c* = 2 by the first (its other neighbour, the second site, has
+    been emptied and holds no overlay yet), has *c* = 10 when the second is placed and is
+    re-patterned. After loading, ⌊data / 3⌋ is 10 for the shared neighbour, 4 for each cell map
+    north of a site, 1 for each cell map south of a site, 8 for the cell map east of the site at
+    (*x* + 2, *y*) and 2 for the cell map west of the site at (*x*, *y*). Had the candidates kept
+    their vein with data 48 until tried, the shared neighbour would get *c* = 10 at once and the
+    second site would take only 4 raw values. *Falsified if* a failing site holds a vein or takes
+    a raw value, the pair takes another number of raw values (4 for the second site in
+    particular), or any data value's ⌊data / 3⌋ differs from the *c* of claim 10. Before running,
+    check in the rules data that the vein overlay type has the veins flag: the second site of the
+    pair passes the placement test only then, because its east neighbour already holds a vein.
+    Otherwise the pair's part is inconclusive.
+  - (F) *Animation creation draws.* A map rules override (S-0006) gives a test overlay type a
+    cell animation whose animation type has a random rate pair that gives a range (S-0109 claim
+    3) and is not a bouncing type, with no particles, scorch marks, craters or chain reaction in
+    its middle event. Place three such overlays between the two bridges of part A. 5 runs.
+    *Expected:* the second bridge's pieces start at *p* + 12 + *k*, where *k* is the number of raw
+    values that the three stage-delay draws consume by the range rule (claim 4), computed from the
+    recorded sequence. *Falsified if* the shift differs from *k*, for example by 3 (one raw value
+    per animation) or by 0. This is variant (i). Variant (ii), *bouncing types:* the same, but the
+    cell animation's type is a bouncing type (S-0109 Terms) with no random rate pair, so no
+    stage-delay draw, and with no particles, scorch marks, craters or chain reaction in its
+    middle event. *Expected:* the shift *k* is, for each of the three animations in turn, 3 raw
+    values plus the raw values of three ranged draws R(−65535, 65535) by the range rule, computed
+    from the recorded sequence. *Falsified if* the shift differs from that *k*.
+  - (G) *Pre-placed objects.* S-0009's scenario M26, variant G: its map, its five dropped entries
+    and its neutral vehicle, and its prediction of the load's draws from the recorded seed, with
+    these entries added, all owned by the neutral house and at least 12 cells from both base
+    cells: a vehicle of a type with either visceroid flag; an infantry unit; and a building whose
+    entry names one upgrade (S-0009 claim 41). 3 runs. *Expected:* the stream position at the
+    first tick equals the prediction in which each created object takes one creation draw, the
+    visceroid vehicle also one ranged draw R(0, 29) (its raw values computed by the range rule),
+    the infantry unit no placement draw, the upgrade a creation draw of its own, and each dropped
+    entry none. *Falsified if* the position fits instead a prediction without the R(0, 29) draw,
+    with a draw for the infantry unit's placement or without the upgrade's creation draw. *Inconclusive if* it fits no prediction (an
+    unexplained draw, for example of the building's own placement, which the placement specs
+    own).
+  - (H) *Tile animation under a piece.* Part A's map, with the first bridge built over land: one
+    cell on its line strictly between the two end rows holds a tile that no other cell of the map
+    uses, and a named test file (S-0010's theater data) gives that tile a tile animation whose
+    type has a random rate pair that gives a range and is not a bouncing type, with no start-event
+    effects. 5 runs. *Expected:* the first bridge's pieces match the raw values as in part A
+    except for a gap of *k* raw values right after the piece on that cell, where *k* is the number
+    of raw values that the animation's stage-delay draw consumes (range rule), and the second
+    bridge starts at *p* + 12 + *k*. *Falsified if* the gap is missing or falls elsewhere among
+    the first bridge's pieces (*k* is at least 1, since the range is not a single value).
+    *Inconclusive if* the animation does not appear on the cell.
+
+- **R9, map-generator stream (claim 13).** A skirmish set up from the setup screens, in a game
+  mode whose map selection offers a random map (check before running), with one computer player
+  and the random-state recorder, which here also reads the map-generator stream. Open the
+  random-map setup screen, read the unsynchronised stream's state, ask the screen once to choose
+  all its settings at random, and read the unsynchronised stream's state again. Generate the map,
+  use it and start the game. At the first tick read the map-generator stream's seed and state,
+  then play 3 game minutes, with the starting units moving and fighting, and read the
+  map-generator stream's state again. 3 runs.
+  *Expected:* (a) the map-generator seed lies in 0 … 65535, and there is a count *N*, found as in
+  R2 (a), for which the seed's computed state (claims 2 and 3) equals the recorded one; (b) the
+  seed equals *x* mod 65536 for one of the raw values *x* that the unsynchronised stream gave
+  between its two readings (a wrong hypothesis passes this with chance about *n* / 65536 per run,
+  for *n* such raw values); (c) the map-generator stream's state at the end of play equals its
+  state at the first tick; (d) in the first run, made as the first game of a fresh launch, the
+  unsynchronised stream's state at its first reading equals the state computed from the seed
+  that the recorder reads at that moment (the seeding at program start, claim 11), advanced by
+  some count up to 100000.
+  *Falsified if* a seed exceeds 65535 or no *N* up to 100000 matches; the seed matches none of
+  those raw values; the map-generator stream's state changes during play; in the first run, no
+  count up to 100000 matches the unsynchronised stream's first reading; or no game mode's map
+  selection offers a random map. *Inconclusive if* the generator fails to produce a playable map.
+  (e) *Setting 0.* 3 further runs, each the first game of a fresh launch, in which the screen is
+  never asked to choose its settings at random: generate the map, use it and start the game, and
+  at the first tick read the game seed and the map-generator seed. Compute the unsynchronised
+  stream's raw values x₀, x₁, … from the game seed (claims 2, 3 and 8). *Expected:* the
+  map-generator seed equals x<sub>*k*</sub> mod 65536 for some *k* below 1000 (a wrong hypothesis
+  passes with chance about 1000 / 65536 per run, so all three runs pass with chance below 4 in a
+  million). *Falsified if* in some run the map-generator seed is 0 or matches no such
+  x<sub>*k*</sub>.
 
 ## Open questions
 
@@ -799,27 +1143,6 @@ The recorder is part of the measurement setup (the project lead has approved it)
   This needs the building animation spec to establish.
 - What state the unsynchronised random stream has after a saved game is loaded (claim 9).
 - The condition under which a network game takes the extra unused draw of claim 12 (for the future multiplayer spec).
-- **Specs that must add the draws of claim 10.** Until they do, this spec and its map-loading table
-  are the only statement of these draws:
-  - S-0009: its draft revision 5 in this batch already points to this spec's table for the groups
-    between the fill and the late phase, and gives the starting units' creation draws. Its claim 12
-    ("placement effects") should still say that bridge completion and cell animations draw, and its
-    claim 14 should give the candidates' draws. Claim 14 also says a passing candidate "gets a
-    veinhole"; what was found is that the cell gets the vein overlay again as a pattern centre
-    (overlay data 48 … 50) and its edge neighbours become vein cells (claim 10), while the veinhole
-    monster comes from another overlay type. S-0009 should be checked on this point.
-  - S-0011: claim 34 already puts a pre-placed object's creation draw before its tag's draws. Its
-    table *Load-time draw order* lists "none known" for the overlays and "not established" for the
-    vein set-up; it should take the bridge and cell-animation draws and the vein candidates' draws
-    of claim 10 from this spec.
-  - The production specs (none yet): a produced object is created, with its creation draw, when its
-    production begins.
-  - The animation specs: the creation draws of cell animations and tile animations at map load,
-    and exactly when a tile animation starts before the second pass (the first recalculation of its
-    cell, which may come at an overlay placement, at a bridge piece or at the first pass).
-  - S-0010 (claim 14, its Edge cases and its Open questions) still says that claim 11 here does not
-    list the map-load use; claim 11 lists it now. S-0010 should point to claim 11 and to the
-    departure that rebuilds the pattern at every map load (Edge cases here).
 - Whether, in the original, the machines of a network game build the same terrain-image pattern in
   the first game of a session (that needs the same unsynchronised draws before the build on every
   machine). Low confidence either way; it does not affect our engine (claim 11).
