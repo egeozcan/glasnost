@@ -16,7 +16,7 @@
 use bytemuck::{Pod, Zeroable};
 use wgpu::util::DeviceExt;
 
-use crate::compose::{DepthTest, Paint, Profile, expand565};
+use crate::compose::{ComposeQuirks, DepthTest, Paint, Profile, expand565};
 use crate::scene::{Filter, ItemDepth, Scene, View};
 
 /// WGSL source.
@@ -148,11 +148,13 @@ enum Role {
     Shadow,
     /// Neither reads nor writes depth (S-0102 claim 25).
     Ignore,
+    /// A shadow that stores its depth where it darkens (S-0102 claim 27).
+    ShadowWriter,
 }
 
 /// GPU resources for one scene.
 pub struct MapRenderer {
-    pipelines: [wgpu::RenderPipeline; 5],
+    pipelines: [wgpu::RenderPipeline; 6],
     bind_group: wgpu::BindGroup,
     layout: wgpu::BindGroupLayout,
     view_buffer: wgpu::Buffer,
@@ -302,15 +304,17 @@ impl MapRenderer {
                 Role::Writer => (wgpu::CompareFunction::Less, true),
                 Role::Reader | Role::Shadow => (wgpu::CompareFunction::Less, false),
                 Role::Ignore => (wgpu::CompareFunction::Always, false),
+                Role::ShadowWriter => (wgpu::CompareFunction::Less, true),
             };
-            let blend = (role == Role::Shadow).then_some(wgpu::BlendState {
-                color: wgpu::BlendComponent {
-                    src_factor: wgpu::BlendFactor::Zero,
-                    dst_factor: wgpu::BlendFactor::Constant,
-                    operation: wgpu::BlendOperation::Add,
-                },
-                alpha: wgpu::BlendComponent::OVER,
-            });
+            let blend =
+                matches!(role, Role::Shadow | Role::ShadowWriter).then_some(wgpu::BlendState {
+                    color: wgpu::BlendComponent {
+                        src_factor: wgpu::BlendFactor::Zero,
+                        dst_factor: wgpu::BlendFactor::Constant,
+                        operation: wgpu::BlendOperation::Add,
+                    },
+                    alpha: wgpu::BlendComponent::OVER,
+                });
             device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some("map"),
                 layout: Some(&pipeline_layout),
@@ -353,6 +357,7 @@ impl MapRenderer {
             make(Role::Reader),
             make(Role::Shadow),
             make(Role::Ignore),
+            make(Role::ShadowWriter),
         ];
         let instance_capacity = 1024;
         let instances = device.create_buffer(&wgpu::BufferDescriptor {
@@ -452,14 +457,14 @@ impl MapRenderer {
         scene: &Scene,
         view: &View,
         filter: &Filter,
-        anchor_after_clip: bool,
+        q: &ComposeQuirks,
     ) -> usize {
         let uniform = ViewUniform {
             origin: [view.origin.0, view.origin.1],
             size: [view.size.0 as i32, view.size.1 as i32],
             reference: view.reference,
             rows_per_column: self.rows_per_column as i32,
-            anchor_after_clip: i32::from(anchor_after_clip),
+            anchor_after_clip: i32::from(q.upright_depth_anchor_after_clip),
             pad: 0,
         };
         queue.write_buffer(&self.view_buffer, 0, bytemuck::bytes_of(&uniform));
@@ -495,6 +500,10 @@ impl MapRenderer {
                         Profile::Upright => 3,
                     };
                     let role = match (item.paint, item.test) {
+                        // spec: S-0102 claim 27 (a cell-pass shadow stores its depth, quirks.cell_pass_shadows_write_depth)
+                        (Paint::Shadow, DepthTest::Writer) if q.cell_pass_shadows_write_depth => {
+                            Role::ShadowWriter
+                        }
                         (Paint::Shadow, _) => Role::Shadow,
                         (_, DepthTest::Reader) => Role::Reader,
                         (_, DepthTest::Tile) => Role::Tile,
@@ -581,6 +590,7 @@ impl MapRenderer {
                 Role::Reader => 2,
                 Role::Shadow => 3,
                 Role::Ignore => 4,
+                Role::ShadowWriter => 5,
             };
             pass.set_pipeline(&self.pipelines[i]);
             pass.draw(0..6, range);

@@ -484,7 +484,7 @@ impl Gfx {
             &r.scene,
             &r.view,
             &r.filter,
-            true,
+            &glasnost_render::compose::ComposeQuirks::default(),
         );
         // The pass renders into an exact (non-sRGB) target; egui samples an
         // sRGB-typed copy of the same bytes.

@@ -164,6 +164,10 @@ pub struct ComposeQuirks {
     /// `quirks.upright_depth_anchor_after_clip`: the upright profile is
     /// anchored at the last visible row (F2 note).
     pub upright_depth_anchor_after_clip: bool,
+    /// `quirks.cell_pass_shadows_write_depth` (claim 27): a shadow drawn as
+    /// a writer (the cell pass's shadows) stores its depth where it darkens;
+    /// off: every shadow darkens without storing depth.
+    pub cell_pass_shadows_write_depth: bool,
 }
 
 impl Default for ComposeQuirks {
@@ -171,6 +175,7 @@ impl Default for ComposeQuirks {
         // spec: S-0102 Edge cases and quirks (default: on)
         Self {
             upright_depth_anchor_after_clip: true,
+            cell_pass_shadows_write_depth: true,
         }
     }
 }
@@ -314,7 +319,10 @@ impl Frame {
                 if !pass {
                     continue;
                 }
-                if d.test != DepthTest::Reader {
+                // spec: S-0102 claim 27 (a cell-pass shadow stores its depth, quirks.cell_pass_shadows_write_depth)
+                let stores = d.test != DepthTest::Reader
+                    && (q.cell_pass_shadows_write_depth || !matches!(d.paint, Paint::Shadow));
+                if stores {
                     // spec: S-0102 F2 (a writer stores the pixel depth, reduced modulo 65536)
                     self.depth[i] = depth.rem_euclid(DEPTH_MOD) as u16;
                 }
@@ -533,6 +541,7 @@ mod tests {
             &rows(),
             &ComposeQuirks {
                 upright_depth_anchor_after_clip: false,
+                ..ComposeQuirks::default()
             },
         );
         // Anchored at the image's own row 5: Q(32763) − ⌊3 / 3⌋ at row 2.
@@ -613,6 +622,17 @@ mod tests {
         // Another building shadow (−4) at the same depth: not darkened again.
         f.draw(&shadow(-4, DepthTest::Writer), &rows(), &q);
         assert_eq!(f.color[0], darken565(darken565(0xFFFF)));
+        // quirks.cell_pass_shadows_write_depth off: overlapping shadows always darken again.
+        let off = ComposeQuirks {
+            cell_pass_shadows_write_depth: false,
+            ..q
+        };
+        let mut g = Frame::new(1, 1, 0, Frame::reset_reference(0));
+        g.color[0] = 0xFFFF;
+        for _ in 0..3 {
+            g.draw(&shadow(-4, DepthTest::Writer), &rows(), &off);
+        }
+        assert_eq!(g.color[0], darken565(darken565(darken565(0xFFFF))));
     }
 
     /// spec: S-0010 claim 22 (a diamond paints all 900 pixels, index 0 included; row 29 never)

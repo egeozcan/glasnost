@@ -98,7 +98,7 @@ fn gpu_scroll_ms(
             scene,
             &view,
             &Filter::default(),
-            true,
+            &ComposeQuirks::default(),
         );
         queue.submit([enc.finish()]);
     }

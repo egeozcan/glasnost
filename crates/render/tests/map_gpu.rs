@@ -169,7 +169,7 @@ fn gpu_matches_cpu_reference() {
             &s,
             &view,
             &filter,
-            true,
+            &ComposeQuirks::default(),
         );
         // The viewer shows an sRGB-typed copy of the target: the copy must
         // keep the bytes (the GL backends included).
@@ -280,7 +280,7 @@ fn sync_uploads_added_images_and_rows() {
         &full,
         &view,
         &filter,
-        true,
+        &ComposeQuirks::default(),
     );
     queue.submit([encoder.finish()]);
     let gpu = read_texture(&device, &queue, &color, size.0, size.1);
@@ -290,4 +290,86 @@ fn sync_uploads_added_images_and_rows() {
         .filter(|(a, b)| a[..3] != b[..3])
         .count();
     assert_eq!(differing, 0);
+}
+
+/// spec: S-0102 claim 27 (cell-pass shadows store their depth; quirks.cell_pass_shadows_write_depth)
+///
+/// Two writer shadows at the same depth over a flat item: with the switch
+/// on the overlap is darkened once, with it off twice, on the GPU as in the
+/// CPU reference (the GPU halves expanded 8-bit channels, so channels are
+/// compared within a small tolerance).
+#[test]
+fn overlapping_writer_shadows() {
+    let Some((device, queue)) = device() else {
+        return;
+    };
+    let mut s = Scene::default();
+    s.add_row(std::array::from_fn(|_| 0xFFFF));
+    let ground = s.add_image(IndexedImage::new(16, 4, vec![1; 64]).unwrap());
+    let shade = s.add_image(IndexedImage::new(8, 4, vec![1; 32]).unwrap());
+    let item = |image, x, bias, test, paint| Item {
+        image,
+        x,
+        y: 0,
+        test,
+        depth: ItemDepth::Profile {
+            profile: Profile::Flat,
+            bias,
+            companion: None,
+        },
+        paint,
+        group: Group::Buildings,
+        provisional: false,
+        object: None,
+    };
+    s.items
+        .push(item(ground, 0, 0, DepthTest::Writer, Paint::Row(0)));
+    s.items
+        .push(item(shade, 0, -4, DepthTest::Writer, Paint::Shadow));
+    s.items
+        .push(item(shade, 4, -4, DepthTest::Writer, Paint::Shadow));
+    let mut r = MapRenderer::new(&device, &queue, &s, glasnost_render::map_gpu::COLOR_FORMAT)
+        .expect("scene uploads");
+    let size = (16, 4);
+    let view = View {
+        origin: (0, 0),
+        size,
+        reference: Frame::reset_reference(0),
+    };
+    for on in [true, false] {
+        let q = ComposeQuirks {
+            cell_pass_shadows_write_depth: on,
+            ..ComposeQuirks::default()
+        };
+        let cpu = s.compose(&view, &Filter::default(), &q).to_rgba();
+        let (color, depth) = targets(&device, size, glasnost_render::map_gpu::COLOR_FORMAT);
+        let mut encoder = device.create_command_encoder(&Default::default());
+        r.render(
+            &device,
+            &queue,
+            &mut encoder,
+            &color.create_view(&Default::default()),
+            &depth.create_view(&Default::default()),
+            &s,
+            &view,
+            &Filter::default(),
+            &q,
+        );
+        queue.submit([encoder.finish()]);
+        let gpu = read_texture(&device, &queue, &color, size.0, size.1);
+        // The overlap (x = 4 … 7) of row 0: once darkened with the switch on, twice off.
+        let overlap = 4 * 4;
+        let single = 4; // pixel 1 of row 0, inside one shadow only
+        let (o, one) = (cpu[overlap], cpu[single]);
+        if on {
+            assert_eq!(o, one, "darkened once where the shadows overlap");
+        } else {
+            assert!(o < one, "darkened twice where the shadows overlap");
+        }
+        for (a, b) in cpu.chunks(4).zip(gpu.chunks(4)) {
+            for k in 0..3 {
+                assert!(a[k].abs_diff(b[k]) <= 8, "switch {on}: cpu {a:?} gpu {b:?}");
+            }
+        }
+    }
 }
