@@ -269,6 +269,16 @@ pub struct Quirks {
     // spec: S-0212 claim 17
     #[serde(default = "on")]
     pub flatten_straight_run_v: bool,
+    /// From the third leg of the detour pass on, the reference distance is
+    /// taken to the step's end cell mirrored through the leg's first cell.
+    // spec: S-0212 claim 18
+    #[serde(default = "on")]
+    pub detour_mirrored_reference: bool,
+    /// After a tunnel step, the detour pass starts afresh at the cell north
+    /// of the tunnel entrance.
+    // spec: S-0212 claim 18
+    #[serde(default = "on")]
+    pub detour_after_tunnel_position: bool,
     /// Congestion marks follow the parity of each cell's count.
     // spec: S-0212 claim 19
     #[serde(default = "on")]
@@ -449,6 +459,8 @@ impl Default for Quirks {
             region_join_height_asymmetry: true,
             flatten_threat_start_cell: true,
             flatten_straight_run_v: true,
+            detour_mirrored_reference: true,
+            detour_after_tunnel_position: true,
             path_congestion_toggle: true,
             corridor_split_probe: true,
             corridor_free_part_unusable_cells: true,
@@ -620,6 +632,11 @@ impl Quirks {
             ),
             ("flatten_threat_start_cell", self.flatten_threat_start_cell),
             ("flatten_straight_run_v", self.flatten_straight_run_v),
+            ("detour_mirrored_reference", self.detour_mirrored_reference),
+            (
+                "detour_after_tunnel_position",
+                self.detour_after_tunnel_position,
+            ),
             ("path_congestion_toggle", self.path_congestion_toggle),
             ("corridor_split_probe", self.corridor_split_probe),
             (

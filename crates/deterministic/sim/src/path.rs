@@ -2,13 +2,14 @@
 //!
 //! [`S0212`] implements the specified parts of S-0212: the reachability
 //! gate (claim 6), the cell search with its costs, estimate, recording and
-//! limits (claims 7 to 12, F1, F2), a blocked destination (claim 15), the
-//! flattening of right-angle turns (claim 17), congestion marks (claim 19),
-//! path storage and retry delays (claims 20, 21), failures (claim 23),
-//! destination substitution (claim 24) and the nearby-cell search (claim 25).
-//! The corridor (claims 13 and 14), the stretch selection of claim 18 and the
-//! estimate E of claim 24 wait for request Q-0017: every search runs over
-//! the whole map.
+//! limits and order among equal entries (claims 7 to 12a, F1, F2), a
+//! blocked destination (claim 15), the flattening of right-angle turns
+//! (claim 17), the shortening of early detours (claim 18), congestion marks
+//! (claim 19), path storage and retry delays (claims 20, 21), failures
+//! (claim 23), destination substitution (claim 24) and the nearby-cell
+//! search (claim 25). The corridor (claims 13 and 14) and the estimate E of
+//! claim 24 are not implemented yet (Q-0017): every search runs over the
+//! whole map.
 
 use std::collections::{BTreeMap, BTreeSet, BinaryHeap};
 
@@ -305,7 +306,8 @@ impl Pathfinder for S0212 {
         sc.g[fi] = F32::ZERO;
         // spec: S-0212 F1 (recorded-pair margin μ = 1.009, the double nearest)
         let mu = crate::consts::PATH_MARGIN;
-        let mut held: Option<Pending> = Some(Pending {
+        // spec: S-0212 claim 12a (the start pair is recorded first)
+        heap.push(Pending {
             f: t24(est(from).to_f64(), mode).0,
             seq,
             cell: from,
@@ -313,38 +315,14 @@ impl Pathfinder for S0212 {
         let mut expansions = 0u32;
         let mut recorded = 0u32;
         // spec: S-0212 claim 16 (a train may not enter the three cells behind it)
-        let behind: Vec<CellXY> = if train {
-            let f8 = i32::from(glasnost_num::geom::eight_direction(o.body.value(w.tick)));
-            (0..8)
-                .filter(|d| matches!((d - f8).rem_euclid(8), 3..=5))
-                .map(|d| {
-                    let (dx, dy) = STEPS[d as usize];
-                    CellXY::new(from.x + dx, from.y + dy)
-                })
-                .collect()
+        let behind = if train {
+            behind_cells(w, req.unit, from)
         } else {
             Vec::new()
         };
         loop {
-            // Next pair: the held candidate when strictly cheapest, else the
-            // cheapest pending pair, earliest recorded first (Q-0017).
-            let next = match (held, heap.peek().copied()) {
-                (Some(h), Some(top)) if h.f < top.f => {
-                    held = None;
-                    h
-                }
-                (Some(h), Some(_)) => {
-                    held = None;
-                    heap.push(h);
-                    heap.pop()?
-                }
-                (Some(h), None) => {
-                    held = None;
-                    h
-                }
-                (None, Some(_)) => heap.pop()?,
-                (None, None) => return None,
-            };
+            // spec: S-0212 claims 12 and 12a (the smallest f; among equal f the pair recorded first)
+            let next = heap.pop()?;
             let Some(ni) = ix(next.cell) else { continue };
             if sc.closed[ni] == stamp {
                 continue;
@@ -370,7 +348,6 @@ impl Pathfinder for S0212 {
             expansions += 1;
             sc.closed[ni] = stamp;
             let ge = sc.g(ni).unwrap_or(F32::ZERO);
-            let mut best_new: Option<Pending> = None;
             for (d, (dx, dy)) in STEPS.iter().enumerate() {
                 let c = CellXY::new(next.cell.x + dx, next.cell.y + dy);
                 let Some(ci) = ix(c) else { continue };
@@ -434,20 +411,28 @@ impl Pathfinder for S0212 {
                 seq += 1;
                 // spec: S-0212 F2 (f = trunc₂₄(g + h))
                 let f = t24(gn.to_f64().add(est(c).to_f64(), mode), mode).0;
-                let p = Pending { f, seq, cell: c };
-                // The held candidate: smallest f, first in generation order.
-                match best_new {
-                    Some(b) if b.f <= f => heap.push(p),
-                    Some(b) => {
-                        heap.push(b);
-                        best_new = Some(p);
-                    }
-                    None => best_new = Some(p),
-                }
+                // spec: S-0212 claim 12a (pairs recorded in expansion order, an expansion's candidates in generation order)
+                heap.push(Pending { f, seq, cell: c });
             }
-            held = best_new;
         }
     }
+}
+
+/// The three neighbours of `from` behind a unit's body facing (S-0212
+/// claim 16).
+fn behind_cells(w: &World, id: ObjectId, from: CellXY) -> Vec<CellXY> {
+    let Some(o) = w.obj(id) else {
+        return Vec::new();
+    };
+    let f8 = i32::from(glasnost_num::geom::eight_direction(o.body.value(w.tick)));
+    // spec: S-0212 claim 16 (the step directions d with (d − f₈) mod 8 equal to 3, 4 or 5)
+    (0..8)
+        .filter(|d| matches!((d - f8).rem_euclid(8), 3..=5))
+        .map(|d| {
+            let (dx, dy) = STEPS[d as usize];
+            CellXY::new(from.x + dx, from.y + dy)
+        })
+        .collect()
 }
 
 fn reconstruct(
@@ -537,6 +522,248 @@ pub fn flatten(steps: &[u8], straight_v: bool, ok: &ReplaceOk<'_>) -> Vec<u8> {
         straight_ok = d3.is_multiple_of(2);
     }
     path
+}
+
+/// One step of a found path as the detour pass of S-0212 claim 18 reads
+/// it: a step in a step direction, or a tunnel step.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PathStep {
+    /// A step in step direction 0 to 7.
+    Dir(u8),
+    /// A tunnel step from a tunnel entrance to its exit (S-0212 claim 9).
+    Tunnel {
+        /// The tunnel entrance.
+        entrance: CellXY,
+        /// The tunnel exit.
+        exit: CellXY,
+    },
+}
+
+/// The acceptance test of a shape in [`shorten`]: `ok(s, shape, limit)`
+/// tells whether the steps `shape`, taken from cell `s`, enter only
+/// acceptable cells with at most `limit` threatened ones.
+pub type ShapeOk<'a> = dyn Fn(CellXY, &[u8], u32) -> bool + 'a;
+
+fn step_of(d: u8) -> (i32, i32) {
+    STEPS[usize::from(d % 8)] // spec: S-0212 Terms (step directions 0 to 7)
+}
+
+fn cheb(a: CellXY, b: CellXY) -> i32 {
+    // spec: S-0212 Terms (Chebyshev distance)
+    (a.x - b.x).abs().max((a.y - b.y).abs())
+}
+
+fn dir_of(dx: i32, dy: i32) -> u8 {
+    STEPS
+        .iter()
+        .position(|&s| s == (dx.signum(), dy.signum()))
+        .map_or(0, |d| d as u8)
+}
+
+/// The two shapes of S-0212 claim 18 from `s` to `e`, in the order they are
+/// tried: diagonal-first (not when the ends lie on one straight line), then
+/// straight-first (not when they lie on one diagonal line).
+fn shapes(s: CellXY, e: CellXY) -> Vec<Vec<u8>> {
+    let (dx, dy) = (e.x - s.x, e.y - s.y);
+    let diag = dx.abs().min(dy.abs()) as usize;
+    let straight = (dx.abs().max(dy.abs()) as usize) - diag;
+    let dd = dir_of(dx, dy);
+    let sd = if dx.abs() > dy.abs() {
+        dir_of(dx, 0)
+    } else {
+        dir_of(0, dy)
+    };
+    let mut v = Vec::new();
+    // spec: S-0212 claim 18 (diagonal-first: all diagonal steps, then all straight ones; not tried on a straight line)
+    if diag > 0 {
+        let mut a = vec![dd; diag];
+        a.extend(std::iter::repeat_n(sd, straight));
+        v.push(a);
+    }
+    // spec: S-0212 claim 18 (straight-first: all straight steps, then all diagonal ones; not tried on a diagonal line)
+    if straight > 0 {
+        let mut b = vec![sd; straight];
+        b.extend(std::iter::repeat_n(dd, diag));
+        v.push(b);
+    }
+    v
+}
+
+/// Replaces the stretch of `cur` from the earliest place `earliest` to the
+/// place `last`, ending on cell `e` (S-0212 claim 18, *the stretch of a
+/// trigger*). `starts[i]` is the cell where the step at place i of `cur`
+/// starts.
+fn replace_stretch(
+    cur: &mut [Option<PathStep>],
+    starts: &[CellXY],
+    earliest: usize,
+    last: usize,
+    e: CellXY,
+    limit: u32,
+    ok: &ShapeOk<'_>,
+) {
+    // The steps that are not removed, σ₁ … σₜ, and their distances dᵢ from e.
+    let sig: Vec<usize> = (earliest..=last).filter(|&i| cur[i].is_some()).collect();
+    if sig.is_empty() {
+        // spec: S-0212 claim 18 (every place removed: from e to e, the stretch stays as it is)
+        return;
+    }
+    let d: Vec<i32> = sig.iter().map(|&i| cheb(e, starts[i])).collect();
+    // spec: S-0212 claim 18 (σᵢ is a new maximum when dᵢ exceeds every later dⱼ)
+    let new_max: Vec<bool> = (0..d.len())
+        .map(|i| d[i + 1..].iter().all(|&dj| d[i] > dj))
+        .collect();
+    let u = (0..d.len()).rev().find(|&i| !new_max[i]);
+    // spec: S-0212 claim 18 (with u the last that is not a new maximum and v the last new maximum before it, the stretch begins after σᵥ; else at the earliest place)
+    let begin = match u.and_then(|u| (0..u).rev().find(|&i| new_max[i])) {
+        Some(v) => sig[v] + 1,
+        None => earliest,
+    };
+    let Some(first) = (begin..=last).find(|&i| cur[i].is_some()) else {
+        return;
+    };
+    let s = starts[first];
+    if s == e {
+        // spec: S-0212 claim 18 (s and e the same cell: the stretch stays as it is)
+        return;
+    }
+    // spec: S-0212 claim 18 (the diagonal-first shape when acceptable, else the straight-first one; neither: unchanged)
+    let Some(shape) = shapes(s, e).into_iter().find(|sh| ok(s, sh, limit)) else {
+        return;
+    };
+    // spec: S-0212 claim 18 (the new steps take the first places of the stretch, the rest become removed steps)
+    for (k, place) in (begin..=last).enumerate() {
+        cur[place] = shape.get(k).map(|&d| PathStep::Dir(d));
+    }
+}
+
+/// The cell where each step of `cur` starts, walking from `start`, and last
+/// the cell where the path ends; after a tunnel step the walk goes on from
+/// `after_tunnel(entrance, exit)`.
+fn start_cells(
+    cur: &[Option<PathStep>],
+    start: CellXY,
+    after_tunnel: &dyn Fn(CellXY, CellXY) -> CellXY,
+) -> Vec<CellXY> {
+    let mut c = start;
+    let mut v = Vec::with_capacity(cur.len());
+    for st in cur {
+        v.push(c);
+        match st {
+            Some(PathStep::Dir(d)) => {
+                let (dx, dy) = step_of(*d);
+                c = CellXY::new(c.x + dx, c.y + dy);
+            }
+            Some(PathStep::Tunnel { entrance, exit }) => c = after_tunnel(*entrance, *exit),
+            None => {}
+        }
+    }
+    v.push(c);
+    v
+}
+
+/// The shortening of early detours (S-0212 claim 18), on the path as claim
+/// 17 has left it, from cell `start`. `mirrored` is
+/// `quirks.detour_mirrored_reference`, `tunnel_north` is
+/// `quirks.detour_after_tunnel_position`.
+pub fn shorten(
+    steps: &[PathStep],
+    start: CellXY,
+    mirrored: bool,
+    tunnel_north: bool,
+    ok: &ShapeOk<'_>,
+) -> Vec<PathStep> {
+    // spec: S-0212 claim 18 (after a tunnel step: as on a new path from the cell north of the entrance, or from the exit with the switch off)
+    let after_tunnel = |entrance: CellXY, exit: CellXY| {
+        if tunnel_north {
+            CellXY::new(entrance.x, entrance.y - 1)
+        } else {
+            exit
+        }
+    };
+    // spec: S-0212 claim 18 (the first 20 places are examined)
+    let n = steps.len().min(20);
+    // The path as received decides the legs, references and triggers.
+    let recv: Vec<Option<PathStep>> = steps.iter().copied().map(Some).collect();
+    let rstarts = start_cells(&recv, start, &after_tunnel);
+    let mut cur = recv.clone();
+    // State of the pass, reset after a tunnel step.
+    let mut seg_start: usize = 0; // place where the current fresh path begins
+    let mut leg_first: Vec<usize> = vec![0]; // the first place of each leg
+    let mut leg_cell: Vec<CellXY> = vec![start]; // the first cell of each leg
+    let mut record = 0i32;
+    let mut turned = false;
+    let mut q_ref: Option<(CellXY, CellXY)> = None; // (q, p) from the third leg on
+    for i in 0..n {
+        let PathStep::Dir(dir) = steps[i] else {
+            // spec: S-0212 claim 18 (a tunnel step ends every leg and the reference; never part of a stretch)
+            seg_start = i + 1;
+            let c = rstarts.get(i + 1).copied().unwrap_or(start);
+            leg_first = vec![i + 1];
+            leg_cell = vec![c];
+            record = 0;
+            turned = false;
+            q_ref = None;
+            continue;
+        };
+        let s = rstarts[i];
+        let (dx, dy) = step_of(dir);
+        let e = CellXY::new(s.x + dx, s.y + dy);
+        // spec: S-0212 claim 18 (a step turns back when it shrinks |x| or |y| of its leg's displacement so far)
+        let lc = *leg_cell.last().unwrap_or(&start);
+        let (px, py) = (s.x - lc.x, s.y - lc.y);
+        let back = (px + dx).abs() < px.abs() || (py + dy).abs() < py.abs();
+        if back {
+            turned = true;
+            leg_first.push(i);
+            leg_cell.push(s);
+            // spec: S-0212 claim 18 (from the third leg: q the previous leg's first cell, the record Chebyshev(q, p))
+            if leg_first.len() >= 3 {
+                let q = leg_cell[leg_cell.len() - 2];
+                q_ref = Some((q, s));
+                record = cheb(q, s);
+            }
+        }
+        // spec: S-0212 claim 18 (the reference distance: from the start in the first two legs; from q to the end cell mirrored through p later, quirks.detour_mirrored_reference)
+        let reference = match q_ref {
+            None => cheb(start_of_seg(&rstarts, seg_start, start), e),
+            Some((q, p)) if mirrored => cheb(q, CellXY::new(2 * p.x - e.x, 2 * p.y - e.y)),
+            Some((q, _)) => cheb(q, e),
+        };
+        if reference > record {
+            // spec: S-0212 claim 18 (a larger reference distance raises the record)
+            record = reference;
+            continue;
+        }
+        // spec: S-0212 claim 18 (the earliest place: the path's first in the first two legs, else the previous leg's first step)
+        let earliest = if leg_first.len() >= 3 {
+            leg_first[leg_first.len() - 2]
+        } else {
+            seg_start
+        };
+        let cstarts = start_cells(&cur, start, &after_tunnel);
+        // spec: S-0212 claim 18 (a trigger: the stretch ending on the trigger step's end cell, threat limit 0)
+        replace_stretch(&mut cur, &cstarts, earliest, i, e, 0, ok);
+    }
+    // spec: S-0212 claim 18 (the closing stretch, when a step turned back)
+    if turned && n > 0 && n > seg_start {
+        let p = *leg_cell.last().unwrap_or(&start);
+        let lf = *leg_first.last().unwrap_or(&0);
+        let last = n - 1;
+        let e = rstarts.get(n).copied().unwrap_or(start);
+        let m = (n - lf) as i32;
+        // spec: S-0212 claim 18 (replaced when Chebyshev(p, e) < m − 1, from the last leg's first step, threat limit 3)
+        if cheb(p, e) < m - 1 {
+            let cstarts = start_cells(&cur, start, &after_tunnel);
+            replace_stretch(&mut cur, &cstarts, lf, last, e, 3, ok);
+        }
+    }
+    // spec: S-0212 claim 18 (removed steps are dropped when the pass ends)
+    cur.into_iter().flatten().collect()
+}
+
+fn start_of_seg(starts: &[CellXY], seg: usize, start: CellXY) -> CellXY {
+    starts.get(seg).copied().unwrap_or(start)
 }
 
 fn between(a: u8, b: u8) -> u8 {
@@ -970,21 +1197,28 @@ pub fn compute(w: &mut World, id: ObjectId, mode: Mode) -> Search {
         return Search::SearchFailed;
     };
     let k = u.threat_avoidance;
-    let ok = |path: &[u8], start: usize, d3: u8, j: usize| -> bool {
-        // Cells the 2j new steps pass through.
-        let mut c = from;
-        for &s in &path[..start] {
-            let (sx, sy) = STEPS[usize::from(s % 8)]; // spec: S-0212 Terms (step directions 0 to 7)
-            c = CellXY::new(c.x + sx, c.y + sy);
-        }
-        let reference = occupancy::reference_level(w, id);
-        let mut prev = c;
-        // spec: S-0212 claim 17 (2j new steps)
-        for _ in 0..2 * j {
-            let (sx, sy) = STEPS[usize::from(d3)];
+    let q = r.quirks;
+    // spec: S-0212 claim 16 (quirks.train_exclusion_search_only off: straightening also treats the cells behind a train as not enterable)
+    let excluded = if u.train && !q.train_exclusion_search_only {
+        behind_cells(w, id, from)
+    } else {
+        Vec::new()
+    };
+    let reference = occupancy::reference_level(w, id);
+    // Whether the steps `shape` from cell `s` enter only clear cells without
+    // a congestion mark. No threat records exist before the combat topics
+    // (M4), so every cell has threat value 0 and every threat test passes
+    // (S-0212 claims 17 and 18, F7).
+    let enters_clear = |s: CellXY, shape: &mut dyn Iterator<Item = u8>| -> bool {
+        let mut prev = s;
+        for d in shape {
+            let (sx, sy) = STEPS[usize::from(d % 8)]; // spec: S-0212 Terms (step directions 0 to 7)
             let n = CellXY::new(prev.x + sx, prev.y + sy);
-            // spec: S-0212 claim 17 (every cell clear, no congestion mark; threat × k below 1.0, no threat records in M3)
-            if step_outcome(w, id, prev, n, reference) != Outcome::Clear || congested.contains(&n) {
+            // spec: S-0212 claims 17 and 18 (every cell entered clear and without a congestion mark)
+            if step_outcome(w, id, prev, n, reference) != Outcome::Clear
+                || congested.contains(&n)
+                || excluded.contains(&n)
+            {
                 return false;
             }
             prev = n;
@@ -992,7 +1226,33 @@ pub fn compute(w: &mut World, id: ObjectId, mode: Mode) -> Search {
         let _ = k;
         true
     };
-    let steps = flatten(&steps, r.quirks.flatten_straight_run_v, &ok);
+    let ok = |path: &[u8], start: usize, d3: u8, j: usize| -> bool {
+        // The cell where the 2j new steps start.
+        let mut c = from;
+        for &s in &path[..start] {
+            let (sx, sy) = STEPS[usize::from(s % 8)]; // spec: S-0212 Terms (step directions 0 to 7)
+            c = CellXY::new(c.x + sx, c.y + sy);
+        }
+        // spec: S-0212 claim 17 (2j new steps)
+        enters_clear(c, &mut std::iter::repeat_n(d3, 2 * j))
+    };
+    let steps = flatten(&steps, q.flatten_straight_run_v, &ok);
+    let ok18 = |s: CellXY, shape: &[u8], _limit: u32| enters_clear(s, &mut shape.iter().copied());
+    let received: Vec<PathStep> = steps.iter().map(|&d| PathStep::Dir(d)).collect();
+    // spec: S-0212 claim 18 (early detours are shortened, after claim 17)
+    let steps: Vec<u8> = shorten(
+        &received,
+        from,
+        q.detour_mirrored_reference,
+        q.detour_after_tunnel_position,
+        &ok18,
+    )
+    .into_iter()
+    .filter_map(|p| match p {
+        PathStep::Dir(d) => Some(d),
+        PathStep::Tunnel { .. } => None,
+    })
+    .collect();
     if let Some(ob) = w.obj_mut(id) {
         ob.path.steps = steps.into_iter().take(STORED).collect();
         ob.path.for_goal = Some(goal);

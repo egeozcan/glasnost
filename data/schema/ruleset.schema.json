@@ -1914,6 +1914,16 @@
           "type": "boolean",
           "default": true
         },
+        "detour_after_tunnel_position": {
+          "description": "After a tunnel step, the detour pass starts afresh at the cell north\nof the tunnel entrance.",
+          "type": "boolean",
+          "default": true
+        },
+        "detour_mirrored_reference": {
+          "description": "From the third leg of the detour pass on, the reference distance is\ntaken to the step's end cell mirrored through the leg's first cell.",
+          "type": "boolean",
+          "default": true
+        },
         "disarm_bomb_needs_weapon": {
           "description": "Disarm bomb gives its attack order only to an actor able to fire; off: it needs only that the actor is movable.",
           "type": "boolean",

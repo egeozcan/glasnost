@@ -180,7 +180,7 @@ Every quirk switch of the implemented specs has a field in `ini::Quirks`, `vfs::
 
 `glasnost-sim` runs the game rules on the typed ruleset and map. Everything in it is integers and the soft-float types of `glasnost-num` (S-0205: IEEE binary32/64 in integers, round toward zero under `quirks.chop_rounding`), with ordered containers only.
 
-- **Rules and data.** `rules::SimRules` is built from a resolved ruleset (`SimRules::new(&resolved.ruleset, &resolved.sim_rules_hash)`): typed per-kind tables, the 87 quirk switches of `rules::Quirks` (every one defaulting to the original), and engine defaults cited to their specs. A type without a locomotor field has the teleporting locomotor (S-0207 claim 14); vehicles with the driving locomotor drive and infantry with the walking one walk, and every other locomotor is not moved in M3. `consts` holds the spec constants given as decimals, as checked bit patterns.
+- **Rules and data.** `rules::SimRules` is built from a resolved ruleset (`SimRules::new(&resolved.ruleset, &resolved.sim_rules_hash)`): typed per-kind tables, the 93 quirk switches of `rules::Quirks` (every one defaulting to the original), and engine defaults cited to their specs. A type without a locomotor field has the teleporting locomotor (S-0207 claim 14); vehicles with the driving locomotor drive and infantry with the walking one walk, and every other locomotor is not moved in M3. `consts` holds the spec constants given as decimals, as checked bit patterns.
 - **A game.** `load::new_game(rules, map, catalogue, setup)` follows S-0009 (start positions, the initial fill, the overlay stream, recalculation passes, pre-placed objects, the load's draws) and S-0010/S-0211 (terrain recalculation in `glasnost-map`). `load::sandbox_setup` is our viewer's setup: one house per object owner of the map, no start positions.
 - **A tick.** `tick::step` runs S-0203's parts in their places: the turn pass over the update order (with S-0203's removal skips and second turns), each object's behaviour part (`process`, S-0215), its locomotor (`drive` with `tracks`, S-0207 and S-0206 claim 12; `walk`, S-0208), its infantry sequence (`infantry`, S-0107), then the orders (`orders`, S-0213), then the tick number. Occupancy is `cells`/`occupancy` (S-0209), crushing `crush` (S-0210), passability and regions `passability`/`regions` (S-0211, S-0212), pathfinding `path` (S-0212) behind the `Pathfinder` trait.
 - **Orders and input.** Every change a player or our AI makes goes through `orders::issue` (pending lists, S-0213). `targeting` turns a click or key command into orders by S-0214 and S-0213 table T2, for people and AI houses alike; the selection is kept by the caller.
@@ -196,7 +196,7 @@ Provisional rules of the simulation, each tied to a request:
 
 | Where | Interim rule | Request |
 |---|---|---|
-| `path` | no corridor of claim 13; pending pairs of equal cost in recording order after the held candidate; the shortening of early detours (claim 18) is not applied | Q-0017 |
+| `path` | no corridor of claim 13 | Q-0017 |
 | `load` | a start list that needs a random start cell is refused (`LoadError::RandomStartCell`); low-bridge end markers complete no bridge; vein seeds are cleared and not rebuilt | Q-0018 |
 | `drive` | the attack override of a refused step (S-0207 table T4) gives no destination; no step check follows the search made after a curve's second cell gives an obstacle (table T5) | Q-0035 |
 | `crush` | a map wall takes the owner of the nearest qualifying building at any distance (S-0210 claim 14) | Q-0036 |

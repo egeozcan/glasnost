@@ -5,9 +5,8 @@
 //! every locomotion class has multiplier 0 there (category *blocked*).
 //!
 //! Not tested here because the simulation does not implement them yet: the
-//! corridor and when it is used (claims 13 and 14, request Q-0017), the
-//! shortening of early detours (claim 18), follower cars (claim 26), bridge
-//! decks, links and tunnel steps.
+//! corridor and when it is used (claims 13 and 14, request Q-0017), follower
+//! cars (claim 26), bridge decks, links and tunnel steps in the search.
 
 mod common;
 
@@ -19,7 +18,7 @@ use glasnost_rules::sim::{
 };
 use glasnost_sim::occupancy::{self, Outcome};
 use glasnost_sim::passability::category;
-use glasnost_sim::path::{self, Mode, Pathfinder, Request, S0212, Search};
+use glasnost_sim::path::{self, Mode, PathStep, Pathfinder, Request, S0212, Search};
 use glasnost_sim::regions::{self, Reach, STEPS};
 use glasnost_sim::rules::{Behaviour, Kind};
 use glasnost_sim::world::{ObjectId, Target, World};
@@ -744,6 +743,126 @@ fn train_search_excludes_cells_behind() {
         find(&w, car, cell(-4, 6), Mode::Fresh, &[]),
         Some(vec![6, 6, 6, 6])
     );
+}
+
+// ------------------------------------------------------------ early detours
+
+fn dirs(v: &[u8]) -> Vec<PathStep> {
+    v.iter().map(|&d| PathStep::Dir(d)).collect()
+}
+
+/// Claim 18 on a path from cell(0, 0); `bad` cells are not acceptable.
+fn shorten(steps: &[u8], mirrored: bool, bad: &[CellXY]) -> Vec<PathStep> {
+    let ok =
+        |s: CellXY, shape: &[u8], _limit: u32| visits(s, shape).iter().all(|c| !bad.contains(c));
+    path::shorten(&dirs(steps), cell(0, 0), mirrored, true, &ok)
+}
+
+// spec: S-0212 claim 18 (worked example a: 1, 3, 4, 5, 4, 4 with (x + 1, y) not clear gives 3, 4, 4, 4; quirks.detour_mirrored_reference off gives 3, 2, 5, 4, 4)
+#[test]
+fn detour_example_a() {
+    let bad = [cell(1, 0)];
+    assert_eq!(
+        shorten(&[1, 3, 4, 5, 4, 4], true, &bad),
+        dirs(&[3, 4, 4, 4])
+    );
+    assert_eq!(
+        shorten(&[1, 3, 4, 5, 4, 4], false, &bad),
+        dirs(&[3, 2, 5, 4, 4])
+    );
+}
+
+// spec: S-0212 claim 18 (worked example b: 2, 4, 4, 5, 4, 4, 4 gives 3, 4, 5, 4, 4, 4)
+#[test]
+fn detour_example_b() {
+    assert_eq!(
+        shorten(&[2, 4, 4, 5, 4, 4, 4], true, &[]),
+        dirs(&[3, 4, 5, 4, 4, 4])
+    );
+}
+
+// spec: S-0212 claim 18 (only the first 20 places are examined; removed steps keep their places)
+#[test]
+fn detour_examines_twenty_places() {
+    // A detour at places 19 and 20 (south, then west) is shortened...
+    let mut p = vec![2; 18];
+    p.extend([4, 6]);
+    let mut want = vec![2; 16];
+    want.push(3);
+    assert_eq!(shorten(&p, true, &[]), dirs(&want));
+    // ... the same detour at places 21 and 22 is not examined.
+    let mut p = vec![2; 20];
+    p.extend([4, 6]);
+    assert_eq!(shorten(&p, true, &[]), dirs(&p));
+    // A shape that is not acceptable leaves the stretch as it is.
+    assert_eq!(
+        shorten(&[2, 4, 4, 5, 4, 4, 4], true, &[cell(1, 1)]),
+        dirs(&[2, 4, 4, 5, 4, 4, 4])
+    );
+}
+
+// spec: S-0212 claim 18 (after a tunnel step the pass starts afresh from the cell north of the entrance, quirks.detour_after_tunnel_position; off: from the exit)
+#[test]
+fn detour_after_a_tunnel_step() {
+    let tunnel = PathStep::Tunnel {
+        entrance: cell(0, 0),
+        exit: cell(10, 10),
+    };
+    let steps = [tunnel, PathStep::Dir(2), PathStep::Dir(4)];
+    // Cells near the exit are not acceptable: only the shape judged from
+    // the cell north of the entrance passes.
+    let ok =
+        |s: CellXY, shape: &[u8], _limit: u32| visits(s, shape).iter().all(|c| c.x < cell(5, 0).x);
+    assert_eq!(
+        path::shorten(&steps, cell(0, 0), true, true, &ok),
+        vec![tunnel, PathStep::Dir(3)]
+    );
+    assert_eq!(
+        path::shorten(&steps, cell(0, 0), true, false, &ok),
+        steps.to_vec()
+    );
+}
+
+/// A train type at cell(0, 0) facing map north, with wall sections on
+/// `walls`, ordered to `to`: the stored path.
+fn train_path(walls: &[CellXY], to: CellXY) -> Vec<u8> {
+    let mut s = scene();
+    s.vehicle(
+        "TESTTRAIN",
+        UnitType {
+            is_train: Some(true),
+            ..unit_type(WHEEL, 40, 6)
+        },
+    );
+    s.register("overlays", "TESTFENCE");
+    s.ruleset.sim.overlays.insert(
+        "TESTFENCE".into(),
+        glasnost_rules::sim::OverlayType {
+            wall: Some(true),
+            ..Default::default()
+        },
+    );
+    s.map.has_overlay_data = true;
+    for &c in walls {
+        s.cell_mut(c).overlay = 0;
+    }
+    s.place_unit(0, "TESTTRAIN", cell(0, 0), 0);
+    let mut w = s.build();
+    let t = vehicles(&w)[0];
+    assert_eq!(compute_to(&mut w, t, to, Mode::Fresh), Search::Found);
+    w.obj(t).unwrap().path.steps.clone()
+}
+
+// spec: S-0212 claim 18 (scenario P9 train runs 2 to 4: the opening detour of a train ordered behind itself is shortened)
+#[test]
+fn train_detours_are_shortened() {
+    // Run 2: 6 cells, the first behind the train.
+    assert_eq!(train_path(&[], cell(0, 6)), vec![3, 4, 5, 4, 4, 4]);
+    // Run 3: the opening 2, 3, 4 becomes 3, 3.
+    assert_eq!(train_path(&[], cell(2, 6)), vec![3, 3, 4, 4, 4, 4]);
+    // Run 4: claim 17 cannot flatten 1, 3 past the wall; claim 18 gives 3, 4, 4, 4.
+    let walls = [cell(-2, 0), cell(-1, 0), cell(1, 0), cell(0, 2), cell(0, 3)];
+    assert_eq!(train_path(&walls, cell(1, 4)), vec![3, 4, 4, 4]);
 }
 
 // ------------------------------------------------------- re-paths, congestion
