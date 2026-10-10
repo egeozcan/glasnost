@@ -3,7 +3,7 @@ id: Q-0020
 title: Absent-key defaults, bridge decks, wall ownership and gate state for the M3 simulation
 status: answered
 related: [S-0207, S-0209, S-0210, S-0211, S-0215]
-answered-by: [S-0207, S-0209, S-0210]
+answered-by: [S-0207, S-0209, S-0210, S-0211]
 ---
 
 ## Need
