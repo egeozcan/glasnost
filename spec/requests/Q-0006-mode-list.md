@@ -1,9 +1,9 @@
 ---
 id: Q-0006
 title: How the mode list names each game mode and its game-mode file
-status: open
+status: answered
 related: [S-0005, S-0006]
-answered-by: []
+answered-by: [S-0006]
 ---
 
 ## Need

@@ -1,9 +1,9 @@
 ---
 id: Q-0007
 title: Names of the sections and keys that the layering rules refer to by role
-status: open
+status: answered
 related: [S-0004, S-0006]
-answered-by: []
+answered-by: [S-0006]
 ---
 
 ## Need
