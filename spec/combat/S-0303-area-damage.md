@@ -2,7 +2,7 @@
 id: S-0303
 title: Area damage (spread, falloff, cells scanned, walls, bridges and detonation effects)
 topic: combat
-revision: 3
+revision: 4
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -84,6 +84,7 @@ addition:
   as it flies.
 - **Sector.** One of the 20 × 20 rectangles of whole cells into which F7 divides the map for the
   flying-object search.
+- **Turn.** In claim 1, an object's share of one tick (S-0203, Terms), not an amount of rotation.
 
 ## Behaviour
 
@@ -119,7 +120,7 @@ addition:
    exceptions for *k* = 11. The two limits are separate: *R* follows *S* exactly, while *k* rounds
    *S* up to the next whole cell when its fraction exceeds 0.01. An object at a distance at most *R*
    in a cell that is not scanned is not hit, and an object in a scanned cell further than *R* is
-   not hit either.
+   not hit either. This has no switch, as decided at the delegated sign-off of 2026-10-10.
    - Backing: `measurable` (scenario A2)
    - Confidence: high
 
@@ -129,6 +130,7 @@ addition:
    otherwise it looks at the ground layer of every scanned cell. It never looks at both. So a
    detonation on a bridge deck hits only objects on bridge decks, and one under or beside the deck
    hits only objects in ground layers, even objects standing on a bridge deck that is within *R*.
+   This has no switch, as decided at the delegated sign-off of 2026-10-10.
    - Backing: `measurable` (scenario A4)
    - Confidence: high
 
@@ -342,7 +344,7 @@ addition:
     taken and no debris appears. One further percent draw *r* follows, and the game-wide barrel
     particle system appears at *P* when *r* < 25. This happens whatever the sign of *D*. Only the centre
     cell is affected, so a barrel next to the centre cell is set off only by its own detonation
-    chain.
+    chain. This has no switch, as decided at the delegated sign-off of 2026-10-10.
     - Backing: `measurable` (scenario A13)
     - Confidence: high for the trigger and the nested detonation; medium for the draws
 
@@ -503,12 +505,16 @@ minimum debris count:
 All the debris below is created at the projectile position *Q* (claim 22).
 
 If the warhead lists debris types *t*₀ … *t*ₘ₋₁ with maxima *u*₀ … *u*ₘ₋₁, the *N* pieces are dealt
-out to the types in turn, *t*₀, *t*₁, … and round again after *t*ₘ₋₁, until none is left. Each turn
-takes one raw value from the scenario random stream, read as a signed integer, and gives type *t*ᵢ
+out in deals *j* = 0, 1, 2, …: deal *j* goes to type *t*ᵢ with *i* = *j* mod *m* (the types in list
+order, and round again after *t*ₘ₋₁), takes the raw value raw*ⱼ*, the next one from the scenario
+random stream, read as a signed integer, and gives that type
 
-> *q*ᵢ = min(|raw| mod (*u*ᵢ + 1), pieces still left)
+> ℓ₀ = *N*, *g*ⱼ = min(|raw*ⱼ*| mod (*u*ᵢ + 1), ℓⱼ), ℓⱼ₊₁ = ℓⱼ − *g*ⱼ
 
 pieces (the "magnitude first" remainder of S-0202 claim 6), each one debris animation of that type.
+ℓⱼ is the number of pieces still left before deal *j*. A deal is made only while pieces are left
+(ℓⱼ > 0), so the deals are *j* = 0 … *J* − 1, with *J* the least *j* for which ℓⱼ = 0, and they
+take *J* raw values (when there is no such *j*, see Edge cases: debris that can never be placed).
 If the warhead lists no debris types, the detonation creates *N* animations, each of the type at
 entry R(0, *c* − 1) of the game-wide metallic debris list (*c* its length), at *Q* raised by 20
 leptons. Exact integer arithmetic.
@@ -831,18 +837,20 @@ armour class, buildings with armour 1.0 and an owner whose country factor for bu
 separate detonations at the same distance from their reference points. *Variant b:* the 1 × 1
 building only, edge fraction 0.5, and a detonation above the centre of its cell (the vertical test
 projectile of S-0306 claim 11, with a detonation altitude field chosen by dry runs until the
-recorder reads *P* at about 300 leptons above the ground over that cell; the projectile type is
+recorder reads *P* at about 300 leptons above the terrain at that cell's centre; the projectile type is
 not of the airburst kind). *Observable:* health lost. *Expected:* the 1 × 1 building loses 100; the
 3 × 3 building loses 900 when all nine cells are within *R* (S-0302's per-hit rules applied to each
 hit). Variant b: F3 with *d* = ⌊*r*(*n*)⌋ − 208 for the distance the recorder gives; with a
 measured distance of 300 that is *d* = 92 and a loss of 94, against 80 if the full distance were
-used and 100 if *d* were 0. *Falsified if:* both buildings lose the same amount (main part), or in
-variant b the loss matches the full distance or *d* = 0.
+used and 100 if *d* were 0. *Falsified if:* in the main part either building loses an amount other
+than 100 for each of its scanned foundation cells within *R* (in particular, if both lose the same
+amount), or in variant b the loss matches the full distance or *d* = 0.
 
 **A4. Bridge-deck layer (claim 4).** *Setup:* a high bridge; one vehicle on the deck and one on the
 ground under the deck in the same cell; detonations (spread 2, edge fraction 1.0) once at the deck
 surface and once at ground level. *Observable:* the health of each vehicle. *Expected:* the deck detonation hits only the deck vehicle, the
-ground detonation only the ground vehicle. *Falsified if:* either detonation hits both.
+ground detonation only the ground vehicle. *Falsified if:* either detonation hits the vehicle of
+the other layer, or fails to hit the vehicle of its own layer.
 
 **A5. Flying aircraft (claims 6, 10).** *Setup:* a stock aircraft hovering or circling at known
 height near a ground target; (a) a ground-level detonation with spread 10 directly below it; (b) a
@@ -1030,10 +1038,4 @@ variant-b aircraft is not, or c leaves the firer undamaged. *Runs:* 3 each.
 
 ## Questions for the project lead
 
-- The allies exception has no switch. If the lead wants one for a detonation whose firer is gone,
-  S-0302 owns it (S-0302 claim 1 and the allies row of its claim 8), for example a switch that keeps
-  the firing house recorded at launch.
-- Three behaviours of the original could each get a quirk switch whose default is the original: an object
-  within *R* in a cell that is not scanned is missed (claim 3); a detonation beside a high bridge
-  misses objects on its deck (claim 4); only a barrel in the centre cell explodes (claim 19). They
-  are fixed behaviour until the lead decides.
+No question for the project lead remains open in this revision.
