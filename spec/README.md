@@ -67,3 +67,4 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0303](combat/S-0303-area-damage.md) | Area damage (spread, falloff, cells scanned, walls, bridges and detonation effects) | combat | 2 | approved | — |
 | [S-0304](combat/S-0304-special-versus-values.md) | Special versus values (what zero and small versus values mean for firing, retaliation and automatic targeting) | combat | 2 | approved | — |
 | [S-0305](combat/S-0305-armour-classes.md) | Armour classes (the class list, its order, and how a type's armour value is read) | combat | 1 | approved | — |
+| [S-0307](combat/S-0307-range.md) | Weapon range test | combat | 1 | approved | — |
