@@ -857,7 +857,7 @@ pub fn shorten(
     let mut q_ref: Option<(CellXY, CellXY)> = None; // (q, p) from the third leg on
     for i in 0..n {
         let PathStep::Dir(dir) = steps[i] else {
-            // spec: S-0212 claim 18 (a tunnel step ends every leg and the reference; never part of a stretch)
+            // spec: S-0212 claim 18 (a tunnel step ends every leg and with it the reference distances and records; never part of a stretch)
             seg_start = i + 1;
             let c = rstarts.get(i + 1).copied().unwrap_or(start);
             leg_first = vec![i + 1];
@@ -878,7 +878,7 @@ pub fn shorten(
             turned = true;
             leg_first.push(i);
             leg_cell.push(s);
-            // spec: S-0212 claim 18 (from the third leg: q the previous leg's first cell, the record Chebyshev(q, p))
+            // spec: S-0212 claim 18 (from the third leg: q the previous leg's first cell; a step's record is the largest of Chebyshev(q, p) and the reference distances of the leg's earlier examined steps)
             if leg_first.len() >= 3 {
                 let q = leg_cell[leg_cell.len() - 2];
                 q_ref = Some((q, s));
@@ -892,7 +892,7 @@ pub fn shorten(
             Some((q, _)) => cheb(q, e),
         };
         if reference > record {
-            // spec: S-0212 claim 18 (a larger reference distance raises the record)
+            // spec: S-0212 claim 18 (in the first two legs a step's record is the largest of 0 and the earlier steps' reference distances: kept as a running maximum; a step above its record does not trigger)
             record = reference;
             continue;
         }

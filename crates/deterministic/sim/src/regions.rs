@@ -2,7 +2,8 @@
 //!
 //! Regions are rebuilt from the passability categories whenever a category
 //! changes (claim 5). The rebuild follows the rule of claim 3 (our engine's
-//! departure D4 from the original's labelling order).
+//! departure D4 from the original's labelling order, accepted by the
+//! project lead).
 
 use glasnost_map::CellXY;
 use glasnost_rules::sim::MovementZone;

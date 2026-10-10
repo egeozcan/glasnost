@@ -1478,3 +1478,16 @@ fn non_player_houses_keep_skill_zero_for_the_crusher_warning() {
         );
     }
 }
+
+// spec: S-0212 claim 27 and S-0209 claim 5 (rows VP20 and VP23, part 5e: an allied infantry unit gives a vehicle stationary friendly while it does not count as moving; once it counts as moving it gives no outcome of its own, and the record's allied infantry house gives moving blocker)
+#[test]
+fn moving_allied_infantry_answers_through_the_record() {
+    let (mut w, m) = asked(Kind::Vehicle, "Cart", |s| {
+        s.place_infantry(0, "Mope", there(), 2);
+    });
+    assert_eq!(veh(&w, m, there()), Outcome::StationaryFriendly);
+    let man = at(&w, Kind::Infantry, there());
+    w.obj_mut(man).unwrap().dest = Some(Target::Cell(cell(5, 5)));
+    assert!(occupancy::counts_as_moving(&w, man));
+    assert_eq!(veh(&w, m, there()), Outcome::MovingBlocker);
+}

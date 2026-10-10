@@ -592,10 +592,10 @@ pub fn vehicle_outcome(w: &World, mover: ObjectId, c: CellXY, reference: i32) ->
             } else if (o.kind != Kind::Infantry && crate::drive::between_steps_or_chain(w, oid))
                 || crate::drive::at_chain_point(w, oid)
             {
-                // spec: S-0209 claim 5 (row VP22)
+                // spec: S-0209 claim 5 (row VP22) and S-0212 claim 27 (a moving allied vehicle between steps, or any unit at a chain point: moving blocker)
                 v = Some(Outcome::MovingBlocker);
             } else {
-                // spec: S-0209 claim 5 (row VP23)
+                // spec: S-0209 claim 5 (row VP23) and S-0212 claim 27 (any other moving allied unit, moving infantry among them, gives no outcome of its own)
                 v = None;
             }
         } else if crusher && crushable_by(w, mover, oid) {
