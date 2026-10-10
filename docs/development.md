@@ -23,7 +23,8 @@ Rust stable (pinned in `rust-toolchain.toml`), one Cargo workspace. Package name
 | `app` | `crates/app` | M0 demo, M1 viewer | winit shell shared by native and web; the asset viewer |
 | `platform-native` | `crates/platform-native` | M0 | Native binary `glasnost` |
 | `platform-web` | `crates/platform-web` | M0 | wasm entry point |
-| `tools` | `crates/tools` | M0 fixtures, M1 local lane | `glasnost-fixtures`, `glasnost-local-lane`; later headless runner, sync-diff |
+| `tools` | `crates/tools` | M0 fixtures, M1 local lane, M3 runner | `glasnost-fixtures`, `glasnost-local-lane`, `glasnost-headless`; later sync-diff |
+| `sim-gate` | `crates/sim-gate` | M3 | The determinism gate: per-tick state hashes of a synthetic replay, native and wasm32 |
 | `xtask` | `xtask` | M0 | Repository checks and build helpers (`cargo xtask help`) |
 
 `app` is not in PLAN.md section 4.2: it holds the event loop and rendering setup that both platform crates share, so native and web run the same code.
@@ -172,6 +173,31 @@ Every quirk switch of the implemented specs has a field in `ini::Quirks`, `vfs::
 - `render::projection` (S-0101), `render::light` (S-0104), `render::compose` (the CPU reference of S-0102's depth compositing), `render::scene` (items in world pixels) and `render::map_gpu` (the WebGL2 map pass, tested pixel for pixel against the CPU reference on a real or software GPU).
 - `app::mapview` builds a map's scene from the decoded map, the rules import and the theater's files; the viewer's *Map viewer* mode lists the install's maps, loads one, scrolls within S-0101's limits, shows a minimap, layer toggles and object info with `rules explain`. Everything that rests on a request is marked provisional and can be hidden.
 
+## Simulation (M3)
+
+`glasnost-sim` runs the game rules on the typed ruleset and map. Everything in it is integers and the soft-float types of `glasnost-num` (S-0205: IEEE binary32/64 in integers, round toward zero under `quirks.chop_rounding`), with ordered containers only.
+
+- **Rules and data.** `rules::SimRules` is built from a resolved ruleset (`SimRules::new(&resolved.ruleset, &resolved.sim_rules_hash)`): typed per-kind tables, the 86 quirk switches of `rules::Quirks` (every one defaulting to the original), and engine defaults cited to their specs. `consts` holds the spec constants given as decimals, as checked bit patterns.
+- **A game.** `load::new_game(rules, map, catalogue, setup)` follows S-0009 (start positions, the initial fill, the overlay stream, recalculation passes, pre-placed objects, the load's draws) and S-0010/S-0211 (terrain recalculation in `glasnost-map`). `load::sandbox_setup` is our viewer's setup: one house per object owner of the map, no start positions.
+- **A tick.** `tick::step` runs S-0203's parts in their places: the turn pass over the update order (with S-0203's removal skips and second turns), each object's behaviour part (`process`, S-0215), its locomotor (`drive` with `tracks`, S-0207 and S-0206 claim 12; `walk`, S-0208), its infantry sequence (`infantry`, S-0107), then the orders (`orders`, S-0213), then the tick number. Occupancy is `cells`/`occupancy` (S-0209), crushing `crush` (S-0210), passability and regions `passability`/`regions` (S-0211, S-0212), pathfinding `path` (S-0212) behind the `Pathfinder` trait.
+- **Orders and input.** Every change a player or our AI makes goes through `orders::issue` (pending lists, S-0213). `targeting` turns a click or key command into orders by S-0214 and S-0213 table T2, for people and AI houses alike; the selection is kept by the caller.
+- **Saves, replays, hashes.** `save::save`/`load` store the whole state with the rules hash; `save::state_hash` is SHA-256 of the state's bytes (derived data such as regions and the path search's memory is not state). `save::Replay` holds the rules hash, the setup and every order with its tick.
+- **Not yet in M3.** Combat (firing, damage, target acquisition: M4) is left as seams; the behaviours other topics own are processed as behaviours without a processing rule and leave a note in `World::notes`.
+
+The determinism gate: `cargo test` checks the first 300 ticks of `crates/sim-gate`'s scripted synthetic replay against `golden/scripted.txt` in a debug build; `cargo xtask gate` checks all 3000 ticks natively in release and as wasm32 under node (CI job *gate*). After a deliberate change of behaviour, regenerate the file with `GLASNOST_UPDATE_GOLDEN=1 cargo test --release -p glasnost-sim-gate -- --include-ignored` and say why in the commit.
+
+The headless runner: `glasnost-headless synthetic [ticks] [seed]` prints the per-tick hashes of the synthetic replay, `glasnost-headless replay <file>` those of a replay file. The local lane: `GLASNOST_GAME_DIR=<install> cargo run --release -p glasnost-tools --bin glasnost-headless -- smoke [ticks] [seed] [index]` loads every map of the install in the sandbox setup, orders every mobile unit to another unit's cell at tick 4, runs the ticks and writes counts and timings (no names, no values) to `local-lane/sim-smoke.txt`.
+
+Provisional rules of the simulation, each tied to a request:
+
+| Where | Interim rule | Request |
+|---|---|---|
+| `path` | no corridor of claim 13; pending pairs of equal cost in recording order after the held candidate; the shortening of early detours (claim 18) is not applied | Q-0017 |
+| `load` | a start list that needs a random start cell is refused (`LoadError::RandomStartCell`); low-bridge end markers complete no bridge; vein seeds are cleared and not rebuilt; off-map neighbours count as blank cells in recalculation | Q-0018 |
+| `rules`, `drive`, `scatter` | the locomotor follows the kind (vehicles drive, infantry walk, aircraft do not move); a driving vehicle meets any blocked outcome other than *blocked* as a moving blocker; vehicles refuse scatter requests; a vehicle's vehicle-present claims are its position's cell and its step's cells | Q-0019 |
+| `rules`, `occupancy`, `cells` | the acceleration and deceleration defaults are the doubles nearest their decimals; `[IQ] GuardArea` absent is 0 and `GuardModeStray` absent falls back to the leash; overlay damage levels absent 1, strength 0; no bridge decks; walls belong to no house; gates read as open | Q-0020 |
+| `objects`, `load` | pre-placed objects start at full strength, facing value × 256, with the placement fall-back as their behaviour | Q-0010, Q-0016 |
+
 ## Tests
 
 ```sh
@@ -192,6 +218,7 @@ The browser lane is described in [web.md](web.md).
 - tests, with lavapipe and `GLASNOST_REQUIRE_GPU=1`;
 - `cargo xtask check`;
 - cargo-deny licence check against `deny.toml` (GPL-3.0-or-later compatible licences only);
+- the determinism gate (`cargo xtask gate`: native release and wasm32 under node);
 - the release web build;
 - the browser lanes:
   - WebGL2 on Chromium, Firefox and WebKit (WebKit non-blocking until it has run green);
