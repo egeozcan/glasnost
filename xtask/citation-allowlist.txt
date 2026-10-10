@@ -5,3 +5,6 @@
 # item. Every entry needs a reason; stale entries fail the check.
 
 crates/deterministic/rules/src/jsonc.rs cite # JSONC syntax parser of our own design (PLAN.md 4.6); its literals are syntax (escapes, radix, depth bound), not game behaviour
+crates/deterministic/num/src/soft.rs cite # IEEE 754 binary32/binary64 arithmetic of our own; its literals are format layout (field widths, bias, working precision), not game behaviour; the rounding rules it implements are cited at their users (S-0205)
+crates/deterministic/num/src/bigmath.rs cite # reference big-integer arithmetic of our own (π, arctangent, sine series) used to check the committed tables against their definitions; its literals are series coefficients and working precision, not game behaviour
+crates/deterministic/num/src/tablegen.rs cite # test-only generator (compiled under cfg(test)) that recomputes the committed tables from their definitions

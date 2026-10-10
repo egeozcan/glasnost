@@ -5,6 +5,7 @@ members = [
     "crates/vfs",
     "crates/ini",
     "crates/convert",
+    "crates/deterministic/num",
     "crates/deterministic/rules",
     "crates/deterministic/map",
     "crates/deterministic/sim",
@@ -32,6 +33,7 @@ glasnost-fmt = { path = "crates/fmt" }
 glasnost-vfs = { path = "crates/vfs" }
 glasnost-ini = { path = "crates/ini" }
 glasnost-convert = { path = "crates/convert" }
+glasnost-num = { path = "crates/deterministic/num" }
 glasnost-rules = { path = "crates/deterministic/rules" }
 glasnost-map = { path = "crates/deterministic/map" }
 glasnost-sim = { path = "crates/deterministic/sim" }

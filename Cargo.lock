@@ -965,6 +965,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "glasnost-num"
+version = "0.0.0"
+dependencies = [
+ "num-bigint",
+ "serde",
+]
+
+[[package]]
 name = "glasnost-platform-native"
 version = "0.0.0"
 dependencies = [
@@ -1014,7 +1022,9 @@ name = "glasnost-sim"
 version = "0.0.0"
 dependencies = [
  "glasnost-map",
+ "glasnost-num",
  "glasnost-rules",
+ "serde",
 ]
 
 [[package]]

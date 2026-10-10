@@ -10,6 +10,8 @@ publish.workspace = true
 [dependencies]
 glasnost-rules.workspace = true
 glasnost-map.workspace = true
+glasnost-num.workspace = true
+serde = { version = "1", features = ["derive"] }
 
 # Simulation crate: determinism lints. The disallowed types, methods and macros
 # are listed in ../clippy.toml, which clippy finds by walking up from this

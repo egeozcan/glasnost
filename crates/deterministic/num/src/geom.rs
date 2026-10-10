@@ -1,0 +1,389 @@
+//! Distances, directions and facings (S-0204).
+
+use num_bigint::BigUint;
+
+use crate::bigmath;
+use crate::soft::{F32, F64, Rounding};
+use crate::tables::ATAN;
+
+/// A facing: 0 … 65535 facing units, 0 = map north, clockwise (glossary G1).
+pub type Facing = u16;
+
+/// Integer square root (floor).
+// nocite: integer square root (Newton iteration), not game behaviour
+pub fn isqrt(n: u128) -> u128 {
+    if n < 2 {
+        return n;
+    }
+    let mut x = 1u128 << (128 - n.leading_zeros()).div_ceil(2);
+    loop {
+        let y = (x + n / x) / 2;
+        if y >= x {
+            return x;
+        }
+        x = y;
+    }
+}
+
+/// The table square root r(n) of S-0204 F1 as `(R, z)` with
+/// r(n) = R × 2^(z − 23), 2^23 ≤ R < 2^24; `None` for n = 0.
+///
+/// `mode` is the rounding of the conversion of `n` to single precision
+/// (S-0204 F1, `quirks.chop_rounding` of S-0205): toward zero it changes
+/// nothing; to nearest it rounds `n` to 24 significant bits first.
+// spec: S-0204 F1 (table square root: 14 significant digits of n / 4^z, root to 24 digits)
+pub fn table_root_parts(n: u64, mode: Rounding) -> Option<(u32, u32)> {
+    if n == 0 {
+        return None;
+    }
+    // spec: S-0204 F1 (n is converted to single precision: 24 significant bits)
+    let n = single_of_integer(n, mode);
+    let len = 64 - n.leading_zeros();
+    let z = (len - 1) / 2;
+    // spec: S-0204 F1 (n / 4^z truncated toward zero to 14 significant binary digits)
+    let r = if len > 14 {
+        let top = u128::from(n >> (len - 14));
+        isqrt(top << (len - 14 + 46 - 2 * z))
+    } else {
+        // spec: S-0204 F1 (root truncated to 24 significant digits: 2^46 scale for 2^23 ≤ R < 2^24)
+        isqrt(u128::from(n) << (46 - 2 * z))
+    };
+    Some((r as u32, z))
+}
+
+/// `n` (non-negative integer) as the integer value of the single nearest to
+/// it by `mode`.
+// spec: S-0205 claim 4 (single precision keeps 24 significant bits)
+fn single_of_integer(n: u64, mode: Rounding) -> u64 {
+    let len = 64 - n.leading_zeros();
+    // spec: S-0205 claim 4 (single precision has a 24-bit significand)
+    if len <= 24 {
+        return n;
+    }
+    let sh = len - 24;
+    let t = n >> sh;
+    let rem = n & ((1u64 << sh) - 1);
+    let t = match mode {
+        Rounding::TowardZero => t,
+        Rounding::Nearest => {
+            let half = 1u64 << (sh - 1);
+            if rem > half || (rem == half && t & 1 == 1) {
+                t + 1
+            } else {
+                t
+            }
+        }
+    };
+    t << sh
+}
+
+/// r(n) as a single-precision value (S-0204 F1).
+pub fn table_root(n: u64, mode: Rounding) -> F32 {
+    match table_root_parts(n, mode) {
+        None => F32::ZERO,
+        Some((r, z)) => {
+            // spec: S-0204 F1 (r = R × 2^(z − 23))
+            F64::from_parts(false, u128::from(r), z as i32 - 23, Rounding::TowardZero)
+                .to_f32(Rounding::TowardZero)
+        }
+    }
+}
+
+/// ⌊r(n)⌋, the distance term of S-0204 claim 5; with `table` false
+/// (`quirks.table_root_distance` off) ⌊√n⌋.
+pub fn root_floor(n: u64, table: bool, mode: Rounding) -> u64 {
+    if !table {
+        return isqrt(u128::from(n)) as u64;
+    }
+    match table_root_parts(n, mode) {
+        None => 0,
+        Some((r, z)) => {
+            // spec: S-0204 F1 (⌊R × 2^(z − 23)⌋)
+            if z <= 23 {
+                u64::from(r >> (23 - z))
+            } else {
+                u64::from(r) << (z - 23)
+            }
+        }
+    }
+}
+
+/// The signed facing difference δ(a, b) of S-0204 F5: −32768 … 32767.
+pub fn delta(a: Facing, b: Facing) -> i32 {
+    // spec: S-0204 F5 (δ = ((b − a + 32768) mod 65536) − 32768)
+    i32::from(b.wrapping_sub(a).wrapping_add(32768)) - 32768
+}
+
+/// The n-step facing of S-0204 F4 for n = 2^b (1 ≤ b ≤ 8).
+pub fn n_step(f: Facing, n: u32) -> u32 {
+    // spec: S-0204 F4 (⌊f × n / 65536 + ½⌋ mod n)
+    ((u32::from(f) * n + 32768) / 65536) % n
+}
+
+/// The 8-direction of a facing (S-0204 F4 with n = 8).
+pub fn eight_direction(f: Facing) -> u8 {
+    // spec: S-0204 claim 9 (8-directions; F4 with n = 8)
+    n_step(f, 8) as u8
+}
+
+/// The 50 table indices at which the original's facing is one unit nearer
+/// to map east or west than the surrogate gives (S-0204 F3).
+// spec: S-0204 F3 (the 50 table exceptions)
+pub const ATAN_EXCEPTIONS: [u16; 50] = [
+    441, 486, 789, 810, 842, 993, 1024, 1115, 1148, 1183, 1203, 1405, 1419, 1443, 1504, 1542, 1582,
+    1618, 1810, 1907, 2015, 2044, 2094, 2136, 2202, 2225, 2400, 2513, 2605, 2621, 2670, 2704, 2721,
+    2848, 3030, 3096, 3312, 3364, 3418, 3502, 3531, 3683, 3715, 3748, 3781, 3849, 3884, 3956, 3993,
+    4069,
+];
+
+/// The direction constants of S-0204 F3.
+struct DirConst {
+    h: F64,
+    c1: F64,
+    pi_d: F64,
+    c2: F64,
+}
+
+fn dir_const() -> DirConst {
+    let rz = Rounding::TowardZero;
+    DirConst {
+        // spec: S-0204 F3 (h = 13176795 / 2^23, single-precision π/2)
+        h: F64::from_parts(false, 13176795, -23, rz),
+        // spec: S-0204 F3 (c₁ = 884279719003555 / 2^49, double-precision π/2)
+        c1: F64::from_parts(false, 884279719003555, -49, rz),
+        // spec: S-0204 F3 (π_d = 884279719003555 / 2^48)
+        pi_d: F64::from_parts(false, 884279719003555, -48, rz),
+        // spec: S-0204 F3 (c₂ = −5733986146512111 / 2^39)
+        c2: F64::from_parts(true, 5733986146512111, -39, rz),
+    }
+}
+
+/// The direction of point Q from point P (S-0204 claim 8, F3), from the
+/// map-axis differences dx = x_Q − x_P and dy = y_Q − y_P in leptons. With
+/// `table` false (`quirks.table_direction` off) the exact angle, rounded to
+/// the nearest facing with halves up.
+// spec: S-0204 F3 (direction; facings modulo 65536; table of 4097 entries)
+pub fn direction(dx: i64, dy: i64, table: bool) -> Facing {
+    // spec: S-0204 F3 (Y = y_P − y_Q grows towards map north)
+    let x = dx;
+    let y = -dy;
+    if !table {
+        return exact_direction(x, y);
+    }
+    let rz = Rounding::TowardZero;
+    let k = dir_const();
+    let ax = u128::from(x.unsigned_abs());
+    let ay = u128::from(y.unsigned_abs());
+    let (theta, index) = if x == 0 {
+        let t = if y > 0 {
+            k.h
+        } else if y < 0 {
+            k.h.negated()
+        } else {
+            F64::ZERO
+        };
+        (t, None)
+    } else {
+        // spec: S-0204 F3 (i = ⌊2^27 |Y| / (3276705 |X|)⌋)
+        let i = (ay << 27) / (3276705 * ax);
+        // spec: S-0204 F3 (A = T(i) for i ≤ 4096, h beyond)
+        let a = if i <= 4096 {
+            F32(ATAN[i as usize]).to_f64()
+        } else {
+            k.h
+        };
+        let base = if x > 0 { a } else { k.pi_d.sub(a, rz) };
+        let t = if y < 0 { base.negated() } else { base };
+        (t, Some(i))
+    };
+    // spec: S-0204 F3 (φ = trunc(trunc53(trunc53(θ − c₁) × c₂)) mod 65536)
+    let v = theta.sub(k.c1, rz).mul(k.c2, rz);
+    let t = v.trunc_i128().unwrap_or(0);
+    let mut phi = t.rem_euclid(65536) as i32;
+    if let Some(i) = index
+        && i <= 4096
+        && ATAN_EXCEPTIONS.contains(&(i as u16))
+    {
+        // spec: S-0204 F3 (one facing unit nearer to map east, or map west when X < 0)
+        let axis = if x > 0 { 16383 } else { 49153 };
+        if phi < axis {
+            phi += 1;
+        } else if phi > axis {
+            phi -= 1;
+        }
+    }
+    phi as Facing
+}
+
+/// The exact direction (S-0204 Edge cases, `quirks.table_direction` off):
+/// round(arctan2(X, Y) × 65536 / (2π)) mod 65536, halves up, with
+/// arctan2(X, Y) the angle clockwise from map north.
+// spec: S-0204 Edge cases (exact direction with `quirks.table_direction` off)
+fn exact_direction(x: i64, y: i64) -> Facing {
+    if x == 0 && y == 0 {
+        return 0;
+    }
+    let s = BigUint::from(1u32) << bigmath::FRAC;
+    let pi = bigmath::pi();
+    let ax = BigUint::from(x.unsigned_abs());
+    let ay = BigUint::from(y.unsigned_abs());
+    // β = arctan(|X| / |Y|), the angle from the Y axis.
+    let beta = if y == 0 {
+        &pi >> 1u32
+    } else {
+        bigmath::atan(&((&ax * &s) / &ay))
+    };
+    let alpha = match (x >= 0, y >= 0) {
+        (true, true) => beta,
+        (true, false) => &pi - beta,
+        (false, false) => &pi + beta,
+        (false, true) => (&pi << 1u32) - beta,
+    };
+    // spec: S-0204 Edge cases (× 65536 / (2π), halves up, mod 65536)
+    let t = (alpha * 32768u32 * &s) / &pi;
+    let rounded = (t + (&s >> 1u32)) >> bigmath::FRAC;
+    let r = u64::try_from(rounded % 65536u32).unwrap_or(0);
+    r as Facing
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const RZ: Rounding = Rounding::TowardZero;
+
+    // spec: S-0204 claim 5 (s = 0 below 16641; r(16641) = 128; shortfall points)
+    #[test]
+    fn table_root_claim_5() {
+        for n in 0..16641u64 {
+            assert_eq!(root_floor(n, true, RZ), isqrt(u128::from(n)) as u64, "{n}");
+        }
+        assert_eq!(root_floor(16641, true, RZ), 128);
+        assert_eq!(isqrt(16641), 129);
+        // s first reaches 2 at 536987929 and 3 at 2147673649.
+        let s = |n: u64| isqrt(u128::from(n)) as u64 - root_floor(n, true, RZ);
+        assert_eq!(s(536987929), 2);
+        assert!((536_000_000..536987929).step_by(997).all(|n| s(n) <= 1));
+        assert_eq!(s(2147673649), 3);
+        // Cell centres: r(65536 m) = 256 r(m) exactly.
+        for m in 1..2000u64 {
+            let (a, b) = (table_root(65536 * m, RZ), table_root(m, RZ));
+            assert_eq!(
+                F64::from_i64(256, RZ).mul(b.to_f64(), RZ).0,
+                a.to_f64().0,
+                "{m}"
+            );
+        }
+        // r(n) never exceeds ⌊√n⌋ and is monotone.
+        let mut prev = 0;
+        for n in (0..10_000_000u64).step_by(9973) {
+            let r = root_floor(n, true, RZ);
+            assert!(r <= isqrt(u128::from(n)) as u64);
+            assert!(r >= prev);
+            prev = r;
+        }
+    }
+
+    // spec: S-0204 claim 5 (the m counts for cells up to 511 apart)
+    #[test]
+    fn table_root_cell_counts() {
+        let mut ms = std::collections::BTreeSet::new();
+        for dx in 0..=511u64 {
+            for dy in 0..=511u64 {
+                if dx + dy > 0 {
+                    ms.insert(dx * dx + dy * dy);
+                }
+            }
+        }
+        assert_eq!(ms.len(), 82489);
+        let (mut exact, mut one) = (0, 0);
+        for &m in &ms {
+            let s = isqrt(u128::from(65536 * m)) as u64 - root_floor(65536 * m, true, RZ);
+            match s {
+                0 => exact += 1,
+                1 => one += 1,
+                _ => {}
+            }
+        }
+        assert_eq!(exact, 23995);
+        assert_eq!(one, 22923);
+    }
+
+    // spec: S-0204 F3 (test values)
+    #[test]
+    fn direction_test_values() {
+        let cases: [(i64, i64, u16); 17] = [
+            (0, -1, 0),
+            (1, 0, 16383),
+            (0, 1, 32767),
+            (-1, 0, 49153),
+            (-1000, 1, 49150),
+            (-1, 200, 32766),
+            (1, -1, 8315),
+            (1, 1, 24451),
+            (-1, 1, 41082),
+            (-1, -1, 57221),
+            (2560, -256, 15368),
+            (256, -2560, 1041),
+            (300, -200, 10304),
+            (-700, 1300, 37922),
+            (1, -100, 104),
+            (1, -200, 0),
+            (9, -97, 966),
+        ];
+        for (dx, dy, want) in cases {
+            assert_eq!(direction(dx, dy, true), want, "({dx}, {dy})");
+        }
+    }
+
+    // spec: S-0204 claim 8 (b) (nearest directions beside each axis and never-taken facings)
+    #[test]
+    fn direction_quantisation() {
+        let mut taken = std::collections::BTreeSet::new();
+        for dx in -300i64..=300 {
+            for dy in -300i64..=300 {
+                taken.insert(direction(dx, dy, true));
+            }
+        }
+        for f in 1..=103u16 {
+            assert!(!taken.contains(&f));
+        }
+        for f in 16129..=16382u16 {
+            assert!(!taken.contains(&f));
+        }
+        assert!(taken.contains(&104));
+        assert!(taken.contains(&65432));
+        assert!(taken.contains(&16128));
+        assert!(taken.contains(&16638));
+        // C1 run g and run f expectations.
+        assert_eq!(direction(256, -6400, true), 417);
+        assert_eq!(direction(-2560, 256, true), 48135);
+    }
+
+    // spec: S-0204 Edge cases (`quirks.table_direction` off: exact angle, halves up)
+    #[test]
+    fn exact_direction_values() {
+        assert_eq!(direction(1, 0, false), 16384);
+        assert_eq!(direction(0, 1, false), 32768);
+        assert_eq!(direction(-1, 0, false), 49152);
+        assert_eq!(direction(1, -1, false), 8192);
+        assert_eq!(direction(-1, -1, false), 57344);
+        assert_eq!(direction(2560, -256, false), 15344);
+        assert_eq!(direction(-2560, 256, false), 48112);
+        assert_eq!(direction(256, -6400, false), 417);
+    }
+
+    // spec: S-0204 F4, F5 (n-step facings and the signed difference)
+    #[test]
+    fn facings() {
+        assert_eq!(delta(0, 32768), -32768);
+        assert_eq!(delta(0, 49153), -16383);
+        assert_eq!(delta(49153, 16383), 32766);
+        assert_eq!(n_step(4095, 8), 0);
+        assert_eq!(n_step(4096, 8), 1);
+        assert_eq!(n_step(65535, 8), 0);
+        assert_eq!(n_step(1024, 32), 1);
+        assert_eq!(n_step(127, 256), 0);
+        assert_eq!(n_step(128, 256), 1);
+    }
+}
