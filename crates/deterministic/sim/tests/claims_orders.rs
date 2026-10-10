@@ -528,3 +528,77 @@ fn s0215_anti_air_rate_default() {
         assert_eq!(p.aa_rate_delay, p.rate_delay);
     }
 }
+
+// spec: S-0213 claim 14 (house orders apply at the tick boundary in the order of claim 3)
+// spec: S-0213 table T1 (cheer: all of the issuer's infantry cheer, S-0107 claim 6 for a type with a cheer sequence)
+#[test]
+fn s0213_cheer() {
+    let mut r = testkit::ruleset();
+    r.sim.infantry.get_mut("WALKER").unwrap().sequences.insert(
+        "cheer".into(),
+        glasnost_rules::sim::SequenceEntry {
+            start: 0,
+            count: 8,
+            multiplier: 0,
+            direction: None,
+        },
+    );
+    let rules = Arc::new(SimRules::new(&r, "cheer"));
+    let mut w = new_game(
+        rules,
+        &testkit::map(),
+        testkit::catalogue(),
+        &testkit::setup(1),
+    )
+    .unwrap();
+    while w.tick < 4 {
+        tick::step(&mut w);
+    }
+    assert!(orders::issue(&mut w, BETA, Order::Cheer));
+    tick::step(&mut w);
+    for id in of(&w, 1, Kind::Infantry, 0) {
+        let s = w.obj(id).unwrap().infantry.as_ref().unwrap().seq;
+        assert_eq!(s, Some(glasnost_sim::infantry::Seq::Cheer));
+    }
+    // Alpha's infantry do not cheer.
+    for id in of(&w, 0, Kind::Infantry, 0) {
+        let s = w.obj(id).unwrap().infantry.as_ref().unwrap().seq;
+        assert_ne!(s, Some(glasnost_sim::infantry::Seq::Cheer));
+    }
+}
+
+// spec: S-0213 claim 19 (a cheer is accepted only after more than R ticks since the last; −100 at program start; the memory spans the session)
+#[test]
+fn s0213_cheer_rate_limit() {
+    let mut r = testkit::ruleset();
+    r.sim.general.maximum_cheer_rate = Some(150);
+    let rules = Arc::new(SimRules::new(&r, "cheer"));
+    let mut w = new_game(
+        rules.clone(),
+        &testkit::map(),
+        testkit::catalogue(),
+        &testkit::setup(1),
+    )
+    .unwrap();
+    let mut memory = targeting::CheerMemory::default();
+    while w.tick < 50 {
+        tick::step(&mut w);
+    }
+    // 50 > −100 + 150 is false: refused.
+    assert_eq!(memory.cheer(&w), None);
+    while w.tick < 51 {
+        tick::step(&mut w);
+    }
+    assert_eq!(memory.cheer(&w), Some(Order::Cheer));
+    assert_eq!(memory.last, 51);
+    // A new game keeps the memory (quirks.cheer_memory_spans_session).
+    let w2 = new_game(
+        rules,
+        &testkit::map(),
+        testkit::catalogue(),
+        &testkit::setup(1),
+    )
+    .unwrap();
+    memory.game_start(&w2);
+    assert_eq!(memory.last, 51);
+}

@@ -52,17 +52,21 @@ pub enum Order {
         /// The guard spot.
         spot: Target,
     },
+    /// Cheer: all of the issuing house's infantry cheer (S-0213 table T1,
+    /// a house order with no actor).
+    Cheer,
 }
 
 impl Order {
-    /// The actor the order names.
-    pub fn actor(&self) -> ObjectId {
+    /// The actor the order names; house orders have none.
+    pub fn actor(&self) -> Option<ObjectId> {
         match *self {
             Order::Behaviour { actor, .. }
             | Order::Stop { actor }
             | Order::Scatter { actor }
             | Order::Deploy { actor }
-            | Order::GuardSpot { actor, .. } => actor,
+            | Order::GuardSpot { actor, .. } => Some(actor),
+            Order::Cheer => None,
         }
     }
 }
@@ -105,7 +109,7 @@ pub fn apply_pending(w: &mut World) {
             .iter()
             .filter(|o| !matches!(o, Order::Behaviour { .. }))
         {
-            apply_other(w, o);
+            apply_other(w, HouseId(hi as u8), o);
         }
         // spec: S-0213 claim 3 (then the behaviour orders, in issue order)
         let behaviour: Vec<Order> = orders
@@ -143,7 +147,7 @@ fn target_ok(w: &World, t: Option<Target>) -> bool {
     }
 }
 
-fn apply_other(w: &mut World, o: &Order) {
+fn apply_other(w: &mut World, house: HouseId, o: &Order) {
     match *o {
         Order::Stop { actor } => {
             // spec: S-0213 claim 8 (live and on the map; tethering, construction and tunnels do not arise yet)
@@ -220,6 +224,18 @@ fn apply_other(w: &mut World, o: &Order) {
             // spec: S-0213 claim 20 (needs only a live actor; sets its guard spot)
             if let Some(ob) = w.obj_mut(actor) {
                 ob.guard_spot = Some(spot);
+            }
+        }
+        Order::Cheer => {
+            // spec: S-0213 table T1 (cheer: all of the issuer's infantry cheer, S-0107's cheer sequence)
+            let infantry: Vec<ObjectId> = w
+                .objects
+                .values()
+                .filter(|o| o.kind == Kind::Infantry && o.owner == Some(house) && o.on_map)
+                .map(|o| o.id)
+                .collect();
+            for id in infantry {
+                crate::infantry::request(w, id, crate::infantry::Seq::Cheer, false);
             }
         }
         Order::Behaviour { .. } => {}
@@ -362,7 +378,9 @@ fn group_destinations(w: &mut World, orders: &[Order]) -> Vec<Option<Target>> {
         if let Some((_, _, _, Some(Target::Cell(common)))) = k
             && j - i >= MIN_RUN
         {
-            let run: Vec<(usize, ObjectId)> = (i..j).map(|n| (n, orders[n].actor())).collect();
+            let run: Vec<(usize, ObjectId)> = (i..j)
+                .filter_map(|n| orders[n].actor().map(|a| (n, a)))
+                .collect();
             for (n, c) in spread(w, &run, common) {
                 out[n] = Some(Target::Cell(c));
             }

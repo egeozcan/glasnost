@@ -1315,6 +1315,44 @@ fn order_for(
     }
 }
 
+/// The last accepted cheer, kept by the input side across the games of a
+/// session (S-0213 claim 19).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CheerMemory {
+    /// Tick of the last accepted cheer.
+    pub last: i32,
+}
+
+impl Default for CheerMemory {
+    fn default() -> Self {
+        // spec: S-0213 claim 19 (at program start the last-cheer tick is −100)
+        Self { last: -100 }
+    }
+}
+
+impl CheerMemory {
+    /// A game starts: with `quirks.cheer_memory_spans_session` off the
+    /// memory is reset (S-0213 claim 19).
+    pub fn game_start(&mut self, w: &World) {
+        if !w.rules().quirks.cheer_memory_spans_session {
+            *self = Self::default();
+        }
+    }
+
+    /// The cheer command (S-0213 table T2, claim 19): the order to issue,
+    /// when the rate limit lets it through. An accepted press is recorded
+    /// even if the pending list then drops the order.
+    pub fn cheer(&mut self, w: &World) -> Option<Order> {
+        // spec: S-0213 Formulas (accepted ⇔ t > L + R)
+        if w.tick > self.last.wrapping_add(w.rules().general.cheer_rate) {
+            self.last = w.tick;
+            Some(Order::Cheer)
+        } else {
+            None
+        }
+    }
+}
+
 /// A key command for the selection (S-0213 table T2 and claim 18): each
 /// selected object in selection order gets at most one order.
 pub fn key_command(
