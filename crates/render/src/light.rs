@@ -114,6 +114,10 @@ pub struct LightQuirks {
     /// animations are drawn at 1000; off, at the unit cell's unscaled
     /// ground level.
     pub deploy_animation_unlit: bool,
+    /// `quirks.building_light_tint_default_1000` (claim 12): an absent
+    /// building light tint is 1000.0, stored 1 000 000 ‰
+    /// ([`building_light_tint_default`]). Off: 1.0, stored 1000 ‰.
+    pub building_light_tint_default_1000: bool,
 }
 
 impl Default for LightQuirks {
@@ -129,7 +133,62 @@ impl Default for LightQuirks {
             aircraft_height_light_ion_only: true,
             building_light_from_top_left_cell: true,
             deploy_animation_unlit: true,
+            building_light_tint_default_1000: true,
         }
+    }
+}
+
+impl LightQuirks {
+    /// The switches by name.
+    pub fn named(&self) -> [(&'static str, bool); 10] {
+        [
+            (
+                "tile_table_kept_on_relight",
+                self.tile_table_kept_on_relight,
+            ),
+            (
+                "near_black_tint_zeroes_scaled_ground",
+                self.near_black_tint_zeroes_scaled_ground,
+            ),
+            ("red_normalisation_divisor", self.red_normalisation_divisor),
+            (
+                "normalisation_truncated_scale",
+                self.normalisation_truncated_scale,
+            ),
+            (
+                "dominator_ground_uses_nuke_level",
+                self.dominator_ground_uses_nuke_level,
+            ),
+            (
+                "incremental_relight_differs",
+                self.incremental_relight_differs,
+            ),
+            (
+                "aircraft_height_light_ion_only",
+                self.aircraft_height_light_ion_only,
+            ),
+            (
+                "building_light_from_top_left_cell",
+                self.building_light_from_top_left_cell,
+            ),
+            ("deploy_animation_unlit", self.deploy_animation_unlit),
+            (
+                "building_light_tint_default_1000",
+                self.building_light_tint_default_1000,
+            ),
+        ]
+    }
+}
+
+/// The stored value, in ‰, of a building light tint whose key is absent
+/// (claim 12).
+pub fn building_light_tint_default(q: &LightQuirks) -> i32 {
+    if q.building_light_tint_default_1000 {
+        // spec: S-0104 claim 12 (an absent tint is 1000.0, stored 1 000 000 ‰)
+        1_000_000
+    } else {
+        // spec: S-0104 Edge cases (quirks.building_light_tint_default_1000 off: 1.0, stored 1000 ‰)
+        NEUTRAL
     }
 }
 
@@ -1039,6 +1098,7 @@ mod tests {
         aircraft_height_light_ion_only: true,
         building_light_from_top_left_cell: true,
         deploy_animation_unlit: true,
+        building_light_tint_default_1000: true,
     };
 
     /// Synthetic palette: entry i = (i, 255 − i, i / 2).
@@ -1633,6 +1693,25 @@ mod tests {
             HeightTerms::dominator_full_recompute(7, 3, &off),
             HeightTerms::uniform(7, 3)
         );
+    }
+
+    /// spec: S-0104 claim 12, Edge cases (quirks.building_light_tint_default_1000)
+    #[test]
+    fn building_tint_default_switch() {
+        let on = LightQuirks::default();
+        let off = LightQuirks {
+            building_light_tint_default_1000: false,
+            ..on
+        };
+        assert_eq!(building_light_tint_default(&on), 1_000_000);
+        assert_eq!(building_light_tint_default(&off), 1000);
+        // A light without tint keys at falloff 500 ‰ on a neutral map tint:
+        // on, each channel adds 500 000 ‰ and reaches the 2000 clamp; off,
+        // it adds 500 ‰.
+        let falloff = 500;
+        let add = |t: i32| i64::from(t) * falloff / 1000;
+        assert!(1000 + add(building_light_tint_default(&on)) >= i64::from(LEVEL_MAX));
+        assert_eq!(1000 + add(building_light_tint_default(&off)), 1500);
     }
 
     /// spec: S-0104 claim 4, Formulas "Ambient fade"

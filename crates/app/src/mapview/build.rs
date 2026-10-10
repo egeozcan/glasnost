@@ -159,8 +159,6 @@ const CLIFF_LEVELS: i32 = 3; // spec: S-0102 Constants (cliff fudge test)
 const DEFAULT_CLIFF_FUDGE: i32 = 10; // spec: S-0102 claim 14 (absent fudge values: cliff 10)
 /// Default light radius of building lights (S-0104 claim 12).
 const DEFAULT_LIGHT_RADIUS: i32 = 5000; // spec: S-0104 Constants (building light radius default)
-/// Building light tint default, 1000.0 as stored (S-0104 claim 12).
-const DEFAULT_LIGHT_TINT: i32 = 1_000_000; // spec: S-0104 claim 12 (tint default 1000.0, stored 1 000 000 ‰)
 /// Voxel lighting table file (S-0105 Import mapping).
 pub const VPL_FILE: &[u8] = b"voxels.vpl"; // spec: S-0105 Import mapping
 
@@ -543,9 +541,10 @@ impl Builder<'_> {
                 continue;
             }
             let (w, h) = self.foundation(i);
-            let tint = |k: &[u8]| {
-                derived(self.import, Kind::Buildings, i, k).map_or(DEFAULT_LIGHT_TINT, |v| v as i32)
-            };
+            // spec: S-0104 claim 12 (an absent tint's default, quirks.building_light_tint_default_1000)
+            let absent = light::building_light_tint_default(&LightQuirks::default());
+            let tint =
+                |k: &[u8]| derived(self.import, Kind::Buildings, i, k).map_or(absent, |v| v as i32);
             let c = s.placed.cell;
             // spec: S-0104 claim 12 (one light at the building's centre, counting at detail 2)
             sources.push(LightSource::building(
