@@ -27,6 +27,10 @@ use glasnost_num::F64;
 use glasnost_render::compose::{DIAMOND_WIDTH, DepthTest, Paint, Profile, row565};
 
 use glasnost_render::light::{self, DetailLevel, LightQuirks, LightSource, TileTable};
+use glasnost_render::overlay::{
+    DECK_BRIDGES, Flags, OverlayQuirks, Row as OverlayRow, Run, apply_image, deck_frame,
+    draw_shift, table_row as overlay_table_row, tiberium_body, tiberium_of,
+};
 use glasnost_render::palette::{PaletteState, TINT_EXEMPT, house_palette};
 use glasnost_render::projection::{
     LEVEL_LEPTONS, TERRAIN_LIFT, cell_centre, cell_top, height_lift, project_lifted,
@@ -138,7 +142,10 @@ const WHITE: [i32; 3] = [1000, 1000, 1000]; // spec: S-0104 claim 3 (house-colou
 /// Ore and gem overlays are drawn at brightness 1000 (S-0104 claim 13).
 const NEUTRAL_BRIGHTNESS: i32 = 1000; // spec: S-0104 claim 13 (ore and gem overlays)
 /// The veinhole marker overlay index (S-0009 claim 14).
-const VEINHOLE_MARKER: u8 = 126; // spec: S-0009 Constants (veinhole marker overlay index)
+/// Rows an ore-spawning terrain object is drawn higher (S-0102 claim 23).
+const ORE_SPAWNER_RAISE: i32 = 16; // spec: S-0102 Constants (ore-spawning terrain object raise)
+/// Height levels a bridge deck adds to an overlay's depth (S-0102 claim 15).
+const DECK_LEVELS: i32 = 4; // spec: S-0102 Constants (overlay depth bias: level + 4 for bridge decks)
 /// Bridge deck height in levels (S-0102 claim 15).
 const SITUATIONAL: i32 = -1; // spec: S-0102 claim 14 (s = −1 in the ordinary case)
 /// A cliff cell is more than this many levels higher (S-0102 claim 14).
@@ -152,12 +159,16 @@ const DEFAULT_LIGHT_TINT: i32 = 1_000_000; // spec: S-0104 claim 12 (tint defaul
 /// Voxel lighting table file (S-0105 Import mapping).
 pub const VPL_FILE: &[u8] = b"voxels.vpl"; // spec: S-0105 Import mapping
 
-/// The provisional notes, by request.
+/// The notes a scene can carry: gaps in the specs (with their request) and
+/// parts our viewer does not draw yet.
 mod notes {
     pub const TILES_UNLOADED: &str = "no game was set up: tiles are drawn as the map stores them, before the load's terrain recalculation and smoothing (S-0010 claim 12)";
-    pub const PLACEMENT: &str =
-        "Q-0011: sprites are centred on their object's point by their canvas (provisional)";
-    pub const OVERLAY: &str = "Q-0012: overlay and smudge frames and palettes are provisional";
+    pub const OVERLAY_SHADOW_DEPTH: &str =
+        "Q-0021: an overlay shadow's depth bias is taken as its overlay's, flat (provisional)";
+    pub const RUBBLE: &str = "rubble overlays outside a rubble cell draw nothing (S-0112 claim 5); rubble cells arise only in play";
+    pub const SMUDGE_CLIP: &str = "a smudge is painted whole once per covered cell, not clipped to that cell (S-0102 claim 25): it differs only where covered cells differ in level or light";
+    pub const TERRAIN_STRENGTH: &str = "a terrain object type without a strength key is drawn with image frame 0 (S-0102 claim 23; no spec gives the absent default)";
+    pub const ANIMATED_TERRAIN: &str = "animated terrain objects show image frame 0: their stages need animation playback (S-0102 claim 23)";
     pub const VOXEL_SHADOW_POINT: &str = "voxel shadows are placed at the object's ground point (the locomotor's shadow point has no spec)";
     pub const NO_SLOT_ANIMS: &str = "building slot animations (S-0108) need animation playback, which has no spec yet: not drawn";
     pub const NO_COMPANION: &str =
@@ -350,6 +361,9 @@ impl Lights {
 struct Rows {
     tiles: BTreeMap<TileTable, (usize, usize)>,
     houses: BTreeMap<[u8; 3], (usize, usize)>,
+    /// The start-up tables: `false` the resource table, `true` the mine
+    /// table (S-0112 claim 2).
+    startup: BTreeMap<bool, (usize, usize)>,
 }
 
 /// What a scene's builder keeps for drawing more items later: the art file,
@@ -469,8 +483,9 @@ pub fn build_parts(inputs: &Inputs, live: bool) -> (Built, Painter) {
     };
     b.light_cells();
     b.tiles();
-    b.overlays();
+    // spec: S-0102 claim 25 (a smudge is painted right after the terrain tile; overlays come later)
     b.smudges();
+    b.overlays();
     b.terrain_objects();
     let mut ground = Vec::new();
     b.structures(&mut ground);
@@ -877,22 +892,72 @@ impl Builder<'_> {
         }
     }
 
-    /// Overlays (S-0009 claim 12, S-0102 claims 12 and 13, S-0104 claim 13;
-    /// frames and palettes provisional, Q-0012).
+    /// The shade row of an untinted start-up table (S-0112 Terms, claim 2;
+    /// S-0104 claim 6): the resource table, or the mine table.
+    fn startup_row(&mut self, mine: bool, brightness: i32) -> usize {
+        let q = OverlayQuirks::default();
+        let (base, n) = match self.p.rows.startup.get(&mine) {
+            Some(r) => *r,
+            None => {
+                // spec: S-0112 claim 2 (quirks.resource_palettes_from_start: the start-up palettes; off,
+                // the loaded theater's theater palette and unit palette)
+                let pal = match (mine, q.resource_palettes_from_start) {
+                    (false, true) => &self.palettes.resource,
+                    (true, true) => &self.palettes.mine,
+                    (false, false) => &self.palettes.theater,
+                    (true, false) => &self.palettes.unit,
+                };
+                let t = light::untinted_table(pal);
+                let base = self.built.scene.rows.len();
+                for row in &t {
+                    self.built.scene.add_row(row565(row));
+                }
+                self.p.rows.startup.insert(mine, (base, t.len()));
+                (base, t.len())
+            }
+        };
+        base + light::brightness_row(brightness, n, light::DEFAULT_LIGHT_ALPHA)
+    }
+
+    /// Each tiberium's image run, in tiberium list order, from the image
+    /// numbers its rules layers gave (S-0112 claim 10).
+    fn tiberium_runs(&self) -> Vec<Option<Run>> {
+        let q = OverlayQuirks::default();
+        let Some(list) = self.import.outcome.registries.get(&Kind::Tiberiums) else {
+            return Vec::new();
+        };
+        list.iter()
+            .map(|t| {
+                let mut run = None;
+                if let Some(k) = t.keys.get(&b"Image"[..]) {
+                    for e in &k.history {
+                        if let glasnost_convert::layers::What::Set(v) = &e.what
+                            && let Some(v) = value::integer(v)
+                        {
+                            run = apply_image(run, v, &q);
+                        }
+                    }
+                }
+                run
+            })
+            .collect()
+    }
+
+    /// Overlays and their shadows (S-0112 claims 1 to 9; S-0102 claims 12,
+    /// 13 and 24; S-0009 claim 12).
     fn overlays(&mut self) {
-        let list_len = self
-            .import
-            .outcome
-            .registries
-            .get(&Kind::Overlays)
-            .map_or(0, Vec::len);
+        let q = OverlayQuirks::default();
+        let k = Kind::Overlays;
+        let list_len = self.import.outcome.registries.get(&k).map_or(0, Vec::len);
+        let grid = self.cells_loaded.unwrap_or(&self.map.cells);
         let cells: Vec<(CellXY, glasnost_map::Cell)> =
-            self.map.cells.iter().map(|(c, cell)| (c, *cell)).collect();
+            grid.iter().map(|(c, cell)| (c, *cell)).collect();
+        let runs = self.tiberium_runs();
+        let (local_hsv, _) = self.owner_colour(HUMAN);
         let mut beyond = 0usize;
         for (c, cell) in cells {
             let o = cell.overlay;
-            // spec: S-0009 claim 14 (veinhole markers are cleared)
-            if o == NO_OVERLAY || o == VEINHOLE_MARKER {
+            if o == NO_OVERLAY {
                 continue;
             }
             let idx = usize::from(o);
@@ -901,88 +966,166 @@ impl Builder<'_> {
                 beyond += 1;
                 continue;
             }
+            let flag = |key: &[u8]| rule_bool(self.import, k, idx, key, false);
+            let flags = Flags {
+                tiberium: flag(b"Tiberium"),
+                wall: flag(b"Wall"),
+                crate_: flag(b"Crate"),
+                rubble: flag(b"IsRubble"),
+                // spec: S-0102 Import mapping (overlay Land: a railroad land type)
+                railroad: rule(self.import, k, idx, b"Land")
+                    .is_some_and(|v| value::text(v, usize::MAX).eq_ignore_ascii_case(b"Railroad")),
+            };
             // spec: S-0009 claim 12 (crate overlays never appear in skirmish or multiplayer)
-            if self.options.skirmish && rule_bool(self.import, Kind::Overlays, idx, b"Crate", false)
-            {
+            if self.cells_loaded.is_none() && self.options.skirmish && flags.crate_ {
                 continue;
             }
-            let Some(sprite) = self
-                .import
-                .arts
-                .get(&(Kind::Overlays, idx))
-                .and_then(|a| a.sprite.clone())
-            else {
-                // spec: S-0009 claim 12 (an overlay without artwork or cell animation is not created)
-                continue;
-            };
-            let k = (Kind::Overlays, idx);
-            let tiberium = rule_bool(self.import, k.0, idx, b"Tiberium", false);
-            let wall = rule_bool(self.import, k.0, idx, b"Wall", false);
-            let rock = rule_bool(self.import, k.0, idx, b"IsARock", false);
-            // spec: S-0102 claim 12 (drawn flat unless the type says otherwise; walls always upright)
-            let flat = !wall && (tiberium || rule_bool(self.import, k.0, idx, b"DrawFlat", true));
+            // spec: S-0112 claim 1 (a deck cell: one whose overlay is at a bridge position)
+            let deck = DECK_BRIDGES.contains(&o);
+            let table_row = overlay_table_row(o, flags, deck);
+            let d = cell.overlay_data;
             let level = i32::from(cell.level);
-            // spec: S-0102 claim 13 (overlay biases: −2 − 15ℓ, or −17 − 15ℓ for other upright types)
-            let bias = if flat || wall || rock || tiberium {
-                -2 - TERRAIN_LIFT * level
-            } else {
-                -17 - TERRAIN_LIFT * level
-            };
-            let light = self.p.lights.get(c);
-            // spec: S-0104 claim 13 (ore and gems 1000; walls U; others the scaled ground level)
-            let b = if tiberium {
-                NEUTRAL_BRIGHTNESS
-            } else if wall {
-                light.map_or(NEUTRAL_BRIGHTNESS, |l| l.unscaled_ground)
-            } else {
-                light.map_or(NEUTRAL_BRIGHTNESS, |l| l.scaled_ground)
-            };
+            let light = self.p.lights.get(c).copied();
+            let scaled = light.map_or(NEUTRAL_BRIGHTNESS, |l| l.scaled_ground);
             let table = light.map_or(TileTable::Neutral, |l| l.table);
-            // provisional (Q-0012): overlays use their cell's tile shade table
-            let row = self.tile_row(table, b);
-            let frames = self.sprite_frames(&sprite).unwrap_or(0);
-            // provisional (Q-0012): ore shows the frame of its data value, other overlays frame 0
-            let frame = if tiberium && usize::from(cell.overlay_data) < frames / 2 {
-                usize::from(cell.overlay_data)
-            } else {
-                0
+            // spec: S-0112 claim 1 (palette, shade table and brightness by row)
+            let paint_row = match table_row {
+                OverlayRow::Marker | OverlayRow::Rubble => None,
+                OverlayRow::Deck => Some(
+                    self.tile_row(table, light.map_or(NEUTRAL_BRIGHTNESS, |l| l.scaled_raised)),
+                ),
+                // spec: S-0112 claim 1 row 3 (ore and gems: the start-up resource table at 1000)
+                OverlayRow::Tiberium => Some(self.startup_row(false, NEUTRAL_BRIGHTNESS)),
+                // spec: S-0112 claim 1 row 4 (walls: the local player's house colour, quirks.wall_local_player_colour; U)
+                OverlayRow::Wall => {
+                    let _ = q.wall_local_player_colour;
+                    Some(self.house_row(
+                        local_hsv,
+                        light.map_or(NEUTRAL_BRIGHTNESS, |l| l.unscaled_ground),
+                    ))
+                }
+                OverlayRow::Vein => Some(self.startup_row(false, scaled)),
+                OverlayRow::Crate | OverlayRow::Other => Some(self.tile_row(table, scaled)),
             };
+            let own_sprite = self.overlay_sprite(idx);
+            // spec: S-0112 claims 1, 4 and 6 (the body's sprite and image frame)
+            let body: Option<(Vec<u8>, usize)> = match table_row {
+                OverlayRow::Marker | OverlayRow::Rubble => None,
+                OverlayRow::Deck => own_sprite.clone().map(|s| (s, deck_frame(d, (c.x, c.y)))),
+                OverlayRow::Tiberium => {
+                    let run = tiberium_of(i32::from(o), &runs).and_then(|t| runs[t]);
+                    match run {
+                        // spec: S-0112 claim 4 (the body comes from the tiberium's run, by cell position)
+                        Some(run) => {
+                            let p = tiberium_body(run, (c.x, c.y), cell.slope);
+                            usize::try_from(p)
+                                .ok()
+                                .and_then(|p| self.overlay_sprite(p))
+                                .map(|s| (s, usize::from(d)))
+                        }
+                        // spec: S-0112 claim 12 (no run: the stored type, with the data value as the frame)
+                        None => own_sprite.clone().map(|s| (s, usize::from(d))),
+                    }
+                }
+                OverlayRow::Crate => own_sprite.clone().map(|s| (s, 0)),
+                OverlayRow::Wall | OverlayRow::Vein | OverlayRow::Other => {
+                    own_sprite.clone().map(|s| (s, usize::from(d)))
+                }
+            };
+            if table_row == OverlayRow::Rubble {
+                self.note(notes::RUBBLE);
+            }
+            // spec: S-0102 claim 12 (drawn flat unless the type says otherwise; walls always upright)
+            let rock = flag(b"IsARock");
+            let flat = !flags.wall
+                && (flags.tiberium || rule_bool(self.import, k, idx, b"DrawFlat", true));
+            // spec: S-0102 Constants (overlay depth bias: level + 4 for bridge decks)
+            let depth_level = if deck { level + DECK_LEVELS } else { level };
+            // spec: S-0102 claim 13 (overlay biases: −2 − 15ℓ, or −17 − 15ℓ for other upright types)
+            let bias = if flat || flags.wall || rock || flags.tiberium {
+                -2 - TERRAIN_LIFT * depth_level
+            } else {
+                -17 - TERRAIN_LIFT * depth_level
+            };
+            // spec: S-0102 claim 24 (the cell's centre at level 0, lifted 15 rows per level, plus the shift s)
+            let (shift, shadow_offset) = draw_shift(o, flags, deck, d);
             let (qx, qy) = cell_top(c.x, c.y);
-            // provisional (Q-0011): centred on the cell centre; spec: S-0101 claim 11 (lift 15 per level)
-            let p = (qx, qy + 15 - TERRAIN_LIFT * level);
-            let name = self.import.outcome.registries[&Kind::Overlays][idx]
-                .name
-                .clone();
+            let p = (qx, qy + 15 - TERRAIN_LIFT * level + shift);
+            let name = self.import.outcome.registries[&k][idx].name.clone();
             let object = self.add_object(ObjectInfo {
                 kind: "overlay",
                 type_name: String::from_utf8_lossy(&name).into_owned(),
                 owner: String::new(),
                 cell: c,
-                entry: format!("type index {o}, data {}", cell.overlay_data),
-                notes: vec![notes::OVERLAY.into(), notes::PLACEMENT.into()],
+                entry: format!("type index {o}, data {d}"),
+                notes: Vec::new(),
             });
-            if let Some(item) = self.place_sprite(
-                &sprite,
-                frame,
-                p,
-                DepthTest::Writer,
-                ItemDepth::Profile {
-                    profile: if flat {
-                        Profile::Flat
-                    } else {
-                        Profile::Upright
+            // spec: S-0112 claim 9 (an image frame beyond the sprite draws nothing)
+            if let (Some((sprite, frame)), Some(row)) = (&body, paint_row)
+                && self.sprite_frames(sprite).is_some_and(|n| *frame < n)
+                && let Some(item) = self.place_sprite(
+                    sprite,
+                    *frame,
+                    p,
+                    DepthTest::Writer,
+                    ItemDepth::Profile {
+                        profile: if flat {
+                            Profile::Flat
+                        } else {
+                            Profile::Upright
+                        },
+                        bias,
+                        companion: None,
                     },
-                    bias,
-                    companion: None,
-                },
-                Paint::Row(row),
-                Group::Overlays,
-                true,
-                Some(object),
-            ) {
+                    Paint::Row(row),
+                    Group::Overlays,
+                    false,
+                    Some(object),
+                )
+            {
                 self.built.scene.items.push(item);
-                self.note(notes::OVERLAY);
-                self.note(notes::PLACEMENT);
+            }
+            // spec: S-0112 claim 8 (the shadow: crate N/2; rubble none; otherwise the stored type, d + N/2)
+            let shadow: Option<(Vec<u8>, usize)> = if flags.crate_ {
+                own_sprite.map(|s| {
+                    let n = self.sprite_frames(&s).unwrap_or(0);
+                    (s, n / 2)
+                })
+            } else if flags.rubble {
+                None
+            } else if q.overlay_shadow_from_stored_type {
+                own_sprite.map(|s| {
+                    let n = self.sprite_frames(&s).unwrap_or(0);
+                    (s, usize::from(d) + n / 2)
+                })
+            } else {
+                // spec: S-0112 Edge cases (switch off: the body's sprite, body frame + N/2)
+                body.map(|(s, f)| {
+                    let n = self.sprite_frames(&s).unwrap_or(0);
+                    (s, f + n / 2)
+                })
+            };
+            if let Some((sprite, frame)) = shadow
+                && self.sprite_frames(&sprite).is_some_and(|n| frame < n)
+                && let Some(item) = self.place_sprite(
+                    &sprite,
+                    frame,
+                    (p.0 + shadow_offset.0, p.1 + shadow_offset.1),
+                    DepthTest::Writer,
+                    // provisional (Q-0021): an overlay shadow's depth bias is the overlay's own, flat
+                    ItemDepth::Profile {
+                        profile: Profile::Flat,
+                        bias,
+                        companion: None,
+                    },
+                    Paint::Shadow,
+                    Group::Shadows,
+                    true,
+                    Some(object),
+                )
+            {
+                self.built.scene.items.push(item);
+                self.note(notes::OVERLAY_SHADOW_DEPTH);
             }
         }
         if beyond > 0 {
@@ -994,11 +1137,23 @@ impl Builder<'_> {
         }
     }
 
-    /// Smudges (provisional throughout: no spec draws them yet).
+    /// The sprite of the overlay type at list position `idx`.
+    fn overlay_sprite(&self, idx: usize) -> Option<Vec<u8>> {
+        self.import
+            .arts
+            .get(&(Kind::Overlays, idx))
+            .and_then(|a| a.sprite.clone())
+    }
+
+    /// Smudges (S-0102 claim 25, S-0112 claim 3, S-0009 claim 42): painted
+    /// once for every covered cell, image frame 0, from the top corner of
+    /// the smudge's first cell lifted by the painted cell's level, with that
+    /// cell's tile shade table and scaled ground level, without depth.
     fn smudges(&mut self) {
         let smudges = self.map.objects.smudges.clone();
         for s in smudges {
             let Some(i) = find_type(self.import, Kind::Smudges, &s.type_name) else {
+                // spec: S-0009 claim 42 (a type field that names no smudge type places nothing)
                 self.drop_object("unknown smudge type");
                 continue;
             };
@@ -1011,46 +1166,58 @@ impl Builder<'_> {
                 self.drop_object("smudge without art");
                 continue;
             };
-            let Some(cell) = self.map.cells.get(s.cell).copied() else {
-                continue;
-            };
-            let level = i32::from(cell.level);
-            let light = self.p.lights.get(s.cell);
-            let row = self.tile_row(
-                light.map_or(TileTable::Neutral, |l| l.table),
-                light.map_or(NEUTRAL_BRIGHTNESS, |l| l.scaled_ground),
-            );
-            let (qx, qy) = cell_top(s.cell.x, s.cell.y);
+            // spec: S-0009 Import mapping (smudge Width and Height, absent 1 and 1)
+            let w = rule_int(self.import, Kind::Smudges, i, b"Width", 1);
+            let h = rule_int(self.import, Kind::Smudges, i, b"Height", 1);
             let object = self.add_object(ObjectInfo {
                 kind: "smudge",
                 type_name: String::from_utf8_lossy(&s.type_name).into_owned(),
                 owner: String::new(),
                 cell: s.cell,
                 entry: String::new(),
-                notes: vec![notes::OVERLAY.into()],
+                notes: vec![notes::SMUDGE_CLIP.into()],
             });
-            if let Some(item) = self.place_sprite(
-                &sprite,
-                0,
-                (qx, qy + 15 - TERRAIN_LIFT * level),
-                DepthTest::Writer,
-                ItemDepth::Profile {
-                    profile: Profile::Flat,
-                    bias: -2 - TERRAIN_LIFT * level,
-                    companion: None,
-                },
-                Paint::Row(row),
-                Group::Smudges,
-                true,
-                Some(object),
-            ) {
-                self.built.scene.items.push(item);
+            // spec: S-0102 claim 25 (the top corner of the smudge's first cell)
+            let (qx, qy) = cell_top(s.cell.x, s.cell.y);
+            // spec: S-0009 claim 42 (the w × h cells (x + i, y + j)), S-0102 claim 25 (each covered cell paints the image again)
+            for j in 0..h.max(0) {
+                for i in 0..w.max(0) {
+                    let c = CellXY::new(s.cell.x + i, s.cell.y + j);
+                    let Some(cell) = self.map.cells.get(c).copied() else {
+                        continue;
+                    };
+                    let level = i32::from(cell.level);
+                    let light = self.p.lights.get(c);
+                    // spec: S-0112 claim 3 (the painted cell's tile shade table and scaled ground level)
+                    let row = self.tile_row(
+                        light.map_or(TileTable::Neutral, |l| l.table),
+                        light.map_or(NEUTRAL_BRIGHTNESS, |l| l.scaled_ground),
+                    );
+                    if let Some(item) = self.place_sprite(
+                        &sprite,
+                        0,
+                        (qx, qy - TERRAIN_LIFT * level),
+                        // spec: S-0102 claim 25 (no depth test and no depth write)
+                        DepthTest::Ignore,
+                        ItemDepth::Profile {
+                            profile: Profile::Flat,
+                            bias: 0,
+                            companion: None,
+                        },
+                        Paint::Row(row),
+                        Group::Smudges,
+                        false,
+                        Some(object),
+                    ) {
+                        self.built.scene.items.push(item);
+                    }
+                }
             }
         }
     }
 
-    /// Terrain objects (S-0102 claim 13 rows, S-0104 claim 13; frame and
-    /// placement provisional, Q-0011).
+    /// Terrain objects (S-0102 claims 13 and 23, S-0112 claim 3, S-0104
+    /// claim 13).
     fn terrain_objects(&mut self) {
         let list = self.map.objects.terrain.clone();
         for t in list {
@@ -1079,33 +1246,51 @@ impl Builder<'_> {
                 b"SpawnsTiberium",
                 false,
             );
-            // spec: S-0104 claim 13 (a plain terrain object: its cell's scaled ground level and tile table;
-            // an ore-spawning one: the unscaled ground level U, with a palette no spec names: Q-0012)
-            let b = if spawns {
-                light.map_or(NEUTRAL_BRIGHTNESS, |l| l.unscaled_ground)
+            // spec: S-0112 claim 3 (plain: its cell's tile shade table and scaled ground; ore-spawning:
+            // the start-up mine table and U)
+            let row = if spawns {
+                self.startup_row(
+                    true,
+                    light.map_or(NEUTRAL_BRIGHTNESS, |l| l.unscaled_ground),
+                )
             } else {
-                light.map_or(NEUTRAL_BRIGHTNESS, |l| l.scaled_ground)
+                self.tile_row(
+                    light.map_or(TileTable::Neutral, |l| l.table),
+                    light.map_or(NEUTRAL_BRIGHTNESS, |l| l.scaled_ground),
+                )
             };
-            if spawns {
-                self.note(notes::OVERLAY);
-            }
-            let row = self.tile_row(light.map_or(TileTable::Neutral, |l| l.table), b);
+            // spec: S-0102 claim 23 (the centre of its cell at the terrain height; an ore spawner 16 rows higher)
             let (x, y) = cell_centre(t.cell.x, t.cell.y);
-            let p = project_lifted(x, y, z);
+            let point = project_lifted(x, y, z);
+            let p = if spawns {
+                (point.0, point.1 - ORE_SPAWNER_RAISE)
+            } else {
+                point
+            };
             let frames = self.sprite_frames(&sprite).unwrap_or(0);
+            // spec: S-0102 claim 23 (frame 0 while its health, its type's strength at the start, is 2 or more; 1 below)
+            let strength =
+                rule(self.import, Kind::TerrainObjects, i, b"Strength").and_then(value::integer);
+            if strength.is_none() {
+                self.note(notes::TERRAIN_STRENGTH);
+            }
+            let frame = usize::from(strength.is_some_and(|s| s < 2));
+            if rule_bool(self.import, Kind::TerrainObjects, i, b"IsAnimated", false) {
+                self.note(notes::ANIMATED_TERRAIN);
+            }
             let object = self.add_object(ObjectInfo {
                 kind: "terrain object",
                 type_name: String::from_utf8_lossy(&t.type_name).into_owned(),
                 owner: String::new(),
                 cell: t.cell,
                 entry: String::new(),
-                notes: vec![notes::PLACEMENT.into()],
+                notes: Vec::new(),
             });
             let lz = height_lift(z);
             // spec: S-0102 claim 13 (terrain object: −L(z) − 12, upright, writes)
             if let Some(item) = self.place_sprite(
                 &sprite,
-                0,
+                frame,
                 p,
                 DepthTest::Writer,
                 ItemDepth::Profile {
@@ -1115,17 +1300,16 @@ impl Builder<'_> {
                 },
                 Paint::Row(row),
                 Group::TerrainObjects,
-                true,
+                false,
                 Some(object),
             ) {
                 self.built.scene.items.push(item);
-                self.note(notes::PLACEMENT);
             }
-            // spec: S-0102 claim 13 (its shadow: −L(z) − 3, flat, writes); provisional frame (Q-0011)
-            if frames > 1
+            // spec: S-0102 claims 13 and 23 (its shadow: body frame + ⌊N/2⌋, −L(z) − 3, flat, writes)
+            if frame + frames / 2 < frames
                 && let Some(item) = self.place_sprite(
                     &sprite,
-                    frames / 2,
+                    frame + frames / 2,
                     p,
                     DepthTest::Writer,
                     ItemDepth::Profile {
@@ -1135,7 +1319,7 @@ impl Builder<'_> {
                     },
                     Paint::Shadow,
                     Group::Shadows,
-                    true,
+                    false,
                     Some(object),
                 )
             {
@@ -1276,7 +1460,7 @@ impl Builder<'_> {
                     .map(|f| String::from_utf8_lossy(f).into_owned())
                     .collect::<Vec<_>>()
                     .join(","),
-                notes: vec![notes::PLACEMENT.into()],
+                notes: Vec::new(),
             });
             if fields.upgrade_count.unwrap_or(0) > 0 {
                 self.note(notes::UPGRADES);
@@ -1406,7 +1590,6 @@ impl Builder<'_> {
             {
                 self.built.scene.items.push(item);
             }
-            self.note(notes::PLACEMENT);
             // Voxel turret or barrel in the object pass (S-0105 claims 5, 9, 37; S-0102 claims 5, 13).
             let turret_voxel =
                 rule_bool(self.import, Kind::Buildings, i, b"TurretAnimIsVoxel", false);
@@ -1620,7 +1803,7 @@ impl Builder<'_> {
                 .map(|f| String::from_utf8_lossy(f).into_owned())
                 .collect::<Vec<_>>()
                 .join(","),
-            notes: vec![notes::PLACEMENT.into()],
+            notes: Vec::new(),
         });
         let m = Mobile {
             kind,
@@ -1789,7 +1972,6 @@ impl Builder<'_> {
         ) {
             items.push(item);
         }
-        self.note(notes::PLACEMENT);
         items
     }
 
@@ -1807,7 +1989,6 @@ impl Builder<'_> {
         if art.voxels.contains_key("body") {
             self.vehicle_voxels(m, &art, point, u, row, group)
         } else if let Some(sprite) = art.sprite.clone() {
-            self.note(notes::PLACEMENT);
             // spec: S-0102 claim 13 (a unit drawn as a sprite: U − 2, upright, reader)
             self.place_sprite(
                 &sprite,

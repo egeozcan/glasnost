@@ -18,6 +18,7 @@ pub mod light;
 pub mod map_gpu;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod offscreen;
+pub mod overlay;
 pub mod palette;
 pub mod palette_quad;
 pub mod projection;

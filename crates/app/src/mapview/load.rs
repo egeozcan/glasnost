@@ -116,6 +116,10 @@ pub async fn load(
         pal(read_named(vfs, ANIM_PALETTE_FILE).await).as_ref(),
         PaletteQuirks::default(),
     );
+    // spec: S-0112 claim 2 (the start-up resource table: the temperate theater palette, read at program start)
+    palettes.set_startup_resource(
+        pal(read_named(vfs, &Theater::Temperate.theater_palette()).await).as_ref(),
+    );
     let mut files = std::collections::BTreeMap::new();
     for name in [
         theater.unit_palette(),

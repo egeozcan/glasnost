@@ -23,6 +23,7 @@ use super::build::{Assets, Built, Options, build};
 
 const RULES: &str = "[BuildingTypes]\n1=HUTX\n[InfantryTypes]\n1=MANX\n[OverlayTypes]\n0=OREX\n1=CRATEX\n2=FENCEX\n\
     [OREX]\nTiberium=yes\n[CRATEX]\nCrate=yes\n[FENCEX]\nDrawFlat=no\n\
+    [SmudgeTypes]\n0=CRATERX\n[CRATERX]\nWidth=2\n[TerrainTypes]\n0=TREEX\n1=MINEX\n[MINEX]\nSpawnsTiberium=yes\n\
     [Colors]\nC0=1,2,3\nC1=10,200,200\nC2=20,200,200\nC3=30,200,200\nC4=40,200,200\nC5=50,200,200\n\
     C6=60,200,200\nC7=70,200,200\nC8=80,200,200\nC9=90,200,200\nC10=100,200,200\nC11=110,200,200\n\
     C12=120,200,200\nC13=130,200,200\nC14=140,200,200\nLightGrey=0,0,150\n";
@@ -126,6 +127,9 @@ pub(super) fn context() -> (glasnost_convert::Import, Catalogue, Assets) {
         ((Kind::Overlays, 0), art("OREX", "orex.shp")),
         ((Kind::Overlays, 1), art("CRATEX", "cratex.shp")),
         ((Kind::Overlays, 2), art("FENCEX", "fencex.shp")),
+        ((Kind::Smudges, 0), art("CRATERX", "craterx.shp")),
+        ((Kind::TerrainObjects, 0), art("TREEX", "treex.shp")),
+        ((Kind::TerrainObjects, 1), art("MINEX", "minex.shp")),
     ]);
     let tdoc = Document::parse(THEATER.as_bytes(), Quirks::default(), &mut Vec::new());
     let catalogue = Catalogue::read(&tdoc, Theater::Temperate);
@@ -139,6 +143,9 @@ pub(super) fn context() -> (glasnost_convert::Import, Catalogue, Assets) {
     assets.insert(b"orex.shp", shp((10, 10), 8, (2, 2), (4, 4)));
     assets.insert(b"cratex.shp", shp((10, 10), 2, (2, 2), (4, 4)));
     assets.insert(b"fencex.shp", shp((10, 10), 2, (2, 2), (4, 4)));
+    assets.insert(b"craterx.shp", shp((10, 10), 1, (2, 2), (4, 4)));
+    assets.insert(b"treex.shp", shp((10, 10), 2, (2, 2), (4, 4)));
+    assets.insert(b"minex.shp", shp((10, 10), 2, (2, 2), (4, 4)));
     (import, catalogue, assets)
 }
 
@@ -294,8 +301,15 @@ fn overlays() {
     assert_eq!(names, ["OREX", "FENCEX"]);
     // Ore at level 0: flat, −2.
     assert_eq!(bias(&items[0]), (Profile::Flat, -2));
-    // Ore shows the frame of its data value 3 (provisional, Q-0012).
+    // S-0112 claims 1 and 12 (no tiberium run: the stored type, frame = data value 3, pixel 4).
     assert_eq!(b.scene.images[items[0].image as usize].pixels()[0], 4);
+    // S-0102 claim 24: the ore's draw point is 12 rows up. Cell (5, 9): centre (−120, 225);
+    // canvas 10 × 10 centred, frame at (4, 4): (−120 − 5 + 4, 225 − 12 − 5 + 4).
+    assert_eq!((items[0].x, items[0].y), (-121, 212));
+    // S-0112 claim 8: the ore's shadow is the stored type's frame d + ⌊N/2⌋ = 3 + 4 (pixel 8).
+    let shadow = items[1];
+    assert_eq!(shadow.paint, Paint::Shadow);
+    assert_eq!(b.scene.images[shadow.image as usize].pixels()[0], 8);
     // The fence is upright (DrawFlat=no) on level 2: −17 − 30.
     let level = map
         .cells
@@ -303,8 +317,9 @@ fn overlays() {
         .unwrap()
         .level;
     assert_eq!(level, 2);
-    assert_eq!(bias(&items[1]), (Profile::Upright, -47));
-    assert!(items.iter().all(|i| i.provisional));
+    let bodies: Vec<&Item> = items.iter().filter(|i| i.paint != Paint::Shadow).collect();
+    assert_eq!(bias(bodies[1]), (Profile::Upright, -47));
+    assert!(bodies.iter().all(|i| !i.provisional));
 }
 
 /// A 1 × 1 tile file whose diamond holds `value`, with an optional extra
@@ -446,6 +461,63 @@ fn claim_24_stray_tile_shows_clear_tile() {
     let t = tile_at(&b, 6, 9);
     assert_eq!(t.len(), 1);
     assert_eq!(b.scene.images[t[0].image as usize].pixels()[28], 7);
+}
+
+/// spec: S-0102 claim 25, S-0112 claim 3, S-0009 claim 42 (smudges: one painting per covered cell,
+/// from the first cell's top corner lifted by the painted cell's level, without depth)
+#[test]
+fn smudges_painted_per_covered_cell() {
+    let (b, _) = build_text(
+        b"[Basic]\nNewINIFormat=4\n[Map]\nSize=0,0,10,10\nLocalSize=0,0,10,10\n\
+          [Smudge]\n0=CRATERX,6,9,0\n1=CRATERX,6,10,1\n",
+        &Options::default(),
+    );
+    let items = items_of(&b, "smudge");
+    // Width 2: cells (6, 9) and (7, 9), both at level 0; the piece-1 entry places nothing.
+    assert_eq!(items.len(), 2);
+    for i in &items {
+        assert_eq!(i.test, DepthTest::Ignore);
+        // Top corner of (6, 9): (−90, 225); canvas 10 × 10 centred, frame at (4, 4).
+        assert_eq!((i.x, i.y), (-90 - 5 + 4, 225 - 5 + 4));
+    }
+    // Smudges come before overlays in the cell pass.
+    let first_overlay = b
+        .scene
+        .items
+        .iter()
+        .position(|i| i.group == Group::Overlays)
+        .unwrap_or(usize::MAX);
+    let last_smudge = b
+        .scene
+        .items
+        .iter()
+        .rposition(|i| i.group == Group::Smudges)
+        .unwrap();
+    assert!(last_smudge < first_overlay);
+}
+
+/// spec: S-0102 claim 23, S-0112 claim 3 (terrain objects at the cell centre; an ore spawner 16 rows
+/// higher with the start-up mine table)
+#[test]
+fn terrain_objects_placement_and_tables() {
+    let (b, _) = build_text(
+        b"[Basic]\nNewINIFormat=4\n[Map]\nSize=0,0,10,10\nLocalSize=0,0,10,10\n\
+          [Terrain]\n9006=TREEX\n10006=MINEX\n",
+        &Options::default(),
+    );
+    let items = items_of(&b, "terrain object");
+    let bodies: Vec<&Item> = items.iter().filter(|i| i.paint != Paint::Shadow).collect();
+    assert_eq!(bodies.len(), 2);
+    // (6, 9): centre (−90, 240) at height 0; canvas 10 × 10 centred, frame at (4, 4).
+    assert_eq!((bodies[0].x, bodies[0].y), (-90 - 1, 240 - 1));
+    // (6, 10): centre (−120, 255), raised 16 rows.
+    assert_eq!((bodies[1].x, bodies[1].y), (-120 - 1, 255 - 16 - 1));
+    // Different tables: the tree's tile table row, the spawner's mine table row.
+    assert_ne!(bodies[0].paint, bodies[1].paint);
+    // Shadows: body frame + ⌊N/2⌋ = 1 (pixel 2), flat −3.
+    let shadow = items.iter().find(|i| i.paint == Paint::Shadow).unwrap();
+    assert_eq!(b.scene.images[shadow.image as usize].pixels()[0], 2);
+    assert_eq!(bias(shadow), (Profile::Flat, -3));
 }
 
 /// Builds `text` with typed rules in which HUTX has strength 100.
