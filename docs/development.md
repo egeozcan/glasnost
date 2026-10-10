@@ -199,8 +199,8 @@ Provisional rules of the simulation, each tied to a request:
 | `path` | no corridor of claim 13; pending pairs of equal cost in recording order after the held candidate; the shortening of early detours (claim 18) is not applied | Q-0017 |
 | `load` | a start list that needs a random start cell is refused (`LoadError::RandomStartCell`); low-bridge end markers complete no bridge; vein seeds are cleared and not rebuilt | Q-0018 |
 | `drive` | the attack override of a refused step (S-0207 table T4) gives no destination; no step check follows the search made after a curve's second cell gives an obstacle (table T5) | Q-0035 |
-| `rules` | `[IQ] GuardArea` absent is 0 and `GuardModeStray` absent falls back to the leash | Q-0020 |
 | `crush` | a map wall takes the owner of the nearest qualifying building at any distance (S-0210 claim 14) | Q-0036 |
+| `process` | a gate's door moves at the start of the gate's turn, before its per-tick start and processing | Q-0030 |
 | `objects`, `load` | pre-placed objects start at full strength, facing value × 256, with the placement fall-back as their behaviour | Q-0010, Q-0016 |
 
 ## Tests

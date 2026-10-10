@@ -693,3 +693,26 @@ fn weapon_and_projectile_fields_resolve() {
         (Some(3), Some(true))
     );
 }
+
+/// spec: S-0215 claim 36 (b) and Questions for the project lead (decided: no layer gives the guard stray distance: the importer warns)
+#[test]
+fn guard_stray_absent_warns() {
+    let (s, w) = sim("[General]\nCloseEnough=1\n", "", "");
+    assert_eq!(s.general.guard_mode_stray, None);
+    assert!(warned(&w, "GuardModeStray is given by no rules layer"));
+    let (_, w) = sim("[General]\nGuardModeStray=2\n", "", "");
+    assert!(!warned(&w, "GuardModeStray"));
+}
+
+/// spec: S-0214 Import mapping (Teleporter); S-0215 Import mapping (DeployTime and GateCloseDelay, game minutes)
+#[test]
+fn teleporter_and_gate_times() {
+    let base = "[VehicleTypes]\n1=Cart\n[BuildingTypes]\n1=Door\n\
+                [Cart]\nTeleporter=yes\n[Door]\nGate=yes\nDeployTime=0.1\nGateCloseDelay=0.2\n";
+    let (s, _) = sim(base, "", "");
+    assert_eq!(s.vehicles["Cart"].teleporter, Some(true));
+    let d = &s.buildings["Door"];
+    assert_eq!(d.gate, Some(true));
+    assert_eq!(dec(&d.deploy_time), Some("1e-1"));
+    assert_eq!(dec(&d.gate_close_delay), Some("2e-1"));
+}

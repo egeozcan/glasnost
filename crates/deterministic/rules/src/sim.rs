@@ -642,6 +642,9 @@ pub struct UnitType {
     // spec: S-0107 claim 11 (four fire-frame fields)
     #[serde(default)]
     pub fire_frames: Option<[i32; 4]>,
+    /// `Teleporter`: a self-teleporting type (S-0214 claim 11).
+    #[serde(default)]
+    pub teleporter: Option<bool>,
 }
 
 /// A building type's simulation fields.
@@ -776,6 +779,12 @@ pub struct BuildingType {
     /// `Crushable`.
     #[serde(default)]
     pub crushable: Option<bool>,
+    /// `DeployTime`, game minutes: a gate's door time (S-0215 F9).
+    #[serde(default)]
+    pub deploy_time: Option<Decimal>,
+    /// `GateCloseDelay`, game minutes: a gate's close delay (S-0215 F9).
+    #[serde(default)]
+    pub gate_close_delay: Option<Decimal>,
 }
 
 /// An overlay type's simulation fields.

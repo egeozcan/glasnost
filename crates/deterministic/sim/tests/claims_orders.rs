@@ -4,6 +4,7 @@
 use std::sync::Arc;
 
 use glasnost_map::CellXY;
+use glasnost_sim::behaviour::Door;
 use glasnost_sim::load::new_game;
 use glasnost_sim::objects;
 use glasnost_sim::orders::{self, Order, PENDING_LIMIT};
@@ -315,11 +316,23 @@ fn s0215_new_actor_slots() {
     assert_eq!((b.current, b.queued, b.suspended), (None, None, None));
 }
 
+/// A synthetic game from a changed copy of the synthetic ruleset.
+fn game_with(r: &glasnost_rules::schema::Ruleset, seed: u32) -> World {
+    new_game(
+        Arc::new(SimRules::new(r, "claims")),
+        &testkit::map(),
+        testkit::catalogue(),
+        &testkit::setup(seed),
+    )
+    .unwrap()
+}
+
 // spec: S-0215 claim 14 (infantry rest in guard: rows 11 and 12, no ability, no area-guard default)
-// spec: S-0215 claim 15 (armed vehicles at skill 0 and threshold 0 rest in area guard, row 12; unarmed ones in guard, row 7)
+// spec: S-0215 claim 15 (armed vehicles at skill 0 and a threshold of 0 given by the data rest in area guard, row 12; unarmed ones in guard, row 7)
 #[test]
 fn s0215_placement_fall_back() {
     let mut w = testkit::new_game(1);
+    assert_eq!(w.rules().general.iq_guard_area, 0);
     tick::step(&mut w);
     let inf = of(&w, 1, Kind::Infantry, 0)[0];
     let cart = of(&w, 0, Kind::Vehicle, 0)[0];
@@ -327,6 +340,63 @@ fn s0215_placement_fall_back() {
     assert_eq!(w.obj(inf).unwrap().beh.current, Some(Behaviour::Guard));
     assert_eq!(w.obj(cart).unwrap().beh.current, Some(Behaviour::AreaGuard));
     assert_eq!(w.obj(crusher).unwrap().beh.current, Some(Behaviour::Guard));
+}
+
+// spec: S-0215 claim 36 (a) (the area-guard threshold given by no layer is 4: skill level 3 rests in guard, 4 in area guard)
+// spec: S-0215 claim 15 (rows 10 and 12: below the threshold guard, else area guard)
+#[test]
+fn s0215_area_guard_threshold() {
+    let mut r = testkit::ruleset();
+    r.sim.general.iq_guard_area = None;
+    let mut w = game_with(&r, 1);
+    assert_eq!(w.rules().general.iq_guard_area, 4);
+    // Skill level 0 of every house of our engine: the armed cart rests in guard.
+    tick::step(&mut w);
+    let cart = of(&w, 0, Kind::Vehicle, 0)[0];
+    assert_eq!(w.obj(cart).unwrap().beh.current, Some(Behaviour::Guard));
+    for (skill, rest) in [(3, Behaviour::Guard), (4, Behaviour::AreaGuard)] {
+        let mut w = game_with(&r, 1);
+        while w.tick < 4 {
+            tick::step(&mut w);
+        }
+        w.houses[0].skill = skill;
+        let cart = of(&w, 0, Kind::Vehicle, 0)[0];
+        let t = w.tick;
+        w.obj_mut(cart).unwrap().beh.force(Behaviour::Move, t);
+        process::fall_back(&mut w, cart, false);
+        assert_eq!(w.obj(cart).unwrap().beh.queued, Some(rest), "skill {skill}");
+    }
+}
+
+// spec: S-0215 Import mapping (cells to leptons: w(trunc(c × 256)); 4.5 cells give 1152 and 0.3 cells give 76)
+// spec: S-0215 F9 (gate times: 0.1 game minutes give 90 ticks, 0.2 give 180; a wrapped product is negative; 0 at 2⁶³ or more)
+// spec: S-0215 Constants (absent-key defaults: gate deploy time and close delay 0)
+#[test]
+fn s0215_guard_stray_and_gate_times() {
+    let dec = |s: &str| Some(glasnost_rules::sim::Decimal(s.into()));
+    let mut r = testkit::ruleset();
+    r.sim.general.guard_mode_stray = dec("4.5");
+    assert_eq!(SimRules::new(&r, "x").general.guard_stray, Some(1152));
+    r.sim.general.guard_mode_stray = dec("0.3");
+    assert_eq!(SimRules::new(&r, "x").general.guard_stray, Some(76));
+    r.sim.general.guard_mode_stray = None;
+    assert_eq!(SimRules::new(&r, "x").general.guard_stray, None);
+    r.registries.insert("buildings".into(), vec!["DOOR".into()]);
+    let gate = |td: Option<&str>, tc: Option<&str>| glasnost_rules::sim::BuildingType {
+        gate: Some(true),
+        deploy_time: td.and_then(dec),
+        gate_close_delay: tc.and_then(dec),
+        ..Default::default()
+    };
+    for (td, tc, want) in [
+        (Some("0.1"), Some("0.2"), (90, 180)),
+        (None, None, (0, 0)),
+        (Some("2400000"), Some("20000000000000000"), (-2134967296, 0)),
+    ] {
+        r.sim.buildings.insert("DOOR".into(), gate(td, tc));
+        let b = &SimRules::new(&r, "x").buildings[0];
+        assert_eq!((b.gate_door_time, b.gate_close_delay), want);
+    }
 }
 
 // spec: S-0215 claim 3 (a start before the processing is processed in the same tick)
@@ -465,7 +535,8 @@ fn s0215_area_guard() {
     assert!((15..=19).contains(&d), "{d}");
 }
 
-// spec: S-0215 claim 17 (a zombie or paralysed behaviour is never left by falling back to rest)
+// spec: S-0215 claim 17 (an armed vehicle in a zombie behaviour reaches row 9 of claim 15: nothing queued, the behaviour stays current)
+// spec: S-0215 claim 17 (rows before row 9 take precedence: an unarmed vehicle queues guard by row 7, and a destination queues move)
 #[test]
 fn s0215_zombie_keeps_its_behaviour() {
     let mut r = testkit::ruleset();
@@ -490,6 +561,16 @@ fn s0215_zombie_keeps_its_behaviour() {
     process::fall_back(&mut w, id, false);
     assert_eq!(w.obj(id).unwrap().beh.queued, None);
     assert_eq!(w.obj(id).unwrap().beh.current, Some(Behaviour::Sleep));
+    // The unarmed crusher in the same behaviour: row 7 comes first.
+    let crusher = of(&w, 0, Kind::Vehicle, 1)[0];
+    w.obj_mut(crusher).unwrap().beh.force(Behaviour::Sleep, t);
+    process::fall_back(&mut w, crusher, false);
+    assert_eq!(w.obj(crusher).unwrap().beh.queued, Some(Behaviour::Guard));
+    assert_eq!(w.obj(crusher).unwrap().beh.current, Some(Behaviour::Sleep));
+    // The armed cart with a destination: row 3 comes first.
+    w.obj_mut(id).unwrap().dest = Some(Target::Cell(testkit::cell(2, 2)));
+    process::fall_back(&mut w, id, false);
+    assert_eq!(w.obj(id).unwrap().beh.queued, Some(Behaviour::Move));
 }
 
 // spec: S-0215 claim 20 (the recruitable property has no effect in our engine)
@@ -734,4 +815,259 @@ fn s0215_deployer_in_guard_undeploys() {
     let b = &w.obj(inf).unwrap().beh;
     assert_eq!(b.current, Some(Behaviour::Guard));
     assert_eq!(b.last.map(|l| l.1), Some(6));
+}
+
+// ---------------------------------------------------------------------------
+// S-0215 claim 35: gates
+
+/// The cell of the test gate, away from the scenario's units.
+fn gate_cell() -> CellXY {
+    testkit::cell(12, 14)
+}
+
+/// The synthetic game with a one-cell gate GATE of house Alpha (door time
+/// 0.1, close delay 0.2 game minutes) and a plain building HUT, and the
+/// gate's ID, with orders open.
+fn gate_world(snaps: bool) -> (World, ObjectId) {
+    use glasnost_map::objects::{Placed, Structure};
+    use glasnost_rules::sim::{BuildingType, Decimal};
+    let mut r = testkit::ruleset();
+    r.globals.quirks.gate_reverse_snaps = snaps;
+    r.registries
+        .insert("buildings".into(), vec!["GATE".into(), "HUT".into()]);
+    r.sim.buildings.insert(
+        "GATE".into(),
+        BuildingType {
+            strength: Some(500),
+            gate: Some(true),
+            deploy_time: Some(Decimal("0.1".into())),
+            gate_close_delay: Some(Decimal("0.2".into())),
+            ..Default::default()
+        },
+    );
+    r.sim.buildings.insert(
+        "HUT".into(),
+        BuildingType {
+            strength: Some(500),
+            ..Default::default()
+        },
+    );
+    let mut map = testkit::map();
+    for (key, ty, c) in [
+        ("900", "GATE", gate_cell()),
+        ("901", "HUT", testkit::cell(-12, 14)),
+    ] {
+        map.objects.structures.push(Structure {
+            placed: Placed {
+                key: key.as_bytes().to_vec(),
+                owner: b"Alpha".to_vec(),
+                type_name: ty.as_bytes().to_vec(),
+                health: 256,
+                cell: c,
+                facing: 0,
+                raw: Vec::new(),
+            },
+        });
+    }
+    let mut w = new_game(
+        Arc::new(SimRules::new(&r, "gates")),
+        &map,
+        testkit::catalogue(),
+        &testkit::setup(1),
+    )
+    .unwrap();
+    while w.tick < 4 {
+        tick::step(&mut w);
+    }
+    let gate = w
+        .objects
+        .values()
+        .find(|o| o.kind == Kind::Building && o.pos.cell() == gate_cell())
+        .unwrap()
+        .id;
+    (w, gate)
+}
+
+fn door(w: &World, gate: ObjectId) -> Door {
+    w.obj(gate).unwrap().beh.gate.door
+}
+
+// spec: S-0215 F9 (the test gate's door time 0.1 and close delay 0.2 game minutes give 90 and 180 ticks)
+// spec: S-0215 claim 35 (a) (a gate starts with its door at rest closed: passage closed)
+// spec: S-0215 claim 35 (b) (the closed-friendly-gate outcome drops the queue and makes open current at once, a behaviour start)
+#[test]
+fn s0215_gate_starts_closed_and_opens_on_demand() {
+    let (mut w, gate) = gate_world(true);
+    let b = &w.rules().buildings[w.obj(gate).unwrap().type_index as usize];
+    assert_eq!((b.gate_door_time, b.gate_close_delay), (90, 180));
+    assert_eq!(door(&w, gate), Door::Closed);
+    assert!(!process::gate_open(&w, gate));
+    w.obj_mut(gate).unwrap().beh.queued = Some(Behaviour::Guard);
+    w.obj_mut(gate).unwrap().beh.progress = 3;
+    process::gate_met(&mut w, gate);
+    let b = &w.obj(gate).unwrap().beh;
+    assert_eq!((b.current, b.queued), (Some(Behaviour::Open), None));
+    assert!(b.expired && b.progress == 0);
+    // Open current and the door opening: a second meeting changes nothing.
+    let t = w.tick;
+    tick::step(&mut w);
+    assert!(matches!(door(&w, gate), Door::Opening { since, ticks: 90 } if since == t));
+    let before = w.obj(gate).unwrap().beh.clone();
+    process::gate_met(&mut w, gate);
+    assert_eq!(w.obj(gate).unwrap().beh, before);
+}
+
+// spec: S-0215 claim 35 (passage state open only with open current and the door at rest open)
+// spec: S-0215 claim 35 (c) (the stage table: opening, waiting with Std, closing-start, closing, finished with guard queued)
+// spec: S-0215 claim 35 (d) (a moving door reaches rest once Td ticks have passed since the motion began)
+// spec: S-0215 claim 35 (e) (closes no earlier than Tc ticks after it began to open)
+#[test]
+fn s0215_gate_open_and_close_cycle() {
+    let (mut w, gate) = gate_world(true);
+    process::gate_met(&mut w, gate);
+    let s = w.tick;
+    let mut opened = None;
+    let mut closing = None;
+    let mut closed = None;
+    for _ in 0..600 {
+        tick::step(&mut w);
+        let t = w.tick - 1;
+        if opened.is_none() && process::gate_open(&w, gate) {
+            opened = Some(t);
+        }
+        if closing.is_none() && matches!(door(&w, gate), Door::Closing { .. }) {
+            closing = Some(t);
+            assert!(!process::gate_open(&w, gate));
+        }
+        if closing.is_some() && closed.is_none() && door(&w, gate) == Door::Closed {
+            closed = Some(t);
+        }
+    }
+    assert_eq!(opened, Some(s + 90));
+    let c = closing.unwrap();
+    // Waiting processings come one Std (D_r 14 of the default rate, + U(0, 2)) apart.
+    assert!((s + 180..=s + 180 + 2 * 16).contains(&c), "{c}");
+    assert_eq!(closed, Some(c + 90));
+    let b = &w.obj(gate).unwrap().beh;
+    assert_eq!(b.progress, 5);
+    assert_eq!(b.queued, Some(Behaviour::Guard));
+    assert!(!process::gate_open(&w, gate));
+}
+
+// spec: S-0215 claim 35 (c) (waiting: an object in the ground layer of a foundation cell restarts the close countdown)
+#[test]
+fn s0215_gate_stays_open_while_occupied() {
+    let (mut w, gate) = gate_world(true);
+    let blocker = glasnost_sim::objects::create(&mut w, Kind::Infantry, 0, Some(ALPHA));
+    w.cells.enter(
+        gate_cell(),
+        glasnost_sim::world::Layer::Ground,
+        blocker,
+        false,
+    );
+    process::gate_met(&mut w, gate);
+    for _ in 0..500 {
+        tick::step(&mut w);
+    }
+    assert!(process::gate_open(&w, gate));
+    w.cells
+        .leave(gate_cell(), glasnost_sim::world::Layer::Ground, blocker);
+    let left = w.tick;
+    let n = run_until_closing(&mut w, gate, 400);
+    assert!((180..=180 + 2 * 16).contains(&(w.tick - left)), "{n}");
+}
+
+fn run_until_closing(w: &mut World, gate: ObjectId, max: i32) -> i32 {
+    for i in 0..max {
+        if matches!(door(w, gate), Door::Closing { .. }) {
+            return i;
+        }
+        tick::step(w);
+    }
+    max
+}
+
+// spec: S-0215 claim 35 (quirks.gate_reverse_snaps: a door reversed while closing is at rest open at the gate's next update; off: it takes the ticks the closing had run)
+// spec: S-0215 claim 35 (e) (a unit that reaches a closing gate makes it reverse by (b))
+#[test]
+fn s0215_gate_reverse_snaps() {
+    for snaps in [true, false] {
+        let (mut w, gate) = gate_world(snaps);
+        process::gate_met(&mut w, gate);
+        run_until_closing(&mut w, gate, 600);
+        for _ in 0..30 {
+            tick::step(&mut w);
+        }
+        let Door::Closing { since, .. } = door(&w, gate) else {
+            panic!("closing expected");
+        };
+        process::gate_met(&mut w, gate);
+        let reversed = w.tick;
+        let ran = reversed - since;
+        let n = run_until(&mut w, 200, |w| process::gate_open(w, gate));
+        // The reversal happens in the gate's processing of the next tick.
+        if snaps {
+            assert_eq!(n, 2);
+        } else {
+            assert_eq!(n, ran + 1);
+        }
+        assert!(ran >= 30);
+    }
+}
+
+fn run_until(w: &mut World, max: i32, done: impl Fn(&World) -> bool) -> i32 {
+    for i in 0..max {
+        if done(w) {
+            return i;
+        }
+        tick::step(w);
+    }
+    max
+}
+
+// spec: S-0215 claim 35 (c) and Constants (open for a building that is not a gate: queues guard, 1 tick, no draw)
+// spec: S-0215 claim 4 (open for a mobile actor: no processing rule, 450 ticks)
+#[test]
+fn s0215_open_without_a_gate() {
+    let (mut w, _) = gate_world(true);
+    let hut = w
+        .objects
+        .values()
+        .find(|o| o.kind == Kind::Building && o.pos.cell() == testkit::cell(-12, 14))
+        .unwrap()
+        .id;
+    let t = w.tick;
+    w.obj_mut(hut).unwrap().beh.force(Behaviour::Open, t);
+    let taken = w.rng.taken();
+    process::turn(&mut w, hut);
+    let b = &w.obj(hut).unwrap().beh;
+    assert_eq!((b.last, b.queued), (Some((t, 1)), Some(Behaviour::Guard)));
+    assert_eq!(w.rng.taken(), taken);
+    let cart = of(&w, 0, Kind::Vehicle, 0)[0];
+    w.obj_mut(cart).unwrap().beh.force(Behaviour::Open, t);
+    process::turn(&mut w, cart);
+    assert_eq!(w.obj(cart).unwrap().beh.last, Some((t, 450)));
+}
+
+// spec: S-0214 claim 3 (nothing over an object that is already selected: the selection stays and no order is made)
+#[test]
+fn s0214_nothing_over_a_selected_object() {
+    let (w, gate) = gate_world(true);
+    let hut = w
+        .objects
+        .values()
+        .find(|o| o.kind == Kind::Building && o.pos.cell() == testkit::cell(-12, 14))
+        .unwrap()
+        .id;
+    let sel = [hut, gate];
+    let on = targeting::ClickOn::Object(gate);
+    let mods = targeting::Modifiers::default();
+    assert_eq!(
+        targeting::cursor(&w, ALPHA, &sel, on, mods),
+        targeting::Action::Nothing
+    );
+    assert_eq!(
+        targeting::click(&w, ALPHA, &sel, on, mods),
+        targeting::ClickResult::default()
+    );
 }

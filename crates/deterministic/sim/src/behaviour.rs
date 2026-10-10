@@ -33,6 +33,44 @@ pub struct Behaviours {
     pub allowance: bool,
     /// Tick of the last fall-back to rest's common effects (S-0215 claim 13).
     pub last_common_effects: Option<i32>,
+    /// A gate's door and close countdown (S-0215 claim 35); unused by
+    /// every other object.
+    pub gate: Gate,
+}
+
+/// A gate's door (S-0215 claim 35): at rest closed, at rest open, opening
+/// or closing. A moving door reaches rest at the gate's update on the first
+/// tick on which `ticks` ticks have passed since `since` (claim 35 (d)).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Door {
+    /// At rest closed; every gate starts so (S-0215 claim 35 (a)).
+    #[default]
+    Closed,
+    /// At rest open.
+    Open,
+    /// Opening.
+    Opening {
+        /// Tick on which the motion began.
+        since: i32,
+        /// Ticks the motion takes (0 or more).
+        ticks: i32,
+    },
+    /// Closing.
+    Closing {
+        /// Tick on which the motion began.
+        since: i32,
+        /// Ticks the motion takes (0 or more).
+        ticks: i32,
+    },
+}
+
+/// A gate's state besides its behaviour slots (S-0215 claim 35).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Gate {
+    /// The door.
+    pub door: Door,
+    /// Tick of the close countdown's last restart.
+    pub countdown: i32,
 }
 
 impl Behaviours {

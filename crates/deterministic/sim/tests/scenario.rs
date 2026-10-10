@@ -15,7 +15,7 @@ fn map_objects_are_placed_and_rest() {
     for _ in 0..5 {
         tick::step(&mut w);
     }
-    // spec: S-0215 claim 15 (an armed vehicle with skill level 0 and a threshold of 0 rests in area guard)
+    // spec: S-0215 claims 14 and 15 (every mobile object gets a resting behaviour from its placement fall-back)
     for o in w.objects.values() {
         assert!(o.beh.current.is_some(), "{:?} has no behaviour", o.id);
     }

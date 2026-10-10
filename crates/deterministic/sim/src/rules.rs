@@ -185,6 +185,11 @@ pub struct BuildingRules {
     pub invisible: bool,
     /// The raw record.
     pub raw: BuildingType,
+    /// A gate's door time Td in ticks (S-0215 F9; a negative result is
+    /// kept and behaves as 0).
+    pub gate_door_time: i32,
+    /// A gate's close delay Tc in ticks (S-0215 F9).
+    pub gate_close_delay: i32,
 }
 
 /// An overlay type's resolved fields.
@@ -300,7 +305,8 @@ pub struct GeneralRules {
     pub cheer_rate: i32,
     /// Area-guard threshold of the house skill level.
     pub iq_guard_area: i32,
-    /// Guard stray distance in leptons (S-0215 F5); absent: Q-0020.
+    /// Guard stray distance in leptons (S-0215 F5); `None` when no rules
+    /// layer gives it (S-0215 claim 36 (b): the leash is used instead).
     pub guard_stray: Option<i32>,
     /// Scatter threshold of the house skill level.
     pub iq_scatter: i32,
@@ -645,9 +651,9 @@ impl SimRules {
                 .unwrap_or_else(|| nearest_double("0.083")),
             // spec: S-0213 Import mapping (MaximumCheerRate absent: 1 tick)
             cheer_rate: g.maximum_cheer_rate.unwrap_or(1),
-            // spec: S-0215 Import mapping ([IQ] GuardArea; the absent default is request Q-0020, interim 0)
-            iq_guard_area: g.iq_guard_area.unwrap_or(0),
-            // spec: S-0215 Import mapping (GuardModeStray: cells × 256, truncated; absent default open, Q-0020)
+            // spec: S-0215 claim 36 (a) and Constants ([IQ] GuardArea absent from every layer: engine default 4)
+            iq_guard_area: g.iq_guard_area.unwrap_or(4),
+            // spec: S-0215 Import mapping (GuardModeStray: w(trunc(c × 256)) leptons, 0 at 2⁶³; absent from every layer: no value, claim 36 (b))
             guard_stray: g.guard_mode_stray.as_ref().map(|d| {
                 d.value(mode)
                     .mul(F64::from_i64(256, mode), mode)
@@ -760,7 +766,12 @@ impl SimRules {
             .enumerate()
             .map(|(i, n)| {
                 names.insert((Kind::Building, n.clone()), i as u32);
-                building_rules(n, s.buildings.get(n).cloned().unwrap_or_default(), &quirks)
+                building_rules(
+                    n,
+                    s.buildings.get(n).cloned().unwrap_or_default(),
+                    &quirks,
+                    mode,
+                )
             })
             .collect();
         let overlays = registry("overlays")
@@ -933,7 +944,7 @@ fn unit_rules(kind: Kind, name: &str, u: UnitType, q: &Quirks, mode: Rounding) -
     }
 }
 
-fn building_rules(name: &str, bt: BuildingType, q: &Quirks) -> BuildingRules {
+fn building_rules(name: &str, bt: BuildingType, q: &Quirks, mode: Rounding) -> BuildingRules {
     let f = bt.foundation.unwrap_or([1, 1]);
     BuildingRules {
         name: name.to_owned(),
@@ -944,6 +955,16 @@ fn building_rules(name: &str, bt: BuildingType, q: &Quirks) -> BuildingRules {
         turn_rate: turn_rate(bt.rot.unwrap_or(0), q.turn_rate_negative_wrap),
         gate: bt.gate.unwrap_or(false),
         invisible: bt.invisible_in_game.unwrap_or(false),
+        // spec: S-0215 F9 and Constants (Td = w(trunc(RZ₅₃(td × 900))), 0 at 2⁶³; DeployTime absent: 0)
+        gate_door_time: bt
+            .deploy_time
+            .as_ref()
+            .map_or(0, |d| rate_delay(d.value(mode), mode)),
+        // spec: S-0215 F9 and Constants (Tc likewise; GateCloseDelay absent: 0)
+        gate_close_delay: bt
+            .gate_close_delay
+            .as_ref()
+            .map_or(0, |d| rate_delay(d.value(mode), mode)),
         raw: bt,
     }
 }

@@ -17,7 +17,12 @@
 //! not imported (combat, milestone M4), so nothing is in range by itself,
 //! no weapon heals and the combat firing rules never rule a target illegal;
 //! every object is at rookie rank; vehicles have no deploy state; building
-//! factory kinds have no vocabulary yet (no building is a factory).
+//! factory kinds have no vocabulary yet (no building is a factory); a
+//! carrier carries nothing. The rows that read these states are in place
+//! behind small predicates, so that the states plug in when their topics
+//! arrive. The nearby-cell search of claim 11 always uses the actor's reach
+//! region and own zone (S-0212 table T5's rows for a free mover's no-move
+//! and for zone *fly* on an object are not in `path::nearby` yet).
 
 use glasnost_map::CellXY;
 use glasnost_map::terrain::land;
@@ -31,7 +36,7 @@ use crate::orders::Order;
 use crate::path::{self, NearbyUse};
 use crate::regions::{self, Reach};
 use crate::rules::{Behaviour, BuildingRules, Kind, UnitRules};
-use crate::world::{HouseId, ObjectId, Pos, Target, World};
+use crate::world::{HouseId, Layer, ObjectId, Pos, Target, World};
 
 /// What was clicked.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -155,6 +160,14 @@ pub struct ClickResult {
     pub orders: Vec<Order>,
     /// The new selection, when the click changed it.
     pub selection: Option<Vec<ObjectId>>,
+    /// The object that speaks the acknowledgement: the first object of the
+    /// selection, when it got an order from the click (S-0214 claim 14).
+    /// Sound only, never game state; AI houses give none.
+    pub acknowledge: Option<ObjectId>,
+    /// Whether a move-target marker is drawn for the click: the first
+    /// object of the selection got an order from the action *move* (S-0214
+    /// claim 14). Drawing only.
+    pub marker: bool,
 }
 
 /// A key command (S-0213 table T2).
@@ -262,15 +275,98 @@ pub fn armed(w: &World, id: ObjectId) -> bool {
     }
 }
 
-/// Able to fire (S-0214 Terms): own, armed, not disabled, not falling.
+/// Able to fire (S-0214 Terms): own, armed, not disabled, not falling
+/// (nothing falls before the aircraft topic).
 pub fn able_to_fire(w: &World, house: HouseId, id: ObjectId) -> bool {
-    own(w, house, id) && armed(w, id)
+    own(w, house, id) && armed(w, id) && !disabled(w, id)
 }
 
-/// A healer: its default weapon does negative damage (weapon damage is not
-/// imported yet, so no weapon heals).
-fn healer(_w: &World, _id: ObjectId) -> bool {
+/// A healing actor (S-0214 Terms): an armed object whose default weapon
+/// does negative damage. The weapon choice is the combat specs' (M4), so no
+/// weapon heals yet.
+fn healing_actor(_w: &World, _id: ObjectId) -> bool {
     false
+}
+
+// The states below have no place in our engine before combat (M4) and the
+// special-abilities topics: these seams keep the rows that read them in
+// place, and evaluate as the state is never present.
+
+/// Berserk (S-0213 Terms): no berserk-causing warhead before M4.
+fn berserk(_w: &World, _id: ObjectId) -> bool {
+    false
+}
+
+/// Melee-linked while the type lacks the keep-acting flag (S-0214 Terms,
+/// rows G1 and GC1): the link needs warhead hits (M4).
+fn melee_held(_w: &World, _id: ObjectId) -> bool {
+    false
+}
+
+/// Being erased (S-0214 Terms): no erasing weapon before M4.
+fn being_erased(_w: &World, _id: ObjectId) -> bool {
+    false
+}
+
+/// Phasing in after a chrono jump (S-0214 Terms): no chrono jumps yet.
+fn phasing_in(_w: &World, _id: ObjectId) -> bool {
+    false
+}
+
+/// Carries an active planted bomb (S-0213 Terms): no bombs before M4.
+fn planted_bomb(_w: &World, _id: ObjectId) -> bool {
+    false
+}
+
+/// Disabled (S-0214 Terms): paralysed, or a vehicle playing its death
+/// sequence; neither exists before M4.
+fn disabled(_w: &World, _id: ObjectId) -> bool {
+    false
+}
+
+/// A carrier aircraft (S-0214 Import mapping, `Carryall`).
+fn carrier(w: &World, id: ObjectId) -> bool {
+    kind(w, id) == Some(Kind::Aircraft) && uflag(w, id, |u| u.raw.carryall.unwrap_or(false))
+}
+
+/// Whether a cell holds a vehicle factory (S-0214 row AC2): a building
+/// with the vehicle-factory flag in its ground layer.
+fn vehicle_factory_cell(w: &World, c: CellXY) -> bool {
+    w.cells
+        .list(c, Layer::Ground)
+        .iter()
+        .any(|&b| building(w, b).is_some_and(|r| r.raw.weapons_factory.unwrap_or(false)))
+}
+
+/// Whether an object stands on a cell that holds a building.
+fn on_building_cell(w: &World, id: ObjectId) -> bool {
+    w.obj(id).is_some_and(|o| {
+        w.cells
+            .list(o.pos.cell(), Layer::Ground)
+            .iter()
+            .any(|&b| b != id && kind(w, b) == Some(Kind::Building))
+    })
+}
+
+/// A self-teleporting type (S-0214 Terms, Import mapping `Teleporter`).
+fn teleporter(w: &World, id: ObjectId) -> bool {
+    uflag(w, id, |u| u.raw.teleporter.unwrap_or(false))
+}
+
+/// A free mover (S-0214 Terms): an aircraft, an underground type (zone
+/// *subterranean*) or a jumpjet infantry type. The jumpjet counts for a
+/// click on a cell only while no ion storm is active, and our engine has no
+/// ion storm. Nothing of another kind is in the air before the aircraft
+/// topic.
+fn free_mover(w: &World, id: ObjectId) -> bool {
+    match kind(w, id) {
+        Some(Kind::Aircraft) => true,
+        Some(Kind::Infantry) if uflag(w, id, |u| u.jumpjet) => true,
+        Some(Kind::Infantry | Kind::Vehicle) => {
+            uflag(w, id, |u| u.zone == MovementZone::Subterranean)
+        }
+        _ => false,
+    }
 }
 
 fn uflag(w: &World, id: ObjectId, f: impl Fn(&UnitRules) -> bool) -> bool {
@@ -448,6 +544,25 @@ fn generic(
 ) -> Action {
     let is_own = own(w, house, actor);
     let only = sel.len() == 1 && sel[0] == actor;
+    // No loaners exist before the topics that lend units: "not an own loaner" always holds.
+    let selectable_new = selectable(w, t) && !sel.contains(&t);
+    // spec: S-0214 table G row G1 (berserk, or melee-linked without the keep-acting flag: nothing)
+    if berserk(w, actor) || melee_held(w, actor) {
+        return Action::Nothing;
+    }
+    // spec: S-0214 table G row G2 (being erased: select unless armed, own and the target another house's)
+    if being_erased(w, actor) {
+        let armed_own_other = armed(w, actor) && is_own && other_house(w, actor, t);
+        return if selectable_new && !armed_own_other {
+            Action::Select
+        } else {
+            Action::Nothing
+        };
+    }
+    // spec: S-0214 table G row G3 (the only selected own object, clicked on itself, carrying a bomb it may set off)
+    if t == actor && only && is_own && planted_bomb(w, actor) {
+        return Action::Detonate;
+    }
     // spec: S-0214 table G row G4 (force-select, own actor, not a loaner)
     if mods.force_select && is_own {
         return Action::ToggleSelect;
@@ -477,8 +592,8 @@ fn generic(
     if is_own && armed(w, actor) && other_house(w, actor, t) {
         return Action::Nothing;
     }
-    // spec: S-0214 table G row G10 (selectable, not selected yet)
-    if selectable(w, t) && !sel.contains(&t) {
+    // spec: S-0214 table G row G10 (selectable, not selected yet, not being erased)
+    if selectable_new && !being_erased(w, t) {
         return Action::Select;
     }
     // spec: S-0214 table G row G11
@@ -543,7 +658,10 @@ fn infantry_on(
     if g == Action::ToggleSelect {
         return Action::ToggleSelect;
     }
-    // Row I2 needs a planted bomb, which no object carries yet.
+    // spec: S-0214 table I row I2 (an engineer over a target carrying an active planted bomb: disarm bomb)
+    if eng && planted_bomb(w, t) {
+        return Action::DisarmBomb;
+    }
     // spec: S-0214 table I row I3 (a bridge repair hut: no bridge is destroyed in our engine yet)
     if eng
         && target_building_repairable
@@ -587,8 +705,27 @@ fn infantry_on(
     if eng && g == Action::Attack {
         return Action::NoMove;
     }
-    if healer(w, actor) {
-        // Rows I10 to I13: no weapon heals until weapon damage is imported.
+    if healing_actor(w, actor) {
+        // spec: S-0214 table I row I10 (a healing actor over an enemy: idle)
+        if !allied(w, actor, t) {
+            return Action::Idle;
+        }
+        // spec: S-0214 table I row I11 (over itself: area guard)
+        if t == actor {
+            return Action::AreaGuard;
+        }
+        // spec: S-0214 table I row I12 (infantry below full health: heal)
+        if kind(w, t) == Some(Kind::Infantry) && below_full(w, t) {
+            return Action::Heal;
+        }
+        // spec: S-0214 table I row I13 (not a unit or building, or no passengers: g if move or area guard, else select)
+        if !unit_or_building(w, t) || !passengers(w, t) {
+            return if matches!(g, Action::Move | Action::AreaGuard) {
+                g
+            } else {
+                Action::Select
+            };
+        }
     }
     let thief = uflag(w, actor, |u| u.vehicle_thief);
     // spec: S-0214 table I row I14 (a vehicle thief on a train)
@@ -717,8 +854,32 @@ fn vehicle_on(w: &World, house: HouseId, actor: ObjectId, t: ObjectId, g: Action
         Action::Deploy => vehicle_deploy(w, actor),
         _ => g,
     };
-    // spec: S-0214 table V values b and n (no healers; no docking answers yet)
-    let n = k;
+    let ally = allied(w, actor, t);
+    // spec: S-0214 table V value b (rows b1 to b3 for a healing vehicle with g other than deploy; b4 otherwise k)
+    let b = if healing_actor(w, actor) && g != Action::Deploy {
+        let tb = building(w, t).is_some();
+        if !ally {
+            // spec: S-0214 table V row b1 (an enemy: nothing)
+            Action::Nothing
+        } else if !tb && (!counts_as_vehicle(w, t) || t == actor || !attackable_height(w, t)) {
+            // spec: S-0214 table V row b2 (allied, not a building; not a vehicle, itself or not attackable: select)
+            Action::Select
+        } else if counts_as_vehicle(w, t)
+            && t != actor
+            && attackable_height(w, t)
+            && below_full(w, t)
+            && !(kind(w, t) == Some(Kind::Aircraft) && on_building_cell(w, t))
+        {
+            // spec: S-0214 table V row b3 (an allied vehicle below full health, not an aircraft on a building's cell: repair vehicle)
+            Action::RepairVehicle
+        } else {
+            k
+        }
+    } else {
+        k
+    };
+    // spec: S-0214 table V value n (rows n1 to n3 need a docking answer accepts, which no contact exchange gives yet: n4)
+    let n = b;
     // spec: S-0214 table V value q (row q1: a moving transport refuses)
     let q = if !matches!(
         n,
@@ -760,6 +921,24 @@ fn aircraft_on(
     g: Action,
     mods: Modifiers,
 ) -> Action {
+    // spec: S-0214 table AC rows AC2 and AC3 (a carrier carrying nothing, g select or nothing, an allied vehicle: tote, unless it stands on a vehicle factory's cell)
+    // A carrier carries nothing before the aircraft topic.
+    // spec: S-0214 claim 15 (a berserk carrier shows tote only with quirks.berserk_carrier_tote)
+    if carrier(w, actor)
+        && (!berserk(w, actor) || w.rules().quirks.berserk_carrier_tote)
+        && matches!(g, Action::Select | Action::Nothing)
+        && kind(w, t) == Some(Kind::Vehicle)
+        && allied(w, actor, t)
+    {
+        let on_factory = w
+            .obj(t)
+            .is_some_and(|o| vehicle_factory_cell(w, o.pos.cell()));
+        return if on_factory {
+            Action::Nothing
+        } else {
+            Action::Tote
+        };
+    }
     match g {
         // spec: S-0214 table AC row AC1
         Action::ToggleSelect => Action::ToggleSelect,
@@ -823,6 +1002,10 @@ fn building_on(w: &World, actor: ObjectId, t: ObjectId, g: Action) -> Action {
 
 /// The generic cell result c (S-0214 table GC).
 fn generic_cell(w: &World, house: HouseId, actor: ObjectId, c: CellXY, mods: Modifiers) -> Action {
+    // spec: S-0214 table GC row GC1 (berserk, melee-linked without keep-acting, being erased or phasing in: nothing)
+    if berserk(w, actor) || melee_held(w, actor) || being_erased(w, actor) || phasing_in(w, actor) {
+        return Action::Nothing;
+    }
     // spec: S-0214 table GC row GC2
     if !own(w, house, actor) {
         return Action::Nothing;
@@ -948,34 +1131,67 @@ fn cell_action(
                 g
             }
         }
-        Some(Kind::Building) => {
-            // spec: S-0214 table BC row BC1
-            if invisible(w, actor) {
-                return Action::Nothing;
-            }
-            // spec: S-0214 table BC row BC3 (attack without a weapon in the first slot)
-            if g == Action::Attack && !armed(w, actor) {
-                return Action::Attack;
-            }
-            // spec: S-0214 table BC row BC4
-            if g == Action::Attack
-                && !building(w, actor).is_some_and(|b| b.raw.emp_cannon.unwrap_or(false))
-            {
-                return Action::Attack;
-            }
-            // spec: S-0214 table BC row BC5 (an own rally-capable building)
-            if own(w, house, actor) && rally_capable(w, actor) {
-                return Action::Move;
-            }
-            // spec: S-0214 table BC rows BC6 and BC7
-            if g == Action::Attack || (g == Action::Move && !movable(w, house, actor)) {
-                return Action::Nothing;
-            }
-            // spec: S-0214 table BC row BC8
-            g
-        }
+        Some(Kind::Building) => building_cell(
+            g,
+            BuildingCell {
+                invisible: invisible(w, actor),
+                // The weapon slot a building uses is its first until weapon switching (M4).
+                first_slot_weapon: armed(w, actor),
+                // Projectile ground flags and selling are not read before M4: only the pulse cannon.
+                fires_on_ground: !building(w, actor)
+                    .is_some_and(|b| b.raw.emp_cannon.unwrap_or(false)),
+                own_rally: own(w, house, actor) && rally_capable(w, actor),
+            },
+            w.rules().quirks.building_cell_attack_no_weapon,
+        ),
         _ => Action::Nothing,
     }
+}
+
+/// The inputs of table BC (S-0214) for one building.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct BuildingCell {
+    /// Its type is invisible in the game (row BC1).
+    pub invisible: bool,
+    /// A weapon is in its first slot (rows BC3).
+    pub first_slot_weapon: bool,
+    /// Its projectile can hit ground targets, it is not a pulse cannon and
+    /// is not being sold (row BC4).
+    pub fires_on_ground: bool,
+    /// It is an own rally-capable building (row BC5).
+    pub own_rally: bool,
+}
+
+/// A building on a cell (S-0214 table BC), from its generic cell result
+/// `c` (no shroud change for buildings). Row BC2 needs the resource
+/// gatherer flags, which are not imported yet (economy topic).
+pub fn building_cell(c: Action, b: BuildingCell, no_weapon_attack: bool) -> Action {
+    // spec: S-0214 table BC row BC1 (invisible in the game: nothing)
+    if b.invisible {
+        return Action::Nothing;
+    }
+    // spec: S-0214 table BC row BC3 (attack, no weapon in the first slot: attack; quirks.building_cell_attack_no_weapon off: nothing)
+    if c == Action::Attack && !b.first_slot_weapon {
+        return if no_weapon_attack {
+            Action::Attack
+        } else {
+            Action::Nothing
+        };
+    }
+    // spec: S-0214 table BC row BC4 (attack it can fire on the ground: attack)
+    if c == Action::Attack && b.fires_on_ground {
+        return Action::Attack;
+    }
+    // spec: S-0214 table BC row BC5 (an own rally-capable building: move, its rally point)
+    if b.own_rally {
+        return Action::Move;
+    }
+    // spec: S-0214 table BC row BC6 (attack: nothing)
+    if c == Action::Attack {
+        return Action::Nothing;
+    }
+    // spec: S-0214 table BC row BC7 (otherwise c)
+    c
 }
 
 /// The action of one selected actor on a target, with the whole selection
@@ -1019,9 +1235,11 @@ pub fn action(w: &World, house: HouseId, actor: ObjectId, on: ClickOn, mods: Mod
 
 /// The representative rank (S-0214 table R).
 fn rank(w: &World, id: ObjectId) -> u8 {
-    // spec: S-0214 table R (0 not a unit or building; 2 not armed; 3 an armed building; 4 or 5 an armed unit)
-    if !unit_or_building(w, id) {
+    // spec: S-0214 table R (0 not a unit or building, or berserk; 1 disabled; 2 not armed; 3 an armed building; 4 or 5 an armed unit)
+    if !unit_or_building(w, id) || berserk(w, id) {
         0
+    } else if disabled(w, id) {
+        1
     } else if !armed(w, id) {
         2
     } else if kind(w, id) == Some(Kind::Building) {
@@ -1094,7 +1312,7 @@ fn eligible(w: &World, id: ObjectId) -> bool {
 }
 
 /// A click: each selected object resolves it itself (S-0214 claims 2, 3,
-/// 5, 9 to 12).
+/// 5, 9 to 12 and 14).
 pub fn click(
     w: &World,
     house: HouseId,
@@ -1104,6 +1322,10 @@ pub fn click(
 ) -> ClickResult {
     let shown = cursor(w, house, selection, on, mods);
     let first_own = selection.first().is_some_and(|&f| own(w, house, f));
+    let reselect = |s: Vec<ObjectId>| ClickResult {
+        selection: Some(s),
+        ..ClickResult::default()
+    };
     match (shown, on) {
         // spec: S-0214 claim 12 (toggle select acts only when the first selected object is own)
         (Action::ToggleSelect, ClickOn::Object(t)) if first_own => {
@@ -1113,25 +1335,16 @@ pub fn click(
             } else {
                 s.push(t);
             }
-            return ClickResult {
-                orders: Vec::new(),
-                selection: Some(s),
-            };
+            return reselect(s);
         }
         // spec: S-0214 claim 12 (select replaces the selection; a toggle that does not act is a select)
         (Action::Select | Action::ToggleSelect, ClickOn::Object(t)) => {
-            return ClickResult {
-                orders: Vec::new(),
-                selection: Some(vec![t]),
-            };
+            return reselect(vec![t]);
         }
-        // spec: S-0214 claim 3 (nothing over a selectable object not selected yet acts as select)
+        // spec: S-0214 claim 3 (nothing over a selectable object not selected yet acts as select; over a selected one, nothing)
         (Action::Nothing, ClickOn::Object(t)) => {
             if selectable(w, t) && !selection.contains(&t) {
-                return ClickResult {
-                    orders: Vec::new(),
-                    selection: Some(vec![t]),
-                };
+                return reselect(vec![t]);
             }
             return ClickResult::default();
         }
@@ -1144,25 +1357,38 @@ pub fn click(
         && selection
             .iter()
             .all(|&id| !unit_or_building(w, id) || eligible(w, id));
-    let mut orders = Vec::new();
-    // spec: S-0214 claim 2 (every selected object in selection order resolves the click itself)
-    for &id in selection {
+    let mut result = ClickResult::default();
+    // spec: S-0214 claim 2 (every selected object in selection order resolves the click itself, all against the state at the click)
+    for (i, &id) in selection.iter().enumerate() {
         if w.obj(id).is_none() {
             continue;
         }
         let a = action_in(w, house, selection, id, on, mods);
-        orders.extend(order_for(w, house, id, a, on, mods, am));
+        let o = order(w, house, id, a, on, mods, am);
+        // spec: S-0214 claim 14 (only the first object of the selection gives the acknowledgement and the marker, and only when it gets an order; the marker only for move)
+        if i == 0 && o.is_some() {
+            result.acknowledge = Some(id);
+            result.marker = a == Action::Move;
+        }
+        result.orders.extend(o);
     }
-    ClickResult {
-        orders,
-        selection: None,
-    }
+    result
 }
 
-/// The move destination of claim 11.
+/// The selection response that acknowledges an order without an
+/// acknowledgement of its own kind (S-0214 claim 14, F5): response
+/// `raw mod responses`, where `raw` is the next raw value of the
+/// unsynchronised random stream; `None`, and no value taken, when the type
+/// has no selection response. Sound only, never game state.
+pub fn selection_response(raw: u32, responses: u32) -> Option<u32> {
+    // spec: S-0214 F5 (i = x mod n, unsigned remainder; none for n = 0)
+    raw.checked_rem(responses)
+}
+
+/// The move destination of claim 11. No cell or object is shrouded before
+/// the visibility topic, so the shroud rules of the claim never apply.
 fn move_destination(
     w: &World,
-    house: HouseId,
     actor: ObjectId,
     on: ClickOn,
     a: Action,
@@ -1170,53 +1396,73 @@ fn move_destination(
 ) -> Option<Target> {
     let o = w.obj(actor)?;
     let zone = unit(w, actor).map_or(MovementZone::Normal, |u| u.zone);
+    let fm = free_mover(w, actor);
+    // spec: S-0214 claim 11 (in reach: in the same reach region of the actor's movement zone as the actor's own cell)
+    let in_reach = |c: CellXY| {
+        let r = regions::reach_in(w, c, zone);
+        matches!(r, Reach::Region(_)) && r == regions::reach_in(w, o.pos.cell(), zone)
+    };
+    // The search of S-0212 table T5. A free mover's no-move searches without a reach region, and a
+    // click on an object searches zone fly as infantry; path::nearby has only the search with the
+    // actor's reach region so far (S-0212's search is not this module's).
+    let search = |c: CellXY| path::nearby(w, c, NearbyUse::MoveOrder { unit: actor });
     match on {
         ClickOn::Cell(c) => {
-            // spec: S-0214 claim 11 (on a cell: the nearby-cell search of S-0212 claim 25; none found, no order)
-            path::nearby(w, c, NearbyUse::MoveOrder { unit: actor }).map(Target::Cell)
+            let inside = w.cells.usable(c);
+            // spec: S-0214 claim 11 (the clicked cell itself, no search: inside, and a free mover's or self-teleporting type's move, or in reach unless a free mover's no-move)
+            let itself = inside
+                && ((a == Action::Move && (fm || teleporter(w, actor)))
+                    || (!(fm && a == Action::NoMove) && in_reach(c)));
+            if itself {
+                return Some(Target::Cell(c));
+            }
+            // spec: S-0214 claim 11 (otherwise a cell found by the search from the clicked cell; none found, no order)
+            search(c).map(Target::Cell)
         }
         ClickOn::Object(t) => {
             let tc = w.obj(t)?.pos.cell();
-            // spec: S-0214 claim 11 (an underground zone counts as ground)
-            let z = if zone == MovementZone::Subterranean {
-                MovementZone::Normal
-            } else {
-                zone
-            };
-            let reachable = matches!(regions::reach_in(w, tc, z), Reach::Region(_))
-                && regions::reach_in(w, tc, z) == regions::reach_in(w, o.pos.cell(), z);
             let infantry_force = o.kind == Kind::Infantry && mods.force_move;
-            let flies = o.kind == Kind::Aircraft
-                || zone == MovementZone::Subterranean
-                || (o.kind == Kind::Infantry && uflag(w, actor, |u| u.jumpjet));
-            // spec: S-0214 claim 11 (the object itself when moving there is possible; else a nearby cell, else the object)
-            if a == Action::Move && (flies || (w.cells.usable(tc) && reachable && !infantry_force))
+            // spec: S-0214 claim 11 (the object itself: a move, its cell inside, and a free mover, or in reach without an infantry actor's force-move)
+            if a == Action::Move && w.cells.usable(tc) && (fm || (in_reach(tc) && !infantry_force))
             {
-                Some(Target::Object(t))
-            } else {
-                let _ = house;
-                Some(
-                    path::nearby(w, tc, NearbyUse::MoveOrder { unit: actor })
-                        .map_or(Target::Object(t), Target::Cell),
-                )
+                return Some(Target::Object(t));
             }
+            // spec: S-0214 claim 11 (otherwise a cell found by the search from the object's cell, and the object itself when none is found)
+            Some(search(tc).map_or(Target::Object(t), Target::Cell))
         }
     }
 }
 
-/// The order an action gives (S-0214 table M), with claim 9's rule for
-/// cells outside the usable area and the attack-move translation of claim 5.
-#[allow(clippy::too_many_arguments)]
-fn order_for(
+/// Part 1 of table M for an actor that is berserk or melee-linked while
+/// its type lacks the keep-acting flag: whether its action gives no order
+/// (S-0214 claim 15). The exception is *tote* for a berserk carrier
+/// aircraft, under `quirks.berserk_carrier_tote`.
+pub fn held_without_order(
+    berserk: bool,
+    melee_held: bool,
+    carrier_aircraft: bool,
+    action: Action,
+    berserk_carrier_tote: bool,
+) -> bool {
+    // spec: S-0214 table M part 1 (berserk or melee-linked: no order, except tote for a berserk carrier aircraft)
+    let tote = berserk && carrier_aircraft && action == Action::Tote && berserk_carrier_tote;
+    (berserk || melee_held) && !tote
+}
+
+/// The order that one actor's action gives (S-0214 table M, claim 10),
+/// with claim 9's rule for cells outside the usable area; `attack_move`
+/// asks for the attack-move translation of claim 5.
+pub fn order(
     w: &World,
     house: HouseId,
     id: ObjectId,
     a: Action,
     on: ClickOn,
     mods: Modifiers,
-    am: bool,
+    attack_move: bool,
 ) -> Option<Order> {
     let k = kind(w, id)?;
+    let q = w.rules().quirks;
     let target = match on {
         ClickOn::Object(t) => Target::Object(t),
         ClickOn::Cell(c) => Target::Cell(c),
@@ -1226,7 +1472,7 @@ fn order_for(
         Some(Order::Behaviour {
             actor: id,
             behaviour: b,
-            attack_move: am && matches!(b, Behaviour::Move | Behaviour::Attack),
+            attack_move: attack_move && matches!(b, Behaviour::Move | Behaviour::Attack),
             target,
             dest,
         })
@@ -1255,6 +1501,16 @@ fn order_for(
             _ => None,
         };
     }
+    // spec: S-0214 table M part 1 (berserk or melee-linked: no order, except tote for a berserk carrier aircraft; quirks.berserk_carrier_tote)
+    if held_without_order(
+        berserk(w, id),
+        melee_held(w, id),
+        carrier(w, id),
+        a,
+        q.berserk_carrier_tote,
+    ) {
+        return None;
+    }
     // spec: S-0214 table M part 1 (no order on the actor itself for attack, heal, disarm, and for a vehicle also no-move and repair)
     let self_none = match k {
         Kind::Infantry => matches!(a, Action::Attack | Action::Heal | Action::DisarmBomb),
@@ -1272,7 +1528,7 @@ fn order_for(
         return None;
     }
     if k == Kind::Aircraft && matches!(on, ClickOn::Object(_)) {
-        // spec: S-0214 table M part 1 (aircraft on an object)
+        // spec: S-0214 table M part 1 (aircraft on an object: no-move none; enter, deploy and tote)
         match a {
             Action::NoMove => return None,
             Action::Enter => return behaviour(Behaviour::Enter, None, Some(target)),
@@ -1281,7 +1537,15 @@ fn order_for(
             _ => {}
         }
     }
-    // spec: S-0214 table M part 1 (the infantry and vehicle "as for" rows)
+    // spec: S-0214 Edge cases (quirks.disarm_bomb_needs_weapon off: disarm bomb needs only a movable actor, and gives the attack order on the object)
+    if k == Kind::Infantry && a == Action::DisarmBomb && !q.disarm_bomb_needs_weapon {
+        return if mv {
+            behaviour(Behaviour::Attack, Some(target), None)
+        } else {
+            None
+        };
+    }
+    // spec: S-0214 table M part 1 (the infantry and vehicle "as for" rows: part 2 then applies in full, its needs included)
     let a = match (k, a) {
         (Kind::Infantry, Action::DamagingEntry | Action::RepairBuilding) => Action::Capture,
         (Kind::Infantry, Action::Heal | Action::DisarmBomb)
@@ -1291,7 +1555,7 @@ fn order_for(
     // spec: S-0214 table M part 2 (infantry, vehicles and aircraft, with their needs)
     match a {
         Action::Move | Action::NoMove if mv => {
-            let dest = move_destination(w, house, id, on, a, mods)?;
+            let dest = move_destination(w, id, on, a, mods)?;
             behaviour(Behaviour::Move, None, Some(dest))
         }
         Action::Attack | Action::Bomb | Action::Demolish | Action::Airstrike if fire => {
@@ -1310,6 +1574,7 @@ fn order_for(
         },
         Action::Deploy | Action::AreaAttack => behaviour(Behaviour::Unload, None, None),
         Action::Harvest => behaviour(Behaviour::Harvest, None, Some(target)),
+        // No first weapon heals before M4: idle gives guard on the actor itself.
         Action::Idle => behaviour(Behaviour::Guard, Some(Target::Object(id)), None),
         _ => None,
     }
