@@ -1338,13 +1338,19 @@ pub fn click(
             let mut s: Vec<ObjectId> = selection.to_vec();
             if let Some(i) = s.iter().position(|&x| x == t) {
                 s.remove(i);
-            } else {
+            } else if selectable(w, t) {
+                // spec: S-0214 Terms (can be selected: claim 12 adds only an object that can be selected)
                 s.push(t);
+            } else {
+                return ClickResult::default();
             }
             return reselect(s);
         }
-        // spec: S-0214 claim 12 (select replaces the selection; a toggle that does not act is a select)
+        // spec: S-0214 claim 12 (select replaces the selection; a toggle that does not act is a select) and Terms (only with an object that can be selected)
         (Action::Select | Action::ToggleSelect, ClickOn::Object(t)) => {
+            if !selectable(w, t) {
+                return ClickResult::default();
+            }
             return reselect(vec![t]);
         }
         // spec: S-0214 claim 3 (nothing over a selectable object not selected yet acts as select; over a selected one, nothing)

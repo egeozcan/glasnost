@@ -731,7 +731,7 @@ mod r12 {
     use crate::common::{Scene, WHEEL, cell, run, unit_type};
     use glasnost_rules::sim::BuildingType;
 
-    // spec: S-0214 Terms (can be selected: a building whose type is invisible in the game is not) and claim 3 (nothing over an object that cannot be selected does nothing; select over one that can)
+    // spec: S-0214 Terms (can be selected: a building whose type is invisible in the game is not), claim 3 (nothing over an object that cannot be selected does nothing; select over one that can) and claim 12 (a toggle adds only an object that can be selected)
     #[test]
     fn invisible_building_cannot_be_selected() {
         let mut s = Scene::new();
@@ -749,7 +749,8 @@ mod r12 {
             );
         }
         s.place_structure(0, "TESTHUT", cell(4, 0))
-            .place_structure(0, "TESTGHOST", cell(6, 0));
+            .place_structure(0, "TESTGHOST", cell(6, 0))
+            .place_unit(0, "TESTCAR", cell(0, 0), 64);
         let mut w = s.build();
         run(&mut w, 1);
         let find = |c| w.objects.values().find(|o| o.pos.cell() == c).unwrap().id;
@@ -764,5 +765,14 @@ mod r12 {
             targeting::cursor(&w, ALPHA, &[], ClickOn::Object(ghost), Modifiers::default()),
             Action::Nothing
         );
+        // Claim 12: a force-select toggle adds the hut but not the ghost.
+        let car = common::objects_of(&w, Kind::Vehicle)[0];
+        let fs = Modifiers {
+            force_select: true,
+            ..Default::default()
+        };
+        let toggle = |on| targeting::click(&w, ALPHA, &[car], ClickOn::Object(on), fs);
+        assert_eq!(toggle(hut).selection, Some(vec![car, hut]));
+        assert_eq!(toggle(ghost).selection, None);
     }
 }
