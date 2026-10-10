@@ -2,13 +2,13 @@
 id: S-0105
 title: Rendering of voxel models
 topic: rendering
-revision: 4
+revision: 5
 sources-class: [decomp, format-doc]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-10
 measurements: []
-requests: []
+requests: [Q-0014]
 supersedes: []
 ---
 
@@ -30,9 +30,9 @@ Shared terms (facing, lepton, tick, drawn frame, locomotor, house colour, measur
 on) are in the glossary. Below, "raw facing" means a facing in the glossary's sense (1/65536 of a
 turn per unit), to tell it apart from the coarser facings derived from it.
 
-- **32-step facing** *f₃₂* of a raw facing *r*: *f₃₂ = (⌊(⌊r / 1024⌋ + 1) / 2⌋) mod 32*. This is
+- **32-step facing** *f₃₂* of a raw facing *r* (S-0204's 32-step facing, its F4 with *n* = 32): *f₃₂ = (⌊(⌊r / 1024⌋ + 1) / 2⌋) mod 32*. This is
   *r / 2048* rounded to the nearest step, halves rounding up, with 32 wrapping to 0.
-- **4-step facing** *f₄ = (⌊(⌊r / 8192⌋ + 1) / 2⌋) mod 4* (same rule, quarter turns).
+- **4-step facing** *f₄ = (⌊(⌊r / 8192⌋ + 1) / 2⌋) mod 4* (S-0204's 4-step facing, its F4 with *n* = 4: the same rule, quarter turns).
 - **Model frame.** The coordinate frame a voxel model is authored in: +x forward, +y to the
   model's left, +z up. One model unit is one screen pixel before projection.
 - **Section.** One independently transformed block of voxels inside a VXL file (VXL calls them
@@ -56,7 +56,7 @@ turn per unit), to tell it apart from the coarser facings derived from it.
 - **Shade index.** A lighting level 0–31 chosen per voxel normal; it selects one 256-entry row
   of the VPL.
 - **VPL.** The voxel lighting table file: for each shade index and each voxel colour index, the
-  palette index to draw.
+  palette index to draw. Claim 38 gives how its content is used. A *row* is the 256 entries of one shade index.
 - **Table trigonometry.** Sines and cosines quantised to 1/8192 of a turn and taken from fixed
   single-precision values instead of exact functions; formula F1. It matters because every
   rotation in this spec uses it.
@@ -77,11 +77,12 @@ turn per unit), to tell it apart from the coarser facings derived from it.
   (F7).
 - **Column.** The cells of a section that share grid indices *(i, j)*: one vertical line of the
   grid.
-- **Column data.** The values the model file stores for one column, between the start and the
-  end the file gives for that column. In a standard file they are the column's runs in pairs,
-  each pair written as an empty count, a voxel count, a colour index and a normal index for each
-  voxel, and the voxel count again. All of them are integers 0 … 255. A column the file marks as
-  empty has no column data.
+- **Column data.** The column's *value sequence*: the integers 0 … 255 that the public model
+  format stores for one column, taken in that format's own order, between the start and the end
+  the file gives for that column. In a standard file the sequence holds the column's runs, and each
+  run contributes its two counts and, for each of its voxels, that voxel's colour index and normal
+  index, in the format's order (the order that claim 35's *Standard files* entry relies on). A
+  column the file marks as empty has no column data.
 - **Run.** The file describes each column as a sequence of runs, each a number of consecutive
   empty cells or a number of consecutive voxels.
 - **Draw point.** The screen point a part image is placed around: the object's position (S-0101)
@@ -115,8 +116,10 @@ turn per unit), to tell it apart from the coarser facings derived from it.
   (values above 127 count as 127). The turn's duration and per-tick step are integers (formula
   F9): a turn of *Δ* facing units (the shorter way round) takes *Θ = ⌊|Δ| / (256 ω)⌋* ticks and
   moves by *trunc(Δ / Θ)* facing units per tick, so the facing does not move by exactly *256 ω*
-  per tick. A turn shorter than *256 ω* facing units completes at once. The facing specs own the
-  full turning rule; this spec uses it only for the barrel elevation (claim 6).
+  per tick. A turn shorter than *256 ω* facing units completes at once. S-0206 owns the full
+  turning rule and how a type's turn-rate field becomes *ω* (its claims 1 and 6; its F1 is the
+  same rule as F9); this spec uses it only for the barrel elevation (claim 6), whose rate
+  S-0206 lists among its constants.
 - **Spawned aircraft, docked.** Some types carry aircraft of their own, which they launch and
   recover (the *spawner* and its *spawned aircraft*; which types carry them, and how launch and
   recovery work, belong to the specs for spawned aircraft). A spawned aircraft counts as *docked*
@@ -217,8 +220,8 @@ turn per unit), to tell it apart from the coarser facings derived from it.
 
 10. **Barrel placement.** With *t* the translation column of the turret transform *T* (before the
     view), the barrel transform is *B = T · Tr(−t) · Ry(φ) · Tr(t)*, where *φ* is the elevation
-    angle of claim 6 and *Tr(v)* is a translation in the current local frame. The only point
-    the elevation leaves in place is the turret-frame point *−t*, so the barrel pitches about a
+    angle of claim 6 and *Tr(v)* is a translation in the current local frame. The only points
+    the elevation leaves in place are those of the lateral (y) line through the turret-frame point *−t*, so the barrel pitches about a
     lateral axis through *−t* in turret coordinates, not through the turret origin (`quirks.barrel_pivot_frame_mixup`).
     *t* is the turret's translation in its parent frame: for a vehicle on flat ground it is
     *δ × ρ* along the body's forward direction (plus any translation in *D*, S-0106),
@@ -343,7 +346,8 @@ turn per unit), to tell it apart from the coarser facings derived from it.
 19. **VPL application.** The pixel written for a voxel with colour index *χ* and shade index *q*
     is *VPL(q, χ)*, the entry for colour *χ* in row *q*, a palette index. That index then goes
     through the object's palette and house colour at copy time (S-0103). The VPL is loaded once at start-up from the voxel lighting
-    table file; its header gives the remap range and the number of rows.
+    table file (claim 38 gives how its content is used). The file's remap range and extra value are not consulted
+    when drawing: a pixel needs only the row and entry.
     - Backing: `measurable` (MS-4)
     - Confidence: high
 
@@ -521,9 +525,9 @@ turn per unit), to tell it apart from the coarser facings derived from it.
       each barrel value is the layer's own barrel key if it has one, and otherwise the turret's
       value as it stands after that layer (the layer's turret key, or the earlier value if the
       layer has none). A rules layer without a section for the type changes neither. Two
-      consequences: a later layer that sets only the turret's travel makes the barrel's travel
-      follow it, and a later layer that has a section for the type but no barrel key, even one
-      that names no recoil key at all, replaces barrel values that an earlier layer set with the
+      consequences: a later rules layer that sets only the turret's travel makes the barrel's travel
+      follow it, and a later rules layer that has a section for the type but no barrel key, even one
+      that names no recoil key at all, replaces barrel values that an earlier rules layer set with the
       turret's values. This is an exception to S-0006's rule that an absent key keeps the earlier
       value (S-0006, claim 3), like the resets on override of S-0006 claim 5, except that the value
       goes back to the turret's value rather than to an engine default.
@@ -657,13 +661,14 @@ turn per unit), to tell it apart from the coarser facings derived from it.
     - **Where a column ends.** As for the other modes (`quirks.voxel_topdown_column_origin`): at the first group boundary, the
       column's start included, at which the cells counted so far (empty counts plus voxel counts)
       are congruent to *Nz* modulo 256.
-    - **Standard files.** In a standard file each voxel holds two values and every run repeats its
-      voxel count, so the groups go out of step after the first run of the reading direction.
-      Bottom-up, the *k*-th voxel of the first run shows the first run's colour indices and normal
-      indices in turn (the first voxel's colour index, the first voxel's normal index, the second
-      voxel's colour index, …), and later empty and voxel counts are taken from whichever values
-      come next: colour indices, normal indices or the file's own counts. Top-down, the first voxel shows the last voxel's normal index, the second the last
-      voxel's colour index, and so on. What is drawn is thus fixed by the column data alone, as
+    - **Standard files.** In a standard file each voxel holds two values (a colour index and a
+      normal index) and each run carries its voxel count a second time, so the groups go out of
+      step after the first run of the reading direction. Bottom-up, the voxels of the first run
+      show that run's voxel values in the value sequence's order, so that colour indices and
+      normal indices alternate, beginning with the first voxel's colour index, and later empty and
+      voxel counts are taken from whichever values come next: colour indices, normal indices or
+      the file's own counts. Top-down, the first voxel shows the last voxel's normal index, the
+      second the last voxel's colour index, and so on. What is drawn is thus fixed by the column data alone, as
       long as the column ends within its own column data.
     - **Reading past the column data.** If a column reaches the end of its own column data (or,
       top-down, its start) before it ends, the original reads on into the data that lies beyond,
@@ -687,13 +692,17 @@ turn per unit), to tell it apart from the coarser facings derived from it.
 36. **Malformed columns.** For columns whose runs do not add up to exactly *Nz* cells, the entry for
     `quirks.voxel_topdown_column_origin` gives what the original does: the position shift of a column drawn top-down, the stop at a
     pair boundary, and the stray voxels read from a neighbouring column's data.
+    - **Importer warning.** The importer warns about every section with a column whose runs do not
+      add up to exactly *Nz* cells, counting all its empty and voxel counts (Import mapping,
+      *Importer warnings*), whatever the state of the switch. This is the condition of the
+      heading. It covers the unspecified case below (a column that never reaches *Nz* at a pair
+      boundary cannot add up to *Nz*) and also a column such as MS-20's, which stops cleanly at
+      a pair boundary but has runs left over.
     - Backing: `measurable` (MS-20) for the stop at a pair boundary; `unmeasured` for the
       top-down shift and the stray voxels. A column that does not reach *Nz* at a pair boundary
       always goes on into a neighbouring column's data, which this spec leaves unspecified, so
       no test model can show the shift on its own. What our engine draws instead (it stops at the
       end of the column's own runs) is given in the entry for `quirks.voxel_topdown_column_origin`.
-      The importer warns about every section with such a column (Import mapping, *Importer
-      warnings*), whatever the state of the switch.
     - Confidence: medium
 
 ### Buildings with a barrel model only
@@ -719,6 +728,36 @@ turn per unit), to tell it apart from the coarser facings derived from it.
     - Backing: `measurable` (MS-21)
     - Confidence: high (pose, frame, no recoil, key), medium (visible placement)
 
+### The voxel lighting table file
+
+38. **Use of the lighting table file.** The voxel lighting table file is in the public format of
+    that table. Its content is a row count *R*, a remap range, one more value, a palette and *R*
+    rows of 256 palette indices each, one entry for each voxel colour index. This spec fixes only
+    how the content is used; where each part lies in the file, and in what order, is the format's
+    own, as it is for VXL and HVA files. The file is loaded once, at start-up (claim 19).
+    - **What counts.** Row *q*, numbered from 0 in file order, supplies the entries for shade
+      *q*: the entry for shade *q* and colour *χ* is entry *χ* of row *q* (claim 19). Only the row
+      count *R* and the rows have an effect.
+    - **What does nothing.** The remap range, the extra value and the palette have no effect: not
+      on drawing, not on house colouring (S-0103 fixes the remap range at 16–31 itself) and not on
+      anything else. S-0103 gives the palettes drawing does use.
+    - **Rows in use.** Shade indices are 0–31 in practice (F4), so rows beyond the 32nd are not
+      used.
+    - **Missing and short data.** Rows the file does not supply read as all zero, which is the
+      transparent index, so voxels drawn with such a row leave nothing in the voxel buffer. That
+      covers *R* below 32, a missing file, and a file that ends before its last row. When the
+      file ends part-way through a row, the entries it does supply from that row are used and the
+      rest of the row reads as zero. The game goes on starting up as if the load had succeeded
+      (`quirks.vpl_unloaded_rows_blank`). Bytes after the last row are ignored.
+    - **Departure: more than 128 rows.** With *R* above 128 the original's result is unspecified:
+      the load can disturb unrelated game state. This is bad data, so it is a departure, with no
+      switch. Our engine uses the first 128 rows, ignores the rest and carries on as for any
+      other file, and the importer warns (Import mapping, *Importer warnings*).
+    - Backing: `measurable` (MS-22 for the use of the rows and the unused parts; MS-23 for short,
+      missing and small tables)
+    - Confidence: high (rows, unused parts), medium (a file that ends part-way through a row, a
+      missing file)
+
 ## Formulas
 
 **F0. Floating-point environment.** All floating-point work in this spec runs in the original
@@ -730,7 +769,7 @@ precision between steps; each such store truncates toward zero. Float-to-integer
 truncations toward zero. Confidence medium: truncation is certain at every float-to-integer
 conversion; that it also holds for every store between conversions is not confirmed. This is the
 glossary's *round-toward-zero mode*. Its scope and its single switch `quirks.chop_rounding`
-(default: the original behaviour) belong to S-0205 (number domains, planned); this spec defines no
+(default: the original behaviour) belong to S-0205 (claim 5); this spec defines no
 switch of its own and only states what the mode changes here (Edge cases and quirks). With the
 switch off, results differ from the original by at most one unit in the last place per stored
 value. That matters only where a value lands exactly on a pixel or table boundary.
@@ -830,17 +869,20 @@ depth-buffered mode the z component is formed the same way, and a voxel's depth 
 *⌊pz / 256⌋ mod 256*.
 
 Without depth buffering, *py* also receives carries from *px* (`quirks.voxel_x_carry_into_y`). Write ⟨v⟩ for
-*v mod 65536*. A voxel's position counts as reached from *o* through these addends:
-- *Δ_y* once for each row of columns before the voxel's row,
-- *Δ_x* once for each column before the voxel's column in its row, empty columns included,
-- *e·Δ_z* once for each run of *e* empty cells before the voxel in its column (one addend, each
-  component reduced modulo 65536),
-- *Δ_z* once for each voxel drawn before it in its column.
+*v mod 65536* (in 0 … 65535), and ⟨w⟩ₓ for ⟨x component of the vector *w*⟩. For a voxel, let
+*v* be the number of voxels drawn before it in its column, and *e₁, …, e_r* the lengths of the
+runs of empty cells before it in its column. The rows of columns before the voxel's row number
+*n_y*, and the columns before the voxel's column in its row number *n_x*, empty columns included.
+Then
 
-Let *U* be ⟨*o_x*⟩ plus the sum of ⟨x component⟩ over all these addends. Then *py* is the value
-above plus *⌊U / 65536⌋*, modulo 65536. This is the same as adding 1/256 pixel to *py* for each
-addend whose x component, taken in 0 … 65535, carries the running *px*, also taken in
-0 … 65535, to 65536 or beyond. With a negative x step that happens for nearly every addend (all
+> *U = ⟨o⟩ₓ + n_y ⟨Δ_y⟩ₓ + n_x ⟨Δ_x⟩ₓ + ⟨e₁ Δ_z⟩ₓ + … + ⟨e_r Δ_z⟩ₓ + v ⟨Δ_z⟩ₓ*,
+
+where each empty run's term reduces the whole product *e_m Δ_z* (not *e_m ⟨Δ_z⟩ₓ*), and *py* is
+the value above plus *⌊U / 65536⌋*, modulo 65536. Equivalently, with the position seen as *o*
+plus these terms (one per row before, one per column before, one per empty run before, one per
+voxel before), *py* gains 1/256 pixel for each term whose x component, taken in 0 … 65535,
+carries the running *px*, also taken in 0 … 65535, to 65536 or beyond; the count is the same
+whatever order the terms are added in. With a negative x step that happens for nearly every term (all
 but those that take *px* below 0); with a positive x step it happens only when *px* passes 65536
 (256 pixels). The depth-buffered mode and the shadow footprint have no such carry.
 
@@ -907,7 +949,7 @@ ascending order of *z*. Sections with equal *z* do not necessarily keep file ord
 in claim 23). Only the resulting order *π_N* is binding: the intermediate orders only define it, and
 any way of reaching the same order meets this spec.
 
-**F9. Turning at a turn rate (claim 6, Terms).** All quantities are integers. A facing turns from
+**F9. Turning at a turn rate (claim 6, Terms).** This is S-0206's turning rule (its claim 1 and F1), stated here for the barrel elevation. All quantities are integers. A facing turns from
 a start facing *ψ₀* toward a target facing *ψ₁* at turn rate *ω* (1 … 127). Let *Δ* be *ψ₁ − ψ₀* taken as the signed
 remainder in −32768 … 32767 (the shorter way round; a half-turn counts as −32768), and
 
@@ -966,6 +1008,7 @@ darkens.
 | Building turret shift divisor | 8 | leptons per model unit | Integer, truncated |
 | The voxel buffer | 256 × 256 | pixels | Wraps |
 | Buffer centre | 128, 128 | pixels | F5, F6 |
+| Rows kept from a lighting table file | 128 | rows | Our engine's limit; a departure for files with more rows (claim 38) |
 | Copy margin | 4 | pixels | Each side |
 | Clear-area extension | 1 | pixel | On the right and at the bottom of the previous copy rectangle (claim 34) |
 | Sub-pixel precision | 1/256 | pixel | F5 |
@@ -1409,6 +1452,11 @@ decides how every fresh draw of a voxel part is made, whatever the part's type.
 
 Every switch defaults to the original (YR) behaviour described; "Fixed" gives the alternative.
 
+- **`quirks.vpl_unloaded_rows_blank`** (default: on). Rows that the lighting table file does not
+  supply (claim 38) read as zero and draw nothing, and a missing or truncated file does not stop
+  the game. Fixed: the importer rejects such a file with an error. (A row count above 128 is not part of
+  this switch: it is a departure, claim 38.)
+
 - **`quirks.voxel_eye_in_model_frame`** (default: on). The specular term uses the eye direction (0, 0, 1)
   in the model's own frame instead of the real viewing direction brought into the model frame.
   Highlights therefore follow the model's up axis and do not move consistently as the model
@@ -1444,7 +1492,7 @@ Every switch defaults to the original (YR) behaviour described; "Fixed" gives th
   angle plus the turret's relative angle (vehicles) or with twice the turret angle (buildings).
   Fixed: pivot at the turret origin, or at an imported pivot.
 - **`quirks.voxel_cache_frame_mod32`** (default: on). Reused body images are keyed by the frame number
-  modulo 32 (turret images modulo 256), so a model with more frames can show frame *f* where
+  modulo 32 (turret images modulo 256), so a model with more HVA frames can show frame *f* where
   *f ± 32* (or *± 256*) was asked for. Fixed: key by the full frame.
 - **`quirks.turret_recoil_leaves_barrel`** (default: on). Building turret recoil does not carry the barrel
   with it. Fixed: barrel follows turret recoil.
@@ -1491,7 +1539,8 @@ Every switch defaults to the original (YR) behaviour described; "Fixed" gives th
   is next drawn fresh. Fixed: switch the mode off after every shadow, or never switch it on for
   shadows.
 - **`quirks.voxel_topdown_column_origin`** (default: on). Claim 36. Malformed columns, whose runs do not add
-  up to exactly *Nz* cells. Three things happen in the original:
+  up to exactly *Nz* cells (the condition of the importer's warning, claim 36). Three things
+  happen in the original:
   - *Shift.* When the section is drawn top-down (claim 21), each column is positioned from the
     top of the grid. A column whose runs cover *Nz − γ* cells is drawn *γ* cells too high (for a
     negative *γ*, a column whose runs are too long, *|γ|* cells too low). Drawn bottom-up, the
@@ -1551,15 +1600,15 @@ Every switch defaults to the original (YR) behaviour described; "Fixed" gives th
   recoil slide never exceeds the travel distance.
 - **`quirks.barrel_recoil_layer_reset`** (default: on). After every rules layer that has a section
   for a type, each of the barrel's four recoil values is that layer's own barrel key if it has one,
-  and otherwise the turret's corresponding value as it stands after that layer (claim 27). A barrel value set by an earlier layer is therefore lost whenever a later layer has
-  the type's section without that barrel key. Fixed: a layer changes a barrel value only through
-  its own barrel key; a barrel value that no layer sets is the turret's value after the last
-  layer.
+  and otherwise the turret's corresponding value as it stands after that layer (claim 27). A barrel value set by an earlier rules layer is therefore lost whenever a later rules layer has
+  the type's section without that barrel key. Fixed: a rules layer changes a barrel value only through
+  its own barrel key; a barrel value that no rules layer sets is the turret's value after the last
+  rules layer.
 - **`quirks.barrel_only_no_recoil`** (default: on). A building that draws its barrel without a
   turret (claim 37) never shows recoil, and its recoil cycle does not stop image reuse. Fixed: slide
   the barrel back by its recoil slide along its own forward axis, as claim 27 does for a barrel
   drawn with a turret, and draw it fresh while its cycle runs.
-- **Round-toward-zero mode** (switch `quirks.chop_rounding`, owned by S-0205 (number domains, planned); not defined here). Every floating-point operation and every single-precision store in
+- **Round-toward-zero mode** (switch `quirks.chop_rounding`, owned by S-0205 (claim 5); not defined here). Every floating-point operation and every single-precision store in
   this spec rounds toward zero (F0). With that switch off they round to nearest. Conversions from floating point to integers are still truncations toward zero, since
   each formula states them. The tabulated sine values of F1 do not change. In the table square
   root the stored input follows the switch, as every store does, while the final cut of the
@@ -1579,7 +1628,7 @@ own name, even when the type's image names a different section.
 | `TurretAnimX`, `TurretAnimY` | Rules [type], buildings | integers, screen pixels (x to the right, y downward) | 0 | Turret anchor of a building's voxel turret and barrel (Terms, claims 9 and 37); the same keys place the turret slot animation of S-0108 |
 | `TurretRecoil` | Rules [type] | boolean | no | Enables S1 for buildings (claims 27, 28) |
 | `TurretTravel`, `TurretCompressFrames`, `TurretHoldFrames`, `TurretRecoverFrames` | Rules [type] | integers | 2, 1, 1, 1 | F7 for the turret |
-| `BarrelTravel`, `BarrelCompressFrames`, `BarrelHoldFrames`, `BarrelRecoverFrames` | Rules [type] | integers | the turret's corresponding value; in each rules layer that has the type's section, an absent barrel key takes the turret's value as it stands after that layer, replacing any barrel value from an earlier layer (claim 27, `quirks.barrel_recoil_layer_reset`) | F7 for the barrel |
+| `BarrelTravel`, `BarrelCompressFrames`, `BarrelHoldFrames`, `BarrelRecoverFrames` | Rules [type] | integers | the turret's corresponding value; in each rules layer that has the type's section, an absent barrel key takes the turret's value as it stands after that layer, replacing any barrel value from an earlier rules layer (claim 27, `quirks.barrel_recoil_layer_reset`) | F7 for the barrel |
 | `UseBuffer` | Art [type] | boolean | no | Per-type depth buffering (claims 24, 32) |
 | `ShadowIndex` | Art [image] | integer | 0 | Shadow section (claim 29) |
 | `NoShadow` | Rules [type] | boolean | no | Suppresses the shadow (claim 31) |
@@ -1600,7 +1649,10 @@ depend on the state of any quirk switch.
 | A vehicle type with the alternative-body option whose rules give it no spawned aircraft | the type | 12 |
 | A voxel model section of normal mode 0 | the model file and the section | 35 |
 | A mode-0 section in which a column's reading reaches past its own column data, in which an empty count is *255 − Nz* or more, or whose *Nz* is 255 | the model file, the section and, for the first two, the column | 35 |
-| A section with a column whose runs do not reach *Nz* exactly at a run boundary | the model file, the section and the column | 36 |
+| A section with a column whose runs do not add up to exactly *Nz* cells (the total of all its empty and voxel counts, whatever the stop rule of claim 36 does with it) | the model file, the section and the column | 36 |
+| A lighting table file that ends before the last of the rows its own row count gives | the file | 38 |
+| A lighting table file with *R* below 32 or above 128 | the file | 38 |
+| A lighting table file with bytes after its last row | the file | 38 |
 
 The importer finds the model cases by reading each column as claims 35 and 36 describe. Three
 cases give no warning, because they depend on the pose or size of an object at the moment of
@@ -1610,17 +1662,17 @@ rectangle larger than the voxel buffer (claim 22) and a clear area that does not
 (claim 34). Our engine's result in each is the one the claim gives. This follows the glossary's
 *unspecified* entry, which asks for an importer warning only where the cause is in the data.
 
-The voxel lighting table is the archive file `voxels.vpl`. Its header gives the remap range and
-the number of rows; the palette it also carries is not used for drawing; each row has 256
-entries, one per voxel colour index. The VXL and HVA byte layouts are public, and the VPL byte
-layout is left to a formats spec; this spec only fixes their interpretation.
+The voxel lighting table is the archive file `voxels.vpl`, looked up like other game files
+(S-0005). The VXL, HVA and lighting table byte layouts are public; this spec only fixes their
+interpretation (claims 19 and 38).
 
 ## Measurement scenarios
 
 **Common setup.** Every scenario uses the glossary's measurement setup: an unmodified install with
 no loose override files and no engine add-ons, and stock data. On top of that: 800×600, a tiny
 flat clear purpose-made map with neutral map lighting, the game paused for captures, and
-screenshots saved losslessly. Record the display path used (glossary, open questions).
+screenshots saved losslessly. Record the display path used (glossary, *display path* and
+*measurement setup*).
 
 - **Golden image** means a pixel comparison between the original's screenshot and our engine's
   render of the same scene, built from this spec.
@@ -1640,6 +1692,9 @@ screenshots saved losslessly. Record the display path used (glossary, open quest
     lists, in a test expansion archive, where it wins over the stock one (S-0005).
   - *Test models:* purpose-made VXL and HVA files in the same test archive, under a new image
     name, so they replace nothing.
+  - *Test lighting table files:* MS-22 and MS-23 use loose copies of the stock lighting table file,
+    changed as each scenario lists, that override the stock one, as the glossary's *named test
+    files* allow. The install itself is not modified.
   - *Giving a stock type test models:* for a vehicle's body, turret and barrel, the test map's
     override section sets the type's image to the new image name (S-0007, claim 1), and the art
     database copy has an art section for that image. S-0007's claim 10 does not interfere: it
@@ -1685,12 +1740,12 @@ screenshots saved losslessly. Record the display path used (glossary, open quest
 - *Falsified if:* the barrel pivots about the turret origin, the overlap rule differs, or a
   direction first drawn from the second tick on shows the barrel level.
 
-**MS-3 HVA, scale, frames (claims 13–16).**
+**MS-3 HVA, scale, HVA frames (claims 13–16).**
 - *Setup:* a stock unit with a multi-frame body HVA (for example a walking voxel unit or an
   animated body), filmed while it moves.
 - *Observable:* the sequence of body crops, per drawn frame.
 - *Expected:*
-  - frames repeat with period *F_body* in walk-counter steps,
+  - body frames repeat with period *F_body* in walk-counter steps,
   - they match our renders, which use translations scaled by the first section's factor,
   - any barrel part stays in HVA frame 0.
 - *Falsified if:* section parts drift from their predicted spots, or a barrel animates.
@@ -1718,7 +1773,7 @@ screenshots saved losslessly. Record the display path used (glossary, open quest
   different, clearly visible position in each frame. The same procedure, for more than 260
   walk-counter steps, with and without the cache-disable option.
   - *Expected:* with caching, turret frames 32–39 show their own marker positions (the turret key
-    keeps frames up to 255 apart, unlike the body key), and turret frames 256–259 show the
+    keeps turret frames up to 255 apart, unlike the body key), and turret frames 256–259 show the
     positions of turret frames 0–3. Under the cache-disable option every turret frame shows its
     own position.
   - *Falsified if:* with caching, turret frames 256–259 show their own positions or frames 32–39
@@ -2348,6 +2403,51 @@ which the two objects are drawn within a drawn frame.
     direction (drawn fresh, as the fixed behaviour of `quirks.barrel_only_no_recoil` would), or
     in the control it does not follow P's row.
 
+**MS-22 Use of the lighting table file (claim 38).**
+- *Test data:* the MS-4 stock vehicle on flat ground, drawn with named test copies of the lighting
+  table file, each a loose file that overrides the stock one (glossary, *measurement setup*):
+  - **(a) Unused parts changed.** The stock file with its remap range and its extra value changed
+    to other values and its palette replaced by all zeros.
+  - **(b) Extra rows.** A file made from the first 32 rows of the stock file (if it has fewer,
+    padded to 32 rows with copies of its last row), then 8 added rows filled with values that
+    differ from every entry of those 32, and the row count set to 40.
+  - **(c) Trailing bytes.** The stock file with 100 bytes of any value appended after its last row.
+- *Procedure:* with the stock file and with each copy, show the vehicle at all 32 facings and
+  capture it. Read the stock file with a reader written from claim 38 and the public format, and
+  draw MS-4's golden images from it.
+- *Observable:* the palette index of each pixel in each capture.
+- *Expected:* the stock file's captures match MS-4's golden images, drawn with row *q* of the file
+  for shade *q*; the captures of (a), (b) and (c) are identical to the stock file's.
+- *Falsified if:* MS-4's images match only with another choice of rows, or any of (a), (b) and (c)
+  changes a pixel. A change under (a) falsifies the claim that the remap range, the extra value and
+  the palette have no effect, and a change under (b) the claim that rows beyond the 32nd are not
+  used.
+
+**MS-23 Short, missing and small tables (claim 38; `quirks.vpl_unloaded_rows_blank`).** The
+variants are named test files under the glossary's *measurement setup*: loose files that override
+the stock one, and, in variant (d), a loose copy of the archive that holds the file, with that member left
+out so that the file is absent. They are removed afterwards.
+- *Setup:* the MS-4 stock vehicle on flat ground, with these variants of the file:
+  - (a) the stock file with its row count set to 20, the data unchanged,
+  - (b) the stock file cut after the end of its 20th row, row count unchanged,
+  - (c) the stock file cut short so that it supplies no row at all and not all of its other
+    content either,
+  - (d) no file at all, and
+  - (e) the stock file cut after the entries for colour indices 0–127 of row 19, row count
+    unchanged. A second test model, as in MS-15's first-section test (one section of normal mode 2,
+    voxels of normal index 16, which takes shade 19), has one voxel for each colour index 1–255,
+    in any layout, drawn at body facing 8 on a stock turretless vehicle type.
+- *Procedure:* start a game and show the vehicle at several facings, whose normals take shades
+  throughout 0–31. For (e), show the second test model.
+- *Observable:* whether the game starts, and which of the vehicle's pixels are drawn, and in variant (e) the
+  palette index of the pixel of each colour.
+- *Expected:* in every variant the game starts. (a): rows 0–19 act as in the stock file, so the
+  vehicle's pixels of shade 20 or above are missing; (b) looks the same as (a); (c) and (d): the
+  vehicle is invisible. (e): the voxels of colours 1–127 show the stock *VPL(19, χ)* and those of
+  colours 128–255 are missing.
+- *Falsified if:* the game fails to start, the missing rows draw as raw colour indices or as some
+  other colour, or in (e) the voxels of colours 128–255 are drawn or the whole row is missing.
+
 ## Open questions
 
 - **Turretless vehicle with a barrel part.** A vehicle with a barrel part but no turret is drawn
@@ -2389,6 +2489,15 @@ which the two objects are drawn within a drawn frame.
   spec for it.
 - **Type id.** Is the type id of claim 12 and MS-11 (Terms) the type name or the registration index
   of the glossary? If it is the type name, the spec should say "type name".
+- **Byte layouts of public file formats.** Claim 38 now refers to the public format of the
+  voxel lighting table file for its byte layout, as the spec does for VXL and HVA, and gives only
+  how its content is used. The Terms entry *Column data* now defines a column's value sequence
+  by reference to the public model format's own order. Claim 35 (and MS-19) cannot be
+  stated without saying how that sequence is cut into groups and which value of a standard file's
+  voxel comes first, and this is as far as the draft goes: it states no sizes, positions or
+  byte layouts, only the order of a voxel's two values, once, in claim 35. If the lead wants even
+  that moved to a formats spec of the model file, claim 35 would cite it instead. Not
+  blocking.
 - **Buffer-edge cases and importer warnings.** The importer warns about the model-file cases of
   claims 12, 35 and 36 (Import mapping, *Importer warnings*) and not about the three pose- or
   size-dependent cases of claims 22, 24 and 34 and F10. Should the importer also warn when a
