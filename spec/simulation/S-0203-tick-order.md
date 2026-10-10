@@ -2,13 +2,13 @@
 id: S-0203
 title: Tick order
 topic: simulation
-revision: 7
+revision: 8
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-10
 measurements: []
-requests: []
+requests: [Q-0018]
 supersedes: []
 ---
 
@@ -97,8 +97,9 @@ same tick. How many ticks run per second is S-0201, and what each object does in
      of them. Each draw shifts every later draw of the stream (S-0202, claim 10), so running such a
      part at another place, or swapping two of them, changes all later random outcomes of the game.
      That is the observable consequence of these places, even where no other is known. The parts
-     that draw or can draw are rows 1 to 3 and 5 to 16. In the original they run in this sequence:
-     the polling of map triggers (row 1), resource growth and spread (row 9), planted bombs (row 2),
+     that draw or can draw are rows 1 to 3 and 5 to 16. Each of them holds its place in the
+     original's sequence, so that whatever draws they take come in this order: the polling of map
+     triggers (row 1), resource growth and spread (row 9), planted bombs (row 2),
      diving aircraft (row 10), teams (row 11), disc lasers (row 12), the weather storm (row 3),
      radiation fields (row 13), the end of electromagnetic pulses (row 14), the turn pass (row 5),
      blast rings (row 15), crate respawns (row 16), the production lines (row 6), the houses (row 7)
@@ -124,8 +125,10 @@ same tick. How many ticks run per second is S-0201, and what each object does in
      - Backing: `measurable` (scenario O6, part A)
      - Confidence: high
    - **Row 2, the detonation of planted bombs whose countdown ends, comes before the turn pass.**
-     An object that a planted bomb destroys in tick *n* takes no turn in tick *n*. In particular it
-     does not fire in tick *n*, even if its weapon is ready then. Because it leaves play while the
+     An object that a planted bomb destroys in tick *n* takes no turn in tick *n*, unless S-0312
+     keeps it in play after its death (claim 6: a sinking or crashing vehicle, an exploding or sold
+     building). In particular it does not fire in tick *n*, even if its weapon is ready then.
+     Because it leaves play while the
      turn pass is not running, its removal costs no other object a turn (claim 10): the object
      directly after it in the update order takes its turn in tick *n* as usual.
      - Backing: `measurable` (scenario O10, part A: the carrier's silence rules out a detonation in
@@ -133,8 +136,8 @@ same tick. How many ticks run per second is S-0201, and what each object does in
        the carrier's own turn)
      - Confidence: high
    - **Row 3, the weather storm's update, with the strikes of its storm bolts, comes before the turn
-     pass.** An object that a storm bolt destroys in tick *n* takes no turn in tick *n*, and, as in
-     row 2, its removal costs no other object a turn.
+     pass.** An object that a storm bolt destroys in tick *n* takes no turn in tick *n*, with the
+     same exceptions as in row 2, and, as in row 2, its removal costs no other object a turn.
      - Backing: `measurable` (scenario O10, part B, in the same two ways as part A)
      - Confidence: high
    - **Row 4, the step of a chrono flash in force, comes after row 1 and before the turn pass.** The
@@ -150,8 +153,8 @@ same tick. How many ticks run per second is S-0201, and what each object does in
      laser's, below, no other consequence of their places is stated here. The specs of their topics
      own what each one does. A disc laser
      (row 12) applies its damage in its own update, outside any object's turn. So, as in rows 2
-     and 3, an object it destroys takes no turn in that tick, and its removal costs no object a turn
-     (claim 10).
+     and 3, an object it destroys takes no turn in that tick, with the same exceptions, and its
+     removal costs no object a turn (claim 10).
      - Backing: `unmeasured` for the disc laser. Which weapons fire one, and in which tick its
        damage falls after firing, is the combat specs' to establish, so no setup can yet time it.
      - Confidence: medium
@@ -173,7 +176,8 @@ same tick. How many ticks run per second is S-0201, and what each object does in
 
 2. **Who takes turns.** Infantry, vehicles, aircraft, buildings, projectiles, animations (sprite
    and voxel), particle systems, the travelling beam or wave of the weapons that fire one, the
-   searchlight beams of buildings, and terrain objects whose type spawns resources take turns. The
+   searchlight beams of buildings, and terrain objects whose type has the spawns-resources flag
+   (Import mapping; off when absent) take turns. The
    individual particles of a particle system take none of their own (the system moves them in its
    turn), and neither do overlays, smudges or other terrain objects. An object out of play takes no
    turns. A passenger of an open-topped transport stays in play while it is inside, so it does take
@@ -186,8 +190,9 @@ same tick. How many ticks run per second is S-0201, and what each object does in
      update order. For the animations a shot or a death creates, that depends on whether the
      animation enters play before or after the projectile or object that comes with it, which is
      not established, so no setup can yet predict which object loses its turn.
-   - Confidence: high for every kind except terrain objects; medium for which terrain objects take
-     turns
+   - Confidence: high for every kind, terrain objects included: a terrain object enters the update
+     order when it is placed exactly when its type's spawns-resources flag is on, and no other field
+     of a terrain type plays a part
 
 3. **The update order is the order of entering play.**
    - **Appending.** An object that enters play is put at the end of the update order. An object
@@ -287,38 +292,66 @@ same tick. How many ticks run per second is S-0201, and what each object does in
      - Backing: `unmeasured`, for the reason given in claim 1 for rows 9 to 16
      - Confidence: medium
 
-6. **When a destroyed object stops acting.**
-   - **(a) Vehicles.** A vehicle whose damage destroys it leaves play at the moment that damage is
-     applied, so it takes no further turn, not even later in the same turn pass. Its removal is a
-     removal for claim 10. It costs a turn only under claim 10's condition: during the turn pass,
-     when the vehicle is the current object or stands before it.
-     - Backing: `measurable` (scenario O1; scenario O8, variant a, lethal against non-lethal)
-     - Confidence: medium
-   - **(b) Buildings.** A building is believed to behave the same way.
-     - Backing: `measurable` (scenario O1, variant B)
-     - Confidence: low, since some buildings may play a destruction sequence first
+6. **When a destroyed object stops acting.** This claim gives the general rule for each kind of
+   object and where its removal falls in the tick. S-0312 owns the death effects and the exceptions
+   below, in which a destroyed object stays in play for a while; the points here only point to it.
+   - **(a) Vehicles.** As a rule, a vehicle whose damage destroys it leaves play at the moment that
+     damage is applied, at the end of its death effects, which all come at once (S-0312 claims 1
+     and 15). It takes no further turn, not even later in the same turn pass. Its removal is a
+     removal for claim 10, and it costs a turn only under claim 10's condition: during the turn
+     pass, when the vehicle is the current object or stands before it. The exceptions, owned by
+     S-0312:
+     - a vehicle that sinks keeps 1 health point and stays in play (S-0312 claim 10), and the
+       naval specs own when it leaves,
+     - a vehicle whose type can crash and which is above the terrain when it is destroyed starts
+       to crash and stays in play until it hits the ground (S-0312 claims 15 and 16).
+
+     When such a vehicle does leave play, that is a removal for claim 10 like any other.
+     - Backing: `measurable` (scenario O1; scenario O8, variant a, lethal against non-lethal) for
+       the rule; for the exceptions, S-0312's backing (its scenarios D8 and D11)
+     - Confidence: high for the rule; for the exceptions, S-0312's confidence
+   - **(b) Buildings.** As a rule, a building whose damage destroys it leaves play like a vehicle,
+     at the moment that damage is applied, at the end of its death effects, and that removal is a
+     removal for claim 10. The exception, owned by S-0312 (claim 21): an exploding building, or one
+     destroyed while it is being sold, stays in play after its death effects and leaves later; the
+     structures specs own when. Its leaving then is a removal for claim 10 like any other.
+     - Backing: `measurable` (scenario O1, variant B, for the rule); for the exception, S-0312's
+       backing (its scenario D14, variant c)
+     - Confidence: high for the rule; for the exception, S-0312's confidence
    - **(c) Infantry.** S-0107, claim 17, decides what a killed infantry unit shows and when it is
      removed. An infantry unit leaves play exactly when it is removed. When claim 17 removes it at
      once, it leaves play at the moment the damage is applied, like a vehicle, and that removal
      is a removal for claim 10. When claim 17 gives it a death sequence, it stays in play while the
      sequence plays, so the kill itself is no removal for claim 10, and it leaves play on the tick
      the sequence completes. That leaving is a removal for claim 10 too, and it is believed to
-     happen in the unit's own turn.
+     happen in the unit's own turn. An infantry unit whose type has the crash flag and which starts
+     to crash instead (S-0107 claim 17, S-0312 claim 16) stays in play until it hits the ground.
      - Backing: `measurable` (scenario O8, variants d and e, for the moment of leaving play, and
-       scenario O9 for the removal when the sequence completes)
+       scenario O9 for the removal when the sequence completes); for the crash, S-0312's backing
      - Confidence: medium for removal at once and for staying in play during the sequence; low that
-       the removal at completion happens in the unit's own turn
+       the removal at completion happens in the unit's own turn; for the crash, S-0312's confidence
    - **(d) Projectiles of destroyed firers.** A projectile whose firer has been destroyed still
      flies, detonates and applies its damage.
      - Backing: `measurable` (scenario O1: the later firer's shot lands after it is destroyed)
      - Confidence: high
-   - **(e) Passengers.** An object that is destroyed takes its passengers with it at that moment.
-     Those of an open-topped transport are in play (claim 3), so they leave play then too, and each
-     of them is one more removal for claim 10, under the same condition as any other.
-     - Backing: `measurable` (scenario O8, variant c against variant b)
-     - Confidence: medium
-   - Whether an aircraft that is shot down stays in play while it falls is left to the aircraft
-     specs.
+   - **(e) Passengers.** S-0312 decides, for each passenger of a destroyed object, whether it dies
+     or gets out (claims 5, 10, 12, 16 and 24). As a rule, a passenger that dies with the object
+     leaves play when it dies, which is at the latest when the object itself leaves play. A
+     passenger of an open-topped transport is in play (claim 3), so each one that dies is one more
+     removal for claim 10, under the same condition as any other. A passenger that gets out
+     instead does not leave play: one of an open-topped transport is back on the map and keeps its
+     place in the update order, as when it gets out by itself (claim 3), so it is no removal; any
+     other enters play then (claim 4). Passengers inside an object that is not open-topped are out
+     of play, so their deaths are no removals.
+     - Backing: `measurable` (scenario O8, variant c against variant b for passengers that die, and
+       variant f against variant c for passengers that get out)
+     - Confidence: high for which passengers are in play; medium for the turns, until scenario O8
+       confirms them
+   - Aircraft follow S-0312 claim 16: an aircraft destroyed above the terrain starts to crash and
+     stays in play until it hits the ground; one destroyed on the ground leaves play at once, like a
+     vehicle. Its leaving is a removal for claim 10 like any other.
+     - Backing: `measurable` (S-0312 scenario D11)
+     - Confidence: S-0312's confidence
 
 7. **Orders take effect after the turn pass.** In a single-player game an order that the player
    gives in the cycle that runs tick *n* (S-0201, *cycle*) takes effect after every object's turn
@@ -384,8 +417,8 @@ same tick. How many ticks run per second is S-0201, and what each object does in
     - A projectile that detonates and leaves play in its own turn (one removal): `measurable`
       (scenarios O1, O3 and O8).
     - The same projectile destroying a vehicle that stands before it in the update order (a second
-      removal), and the passengers of that vehicle if it is an open-topped transport (one more
-      removal each): `measurable` (scenario O8, variants a and c). Every object that was in play
+      removal), and those passengers of that vehicle that die with it if it is an open-topped
+      transport (one more removal each, claim 6): `measurable` (scenario O8, variants a and c). Every object that was in play
       when the projectile was fired stands before it (claim 3).
     - The same projectile destroying an infantry unit that claim 6 removes at once: `measurable`
       (scenario O8, variant d), also when that unit missed its turn in the same tick (scenario
@@ -446,18 +479,18 @@ after exactly the parts named in its "Comes after" column, and after anything th
 Two parts with no such link may run in either order. Row numbers are labels. Rows 1 and 4 keep the
 labels of revision 2, and rows 1 to 8 those of revision 5, so that other specs can keep citing them.
 Every two parts that take draws from the scenario random stream are linked, so their order is
-total (claim 1, draw order). Following the "Comes after" links, the drawing parts run as 1, 9, 2,
-10, 11, 12, 3, 13, 14, 5, 15, 16, 6, 7, 8.
+total (claim 1, draw order). Following the "Comes after" links, the drawing parts stand in the
+order 1, 9, 2, 10, 11, 12, 3, 13, 14, 5, 15, 16, 6, 7, 8, which is the order of their draws.
 
 | Row | Part | Comes after | Observable consequence of its place | Claim |
 |---|---|---|---|---|
 | 1 | Polling of map triggers: the per-tick raise of every polled tag (S-0011, claim 6) | (start of the tick) | A trigger action set off here takes effect before any object takes its turn in this tick; draw order | Claim 1, scenario O6 part A |
 | 9 | Growth and spread of resources, growth first (the resource specs own both) | 1 | Draw order | Claim 1 |
-| 2 | Detonation of planted bombs whose countdown ends | 9 | An object a bomb destroys in this tick takes no turn in it, and its removal costs no object a turn; draw order | Claim 1, scenario O10 part A |
+| 2 | Detonation of planted bombs whose countdown ends | 9 | An object a bomb destroys in this tick takes no turn in it unless S-0312 keeps it in play (claim 6), and its removal costs no object a turn; draw order | Claim 1, scenario O10 part A |
 | 10 | Steering of aircraft that dive into their target (the aircraft specs own it) | 2 | Draw order | Claim 1 |
 | 11 | Teams, one after another in the order of the list of teams (the specs of teams own both) | 10 | Draw order | Claim 1 |
-| 12 | Disc lasers, the most recently fired first; each applies its damage in its own update | 11 | An object a disc laser destroys takes no turn in this tick, and its removal costs no object a turn; draw order | Claim 1 |
-| 3 | The weather storm's update, with the strikes of its storm bolts | 12 | An object a bolt destroys in this tick takes no turn in it, and its removal costs no object a turn; draw order | Claim 1, scenario O10 part B |
+| 12 | Disc lasers, the most recently fired first; each applies its damage in its own update | 11 | An object a disc laser destroys takes no turn in this tick unless S-0312 keeps it in play (claim 6), and its removal costs no object a turn; draw order | Claim 1 |
+| 3 | The weather storm's update, with the strikes of its storm bolts | 12 | An object a bolt destroys in this tick takes no turn in it unless S-0312 keeps it in play (claim 6), and its removal costs no object a turn; draw order | Claim 1, scenario O10 part B |
 | 13 | Radiation fields, the most recently created first (the combat specs own them) | 3 | Draw order | Claim 1 |
 | 14 | The end of electromagnetic pulses whose time is up (the combat and superweapon specs own them) | 13 | Draw order | Claim 1 |
 | 4 | The step of a chrono flash in force (S-0201, claim 11) | 1 | A chrono flash started in row 1 steps in the tick of its action; one started in the turn pass first steps in the next tick | Claim 1, scenario O6 part B |
@@ -482,7 +515,9 @@ scenario random stream has no place here (claim 1).
 | In play, infantry | Killed, and S-0107 claim 17 gives it a death sequence | Stays in play while the sequence plays; leaves play on the tick the sequence completes (claim 6) |
 | In play, on the map | Boards an open-topped transport | Taken out (a removal for claim 10) and appended at the end at once. Off the map, in play, keeps taking turns (claim 3) |
 | In play, inside an open-topped transport | Gets out | Back on the map, keeps its place in the update order (claim 3) |
-| In play, inside an open-topped transport | The transport is destroyed | Leaves play with it, one more removal for claim 10 (claim 6) |
+| In play, inside an open-topped transport | The transport is destroyed and S-0312 has the passenger die | Leaves play when it dies, one more removal for claim 10 (claim 6) |
+| In play, inside an open-topped transport | The transport is destroyed and S-0312 has the passenger get out | Back on the map, keeps its place in the update order, no removal (claim 6) |
+| In play, vehicle, aircraft or building | Destroyed | Leaves play at the moment of the damage, a removal for claim 10, except in S-0312's cases (sinking, crashing, exploding or sold buildings), where it stays in play and leaves later (claim 6) |
 | In play | Nothing | Keeps its place |
 
 ## Edge cases and quirks
@@ -500,8 +535,12 @@ scenario random stream has no place here (claim 1).
 
 ## Import mapping
 
-None. The order of a tick takes no input from the user's data, apart from the map's own order of
-entries (claim 3), whose format S-0009 owns.
+The order of a tick takes one input from the user's rules data, apart from the map's own order of
+entries (claim 3), whose format S-0009 owns:
+
+| Key | Section | Form | Absent | Feeds |
+|---|---|---|---|---|
+| `SpawnsTiberium` | a terrain type's section | boolean | no | the spawns-resources flag of claim 2: a terrain object of a type with the flag on takes turns; one with it off takes none. What the flag does for resources belongs to the economy specs |
 
 ## Measurement scenarios
 
@@ -539,9 +578,10 @@ speed makes manual orders easiest.
   of 10, armed with a test weapon with damage 20 at 100 % against the vehicle's armour class, a
   range of 5 cells and a long delay between shots. Two vehicles of that type are pre-placed 3 cells
   apart, facing each other, one owned by the human player and one by the computer player
-  (enemies), the human's vehicle first in the map's vehicle entries. Variant B: the computer's
-  vehicle is replaced by a test defensive building of the computer player, with the same weapon and
-  health.
+  (enemies), the human's vehicle first in the map's vehicle entries. The vehicle type is not naval
+  and has no crash flag, so neither sinks nor crashes (S-0312 claims 10 and 15). Variant B: the
+  computer's vehicle is replaced by a test defensive building of the computer player, with the same
+  weapon and health, of a type that is not exploding (S-0312 claim 21).
 - *Procedure:* start, and give no orders. Repeat with the two entries swapped in the map (in
   variant B the building is always later, by claim 3, so there is nothing to swap).
 - *Observable:* the tick on which each object fires, and the tick on which each disappears.
@@ -629,11 +669,13 @@ speed makes manual orders easiest.
 - *Runs:* 3 test and 3 control runs.
 - *Expected:* in the test runs the passenger fires from inside, at its own weapon's delay between
   shots; in the control runs it never fires while inside.
-- *Falsified if:* the passenger of the open-topped transport never fires while inside.
+- *Falsified if:* the passenger of the open-topped transport never fires while inside, or, in a
+  control run, the passenger fires while inside.
 
 **Scenario O6: parts before the turn pass (claim 1).**
 - *Part A, row 1 before the turn pass.*
-  - *Setup:* a flat test map. A human test vehicle S is armed with a test weapon with damage 1 and a
+  - *Setup:* a flat test map. A human test vehicle S, of a type that is not naval and has no crash
+    flag (claim 6), is armed with a test weapon with damage 1 and a
     delay between shots of *R* ticks. It faces a computer test target Z (an unarmed vehicle with high
     health) in range. In the test run S carries a tag whose one-time trigger has the single event
     elapsed time *v* and the action that destroys the objects carrying the tag (S-0011, claims 13
@@ -725,10 +767,14 @@ speed makes manual orders easiest.
     range. The targets are unarmed test vehicles with high health, except W1 as the variants say.
     All firers fire on their first chance after the start, so they fire together every 30 ticks
     after that, in volleys.
-  - *Variants a to c.* In all three, W1's health is 10, so the tenth volley destroys it. (a) Three
-    firers; W1 a test vehicle. (b) Five firers; W1 a test transport that is not open-topped. (c) As
-    (b), but W1's type is open-topped. In variants b and c, two unarmed human test infantry units
-    stand next to W1.
+  - *Variants a to c and f.* In all four, W1's health is 10, so the tenth volley destroys it. No
+    test vehicle type here is naval, so none sinks (S-0312 claim 10). (a) Three firers; W1 a test
+    vehicle with no crash flag. (b) Five firers; W1 a test transport that is not open-topped, whose
+    type has the crash flag (S-0107 Terms). It stands on the ground, so it cannot crash, and by
+    S-0312 claim 12 its passengers stay inside and die when it leaves play. (c) As (b), but W1's
+    type is open-topped. (f) As (c), but W1's type has no crash flag, so by S-0312 claim 12 its
+    passengers get out when it is destroyed. In variants b, c and f, two unarmed human test
+    infantry units stand next to W1.
   - *Variants d and e.* Three firers. W1 is a human test infantry unit of a type that is not marked
     "not human" (as in S-0107), is not a cyborg or jumpjet type, has no death animations of its own,
     and has a *die-1* entry with image frames (S-0107, claim 17, which turns a death request down
@@ -739,7 +785,7 @@ speed makes manual orders easiest.
     claim's table), and kind 1, which gives a death sequence, in variant e. In variant d the death
     animations that S-0107 names for that kind are named objects. The pilot run checks that in
     variant e W1 is still present at the end of tick *n* + 3.
-- *Procedure:* in variants b and c, right after the start, order the two infantry units into W1.
+- *Procedure:* in variants b, c and f, right after the start, order the two infantry units into W1.
   They must be inside well before the tenth volley, which the recorder checks. Otherwise give no
   orders.
 - *Observable:* for every volley, fired in tick *n*, the tick on which each Wi's health drops or Wi
@@ -750,15 +796,17 @@ speed makes manual orders easiest.
 - *Expected:* the ticks below, counted from the volley's tick *n*. They follow from claim 10 applied
   to the projectiles in firing order, including the skips that later detonations cause in the
   following ticks. A non-lethal volley is any volley before the tenth. The lethal volley is the one
-  that destroys W1: the tenth in variants a to c, which in variants b and c also destroys W1's two
-  passengers, and the first in variants d and e. In variant e, W1's health reaches 0 in tick *n*.
+  that destroys W1: the tenth in variants a to c and f, which in variants b and c also kills W1's
+  two passengers and in variant f lets them get out, and the first in variants d and e. In variant
+  e, W1's health reaches 0 in tick *n*. In variant f the recorder checks that both passengers are
+  present on the map at the end of tick *n*; a run in which either is not does not count.
 
   | Variant and volley | W1 | W2 | W3 | W4 | W5 |
   |---|---|---|---|---|---|
   | (a), non-lethal | *n* | *n* + 1 | *n* | — | — |
   | (a), lethal | *n* | *n* + 1 | *n* + 2 | — | — |
-  | (b) or (c), non-lethal | *n* | *n* + 1 | *n* | *n* + 2 | *n* |
-  | (b), lethal | *n* | *n* + 1 | *n* + 2 | *n* | *n* + 1 |
+  | (b), (c) or (f), non-lethal | *n* | *n* + 1 | *n* | *n* + 2 | *n* |
+  | (b) or (f), lethal | *n* | *n* + 1 | *n* + 2 | *n* | *n* + 1 |
   | (c), lethal | *n* | *n* + 1 | *n* + 2 | *n* + 1 | *n* + 3 |
   | (d), lethal | *n* | *n* + 1 | *n* + 2 | — | — |
   | (e), lethal | *n* | *n* + 1 | *n* | — | — |
@@ -766,7 +814,9 @@ speed makes manual orders easiest.
 - *Falsified if:* a counted volley differs from its row. In particular, the lethal volley of variant
   a equal to the non-lethal one falsifies the count of *k* removals, and the lethal volley of
   variant c equal to that of variant b falsifies that the passengers of an open-topped transport
-  leave the update order with it (claim 6), for example because they survive on the map. A lethal
+  that die with it leave the update order then (claim 6). The lethal volley of variant f equal to
+  that of variant c falsifies that passengers of an open-topped transport that get out keep their
+  place in the update order (claim 6). A lethal
   volley of variant d equal to the row of variant e falsifies that an infantry unit removed at once
   leaves play at the moment of the damage. A lethal volley of variant e equal to the row of variant
   d falsifies that an infantry unit with a death sequence stays in play. If all targets are hit in
@@ -805,7 +855,7 @@ speed makes manual orders easiest.
 3).**
 - *Common part:* a flat test map with no aircraft and no terrain entries.
   - *V,* the destroyed object: a computer test vehicle, the last entry in the map's vehicle
-    entries, armed with a test weapon with damage 1 and a delay between shots of 2 ticks, which
+    entries, of a type that is not naval and has no crash flag (claim 6), armed with a test weapon with damage 1 and a delay between shots of 2 ticks, which
     does 0 % against the armour class of the test infantry type below. V faces a human target T (an
     unarmed test vehicle with high health) in range, and has no other target.
   - *Y,* the observer: a human test infantry unit, the first entry in the map's infantry entries.
@@ -945,8 +995,6 @@ speed makes manual orders easiest.
 - Whether a projectile with no visible flight always detonates on its first turn, or can need a
   second one at long range, is not traced in full (claim 5). Scenarios O1, O3 and O8 settle the
   cases they use.
-- Whether a building plays a destruction sequence in play before it leaves play is not traced
-  (claim 6). Scenario O1, variant B, settles it.
 - Whose turn removes an infantry unit when its death sequence completes is not traced (claim 6).
   Scenario O9 tests the unit's own turn.
 - Whose turn performs boarding, the boarding unit's or the transport's, is not traced, and neither
@@ -995,6 +1043,17 @@ speed makes manual orders easiest.
   tick. Scenario O12 tests the case in which the two readings differ. No decision is needed unless
   the lead prefers a different rule for our engine.
 - **For sign-off.**
+  - Revision 8 makes claim 6 agree with S-0312 (approved). Points (a), (b) and (e) used to say that
+    every destroyed vehicle and building leaves play at once and that a destroyed object takes all
+    its passengers with it; S-0312 claims 10, 12, 15, 16, 21 and 24 have exceptions. Claim 6 now
+    states the general rule and points to S-0312 for the exceptions, which S-0312 owns. Scenario
+    O8 gives W1 the crash flag in variants b and c, so that its passengers die with it as the
+    scenario needs, and adds variant f, in which they get out. S-0312's sentences "this refines
+    S-0203 claim 6b" and "6e, which takes every passenger with a destroyed object" now describe an
+    older revision; S-0312's owner may drop them at its next revision. Claim 6 rates the general
+    rules of points (a) and (b) high, after a fresh trace: a destroyed building that is neither
+    exploding nor being sold leaves play at the moment of the damage. S-0312 claim 21 rates the
+    same rule low, and its owner may raise it.
   - S-0011, S-0201, S-0202 and S-0213, cited above, are drafts of the same batch.
   - S-0107 (approved), claim 17, is assumed by scenarios O8, O9 and O12: row 8 of its table removes
     a killed unit at once, infantry-death kind 1 reaches *die-1* through row 5, and a death request
