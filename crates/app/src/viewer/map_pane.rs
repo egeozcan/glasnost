@@ -21,7 +21,7 @@ use egui::{Color32, RichText, TextureHandle, TextureOptions, Ui};
 use glasnost_render::compose::{ComposeQuirks, Frame};
 use glasnost_render::light::DetailLevel;
 use glasnost_render::projection::{
-    ScrollQuirks, cell_centre, cursor_cell, limit_centre, project_lifted, view_origin,
+    ProjectionQuirks, cell_centre, cursor_cell, limit_centre, project_lifted, view_origin,
 };
 use glasnost_render::scene::{Filter, Group, Scene, View};
 use glasnost_sim::targeting::{self, ClickOn, KeyCommand, Modifiers};
@@ -207,7 +207,13 @@ impl MapPane {
         };
         let size = (self.view_size.0 as i32, self.view_size.1 as i32);
         // spec: S-0101 claim 8 (every request is limited by F5; the stored centre is the limited one)
-        let c = limit_centre(requested, size, f.width, f.local, &ScrollQuirks::default());
+        let c = limit_centre(
+            requested,
+            size,
+            f.width,
+            f.local,
+            &ProjectionQuirks::default(),
+        );
         let (dx, dy) = (c.0 - self.centre.0, c.1 - self.centre.1);
         // spec: S-0102 Terms (a view jump moves by more than the view's width across or its height up or down)
         let big = dx.abs() > size.0 || dy.abs() > size.1;
@@ -557,11 +563,28 @@ impl MapPane {
         self.hover = r.hover_pos().map(|p| {
             let (qx, qy) = to_world(p);
             let map = &shown.loaded.map;
-            let cell = cursor_cell(qx, qy, |x, y| {
+            let q = ProjectionQuirks::default();
+            // spec: S-0101 claim 10 (the highest level is read only with quirks.cursor_probe_depth_180 off)
+            let max_level = if q.cursor_probe_depth_180 {
+                0
+            } else {
                 map.cells
-                    .get(glasnost_map::CellXY::new(x, y))
-                    .map_or(0, |c| i32::from(c.level))
-            });
+                    .iter()
+                    .map(|(_, c)| i32::from(c.level))
+                    .max()
+                    .unwrap_or(0)
+            };
+            let cell = cursor_cell(
+                qx,
+                qy,
+                |x, y| {
+                    map.cells
+                        .get(glasnost_map::CellXY::new(x, y))
+                        .map_or(0, |c| i32::from(c.level))
+                },
+                max_level,
+                &q,
+            );
             (cell.0, cell.1, shown.scene.object_at(qx, qy, &filter))
         });
         let hover = self.hover;

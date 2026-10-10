@@ -17,7 +17,7 @@ use std::time::Instant;
 use glasnost_app::mapview::{build, find, load, png};
 use glasnost_render::compose::{ComposeQuirks, Frame};
 use glasnost_render::projection::{
-    ScrollQuirks, cell_centre, limit_centre, project_lifted, view_origin,
+    ProjectionQuirks, cell_centre, limit_centre, project_lifted, view_origin,
 };
 use glasnost_render::scene::{Filter, View};
 use glasnost_render::wgpu;
@@ -185,7 +185,7 @@ fn map_lane() {
                 size,
                 map.footprint.width,
                 map.footprint.local,
-                &ScrollQuirks::default(),
+                &ProjectionQuirks::default(),
             );
             let origin = view_origin(centre, size);
             let view = View {
@@ -237,7 +237,7 @@ fn map_lane() {
                         (640, 400),
                         map.footprint.width,
                         map.footprint.local,
-                        &ScrollQuirks::default(),
+                        &ProjectionQuirks::default(),
                     );
                     let origin = view_origin(c, (640, 400));
                     let v = View {
