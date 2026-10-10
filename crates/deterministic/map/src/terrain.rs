@@ -255,8 +255,9 @@ pub struct Recalc {
 const CLIFF_BACK_NEIGHBOURS: [(i32, i32); 6] = [(0, -1), (1, -1), (-1, 0), (-1, 1), (1, 1), (2, 2)];
 
 /// The terrain recalculation of cell `c` (S-0010 claims 6 to 11, S-0211
-/// claims 5 to 8). Neighbours outside the map read as blank cells (S-0009
-/// Terms; see request Q-0018 for the original's edge rule).
+/// claims 5 to 8). Neighbours outside the map read as blank cells: ground
+/// level 0, flat, the no-tile marker (S-0009 claim 44; S-0211 claim 8 for
+/// the cliff-back rule).
 pub fn recalc(grid: &mut CellGrid, c: CellXY, rules: &RecalcRules<'_>) -> Recalc {
     let Some(cell) = grid.get(c).copied() else {
         return Recalc::default();
@@ -671,6 +672,36 @@ mod tests {
         }
         recalc(&mut g, c, &r);
         assert_eq!(g.get(c).map(|x| x.land), Some(land::CLEAR));
+    }
+
+    // spec: S-0211 claim 8 (a neighbour outside the map reads level 0: behind a cliff only at level −4 or lower)
+    // spec: S-0009 claim 44 (a cell outside the map reads as a blank cell)
+    #[test]
+    fn cliff_back_off_map_neighbour_reads_level_zero() {
+        let cat = flat_catalogue();
+        let ov = no_overlay;
+        let mut r = rules(&cat, &ov);
+        r.cliff_back = 2;
+        let mut g = grid();
+        let c = g
+            .iter()
+            .map(|(c, _)| c)
+            .find(|c| {
+                g.get(CellXY::new(c.x, c.y - 1)).is_none()
+                    && CLIFF_BACK_NEIGHBOURS[1..].iter().all(|&(dx, dy)| {
+                        g.get(CellXY::new(c.x + dx, c.y + dy))
+                            .is_none_or(|n| n.level == 0)
+                    })
+            })
+            .expect("an edge cell");
+        for (level, want) in [(-4, land::ROCK), (-3, land::CLEAR)] {
+            if let Some(cell) = g.get_mut(c) {
+                cell.level = level;
+                cell.tile = 0;
+            }
+            recalc(&mut g, c, &r);
+            assert_eq!(g.get(c).map(|x| x.land), Some(want), "level {level}");
+        }
     }
 
     // spec: S-0010 claim 10 (ground smoothing: G inside a patch, L + m at its edge)

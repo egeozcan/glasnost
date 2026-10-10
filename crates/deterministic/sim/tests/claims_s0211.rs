@@ -2,8 +2,8 @@
 //!
 //! Not covered here because the simulation does not implement them yet:
 //! building placement (the buildable flag and the naval range are read into
-//! the rules but nothing places buildings), bridge decks and the events that
-//! destroy or repair a bridge, laser-fence states and a house's firestorm.
+//! the rules but nothing places buildings), the events that destroy or
+//! repair a bridge, laser-fence states and a house's firestorm.
 //! Name parsing of land types, zones and locomotion classes, the misspelling
 //! departures and the vehicle's crusher-based default class belong to the
 //! importer (`crates/convert`), which hands the simulation typed values.
@@ -844,4 +844,113 @@ fn restricted_vehicle_entry_test() {
         occupancy::vehicle_outcome(&w, id, cell(0, 1), reference),
         Outcome::Blocked
     );
+}
+
+// ---------------------------------------------------------------------------
+// High-bridge cells (claim 15) and walls under a deck (claim 10)
+
+/// Registers invented overlay types up to list index `last` and returns
+/// the scene.
+fn many_overlays(last: usize) -> Scene {
+    let mut s = Scene::new();
+    for i in 0..=last {
+        overlay(&mut s, &format!("OV{i}"), OverlayType::default());
+    }
+    s
+}
+
+fn deck_at(w: &World, c: CellXY) -> bool {
+    w.cells.deck[w.cells.idx(c).expect("cell")]
+}
+
+// spec: S-0211 claim 15 (indices 24 and 25 mark four cells along map north and map west; marking looks at nothing in the marked cells)
+// spec: S-0211 Constants (high-bridge overlay indices and marking directions)
+#[test]
+fn high_bridge_overlays_mark_four_cells() {
+    let mut s = many_overlays(25);
+    let (a, b) = (cell(0, 0), cell(10, 0));
+    put_overlay(&mut s, a, 24);
+    put_overlay(&mut s, b, 25);
+    let w = s.build();
+    for (dx, dy) in [(0, 1), (0, 0), (0, -1), (0, -2)] {
+        assert!(deck_at(&w, cell(dx, dy)), "index 24 marks ({dx}, {dy})");
+    }
+    assert!(!deck_at(&w, cell(0, 2)));
+    assert!(!deck_at(&w, cell(0, -3)));
+    for (dx, dy) in [(1, 0), (0, 0), (-1, 0), (-2, 0)] {
+        assert!(
+            deck_at(&w, cell(10 + dx, dy)),
+            "index 25 marks ({dx}, {dy})"
+        );
+    }
+    assert!(!deck_at(&w, cell(12, 0)));
+    assert!(!deck_at(&w, cell(5, 5)));
+}
+
+// spec: S-0211 claim 15 (c) (indices 237 and 238 mark the same cells as 24 and 25)
+#[test]
+fn other_high_bridge_indices_mark_the_same_cells() {
+    let mut w = Scene::new().build();
+    let c = cell(0, 0);
+    w.cells.mark_high_bridge(c, 237);
+    w.cells.mark_high_bridge(cell(10, 0), 238);
+    w.cells.mark_high_bridge(cell(20, 0), 23);
+    for k in [-1, 0, 1, 2] {
+        assert!(deck_at(&w, cell(0, -k)));
+        assert!(deck_at(&w, cell(10 - k, 0)));
+    }
+    assert!(!deck_at(&w, cell(20, 0)), "another index marks nothing");
+}
+
+// spec: S-0211 claim 10 (ii) and (iii) (on a deck: any land type, but a wall overlay still refuses the zones (iii) does not list)
+// spec: S-0211 Edge cases (a wall overlay under a bridge deck)
+#[test]
+fn a_wall_under_a_deck_refuses_other_zones() {
+    let mut s = Scene::new();
+    let wall = overlay(
+        &mut s,
+        "DECKWALL",
+        OverlayType {
+            land: Some(LandType::Wall),
+            wall: Some(true),
+            crushable: Some(true),
+            ..Default::default()
+        },
+    );
+    let c = cell(0, 0);
+    s.set_cell(c, code_tile(WATER), 0);
+    put_overlay(&mut s, c, wall);
+    let w = s.build();
+    let r = w.rules_arc();
+    let enter = |zone, deck| passability::enterable_by_class(&r, &w, c, Some(WHEEL), zone, deck);
+    assert!(
+        !enter(MovementZone::Normal, true),
+        "normal is refused on the deck too"
+    );
+    assert!(
+        enter(MovementZone::Crusher, true),
+        "a crusher of a crushable wall enters the deck"
+    );
+    // A water cell without a wall: the deck admits any class.
+    let open = cell(2, 0);
+    let mut s2 = Scene::new();
+    s2.set_cell(open, code_tile(WATER), 0);
+    let w2 = s2.build();
+    let r2 = w2.rules_arc();
+    assert!(passability::enterable_by_class(
+        &r2,
+        &w2,
+        open,
+        Some(WHEEL),
+        MovementZone::Normal,
+        true
+    ));
+    assert!(!passability::enterable_by_class(
+        &r2,
+        &w2,
+        open,
+        Some(WHEEL),
+        MovementZone::Normal,
+        false
+    ));
 }

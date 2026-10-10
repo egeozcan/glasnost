@@ -191,8 +191,8 @@ pub fn enterable_by_class(
     let Some(class) = class else {
         return false;
     };
-    // spec: S-0211 claim 10 (winged: always; on a bridge deck: always)
-    if class == LocomotionClass::Winged || deck {
+    // spec: S-0211 claim 10 (i) (winged: always)
+    if class == LocomotionClass::Winged {
         return true;
     }
     if cell.overlay != NO_OVERLAY
@@ -200,15 +200,15 @@ pub fn enterable_by_class(
         && o.wall
     {
         use MovementZone as Z;
-        // spec: S-0211 claim 10 (a wall cell: destroyer zones and crusher-all, crushers for crushable walls; as clear)
+        // spec: S-0211 claim 10 (iii) (a wall cell: destroyer zones and crusher-all, crushers for crushable walls; on the deck or as clear)
         let may = matches!(
             zone,
             Z::Destroyer | Z::AmphibiousDestroyer | Z::InfantryDestroyer | Z::CrusherAll
         ) || (matches!(zone, Z::Crusher | Z::AmphibiousCrusher) && o.crushable);
-        return may && nonzero(r.multiplier(land::CLEAR, class));
+        return may && (deck || nonzero(r.multiplier(land::CLEAR, class)));
     }
-    // spec: S-0211 claim 10 (otherwise: M(ℓ, c) ≠ 0)
-    nonzero(r.multiplier(cell.land, class))
+    // spec: S-0211 claim 10 (ii) (no wall: on the cell's bridge deck, or M(ℓ, c) ≠ 0)
+    deck || nonzero(r.multiplier(cell.land, class))
 }
 
 /// The restricted-land rule of S-0211 claim 14.

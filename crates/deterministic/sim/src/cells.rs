@@ -101,15 +101,24 @@ pub struct Cells {
     /// Listed objects (ground, deck) by dense index, in listing order
     /// (S-0209 claim 13).
     pub lists: Vec<[Vec<ObjectId>; 2]>, // spec: S-0209 Terms (two cell layers)
-    /// Whether a cell carries a high bridge's deck (Q-0020: none in M3).
+    /// Whether a cell is a high-bridge cell, with a bridge deck (S-0211
+    /// claim 15).
     pub deck: Vec<bool>,
     /// Marking counter.
     pub mark_seq: u32,
     /// The owner of each cell's wall (S-0210 claim 14); `None`: no owner.
     pub wall_owner: Vec<Option<HouseId>>,
-    /// Whether the marks a map's load gives (wall owners) have been made.
+    /// Whether the marks a map's load gives (high-bridge cells, wall owners)
+    /// have been made.
     pub load_marks_done: bool,
 }
+
+/// The high-bridge overlay indices and their marking directions (S-0211
+/// claim 15): indices 24 and 237 mark along step direction 0 (map north),
+/// 25 and 238 along step direction 6 (map west).
+// spec: S-0211 claim 15, Constants (high-bridge overlay indices and marking directions)
+const HIGH_BRIDGE_OVERLAYS: [(u8, (i32, i32)); 4] =
+    [(24, (0, -1)), (237, (0, -1)), (25, (-1, 0)), (238, (-1, 0))];
 
 fn li(l: Layer) -> usize {
     match l {
@@ -131,6 +140,35 @@ impl Cells {
             mark_seq: 0,
             wall_owner: vec![None; n],
             load_marks_done: false,
+        }
+    }
+
+    /// An overlay of `overlay` placed in `c` marks its high-bridge cells
+    /// (S-0211 claim 15): for a high-bridge overlay index, the cell one step
+    /// against its marking direction d, its own cell, and the cells one and
+    /// two steps along d. Marking looks at nothing in the marked cells.
+    pub fn mark_high_bridge(&mut self, c: CellXY, overlay: u8) {
+        let Some(&(_, (dx, dy))) = HIGH_BRIDGE_OVERLAYS.iter().find(|h| h.0 == overlay) else {
+            return;
+        };
+        // spec: S-0211 claim 15 (four cells: one step against d, its own, one and two steps along d)
+        for k in [-1, 0, 1, 2] {
+            if let Some(i) = self.idx(CellXY::new(c.x + k * dx, c.y + k * dy)) {
+                self.deck[i] = true;
+            }
+        }
+    }
+
+    /// Marks the high-bridge cells of every high-bridge overlay on the map
+    /// (S-0211 claim 15). Marking only adds, so marking again is harmless.
+    pub fn mark_all_high_bridges(&mut self) {
+        let placed: Vec<(CellXY, u8)> = self
+            .grid
+            .iter()
+            .map(|(c, cell)| (c, cell.overlay))
+            .collect();
+        for (c, o) in placed {
+            self.mark_high_bridge(c, o);
         }
     }
 
