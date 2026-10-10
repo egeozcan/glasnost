@@ -1402,10 +1402,19 @@ fn move_destination(
         let r = regions::reach_in(w, c, zone);
         matches!(r, Reach::Region(_)) && r == regions::reach_in(w, o.pos.cell(), zone)
     };
-    // The search of S-0212 table T5. A free mover's no-move searches without a reach region, and a
-    // click on an object searches zone fly as infantry; path::nearby has only the search with the
-    // actor's reach region so far (S-0212's search is not this module's).
-    let search = |c: CellXY| path::nearby(w, c, NearbyUse::MoveOrder { unit: actor });
+    // The search of S-0212 table T5: a free mover's no-move searches without a reach region, and a
+    // click on an object searches zone fly as infantry.
+    let search = |c: CellXY, on_object: bool| {
+        path::nearby(
+            w,
+            c,
+            NearbyUse::MoveOrder {
+                unit: actor,
+                on_object,
+                free_no_move: fm && a == Action::NoMove,
+            },
+        )
+    };
     match on {
         ClickOn::Cell(c) => {
             let inside = w.cells.usable(c);
@@ -1417,7 +1426,7 @@ fn move_destination(
                 return Some(Target::Cell(c));
             }
             // spec: S-0214 claim 11 (otherwise a cell found by the search from the clicked cell; none found, no order)
-            search(c).map(Target::Cell)
+            search(c, false).map(Target::Cell)
         }
         ClickOn::Object(t) => {
             let tc = w.obj(t)?.pos.cell();
@@ -1428,7 +1437,7 @@ fn move_destination(
                 return Some(Target::Object(t));
             }
             // spec: S-0214 claim 11 (otherwise a cell found by the search from the object's cell, and the object itself when none is found)
-            Some(search(tc).map_or(Target::Object(t), Target::Cell))
+            Some(search(tc, true).map_or(Target::Object(t), Target::Cell))
         }
     }
 }

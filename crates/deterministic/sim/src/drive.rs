@@ -733,7 +733,10 @@ fn first_cell_look(w: &mut World, id: ObjectId, u: &UnitRules) {
 /// The object nearest the centre of `c`, looked for in the deck layer when
 /// the vehicle's world height is more than 208 leptons above the surface
 /// height at that centre, otherwise in the ground layer (S-0207 claim 15).
-/// Ties go to the object listed first.
+/// Which objects take part, how the distance is measured and how ties are
+/// broken are not stated (request Q-0040). Interim: every listed object but
+/// the vehicle itself, by S-0204's distance from its position to the
+/// centre at the surface height, ties to the object listed first.
 fn nearest_object(w: &World, id: ObjectId, c: CellXY) -> Option<ObjectId> {
     let o = w.obj(id)?;
     let r = w.rules();
@@ -755,7 +758,7 @@ fn nearest_object(w: &World, id: ObjectId, c: CellXY) -> Option<ObjectId> {
         let dx = i64::from(ob.pos.x - cx);
         let dy = i64::from(ob.pos.y - cy);
         let dz = i64::from(ob.pos.z - h);
-        // spec: S-0204 claim 5 (the distance with the table square root)
+        // spec: S-0204 claim 5 (the distance with the table square root; measure and ties: Q-0040)
         let dist = root_floor(
             (dx * dx + dy * dy + dz * dz) as u64,
             r.quirks.table_root_distance,

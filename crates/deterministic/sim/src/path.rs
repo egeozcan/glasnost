@@ -835,10 +835,15 @@ pub enum NearbyUse {
         /// In deck mode.
         deck: bool,
     },
-    /// A move order onto a cell (S-0214 claim 11).
+    /// A move or no-move order onto a cell or an object (S-0214 claim 11).
     MoveOrder {
         /// The unit.
         unit: ObjectId,
+        /// The click was on an object (its cell is the centre).
+        on_object: bool,
+        /// A no-move order by a unit that is in the air, travels
+        /// underground, is of a jumpjet infantry type or is an aircraft.
+        free_no_move: bool,
     },
 }
 
@@ -853,42 +858,70 @@ pub fn nearby(w: &World, centre: CellXY, use_: NearbyUse) -> Option<CellXY> {
     } else {
         31
     };
-    let (class, zone, reach_ref, deck_mode, height_cond, reference) = match use_ {
-        NearbyUse::Substitution { unit } => {
-            let o = w.obj(unit)?;
-            let u = w.rules().unit(o.kind, o.type_index)?.clone();
-            let z = simplified(u.zone);
-            let rr = regions::reach_in(w, o.pos.cell(), z);
-            let o = w.obj(unit)?;
-            (
-                u.class,
-                z,
-                Some(rr),
-                o.layer == Layer::Deck,
-                true,
-                Some(o.pos.cell()),
-            )
-        }
-        NearbyUse::Scatter { class, deck } => {
-            // spec: S-0212 table T5 (scatter: zone normal, no reach region, no reference cell)
-            (class, MovementZone::Normal, None, deck, true, None)
-        }
-        NearbyUse::MoveOrder { unit } => {
-            let o = w.obj(unit)?;
-            let u = w.rules().unit(o.kind, o.type_index)?.clone();
-            // spec: S-0212 table T5 (move order: own zone, subterranean as normal, fly as infantry under an ion storm)
-            let z = if u.zone == MovementZone::Subterranean {
-                MovementZone::Normal
-            } else {
-                u.zone
-            };
-            let rr = regions::reach_in(w, o.pos.cell(), z);
-            let deck = w.cells.idx(centre).is_some_and(|i| w.cells.deck[i]);
-            (u.class, z, Some(rr), deck, true, None)
-        }
-    };
+    let is_deck = |c: CellXY| w.cells.idx(c).is_some_and(|i| w.cells.deck[i]);
+    let (class, zone, reach_ref, deck_mode, height_cond, further, reference, centre_deck) =
+        match use_ {
+            NearbyUse::Substitution { unit } => {
+                let o = w.obj(unit)?;
+                let u = w.rules().unit(o.kind, o.type_index)?.clone();
+                let z = simplified(u.zone);
+                let rr = regions::reach_in(w, o.pos.cell(), z);
+                // spec: S-0212 table T5 (substitution: in deck mode when the unit is on a bridge deck)
+                let deck = o.layer == Layer::Deck;
+                // spec: S-0212 claim 24 (quirks.substitution_centre_ground_level off: the centre's level includes the deck whenever it is a bridge cell, for a unit that is not an aircraft)
+                let centre_deck =
+                    deck || (!q.substitution_centre_ground_level && o.kind != Kind::Aircraft);
+                // spec: S-0212 claim 25 (claim 24 asks for the further test for a subterranean unit whose destination passes it)
+                let further = u.zone == MovementZone::Subterranean && burrow_ok(w, centre);
+                (
+                    u.class,
+                    z,
+                    Some(rr),
+                    deck,
+                    true,
+                    further,
+                    Some(o.pos.cell()),
+                    centre_deck,
+                )
+            }
+            NearbyUse::Scatter { class, deck } => {
+                // spec: S-0212 table T5 (scatter: zone normal, no reach region, no further test, no reference cell)
+                (
+                    class,
+                    MovementZone::Normal,
+                    None,
+                    deck,
+                    true,
+                    false,
+                    None,
+                    deck,
+                )
+            }
+            NearbyUse::MoveOrder {
+                unit,
+                on_object,
+                free_no_move,
+            } => {
+                let o = w.obj(unit)?;
+                let u = w.rules().unit(o.kind, o.type_index)?.clone();
+                // spec: S-0212 table T5 (orders: own zone, subterranean as normal; fly as infantry for a click on an object, and for a click on a cell only under an ion storm, which no topic of M3 starts)
+                let z = match u.zone {
+                    MovementZone::Subterranean => MovementZone::Normal,
+                    MovementZone::Fly if on_object => MovementZone::Infantry,
+                    other => other,
+                };
+                // spec: S-0212 table T5 (the no-move rows: no reach region; the others: that of the unit's cell for that zone)
+                let rr = (!free_no_move).then(|| regions::reach_in(w, o.pos.cell(), z));
+                // spec: S-0212 table T5 (orders: in deck mode when the centre is a bridge cell)
+                let deck = is_deck(centre);
+                // The no-move rows ask for the further test for a subterranean unit under a
+                // condition of its state that S-0212 does not establish (request Q-0041): not
+                // asked meanwhile.
+                (u.class, z, rr, deck, true, false, None, deck)
+            }
+        };
     let centre_level = w.cells.cell(centre).map_or(0, |c| i32::from(c.level))
-        + if deck_mode && w.cells.idx(centre).is_some_and(|i| w.cells.deck[i]) {
+        + if centre_deck && is_deck(centre) {
             4 // spec: S-0207 claim 9 (a deck counts 4 levels above its cell)
         } else {
             0
@@ -898,6 +931,7 @@ pub fn nearby(w: &World, centre: CellXY, use_: NearbyUse) -> Option<CellXY> {
     'rings: for r in 0..=max_r {
         let ring = ring_cells(centre, r, q.nearby_centre_twice);
         for c in ring {
+            // spec: S-0212 claim 25 (the further test, when the user asks for it)
             if qualifies(
                 w,
                 c,
@@ -907,7 +941,8 @@ pub fn nearby(w: &World, centre: CellXY, use_: NearbyUse) -> Option<CellXY> {
                 deck_mode,
                 height_cond,
                 centre_level,
-            ) {
+            ) && (!further || burrow_ok(w, c))
+            {
                 collected.push(c);
                 // spec: S-0212 claim 25 (cut off at the 24th collected cell)
                 if collected.len() >= 24 {
@@ -956,6 +991,32 @@ pub fn nearby(w: &World, centre: CellXY, use_: NearbyUse) -> Option<CellXY> {
             preferred.get(w.tick.rem_euclid(n) as usize).copied()
         }
     }
+}
+
+/// The further test of the nearby-cell search (S-0212 claim 25): the
+/// burrowing test of S-0010 claim 17. Every cell outside the usable area
+/// passes; a cell inside it passes when it is flat, not a bridge cell, and
+/// its ground layer holds no building and no terrain object. Two parts are
+/// placeholders: the tileset's allow-burrowing flag reads as its absent-key
+/// default (allowed), since the tile catalogue does not carry it yet, and
+/// the further cells of a bridge's structure that the original refuses are
+/// not stated (request Q-0041).
+pub fn burrow_ok(w: &World, c: CellXY) -> bool {
+    // spec: S-0010 claim 17 (every cell outside the usable area passes, by the height-aware test)
+    if !w.cells.usable(c) {
+        return true;
+    }
+    let Some(cell) = w.cells.cell(c) else {
+        return true;
+    };
+    let bridge = w.cells.idx(c).is_some_and(|i| w.cells.deck[i]);
+    // spec: S-0212 claim 25 (inside: flat, not a bridge cell, no building and no terrain object on the ground layer)
+    cell.slope == 0
+        && !bridge
+        && !w.cells.list(c, Layer::Ground).iter().any(|&x| {
+            w.obj(x)
+                .is_some_and(|o| matches!(o.kind, Kind::Building | Kind::Terrain))
+        })
 }
 
 /// Whether a cell qualifies for the nearby-cell search (S-0212 claim 25).

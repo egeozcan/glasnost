@@ -1389,3 +1389,45 @@ fn budget_kept_while_waiting_for_a_path() {
     run(&mut w, 5);
     assert_eq!(snap(&w, id).budget, 40);
 }
+
+// spec: S-0207 claim 16 (a): unload, sleep or sticky as the current behaviour, or as the queued one when there is no current one, refuses every request
+#[test]
+fn vehicle_scatter_refused_in_unload() {
+    use glasnost_sim::rules::Behaviour;
+    use glasnost_sim::scatter::{ScatterRequest, vehicle_request};
+    let s = scene(car(WHEEL, 30, false), 0);
+    let base = s.build();
+    let id = object_in(&base, cell(0, 0)).expect("vehicle");
+    let reqs = [
+        ScatterRequest {
+            threat: None,
+            forced: true,
+            anywhere: true,
+        },
+        ScatterRequest {
+            threat: Some(glasnost_sim::world::Pos::centre(cell(3, 0), 0)),
+            forced: true,
+            anywhere: true,
+        },
+    ];
+    for b in [Behaviour::Unload, Behaviour::Sleep, Behaviour::Sticky] {
+        for (current, queued) in [(Some(b), None), (None, Some(b))] {
+            for req in reqs {
+                let mut w = base.clone();
+                let o = w.obj_mut(id).expect("v");
+                o.beh.current = current;
+                o.beh.queued = queued;
+                let rng = w.rng.clone();
+                assert!(!vehicle_request(&mut w, id, req), "{b:?} {current:?}");
+                assert_eq!(w.obj(id).expect("v").dest, None);
+                assert_eq!(w.rng, rng, "no draw");
+            }
+        }
+    }
+    // A guard current with unload queued: the current behaviour decides.
+    let mut w = base.clone();
+    let o = w.obj_mut(id).expect("v");
+    o.beh.current = Some(Behaviour::Guard);
+    o.beh.queued = Some(Behaviour::Unload);
+    assert!(vehicle_request(&mut w, id, reqs[0]));
+}

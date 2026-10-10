@@ -1323,3 +1323,96 @@ fn wall_blocks_an_unarmed_vehicle() {
         Outcome::Clear
     );
 }
+
+// ------------------------------------------------- the nearby-cell search, T5
+
+/// A unit of `ty` at cell(0, 0) and a car on cell(6, 0), inside a ring of
+/// rock cells at Chebyshev distance 2 from it: the island of cell(6, 0)
+/// and its eight neighbours is a region of its own.
+fn island(ty: &str, t: UnitType) -> (World, ObjectId) {
+    let mut s = scene();
+    s.vehicle(ty, t);
+    for c in ring(cell(6, 0), 2) {
+        rock(&mut s, c, 0);
+    }
+    s.place_unit(0, ty, cell(0, 0), 64);
+    s.place_unit(1, CAR, cell(6, 0), 64);
+    let mut w = s.build();
+    regions::ensure(&mut w);
+    let id = vehicles(&w)
+        .into_iter()
+        .find(|&v| w.obj(v).unwrap().pos.cell() == cell(0, 0))
+        .unwrap();
+    (w, id)
+}
+
+fn order_search(w: &World, id: ObjectId, on_object: bool, free_no_move: bool) -> Option<CellXY> {
+    path::nearby(
+        w,
+        cell(6, 0),
+        path::NearbyUse::MoveOrder {
+            unit: id,
+            on_object,
+            free_no_move,
+        },
+    )
+}
+
+// spec: S-0212 table T5 (move orders: the unit's reach region; the no-move rows of a free mover: no reach region)
+#[test]
+fn order_search_reach_region() {
+    let (w, id) = island("TESTWHEEL", unit_type(WHEEL, 40, 6));
+    let near = |c: Option<CellXY>| chebyshev(c.expect("a cell"), cell(6, 0));
+    // With the reach region, the island's cells are out: ring 3.
+    assert_eq!(near(order_search(&w, id, false, false)), 3);
+    assert_eq!(near(order_search(&w, id, true, false)), 3);
+    // Without it (a free mover's no-move), the island's ring 1 qualifies.
+    assert_eq!(near(order_search(&w, id, false, true)), 1);
+    assert_eq!(near(order_search(&w, id, true, true)), 1);
+}
+
+// spec: S-0212 table T5 (fly counted as infantry for a click on an object always, for a click on a cell only under an ion storm)
+#[test]
+fn order_search_fly_zone() {
+    let (w, id) = island(
+        "TESTFLY",
+        UnitType {
+            movement_zone: Some(MovementZone::Fly),
+            ..unit_type(WHEEL, 40, 6)
+        },
+    );
+    let near = |c: Option<CellXY>| chebyshev(c.expect("a cell"), cell(6, 0));
+    // Zone fly reaches across the rock ring: the island's ring 1.
+    assert_eq!(near(order_search(&w, id, false, false)), 1);
+    // As infantry, the island is another reach region: ring 3.
+    assert_eq!(near(order_search(&w, id, true, false)), 3);
+}
+
+// spec: S-0212 claim 25 (the further test is S-0010's burrowing test: outside the usable area every cell passes; inside, flat, no bridge cell, no building or terrain object)
+// spec: S-0212 claim 24 (a subterranean unit whose destination passes the further test gets only substitutes that pass it)
+#[test]
+fn further_test_is_the_burrowing_test() {
+    let mut s = scene();
+    s.vehicle(
+        "TESTMOLE",
+        UnitType {
+            movement_zone: Some(MovementZone::Subterranean),
+            ..unit_type(WHEEL, 40, 6)
+        },
+    );
+    s.set_cell(cell(5, 1), slope_tile(1), 0);
+    s.place_structure(1, HUT, cell(4, 4));
+    s.place_unit(0, "TESTMOLE", cell(0, 0), 64);
+    s.place_unit(1, CAR, cell(6, 0), 64);
+    let mut w = s.build();
+    regions::ensure(&mut w);
+    assert!(path::burrow_ok(&w, cell(6, 0)));
+    assert!(!path::burrow_ok(&w, cell(5, 1)), "a slope fails");
+    assert!(!path::burrow_ok(&w, cell(4, 4)), "a building cell fails");
+    let outside = CellXY::new(-5, -5);
+    assert!(!w.cells.usable(outside));
+    assert!(
+        path::burrow_ok(&w, outside),
+        "outside the usable area passes"
+    );
+}

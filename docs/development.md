@@ -197,6 +197,8 @@ Provisional rules of the simulation, each tied to a request:
 | Where | Interim rule | Request |
 |---|---|---|
 | `path` | no corridor of claim 13 | Q-0017 |
+| `path::nearby`, `path::burrow_ok` | the no-move rows of S-0212 table T5 never ask for the further test; the burrowing test applies only its stated conditions, and the tileset's allow-burrowing flag reads as allowed (the tile catalogue does not carry it yet) | Q-0041 |
+| `drive` | the look at a new path's first cell (S-0207 claim 15) takes as nearest object every listed object but the vehicle, by S-0204's distance to the cell centre at the surface height, ties to the first listed | Q-0040 |
 | `load` | a start list that needs a random start cell is refused (`LoadError::RandomStartCell`); low-bridge end markers complete no bridge; vein seeds are cleared and not rebuilt | Q-0018 |
 | `drive` | the attack override of a refused step (S-0207 table T4) gives no destination; no step check follows the search made after a curve's second cell gives an obstacle (table T5) | Q-0035 |
 | `crush` | a map wall takes the owner of the nearest qualifying building at any distance (S-0210 claim 14) | Q-0036 |
