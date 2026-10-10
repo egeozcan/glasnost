@@ -18,7 +18,9 @@ pub mod objects;
 pub mod terrain;
 
 pub use geometry::{CellXY, Footprint};
-pub use objects::{Aircraft, Infantry, Objects, Smudge, Structure, TerrainObject, Unit};
+pub use objects::{
+    Aircraft, EntryFields, Infantry, ListKind, Objects, Smudge, Structure, TerrainObject, Unit,
+};
 
 /// Number of waypoint markers, numbered 0 to 701 (S-0009 claim 15).
 pub const WAYPOINT_COUNT: u16 = 702; // spec: S-0009 Constants (waypoint count)
