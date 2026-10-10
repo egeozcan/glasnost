@@ -2290,7 +2290,7 @@
           "default": true
         },
         "ramp_shape_zero": {
-          "description": "A ramp-range tile of shape 0 becomes the tile just before the ramp range.",
+          "description": "A tile of the ramp range or of the smooth-ramp range whose slope shape is 0 becomes the tile just before the ramp range.",
           "type": "boolean",
           "default": true
         },

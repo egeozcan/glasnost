@@ -212,7 +212,9 @@ pub struct TerrainQuirks {
     pub cliff_back_case_sets: bool,
     /// `quirks.unset_role_range` (S-0010 claims 5, 10, 11).
     pub unset_role_range: bool,
-    /// `quirks.ramp_shape_zero` (S-0010 claim 11).
+    /// `quirks.ramp_shape_zero` (S-0010 claim 11): a tile of the ramp
+    /// range or of the smooth-ramp range whose slope shape is 0 becomes the
+    /// tile just before the ramp range; off, it keeps its tile.
     pub ramp_shape_zero: bool,
 }
 
@@ -504,6 +506,7 @@ fn smooth_ramp(grid: &CellGrid, c: CellXY, tile: i32, s: u8, rules: &RecalcRules
     } else {
         0
     };
+    // spec: S-0010 claim 11 (shape 0 in either range: ramp start − 1 by the formula below, m being 0; quirks.ramp_shape_zero off keeps the tile)
     if s == 0 && !q.ramp_shape_zero {
         return tile;
     }
@@ -774,6 +777,69 @@ mod tests {
         assert_eq!(g.get(c).map(|x| x.tile), Some(8 + 15));
         // The land type comes from the tile the recalculation began with.
         assert_eq!(g.get(c).map(|x| x.land), Some(land::ROUGH));
+    }
+
+    // spec: S-0010 claim 11 (a tile of shape 0 in the ramp range or in the smooth-ramp range becomes ramp start − 1; quirks.ramp_shape_zero off keeps it; scenario L4 parts A and B)
+    #[test]
+    fn ramp_shape_zero_in_both_ranges() {
+        let mut cat = flat_catalogue();
+        cat.roles.ramp = 4; // tiles 4 … 7 have shapes 1 … 4
+        // Tiles 8 … 24 are flat (shape 0); tile 24 starts the smooth-ramp
+        // range, outside the ramp range 4 … 23.
+        while cat.tiles.len() < 25 {
+            cat.tiles.push(TileInfo {
+                width: 1,
+                height: 1,
+                has_image: true,
+                cells: vec![Some(TileCell {
+                    terrain_code: 0,
+                    slope: 0,
+                })],
+                variants: 0,
+                anim: None,
+            });
+        }
+        cat.roles.smooth_ramp = 24;
+        let ov = no_overlay;
+        let c = CellXY::new(8, 8);
+        for (placed, quirk, want) in [
+            (24, true, 3),   // smooth-ramp range, shape 0: ramp start − 1
+            (24, false, 24), // switch off: kept
+        ] {
+            let mut r = rules(&cat, &ov);
+            r.quirks.ramp_shape_zero = quirk;
+            let mut g = grid();
+            if let Some(cell) = g.get_mut(c) {
+                cell.tile = placed;
+            }
+            recalc(&mut g, c, &r);
+            assert_eq!(
+                g.get(c).map(|x| x.tile),
+                Some(want),
+                "tile {placed}, switch {quirk}"
+            );
+        }
+        // The ramp range: tile 4 carries shape 1 in the catalogue, so a
+        // catalogue whose ramp-range tile 4 is flat shows part A.
+        let mut cat_a = cat.clone();
+        cat_a.tiles[4].cells = vec![Some(TileCell {
+            terrain_code: 0,
+            slope: 0,
+        })];
+        for (quirk, want) in [(true, 3), (false, 4)] {
+            let mut r = rules(&cat_a, &ov);
+            r.quirks.ramp_shape_zero = quirk;
+            let mut g = grid();
+            if let Some(cell) = g.get_mut(c) {
+                cell.tile = 4;
+            }
+            recalc(&mut g, c, &r);
+            assert_eq!(
+                g.get(c).map(|x| x.tile),
+                Some(want),
+                "ramp range, switch {quirk}"
+            );
+        }
     }
 
     // spec: S-0010 claim 11 (ramp smoothing by the flat neighbours)

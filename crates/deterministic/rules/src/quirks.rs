@@ -245,7 +245,7 @@ pub struct Quirks {
     // spec: S-0010 claim 4
     #[serde(default = "on")]
     pub role_one_past_end: bool,
-    /// A ramp-range tile of shape 0 becomes the tile just before the ramp range.
+    /// A tile of the ramp range or of the smooth-ramp range whose slope shape is 0 becomes the tile just before the ramp range.
     // spec: S-0010 claim 11
     #[serde(default = "on")]
     pub ramp_shape_zero: bool,

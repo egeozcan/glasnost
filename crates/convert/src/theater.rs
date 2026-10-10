@@ -132,6 +132,11 @@ pub fn variant_pattern(mut draw: impl FnMut() -> u32) -> ([u8; 64], u32) {
 /// The image a cell shows (S-0010 claim 13, Formulas *Variant*): for a cell
 /// (x, y) of sub-tile `t` of a tile whose plain image is `w` × `h` cells
 /// and has `n` variants, with the 8 × 8 pattern `p8`.
+///
+/// Placeholder (Q-0055): claim 13's alternate-image mark is not read,
+/// because the spec does not say where the tile file carries it, so every
+/// tile cell uses the pattern. A marked cell would show the plain image
+/// (its alternate-image state is clear at map load and no spec sets it).
 pub fn variant_image(
     (x, y): (i32, i32),
     t: i32,
