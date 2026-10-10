@@ -2,11 +2,11 @@
 id: S-0105
 title: Rendering of voxel models
 topic: rendering
-revision: 3
+revision: 4
 sources-class: [decomp, format-doc]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-09
+approved-on: 2026-10-10
 measurements: []
 requests: []
 supersedes: []
@@ -20,7 +20,7 @@ How a voxel model (a VXL model with its HVA animation) becomes pixels: the fixed
 transform, how many facings each model part can show, how the body, turret and barrel are
 placed (a building's barrel without a turret included), how the voxel's normal and the global light pick a shade from the voxel lighting table
 (VPL), how each voxel becomes a pixel, how the parts are composited, how building turrets
-recoil, how the flat voxel shadow is made, and what of earlier draws the voxel buffer keeps. Ramp tilt is left to planned S-0106; where the finished image
+recoil, how the flat voxel shadow is made, and what of earlier draws the voxel buffer keeps. Ramp tilt is left to S-0106; where the finished image
 lands among other objects is in S-0102; palettes and house colours are in S-0103; the map's
 lighting tint is in S-0104.
 
@@ -87,12 +87,12 @@ turn per unit), to tell it apart from the coarser facings derived from it.
 - **Draw point.** The screen point a part image is placed around: the object's position (S-0101)
   plus any shift its locomotor applies when drawing (claim 25).
 - **Shadow draw point.** The screen point a shadow image is placed around: the point on the
-  ground below the object that its locomotor gives (S-0102, planned S-0106; open questions).
+  ground below the object that its locomotor gives (S-0102, S-0106; open questions).
 - **Aircraft-like type.** A type with the aircraft-like flag (import mapping); its shadow is
   half size (claim 31).
 - **Depth-option type.** A type with the per-type depth-buffer option (claim 24).
 - **Ramp.** A sloped cell (a *slope* in the glossary's sense). A vehicle on a ramp is drawn tilted to match it; the tilt, and the
-  per-cell slope that selects it, are left to planned S-0106. Here it matters only as an input of the body
+  per-cell slope that selects it, are left to S-0106. Here it matters only as an input of the body
   transform and of the image-cache key. A body's tilt is *settled* when it is the fixed tilt of the
   cell it stands on and is not changing. While the body moves from one tilt to another, or while its
   locomotor rocks it (pitches or rolls it by 0.005 radians or more), the tilt is not settled.
@@ -156,7 +156,7 @@ turn per unit), to tell it apart from the coarser facings derived from it.
 
 3. **Body: 32 facings.** The body rotation is the body's 32-step facing, not its raw facing:
    angle *θ_body = −(π/16) · (f₃₂ − 8)* about model +z. A unit turning smoothly therefore shows
-   at most 32 distinct body orientations on flat ground. (Ramps and pitch add tilt, planned S-0106.)
+   at most 32 distinct body orientations on flat ground. (Ramps and pitch add tilt, S-0106.)
    - Backing: `measurable` (MS-1)
    - Confidence: high
 
@@ -192,7 +192,7 @@ turn per unit), to tell it apart from the coarser facings derived from it.
 ### Part placement
 
 7. **Vehicle body transform.** *D* is the body transform its locomotor gives, without the view
-   (rotation by *θ_body* on flat ground, plus tilt, planned S-0106). The body is drawn with *V · D*.
+   (rotation by *θ_body* on flat ground, plus tilt, S-0106). The body is drawn with *V · D*.
    - Backing: `measurable` (MS-1)
    - Confidence: high
 
@@ -221,7 +221,7 @@ turn per unit), to tell it apart from the coarser facings derived from it.
     the elevation leaves in place is the turret-frame point *−t*, so the barrel pitches about a
     lateral axis through *−t* in turret coordinates, not through the turret origin (`quirks.barrel_pivot_frame_mixup`).
     *t* is the turret's translation in its parent frame: for a vehicle on flat ground it is
-    *δ × ρ* along the body's forward direction (plus any translation in *D*, planned S-0106),
+    *δ × ρ* along the body's forward direction (plus any translation in *D*, S-0106),
     for a building it is *d_b* along the turret's own forward direction. When *t = 0* the pivot
     is the turret origin. The barrel is drawn with *V · B*.
     - Backing: `measurable` (MS-2 for vehicles, MS-6 for buildings)
@@ -239,7 +239,8 @@ turn per unit), to tell it apart from the coarser facings derived from it.
 12. **Alternative and multiple models.** A vehicle whose type has the alternative-body option
     draws its alternative body instead of its main body whenever none of its spawned aircraft is
     docked (Terms), and its main body while at least one is. If a type has the option but carries
-    no spawned aircraft, the original's result is unspecified; our engine draws the main body.
+    no spawned aircraft, the original's result is unspecified; our engine draws the main body,
+    and the importer warns about the type (Import mapping, *Importer warnings*).
     - **Which alternative body.** It is the one S-0007 claim 16 loads for the type: the body with
       the no-spawn-alternate suffix or, for the one type id that S-0007 names, the body with the
       suffix S-0007 gives for that type id. When both files exist, the no-spawn-alternate one is
@@ -272,9 +273,9 @@ turn per unit), to tell it apart from the coarser facings derived from it.
     - Backing: `measurable` (MS-3 for the HVA, MS-13 for the unused file transform)
     - Confidence: high (HVA use), medium (file transform unused)
 
-14. **HVA translation scale.** When the HVA is loaded, the translation column of every one of its
-    transforms is multiplied by the scale factor of the VXL's **first** section, for all sections
-    (`quirks.hva_scale_first_section`). Each product is a single-precision value truncated toward zero (F0).
+14. **HVA translation scale.** Every section is drawn with the translation column of its HVA
+    transforms multiplied by the scale factor of the VXL's **first** section, whatever the
+    section's own factor (`quirks.hva_scale_first_section`). Each product is a single-precision value truncated toward zero (F0).
     - Backing: `measurable` (MS-13)
     - Confidence: high
 
@@ -432,7 +433,7 @@ turn per unit), to tell it apart from the coarser facings derived from it.
     reused, by every object of that type, whenever a later draw produces the same key. The key is
     meant to capture every input of the image, but it does not:
     - **Body:** the ramp state (which settled tilt the body has, for locomotors that tilt the
-      body on ramps, planned S-0106), the 32-step body facing, the alternative-model state, and the HVA
+      body on ramps, S-0106), the 32-step body facing, the alternative-model state, and the HVA
       frame modulo 32 (`quirks.voxel_cache_frame_mod32`).
     - **Vehicle turret:** the ramp state, the 32-step body facing, the 32-step turret facing, the
       selected turret index for a multi-turret type, and a frame value *v*. With *f* the turret
@@ -445,7 +446,7 @@ turn per unit), to tell it apart from the coarser facings derived from it.
       from a fresh one by at most the 0.088° rounding of F1, which rarely moves a pixel. (On a ramp
       the tilt is part of the key. On a settled ramp the body transform is the cell's tilt
       followed by the body's 32-step rotation, so the tilt does not depend on the body facing.
-      The tilt itself is left to planned S-0106.)
+      The tilt itself is left to S-0106.)
     - **Building turret:** the 32-step turret facing and the turret frame modulo 256.
     - **Barrel:** the turret's key (for a building's barrel drawn without a turret, claim 37
       gives the key). Barrel images are kept apart from turret images, so a
@@ -460,7 +461,9 @@ turn per unit), to tell it apart from the coarser facings derived from it.
     - for a vehicle with the driving locomotor or the naval locomotor (the one ships use): while
       its body's tilt is not settled (Terms: while it moves between tilts, or while it is pitched
       or rolled by 0.005 radians or more; the angles are compared in floating point). Body, turret and barrel are then all drawn fresh. When a body tilts or
-      rocks is left to planned S-0106 and the vehicle specs.
+      rocks is left to S-0106 and the vehicle specs. The three other locomotors whose bodies are
+      drawn fresh (hovering while it rocks, jumpjet while it rocks, tunnelling while its digging
+      pitch changes) are S-0106 claim 13's.
 
     **What reuse changes on screen.** Because only fresh draws have side effects, every key
     component shows: a draw with a key not yet in the cache is fresh, and a draw with a known key
@@ -484,11 +487,12 @@ turn per unit), to tell it apart from the coarser facings derived from it.
       look. `unmeasured` in two places. The building turret's frame modulo 256: a building's
       animation-frame counter advances only through attacking, by rules other specs own, so no
       scenario here can bring a building turret past frame 255 on demand. The naval locomotor
-      case: when a ship's body tilts is not fixed by any spec yet (planned S-0106), so no scenario can
-      make it happen on demand.
+      case: when a ship's body tilts is S-0106's (claims 6 and 7), but stock data may give a
+      ship no tilt at all (S-0106, Open questions), and none of this spec's scenarios uses
+      S-0106's naval test data (its scenario T6), so none of them makes it happen.
     - Confidence: high (the frame keys, the collision of `quirks.voxel_cache_alt_turret_frame`, the barrel key without elevation, the body facing
       in the turret key), medium (the ramp state and the unsettled-tilt case, whose details
-      are left to planned S-0106)
+      are left to S-0106)
 
 ### Recoil
 
@@ -552,7 +556,7 @@ turn per unit), to tell it apart from the coarser facings derived from it.
     positions, the rounding and the copy to the screen. All marked pixels take one value,
     which the shadow treatment then darkens. The shadow transform is
     *V · S · H(0, shadow section)*, where *S* is the body's shadow transform: the ramp tilt of the
-    cell under the unit (planned S-0106) and the body's 32-step rotation. Height and pitch of the body do not change the footprint's outline.
+    cell under the unit (S-0106) and the body's 32-step rotation. Height and pitch of the body do not change the footprint's outline.
     - Backing: `measurable` (MS-8)
     - Confidence: medium (high for the two pixels per column and for present columns without
       voxels)
@@ -640,7 +644,8 @@ turn per unit), to tell it apart from the coarser facings derived from it.
 35. **Normal mode 0.** A section whose normal mode is 0 has no normal table and is drawn unlit:
     each voxel's value goes into the voxel buffer as it is, without the VPL (a value of 0 is
     written as transparent). Its column data is read as if each voxel held one value, a colour
-    index, and no normal index (`quirks.voxel_mode0_misread`). Every column's reading starts afresh at its own
+    index, and no normal index (`quirks.voxel_mode0_misread`). The importer warns about every
+    section of normal mode 0 (Import mapping, *Importer warnings*). Every column's reading starts afresh at its own
     column data (at its first value bottom-up, at its last value top-down), however the column
     before it was read.
     - **Bottom-up** (claim 21), a column's values are taken, from its first, as consecutive
@@ -664,11 +669,13 @@ turn per unit), to tell it apart from the coarser facings derived from it.
       top-down, its start) before it ends, the original reads on into the data that lies beyond,
       and what it draws from there is unspecified (as are the stray voxels of `quirks.voxel_topdown_column_origin`). Our engine, with the
       switch on, stops the column at the end of its own column data and draws nothing more for it.
+      The importer warns about such a column.
     - **Positions.** A voxel is placed as F5 gives, with an empty count *e* adding *e·Δ_z*, when
       *e < 255 − Nz*. After an empty count of *255 − Nz* or more the original's position is
       unspecified (it depends on earlier draws), and for *Nz = 255* the original's preparation of a
       mode-0 section fails in an unspecified way. Our engine uses F5's *e·Δ_z* in every case, and
-      draws a mode-0 section with *Nz = 255* like any other.
+      draws a mode-0 section with *Nz = 255* like any other. The importer warns about a
+      section with either case, since both come from the model file alone.
     - Backing: `measurable` (MS-19) for the unlit values, the bottom-up and top-down groups, the
       end of a column and positions within the bound (MS-19 (b) has an empty count of 40, below
       255 − 42); `unmeasured` for positions at or beyond the bound: there the original's position
@@ -685,6 +692,8 @@ turn per unit), to tell it apart from the coarser facings derived from it.
       always goes on into a neighbouring column's data, which this spec leaves unspecified, so
       no test model can show the shift on its own. What our engine draws instead (it stops at the
       end of the column's own runs) is given in the entry for `quirks.voxel_topdown_column_origin`.
+      The importer warns about every section with such a column (Import mapping, *Importer
+      warnings*), whatever the state of the switch.
     - Confidence: medium
 
 ### Buildings with a barrel model only
@@ -714,8 +723,8 @@ turn per unit), to tell it apart from the coarser facings derived from it.
 
 **F0. Floating-point environment.** All floating-point work in this spec runs in the original
 with 53-bit (double) intermediate precision and **round toward zero** for every operation and
-every store. This holds for everything this spec computes, the loading of models (claim 14) and
-every draw included; the light direction (claim 17) comes out the same under either rounding
+every store. This holds for everything this spec computes, the HVA translation scaling (claim 14)
+and every draw included; the light direction (claim 17) comes out the same under either rounding
 (F2). Matrices, vectors and the shade sums are stored in single
 precision between steps; each such store truncates toward zero. Float-to-integer conversions are
 truncations toward zero. Confidence medium: truncation is certain at every float-to-integer
@@ -1461,7 +1470,8 @@ Every switch defaults to the original (YR) behaviour described; "Fixed" gives th
   first run of the reading direction later counts are taken from colour and normal indices, so the
   section draws as garbage. With the switch on (default), our engine reproduces claim 35 exactly
   while a column stays within its own column data. Where the original would read past it (claim
-  35, unspecified), our engine stops that column at the end of its own column data. Fixed: read
+  35, unspecified), our engine stops that column at the end of its own column data, and the
+  importer warns (Import mapping). Fixed: read
   each voxel's colour index and normal index, and draw the colour unlit.
 - **`quirks.voxel_no_intersection_depth`** (default: on). No depth test between sections unless the
   per-type depth option is set; interpenetrating sections can show the farther one in front.
@@ -1549,9 +1559,8 @@ Every switch defaults to the original (YR) behaviour described; "Fixed" gives th
   turret (claim 37) never shows recoil, and its recoil cycle does not stop image reuse. Fixed: slide
   the barrel back by its recoil slide along its own forward axis, as claim 27 does for a barrel
   drawn with a turret, and draw it fresh while its cycle runs.
-- **Round-toward-zero mode** (switch `quirks.chop_rounding`, owned by S-0205 (number domains,
-  planned); not defined here). Every floating-point operation and every single-precision store in
-  this spec rounds toward zero (F0). With S-0205's switch off they round to nearest. Conversions from floating point to integers are still truncations toward zero, since
+- **Round-toward-zero mode** (switch `quirks.chop_rounding`, owned by S-0205 (number domains, planned); not defined here). Every floating-point operation and every single-precision store in
+  this spec rounds toward zero (F0). With that switch off they round to nearest. Conversions from floating point to integers are still truncations toward zero, since
   each formula states them. The tabulated sine values of F1 do not change. In the table square
   root the stored input follows the switch, as every store does, while the final cut of the
   result stays a truncation. Example: F2's row z, x entry becomes 0.611342072 instead of 0.611342013.
@@ -1581,6 +1590,25 @@ own name, even when the type's image names a different section.
 | `TurretCount` | Rules [type] | integer | 0 | Turret count; above 0 makes a multi-turret type unless the type has rotating-barrel weapon stages (Terms, claim 12) |
 | `IsGattling` | Rules [type] | boolean | no | Rotating-barrel weapon stages; here only its effect on the multi-turret rule (claim 12) |
 | `UseTurretShadow` | Art [image], vehicles | boolean | no | Read, no effect (`quirks.no_turret_shadow`) |
+
+**Importer warnings.** The importer warns, naming the file and the place in it, in these cases. A
+warning never changes the imported result (glossary, *importer warning*), and the warnings do not
+depend on the state of any quirk switch.
+
+| Input | Warns | Claim |
+|---|---|---|
+| A vehicle type with the alternative-body option whose rules give it no spawned aircraft | the type | 12 |
+| A voxel model section of normal mode 0 | the model file and the section | 35 |
+| A mode-0 section in which a column's reading reaches past its own column data, in which an empty count is *255 − Nz* or more, or whose *Nz* is 255 | the model file, the section and, for the first two, the column | 35 |
+| A section with a column whose runs do not reach *Nz* exactly at a run boundary | the model file, the section and the column | 36 |
+
+The importer finds the model cases by reading each column as claims 35 and 36 describe. Three
+cases give no warning, because they depend on the pose or size of an object at the moment of
+drawing and not on the file alone, so the importer cannot tell in general whether they will
+occur: the right-hand pixel written below the last buffer row (claim 24 and the shadow marking of claim 30, F10), a copy
+rectangle larger than the voxel buffer (claim 22) and a clear area that does not fit in it
+(claim 34). Our engine's result in each is the one the claim gives. This follows the glossary's
+*unspecified* entry, which asks for an importer warning only where the cause is in the data.
 
 The voxel lighting table is the archive file `voxels.vpl`. Its header gives the remap range and
 the number of rows; the palette it also carries is not used for drawing; each row has 256
@@ -1741,7 +1769,9 @@ screenshots saved losslessly. Record the display path used (glossary, open quest
 **MS-6 Building voxel turret (claims 5, 6, 9, 10, 11, 26, 27; `quirks.recoil_hold_one_skipped`, `quirks.recoil_refire_accumulates`, `quirks.barrel_recoil_layer_reset`).**
 - *Setup:*
   - a stock building with a voxel turret and a barrel: one with both a turret model and a barrel
-    model, that is, a turret-animation name with a late "TUR" (S-0007 claim 20). A defence whose
+    model, that is, a turret-animation name that has a late "TUR" in the sense of S-0007
+    claim 20 (the letters "TUR" in any case, starting at the name's fifth character or later).
+    A defence whose
     only model is in the barrel role does not qualify; claim 37 and MS-21 cover those,
   - if no stock building has a non-zero turret displacement, the art database copy gives it
     one: first *δ = 20*, then *δ = −12*,
@@ -1872,8 +1902,8 @@ screenshots saved losslessly. Record the display path used (glossary, open quest
     turret shadow,
   - on flat ground, every shadow's marked pixels match, pixel for pixel, the golden image built
     from F10 and F6 around the shadow draw point (whose position comes from S-0102 and
-    planned S-0106). On the ramp the footprint keeps its 2-pixel-per-column form but is tilted; its exact
-    pixels need the ramp tilt, which is left to planned S-0106, so the ramp captures are kept for
+    S-0106). On the ramp the footprint keeps its 2-pixel-per-column form but is tilted; its exact
+    pixels need the ramp tilt, which is left to S-0106, so the ramp captures are kept for
     then and are not compared here,
   - the cloaking vehicle's shadow is present only while it is fully uncloaked: absent from the
     first tick of cloaking to the last tick of uncloaking,
@@ -2012,6 +2042,9 @@ the order in which objects are drawn, so its outcome does not depend on S-0102.
   - the rotating-barrel vehicle shows a test turret model,
   - the turreted spawner keeps its own body while none is docked,
   - with caching, body frames 2 and 3 show different turret images while none is docked,
+  - with caching, after a spawned aircraft has docked again, body frame 3 shows a turret image
+    other than the one body frames 2 and 3 shared while none was docked, or body frame 2 does not
+    show turret frame 2,
   - under the cache-disable option, a body frame from 1 to 3 shows another turret frame,
   - a spawner's shadow changes shape when the body is replaced,
   - the missing-file spawner keeps its main body, or loses its shadow, while none is docked,
@@ -2321,7 +2354,7 @@ which the two objects are drawn within a drawn frame.
   differently, with a shift derived from its weapon position and a pitch correction. Not yet
   understood; left out.
 - **Shadow vertical placement.** Where an airborne unit's shadow footprint lands vertically (its
-  ground point) is decided by the locomotor and is left to S-0102 and planned S-0106; the one-pixel
+  ground point) is decided by the locomotor and is left to S-0102 and S-0106; the one-pixel
   adjustment for airborne units seen in the original is unconfirmed.
 - **Aircraft draw order of body and shadow** follows the same pipeline, but its exact sequence has
   not been determined.
@@ -2343,7 +2376,8 @@ which the two objects are drawn within a drawn frame.
   key is made up differently, and how its parts combine with the turret key, including the
   removal of the body facing at turret displacement 0, has not been determined. Whether
   locomotors other than the driving and naval locomotors also skip the cache while the body's
-  tilt is not settled has not been determined either (claim 26, planned S-0106).
+  tilt is not settled is settled for the hovering, jumpjet and tunnelling locomotors by S-0106
+  claim 13; for the flying and rocket locomotors it has not been determined.
 - **Cache lifetime.** When cached images are discarded (budget, map change) has not been determined. It
   bounds how long the artefacts of `quirks.voxel_cache_frame_mod32` and `quirks.barrel_cache_ignores_elevation` persist.
 
@@ -2355,6 +2389,10 @@ which the two objects are drawn within a drawn frame.
   spec for it.
 - **Type id.** Is the type id of claim 12 and MS-11 (Terms) the type name or the registration index
   of the glossary? If it is the type name, the spec should say "type name".
+- **Buffer-edge cases and importer warnings.** The importer warns about the model-file cases of
+  claims 12, 35 and 36 (Import mapping, *Importer warnings*) and not about the three pose- or
+  size-dependent cases of claims 22, 24 and 34 and F10. Should the importer also warn when a
+  model's own size already guarantees an oversized copy rectangle (claim 22)?
 - **Fixed behaviour of three quirk switches.** Each offers two alternatives; which one does the
   switch select when turned off?
   - `quirks.voxel_buffer_wrap`: clip, or enlarge the buffer.
