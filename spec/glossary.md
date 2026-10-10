@@ -2,7 +2,7 @@
 id: glossary
 title: Glossary of shared terms
 topic: rules-import        # cross-cutting; every topic uses these terms
-revision: 7
+revision: 9
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -30,9 +30,9 @@ meaning, the spec says so and wins for that spec.
   confidence and measurement scenario.
 - A planned spec is a spec that is neither approved nor a draft of this glossary's batch. It may
   not be written yet, or it may exist as a draft of a later batch; either way it is not signed off
-  with this batch. The only one this glossary cites is S-0301 (the firing cycle). A spec cites a
-  planned spec as "planned S-xxxx" or as "S-xxxx (its subject, planned)", for example "S-0301 (the firing cycle, planned)". A planned spec owns no claim, so a pointer to
-  one is a pointer only: in an entry with such a pointer, every statement about the original is a
+  with this batch. This revision of the glossary cites none. A spec cites a planned spec as
+  "planned S-xxxx" or as "S-xxxx (its subject, planned)". A planned spec owns no claim, so a
+  pointer to one is a pointer only: in an entry with such a pointer, every statement about the original is a
   claim G1 to G3 or a claim of a written spec that the entry names, and the rest is vocabulary. At
   sign-off every S-number a spec cites must be an approved spec listed in `spec/README.md`, a draft
   in the same batch or a planned spec of this list. A draft in the batch is cited by its number and
@@ -41,16 +41,14 @@ meaning, the spec says so and wins for that spec.
 - A pointer to a planned spec that has since been approved reads as a plain pointer. The same holds
   for a pointer that calls a draft of the same batch planned. The word "planned" is then ignored,
   the spec pointed to owns its claims as usual, and the next revision of the citing text drops the
-  word. This covers every spec of the first two batches: S-0010, S-0106, S-0109, S-0201, S-0202,
-  S-0204, S-0205 and S-0206, which earlier revisions of this glossary listed as planned, and every
-  other spec that is approved or a draft of this batch. A draft of a later batch is still planned.
-- This revision of the glossary cites, besides planned S-0301, the specs of its batch as they
-  stand in it: the drafts S-0010, S-0011, S-0106, S-0109 to S-0111 and S-0201 to S-0215; the
-  revisions of approved specs made in the batch, which are S-0002 revision 6, S-0003 revision 8,
-  S-0004 revision 7, S-0005 revision 4, S-0006 revision 6, S-0007 revision 6, S-0009 revision 7,
-  S-0104 revision 8, S-0105 revision 4 and S-0107 revision 4 (see *scatter*); and every other approved
-  spec of the index in `spec/README.md` at its current revision. It is signed off in the same
-  batch as those drafts and revisions.
+  word. This covers every spec of the first two batches, all of them now approved, among them
+  S-0010, S-0106, S-0109, S-0201, S-0202, S-0204, S-0205 and S-0206, which earlier revisions of
+  this glossary listed as planned; S-0301, which revision 7 listed as planned; and every draft of
+  this batch, S-0301 to S-0315. A draft of a later batch is still planned.
+- This revision of the glossary cites the specs of its batch, the third (combat), as they stand
+  in it: the drafts S-0301 to S-0315; any revision of an approved spec made in the batch; and every
+  other approved spec of the index in `spec/README.md` at its current revision. It is signed off in
+  the same batch as those drafts and revisions.
 - Open questions are questions about the original's behaviour that a spec leaves open. They need
   no Q-ID: Q-IDs number the implementers' spec requests only, and a spec's `requests` field lists
   just the Q-IDs it answers. Specs therefore don't say that no request tracks a question.
@@ -62,7 +60,7 @@ meaning, the spec says so and wins for that spec.
   under a topic. It takes no S-number.
 - An entry otherwise only fixes what a word means in the specs. That is a choice of vocabulary, not
   a claim about the original, so it needs no backing. Where an entry names a topic that has no
-  approved spec and no draft in this batch (for example combat, economy or production), its
+  approved spec and no draft in this batch (for example economy or production), its
   description is a pointer only: specs must not cite it as a rule.
 - The few statements about the original that the glossary makes itself are the numbered claims G1
   to G3 in **Behaviour**, each with its backing, confidence and measurement scenario. They were
@@ -85,7 +83,7 @@ computer player, whose script and team system is out of scope (see *team member*
 the project lead, an AI house has the same unit rules and the same order legality as a
 human-controlled house. This is a rule of our engine, not a claim about the original.
 - *Orders.* An AI house acts only through orders, and its orders are applied, although the
-  original drops orders issued in a computer house's name (S-0213, claim 3). They pass the same
+  original drops orders issued in the name of a computer-controlled house (S-0213, claim 3). They pass the same
   legality rules as a person's (S-0214) and the same checks when they are applied (S-0213), with
   no exemption from the owner check or from the limit on pending orders.
 - *Unit rules.* Its units follow the rules that the specs give for units of a human-controlled
@@ -101,12 +99,30 @@ a general rule of our engine, so it holds in every spec. Where a spec gives a ru
 computer-controlled owners, that rule describes the original, and an AI house follows the rule the
 spec gives for human-controlled owners. The spec's next revision marks such a rule as the
 original's only. In particular an AI house has the house skill level of a human-controlled house:
-0 in a skirmish or network game (see *house skill level*).
+0 in a skirmish or network game (see *house skill level*). By default it also uses the *normal
+row* of the difficulty skill block, as a human-controlled house in a skirmish does (see *difficulty
+row* and *difficulty skill block*).
+
+**aiming facing.** The facing of a firer that the firing check compares with the direction of its
+target: its turret facing or its body facing. S-0310 owns which facing aims and the aiming
+tolerance (claims 1 to 5); S-0306 and S-0313 use it.
+
+**airborne.** Ambiguous on its own in a rule, because the combat specs use two different tests:
+S-0307 (Terms) gives a test by height above the surface, which S-0306 uses, and S-0308 (Terms)
+means the state in which the original counts an object as in the air, whose exact test it leaves
+to the aircraft and movement specs, and which S-0309 uses. A spec that uses "airborne" in a rule
+says in its Terms which test it means. In a measurement setup the word keeps its everyday sense:
+the object is in the air.
 
 **aircraft.** A type kind and its objects: units that fly, drawn as voxel models or sprites (see
 S-0007, claim 4, and S-0105). Infantry of a jumpjet type and hovering vehicles are not aircraft: an object's kind is the kind of
 its type. Which kinds can take off and land, and where, belongs to the
 aircraft specs.
+
+**ammunition.** A firer's count of shots left. A type whose maximum ammunition says it uses none
+never runs out. S-0301 owns how shots spend it and how vehicles reload (claims 10 and 11). S-0302
+calls the same count *readiness* where damage lowers it (Terms, claim 10); S-0312 and S-0315 use
+it.
 
 **animated terrain object.** A terrain object (a type kind, such as a tree) of the group that S-0102
 draws in the object pass instead of painting it in the cell pass. S-0102 says which terrain objects
@@ -120,19 +136,28 @@ session (S-0005). See S-0005.
 
 **armed.** Ambiguous on its own in a rule, because the original asks different questions in
 different rules: S-0209 calls a walker armed when the combined damage of its weapons is positive,
-and S-0214 calls an object armed when it has a weapon in the weapon slot it currently uses. A spec
+and S-0214 calls an object armed when it has a weapon in the weapon slot it currently uses.
+S-0309 uses S-0214's sense, and S-0312 (Terms) a third sense for one formula. A spec
 that uses "armed" in a rule says in its Terms which test it means. In a measurement setup the word
 keeps its everyday sense: the object has a weapon.
 
 **armour class.** The category of protection a type belongs to, taken from the type's imported
-armour field. A warhead scales its damage by a percentage chosen by the target's armour class. The
-combat specs own the rules.
+armour field. A warhead scales its damage by its *versus value* for the target's armour class.
+S-0305 owns the list of classes, their order and how a type's class is read (claims 1 to 5).
+S-0302 (claim 6) applies the class to damage, and S-0304 gives what small versus values mean.
 
 **art database.** The parsed contents of the expansion's art file: the settings of each art section,
 which say how a type is drawn (sprite or voxel model, image-frame ranges, animation settings). A type
 finds its art section mostly through its *image name*, and S-0007 gives the cases that use the type
 name instead. *Image name* and *art section* are S-0007's terms: an image name names an art section,
 not a sprite. See S-0007.
+
+**automatic search, automatic target scan.** A search in which an object picks a target by itself,
+without an order naming that target. S-0309 owns the searches, their kinds (*range search*, *area
+search* and *map-wide search*), their candidates and their scoring (Terms, claims 1 to 17). Specs
+write "automatic search". S-0304's *automatic target scan* means the same, and S-0215's
+opportunity, area and normal searches are S-0309's range, area and map-wide searches (S-0309,
+Terms).
 
 **backing.** How a claim is supported. One of: `measured` (an M-ID records an observation that
 confirms it), `measurable` (a measurement scenario in the spec would confirm or falsify it) or
@@ -156,8 +181,13 @@ See S-0215; orders that set a behaviour are S-0213's.
 
 **being erased.** The state of an object that an erasing weapon (a temporal weapon) has locked
 onto, from the moment the first such weapon locks on until the last one lets go or the object is
-removed. S-0215's *warped out* means the same state. The combat specs own erasing weapons. See
+removed. S-0215's *warped out* means the same state. Erasing weapons are left to a later combat
+spec. See
 S-0109 (Terms) and S-0214 (Terms).
+
+**berserk.** The state of a unit that a berserk-causing warhead has put out of its owner's
+control. S-0301 (claim 8) and S-0302 (claim 10) give what it changes in firing and in damage, and
+S-0309 uses it. How it starts and ends is left to a later warhead spec.
 
 **bridge, high bridge, bridge deck.** A *bridge* is a crossing of water or a gap built from bridge
 overlays. A *high bridge* is a bridge with a raised *bridge deck* that units can drive on and pass
@@ -170,6 +200,14 @@ enters it. The structures specs own it. See S-0214 (Terms).
 
 **building.** A type kind and its objects: a stationary object that occupies a foundation of cells.
 Also called a structure.
+
+**bunkered, tank bunker.** A *tank bunker* is a building that a vehicle can drive into for
+protection, and a vehicle inside one is *bunkered* (S-0206, Terms). S-0301, S-0302, S-0307 and
+S-0309 give what being bunkered changes in their topics; entering and leaving are left to the
+structures specs.
+
+**burst counter.** A per-firer count of the shots made in the current burst, shared by all weapons
+of the firer. S-0301 owns it (Terms, claim 4); S-0313 (claim 2) uses it.
 
 **cell.** One square of the map grid, identified by integer cell coordinates (x, y). Increasing x
 runs towards the lower right of the screen, increasing y towards the lower left. A cell is 256
@@ -232,14 +270,34 @@ production specs.
 **credits.** The unit of money: costs, refunds, harvested resources and a house's balance are given
 in credits. Each economy spec states the number domain and rounding of the amounts it computes.
 
+**current weapon.** The weapon in the slot of an object's weapon number when its type is a
+multi-weapon type, and the weapon in its slot 0 otherwise. See S-0309 (Terms), with S-0308 for
+the weapon number; S-0312 uses it.
+
+**curtain protection, temporarily invulnerable.** An object is *temporarily invulnerable* while an
+iron curtain or force shield effect protects it (S-0302, Terms). *Curtain protection* is that
+effect of the iron-curtain kind, as opposed to the force-shield kind (S-0303, Terms); S-0312 uses
+it. S-0302 and S-0303 give what the state changes in damage; how the effects start and end belongs
+to the superweapon specs.
+
 **cycle.** The unit of real time in which the original runs a game. Cycles follow one another
 without overlap. A cycle that is not frozen takes the player's input and runs one tick. A *frozen*
 cycle, during a freeze, runs no tick and takes no input. In a single-player game every cycle makes
 one drawn frame. While the game stands still (the game window has lost the input focus, or the
 options menu is open) there are no cycles. See S-0201 (Terms, claims 2, 6, 8, 9 and 10). In rules
 about ticks, drawn frames and real time, "cycle" means this. A spec that defines another kind of
-cycle, such as the recoil cycle of S-0105, the firing cycle (planned S-0301) or a cycle of image
+cycle, such as the recoil cycle of S-0105, the firing cycle (S-0301) or a cycle of image
 frames, names it in full where it defines it and may then shorten it.
+
+**damage that ignores defences.** A hit delivered with a marker that tells the target to
+disregard its defences. S-0302 owns which hits carry it (claim 1) and what it skips (claim 9).
+S-0107 and S-0312 use it, S-0312 as the *ignore-defences marker*.
+
+**death weapon.** The weapon that an exploding object's death detonates. S-0312 owns it (Terms,
+claim 6); S-0303 gives the detonation.
+
+**debris.** Animations thrown by a death or a detonation. S-0312 owns them (Terms, claim 4,
+Formulas F1); S-0303 (claim 22) throws them from a warhead.
 
 **departure.** A documented place where our engine deliberately does not reproduce the original,
 and offers no quirk switch for it. The spec states the original's behaviour as behaviour and then
@@ -265,14 +323,33 @@ tell in general which data would reach it.
 **detail level.** The player's visual-detail option, kept in the settings file: 0 = low, 1 =
 medium, 2 = high. Specs write "detail level", not "detail setting". See S-0104.
 
-**difficulty skill block.** In the original, the group of factors that scale a house's rate of fire,
-firepower, armour, cost and build time, chosen by the house's difficulty. Which block a house takes
-is set-up behaviour of the original, recorded by the specs that use the factors. By decision of the
-project lead, in our engine every house, human or AI, uses by default the block the original gives a
-human-controlled house. AI difficulty comes from the AI's strategy modules, never from these
-factors. The original's per-difficulty choice is available only as an optional per-player handicap
-setting, off by default, and is never tied to AI difficulty automatically. This is a rule of our
-engine, not a claim about the original.
+**detonation, detonation point.** One application of area damage at a point, the *detonation
+point*, with a damage amount, a warhead, and optionally the object and the house that caused it.
+S-0303 owns what a detonation does (Terms, claims 1 to 23). Projectiles (S-0306), damaging
+animations (S-0109), deaths (S-0312) and other specs produce detonations, and each says what it
+passes. S-0302 turns each resulting *hit* into a health change.
+
+**difficulty row, normal row.** One entry of the *difficulty skill block*: the factors of one
+difficulty, easy, normal or difficult. The multipliers a house takes from its row are fixed when the
+houses are set up (S-0302, claim 3). The *normal row* is the row
+of the normal difficulty, which the original gives every human-controlled house in a skirmish; by
+the decision recorded under *difficulty skill block* it is the row every house uses in our engine by
+default. S-0302 owns the terms (Terms, claim 3); S-0301 (claim 3) uses them.
+
+**difficulty skill block, skill block.** In the original, the factors that scale a house's rate of
+fire, firepower, armour, cost and build time, given once for each difficulty. There is one block,
+and its entries, one per difficulty (easy, normal, difficult), are the *difficulty rows*. S-0301 (claim 3) owns the rows' rate-of-fire
+factor and S-0302 (claim 3, Edge cases) their firepower and armour factors; the cost and build-time
+factors are left to the economy and production specs. It is not the *house skill level*. Which row
+a house takes is set-up behaviour of the original, recorded by the specs that use the factors
+(S-0301 and S-0302, claim 3). By decision of the project lead, in our engine every house, human or
+AI, uses by default the row the original gives a human-controlled house in a skirmish, the *normal
+row*. AI difficulty comes from the AI's strategy modules, never from these factors. Choosing
+another row per difficulty is available only as an optional per-player handicap setting, off by
+default, and is never tied to AI difficulty automatically (decided 2026-10-10). This is a rule of
+our engine, not a claim about the original. What the default means in a campaign mission, where the
+original gives the player's house the row of the chosen difficulty (S-0301, claim 3), is a question
+for the project lead (see the end of this glossary).
 
 **direction.** The direction of a point *Q* from a point *P* is the facing that the original
 computes for the way from *P* to *Q*. It is close to the exact angle, but not always equal to it.
@@ -296,6 +373,13 @@ coincide there except during a freeze, which makes drawn frames without ticks (S
 Rendering specs say which of the two each rule follows. Not the same thing as an *image frame*
 either. Specs should not write "frame" or "game frame" on its own.
 
+**elevation level.** Of a cell: its height level, raised when the cell is marked as carrying a
+bridge deck. S-0307 owns it (Terms, Formulas F2); S-0306 (claim 22) uses it.
+
+**elite weapon, elite slot.** A type's optional second weapon for one weapon slot, which an object
+of elite rank uses instead; the slot that holds it is that slot's *elite slot*. S-0311 (claim 6)
+owns when it is used and S-0308 (Terms, claims 1 and 2) the slots; S-0313 gives its firing positions.
+
 **engine add-on.** Anything that changes the original's program behaviour beyond what its data files
 control: a patched executable, an injected library, a launcher that alters the game while it runs, or
 a third-party extension of the rules language. Data-only changes are *mods*, not engine add-ons. A
@@ -316,6 +400,14 @@ order of increasing severity, *clear*, *cloaked blocker*, *moving blocker*, *clo
 *friendly obstacle*, *enemy obstacle*, *stationary friendly* and *blocked*. See S-0209 (Terms,
 claim 4); S-0212 (claim 27) gives the rows it relies on for a vehicle mover.
 
+**expected damage.** The damage that the original estimates, when an object fires at another, for
+target choice. S-0302 owns how it is computed (claim 18); S-0309 uses it for its *expected
+remaining health*.
+
+**experience.** A number per object, held in single precision, from which its *veterancy rank*
+follows. S-0311 owns how it is gained, kept and lost (Terms, claims 1, 2 and 7 to 13); S-0302 and
+S-0312 use it.
+
 **facing.** A direction, given as an integer *f* from 0 to 65535 that stands for *f*/65536 of a full
 turn in the map plane (not an angle measured on the screen, where the isometric projection
 distorts angles): one facing unit is 1/65536 of a turn. 0 is *map north* and values grow clockwise as seen on the
@@ -334,6 +426,24 @@ so.
 Each field has a value form (integer, percent, boolean, list and so on, see S-0003) and an absent-key
 default. Specs refer to stock numbers only through the field: "the weapon's rate-of-fire field".
 
+**fire point.** The world position at which a shot's projectile starts. S-0313 owns it and the
+muzzle positions it is built from (Terms, claim 1). S-0306 places the projectile there and aims
+from it (claims 5 and 8), except that a steering or dropping projectile starts from the firer's
+own position (claim 5). S-0307 (claim 8) does not use it: the range test measures from the source
+point that claim gives.
+
+**firer, shot, void shot.** A *firer* is an object that fires a weapon: a vehicle, infantry unit,
+aircraft or building. A *shot* is one firing of one weapon by a firer: one projectile, beam or
+effect launched. An attempt that the firing check refuses makes no shot, and neither does a *void
+shot*, an attempt that passed the check but whose projectile could not be put on the map. S-0301
+owns the terms (Terms, claim 15); most combat specs use them.
+
+**firing check, answer.** The test that every attempt to fire a weapon at a target makes. Its
+*answer* is *can fire* or a reason why not: *rearming*, *out of ammunition*, *not facing*, *still
+turning*, *moving*, *cloaked*, *out of range*, *illegal*, *impossible*, *busy* or *must deploy*.
+S-0301 owns the check, the answer names and their precedence (claim 9). S-0306, S-0307, S-0308,
+S-0309 and S-0310 give the answers of their own topics, and S-0206 and S-0215 use the term.
+
 **fog of war.** An optional game setting. With it on, map areas a house has explored but cannot see at
 the moment keep showing what the house last saw there; S-0102 says which objects appear there as
 *remembered images* and how they are drawn. With it off, explored areas show what is there now.
@@ -347,8 +457,11 @@ not itself a follower car forms a *car chain* together with the follower cars be
 speed fraction. Specs write "follower car", not "following car", and "car chain", not "train", for
 the linked group (see *train*).
 
-**foundation.** The rectangle of W × H cells a building occupies, W along the map x axis and H along
-y. Its top-left cell is the foundation cell with the smallest x and y. "Top-left" refers to the map
+**foundation.** The cells a building occupies, within a bounding rectangle of W × H cells, W along
+the map x axis and H along y (S-0108, Import mapping, gives the sizes). The cells are normally the
+full rectangle, but not always: in its building-fire draws S-0302 (claim 13) gives a zero-size
+foundation no cells and one 3 × 3 foundation only 8, leaving out one cell of its rectangle. Which
+cells a building occupies for placement and movement belongs to the placement specs. Its top-left cell is the foundation cell with the smallest x and y. "Top-left" refers to the map
 axes: on the screen that cell is the topmost cell of the footprint, not the leftmost. The
 foundation's *top corner* is the top corner of its top-left cell, the topmost point of the footprint
 on the screen.
@@ -401,6 +514,10 @@ clash with *measurement scenario*).
 general settings, the combat-damage settings, the AI settings, the difficulty sections, the land-type
 sections and the like. See S-0004 and S-0006.
 
+**garrisoned building.** A building whose type lets infantry occupy it and fire from it, while at
+least one occupant is inside. S-0301 (Terms) defines it, and S-0302 (Terms) gives the same
+definition; S-0302, S-0307, S-0308, S-0311 and S-0313 give what it changes in their topics. Occupation itself is left to the structures specs.
+
 **global effect.** One of the map-wide lighting effects of S-0104: the *nuke flash*, the *chrono
 flash*, an *ion storm* or the *psychic dominator*. Each name, and the phases of each, means what
 S-0104 defines, except that S-0201 owns the chrono flash's steps, order block and freeze (see
@@ -409,6 +526,16 @@ See S-0103 and S-0104.
 
 **guard spot.** The cell or object that an actor in *area guard* stays near. See S-0215 (Terms,
 claim 26).
+
+**healer, healer for acquisition.** An object whose *mean weapon damage* is below 0. S-0308 owns
+the mean weapon damage and the test (claim 15, where the object is called a *healer for
+acquisition*); the two names mean the same test. S-0309 uses it for automatic searches (claim 6),
+S-0214 for its healer rows of the cursor and order rules, and S-0314 owns healing in combat.
+
+**health, strength, health ratio.** An object's *health* is its current hit points, an integer from
+0 to its *strength*, the maximum its type gives (S-0302, Terms). Its *health ratio* is health
+divided by strength (S-0214, Terms). S-0302 owns how hits change health; S-0303, S-0309, S-0312
+and S-0314 use the terms.
 
 **height above the surface, height above the terrain.** Two heights of an object, both in leptons,
 that differ only for an object on a bridge deck. Its *height above the surface* is its world height
@@ -425,6 +552,12 @@ S-0101.
 
 **height lift.** The number of pixels by which a point at world height *z* is drawn above the
 projection of its ground point, written *L(z)*. See S-0101.
+
+**hit, healing hit.** A *hit* is one delivery of an amount of damage, with a warhead, to one
+object. S-0302 owns hits in general and what one does (claims 1 to 19). S-0303 uses the word in a
+narrower sense, the hit of one detonation on one object at one distance (Terms, claims 8 and 11).
+A *healing hit* is a hit whose delivered amount is negative (S-0302, claim 6); S-0309, S-0314 and
+S-0315 use it.
 
 **house.** One owner of objects in a game: it has credits, power, a colour, a country and an
 alliance state with every other house. Each player, human or computer, is one house. A skirmish game
@@ -472,6 +605,27 @@ that a departure replaces with a default. The data-file quirks of the original a
 stock data, user maps and mods alike, and stay on by default; the warning is how a mod author learns
 of them.
 
+**in play, enter play, leave play; on the map, off the map; destroyed, removed.** Three different
+questions about an object, which specs keep apart.
+- *In play*: the object is in the update order and takes turns. It *enters play* when it joins
+  that order and *leaves play* when it leaves it. S-0203 owns the terms and when they happen
+  (Terms, claims 2, 3 and 6). S-0107 (claim 17) and S-0312 (claims 10, 15, 16 and 21) add when
+  killed objects leave play: a sinking or crashing object, an infantry unit playing its death
+  sequence and some destroyed buildings stay in play for a while after the killing hit.
+- *On the map*: the object is placed in the world at a position. It is *off the map* while it
+  exists without being placed there, for example inside any transport, open-topped or not, or
+  inside a building.
+- *Destroyed* and *removed*: a destroyed object has been killed. A *removed* object has left play
+  for good after it was destroyed or deleted: it no longer exists. When an object is removed is
+  S-0203's claim 6 and the claims named above.
+
+The three differ. A passenger of an open-topped transport is off the map and in play (S-0203,
+claim 3); a passenger of any other transport, or an object inside a building, is off the map and
+out of play, but neither destroyed nor removed. A killed object that stays in play is destroyed
+but not yet removed. A spec writes "off the map" or "inside" for an object held without being
+placed, "not removed" (or "still exists") for an object that has not gone for good, and "in play"
+only in S-0203's sense.
+
 **infantry.** A type kind and its objects: soldiers and other units drawn as sprites and moving on
 foot. See S-0107.
 
@@ -485,7 +639,9 @@ flag, which flies with a jump-pack style locomotor. A *jumpjet* is a unit of a j
 currently moving with that jumpjet locomotor. Specs say which of the two a rule needs. See S-0107.
 
 **known attacker.** Damage has a known attacker when it comes with the object that caused it.
-See S-0107 (Terms); S-0208 (claim 15) uses it for the scatter requests that damage sends.
+See S-0107 (Terms); S-0208 (claim 15) uses it for the scatter requests that damage sends. S-0302
+(Terms, claim 1) calls that object the *attacker*, adds the *attacking house* that a hit credits,
+and says which sources give which.
 
 **land multiplier.** The factor *M*(*ℓ*, *c*) for land type *ℓ* and locomotion class *c*, stored in
 single precision. S-0207 uses it as a speed factor; a multiplier of exactly zero means that the class
@@ -635,6 +791,12 @@ rendering terms; the *turn pass* of S-0203 is a part of a tick. See S-0102.
 whether a vehicle, a building or another object is present, and the house of the last infantry unit
 to mark a position there. See S-0209 (Terms, claim 1).
 
+**open-topped transport.** A transport whose passengers fire from inside it. S-0203 (Terms)
+defines it, as a transport whose type is open-topped, a property taken from the rules data, and
+gives its passengers' place in the update order (claim 3); S-0215 and S-0302 (Terms) restate it,
+and S-0307, S-0308, S-0311 and S-0313 give what it changes in their topics. Which
+transports are open-topped is left to the transport specs.
+
 **oracle.** The original, used as the reference that decides what correct behaviour is. Measurements
 are taken from the oracle.
 
@@ -663,8 +825,9 @@ Sprites and voxel models store palette indices, not colours. Each theater has it
 and theater palettes; the anim palette is the same in every theater. See S-0103.
 
 **parasite, victim.** A *parasite* is a unit that attaches itself to another unit, its *victim*,
-and harms it from there, for example by climbing inside a vehicle or grabbing a ship. The combat and
-special-abilities specs own parasites. See S-0209 (Terms) and S-0214 (Terms).
+and harms it from there, for example by climbing inside a vehicle or grabbing a ship. S-0315
+(claims 6 and 7) owns how damage to the victim, which it calls the *host*, suppresses a
+parasite; the rest is left to the special-abilities specs. See S-0209 (Terms) and S-0214 (Terms).
 
 **passability category.** A number from 0 to 7 that each cell carries, computed from its land type,
 overlay and contents: *open*, *crushable*, *wall-like*, *beach*, *water*, *partial obstacle*,
@@ -675,6 +838,13 @@ overlay and contents: *open*, *crushable*, *wall-like*, *beach*, *water*, *parti
 **prerequisite.** A type that a house must own (usually a building) before another type can be built.
 Which types are prerequisites of which comes from imported fields.
 
+**projectile.** The object that carries a shot from its fire point to where it detonates. S-0203
+(Terms) names it, S-0306 owns its launch, flight and detonation, and most combat specs use it.
+
+**prone state.** The lying-down state of an infantry unit. S-0107 (Terms) owns its sequences and
+the fear level that leads to it; S-0315 owns its effects in combat (claim 3), and S-0302, S-0310
+and S-0312 use it.
+
 **quirk switch.** A named setting of our engine, written `quirks.<name>`, that controls one unusual or
 defective behaviour of the original. Its default is always the original behaviour. The spec that
 names a switch describes both the original behaviour and the alternative ("fixed") behaviour that the
@@ -683,6 +853,16 @@ undefined result, hangs or leaves the game frozen for good on bad data, or depen
 machine or on real time, there is no switch: that is a *departure*. A switch shared by
 several specs is named once in each of them; the glossary points to the shared ones (Edge cases and
 quirks).
+
+**range test, weapon range.** The *range test* is the yes/no question whether a target is within
+reach of a weapon of a firer; the firing check's *out of range* is its "no". A weapon's *weapon
+range* is its range field in leptons. S-0307 owns both (Terms, claims 1 to 12); S-0306 and S-0309
+use them.
+
+**rearm countdown.** A per-firer countdown in ticks, set by every shot the firer makes. While it
+runs, the firer may fire none of its weapons; one countdown serves all of them. S-0301 owns it
+(Terms, claims 1 and 2); S-0215's *rearm time remaining* is the number of ticks it still has to
+run. S-0308 and S-0310 use it.
 
 **recorder.** Whatever a measurement uses to observe the original without changing it: a stopwatch, a
 screen or video capture, or a program that only reads the running game's state, such as its count
@@ -713,6 +893,11 @@ S-0105 (claim 27).
 that name if one exists, otherwise the archive member that the archive precedence of
 S-0005 selects. A name that
 resolves to nothing is "not found". See S-0005.
+
+**retaliation.** An actor's automatic attack on the object that has just damaged it, as opposed
+to an ordered attack or a target picked in an automatic search. S-0309 owns when an object
+retaliates (claim 18), S-0304 (claim 3) its versus-value condition and S-0215 (claims 18 and 19)
+what retaliation does; S-0308 uses it.
 
 **round-toward-zero mode.** The floating-point rounding mode under which the original rounds
 floating-point results toward zero. S-0205 (claim 5) owns its scope and its single switch
@@ -753,18 +938,18 @@ mean the same. The list decides four observable things:
   name (S-0006, claim 7).
 - *Empty layers.* An applied layer that gives nothing (a game-mode file that cannot be resolved or
   holds no section, or a language rules file with no section) changes no rules value but still
-  counts: each animation that exists when that layer's animations are read gets one type read in
-  it, from the art file (S-0006, claims 1 and 8).
+  counts: in that layer, every animation that already exists when the animations are read takes its
+  settings from the art file once more. The number of these reads in a game is observable,
+  because it can change which art section's theater and new-theater flags are in force for the
+  animation (S-0006, claims 1 and 8; S-0007, claim 2).
 See S-0006.
 
 **scatter.** A unit's short move away from its spot, made to dodge a threat or to make room, set off
 by a *scatter request*. For infantry, S-0208 gives which requests a unit accepts and where it moves
 (claims 11 to 13), through the nearby-cell search of its claim 13 (with S-0212, claim 25). By
 decision of the project lead it also owns infantry scatter from damage: which scatter requests a
-hit sends (claim 15). S-0107 (claims 14 and 15) gives the idle and flee scatters. Its revision 3
-also gives a scatter from damage with a known attacker (claim 16); where that differs from S-0208,
-S-0208 holds, and S-0107's revision 4, in the same batch as this glossary, drops the condition
-and points to S-0208. S-0209
+hit sends (claim 15). S-0107 (claims 14 and 15) gives the idle and flee scatters, and for scatter from damage it points to
+S-0208 (claims 11 and 15). S-0209
 (claims 11 and 12) gives the cell-wide scatter requests that make room, and S-0215 (claim 19) the
 scatter property of behaviours. How vehicles and other kinds of unit scatter is left to later
 revisions of the movement specs.
@@ -836,6 +1021,10 @@ flash's steps during a timed freeze: it is the one switch through which game spe
 state in our engine. What turning it off does on each path it covers is given in claim G3, in the
 paragraph *Our engine*.
 
+**spread, spread radius.** A warhead's *spread* is its spread field, a decimal number of cells; the
+*spread radius* is the distance in leptons, derived from it, within which a detonation hits
+objects. S-0303 owns both (Terms, claim 3, Formulas F1); S-0302 and S-0312 use them.
+
 **sprite.** A two-dimensional image stored in a shape file in the public "SHP" format: a numbered
 sequence of image frames, each a rectangle of palette indices. Infantry, buildings, animations and
 some vehicles and aircraft are drawn as sprites. A sprite that a type's art names for one role is
@@ -873,10 +1062,10 @@ created by an object or an event. Not the same thing as an *animated terrain obj
 terrain object. See S-0103 and S-0104.
 
 **tether link, tethered.** A link that two objects in *contact* both hold during some exchanges.
-An object that holds one is *tethered*. Both take it when one of them receives from the other notice
-that the other begins a loading or unloading manoeuvre, clearance to unload, or a request to dock at
-a refinery, and both lose it when that manoeuvre ends or the link is broken off. See S-0208
-(Terms). Which situations of play send these notices is not fully traced (S-0208 and S-0213, Open
+An object that holds one is *tethered*. Both hold it from the moment one of them begins a loading or
+unloading manoeuvre with the other, gives the other clearance to unload, or docks at a refinery,
+and both lose it when that manoeuvre ends or the link is broken off. See S-0208
+(Terms). Which situations of play set the link is not fully known (S-0208 and S-0213, Open
 questions); S-0213 notes a probable further case, an aircraft that has landed on its pad. What a
 tether changes is owned by the specs that use it, for example S-0213 (table T1) for orders.
 
@@ -928,7 +1117,7 @@ Specs write "trigger action", not "script action".
   ("turns by", "turn rate", "a quarter turn").
 
 **type.** One kind of thing defined by the rules data, such as one infantry, one weapon or one
-warhead, with its own section and fields. Objects in play are instances of types.
+warhead, with its own section and fields. Every object is an instance of a type.
 
 **type kind.** One family of types with its own registry: countries, sides, superweapons, buildings,
 vehicles, aircraft, infantry, weapons, projectiles, warheads, animations, voxel animations, particles,
@@ -970,15 +1159,39 @@ models or sprites (see S-0007, claim 4).
 **vehicle thief.** An infantry unit whose type has the imported vehicle-thief flag: it takes over a
 vehicle by entering it. Its rules belong to the special-abilities specs. See S-0209 and S-0214.
 
+**versus value.** The factor, a double-precision number, that a warhead gives one armour class,
+read from the warhead's versus list (S-0003, claim 13, which with Import mapping row C5 gives the
+order of the items). S-0305 names the class at each list position (Terms, claim 1) and says where
+the class is used (claim 6); the two specs agree. S-0302 (claim 6) multiplies damage by it, and S-0304 owns
+what zero and small values mean. "The versus value of a weapon against an object" is that of the
+weapon's warhead for the object's armour class (S-0304, Terms).
+
+**veterancy ability.** One of the capabilities that a type may grant at the veteran rank, at the
+elite rank or at both. S-0311 owns the list and which rank grants each (Terms, claims 3
+to 5); S-0107, S-0214, S-0215 and several combat specs use it.
+
+**veterancy rank.** *Rookie*, *veteran* or *elite*, derived from an object's *experience*.
+*Veteran* and *elite* alone name the two raised ranks. S-0311 owns it (Terms, claim 1). S-0214
+(Terms) uses the same three words, and S-0301, S-0308, S-0309 and S-0312 use it.
+
 **voxel model.** A volumetric model in the public "VXL" format, with a companion motion file in the
 public "HVA" format of the same base name. See S-0105.
 
 **warhead.** The type that decides what a hit does: its damage scaling per armour class, its area
-spread and its side effects. A weapon's warhead is one of the weapon's fields. The combat specs own
-the rules.
+spread and its side effects. A weapon's warhead is one of the weapon's fields. S-0302 owns what a
+warhead does in damage resolution, S-0303 its area damage and detonation effects, and S-0304 and
+S-0305 its versus values.
 
 **weapon.** The type that describes one way of attacking: damage, range, delay between shots,
-projectile and warhead are all fields of it.
+projectile and warhead are all fields of it. S-0301 owns its firing cycle, S-0307 its range test,
+S-0308 which weapon an object uses, S-0313 where its shots start and S-0306 the flight of its
+projectile.
+
+**weapon slot, weapon it would use.** A type holds numbered *weapon slots*, each with a weapon or
+nothing; slot 0 is the *primary* and slot 1 the *secondary* slot (S-0308, Terms). The *weapon it
+would use* against a target is the weapon that the weapon choice of S-0308 picks, and the combat
+rules test that weapon (S-0308, claim 14; S-0304, Terms). S-0309, S-0310, S-0311, S-0313 and
+S-0314 use the terms.
 
 **world height.** The height of a point in leptons above height level 0, not above the local ground.
 See S-0101.
@@ -1092,7 +1305,7 @@ G3. **Game speed and timings counted in ticks (skirmish).** In a skirmish game t
       length of a timed freeze, which reaches it only through exception 2 (S-0201, claims 10 and
       11); our engine counts that length in cycles, a departure of S-0201 that removes the host's
       influence but keeps the game-speed dependence. Relighting does not depend on real time
-      (S-0104, claim 12). Not every timer of the original has been traced)
+      (S-0104, claim 12). Not every timer of the original is known)
 
     **Our engine.** It reproduces both exceptions by default. Game speed reaches game state in our
     engine only through the single switch `quirks.speed_normalised_delays` (default: the original
@@ -1190,7 +1403,7 @@ switch for the same behaviour:
   S-0009 (revision 7, the farthest-sum rule for start positions), S-0207, S-0209 (claim 8, Formulas
   F1), S-0212, S-0214 and S-0215, and S-0208, which notes that it changes nothing there. An earlier revision of S-0009
   proposed a switch of a different name for the same table; by decision of the project lead the two
-  are one switch under this name, and S-0009 revision 7, in this batch, uses it. It is the only name
+  are one switch under this name, and S-0009 revision 7 uses it. It is the only name
   of this switch.
 
 ## Import mapping
@@ -1316,7 +1529,12 @@ scenario T6, part G.
 
 ## Questions for the project lead
 
-- S-0301 (the firing cycle) and S-0310 (turrets and facing for fire) exist as drafts of a later
-  batch. By *Conventions* this glossary treats S-0301 as planned, because it is not signed off with
-  this batch, and does not cite S-0310. If the lead puts either into this batch's sign-off, the
-  next revision cites it as a draft of the batch (by number and claim), not as planned.
+- **Difficulty row in a campaign mission.** The decision of 2026-10-10 gives every house by default
+  the row the original gives a human-controlled house. In a skirmish that is the normal row, which
+  S-0301 and S-0302 (claim 3) apply. In a campaign mission the original gives the player's house the
+  row of the difficulty the player chose, and the computer houses the row of the mission's
+  computer difficulty (S-0301, claim 3). Does our engine's default stay the normal row for every
+  house in a campaign mission too, or does the player's chosen campaign difficulty select the
+  player's row (and, if so, which row the AI houses use)? Campaigns are a pointer only in the
+  current specs, so until this is decided the specs state the normal row as the default for every
+  house.
