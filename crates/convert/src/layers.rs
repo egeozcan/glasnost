@@ -109,6 +109,21 @@ pub struct LayerQuirks {
     /// 0, sets the anti-air rate to the rate after that layer. Off: an
     /// absent anti-air rate keeps the held value.
     pub anti_air_rate_layer_reset: bool,
+    /// `quirks.persist_global_overrides` (S-0006 claim 10): game-wide
+    /// values carry over into later games of the session. Not consulted:
+    /// the importer imports one game, the first of its session.
+    pub persist_global_overrides: bool,
+    /// `quirks.persist_tiberium_overrides` (S-0006 claim 10, Formulas,
+    /// claim 14): tiberiums are not rebuilt at a game start. Not consulted,
+    /// as above.
+    pub persist_tiberium_overrides: bool,
+    /// `quirks.mission_rules_before_reset` (S-0006 claim 14): a campaign
+    /// mission's mission-named file acts as a layer of the previous game.
+    /// Not consulted: campaigns are out of scope.
+    pub mission_rules_before_reset: bool,
+    /// `quirks.mode_number_first_wins` (S-0006 claim 13). Not consulted:
+    /// the mode list is not read (Q-0006).
+    pub mode_number_first_wins: bool,
 }
 
 impl Default for LayerQuirks {
@@ -127,13 +142,18 @@ impl Default for LayerQuirks {
             bad_language_rules_skips_mode: true,
             // spec: S-0215 Edge cases (anti_air_rate_layer_reset defaults on)
             anti_air_rate_layer_reset: true,
+            // spec: S-0006 Edge cases (persist_global_overrides, persist_tiberium_overrides, mission_rules_before_reset and mode_number_first_wins default on)
+            persist_global_overrides: true,
+            persist_tiberium_overrides: true,
+            mission_rules_before_reset: true,
+            mode_number_first_wins: true,
         }
     }
 }
 
 impl LayerQuirks {
     /// The switches by name, for the import record.
-    pub fn named(&self) -> [(&'static str, bool); 11] {
+    pub fn named(&self) -> [(&'static str, bool); 15] {
         [
             ("unlisted_reference_unread", self.unlisted_reference_unread),
             ("long_name_duplicates", self.long_name_duplicates),
@@ -158,6 +178,16 @@ impl LayerQuirks {
                 self.bad_language_rules_skips_mode,
             ),
             ("anti_air_rate_layer_reset", self.anti_air_rate_layer_reset),
+            ("persist_global_overrides", self.persist_global_overrides),
+            (
+                "persist_tiberium_overrides",
+                self.persist_tiberium_overrides,
+            ),
+            (
+                "mission_rules_before_reset",
+                self.mission_rules_before_reset,
+            ),
+            ("mode_number_first_wins", self.mode_number_first_wins),
         ]
     }
 }

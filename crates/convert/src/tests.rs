@@ -278,6 +278,36 @@ fn empty_and_none_particles() {
     assert_eq!(names(&o, Kind::Particles), ["", "none"]);
 }
 
+/// spec: S-0006 claim 5 (with quirks.override_resets_keys off, a reset key that the layer creating
+/// the type omits holds the engine default, never its reset value: no reset is recorded and an omitted
+/// emitted particle creates no empty-named particle)
+#[test]
+fn switch_off_creating_layer_holds_engine_defaults() {
+    let base = "[Warheads]\n1=Boom\n[Boom]\nSpread=3\n\
+                [ParticleSystems]\n1=Smoke\n[Smoke]\nLifetime=9\n\
+                [Normal]\nCost=5\n";
+    let q = LayerQuirks {
+        override_resets_keys: false,
+        ..LayerQuirks::default()
+    };
+    let o = apply_with(&[layer(Role::Base, base)], "", GameKind::Skirmish, q);
+    let boom = ty(&o, Kind::Warheads, "Boom");
+    assert!(
+        boom.keys
+            .get(&b"Verses"[..])
+            .is_none_or(|k| !k.reset && k.value.is_none())
+    );
+    let smoke = ty(&o, Kind::ParticleSystems, "Smoke");
+    assert!(smoke.keys.get(&b"BehavesLike"[..]).is_none_or(|k| !k.reset));
+    assert!(names(&o, Kind::Particles).is_empty());
+    let normal = &o.globals[&b"Normal"[..]];
+    assert!(normal.get(&b"FirePower"[..]).is_none_or(|k| !k.reset));
+    // Switch on: the same layer resets them.
+    let o = apply(&[layer(Role::Base, base)], "");
+    assert!(ty(&o, Kind::Warheads, "Boom").keys[&b"Verses"[..]].reset);
+    assert_eq!(names(&o, Kind::Particles), [""]);
+}
+
 /// spec: S-0006 claims 2 and 3 (base-only maximum players; recharge time 0 not given)
 #[test]
 fn base_only_and_not_given() {

@@ -161,6 +161,10 @@ pub struct Quirks {
     // spec: S-0107 claim 22
     #[serde(default = "on")]
     pub two_sound_cues: bool,
+    /// A death request turned down because the die-1 or die-2 entry has no image frames leaves the unit in play with its current sequence; off: the resulting death kind counts as completed on the death tick. Not consulted in M3, which has no death handling (combat, M4).
+    // spec: S-0107 claim 17
+    #[serde(default = "on")]
+    pub refused_death_keeps_unit: bool,
     /// The infantry house clears when no side position stays taken.
     // spec: S-0209 Edge cases
     #[serde(default = "on")]
@@ -476,6 +480,7 @@ impl Default for Quirks {
             air_death_fall_generic_follow_up: true,
             first_comment_only: true,
             two_sound_cues: true,
+            refused_death_keeps_unit: true,
             occupancy_house_side_positions_only: true,
             occupancy_house_stale: true,
             stationary_friendly_exactly_three: true,
@@ -618,6 +623,7 @@ impl Quirks {
             ),
             ("first_comment_only", self.first_comment_only),
             ("two_sound_cues", self.two_sound_cues),
+            ("refused_death_keeps_unit", self.refused_death_keeps_unit),
             (
                 "occupancy_house_side_positions_only",
                 self.occupancy_house_side_positions_only,
@@ -794,8 +800,48 @@ impl Quirks {
 
 /// Quirk switches named in the specs that are owned by the importer or the
 /// renderer rather than the simulation, with their owner.
-// spec: S-0215 claim 21, S-0104, S-0107 claim 22, S-0009 Edge cases (the owning specs of these switches)
+// spec: S-0215 claim 21, S-0104, S-0107 claim 22, S-0009 Edge cases, S-0006 Edge cases, S-0010 Edge cases (the owning specs of these switches)
 pub const EXTERNAL_QUIRKS: &[(&str, &str)] = &[
+    (
+        "override_resets_keys",
+        "importer (convert::layers::LayerQuirks), S-0006 claim 5",
+    ),
+    (
+        "persist_global_overrides",
+        "importer (convert::layers::LayerQuirks), S-0006 claim 10",
+    ),
+    (
+        "persist_tiberium_overrides",
+        "importer (convert::layers::LayerQuirks), S-0006 claim 10",
+    ),
+    (
+        "mission_rules_before_reset",
+        "importer (convert::layers::LayerQuirks), S-0006 claim 14",
+    ),
+    (
+        "mode_number_first_wins",
+        "importer (convert::layers::LayerQuirks), S-0006 claim 13",
+    ),
+    (
+        "bad_language_rules_skips_mode",
+        "importer (convert::layers::LayerQuirks), S-0006 claim 12",
+    ),
+    (
+        "barrel_recoil_layer_reset",
+        "importer (convert::layers::LayerQuirks), S-0105 claim 27",
+    ),
+    (
+        "reread_truncates_light_values",
+        "importer (convert::layers::LayerQuirks), S-0104 claim 12",
+    ),
+    (
+        "variant_origin_mismatch",
+        "importer (convert::theater::TheaterQuirks), S-0010 claim 13",
+    ),
+    (
+        "variant_cell_missing",
+        "importer (convert::theater::TheaterQuirks), S-0010 claim 24",
+    ),
     (
         "anti_air_rate_layer_reset",
         "importer (convert::layers::LayerQuirks), S-0215 claim 21",
@@ -840,8 +886,9 @@ pub const EXTERNAL_QUIRKS: &[(&str, &str)] = &[
 mod tests {
     use super::*;
 
-    /// Every `quirks.name` in the simulation specs (S-0201 to S-0215) and in
-    /// S-0009 is a field here or listed as owned elsewhere.
+    /// Every `quirks.name` in the simulation specs (S-0201 to S-0215), in
+    /// S-0006, S-0009, S-0010 and in S-0107 is a field here or listed as
+    /// owned elsewhere.
     #[allow(clippy::disallowed_methods)]
     #[test]
     fn every_spec_quirk_has_a_switch() {
@@ -861,14 +908,22 @@ mod tests {
             }
         }
         assert!(files.len() >= 15, "found {} M3 specs", files.len());
-        // S-0009's switches: the loader's are fields here, the importer's are listed below.
-        for e in std::fs::read_dir(format!("{root}/formats")).expect("spec dir") {
-            let p = e.expect("entry").path();
-            if p.file_name()
-                .and_then(|n| n.to_str())
-                .is_some_and(|n| n.starts_with("S-0009"))
-            {
-                files.push(p);
+        // S-0009's and S-0010's switches: the loader's and the recalculation's are fields here,
+        // the importer's are listed below; likewise S-0006's (importer) and S-0107's (simulation,
+        // apart from two importer switches).
+        for (dir, prefixes) in [
+            ("formats", &["S-0009", "S-0010"][..]),
+            ("rules-import", &["S-0006"][..]),
+            ("rendering", &["S-0107"][..]),
+        ] {
+            for e in std::fs::read_dir(format!("{root}/{dir}")).expect("spec dir") {
+                let p = e.expect("entry").path();
+                if p.file_name()
+                    .and_then(|n| n.to_str())
+                    .is_some_and(|n| prefixes.iter().any(|x| n.starts_with(x)))
+                {
+                    files.push(p);
+                }
             }
         }
         let q = Quirks::default();

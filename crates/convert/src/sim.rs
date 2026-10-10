@@ -1416,6 +1416,9 @@ impl Builder<'_> {
         let mut crawls = None;
         let mut fire: [Option<i32>; 4] = [None; 4];
         let mut sequences: Option<Vec<(String, Node)>> = None;
+        // The die-1 and die-2 frame counts of the table in force (claim 1: all zero without one).
+        let mut die_counts = [0i32; 2];
+        let mut sequence_line = 0u32;
         for image in self.images(kind, index, t) {
             let Some(sec) = self.art_section(&image) else {
                 continue;
@@ -1433,8 +1436,18 @@ impl Builder<'_> {
             if let Some(entry) = sec.get(b"Sequence") {
                 let (v, line) = (entry.value.clone(), entry.line);
                 let name = self.cut(&v, line, "Sequence");
-                sequences = Some(self.sequence_table(&name, t));
+                let (table, die) = self.sequence_table(&name, t);
+                sequences = Some(table);
+                die_counts = die;
+                sequence_line = line;
             }
+        }
+        if die_counts.contains(&0) {
+            // spec: S-0107 claim 17 and Edge cases (the importer warns about an infantry type whose die-1 or die-2 entry has no image frames, whatever quirks.refused_death_keeps_unit says)
+            self.art_warn(sequence_line, format!(
+                "infantry {}: its die-1 or die-2 sequence entry has no image frames, so a death of that kind is turned down (S-0107 claim 17, quirks.refused_death_keeps_unit)",
+                show(&t.name)
+            ));
         }
         if let Some(b) = crawls {
             rec.put("crawls", jsonc::boolean(b));
@@ -1468,10 +1481,12 @@ impl Builder<'_> {
         value::text(v, SEQUENCE_VALUE_MAX).to_vec()
     }
 
-    /// The entries of a sequence section (S-0107 Import mapping).
-    fn sequence_table(&mut self, name: &[u8], t: &TypeRec) -> Vec<(String, Node)> {
+    /// The entries of a sequence section (S-0107 Import mapping), with the
+    /// frame counts of the die-1 and die-2 entries (0 when absent, claim 1).
+    fn sequence_table(&mut self, name: &[u8], t: &TypeRec) -> (Vec<(String, Node)>, [i32; 2]) {
+        let mut die = [0i32; 2];
         let Some(sec) = self.art_section(name) else {
-            return Vec::new();
+            return (Vec::new(), die);
         };
         let mut out = Vec::new();
         for (kind, key) in SEQUENCE_KINDS {
@@ -1494,6 +1509,11 @@ impl Builder<'_> {
                     ),
                 );
             }
+            match kind {
+                "die_1" => die[0] = e.0[1],
+                "die_2" => die[1] = e.0[1],
+                _ => {}
+            }
             let mut members = vec![
                 ("start".to_owned(), int_node(e.0[0])),
                 ("count".to_owned(), int_node(e.0[1])),
@@ -1504,7 +1524,7 @@ impl Builder<'_> {
             }
             out.push((kind.to_owned(), jsonc::object(members)));
         }
-        out
+        (out, die)
     }
 
     /// A building's foundation (S-0108 Import mapping): at each type read

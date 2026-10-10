@@ -2309,6 +2309,11 @@
           "type": "boolean",
           "default": true
         },
+        "refused_death_keeps_unit": {
+          "description": "A death request turned down because the die-1 or die-2 entry has no image frames leaves the unit in play with its current sequence; off: the resulting death kind counts as completed on the death tick. Not consulted in M3, which has no death handling (combat, M4).",
+          "type": "boolean",
+          "default": true
+        },
         "refused_override_retargets": {
           "description": "A refused override still replaces the target and destination.",
           "type": "boolean",

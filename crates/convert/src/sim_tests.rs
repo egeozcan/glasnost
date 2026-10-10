@@ -545,6 +545,22 @@ fn infantry_art_and_lists() {
     assert_eq!((q["panic"].multiplier, q["panic"].direction), (3, Some(0)));
 }
 
+/// spec: S-0107 claim 17 and Edge cases (the importer warns about an infantry type whose die-1 or die-2 entry has no image frames, with quirks.refused_death_keeps_unit on or off)
+#[test]
+fn empty_death_entries_warn() {
+    let base =
+        "[InfantryTypes]\n1=Full\n2=NoDie2\n3=Bare\n[Full]\nX=1\n[NoDie2]\nX=1\n[Bare]\nX=1\n";
+    let art = "[Full]\nSequence=FullSeq\n[FullSeq]\nDie1=1,2,3\nDie2=4,5,6\n\
+               [NoDie2]\nSequence=HalfSeq\n[HalfSeq]\nDie1=1,2,3\nDie2=4,0,6\n";
+    let (_, w) = sim(base, "", art);
+    let names: Vec<&str> = ["Full", "NoDie2", "Bare"]
+        .into_iter()
+        .filter(|n| warned(&w, &format!("infantry {n}: its die-1 or die-2")))
+        .collect();
+    // A die-2 entry with count 0, and the all-zero table of a type without a sequence section.
+    assert_eq!(names, ["NoDie2", "Bare"]);
+}
+
 /// spec: S-0108 Import mapping (Foundation: vocabulary, fallback, image and id sections)
 #[test]
 fn building_foundations() {
