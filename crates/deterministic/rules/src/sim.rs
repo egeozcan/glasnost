@@ -1400,6 +1400,9 @@ pub struct BuildingType {
     /// `Capturable`.
     #[serde(default)]
     pub capturable: Option<bool>,
+    /// `ImmuneToRadiation` (S-0302 claim 8).
+    #[serde(default)]
+    pub immune_to_radiation: Option<bool>,
     /// `NeedsEngineer` (S-0309 claim 25 part e, Import mapping).
     #[serde(default)]
     pub needs_engineer: Option<bool>,

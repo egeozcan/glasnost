@@ -1731,3 +1731,20 @@ fn ore_spawning_terrain_bursts() {
     // R = 384, the vehicle 256 leptons away: g = trunc((100 − 100) × … + 100) = 100 (no falloff at p = 1).
     assert_eq!(health(&w, v), 900);
 }
+
+// spec: S-0302 claim 8 (stage 2: a building type immune to radiation stops every hit of a radiation warhead)
+#[test]
+fn radiation_immune_building() {
+    for (immune, want) in [(Some(true), 0), (None, 100)] {
+        let mut r = testkit::combat_ruleset();
+        building(&mut r, "BUNK", |b| b.immune_to_radiation = immune);
+        warhead(&mut r, "RAD", |h| {
+            h.verses = every("1");
+            h.radiation = Some(true);
+        });
+        let mut w = testkit::game_with(&r, SIZE, 1);
+        let t = put(&mut w, Kind::Building, "BUNK", BETA, 0);
+        let h = wh(&w, "RAD");
+        assert_eq!(loss!(w, t, hit(100, h)).0, want, "{immune:?}");
+    }
+}

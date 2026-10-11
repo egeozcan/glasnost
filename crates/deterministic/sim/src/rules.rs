@@ -1203,6 +1203,8 @@ fn building_rules(
         mode,
     );
     combat.immune = bt.immune.unwrap_or(false);
+    // spec: S-0302 Import mapping (ImmuneToRadiation absent: no)
+    combat.immune_radiation = bt.immune_to_radiation.unwrap_or(false);
     let b = |x: Option<bool>| x.unwrap_or(false);
     let building = crate::combat::data::BuildingCombat {
         defense: b(bt.defense),

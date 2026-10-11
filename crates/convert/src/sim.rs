@@ -404,6 +404,7 @@ const BUILDING_FIELDS: &[(&str, &str, Form)] = &[
     ("can_occupy_fire", "CanOccupyFire", Bool),
     ("capturable", "Capturable", Bool),
     ("needs_engineer", "NeedsEngineer", Bool),
+    ("immune_to_radiation", "ImmuneToRadiation", Bool),
     ("storage", "Storage", Int),
     ("spyable", "Spyable", Bool),
     ("can_c4", "CanC4", Bool),
