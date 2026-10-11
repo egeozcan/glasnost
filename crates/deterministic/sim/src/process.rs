@@ -23,7 +23,7 @@ use crate::behaviour::Door;
 use crate::infantry::{self, Seq};
 use crate::occupancy;
 use crate::rules::{Behaviour, Kind};
-use crate::world::{Layer, ObjectId, Pos, Target, World};
+use crate::world::{AttackMoveMemory, Layer, ObjectId, Pos, Target, World};
 
 /// The fixed delay of a behaviour without a processing rule (S-0215 claim 4).
 // spec: S-0215 claim 4 (nothing happens; a delay of exactly 450 ticks, no draw)
@@ -349,6 +349,7 @@ pub fn turn(w: &mut World, id: ObjectId) {
     if kind == Kind::Building {
         door_update(w, id);
     }
+    resume_attack_move(w, id);
     // spec: S-0215 claim 11 (the per-tick start of infantry, vehicles and buildings)
     let ready_now = ready(w, id);
     let Some(o) = w.obj(id) else { return };
@@ -410,6 +411,33 @@ pub fn turn(w: &mut World, id: ObjectId) {
     }
     // spec: S-0215 claim 33 (b) and (d) (the per-tick search after the processing, judged on the behaviour it leaves)
     crate::combat::acquire::per_tick(w, id);
+}
+
+/// The attack-move resumption at the start of an object's tick (S-0309
+/// claim 23 (b)): when engaged (which it then no longer is), or not engaged
+/// and in *guard*.
+fn resume_attack_move(w: &mut World, id: ObjectId) {
+    let t = w.tick;
+    let Some(ob) = w.obj_mut(id) else { return };
+    let Some(mem) = ob.attack_move else { return };
+    // spec: S-0309 claim 23 (b) (resumed when engaged, or not engaged and in guard)
+    if !(ob.combat.engaged || ob.beh.current == Some(Behaviour::Guard)) {
+        return;
+    }
+    // spec: S-0309 claim 23 (c) (resuming ends the engaged mark)
+    ob.combat.engaged = false;
+    match mem {
+        AttackMoveMemory::Dest(d) => {
+            // spec: S-0309 claim 23 (b) (a destination: move queued with an immediate start, the memory's destination the object's)
+            ob.beh.queue_and_start_at_once(Behaviour::Move, t);
+            ob.dest = Some(d);
+        }
+        AttackMoveMemory::Target(x) => {
+            // spec: S-0309 claim 23 (b) (only a target: attack queued with an immediate start, the memory's target the object's)
+            ob.beh.queue_and_start_at_once(Behaviour::Attack, t);
+            ob.target = Some(x);
+        }
+    }
 }
 
 /// A building's second per-tick start (S-0215 claim 11).

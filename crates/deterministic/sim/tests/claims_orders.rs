@@ -13,7 +13,7 @@ use glasnost_sim::rules::{Behaviour, Kind, SimRules};
 use glasnost_sim::targeting::{self, KeyCommand};
 use glasnost_sim::testkit;
 use glasnost_sim::tick;
-use glasnost_sim::world::{HouseId, ObjectId, Target, World};
+use glasnost_sim::world::{AttackMoveMemory, HouseId, ObjectId, Target, World};
 
 const ALPHA: HouseId = HouseId(0);
 const BETA: HouseId = HouseId(1);
@@ -189,7 +189,10 @@ fn s0213_attack_move() {
     let o = w.obj(cart).unwrap();
     assert_eq!(
         (o.beh.queued, o.attack_move),
-        (Some(Behaviour::Move), Some(Target::Cell(c)))
+        (
+            Some(Behaviour::Move),
+            Some(AttackMoveMemory::Dest(Target::Cell(c)))
+        )
     );
     let o = w.obj(crusher).unwrap();
     assert_eq!(
@@ -199,7 +202,10 @@ fn s0213_attack_move() {
     orders::issue(&mut w, ALPHA, am(cart, Some(Target::Object(enemy)), None));
     tick::step(&mut w);
     let o = w.obj(cart).unwrap();
-    assert_eq!(o.attack_move, Some(Target::Object(enemy)));
+    assert_eq!(
+        o.attack_move,
+        Some(AttackMoveMemory::Target(Target::Object(enemy)))
+    );
     // Any other behaviour order removes the memory.
     orders::issue(&mut w, ALPHA, mv(cart, c));
     tick::step(&mut w);

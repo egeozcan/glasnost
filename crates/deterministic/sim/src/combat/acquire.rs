@@ -10,7 +10,7 @@ use crate::combat::data::Ability;
 use crate::combat::veterancy::{has_ability, type_combat};
 use crate::combat::weapon::{armed, mean_damage, versus, would_use};
 use crate::rules::{Behaviour, Kind};
-use crate::world::{HouseRole, ObjectId, Target, World};
+use crate::world::{AttackMoveMemory, HouseRole, ObjectId, Target, World};
 
 /// τ_r, the retaliation threshold: the single nearest 0.01 (S-0304
 /// Constants).
@@ -1225,7 +1225,7 @@ fn attack_move_search(w: &mut World, a: ObjectId) {
         })
     };
     match mem {
-        Target::Cell(_) => {
+        AttackMoveMemory::Dest(_) => {
             if o.combat.engaged && within(w, o.target) {
                 return;
             }
@@ -1249,7 +1249,7 @@ fn attack_move_search(w: &mut World, a: ObjectId) {
                 ob.combat.engaged = true;
             }
         }
-        Target::Object(_) => {
+        AttackMoveMemory::Target(mem) => {
             if within(w, Some(mem)) || (o.combat.engaged && within(w, o.target)) {
                 return;
             }

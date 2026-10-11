@@ -10,7 +10,7 @@ use crate::occupancy::{self, Outcome};
 use crate::regions::{self, Reach};
 use crate::rules::{Behaviour, Kind};
 use crate::scatter::{self, ScatterRequest};
-use crate::world::{HouseId, Layer, ObjectId, Pos, Target, World};
+use crate::world::{AttackMoveMemory, HouseId, Layer, ObjectId, Pos, Target, World};
 
 /// An order (S-0213 table T1). House orders of other topics (production,
 /// superweapons, alliances, cheering) are added with those topics.
@@ -299,8 +299,8 @@ fn apply_behaviour(w: &mut World, o: &Order, dest_override: Option<Target>) {
             (Behaviour::AttackMove, None)
         } else if eligible(w, actor) {
             match (target, dest) {
-                (Some(t), None) => (Behaviour::Attack, Some(Some(t))),
-                (_, Some(d)) => (Behaviour::Move, Some(Some(d))),
+                (Some(t), None) => (Behaviour::Attack, Some(Some(AttackMoveMemory::Target(t)))),
+                (_, Some(d)) => (Behaviour::Move, Some(Some(AttackMoveMemory::Dest(d)))),
                 (None, None) => (Behaviour::AttackMove, Some(None)),
             }
         } else {
@@ -332,6 +332,8 @@ fn apply_behaviour(w: &mut World, o: &Order, dest_override: Option<Target>) {
     m.beh.aside = None;
     if let Some(mem) = memory {
         m.attack_move = mem;
+        // spec: S-0309 claim 23 (c) (a new attack-move order, or the memory removed, ends the engaged mark)
+        m.combat.engaged = false;
     }
     if b == Behaviour::AreaGuard && mobile {
         // spec: S-0213 table T3 (e) (area guard: target nothing; destination and guard spot the order's target)

@@ -2023,7 +2023,11 @@ fn limited_scan_mark() {
 
 fn attack_move(w: &mut World, a: ObjectId, mem: Target, engaged: bool) {
     let o = w.obj_mut(a).unwrap();
-    o.attack_move = Some(mem);
+    // A cell is the memory's destination, an object its target only.
+    o.attack_move = Some(match mem {
+        Target::Cell(_) => glasnost_sim::world::AttackMoveMemory::Dest(mem),
+        Target::Object(_) => glasnost_sim::world::AttackMoveMemory::Target(mem),
+    });
     o.combat.engaged = engaged;
 }
 

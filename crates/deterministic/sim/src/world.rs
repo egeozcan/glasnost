@@ -67,6 +67,16 @@ impl Pos {
     }
 }
 
+/// What an attack-move memory holds (S-0213 claim 6): a destination, or a
+/// target only. A memory that would hold neither is removed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum AttackMoveMemory {
+    /// A destination (the order had one).
+    Dest(Target),
+    /// A target only.
+    Target(Target),
+}
+
 /// What a target, destination or guard spot names (S-0215 Terms).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum Target {
@@ -173,7 +183,7 @@ pub struct Object {
     /// Queued destinations.
     pub queued_dests: Vec<Target>,
     /// Attack-move memory (S-0213 claim 6).
-    pub attack_move: Option<Target>,
+    pub attack_move: Option<AttackMoveMemory>,
     /// The object it is in contact with (S-0215 Terms).
     pub contact: Option<ObjectId>,
     /// Path state (S-0212).
