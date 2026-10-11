@@ -10,6 +10,23 @@ use glasnost_sim::world::{HouseId, ObjectId, Target, World};
 
 const ALPHA: HouseId = HouseId(0);
 
+/// The synthetic scenario under the combat rules (weapon records for its
+/// armed types), with the crusher unarmed as in the plain rules.
+fn game(seed: u32) -> World {
+    let mut r = testkit::combat_ruleset();
+    if let Some(v) = r.sim.vehicles.get_mut("CRUSHER") {
+        v.primary = None;
+    }
+    let rules = std::sync::Arc::new(glasnost_sim::rules::SimRules::new(&r, "targeting"));
+    glasnost_sim::load::new_game(
+        rules,
+        &testkit::map(),
+        testkit::catalogue(),
+        &testkit::setup(seed),
+    )
+    .expect("the scenario loads")
+}
+
 fn of(w: &World, h: u8, kind: Kind, type_index: u32) -> Vec<ObjectId> {
     testkit::house_objects(w, h)
         .into_iter()
@@ -28,7 +45,7 @@ fn carts(w: &World, h: u8) -> Vec<ObjectId> {
 // spec: S-0214 claim 12 (select replaces the selection with the clicked object)
 #[test]
 fn clicking_an_object_selects_it() {
-    let w = testkit::new_game(3);
+    let w = game(3);
     let a = carts(&w, 0);
     let r = targeting::click(&w, ALPHA, &[], ClickOn::Object(a[0]), Modifiers::default());
     assert_eq!(r.selection, Some(vec![a[0]]));
@@ -47,7 +64,7 @@ fn clicking_an_object_selects_it() {
 // spec: S-0214 claim 12 (toggle select adds or removes the clicked object)
 #[test]
 fn force_select_toggles() {
-    let w = testkit::new_game(3);
+    let w = game(3);
     let a = carts(&w, 0);
     let fs = Modifiers {
         force_select: true,
@@ -64,7 +81,7 @@ fn force_select_toggles() {
 // spec: S-0214 claim 11 (a move on a cell in reach: the clicked cell itself, no search)
 #[test]
 fn a_cell_click_moves_every_selected_unit() {
-    let w = testkit::new_game(3);
+    let w = game(3);
     let a = carts(&w, 0);
     let cell = testkit::cell(0, 10);
     assert_eq!(
@@ -94,7 +111,7 @@ fn a_cell_click_moves_every_selected_unit() {
 // spec: S-0214 table M (attack: behaviour attack with the object as target)
 #[test]
 fn an_enemy_click_attacks() {
-    let w = testkit::new_game(3);
+    let w = game(3);
     let a = carts(&w, 0);
     let enemy = carts(&w, 1)[0];
     assert_eq!(
@@ -130,7 +147,7 @@ fn an_enemy_click_attacks() {
 // spec: S-0214 table V row V7 (the generic result passes through)
 #[test]
 fn an_unarmed_vehicle_selects_an_enemy() {
-    let w = testkit::new_game(3);
+    let w = game(3);
     let crusher = of(&w, 0, Kind::Vehicle, 1)[0];
     let buggy = of(&w, 1, Kind::Vehicle, 2)[0];
     let ff = Modifiers {
@@ -158,7 +175,7 @@ fn an_unarmed_vehicle_selects_an_enemy() {
 // spec: S-0214 claim 3 (nothing over a selectable, unselected object acts as select)
 #[test]
 fn nothing_over_an_object_selects_it() {
-    let w = testkit::new_game(3);
+    let w = game(3);
     let crusher = of(&w, 0, Kind::Vehicle, 1)[0];
     let a = carts(&w, 0);
     let r = targeting::click(
@@ -176,7 +193,7 @@ fn nothing_over_an_object_selects_it() {
 // spec: S-0214 claim 11 (a move on an object: the object itself when reachable)
 #[test]
 fn force_move_onto_an_own_unit() {
-    let w = testkit::new_game(3);
+    let w = game(3);
     let a = carts(&w, 0);
     let fm = Modifiers {
         force_move: true,
@@ -199,7 +216,7 @@ fn force_move_onto_an_own_unit() {
 // spec: S-0214 claim 5 (the attack-move gesture turns move orders into attack-move orders)
 #[test]
 fn attack_move_gesture() {
-    let w = testkit::new_game(3);
+    let w = game(3);
     let a = carts(&w, 0);
     let am = Modifiers {
         force_fire: true,
@@ -232,7 +249,7 @@ fn attack_move_gesture() {
 // spec: S-0214 claim 1 (the representative: the highest rank decides the cursor)
 #[test]
 fn the_representative_has_the_highest_rank() {
-    let w = testkit::new_game(3);
+    let w = game(3);
     let crusher = of(&w, 0, Kind::Vehicle, 1)[0];
     let cart = carts(&w, 0)[0];
     let enemy = carts(&w, 1)[0];
@@ -250,7 +267,7 @@ fn the_representative_has_the_highest_rank() {
 // spec: S-0214 claim 9 (a click outside the usable area gives an order only for no-move)
 #[test]
 fn outside_the_usable_area() {
-    let w = testkit::new_game(3);
+    let w = game(3);
     let a = carts(&w, 0);
     let outside = glasnost_map::CellXY::new(1, 1);
     assert!(!w.cells.usable(outside));
@@ -269,7 +286,7 @@ fn outside_the_usable_area() {
 // spec: S-0213 table T2 (stop, scatter, guard and deploy for the selection)
 #[test]
 fn key_commands() {
-    let w = testkit::new_game(3);
+    let w = game(3);
     let a = carts(&w, 0);
     let crusher = of(&w, 0, Kind::Vehicle, 1)[0];
     let enemy = carts(&w, 1)[0];
@@ -298,7 +315,7 @@ fn key_commands() {
 // spec: S-0214 claim 7 (infantry on an object: table I; an armed infantry unit attacks an enemy, row I29)
 #[test]
 fn infantry_attack_an_enemy() {
-    let w = testkit::new_game(3);
+    let w = game(3);
     let walker = of(&w, 1, Kind::Infantry, 0)[0];
     let enemy = carts(&w, 0)[0];
     let beta = HouseId(1);
@@ -342,6 +359,15 @@ mod r11 {
 
     fn scene() -> Scene {
         let mut s = Scene::new();
+        // An invented weapon record for the armed test types (S-0214 Terms, armed).
+        s.ruleset.sim.weapons.insert(
+            "TestGun".into(),
+            glasnost_rules::sim::WeaponType {
+                damage: Some(10),
+                range: Some(glasnost_rules::sim::Decimal("3".into())),
+                ..Default::default()
+            },
+        );
         s.vehicle(CAR, unit_type(WHEEL, 40, 6));
         s.infantry(MAN, unit_type(FOOT, 20, 0));
         s

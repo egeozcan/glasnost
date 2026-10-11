@@ -14,9 +14,10 @@
 //! disguised, bomb-carrying or a loaner; there is no shroud, fog of war or
 //! route mode; no docking answer is given (no contact exchange exists yet,
 //! so the answer is neither); weapon ranges, damage and warhead flags are
-//! not imported (combat, milestone M4), so nothing is in range by itself,
-//! no weapon heals and the combat firing rules never rule a target illegal;
-//! every object is at rookie rank; vehicles have no deploy state; building
+//! weapon choice, ranges, healing weapons, veterancy abilities and the
+//! firing rules' legality answer come from the combat module (M4), with its
+//! own seams (garrison occupants, upgrades); the weapon cursor flags of rows
+//! I17 and I18 are not imported; vehicles have no deploy state; building
 //! factory kinds have no vocabulary yet (no building is a factory); a
 //! carrier carries nothing. The rows that read these states are in place
 //! behind small predicates, so that the states plug in when their topics
@@ -30,6 +31,9 @@ use glasnost_num::F64;
 use glasnost_num::geom::root_floor;
 use glasnost_rules::sim::MovementZone;
 
+use crate::combat::check::{self, Answer};
+use crate::combat::data::{Ability, WeaponId};
+use crate::combat::{range, veterancy, weapon};
 use crate::infantry::Seq;
 use crate::occupancy::{self, Outcome};
 use crate::orders::Order;
@@ -272,13 +276,37 @@ pub fn movable(w: &World, house: HouseId, id: ObjectId) -> bool {
     }
 }
 
-/// Armed (S-0214 Terms): a weapon in the slot it uses (its first slot).
+/// Armed (S-0214 Terms): a weapon in the weapon slot it currently uses
+/// (S-0308's choice with no target). Garrison occupants that may fire from
+/// inside are a seam (no garrisons yet).
 pub fn armed(w: &World, id: ObjectId) -> bool {
     match kind(w, id) {
-        Some(Kind::Building) => building(w, id).is_some_and(|b| b.raw.primary.is_some()),
         Some(Kind::Terrain) | None => false,
-        _ => unit(w, id).is_some_and(|u| u.primary.is_some()),
+        // spec: S-0214 Terms (armed: a weapon in the slot it currently uses)
+        _ => weapon::armed(w, id),
     }
+}
+
+/// The weapon an object would use by default (S-0214 Terms, healing actor).
+fn default_weapon(w: &World, id: ObjectId) -> Option<WeaponId> {
+    weapon::would_use(w, id, None).1
+}
+
+/// The weapon in an object's first slot.
+fn first_weapon(w: &World, id: ObjectId) -> Option<WeaponId> {
+    weapon::slot_weapon(w, id, 0)
+}
+
+fn heals(w: &World, x: Option<WeaponId>) -> bool {
+    // spec: S-0214 Terms (a weapon that heals does negative damage)
+    x.is_some_and(|x| w.rules().combat.weapon(x).damage < 0)
+}
+
+/// The target is in range of the weapon the actor would use against it
+/// (S-0214 claim 6 (d), row GC4; the range test of S-0307).
+fn in_range_of(w: &World, actor: ObjectId, t: Target) -> bool {
+    let (_, x) = weapon::would_use(w, actor, Some(t));
+    range::in_range(w, actor, x, Some(t), None)
 }
 
 /// Able to fire (S-0214 Terms): own, armed, not disabled, not falling
@@ -288,10 +316,31 @@ pub fn able_to_fire(w: &World, house: HouseId, id: ObjectId) -> bool {
 }
 
 /// A healing actor (S-0214 Terms): an armed object whose default weapon
-/// does negative damage. The weapon choice is the combat specs' (M4), so no
-/// weapon heals yet.
-fn healing_actor(_w: &World, _id: ObjectId) -> bool {
-    false
+/// does negative damage.
+fn healing_actor(w: &World, id: ObjectId) -> bool {
+    // spec: S-0214 Terms (healing actor: armed, and the weapon it would use by default does negative damage)
+    armed(w, id) && heals(w, default_weapon(w, id))
+}
+
+/// An infiltrating infantry type facing a building it can enter (S-0214
+/// claim 6 (e)): a spy and a spyable building, another infiltrator and a
+/// capturable building, or a charge planter and a building that accepts
+/// charges.
+fn infiltrator_entry(w: &World, actor: ObjectId, t: ObjectId) -> bool {
+    if kind(w, actor) != Some(Kind::Infantry)
+        || !uflag(w, actor, |u| u.raw.infiltrate.unwrap_or(false))
+    {
+        return false;
+    }
+    let Some(b) = building(w, t) else {
+        return false;
+    };
+    // spec: S-0214 Import mapping (Agent, Capturable, Spyable, C4 absent: no; CanC4 absent: yes)
+    let spy = uflag(w, actor, |u| u.raw.agent.unwrap_or(false));
+    let charges = uflag(w, actor, |u| u.raw.c4.unwrap_or(false));
+    (spy && b.raw.spyable.unwrap_or(false))
+        || (!spy && b.raw.capturable.unwrap_or(false))
+        || (charges && b.raw.can_c4.unwrap_or(true))
 }
 
 // The states below have no place in our engine before combat (M4) and the
@@ -534,9 +583,16 @@ fn attack_rule(w: &World, house: HouseId, actor: ObjectId, t: ObjectId, mods: Mo
     let c = armed(w, actor)
         || (kind(w, actor) == Some(Kind::Infantry)
             && uflag(w, actor, |u| u.raw.infiltrate.unwrap_or(false)));
-    // spec: S-0214 claim 6 (d) (movable, or the target already in range)
-    let d = movable(w, house, actor);
-    a && b && c && d
+    // spec: S-0214 claim 6 (d) (movable, or the target already in range of the weapon it would use)
+    let d = movable(w, house, actor) || in_range_of(w, actor, Target::Object(t));
+    // spec: S-0214 claim 6 (e) (unless force-fire or an infiltrator's entry, the firing rules do not rule the target illegal)
+    let e = mods.force_fire || infiltrator_entry(w, actor, t) || {
+        let (slot, x) = weapon::would_use(w, actor, Some(Target::Object(t)));
+        // Without a weapon there is no firing rule to rule the target illegal.
+        x.is_none()
+            || check::check(w, actor, Some(Target::Object(t)), slot, false) != Answer::Illegal
+    };
+    a && b && c && d && e
 }
 
 /// The generic result g on an object (S-0214 table G).
@@ -742,7 +798,19 @@ fn infantry_on(
     if thief && counts_as_vehicle(w, t) && other_house(w, actor, t) {
         return Action::Capture;
     }
-    // Rows I16 to I18 need the charge flag (not imported) and weapon cursor flags (combat).
+    // spec: S-0214 table I row I16 (a charge planter: the type flag or the explosive-charges ability)
+    let planter = uflag(w, actor, |u| u.raw.c4.unwrap_or(false))
+        || veterancy::has_ability(w, actor, Ability::C4);
+    if planter && g1 == Action::Attack && building(w, t).is_some() && !vehicle_like(w, t) {
+        // spec: S-0214 table I row I16 (sabotage if it accepts charges and is not invisible in the game, else attack)
+        let accepts = building(w, t).is_some_and(|b| b.raw.can_c4.unwrap_or(true));
+        return if accepts && !invisible(w, t) {
+            Action::Sabotage
+        } else {
+            Action::Attack
+        };
+    }
+    // Rows I17 and I18 need the weapon cursor flags, which are not imported.
     // spec: S-0214 table I row I19 (a bomb planter: bomb if the type accepts bombs and carries none)
     if uflag(w, actor, |u| u.raw.ivan.unwrap_or(false)) && g1 == Action::Attack {
         // spec: S-0214 Import mapping (Bombable absent: yes)
@@ -758,8 +826,18 @@ fn infantry_on(
     if dipd && g1 == Action::Move {
         return Action::NoMove;
     }
-    // spec: S-0214 table I row I21 (does not fire while deployed; ranges are not imported)
-    if dipd && g1 == Action::Attack && !uflag(w, actor, |u| u.raw.deploy_fire.unwrap_or(false)) {
+    // spec: S-0214 table I row I21 (does not fire while deployed, or the target out of range of its first weapon)
+    if dipd
+        && g1 == Action::Attack
+        && (!uflag(w, actor, |u| u.raw.deploy_fire.unwrap_or(false))
+            || !range::in_range(
+                w,
+                actor,
+                first_weapon(w, actor),
+                Some(Target::Object(t)),
+                None,
+            ))
+    {
         return Action::NoMove;
     }
     // spec: S-0214 table I row I22 (deployed, with an undeploy delay)
@@ -852,7 +930,10 @@ fn vehicle_deploy(w: &World, actor: ObjectId) -> Action {
 /// A vehicle on an object (S-0214 table V).
 fn vehicle_on(w: &World, house: HouseId, actor: ObjectId, t: ObjectId, g: Action) -> Action {
     let fire = able_to_fire(w, house, actor);
-    let crush = occupancy::is_crusher(w, actor) && occupancy::crushable_by(w, actor, t);
+    // spec: S-0214 table V row k1 (it can crush: the type flag, or the crusher ability at its current rank)
+    let crush = (occupancy::is_crusher(w, actor)
+        || veterancy::has_ability(w, actor, Ability::Crusher))
+        && occupancy::crushable_by(w, actor, t);
     // spec: S-0214 table V value k
     let k = match g {
         Action::Attack if !fire && crush => Action::Move,
@@ -969,7 +1050,7 @@ fn aircraft_on(
             }
         }
         // spec: S-0214 table AC row AC8
-        Action::Attack if unit(w, actor).is_some_and(|u| u.primary.is_none()) => Action::Nothing,
+        Action::Attack if first_weapon(w, actor).is_none() => Action::Nothing,
         // spec: S-0214 table AC row AC9
         Action::Attack if immune(w, t) => Action::NoMove,
         // spec: S-0214 table AC row AC10 (a repair depot: the dock list is not imported yet, so no-enter)
@@ -1026,8 +1107,11 @@ fn generic_cell(w: &World, house: HouseId, actor: ObjectId, c: CellXY, mods: Mod
     {
         return Action::AreaGuard;
     }
-    // spec: S-0214 table GC row GC4 (a weapon, force-fire or an attackable cell, movable or in range)
-    if armed(w, actor) && (mods.force_fire || attackable_cell(w, c)) && mv {
+    // spec: S-0214 table GC row GC4 (a weapon, force-fire or an attackable cell, movable or the cell centre in range)
+    if weapon::current_weapon(w, actor).is_some()
+        && (mods.force_fire || attackable_cell(w, c))
+        && (mv || in_range_of(w, actor, Target::Cell(c)))
+    {
         return Action::Attack;
     }
     // spec: S-0214 table GC row GC6 (outside the usable area)
@@ -1131,7 +1215,7 @@ fn cell_action(
         }
         Some(Kind::Aircraft) => {
             // spec: S-0214 table ACC (attack without a weapon in the first slot: nothing)
-            if g == Action::Attack && !armed(w, actor) {
+            if g == Action::Attack && first_weapon(w, actor).is_none() {
                 Action::Nothing
             } else {
                 g
@@ -1141,11 +1225,15 @@ fn cell_action(
             g,
             BuildingCell {
                 invisible: invisible(w, actor),
-                // The weapon slot a building uses is its first until weapon switching (M4).
-                first_slot_weapon: armed(w, actor),
-                // Projectile ground flags and selling are not read before M4: only the pulse cannon.
-                fires_on_ground: !building(w, actor)
-                    .is_some_and(|b| b.raw.emp_cannon.unwrap_or(false)),
+                first_slot_weapon: first_weapon(w, actor).is_some(),
+                // spec: S-0214 table BC row BC4 (its projectile hits ground targets, not a pulse cannon, not being sold)
+                fires_on_ground: weapon::would_use(w, actor, Some(Target::Cell(c)))
+                    .1
+                    .and_then(|x| w.rules().combat.projectile_of(x))
+                    .is_some_and(|p| p.ag)
+                    && !building(w, actor).is_some_and(|b| b.raw.emp_cannon.unwrap_or(false))
+                    && w.obj(actor)
+                        .is_none_or(|o| o.beh.current != Some(Behaviour::Selling)),
                 own_rally: own(w, house, actor) && rally_capable(w, actor),
             },
             w.rules().quirks.building_cell_attack_no_weapon,
@@ -1251,11 +1339,8 @@ fn rank(w: &World, id: ObjectId) -> u8 {
     } else if kind(w, id) == Some(Kind::Building) {
         3
     } else {
-        let damage = unit(w, id)
-            .and_then(|u| u.primary.as_ref())
-            .and_then(|p| w.rules().weapons.get(p))
-            .and_then(|wp| wp.damage);
-        // spec: S-0214 table R (a weapon doing zero or negative damage, or without damage: rank 4)
+        let damage = default_weapon(w, id).map(|x| w.rules().combat.weapon(x).damage);
+        // spec: S-0214 table R (a default weapon doing zero or negative damage, or without damage: rank 4)
         if damage.is_some_and(|d| d > 0) { 5 } else { 4 }
     }
 }
@@ -1595,7 +1680,10 @@ pub fn order(
         },
         Action::Deploy | Action::AreaAttack => behaviour(Behaviour::Unload, None, None),
         Action::Harvest => behaviour(Behaviour::Harvest, None, Some(target)),
-        // No first weapon heals before M4: idle gives guard on the actor itself.
+        // spec: S-0214 Part 2 (idle: guard, or area guard if the actor's first weapon heals; the actor itself)
+        Action::Idle if heals(w, first_weapon(w, id)) => {
+            behaviour(Behaviour::AreaGuard, Some(Target::Object(id)), None)
+        }
         Action::Idle => behaviour(Behaviour::Guard, Some(Target::Object(id)), None),
         _ => None,
     }
