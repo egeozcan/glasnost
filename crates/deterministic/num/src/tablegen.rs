@@ -38,6 +38,36 @@ pub fn atan_table() -> Vec<u32> {
         .collect()
 }
 
+/// A_s(0 … 4096) = RZ₂₄(asin(k / 2048 − 1)) (S-0306 Terms, table arcsine).
+pub fn asin_table() -> Vec<u32> {
+    let s = BigUint::from(1u32) << FRAC;
+    let half_pi = bigmath::pi() >> 1u32;
+    (0..=4096u32)
+        .map(|k| {
+            let neg = k < 2048;
+            let m = if neg { 2048 - k } else { k - 2048 };
+            let v = if m == 2048 {
+                bigmath::trunc_single(&half_pi)
+            } else if m == 0 {
+                F32::ZERO
+            } else {
+                // asin(x) = atan(x / √(1 − x²)), x = m / 2048
+                let x = (BigUint::from(m) << FRAC) / 2048u32;
+                let one_minus = &s - ((&x * &x) >> FRAC);
+                let root = bigmath::isqrt_big(&(one_minus << FRAC));
+                let ratio = (&x << FRAC) / root;
+                bigmath::trunc_single(&bigmath::atan(&ratio))
+            };
+            // spec: S-0306 Terms (RZ₂₄ truncates toward zero, so a negative value keeps the magnitude's truncation)
+            if neg && v.0 != 0 {
+                v.0 | 0x8000_0000
+            } else {
+                v.0
+            }
+        })
+        .collect()
+}
+
 /// The single-precision value of decimal text.
 fn single(s: &str) -> u32 {
     decimal::to_single(&decimal::parse_text(s).expect("decimal")).0
@@ -79,6 +109,13 @@ pub fn render() -> String {
         "ATAN",
         &atan_table(),
     );
+    emit(
+        &mut out,
+        "S-0306 Terms (table arcsine A_s[k] = RZ₂₄(asin(k / 2048 − 1)) for k = 0 … 4096)",
+        "Table arcsine A_s(0 … 4096) as single-precision bit patterns.",
+        "ASIN",
+        &asin_table(),
+    );
     out.push_str(&format!(
         "// spec: S-0105 F1 (τ(4096) = 1.2246063538223773 × 10⁻¹⁶, a single)\n\
          /// τ(4096) as a single-precision bit pattern.\n\
@@ -101,6 +138,7 @@ mod tests {
     fn tables_match_definitions() {
         assert_eq!(tables::SINE_QUARTER.to_vec(), sine_quarter());
         assert_eq!(tables::ATAN.to_vec(), atan_table());
+        assert_eq!(tables::ASIN.to_vec(), asin_table());
         assert_eq!(tables::TAU_4096, single("1.2246063538223773e-16"));
         assert_eq!(tables::TAU_8192, single("-2.4492127076447545e-16"));
     }

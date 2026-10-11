@@ -65,6 +65,22 @@ pub fn cos_t(x: F64, mode: Rounding) -> F64 {
     tau(table_index(x, mode) + 2048).to_f64()
 }
 
+/// The table arccosine of S-0306 F8: π/2 − A_s[trunc(2048 (x + 1))]; a
+/// value that is not a number converts to the index 0 (S-0205 claim 7).
+/// An index outside 0 … 4096 is clamped (the original's table has no
+/// entries there).
+pub fn acos_t(x: F64, mode: Rounding) -> F64 {
+    // spec: S-0306 F8 (k = trunc(2048 (x + 1)))
+    let k = x
+        .add(F64::from_i64(1, mode), mode)
+        .mul(F64::from_i64(2048, mode), mode)
+        .trunc_i128()
+        .unwrap_or(0)
+        .clamp(0, 4096) as usize;
+    let (c1, _) = crate::geom::direction_constants();
+    c1.sub(F32(crate::tables::ASIN[k]).to_f64(), mode)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

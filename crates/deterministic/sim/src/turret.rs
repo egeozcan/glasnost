@@ -18,7 +18,7 @@ pub fn spin_target(f: u16) -> u16 {
 }
 
 /// One tick of a vehicle's turret (S-0206 claim 9), after its movement.
-pub fn tick(w: &mut World, id: ObjectId) {
+pub fn tick(w: &mut World, id: ObjectId, facing_error: bool) {
     let t = w.tick;
     let r = w.rules_arc();
     let Some(o) = w.obj(id).cloned() else { return };
@@ -36,8 +36,8 @@ pub fn tick(w: &mut World, id: ObjectId) {
     } else if !u.turret {
         None
     } else if o.target.is_some() {
-        // spec: S-0206 claim 9 (with a target and no turret weapon known: no change; the weapon rows need M4)
-        None
+        // spec: S-0206 claim 9 (the target rows, with the firing check's facing error of this tick)
+        crate::combat::behave::turret_target(w, id, facing_error)
     } else {
         let g = r.general.guard_area_targeting_delay;
         // spec: S-0206 claim 9 (rest rows: not turning, at least G + 5 ticks since the vehicle last fired)

@@ -6,6 +6,7 @@ use glasnost_num::F64;
 
 use crate::combat::state::HouseCombat;
 use crate::rules::{Kind, SimRules};
+use crate::world::{ObjectId, Target, World};
 
 /// A new object's ammunition: its type's initial ammunition (S-0301 claim
 /// 10). How it relates to the maximum A belongs to the production specs;
@@ -49,4 +50,275 @@ pub fn house_combat(r: &SimRules, country: u32, houses: usize) -> HouseCombat {
         losses: 0,
         self_heal: [0, 0],
     }
+}
+
+/// The reload delay of S-0301 F3 for ammunition `a`.
+pub fn reload_delay(tc: &crate::combat::data::TypeCombat, a: i32) -> i32 {
+    // spec: S-0301 F3 (E when a = 0 and E ≠ −1)
+    if a == 0 && tc.empty_reload != -1 {
+        return tc.empty_reload;
+    }
+    // spec: S-0301 F3 (q = 1 if W = 0, else trunc(a / W); delay = L + I × q², 32-bit)
+    let q = if tc.pip_wrap == 0 {
+        1
+    } else {
+        glasnost_num::int::div(a, tc.pip_wrap)
+    };
+    tc.reload
+        .wrapping_add(tc.reload_increment.wrapping_mul(q.wrapping_mul(q)))
+}
+
+/// Makes a shot with the weapon in `slot` at `target` (S-0301 claims 1 to
+/// 18; S-0313 for the fire point; S-0306 for the launch). Returns whether a
+/// shot was made (a void shot is none, claim 15).
+pub fn shot(w: &mut World, firer: ObjectId, slot: usize, target: Target) -> bool {
+    let rules = w.rules_arc();
+    let mode = rules.mode;
+    let q = rules.quirks;
+    let half = q.ranged_draw_half_span;
+    let Some(weapon) = crate::combat::weapon::slot_weapon(w, firer, slot) else {
+        return false;
+    };
+    let Some(o) = w.obj(firer).cloned() else {
+        return false;
+    };
+    let tc = crate::combat::veterancy::type_combat(w, firer)
+        .cloned()
+        .unwrap_or_default();
+    let wr = rules.combat.weapon(weapon).clone();
+    let k = o.combat.burst;
+    let b = wr.burst;
+    let spray = o.kind != Kind::Building
+        && rules
+            .unit(o.kind, o.type_index)
+            .is_some_and(|u| u.raw.spray_attack.unwrap_or(false));
+    // spec: S-0306 claim 3 a (an area-fire weapon: the firer's cell; a spray-attack firer: the cell of S-0313 claim 9)
+    let mut shot_target = target;
+    if spray {
+        let s = if k == 0 {
+            // spec: S-0313 claim 9 (the first shot of a burst draws R(0, 7))
+            w.rng.ranged(0, 7, half)
+        } else {
+            // spec: S-0313 claim 9 (later shots advance by trunc(8 / B) mod 8)
+            (o.combat.spray_shift + 8 / b).rem_euclid(8)
+        };
+        if let Some(ob) = w.obj_mut(firer) {
+            ob.combat.spray_shift = s;
+        }
+        let (dx, dy) = crate::combat::position::SPRAY[s as usize];
+        shot_target =
+            Target::Cell(crate::world::Pos::new(o.pos.x + dx, o.pos.y + dy, o.pos.z).cell());
+    } else if wr.area_fire {
+        shot_target = Target::Cell(o.pos.cell());
+    }
+    // spec: S-0302 claim 2 (the shot damage is fixed at the moment of firing)
+    let damage = crate::combat::damage::shot_damage(w, firer, weapon);
+    let fp = crate::combat::position::fire_point(w, firer, slot, k);
+    let launched = crate::combat::projectile::launch(w, firer, weapon, shot_target, fp, damage);
+    // spec: S-0301 claim 15 (a void shot: the countdown, burst counter and ammunition stay as they were)
+    if launched.is_none() && wr.projectile.is_some() {
+        return false;
+    }
+    let t = w.tick;
+    let j = k + 1;
+    let berserk = o.combat.berserk_until.is_some_and(|u| t < u);
+    // spec: S-0301 claim 2 (the order of the delay kinds: 1-tick building, bare rate, in-burst, full)
+    let d = if o.kind == Kind::Building && o.combat.ammo > 1 && q.building_ammo_fast_rearm {
+        1 // spec: S-0301 claim 10 (a building holding more than 1 round: 1 tick, no draw)
+    } else if wr.effect() {
+        // spec: S-0301 claim 5 (an effect weapon: its bare rate, no draw)
+        wr.rof
+    } else if j < b {
+        // spec: S-0301 claim 4 (the in-burst delay: a vehicle's burst delay j for j ≤ 4 and not −1, else R(3, 5))
+        let field = if o.kind == Kind::Vehicle && (1..=4).contains(&j) {
+            rules
+                .unit(o.kind, o.type_index)
+                .map_or(-1, |u| u.vehicle.burst_delay[(j - 1) as usize])
+        } else {
+            -1
+        };
+        if field != -1 {
+            field
+        } else {
+            w.rng.ranged(3, 5, half)
+        }
+    } else {
+        full_delay(w, firer, &wr)
+    };
+    // spec: S-0301 claim 8 (a berserk firer halves the delay, truncated; a disc laser shot is never halved)
+    let d = if berserk && !wr.disk_laser { d / 2 } else { d };
+    let sync_frames = o.kind == Kind::Vehicle
+        && rules
+            .unit(o.kind, o.type_index)
+            .is_some_and(|u| u.vehicle.firing_frames > 0);
+    let firing_frames = rules
+        .unit(o.kind, o.type_index)
+        .map_or(0, |u| u.vehicle.firing_frames);
+    let was_sync = t < o.combat.rearm_until;
+    let expected = match target {
+        Target::Object(x)
+            if !rules
+                .combat
+                .projectile_of(weapon)
+                .is_some_and(|p| p.inaccurate) =>
+        {
+            Some((
+                x,
+                crate::combat::damage::expected_damage(w, firer, weapon, x),
+            ))
+        }
+        _ => None,
+    };
+    let Some(ob) = w.obj_mut(firer) else {
+        return false;
+    };
+    // spec: S-0301 claim 1 (the rearm countdown is set to the shot's delay D)
+    ob.combat.rearm_until = t.wrapping_add(d);
+    ob.combat.rearm_delay = d;
+    // spec: S-0301 claim 4 (the counter is left at j mod B)
+    ob.combat.burst = j.rem_euclid(b);
+    // spec: S-0206 claim 9 (the tick of the last shot of any weapon)
+    ob.last_fired = t;
+    // spec: S-0301 claim 10 (a shot uses one round when a > 0; a disc laser shot uses none)
+    if ob.combat.ammo > 0 && !wr.disk_laser {
+        ob.combat.ammo -= 1;
+    }
+    // spec: S-0301 claim 11 (a vehicle shot that launches a projectile with a < A restarts the reload, unless manual reload or A = 0)
+    if ob.kind == Kind::Vehicle
+        && launched.is_some()
+        && !wr.disk_laser
+        && tc.ammo > 0
+        && !tc.manual_reload
+        && ob.combat.ammo < tc.ammo
+    {
+        ob.combat.reload_left = Some(reload_delay(&tc, ob.combat.ammo));
+    }
+    // spec: S-0301 claim 13 (a shot that is not a sync shot runs the firing-frame counter at 2F − 1)
+    if sync_frames && !was_sync {
+        ob.combat.firing_frame = Some(2 * firing_frames - 1);
+    }
+    let _ = mode;
+    crate::combat::projectile::shot_effect(w, firer, fp);
+    // spec: S-0309 claim 15 and S-0302 claim 18 (a shot lowers the target's expected remaining health)
+    if let Some((x, e)) = expected
+        && let Some(tob) = w.obj_mut(x)
+    {
+        tob.combat.expected_health = tob.combat.expected_health.wrapping_sub(e);
+    }
+    after_shot(w, firer, weapon);
+    true
+}
+
+/// The full delay of S-0301 F1, with its draw R(0, 2).
+// spec: S-0301 claim 2 (the full delay draw R(0, 2))
+fn full_delay(w: &mut World, firer: ObjectId, wr: &crate::combat::data::WeaponRules) -> i32 {
+    let rules = w.rules_arc();
+    let mode = rules.mode;
+    let half = rules.quirks.ranged_draw_half_span;
+    let h = w
+        .obj(firer)
+        .and_then(|o| o.owner)
+        .and_then(|x| w.houses.get(usize::from(x.0)))
+        .map_or(F64::from_i64(1, mode), |x| x.combat.rof_factor);
+    let u = w.rng.ranged(0, 2, half);
+    // spec: S-0301 F1 (D₁ = trunc(RZ₅₃(RZ₅₃(R × h) + u)))
+    let d1 = F64::from_i64(i64::from(wr.rof), mode)
+        .mul(h, mode)
+        .add(F64::from_i64(i64::from(u), mode), mode)
+        .to_i32_common();
+    let rank = crate::combat::veterancy::rank(w, firer);
+    let tc = crate::combat::veterancy::type_combat(w, firer);
+    let vet_rof = tc.is_some_and(|tc| tc.veteran.has(crate::combat::data::Ability::Rof));
+    let elite_rof = tc.is_some_and(|tc| tc.elite.has(crate::combat::data::Ability::Rof));
+    // spec: S-0301 claim 6 (veteran with the veteran ability, or elite with either: × v once)
+    let vet = match rank {
+        crate::combat::veterancy::Rank::Veteran => vet_rof,
+        crate::combat::veterancy::Rank::Elite => vet_rof || elite_rof,
+        crate::combat::veterancy::Rank::Rookie => false,
+    };
+    // spec: S-0301 F1 (D₂ = trunc(RZ₅₃(D₁ × v)))
+    let d2 = if vet {
+        F64::from_i64(i64::from(d1), mode)
+            .mul(rules.combat.general.veteran_rof, mode)
+            .to_i32_common()
+    } else {
+        d1
+    };
+    // Garrisoned buildings and bunkered vehicles (D₃ to D₅) are seams: no firer is in those situations.
+    d2
+}
+
+/// The rules after a shot: distributed fire (S-0309 claim 20), fire-once
+/// weapons (claim 21) and the fraidycat's last round (S-0315 claim 2).
+fn after_shot(w: &mut World, firer: ObjectId, weapon: crate::combat::data::WeaponId) {
+    let rules = w.rules_arc();
+    let Some(o) = w.obj(firer).cloned() else {
+        return;
+    };
+    let tc = crate::combat::veterancy::type_combat(w, firer).cloned();
+    let distributed = match o.kind {
+        Kind::Building => false,
+        _ => rules
+            .unit(o.kind, o.type_index)
+            .is_some_and(|u| u.raw.distributed_fire.unwrap_or(false)),
+    };
+    // spec: S-0309 claim 20 (a distributed-fire object firing outside attack (a building: in any behaviour) adds the target to its list and drops it)
+    if distributed
+        && (o.kind == Kind::Building || o.beh.current != Some(crate::rules::Behaviour::Attack))
+        && let Some(Target::Object(x)) = o.target
+        && let Some(ob) = w.obj_mut(firer)
+    {
+        ob.combat.fired_at.push(x);
+        ob.target = None;
+        ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
+    }
+    // spec: S-0309 claim 21 (a fire-once weapon drops its target after the shot)
+    if rules.combat.weapon(weapon).fire_once
+        && let Some(ob) = w.obj_mut(firer)
+    {
+        ob.target = None;
+        ob.combat.burst = 0;
+    }
+    let _ = tc;
+    if o.kind == Kind::Infantry {
+        crate::combat::fear::last_round(w, firer);
+    }
+}
+
+/// A vehicle's reload in its turn (S-0301 claim 11).
+pub fn reload_turn(w: &mut World, id: ObjectId) {
+    let Some(o) = w.obj(id).cloned() else { return };
+    if o.kind != Kind::Vehicle {
+        return;
+    }
+    let Some(tc) = crate::combat::veterancy::type_combat(w, id).cloned() else {
+        return;
+    };
+    if tc.ammo < 0 {
+        return;
+    }
+    let moving = crate::occupancy::in_progress(w, id);
+    let Some(ob) = w.obj_mut(id) else { return };
+    // spec: S-0301 claim 11 (while a vehicle without the mobile-fire flag is moved, its reload countdown does not advance)
+    if let Some(left) = ob.combat.reload_left.as_mut()
+        && (tc.mobile_fire || !moving)
+    {
+        *left -= 1;
+    }
+    let over = ob.combat.reload_left.is_none_or(|l| l <= 0);
+    // spec: S-0301 claim 11 (countdown over and a < A: a grows by 1 and the countdown restarts; one round per turn at most)
+    if over && ob.combat.ammo < tc.ammo {
+        ob.combat.ammo += 1;
+        ob.combat.reload_left = Some(reload_delay(&tc, ob.combat.ammo));
+    }
+}
+
+/// A vehicle's firing-frame counter in its turn (S-0301 claim 13).
+pub fn firing_frame_turn(w: &mut World, id: ObjectId) {
+    let Some(ob) = w.obj_mut(id) else { return };
+    // spec: S-0301 claim 13 (running above 0: one less; at 0: idle; tunnels are not modelled)
+    ob.combat.firing_frame = match ob.combat.firing_frame {
+        Some(v) if v > 0 => Some(v - 1),
+        _ => None,
+    };
 }

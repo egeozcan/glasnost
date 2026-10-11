@@ -1,0 +1,392 @@
+//! The firing check (S-0301 claim 9) with the aiming answers of S-0310:
+//! the per-attempt test whose answer says whether a shot can be made now
+//! and, if not, why.
+
+use glasnost_num::F64;
+use glasnost_num::geom::{Facing, delta, direction};
+
+use crate::combat::data::WeaponId;
+use crate::combat::range;
+use crate::combat::veterancy::type_combat;
+use crate::combat::weapon::{airborne_by_height, slot_weapon, versus};
+use crate::rules::Kind;
+use crate::world::{ObjectId, Pos, Target, World};
+
+/// The answers of the firing check (S-0301 claim 9).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Answer {
+    /// The shot can be made now.
+    CanFire,
+    /// The rearm countdown runs, or a gate holds the shot.
+    Rearming,
+    /// Ammunition 0.
+    OutOfAmmo,
+    /// Not pointed at the target (S-0310).
+    NotFacing,
+    /// The turret is still turning (S-0310 claim 3).
+    StillTurning,
+    /// May not fire while moving (S-0310 claims 7, 8).
+    Moving,
+    /// Needs to be uncloaked.
+    Cloaked,
+    /// Beyond the weapon's range (S-0307).
+    OutOfRange,
+    /// Not a legal target.
+    Illegal,
+    /// Cannot fire this weapon now for a reason of its own.
+    Impossible,
+    /// Launching spawned aircraft.
+    Busy,
+    /// Must deploy first (S-0310 claim 9).
+    MustDeploy,
+}
+
+/// The aiming facing of a firer (S-0310 claims 1, 4, 5) and whether it is
+/// aimed at all.
+fn aiming_facing(w: &World, id: ObjectId) -> Facing {
+    let t = w.tick;
+    let o = w.obj(id).expect("firer");
+    let turret = type_combat(w, id).is_some()
+        && match o.kind {
+            Kind::Vehicle => w
+                .rules()
+                .unit(o.kind, o.type_index)
+                .is_some_and(|u| u.turret),
+            Kind::Building => true,
+            _ => true,
+        };
+    // spec: S-0310 claim 1 (a vehicle aims with its turret facing if its type has the turret flag, else its body)
+    if turret {
+        o.turret.value(t)
+    } else {
+        o.body.value(t)
+    }
+}
+
+/// The aiming point of a turreted building (S-0310 claim 4).
+pub fn building_aim_point(w: &World, id: ObjectId) -> Pos {
+    let p = w.reference_point(id);
+    let Some(o) = w.obj(id) else { return p };
+    let b = &w.rules().buildings[o.type_index as usize].building;
+    // spec: S-0310 claim 4 (the primary fire pixel shift; else the turret anchor's when not zero; else none)
+    let shift = match b.fire_pixel {
+        Some(px) => Some(px),
+        None if b.turret_anim != [0, 0] => Some(b.turret_anim),
+        None => None,
+    };
+    match shift {
+        Some([px, py]) => {
+            let (dx, dy) = crate::combat::position::pixel_to_leptons(w, px, py);
+            Pos::new(p.x + dx, p.y + dy, p.z)
+        }
+        None => p,
+    }
+}
+
+/// The direction of a target from a point (S-0204 claim 8).
+fn direction_to(w: &World, from: Pos, to: Pos) -> Facing {
+    direction(
+        i64::from(to.x - from.x),
+        i64::from(to.y - from.y),
+        w.rules().quirks.table_direction,
+    )
+}
+
+/// The aiming answer (S-0310 claims 2, 4, 5): `None` when pointing.
+fn facing_answer(w: &World, firer: ObjectId, weapon: WeaponId, t: Target) -> Option<Answer> {
+    let o = w.obj(firer)?;
+    let r = w.rules();
+    let wr = r.combat.weapon(weapon);
+    let target_pt = range::target_point(w, t);
+    let homing = r.combat.projectile_of(weapon).is_some_and(|p| p.rot != 0);
+    let tol = match o.kind {
+        // spec: S-0310 claim 5 (infantry never get not facing)
+        Kind::Infantry => return None,
+        Kind::Vehicle => {
+            let u = r.unit(o.kind, o.type_index)?;
+            // spec: S-0310 claim 2 (an omni-fire weapon, and every weapon of a visceroid type, is never not facing)
+            if wr.omni_fire || u.visceroid {
+                return None;
+            }
+            // spec: S-0310 claim 2 (τ = 2048, or 4096 for a homing projectile)
+            if homing { 4096 } else { 2048 }
+        }
+        Kind::Building => {
+            let b = &r.buildings[o.type_index as usize];
+            // spec: S-0310 claim 4 (a building that is not turreted fires in any direction)
+            if !b.turret {
+                return None;
+            }
+            if b.building.voxel_turret && r.quirks.voxel_turret_exact_aim {
+                0 // spec: S-0310 claim 4 (a voxel turret: τ = 0)
+            } else {
+                2048 // spec: S-0310 claim 4 (a sprite turret: τ = 2048)
+            }
+        }
+        // spec: S-0310 claim 5 (an aircraft: τ = 2048; its flight control exemptions belong to the aircraft specs)
+        Kind::Aircraft => 2048,
+        Kind::Terrain => return None,
+    };
+    let from = if o.kind == Kind::Building {
+        building_aim_point(w, firer)
+    } else {
+        w.reference_point(firer)
+    };
+    let d = direction_to(w, from, target_pt);
+    // spec: S-0310 F1 (ε = |δ(a, d)|, the magnitude of −32768 is 32768; pointing ⇔ ε ≤ τ)
+    let eps = delta(aiming_facing(w, firer), d).abs();
+    (eps > tol).then_some(Answer::NotFacing)
+}
+
+/// Whether a vehicle is "moving" for a weapon (S-0310 claim 7).
+fn vehicle_moving(w: &World, firer: ObjectId, weapon: WeaponId) -> bool {
+    let Some(o) = w.obj(firer) else { return false };
+    let r = w.rules();
+    let Some(u) = r.unit(o.kind, o.type_index) else {
+        return false;
+    };
+    let wr = r.combat.weapon(weapon);
+    let dest = o.dest.is_some();
+    // spec: S-0310 claim 7 (the type lacks the mobile-fire flag and has a destination)
+    if !u.combat.mobile_fire && dest {
+        return true;
+    }
+    // spec: S-0310 claim 7 (the weapon lacks fire-while-moving: a destination; a balloon-hover type: its locomotor moving it)
+    let balloon = u.raw.balloon_hover.unwrap_or(false);
+    let moving_cond = if balloon {
+        crate::occupancy::in_progress(w, firer)
+    } else {
+        dest
+    };
+    if !wr.fire_while_moving && moving_cond {
+        return true;
+    }
+    // spec: S-0310 claim 7 (a spark- or fire-particle weapon with a destination)
+    if (wr.spark || wr.fire_particles) && dest {
+        return true;
+    }
+    // spec: S-0310 claim 7 (a temporal primary weapon and a destination)
+    let primary_temporal = slot_weapon(w, firer, 0).is_some_and(|p| r.combat.weapon(p).temporal);
+    primary_temporal && dest
+}
+
+/// Whether an infantry unit is "moving" for a weapon (S-0310 claim 8).
+fn infantry_moving(w: &World, firer: ObjectId, weapon: WeaponId) -> bool {
+    let Some(o) = w.obj(firer) else { return false };
+    // spec: S-0310 claim 8 and Terms (speed fraction above 0.1: it has taken a walking step and not yet stopped)
+    let walking = o.walk.as_ref().is_some_and(|s| s.target.is_some());
+    let interruptible = o
+        .infantry
+        .as_ref()
+        .and_then(|s| s.seq)
+        .is_none_or(|q| q.table().0);
+    let dest = o.dest.is_some();
+    // spec: S-0310 claim 8 (a destination and a current sequence that is not interruptible)
+    if walking || (dest && !interruptible) {
+        return true;
+    }
+    // spec: S-0310 claim 8 (a fire-particle weapon while the unit has a destination)
+    w.rules().combat.weapon(weapon).fire_particles && dest
+}
+
+/// Whether a target is gone or out of play (no object).
+fn target_exists(w: &World, t: Target) -> bool {
+    match t {
+        Target::Object(x) => w.obj(x).is_some_and(|o| o.on_map && o.health > 0),
+        Target::Cell(_) => true,
+    }
+}
+
+/// The illegal-target tests of S-0306 claim 23 (rank 4).
+fn projectile_illegal(w: &World, weapon: WeaponId, t: Target) -> bool {
+    let r = w.rules();
+    let Some(p) = r.combat.projectile_of(weapon) else {
+        return false;
+    };
+    match t {
+        Target::Object(x) => {
+            let Some(o) = w.obj(x) else { return true };
+            let air = airborne_by_height(w, x);
+            // spec: S-0306 claim 23 (an airborne target and a projectile that is not anti-air)
+            if air && !p.aa {
+                return true;
+            }
+            // Render layers other than the ground layer (flying, jumping, falling, digging) are not modelled: every unit is in the ground layer.
+            // spec: S-0306 claim 23 (not an infantry, vehicle, aircraft or building, not airborne, projectile not anti-ground)
+            o.kind == Kind::Terrain && !air && !p.ag
+        }
+        // spec: S-0306 claim 23 (a cell target, not airborne, and a projectile that is not anti-ground)
+        Target::Cell(_) => !p.ag,
+    }
+}
+
+/// Whether the weapon is a healing weapon (S-0310 Terms: negative damage).
+fn healing(w: &World, weapon: WeaponId) -> bool {
+    w.rules().combat.weapon(weapon).damage < 0
+}
+
+/// The health ratio of an object is at least 1 (S-0214 Terms, full health).
+fn full_health(w: &World, x: ObjectId) -> bool {
+    let Some(o) = w.obj(x) else { return true };
+    let strength = crate::combat::damage::strength(w, x);
+    o.health >= strength
+}
+
+/// The firing check for the weapon in `slot` against `target`, with or
+/// without the range test (S-0301 claim 9; S-0310 for the aiming answers).
+pub fn check(
+    w: &World,
+    firer: ObjectId,
+    target: Option<Target>,
+    slot: usize,
+    with_range: bool,
+) -> Answer {
+    let Some(o) = w.obj(firer) else {
+        return Answer::Impossible;
+    };
+    let r = w.rules();
+    let kind = o.kind;
+    let weapon = slot_weapon(w, firer, slot);
+    let target = target.filter(|t| target_exists(w, *t));
+    // Ranks 1 to 3 (a vehicle playing death frames, launching spawned aircraft, melee-linked) need states that no topic of our engine sets yet.
+    // spec: S-0310 claim 11 (an infantry healer: illegal when its target is absent, not infantry or at full health; above the general part)
+    if kind == Kind::Infantry
+        && let Some(wp) = weapon
+        && healing(w, wp)
+    {
+        let ok = matches!(target, Some(Target::Object(x))
+            if w.obj(x).is_some_and(|t| t.kind == Kind::Infantry) && !full_health(w, x));
+        if !ok {
+            return Answer::Illegal;
+        }
+    }
+    // spec: S-0301 claim 9 rank 4 (no weapon in the slot: impossible)
+    let Some(weapon) = weapon else {
+        return Answer::Impossible;
+    };
+    let wr = r.combat.weapon(weapon);
+    if let Some(t) = target
+        && projectile_illegal(w, weapon, t)
+    {
+        // spec: S-0301 claim 9 rank 4 (most target tests give illegal)
+        return Answer::Illegal;
+    }
+    // spec: S-0301 claim 9 rank 4 (a spawner weapon none of whose spawned aircraft is alive: rearming; no spawned aircraft exist in our engine)
+    if wr.spawner {
+        return Answer::Rearming;
+    }
+    let t = w.tick;
+    let c = &o.combat;
+    // spec: S-0301 claim 13 (the sync tick: the counter equals the sync frame for k mod B)
+    let sync = sync_tick(w, firer, slot, weapon);
+    // spec: S-0301 claim 1 and claim 9 rank 5 (the countdown runs below t + D, except in the sync tick)
+    if t < c.rearm_until && !sync {
+        return Answer::Rearming;
+    }
+    // spec: S-0301 claim 13 (with a sync frame, the primary weapon gets rearming until the counter equals it)
+    if slot == 0 && gate_closed(w, firer, weapon) {
+        return Answer::Rearming;
+    }
+    // spec: S-0301 claim 14 (a pending delayed shot: rearming)
+    if c.delayed_shot.is_some() {
+        return Answer::Rearming;
+    }
+    // spec: S-0301 claim 9 rank 7 (ammunition 0)
+    if c.ammo == 0 {
+        return Answer::OutOfAmmo;
+    }
+    // Rank 8 (cloaked) needs the cloaking states of the visibility topic: no object cloaks yet.
+    if let Some(tg) = target {
+        // spec: S-0301 claim 9 rank 9 (a seeker type answers out of range, whatever the distance)
+        if kind == Kind::Vehicle
+            && r.unit(kind, o.type_index)
+                .is_some_and(|u| u.vehicle.hunter_seeker)
+        {
+            return Answer::OutOfRange;
+        }
+        // spec: S-0304 claim 1 and S-0301 claim 9 rank 9 (a versus value of exactly zero makes a unit or building illegal)
+        if let Target::Object(x) = tg
+            && w.obj(x).is_some_and(|ob| ob.kind != Kind::Terrain)
+            && versus(w, weapon, tg).is_some_and(|v| v.eq_num(F64::ZERO))
+        {
+            return Answer::Illegal;
+        }
+    }
+    // spec: S-0301 claim 9 rank 10 (the range test, when asked for)
+    if with_range && !range::in_range(w, firer, Some(weapon), target, None) {
+        return Answer::OutOfRange;
+    }
+    if kind == Kind::Vehicle {
+        let u = r.unit(kind, o.type_index).expect("vehicle type");
+        // Rank 11 (must deploy) needs the deploy specs' cell test for deploy-to-fire vehicles; the cell is taken to allow deploying.
+        // spec: S-0310 claim 11 and S-0301 claim 9 rank 12 (a vehicle healer: illegal when the target is absent, does not count as a vehicle, or is at full health)
+        if healing(w, weapon) {
+            let ok = matches!(target, Some(Target::Object(x))
+                if crate::targeting::counts_as_vehicle(w, x) && !full_health(w, x));
+            if !ok {
+                return Answer::Illegal;
+            }
+        }
+        // spec: S-0301 claim 9 rank 13 (moving)
+        if vehicle_moving(w, firer, weapon) {
+            return Answer::Moving;
+        }
+        let homing = r.combat.projectile_of(weapon).is_some_and(|p| p.rot != 0);
+        // spec: S-0310 claim 3 (the turret was turning at the end of the previous tick; not for a homing projectile; never without a turret or with a spinning one)
+        if u.turret && !u.turret_spins && !homing && o.turret.turning(t.wrapping_sub(1)) {
+            return Answer::StillTurning;
+        }
+    }
+    if kind == Kind::Infantry && infantry_moving(w, firer, weapon) {
+        // spec: S-0310 claim 8 (infantry moving)
+        return Answer::Moving;
+    }
+    if let Some(tg) = target
+        && let Some(a) = facing_answer(w, firer, weapon, tg)
+    {
+        // spec: S-0301 claim 9 rank 15 (not facing)
+        return a;
+    }
+    Answer::CanFire
+}
+
+/// The sync tick of claim 13 of S-0301: the firing-frame counter runs and
+/// equals the sync frame that applies.
+fn sync_tick(w: &World, firer: ObjectId, slot: usize, weapon: WeaponId) -> bool {
+    if slot != 0 {
+        return false;
+    }
+    let Some(s) = sync_frame(w, firer, weapon) else {
+        return false;
+    };
+    w.obj(firer).and_then(|o| o.combat.firing_frame) == Some(s)
+}
+
+/// The sync frame that applies (S-0301 claim 13), if any.
+fn sync_frame(w: &World, firer: ObjectId, weapon: WeaponId) -> Option<i32> {
+    let o = w.obj(firer)?;
+    if o.kind != Kind::Vehicle {
+        return None;
+    }
+    let u = w.rules().unit(o.kind, o.type_index)?;
+    if u.vehicle.firing_frames <= 0 {
+        return None;
+    }
+    let b = w.rules().combat.weapon(weapon).burst;
+    // spec: S-0301 claim 13 (k mod B 0 or 1: that value's sync frame; 2 or more: none; −1 gives none)
+    let s = match o.combat.burst.rem_euclid(b) {
+        0 => u.vehicle.sync_frames[0],
+        1 => u.vehicle.sync_frames[1],
+        _ => -1,
+    };
+    (s != -1).then_some(s)
+}
+
+/// The firing-frame gate (S-0301 claim 13): with a sync frame that applies,
+/// a running counter that does not equal it holds the primary weapon.
+fn gate_closed(w: &World, firer: ObjectId, weapon: WeaponId) -> bool {
+    let Some(s) = sync_frame(w, firer, weapon) else {
+        return false;
+    };
+    matches!(w.obj(firer).and_then(|o| o.combat.firing_frame), Some(k) if k != s)
+}

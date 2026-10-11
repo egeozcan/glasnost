@@ -84,6 +84,11 @@ pub fn sin(theta: &BigUint) -> BigUint {
     sum.to_biguint().unwrap_or_default()
 }
 
+/// The integer square root of a big integer (floor).
+pub fn isqrt_big(n: &BigUint) -> BigUint {
+    n.sqrt()
+}
+
 /// A positive fixed-point value truncated toward zero to single precision.
 pub fn trunc_single(v: &BigUint) -> F32 {
     if v == &BigUint::from(0u32) {

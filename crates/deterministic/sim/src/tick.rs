@@ -40,13 +40,31 @@ fn turn_pass(w: &mut World) {
 /// (S-0107 claims 8 to 10 and 15 run after the movement of the tick).
 fn object_turn(w: &mut World, id: ObjectId) {
     let t = w.tick;
+    if w.projectiles.contains_key(&id) {
+        // spec: S-0203 claim 5 (a shot is resolved in its projectile's own turn)
+        crate::combat::projectile::turn(w, id);
+        return;
+    }
+    let Some(o) = w.obj(id) else { return };
+    let killed = o.combat.killed;
+    // spec: S-0309 claim 15 (the expected remaining health changes in the object's own turn)
+    crate::combat::acquire::expected_health_turn(w, id);
     let Some(o) = w.obj(id) else { return };
     let kind = o.kind;
     if let Some(ob) = w.obj_mut(id) {
         ob.last_turn = t;
     }
+    if killed {
+        // A killed object that stays in play (an infantry unit in its death sequence) only plays it out.
+        crate::combat::death::infantry_death_turn(w, id);
+        return;
+    }
     process::turn(w, id);
     if w.obj(id).is_none() {
+        return;
+    }
+    if kind == Kind::Building {
+        crate::combat::behave::delayed_shot_turn(w, id);
         return;
     }
     let loco = w
@@ -59,12 +77,18 @@ fn object_turn(w: &mut World, id: ObjectId) {
         _ => false,
     };
     if kind == Kind::Vehicle {
+        crate::combat::fire::reload_turn(w, id);
+        crate::combat::fire::firing_frame_turn(w, id);
+        // spec: S-0310 claim 9 (the vehicle's own firing step each tick it has a target)
+        let facing_error = crate::combat::behave::vehicle_step(w, id);
         // The turret's target at the end of the tick (S-0206 claim 9), after the movement.
-        turret::tick(w, id);
+        turret::tick(w, id, facing_error);
     }
     if kind == Kind::Infantry && w.obj(id).is_some() {
         let in_progress = occupancy::in_progress(w, id);
         let has_dest = w.obj(id).is_some_and(|o| o.dest.is_some());
         infantry::update(w, id, moved, in_progress, has_dest);
+        // spec: S-0107 claim 11 (firing, after the unit's sequence rules of the tick)
+        crate::combat::behave::infantry_step(w, id);
     }
 }

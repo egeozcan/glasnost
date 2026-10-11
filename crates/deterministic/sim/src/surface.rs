@@ -62,6 +62,29 @@ impl World {
             None => 0,
         }
     }
+
+    /// Whether a cell carries a high bridge with a deck (S-0211 claim 15).
+    pub fn high_bridge(&self, c: CellXY) -> bool {
+        self.cells.idx(c).is_some_and(|i| self.cells.deck[i])
+    }
+
+    /// The height of the surface an object is on or over (glossary *height
+    /// above the surface*): the bridge deck, 416 leptons above the terrain,
+    /// for an object on a deck; otherwise the terrain at its position.
+    pub fn surface_for(&self, id: crate::world::ObjectId) -> i32 {
+        let Some(o) = self.obj(id) else { return 0 };
+        let t = self.surface_at(o.pos.x, o.pos.y);
+        if o.layer == crate::world::Layer::Deck {
+            t + 416 // spec: S-0307 Constants (bridge deck height 416 leptons above the terrain)
+        } else {
+            t
+        }
+    }
+
+    /// An object's height above the surface (glossary).
+    pub fn height_above_surface(&self, id: crate::world::ObjectId) -> i32 {
+        self.obj(id).map_or(0, |o| o.pos.z - self.surface_for(id))
+    }
 }
 
 #[cfg(test)]

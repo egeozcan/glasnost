@@ -1,0 +1,350 @@
+//! Weapon choice (S-0308): the weapon in each slot of an object, the
+//! weapon it would use against a target (table P, table N), and the mean
+//! weapon damage.
+
+use glasnost_map::terrain::land;
+
+use crate::combat::data::{SLOTS, WeaponId};
+use crate::combat::veterancy::{self, Rank};
+use crate::rules::{Behaviour, Kind};
+use crate::world::{Layer, ObjectId, Target, World};
+
+/// Whether an object is in the air in the sense of S-0308 (Terms,
+/// *airborne*): an aircraft or jumpjet in flight, an object falling or
+/// carried. The aircraft and movement specs own the test; in our engine no
+/// object flies yet (aircraft stand landed, jumpjets are not moved), so no
+/// object is in the air.
+pub fn in_air(w: &World, id: ObjectId) -> bool {
+    let _ = (w, id);
+    false
+}
+
+/// Whether an object is airborne in the sense of S-0307 (Terms): on the
+/// map, with a height above the surface of at least 208 leptons.
+pub fn airborne_by_height(w: &World, id: ObjectId) -> bool {
+    let Some(o) = w.obj(id) else { return false };
+    if !o.on_map {
+        return false;
+    }
+    // spec: S-0307 Terms (airborne: height above the surface at least 208 leptons)
+    o.pos.z - w.surface_for(id) >= 208
+}
+
+/// Whether an object is a target object of table P: an infantry unit,
+/// vehicle, aircraft or building.
+pub fn is_target_object(w: &World, t: Target) -> bool {
+    match t {
+        Target::Object(x) => w.obj(x).is_some_and(|o| o.kind != Kind::Terrain),
+        Target::Cell(_) => false,
+    }
+}
+
+/// The weapon in slot `i` of an object (S-0308 Terms, claim 2): the elite
+/// slot's weapon for an elite object when that slot holds one, else the
+/// ordinary slot's. Buildings: installed upgrades (claim 12) and occupants
+/// (claim 13) would come first; neither exists in our engine yet (the
+/// structures specs own them), so a building uses its own slots.
+pub fn slot_weapon(w: &World, id: ObjectId, i: usize) -> Option<WeaponId> {
+    let tc = veterancy::type_combat(w, id)?;
+    if i >= SLOTS {
+        return None;
+    }
+    // spec: S-0308 claim 2 (elite: the elite slot when it holds a weapon, else the slot; per slot)
+    if veterancy::rank(w, id) == Rank::Elite
+        && let Some(e) = tc.elite_slots[i]
+    {
+        return Some(e);
+    }
+    tc.slots[i]
+}
+
+/// Whether an object's type is a switching type (S-0308 Terms): a
+/// multi-weapon type that is not a gattling type.
+pub fn switching(w: &World, id: ObjectId) -> bool {
+    veterancy::type_combat(w, id).is_some_and(|tc| tc.multi_weapon && !tc.gattling)
+}
+
+/// The weapon number, always one of 0 … 17 (S-0308 claim 5).
+pub fn weapon_number(w: &World, id: ObjectId) -> usize {
+    let n = w.obj(id).map_or(0, |o| o.combat.weapon_number);
+    // spec: S-0308 claim 5 (a value outside 0 … 17 sets it to 0)
+    if (0..SLOTS as i32).contains(&n) {
+        n as usize
+    } else {
+        0
+    }
+}
+
+/// Sets the weapon number (S-0308 claim 5): a value outside 0 … 17 sets 0,
+/// and a charge-turret type ignores the request.
+pub fn set_weapon_number(w: &mut World, id: ObjectId, n: i32) {
+    if veterancy::type_combat(w, id).is_some_and(|tc| tc.charge_turret) {
+        // spec: S-0308 claim 5 (a charge-turret type ignores every request to change it)
+        return;
+    }
+    if let Some(o) = w.obj_mut(id) {
+        // spec: S-0308 claim 5 (outside 0 … 17: 0)
+        o.combat.weapon_number = if (0..SLOTS as i32).contains(&n) { n } else { 0 };
+    }
+}
+
+/// The current weapon (glossary): the weapon in the slot of the weapon
+/// number for a multi-weapon type, else slot 0.
+pub fn current_weapon(w: &World, id: ObjectId) -> Option<WeaponId> {
+    let multi = veterancy::type_combat(w, id).is_some_and(|tc| tc.multi_weapon);
+    if multi {
+        slot_weapon(w, id, weapon_number(w, id))
+    } else {
+        slot_weapon(w, id, 0)
+    }
+}
+
+/// The versus value of a weapon against a target object (S-0304 Terms):
+/// its warhead's value for the object's armour class; `None` when the
+/// weapon has no warhead or the target has no armour class (a cell).
+pub fn versus(w: &World, weapon: WeaponId, t: Target) -> Option<glasnost_num::F64> {
+    let r = w.rules();
+    let h = r.combat.warhead_of(weapon)?;
+    let class = armour_class(w, t)?;
+    Some(h.versus(class))
+}
+
+/// The armour class of a target (S-0305): an object's type's class; a cell
+/// has none.
+pub fn armour_class(w: &World, t: Target) -> Option<usize> {
+    let Target::Object(x) = t else { return None };
+    let o = w.obj(x)?;
+    let r = w.rules();
+    match o.kind {
+        Kind::Terrain => r.terrain.get(o.type_index as usize).map(|t| t.armour),
+        _ => veterancy::type_combat(w, x).map(|tc| tc.armour),
+    }
+}
+
+/// A water target of table P row 17 (S-0308 Terms): an object that is not
+/// in the air, not on a bridge deck, on a water or beach cell.
+fn water_target(w: &World, t: Target) -> bool {
+    let Target::Object(x) = t else { return false };
+    let Some(o) = w.obj(x) else { return false };
+    if in_air(w, x) || o.layer == Layer::Deck {
+        return false;
+    }
+    let l = w.cells.cell(o.pos.cell()).map_or(land::CLEAR, |c| c.land);
+    // spec: S-0308 Terms (water target: land type water or beach)
+    l == land::WATER || l == land::BEACH
+}
+
+/// Table N: water targets by the firer's naval-targeting mode (S-0308).
+fn table_n(w: &World, firer: ObjectId, t: Target) -> usize {
+    let mode = veterancy::type_combat(w, firer).map_or(0, |tc| tc.naval_targeting);
+    let Target::Object(x) = t else { return 0 };
+    let tc = veterancy::type_combat(w, x);
+    let underwater = tc.is_some_and(|c| c.underwater);
+    let organic = tc.is_some_and(|c| c.organic);
+    let unnatural = tc.is_some_and(|c| c.unnatural);
+    // spec: S-0308 table N (modes 0 … 7; "no weapon" answers are slot 0)
+    match mode {
+        // spec: S-0308 table N (mode 1: 1 against an underwater type)
+        1 => usize::from(underwater),
+        // spec: S-0308 table N (mode 3: 1 against an organic or unnatural type)
+        3 => usize::from(organic || unnatural),
+        // spec: S-0308 table N (mode 4: 1 when the target is not a hover speed type and not organic; no hover speed types exist without a speed-type field)
+        4 => usize::from(!organic),
+        _ => 0,
+    }
+}
+
+/// The slot an object of a deploy-fire infantry type uses (S-0308 claim 8).
+fn deployed_infantry_slot(w: &World, firer: ObjectId) -> Option<usize> {
+    let o = w.obj(firer)?;
+    if o.kind != Kind::Infantry {
+        return None;
+    }
+    let tc = veterancy::type_combat(w, firer)?;
+    if !tc.deploy_fire {
+        return None;
+    }
+    let deployed = o
+        .infantry
+        .as_ref()
+        .and_then(|s| s.seq)
+        .is_some_and(crate::infantry::Seq::is_deploy);
+    // spec: S-0308 claim 8 (deploying: the deploy weapon index; in an open-topped transport the passenger index; else 0)
+    let i = if deployed { tc.deploy_fire_weapon } else { 0 };
+    // spec: S-0308 Edge cases (an index outside 0 … 17 is treated as 0, a departure)
+    Some(if (0..SLOTS as i32).contains(&i) {
+        i as usize
+    } else {
+        0
+    })
+}
+
+/// The weapon slot an object would use against a target (S-0308 claim 3,
+/// table P; claims 8 and 9 before it).
+// spec: S-0308 F2 and table P rows 13, 18 (slot 2s + a; land-targeting mode 2)
+pub fn choose_slot(w: &World, firer: ObjectId, target: Option<Target>) -> usize {
+    if let Some(i) = deployed_infantry_slot(w, firer) {
+        return i;
+    }
+    // Claim 9 (a deployed deploy-fire vehicle) needs the vehicle deploy state of the deploy specs; no vehicle is deployed in our engine yet.
+    let Some(tc) = veterancy::type_combat(w, firer) else {
+        return 0;
+    };
+    let r = w.rules();
+    let q = r.quirks;
+    // spec: S-0308 table P row 1 (a switching type: its weapon number)
+    if tc.multi_weapon && !tc.gattling {
+        return weapon_number(w, firer);
+    }
+    // Row 2 (a garrisoned building) needs occupants, which the structures specs own.
+    let p = slot_weapon(w, firer, 0);
+    let s = slot_weapon(w, firer, 1);
+    let sec_never = s.is_some_and(|s| r.combat.weapon(s).never_use);
+    // spec: S-0308 table P row 3 (slot 1 or 0 empty, secondary never-use, or no target: 0)
+    let (Some(pw), Some(sw), Some(t)) = (p, s, target) else {
+        return 0;
+    };
+    if sec_never {
+        return 0;
+    }
+    // Row 4 (a passenger of an open-topped transport) needs transports, which their specs own.
+    if tc.gattling {
+        // spec: S-0308 claim 7 (slot 2s + 1 against an object in the air when the anti-air test passes, else 2s)
+        let stage = w.obj(firer).map_or(0, |o| o.combat.gattling_stage).max(0) as usize;
+        let test_slot = if q.gattling_air_test_slot_one {
+            Some(sw)
+        } else {
+            // spec: S-0308 Edge cases (gattling_air_test_slot_one off: the slot 2s + 1)
+            slot_weapon(w, firer, 2 * stage + 1)
+        };
+        let aa = test_slot
+            .and_then(|x| r.combat.projectile_of(x))
+            .is_some_and(|p| p.aa);
+        let air = matches!(t, Target::Object(x) if in_air(w, x));
+        return (2 * stage + usize::from(air && aa)).min(SLOTS - 1);
+    }
+    let sec_h = r.combat.warhead_of(sw);
+    let pri_h = r.combat.warhead_of(pw);
+    let target_obj = match t {
+        Target::Object(x) => w.obj(x),
+        Target::Cell(_) => None,
+    };
+    let target_building = target_obj.is_some_and(|o| o.kind == Kind::Building);
+    // spec: S-0308 table P row 6 (an airstrike secondary decides alone)
+    if sec_h.is_some_and(|h| h.airstrike) {
+        let accepts = matches!(t, Target::Object(x)
+            if target_building && r.buildings[w.obj(x).map_or(0, |o| o.type_index) as usize].building.can_c4);
+        // The resource gatherer and destination flags of row 6 are not imported (economy, M5): no building is both.
+        return usize::from(accepts);
+    }
+    // spec: S-0308 table P row 7 (a locomotor primary against a building: 1)
+    if pri_h.is_some_and(|h| h.is_locomotor) && target_building {
+        return 1;
+    }
+    // spec: S-0308 table P row 8 (a draining secondary against a drainable, not allied target; the firer drains nothing in our engine)
+    if r.combat.weapon(sw).drain
+        && let Target::Object(x) = t
+        && veterancy::type_combat(w, x).is_some_and(|c| c.drainable)
+        && !w.allied(
+            w.obj(firer).and_then(|o| o.owner),
+            w.obj(x).and_then(|o| o.owner),
+        )
+    {
+        return 1;
+    }
+    // spec: S-0308 table P row 9 (an area-fire secondary while the current behaviour is unload)
+    if r.combat.weapon(sw).area_fire
+        && w.obj(firer).and_then(|o| o.beh.current) == Some(Behaviour::Unload)
+    {
+        return 1;
+    }
+    // Rows 10 to 12 (overpowered buildings, overpowerable targets, kamikaze aircraft) need states the structures and aircraft specs own.
+    if let Target::Cell(c) = t
+        && tc.land_targeting == 2
+    {
+        // spec: S-0308 table P row 13 (a cell target with land mode 2: not water and outside the water role, or a bridge for a naval firer)
+        let cell = w.cells.cell(c);
+        let land_type = cell.map_or(land::CLEAR, |c| c.land);
+        let water_start = w
+            .catalogue
+            .as_deref()
+            .map_or(i32::MIN, |cat| cat.roles.water);
+        let tile = cell.map_or(-1, |c| c.tile);
+        // spec: S-0308 Constants (water role range: 14 tile indices)
+        let in_water_role = water_start >= 0 && (water_start..water_start + 14).contains(&tile);
+        let bridge = w.cells.idx(c).is_some_and(|i| w.cells.deck[i]);
+        if (land_type != land::WATER && !in_water_role) || (bridge && tc.naval) {
+            return 1;
+        }
+    }
+    // spec: S-0308 table P row 14 (a target that is not a target object: 0)
+    if !is_target_object(w, t) {
+        return 0;
+    }
+    let zero = |x: Option<glasnost_num::F64>| x.is_some_and(|v| v.eq_num(glasnost_num::F64::ZERO));
+    // spec: S-0308 table P row 15 (the secondary's versus value is zero: 0)
+    if zero(versus(w, sw, t)) {
+        return 0;
+    }
+    // spec: S-0308 table P row 16 (the primary's versus value is zero: 1)
+    if zero(versus(w, pw, t)) {
+        return 1;
+    }
+    // spec: S-0308 table P row 17 (a water target: table N)
+    if water_target(w, t) {
+        return table_n(w, firer, t);
+    }
+    let air = matches!(t, Target::Object(x) if in_air(w, x));
+    // spec: S-0308 table P row 18 (not in the air, land mode 2: 1)
+    if !air && tc.land_targeting == 2 {
+        return 1;
+    }
+    let sec_aa = r.combat.projectile_of(sw).is_some_and(|p| p.aa);
+    let pri_aa = r.combat.projectile_of(pw).is_some_and(|p| p.aa);
+    // spec: S-0308 table P row 19 (in the air and an anti-air secondary: 1; quirks.secondary_wins_against_air off: only when the primary is not anti-air)
+    if air && sec_aa && (q.secondary_wins_against_air || !pri_aa) {
+        return 1;
+    }
+    // spec: S-0308 table P row 20 (otherwise 0)
+    0
+}
+
+/// The weapon an object would use against a target (S-0308, S-0304
+/// Terms): the weapon in the slot of [`choose_slot`].
+pub fn would_use(w: &World, firer: ObjectId, target: Option<Target>) -> (usize, Option<WeaponId>) {
+    let slot = choose_slot(w, firer, target);
+    (slot, slot_weapon(w, firer, slot))
+}
+
+/// The mean weapon damage M (S-0308 claim 15, F1).
+pub fn mean_damage(w: &World, id: ObjectId) -> i32 {
+    let r = w.rules();
+    // spec: S-0308 F1 (dᵢ = damage + ambient damage, signed 32-bit)
+    let d = |x: Option<WeaponId>| {
+        x.map(|x| {
+            let wr = r.combat.weapon(x);
+            wr.damage.wrapping_add(wr.ambient)
+        })
+    };
+    if switching(w, id) {
+        // spec: S-0308 claim 15 (a switching type: d of its weapon number's slot, 0 when empty)
+        return d(slot_weapon(w, id, weapon_number(w, id))).unwrap_or(0);
+    }
+    match (d(slot_weapon(w, id, 0)), d(slot_weapon(w, id, 1))) {
+        // spec: S-0308 F1 (M = trunc((d₀ + d₁) / 2) when both hold a weapon)
+        (Some(a), Some(b)) => a.wrapping_add(b) / 2,
+        (Some(a), None) | (None, Some(a)) => a,
+        (None, None) => 0,
+    }
+}
+
+/// A healer for acquisition (S-0308 claim 15): mean weapon damage below 0.
+pub fn healer_for_acquisition(w: &World, id: ObjectId) -> bool {
+    mean_damage(w, id) < 0
+}
+
+/// Armed in the sense of S-0214 (Terms): a weapon in the slot it currently
+/// uses (the slot of table P with no target).
+pub fn armed(w: &World, id: ObjectId) -> bool {
+    would_use(w, id, None).1.is_some()
+}

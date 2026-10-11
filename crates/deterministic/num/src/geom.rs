@@ -264,6 +264,80 @@ pub fn direction(dx: i64, dy: i64, table: bool) -> Facing {
     phi as Facing
 }
 
+/// The table angle θ of S-0204 F3 for real arguments X and Y (Y growing
+/// towards map north, or upwards for a pitch), both narrowed to single
+/// precision by `mode` first (S-0306 Formulas), with the table index used
+/// (`None` when X is 0).
+// spec: S-0204 F3 (the table index, 4097 entries; an index beyond the table gives h)
+pub fn table_angle_real(x: F64, y: F64, mode: Rounding) -> (F64, Option<u32>) {
+    let k = dir_const();
+    let x = x.to_f32(mode).to_f64();
+    let y = y.to_f32(mode).to_f64();
+    let zero = F64::ZERO;
+    if x.eq_num(zero) {
+        // spec: S-0204 F3 (X = 0: h, 0 or −h by the sign of Y)
+        let t = if y.gt(zero) {
+            k.h
+        } else if y.lt(zero) {
+            k.h.negated()
+        } else {
+            zero
+        };
+        return (t, None);
+    }
+    // spec: S-0204 F3 (σ = 3276705 / 2^27; the quotient Y / X and its quotient by σ are doubles, truncated to the index)
+    let sigma = F64::from_parts(false, 3276705, -27, Rounding::TowardZero);
+    let q = y.abs().div(x.abs(), mode).div(sigma, mode);
+    let i = q.trunc_i128().unwrap_or(i128::MAX).clamp(0, 1 << 20) as u32;
+    // spec: S-0204 F3 (A = T(i) for i ≤ 4096, h beyond)
+    let a = if i <= 4096 {
+        F32(ATAN[i as usize]).to_f64()
+    } else {
+        k.h
+    };
+    let base = if x.gt(zero) { a } else { k.pi_d.sub(a, mode) };
+    let t = if y.lt(zero) { base.negated() } else { base };
+    (t, Some(i))
+}
+
+/// The facing value of an angle by S-0204 F3, trunc(trunc₅₃(trunc₅₃(θ − c₁)
+/// × c₂)), before the reduction modulo 65536, with the table exceptions
+/// applied for the index (towards 16383 for X > 0, 49153 for X < 0).
+// spec: S-0204 F3 (facings modulo 65536; the table exceptions up to index 4096)
+pub fn facing_of_angle(theta: F64, index: Option<u32>, x_positive: bool, mode: Rounding) -> i64 {
+    let k = dir_const();
+    // spec: S-0204 F3 (φ = trunc(trunc₅₃(trunc₅₃(θ − c₁) × c₂)))
+    let v = theta.sub(k.c1, mode).mul(k.c2, mode);
+    let mut phi = v.trunc_i128().unwrap_or(0) as i64;
+    if let Some(i) = index
+        && i <= 4096
+        && ATAN_EXCEPTIONS.contains(&(i as u16))
+    {
+        // spec: S-0204 F3 (one facing unit nearer to map east, or map west when X < 0)
+        let axis = if x_positive { 16383 } else { 49153 };
+        let p = phi.rem_euclid(65536);
+        if p < axis {
+            phi += 1;
+        } else if p > axis {
+            phi -= 1;
+        }
+    }
+    phi
+}
+
+/// The direction facing of a real displacement (X, Y up), S-0204 F3.
+// spec: S-0204 F3 (the facing modulo 65536)
+pub fn direction_real(x: F64, y: F64, mode: Rounding) -> Facing {
+    let (t, i) = table_angle_real(x, y, mode);
+    facing_of_angle(t, i, x.gt(F64::ZERO), mode).rem_euclid(65536) as Facing
+}
+
+/// The constants c₁ (π/2) and c₂ (−32767/π) of S-0204 F3, as doubles.
+pub fn direction_constants() -> (F64, F64) {
+    let k = dir_const();
+    (k.c1, k.c2)
+}
+
 /// The exact direction (S-0204 Edge cases, `quirks.table_direction` off):
 /// round(arctan2(X, Y) × 65536 / (2π)) mod 65536, halves up, with
 /// arctan2(X, Y) the angle clockwise from map north.

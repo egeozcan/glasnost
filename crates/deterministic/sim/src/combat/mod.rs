@@ -13,8 +13,21 @@
 //! place so that the rows land where the specs put them once the topic is
 //! written.
 
+pub mod acquire;
+pub mod area;
 pub mod ballistics;
+pub mod behave;
+pub mod check;
+pub mod damage;
 pub mod data;
+pub mod death;
 pub mod effects;
+pub mod fear;
 pub mod fire;
+pub mod lof;
+pub mod position;
+pub mod projectile;
+pub mod range;
 pub mod state;
+pub mod veterancy;
+pub mod weapon;

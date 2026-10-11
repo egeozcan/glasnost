@@ -1457,6 +1457,9 @@ pub struct BuildingType {
     /// The combat fields shared with mobile types (M4).
     #[serde(default)]
     pub combat: CombatFields,
+    /// `Cost`, credits (S-0311 F1, S-0314 claim 5).
+    #[serde(default)]
+    pub cost: Option<i32>,
     /// `BuildCat` is `Combat`: a defence building (S-0302 claim 5).
     #[serde(default)]
     pub defense: Option<bool>,

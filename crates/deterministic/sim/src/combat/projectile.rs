@@ -1,0 +1,1605 @@
+//! Projectiles (S-0306): launch, flight, homing, detonation and its point,
+//! cluster detonations, and the projectile effects of a detonation
+//! (S-0303 claims 21 and 22).
+
+use glasnost_map::CellXY;
+use glasnost_num::geom::{
+    delta, direction, direction_constants, facing_of_angle, root_floor, table_angle_real,
+    table_root, table_root_real,
+};
+use glasnost_num::trig::{acos_t, cos_t, sin_t};
+use glasnost_num::{F64, Rounding};
+
+use crate::combat::area::{self, Detonation, DetonationResult};
+use crate::combat::ballistics;
+use crate::combat::data::{ProjectileKind, ProjectileRules, WarheadId, WeaponId};
+use crate::combat::effects::{self, Effect};
+use crate::combat::range::target_point as ref_point;
+use crate::combat::state::Projectile;
+use crate::combat::weapon::airborne_by_height;
+use crate::rules::Kind;
+use crate::world::{HouseId, ObjectId, Pos, Target, World};
+
+/// The double nearest −π/32767, the pitch and facing scale of S-0306 Terms.
+pub fn kappa() -> F64 {
+    // spec: S-0306 Constants (pitch scale: the double nearest −π/32767)
+    crate::rules::nearest_double("-0.00009587672516830327")
+}
+
+/// θ(f) = (f − 16383) × κ for a facing read as a signed 16-bit value
+/// (S-0306 Terms, Formulas).
+pub fn theta(f: i32, mode: Rounding) -> F64 {
+    let signed = i64::from(f as i16);
+    // spec: S-0306 Terms (θ(p) = (p − 16383) × (−π / 32767), p read as signed 16-bit)
+    F64::from_i64(signed - 16383, mode).mul(kappa(), mode)
+}
+
+/// The facing of an angle, trunc((θ − π/2) × c₂) (S-0306 Terms), as a
+/// signed 16-bit value.
+pub fn angle_facing(t: F64, mode: Rounding) -> i32 {
+    let (c1, c2) = direction_constants();
+    // spec: S-0306 Terms (the angle-to-facing map trunc((θ − π/2) × c₂))
+    let v = t.sub(c1, mode).mul(c2, mode).trunc_i128().unwrap_or(0);
+    i32::from(v as i64 as i16)
+}
+
+fn f(n: i64, mode: Rounding) -> F64 {
+    F64::from_i64(n, mode)
+}
+
+/// ⌊r(n)⌋ of a squared distance formed exactly (S-0306 Terms, d₃ and d₂).
+fn root_n(w: &World, n: i128) -> i32 {
+    let r = w.rules();
+    let n = n.max(0) as u64;
+    root_floor(n, r.quirks.table_root_distance, r.mode) as i32
+}
+
+/// d₃ between two points (S-0306 Terms).
+pub fn d3(w: &World, a: Pos, b: Pos) -> i32 {
+    let (dx, dy, dz) = (
+        i128::from(a.x - b.x),
+        i128::from(a.y - b.y),
+        i128::from(a.z - b.z),
+    );
+    root_n(w, dx * dx + dy * dy + dz * dz)
+}
+
+/// d₂ between two points (S-0306 Terms).
+pub fn d2(w: &World, a: Pos, b: Pos) -> i32 {
+    let (dx, dy) = (i128::from(a.x - b.x), i128::from(a.y - b.y));
+    root_n(w, dx * dx + dy * dy)
+}
+
+/// |V| = r(RZ₅₃(Vₓ² + V_y² + V_z²)) (S-0306 Terms, F10).
+// spec: S-0306 Terms (|V| over three components)
+fn speed(w: &World, v: [F64; 3]) -> F64 {
+    let mode = w.rules().mode;
+    let s = v[0]
+        .mul(v[0], mode)
+        .add(v[1].mul(v[1], mode), mode)
+        .add(v[2].mul(v[2], mode), mode);
+    table_root_real(s, w.rules().quirks.table_root_distance, mode)
+}
+
+/// The horizontal length H = r(RZ₅₃(Vₓ² + V_y²)).
+// spec: S-0306 F11 (the horizontal length of three components)
+fn hlen(w: &World, v: [F64; 3]) -> F64 {
+    let mode = w.rules().mode;
+    let s = v[0].mul(v[0], mode).add(v[1].mul(v[1], mode), mode);
+    table_root_real(s, w.rules().quirks.table_root_distance, mode)
+}
+
+/// V rescaled to length `l` (S-0306 F10).
+// spec: S-0306 F10 (three velocity components)
+fn rescale(w: &World, v: [F64; 3], l: F64) -> [F64; 3] {
+    let mode = w.rules().mode;
+    let zero = F64::ZERO;
+    // spec: S-0306 F10 (Ṽ = (100, 0, 0) when V = (0, 0, 0))
+    let vt = if v.iter().all(|c| c.eq_num(zero)) {
+        [f(100, mode), zero, zero]
+    } else {
+        v
+    };
+    let mu = speed(w, vt);
+    // spec: S-0306 F10 (f = RZ₅₃(L / μ); components RZ₅₃(f × Ṽᵢ))
+    let k = l.div(mu, mode);
+    [vt[0].mul(k, mode), vt[1].mul(k, mode), vt[2].mul(k, mode)]
+}
+
+/// Builds a velocity from a launch facing, a pitch facing and a start speed
+/// (S-0306 claim 7, F1).
+// spec: S-0306 F1 (three velocity components)
+fn initial_velocity(w: &World, yaw: i32, pitch: i32, s: i32) -> [F64; 3] {
+    let r = w.rules();
+    let mode = r.mode;
+    // spec: S-0306 F1 (s₀ = s when s > 0, 100 when s = 0; quirks.zero_speed_launch)
+    let s0 = if s > 0 || !r.quirks.zero_speed_launch {
+        s
+    } else {
+        100
+    };
+    // spec: S-0306 F1 (L = r(s₀²))
+    let l = table_root((i64::from(s0) * i64::from(s0)) as u64, mode).to_f64();
+    let ty = theta(yaw, mode);
+    let chx = cos_t(ty, mode).mul(l, mode);
+    let chy = sin_t(ty, mode).mul(l, mode).negated();
+    // spec: S-0306 F1 (M = r(RZ₅₃(χₓ² + χ_y²)))
+    let m = table_root_real(
+        chx.mul(chx, mode).add(chy.mul(chy, mode), mode),
+        r.quirks.table_root_distance,
+        mode,
+    );
+    let tp = theta(pitch, mode);
+    let cp = cos_t(tp, mode);
+    [
+        cp.mul(chx, mode),
+        cp.mul(chy, mode),
+        sin_t(tp, mode).mul(m, mode),
+    ]
+}
+
+/// The shot speed of claim 1 (S-0306) for a weapon, from the fire point to
+/// the shot target's target point.
+fn shot_speed(w: &World, weapon: WeaponId, from: Pos, to: Pos) -> i32 {
+    let r = w.rules();
+    let mode = r.mode;
+    let wr = r.combat.weapon(weapon);
+    let Some(p) = r.combat.projectile_of(weapon) else {
+        return wr.speed;
+    };
+    // spec: S-0306 claim 1 (ρ ≠ 0: the weapon's speed field)
+    if p.rot != 0 {
+        return wr.speed;
+    }
+    let (dx, dy) = (i64::from(to.x - from.x), i64::from(to.y - from.y));
+    let n = dx * dx + dy * dy;
+    // spec: S-0306 claim 1 (the sum of squares wraps in 32-bit arithmetic, quirks.shot_distance_wrap; d = trunc(r(|n|)))
+    let n = if r.quirks.shot_distance_wrap {
+        i64::from(n as i32).unsigned_abs()
+    } else {
+        n as u64
+    };
+    let d = root_floor(n, r.quirks.table_root_distance, mode) as i32;
+    ballistics::arc_speed(d, r.combat.general.gravity, p.floater, mode)
+}
+
+/// The launch elevation of an arcing shot (S-0306 claim 6 a, F4): the pitch
+/// facing, or `None` for a void shot.
+// spec: S-0306 F4 (θ = π/4 for z > 0; ω = 2(1 + z²/d²))
+fn arc_pitch(w: &World, s: i32, dist: i32, dz: i32, lob: bool, g: F64) -> Option<i32> {
+    let r = w.rules();
+    let mode = r.mode;
+    let q = r.quirks;
+    let (c1, _) = direction_constants();
+    let quarter = c1.div(f(2, mode), mode);
+    // spec: S-0306 F4 (z > 0: θ = π/4 whatever v, d and g, quirks.uphill_arc_45)
+    if dz > 0 && q.uphill_arc_45 {
+        return Some(angle_facing(quarter, mode));
+    }
+    let solve = |d: i32, steep: bool| -> Option<F64> {
+        let v = f(i64::from(s), mode);
+        let dd = f(i64::from(d), mode);
+        let z = f(i64::from(dz), mode);
+        let v2 = v.mul(v, mode);
+        // spec: S-0306 F4 (disc = v⁴ − 2gzv² − g²d²; ω = 2(1 + z²/d²); U = (v² − gz ± r(disc)) / ω)
+        let disc = v2
+            .mul(v2, mode)
+            .sub(f(2, mode).mul(g, mode).mul(z, mode).mul(v2, mode), mode)
+            .sub(g.mul(g, mode).mul(dd, mode).mul(dd, mode), mode);
+        let omega = f(2, mode).mul(
+            f(1, mode).add(z.mul(z, mode).div(dd.mul(dd, mode), mode), mode),
+            mode,
+        );
+        if !disc.ge(F64::ZERO) || omega.is_nan() || omega.eq_num(F64::ZERO) {
+            return None;
+        }
+        let rd = table_root_real(disc, q.table_root_distance, mode);
+        let num = if steep {
+            v2.sub(g.mul(z, mode), mode).sub(rd, mode)
+        } else {
+            v2.sub(g.mul(z, mode), mode).add(rd, mode)
+        };
+        let u = num.div(omega, mode);
+        if !u.ge(F64::ZERO) {
+            return None;
+        }
+        // spec: S-0306 F4 (θ = acos_t(r(U) / v))
+        Some(acos_t(
+            table_root_real(u, q.table_root_distance, mode).div(v, mode),
+            mode,
+        ))
+    };
+    if dist == 0 && dz < 0 && !q.zero_distance_arc {
+        // spec: S-0306 Edge cases (zero_distance_arc off: a lob straight up, the flatter shot straight down)
+        return Some(if lob { 0 } else { 32766 });
+    }
+    let th = solve(dist, lob)?;
+    let angle = if lob {
+        th
+    } else {
+        // spec: S-0306 F4 (the flatter shot compares with the solve for d + 1: −θ when θ′ < θ; a failed d + 1 solve launches at θ, a departure)
+        match solve(dist + 1, false) {
+            Some(tp) if tp.lt(th) => th.negated(),
+            _ => th,
+        }
+    };
+    Some(angle_facing(angle, mode))
+}
+
+/// The straight launch pitch of S-0306 F13.
+fn straight_pitch(w: &World, fire: Pos, q: Pos, target_building: bool, hb: i32) -> i32 {
+    let r = w.rules();
+    let mode = r.mode;
+    let dz = q.z - fire.z;
+    // spec: S-0306 F13 (16383 when |Δz| ≤ 200)
+    if dz.abs() <= 200 {
+        return 16383;
+    }
+    let dprime = d2(w, fire, q);
+    // spec: S-0306 F13 (Z = Δz and τ = 20; a building: Z = 200 H_b − world height of F, τ = 20 when |Z| ≥ 20 else 0; quirks.building_pitch_term)
+    let (z, tau) = if target_building && r.quirks.building_pitch_term {
+        let z = 200 * hb - fire.z;
+        (z, if z.abs() >= 20 { 20 } else { 0 })
+    } else {
+        (dz, 20)
+    };
+    let x = f(i64::from(dprime), mode).max(crate::rules::nearest_double("0.05"));
+    let y = f(i64::from(z.abs() - tau), mode);
+    let (a, _) = table_angle_real(x, y, mode);
+    // spec: S-0306 F13 (θ_c = sgn(Z) × A(|Z| − τ, max(d′, 0.05)))
+    let tc = if z < 0 { a.negated() } else { a };
+    angle_facing(tc, mode)
+}
+
+/// The scatter of S-0306 F5: displacement `p` moved by radius `sigma` in the
+/// direction of draw `xi`.
+// spec: S-0306 F5 (2π, the double nearest it)
+fn scatter(w: &World, p: (i32, i32), sigma: i32, xi: i32) -> (i32, i32) {
+    let r = w.rules();
+    let mode = r.mode;
+    // spec: S-0306 F5 (k_ξ = the double nearest 1/2147483646; 2π and π/2 the doubles nearest them)
+    let k = crate::rules::nearest_double("4.656612877414201e-10");
+    let (c1, c2) = direction_constants();
+    let two_pi = c1.mul(f(4, mode), mode);
+    // spec: S-0306 F5 (f_ξ = trunc(RZ₅₃(RZ₅₃(RZ₅₃(RZ₅₃(ξ k_ξ) 2π) − π/2) c₂)) as signed 16-bit)
+    let fx = f(i64::from(xi), mode)
+        .mul(k, mode)
+        .mul(two_pi, mode)
+        .sub(c1, mode)
+        .mul(c2, mode)
+        .trunc_i128()
+        .unwrap_or(0) as i64 as i16;
+    let th = theta(i32::from(fx), mode);
+    let s = f(i64::from(sigma), mode);
+    // spec: S-0306 F5 (Qₓ = trunc(RZ₅₃(Pₓ + RZ₅₃(cos_t θ × σ))), Q_y = trunc(RZ₅₃(P_y − RZ₅₃(sin_t θ × σ))))
+    let qx = f(i64::from(p.0), mode)
+        .add(cos_t(th, mode).mul(s, mode), mode)
+        .to_i32_common();
+    let qy = f(i64::from(p.1), mode)
+        .sub(sin_t(th, mode).mul(s, mode), mode)
+        .to_i32_common();
+    (qx, qy)
+}
+
+/// A projectile's target point P_T (S-0306 Terms): the reference point,
+/// plus a building's aim shift.
+// spec: S-0306 Terms (the aim shift, a lepton triple)
+fn aim_target_point(w: &World, t: Target) -> Pos {
+    let p = ref_point(w, t);
+    if let Target::Object(x) = t
+        && let Some(o) = w.obj(x)
+        && o.kind == Kind::Building
+    {
+        let s = w.rules().buildings[o.type_index as usize]
+            .building
+            .aim_shift;
+        return Pos::new(p.x + s[0], p.y + s[1], p.z + s[2]);
+    }
+    p
+}
+
+/// Launches the projectile of a shot (S-0306 claims 1 to 9, 24). Returns
+/// `None` for a void shot (S-0301 claim 15), whose launch draws stay taken.
+#[allow(clippy::too_many_arguments)]
+// spec: S-0306 claims 4, 6 and 9 (art height absent 2; direction draw R(0, 2147483646); an invisible projectile's velocity 0)
+pub fn launch(
+    w: &mut World,
+    firer: ObjectId,
+    weapon: WeaponId,
+    shot_target: Target,
+    fire_point: Pos,
+    damage: i32,
+) -> Option<ObjectId> {
+    let rules = w.rules_arc();
+    let mode = rules.mode;
+    let q = rules.quirks;
+    let half = q.ranged_draw_half_span;
+    let wr = rules.combat.weapon(weapon).clone();
+    let Some(pid) = wr.projectile else {
+        // A weapon without a projectile launches nothing (the importer warns).
+        return None;
+    };
+    let p = rules.combat.projectiles[pid as usize].clone();
+    let o = w.obj(firer)?.clone();
+    let tc = crate::combat::veterancy::type_combat(w, firer)
+        .cloned()
+        .unwrap_or_default();
+    let g = ballistics::gravity(rules.combat.general.gravity, p.floater, mode);
+    let shot_tp = ref_point(w, shot_target);
+    // spec: S-0306 claim 1 (the shot speed towards the shot target's target point)
+    let s1 = shot_speed(w, weapon, fire_point, aim_target_point(w, shot_target));
+    // spec: S-0306 claim 3 (the aim point: the firer's target's reference point, no aim shift; no target: the origin, quirks.aim_origin_without_target)
+    let firer_target = o.target;
+    let redirected = wr.area_fire || tc_spray(w, firer);
+    let mut aim = match firer_target {
+        Some(t) => ref_point(w, t),
+        None if q.aim_origin_without_target => Pos::default(),
+        None => shot_tp,
+    };
+    if redirected && !q.redirected_shot_aim {
+        // spec: S-0306 Edge cases (redirected_shot_aim off: the aim point is the redirected cell)
+        aim = shot_tp;
+    }
+    // spec: S-0306 claim 3 (a moving vehicle target is led, F6)
+    if let Some(Target::Object(t)) = firer_target
+        && let Some(tobj) = w.obj(t)
+        && tobj.kind == Kind::Vehicle
+        && crate::occupancy::in_progress(w, t)
+    {
+        aim = lead(w, firer, t, aim);
+    }
+    // spec: S-0306 claim 4 (an arcing, inaccurate projectile scatters at launch)
+    let mut impact = aim;
+    let b = rules.combat.general.ballistic_scatter;
+    if p.arcing && p.inaccurate {
+        let disp = (aim.x - fire_point.x, aim.y - fire_point.y);
+        let sigma = if !p.flak_scatter || p.inviso {
+            // spec: S-0306 claim 4 (σ = R(trunc(B / 2), B))
+            w.rng.ranged(b / 2, b, half)
+        } else {
+            // spec: S-0306 claim 4 (σ = trunc(R(0, B) × D / R_W), D the spatial distance in single precision)
+            let rr = w.rng.ranged(0, b, half);
+            let dd = d3(w, fire_point, aim);
+            let rw = crate::combat::range::firer_weapon_range(w, firer, 0);
+            // spec: S-0306 Edge cases (a flak range of 0 gives a radius of 0, a departure)
+            if rw == 0 { 0 } else { rr.wrapping_mul(dd) / rw }
+        };
+        // spec: S-0306 F5 (direction draw R(0, 2147483646))
+        let xi = w.rng.ranged(0, 2147483646, half);
+        let (qx, qy) = scatter(w, disp, sigma, xi);
+        impact = Pos::new(fire_point.x + qx, fire_point.y + qy, aim.z);
+    }
+    // spec: S-0306 claim 2 (capped at half the spatial distance to the impact point)
+    let capped = s1.min(d3(w, fire_point, impact) / 2);
+    let radial = tc.radial_segments;
+    let kind = p.kind();
+    // spec: S-0306 claim 2 (a steering or vertical projectile whose firer type has no radial segments starts at 1)
+    let start =
+        if matches!(kind, ProjectileKind::Steering | ProjectileKind::Vertical) && radial <= 0 {
+            1
+        } else {
+            capped
+        };
+    // spec: S-0306 claim 5 (ρ = 0 and not dropping: the direction towards the impact point; else the aiming facing)
+    let mut yaw = if p.rot == 0 && !p.dropping {
+        i32::from(direction(
+            i64::from(impact.x - fire_point.x),
+            i64::from(impact.y - fire_point.y),
+            q.table_direction,
+        ))
+    } else {
+        i32::from(aiming(w, firer))
+    };
+    if radial > 0 {
+        yaw = radial_yaw(w, firer, radial, o.combat.radial_index);
+        if let Some(ob) = w.obj_mut(firer) {
+            ob.combat.radial_index = (ob.combat.radial_index + 1) % radial;
+        }
+    }
+    // spec: S-0306 claim 6 (the pitch: (a) arcing flag, (b) voxel image, (c) otherwise)
+    let target_building = matches!(firer_target, Some(Target::Object(t)) if w.obj(t).is_some_and(|x| x.kind == Kind::Building));
+    let pitch = if p.arcing {
+        let dz = impact.z - fire_point.z;
+        let dist = d2(w, fire_point, impact);
+        let tgt_ref = firer_target.map(|t| ref_point(w, t)).unwrap_or(aim);
+        let horizontal = d2(w, o.pos, tgt_ref);
+        // spec: S-0306 claim 6 a (a lob: the lobber flag, or the target higher above than it is far)
+        let lob = wr.lobber || (tgt_ref.z - o.pos.z) > horizontal;
+        arc_pitch(w, start, dist, dz, lob, g)?
+    } else if p.voxel {
+        let tgt_z = firer_target.map_or(aim.z, |t| ref_point(w, t).z);
+        // spec: S-0306 claim 6 b (32768 when the target is lower than the firer, else 16384)
+        if tgt_z < o.pos.z { 32768 } else { 16384 }
+    } else {
+        let hb = match firer_target {
+            Some(Target::Object(t)) => w
+                .obj(t)
+                .filter(|x| x.kind == Kind::Building)
+                .map_or(2, |x| {
+                    rules.buildings[x.type_index as usize].building.art_height
+                }),
+            _ => 2, // spec: S-0306 Import mapping (Height absent: 2)
+        };
+        straight_pitch(w, fire_point, impact, target_building, hb)
+    };
+    let mut vel = initial_velocity(w, yaw, pitch, start);
+    // spec: S-0306 claim 5 (only a dropping projectile starts from the firer's own position)
+    let start_pos = if p.dropping { o.pos } else { fire_point };
+    let id = w.new_id();
+    // spec: S-0306 claim 9 (the stored target point K; the arm time: 0 against an aircraft)
+    let mut stored = shot_tp;
+    let arm = if matches!(shot_target, Target::Object(t) if w.obj(t).is_some_and(|x| x.kind == Kind::Aircraft))
+    {
+        0
+    } else {
+        p.arm
+    };
+    let mut pos = start_pos;
+    if p.inviso {
+        if p.flak_scatter {
+            // spec: S-0306 claim 9 (an invisible flak projectile: K scattered by trunc(R(0, 2B) × D / R₀))
+            let rr = w.rng.ranged(0, 2 * b, half);
+            let dd = d3(w, fire_point, stored);
+            let r0 = wr.range;
+            let sigma = if r0 == 0 { 0 } else { rr.wrapping_mul(dd) / r0 };
+            let xi = w.rng.ranged(0, 2147483646, half);
+            let (qx, qy) = scatter(w, (stored.x, stored.y), sigma, xi);
+            stored = Pos::new(qx, qy, stored.z);
+        }
+        // spec: S-0306 claim 9 (an invisible projectile: moved to K, or the first blocking cell's centre)
+        let house = o.owner;
+        pos = match crate::combat::lof::walk(w, &p, house, fire_point, stored) {
+            Some(c) => {
+                let cc = Pos::centre(c, 0);
+                Pos::new(cc.x, cc.y, w.surface_at(cc.x, cc.y))
+            }
+            None => stored,
+        };
+        vel = [F64::ZERO; 3];
+    } else if kind == ProjectileKind::Steering {
+        // spec: S-0306 claim 9 (a steering projectile's velocity is scaled to length 1)
+        vel = rescale(w, vel, f(1, mode));
+    }
+    let top_speed = wr.speed;
+    let proj = Projectile {
+        id,
+        weapon,
+        attacker: Some(firer),
+        house: o.owner,
+        firer: Some(firer),
+        firer_house: o.owner,
+        pos,
+        vel,
+        target: Some(shot_target),
+        stored,
+        placed_at: pos,
+        arm,
+        placed: w.tick,
+        damage,
+        // spec: S-0306 T1 (Ω starts as the full spatial distance from the placement position to K)
+        omega: d3(w, pos, stored),
+        top_speed,
+        turns: 0,
+        unlocked: 0,
+        locked: p.course_lock != 1,
+        closing: F64::ZERO,
+        prev_cell: pos.cell(),
+        fire_point,
+        nuke_wait: None,
+    };
+    w.projectiles.insert(id, proj);
+    // spec: S-0306 claim 8 (the projectile enters play; its first turn is in the same tick)
+    w.update.enter(id);
+    let _ = mode;
+    Some(id)
+}
+
+/// Whether a firer's type has the spray-attack flag (S-0313 Terms).
+fn tc_spray(w: &World, id: ObjectId) -> bool {
+    w.obj(id)
+        .and_then(|o| w.rules().unit(o.kind, o.type_index))
+        .is_some_and(|u| u.raw.spray_attack.unwrap_or(false))
+}
+
+/// The aiming facing of a firer (S-0310).
+fn aiming(w: &World, id: ObjectId) -> u16 {
+    let t = w.tick;
+    let Some(o) = w.obj(id) else { return 0 };
+    let turret = match o.kind {
+        Kind::Vehicle => w
+            .rules()
+            .unit(o.kind, o.type_index)
+            .is_some_and(|u| u.turret),
+        Kind::Infantry => false,
+        _ => true,
+    };
+    if turret {
+        o.turret.value(t)
+    } else {
+        o.body.value(t)
+    }
+}
+
+/// The yaw of radial fire segment `k` of `n` (S-0306 F1).
+// spec: S-0306 F1 (π, the double nearest it)
+fn radial_yaw(w: &World, id: ObjectId, n: i32, k: i32) -> i32 {
+    let r = w.rules();
+    let mode = r.mode;
+    let (c1, c2) = direction_constants();
+    let pi = c1.mul(f(2, mode), mode);
+    let body = w.obj(id).map_or(0, |o| i32::from(o.body.value(w.tick)));
+    // spec: S-0306 F1 (φₖ = RZ₅₃(RZ₅₃(RZ₅₃(π / n) × k) − π/2); y = trunc(RZ₅₃(RZ₅₃(RZ₅₃(θ(b) + φₖ) − π/2) × c₂)))
+    let phi = pi
+        .div(f(i64::from(n), mode), mode)
+        .mul(f(i64::from(k), mode), mode)
+        .sub(c1, mode);
+    let v = theta(body, mode)
+        .add(phi, mode)
+        .sub(c1, mode)
+        .mul(c2, mode)
+        .trunc_i128()
+        .unwrap_or(0);
+    i32::from(v as i64 as u16)
+}
+
+/// The lead of S-0306 claim 3, F6.
+fn lead(w: &World, firer: ObjectId, target: ObjectId, aim: Pos) -> Pos {
+    let r = w.rules();
+    let mode = r.mode;
+    // spec: S-0306 claim 3 (the lead weapon: slot 0, or the slot of the weapon number for a multi-weapon type)
+    let multi = crate::combat::veterancy::type_combat(w, firer).is_some_and(|tc| tc.multi_weapon);
+    let slot = if multi {
+        crate::combat::weapon::weapon_number(w, firer)
+    } else {
+        0
+    };
+    let Some(lw) = crate::combat::weapon::slot_weapon(w, firer, slot) else {
+        return aim;
+    };
+    let dd3 = d3(w, w.reference_point(firer), w.reference_point(target));
+    let p = r.combat.projectile_of(lw);
+    let ws = match p {
+        Some(p) if p.rot == 0 => {
+            ballistics::arc_speed(dd3, r.combat.general.gravity, p.floater, mode)
+        }
+        _ => r.combat.weapon(lw).speed,
+    };
+    // The target vehicle's current speed u in leptons per tick is not defined for the driving
+    // locomotor, whose progress is in progress units (S-0207 F2): request Q-0071. Until it is
+    // answered u = 0, so no shot is led.
+    let u = 0;
+    let _ = target;
+    let b = w.obj(target).map_or(0, |o| i32::from(o.body.value(w.tick)));
+    let point9 = crate::rules::nearest_double("0.9");
+    // spec: S-0306 F6 (ℓ = trunc(RZ₅₃(RZ₅₃(D₃ / RZ₅₃(w × 0.9)) × u)))
+    let l = f(i64::from(dd3), mode)
+        .div(f(i64::from(ws), mode).mul(point9, mode), mode)
+        .mul(f(i64::from(u), mode), mode)
+        .to_i32_common();
+    let th = theta(b, mode);
+    let lf = f(i64::from(l), mode);
+    // spec: S-0306 F6 (aim = (trunc(RZ₅₃(x + RZ₅₃(cos_t θ(b) × ℓ))), trunc(RZ₅₃(y − RZ₅₃(sin_t θ(b) × ℓ))), z))
+    Pos::new(
+        f(i64::from(aim.x), mode)
+            .add(cos_t(th, mode).mul(lf, mode), mode)
+            .to_i32_common(),
+        f(i64::from(aim.y), mode)
+            .sub(sin_t(th, mode).mul(lf, mode), mode)
+            .to_i32_common(),
+        aim.z,
+    )
+}
+
+/// The steering turn step t of S-0306 claim 13, F7.
+// spec: S-0306 F7 (2π, the double nearest it)
+fn turn_step(w: &World, pr: &Projectile, rot: i32, near: bool) -> i32 {
+    let r = w.rules();
+    let mode = r.mode;
+    let m = r.combat.general.missile_rot_var;
+    // spec: S-0306 claim 13 (j = (object number + tick number) mod 15)
+    let j = (i64::from(pr.id.0) + i64::from(w.tick)).rem_euclid(15);
+    let k15 = crate::rules::nearest_double("0.06666666666666667");
+    let (c1, _) = direction_constants();
+    let two_pi = c1.mul(f(4, mode), mode);
+    let angle = f(j, mode).mul(k15, mode).mul(two_pi, mode);
+    // spec: S-0306 F7 (q = trunc(RZ₅₃(RZ₅₃(RZ₅₃(sin_t(...) × m) + (m + 1)) × ρ)))
+    let qv = sin_t(angle, mode)
+        .mul(m, mode)
+        .add(m.add(f(1, mode), mode), mode)
+        .mul(f(i64::from(rot), mode), mode);
+    let qi = qv.to_i32_common();
+    // spec: S-0306 F7 (q* = trunc(q × 1.5) near the target)
+    let qs = if near {
+        f(i64::from(qi), mode)
+            .mul(crate::rules::nearest_double("1.5"), mode)
+            .to_i32_common()
+    } else {
+        qi
+    };
+    if r.quirks.missile_turn_wrap {
+        // spec: S-0306 F7 (t = 256 × (q* mod 256), a signed 16-bit value)
+        i32::from((256 * qs.rem_euclid(256)) as i16)
+    } else {
+        // spec: S-0306 Edge cases (missile_turn_wrap off: t = 256 × min(q*, 127))
+        256 * qs.min(127)
+    }
+}
+
+/// Turns facing `cur` towards `goal` by step `t` (S-0306 F7).
+fn turn_towards(cur: i32, goal: i32, t: i32) -> i32 {
+    let d = delta(cur as u16, goal as u16);
+    // spec: S-0306 F7 (|t| ≥ |δ|: the goal; else f + t for δ ≥ 0, f − t for δ < 0, 16-bit)
+    if t.abs() >= d.abs() {
+        goal
+    } else if d >= 0 {
+        i32::from((cur + t) as u16)
+    } else {
+        i32::from((cur - t) as u16)
+    }
+}
+
+/// The pitch facing of a velocity p(V) (S-0306 F12).
+// spec: S-0306 F12 (the vertical component V_z)
+fn pitch_of(w: &World, v: [F64; 3]) -> i32 {
+    let mode = w.rules().mode;
+    let h = hlen(w, v);
+    let (a, i) = table_angle_real(h, v[2], mode);
+    // spec: S-0306 F12 (p(V) = trunc((A(V_z, H) − π/2) × c₂), a 16-bit value)
+    i32::from(facing_of_angle(a, i, true, mode) as i16)
+}
+
+/// The steering turn of one turn (S-0306 claims 12 to 15, F10 to F12).
+/// Returns the displacement velocity and the velocity after the turn.
+// spec: S-0306 claims 14 and 15 (the vertical component; direct steps 0 and 256; cruise look-ahead 6, cell centres, height levels of 104; steps t / 2; climb pitch 8192)
+fn steer(w: &World, pr: &mut Projectile, p: &ProjectileRules) -> ([F64; 3], [F64; 3]) {
+    let r = w.rules();
+    let mode = r.mode;
+    let q = r.quirks;
+    let tick = w.tick;
+    // Course lock (claim 12).
+    let kappa_l = p.course_lock;
+    let speed_before = speed(w, pr.vel);
+    let s_top = f(i64::from(pr.top_speed), mode);
+    if pr.locked {
+        let ends = if kappa_l >= 1 {
+            // spec: S-0306 claim 12 (κ ≥ 1: the κ-th turn is the first unlocked one)
+            pr.turns + 1 >= kappa_l
+        } else if kappa_l == 0 {
+            // spec: S-0306 claim 12 (κ = 0: the first turn with S ≥ 40 or S ≤ |V| + 0.5)
+            pr.top_speed >= 40
+                || s_top.le(speed_before.add(crate::rules::nearest_double("0.5"), mode))
+        } else {
+            false
+        };
+        if ends {
+            pr.locked = false;
+        }
+    }
+    // spec: S-0306 claim 12 (during the lock with κ = 0 the acceleration is 1 in even ticks, 0 in odd ones)
+    let a = if pr.locked && kappa_l == 0 {
+        i32::from(tick % 2 == 0)
+    } else {
+        p.acceleration
+    };
+    // spec: S-0306 F10 (|V| < S: rescaled to min(|V| + a, S); |V| > S: max(|V| − trunc(a / 2), 0))
+    let mut v = if speed_before.lt(s_top) {
+        let l = speed_before.add(f(i64::from(a), mode), mode).min(s_top);
+        rescale(w, pr.vel, l)
+    } else if speed_before.gt(s_top) {
+        let l = speed_before
+            .sub(f(i64::from(a / 2), mode), mode)
+            .max(F64::ZERO);
+        rescale(w, pr.vel, l)
+    } else {
+        pr.vel
+    };
+    let target_pt = pr.target.map(|t| aim_target_point(w, t));
+    // spec: S-0306 Terms (a target whose target point is the world origin counts as no target, quirks.origin_as_missing_target_point)
+    let has_target =
+        target_pt.is_some_and(|tp| !(q.origin_as_missing_target_point && tp == Pos::default()));
+    let tp = target_pt.unwrap_or_default();
+    let near = {
+        let reference = if has_target || q.origin_as_missing_target_point {
+            tp
+        } else {
+            Pos::default()
+        };
+        // spec: S-0306 claim 13 (near: d₃ from the start-of-turn position to the target point below 256)
+        (has_target || q.origin_as_missing_target_point) && d3(w, pr.pos, reference) < 256
+    };
+    let t = if pr.locked {
+        0 // spec: S-0306 claim 13 (the step is 0 during course lock)
+    } else {
+        turn_step(w, pr, p.rot, near)
+    };
+    if has_target {
+        // spec: S-0306 claim 14 (the displacement is trunc(V) after the speed change, before the heading change)
+        let disp = v;
+        let pprime = add_trunc(pr.pos, disp);
+        // F11: turn the horizontal direction towards the target point from P′.
+        let yc = i32::from(glasnost_num::geom::direction_real(
+            v[0],
+            v[1].negated(),
+            mode,
+        ));
+        let wdx = f(i64::from(tp.x - pprime.x), mode);
+        let wdy = f(i64::from(tp.y - pprime.y), mode);
+        let yg = i32::from(glasnost_num::geom::direction_real(wdx, wdy.negated(), mode));
+        let yn = turn_towards(yc, yg, t);
+        let zero = F64::ZERO;
+        // spec: S-0306 F11 (H = r(RZ₅₃(Vₓ² + V_y²)), r(10000) when both are 0)
+        let h = if v[0].eq_num(zero) && v[1].eq_num(zero) {
+            table_root(10000, mode).to_f64()
+        } else {
+            hlen(w, v)
+        };
+        let th = theta(yn, mode);
+        v = [
+            cos_t(th, mode).mul(h, mode),
+            sin_t(th, mode).mul(h, mode).negated(),
+            v[2],
+        ];
+        // F12: the pitch.
+        let wv = [wdx, wdy.negated(), f(i64::from(tp.z - pprime.z), mode)];
+        let dp = d2(w, pprime, tp);
+        let aircraft = matches!(pr.target, Some(Target::Object(x)) if w.obj(x).is_some_and(|o| o.kind == Kind::Aircraft));
+        // spec: S-0306 claim 15 (direct mode: an aircraft target, within 3 cells (6 very high) and not airburst, or t of 0 or 256)
+        let lim = if p.very_high { 6 * 256 } else { 3 * 256 };
+        let direct = aircraft || (dp <= lim && !p.airburst) || t == 0 || t == 256;
+        let (goal, step, level_keep) = if p.level {
+            // spec: S-0306 claim 15 (a level projectile with a target keeps its pitch)
+            (0, 0, true)
+        } else if direct {
+            // spec: S-0306 claim 15 (direct: goal the pitch of the vector to the target point, step trunc((t + 256) / 2))
+            (pitch_of(w, wv), i32::from(((t + 256) / 2) as i16), false)
+        } else {
+            // Cruise mode (claim 15): the cruising altitude.
+            let look = add_trunc(
+                pprime,
+                [
+                    v[0].mul(f(6, mode), mode),
+                    v[1].mul(f(6, mode), mode),
+                    F64::ZERO,
+                ],
+            );
+            let lc = look.cell();
+            let mut e = w.surface_at(256 * lc.x + 128, 256 * lc.y + 128);
+            if w.high_bridge(lc) {
+                e += 416; // spec: S-0306 Constants (high-bridge allowance 416)
+            }
+            // spec: S-0306 claim 15 (n = 10 airburst or very high, else min(trunc(D / 256), 5))
+            let n = if p.airburst || p.very_high {
+                10
+            } else {
+                (d3(w, pprime, tp) / 256).min(5)
+            };
+            let cruise = e + n * 104;
+            let ee = pprime.z - cruise;
+            // spec: S-0306 claim 15 (goal 8192 when e < −52, 18432 when e > 52, else 16384; step trunc(t / 2))
+            let goal = if ee < -52 {
+                8192
+            } else if ee > 52 {
+                18432
+            } else {
+                16384
+            };
+            (goal, t / 2, false)
+        };
+        let pc = pitch_of(w, v);
+        let m = speed(w, v);
+        let pn = if level_keep {
+            pc
+        } else {
+            let d = i32::from((goal - pc) as i16);
+            if step.abs() >= d.abs() {
+                goal
+            } else if d >= 0 {
+                pc + step
+            } else {
+                pc - step
+            }
+        };
+        v = rebuild(w, v, pc, pn, m);
+        (disp, v)
+    } else {
+        // spec: S-0306 claim 15 (no target: goal 8192 with step t; the displacement already includes the pitch change)
+        let pc = pitch_of(w, v);
+        let m = speed(w, v);
+        let d = i32::from((8192 - pc) as i16);
+        let pn = if t.abs() >= d.abs() {
+            8192
+        } else if d >= 0 {
+            pc + t
+        } else {
+            pc - t
+        };
+        v = rebuild(w, v, pc, pn, m);
+        (v, v)
+    }
+}
+
+/// The F12 rebuild of a velocity from its pitch pc to pn, keeping length m.
+// spec: S-0306 F12 (three components)
+fn rebuild(w: &World, v: [F64; 3], pc: i32, pn: i32, m: F64) -> [F64; 3] {
+    let mode = w.rules().mode;
+    let cpc = cos_t(theta(pc, mode), mode);
+    // spec: S-0306 F12 (Ĥᵢ = RZ₅₃(Vᵢ / cos_t θ(p_c)); rebuilt = (cos_t θ(p′) Ĥₓ, cos_t θ(p′) Ĥ_y, sin_t θ(p′) M))
+    let hx = v[0].div(cpc, mode);
+    let hy = v[1].div(cpc, mode);
+    let tn = theta(pn, mode);
+    let cn = cos_t(tn, mode);
+    [
+        cn.mul(hx, mode),
+        cn.mul(hy, mode),
+        sin_t(tn, mode).mul(m, mode),
+    ]
+}
+
+/// P + trunc(V) componentwise.
+// spec: S-0306 claim 11 (P + trunc(V), three components)
+fn add_trunc(p: Pos, v: [F64; 3]) -> Pos {
+    Pos::new(
+        p.x.wrapping_add(v[0].to_i32_common()),
+        p.y.wrapping_add(v[1].to_i32_common()),
+        p.z.wrapping_add(v[2].to_i32_common()),
+    )
+}
+
+/// trunc(P + V) componentwise, in double precision (S-0306 claim 10).
+// spec: S-0306 claim 10 (trunc(P + V), three components)
+fn add_exact(w: &World, p: Pos, v: [F64; 3]) -> Pos {
+    let mode = w.rules().mode;
+    Pos::new(
+        f(i64::from(p.x), mode).add(v[0], mode).to_i32_common(),
+        f(i64::from(p.y), mode).add(v[1], mode).to_i32_common(),
+        f(i64::from(p.z), mode).add(v[2], mode).to_i32_common(),
+    )
+}
+
+/// The rows of T1 that apply in a turn (S-0306 State and ordering).
+#[derive(Default)]
+struct Rows {
+    first: Option<i32>,
+    reached: bool,
+    proximity: Option<Pos>,
+    speed: bool,
+    vertical: bool,
+    steering_dist: bool,
+    steer_ground: bool,
+    safety: bool,
+    orbit: bool,
+    bridge: Option<i32>,
+    arrival: bool,
+    passed: bool,
+    lof: bool,
+    deep: bool,
+    flak: bool,
+    level: bool,
+    aa: bool,
+    outside: bool,
+}
+
+/// One turn of a projectile (S-0306 claims 10 to 21, T1, T2).
+// spec: S-0306 T1 (deck height 416; half the speed; closing average over 60 turns; arrival below 32, pass-by below 256)
+pub fn turn(w: &mut World, id: ObjectId) {
+    let Some(mut pr) = w.projectiles.get(&id).cloned() else {
+        return;
+    };
+    let rules = w.rules_arc();
+    let mode = rules.mode;
+    let q = rules.quirks;
+    let wr = rules.combat.weapon(pr.weapon).clone();
+    let Some(pid) = wr.projectile else {
+        remove(w, id);
+        return;
+    };
+    let p = rules.combat.projectiles[pid as usize].clone();
+    let g = ballistics::gravity(rules.combat.general.gravity, p.floater, mode);
+    let tick = w.tick;
+    if let Some(until) = pr.nuke_wait {
+        // spec: S-0306 claim 25 (it does nothing while the fireball exists; in its first turn after, it detonates)
+        if tick < until {
+            return;
+        }
+        let pos = pr.pos;
+        explode(w, &mut pr, &p, pos, true);
+        remove(w, id);
+        return;
+    }
+    // spec: S-0306 claim 17 (a lost target object: its cell if it was not airborne, else nothing)
+    if let Some(Target::Object(t)) = pr.target
+        && w.obj(t).is_none_or(|o| !o.on_map)
+    {
+        pr.target = None;
+    }
+    if !q.stored_target_point
+        && let Some(t) = pr.target
+    {
+        // spec: S-0306 Edge cases (stored_target_point off: K follows the target while it is in play)
+        pr.stored = ref_point(w, t);
+    }
+    let start = pr.pos;
+    let h = start.z - w.surface_at(start.x, start.y);
+    let speed_start = speed(w, pr.vel);
+    // spec: S-0306 claim 16 (a trailer at the start-of-turn position, every turn whose tick number is a multiple of the effective spawn delay)
+    if let Some(trailer) = p.trailer.clone()
+        && p.spawn_delay != 0
+        && tick.rem_euclid(p.spawn_delay) == 0
+    {
+        effects::anim(w, &trailer, start);
+    }
+    let kind = p.kind();
+    let (newpos, disp_v) = match kind {
+        ProjectileKind::Straight | ProjectileKind::Arcing => {
+            // spec: S-0306 claim 10 (V_z falls by g, then trunc(P + V))
+            pr.vel[2] = pr.vel[2].sub(g, mode);
+            (add_exact(w, start, pr.vel), pr.vel)
+        }
+        ProjectileKind::Vertical => {
+            let sp = speed(w, pr.vel).to_i32_common();
+            let sw = pr.top_speed;
+            // spec: S-0306 F10 (vertical: trunc(|V|) < S_w: rescaled to trunc(|V|) + α; quirks.vertical_speed_uncapped)
+            if sp < sw {
+                let mut l = sp + p.acceleration;
+                if !q.vertical_speed_uncapped {
+                    l = l.min(sw);
+                }
+                pr.vel = rescale(w, pr.vel, f(i64::from(l), mode));
+            }
+            (add_trunc(start, pr.vel), pr.vel)
+        }
+        ProjectileKind::Steering => {
+            let (disp, v) = steer(w, &mut pr, &p);
+            let np = add_trunc(start, disp);
+            pr.vel = v;
+            (np, v)
+        }
+    };
+    let _ = disp_v;
+    pr.turns += 1;
+    let hp = newpos.z - w.surface_at(newpos.x, newpos.y);
+    let mut rows = Rows::default();
+    let nc = newpos.cell();
+    let terrain_new = w.surface_at(newpos.x, newpos.y);
+    let deck_old = w
+        .high_bridge(start.cell())
+        .then(|| w.surface_at(start.x, start.y) + 416);
+    let deck_new = w.high_bridge(nc).then(|| terrain_new + 416);
+    let crossing = |a: i32, b: i32, deck: Option<i32>| -> Option<i32> {
+        let d = deck?;
+        // spec: S-0306 T1 (crossing a bridge deck height going up (deck height) or down (20 below it))
+        if a < d && b >= d {
+            Some(d)
+        } else if a >= d && b < d {
+            Some(d - 20)
+        } else {
+            None
+        }
+    };
+    let cross =
+        crossing(start.z, newpos.z, deck_old).or_else(|| crossing(start.z, newpos.z, deck_new));
+    let in_map = w.cells.cell(nc).is_some();
+    if matches!(kind, ProjectileKind::Straight | ProjectileKind::Arcing) {
+        // spec: S-0306 T1 row 1 (below the terrain; a deck crossing; 0 to 149 above the terrain over a building or one of the three wall overlays)
+        if newpos.z < terrain_new {
+            rows.first = Some(newpos.z);
+        } else if let Some(z) = cross {
+            rows.first = Some(z);
+        } else if (0..150).contains(&(newpos.z - terrain_new)) && building_or_wall(w, &pr, nc) {
+            rows.first = Some(newpos.z);
+        }
+        // spec: S-0306 T1 (reached: the cell of K, or the same building, with h < 208)
+        if h < 208 {
+            let kc = pr.stored.cell();
+            if nc == kc || same_building(w, nc, kc) {
+                rows.reached = true;
+            }
+        }
+    }
+    if kind != ProjectileKind::Steering {
+        // spec: S-0306 T1 (proximity: the nearest unit or building in the cell of P′ within 128, not the firer or allied)
+        rows.proximity = proximity(w, &pr, newpos);
+        // spec: S-0306 T1 (the speed row: |V| < 10 and h < 10)
+        if speed(w, pr.vel).lt(f(10, mode)) && h < 10 {
+            rows.speed = true;
+        }
+        // spec: S-0306 T1 (outside the legal map: removed)
+        rows.outside = !in_map;
+    }
+    if kind == ProjectileKind::Vertical {
+        // spec: S-0306 T1 (vertical: above the detonation altitude, h < 0, or a deck crossing)
+        rows.vertical = newpos.z > p.detonation_altitude || h < 0 || cross.is_some();
+    }
+    if kind == ProjectileKind::Steering {
+        let target_pt = pr.target.map(|t| aim_target_point(w, t));
+        let has_target =
+            target_pt.is_some_and(|tp| !(q.origin_as_missing_target_point && tp == Pos::default()));
+        let sd = if has_target {
+            let tp = target_pt.unwrap_or_default();
+            let (dx, dy) = (i128::from(tp.x - newpos.x), i128::from(tp.y - newpos.y));
+            // spec: S-0306 Terms (steering distance: ζ = trunc(Δz / 4), 0 for airburst)
+            let zeta = if p.airburst {
+                0
+            } else {
+                i128::from((tp.z - newpos.z) / 4)
+            };
+            root_n(w, dx * dx + dy * dy + zeta * zeta)
+        } else {
+            speed(w, pr.vel).to_i32_common()
+        };
+        let half_speed = speed(w, pr.vel).div(f(2, mode), mode);
+        // spec: S-0306 T1 (steering distance row: half the speed ≥ the steering distance)
+        rows.steering_dist = half_speed.ge(f(i64::from(sd), mode));
+        rows.steer_ground = h <= 0;
+        rows.safety = !has_target && h >= rules.combat.general.missile_safety_altitude;
+        if !pr.locked {
+            pr.unlocked += 1;
+            let reference = target_pt.unwrap_or_default();
+            // spec: S-0306 T1 (closing step c_k = d₃(P, target point) − d₃(P′, target point))
+            let ck = d3(w, start, reference) - d3(w, newpos, reference);
+            let ckd = f(i64::from(ck), mode);
+            pr.closing = if pr.unlocked <= 60 {
+                pr.closing.add(ckd, mode)
+            } else {
+                // spec: S-0306 T1 (C_k = RZ₅₃(RZ₅₃(C_{k−1} × f₆₀) + c_k), f₆₀ = 8857079267161975 / 2⁵³)
+                let f60 = F64::from_parts(false, 8857079267161975, -53, Rounding::TowardZero);
+                pr.closing.mul(f60, mode).add(ckd, mode)
+            };
+            if pr.unlocked > 60
+                && !p.airburst
+                && !p.very_high
+                && (has_target || q.origin_as_missing_target_point)
+                && pr.closing.ge(F64::ZERO)
+                && pr.closing.lt(f(60, mode))
+            {
+                rows.orbit = true;
+            }
+        }
+        if !(rows.steering_dist || rows.steer_ground || rows.safety || rows.orbit) {
+            rows.bridge = cross;
+        }
+    }
+    if (kind == ProjectileKind::Steering || p.ranged) && !p.dropping {
+        let past_arm = tick.wrapping_sub(pr.placed) >= pr.arm;
+        if past_arm {
+            // spec: S-0306 T1 (η = trunc(d₃(P′, K) / 2); arrival η < 32; passed by η < 256 and η > Ω)
+            let eta = d3(w, newpos, pr.stored) / 2;
+            if eta < 32 {
+                rows.arrival = true;
+            } else if eta < 256 && eta > pr.omega {
+                rows.passed = true;
+            } else {
+                pr.omega = eta;
+            }
+        }
+    }
+    if p.cliffs || p.walls {
+        // spec: S-0306 claim 22 (the line-of-fire test in flight for the single sample P′)
+        let house = pr.firer_house;
+        let x1 = pr.fire_point.cell();
+        let x2 = pr.stored.cell();
+        rows.lof = crate::combat::lof::sample_blocks(w, &p, house, nc, pr.prev_cell, x1, x2);
+    }
+    // spec: S-0306 T1 (deep fall: h′ ≤ −416)
+    rows.deep = hp <= -416;
+    if p.flak_scatter
+        && let Some(t) = pr.target
+    {
+        // spec: S-0306 T1 (flak: P′ below the target's reference height and h′ < 0)
+        rows.flak = newpos.z < ref_point(w, t).z && hp < 0;
+    }
+    if p.level {
+        // spec: S-0306 T1 (level: the cell of P′ is not one of the 14 water tiles)
+        let water = w.catalogue.as_deref().map_or(i32::MIN, |c| c.roles.water);
+        let tile = w.cells.cell(nc).map_or(-1, |c| c.tile);
+        rows.level = !(water >= 0 && (water..water + 14).contains(&tile)); // spec: S-0306 Constants (14 water tiles)
+    }
+    if p.aa
+        && let Some(Target::Object(t)) = pr.target
+        && airborne_by_height(w, t)
+    {
+        // spec: S-0306 T1 (anti-air with an airborne target: d₃ to its reference point below 128)
+        rows.aa = d3(w, newpos, w.reference_point(t)) < 128;
+    }
+    pr.prev_cell = nc;
+    // T2: the outcome.
+    let outcome: Option<Option<Pos>> = if kind == ProjectileKind::Steering {
+        let target_pt = pr.target.map(|t| aim_target_point(w, t));
+        let has_target =
+            target_pt.is_some_and(|tp| !(q.origin_as_missing_target_point && tp == Pos::default()));
+        let any = rows.steering_dist
+            || rows.steer_ground
+            || rows.safety
+            || rows.orbit
+            || rows.bridge.is_some()
+            || rows.arrival
+            || rows.passed
+            || rows.lof
+            || rows.deep
+            || rows.flak
+            || rows.level
+            || rows.aa;
+        if rows.steering_dist && h > 0 && !p.airburst && has_target {
+            // spec: S-0306 T2 (steering distance, h > 0, not airburst, a target: at the target point)
+            Some(target_pt)
+        } else if let Some(z) = rows.bridge {
+            Some(Some(Pos::new(newpos.x, newpos.y, z)))
+        } else if any {
+            Some(Some(newpos))
+        } else {
+            None
+        }
+    } else if rows.reached {
+        // spec: S-0306 T2 (a reached row: at P′ with the first row's vertical change)
+        Some(Some(Pos::new(
+            newpos.x,
+            newpos.y,
+            rows.first.unwrap_or(newpos.z),
+        )))
+    } else if let Some(op) = rows.proximity {
+        // spec: S-0306 T2 (the proximity row: at the other object's position; inaccurate: at P′)
+        if p.inaccurate {
+            Some(Some(Pos::new(
+                newpos.x,
+                newpos.y,
+                rows.first.unwrap_or(newpos.z),
+            )))
+        } else {
+            Some(Some(op))
+        }
+    } else if rows.outside {
+        // spec: S-0306 T2 (outside the legal map: removal without detonation)
+        Some(None)
+    } else if rows.first.is_some()
+        || rows.speed
+        || rows.vertical
+        || rows.lof
+        || rows.deep
+        || rows.flak
+        || rows.level
+        || rows.aa
+        || rows.arrival
+        || rows.passed
+    {
+        Some(Some(Pos::new(
+            newpos.x,
+            newpos.y,
+            rows.first.unwrap_or(newpos.z),
+        )))
+    } else {
+        None
+    };
+    match outcome {
+        None => {
+            pr.pos = newpos;
+            // spec: S-0306 claim 18 (a degenerating projectile loses 1 per turn without a detonation, not below 5)
+            if p.degenerates && pr.damage > 5 {
+                pr.damage -= 1;
+            }
+            w.projectiles.insert(id, pr);
+        }
+        Some(None) => remove(w, id),
+        Some(Some(point)) => {
+            pr.pos = point;
+            let arrival = rows.arrival;
+            let reached = rows.reached || rows.passed;
+            let pt = detonation_point(w, &pr, &p, point, arrival, reached, speed_start);
+            if rules.combat.warhead_of(pr.weapon).is_some_and(|h| h.nuke) {
+                // spec: S-0306 claim 25 (the nuclear warhead waits for its fireball animation)
+                if rules.animation("NUKEBALL").is_some() {
+                    effects::anim(w, "NUKEBALL", pt);
+                    w.note("S-0306 claim 25: the fireball's length needs animation playback (S-0109), which is not implemented; the nuclear detonation follows at once");
+                }
+            }
+            pr.pos = pt;
+            explode(w, &mut pr, &p, pt, false);
+            remove(w, id);
+        }
+    }
+}
+
+/// Whether the cell holds a building that stops a straight or arcing
+/// projectile (T1 row 1), or one of the three wall overlays.
+// spec: S-0306 T1 and S-0307 claim 11 (the wall overlays 2, 26 and 243)
+fn building_or_wall(w: &World, pr: &Projectile, c: CellXY) -> bool {
+    if crate::combat::lof::wall_overlay(w, c).is_some_and(|o| [2u8, 26, 243].contains(&o)) {
+        return true; // spec: S-0306 Constants (hard-coded wall overlays 2, 26, 243)
+    }
+    w.cells
+        .list(c, crate::world::Layer::Ground)
+        .iter()
+        .any(|&b| {
+            w.obj(b).is_some_and(|o| {
+                o.kind == Kind::Building
+                    && Some(b) != pr.firer
+                    && !crate::process::gate_open(w, b)
+                    && !w.allied(o.owner, pr.firer_house)
+            })
+        })
+}
+
+/// Whether two cells hold the same building.
+fn same_building(w: &World, a: CellXY, b: CellXY) -> bool {
+    let bl = |c: CellXY| {
+        w.cells
+            .list(c, crate::world::Layer::Ground)
+            .iter()
+            .copied()
+            .find(|&x| w.obj(x).is_some_and(|o| o.kind == Kind::Building))
+    };
+    matches!((bl(a), bl(b)), (Some(x), Some(y)) if x == y)
+}
+
+/// The proximity row of T1: the nearest unit or building in the cell of P′.
+// spec: S-0306 Constants (proximity to a unit in the cell: 128 leptons)
+fn proximity(w: &World, pr: &Projectile, p: Pos) -> Option<Pos> {
+    let c = p.cell();
+    let mut best: Option<(i32, ObjectId)> = None;
+    for &x in w.cells.list(c, crate::world::Layer::Ground) {
+        let Some(o) = w.obj(x) else { continue };
+        if o.kind == Kind::Terrain {
+            continue;
+        }
+        let d = d3(w, p, o.pos);
+        if best.is_none_or(|(bd, _)| d < bd) {
+            best = Some((d, x));
+        }
+    }
+    let (d, x) = best?;
+    let o = w.obj(x)?;
+    // spec: S-0306 T1 (at d₃ < 128, neither the firer nor allied with the firer's house; with no firer any object counts)
+    let excluded = pr.firer.is_some() && (Some(x) == pr.firer || w.allied(o.owner, pr.firer_house));
+    (d < 128 && !excluded).then_some(o.pos)
+}
+
+/// The detonation point of S-0306 claim 20 (a) to (c).
+fn detonation_point(
+    w: &World,
+    pr: &Projectile,
+    p: &ProjectileRules,
+    point: Pos,
+    arrival: bool,
+    reached: bool,
+    speed_start: F64,
+) -> Pos {
+    let mode = w.rules().mode;
+    let mut pt = point;
+    // spec: S-0306 claim 20 (a) (a negative height above the surface is raised to 0)
+    let surf = w.surface_at(pt.x, pt.y);
+    if pt.z < surf {
+        pt.z = surf;
+    }
+    let Some(t) = pr.target else { return pt };
+    if p.inaccurate || p.airburst {
+        return pt;
+    }
+    let rp = ref_point(w, t);
+    // spec: S-0306 claim 20 (b) (arrival always; a reached row when ν′ ≤ max(2|V|, 128))
+    let snap = if arrival {
+        true
+    } else if reached {
+        let zeta = (rp.z + pt.z) / 2 - rp.z; // spec: S-0306 F9 (ζ = trunc((P_R.z + P.z) / 2) − P_R.z)
+        let (dx, dy) = (i128::from(pt.x - rp.x), i128::from(pt.y - rp.y));
+        let nu = root_n(w, dx * dx + dy * dy + i128::from(zeta) * i128::from(zeta));
+        let nup = nu / 3; // spec: S-0306 F9 (ν′ = trunc(ν / 3))
+        let thr = speed_start.mul(f(2, mode), mode).max(f(128, mode));
+        f(i64::from(nup), mode).le(thr)
+    } else {
+        false
+    };
+    if snap {
+        pt = rp;
+    }
+    // spec: S-0306 claim 20 (c) (D_R and D_S from the point (a) and (b) leave)
+    let dr = d3(w, pt, rp);
+    let ds = match t {
+        Target::Object(x) => w
+            .obj(x)
+            .filter(|o| o.kind == Kind::Building)
+            .map_or(dr, |o| {
+                (dr - 64 * (o.foundation.0 + o.foundation.1)).max(0) // spec: S-0306 Constants (building reduction 64 per cell)
+            }),
+        Target::Cell(_) => dr,
+    };
+    let em = w.rules().combat.warhead_of(pr.weapon).is_some_and(|h| h.em);
+    // spec: S-0306 claim 20 (c) (threshold 42; 128 for a target airborne in another render layer, which no object is)
+    if !em && ds < 42 {
+        aim_target_point(w, t)
+    } else if dr < 32 {
+        rp
+    } else {
+        pt
+    }
+}
+
+/// The detonations of a projectile (S-0306 claim 21) and their projectile
+/// effects (S-0303 claims 21 and 22).
+fn explode(w: &mut World, pr: &mut Projectile, p: &ProjectileRules, point: Pos, _after_wait: bool) {
+    let rules = w.rules_arc();
+    let half = rules.quirks.ranged_draw_half_span;
+    let wr = rules.combat.weapon(pr.weapon).clone();
+    if p.airburst {
+        let res = projectile_detonation(
+            w,
+            pr.weapon,
+            pr.damage,
+            point,
+            pr.attacker,
+            pr.house,
+            pr.pos,
+            p.inviso,
+        );
+        let _ = res;
+        if let Some(aw) = p.airburst_weapon {
+            airburst_children(w, pr, aw);
+        }
+        return;
+    }
+    // spec: S-0306 Edge cases (a cluster count of 0 or less: no detonation, no draw)
+    let mut q = point;
+    for _ in 0..p.cluster.max(0) {
+        projectile_detonation(
+            w,
+            pr.weapon,
+            pr.damage,
+            q,
+            pr.attacker,
+            pr.house,
+            pr.pos,
+            p.inviso,
+        );
+        // spec: S-0306 claim 21 (after every detonation: R(256, 512), then one raw value for the nearby point)
+        let lambda = w.rng.ranged(256, 512, half);
+        let b = w.rng.raw();
+        q = crate::combat::death::nearby_point(w, q, lambda, b, false);
+    }
+    let _ = wr;
+}
+
+/// The nine children of an airburst (S-0306 claim 21).
+fn airburst_children(w: &mut World, pr: &Projectile, aw: WeaponId) {
+    let rules = w.rules_arc();
+    let half = rules.quirks.ranged_draw_half_span;
+    let c = pr.pos.cell();
+    let sw = rules.combat.weapon(aw).speed;
+    let mode = rules.mode;
+    // spec: S-0306 claim 21 (the eight neighbouring cells and its own cell, falling at a tenth of S_w)
+    for (dx, dy) in [
+        (-1, -1),
+        (0, -1),
+        (1, -1),
+        (-1, 0),
+        (1, 0),
+        (-1, 1),
+        (0, 1),
+        (1, 1),
+        (0, 0),
+    ] {
+        // spec: S-0306 claim 21 (each child takes one draw R(0, 32))
+        let _ = w.rng.ranged(0, 32, half);
+        let cell = CellXY::new(c.x + dx, c.y + dy);
+        let cc = Pos::centre(cell, pr.pos.z);
+        let id = w.new_id();
+        let child = Projectile {
+            id,
+            weapon: aw,
+            attacker: pr.attacker,
+            house: pr.house,
+            firer: pr.firer,
+            firer_house: pr.firer_house,
+            pos: cc,
+            vel: [F64::ZERO, F64::ZERO, f(-i64::from(sw / 10), mode)],
+            target: Some(Target::Cell(cell)),
+            stored: Pos::new(cc.x, cc.y, w.surface_at(cc.x, cc.y)),
+            placed_at: cc,
+            arm: 0,
+            placed: w.tick,
+            damage: rules.combat.weapon(aw).damage,
+            omega: 0,
+            top_speed: sw,
+            turns: 0,
+            unlocked: 0,
+            locked: false,
+            closing: F64::ZERO,
+            prev_cell: cell,
+            fire_point: cc,
+            nuke_wait: None,
+        };
+        w.projectiles.insert(id, child);
+        w.update.enter(id);
+    }
+}
+
+/// One projectile detonation (S-0303 State and ordering, *Order of a
+/// projectile's detonation*): area damage, then the invisible kind's
+/// nearby point, the explosion animation (F5) and the debris (F6).
+#[allow(clippy::too_many_arguments)]
+// spec: S-0303 claim 21 (N(P, 32, u mod 256), the invisible-projectile animation scatter)
+pub fn projectile_detonation(
+    w: &mut World,
+    weapon: WeaponId,
+    damage: i32,
+    point: Pos,
+    attacker: Option<ObjectId>,
+    house: Option<HouseId>,
+    q: Pos,
+    invisible: bool,
+) -> DetonationResult {
+    let rules = w.rules_arc();
+    let half = rules.quirks.ranged_draw_half_span;
+    let warhead = rules.combat.weapon(weapon).warhead;
+    let Some(h) = warhead else {
+        // spec: S-0303 Edge cases (a projectile without a warhead does nothing, a departure)
+        return DetonationResult::Missed;
+    };
+    let res = area::detonate(
+        w,
+        Detonation {
+            point,
+            damage,
+            warhead: Some(h),
+            source: attacker,
+            house,
+            resources: true,
+        },
+    );
+    let wh = rules.combat.warhead(h).clone();
+    let mut anim_at = point;
+    if invisible {
+        // spec: S-0303 claim 21 (an invisible projectile: the nearby point N(P, 32, u mod 256), one raw value after the area damage)
+        let u = w.rng.raw();
+        anim_at = crate::combat::death::nearby_point(w, point, 32, u & 255, false);
+    }
+    if let Some(name) = explosion_anim(w, h, damage, q) {
+        if res == DetonationResult::Nullified {
+            // spec: S-0303 claim 21 (a nullified detonation shows the nullify animation instead)
+            if let Some(n) = rules.combat.general.nullify_anim.clone() {
+                effects::anim(w, &n, anim_at);
+            }
+        } else {
+            effects::anim(w, &name, anim_at);
+        }
+    }
+    // spec: S-0303 claim 22 (warhead debris whatever the damage amount, not when nullified)
+    if res != DetonationResult::Nullified && wh.max_debris > 0 {
+        // spec: S-0303 F6 (N = R(Y, X − 1))
+        let n = w.rng.ranged(wh.min_debris, wh.max_debris - 1, half);
+        if wh.debris_types.is_empty() {
+            let list = rules.combat.general.metallic_debris.clone();
+            let c = list.len() as i32;
+            for _ in 0..n.max(0) {
+                let k = w.rng.ranged(0, c - 1, half);
+                if let Some(name) = list.get(k as usize).cloned() {
+                    // spec: S-0303 F6 (metallic debris at Q raised by 20 leptons)
+                    effects::anim(w, &name, Pos::new(q.x, q.y, q.z + 20));
+                }
+            }
+        } else {
+            crate::combat::death::deal_debris(w, n, &wh.debris_types, &wh.debris_maximums, q);
+        }
+    }
+    res
+}
+
+/// The explosion animation of S-0303 F5 (with the electromagnetic case's
+/// draw when it applies).
+fn explosion_anim(w: &mut World, h: WarheadId, d: i32, q: Pos) -> Option<String> {
+    let rules = w.rules_arc();
+    let half = rules.quirks.ranged_draw_half_span;
+    let g = &rules.combat.general;
+    let wh = rules.combat.warhead(h);
+    // spec: S-0303 F5 (D = 0: no animation and no draw)
+    if d == 0 {
+        return None;
+    }
+    let qc = q.cell();
+    let terrain = w.surface_at(q.x, q.y);
+    // spec: S-0303 claim 21 (the land type of Q's cell when its height above the terrain is below 208, else air)
+    let land = (q.z - terrain < 208).then(|| w.cells.cell(qc).map_or(0, |c| c.land));
+    let water = land == Some(glasnost_map::terrain::land::WATER);
+    // spec: S-0303 F5 (splash: water, conventional, no bridge, q_z < terrain + 208)
+    if water && wh.conventional && !w.high_bridge(qc) && q.z < terrain + 208 {
+        let ns = g.splash_list.len() as i32;
+        if ns == 0 {
+            return None;
+        }
+        // spec: S-0303 F5 (entry trunc(min(D, 35 nₛ − 1) / 35))
+        let e = d.min(35 * ns - 1) / 35;
+        return if e < 0 {
+            None
+        } else {
+            g.splash_list.get(e as usize).cloned()
+        };
+    }
+    // spec: S-0303 F5 (the lightning warhead: the bolt explosion)
+    if g.lightning_warhead == Some(h) {
+        return g.bolt_explosion.clone();
+    }
+    let nw = wh.anim_list.len() as i32;
+    if wh.em {
+        // spec: S-0303 F5 (electromagnetic: entry R(0, n_W − 1), one draw when n_W > 0)
+        if nw == 0 {
+            return None;
+        }
+        let k = w.rng.ranged(0, nw - 1, half);
+        return wh.anim_list.get(k as usize).cloned();
+    }
+    if nw == 0 {
+        return None;
+    }
+    // spec: S-0303 F5 (graded: entry trunc(min(D, 25 n_W − 1) / 25)); Edge cases (a negative entry shows nothing)
+    let e = d.min(25 * nw - 1) / 25;
+    if e < 0 {
+        None
+    } else {
+        wh.anim_list.get(e as usize).cloned()
+    }
+}
+
+/// A death weapon's detonation (S-0312 claim 6): a projectile detonation
+/// of the weapon at the object's position; its projectile is never placed,
+/// so the land-type, height and water tests and the debris use the map
+/// origin (`quirks.death_weapon_unplaced_projectile`).
+pub fn detonate_weapon(
+    w: &mut World,
+    weapon: WeaponId,
+    damage: i32,
+    at: Pos,
+    source: Option<ObjectId>,
+    house: Option<HouseId>,
+    _death: bool,
+) {
+    let unplaced = w.rules().quirks.death_weapon_unplaced_projectile;
+    // spec: S-0312 claim 6 (the unplaced projectile's default position, believed the origin; off: the object's position)
+    let q = if unplaced { Pos::default() } else { at };
+    let inviso = w
+        .rules()
+        .combat
+        .projectile_of(weapon)
+        .is_some_and(|p| p.inviso);
+    projectile_detonation(w, weapon, damage, at, source, house, q, inviso);
+}
+
+/// A plain area detonation of a warhead (S-0303), with the explosion
+/// animation of F5 chosen for its amount (S-0302 claim 20).
+pub fn detonate_area(
+    w: &mut World,
+    warhead: WarheadId,
+    damage: i32,
+    at: Pos,
+    source: Option<ObjectId>,
+    house: Option<HouseId>,
+    resources: bool,
+) {
+    if let Some(name) = explosion_anim(w, warhead, damage, at) {
+        effects::anim(w, &name, at);
+    }
+    area::detonate(
+        w,
+        Detonation {
+            point: at,
+            damage,
+            warhead: Some(warhead),
+            source,
+            house,
+            resources,
+        },
+    );
+}
+
+/// A projectile leaves play (S-0203 claim 5: a removal for claim 10).
+pub fn remove(w: &mut World, id: ObjectId) {
+    w.projectiles.remove(&id);
+    let skip = w.rules().quirks.update_order_removal_skip;
+    w.update.leave(id, skip);
+}
+
+/// The kind of a projectile type, for the drawing.
+pub fn kind_of(w: &World, pr: &Projectile) -> Option<ProjectileKind> {
+    w.rules().combat.projectile_of(pr.weapon).map(|p| p.kind())
+}
+
+/// Events of the drawing: a shot left a firer.
+pub fn shot_effect(w: &mut World, firer: ObjectId, from: Pos) {
+    w.effects.push(Effect::Shot { firer, from });
+}

@@ -92,11 +92,13 @@ fn close_range(w: &World, id: ObjectId) -> bool {
     let Some(o) = w.obj(id) else { return false };
     let Some(t) = o.target else { return false };
     let r = w.rules();
-    // spec: S-0215 F3 (an infantry type with the close-range flag; weapon ranges wait for M4)
+    // spec: S-0215 claim 23 and F3 (an infantry type with the close-range flag, or a primary weapon range of at most 512)
     let flag = o.kind == Kind::Infantry
         && r.unit(o.kind, o.type_index)
             .is_some_and(|u| u.raw.close_range.unwrap_or(false));
-    if !flag {
+    let short = crate::combat::weapon::slot_weapon(w, id, 0)
+        .is_some_and(|x| r.combat.weapon(x).range <= 512); // spec: S-0215 F3 (a primary weapon range of at most 512 leptons)
+    if !flag && !short {
         return false;
     }
     let tp = target_pos(w, t);
@@ -365,13 +367,40 @@ pub fn turn(w: &mut World, id: ObjectId) {
             ob.beh.ready_mark = false;
         }
     }
-    // The drop rule of opportunity targets (claim 33) needs opportunity targets, which only the M4 search finds.
+    // spec: S-0215 claim 33 (the drop rule: an opportunity target is dropped in these behaviours, judged after the per-tick start)
+    if let Some(ob) = w.obj_mut(id)
+        && ob.target.is_some()
+        && ob.combat.opportunity
+        && matches!(
+            ob.beh.current,
+            Some(
+                Behaviour::Ambush
+                    | Behaviour::Construction
+                    | Behaviour::Enter
+                    | Behaviour::Harmless
+                    | Behaviour::Missile
+                    | Behaviour::Open
+                    | Behaviour::Repair
+                    | Behaviour::Selling
+                    | Behaviour::Sleep
+                    | Behaviour::Stop
+                    | Behaviour::Unload
+                    | Behaviour::Wait
+            )
+        )
+    {
+        ob.target = None;
+        ob.combat.opportunity = false;
+        ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
+    }
     let Some(o) = w.obj(id) else { return };
     // spec: S-0215 claim 2 (alive with health above 0 and the timer expired)
     if o.health <= 0 || !o.beh.due(t) {
         if kind == Kind::Building {
             second_start(w, id);
         }
+        // spec: S-0215 claim 33 (b) and (d) (the per-tick search after the processing)
+        crate::combat::acquire::per_tick(w, id);
         return;
     }
     let d = process(w, id);
@@ -381,6 +410,8 @@ pub fn turn(w: &mut World, id: ObjectId) {
     if kind == Kind::Building {
         second_start(w, id);
     }
+    // spec: S-0215 claim 33 (b) and (d) (the per-tick search after the processing, judged on the behaviour it leaves)
+    crate::combat::acquire::per_tick(w, id);
 }
 
 /// A building's second per-tick start (S-0215 claim 11).
@@ -419,22 +450,12 @@ fn process(w: &mut World, id: ObjectId) -> i32 {
             process_guard(w, id)
         }
         (Some(Behaviour::AreaGuard), Kind::Infantry | Kind::Vehicle) => process_area_guard(w, id),
+        (Some(Behaviour::Hunt), Kind::Infantry | Kind::Vehicle) => process_hunt(w, id),
         (Some(Behaviour::Unload), Kind::Infantry) => process_unload_infantry(w, id),
         (
             Some(Behaviour::Guard | Behaviour::Sticky | Behaviour::AreaGuard | Behaviour::Attack),
             Kind::Building,
-        ) => {
-            // spec: S-0215 claim 32 (an armed building's guard sets its ready mark); firing waits for M4
-            let armed = w.rules().buildings[o.type_index as usize]
-                .raw
-                .primary
-                .is_some();
-            if armed && let Some(ob) = w.obj_mut(id) {
-                ob.beh.ready_mark = true;
-            }
-            w.note("S-0215 claim 32: building guard and attack processings are partial until combat (M4)");
-            standard_delay(w, id)
-        }
+        ) => crate::combat::behave::building_process(w, id),
         // spec: S-0215 claim 35 (c) (open for buildings)
         (Some(Behaviour::Open), Kind::Building) => process_open(w, id),
         // spec: S-0215 claim 4 and table T1 (open for infantry and vehicles: no processing rule, 450 ticks)
@@ -603,11 +624,22 @@ fn process_attack(w: &mut World, id: ObjectId) -> i32 {
             return standard_delay(w, id);
         }
     }
-    if o.target.is_none() {
+    if let Some(t) = o.target {
+        let (slot, _) = crate::combat::weapon::would_use(w, id, Some(t));
+        // spec: S-0304 claim 2 (the target is dropped, and the attack stopped, at the first check that answers illegal)
+        if crate::combat::check::check(w, id, Some(t), slot, true)
+            == crate::combat::check::Answer::Illegal
+            && let Some(ob) = w.obj_mut(id)
+        {
+            ob.target = None;
+            ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
+        }
+    }
+    if w.obj(id).is_some_and(|o| o.target.is_none()) {
         // spec: S-0215 claim 23 (fall-back: no target)
         fall_back(w, id, false);
     }
-    // Approaching and engaging the target belong to the combat topic (M4).
+    // Approaching a target out of reach is not stated by any approved spec (request Q-0072); the firing rules engage it when they can.
     let d = standard_delay(w, id);
     // spec: S-0215 claim 23 and F3 (halved under the close-range condition, the draw taken either way)
     if close_range(w, id) { d / 2 } else { d }
@@ -623,7 +655,91 @@ fn process_guard(w: &mut World, id: ObjectId) -> i32 {
         let in_progress = moving(w, id);
         infantry::idle_attempt(w, id, in_progress);
     }
-    // spec: S-0215 claim 24 (the delay table: rearming, distributed fire, otherwise the standard delay)
+    let t = w.tick;
+    let Some(o) = w.obj(id).cloned() else {
+        return NO_RULE_DELAY;
+    };
+    // spec: S-0215 claim 24 (the actor's weapon is still rearming: the rearm time remaining, no draw)
+    if t < o.combat.rearm_until {
+        return o.combat.rearm_until.wrapping_sub(t);
+    }
+    // spec: S-0215 claim 24 (distributed fire with candidates: 0, no draw)
+    let distributed = w
+        .rules()
+        .unit(o.kind, o.type_index)
+        .is_some_and(|u| u.raw.distributed_fire.unwrap_or(false));
+    if distributed && !o.combat.fired_at.is_empty() {
+        return 0;
+    }
+    standard_delay(w, id)
+}
+
+/// Hunt (S-0215 claim 27).
+fn process_hunt(w: &mut World, id: ObjectId) -> i32 {
+    let t = w.tick;
+    let r = w.rules_arc();
+    let Some(o) = w.obj(id).cloned() else {
+        return NO_RULE_DELAY;
+    };
+    let Some(u) = r.unit(o.kind, o.type_index).cloned() else {
+        return NO_RULE_DELAY;
+    };
+    let stupid = u.raw.stupid_hunt.unwrap_or(false);
+    if o.kind == Kind::Vehicle && u.raw.deploys_into.is_some() {
+        // spec: S-0215 claim 27 (a deploying vehicle seeks a clear spot to deploy; the deploy specs own it)
+        w.note("S-0215 claim 27: a hunting vehicle that deploys does not seek a spot yet (deploy specs)");
+        return standard_delay(w, id);
+    }
+    if !stupid {
+        // spec: S-0215 claim 27 (the normal search from its own position, unless stupid hunt)
+        crate::combat::acquire::search(
+            w,
+            id,
+            crate::combat::acquire::SearchKind::MapWide,
+            crate::combat::acquire::SearchContext::Hunt,
+        );
+    }
+    let target = if stupid {
+        None
+    } else {
+        w.obj(id).and_then(|x| x.target)
+    };
+    match target {
+        Some(tg) => {
+            let charges = u.raw.c4.unwrap_or(false)
+                || crate::combat::veterancy::has_ability(w, id, crate::combat::data::Ability::C4);
+            let building = matches!(tg, Target::Object(x) if w.obj(x).is_some_and(|b| b.kind == Kind::Building));
+            let ready_now = ready(w, id);
+            if o.kind == Kind::Infantry && ((u.engineer && !charges) || u.vehicle_thief) {
+                // spec: S-0215 claim 27 (an engineer or vehicle thief: the target as destination, capture queued with an immediate start if ready)
+                if let Some(ob) = w.obj_mut(id) {
+                    ob.dest = Some(tg);
+                    ob.beh
+                        .queue_and_start(Some(Behaviour::Capture), ready_now, t);
+                }
+            } else if o.kind == Kind::Infantry && charges && building {
+                // spec: S-0215 claim 27 (explosive charges against a building: sabotage)
+                if let Some(ob) = w.obj_mut(id) {
+                    ob.dest = Some(tg);
+                    ob.beh
+                        .queue_and_start(Some(Behaviour::Sabotage), ready_now, t);
+                }
+            } else if o.kind == Kind::Infantry
+                && let Some(ob) = w.obj_mut(id)
+            {
+                // spec: S-0215 claim 27 (any other infantry unit clears its destination and approaches; approach: request Q-0072)
+                ob.dest = None;
+            }
+        }
+        None => {
+            if o.kind == Kind::Infantry {
+                // spec: S-0215 claim 27 (without a target: it attempts its idle action)
+                let ip = moving(w, id);
+                infantry::idle_attempt(w, id, ip);
+            }
+        }
+    }
+    // spec: S-0215 claim 27 (the standard delay with the rate of the behaviour current once the outcome took effect)
     standard_delay(w, id)
 }
 
@@ -676,22 +792,40 @@ fn process_area_guard(w: &mut World, id: ObjectId) -> i32 {
         } else {
             leash(u.guard_range)
         };
+        let firing = t < o.combat.rearm_until;
         // spec: S-0215 claim 26 (the leash: not firing, no destination, distance above L)
-        let holds = o.dest.is_none() && dist > i64::from(leash);
-        if holds {
-            // spec: S-0215 claim 26 (drops any target, takes the guard spot as destination; may not search: idle action)
-            if let Some(ob) = w.obj_mut(id) {
-                ob.target = None;
-                ob.dest = Some(gs);
-            }
+        let holds = !firing && o.dest.is_none() && dist > i64::from(leash);
+        // spec: S-0215 claim 26 (may search: passive acquisition allowed and the targeting timer run out)
+        let may = crate::combat::acquire::may_search_passively(w, id) && t >= o.targeting_timer;
+        let idle = |w: &mut World| {
             if o.kind == Kind::Infantry {
                 let ip = moving(w, id);
                 infantry::idle_attempt(w, id, ip);
             }
-        } else if o.target.is_none() && o.kind == Kind::Infantry {
-            // spec: S-0215 claim 26 (no leash, no target, may not search: attempts its idle action)
-            let ip = moving(w, id);
-            infantry::idle_attempt(w, id, ip);
+        };
+        if holds {
+            // spec: S-0215 claim 26 (drops any target, takes the guard spot as destination)
+            if let Some(ob) = w.obj_mut(id) {
+                ob.target = None;
+                ob.combat.burst = 0;
+                ob.dest = Some(gs);
+            }
+        }
+        if (holds || o.target.is_none()) && may {
+            // spec: S-0215 claim 26 (the area search; a search that finds a target ends the processing with 1 tick)
+            let found = crate::combat::acquire::search(
+                w,
+                id,
+                crate::combat::acquire::SearchKind::Area,
+                crate::combat::acquire::SearchContext::Area,
+            );
+            if found.is_some() {
+                return 1;
+            }
+            idle(w);
+        } else if holds || o.target.is_none() {
+            // spec: S-0215 claim 26 (may not search: attempts its idle action)
+            idle(w);
         }
     }
     let Some(o) = w.obj(id).cloned() else {

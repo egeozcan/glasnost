@@ -461,7 +461,7 @@ fn below_full(w: &World, id: ObjectId) -> bool {
 }
 
 /// Counts as a vehicle (S-0214 Terms).
-fn counts_as_vehicle(w: &World, id: ObjectId) -> bool {
+pub fn counts_as_vehicle(w: &World, id: ObjectId) -> bool {
     match kind(w, id) {
         Some(Kind::Vehicle) => !uflag(w, id, |u| u.raw.non_vehicle.unwrap_or(false)),
         // Aircraft stand on the ground in our engine so far.

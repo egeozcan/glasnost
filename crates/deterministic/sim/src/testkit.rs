@@ -325,3 +325,131 @@ pub fn scripted_replay(seed: u32, ticks: i32) -> Replay {
     rep.ticks = ticks;
     rep
 }
+
+/// The synthetic combat ruleset: [`ruleset`] with invented weapons,
+/// projectiles and warheads for its types (no stock values), and a guard
+/// tower building type.
+pub fn combat_ruleset() -> Ruleset {
+    use glasnost_rules::sim::{
+        ArmourClass, BuildingType, Decimal, ProjectileType, WarheadType, WeaponType,
+    };
+    let mut r = ruleset();
+    let d = |s: &str| Decimal(s.into());
+    r.registries
+        .insert("buildings".into(), vec!["TOWER".into()]);
+    let s = &mut r.sim;
+    s.weapons.insert(
+        "Gun".into(),
+        WeaponType {
+            damage: Some(30),
+            rof: Some(40),
+            range: Some(d("5.5")),
+            speed: Some(40),
+            projectile: Some("Shell".into()),
+            warhead: Some("HE".into()),
+            ..Default::default()
+        },
+    );
+    s.weapons.insert(
+        "Rifle".into(),
+        WeaponType {
+            damage: Some(12),
+            rof: Some(25),
+            range: Some(d("4")),
+            speed: Some(100),
+            projectile: Some("Bullet".into()),
+            warhead: Some("SA".into()),
+            ..Default::default()
+        },
+    );
+    s.weapons.insert(
+        "Cannon".into(),
+        WeaponType {
+            damage: Some(55),
+            rof: Some(60),
+            range: Some(d("7.25")),
+            speed: Some(30),
+            projectile: Some("Lob".into()),
+            warhead: Some("HE".into()),
+            ..Default::default()
+        },
+    );
+    s.projectiles
+        .insert("Shell".into(), ProjectileType::default());
+    s.projectiles.insert(
+        "Bullet".into(),
+        ProjectileType {
+            inviso: Some(true),
+            ..Default::default()
+        },
+    );
+    s.projectiles.insert(
+        "Lob".into(),
+        ProjectileType {
+            arcing: Some(true),
+            ..Default::default()
+        },
+    );
+    let verses = |v: [&str; 11]| Some(v.iter().map(|x| Decimal((*x).into())).collect());
+    s.warheads.insert(
+        "HE".into(),
+        WarheadType {
+            cell_spread: Some(d("0.75")),
+            percent_at_max: Some(d("0.5")),
+            verses: verses([
+                "0.9", "0.8", "0.7", "0.6", "0.5", "0.45", "0.6", "0.4", "0.35", "1", "1",
+            ]),
+            wall: Some(true),
+            ..Default::default()
+        },
+    );
+    s.warheads.insert(
+        "SA".into(),
+        WarheadType {
+            verses: verses([
+                "1", "0.7", "0.5", "0.3", "0.2", "0.1", "0.4", "0.05", "0.05", "1", "1",
+            ]),
+            ..Default::default()
+        },
+    );
+    for (name, class) in [
+        ("CART", ArmourClass::Light),
+        ("CRUSHER", ArmourClass::Heavy),
+        ("BUGGY", ArmourClass::Light),
+    ] {
+        if let Some(v) = s.vehicles.get_mut(name) {
+            v.combat.armor = Some(class);
+            v.turret = Some(true);
+        }
+    }
+    if let Some(v) = s.vehicles.get_mut("CRUSHER") {
+        v.primary = Some("Gun".into());
+    }
+    s.buildings.insert(
+        "TOWER".into(),
+        BuildingType {
+            strength: Some(800),
+            foundation: Some([1, 1]),
+            primary: Some("Cannon".into()),
+            turret: Some(true),
+            rot: Some(10),
+            combat: glasnost_rules::sim::CombatFields {
+                armor: Some(ArmourClass::Concrete),
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+    );
+    r
+}
+
+/// The synthetic combat rules.
+pub fn combat_rules() -> Arc<SimRules> {
+    Arc::new(SimRules::new(&combat_ruleset(), "synthetic-combat"))
+}
+
+/// A new game of the scenario with the combat rules.
+pub fn combat_game(seed: u32) -> World {
+    crate::load::new_game(combat_rules(), &map(), catalogue(), &setup(seed))
+        .expect("synthetic combat scenario loads")
+}

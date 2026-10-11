@@ -239,3 +239,21 @@ pub fn reach_in(w: &World, c: CellXY, z: MovementZone) -> Reach {
         _ => Reach::None,
     }
 }
+
+/// Whether two cells lie in the same connected region of a movement zone
+/// (S-0212 claim 4), the cell layers given for the deck rule of S-0309
+/// claim 7 (regions are labelled per cell; a deck is compared by its
+/// cell's region, as the path search does, request Q-0042).
+pub fn same_region(
+    w: &World,
+    z: MovementZone,
+    a: CellXY,
+    _la: crate::world::Layer,
+    b: CellXY,
+    _lb: crate::world::Layer,
+) -> bool {
+    match (reach_in(w, a, z), reach_in(w, b, z)) {
+        (Reach::Region(x), Reach::Region(y)) => x == y,
+        _ => false,
+    }
+}

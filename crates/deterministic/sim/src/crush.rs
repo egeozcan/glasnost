@@ -189,7 +189,7 @@ fn crush_overlay(w: &mut World, id: ObjectId, c: CellXY) {
 }
 
 /// Removes a cell's overlay and updates passability (S-0211, S-0212).
-fn remove_overlay(w: &mut World, c: CellXY) {
+pub fn remove_overlay(w: &mut World, c: CellXY) {
     let wall = w
         .cells
         .cell(c)

@@ -566,6 +566,15 @@
           ],
           "default": null
         },
+        "cost": {
+          "description": "`Cost`, credits (S-0311 F1, S-0314 claim 5).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
         "crushable": {
           "description": "`Crushable`.",
           "type": [

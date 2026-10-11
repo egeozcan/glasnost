@@ -39,3 +39,15 @@ pub enum Effect {
         pos: Pos,
     },
 }
+
+/// Creates an animation: its creation draws (S-0202 claim 10) and a
+/// presentation event. Animations are not placed in the update order: where
+/// a shot's or a death's animations stand in it is not established (S-0203
+/// claim 2, `unmeasured`).
+pub fn anim(w: &mut crate::world::World, name: &str, pos: Pos) {
+    crate::load::anim_creation_draws(w, name);
+    w.effects.push(Effect::Anim {
+        name: name.to_owned(),
+        pos,
+    });
+}
