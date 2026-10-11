@@ -1463,6 +1463,19 @@ impl Builder<'_> {
         }
     }
 
+    /// The numbered muzzle positions belong to the numbered weapon slots
+    /// (S-0313 Terms: one muzzle position per weapon slot; S-0308 claim 1:
+    /// a type uses either the numbered slots or the primary and secondary
+    /// pair). They are kept only for a type written with numbered slots, so
+    /// that a single-weapon type keeps its primary and secondary positions.
+    fn numbered_flh_only_with_slots(combat: &mut Rec) {
+        if !combat.0.iter().any(|(f, _)| f == "weapon_slots") {
+            combat
+                .0
+                .retain(|(f, _)| f != "weapon_flh" && f != "elite_weapon_flh");
+        }
+    }
+
     /// `DamageParticleSystems` (S-0302 Import mapping): the listed particle
     /// systems whose `BehavesLike` is `Smoke` (letter case ignored), in list
     /// order, as type keys.
@@ -1495,6 +1508,7 @@ impl Builder<'_> {
         let mut combat = Rec::default();
         self.shared_combat(&mut combat, kind, index, t);
         self.weapon_slots(rec, &mut combat, kind, t);
+        Self::numbered_flh_only_with_slots(&mut combat);
         self.smoke_systems(&mut combat, t);
         if !combat.0.is_empty() {
             rec.put("combat", combat.node());
@@ -1584,6 +1598,7 @@ impl Builder<'_> {
         let mut combat = Rec::default();
         self.shared_combat(&mut combat, kind, index, t);
         self.weapon_slots(rec, &mut combat, kind, t);
+        Self::numbered_flh_only_with_slots(&mut combat);
         if !combat.0.is_empty() {
             rec.put("combat", combat.node());
         }

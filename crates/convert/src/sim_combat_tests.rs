@@ -717,8 +717,8 @@ fn every_combat_key_resolves() {
 /// spec: S-0313 Import mapping (muzzle positions and turret offset from the type's image section), S-0301 Import mapping (firing frames; building delayed fire), S-0306 Import mapping (aim shift, height), S-0310 Import mapping (voxel turret, pixel offsets); S-0003 claim 9 (an unread component keeps the value in force, with a warning)
 #[test]
 fn art_combat_fields() {
-    let base =
-        "[VehicleTypes]\n1=Cart\n[BuildingTypes]\n1=Hut\n[Cart]\nImage=CARTART\n[Hut]\nSpeed=0\n";
+    let base = "[VehicleTypes]\n1=Cart\n2=Solo\n[BuildingTypes]\n1=Hut\n\
+                [Cart]\nImage=CARTART\nTurretCount=1\nWeaponCount=2\n[Solo]\nImage=CARTART\n[Hut]\nSpeed=0\n";
     let art = "[CARTART]\nPrimaryFireFLH=100,-20,30\nEliteSecondaryFireFLH=5\nWeapon2FLH=1,2,3\n\
                TurretOffset=-40\nFiringFrames=3\nFiringSyncFrame1=2\n\
                [Hut]\nTargetCoordOffset=0,0,50\nHeight=4\nTurretAnimIsVoxel=yes\nBarrelAnimIsVoxel=no\n\
@@ -733,6 +733,10 @@ fn art_combat_fields() {
         "art EliteSecondaryFireFLH \"5\" has fewer than 3 readable integers"
     ));
     assert_eq!(c.combat.weapon_flh, Some(vec![[0, 0, 0], [1, 2, 3]]));
+    // A type with the primary and secondary pair keeps no numbered muzzle positions.
+    let solo = &s.vehicles["Solo"];
+    assert_eq!(solo.combat.weapon_flh, None);
+    assert_eq!(solo.combat.primary_fire_flh, Some([100, -20, 30]));
     assert_eq!(c.combat.turret_offset, Some(-40));
     assert_eq!(
         (c.firing_frames, c.firing_sync_frames),
