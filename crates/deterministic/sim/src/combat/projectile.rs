@@ -245,6 +245,7 @@ fn straight_pitch(w: &World, fire: Pos, q: Pos, target_building: bool, hb: i32) 
     };
     let x = f(i64::from(dprime), mode).max(crate::rules::nearest_double("0.05"));
     let y = f(i64::from(z.abs() - tau), mode);
+    // Whether S-0204's 50 table exceptions apply to this pitch facing (pitch_of applies them) is request Q-0077.
     let (a, _) = table_angle_real(x, y, mode);
     // spec: S-0306 F13 (θ_c = sgn(Z) × A(|Z| − τ, max(d′, 0.05)))
     let tc = if z < 0 { a.negated() } else { a };
@@ -653,9 +654,11 @@ fn pitch_of(w: &World, v: [F64; 3]) -> i32 {
 }
 
 /// The steering turn of one turn (S-0306 claims 12 to 15, F10 to F12).
-/// Returns the displacement velocity and the velocity after the turn.
+/// Returns the displacement velocity, the velocity after the turn and the
+/// cruise lift of claim 15 (leptons, applied to the position after the
+/// move).
 // spec: S-0306 claims 14 and 15 (the vertical component; direct steps 0 and 256; cruise look-ahead 6, cell centres, height levels of 104; steps t / 2; climb pitch 8192)
-fn steer(w: &World, pr: &mut Projectile, p: &ProjectileRules) -> ([F64; 3], [F64; 3]) {
+fn steer(w: &World, pr: &mut Projectile, p: &ProjectileRules) -> ([F64; 3], [F64; 3], i32) {
     let r = w.rules();
     let mode = r.mode;
     let q = r.quirks;
@@ -750,6 +753,7 @@ fn steer(w: &World, pr: &mut Projectile, p: &ProjectileRules) -> ([F64; 3], [F64
         // spec: S-0306 claim 15 (direct mode: an aircraft target, within 3 cells (6 very high) and not airburst, or t of 0 or 256)
         let lim = if p.very_high { 6 * 256 } else { 3 * 256 };
         let direct = aircraft || (dp <= lim && !p.airburst) || t == 0 || t == 256;
+        let mut lift = 0;
         let (goal, step, level_keep) = if p.level {
             // spec: S-0306 claim 15 (a level projectile with a target keeps its pitch)
             (0, 0, true)
@@ -758,13 +762,11 @@ fn steer(w: &World, pr: &mut Projectile, p: &ProjectileRules) -> ([F64; 3], [F64
             (pitch_of(w, wv), i32::from(((t + 256) / 2) as i16), false)
         } else {
             // Cruise mode (claim 15): the cruising altitude.
-            let look = add_trunc(
-                pprime,
-                [
-                    v[0].mul(f(6, mode), mode),
-                    v[1].mul(f(6, mode), mode),
-                    F64::ZERO,
-                ],
+            // spec: S-0306 claim 15 (the terrain height of the cell at P′ + 6 × trunc(V))
+            let look = Pos::new(
+                pprime.x.wrapping_add(v[0].to_i32_common().wrapping_mul(6)),
+                pprime.y.wrapping_add(v[1].to_i32_common().wrapping_mul(6)),
+                pprime.z,
             );
             let lc = look.cell();
             let mut e = w.surface_at(256 * lc.x + 128, 256 * lc.y + 128);
@@ -779,6 +781,14 @@ fn steer(w: &World, pr: &mut Projectile, p: &ProjectileRules) -> ([F64; 3], [F64
             };
             let cruise = e + n * 104;
             let ee = pprime.z - cruise;
+            // spec: S-0306 claim 15 (lifted 18 leptons when e < −20, lowered 18 when e > 20, a direct change of position)
+            lift = if ee < -20 {
+                18
+            } else if ee > 20 {
+                -18
+            } else {
+                0
+            };
             // spec: S-0306 claim 15 (goal 8192 when e < −52, 18432 when e > 52, else 16384; step trunc(t / 2))
             let goal = if ee < -52 {
                 8192
@@ -804,7 +814,7 @@ fn steer(w: &World, pr: &mut Projectile, p: &ProjectileRules) -> ([F64; 3], [F64
             }
         };
         v = rebuild(w, v, pc, pn, m);
-        (disp, v)
+        (disp, v, lift)
     } else {
         // spec: S-0306 claim 15 (no target: goal 8192 with step t; the displacement already includes the pitch change)
         let pc = pitch_of(w, v);
@@ -818,7 +828,7 @@ fn steer(w: &World, pr: &mut Projectile, p: &ProjectileRules) -> ([F64; 3], [F64
             pc - t
         };
         v = rebuild(w, v, pc, pn, m);
-        (v, v)
+        (v, v, 0)
     }
 }
 
@@ -933,6 +943,7 @@ pub fn turn(w: &mut World, id: ObjectId) {
         effects::anim(w, &trailer, start);
     }
     let kind = p.kind();
+    let mut lift = 0;
     let (newpos, disp_v) = match kind {
         ProjectileKind::Straight | ProjectileKind::Arcing => {
             // spec: S-0306 claim 10 (V_z falls by g, then trunc(P + V))
@@ -953,9 +964,10 @@ pub fn turn(w: &mut World, id: ObjectId) {
             (add_trunc(start, pr.vel), pr.vel)
         }
         ProjectileKind::Steering => {
-            let (disp, v) = steer(w, &mut pr, &p);
+            let (disp, v, l) = steer(w, &mut pr, &p);
             let np = add_trunc(start, disp);
             pr.vel = v;
+            lift = l;
             (np, v)
         }
     };
@@ -1175,7 +1187,8 @@ pub fn turn(w: &mut World, id: ObjectId) {
     };
     match outcome {
         None => {
-            pr.pos = newpos;
+            // The rows of T1 test P′, the position before the cruise lift of claim 15 (request Q-0078).
+            pr.pos = Pos::new(newpos.x, newpos.y, newpos.z.wrapping_add(lift));
             // spec: S-0306 claim 18 (a degenerating projectile loses 1 per turn without a detonation, not below 5)
             if p.degenerates && pr.damage > 5 {
                 pr.damage -= 1;
