@@ -355,3 +355,217 @@ fn live_maps_move_and_draw() {
         assert!(done == 0 || moved_total > 0, "no unit moved");
     });
 }
+
+/// Combat run: on each map, the closest pair of an armed unit and an enemy
+/// unit of two houses that are not allied; up to 8 armed units of
+/// the first house near it are selected through the input rules and ordered
+/// to attack the enemy with a right click. The game runs
+/// `GLASNOST_COMBAT_TICKS` ticks (default 360) and views are written before
+/// the order, at the first visible projectile, 8 ticks later and at the end,
+/// as `local-lane/screens/combat-<map index>-<tick>.png`, with the attackers
+/// selected and the enemy hovered (their S-0111 health bars). Prints counts
+/// and timings only. `GLASNOST_COMBAT_MAPS=n` (default 2) maps;
+/// `GLASNOST_LIVE_FILTER` as above.
+#[test]
+fn live_maps_fight_and_draw() {
+    use glasnost_sim::world::{Object, Pos};
+
+    let Some(dir) = std::env::var_os("GLASNOST_GAME_DIR") else {
+        eprintln!("GLASNOST_GAME_DIR not set: skipped");
+        return;
+    };
+    let want = env_num("GLASNOST_COMBAT_MAPS", 2);
+    let ticks = env_num("GLASNOST_COMBAT_TICKS", 360) as i32;
+    let filter = std::env::var("GLASNOST_LIVE_FILTER")
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    let out_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../local-lane/screens");
+    std::fs::create_dir_all(&out_dir).unwrap();
+    pollster::block_on(async {
+        let mut vfs = Vfs::default();
+        vfs.mount_install(files(std::path::Path::new(&dir))).await;
+        vfs.mount_startup(GameOptions::default()).await;
+        let maps = find::find_maps(&vfs).await;
+        let mut done = 0usize;
+        let mut shots_total = 0u64;
+        let mut armed_runs = 0usize;
+        let mut written = Vec::new();
+        for (n, m) in maps.iter().enumerate() {
+            if done >= want {
+                break;
+            }
+            if !filter.is_empty() && !m.name.to_ascii_lowercase().contains(&filter) {
+                continue;
+            }
+            let bytes = vfs.read(&m.file).await.unwrap();
+            let t0 = Instant::now();
+            let mut loaded = load::load(
+                &mut vfs,
+                bytes,
+                m.archive.clone(),
+                &Default::default(),
+                true,
+            )
+            .await;
+            let load_ms = t0.elapsed().as_millis();
+            let Some(live) = loaded.live.as_ref() else {
+                continue;
+            };
+            let w = &live.world;
+            // Any owner will do: the sandbox lets the viewer control every
+            // house.
+            let player = |o: &Object| o.on_map && o.kind.is_mobile() && o.owner.is_some();
+            // When the import gives no weapons at all (the importer does not
+            // yet create weapons by reference, S-0004 claim 13), any unit
+            // will do: the run then still shows the status extras.
+            let weapons = live.rules.combat.weapons.len();
+            let armed = |o: &Object| {
+                weapons == 0
+                    || live
+                        .rules
+                        .unit(o.kind, o.type_index)
+                        .is_some_and(|u| u.combat.slots.iter().any(Option::is_some))
+            };
+            let dist = |a: Pos, b: Pos| i64::from(a.x - b.x).pow(2) + i64::from(a.y - b.y).pow(2);
+            let mut best: Option<(i64, ObjectId, ObjectId)> = None;
+            for a in w.objects.values().filter(|o| player(o) && armed(o)) {
+                for b in w.objects.values().filter(|o| player(o)) {
+                    if b.owner == a.owner || w.allied(a.owner, b.owner) {
+                        continue;
+                    }
+                    let d = dist(a.pos, b.pos);
+                    if best.is_none_or(|(bd, ..)| d < bd) {
+                        best = Some((d, a.id, b.id));
+                    }
+                }
+            }
+            let Some((_, first, enemy)) = best else {
+                continue;
+            };
+            let a0 = w.obj(first).unwrap();
+            let house = a0.owner.unwrap();
+            let attackers: Vec<ObjectId> = w
+                .objects
+                .values()
+                .filter(|o| {
+                    player(o)
+                        && armed(o)
+                        && o.owner == Some(house)
+                        && dist(o.pos, a0.pos) <= (6 * 256i64).pow(2)
+                })
+                .map(|o| o.id)
+                .take(8)
+                .collect();
+            done += 1;
+            while loaded.live.as_ref().unwrap().world.tick < 4 {
+                loaded.tick();
+            }
+            let live = loaded.live.as_mut().unwrap();
+            let mut selection = Vec::new();
+            for (i, &id) in attackers.iter().enumerate() {
+                let mods = Modifiers {
+                    force_select: i > 0,
+                    ..Default::default()
+                };
+                live.click(house, &mut selection, ClickOn::Object(id), mods);
+            }
+            let report = live.click(
+                house,
+                &mut selection,
+                ClickOn::Object(enemy),
+                Modifiers::default(),
+            );
+            let mut focus: Vec<ObjectId> = attackers.clone();
+            focus.push(enemy);
+            let redraw = |loaded: &mut load::Loaded, selection: &mut Vec<ObjectId>| {
+                let mut scene = std::mem::take(&mut loaded.built.scene);
+                let (inputs, live) = loaded.split();
+                let live = live.unwrap();
+                live.prune(selection);
+                let hovered = live.world.obj(enemy).map(|o| o.id);
+                live.set_marks(selection, hovered);
+                live.redraw(&inputs, &mut scene);
+                loaded.built.scene = scene;
+            };
+            let shoot = |loaded: &load::Loaded, written: &mut Vec<String>| {
+                let live = loaded.live.as_ref().unwrap();
+                let v = view_at(&loaded.map, middle(&live.world, &focus));
+                let f =
+                    loaded
+                        .built
+                        .scene
+                        .compose(&v, &Filter::default(), &ComposeQuirks::default());
+                let name = format!("combat-{n}-{}.png", live.world.tick);
+                std::fs::write(
+                    out_dir.join(&name),
+                    png::png(v.size.0, v.size.1, &f.to_rgba()),
+                )
+                .unwrap();
+                written.push(name);
+            };
+            redraw(&mut loaded, &mut selection);
+            shoot(&loaded, &mut written);
+            let (mut step_us, mut redraw_us) = (0u128, 0u128);
+            let mut seen_at: Option<i32> = None;
+            for t in 0..ticks {
+                let t0 = Instant::now();
+                loaded.live.as_mut().unwrap().step();
+                step_us += t0.elapsed().as_micros();
+                let t0 = Instant::now();
+                redraw(&mut loaded, &mut selection);
+                redraw_us += t0.elapsed().as_micros();
+                let live = loaded.live.as_ref().unwrap();
+                let visible = live.world.projectiles.values().any(|p| {
+                    live.rules
+                        .combat
+                        .projectile_of(p.weapon)
+                        .is_none_or(|k| !k.inviso)
+                });
+                if seen_at.is_none() && (visible || live.counts.detonations > 0) {
+                    seen_at = Some(t);
+                    shoot(&loaded, &mut written);
+                }
+                if seen_at.is_some_and(|s| t == s + 8) {
+                    shoot(&loaded, &mut written);
+                }
+            }
+            shoot(&loaded, &mut written);
+            let live = loaded.live.as_ref().unwrap();
+            let c = live.counts;
+            shots_total += c.shots;
+            armed_runs += usize::from(weapons > 0);
+            let kills: i32 = live.world.houses.iter().map(|h| h.combat.kills).sum();
+            let losses: i32 = live.world.houses.iter().map(|h| h.combat.losses).sum();
+            println!(
+                "combat map {n} ({}): load {load_ms} ms; {weapons} weapons imported; {} attackers, {} selected, \
+                 {} orders issued, {} refused; enemy {}; after {ticks} ticks: {} shots, \
+                 {} detonations, {} animations, {} killed (houses: {kills} kills, {losses} losses), \
+                 at most {} projectiles in flight, first seen after {:?} ticks; \
+                 per tick: step {} µs, redraw {} µs; scene images {}",
+                m.name,
+                attackers.len(),
+                selection.len(),
+                report.issued,
+                report.refused,
+                if live.world.obj(enemy).is_some() {
+                    "alive"
+                } else {
+                    "destroyed"
+                },
+                c.shots,
+                c.detonations,
+                c.anims,
+                c.kills,
+                c.most_in_flight,
+                seen_at,
+                step_us / ticks.max(1) as u128,
+                redraw_us / ticks.max(1) as u128,
+                loaded.built.scene.images.len(),
+            );
+        }
+        for name in &written {
+            println!("wrote {}", out_dir.join(name).display());
+        }
+        assert!(armed_runs == 0 || shots_total > 0, "no shot was fired");
+    });
+}
