@@ -82,6 +82,8 @@ pub fn shot(w: &mut World, firer: ObjectId, slot: usize, target: Target) -> bool
     let Some(o) = w.obj(firer).cloned() else {
         return false;
     };
+    // spec: S-0301 claim 13 (a shot made in the tick the counter equals the sync frame is a sync shot, whether or not the countdown runs)
+    let was_sync = crate::combat::check::sync_tick(w, firer, slot, weapon);
     let tc = crate::combat::veterancy::type_combat(w, firer)
         .cloned()
         .unwrap_or_default();
@@ -154,7 +156,6 @@ pub fn shot(w: &mut World, firer: ObjectId, slot: usize, target: Target) -> bool
     let firing_frames = rules
         .unit(o.kind, o.type_index)
         .map_or(0, |u| u.vehicle.firing_frames);
-    let was_sync = t < o.combat.rearm_until;
     let expected = match target {
         Target::Object(x)
             if !rules
