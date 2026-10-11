@@ -1004,7 +1004,7 @@ pub fn search(
         ob.combat.limited_scan = false;
     }
     if let Some(x) = pick {
-        set_target_from_search(w, a, x, ctx, distributed);
+        set_target_from_search(w, a, x, ctx, distributed, ao.target);
     }
     pick
 }
@@ -1026,8 +1026,9 @@ fn set_target_from_search(
     x: ObjectId,
     ctx: SearchContext,
     distributed: bool,
+    before: Option<Target>,
 ) {
-    let before = w.obj(a).and_then(|o| o.target);
+    // `before` is the target held before the search, even when the search dropped it (claim 24, table Search outcome row 1).
     let t = redirect(w, a, Target::Object(x));
     let rules = w.rules_arc();
     let expected = match t {
