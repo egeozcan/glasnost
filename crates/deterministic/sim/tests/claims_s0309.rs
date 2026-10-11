@@ -1649,3 +1649,606 @@ fn anger_ties_go_to_the_earlier_house() {
         Some(glasnost_sim::world::HouseId(1))
     );
 }
+
+// ---------------------------------------------------------------------------
+// Claim 20: distributed fire
+
+fn distributed_rules() -> Ruleset {
+    let mut r = by_special();
+    cart_mut(&mut r).distributed_fire = Some(true);
+    special(&mut r, "T9", "50");
+    r
+}
+
+fn fired_at(w: &World, a: ObjectId) -> Vec<ObjectId> {
+    w.obj(a).unwrap().combat.fired_at.clone()
+}
+
+fn set_fired_at(w: &mut World, a: ObjectId, l: Vec<ObjectId>) {
+    w.obj_mut(a).unwrap().combat.fired_at = l;
+}
+
+// spec: S-0309 claim 20 (C empty: nothing, and the fired-at list is emptied)
+#[test]
+fn distributed_fire_no_candidate() {
+    let mut w = game(&distributed_rules());
+    let a = veh(&mut w, "CART", 0, 0, 0);
+    let far = veh(&mut w, "T0", 1, 12, 0);
+    set_fired_at(&mut w, a, vec![far]);
+    assert_eq!(range_search(&mut w, a), None);
+    assert!(fired_at(&w, a).is_empty());
+}
+
+// spec: S-0309 claim 20 (some candidate not on L: the best of those; L keeps only its objects that are in C)
+#[test]
+fn distributed_fire_prefers_objects_not_fired_at() {
+    let mut w = game(&distributed_rules());
+    let a = veh(&mut w, "CART", 0, 0, 0);
+    let best = veh(&mut w, "T9", 1, 2, 0);
+    let other = veh(&mut w, "T0", 1, -2, 0);
+    let far = veh(&mut w, "T1", 1, 12, 0);
+    set_fired_at(&mut w, a, vec![far, best]);
+    assert_eq!(range_search(&mut w, a), Some(other));
+    assert_eq!(fired_at(&w, a), vec![best]);
+}
+
+// spec: S-0309 claim 20 (every candidate on L: the best of C, and the list is emptied)
+#[test]
+fn distributed_fire_all_fired_at() {
+    let mut w = game(&distributed_rules());
+    let a = veh(&mut w, "CART", 0, 0, 0);
+    let best = veh(&mut w, "T9", 1, 2, 0);
+    let other = veh(&mut w, "T0", 1, -2, 0);
+    set_fired_at(&mut w, a, vec![other, best]);
+    assert_eq!(range_search(&mut w, a), Some(best));
+    assert!(fired_at(&w, a).is_empty());
+}
+
+// spec: S-0309 claim 20 and Edge cases (quirks.hunt_ignores_distributed_fire on: a map-wide search picks nothing and empties the list)
+#[test]
+fn distributed_fire_hunt_on() {
+    let mut w = game(&distributed_rules());
+    let a = veh(&mut w, "CART", 0, 0, 0);
+    let b = veh(&mut w, "T9", 1, 2, 0);
+    set_fired_at(&mut w, a, vec![b]);
+    assert_eq!(
+        acquire::search(&mut w, a, SearchKind::MapWide, SearchContext::Hunt),
+        None
+    );
+    assert!(fired_at(&w, a).is_empty());
+}
+
+// spec: S-0309 Edge cases (quirks.hunt_ignores_distributed_fire off: claim 17 among the map-wide candidates, the list empty afterwards)
+#[test]
+fn distributed_fire_hunt_off() {
+    let mut r = distributed_rules();
+    r.globals.quirks.hunt_ignores_distributed_fire = false;
+    let mut w = game(&r);
+    let a = veh(&mut w, "CART", 0, 0, 0);
+    let best = veh(&mut w, "T9", 1, 2, 0);
+    let other = veh(&mut w, "T0", 1, -2, 0);
+    // The best candidate is on the list: claim 17 still picks it.
+    set_fired_at(&mut w, a, vec![best]);
+    let _ = other;
+    assert_eq!(
+        acquire::search(&mut w, a, SearchKind::MapWide, SearchContext::Hunt),
+        Some(best)
+    );
+    assert!(fired_at(&w, a).is_empty());
+}
+
+// ---------------------------------------------------------------------------
+// Claim 18 and S-0215 claim 18: retaliation
+
+/// A CART defender (house 0, guard) and a T1 attacker (house 1) at
+/// (`dx`, 0).
+fn duel(r: &Ruleset, dx: i32) -> (World, ObjectId, ObjectId) {
+    let mut w = game(r);
+    let a = veh(&mut w, "CART", 0, 0, 0);
+    let x = veh(&mut w, "T1", 1, dx, 0);
+    (w, a, x)
+}
+
+fn retaliated(w: &World, a: ObjectId, x: ObjectId) -> bool {
+    let o = w.obj(a).unwrap();
+    o.target == obj(x)
+        && (o.beh.current == Some(Behaviour::Attack) || o.beh.queued == Some(Behaviour::Attack))
+}
+
+// spec: S-0309 claim 18 and S-0215 claim 18 (a defender in guard retaliates: an override to attack with the attacker as target)
+#[test]
+fn retaliation_happens() {
+    let (mut w, a, x) = duel(&base(), 2);
+    acquire::retaliate(&mut w, a, x);
+    assert!(retaliated(&w, a, x));
+    assert!(!opportunity(&w, a));
+}
+
+// spec: S-0309 claim 18 (the retaliate flag)
+#[test]
+fn retaliation_needs_the_flag() {
+    let mut r = base();
+    cart_mut(&mut r).combat.can_retaliate = Some(false);
+    let (mut w, a, x) = duel(&r, 2);
+    acquire::retaliate(&mut w, a, x);
+    assert!(!retaliated(&w, a, x));
+}
+
+// spec: S-0309 claim 18 (not against an allied attacker)
+#[test]
+fn no_retaliation_against_allies() {
+    let mut w = game(&base());
+    let a = veh(&mut w, "CART", 0, 0, 0);
+    let x = veh(&mut w, "T1", 0, 2, 0);
+    acquire::retaliate(&mut w, a, x);
+    assert!(!retaliated(&w, a, x));
+}
+
+// spec: S-0309 claim 18 and S-0308 scenario W10 (mean weapon damage above 0: M = trunc((2 − 1) / 2) = 0 does not retaliate, M = trunc((4 − 1) / 2) = 1 does)
+#[test]
+fn retaliation_needs_positive_mean_damage() {
+    for (p, ok) in [(2, false), (4, true)] {
+        let mut r = base();
+        // The secondary's warhead is 0 against light, so row 15 gives the primary against the light attacker.
+        let mut v = vec![d("1"); 11];
+        v[3] = d("0");
+        r.sim.warheads.insert(
+            "Blank".into(),
+            WarheadType {
+                verses: Some(v),
+                ..Default::default()
+            },
+        );
+        let gun = r.sim.weapons["Gun"].clone();
+        r.sim.weapons.insert(
+            "Pos".into(),
+            WeaponType {
+                damage: Some(p),
+                ..gun.clone()
+            },
+        );
+        r.sim.weapons.insert(
+            "Neg".into(),
+            WeaponType {
+                damage: Some(-1),
+                warhead: Some("Blank".into()),
+                ..gun
+            },
+        );
+        cart_mut(&mut r).primary = Some("Pos".into());
+        cart_mut(&mut r).secondary = Some("Neg".into());
+        let (mut w, a, x) = duel(&r, 2);
+        acquire::retaliate(&mut w, a, x);
+        assert_eq!(retaliated(&w, a, x), ok, "primary {p}");
+    }
+}
+
+// spec: S-0309 claim 18 (the firing check without range for the weapon it would use must answer neither illegal nor impossible)
+#[test]
+fn retaliation_needs_a_legal_shot() {
+    // Primary 10 with a zero versus value against light: row 16 gives the secondary, a healing
+    // weapon (-2). M = trunc(8 / 2) = 4. A vehicle's healing weapon is illegal against an
+    // object at full health (S-0310 claim 11) and legal against a damaged one.
+    let mut r = base();
+    let mut v = vec![d("1"); 11];
+    v[3] = d("0");
+    r.sim.warheads.insert(
+        "Blank".into(),
+        WarheadType {
+            verses: Some(v),
+            ..Default::default()
+        },
+    );
+    let gun = r.sim.weapons["Gun"].clone();
+    r.sim.weapons.insert(
+        "Big".into(),
+        WeaponType {
+            damage: Some(10),
+            warhead: Some("Blank".into()),
+            ..gun.clone()
+        },
+    );
+    r.sim.weapons.insert(
+        "Salve".into(),
+        WeaponType {
+            damage: Some(-2),
+            ..gun
+        },
+    );
+    cart_mut(&mut r).primary = Some("Big".into());
+    cart_mut(&mut r).secondary = Some("Salve".into());
+    let (mut w, a, x) = duel(&r, 2);
+    acquire::retaliate(&mut w, a, x);
+    assert!(!retaliated(&w, a, x), "illegal against full health");
+    w.obj_mut(x).unwrap().health = 50;
+    acquire::retaliate(&mut w, a, x);
+    assert!(retaliated(&w, a, x));
+}
+
+// spec: S-0215 claim 18 (an actor of a player house that already has a target never retaliates)
+#[test]
+fn player_actor_with_a_target_does_not_retaliate() {
+    let (mut w, a, x) = duel(&base(), 2);
+    let other = veh(&mut w, "T2", 1, -2, 0);
+    set_target(&mut w, a, obj(other), false);
+    acquire::retaliate(&mut w, a, x);
+    assert_eq!(target(&w, a), obj(other));
+}
+
+// spec: S-0215 claim 18 (a mobile actor of a player house retaliates only in guard, area guard or patrol, unless player return fire is on)
+#[test]
+fn player_mobile_actor_behaviour_list() {
+    for (b, prf, ok) in [
+        (Behaviour::Guard, false, true),
+        (Behaviour::AreaGuard, false, true),
+        (Behaviour::Patrol, false, true),
+        (Behaviour::Sticky, false, false),
+        (Behaviour::Move, false, false),
+        (Behaviour::Move, true, true),
+    ] {
+        let mut r = base();
+        r.sim.general.player_return_fire = Some(prf);
+        let (mut w, a, x) = duel(&r, 2);
+        set_beh(&mut w, a, b);
+        acquire::retaliate(&mut w, a, x);
+        assert_eq!(retaliated(&w, a, x), ok, "{b:?}, player return fire {prf}");
+    }
+}
+
+// spec: S-0215 claim 18 and F7 (a player's actor that cannot reach the attacker overrides only within (S + 0.5) × 256 leptons)
+#[test]
+fn player_actor_distance_rule() {
+    // The attacker 7 cells away (1792 leptons), beyond the gun's 1408.
+    for (sight, ok) in [(6, false), (7, true)] {
+        let mut r = base();
+        cart_mut(&mut r).sight = Some(sight);
+        let (mut w, a, x) = duel(&r, 7);
+        acquire::retaliate(&mut w, a, x);
+        assert_eq!(
+            retaliated(&w, a, x),
+            ok,
+            "sight {sight}: {} leptons",
+            256 * sight + 128
+        );
+    }
+}
+
+// spec: S-0309 claim 18 (a player's infantry unit with the explosive-charges flag does not retaliate against a building)
+#[test]
+fn charges_infantry_does_not_retaliate_against_buildings() {
+    let mut r = base();
+    r.sim.infantry.get_mut("WALKER").unwrap().c4 = Some(true);
+    let mut w = game(&r);
+    let a = put(&mut w, Kind::Infantry, "WALKER", 0, 0, 0);
+    let tower = put(&mut w, Kind::Building, "TOWER", 1, 2, 0);
+    acquire::retaliate(&mut w, a, tower);
+    assert!(!retaliated(&w, a, tower));
+    let x = veh(&mut w, "T1", 1, -2, 0);
+    acquire::retaliate(&mut w, a, x);
+    assert!(retaliated(&w, a, x), "a vehicle attacker");
+}
+
+// spec: S-0309 claim 18 (a player's vehicle that deploys into an artillery building never retaliates)
+#[test]
+fn artillery_deployer_does_not_retaliate() {
+    let mut r = base();
+    r.sim.buildings.get_mut("TOWER").unwrap().artillary = Some(true);
+    cart_mut(&mut r).deploys_into = Some("TOWER".into());
+    let (mut w, a, x) = duel(&r, 2);
+    acquire::retaliate(&mut w, a, x);
+    assert!(!retaliated(&w, a, x));
+}
+
+// spec: S-0309 claim 25 part h and S-0215 claim 18 (the neutral and special houses: the charges condition does not apply, and neither the behaviour list nor a present target holds them back)
+#[test]
+fn neutral_retaliation() {
+    let mut r = base();
+    r.sim.infantry.get_mut("WALKER").unwrap().c4 = Some(true);
+    for role in [HouseRole::Neutral, HouseRole::Special] {
+        let mut w = game_role(&r, role);
+        let a = put(&mut w, Kind::Infantry, "WALKER", 1, 0, 0);
+        let tower = put(&mut w, Kind::Building, "TOWER", 0, 2, 0);
+        acquire::retaliate(&mut w, a, tower);
+        assert!(
+            retaliated(&w, a, tower),
+            "{role:?}: charges against a building"
+        );
+        let mut w = game_role(&base(), role);
+        let a = veh(&mut w, "CART", 1, 0, 0);
+        let x = veh(&mut w, "T1", 0, 2, 0);
+        set_beh(&mut w, a, Behaviour::Move);
+        acquire::retaliate(&mut w, a, x);
+        assert!(retaliated(&w, a, x), "{role:?}: in move");
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Claims 21 and 22
+
+// spec: S-0309 claim 21 (a fire-once weapon drops its target after the shot)
+#[test]
+fn fire_once_drops_the_target() {
+    let mut r = base();
+    r.sim.weapons.get_mut("Gun").unwrap().fire_once = Some(true);
+    r.sim.general.normal_targeting_delay = Some(400);
+    let mut w = game(&r);
+    let a = veh(&mut w, "CART", 0, 0, 0);
+    let b = veh(&mut w, "T0", 1, 2, 0);
+    set_target(&mut w, a, obj(b), false);
+    w.obj_mut(a).unwrap().targeting_timer = 1000;
+    let mut fired = false;
+    for _ in 0..300 {
+        glasnost_sim::tick::step(&mut w);
+        if w.obj(a).unwrap().combat.rearm_until != i32::MIN {
+            fired = true;
+            break;
+        }
+    }
+    assert!(fired, "the cart fires");
+    assert_eq!(target(&w, a), None);
+}
+
+// spec: S-0309 claim 22 (with the limited-scan mark an area search is a range search; a search that finds nothing clears the mark)
+#[test]
+fn limited_scan_mark() {
+    let mut r = base();
+    guard(&mut r, "CART", "3");
+    let mut w = game(&r);
+    let a = veh(&mut w, "CART", 0, 0, 0);
+    w.obj_mut(a).unwrap().guard_spot = Some(Target::Cell(at(10, 0)));
+    // Around the guard spot, but 10 cells from the searcher.
+    veh(&mut w, "T0", 1, 10, 1);
+    w.obj_mut(a).unwrap().combat.limited_scan = true;
+    // A range search (R = 768) finds nothing near the searcher: the mark is cleared.
+    assert_eq!(
+        acquire::search(&mut w, a, SearchKind::Area, SearchContext::Area),
+        None
+    );
+    assert!(!w.obj(a).unwrap().combat.limited_scan);
+    let near = veh(&mut w, "T1", 1, 2, 0);
+    w.obj_mut(a).unwrap().combat.limited_scan = true;
+    assert_eq!(
+        acquire::search(&mut w, a, SearchKind::Area, SearchContext::Area),
+        Some(near),
+        "centred on the searcher"
+    );
+    assert!(
+        w.obj(a).unwrap().combat.limited_scan,
+        "found: the mark stays"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Claim 23: attack-move searches
+
+fn attack_move(w: &mut World, a: ObjectId, mem: Target, engaged: bool) {
+    let o = w.obj_mut(a).unwrap();
+    o.attack_move = Some(mem);
+    o.combat.engaged = engaged;
+}
+
+// spec: S-0309 claim 23 (a), row "a destination, not engaged" (a range search keeping a usable target; a target found queues attack with an immediate start and counts as engaged; not limited by claims 2 and 3; not an opportunity target)
+#[test]
+fn attack_move_destination_not_engaged() {
+    let mut r = base();
+    cart_mut(&mut r).combat.can_passive_aquire = Some(false);
+    let mut w = game(&r);
+    let a = veh(&mut w, "CART", 0, 0, 0);
+    let b = veh(&mut w, "T0", 1, 2, 0);
+    set_beh(&mut w, a, Behaviour::Move);
+    attack_move(&mut w, a, Target::Cell(at(-8, 0)), false);
+    expire(&mut w, a);
+    acquire::per_tick(&mut w, a);
+    assert_eq!(target(&w, a), obj(b));
+    assert!(!opportunity(&w, a));
+    let o = w.obj(a).unwrap();
+    assert!(o.combat.engaged);
+    assert_eq!(o.beh.current, Some(Behaviour::Attack));
+}
+
+// spec: S-0309 claim 23 (a), row "only a target", memory target within reach (nothing happens; the timer is not restarted)
+#[test]
+fn attack_move_target_within_reach_does_nothing() {
+    let mut w = game(&base());
+    let a = veh(&mut w, "CART", 0, 0, 0);
+    let m = veh(&mut w, "T0", 1, 2, 0);
+    veh(&mut w, "T1", 1, -2, 0);
+    attack_move(&mut w, a, Target::Object(m), false);
+    expire(&mut w, a);
+    let rng = w.rng.clone();
+    let t0 = timer(&w, a);
+    acquire::per_tick(&mut w, a);
+    assert_eq!(target(&w, a), None);
+    assert_eq!(timer(&w, a), t0);
+    assert_eq!(w.rng, rng);
+}
+
+// spec: S-0309 claim 23 (a), row "only a target", any other state (a search as for no target; nothing found: the memory's target again; found: attack and engaged)
+#[test]
+fn attack_move_target_out_of_reach() {
+    let mut w = game(&base());
+    let a = veh(&mut w, "CART", 0, 0, 0);
+    let m = veh(&mut w, "T0", 1, 12, 0);
+    attack_move(&mut w, a, Target::Object(m), false);
+    expire(&mut w, a);
+    acquire::per_tick(&mut w, a);
+    assert_eq!(target(&w, a), obj(m), "nothing found");
+    assert!(!w.obj(a).unwrap().combat.engaged);
+    let b = veh(&mut w, "T1", 1, -2, 0);
+    expire(&mut w, a);
+    acquire::per_tick(&mut w, a);
+    assert_eq!(
+        target(&w, a),
+        obj(b),
+        "found: its present target is not kept"
+    );
+    assert!(w.obj(a).unwrap().combat.engaged);
+    assert!(!opportunity(&w, a));
+}
+
+// spec: S-0309 claim 23 (a), rows "a destination, engaged" (target within reach: nothing; none within reach: a search as for no target, nothing found leaves no target, still engaged)
+#[test]
+fn attack_move_destination_engaged() {
+    let mut w = game(&base());
+    let a = veh(&mut w, "CART", 0, 0, 0);
+    let near = veh(&mut w, "T0", 1, 2, 0);
+    attack_move(&mut w, a, Target::Cell(at(-8, 0)), true);
+    set_target(&mut w, a, obj(near), false);
+    expire(&mut w, a);
+    let t0 = timer(&w, a);
+    acquire::per_tick(&mut w, a);
+    assert_eq!(target(&w, a), obj(near));
+    assert_eq!(timer(&w, a), t0, "nothing happens");
+    let far = veh(&mut w, "T1", 1, 12, 0);
+    kill(&mut w, near);
+    set_target(&mut w, a, obj(far), false);
+    expire(&mut w, a);
+    acquire::per_tick(&mut w, a);
+    assert_eq!(target(&w, a), None);
+    assert!(w.obj(a).unwrap().combat.engaged);
+}
+
+// ---------------------------------------------------------------------------
+// Claim 25: the neutral and special houses
+
+// spec: S-0309 claim 25 part a (an engineer of these houses is not excluded from passive acquisition)
+#[test]
+fn neutral_engineer_may_search_passively() {
+    let mut r = base();
+    r.sim.infantry.get_mut("WALKER").unwrap().engineer = Some(true);
+    for role in [HouseRole::Neutral, HouseRole::Special] {
+        let mut w = game_role(&r, role);
+        let e = put(&mut w, Kind::Infantry, "WALKER", 1, 0, 0);
+        assert!(acquire::may_search_passively(&w, e), "{role:?}");
+    }
+}
+
+// spec: S-0309 claim 8 and claim 25 part a (the engineer exception of F1: R = 0 for an engineer, so the rings come from the weapon ranges)
+#[test]
+fn engineer_range_search_ignores_guard_range() {
+    let mut r = base();
+    let wk = r.sim.infantry.get_mut("WALKER").unwrap();
+    wk.engineer = Some(true);
+    wk.guard_range = Some(d("10"));
+    shed(&mut r, None, 0, false);
+    let mut w = game_role(&r, HouseRole::Neutral);
+    let e = put(&mut w, Kind::Infantry, "WALKER", 1, 0, 0);
+    // Rifle: 4 cells. A building 8 cells away is within the guard range but beyond the reach.
+    put(&mut w, Kind::Building, "SHED", 0, 8, 0);
+    assert_eq!(range_search(&mut w, e), None);
+    let near = put(&mut w, Kind::Building, "SHED", 0, 3, 0);
+    assert_eq!(range_search(&mut w, e), Some(near));
+}
+
+// ---------------------------------------------------------------------------
+// S-0215 claims 26, 27 and 33: searches from processing, and the drop rule
+
+// spec: S-0215 claim 26 (area guard searches around its guard spot when it may; a search that finds a target ends the processing with a delay of 1 tick) and S-0309 claim 1
+#[test]
+fn area_guard_processing_searches() {
+    let mut w = game(&base());
+    let a = veh(&mut w, "CART", 0, 0, 0);
+    set_beh(&mut w, a, Behaviour::AreaGuard);
+    w.obj_mut(a).unwrap().guard_spot = Some(Target::Cell(at(0, 0)));
+    expire(&mut w, a);
+    // 8 cells: inside the area search (R = 2816) but beyond a range search's reach.
+    let b = veh(&mut w, "T0", 1, 8, 0);
+    let t = w.tick;
+    glasnost_sim::tick::step(&mut w);
+    assert_eq!(target(&w, a), obj(b));
+    assert!(
+        !opportunity(&w, a),
+        "the area search marks no opportunity target"
+    );
+    assert_eq!(w.obj(a).unwrap().beh.last, Some((t, 1)));
+}
+
+// spec: S-0215 claim 26 (the leash: drops any target, takes the guard spot as destination, and searches)
+#[test]
+fn area_guard_leash_drops_target_and_searches() {
+    let mut r = base();
+    guard(&mut r, "CART", "2");
+    let mut w = game(&r);
+    let a = veh(&mut w, "CART", 0, 0, 0);
+    set_beh(&mut w, a, Behaviour::AreaGuard);
+    let spot = Target::Cell(at(-10, 0));
+    w.obj_mut(a).unwrap().guard_spot = Some(spot);
+    let b = veh(&mut w, "T0", 1, 2, 0);
+    set_target(&mut w, a, obj(b), false);
+    w.obj_mut(a).unwrap().targeting_timer = 1000;
+    glasnost_sim::tick::step(&mut w);
+    let o = w.obj(a).unwrap();
+    assert_eq!(o.target, None, "the leash drops the target");
+    assert_eq!(o.dest, Some(spot));
+}
+
+// spec: S-0215 claim 27 and S-0309 claim 1 (hunt runs the map-wide search at each processing; a target already held is kept)
+#[test]
+fn hunt_processing_searches_map_wide() {
+    let mut w = game(&base());
+    let a = veh(&mut w, "CART", 0, 0, 0);
+    set_beh(&mut w, a, Behaviour::Hunt);
+    let b = veh(&mut w, "T0", 1, 14, 0);
+    glasnost_sim::tick::step(&mut w);
+    assert_eq!(target(&w, a), obj(b));
+    // Kept: a nearer enemy does not replace it.
+    veh(&mut w, "T1", 1, 2, 0);
+    let rng_timer = timer(&w, a);
+    for _ in 0..40 {
+        glasnost_sim::tick::step(&mut w);
+    }
+    assert_eq!(target(&w, a), obj(b));
+    assert_ne!(timer(&w, a), rng_timer, "every search restarts the timer");
+}
+
+// spec: S-0215 claim 27 (an actor whose type has the stupid-hunt flag does not search)
+#[test]
+fn stupid_hunt_does_not_search() {
+    let mut r = base();
+    cart_mut(&mut r).stupid_hunt = Some(true);
+    let mut w = game(&r);
+    let a = veh(&mut w, "CART", 0, 0, 0);
+    set_beh(&mut w, a, Behaviour::Hunt);
+    w.obj_mut(a).unwrap().targeting_timer = 1000;
+    veh(&mut w, "T0", 1, 14, 0);
+    glasnost_sim::tick::step(&mut w);
+    assert_eq!(target(&w, a), None);
+    assert_eq!(timer(&w, a), 1000);
+}
+
+// spec: S-0215 claim 33 (an opportunity target is dropped in the listed behaviours, here sleep; a target that is not one is kept; guard keeps it)
+#[test]
+fn drop_rule_for_opportunity_targets() {
+    for (b, opp, kept) in [
+        (Behaviour::Sleep, true, false),
+        (Behaviour::Sleep, false, true),
+        (Behaviour::Guard, true, true),
+    ] {
+        let mut w = game(&base());
+        let a = veh(&mut w, "CART", 0, 0, 0);
+        let x = veh(&mut w, "T0", 1, 2, 0);
+        set_beh(&mut w, a, b);
+        set_target(&mut w, a, obj(x), opp);
+        w.obj_mut(a).unwrap().targeting_timer = 1000;
+        glasnost_sim::tick::step(&mut w);
+        let want = if kept { obj(x) } else { None };
+        assert_eq!(target(&w, a), want, "{b:?}, opportunity {opp}");
+    }
+}
+
+// spec: S-0215 claim 33 (c) (a target that the per-tick search finds on a tick is not removed by that tick's drop rule, and is first acted on by a later processing)
+#[test]
+fn per_tick_search_target_survives_its_tick() {
+    let mut w = game(&base());
+    let a = veh(&mut w, "CART", 0, 0, 0);
+    let b = veh(&mut w, "T0", 1, 2, 0);
+    expire(&mut w, a);
+    glasnost_sim::tick::step(&mut w);
+    assert_eq!(target(&w, a), obj(b));
+    assert!(opportunity(&w, a));
+    assert_eq!(
+        w.obj(a).unwrap().combat.rearm_until,
+        i32::MIN,
+        "not fired at by the processing of the same tick"
+    );
+}
