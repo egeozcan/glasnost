@@ -2278,3 +2278,18 @@ fn neutral_searcher_passive_house_and_insignificant_rows() {
     veh(&mut w, "T2", 0, 2, 0);
     assert_eq!(range_search(&mut w, a), None, "passive house");
 }
+
+// spec: S-0309 claim 25 part b (an infantry unit of the neutral or special house with the explosive-charges flag also searches for buildings; a player's does not)
+#[test]
+fn neutral_charges_infantry_searches_for_buildings() {
+    let mut r = base();
+    special_weapons(&mut r);
+    let wk = r.sim.infantry.get_mut("WALKER").unwrap();
+    wk.primary = Some("Needle".into());
+    wk.c4 = Some(true);
+    let mut w = game_role(&r, HouseRole::Neutral);
+    let p = put(&mut w, Kind::Infantry, "WALKER", 0, 0, 0);
+    let n = put(&mut w, Kind::Infantry, "WALKER", 1, 3, 3);
+    assert_eq!(classes(&w, p), (true, false, false, false, false));
+    assert_eq!(classes(&w, n), (true, false, false, true, false));
+}

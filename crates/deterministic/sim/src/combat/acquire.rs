@@ -382,6 +382,12 @@ pub fn classes(w: &World, a: ObjectId) -> Classes {
         if money {
             c.buildings = true; // spec: S-0309 claim 5 (the money-thief flag also searches for buildings)
         }
+        let charges = u.is_some_and(|u| u.raw.c4.unwrap_or(false))
+            || crate::combat::veterancy::has_ability(w, a, crate::combat::data::Ability::C4);
+        if !player && charges {
+            // spec: S-0309 claim 25 part b (an infantry unit of the neutral or special house with explosive charges also searches for buildings)
+            c.buildings = true;
+        }
         if engineer {
             // spec: S-0309 claim 5 (an engineer never searches for infantry or vehicles)
             c.infantry = false;
