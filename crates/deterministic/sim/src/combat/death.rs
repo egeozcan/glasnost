@@ -530,6 +530,7 @@ fn building_death(w: &mut World, id: ObjectId, hit: &Hit) {
     // (f) destruction particle systems: which kinds are eligible belongs to the particle specs; none is created.
     survivors(w, id, hit);
     // spec: S-0312 claim 21 (a building that is neither exploding nor being sold leaves play at the end of its death effects)
+    // An exploding building should stay in play and leave later; when is not specified (request Q-0081), so it leaves now too.
     leave_play(w, id);
 }
 
