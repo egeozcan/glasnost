@@ -1,4 +1,4 @@
-# glasnost determinism gate: seed 20261010, 3000 ticks, state hash (64 bits) after each tick
+# glasnost determinism gate (scripted): seed 20261010, 3000 ticks, state hash (64 bits) after each tick
 a78388dbc5e0a843
 ba095366a9c89732
 9279e1e9ea44f00a

@@ -553,3 +553,85 @@ pub fn run(w: &mut World, n: i32) {
         crate::tick::step(w);
     }
 }
+
+/// The combat replay of the determinism gate: the scenario's map under the
+/// synthetic combat rules; both sides attack-move into each other, a few
+/// explicit attacks and hunts follow, and the survivors return home.
+pub fn combat_replay(seed: u32, ticks: i32) -> Replay {
+    let w = combat_game(seed);
+    let mut rep = Replay::new(w.rules(), "synthetic-combat", setup(seed));
+    let a = house_objects(&w, 0);
+    let b = house_objects(&w, 1);
+    let mut push = |t: i32, h: u8, o: Order| rep.record(t, HouseId(h), o);
+    let attack_move = |actor: ObjectId, c: CellXY| Order::Behaviour {
+        actor,
+        behaviour: Behaviour::Move,
+        attack_move: true,
+        target: None,
+        dest: Some(Target::Cell(c)),
+    };
+    let attack = |actor: ObjectId, t: ObjectId| Order::Behaviour {
+        actor,
+        behaviour: Behaviour::Attack,
+        attack_move: false,
+        target: Some(Target::Object(t)),
+        dest: None,
+    };
+    for (i, &id) in a.iter().enumerate() {
+        push(5, 0, attack_move(id, cell(6, i as i32 % 7 - 3)));
+    }
+    for (i, &id) in b.iter().enumerate() {
+        push(7, 1, attack_move(id, cell(-6, i as i32 % 7 - 3)));
+    }
+    // Focused fire: the first two of each side attack the other's first.
+    if let (Some(&a0), Some(&b0)) = (a.first(), b.first()) {
+        for &id in a.iter().take(2) {
+            push(120, 0, attack(id, b0));
+        }
+        for &id in b.iter().take(2) {
+            push(125, 1, attack(id, a0));
+        }
+    }
+    // Beta's infantry hunt; Alpha's hold an area.
+    for &id in b.iter().filter(|&&id| {
+        w.obj(id)
+            .is_some_and(|o| o.kind == crate::rules::Kind::Infantry)
+    }) {
+        push(
+            300,
+            1,
+            Order::Behaviour {
+                actor: id,
+                behaviour: Behaviour::Hunt,
+                attack_move: false,
+                target: None,
+                dest: None,
+            },
+        );
+    }
+    for &id in a.iter().filter(|&&id| {
+        w.obj(id)
+            .is_some_and(|o| o.kind == crate::rules::Kind::Infantry)
+    }) {
+        push(
+            310,
+            0,
+            Order::Behaviour {
+                actor: id,
+                behaviour: Behaviour::AreaGuard,
+                attack_move: false,
+                target: Some(Target::Cell(cell(0, 0))),
+                dest: None,
+            },
+        );
+    }
+    // The survivors return home late in the run.
+    for (i, &id) in a.iter().enumerate() {
+        push(1500, 0, mv(id, cell(-6, i as i32 % 7 - 3)));
+    }
+    for (i, &id) in b.iter().enumerate() {
+        push(1520, 1, mv(id, cell(6, i as i32 % 7 - 3)));
+    }
+    rep.ticks = ticks;
+    rep
+}

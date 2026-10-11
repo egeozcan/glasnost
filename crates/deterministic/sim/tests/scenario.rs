@@ -126,6 +126,42 @@ fn save_load_round_trip_keeps_the_hash_and_the_future() {
     assert_eq!(a, b);
 }
 
+#[test]
+fn save_load_mid_combat_keeps_the_hash_and_the_future() {
+    // Save while shots are in flight and reload timers run; the saved and the
+    // loaded game then fight on identically.
+    let mut rep = testkit::combat_replay(17, 140);
+    let mut w = rep
+        .run(
+            testkit::combat_rules(),
+            &testkit::map(),
+            testkit::catalogue(),
+            |_| {},
+        )
+        .unwrap();
+    let mut extra = 0;
+    while w.projectiles.is_empty() && extra < 200 {
+        tick::step(&mut w);
+        extra += 1;
+    }
+    assert!(!w.projectiles.is_empty(), "no shot in flight to save");
+    let h = save::state_hash(&w);
+    let bytes = save::save(&w);
+    let mut l = save::load(&bytes, testkit::combat_rules(), testkit::catalogue()).unwrap();
+    assert_eq!(save::state_hash(&l), h);
+    rep.ticks = 1400;
+    let mut a = Vec::new();
+    let mut b = Vec::new();
+    rep.run_on(&mut w, rep.ticks, |w| a.push(save::state_hash(w)));
+    rep.run_on(&mut l, rep.ticks, |w| b.push(save::state_hash(w)));
+    assert!(!a.is_empty());
+    assert_eq!(a, b);
+    assert!(
+        w.objects.len() < testkit::combat_game(17).objects.len(),
+        "nobody died in the combat replay"
+    );
+}
+
 // spec: S-0210 claim 3 (a crusher crushes at the centre of the cell it reaches)
 // spec: S-0210 claim 4 (a crushed object is removed on the same tick)
 #[test]
