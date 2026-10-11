@@ -14,6 +14,7 @@ pub fn run(data: &[u8]) {
         ini_trim_defect: false,
         ini_duplicate_hash_order: false,
         ini_hash_identity: false,
+        percent_list_integer_prefix: false,
     };
     for quirks in [Quirks::default(), off] {
         let mut warnings = Vec::new();
@@ -36,7 +37,11 @@ pub fn run(data: &[u8]) {
                 let _ = value::colour_definition(v);
                 let _ = value::byte_triple(v, [1, 2, 3]);
                 let _ = value::list(v, value::COMMON_TEXT_LIMIT);
-                let _ = value::percent_list(v, value::ARMOUR_CLASS_COUNT);
+                let _ = value::percent_list(
+                    v,
+                    value::ARMOUR_CLASS_COUNT,
+                    quirks.percent_list_integer_prefix,
+                );
                 let _ = value::named(v, 31, &["a", "b"]);
             }
         }
