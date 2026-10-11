@@ -3,6 +3,7 @@
 //! minimap, layer toggles and object info.
 
 pub mod build;
+pub mod combat;
 pub mod find;
 pub mod live;
 #[cfg(test)]

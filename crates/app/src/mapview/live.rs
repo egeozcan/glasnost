@@ -4,6 +4,13 @@
 //! mobile objects drawn from the simulation each time a tick has run, and
 //! the selection and orders of the controlled house (S-0213, S-0214).
 //!
+//! Combat is drawn after the object pass: placeholders of our own for
+//! projectiles in flight and for the shots, detonations and animations the
+//! simulation reports in `World::effects` (drained after each tick), then
+//! S-0111's status extras (health bars of the selected and hovered objects,
+//! unit brackets, veterancy insignia; [`super::combat`]). Buildings the game
+//! has removed leave the picture.
+//!
 //! Nothing here feeds the simulation except orders, issued between ticks
 //! through `glasnost_sim::orders::issue`, and the ticks themselves. The
 //! selection, the ground layer's order and the drawing are presentation
@@ -14,14 +21,19 @@ use std::sync::Arc;
 
 use glasnost_convert::kinds::Kind;
 use glasnost_map::terrain::land;
-use glasnost_render::scene::Scene;
+use glasnost_render::projection::project_lifted;
+use glasnost_render::scene::{Item, Scene};
 use glasnost_render::voxel;
+use glasnost_sim::combat::effects::Effect;
 use glasnost_sim::orders::{self, Order};
 use glasnost_sim::rules::{Kind as SimKind, SimRules};
 use glasnost_sim::targeting::{self, ClickOn, KeyCommand, Modifiers};
 use glasnost_sim::world::{GameSetup, HouseId, Layer, ObjectId, World};
 
-use super::build::{Built, GroundEntry, InfantryFrame, Inputs, Mobile, Painter, find_type};
+use super::build::{
+    Built, GroundEntry, InfantryFrame, Inputs, Mobile, Painter, find_type, rule_int,
+};
+use super::combat::{self, Cache, Counts, Marker, Ratios, Transient, TransientKind};
 use super::quirks::ViewQuirks;
 
 /// The flag that marks an [`glasnost_render::scene::Item::object`] code as
@@ -206,8 +218,27 @@ pub struct Live {
     pub building_ids: BTreeMap<u32, ObjectId>,
     painter: Painter,
     static_ground: Vec<GroundEntry>,
+    /// The cell pass as built, before any building left it.
+    cell_pass: Vec<Item>,
     cell_pass_len: usize,
+    /// Static building objects ([`Built::objects`] indices) whose
+    /// simulation object is gone, as last drawn.
+    gone: BTreeSet<u32>,
+    /// End of the object pass in the scene's items; the combat tail follows.
+    objects_end: usize,
+    /// End of the effects in the scene's items; the status extras follow.
+    effects_end: usize,
     ground: GroundLayer,
+    /// Images and rows the combat drawing added.
+    cache: Cache,
+    /// Shots, detonations and animations still shown.
+    transients: Vec<Transient>,
+    /// Counts of the combat events seen.
+    pub counts: Counts,
+    /// The selection whose status extras are drawn (presentation state).
+    marked: Vec<ObjectId>,
+    /// The object under the pointer (presentation state).
+    hovered: Option<ObjectId>,
     /// Notes the drawing of the live objects met.
     pub notes: BTreeSet<String>,
     /// Simulation types with no import type of the same name (not drawn).
@@ -350,8 +381,17 @@ impl Live {
             building_ids,
             painter,
             static_ground,
+            cell_pass: built.scene.items[..built.scene.cell_pass_len].to_vec(),
             cell_pass_len: built.scene.cell_pass_len,
+            gone: BTreeSet::new(),
+            objects_end: built.scene.items.len(),
+            effects_end: built.scene.items.len(),
             ground: GroundLayer::default(),
+            cache: Cache::default(),
+            transients: Vec::new(),
+            counts: Counts::default(),
+            marked: Vec::new(),
+            hovered: None,
             notes: BTreeSet::new(),
             undrawn_types: undrawn,
             failed: None,
@@ -400,6 +440,41 @@ impl Live {
         }
         self.ground.pass(&ViewQuirks::default());
         self.sync_ground();
+        self.take_effects();
+    }
+
+    /// Takes the tick's presentation events out of the game (they are not
+    /// game state) and turns them into short-lived markers.
+    fn take_effects(&mut self) {
+        let now = self.shown_tick();
+        let at = |p: glasnost_sim::world::Pos| project_lifted(p.x, p.y, p.z);
+        for e in std::mem::take(&mut self.world.effects) {
+            let (kind, pos) = match e {
+                Effect::Shot { from, .. } => {
+                    self.counts.shots += 1;
+                    (TransientKind::Muzzle, from)
+                }
+                Effect::Detonation { pos, radius, .. } => {
+                    self.counts.detonations += 1;
+                    (TransientKind::Burst(combat::burst_half_width(radius)), pos)
+                }
+                Effect::Anim { pos, .. } => {
+                    self.counts.anims += 1;
+                    (TransientKind::Anim, pos)
+                }
+                Effect::Killed { .. } => {
+                    self.counts.kills += 1;
+                    continue;
+                }
+            };
+            self.transients.push(Transient {
+                kind,
+                at: at(pos),
+                born: now,
+            });
+        }
+        self.transients.retain(|t| t.marker(now).is_some());
+        self.counts.most_in_flight = self.counts.most_in_flight.max(self.world.projectiles.len());
     }
 
     /// Brings the ground layer's members and keys up to date with the game.
@@ -521,11 +596,32 @@ impl Live {
             .zip(entries)
             .map(|(m, e)| (m.object, e))
             .collect();
+        // Buildings the game removed leave the cell pass and the ground
+        // layer.
+        let gone: BTreeSet<u32> = self
+            .building_ids
+            .iter()
+            .filter(|(_, id)| self.world.obj(**id).is_none_or(|o| !o.on_map))
+            .map(|(i, _)| *i)
+            .collect();
+        if gone != self.gone {
+            scene.items.clear();
+            scene.items.extend(
+                self.cell_pass
+                    .iter()
+                    .filter(|i| i.object.is_none_or(|o| !gone.contains(&o))),
+            );
+            self.cell_pass_len = scene.items.len();
+            scene.cell_pass_len = self.cell_pass_len;
+            self.gone = gone;
+        }
         scene.items.truncate(self.cell_pass_len);
         for e in self.ground.order() {
             match e {
                 Entrant::Static(i) => {
-                    if let Some(g) = self.static_ground.get(i) {
+                    if let Some(g) = self.static_ground.get(i)
+                        && g.object.is_none_or(|o| !self.gone.contains(&o))
+                    {
                         scene.items.extend_from_slice(&g.items);
                     }
                 }
@@ -536,6 +632,143 @@ impl Live {
                 }
             }
         }
+        self.objects_end = scene.items.len();
+        self.draw_effects(scene);
+        self.draw_status(inputs, scene);
+    }
+
+    /// Draws the combat placeholders after the object pass: projectiles in
+    /// flight (invisible ones are not drawn) and the shots, detonations and
+    /// animations still shown. Our own presentation, provisional.
+    fn draw_effects(&mut self, scene: &mut Scene) {
+        scene.items.truncate(self.objects_end);
+        let rules = self.rules.clone();
+        for p in self.world.projectiles.values() {
+            let kind = rules.combat.projectile_of(p.weapon);
+            if kind.is_some_and(|k| k.inviso) {
+                continue;
+            }
+            let m = Marker::Projectile {
+                arcing: kind.is_some_and(|k| k.arcing),
+                homing: kind.is_some_and(|k| k.rot > 0),
+            };
+            // spec: S-0101 F1, F2 (the projected point of the position with its height)
+            let at = project_lifted(p.pos.x, p.pos.y, p.pos.z);
+            let item = self.cache.marker_item(scene, m, at);
+            scene.items.push(item);
+        }
+        let now = self.shown_tick();
+        for t in &self.transients {
+            if let Some(m) = t.marker(now) {
+                let item = self.cache.marker_item(scene, m, t.at);
+                scene.items.push(item);
+            }
+        }
+        self.effects_end = scene.items.len();
+    }
+
+    /// Sets the objects whose status extras show: the selection and the
+    /// object under the pointer (S-0111 claim 3). Returns whether they
+    /// changed; then call [`Live::redraw_status`].
+    pub fn set_marks(&mut self, selected: &[ObjectId], hovered: Option<ObjectId>) -> bool {
+        // spec: S-0111 Terms (hovered: under the pointer while not selected)
+        let hovered = hovered.filter(|h| !selected.contains(h));
+        if self.marked == selected && self.hovered == hovered {
+            return false;
+        }
+        self.marked = selected.to_vec();
+        self.hovered = hovered;
+        true
+    }
+
+    /// Redraws only the status extras (after [`Live::set_marks`]).
+    pub fn redraw_status(&mut self, inputs: &Inputs, scene: &mut Scene) {
+        self.draw_status(inputs, scene);
+    }
+
+    /// Whether a unit's selection is drawn by S-0111's bracket image (the
+    /// bracket sprite and the overlay palette are there); buildings get no
+    /// bracket image (claim 8's corner brackets are not drawn yet).
+    pub fn bracket_drawn(&self, assets: &super::build::Assets, id: ObjectId) -> bool {
+        self.world.obj(id).is_some_and(|o| o.kind.is_mobile())
+            && assets.get(combat::BRACKET_SPRITE).is_some()
+            && assets.get(combat::OVERLAY_PALETTE).is_some()
+    }
+
+    /// S-0111's status extras after the effects: every object's veterancy
+    /// insignia (claim 18), then the health bars of the selected objects
+    /// (with the unit bracket) and of the hovered one (claims 3 to 7). Within
+    /// an object the bar covers the insignia (State and ordering).
+    fn draw_status(&mut self, inputs: &Inputs, scene: &mut Scene) {
+        scene.items.truncate(self.effects_end);
+        let r = self.rules.clone();
+        let ratios = Ratios {
+            yellow: r.general.condition_yellow,
+            red: r.general.condition_red,
+            mode: r.mode,
+        };
+        let shows: Vec<(ObjectId, bool)> = self
+            .marked
+            .iter()
+            .map(|&id| (id, true))
+            .chain(self.hovered.map(|h| (h, false)))
+            .collect();
+        let mut items = Vec::new();
+        for o in self.world.objects.values() {
+            if !o.on_map || o.kind == SimKind::Terrain {
+                continue;
+            }
+            let infantry = o.kind == SimKind::Infantry;
+            let bar = shows.iter().find(|(id, _)| *id == o.id).map(|(_, s)| *s);
+            let insignia = combat::insignia(o.combat.experience, infantry);
+            if bar.is_none() && insignia.is_none() {
+                continue;
+            }
+            // spec: S-0111 Terms (status anchor: the centre at its world height, projected; S-0204 claim 4 for a building's centre)
+            let p = self.world.reference_point(o.id);
+            let anchor = project_lifted(p.x, p.y, p.z);
+            let import_idx = self.types.get(&(o.kind, o.type_index)).copied().flatten();
+            let mut pips: Vec<combat::Pip> = insignia.into_iter().collect();
+            if let Some(selected) = bar {
+                if o.kind == SimKind::Building {
+                    let strength = r
+                        .buildings
+                        .get(o.type_index as usize)
+                        .map_or(0, |b| b.strength);
+                    // spec: S-0111 Import mapping (the building art's height field, absent 2)
+                    let levels = import_idx
+                        .and_then(|i| {
+                            self.painter
+                                .art_int(inputs.import, Kind::Buildings, i, b"Height")
+                        })
+                        .unwrap_or(combat::DEFAULT_ART_HEIGHT);
+                    let (w, d) = o.foundation;
+                    pips.extend(combat::building_bar(
+                        w, d, levels, o.health, strength, &ratios,
+                    ));
+                } else {
+                    let strength = r.unit(o.kind, o.type_index).map_or(0, |u| u.strength);
+                    // spec: S-0111 Import mapping (PixelSelectionBracketDelta, absent 0)
+                    let delta = match (import_kind(o.kind), import_idx) {
+                        (Some(k), Some(i)) => {
+                            rule_int(inputs.import, k, i, b"PixelSelectionBracketDelta", 0)
+                        }
+                        _ => 0,
+                    };
+                    pips.extend(combat::unit_bar(
+                        infantry, delta, o.health, strength, selected, &ratios,
+                    ));
+                }
+            }
+            items.extend(self.cache.pip_items(
+                scene,
+                inputs.assets,
+                anchor,
+                &pips,
+                Some(sim_code(o.id)),
+            ));
+        }
+        scene.items.extend(items);
     }
 
     /// The simulation object an item code names: a live object, or a static

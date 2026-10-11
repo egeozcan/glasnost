@@ -344,3 +344,258 @@ fn drawing_leaves_the_game_alone() {
     }
     assert_eq!(save::state_hash(&live.world), save::state_hash(&reference));
 }
+
+// ---------------------------------------------------------------------------
+// Combat in the live view (synthetic combat ruleset, invented overlay art)
+// ---------------------------------------------------------------------------
+
+/// The test context's assets plus invented overlay sprites and palette:
+/// a pip sprite of 20 frames on a canvas of 8 × 6 (frame i a 2 × 2 block of
+/// value i + 1 at (3, 2)), a bracket sprite of 2 frames on 36 × 10, and an
+/// overlay palette.
+fn overlay_assets() -> super::build::Assets {
+    let (_, _, mut assets) = context();
+    assets.insert(
+        super::combat::PIP_SPRITE,
+        super::tests::shp((8, 6), 20, (2, 2), (3, 2)),
+    );
+    assets.insert(
+        super::combat::BRACKET_SPRITE,
+        super::tests::shp((36, 10), 2, (34, 4), (1, 3)),
+    );
+    let pal: Vec<u8> = (0..768u32).map(|i| (i * 7 % 64) as u8).collect();
+    assets.insert(super::combat::OVERLAY_PALETTE, pal);
+    assets
+}
+
+/// A live game of the synthetic combat ruleset on an empty map of 24, with
+/// a gun cart of house 0 and a rifle walker of house 1 `gap` cells apart,
+/// both in guard. Returns the game, its scene, the map, the import and
+/// catalogue, and the two objects.
+#[allow(clippy::type_complexity)]
+fn combat_live(
+    gap: i32,
+) -> (
+    Live,
+    Scene,
+    glasnost_map::Map,
+    glasnost_convert::Import,
+    glasnost_convert::theater::Catalogue,
+    ObjectId,
+    ObjectId,
+) {
+    use glasnost_sim::rules::Kind as SimKind;
+    let (import, catalogue, _) = context();
+    let assets = overlay_assets();
+    let map = testkit::empty_map(24);
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    let (mut built, painter) = build_parts(&inputs, true);
+    let mut world = testkit::game_with(&testkit::combat_ruleset(), 24, 3);
+    let cart = testkit::spawn(
+        &mut world,
+        SimKind::Vehicle,
+        "CART",
+        0,
+        testkit::mid(24, -gap / 2, 0),
+        16384,
+    );
+    let walker = testkit::spawn(
+        &mut world,
+        SimKind::Infantry,
+        "WALKER",
+        1,
+        testkit::mid(24, gap - gap / 2, 0),
+        49152,
+    );
+    let rules = world.rules_arc();
+    let live = Live::new(
+        &inputs,
+        &mut built,
+        painter,
+        (world, rules, testkit::setup(3), Vec::new()),
+    );
+    (live, built.scene, map, import, catalogue, cart, walker)
+}
+
+/// spec: S-0309 claim 1 (units in guard find targets in range by
+/// themselves), S-0101 F1 and F2 (a projectile is drawn at its projected
+/// point), S-0111 claims 3, 4, 5 and 6 (the health bars of a selected and
+/// a hovered unit: bracket, filled segments, colour frames, places), S-0312
+/// claim 15 (a destroyed unit leaves the picture). The projectile, shot and
+/// detonation markers are our own provisional placeholders; invisible
+/// projectiles are not drawn.
+#[test]
+fn combat_draws_projectiles_bursts_and_health_bars() {
+    use glasnost_render::scene::Group;
+
+    use super::combat::{INFANTRY_SEGMENTS, Ratios, UNIT_SEGMENTS, filled_segments};
+
+    let (mut live, mut scene, map, import, catalogue, cart, walker) = combat_live(3);
+    let assets = overlay_assets();
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    let mut seen_projectile = false;
+    let mut seen_burst = false;
+    let mut hurt = false;
+    for _ in 0..400 {
+        live.step();
+        live.redraw(&inputs, &mut scene);
+        let effects: Vec<_> = scene
+            .items
+            .iter()
+            .filter(|i| i.group == Group::Effects)
+            .collect();
+        assert!(effects.iter().all(|i| i.provisional));
+        // Every visible projectile has a 7 × 7 marker centred on its point;
+        // invisible ones (the rifle's) have none.
+        let rules = live.rules.clone();
+        for p in live.world.projectiles.values() {
+            let inviso = rules
+                .combat
+                .projectile_of(p.weapon)
+                .is_some_and(|k| k.inviso);
+            let (px, py) = project_lifted(p.pos.x, p.pos.y, p.pos.z);
+            let found = effects.iter().any(|i| {
+                (i.x + 3, i.y + 3) == (px, py) && scene.images[i.image as usize].width() == 7
+            });
+            assert_eq!(found, !inviso, "projectile marker iff visible");
+            seen_projectile |= !inviso;
+        }
+        seen_burst |= effects
+            .iter()
+            .any(|i| scene.images[i.image as usize].width() > 9);
+        let health = |l: &Live, id| l.world.obj(id).map_or(0, |o| o.health);
+        if !hurt
+            && health(&live, cart) < 300
+            && health(&live, walker) < 100
+            && health(&live, walker) > 0
+        {
+            hurt = true;
+            // The cart selected, the walker under the pointer.
+            assert!(live.set_marks(&[cart], Some(walker)));
+            assert!(!live.set_marks(&[cart], Some(walker)));
+            live.redraw_status(&inputs, &mut scene);
+            let r = &live.rules;
+            let ratios = Ratios {
+                yellow: r.general.condition_yellow,
+                red: r.general.condition_red,
+                mode: r.mode,
+            };
+            let status = |id| -> Vec<_> {
+                scene
+                    .items
+                    .iter()
+                    .filter(|i| i.group == Group::Status && i.object == Some(sim_code(id)))
+                    .copied()
+                    .collect()
+            };
+            let anchor = |id: ObjectId| {
+                let p = live.world.obj(id).unwrap().pos;
+                project_lifted(p.x, p.y, p.z)
+            };
+            // Cart: bracket frame 0 at (1, −26), then f segments from (−15, −25).
+            let c = status(cart);
+            let f = filled_segments(health(&live, cart), 300, UNIT_SEGMENTS, ratios.mode);
+            assert_eq!(c.len() as i32, 1 + f);
+            let (ax, ay) = anchor(cart);
+            // Bracket canvas 36 × 10, frame at (1, 3).
+            assert_eq!((c[0].x, c[0].y), (ax + 1 - 18 + 1, ay - 26 - 5 + 3));
+            assert_eq!(scene.images[c[0].image as usize].pixels()[0], 1);
+            // Pip canvas 8 × 6, frame at (3, 2): segment i at (−15 + 2i, −25).
+            for (i, s) in c[1..].iter().enumerate() {
+                assert_eq!(
+                    (s.x, s.y),
+                    (ax - 15 + 2 * i as i32 - 4 + 3, ay - 25 - 3 + 2)
+                );
+                let frame = scene.images[s.image as usize].pixels()[0] - 1;
+                assert!((16..=18).contains(&frame));
+            }
+            // Walker, hovered: no bracket, f of 8 segments from (−5, −24).
+            let w = status(walker);
+            let f = filled_segments(health(&live, walker), 100, INFANTRY_SEGMENTS, ratios.mode);
+            assert_eq!(w.len() as i32, f);
+            let (ax, ay) = anchor(walker);
+            assert_eq!((w[0].x, w[0].y), (ax - 5 - 4 + 3, ay - 24 - 3 + 2));
+        }
+        if live.world.obj(cart).is_none() || live.world.obj(walker).is_none() {
+            break;
+        }
+    }
+    assert!(seen_projectile, "a shell was drawn in flight");
+    assert!(seen_burst, "a detonation burst was drawn");
+    assert!(hurt, "both took damage while alive");
+    assert!(live.counts.shots > 0 && live.counts.detonations > 0);
+    // Run on until one of them is destroyed: it leaves the status extras.
+    for _ in 0..3000 {
+        if live.world.obj(cart).is_none() || live.world.obj(walker).is_none() {
+            break;
+        }
+        live.step();
+    }
+    live.redraw(&inputs, &mut scene);
+    let dead = if live.world.obj(cart).is_none() {
+        cart
+    } else {
+        walker
+    };
+    assert!(live.world.obj(dead).is_none(), "one of them is destroyed");
+    assert!(live.counts.kills >= 1);
+    assert!(
+        scene.items.iter().all(|i| i.object != Some(sim_code(dead))),
+        "a destroyed unit is not drawn"
+    );
+    assert!(live.world.effects.is_empty(), "the view drains the events");
+}
+
+/// spec: S-0214 claim 12 and S-0213 table T2 (a right click on an enemy with
+/// a selection gives an attack order through the input rules), S-0201
+/// claim 14 (not during ticks 0 to 3)
+#[test]
+fn right_click_on_an_enemy_orders_an_attack() {
+    let (mut live, _, _, _, _, cart, walker) = combat_live(14);
+    while live.world.tick < 4 {
+        live.step();
+    }
+    let house = HouseId(0);
+    let mut selection = Vec::new();
+    live.click(
+        house,
+        &mut selection,
+        ClickOn::Object(cart),
+        Modifiers::default(),
+    );
+    assert_eq!(selection, [cart]);
+    let r = live.click(
+        house,
+        &mut selection,
+        ClickOn::Object(walker),
+        Modifiers::default(),
+    );
+    assert_eq!((r.issued, r.refused), (1, 0));
+    live.step();
+    assert_eq!(
+        live.world.obj(cart).unwrap().target,
+        Some(Target::Object(walker))
+    );
+}

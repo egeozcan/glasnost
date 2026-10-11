@@ -31,7 +31,12 @@ const ART: &str = "[HUTX]\nFoundation=2x2\nAnimIdle=1,1,0\n[MANX]\nSequence=MANS
     [CARX]\nFacings=8\nWalkFrames=2\n";
 const THEATER: &str = "[General]\nClearTile=0\n[TileSet0000]\nFileName=clr\nTilesInSet=1\n";
 
-fn shp(canvas: (u16, u16), frames: usize, frame_size: (u32, u32), at: (u16, u16)) -> Vec<u8> {
+pub(super) fn shp(
+    canvas: (u16, u16),
+    frames: usize,
+    frame_size: (u32, u32),
+    at: (u16, u16),
+) -> Vec<u8> {
     ShpWriter {
         width: canvas.0,
         height: canvas.1,
