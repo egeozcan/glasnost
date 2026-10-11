@@ -352,7 +352,7 @@ pub fn check(
 
 /// The sync tick of claim 13 of S-0301: the firing-frame counter runs and
 /// equals the sync frame that applies.
-fn sync_tick(w: &World, firer: ObjectId, slot: usize, weapon: WeaponId) -> bool {
+pub fn sync_tick(w: &World, firer: ObjectId, slot: usize, weapon: WeaponId) -> bool {
     if slot != 0 {
         return false;
     }
