@@ -2331,3 +2331,23 @@ fn aircraft_take_no_classes() {
     let p = put(&mut w, Kind::Aircraft, "PLANE", 0, 0, 0);
     assert_eq!(classes(&w, p), NONE);
 }
+
+// spec: S-0309 claim 25 part h (an object of the neutral or special house with a target retaliates only when the attacker's threat sum is at least its target's)
+#[test]
+fn neutral_retaliation_compares_threat_sums() {
+    let mut r = by_special();
+    special(&mut r, "T5", "5");
+    special(&mut r, "T6", "6");
+    for (attacker, ok) in [("T0", false), ("T5", true), ("T6", true)] {
+        let mut w = game_role(&r, HouseRole::Neutral);
+        let a = veh(&mut w, "CART", 1, 0, 0);
+        let held = veh(&mut w, "T5", 0, -2, 0);
+        set_target(&mut w, a, obj(held), false);
+        let x = veh(&mut w, attacker, 0, 2, 0);
+        acquire::retaliate(&mut w, a, x);
+        assert_eq!(retaliated(&w, a, x), ok, "attacker {attacker}");
+        if !ok {
+            assert_eq!(target(&w, a), obj(held));
+        }
+    }
+}

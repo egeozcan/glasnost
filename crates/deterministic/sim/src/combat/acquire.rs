@@ -210,7 +210,19 @@ pub fn retaliate(w: &mut World, actor: ObjectId, attacker: ObjectId) {
             return;
         }
     }
-    // The neutral and special houses' further conditions (S-0309 claim 25 part h: draining, the threat sums) need the threat score of a target; the attacker is taken without them.
+    if !player
+        && let Some(Target::Object(y)) = o.target
+        && w.obj(y).is_some_and(|x| x.kind != Kind::Terrain)
+    {
+        // spec: S-0309 claim 25 part h (the neutral and special houses: only when the attacker's threat sum, d in cells as in a range search, is at least the present target's, compared exactly)
+        let sum = |x| threat_sum(w, actor, x, SearchKind::Range);
+        if let (Some(sx), Some(sy)) = (sum(attacker), sum(y))
+            && !sx.ge(sy)
+        {
+            return;
+        }
+    }
+    // The draining condition of claim 25 part h needs a draining state, which no object has in our engine.
     override_attack(w, actor, attacker);
 }
 
@@ -704,10 +716,10 @@ fn v_of(w: &World, x: ObjectId, y: ObjectId) -> F64 {
         .unwrap_or(F64::ZERO)
 }
 
-/// The threat score of a candidate (S-0309 claims 13 and 14, F4 to F6,
-/// F9); `None` rejects it (a score of exactly 0).
-// spec: S-0309 F4 to F6 (cells of 256 leptons; N = trunc(L / 256))
-fn score(w: &World, a: ObjectId, t: ObjectId, kind: SearchKind) -> Option<i32> {
+/// The threat sum of a candidate (S-0309 Terms, F4): the argument of conv
+/// in F4, before conversion and before the modifiers of claim 14.
+// spec: S-0309 F4 (cells of 256 leptons)
+fn threat_sum(w: &World, a: ObjectId, t: ObjectId, kind: SearchKind) -> Option<F64> {
     let r = w.rules();
     let mode = r.mode;
     let ao = w.obj(a)?;
@@ -758,7 +770,20 @@ fn score(w: &World, a: ObjectId, t: ObjectId, kind: SearchKind) -> Option<i32> {
             mode,
         )
         .add(F64::from_i64(100000, mode), mode);
-    let mut sc = sum.to_i32_common();
+    Some(sum)
+}
+
+/// The threat score of a candidate (S-0309 claims 13 and 14, F4 to F6,
+/// F9); `None` rejects it (a score of exactly 0).
+// spec: S-0309 F5 and F6 (N = trunc(L / 256))
+fn score(w: &World, a: ObjectId, t: ObjectId, kind: SearchKind) -> Option<i32> {
+    let r = w.rules();
+    let mode = r.mode;
+    let ao = w.obj(a)?;
+    let to = w.obj(t)?;
+    let tc = type_combat(w, a)?;
+    let s = crate::combat::damage::strength(w, t);
+    let mut sc = threat_sum(w, a, t, kind)?.to_i32_common();
     // spec: S-0309 F5 (normal mode: halved at expected health ≤ 0, doubled at ≤ trunc(S / 2))
     if tc.scan_mode == crate::combat::data::ScanMode::Normal {
         let x = to.combat.expected_health;
