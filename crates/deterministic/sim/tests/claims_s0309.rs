@@ -2293,3 +2293,41 @@ fn neutral_charges_infantry_searches_for_buildings() {
     assert_eq!(classes(&w, p), (true, false, false, false, false));
     assert_eq!(classes(&w, n), (true, false, false, true, false));
 }
+
+/// Adds an unarmed aircraft type `PLANE` (light armour).
+fn plane(r: &mut Ruleset) {
+    let mut p = r.sim.vehicles["T0"].clone();
+    p.locomotion_class = Some(glasnost_rules::sim::LocomotionClass::Winged);
+    p.locomotor = Some(glasnost_rules::sim::Locomotor::Fly);
+    r.sim.aircraft.insert("PLANE".into(), p);
+    r.registries
+        .entry("aircraft".into())
+        .or_default()
+        .push("PLANE".into());
+}
+
+// spec: S-0309 claim 7 and table C row class (the map-wide search's second pass considers the landed aircraft of the ground layer, which a search for vehicles accepts)
+#[test]
+fn map_wide_search_finds_landed_aircraft() {
+    let mut r = base();
+    plane(&mut r);
+    let mut w = game(&r);
+    let a = veh(&mut w, "CART", 0, 0, 0);
+    let p = put(&mut w, Kind::Aircraft, "PLANE", 1, 10, 0);
+    assert!(!acquire::classes(&w, a).aircraft);
+    assert_eq!(
+        acquire::search(&mut w, a, SearchKind::MapWide, SearchContext::Hunt),
+        Some(p)
+    );
+}
+
+// spec: S-0309 claim 5 (an aircraft takes no classes from its weapons)
+#[test]
+fn aircraft_take_no_classes() {
+    let mut r = base();
+    plane(&mut r);
+    r.sim.aircraft.get_mut("PLANE").unwrap().primary = Some("Gun".into());
+    let mut w = game(&r);
+    let p = put(&mut w, Kind::Aircraft, "PLANE", 0, 0, 0);
+    assert_eq!(classes(&w, p), NONE);
+}

@@ -496,8 +496,9 @@ fn class_ok(w: &World, c: Classes, t: ObjectId) -> bool {
     }
 }
 
-/// The candidate tests of table C (S-0309 claim 12). `d` is the search
-/// radius R (0: the weapon's reach), `zone` whether the zone row applies.
+/// The candidate tests of table C (S-0309 claim 12). `big_r` is the
+/// search radius R (0: the weapon's reach), `zone` whether the zone row
+/// applies (claims 7 and 11).
 // spec: S-0309 Constants (lowest searchable height −20 leptons)
 fn candidate(
     w: &World,
@@ -506,6 +507,7 @@ fn candidate(
     c: Classes,
     big_r: i32,
     kind: SearchKind,
+    zone: bool,
 ) -> bool {
     let r = w.rules();
     let Some(ao) = w.obj(a) else { return false };
@@ -563,11 +565,7 @@ fn candidate(
         return false;
     }
     // spec: S-0309 table C (zone, in the searches claims 7 and 11 restrict)
-    if kind != SearchKind::Range
-        && ao.kind.is_mobile()
-        && ao.kind != Kind::Aircraft
-        && !same_zone(w, a, t)
-    {
+    if zone && ao.kind.is_mobile() && ao.kind != Kind::Aircraft && !same_zone(w, a, t) {
         return false;
     }
     let allied = w.allied(ao.owner, to.owner);
@@ -903,7 +901,8 @@ pub fn search(
         for pass in 0..2 {
             for &x in &ids {
                 let Some(o) = w.obj(x) else { continue };
-                if (pass == 0) != (o.kind == Kind::Aircraft) || (pass == 0 && !c.aircraft) {
+                // spec: S-0309 claim 7 (the second pass considers every infantry unit, vehicle, aircraft and building of the ground render layer; no object leaves the ground layer in our engine, so landed aircraft are among them)
+                if pass == 0 && (o.kind != Kind::Aircraft || !c.aircraft) {
                     continue;
                 }
                 let allied = w.allied(ao.owner, o.owner);
@@ -915,7 +914,8 @@ pub fn search(
                 if !consider {
                     continue;
                 }
-                if candidate(w, a, x, c, 0, kind)
+                // spec: S-0309 claim 7 (the zone test applies to the ground-layer objects of the second pass)
+                if candidate(w, a, x, c, 0, kind, pass == 1)
                     && let Some(s) = score(w, a, x, kind)
                 {
                     cands.push((x, s));
@@ -961,7 +961,7 @@ pub fn search(
                             || crate::combat::weapon::healer_for_acquisition(w, a)
                             || friendly_exception(w, a);
                         if tested
-                            && candidate(w, a, x, c, big_r, kind)
+                            && candidate(w, a, x, c, big_r, kind, kind == SearchKind::Area)
                             && let Some(s) = score(w, a, x, kind)
                         {
                             cands.push((x, s));
