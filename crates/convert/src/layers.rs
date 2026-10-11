@@ -443,6 +443,14 @@ fn type_not_given(kind: Kind, key: &[u8]) -> Option<NotGivenForm> {
         (Kind::Infantry | Kind::Vehicles | Kind::Aircraft | Kind::Buildings, b"GuardRange") => {
             Some(DecimalMinusOne)
         }
+        // spec: S-0306 Import mapping (weapon Speed: −1 keeps the value in force)
+        (Kind::Weapons, b"Speed") => Some(IntegerMinusOne),
+        // spec: S-0307 claim 1 (the lepton form: a value read as exactly −1 keeps the value in force)
+        (Kind::Weapons, b"Range" | b"MinimumRange") => Some(DecimalMinusOne),
+        // spec: S-0307 claim 1, S-0309 Import mapping (AirRangeBonus: the lepton form, as GuardRange)
+        (Kind::Infantry | Kind::Vehicles | Kind::Aircraft | Kind::Buildings, b"AirRangeBonus") => {
+            Some(DecimalMinusOne)
+        }
         _ => None,
     }
 }
@@ -457,8 +465,23 @@ fn global_not_given(section: &[u8], key: &[u8]) -> Option<NotGivenForm> {
         (b"General", b"GuardModeStray") => Some(NotGivenForm::DecimalMinusOne),
         // spec: S-0210 Import mapping, F2 (combat-damage `Crush`: exactly −1 counts as absent)
         (COMBAT_DAMAGE, b"Crush") => Some(NotGivenForm::DecimalMinusOne),
+        // spec: S-0306 Import mapping, S-0309 Import mapping (BallisticScatter, FireSupress: the lepton form of S-0307 claim 1, exactly −1 keeps the held value)
+        (COMBAT_DAMAGE, b"BallisticScatter" | b"FireSupress") => {
+            Some(NotGivenForm::DecimalMinusOne)
+        }
         _ => None,
     }
+}
+
+/// Whether a type key's stored value is its "not given" value (S-0006
+/// claim 3 and the topic specs named in [`type_not_given`]).
+pub(crate) fn type_value_not_given(kind: Kind, key: &[u8], stored: &[u8]) -> bool {
+    type_not_given(kind, key).is_some_and(|f| is_not_given(f, stored))
+}
+
+/// Whether a game-wide key's stored value is its "not given" value.
+pub(crate) fn global_value_not_given(section: &[u8], key: &[u8], stored: &[u8]) -> bool {
+    global_not_given(section, key).is_some_and(|f| is_not_given(f, stored))
 }
 
 /// Whether `stored` is the "not given" value of its form (S-0006 claim 3:
@@ -901,7 +924,7 @@ impl Run<'_> {
             given.push((e.key.clone(), winner.value.clone(), winner.line));
         }
         for (key, stored, line) in &given {
-            let what = if type_not_given(kind, key).is_some_and(|f| is_not_given(f, stored)) {
+            let what = if type_value_not_given(kind, key, stored) {
                 // spec: S-0006 claim 3 (a "not given" value keeps the held value)
                 What::NotGiven(stored.clone())
             } else {
@@ -1252,7 +1275,7 @@ impl Run<'_> {
                     });
                     continue;
                 }
-                if global_not_given(&name, key).is_some_and(|f| is_not_given(f, stored)) {
+                if global_value_not_given(&name, key, stored) {
                     // spec: S-0209, S-0210 and S-0215 Import mapping (a "not given" value keeps the held value)
                     state.history.push(Event {
                         layer: li,
