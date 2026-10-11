@@ -327,7 +327,7 @@ pub fn update(w: &mut World, id: ObjectId, moving_now: bool, in_progress: bool, 
     }
     if f > 0 {
         // spec: S-0107 claim 15 (lie down at f′ ≥ 50, at rest for a human-controlled owner or an AI house, moving or not for the neutral and special houses; get up below 50)
-        // The get-up of a prone unit on a movement order (human-controlled owners, not fraidycats or cyborgs) is not implemented: nothing raises fear in M3 (combat, M4).
+        // The get-up of a prone unit on a movement order is `orders::prone_get_up`.
         if !s.prone
             && !deploying
             && !u.fraidycat

@@ -891,3 +891,64 @@ fn s0315_claim_5_no_lying_down_while_moving() {
     assert_eq!(frightened_walker(true), Some(Seq::Walk));
     assert_eq!(frightened_walker(false), Some(Seq::GoProne));
 }
+
+// spec: S-0107 claim 15 (a prone unit of a human-controlled owner asks for get-up when given a movement order, unless a fraidycat or a cyborg; Q-0087 for which orders count)
+// spec: S-0315 claim 3 (the get-up of a prone unit on a movement order)
+#[test]
+fn prone_unit_gets_up_on_a_move_order() {
+    use glasnost_sim::orders::{self, Order};
+    use glasnost_sim::world::{HouseId, Target};
+    for (fraidycat, cyborg, want_up) in [
+        (false, false, true),
+        (true, false, false),
+        (false, true, false),
+    ] {
+        let mut r = testkit::combat_ruleset();
+        let wk = r.sim.infantry.get_mut("WALKER").unwrap();
+        wk.fraidycat = Some(fraidycat);
+        wk.cyborg = Some(cyborg);
+        wk.crawls = Some(true);
+        // Image frames for the kinds involved (S-0107 claim 6 row 1).
+        for k in ["stand", "walk", "go_prone", "get_up", "prone", "crawl"] {
+            wk.sequences.insert(
+                k.into(),
+                glasnost_rules::sim::SequenceEntry {
+                    start: 0,
+                    count: 4,
+                    multiplier: 0,
+                    direction: None,
+                },
+            );
+        }
+        let mut w = testkit::game_with(&r, 32, 3);
+        let id = testkit::spawn(
+            &mut w,
+            Kind::Infantry,
+            "WALKER",
+            0,
+            testkit::mid(32, 0, 0),
+            0,
+        );
+        w.obj_mut(id).unwrap().infantry.as_mut().unwrap().prone = true;
+        w.tick = 10;
+        assert!(orders::issue(
+            &mut w,
+            HouseId(0),
+            Order::Behaviour {
+                actor: id,
+                behaviour: Behaviour::Move,
+                attack_move: false,
+                target: None,
+                dest: Some(Target::Cell(testkit::mid(32, 4, 0))),
+            },
+        ));
+        testkit::run(&mut w, 1);
+        let s = w.obj(id).unwrap().infantry.clone().unwrap();
+        let asked = s.seq == Some(glasnost_sim::infantry::Seq::GetUp) || !s.prone;
+        assert_eq!(
+            asked, want_up,
+            "fraidycat {fraidycat} cyborg {cyborg}: {:?} prone {}",
+            s.seq, s.prone
+        );
+    }
+}
