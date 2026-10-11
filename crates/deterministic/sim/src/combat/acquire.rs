@@ -967,12 +967,17 @@ pub fn search(
         .unit(ao.kind, ao.type_index)
         .is_some_and(|u| u.raw.distributed_fire.unwrap_or(false));
     let pick = if distributed {
-        if kind == SearchKind::MapWide && rules.quirks.hunt_ignores_distributed_fire {
-            // spec: S-0309 claim 20 (a map-wide search picks nothing and empties the list, quirks.hunt_ignores_distributed_fire)
+        if kind == SearchKind::MapWide {
             if let Some(ob) = w.obj_mut(a) {
                 ob.combat.fired_at.clear();
             }
-            None
+            if rules.quirks.hunt_ignores_distributed_fire {
+                // spec: S-0309 claim 20 (a map-wide search picks nothing and empties the list, quirks.hunt_ignores_distributed_fire)
+                None
+            } else {
+                // spec: S-0309 Edge cases (hunt_ignores_distributed_fire off: claim 17 among the map-wide candidates, the list empty afterwards)
+                best_of(cands.iter().copied())
+            }
         } else {
             let list = ao.combat.fired_at.clone();
             let not_on: Vec<&(ObjectId, i32)> =
