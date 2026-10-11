@@ -753,6 +753,7 @@ fn threat_sum(w: &World, a: ObjectId, t: ObjectId, kind: SearchKind) -> Option<F
     let k = wp.map_or(g / 256, |x| r.combat.weapon(x).range / 256);
     let rh = rho3(w, a, t);
     // spec: S-0309 F4 (d in cells; in leptons for ground-layer objects of the map-wide search, quirks.hunt_distance_in_leptons)
+    // A landed aircraft of the map-wide search's second pass keeps d in cells (request Q-0079).
     let dd = if kind == SearchKind::MapWide
         && to.kind != Kind::Aircraft
         && r.quirks.hunt_distance_in_leptons

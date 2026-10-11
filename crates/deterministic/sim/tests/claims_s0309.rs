@@ -2351,3 +2351,72 @@ fn neutral_retaliation_compares_threat_sums() {
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// Claims 7 and 11: movement-zone regions
+
+/// A game whose map has a line of rock cells (a land type with no land row:
+/// blocked for every class) along cell column `mid + 2`, which splits the
+/// map into two regions.
+fn walled_game(r: &Ruleset) -> World {
+    use glasnost_map::terrain::{TileCell, TileInfo};
+    let mut cat = (*testkit::catalogue()).clone();
+    let rock_tile = cat.tiles.len() as i32;
+    cat.tiles.push(TileInfo {
+        width: 1,
+        height: 1,
+        has_image: true,
+        cells: vec![Some(TileCell {
+            terrain_code: 7,
+            slope: 0,
+        })],
+        variants: 0,
+        anim: None,
+    });
+    let mut map = testkit::empty_map(SIZE);
+    let wall_x = at(2, 0).x;
+    let cells: Vec<CellXY> = map.cells.iter().map(|(c, _)| c).collect();
+    for c in cells {
+        if c.x == wall_x {
+            map.cells.get_mut(c).unwrap().tile = rock_tile;
+        }
+    }
+    glasnost_sim::load::new_game(
+        Arc::new(SimRules::new(r, "claims-s0309")),
+        &map,
+        Arc::new(cat),
+        &testkit::setup(11),
+    )
+    .expect("synthetic game loads")
+}
+
+// spec: S-0309 claim 11 and table C row zone (an area search skips cells outside the searcher's region; a range search does not)
+#[test]
+fn area_search_skips_other_regions() {
+    let mut w = walled_game(&base());
+    let a = veh(&mut w, "CART", 0, 0, 0);
+    w.obj_mut(a).unwrap().guard_spot = Some(Target::Cell(at(0, 0)));
+    let b = veh(&mut w, "T0", 1, 3, 0);
+    assert_eq!(
+        acquire::search(&mut w, a, SearchKind::Area, SearchContext::Area),
+        None
+    );
+    assert_eq!(range_search(&mut w, a), Some(b));
+}
+
+// spec: S-0309 claim 7 (a mobile searcher's map-wide search considers a ground-layer object only in its own region)
+#[test]
+fn map_wide_search_skips_other_regions() {
+    let mut w = walled_game(&base());
+    let a = veh(&mut w, "CART", 0, 0, 0);
+    veh(&mut w, "T0", 1, 3, 0);
+    assert_eq!(
+        acquire::search(&mut w, a, SearchKind::MapWide, SearchContext::Hunt),
+        None
+    );
+    let b = veh(&mut w, "T1", 1, -6, 0);
+    assert_eq!(
+        acquire::search(&mut w, a, SearchKind::MapWide, SearchContext::Hunt),
+        Some(b)
+    );
+}
