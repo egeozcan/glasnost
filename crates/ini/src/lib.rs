@@ -29,8 +29,8 @@ pub mod value;
 
 pub use doc::{Document, Entry, LayerError, Section};
 
-/// Quirk switches of S-0001 and S-0002. Each defaults to the original's
-/// behaviour.
+/// Quirk switches of S-0001, S-0002 and S-0003. Each defaults to the
+/// original's behaviour.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Quirks {
     /// `quirks.ini_final_line_needs_newline` (S-0001 claim 5): in a fresh
@@ -45,16 +45,21 @@ pub struct Quirks {
     /// `quirks.ini_hash_identity` (S-0002 claim 3): names with equal hashes
     /// are one name; off, names must be equal byte for byte.
     pub ini_hash_identity: bool,
+    /// `quirks.percent_list_integer_prefix` (S-0003 claim 13): an item of a
+    /// fixed-count percentage list that contains `%` uses only its integer
+    /// prefix; off, its full decimal at 53 bits.
+    pub percent_list_integer_prefix: bool,
 }
 
 impl Default for Quirks {
     fn default() -> Self {
-        // spec: S-0001 Edge cases, S-0002 Edge cases (all on by default, for every input)
+        // spec: S-0001 Edge cases, S-0002 Edge cases, S-0003 Edge cases (all on by default, for every input)
         Self {
             ini_final_line_needs_newline: true,
             ini_trim_defect: true,
             ini_duplicate_hash_order: true,
             ini_hash_identity: true,
+            percent_list_integer_prefix: true,
         }
     }
 }

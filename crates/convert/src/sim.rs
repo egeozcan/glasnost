@@ -15,7 +15,7 @@
 use std::collections::BTreeMap;
 
 use glasnost_ini::value::{self, Decimal as IniDecimal, DecimalField};
-use glasnost_ini::{Document, Section};
+use glasnost_ini::{Document, Quirks as IniQuirks, Section};
 use glasnost_rules::jsonc::{self, Node};
 
 use crate::art::{ArtQuirks, IMAGE_MAX, TypeArt, bool_as_of, given_at};
@@ -271,8 +271,17 @@ enum Form {
     Dec,
     /// S-0003 claim 1, a name as written (common text limit).
     Text,
+    /// A type name (S-0003 claims 1 and 14): the key of the type of that
+    /// kind it names, else the name as written; `none` and `<none>` give
+    /// no value.
+    Ref(Kind),
+    /// A list of type names (S-0003 claims 12 and 14), each item as
+    /// [`Form::Ref`] gives it; `none` and `<none>` items are left out.
+    Refs(Kind),
+    /// A list of integers (S-0003 claims 3 and 12).
+    Ints,
 }
-use Form::{Bool, Dec, Int, Text};
+use Form::{Bool, Dec, Int, Ints, Ref, Refs, Text};
 
 /// Rules fields shared by infantry, vehicle and aircraft types: our field
 /// name, the INI key (the field docs of `glasnost_rules::sim::UnitType`).
@@ -360,10 +369,7 @@ const UNIT_FIELDS: &[(&str, &str, Form)] = &[
         Dec,
     ),
     ("deploys_into", "DeploysInto", Text),
-    ("primary", "Primary", Text),
-    ("secondary", "Secondary", Text),
-    ("elite_primary", "ElitePrimary", Text),
-    ("elite_secondary", "EliteSecondary", Text),
+    // `Primary`, `Secondary` and the elite keys: the weapon slots (S-0308 claim 1).
     ("turret_count", "TurretCount", Int),
     ("weapon_count", "WeaponCount", Int),
     // spec: S-0214 Import mapping (Teleporter)
@@ -406,8 +412,7 @@ const BUILDING_FIELDS: &[(&str, &str, Form)] = &[
     ("stupid_guard_mode", "HasStupidGuardMode", Bool),
     ("turret", "Turret", Bool),
     ("rot", "ROT", Int),
-    ("primary", "Primary", Text),
-    ("secondary", "Secondary", Text),
+    // `Primary` and `Secondary`: the weapon slots (S-0308 claim 1).
     ("tech_level", "TechLevel", Int),
     ("gap_generator", "GapGenerator", Bool),
     ("immune", "Immune", Bool),
@@ -558,8 +563,13 @@ const GENERAL_FIELDS: &[(&str, &[u8], &str, Form)] = &[
 
 /// Percentage fields among the game-wide fields (S-0003 Import mapping row
 /// C9).
-// spec: S-0003 Import mapping row C9 (ConditionYellow, ConditionRed)
-const PERCENTAGE_KEYS: [&str; 2] = ["ConditionYellow", "ConditionRed"];
+// spec: S-0003 Import mapping row C9 (ConditionYellow, ConditionRed; RepairPercent and CrewEscape in [General])
+const PERCENTAGE_KEYS: [&str; 4] = [
+    "ConditionYellow",
+    "ConditionRed",
+    "RepairPercent",
+    "CrewEscape",
+];
 
 /// Cliff-back settings the importer accepts without a warning (S-0211
 /// Edge cases).
@@ -626,6 +636,49 @@ pub struct SimInputs<'a> {
     pub quirks: &'a LayerQuirks,
     /// Art switches.
     pub art_quirks: &'a ArtQuirks,
+    /// INI value-form switches (S-0003).
+    pub ini_quirks: &'a IniQuirks,
+    /// Switches of the typed simulation fields.
+    pub sim_quirks: &'a SimQuirks,
+}
+
+/// Quirk switches of the importer's typed simulation fields. Each defaults
+/// to the original's behaviour.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct SimQuirks {
+    /// `quirks.clear_weapons_any_turret_count` (S-0308 claim 1, Edge
+    /// cases): the clear-weapons flag empties slots 0 and 1 and elite slots
+    /// 0 and 1 whatever the turret count; off, only on types whose turret
+    /// count is 0 or less.
+    pub clear_weapons_any_turret_count: bool,
+    /// `quirks.coefficient_zero_replaced` (S-0309 Edge cases): a held threat
+    /// coefficient of 0 is replaced by the matching game-wide default when a
+    /// later reading of the section lacks the key; off, an absent key always
+    /// keeps the held value.
+    pub coefficient_zero_replaced: bool,
+}
+
+impl Default for SimQuirks {
+    fn default() -> Self {
+        // spec: S-0308 Edge cases, S-0309 Edge cases (both on by default: the original)
+        Self {
+            clear_weapons_any_turret_count: true,
+            coefficient_zero_replaced: true,
+        }
+    }
+}
+
+impl SimQuirks {
+    /// The switches by name, for the import record.
+    pub fn named(&self) -> [(&'static str, bool); 2] {
+        [
+            (
+                "clear_weapons_any_turret_count",
+                self.clear_weapons_any_turret_count,
+            ),
+            ("coefficient_zero_replaced", self.coefficient_zero_replaced),
+        ]
+    }
 }
 
 struct Builder<'a> {
@@ -718,7 +771,45 @@ impl Builder<'_> {
                 Some(encode(value::text(v, value::COMMON_TEXT_LIMIT)))
             })
             .map(jsonc::string),
+            // spec: S-0003 claims 1 and 14 (a type name; none and <none> name no type)
+            Ref(kind) => fold(state, None, |v, _| Some(self.ref_name(kind, v)))
+                .flatten()
+                .map(jsonc::string),
+            // spec: S-0003 claims 12 and 14 (a list of type names; a given list replaces the held one; none items left out: placeholder, Q-0061)
+            Refs(kind) => fold(state, None, |v, _| {
+                Some(
+                    value::list(v, value::COMMON_TEXT_LIMIT)
+                        .into_iter()
+                        .filter_map(|item| self.ref_name(kind, item))
+                        .map(jsonc::string)
+                        .collect::<Vec<_>>(),
+                )
+            })
+            .map(jsonc::array),
+            // spec: S-0003 claims 3 and 12 (a list of integers; an item the integer form cannot read is 0: placeholder, Q-0061)
+            Ints => fold(state, None, |v, _| {
+                Some(
+                    value::list(v, value::COMMON_TEXT_LIMIT)
+                        .into_iter()
+                        .map(|item| int_node(value::integer(item).unwrap_or(0)))
+                        .collect::<Vec<_>>(),
+                )
+            })
+            .map(jsonc::array),
         }
+    }
+
+    /// A type name (S-0003 claims 1 and 14): the key of the type of `kind`
+    /// it names, compared by claim 14; a name that matches no type is kept
+    /// as written (the registries of weapons, projectiles and the other
+    /// kinds that types create by reference are incomplete, Q-0005). `none`,
+    /// `<none>` and an empty name give `None`.
+    fn ref_name(&self, kind: Kind, v: &[u8]) -> Option<String> {
+        let name = value::text(v, value::COMMON_TEXT_LIMIT);
+        if name.is_empty() || value::is_no_type(name) {
+            return None;
+        }
+        Some(self.type_key(kind, name).unwrap_or_else(|| encode(name)))
     }
 
     /// A decimal key's text in force after layer `upto` (all layers when
@@ -793,6 +884,9 @@ impl Builder<'_> {
             let node = self.kind(kind);
             root.push((kind.key().to_owned(), node));
         }
+        let difficulty = self.difficulty();
+        root.push(("difficulty".to_owned(), difficulty));
+        self.cross_checks();
         (jsonc::object(root), self.warnings)
     }
 
@@ -872,6 +966,7 @@ impl Builder<'_> {
                 rec.put(field, jsonc::string(k));
             }
         }
+        self.general_combat(&mut rec);
         rec.node()
     }
 
@@ -1020,6 +1115,7 @@ impl Builder<'_> {
             match kind {
                 Kind::Countries => {
                     self.fields(&mut rec, t, kind, COUNTRY_FIELDS);
+                    self.country_combat(&mut rec, t);
                     // spec: S-0009 claim 33 (the early phase sees the base rules' passive field only)
                     let base = fold(t.keys.get(&b"MultiplayPassive"[..]), Some(0), |v, _| {
                         value::boolean(v)
@@ -1032,12 +1128,28 @@ impl Builder<'_> {
                 Kind::Buildings => {
                     self.fields(&mut rec, t, kind, BUILDING_FIELDS);
                     self.foundation(&mut rec, kind, i, t);
+                    self.building_combat(&mut rec, i, t);
                 }
-                Kind::Overlays => self.overlay(&mut rec, i, t),
-                Kind::TerrainObjects => self.fields(&mut rec, t, kind, TERRAIN_OBJECT_FIELDS),
-                Kind::Weapons => self.fields(&mut rec, t, kind, WEAPON_FIELDS),
-                Kind::Projectiles => self.fields(&mut rec, t, kind, PROJECTILE_FIELDS),
-                Kind::Warheads => self.fields(&mut rec, t, kind, WARHEAD_FIELDS),
+                Kind::Overlays => {
+                    self.overlay(&mut rec, i, t);
+                    self.overlay_combat(&mut rec, t);
+                }
+                Kind::TerrainObjects => {
+                    self.fields(&mut rec, t, kind, TERRAIN_OBJECT_FIELDS);
+                    self.terrain_combat(&mut rec, t);
+                }
+                Kind::Weapons => {
+                    self.fields(&mut rec, t, kind, WEAPON_FIELDS);
+                    self.weapon_combat(&mut rec, t);
+                }
+                Kind::Projectiles => {
+                    self.fields(&mut rec, t, kind, PROJECTILE_FIELDS);
+                    self.projectile_combat(&mut rec, i, t);
+                }
+                Kind::Warheads => {
+                    self.fields(&mut rec, t, kind, WARHEAD_FIELDS);
+                    self.warhead_combat(&mut rec, t);
+                }
                 Kind::Animations => self.animation(&mut rec, t),
                 _ => {}
             }
@@ -1081,6 +1193,7 @@ impl Builder<'_> {
         if kind == Kind::Infantry {
             self.infantry_art(rec, kind, index, t);
         }
+        self.unit_combat(rec, kind, index, t);
     }
 
     /// A list of type names after every layer (S-0003 claim 12: split at
@@ -1655,6 +1768,14 @@ pub fn attach(tree: &mut Node, sim: Node) {
     });
 }
 
+#[path = "sim_combat.rs"]
+mod combat;
+pub use combat::converted_keys;
+
 #[cfg(test)]
 #[path = "sim_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "sim_combat_tests.rs"]
+mod combat_tests;

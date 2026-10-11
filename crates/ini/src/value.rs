@@ -324,34 +324,68 @@ pub fn list(stored: &[u8], limit: usize) -> Vec<&[u8]> {
 }
 
 /// A fixed-count percentage list (S-0003 claim 13), such as a warhead's
-/// armour modifiers. Returns `k` doubles and whether items were missing
-/// (our engine fills them with 1.0; the original crashes) or fell in the
-/// uncovered cases (warning).
-pub fn percent_list(stored: &[u8], k: usize) -> (Vec<Binary>, PercentListNotes) {
+/// armour modifiers. Returns `k` doubles and what claim 13 asks the
+/// importer to warn about: missing items (our engine fills them with 1.0;
+/// the original crashes), items beyond `k`, items with no number, items
+/// whose `%` reading drops a fraction, items without `%` above 1 in
+/// magnitude (claim 18) and the uncovered conversion cases.
+///
+/// `integer_prefix` is `quirks.percent_list_integer_prefix`: on, an item
+/// containing `%` gives its integer decimal prefix times *c*; off, its
+/// decimal at 53 bits times *c*.
+pub fn percent_list(
+    stored: &[u8],
+    k: usize,
+    integer_prefix: bool,
+) -> (Vec<Binary>, PercentListNotes) {
     let c = binfloat::percent_factor();
     let items = list(stored, COMMON_TEXT_LIMIT);
-    let mut notes = PercentListNotes::default();
+    let mut notes = PercentListNotes {
+        // spec: S-0003 claim 13 (items beyond k are ignored; the importer warns)
+        extra: items.len().saturating_sub(k),
+        ..PercentListNotes::default()
+    };
     let mut out: Vec<Binary> = items
         .iter()
         .take(k)
         .map(|item| {
+            // spec: S-0003 claim 13 (the decimal of an item at 53 bits, claim 6's rule)
+            let full = decimal_prefix(item).map(|text| {
+                let conv = binfloat::decimal_to_binary(&text, Format::Double);
+                notes.uncovered |= conv.uncovered;
+                conv.value
+            });
+            if full.is_none() {
+                // spec: S-0003 claim 13 (an item with no number gives +0.0; the importer warns)
+                notes.no_number += 1;
+            }
             if item.contains(&b'%') {
                 // spec: S-0003 claim 13 (with `%`: the integer decimal prefix × c, RZ53)
                 let i = decimal_integer(item);
                 let (neg, m) = (i < 0, i.unsigned_abs());
                 let i = Binary::round_toward_zero(Format::Double, neg && m != 0, u128::from(m), 0);
-                i.mul_rz(&c, Format::Double)
-            } else {
-                match decimal_prefix(item) {
-                    // spec: S-0003 claim 13 (without `%`: claim 6's rule at 53 bits)
-                    Some(text) => {
-                        let conv = binfloat::decimal_to_binary(&text, Format::Double);
-                        notes.uncovered |= conv.uncovered;
-                        conv.value
-                    }
-                    // spec: S-0003 claim 13 (an item with no number gives +0.0)
-                    None => Binary::zero(Format::Double, false),
+                if let Some(d) = full
+                    && d.to_exact_decimal().trim_start_matches('-')
+                        != i.to_exact_decimal().trim_start_matches('-')
+                {
+                    // spec: S-0003 claim 13, Formulas (the integer-prefix warning: d ≠ i, exactly)
+                    notes.prefix_differs += usize::from(integer_prefix);
                 }
+                if integer_prefix {
+                    i.mul_rz(&c, Format::Double)
+                } else {
+                    // spec: S-0003 Edge cases (switch off: the item's decimal at 53 bits × c, RZ53)
+                    full.unwrap_or(Binary::zero(Format::Double, false))
+                        .mul_rz(&c, Format::Double)
+                }
+            } else {
+                // spec: S-0003 claim 13 (without `%`: claim 6's rule at 53 bits; no number gives +0.0)
+                let v = full.unwrap_or(Binary::zero(Format::Double, false));
+                if above_one(&v) {
+                    // spec: S-0003 claim 13 and claim 18 (an item without `%` above 1 in magnitude)
+                    notes.above_one += 1;
+                }
+                v
             }
         })
         .collect();
@@ -363,11 +397,32 @@ pub fn percent_list(stored: &[u8], k: usize) -> (Vec<Binary>, PercentListNotes) 
     (out, notes)
 }
 
+/// Whether a value is greater than 1 in magnitude (infinity included).
+fn above_one(v: &Binary) -> bool {
+    let exact = v.to_exact_decimal();
+    let m = exact.trim_start_matches('-');
+    if m == "inf" {
+        return true;
+    }
+    let (int, frac) = m.split_once('.').unwrap_or((m, ""));
+    let int = int.trim_start_matches('0');
+    !int.is_empty() && (int != "1" || frac.bytes().any(|b| b != b'0'))
+}
+
 /// What [`percent_list`] found worth a warning.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct PercentListNotes {
     /// Items missing below the fixed count (filled with 1.0).
     pub missing: usize,
+    /// Items beyond the fixed count (ignored).
+    pub extra: usize,
+    /// Items with no number (each +0.0).
+    pub no_number: usize,
+    /// Items with `%` whose decimal differs from their integer prefix,
+    /// counted only while the integer-prefix reading is on.
+    pub prefix_differs: usize,
+    /// Items without `%` above 1 in magnitude (S-0003 claim 18).
+    pub above_one: usize,
     /// Some item fell in claim 6's uncovered cases.
     pub uncovered: bool,
 }
@@ -549,7 +604,7 @@ mod tests {
     /// spec: S-0003 claim 13 (scenario V8)
     #[test]
     fn percent_lists() {
-        let (v, notes) = percent_list(b"12.5%,0.125,abc,-abc,inf,50%", ARMOUR_CLASS_COUNT);
+        let (v, notes) = percent_list(b"12.5%,0.125,abc,-abc,inf,50%", ARMOUR_CLASS_COUNT, true);
         let s: Vec<String> = v.iter().map(Binary::to_exact_decimal).collect();
         assert!(
             s[0].starts_with("0.11999999") || s[0].starts_with("0.12"),
@@ -567,6 +622,35 @@ mod tests {
         let twelve = Binary::round_toward_zero(Format::Double, false, 12, 0)
             .mul_rz(&binfloat::percent_factor(), Format::Double);
         assert_eq!(v[0], twelve);
+        assert_eq!((notes.no_number, notes.prefix_differs), (3, 1));
+        assert_eq!((notes.extra, notes.above_one), (0, 0));
+    }
+
+    /// spec: S-0003 claim 13 and Edge cases (`quirks.percent_list_integer_prefix` off; the warnings of claim 13)
+    #[test]
+    fn percent_list_switch_and_notes() {
+        let c = binfloat::percent_factor();
+        let full = |s: &str| {
+            let t = decimal_prefix(s.as_bytes()).unwrap();
+            binfloat::decimal_to_binary(&t, Format::Double)
+                .value
+                .mul_rz(&c, Format::Double)
+        };
+        let (v, notes) = percent_list(b"12.5%,1e2%,12%,12.0%,2,-3.5", ARMOUR_CLASS_COUNT, false);
+        assert_eq!(v[0], full("12.5"));
+        assert_eq!(v[0].to_exact_decimal(), "0.125");
+        assert_eq!(v[1].to_exact_decimal(), "1");
+        // Switch off: no integer-prefix warning.
+        assert_eq!(notes.prefix_differs, 0);
+        assert_eq!(notes.above_one, 2);
+        let (v, notes) = percent_list(b"12.5%,1e2%,12%,12.0%", ARMOUR_CLASS_COUNT, true);
+        // 1e2% reads its integer prefix 1: 0.01.
+        assert_eq!(v[1], Binary::one(Format::Double).mul_rz(&c, Format::Double));
+        assert_eq!(v[2], v[3]);
+        assert_eq!(notes.prefix_differs, 2);
+        let twelve = "1,1,1,1,1,1,1,1,1,1,1,1";
+        let (_, notes) = percent_list(twelve.as_bytes(), ARMOUR_CLASS_COUNT, true);
+        assert_eq!((notes.extra, notes.missing), (1, 0));
     }
 
     /// spec: S-0003 claims 14 and 16

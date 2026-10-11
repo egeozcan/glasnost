@@ -295,7 +295,7 @@ pub(crate) fn bool_as_of(t: &TypeRec, key: &str, layer: usize, default: bool) ->
 }
 
 /// An integer key's value in force after layer `layer` (S-0003 claim 3).
-fn int_as_of(t: &TypeRec, key: &str, layer: usize, default: i32) -> i32 {
+pub(crate) fn int_as_of(t: &TypeRec, key: &str, layer: usize, default: i32) -> i32 {
     let Some(k) = t.keys.get(key.as_bytes()) else {
         return default;
     };

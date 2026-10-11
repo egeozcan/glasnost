@@ -478,6 +478,8 @@ fn overlay_art_flag() {
         arts: Some(&arts),
         quirks: &LayerQuirks::default(),
         art_quirks: &ArtQuirks::default(),
+        ini_quirks: &Default::default(),
+        sim_quirks: &SimQuirks::default(),
     });
     let parsed: SimData = glasnost_rules::de::from_node(&node).unwrap();
     assert_eq!(parsed.overlays["Ore"].has_art, Some(true));
@@ -600,7 +602,8 @@ fn every_record_kind_resolves() {
             Form::Int => format!("{k}=3\n"),
             Form::Bool => format!("{k}=yes\n"),
             Form::Dec => format!("{k}=0.5\n"),
-            Form::Text => format!("{k}=Name{k}\n"),
+            Form::Text | Form::Ref(_) | Form::Refs(_) => format!("{k}=Name{k}\n"),
+            Form::Ints => format!("{k}=1,2\n"),
         })
         .collect();
     let section = |name: &str, table: &[(&str, &str, Form)]| -> String {
@@ -610,7 +613,8 @@ fn every_record_kind_resolves() {
                 Form::Int => format!("{k}=2\n"),
                 Form::Bool => format!("{k}=no\n"),
                 Form::Dec => format!("{k}=25%\n"),
-                Form::Text => format!("{k}=T{k}\n"),
+                Form::Text | Form::Ref(_) | Form::Refs(_) => format!("{k}=T{k}\n"),
+                Form::Ints => format!("{k}=3,4\n"),
             });
         }
         s
@@ -695,6 +699,8 @@ fn weapon_and_projectile_fields_resolve() {
         arts: None,
         quirks: &LayerQuirks::default(),
         art_quirks: &ArtQuirks::default(),
+        ini_quirks: &Default::default(),
+        sim_quirks: &SimQuirks::default(),
     });
     let parsed: SimData = glasnost_rules::de::from_node(&node).unwrap();
     let w = &parsed.weapons["Zap"];
