@@ -1072,7 +1072,11 @@ pub fn turn(w: &mut World, id: ObjectId) {
             }
         }
         if !(rows.steering_dist || rows.steer_ground || rows.safety || rows.orbit) {
-            rows.bridge = cross;
+            // spec: S-0306 T1 (steering: P′ strictly crosses the deck height of a high-bridge cell, old or new; z at the deck height)
+            let strict = |deck: Option<i32>| {
+                deck.filter(|&d| (start.z < d && newpos.z > d) || (start.z > d && newpos.z < d))
+            };
+            rows.bridge = strict(deck_old).or_else(|| strict(deck_new));
         }
     }
     if (kind == ProjectileKind::Steering || p.ranged) && !p.dropping {
