@@ -267,6 +267,7 @@ fn fall_back_vehicle(w: &mut World, id: ObjectId, placement: bool) {
     let clear = |w: &mut World| {
         if let Some(ob) = w.obj_mut(id) {
             ob.target = None;
+            ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
             ob.dest = None;
         }
     };

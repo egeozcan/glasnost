@@ -173,6 +173,7 @@ fn apply_other(w: &mut World, house: HouseId, o: &Order) {
                 }
                 // spec: S-0213 claim 8 (target and destination become nothing; contact broken off)
                 ob.target = None;
+                ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
                 ob.dest = None;
                 ob.contact = None;
                 if ob.kind.is_mobile() {
@@ -216,6 +217,7 @@ fn apply_other(w: &mut World, house: HouseId, o: &Order) {
                 // spec: S-0213 claim 10 (contact broken off, target and destination nothing, unload queued)
                 ob.contact = None;
                 ob.target = None;
+                ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
                 ob.dest = None;
                 ob.beh.queue(Some(Behaviour::Unload));
             }
@@ -334,6 +336,7 @@ fn apply_behaviour(w: &mut World, o: &Order, dest_override: Option<Target>) {
     if b == Behaviour::AreaGuard && mobile {
         // spec: S-0213 table T3 (e) (area guard: target nothing; destination and guard spot the order's target)
         m.target = None;
+        m.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
         m.dest = target;
         m.guard_spot = target;
     } else {

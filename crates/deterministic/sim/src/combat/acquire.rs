@@ -1184,6 +1184,7 @@ fn attack_move_search(w: &mut World, a: ObjectId) {
                 && let Some(ob) = w.obj_mut(a)
             {
                 ob.target = None;
+                ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
             }
             search(w, a, SearchKind::Range, ctx);
             if w.obj(a).is_some_and(|x| x.target.is_some())
@@ -1200,6 +1201,7 @@ fn attack_move_search(w: &mut World, a: ObjectId) {
             }
             if let Some(ob) = w.obj_mut(a) {
                 ob.target = None;
+                ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
             }
             search(w, a, SearchKind::Range, SearchContext::AttackMoveFresh);
             let found = w.obj(a).is_some_and(|x| x.target.is_some());

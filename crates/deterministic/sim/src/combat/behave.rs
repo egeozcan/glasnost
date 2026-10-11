@@ -390,6 +390,7 @@ fn sam_attack(w: &mut World, id: ObjectId) -> i32 {
         if !suitable {
             if let Some(ob) = w.obj_mut(id) {
                 ob.target = None;
+                ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
                 ob.beh.queue_and_start_at_once(Behaviour::Guard, tick);
             }
             return 1;
@@ -411,6 +412,7 @@ fn sam_attack(w: &mut World, id: ObjectId) -> i32 {
     let Some(t) = o.target.filter(|_| suitable) else {
         if let Some(ob) = w.obj_mut(id) {
             ob.target = None;
+            ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
             ob.beh.progress = 0;
         }
         return 1;
@@ -427,6 +429,7 @@ fn sam_attack(w: &mut World, id: ObjectId) -> i32 {
         Answer::Illegal | Answer::Impossible | Answer::OutOfRange => {
             if let Some(ob) = w.obj_mut(id) {
                 ob.target = None;
+                ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
             }
             0
         }

@@ -499,15 +499,19 @@ fn claim_4_cleared_target_resets_the_counter_building() {
 
 // spec: S-0301 claim 4 (when the firer's target is cleared, its burst counter is set to 0: a stop order, scenario F3)
 #[test]
-#[ignore = "the stop order (orders.rs, S-0213 claim 8) clears the target without resetting the burst counter; outside the combat modules, reported"]
 fn claim_4_stop_order_resets_the_counter() {
     let mut r = base();
     r.sim.weapons.get_mut("ZAP").unwrap().burst = Some(3);
+    // No passive search, so nothing picks the enemy again after the stop.
+    r.sim.vehicles.get_mut("CART").unwrap().combat.can_passive_aquire = Some(false);
     let (mut w, a, _) = duel(&r);
     fire_slot(&mut w, a, 0);
     assert_eq!(w.obj(a).unwrap().combat.burst, 1);
-    orders::issue(&mut w, HouseId(0), Order::Stop { actor: a });
-    testkit::run(&mut w, 2);
+    // Orders are refused through tick 3 (S-0213 claim 1): set the clock past it.
+    w.tick = 10;
+    assert!(orders::issue(&mut w, HouseId(0), Order::Stop { actor: a }));
+    testkit::run(&mut w, 1);
+    assert_eq!(w.obj(a).unwrap().target, None);
     assert_eq!(w.obj(a).unwrap().combat.burst, 0);
 }
 
