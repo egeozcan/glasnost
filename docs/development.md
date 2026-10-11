@@ -257,7 +257,7 @@ Every quirk switch of the implemented specs has a field in `ini::Quirks` (includ
 
 The determinism gate: `cargo test` checks the first 300 ticks of `crates/sim-gate`'s two synthetic replays (`testkit::scripted_replay`, movement; `testkit::combat_replay`, two sides fighting under `testkit::combat_rules`) against `golden/scripted.txt` and `golden/combat.txt` in a debug build; `cargo xtask gate` checks all 3000 ticks of both natively in release and as wasm32 under node (CI job *gate*). `tests/scenario.rs` also saves a combat game while shots are in flight, loads it and checks that both copies fight on with the same hashes. After a deliberate change of behaviour, regenerate the file with `GLASNOST_UPDATE_GOLDEN=1 cargo test --release -p glasnost-sim-gate -- --include-ignored` and say why in the commit.
 
-The headless runner: `glasnost-headless synthetic [ticks] [seed]` prints the per-tick hashes of the synthetic replay, `glasnost-headless replay <file>` those of a replay file. The local lane: `GLASNOST_GAME_DIR=<install> cargo run --release -p glasnost-tools --bin glasnost-headless -- smoke [ticks] [seed] [index]` loads every map of the install in the sandbox setup, orders every mobile unit to another unit's cell at tick 4, runs the ticks and writes counts and timings (no names, no values) to `local-lane/sim-smoke.txt`. A skirmish pass also sets each map up as a skirmish of the tool's design (`headless::skirmish_setup`: as many players as the lobby allows, all on random positions, the neutral and special houses, unit count 10, bases on), loads it without running it and counts the maps loaded and refused (with the reason) and the starting units created.
+The headless runner: `glasnost-headless synthetic [ticks] [seed]` prints the per-tick hashes of the synthetic replay, `glasnost-headless replay <file>` those of a replay file. The local lane: `GLASNOST_GAME_DIR=<install> cargo run --release -p glasnost-tools --bin glasnost-headless -- smoke [ticks] [seed] [index]` loads every map of the install in the sandbox setup, orders every mobile unit to another unit's cell at tick 4, runs the ticks and writes counts and timings (no names, no values) to `local-lane/sim-smoke.txt` (with each map's shots, detonations, kills and most projectiles in flight). A skirmish pass also sets each map up as a skirmish of the tool's design (`headless::skirmish_setup`: as many players as the lobby allows, all on random positions, the neutral and special houses, unit count 10, bases on), loads it without running it and counts the maps loaded and refused (with the reason) and the starting units created.
 
 Provisional rules of the simulation, each tied to a request:
 
@@ -299,6 +299,11 @@ Provisional rules of combat, each tied to a request:
 | `combat::death::building_death` | the smudge choice of a destroyed building takes no draw and places no smudge | Q-0070 |
 | `combat::projectile::lead` | a moving vehicle's speed *u* is 0, so no shot is led | Q-0071 |
 | `process::process_attack` | an actor in *attack* does not approach a target it cannot fire at yet; it keeps its target and fires when the firing check lets it | Q-0072 |
+| `combat::projectile` | F12's pitch facing takes S-0204's table exceptions and F13's does not | Q-0077 |
+| `combat::projectile` | the rows of T1 test the position before the cruise lift; a vertical projectile crossing a deck detonates at its new height | Q-0078 |
+| `combat::acquire` | a landed aircraft counts in the map-wide search's second pass and is scored with its distance in cells | Q-0079 |
+| `combat::damage`, `combat::death` | a building's delayed-kill countdown ends without effect; an exploding building, or one destroyed while being sold, leaves play at once | Q-0081 |
+| `orders::prone_get_up` | a behaviour order resulting in *move* is the movement order that makes a prone unit get up, when the order is applied | Q-0087 |
 
 ## Tests
 
