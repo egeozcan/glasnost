@@ -90,11 +90,18 @@ pub fn walking_speed(w: &World, id: ObjectId) -> i32 {
         .owner
         .and_then(|h| r.countries.get(w.houses[usize::from(h.0)].country as usize))
         .map_or(F64::from_i64(1, mode), |c| c.speed_infantry);
-    // spec: S-0208 F5 (s₁ = trunc((b × k꜀) × m); the faster ability needs veterancy, none in M3)
-    let s = F64::from_i64(i64::from(u.speed), mode)
+    // spec: S-0208 F5 (s₁ = trunc((b × k꜀) × m); s = trunc(s₁ × kᵥ) with the faster ability, else s₁)
+    let s1 = F64::from_i64(i64::from(u.speed), mode)
         .mul(kc, mode)
         .mul(o.speed_bonus, mode)
         .to_i32_common();
+    let s = if crate::combat::veterancy::has_ability(w, id, crate::combat::data::Ability::Faster) {
+        F64::from_i64(i64::from(s1), mode)
+            .mul(r.general.veteran_speed, mode)
+            .to_i32_common()
+    } else {
+        s1
+    };
     let prone = o.infantry.as_ref().is_some_and(|i| i.prone);
     if prone {
         if u.crawls {

@@ -170,12 +170,9 @@ pub fn fall_back(w: &mut World, id: ObjectId, placement: bool) {
     }
 }
 
-fn has_ability(u: &crate::rules::UnitRules, name: &str) -> bool {
-    u.abilities
-        .0
-        .iter()
-        .chain(u.abilities.1.iter())
-        .any(|a| a == name)
+/// The guard-area veterancy ability at the actor's current rank (S-0311 claim 3).
+fn guard_area_ability(w: &World, id: ObjectId) -> bool {
+    crate::combat::veterancy::has_ability(w, id, crate::combat::data::Ability::GuardArea)
 }
 
 /// Claim 14 (infantry).
@@ -239,7 +236,7 @@ fn fall_back_infantry(w: &mut World, id: ObjectId) {
         return;
     }
     // spec: S-0215 claim 14 rows 11 and 12 (our engine: area guard with the ability or the type default, else guard)
-    if has_ability(u, "GUARD_AREA") || u.default_to_guard_area {
+    if guard_area_ability(w, id) || u.default_to_guard_area {
         queue(w, Behaviour::AreaGuard);
     } else {
         queue(w, Behaviour::Guard);
@@ -331,7 +328,7 @@ fn fall_back_vehicle(w: &mut World, id: ObjectId, placement: bool) {
         return;
     }
     let skill = o.owner.map_or(0, |h| w.houses[usize::from(h.0)].skill);
-    let area = has_ability(u, "GUARD_AREA") || u.default_to_guard_area;
+    let area = guard_area_ability(w, id) || u.default_to_guard_area;
     // spec: S-0215 claim 15 row 10 (skill below the area-guard threshold, without the ability or the type default)
     if skill < r.general.iq_guard_area && !area {
         queue(w, Behaviour::Guard);

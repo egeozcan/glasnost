@@ -296,12 +296,19 @@ fn progress(w: &World, id: ObjectId, u: &UnitRules) -> i32 {
         .owner
         .and_then(|h| r.countries.get(w.houses[usize::from(h.0)].country as usize))
         .map_or(F64::from_i64(1, mode), |c| c.speed_units);
-    // spec: S-0207 F2 (s₁ = trunc((V × κ) × b); s₂ = s₁ without the faster ability; s = trunc(s₂ × ρ))
+    // spec: S-0207 F2 (s₁ = trunc((V × κ) × b); s₂ = trunc(s₁ × ν) with the faster ability, else s₁; s = trunc(s₂ × ρ))
     let s1 = F64::from_i64(i64::from(u.speed), mode)
         .mul(kappa, mode)
         .mul(o.speed_bonus, mode)
         .to_i32_common();
-    F64::from_i64(i64::from(s1), mode)
+    let s2 = if crate::combat::veterancy::has_ability(w, id, crate::combat::data::Ability::Faster) {
+        F64::from_i64(i64::from(s1), mode)
+            .mul(r.general.veteran_speed, mode)
+            .to_i32_common()
+    } else {
+        s1
+    };
+    F64::from_i64(i64::from(s2), mode)
         .mul(rho, mode)
         .to_i32_common()
 }

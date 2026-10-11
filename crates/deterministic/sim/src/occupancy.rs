@@ -177,8 +177,10 @@ pub fn is_crusher(w: &World, mover: ObjectId) -> bool {
     let Some(u) = w.rules().unit(o.kind, o.type_index) else {
         return false;
     };
-    // spec: S-0210 claim 1 (the crusher flag; with quirks.omnicrusher_needs_crusher off the omni flag too)
-    u.crusher || (!w.rules().quirks.omnicrusher_needs_crusher && u.omni_crusher)
+    // spec: S-0210 claim 1 (the crusher flag or the crusher veterancy ability; with quirks.omnicrusher_needs_crusher off the omni flag too)
+    u.crusher
+        || crate::combat::veterancy::has_ability(w, mover, crate::combat::data::Ability::Crusher)
+        || (!w.rules().quirks.omnicrusher_needs_crusher && u.omni_crusher)
 }
 
 /// Whether `obj` can be crushed by `crusher` (S-0210 claim 2).

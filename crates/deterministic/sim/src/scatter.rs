@@ -84,8 +84,11 @@ pub fn request(w: &mut World, id: ObjectId, req: ScatterRequest) -> bool {
     // AI house counts as human-controlled (glossary *AI house*), the neutral and special houses
     // do not.
     let human = o.owner.is_some_and(|h| w.houses[usize::from(h.0)].human);
-    // spec: S-0208 claim 11 (permission: player-scatter rule, the scatter ability, a computer-controlled owner, or move-anywhere; no unit is a team member, and no unit has a veterancy rank before the veterancy topic)
-    let permission = r.general.player_scatter || !human || req.anywhere;
+    // spec: S-0208 claim 11 (permission: player-scatter rule, the scatter ability, a computer-controlled owner, or move-anywhere; no unit is a team member)
+    let permission = r.general.player_scatter
+        || !human
+        || req.anywhere
+        || crate::combat::veterancy::has_ability(w, id, crate::combat::data::Ability::Scatter);
     let scatter_prop = o.beh.current.is_some_and(|b| r.behaviour(b).scatter);
     // spec: S-0208 claim 11 (first case: a sequence that is not undeploy and not interruptible)
     let first = seq.is_some_and(|q| q != Seq::Undeploy && !q.table().0);
@@ -292,11 +295,24 @@ fn neighbours_choice(w: &World, id: ObjectId, centre: CellXY, d: i32) -> Option<
 pub fn cell_request(w: &mut World, c: CellXY, l: Layer, req: ScatterRequest) {
     let listed: Vec<ObjectId> = w.cells.list(c, l).to_vec();
     let r = w.rules_arc();
+    // spec: S-0209 claim 11 (a unit or building of elite rank listed in the cell layer at the time of the request)
+    let elite_listed = listed.iter().any(|&x| {
+        w.obj(x).is_some_and(|o| {
+            matches!(
+                o.kind,
+                Kind::Infantry | Kind::Vehicle | Kind::Aircraft | Kind::Building
+            )
+        }) && crate::combat::veterancy::rank(w, x) == crate::combat::veterancy::Rank::Elite
+    });
     for id in listed {
         let Some(o) = w.obj(id) else { continue };
         let skill = o.owner.map_or(0, |h| w.houses[usize::from(h.0)].skill);
         // spec: S-0209 claim 11 (move-anywhere, an elite occupant, the player-scatter rule, the ability, or the skill threshold)
-        let receives = req.anywhere || r.general.player_scatter || skill >= r.general.iq_scatter;
+        let receives = req.anywhere
+            || elite_listed
+            || r.general.player_scatter
+            || crate::combat::veterancy::has_ability(w, id, crate::combat::data::Ability::Scatter)
+            || skill >= r.general.iq_scatter;
         if receives {
             request(w, id, req);
         }

@@ -503,7 +503,12 @@ fn claim_4_stop_order_resets_the_counter() {
     let mut r = base();
     r.sim.weapons.get_mut("ZAP").unwrap().burst = Some(3);
     // No passive search, so nothing picks the enemy again after the stop.
-    r.sim.vehicles.get_mut("CART").unwrap().combat.can_passive_aquire = Some(false);
+    r.sim
+        .vehicles
+        .get_mut("CART")
+        .unwrap()
+        .combat
+        .can_passive_aquire = Some(false);
     let (mut w, a, _) = duel(&r);
     fire_slot(&mut w, a, 0);
     assert_eq!(w.obj(a).unwrap().combat.burst, 1);
