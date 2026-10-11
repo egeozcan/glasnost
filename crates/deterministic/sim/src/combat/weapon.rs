@@ -142,14 +142,19 @@ fn table_n(w: &World, firer: ObjectId, t: Target) -> usize {
     let underwater = tc.is_some_and(|c| c.underwater);
     let organic = tc.is_some_and(|c| c.organic);
     let unnatural = tc.is_some_and(|c| c.unnatural);
+    // The target's speed type is its locomotion class (S-0308 Import mapping, S-0211).
+    let hover = w
+        .obj(x)
+        .and_then(|o| w.rules().unit(o.kind, o.type_index))
+        .is_some_and(|u| u.class == Some(glasnost_rules::sim::LocomotionClass::Hover));
     // spec: S-0308 table N (modes 0 … 7; "no weapon" answers are slot 0)
     match mode {
         // spec: S-0308 table N (mode 1: 1 against an underwater type)
         1 => usize::from(underwater),
         // spec: S-0308 table N (mode 3: 1 against an organic or unnatural type)
         3 => usize::from(organic || unnatural),
-        // spec: S-0308 table N (mode 4: 1 when the target is not a hover speed type and not organic; no hover speed types exist without a speed-type field)
-        4 => usize::from(!organic),
+        // spec: S-0308 table N (mode 4: 1 when the target's speed type is not hover and its type is not organic)
+        4 => usize::from(!hover && !organic),
         _ => 0,
     }
 }
