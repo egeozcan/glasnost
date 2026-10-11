@@ -174,11 +174,7 @@ Every quirk switch of the implemented specs has a field in `ini::Quirks`, `vfs::
 | `voxel_no_intersection_depth` | S-0105 claim 23 | the on state is drawn; the off state (a depth test between sections) is not implemented |
 | `voxel_buffer_wrap` | S-0105 claim 22 | the on state is drawn; which off state the switch selects is a question for the lead in S-0105 |
 | `barrel_pivot_frame_mixup` | S-0105 claim 10 | the on state is drawn; which off state the switch selects is a question for the lead in S-0105 |
-| `depth_mode_leak` | S-0105 claim 32 | every voxel draw is fresh, and the caller says whether it is depth-buffered; the off state is a question for the lead in S-0105 |
-| `voxel_cache_frame_mod32` | S-0105 claim 26 | the image cache is not modelled, every voxel image is drawn fresh (as with the switch off) |
-| `voxel_cache_alt_turret_frame` | S-0105 claim 26 | the image cache is not modelled, every voxel image is drawn fresh (as with the switch off) |
-| `barrel_cache_ignores_elevation` | S-0105 claims 26 and 37 | the image cache is not modelled, every voxel image is drawn fresh (as with the switch off) |
-| `voxel_depth_plane_partial_clear` | S-0105 claim 34 | no depth plane is kept between voxel draws (as with the switch off) |
+| `depth_mode_leak` | S-0105 claim 32 | the on state is drawn (render::voxel::VoxelCanvas); which off state the switch selects is asked in Q-0056 |
 | `no_turret_shadow` | S-0105 claim 29 | turrets and barrels cast no shadow, as with the switch on; the off state's shadow is not specified |
 | `slope_tilt_angles` | S-0106 claim 4 | voxel bodies are not tilted on slopes |
 | `tilter_flag_ignored` | S-0106 claim 10 | voxel bodies are not tilted on slopes |
