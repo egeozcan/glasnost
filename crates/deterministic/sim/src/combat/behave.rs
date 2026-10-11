@@ -347,8 +347,9 @@ pub fn building_process(w: &mut World, id: ObjectId) -> i32 {
             // spec: S-0215 claim 32 (every processing of an armed building in guard sets its ready mark)
             ob.beh.ready_mark = true;
         }
-        // spec: S-0215 claim 32 (a pulse cannon chooses the anti-air delay whatever its target)
-        if o.target.is_some() && !b.building.emp_cannon {
+        // spec: S-0215 claim 32 (a pulse cannon, and a building that can be occupied but has no occupants, choose the anti-air delay whatever their target)
+        // Occupants are not modelled (garrisons are a seam), so a building that can be occupied has none.
+        if o.target.is_some() && !b.building.emp_cannon && !b.building.can_be_occupied {
             // spec: S-0215 claim 32 (a target: queues attack and starts it at once, 1 tick)
             if let Some(ob) = w.obj_mut(id) {
                 ob.beh.queue_and_start_at_once(Behaviour::Attack, tick);
