@@ -299,10 +299,10 @@ pub fn apply(w: &mut World, target: ObjectId, hit: Hit) -> HitResult {
     let wh = hit.warhead.map(|h| rules.combat.warhead(h).clone());
     let mut hit = hit;
     // spec: S-0302 claim 17 (an infantry unit in the air hit by a warhead of infantry-death kind 9: d₀ = 0)
-    if o.kind == Kind::Infantry
+    let mutated = o.kind == Kind::Infantry
         && w.height_above_surface(target) > 0
-        && wh.as_ref().is_some_and(|h| h.inf_death == 9)
-    {
+        && wh.as_ref().is_some_and(|h| h.inf_death == 9);
+    if mutated {
         hit.amount = 0;
     }
     let plus = !hit.ignore_defences && hit.amount >= 0;
@@ -327,7 +327,10 @@ pub fn apply(w: &mut World, target: ObjectId, hit: Hit) -> HitResult {
     // The amount after the defences of claim 5 (d₀ for a hit that ignores defences or heals).
     let prone = o.kind == Kind::Infantry && o.infantry.as_ref().is_some_and(|s| s.prone);
     let prone_factor = prone.then(|| wh.as_ref().map_or(d(1, mode), |h| h.prone));
-    let d3 = if plus {
+    let d3 = if mutated && !q.airborne_mutation_hit_raised {
+        // spec: S-0302 Edge cases (airborne_mutation_hit_raised off: the 0 is not raised to 1)
+        0
+    } else if plus {
         defended(w, target, target, hit.amount, prone_factor)
     } else {
         hit.amount
