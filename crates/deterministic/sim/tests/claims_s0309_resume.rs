@@ -10,7 +10,12 @@ const SIZE: i32 = 32;
 fn setup() -> (World, ObjectId, ObjectId) {
     let mut r = testkit::combat_ruleset();
     // No passive searches, so only the resumption changes the behaviour.
-    r.sim.vehicles.get_mut("CART").unwrap().combat.can_passive_aquire = Some(false);
+    r.sim
+        .vehicles
+        .get_mut("CART")
+        .unwrap()
+        .combat
+        .can_passive_aquire = Some(false);
     let mut w = testkit::game_with(&r, SIZE, 5);
     let a = spawn(&mut w, Kind::Vehicle, "CART", 0, mid(SIZE, 0, 0), 64);
     let e = spawn(&mut w, Kind::Vehicle, "CART", 1, mid(SIZE, 12, 0), 192);

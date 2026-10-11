@@ -235,7 +235,6 @@ const NAMED: &[(&str, &[&str])] = &[
         "S-0308",
         &["Overpowerable", "ResourceDestination", "ResourceGatherer"],
     ),
-    ("S-0309", &["NeedsEngineer", "Thief"]),
     ("S-0311", &["EliteFlashTimer"]),
     (
         "S-0312",

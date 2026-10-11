@@ -368,7 +368,8 @@ pub fn classes(w: &World, a: ObjectId) -> Classes {
     if o.kind == Kind::Infantry {
         let u = r.unit(o.kind, o.type_index);
         let thief = u.is_some_and(|u| u.vehicle_thief);
-        let money = u.is_some_and(|u| u.raw.agent.unwrap_or(false));
+        // spec: S-0309 Import mapping (the money-thief flag: `Thief`)
+        let money = u.is_some_and(|u| u.raw.thief.unwrap_or(false));
         let infiltrate = u.is_some_and(|u| u.raw.infiltrate.unwrap_or(false));
         let engineer = u.is_some_and(|u| u.engineer);
         if !armed {
@@ -631,9 +632,15 @@ fn candidate(
         .and_then(|h| w.houses.get(usize::from(h.0)))
         .and_then(|h| r.countries.get(h.country as usize))
         .is_some_and(|c| c.passive);
+    let a_unit = r.unit(ao.kind, ao.type_index);
+    let a_engineer = ao.kind == Kind::Infantry && a_unit.is_some_and(|u| u.engineer);
+    let t_building = (to.kind == Kind::Building).then(|| &r.buildings[to.type_index as usize]);
     // spec: S-0309 claim 25 part e (for a searcher of the neutral or special house the two rows let T through only when T is a building, A an infantry unit, and an engineer of another owner may capture it or A may occupy it)
-    // Neither alternative can hold in our engine yet: the needs-engineer flag is not imported, and the occupation test belongs to the structures specs.
-    let house_exception = false;
+    // The occupation alternative belongs to the structures specs: it never holds in our engine yet.
+    let house_exception = ao.kind == Kind::Infantry
+        && a_engineer
+        && t_building.is_some_and(|b| b.raw.needs_engineer.unwrap_or(false))
+        && to.owner != ao.owner;
     if passive && (player || !house_exception) {
         return false;
     }
@@ -649,6 +656,18 @@ fn candidate(
         .is_some_and(|u| u.vehicle_thief)
         && r.unit(to.kind, to.type_index).is_some_and(|u| u.train)
     {
+        return false;
+    }
+    let money_thief =
+        ao.kind == Kind::Infantry && a_unit.is_some_and(|u| u.raw.thief.unwrap_or(false));
+    // spec: S-0309 table C (capture: A a money thief, or an engineer of the neutral or special house, and T not a building whose type is capturable)
+    if (money_thief || (!player && a_engineer))
+        && !t_building.is_some_and(|b| b.raw.capturable.unwrap_or(false))
+    {
+        return false;
+    }
+    // spec: S-0309 table C (storage: A a money thief and T's type without storage capacity; Storage absent: 0)
+    if money_thief && t_building.is_none_or(|b| b.raw.storage.unwrap_or(0) <= 0) {
         return false;
     }
     // spec: S-0309 table C (harmless building: a player searcher, a building with no current weapon or a threat value of 0; not for an engineer)

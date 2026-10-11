@@ -790,6 +790,14 @@
           ],
           "default": null
         },
+        "needs_engineer": {
+          "description": "`NeedsEngineer` (S-0309 claim 25 part e, Import mapping).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
         "number_impassable_rows": {
           "description": "`NumberImpassableRows` (S-0209 Terms); absent: none.",
           "type": [
@@ -876,6 +884,15 @@
             "boolean",
             "null"
           ],
+          "default": null
+        },
+        "storage": {
+          "description": "`Storage`, storage capacity (S-0309 table C, row \"storage\").",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
           "default": null
         },
         "strength": {
@@ -5644,6 +5661,14 @@
         },
         "teleporter": {
           "description": "`Teleporter`: a self-teleporting type (S-0214 claim 11).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "thief": {
+          "description": "`Thief`, the money-thief flag (S-0309 claim 5, Import mapping).",
           "type": [
             "boolean",
             "null"

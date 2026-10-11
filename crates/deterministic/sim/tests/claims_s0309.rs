@@ -2135,6 +2135,8 @@ fn engineer_range_search_ignores_guard_range() {
     wk.engineer = Some(true);
     wk.guard_range = Some(d("10"));
     shed(&mut r, None, 0, false);
+    // Capturable: table C's capture row applies to an engineer of these houses.
+    r.sim.buildings.get_mut("SHED").unwrap().capturable = Some(true);
     let mut w = game_role(&r, HouseRole::Neutral);
     let e = put(&mut w, Kind::Infantry, "WALKER", 1, 0, 0);
     // Rifle: 4 cells. A building 8 cells away is within the guard range but beyond the reach.
@@ -2448,4 +2450,73 @@ fn map_wide_search_skips_other_regions() {
         acquire::search(&mut w, a, SearchKind::MapWide, SearchContext::Hunt),
         Some(b)
     );
+}
+
+// ---------------------------------------------------------------------------
+// The money thief (claim 5, table C rows capture and storage) and claim 25
+// part e's capture exception.
+
+fn thief_rules(capturable: bool, storage: Option<i32>) -> Ruleset {
+    let mut r = base();
+    shed(&mut r, Some("Gun"), 5, false);
+    let b = r.sim.buildings.get_mut("SHED").unwrap();
+    b.capturable = Some(capturable);
+    b.storage = storage;
+    let wk = r.sim.infantry.get_mut("WALKER").unwrap();
+    wk.thief = Some(true);
+    wk.guard_range = Some(d("6"));
+    r
+}
+
+// spec: S-0309 claim 5 (the money-thief flag also searches for buildings; every candidate a capturable building with storage)
+// spec: S-0309 table C row capture (a money thief: T a building whose type is capturable)
+// spec: S-0309 table C row storage (a money thief: T's type has storage capacity)
+#[test]
+fn money_thief_finds_only_capturable_buildings_with_storage() {
+    for (capturable, storage, want) in [
+        (true, Some(100), true),
+        (true, None, false),
+        (false, Some(100), false),
+    ] {
+        let r = thief_rules(capturable, storage);
+        let mut w = game(&r);
+        let a = put(&mut w, Kind::Infantry, "WALKER", 0, 0, 0);
+        let cart = veh(&mut w, "CART", 1, 1, 0);
+        let b = put(&mut w, Kind::Building, "SHED", 1, 2, 0);
+        let got = range_search(&mut w, a);
+        assert_ne!(
+            got,
+            Some(cart),
+            "a vehicle is never a money thief's candidate"
+        );
+        assert_eq!(got == Some(b), want, "{capturable} {storage:?}: {got:?}");
+    }
+}
+
+// spec: S-0309 claim 25 part e (a searcher of the neutral house: a passive-house building passes when it needs an engineer, A is an engineer and T's owner is not A's)
+#[test]
+fn neutral_engineer_passes_a_passive_building_that_needs_an_engineer() {
+    for needs in [true, false] {
+        let mut r = base();
+        shed(&mut r, Some("Gun"), 5, false);
+        let b = r.sim.buildings.get_mut("SHED").unwrap();
+        b.capturable = Some(true);
+        b.needs_engineer = Some(needs);
+        r.sim
+            .countries
+            .get_mut("Alphaland")
+            .unwrap()
+            .multiplay_passive = Some(true);
+        let wk = r.sim.infantry.get_mut("WALKER").unwrap();
+        wk.engineer = Some(true);
+        wk.guard_range = Some(d("6"));
+        let mut w = game_role(&r, HouseRole::Neutral);
+        let a = put(&mut w, Kind::Infantry, "WALKER", 1, 0, 0);
+        let b = put(&mut w, Kind::Building, "SHED", 0, 2, 0);
+        assert_eq!(
+            range_search(&mut w, a) == Some(b),
+            needs,
+            "needs engineer {needs}"
+        );
+    }
 }

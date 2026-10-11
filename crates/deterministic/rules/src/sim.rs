@@ -898,6 +898,9 @@ pub struct UnitType {
     /// `Agent`.
     #[serde(default)]
     pub agent: Option<bool>,
+    /// `Thief`, the money-thief flag (S-0309 claim 5, Import mapping).
+    #[serde(default)]
+    pub thief: Option<bool>,
     /// `C4`.
     #[serde(default)]
     pub c4: Option<bool>,
@@ -1397,6 +1400,12 @@ pub struct BuildingType {
     /// `Capturable`.
     #[serde(default)]
     pub capturable: Option<bool>,
+    /// `NeedsEngineer` (S-0309 claim 25 part e, Import mapping).
+    #[serde(default)]
+    pub needs_engineer: Option<bool>,
+    /// `Storage`, storage capacity (S-0309 table C, row "storage").
+    #[serde(default)]
+    pub storage: Option<i32>,
     /// `Spyable`.
     #[serde(default)]
     pub spyable: Option<bool>,
