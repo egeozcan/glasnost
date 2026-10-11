@@ -2252,3 +2252,29 @@ fn per_tick_search_target_survives_its_tick() {
         "not fired at by the processing of the same tick"
     );
 }
+
+// spec: S-0309 claim 25 part e (rows passive house and insignificant: a searcher of the neutral or special house is rejected too unless T is a building and A an infantry unit that may capture or occupy it)
+#[test]
+fn neutral_searcher_passive_house_and_insignificant_rows() {
+    let mut r = base();
+    guard(&mut r, "CART", "4");
+    r.sim.vehicles.get_mut("T1").unwrap().combat.insignificant = Some(true);
+    let mut w = game_role(&r, HouseRole::Neutral);
+    let a = veh(&mut w, "CART", 1, 0, 0);
+    veh(&mut w, "T1", 0, 2, 0);
+    assert_eq!(range_search(&mut w, a), None, "insignificant");
+    let b = veh(&mut w, "T2", 0, -2, 0);
+    assert_eq!(range_search(&mut w, a), Some(b));
+    // House 0's country made multiplayer-passive.
+    let mut r = base();
+    guard(&mut r, "CART", "4");
+    r.sim
+        .countries
+        .get_mut("Alphaland")
+        .unwrap()
+        .multiplay_passive = Some(true);
+    let mut w = game_role(&r, HouseRole::Special);
+    let a = veh(&mut w, "CART", 1, 0, 0);
+    veh(&mut w, "T2", 0, 2, 0);
+    assert_eq!(range_search(&mut w, a), None, "passive house");
+}

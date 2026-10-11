@@ -615,11 +615,17 @@ fn candidate(
         .and_then(|h| w.houses.get(usize::from(h.0)))
         .and_then(|h| r.countries.get(h.country as usize))
         .is_some_and(|c| c.passive);
-    if player && passive {
+    // spec: S-0309 claim 25 part e (for a searcher of the neutral or special house the two rows let T through only when T is a building, A an infantry unit, and an engineer of another owner may capture it or A may occupy it)
+    // Neither alternative can hold in our engine yet: the needs-engineer flag is not imported, and the occupation test belongs to the structures specs.
+    let house_exception = false;
+    if passive && (player || !house_exception) {
         return false;
     }
-    // spec: S-0309 table C (insignificant: not a building of a non-passive owner, A's owner a player house)
-    if player && ttc.is_some_and(|x| x.insignificant) && !(to.kind == Kind::Building && !passive) {
+    // spec: S-0309 table C (insignificant: not a building of a non-passive owner, A's owner a player house; claim 25 part e for the neutral and special houses)
+    if ttc.is_some_and(|x| x.insignificant)
+        && !(to.kind == Kind::Building && !passive)
+        && (player || !house_exception)
+    {
         return false;
     }
     // spec: S-0309 table C (train: T a train and A a vehicle thief)
