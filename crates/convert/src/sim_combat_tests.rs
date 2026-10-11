@@ -51,8 +51,8 @@ fn sim(base: &str, map: &str, art: &str) -> (SimData, Vec<Warning>) {
 
 /// Builds the `sim` data from layers whose `[Warheads]` sections named in
 /// `weapons` and `projectiles` are moved to those registries (weapons and
-/// projectiles exist by reference only and no listed reference creates
-/// them, Q-0005).
+/// projectiles exist by reference only, S-0004 claim 3; listing them as
+/// warheads keeps each test's fixture short).
 fn direct(
     layers: &[&str],
     art: &str,
@@ -169,8 +169,8 @@ fn weapon_fields_and_not_given_values() {
     assert_eq!(dec(&s.weapons["Zap"].range), Some("-3"));
     assert!(warned(&w, "Zap Range -3 is negative"));
     assert!(!warned(&w, "MinimumRange -2"));
-    // The "not given" values of the layering (weapons exist by reference only, Q-0005, so the
-    // layering's own test of a stored value is checked here).
+    // The "not given" values of the layering (the layering's own test of a stored value is
+    // checked here directly).
     use crate::layers::{global_value_not_given, type_value_not_given};
     assert!(type_value_not_given(Kind::Weapons, b"Speed", b"$FFFFFFFF"));
     assert!(!type_value_not_given(Kind::Weapons, b"Speed", b"-2"));
