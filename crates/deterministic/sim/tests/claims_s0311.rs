@@ -340,7 +340,7 @@ fn claim_6_elite_weapons_only_at_elite() {
     assert_eq!(weapon::slot_weapon(&w, b, 0), Some(gun));
 }
 
-// spec: S-0311 claim 7 (V = m × A_v with m = 1, 2, 3 for a rookie, veteran or elite victim, added to the credited house's score; scenario X2)
+// spec: S-0311 claim 7 and F2 (V = m × A_v with m = 1, 2, 3 for a rookie, veteran or elite victim, added to the credited house's score; scenario X2)
 #[test]
 fn claim_7_kill_value_by_victim_rank() {
     let r = ruleset("4", Some("2.5"));
@@ -375,7 +375,7 @@ fn claim_7_veteran_and_elite_victims_promote_sooner() {
     }
 }
 
-// spec: S-0311 claim 7 (V = 0 when the credited object's house is allied with the destroyed object's: itself or an ally; the score rises by 0)
+// spec: S-0311 claim 7 and F2 (V = 0 when the credited object's house is allied with the destroyed object's: itself or an ally; the score rises by 0)
 #[test]
 fn claim_7_allied_victims_give_nothing() {
     let r = ruleset("4", Some("2.5"));

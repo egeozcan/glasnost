@@ -851,3 +851,43 @@ fn s0315_claim_4_panic_sequence() {
     assert_eq!(seq(&w, a), Some(Seq::Panic));
     assert_eq!(seq(&w, b), Some(Seq::Walk));
 }
+
+/// A frightened walking unit of a type that can crawl, after one sequence
+/// update while it moves; `human`: its owner is human-controlled.
+fn frightened_walker(human: bool) -> Option<Seq> {
+    let mut r = fear_rules();
+    let t = r.sim.infantry.get_mut("GRUNT").unwrap();
+    for k in ["stand", "walk", "go_prone", "prone", "crawl"] {
+        t.sequences.insert(
+            k.into(),
+            glasnost_rules::sim::SequenceEntry {
+                start: 0,
+                count: 4,
+                multiplier: 0,
+                direction: None,
+            },
+        );
+    }
+    let mut setup = testkit::setup(5);
+    setup.houses[0].human = human;
+    let mut w = glasnost_sim::load::new_game(
+        Arc::new(SimRules::new(&r, "s0315")),
+        &testkit::empty_map(SIZE),
+        testkit::catalogue(),
+        &setup,
+    )
+    .unwrap();
+    let id = spawn(&mut w, Kind::Infantry, "GRUNT", 0, 0, 0);
+    let st = w.obj_mut(id).unwrap().infantry.as_mut().unwrap();
+    st.seq = Some(Seq::Walk);
+    st.fear = 60;
+    infantry::update(&mut w, id, true, true, true);
+    w.obj(id).unwrap().infantry.as_ref().unwrap().seq
+}
+
+// spec: S-0315 claim 5 (an AI house, counted as human-controlled, does not lie down while moving; the original's computer-controlled rule, kept for the neutral and special houses, lies down in the middle of a move)
+#[test]
+fn s0315_claim_5_no_lying_down_while_moving() {
+    assert_eq!(frightened_walker(true), Some(Seq::Walk));
+    assert_eq!(frightened_walker(false), Some(Seq::GoProne));
+}

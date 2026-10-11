@@ -427,6 +427,43 @@ fn claim_3_other_warhead_ends_the_countdown() {
     assert!(w.obj(id).is_none());
 }
 
+/// Kills, score and countdown end after two delayed-kill hits by house 1's
+/// NEIGH on house 0's HUT, at distances 256 and then 0.
+fn credited_again(on: bool) -> (i32, i32, Option<i32>, i32) {
+    let mut r = delay_rules();
+    r.globals.quirks.delay_kill_credited_again = on;
+    r.sim.buildings.get_mut("HUT").unwrap().cost = Some(300);
+    let mut w = game(&r);
+    let id = spawn(&mut w, Kind::Building, "HUT", 0, 0, 0);
+    let a = spawn(&mut w, Kind::Vehicle, "NEIGH", 1, 6, 0);
+    let hit = |d| Hit {
+        attacker: Some(a),
+        ..delay_hit(&r, d)
+    };
+    damage::apply(&mut w, id, hit(256));
+    testkit::run(&mut w, 1);
+    let now = w.tick;
+    damage::apply(&mut w, id, hit(0));
+    let h = &w.houses[1].combat;
+    (
+        h.kills,
+        h.score,
+        w.obj(id).unwrap().combat.delay_kill_until,
+        now,
+    )
+}
+
+// spec: S-0312 claim 3 and S-0302 claim 16 (quirks.delay_kill_credited_again on: a further delayed-kill hit credits the destruction again; off: no further credit; in both settings the countdown is shortened)
+#[test]
+fn quirk_delay_kill_credited_again_both_settings() {
+    let (kills, score, until, now) = credited_again(true);
+    assert_eq!((kills, score), (2, 600));
+    assert_eq!(until, Some(now + 5));
+    let (kills, score, until, now) = credited_again(false);
+    assert_eq!((kills, score), (1, 300));
+    assert_eq!(until, Some(now + 5));
+}
+
 // spec: S-0312 Edge cases (quirks.delay_kill_whole_cell_spread on: a spread below one cell gives T = 0; off: R of S-0302 F3 gives a countdown rising from F)
 #[test]
 fn quirk_delay_kill_whole_cell_spread_both_settings() {
