@@ -2,11 +2,11 @@
 id: glossary
 title: Glossary of shared terms
 topic: rules-import        # cross-cutting; every topic uses these terms
-revision: 11
+revision: 12
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-10
+approved-on: 2026-10-11
 measurements: []
 requests: []
 supersedes: []
@@ -45,12 +45,13 @@ meaning, the spec says so and wins for that spec.
   word. This covers every spec of the first two batches, all of them now approved, among them
   S-0010, S-0106, S-0109, S-0201, S-0202, S-0204, S-0205 and S-0206, which earlier revisions of
   this glossary listed as planned; S-0301, which revision 7 listed as planned; and every draft of
-  the third batch (combat), S-0301 to S-0315. A draft of a later batch is still planned.
-- This revision of the glossary cites the specs of its batch, a batch of follow-up revisions, as
-  they stand in it: every approved spec of the index in `spec/README.md` at its current
-  revision, any revision of an approved spec made in the batch, and S-0309, the one combat draft
-  not yet approved, as a draft of the batch. It is signed off in the same batch as those revisions
-  and that draft.
+  the third batch (combat), S-0301 to S-0315, all now approved, S-0309 among them, which revision
+  11 cited as a draft of its batch. A draft of a later batch is still planned.
+- This revision of the glossary cites the specs of its batch, the fourth (economy, production,
+  power, visibility and the skirmish rules), as they stand in it: every approved spec of the index
+  in `spec/README.md` at its current revision, any revision of an approved spec made in the batch,
+  and the sixteen drafts S-0401 to S-0416 as drafts of the batch. It is signed off in the same
+  batch as those drafts.
 - Open questions are questions about the original's behaviour that a spec leaves open. They need
   no Q-ID: Q-IDs number the implementers' spec requests only, and a spec's `requests` field lists
   just the Q-IDs it answers. Specs therefore don't say that no request tracks a question.
@@ -62,13 +63,13 @@ meaning, the spec says so and wins for that spec.
   under a topic. It takes no S-number.
 - An entry otherwise only fixes what a word means in the specs. That is a choice of vocabulary, not
   a claim about the original, so it needs no backing. Where an entry names a topic that has no
-  approved spec and no draft in this batch (for example economy or production), its
+  approved spec and no draft in this batch (for example superweapons, structures or crates), its
   description is a pointer only: specs must not cite it as a rule.
 - The few statements about the original that the glossary makes itself are the numbered claims G1
   to G3 in **Behaviour**, each with its backing, confidence and measurement scenario. They were
   written before any spec covered them. Where a written spec now states the same behaviour in more
-  detail (S-0204 for G1, S-0201 for G2, and for G3 the specs its exceptions name), that spec cites
-  the glossary claim, the two agree, and the spec's claim adds the detail. The glossary claim stays
+  detail (S-0204 for G1, S-0201 for G2, and for G3 the specs its exceptions name and S-0403, claim
+  9, for production times), that spec cites the glossary claim, the two agree, and the spec's claim adds the detail. The glossary claim stays
   because other specs cite it; a later revision that finds the two in disagreement corrects both.
 
 ## Terms
@@ -79,6 +80,13 @@ specs may state it. When rules are layered, a missing key normally keeps the val
 instead (see *rules layer*). For a type section that is the value from an earlier layer of the same
 game, or the absent-key default. For a game-wide key, and for a tiberium's key, it can be a value
 that an earlier game of the session left behind (see *rules database*). See S-0003 and S-0006.
+
+**absorbing building.** A building whose type takes in infantry, vehicles or both as passengers
+that do not come out on their own (S-0312, Terms, *absorbed passengers*). S-0405 names it
+(Terms), and S-0408 (claim 8) uses it.
+
+**adjacency.** A building type's adjacency field, in cells, and the placement condition that
+S-0406 builds on it. S-0406 owns both (Terms, claim 4); S-0415 uses the term.
 
 **AI house.** A house of our engine that our own AI plays. It takes the place of the original's
 computer player, whose script and team system is out of scope (see *team member*). By decision of
@@ -126,6 +134,14 @@ S-0007, claim 4, and S-0105). Infantry of a jumpjet type and hovering vehicles a
 its type. Which kinds can take off and land, and where, belongs to the
 aircraft specs.
 
+**alliance, allied, mutually allied.** An *alliance* is a one-way relation between two houses:
+house A *allies* house B when A counts B as a friend. A and B are *mutually allied* when each allies
+the other, and a house counts as allied with itself. S-0412 owns the terms and the alliances a
+skirmish starts with (Terms, claim 8), and S-0414 how alliances change during play (claims 12 and
+13). S-0209, S-0210, S-0214 and S-0314 define *allied* in their own Terms for their own tests, each
+from the side it names (S-0210 always from the crusher's side, S-0214 for objects as well as
+houses); S-0409 (Terms) takes S-0314's sense.
+
 **ammunition.** A firer's count of shots left. A type whose maximum ammunition says it uses none
 never runs out. S-0301 owns how shots spend it and how vehicles reload (claims 10 and 11). S-0302
 calls the same count *readiness* where damage lowers it (Terms, claim 10); S-0312 and S-0315 use
@@ -166,12 +182,25 @@ write "automatic search". S-0304's *automatic target scan* means the same, and S
 opportunity, area and normal searches are S-0309's range, area and map-wide searches (S-0309,
 Terms).
 
+**available credits.** What a house can spend at a given moment: its *credit balance* plus the
+credit value of the resources held in the house's own storage. The house's own storage is not a
+building's storage (S-0408, claim 10) and not the separate store that a weeder fills (S-0402
+leaves weeders to a later spec). S-0404 owns the term, the sum and the stored part (Terms, claim
+4); the balance part is as in *credit balance*. No other spec owns a house's storage. In a skirmish nothing puts resources into it: harvests are paid straight into the
+balance (S-0402, claim 12), and so are a sold building's stored resources (S-0408, claim 10).
+So the stored part is 0, and available credits equal the credit balance (S-0404, claim 4).
+S-0416 uses the term.
+
 **backing.** How a claim is supported. One of: `measured` (an M-ID records an observation that
 confirms it), `measurable` (a measurement scenario in the spec would confirm or falsify it) or
 `unmeasured` (it cannot practically be observed, even with the allowances of the *measurement
 setup*, such as whether a wait exists inside the original when no observable shows it; each use
 must say why). Draw counts and draw order of the random streams are measurable through the
 random-state recorder of the measurement setup.
+
+**bale.** The unit in which resource is held in a *resource cell*, harvested and carried. S-0401
+owns how many bales a resource cell holds and what each is worth (Terms, claim 2); S-0402 counts a
+harvester's *load* in bales.
 
 **base rules.** The expansion's main rules file: at every game start, the lowest of the rules layers
 (see *rules layer*). It restores every key it gives. A game-wide key it does not give is not reset by it (see *rules
@@ -185,6 +214,10 @@ object) carries out, such as *move*, *attack*, *guard* or *area guard*. S-0215 n
 and gives each actor a current, a queued and a suspended behaviour (Terms, claim 1). In the specs a
 behaviour name in italics means the behaviour, never the sequence kind of the same name in S-0107.
 See S-0215; orders that set a behaviour are S-0213's.
+
+**being drained.** The state of a building to which an enemy unit with a draining weapon is
+attached. S-0405 owns the term (Terms) and what it changes in power (claim 5); S-0408 (claim 3)
+uses it. How the attaching starts and ends belongs to the special-abilities specs.
 
 **being erased.** The state of an object that an erasing weapon (a temporal weapon) has locked
 onto, from the moment the first such weapon locks on until the last one lets go or the object is
@@ -205,6 +238,19 @@ deck". An object "on a bridge deck" stands or drives on the deck, as opposed to 
 **bridge repair hut.** A building type that rebuilds the bridge linked to it when an engineer
 enters it. The structures specs own it. See S-0214 (Terms).
 
+**build icon, cameo.** One entry of a *sidebar tab* (S-0004, Terms): a type that the local player
+may build, shown by its picture. S-0004 (claim 11) owns the tab and position of each icon, and
+S-0411 what an icon shows and which orders its clicks give (Terms, claims 1 to 12); S-0404 and
+S-0407 use the term. Specs write "build icon"; "cameo" means the same.
+
+**build limit.** A type's imported limit on how many objects of it a house may have, or may ever
+have built. S-0407 owns it (Terms, claims 9, 10 and 16); S-0404, S-0406, S-0411 and S-0415 use it.
+
+**build time, progress, step period.** An *item*'s *build time* is the number of ticks that S-0403
+computes for it. A *production line* builds its item in *progress* steps, one every *step period*
+ticks, which follows from the build time. S-0403 owns the three terms (Terms, claims 1 to 8),
+and S-0404, S-0405 and S-0411 use them.
+
 **building.** A type kind and its objects: a stationary object that occupies a foundation of cells.
 Also called a structure.
 
@@ -215,6 +261,34 @@ structures specs.
 
 **burst counter.** A per-firer count of the shots made in the current burst, shared by all weapons
 of the firer. S-0301 owns it (Terms, claim 4); S-0313 (claim 2) uses it.
+
+**bystander computer player.** Measurement vocabulary. A computer player of the original (see
+*computer-controlled*) that a measurement scenario includes as the skirmish's opponent, and keeps
+away from what it observes. Scenarios write "one bystander computer player" (or "one allied and
+one enemy bystander computer player"). The term is used in place of "passive AI house", which is
+wrong twice over: the oracle runs the original, which has computer players and no *AI houses*, and
+a *passive house* (S-0009, Terms) is a different thing.
+- *Not inactive.* A scenario does not assume that the computer player stays idle. It relies on
+  the conditions below and on its void rule instead. It may add named test data meant to hold the
+  computer player back, but the void rule still applies.
+- *Kept away.* Its start position is the one farthest from the test objects, on a test map where
+  its objects cannot reach the observed area within the run, unless the scenario places or uses
+  some of its objects (for example the allied buildings of a build-off-ally test). Its starting
+  credits and starting units follow from the game-wide setup values that the scenario sets for
+  every house (S-0412, claims 1 and 2), plus the original's computer-only extras (S-0412, claim
+  3). A scenario that needs ample credits for the observed house therefore gives them to the
+  bystander too. Whether it is allied with the observed house follows from the lobby teams
+  (S-0412, claim 8).
+- *Not a passive house.* Its country is not marked passive. So it takes a start position and gets
+  starting units like any player (S-0009; S-0412), and it is tested for defeat (S-0414, claim 1).
+- *Void rule.* A run is void, and is repeated, when any object of the bystander that the scenario
+  does not name enters the observed area or acts on a test object, or when the bystander is
+  defeated before the observation ends. Its defeat would run the end test and could end the game
+  (S-0414, claim 6). Each scenario names its observed area. Scenarios that fix a void rule of their
+  own (S-0203, S-0110, S-0213) keep it.
+- *On our engine.* When a scenario is replayed on our engine, the bystander's counterpart is an AI
+  house that gives no orders. The void rule makes sure nothing the original's computer player did
+  reached the observables.
 
 **cell.** One square of the map grid, identified by integer cell coordinates (x, y). Increasing x
 runs towards the lower right of the screen, increasing y towards the lower left. A cell is 256
@@ -229,6 +303,9 @@ in the cell to the ground layer. It is neither a rules layer nor a render layer.
 specified in S-0009 (claim 31). What an object entering the cell sets off is owned by S-0011
 (claim 18, the entered-by event) for the codes of its subset; other codes are left to later
 revisions of the trigger specs.
+
+**cell test.** The test that a single cell passes or fails for a building type that is being
+placed. S-0406 owns it (Terms, claim 3); S-0415 (claim 3) uses it for deploying.
 
 **chrono flash.** The full-screen chrono warp effect that a trigger action starts, one of the
 *global effects*. It is not the chronosphere superweapon's jump (S-0104). S-0104 owns its lighting
@@ -260,8 +337,13 @@ should have an open question or a measurement scenario.
 **construction state.** The state of a building while it plays its build-up sprite (see *sprite*):
 forwards after it is placed (*build-up*), and backwards while it is sold (*selling*). Specs write
 "construction state" for the state, and "build-up" or "selling" only for one direction of it, so a
-rule that holds "outside the construction state" also holds while selling. S-0108 owns its timing.
-See S-0108.
+rule that holds "outside the construction state" also holds while selling. S-0408 and S-0415 call
+the backwards direction the *build-down* (S-0408, Terms). S-0108 owns its timing. See S-0108.
+
+**construction yard.** Ambiguous on its own. S-0213, S-0214 and S-0415 (Terms) mean a building
+whose type has the construction-yard flag; S-0215 (Terms) means a building whose type is in a list
+of the original's computer player, which can be a different set of types. A spec that uses the word
+in a rule says in its Terms which sense it means.
 
 **contact.** The one pairing that a mobile actor can hold with another object while the two carry
 out an exchange: for example a harvester with the refinery it unloads at, a unit with the
@@ -271,12 +353,33 @@ An actor "in contact with nothing" holds none. See S-0215 (Terms); the specs of 
 when contact starts and ends. A *tether link* is a firmer state that some exchanges add to a
 contact.
 
+**could make, could release.** Whether a factory building of an item's kind can serve an *item*
+of a given type, and whether it can release the finished object. S-0404 owns the tests (Terms,
+claims 3, 7 and 8); S-0403, S-0406, S-0407 and S-0411 use them.
+
+**counted building.** Ambiguous on its own. S-0405 (Terms, claim 3) counts the buildings whose power
+a house sums, and S-0414 (Terms, claim 4) the buildings that keep a house alive in its defeat
+tests; the two sets differ. A spec that uses the term says whose sense it means.
+
 **country.** The nationality a house plays, chosen from the countries listed in the rules data. A
-country belongs to one side (S-0004, claim 9). Which types a country may build is left to the
-production specs.
+country belongs to one side (S-0004, claim 9). Which types the houses of a country may build is
+S-0407's (claims 5 and 11), and what each field of a country does is S-0413's (claim 1).
+
+**country factor, per-kind factor, general factor.** A *country factor* is a factor that a
+country's rules section gives. A *per-kind factor* holds one factor for one kind of item
+(infantry, vehicles, aircraft, ordinary buildings or defences), a *general factor* one factor for
+every kind. S-0413 owns the terms and which factors have an effect (Terms, claims 1 to 3); S-0403,
+S-0404, S-0408 and S-0412 use them.
+
+**credit balance.** A house's own stock of credits, not counting resources held in storage (see
+*available credits*). S-0412 (claim 2) gives its starting value in a skirmish, S-0402 (claim 12)
+what harvesting adds, S-0404 (claims 4 and 6) what production takes and gives back, and S-0408
+(claims 1 and 10) what a sale adds.
 
 **credits.** The unit of money: costs, refunds, harvested resources and a house's balance are given
-in credits. Each economy spec states the number domain and rounding of the amounts it computes.
+in credits. Each economy spec states the number domain and rounding of the amounts it computes:
+S-0402 (claim 12) for income, S-0404 (claims 2, 4 and 6) for prices, payments and cancel refunds,
+and S-0408 (claim 1) for sale refunds. See also *credit balance* and *available credits*.
 
 **current weapon.** The weapon in the slot of an object's weapon number when its type is a
 multi-weapon type, and the weapon in its slot 0 otherwise. See S-0309 (Terms), with S-0308 for
@@ -306,6 +409,15 @@ claim 6); S-0303 gives the detonation.
 
 **debris.** Animations thrown by a death or a detonation. S-0312 owns them (Terms, claim 4,
 Formulas F1); S-0303 (claim 22) throws them from a warhead.
+
+**defeated, undefeated, contender.** A house is *defeated* once the defeat of S-0414 (claim 5) has
+struck it, and *undefeated* otherwise. A *contender* is an undefeated house that is not passive.
+S-0414 owns the terms (Terms, claims 1 to 10); S-0409 and S-0410 use *defeated*.
+
+**defence, ordinary building.** A building type is a *defence* when its build category field is
+the combat category, and an *ordinary building* otherwise. The two are separate kinds for the
+production lines and for the per-kind country factors. S-0403 owns the split (Terms); S-0404,
+S-0406, S-0408, S-0411 and S-0413 use it.
 
 **departure.** A documented place where our engine deliberately does not reproduce the original,
 and offers no quirk switch for it. The spec states the original's behaviour as behaviour and then
@@ -347,8 +459,9 @@ default. S-0302 owns the terms (Terms, claim 3); S-0301 (claim 3) uses them.
 **difficulty skill block, skill block.** In the original, the factors that scale a house's rate of
 fire, firepower, armour, cost and build time, given once for each difficulty. There is one block,
 and its entries, one per difficulty (easy, normal, difficult), are the *difficulty rows*. S-0301 (claim 3) owns the rows' rate-of-fire
-factor and S-0302 (claim 3, Edge cases) their firepower and armour factors; the cost and build-time
-factors are left to the economy and production specs. It is not the *house skill level*. Which row
+factor and S-0302 (claim 3, Edge cases) their firepower and armour factors; S-0404 (claim 2) gives
+what the rows' cost factor does and S-0403 (claim 9) their build-time factor. It is not the *house
+skill level*. Which row
 a house takes is set-up behaviour of the original, recorded by the specs that use the factors
 (S-0301 and S-0302, claim 3). By decision of the project lead, in our engine every house, human or
 AI, uses by default the row the original gives a human-controlled house in a skirmish, the *normal
@@ -364,6 +477,15 @@ scope for now (decided by the project lead, 2026-10-10).
 computes for the way from *P* to *Q*. It is close to the exact angle, but not always equal to it.
 See S-0204 (claim 8, Formulas F3). One of the eight ways from a cell to a neighbouring cell is a
 *step direction*, and a facing rounded to one of *n* equal steps is an *n-step facing*.
+
+**disableable superweapon.** A superweapon type whose imported disableable flag lets the setup
+screen's superweapon setting (see *setup values*) take it out of the game. S-0412 owns the term
+and what the setting does to such superweapons and to the buildings that name them (Terms, claim
+9). S-0407 (claim 7) and S-0413 use it. Specs write "disableable superweapon", not "switchable
+superweapon", because *switched on* and *switched off* name a building's power switch.
+
+**discovered by a house.** A per-house mark of objects, set by reveals for that house. S-0409
+owns when it is set (Terms, *discovered by H*, claim 16); S-0410 (claim 7) uses it.
 
 **disguise.** A unit's ability to look like a unit of another type to some players. While a disguise
 is in effect against a player, that player sees the unit drawn as the disguise type. Which units can
@@ -417,6 +539,12 @@ remaining health*.
 follows. S-0311 owns how it is gained, kept and lost (Terms, claims 1, 2 and 7 to 13); S-0302 and
 S-0312 use it.
 
+**explored, seen.** Two per-house states of every legal cell. An *explored* cell is free of
+*shroud* for the house; with *fog of war* on, a *seen* cell is also not under fog. The opposites are
+*unexplored* and *unseen*. S-0409 owns when cells become explored and seen and when they are
+covered again, for every *player house* (Terms, claims 1 to 19). S-0110 (Terms) uses the words for
+the local player when it draws the cover, and S-0406 (claim 5) and S-0410 use them.
+
 **facing.** A direction, given as an integer *f* from 0 to 65535 that stands for *f*/65536 of a full
 turn in the map plane (not an angle measured on the screen, where the isometric projection
 distorts angles): one facing unit is 1/65536 of a turn. 0 is *map north* and values grow clockwise as seen on the
@@ -430,6 +558,12 @@ original stores every facing at the full resolution of one facing unit, how a co
 facing* (*n* a power of two from 2 to 256) is derived from a facing, and how two facings are
 compared (the *signed facing difference*). A spec that derives a coarse facing in another way says
 so.
+
+**factory building.** A building whose type's factory field names the kind of object it makes:
+infantry, vehicles, aircraft or buildings. S-0403 defines it (Terms, *factory building of a
+kind*). S-0404 owns which factory building *could make* an item and which one releases it (Terms, claim
+7), and S-0213 (Terms) names the *primary factory*, the one that receives a house's new objects of
+its kind. S-0406, S-0407 and S-0411 use the term.
 
 **field.** One setting of a type, or of a game-wide section, that the original reads from a value.
 Each field has a value form (integer, percent, boolean, list and so on, see S-0003) and an absent-key
@@ -457,8 +591,8 @@ S-0309 and S-0310 give the answers of their own topics, and S-0206 and S-0215 us
 **fog of war.** An optional game setting. With it on, map areas a house has explored but cannot see at
 the moment keep showing what the house last saw there; S-0102 says which objects appear there as
 *remembered images* and how they are drawn. With it off, explored areas show what is there now.
-Which objects stay hidden under fog, and when an area counts as explored or seen, belongs to the
-visibility specs. *Shroud* is a separate cover.
+When an area counts as explored or seen is S-0409's (see *explored, seen*); what is drawn under fog is S-0102's and S-0110's. *Shroud* is a separate
+cover.
 
 **follower car, leader, car chain.** A *follower car* is a vehicle that the map links to another
 vehicle, its *leader*, so that it follows it, as a carriage follows its engine. A leader that is
@@ -473,7 +607,8 @@ full rectangle, but not always: in its building-fire draws S-0302 (claim 13) giv
 foundation word no cells, and the 8-cell 3 × 3 foundation word only 8 of the 9 cells of its
 rectangle. S-0108's vocabulary has two 3 × 3 words (Import mapping, foundation vocabulary); in
 those draws the other one, the plain 3 × 3 word, has all 9 cells. Which
-cells a building occupies for placement and movement belongs to the placement specs. Its top-left cell is the foundation cell with the smallest x and y. "Top-left" refers to the map
+cells a building occupies for placement, its *foundation cells* within its *foundation rectangle*,
+is S-0406's (Terms, claim 2); S-0408 and S-0415 use those terms. Its top-left cell is the foundation cell with the smallest x and y. "Top-left" refers to the map
 axes: on the screen that cell is the topmost cell of the footprint, not the leftmost. The
 foundation's *top corner* is the top corner of its top-left cell, the topmost point of the footprint
 on the screen.
@@ -530,6 +665,11 @@ clash with *measurement scenario*).
 general settings, the combat-damage settings, the AI settings, the difficulty sections, the land-type
 sections and the like. See S-0004 and S-0006.
 
+**gap generator, gap field.** A *gap generator* is an object whose type has the gap-generator
+flag. While it generates, it holds one *gap field*, a set of cells around it. S-0409 owns both
+(Terms, claim 11); S-0110 (Terms) names the stock building, and S-0405 (claim 16) and S-0410 use
+the terms.
+
 **garrisoned building.** A building whose type lets infantry occupy it and fire from it, while at
 least one occupant is inside. S-0301 (Terms) defines it, and S-0302 (Terms) gives the same
 definition; S-0302, S-0307, S-0308, S-0311 and S-0313 give what it changes in their topics. Occupation itself is left to the structures specs.
@@ -542,6 +682,17 @@ See S-0103 and S-0104.
 
 **guard spot.** The cell or object that an actor in *area guard* stays near. See S-0215 (Terms,
 claim 26).
+
+**handicap.** Our engine's optional per-player setup value that picks a *difficulty row* for that
+player's house; it is off by default and never tied to AI difficulty (see *difficulty skill
+block*). S-0412 owns it (Terms, claim 5); S-0403, S-0404 and S-0413 say what it does not change.
+This is a rule of our engine, not a claim about the original.
+
+**harvester, load, capacity.** A *harvester* is a vehicle whose type has the harvester flag. Its
+*load* is the *bales* it carries, kept per tiberium, and its *capacity* the number of bales it can
+carry, its type's storage field. S-0402 owns the terms and the harvest cycle (Terms, claims 1 to
+17), and names the *slave miner* and the *chrono miner* there; S-0401, S-0404 and S-0415 use
+*harvester*.
 
 **healer, healer for acquisition.** An object whose *mean weapon damage* is below 0. S-0308 owns
 the mean weapon damage and the test (claim 15, where the object is called a *healer for
@@ -601,6 +752,9 @@ follow the unit rules of human houses (see *AI house*). So every rule gated by t
 treats its units as it treats a human player's: for example the area-guard row of S-0215 (claim
 15), the cell-wide scatter rule of S-0209 (claim 11) and automatic crushing in S-0210 (claim 11).
 
+**human participant.** A person who takes part in a game through the lobby, observers included.
+S-0412 owns the term (Terms); S-0414 uses it.
+
 **human-controlled.** A house played by a person rather than by the computer. A rule that depends on
 this says "human-controlled owner" or "computer-controlled owner" (see *computer-controlled*). In our
 engine an *AI house* counts as human-controlled for every unit rule and for the legality and
@@ -623,6 +777,11 @@ one the original reads, input that the original trims wrongly (S-0001, S-0002, S
 that a departure replaces with a default. The data-file quirks of the original apply to every input,
 stock data, user maps and mods alike, and stay on by default; the warning is how a mod author learns
 of them.
+
+**in operation.** Whether a building currently works as a powered building. It is worked out each
+time it is asked, and it is not the state of the power switch, for which see *switched on,
+switched off*. S-0405 owns it
+(Terms, claims 8 and 9); S-0408 uses it.
 
 **in play, enter play, leave play; on the map, off the map; destroyed, removed.** Three different
 questions about an object, which specs keep apart.
@@ -647,6 +806,10 @@ only in S-0203's sense.
 
 **infantry.** A type kind and its objects: soldiers and other units drawn as sprites and moving on
 foot. See S-0107.
+
+**item.** The one object that a *production line* is building at a time; its type is the type
+ordered. S-0403 names it (Terms), and S-0404 owns how an item starts, is paid for, held, cancelled
+and completed (claims 3 to 9). S-0406, S-0407, S-0411, S-0413 and S-0414 use it.
 
 **jumpjet cruise height.** A jumpjet type's imported height field: the height above the terrain
 at which its jumpjets fly, in leptons. It is also the hover height that S-0101 uses. S-0102 gives its minimum, its
@@ -688,6 +851,11 @@ or *render layer* for one of the ordered drawing lists.
 **lepton.** The unit of world distance: 1/256 of a cell edge. Positions, ranges and speeds are given
 in leptons (speeds in leptons per tick). World height is also measured in leptons.
 
+**line kind.** Which of a house's production lines builds a type: infantry, ground vehicles, naval
+vehicles, aircraft, buildings or defences. S-0403 names the kinds (Terms) and S-0404 (claim 1) the
+lines a house has; S-0411 uses the term. S-0413 (Terms, *kind of an item*) groups items into five
+kinds for the per-kind country factors, with ground and naval vehicles in one kind.
+
 **lobby.** The pre-game screen of a skirmish or network game, where the players, their countries,
 colours, teams and start positions and the game mode are chosen.
 
@@ -715,6 +883,11 @@ locomotors tilt a body on slopes. The other locomotors are left to later movemen
 found before an archive member of the same name, so a loose file can override shipped data. Our
 engine looks for loose files in the game directory only. The original also looks in a few legacy
 places outside it; S-0005 claim 4 makes not doing so a *departure*, with no switch. See S-0005.
+
+**low power, power fraction.** Two derived power states of a house: whether it has *low power*,
+and its *power fraction*, a number from 0 to 1, which compare its *power output* with its *power
+drain*. S-0405 owns both (Terms, claim 4, Formulas F3); S-0403 (claim 5) uses the fraction, and
+S-0409 and S-0410 use low power.
 
 **map layer.** The map file as a rules layer: the highest of the rules layers of a game (see *rules
 layer*), so any rules section it contains overrides the lower layers. What it sets in type sections lasts for that game only, except in
@@ -766,6 +939,9 @@ fixes them. Five further allowances apply:
 A claim that was unmeasured only because it needed named test files, the random-state recorder or
 scripted input is therefore measurable.
 
+A scenario's opponent in the original is a *bystander computer player* (see that entry). A
+scenario that needs a *passive house* names it as a test object, as S-0414 (scenario V3) does.
+
 **mission target.** The object or cell that a unit's current behaviour aims to enter, capture,
 sabotage or otherwise reach, while the unit is in a behaviour that has one. S-0209 (Terms) defines
 it and uses it in its entry outcomes (claim 4). Which behaviours have one belongs to the behaviour
@@ -810,6 +986,10 @@ rendering terms; the *turn pass* of S-0203 is a part of a tick. See S-0102.
 whether a vehicle, a building or another object is present, and the house of the last infantry unit
 to mark a position there. See S-0209 (Terms, claim 1).
 
+**offered.** A type is *offered* to a house when the tech-tree rules let the house order it now, or
+show it at its *build limit*. S-0407 owns it (Terms, claims 1 and 12); S-0415 uses the word, and
+S-0404 (claim 9) and S-0411 (claim 2) write "buildable" for it, pointing to S-0407.
+
 **open-topped transport.** A transport whose passengers fire from inside it. S-0203 (Terms)
 defines it, as a transport whose type is open-topped, a property taken from the rules data, and
 gives its passengers' place in the update order (claim 3); S-0215 and S-0302 (Terms) restate it,
@@ -829,7 +1009,7 @@ overlay data value. See S-0009.
 
 **overlay data value.** An integer from 0 to 255 that every legal cell has, alongside its overlay
 type (S-0009, claim 13). Its meaning depends on the overlay type: for
-example the amount of ore in an ore cell or the damage stage of a wall. Cells without an overlay
+example the stage of a resource cell (S-0401, claim 1) or the damage stage of a wall. Cells without an overlay
 still have one. See S-0009.
 
 **override section.** A rules section inside a game-mode file or a map that changes the rules from
@@ -855,8 +1035,33 @@ overlay and contents: *open*, *crushable*, *wall-like*, *beach*, *water*, *parti
 
 **per-mille (‰).** An integer ratio where 1000 means a factor of 1.0.
 
+**place order, build order, hold order, cancel order, cancel-all order.** The production orders a
+house gives. Each names a type, and so a *production line*; a place order of a building also names
+a cell. They are orders in the sense of S-0213. S-0404 owns them (Terms, claims 3 to 7), S-0406
+what a place order needs (claims 1 to 12) and S-0411 which clicks give them; S-0407 and S-0415 use
+them.
+
+**player house.** A house of a player, human or AI (see *AI house*). The *neutral house* and the
+*special house* are not player houses. S-0409 defines it (Terms); most specs of the batch use it.
+
+**power output, power drain.** What a building makes and what it needs, in power units (integers),
+and a house's sums of them. S-0405 owns both (Terms, claims 1 to 7); S-0403, S-0404, S-0408 and
+S-0410 use them.
+
 **prerequisite.** A type that a house must own (usually a building) before another type can be built.
-Which types are prerequisites of which comes from imported fields.
+Which types are prerequisites of which comes from imported fields. S-0407 owns when a prerequisite
+is met (claim 8), including the *generic groups* that a prerequisite list can name instead of a
+type (Terms).
+
+**price.** What a house pays for one *item* of a type, in credits. S-0404 owns it (Terms, claim
+2), and S-0403, S-0408, S-0412 and S-0413 use it.
+
+**production line, queue.** One of a house's production processes: its *item*, the item's
+progress, its hold state and its *queue*, the ordered list of types waiting to be started after
+the item. S-0203 (Terms) names it and places its update in the tick (claim 8). S-0404 owns how many
+lines a house has and what a line does (Terms, claims 1 to 12), with the line states *player hold*,
+*automatic hold* and *waiting for money*. S-0402, S-0403, S-0405, S-0411 and S-0414 use it, and
+S-0406 and S-0407 shorten it to "line".
 
 **projectile.** The object that carries a shot from where it is launched (normally its fire point,
 S-0306 claim 5) to where it detonates. S-0203
@@ -874,6 +1079,11 @@ undefined result, hangs or leaves the game frozen for good on bad data, or depen
 machine or on real time, there is no switch: that is a *departure*. A switch shared by
 several specs is named once in each of them; the glossary points to the shared ones (Edge cases and
 quirks).
+
+**radar, radar map, radar building.** A house *has radar* while the conditions of S-0410 (claim
+1) hold. The *radar map* is the picture in the sidebar's radar panel, and a *radar building* is a
+building whose type has the radar flag. S-0410 owns the three terms (Terms, claims 1 to 11), and
+S-0405 (claim 12) and S-0409 use them.
 
 **range test, weapon range.** The *range test* is the yes/no question whether a target is within
 reach of a weapon of a firer; the firing check's *out of range* is its "no". A weapon's *weapon
@@ -896,6 +1106,19 @@ of the measurement setup.
 **reference point.** The point of an object that distance and direction measurements use: for a
 building the centre of its foundation, for every other object its position. See S-0204 (claim 4).
 
+**refinery, dock types.** Ambiguous on its own. In the harvest cycle a *refinery* is any building
+of one of a harvester's *dock types*, the building types that its type lists as places to unload
+(S-0402, Terms). S-0407's refinery *generic group* (Terms) is another set of building types,
+S-0414's *refinery-list building* (Terms) is one building type taken from a list of its own, and an
+aircraft type's dock types are the buildings it
+docks at (S-0404, claim 2; S-0408, Terms). A spec that uses "refinery" or "dock types" in a rule
+says in its Terms which it means.
+
+**refund.** Ambiguous on its own. S-0408 (Terms, claim 1) gives the refund for an object that a
+house sells, S-0404 (claim 6) the refund for a cancelled item, and the two are computed
+differently. S-0415 (Terms, *sale refund*) and S-0416 use them. Where the context does not tell,
+specs write "sale refund" or "cancel refund".
+
 **registry, registration index.** The registry of a type kind is the ordered collection of all types
 of that kind in the current game. A type's registration index is its position there, a non-negative
 integer counted from 0. Indices are dense: the *n*-th type created for a kind has index *n* − 1.
@@ -914,6 +1137,12 @@ S-0105 (claim 27).
 that name if one exists, otherwise the archive member that the archive precedence of
 S-0005 selects. A name that
 resolves to nothing is "not found". See S-0005.
+
+**resource cell, stage of a resource cell.** A *resource cell* is a cell whose overlay type has
+the tiberium flag; its *stage* is its overlay data value, which sets how many *bales* it holds.
+S-0401 owns both (Terms, claims 1 and 2) and how resource grows, spreads and is removed; S-0402 and
+S-0410 use them. Specs write "stage of a resource cell" wherever "stage" alone could be read as a
+stage of a sprite or animation (S-0108, S-0109).
 
 **retaliation.** An actor's automatic attack on the object that has just damaged it, as opposed
 to an ordered attack or a target picked in an automatic search. S-0309 owns when an object
@@ -965,6 +1194,10 @@ mean the same. The list decides four observable things:
   animation (S-0006, claims 1 and 8; S-0007, claim 2).
 See S-0006.
 
+**sale.** The course of selling one building, from the first processing of its *selling* behaviour
+(S-0215) to its removal or its return to another behaviour. S-0408 owns it (Terms, claims 4 to
+10), and S-0405, S-0406 and S-0415 use it.
+
 **scatter.** A unit's short move away from its spot, made to dodge a threat or to make room, set off
 by a *scatter request*. For infantry, S-0208 gives which requests a unit accepts and where it moves
 (claims 11 to 13), through the nearby-cell search of its claim 13 (with S-0212, claim 25). By
@@ -999,18 +1232,28 @@ S-0001.
 settings, such as the game speed (see Import mapping) and the difficulty. It is a user file, not
 stock data, so a scenario may set its values.
 
-**shroud.** The cover that hides map areas a house has not explored yet. When it is removed belongs
-to the visibility specs.
+**setup values.** The values that the lobby fixes for one game: game-wide ones, named "the …
+setting" (among them the *credits setting*, *unit-count setting*, *bases setting*, *short-game
+setting*, *superweapon setting*, *crate setting* and *build-off-ally setting*), and per-player ones.
+S-0412 owns them (Terms, claim 1); S-0406, S-0407 and S-0414 use the settings.
+
+**shroud.** The cover that hides map areas a house has not explored yet. When a cell becomes
+explored, and when it is covered again, is S-0409's (see *explored, seen*); S-0110 draws the
+cover.
 
 **side.** One of the faction groups, listed in the rules data, that countries belong to (S-0004,
 claim 9). The local player's side selects the side group of archives, whose art gives the sidebar
-its look (S-0005, claim 13). Which types a side's houses may build belongs to the production specs.
-See S-0004 and S-0005.
+its look (S-0005, claim 13). Which types a side's houses may build is S-0407's. See S-0004 and
+S-0005.
 
 **sidebar.** The panel beside the battlefield view during play, with the radar, the local
-player's credits and the build icons. The order of the build icons is owned for now by S-0004
-(claim 11) and may later move to the interface specs, which are not written yet and will own the
-rest of its behaviour.
+player's credits and the build icons. S-0004 (claim 11) owns the order of the build icons, S-0411
+what the icons show and what clicking them does (see *build icon*), S-0416 the credits counter and
+S-0410 the radar map (see *radar*). The rest of its behaviour is left to later interface specs.
+
+**sight, sight radius.** An object's *sight* is the coverage it holds for a house: the cells it
+explores around its *sight centre*. Its *sight radius* is the radius in cells that its sight uses
+at a given moment. S-0409 owns both (Terms, claims 2 to 10); S-0406 points to it.
 
 **signed facing difference.** The value *δ*(*a*, *b*) = *b* − *a* of two facings, reduced to the
 range −32768 … 32767. A positive value is a clockwise turn, and a half turn counts as −32768. See
@@ -1055,6 +1298,10 @@ sprite*, *roof-deploying sprite*, *under-door sprite* and *under-roof-door sprit
 an art section, not a sprite), and a numbered picture inside one is an
 *image frame*, never a bare "frame". See S-0007, S-0107 and S-0108.
 
+**spy satellite.** A building type flag, and a building of a type with it, whose active reveal
+explores the whole map for its house. S-0409 owns it (Terms, claim 15); S-0405 (claim 14) and
+S-0410 use it.
+
 **step direction.** One of the eight directions from a cell to a neighbouring cell, numbered 0 to 7
 clockwise from map north: 0 is the cell (*x*, *y* − 1), 1 is (*x* + 1, *y* − 1), 2 is (*x* + 1, *y*),
 3 is (*x* + 1, *y* + 1), 4 is (*x*, *y* + 1), 5 is (*x* − 1, *y* + 1), 6 is (*x* − 1, *y*) and 7 is
@@ -1068,6 +1315,11 @@ stock data. They refer to the field instead, and a value in an example is invent
 **sub-tile.** A terrain tile can cover several cells. A cell's sub-tile is the index of the part of
 its tile that lies on that cell. See S-0009.
 
+**switched on, switched off.** The two states of a building's power switch, which power orders
+and some trigger actions change. S-0213 (claim 13) calls them *online* and *offline*; specs write
+"switched on" and "switched off". S-0405 owns the power switch and its rules (Terms, claim 10); S-0404, S-0407, S-0408,
+S-0410 and S-0411 use it. It is not *in operation*.
+
 **target, destination.** An actor's *target* is the object it currently attacks, captures or
 enters, and its *destination* the cell or object it currently moves to. Either may be absent. See
 S-0215 (Terms); orders set them (S-0213), and the movement specs keep further points of their own.
@@ -1076,6 +1328,17 @@ S-0215 (Terms); orders set them (S-0213), and the movement specs keep further po
 That system is out of scope for glasnost, so specs note only where membership changes a rule of the
 game. An *AI house* of our engine has no such teams, so a rule's exception for team members never
 applies to its units. See S-0215 (Terms).
+
+**tech-lab list.** A game-wide list of building types in the rules data. A spy that infiltrates a
+building on it can win its house stolen tech (S-0407, claim 6), and the superweapon setting never bars
+a building type on it from being built (S-0412, claim 9, part a). S-0407 owns the term (Terms). S-0412 uses it.
+Specs write "tech-lab list", not "tech-building list", which is easy to confuse with the *tech*
+generic group of S-0407 (Terms) and with the neutral buildings that players capture.
+
+**tech level.** Ambiguous on its own. A *type's tech level* is its imported tech-level field
+(S-0108, Terms); the *game's tech level* and a *house's tech level* are S-0009's (Terms), and
+S-0407 (Terms, *house tech level*, claim 5) owns how the house's tech level limits what it may
+build. S-0406 and S-0412 use them. A spec says which of them it means.
 
 **terrain animation.** An animation that the game creates as part of a cell's terrain, when the
 map's terrain is set up or when a cell is recalculated in play (S-0010, claim 19), such as the
@@ -1172,6 +1435,10 @@ load. S-0202 (claim 11) classifies its uses during play and on the setup screens
 our engine runs it: each machine runs it from the game's seed, it is not synchronised between the
 machines of a network game, and none of its draws during play reaches game state. A spec that names a draw from this stream also says what the
 draw affects.
+
+**upgrade.** A building type that is added to an existing building instead of standing on its own
+cells, and a building of such a type. S-0405 names it (Terms), and S-0406 owns how it is placed
+(Terms, *upgrade type*, claim 12); S-0407 and S-0408 (claim 5) use it.
 
 **usable area, usable cell, playable area.** The part of the local area in which play takes place. A legal cell is
 *usable* when the test of S-0009 (claim 4) puts it inside the local area. S-0009 (claim 5) says
@@ -1413,7 +1680,7 @@ consequences in the specs they point to: S-0004, S-0005, S-0006 and S-0009.
 
 ## Edge cases and quirks
 
-The glossary owns no quirk; *quirk switch* defines the notation the specs use. It points to three
+The glossary owns no quirk; *quirk switch* defines the notation the specs use. It points to five
 switches that several specs share. Each spec that uses one names it, and no spec defines a second
 switch for the same behaviour:
 - `quirks.speed_normalised_delays`: both exceptions of claim G3, and the one switch through which
@@ -1427,10 +1694,15 @@ switch for the same behaviour:
 - `quirks.table_root_distance`: the table square root of S-0204 (claim 5, Formulas F1), owned by
   S-0204. Every distance taken with that table follows it. The specs that name it are S-0104,
   S-0009 (the farthest-sum rule for start positions), S-0207, S-0209 (claim 8, Formulas
-  F1), S-0212, S-0214 and S-0215, and S-0208, which notes that it changes nothing there. An earlier revision of S-0009
+  F1), S-0212, S-0214, S-0215 and S-0402 (claim 9), and S-0208, which notes that it changes nothing there. An earlier revision of S-0009
   proposed a switch of a different name for the same table; by decision of the project lead the two
   are one switch under this name, and S-0009 uses it. It is the only name
   of this switch.
+- `quirks.last_bale_lost`: the last bale of a resource cell, owned by S-0401 (claim 3); S-0402
+  names it for what a harvester gets.
+- `quirks.radar_first_building_decides`: the first radar building deciding a house's radar,
+  described by S-0405 (claim 12) and S-0410 (claim 1) and named by S-0409. It is one switch with
+  this one name, whichever of S-0405 and S-0410 comes to own it.
 
 ## Import mapping
 
@@ -1451,11 +1723,12 @@ generically (see *measurement setup*).
 
 **Scenario G1: direction convention (claim G1).**
 - *Setup:* a purpose-made flat map of one theater, no hills, no overlays near the test area. A
-  skirmish with one human player and one computer player whose start position is on the far side of
-  the map. The map pre-places seven vehicles of one stock vehicle type that is drawn as a voxel model
-  and whose body has a visible front. They are owned by the human player (the map names their owner
+  skirmish with one human player and one bystander computer player whose start position is on the
+  far side of the map. The map pre-places seven vehicles of one stock vehicle type that is drawn
+  as a voxel model and whose body has a visible front. They are owned by the human player (the map names their owner
   as S-0009, claim 27, requires), each stands on its own cell at least three cells from the others,
-  and their facing values are 0, 8, 16, 32, 64, 128 and 192. Any game speed.
+  and their facing values are 0, 8, 16, 32, 64, 128 and 192. The observed area is the test area
+  where the seven vehicles stand. Any game speed.
 - *Procedure:* start the game, give no orders and pause on the first tick the map is visible.
   Take a screenshot.
 - *Observable:* for each vehicle, the direction its front points on the screen, read against the
@@ -1478,8 +1751,10 @@ generically (see *measurement setup*).
   tested instead through turn times, by S-0206 scenario R2.
 
 **Scenario G2: game-speed direction (claim G2).**
-- *Setup:* a small purpose-made or stock skirmish map, one human player and one computer player.
-  Before each run the settings file's skirmish game-speed value is set to one of 0, 1, 2, 3, 4, 5
+- *Setup:* a small purpose-made or stock skirmish map, one human player and one bystander computer
+  player. The scenario has no test objects and observes no area of the map, only the number of
+  ticks run, so of the bystander's void rule only its defeat applies: a run in which the bystander
+  is defeated before the 300 seconds end is void. Before each run the settings file's skirmish game-speed value is set to one of 0, 1, 2, 3, 4, 5
   and 6, and in the lobby the speed control is left at the position where it starts, which by
   S-0201 (claim 7) gives that index; the run records the starting position. A recorder that reads
   the number of ticks run. A display path that does not wait for the monitor's
@@ -1527,8 +1802,9 @@ scenarios of S-0107 (M3), S-0108 (B11), S-0109 (AN4) and S-0111 (OV14), exceptio
 scenario T6, part G.
 - *Setup:* a purpose-made map with open flat ground. A skirmish with one human player who has a
   construction yard (a building that produces buildings), enough credits for one building and one vehicle standing at the start of a
-  straight, free route 10 cells long; one computer player whose start position is on the far side of
-  the map. Game speeds 1 and 5.
+  straight, free route 10 cells long; one bystander computer player whose start position is on the
+  far side of the map. The observed area is the construction yard and the vehicle's route. Game
+  speeds 1 and 5.
 - *Procedure:* in each run, order one building of one stock type (the same type in every run), and
   order the vehicle to the cell at the end of the route. The orders may be given at any time; no
   exact tick is needed.
