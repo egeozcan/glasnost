@@ -352,6 +352,15 @@ async fn rules_import(vfs: &mut Vfs, report: &mut Report) {
             reg.len() as u64,
         );
     }
+    if let Some(sim) = import.tree.get("sim") {
+        for kind in ["weapons", "projectiles", "warheads", "animations"] {
+            let n = sim
+                .get(kind)
+                .and_then(glasnost_rules::jsonc::Node::members)
+                .map_or(0, <[_]>::len);
+            report.count(&format!("sim records: {kind}"), n as u64);
+        }
+    }
     report.count("sides", import.outcome.sides.len() as u64);
     report.count("colour definitions", import.outcome.colours.len() as u64);
     report.count(
@@ -359,6 +368,31 @@ async fn rules_import(vfs: &mut Vfs, report: &mut Report) {
         import.outcome.globals.len() as u64,
     );
     report.count("importer warnings", import.warnings.len() as u64);
+    for (label, text) in [
+        (
+            "importer warnings: endless creation stopped (Q-0083)",
+            "Q-0083",
+        ),
+        (
+            "importer warnings: list items with whitespace (S-0003 claim 12)",
+            "begins or ends with whitespace",
+        ),
+        (
+            "importer warnings: unknown superweapon (S-0004 claim 3)",
+            "names the unknown superweapon",
+        ),
+        (
+            "importer warnings: <none> attached particle system (S-0004 claim 2)",
+            "keeps the attached particle system",
+        ),
+    ] {
+        let n = import
+            .warnings
+            .iter()
+            .filter(|w| w.message.contains(text))
+            .count();
+        report.count(label, n as u64);
+    }
     report.count(
         "import errors (the original would not start)",
         import.errors.len() as u64,

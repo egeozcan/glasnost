@@ -309,7 +309,7 @@ pub(crate) fn int_as_of(t: &TypeRec, key: &str, layer: usize, default: i32) -> i
 }
 
 /// A text key's value in force after layer `layer`.
-fn text_as_of(t: &TypeRec, key: &str, layer: usize, limit: usize) -> Option<Vec<u8>> {
+pub(crate) fn text_as_of(t: &TypeRec, key: &str, layer: usize, limit: usize) -> Option<Vec<u8>> {
     let k = t.keys.get(key.as_bytes())?;
     k.history
         .iter()

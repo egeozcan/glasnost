@@ -381,6 +381,8 @@ const UNIT_FIELDS: &[(&str, &str, Form)] = &[
 /// is not converted: no approved spec gives the vocabulary of its value.
 const BUILDING_FIELDS: &[(&str, &str, Form)] = &[
     ("strength", "Strength", Int),
+    // spec: S-0311 F1 and Import mapping, S-0314 claim 5 and Import mapping (the cost field, an integer)
+    ("cost", "Cost", Int),
     ("bib", "Bib", Bool),
     ("gate", "Gate", Bool),
     ("invisible_in_game", "InvisibleInGame", Bool),
@@ -805,9 +807,10 @@ impl Builder<'_> {
 
     /// A type name (S-0003 claims 1 and 14): the key of the type of `kind`
     /// it names, compared by claim 14; a name that matches no type is kept
-    /// as written (the registries of weapons, projectiles and the other
-    /// kinds that types create by reference are incomplete, Q-0005). `none`,
-    /// `<none>` and an empty name give `None`.
+    /// as written (a field that S-0004 claim 13 does not list as creating,
+    /// a long name that claim 8 duplicates, or the terrain objects and
+    /// animations created after the rules layers, which are not imported).
+    /// `none`, `<none>` and an empty name give `None`.
     fn ref_name(&self, kind: Kind, v: &[u8]) -> Option<String> {
         let name = value::text(v, value::COMMON_TEXT_LIMIT);
         if name.is_empty() || value::is_no_type(name) {
@@ -1157,7 +1160,13 @@ impl Builder<'_> {
                 Kind::Animations => self.animation(&mut rec, t),
                 _ => {}
             }
-            if !rec.0.is_empty() {
+            // A weapon, projectile, warhead or animation that read no section still exists with the
+            // engine defaults of its kind (S-0004 claims 6 and 13), and other records name it.
+            let always = matches!(
+                kind,
+                Kind::Weapons | Kind::Projectiles | Kind::Warheads | Kind::Animations
+            );
+            if always || !rec.0.is_empty() {
                 out.push((key.clone(), rec.node()));
             }
         }

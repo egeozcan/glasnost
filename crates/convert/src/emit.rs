@@ -199,6 +199,9 @@ pub fn emit(
                         .to_owned()
                 }
                 crate::layers::How::SideField => "side field".to_owned(),
+                crate::layers::How::GameStart => {
+                    "game start: the fixed particle system (S-0004 claim 3)".to_owned()
+                }
             };
             let mut p = base.clone();
             p.push("created".into());

@@ -298,7 +298,7 @@ impl RulesPane {
             && incomplete.contains(&self.kind)
         {
             ui.label(
-                RichText::new("May lack types created by references no spec lists yet (Q-0005).")
+                RichText::new("May lack types created after the rules layers (S-0004 claim 3).")
                     .small()
                     .weak(),
             );

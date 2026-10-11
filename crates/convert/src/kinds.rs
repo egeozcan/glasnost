@@ -125,18 +125,16 @@ impl Kind {
         }
     }
 
-    /// Whether every way a type of this kind can be created is specified,
-    /// so that its registration indices are complete (S-0004 claims 3 and
-    /// 4). Overlays are created only by their list and the crate rules;
-    /// superweapons, tiberiums and countries only by their lists inside the
-    /// rules layers. Every other kind can gain types by references that no
-    /// approved spec lists yet (Q-0005).
+    /// Whether the importer implements every way a type of this kind can
+    /// be created, so that its registration indices are complete (S-0004
+    /// claims 3, 4 and 13). The layering implements the type lists and
+    /// every creating reference field, and the game-start particle system.
+    /// Two creations after all rules layers are not implemented: terrain
+    /// objects that a map's placements name, and animations that the
+    /// theater control file's tile animations name (S-0004 claim 3).
     pub fn registry_complete(self) -> bool {
-        // spec: S-0004 claims 3 and 4 (overlays: list and crate rules only)
-        matches!(
-            self,
-            Kind::Overlays | Kind::Superweapons | Kind::Tiberiums | Kind::Countries
-        )
+        // spec: S-0004 claim 3 (creations after the rules layers: map terrain-object placements, theater tile animations)
+        !matches!(self, Kind::TerrainObjects | Kind::Animations)
     }
 }
 

@@ -51,8 +51,8 @@ fn sim(base: &str, map: &str, art: &str) -> (SimData, Vec<Warning>) {
 
 /// Builds the `sim` data from layers whose `[Warheads]` sections named in
 /// `weapons` and `projectiles` are moved to those registries (weapons and
-/// projectiles exist by reference only and no listed reference creates
-/// them, Q-0005).
+/// projectiles exist by reference only, S-0004 claim 3; listing them as
+/// warheads keeps each test's fixture short).
 fn direct(
     layers: &[&str],
     art: &str,
@@ -169,8 +169,8 @@ fn weapon_fields_and_not_given_values() {
     assert_eq!(dec(&s.weapons["Zap"].range), Some("-3"));
     assert!(warned(&w, "Zap Range -3 is negative"));
     assert!(!warned(&w, "MinimumRange -2"));
-    // The "not given" values of the layering (weapons exist by reference only, Q-0005, so the
-    // layering's own test of a stored value is checked here).
+    // The "not given" values of the layering (the layering's own test of a stored value is
+    // checked here directly).
     use crate::layers::{global_value_not_given, type_value_not_given};
     assert!(type_value_not_given(Kind::Weapons, b"Speed", b"$FFFFFFFF"));
     assert!(!type_value_not_given(Kind::Weapons, b"Speed", b"-2"));
@@ -691,7 +691,11 @@ fn every_combat_key_resolves() {
     let r = &s.countries["Ruritania"];
     assert_eq!(dec(&r.firepower), Some("125e-2"));
     assert_eq!(dec(&r.armor_defenses_mult), Some("25%"));
-    assert_eq!(r.veteran_infantry, Some(vec!["Walker".to_string()]));
+    // spec: S-0004 claim 13 (a country's veteran lists create the types they name)
+    assert_eq!(
+        r.veteran_infantry,
+        Some(vec!["Walker".to_string(), "Nobody".to_string()])
+    );
     assert_eq!(r.veteran_aircraft, Some(vec!["Kite".to_string()]));
     for text in [
         "infantry Walker EliteAbilities: \" faster\" names no ability",
@@ -707,7 +711,6 @@ fn every_combat_key_resolves() {
         "buildings Hut Cost -5 is negative",
         "countries Ruritania Armor 1.5: the original ignores",
         "countries Ruritania ROF -0.5 is negative",
-        "\"Nobody\" names no infantry type",
     ] {
         assert!(warned(&w, text), "{text}: {w:#?}");
     }
@@ -819,7 +822,8 @@ fn game_wide_combat_values() {
     assert_eq!(g.harvester_unit, Some(vec!["Hauler".to_string()]));
     assert_eq!(texts(&g.metallic_debris), ["M1", "M2"]);
     assert_eq!(g.allied_crew.as_deref(), Some("Crewman"));
-    assert_eq!(g.soviet_crew, None);
+    // spec: S-0004 claim 13 ([General] crew fields create the infantry they name)
+    assert_eq!(g.soviet_crew.as_deref(), Some("Ghost"));
     assert_eq!(
         (g.allied_survivor_divisor, g.repair_step, g.i_repair_step),
         (Some(100), Some(0), Some(2))
@@ -883,7 +887,6 @@ fn game_wide_combat_values() {
         "[General] SelfHealUnitFrames -5 is not above 0",
         "[General] SelfHealInfantryAmount -1 is negative",
         "[General] RepairRate 0.0001 gives a building repair period below one tick",
-        "[General] SovietCrew names no infantry type",
         "[General] CrewEscape \"50\" has no `%`",
         "[Normal] Armor 0.5: the original ignores",
         "[Normal] ROF -1 is negative",
@@ -929,7 +932,8 @@ fn combat_coverage() {
         base: Some(file(
             "rules.ini",
             "[VehicleTypes]\n1=Cart\n[Warheads]\n1=Pow\n\
-             [Cart]\nArmor=heavy\nWeapon3=Zap\nAmmo=2\nBurstDelay0=3\nWake=x\n\
+             [Cart]\nArmor=heavy\nWeapon3=Zap\nAmmo=2\nBurstDelay0=3\nWake=x\nPrimary=Gun\n\
+             [Gun]\nROF=5\n[BuildingTypes]\n1=Hut\n[Hut]\nCost=5\n\
              [Pow]\nVerses=50%\nCellSpread=1\nShakeXlo=2\n\
              [CombatDamage]\nMaxDamage=500\nMinDamage=1\n[General]\nCrewEscape=50%\n\
              DumbMyEffectivenessCoefficient=1\n",
@@ -977,4 +981,8 @@ fn combat_coverage() {
     assert_eq!(row("art", "PrimaryFireFLH"), (Field, "S-0313".into()));
     assert_eq!(row("art", "Weapon2FLH"), (Field, "S-0313".into()));
     assert_eq!(row("art", "MuzzleFlash0"), (Unsupported, "S-0313".into()));
+    // spec: S-0311 F1, S-0314 claim 5 (the building cost field)
+    assert_eq!(row("buildings", "Cost"), (Field, "S-0311, S-0314".into()));
+    // spec: S-0004 claim 13 (a weapon created by a vehicle's primary field: its section is a weapon's)
+    assert_eq!(row("weapons", "ROF"), (Field, "S-0301".into()));
 }

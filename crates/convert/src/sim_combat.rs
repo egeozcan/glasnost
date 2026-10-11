@@ -995,6 +995,7 @@ pub fn converted_keys() -> Vec<(&'static str, String, &'static str)> {
     keyed(&["global:General"], &crews, "S-0312");
     keyed(&UNITS, &s(&["DamageParticleSystems"]), "S-0302");
     keyed(&["buildings"], &s(&["BuildCat"]), "S-0302");
+    keyed(&["buildings"], &s(&["Cost"]), "S-0311, S-0314");
     keyed(
         &["vehicles"],
         &s(&["BurstDelay0", "BurstDelay1", "BurstDelay2", "BurstDelay3"]),
