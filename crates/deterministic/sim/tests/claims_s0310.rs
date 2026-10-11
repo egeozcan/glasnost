@@ -234,7 +234,7 @@ fn claim_3_still_turning() {
     let (mut w, a, b) = duel(&base());
     turning_onto_target(&mut w, a, b);
     assert_eq!(ask(&w, a), Answer::StillTurning);
-    // Even pointed straight at the target, if the turn was still running at the end of the previous tick.
+    // Even within the tolerance (about 300 off the target), if the turn was still running at the end of the previous tick.
     let d0 = dir(&w, a, b);
     let t = w.tick;
     let o = w.obj_mut(a).unwrap();

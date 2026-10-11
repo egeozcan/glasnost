@@ -1733,34 +1733,70 @@ fn s0107_claim_11_fire_frame_zero_shoots_at_once() {
     assert_eq!(w.obj(a).unwrap().last_fired, w.tick);
 }
 
+/// A WALKER with fire frame `f` (standing), already in the attack state on
+/// its target with *fire-standing* current at stage `stage` (stage delay
+/// 3, so the frozen-stage rule does not apply) and its countdown running.
+fn attacking(f: i32, stage: i32) -> (World, ObjectId, ObjectId) {
+    let r = rifleman([f, 0, 0, 0]);
+    let (mut w, a, b) = duel_of(&r, Kind::Infantry, "WALKER", 7);
+    w.tick = 100;
+    let t = w.tick;
+    let o = w.obj_mut(a).unwrap();
+    o.combat.last_shot_target = o.target;
+    o.combat.rearm_until = t + 50;
+    let st = o.infantry.as_mut().unwrap();
+    st.attack = true;
+    st.seq = Some(Seq::FireStanding);
+    st.seq_delay = 3;
+    st.seq_t0 = t - 3 * stage;
+    assert_eq!(st.stage(t), stage);
+    (w, a, b)
+}
+
+fn in_attack(w: &World, a: ObjectId) -> bool {
+    w.obj(a).unwrap().infantry.as_ref().unwrap().attack
+}
+
 // spec: S-0107 claim 11 (not ready at the fire frame: the attack state ends)
 #[test]
 fn s0107_claim_11_not_ready_at_the_fire_frame_ends_attack() {
-    let r = rifleman([0; 4]);
-    let (mut w, a, _) = duel_of(&r, Kind::Infantry, "WALKER", 7);
-    {
-        let o = w.obj_mut(a).unwrap();
-        o.infantry.as_mut().unwrap().attack = true;
-        o.combat.last_shot_target = o.target;
-        o.combat.rearm_until = 1000;
-    }
+    let (mut w, a, _) = attacking(2, 2);
     behave::infantry_step(&mut w, a);
-    assert!(!w.obj(a).unwrap().infantry.as_ref().unwrap().attack);
+    assert!(!in_attack(&w, a));
+    // Control: at another stage the attack state stays.
+    let (mut w, a, _) = attacking(2, 1);
+    behave::infantry_step(&mut w, a);
+    assert!(in_attack(&w, a));
 }
 
-// spec: S-0107 claim 11 (the attack state ends when the unit has no target, or when its target changes)
+// spec: S-0107 claim 11 (the attack state ends when the unit has no target)
 #[test]
-fn s0107_claim_11_attack_ends_without_or_on_a_new_target() {
-    let r = rifleman([0; 4]);
-    let (mut w, a, _) = duel_of(&r, Kind::Infantry, "WALKER", 7);
-    {
-        let o = w.obj_mut(a).unwrap();
-        o.infantry.as_mut().unwrap().attack = true;
-        o.combat.last_shot_target = o.target;
-        o.target = None;
-    }
+fn s0107_claim_11_attack_ends_without_a_target() {
+    let (mut w, a, _) = attacking(2, 0);
+    w.obj_mut(a).unwrap().target = None;
     behave::infantry_step(&mut w, a);
-    assert!(!w.obj(a).unwrap().infantry.as_ref().unwrap().attack);
+    assert!(!in_attack(&w, a));
+    // Control: with the target it stays.
+    let (mut w, a, _) = attacking(2, 0);
+    behave::infantry_step(&mut w, a);
+    assert!(in_attack(&w, a));
+}
+
+// spec: S-0107 claim 11 (the attack state ends when its target changes)
+#[test]
+fn s0107_claim_11_attack_ends_on_a_new_target() {
+    let (mut w, a, _) = attacking(2, 0);
+    let other = testkit::spawn(
+        &mut w,
+        Kind::Vehicle,
+        "BUGGY",
+        1,
+        testkit::mid(N, 2, 2),
+        WEST,
+    );
+    w.obj_mut(a).unwrap().target = Some(Target::Object(other));
+    behave::infantry_step(&mut w, a);
+    assert!(!in_attack(&w, a));
 }
 
 // spec: S-0107 claim 11 (the firing kind: fire-prone for a prone unit, fire-standing otherwise; the attack state is entered even when the request is turned down)
