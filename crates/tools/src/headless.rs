@@ -13,6 +13,7 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Instant;
 
+use glasnost_sim::combat::effects::Effect;
 use glasnost_sim::load::{new_game, sandbox_setup};
 use glasnost_sim::rules::SimRules;
 use glasnost_sim::save::{self, Replay};
@@ -67,6 +68,14 @@ pub struct MapRun {
     pub settled: usize,
     /// Of those, the ones that moved at all.
     pub moved: usize,
+    /// Shots made (combat events, S-0301).
+    pub shots: usize,
+    /// Detonations (S-0303).
+    pub detonations: usize,
+    /// Objects killed (S-0312).
+    pub killed: usize,
+    /// Most projectiles in flight at once (S-0306).
+    pub max_in_flight: usize,
     /// Why the map did not run to the end, if it did not.
     pub failure: Option<String>,
     /// The skirmish pass: players of the skirmish setup (0: not tried).
@@ -143,11 +152,22 @@ async fn smoke_async(
             let objects = w.objects.len();
             let t3 = Instant::now();
             let mut ordered = Vec::new();
+            let mut fight = [0usize; 4];
             for _ in 0..ticks {
                 if w.tick == ORDER_TICK {
                     ordered = order_moves(&mut w);
                 }
                 tick::step(&mut w);
+                // The tick's combat events, counted and then dropped (nothing draws them here).
+                for e in w.effects.drain(..) {
+                    match e {
+                        Effect::Shot { .. } => fight[0] += 1,
+                        Effect::Detonation { .. } => fight[1] += 1,
+                        Effect::Killed { .. } => fight[2] += 1,
+                        Effect::Anim { .. } => {}
+                    }
+                }
+                fight[3] = fight[3].max(w.projectiles.len());
             }
             let ms = t3.elapsed().as_millis();
             let settled = ordered
@@ -167,10 +187,12 @@ async fn smoke_async(
                 ordered.len(),
                 settled,
                 moved,
+                fight,
             ))
         }));
         match result {
-            Ok(Ok((objects, end, notes, ng, tk, ordered, settled, moved))) => {
+            Ok(Ok((objects, end, notes, ng, tk, ordered, settled, moved, fight))) => {
+                [run.shots, run.detonations, run.killed, run.max_in_flight] = fight;
                 run.ordered = ordered;
                 run.settled = settled;
                 run.moved = moved;
@@ -373,6 +395,15 @@ fn report(mount_ms: u128, runs: &[MapRun], ticks: i32) -> String {
         s,
         "move orders: {ordered}; moved: {moved}; without a destination at the end: {settled}"
     );
+    let shots: usize = runs.iter().map(|r| r.shots).sum();
+    let detonations: usize = runs.iter().map(|r| r.detonations).sum();
+    let killed: usize = runs.iter().map(|r| r.killed).sum();
+    let fought = runs.iter().filter(|r| r.shots > 0).count();
+    let in_flight = runs.iter().map(|r| r.max_in_flight).max().unwrap_or(0);
+    let _ = writeln!(
+        s,
+        "combat: {shots} shots, {detonations} detonations, {killed} killed; shots on {fought} maps; at most {in_flight} projectiles in flight"
+    );
     let tried: Vec<&MapRun> = runs.iter().filter(|r| r.skirmish_players > 0).collect();
     let refused = tried
         .iter()
@@ -410,12 +441,12 @@ fn report(mount_ms: u128, runs: &[MapRun], ticks: i32) -> String {
     );
     let _ = writeln!(
         s,
-        "index  objects  end  houses  subst  notes  problems  inputs_ms  new_game_ms  ticks_ms  ordered  moved  settled  result"
+        "index  objects  end  houses  subst  notes  problems  inputs_ms  new_game_ms  ticks_ms  ordered  moved  settled  shots  killed  result"
     );
     for (i, r) in runs.iter().enumerate() {
         let _ = writeln!(
             s,
-            "{i:5}  {:7}  {:4}  {:6}  {:5}  {:5}  {:8}  {:9}  {:11}  {:8}  {:7}  {:5}  {:7}  {}",
+            "{i:5}  {:7}  {:4}  {:6}  {:5}  {:5}  {:8}  {:9}  {:11}  {:8}  {:7}  {:5}  {:7}  {:5}  {:6}  {}",
             r.objects,
             r.objects_end,
             r.houses,
@@ -428,6 +459,8 @@ fn report(mount_ms: u128, runs: &[MapRun], ticks: i32) -> String {
             r.ordered,
             r.moved,
             r.settled,
+            r.shots,
+            r.killed,
             r.failure.as_deref().unwrap_or("ok")
         );
     }
