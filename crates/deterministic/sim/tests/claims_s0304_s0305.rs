@@ -11,6 +11,7 @@ use glasnost_sim::combat::acquire::{self, SearchContext, SearchKind};
 use glasnost_sim::combat::check::{self, Answer};
 use glasnost_sim::combat::damage::{self, Hit};
 use glasnost_sim::combat::data::WarheadId;
+use glasnost_sim::combat::effects::Effect;
 use glasnost_sim::combat::weapon;
 use glasnost_sim::orders::{self, Order};
 use glasnost_sim::rules::{Behaviour, Kind};
@@ -212,11 +213,12 @@ fn cells_and_terrain_objects_are_never_illegal_by_versus() {
     );
 }
 
-/// Issues an attack order on X for D, as a force-fire order would be
-/// accepted, and runs until D drops X or `limit` ticks pass. Returns the
-/// tick D dropped X (if it did) and whether X lost health.
-fn ordered_attack(rearm: i32, limit: i32) -> (Option<i32>, i32, bool) {
-    let (mut w, d, x) = v1("0", false);
+/// Issues an attack order on X for D (versus value `v`), as a force-fire
+/// order would be accepted, with D's rearm countdown running for `rearm`
+/// more ticks, and runs `limit` ticks. Returns the tick D dropped X (if it
+/// did), the end of the countdown and the number of shots D made.
+fn ordered_attack(v: &str, rearm: i32, limit: i32) -> (Option<i32>, i32, usize) {
+    let (mut w, d, x) = v1(v, false);
     let order = Order::Behaviour {
         actor: d,
         behaviour: Behaviour::Attack,
@@ -230,6 +232,7 @@ fn ordered_attack(rearm: i32, limit: i32) -> (Option<i32>, i32, bool) {
     }
     let until = w.tick + rearm;
     w.obj_mut(d).unwrap().combat.rearm_until = until;
+    w.effects.clear();
     let mut held = false;
     let mut dropped = None;
     for _ in 0..limit {
@@ -242,26 +245,34 @@ fn ordered_attack(rearm: i32, limit: i32) -> (Option<i32>, i32, bool) {
         }
     }
     assert!(held, "the order was accepted");
-    let damaged = health(&w, x) < 1000 || !w.projectiles.is_empty();
-    (dropped, until, damaged)
+    let shots = w
+        .effects
+        .iter()
+        .filter(|e| matches!(e, Effect::Shot { firer, .. } if *firer == d))
+        .count();
+    (dropped, until, shots)
 }
 
 // spec: S-0304 claim 2 (an attack order on an illegal target is accepted, the actor never fires, and drops the target at the first check that answers illegal)
 #[test]
 fn an_attack_on_an_illegal_target_never_fires() {
-    let (dropped, _, damaged) = ordered_attack(0, 120);
+    let (dropped, _, shots) = ordered_attack("0", 0, 120);
     assert!(dropped.is_some());
-    assert!(!damaged);
+    assert_eq!(shots, 0);
+    // The same order on a legal target fires and keeps it.
+    let (dropped, _, shots) = ordered_attack("1", 0, 120);
+    assert_eq!(dropped, None);
+    assert!(shots > 0);
 }
 
 // spec: S-0304 claim 2 (while the rearm countdown runs the check answers rearming, so the target is kept until the countdown has run out, then dropped)
 #[test]
 fn an_illegal_target_is_kept_while_rearming() {
-    let (dropped, until, damaged) = ordered_attack(80, 300);
+    let (dropped, until, shots) = ordered_attack("0", 80, 300);
     let dropped = dropped.expect("dropped after the countdown");
     assert!(dropped > until, "kept until the countdown ends");
     assert!(dropped <= until + 60, "dropped at the next check after it");
-    assert!(!damaged);
+    assert_eq!(shots, 0);
 }
 
 // spec: S-0304 claim 3 and Formulas (may retaliate(v) ⇔ v > τ_r: 1 % and 0.0099999999 retaliate; τ_r itself, 0.005, 0 and negative values do not)

@@ -849,9 +849,11 @@ fn warheads_that_spare_allies() {
     assert_eq!(loss!(w, t, ign(by(own))).0, 0);
     assert_eq!(loss!(w, t, hit(100, h)).0, 100);
     assert_eq!(loss!(w, t, by(foe)).0, 100);
-    // Once the houses are allied, the other house's attacker is spared too.
-    w.houses[usize::from(ALPHA)].allies = vec![HouseId(ALPHA), HouseId(BETA)];
+    // The target's house counting the attacker's as allied is not enough:
+    // the attacker's owner must count the target's owner as allied.
     w.houses[usize::from(BETA)].allies = vec![HouseId(ALPHA), HouseId(BETA)];
+    assert_eq!(loss!(w, t, by(foe)).0, 100);
+    w.houses[usize::from(ALPHA)].allies = vec![HouseId(ALPHA), HouseId(BETA)];
     assert_eq!(loss!(w, t, by(foe)).0, 0);
 }
 
