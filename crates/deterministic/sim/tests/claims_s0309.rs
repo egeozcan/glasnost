@@ -2163,9 +2163,9 @@ fn area_guard_processing_searches() {
     assert_eq!(w.obj(a).unwrap().beh.last, Some((t, 1)));
 }
 
-// spec: S-0215 claim 26 (the leash: drops any target, takes the guard spot as destination, and searches)
+// spec: S-0215 claim 26 (the leash holds and it may not search: drops any target and takes the guard spot as destination)
 #[test]
-fn area_guard_leash_drops_target_and_searches() {
+fn area_guard_leash_drops_target_without_search() {
     let mut r = base();
     guard(&mut r, "CART", "2");
     let mut w = game(&r);
@@ -2180,6 +2180,31 @@ fn area_guard_leash_drops_target_and_searches() {
     let o = w.obj(a).unwrap();
     assert_eq!(o.target, None, "the leash drops the target");
     assert_eq!(o.dest, Some(spot));
+}
+
+// spec: S-0215 claim 26 (the leash holds and it may search: drops any target, takes the guard spot as destination, and searches around the guard spot; a target found ends the processing with 1 tick, so the dropped target is never engaged in that processing)
+#[test]
+fn area_guard_leash_drops_target_and_searches() {
+    let mut r = base();
+    // g = 2 cells: leash L = trunc(11 × 1024 / 10) = 1126; area search R = 1024, n = 4.
+    guard(&mut r, "CART", "2");
+    let mut w = game(&r);
+    let a = veh(&mut w, "CART", 0, 0, 0);
+    set_beh(&mut w, a, Behaviour::AreaGuard);
+    // The guard spot 1280 leptons away: the leash holds.
+    let spot = Target::Cell(at(-5, 0));
+    w.obj_mut(a).unwrap().guard_spot = Some(spot);
+    let held = veh(&mut w, "T0", 1, 2, 0);
+    set_target(&mut w, a, obj(held), false);
+    // Ring 2 of the guard spot, 768 leptons from the searcher.
+    let near_spot = veh(&mut w, "T1", 1, -3, 0);
+    expire(&mut w, a);
+    let t = w.tick;
+    glasnost_sim::tick::step(&mut w);
+    let o = w.obj(a).unwrap();
+    assert_eq!(o.target, obj(near_spot));
+    assert_eq!(o.dest, Some(spot));
+    assert_eq!(o.beh.last, Some((t, 1)));
 }
 
 // spec: S-0215 claim 27 and S-0309 claim 1 (hunt runs the map-wide search at each processing; a target already held is kept)
