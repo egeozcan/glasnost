@@ -40,11 +40,16 @@ pub enum Group {
     Aircraft,
     /// Shadows of any kind.
     Shadows,
+    /// Combat effects: projectiles, shots, detonations and animations
+    /// (the app's placeholders).
+    Effects,
+    /// Status extras: health bars, selection brackets, insignia (S-0111).
+    Status,
 }
 
 impl Group {
     /// Every group, in a fixed order.
-    pub const ALL: [Group; 10] = [
+    pub const ALL: [Group; 12] = [
         Group::Tiles,
         Group::Overlays,
         Group::Smudges,
@@ -55,6 +60,8 @@ impl Group {
         Group::Infantry,
         Group::Aircraft,
         Group::Shadows,
+        Group::Effects,
+        Group::Status,
     ];
 
     /// A short label.
@@ -70,6 +77,8 @@ impl Group {
             Group::Infantry => "infantry",
             Group::Aircraft => "aircraft",
             Group::Shadows => "shadows",
+            Group::Effects => "combat effects",
+            Group::Status => "status extras",
         }
     }
 }

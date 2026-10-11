@@ -227,7 +227,7 @@ fn rule_bool(import: &Import, kind: Kind, idx: usize, key: &[u8], default: bool)
         .unwrap_or(default)
 }
 
-fn rule_int(import: &Import, kind: Kind, idx: usize, key: &[u8], default: i32) -> i32 {
+pub(crate) fn rule_int(import: &Import, kind: Kind, idx: usize, key: &[u8], default: i32) -> i32 {
     rule(import, kind, idx, key)
         .and_then(value::integer)
         .unwrap_or(default)
@@ -334,6 +334,14 @@ pub fn wanted_files(
         }
     }
     out.insert(upper(VPL_FILE));
+    // spec: S-0111 Import mapping (the overlay sprites and palette of the status extras)
+    for f in [
+        super::combat::PIP_SPRITE,
+        super::combat::BRACKET_SPRITE,
+        super::combat::OVERLAY_PALETTE,
+    ] {
+        out.insert(upper(f));
+    }
     out
 }
 
@@ -2559,6 +2567,16 @@ impl Painter {
             vpl: None,
             tile_files: BTreeMap::new(),
         }
+    }
+
+    /// An integer of a type's art section (the section of its image name),
+    /// read as the importer's integer form.
+    pub fn art_int(&self, import: &Import, kind: Kind, idx: usize, key: &[u8]) -> Option<i32> {
+        let image = match import.arts.get(&(kind, idx)) {
+            Some(a) => a.image.clone(),
+            None => import.outcome.registries.get(&kind)?.get(idx)?.name.clone(),
+        };
+        self.art.value(&image, key).and_then(value::integer)
     }
 
     /// Draws `mobiles` into `scene` (adding the images and palette rows they

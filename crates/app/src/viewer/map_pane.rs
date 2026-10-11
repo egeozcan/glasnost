@@ -597,6 +597,7 @@ impl MapPane {
         });
         let house = shown.house;
         let mut report = None;
+        let mut marks_changed = false;
         if let Some(live) = shown.loaded.live.as_mut() {
             let target = hover.map(|(cx, cy, code)| {
                 match code
@@ -648,10 +649,33 @@ impl MapPane {
                 }
             }
             live.prune(&mut shown.selection);
-            selection_markers(ui, live, &shown.selection, &view, r.rect, ppp);
+            // S-0111 claim 3: the selected objects and the one under the
+            // pointer show their health bars.
+            let hovered = hover
+                .and_then(|h| h.2)
+                .and_then(|c| live.object_of_code(c))
+                .filter(|&id| live.world.obj(id).is_some_and(|o| o.on_map));
+            marks_changed = live.set_marks(&shown.selection, hovered);
+            // Our own markers for selected objects S-0111's bracket image
+            // does not mark (buildings; units without the bracket sprite).
+            let plain: Vec<ObjectId> = shown
+                .selection
+                .iter()
+                .copied()
+                .filter(|&id| !live.bracket_drawn(&shown.loaded.assets, id))
+                .collect();
+            selection_markers(ui, live, &plain, &view, r.rect, ppp);
         } else if r.clicked() {
             self.pinned = hover.and_then(|h| h.2);
             self.explain.clear();
+        }
+        if marks_changed {
+            let scene = Rc::make_mut(&mut shown.scene);
+            let (inputs, live) = shown.loaded.split();
+            if let Some(live) = live {
+                live.redraw_status(&inputs, scene);
+            }
+            ui.ctx().request_repaint();
         }
         if let Some(rep) = report {
             self.status = input_status(&rep);
@@ -761,6 +785,31 @@ fn game_ui(ui: &mut Ui, shown: &mut Shown, status: &mut String) {
         shown.selection.clear();
         *status = format!("You control {}.", name(shown.house));
     }
+    let k = &live.counts;
+    ui.label(format!(
+        "combat: {} shots, {} detonations, {} animations, {} killed; {} projectiles in flight",
+        k.shots,
+        k.detonations,
+        k.anims,
+        k.kills,
+        live.world.projectiles.len()
+    ));
+    egui::Grid::new("house combat")
+        .striped(true)
+        .show(ui, |ui| {
+            ui.label(RichText::new("house").small().strong());
+            ui.label(RichText::new("kills").small().strong());
+            ui.label(RichText::new("losses").small().strong());
+            ui.label(RichText::new("score").small().strong());
+            ui.end_row();
+            for h in &live.world.houses {
+                ui.label(RichText::new(&h.name).small());
+                ui.label(RichText::new(h.combat.kills.to_string()).small());
+                ui.label(RichText::new(h.combat.losses.to_string()).small());
+                ui.label(RichText::new(h.combat.score.to_string()).small());
+                ui.end_row();
+            }
+        });
     if !live.substituted.is_empty() {
         ui.label(
             RichText::new(format!(
@@ -826,14 +875,39 @@ fn sim_object_ui(ui: &mut Ui, live: &Live, id: ObjectId) {
         None => "none".into(),
     };
     ui.label(format!("destination: {}", target(o.dest)));
-    if o.target.is_some() {
-        ui.label(format!("target: {}", target(o.target)));
-    }
+    ui.label(format!("target: {}", target(o.target)));
+    let strength = match o.kind {
+        glasnost_sim::rules::Kind::Building => live
+            .rules
+            .buildings
+            .get(o.type_index as usize)
+            .map(|b| b.strength),
+        glasnost_sim::rules::Kind::Terrain => None,
+        k => live.rules.unit(k, o.type_index).map(|u| u.strength),
+    };
     ui.label(format!(
-        "health {}; body facing {}",
+        "health {} of {}; body facing {}",
         o.health,
+        strength.map_or_else(|| "?".into(), |s| s.to_string()),
         o.body.value(w.tick)
     ));
+    let c = &o.combat;
+    // Ammunition −1 is unlimited (S-0301 claim 10).
+    let ammo = if c.ammo < 0 {
+        "unlimited".to_string()
+    } else {
+        c.ammo.to_string()
+    };
+    // The experience is a single (S-0311 claim 1); shown as a host float,
+    // presentation only.
+    let experience = f32::from_bits(c.experience.0);
+    let rank = glasnost_sim::combat::veterancy::rank_of(c.experience);
+    ui.label(format!(
+        "ammunition {ammo}; experience {experience:.3} ({rank:?})"
+    ));
+    if c.killed {
+        ui.label("killed (its death is under way)");
+    }
     if let Some(s) = &o.infantry {
         ui.label(format!("sequence: {}", s.seq.map_or("none", |q| q.key())));
     }
