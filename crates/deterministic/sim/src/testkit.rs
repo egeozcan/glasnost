@@ -369,13 +369,26 @@ pub fn combat_ruleset() -> Ruleset {
             rof: Some(60),
             range: Some(d("7.25")),
             speed: Some(30),
-            projectile: Some("Lob".into()),
+            projectile: Some("Rocket".into()),
             warhead: Some("HE".into()),
             ..Default::default()
         },
     );
-    s.projectiles
-        .insert("Shell".into(), ProjectileType::default());
+    s.projectiles.insert(
+        "Shell".into(),
+        ProjectileType {
+            arcing: Some(true),
+            ..Default::default()
+        },
+    );
+    s.projectiles.insert(
+        "Rocket".into(),
+        ProjectileType {
+            rot: Some(12),
+            acceleration: Some(4),
+            ..Default::default()
+        },
+    );
     s.projectiles.insert(
         "Bullet".into(),
         ProjectileType {
@@ -420,10 +433,14 @@ pub fn combat_ruleset() -> Ruleset {
         if let Some(v) = s.vehicles.get_mut(name) {
             v.combat.armor = Some(class);
             v.turret = Some(true);
+            v.combat.primary_fire_flh = Some([90, 0, 70]);
         }
     }
     if let Some(v) = s.vehicles.get_mut("CRUSHER") {
         v.primary = Some("Gun".into());
+    }
+    if let Some(i) = s.infantry.get_mut("WALKER") {
+        i.combat.primary_fire_flh = Some([30, 0, 50]);
     }
     s.buildings.insert(
         "TOWER".into(),
@@ -435,6 +452,7 @@ pub fn combat_ruleset() -> Ruleset {
             rot: Some(10),
             combat: glasnost_rules::sim::CombatFields {
                 armor: Some(ArmourClass::Concrete),
+                primary_fire_flh: Some([60, 0, 220]),
                 ..Default::default()
             },
             ..Default::default()
@@ -452,4 +470,86 @@ pub fn combat_rules() -> Arc<SimRules> {
 pub fn combat_game(seed: u32) -> World {
     crate::load::new_game(combat_rules(), &map(), catalogue(), &setup(seed))
         .expect("synthetic combat scenario loads")
+}
+
+/// A flat map of `size` × `size` clear cells at level 0 with no objects,
+/// for tests that place their own objects.
+pub fn empty_map(size: i32) -> Map {
+    let fp = Footprint::new(size, size, [0, 0, size, size]);
+    let mut cells = CellGrid::new(fp);
+    let all: Vec<CellXY> = cells.iter().map(|(c, _)| c).collect();
+    for c in all {
+        if let Some(cell) = cells.get_mut(c) {
+            *cell = Cell {
+                tile: 0,
+                stream: true,
+                ..Cell::BLANK
+            };
+        }
+    }
+    Map {
+        format_version: 4,
+        theater: Theater::Temperate,
+        base_level: 0,
+        fill: Fill::Clear,
+        footprint: fp,
+        cells,
+        has_overlay_data: true,
+        waypoints: BTreeMap::new(),
+        home_waypoint: DEFAULT_HOME_WAYPOINT,
+        header: Header::default(),
+        preview: None,
+        lighting: Lighting::default(),
+        basic: Basic::default(),
+        objects: Objects::default(),
+        cell_tags: BTreeMap::new(),
+        fill_draws: 0,
+    }
+}
+
+/// A new sandbox game of houses Alpha and Beta (not allied) on an empty
+/// map of `size`, with the given ruleset.
+pub fn game_with(ruleset: &Ruleset, size: i32, seed: u32) -> World {
+    let rules = Arc::new(SimRules::new(ruleset, "synthetic-test"));
+    crate::load::new_game(rules, &empty_map(size), catalogue(), &setup(seed))
+        .expect("synthetic test game loads")
+}
+
+/// The middle cell of a map of `size` (s = 2W, d = 0), offset by (dx, dy).
+pub fn mid(size: i32, dx: i32, dy: i32) -> CellXY {
+    CellXY::new(size + dx, size + dy)
+}
+
+/// Creates an object of type `name` for house `house` and places it at the
+/// centre of `cell` (a building's top-left cell), facing `facing`. Infantry
+/// stand at the cell's centre position. Takes the creation draw like any
+/// object creation (S-0202 claim 10).
+pub fn spawn(
+    w: &mut World,
+    kind: crate::rules::Kind,
+    name: &str,
+    house: u8,
+    cell: CellXY,
+    facing: u16,
+) -> ObjectId {
+    let ti = w
+        .rules()
+        .index_of(kind, name)
+        .unwrap_or_else(|| panic!("no {kind:?} type {name}"));
+    let id = crate::objects::create(w, kind, ti, Some(HouseId(house)));
+    let p = crate::world::Pos::centre(cell, 0);
+    let z = w.surface_at(p.x, p.y);
+    crate::objects::place(w, id, crate::world::Pos::new(p.x, p.y, z), facing);
+    let tick = w.tick;
+    if let Some(o) = w.obj_mut(id) {
+        o.beh.force(Behaviour::Guard, tick);
+    }
+    id
+}
+
+/// Runs `n` ticks.
+pub fn run(w: &mut World, n: i32) {
+    for _ in 0..n {
+        crate::tick::step(w);
+    }
 }
