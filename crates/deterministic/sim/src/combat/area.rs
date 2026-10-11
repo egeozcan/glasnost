@@ -379,7 +379,9 @@ pub fn detonate(w: &mut World, det: Detonation) -> DetonationResult {
     for cand in cands {
         // spec: S-0303 claim 9 (not alive, health 0 or less, not on the map: no hit, judged at the moment of the hit)
         let Some(o) = w.obj(cand.id) else { continue };
-        if o.health <= 0 || !o.on_map || o.combat.killed {
+        // spec: S-0302 claim 16 (a building in a delayed-kill countdown keeps 1 health and takes the later hits of the detonation)
+        let dead = o.combat.killed && o.combat.delay_kill_until.is_none();
+        if o.health <= 0 || !o.on_map || dead {
             continue;
         }
         any = true;
