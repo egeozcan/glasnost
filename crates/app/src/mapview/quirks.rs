@@ -239,23 +239,7 @@ pub const NOT_IMPLEMENTED: &[(&str, &str)] = &[
     ),
     (
         "depth_mode_leak",
-        "S-0105 claim 32: every voxel draw is fresh, and the caller says whether it is depth-buffered; the off state is a question for the lead in S-0105",
-    ),
-    (
-        "voxel_cache_frame_mod32",
-        "S-0105 claim 26: the image cache is not modelled, every voxel image is drawn fresh (as with the switch off)",
-    ),
-    (
-        "voxel_cache_alt_turret_frame",
-        "S-0105 claim 26: the image cache is not modelled, every voxel image is drawn fresh (as with the switch off)",
-    ),
-    (
-        "barrel_cache_ignores_elevation",
-        "S-0105 claims 26 and 37: the image cache is not modelled, every voxel image is drawn fresh (as with the switch off)",
-    ),
-    (
-        "voxel_depth_plane_partial_clear",
-        "S-0105 claim 34: no depth plane is kept between voxel draws (as with the switch off)",
+        "S-0105 claim 32: the on state is drawn (render::voxel::VoxelCanvas); which off state the switch selects is asked in Q-0056",
     ),
     (
         "no_turret_shadow",

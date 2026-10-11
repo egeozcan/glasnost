@@ -381,8 +381,12 @@ pub struct Painter {
     lights: Lights,
     rows: Rows,
     images: BTreeMap<(Vec<u8>, usize, u8), Option<u32>>,
-    /// Voxel part images by pose, with their offsets.
-    voxels: BTreeMap<VoxelKey, Option<(u32, [i32; 2])>>,
+    /// Each type's image cache of voxel part and shadow images (S-0105
+    /// claims 26, 31), as scene images with their offsets.
+    voxels: BTreeMap<(Kind, usize), voxel::ImageCache<Option<PlacedPart>>>,
+    /// The voxel buffer kept between fresh voxel draws, with the
+    /// depth-buffered mode (S-0105 claims 32, 34).
+    canvas: voxel::VoxelCanvas,
     /// Parsed voxel models by file.
     models: BTreeMap<Vec<u8>, Option<std::rc::Rc<voxel::VoxelModel>>>,
     /// The voxel lighting table, once read.
@@ -391,6 +395,10 @@ pub struct Painter {
     tile_files: BTreeMap<Vec<u8>, Option<TileFile>>,
 }
 
+/// A voxel part image added to the scene: its index and offset from the
+/// draw point (S-0105 claim 25, F6).
+type PlacedPart = (u32, [i32; 2]);
+
 /// A decoded tile file: its size in cells and its tile cells, row by row.
 #[derive(Clone, Debug)]
 struct TileFile {
@@ -398,11 +406,6 @@ struct TileFile {
     height: i32,
     cells: Vec<Option<TileImages>>,
 }
-
-/// A vehicle part image's pose: the type, the part, the 32-step body and
-/// turret facings and the raw barrel elevation (S-0105 Terms and claims 3
-/// to 6: the poses depend on facings only through their 32-step values).
-type VoxelKey = (Kind, usize, u8, u8, u8, u16);
 
 struct Builder<'a> {
     map: &'a Map,
@@ -1684,26 +1687,67 @@ impl Builder<'_> {
         let turret = art.voxels.get("turret").and_then(|f| self.voxel_model(f));
         let barrel = art.voxels.get("barrel").and_then(|f| self.voxel_model(f));
         let mut items = Vec::new();
+        // spec: S-0105 claim 16 (an animation-frame counter of 0 before any attack: frame 0)
+        let counter = 0;
         let parts = match turret {
             Some(t) => {
                 let pose = voxel::building_turret_parts(facing, offset, elevation, &q);
-                let mut v = vec![(Some(t), pose.turret), (barrel, pose.barrel)];
+                let turret_frame = voxel::building_turret_frame(counter, t.frame_count() as u32);
+                // spec: S-0105 claim 16 (quirks.barrel_frame_zero)
+                let barrel_frame = voxel::barrel_frame_with_turret(turret_frame, &q);
+                // spec: S-0105 claim 26 (building turret key; the barrel's is the turret's,
+                // quirks.barrel_cache_ignores_elevation)
+                let turret_key = voxel::building_turret_key(facing, turret_frame, &q);
+                let mut v = vec![
+                    (
+                        Some(t),
+                        pose.turret,
+                        turret_frame,
+                        voxel::ImageKey::Turret(turret_key),
+                    ),
+                    (
+                        barrel,
+                        pose.barrel,
+                        barrel_frame,
+                        voxel::barrel_key(turret_key, elevation, &q),
+                    ),
+                ];
                 // spec: S-0105 claim 11 (turret first when its 4-step facing is 1 or 2)
                 if !pose.turret_first {
                     v.reverse();
                 }
                 v
             }
-            // spec: S-0105 claim 37 (a barrel without a turret: V · Rz(θ) · Ry(φ), frame from the counter, 0)
-            None => vec![(barrel, voxel::building_barrel_only(facing, elevation, &q))],
+            // spec: S-0105 claim 37 (a barrel without a turret: V · Rz(θ) · Ry(φ), frame from the counter;
+            // kept with the barrel images under its facing and frame)
+            None => {
+                let frame = barrel.as_ref().map_or(0, |b| {
+                    voxel::barrel_only_frame(counter, b.frame_count() as u32)
+                });
+                vec![(
+                    barrel,
+                    voxel::building_barrel_only(facing, elevation, &q),
+                    frame,
+                    voxel::barrel_only_key(facing, frame, elevation, &q),
+                )]
+            }
         };
-        for (model, draw) in parts {
-            if let Some(m) = model
-                && let Some(img) = voxel::draw_model(&m, 0, &draw, vpl.as_ref(), depth_buffered, &q)
-                && let Some(item) =
-                    self.voxel_item(&img, at, bias, Paint::Row(row), Group::Buildings, object)
-            {
-                items.push(item);
+        for (model, draw, frame, key) in parts {
+            let Some(m) = model else {
+                continue;
+            };
+            if let Some(part) = self.cached_part(k, idx, key, |b| {
+                b.p.canvas
+                    .draw_part(&m, frame, &draw, vpl.as_ref(), depth_buffered, &q)
+            }) {
+                items.push(Self::part_item(
+                    part,
+                    at,
+                    bias,
+                    Paint::Row(row),
+                    Group::Buildings,
+                    object,
+                ));
             }
         }
         items
@@ -2236,31 +2280,27 @@ impl Builder<'_> {
         }
     }
 
-    /// A voxel part image as a scene item at `point`.
-    fn voxel_item(
-        &mut self,
-        img: &voxel::PartImage,
-        point: (i32, i32),
-        bias: i32,
-        paint: Paint,
-        group: Group,
-        object: u32,
-    ) -> Option<Item> {
-        let part = self.add_part(img)?;
-        Some(Self::part_item(part, point, bias, paint, group, object))
-    }
-
-    /// A vehicle part image for a pose, drawn once per pose and kept.
+    /// A voxel part or shadow image of type `(kind, idx)` from the type's
+    /// image cache, or drawn fresh by `draw` and kept (S-0105 claims 26,
+    /// 31). The cache-disable options are not honoured: the scene keeps
+    /// every image added, so a type drawn fresh in every drawn frame would
+    /// add images without end.
     fn cached_part(
         &mut self,
-        key: VoxelKey,
+        kind: Kind,
+        idx: usize,
+        key: voxel::ImageKey,
         draw: impl FnOnce(&mut Self) -> Option<voxel::PartImage>,
     ) -> Option<(u32, [i32; 2])> {
-        if let Some(p) = self.p.voxels.get(&key) {
+        if let Some(p) = self.p.voxels.get(&(kind, idx)).and_then(|c| c.get(&key)) {
             return *p;
         }
         let part = draw(self).and_then(|img| self.add_part(&img));
-        self.p.voxels.insert(key, part);
+        self.p
+            .voxels
+            .entry((kind, idx))
+            .or_default()
+            .insert(key, part);
         part
     }
 
@@ -2295,7 +2335,6 @@ impl Builder<'_> {
             .value(&name, b"UseBuffer")
             .and_then(value::boolean)
             .unwrap_or(false);
-        let (b32, t32) = (voxel::facing32(m.body), voxel::facing32(m.turret));
         let (body_raw, turret_raw, elevation) = (m.body, m.turret, m.elevation);
         let pose = move || voxel::vehicle_parts(body_raw, turret_raw, offset, elevation, &q);
         let object = m.object;
@@ -2305,10 +2344,20 @@ impl Builder<'_> {
             let section = art_int(self, b"ShadowIndex", 0).max(0) as usize;
             let aircraft_like = rule_bool(self.import, kind, idx, b"ConsideredAircraft", false);
             let file = body_file.clone();
-            let key = (kind, idx, PART_SHADOW, b32, 0, 0);
-            if let Some(part) = self.cached_part(key, |b| {
+            // spec: S-0105 claim 31 (shadow key: ramp, 32-step body facing; bodies stand on flat ground)
+            let key = voxel::shadow_key(voxel::RAMP_FLAT, body_raw);
+            if let Some(part) = self.cached_part(kind, idx, key, |b| {
                 let body = b.voxel_model(&file)?;
-                voxel::draw_shadow(&body, section, &pose().shadow, 0, aircraft_like, &q)
+                // spec: S-0105 claim 32 (a depth-option type's fresh shadow switches the mode on)
+                b.p.canvas.draw_shadow(
+                    &body,
+                    section,
+                    &pose().shadow,
+                    0,
+                    aircraft_like,
+                    depth_buffered,
+                    &q,
+                )
             }) {
                 // spec: S-0102 claim 18 (the voxel shadow: bias U, upright, a reader, in the object's own drawing)
                 items.push(Self::part_item(
@@ -2323,11 +2372,20 @@ impl Builder<'_> {
             }
         }
         // spec: S-0105 claim 16 (walk counter 0: body frame 0; the simulation keeps no walk counter yet)
-        let key = (kind, idx, PART_BODY, b32, 0, 0);
-        if let Some(part) = self.cached_part(key, |b| {
+        let body_frame = 0;
+        // spec: S-0105 claim 26 (body key; flat ground, the alternative-model state off: claim 12 is not drawn)
+        let key = voxel::body_key(voxel::RAMP_FLAT, body_raw, false, body_frame, &q);
+        if let Some(part) = self.cached_part(kind, idx, key, |b| {
             let body = b.voxel_model(&body_file)?;
             let vpl = b.vpl();
-            voxel::draw_model(&body, 0, &pose().body, vpl.as_ref(), depth_buffered, &q)
+            b.p.canvas.draw_part(
+                &body,
+                body_frame,
+                &pose().body,
+                vpl.as_ref(),
+                depth_buffered,
+                &q,
+            )
         }) {
             // spec: S-0102 claim 13 (a voxel vehicle: bias U, upright, a reader)
             items.push(Self::part_item(
@@ -2341,28 +2399,45 @@ impl Builder<'_> {
         }
         // spec: S-0105 claims 4, 8 (a turret part only with the turret flag)
         if rule_bool(self.import, kind, idx, b"Turret", false) {
-            let mut parts = vec![(PART_TURRET, "turret"), (PART_BARREL, "barrel")];
+            // spec: S-0105 claim 16 (body frame 0 and an animation-frame counter of 0 before any attack: turret frame 0)
+            let turret_frame = voxel::vehicle_turret_frame(body_frame, 0, None);
+            // spec: S-0105 claim 16 (quirks.barrel_frame_zero)
+            let barrel_frame = voxel::barrel_frame_with_turret(turret_frame, &q);
+            // spec: S-0105 claim 26 (turret key; flat ground, no multi-turret models, the alternative-model state off)
+            let turret_key = voxel::vehicle_turret_key(
+                voxel::RAMP_FLAT,
+                body_raw,
+                turret_raw,
+                offset,
+                None,
+                false,
+                turret_frame,
+                &q,
+            );
+            let mut parts = vec![
+                (false, "turret", voxel::ImageKey::Turret(turret_key)),
+                // spec: S-0105 claim 26 (barrel key: the turret's key, quirks.barrel_cache_ignores_elevation)
+                (true, "barrel", voxel::barrel_key(turret_key, elevation, &q)),
+            ];
             // spec: S-0105 claim 11 (turret first when its 4-step facing is 1 or 2)
             if !voxel::turret_drawn_first(m.turret) {
                 parts.reverse();
             }
-            for (part_id, part_name) in parts {
+            for (is_barrel, part_name, key) in parts {
                 let Some(file) = art.voxels.get(part_name).cloned() else {
                     continue;
                 };
-                let elev = if part_id == PART_BARREL { elevation } else { 0 };
-                let key = (kind, idx, part_id, b32, t32, elev);
-                // spec: S-0105 claim 16 (turret frame 0 before any attack; barrels in frame 0)
-                if let Some(part) = self.cached_part(key, |b| {
+                if let Some(part) = self.cached_part(kind, idx, key, |b| {
                     let model = b.voxel_model(&file)?;
                     let vpl = b.vpl();
                     let p = pose();
-                    let draw = if part_id == PART_BARREL {
-                        p.barrel
+                    let (draw, frame) = if is_barrel {
+                        (p.barrel, barrel_frame)
                     } else {
-                        p.turret
+                        (p.turret, turret_frame)
                     };
-                    voxel::draw_model(&model, 0, &draw, vpl.as_ref(), depth_buffered, &q)
+                    b.p.canvas
+                        .draw_part(&model, frame, &draw, vpl.as_ref(), depth_buffered, &q)
                 }) {
                     items.push(Self::part_item(
                         part,
@@ -2390,12 +2465,6 @@ pub fn fire_angle(inputs: &Inputs, kind: Kind, idx: usize) -> i32 {
         voxel::DEFAULT_FIRE_ANGLE,
     )
 }
-
-/// Voxel parts, for [`VoxelKey`].
-const PART_BODY: u8 = 0;
-const PART_TURRET: u8 = 1;
-const PART_BARREL: u8 = 2;
-const PART_SHADOW: u8 = 3;
 
 /// The sequence entry and stage an infantry unit is drawn with (S-0107
 /// claims 1 to 4).
@@ -2485,6 +2554,7 @@ impl Painter {
             rows: Rows::default(),
             images: BTreeMap::new(),
             voxels: BTreeMap::new(),
+            canvas: voxel::VoxelCanvas::new(),
             models: BTreeMap::new(),
             vpl: None,
             tile_files: BTreeMap::new(),
