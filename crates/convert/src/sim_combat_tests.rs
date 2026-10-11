@@ -981,4 +981,8 @@ fn combat_coverage() {
     assert_eq!(row("art", "PrimaryFireFLH"), (Field, "S-0313".into()));
     assert_eq!(row("art", "Weapon2FLH"), (Field, "S-0313".into()));
     assert_eq!(row("art", "MuzzleFlash0"), (Unsupported, "S-0313".into()));
+    // spec: S-0311 F1, S-0314 claim 5 (the building cost field)
+    assert_eq!(row("buildings", "Cost"), (Field, "S-0311, S-0314".into()));
+    // spec: S-0004 claim 13 (a weapon created by a vehicle's primary field: its section is a weapon's)
+    assert_eq!(row("weapons", "ROF"), (Field, "S-0301".into()));
 }

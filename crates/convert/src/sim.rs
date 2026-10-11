@@ -380,6 +380,8 @@ const UNIT_FIELDS: &[(&str, &str, Form)] = &[
 /// is not converted: no approved spec gives the vocabulary of its value.
 const BUILDING_FIELDS: &[(&str, &str, Form)] = &[
     ("strength", "Strength", Int),
+    // spec: S-0311 F1 and Import mapping, S-0314 claim 5 and Import mapping (the cost field, an integer)
+    ("cost", "Cost", Int),
     ("bib", "Bib", Bool),
     ("gate", "Gate", Bool),
     ("invisible_in_game", "InvisibleInGame", Bool),

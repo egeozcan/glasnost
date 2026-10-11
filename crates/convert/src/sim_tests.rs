@@ -658,6 +658,8 @@ fn every_record_kind_resolves() {
     );
     assert_eq!(dec(&s.aircraft["Kite"].guard_range), Some("5e-1"));
     assert_eq!(s.buildings["Hut"].tech_level, Some(2));
+    // spec: S-0311 F1, S-0314 claim 5 (the building cost field)
+    assert_eq!(s.buildings["Hut"].cost, Some(2));
     assert_eq!(s.buildings["Hut"].foundation, Some([2, 2]));
     assert_eq!(s.overlays["Ore"].crate_, Some(false));
     assert_eq!(s.terrain_objects["Elm"].snow_occupation_bits, Some(2));
