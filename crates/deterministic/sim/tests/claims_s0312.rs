@@ -414,6 +414,19 @@ fn claim_3_other_deaths_are_immediate() {
     assert!(w.obj(id).is_none());
 }
 
+// spec: S-0312 claim 3 (a building in a delayed-death countdown is destroyed at once by a hit of another warhead, with its death effects: S-0302 claim 16)
+#[test]
+fn claim_3_other_warhead_ends_the_countdown() {
+    let r = delay_rules();
+    let mut w = game(&r);
+    let id = spawn(&mut w, Kind::Building, "HUT", 0, 0, 0);
+    damage::apply(&mut w, id, delay_hit(&r, 0));
+    assert!(w.obj(id).is_some());
+    let res = damage::apply(&mut w, id, hit_with(warhead(&r, "W1"), 10));
+    assert_eq!(res, HitResult::NowDead);
+    assert!(w.obj(id).is_none());
+}
+
 // spec: S-0312 Edge cases (quirks.delay_kill_whole_cell_spread on: a spread below one cell gives T = 0; off: R of S-0302 F3 gives a countdown rising from F)
 #[test]
 fn quirk_delay_kill_whole_cell_spread_both_settings() {
