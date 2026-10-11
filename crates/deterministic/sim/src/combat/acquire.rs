@@ -1077,11 +1077,17 @@ pub fn redirect(w: &World, a: ObjectId, t: Target) -> Option<Target> {
                 q,
                 crate::infantry::Seq::Die1
                     | crate::infantry::Seq::Die2
+                    | crate::infantry::Seq::Die3
+                    | crate::infantry::Seq::Die4
+                    | crate::infantry::Seq::Die5
                     | crate::infantry::Seq::WetDie1
                     | crate::infantry::Seq::WetDie2
+                    | crate::infantry::Seq::AirDeathStart
+                    | crate::infantry::Seq::AirDeathFall
+                    | crate::infantry::Seq::AirDeathEnd
             )
         });
-    // spec: S-0309 claim 24 (a dead or sinking object, or one in a death sequence: no target)
+    // spec: S-0309 claim 24 (a dead or sinking object, or an infantry unit whose current sequence is a death kind of S-0107: die 1 to 5, wet die 1 and 2, the three air-death kinds: no target)
     if o.combat.killed || o.health <= 0 || dying {
         return None;
     }

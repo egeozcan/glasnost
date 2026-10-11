@@ -144,6 +144,51 @@ fn repicked_opportunity_target_is_not_an_opportunity_target() {
     );
 }
 
+// spec: S-0309 claim 24 (setting the object itself gives its own cell)
+#[test]
+fn redirect_self_gives_own_cell() {
+    let mut w = game(&base());
+    let a = veh(&mut w, "CART", 0, 0, 0);
+    assert_eq!(
+        acquire::redirect(&w, a, Target::Object(a)),
+        Some(Target::Cell(at(0, 0)))
+    );
+}
+
+// spec: S-0309 claim 24 (a dead object, or an infantry unit whose current sequence is a death kind, gives no target; others are held as set)
+#[test]
+fn redirect_dead_or_dying_gives_no_target() {
+    use glasnost_sim::infantry::Seq;
+    let mut w = game(&base());
+    let a = veh(&mut w, "CART", 0, 0, 0);
+    let b = veh(&mut w, "T0", 1, 2, 0);
+    let i = put(&mut w, Kind::Infantry, "WALKER", 1, 3, 0);
+    assert_eq!(acquire::redirect(&w, a, Target::Object(b)), obj(b));
+    assert_eq!(
+        acquire::redirect(&w, a, Target::Cell(at(4, 4))),
+        Some(Target::Cell(at(4, 4)))
+    );
+    for seq in [
+        Seq::Die1,
+        Seq::Die2,
+        Seq::Die3,
+        Seq::Die4,
+        Seq::Die5,
+        Seq::WetDie1,
+        Seq::WetDie2,
+        Seq::AirDeathStart,
+        Seq::AirDeathFall,
+        Seq::AirDeathEnd,
+    ] {
+        w.obj_mut(i).unwrap().infantry.as_mut().unwrap().seq = Some(seq);
+        assert_eq!(acquire::redirect(&w, a, Target::Object(i)), None, "{seq:?}");
+    }
+    w.obj_mut(i).unwrap().infantry.as_mut().unwrap().seq = Some(Seq::Stand);
+    assert_eq!(acquire::redirect(&w, a, Target::Object(i)), obj(i));
+    w.obj_mut(b).unwrap().health = 0;
+    assert_eq!(acquire::redirect(&w, a, Target::Object(b)), None, "dead");
+}
+
 // ---------------------------------------------------------------------------
 // Claim 8 and F1
 
