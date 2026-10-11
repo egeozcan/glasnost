@@ -86,23 +86,22 @@ pub fn deal_debris(w: &mut World, n: i32, types: &[String], maxima: &[i32], at: 
         return;
     }
     let q = w.rules().quirks;
+    // spec: S-0303 Edge cases (a missing maximum counts as 0)
+    let max_of = |i: usize| maxima.get(i).copied().unwrap_or(0);
+    // spec: S-0303 Edge cases (debris that can never be placed: every maximum 0, so that every deal gives 0 pieces; a maximum of −1 or −2 gives 0 pieces too)
+    let never = (0..m).all(|i| (-2..=0).contains(&max_of(i)));
     let mut left = n;
     let mut j: usize = 0;
-    let mut placed_in_pass = false;
     loop {
         if left <= 0 {
             break;
         }
-        let i = j % m;
-        if i == 0 && j > 0 {
-            if !placed_in_pass {
-                // spec: S-0303 Edge cases (debris that can never be placed: stop after one full pass that places nothing)
-                break;
-            }
-            placed_in_pass = false;
+        if never && j == m {
+            // spec: S-0303 Edge cases (debris that can never be placed: stop after one full pass over the types)
+            break;
         }
-        // spec: S-0303 Edge cases (a missing maximum counts as 0)
-        let u = maxima.get(i).copied().unwrap_or(0);
+        let i = j % m;
+        let u = max_of(i);
         let raw = w.rng.raw() as i32;
         // spec: S-0303 F6 (gⱼ = min(|rawⱼ| mod (uᵢ + 1), ℓⱼ), the magnitude-first remainder)
         let mag = if raw == i32::MIN && q.random_magnitude_overflow {
@@ -117,9 +116,6 @@ pub fn deal_debris(w: &mut World, n: i32, types: &[String], maxima: &[i32], at: 
         };
         for _ in 0..g.max(0) {
             effects::anim(w, &types[i], at);
-        }
-        if g > 0 {
-            placed_in_pass = true;
         }
         left -= g.max(0);
         j += 1;
