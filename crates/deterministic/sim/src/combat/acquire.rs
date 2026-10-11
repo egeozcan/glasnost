@@ -210,7 +210,19 @@ pub fn retaliate(w: &mut World, actor: ObjectId, attacker: ObjectId) {
             return;
         }
     }
-    // The neutral and special houses' further conditions (S-0309 claim 25 part h: draining, the threat sums) need the threat score of a target; the attacker is taken without them.
+    if !player
+        && let Some(Target::Object(y)) = o.target
+        && w.obj(y).is_some_and(|x| x.kind != Kind::Terrain)
+    {
+        // spec: S-0309 claim 25 part h (the neutral and special houses: only when the attacker's threat sum, d in cells as in a range search, is at least the present target's, compared exactly)
+        let sum = |x| threat_sum(w, actor, x, SearchKind::Range);
+        if let (Some(sx), Some(sy)) = (sum(attacker), sum(y))
+            && !sx.ge(sy)
+        {
+            return;
+        }
+    }
+    // The draining condition of claim 25 part h needs a draining state, which no object has in our engine.
     override_attack(w, actor, attacker);
 }
 
@@ -382,6 +394,12 @@ pub fn classes(w: &World, a: ObjectId) -> Classes {
         if money {
             c.buildings = true; // spec: S-0309 claim 5 (the money-thief flag also searches for buildings)
         }
+        let charges = u.is_some_and(|u| u.raw.c4.unwrap_or(false))
+            || crate::combat::veterancy::has_ability(w, a, crate::combat::data::Ability::C4);
+        if !player && charges {
+            // spec: S-0309 claim 25 part b (an infantry unit of the neutral or special house with explosive charges also searches for buildings)
+            c.buildings = true;
+        }
         if engineer {
             // spec: S-0309 claim 5 (an engineer never searches for infantry or vehicles)
             c.infantry = false;
@@ -425,7 +443,11 @@ fn radius(w: &World, a: ObjectId, kind: SearchKind) -> (i32, i32) {
     let n = if big_r != 0 {
         big_r / 256 // spec: S-0309 F1 (n = trunc(R / 256))
     } else {
-        let ww = if crate::combat::weapon::switching(w, a) {
+        let tc = type_combat(w, a);
+        let ww = if tc.is_some_and(|t| t.underwater && t.organic && t.self_healing) {
+            // spec: S-0309 F1 (a type that is underwater, organic and self-healing uses g for w)
+            g
+        } else if crate::combat::weapon::switching(w, a) {
             crate::combat::range::firer_weapon_range(
                 w,
                 a,
@@ -434,7 +456,7 @@ fn radius(w: &World, a: ObjectId, kind: SearchKind) -> (i32, i32) {
         } else {
             w0.max(w1)
         };
-        let b = type_combat(w, a).map_or(0, |t| t.air_range_bonus);
+        let b = tc.map_or(0, |t| t.air_range_bonus);
         // spec: S-0309 F1 (n = trunc(w / 256) + 1 + trunc(b / 256) when R = 0)
         ww / 256 + 1 + b / 256
     };
@@ -486,8 +508,9 @@ fn class_ok(w: &World, c: Classes, t: ObjectId) -> bool {
     }
 }
 
-/// The candidate tests of table C (S-0309 claim 12). `d` is the search
-/// radius R (0: the weapon's reach), `zone` whether the zone row applies.
+/// The candidate tests of table C (S-0309 claim 12). `big_r` is the
+/// search radius R (0: the weapon's reach), `zone` whether the zone row
+/// applies (claims 7 and 11).
 // spec: S-0309 Constants (lowest searchable height −20 leptons)
 fn candidate(
     w: &World,
@@ -496,6 +519,7 @@ fn candidate(
     c: Classes,
     big_r: i32,
     kind: SearchKind,
+    zone: bool,
 ) -> bool {
     let r = w.rules();
     let Some(ao) = w.obj(a) else { return false };
@@ -553,11 +577,7 @@ fn candidate(
         return false;
     }
     // spec: S-0309 table C (zone, in the searches claims 7 and 11 restrict)
-    if kind != SearchKind::Range
-        && ao.kind.is_mobile()
-        && ao.kind != Kind::Aircraft
-        && !same_zone(w, a, t)
-    {
+    if zone && ao.kind.is_mobile() && ao.kind != Kind::Aircraft && !same_zone(w, a, t) {
         return false;
     }
     let allied = w.allied(ao.owner, to.owner);
@@ -611,11 +631,17 @@ fn candidate(
         .and_then(|h| w.houses.get(usize::from(h.0)))
         .and_then(|h| r.countries.get(h.country as usize))
         .is_some_and(|c| c.passive);
-    if player && passive {
+    // spec: S-0309 claim 25 part e (for a searcher of the neutral or special house the two rows let T through only when T is a building, A an infantry unit, and an engineer of another owner may capture it or A may occupy it)
+    // Neither alternative can hold in our engine yet: the needs-engineer flag is not imported, and the occupation test belongs to the structures specs.
+    let house_exception = false;
+    if passive && (player || !house_exception) {
         return false;
     }
-    // spec: S-0309 table C (insignificant: not a building of a non-passive owner, A's owner a player house)
-    if player && ttc.is_some_and(|x| x.insignificant) && !(to.kind == Kind::Building && !passive) {
+    // spec: S-0309 table C (insignificant: not a building of a non-passive owner, A's owner a player house; claim 25 part e for the neutral and special houses)
+    if ttc.is_some_and(|x| x.insignificant)
+        && !(to.kind == Kind::Building && !passive)
+        && (player || !house_exception)
+    {
         return false;
     }
     // spec: S-0309 table C (train: T a train and A a vehicle thief)
@@ -690,10 +716,10 @@ fn v_of(w: &World, x: ObjectId, y: ObjectId) -> F64 {
         .unwrap_or(F64::ZERO)
 }
 
-/// The threat score of a candidate (S-0309 claims 13 and 14, F4 to F6,
-/// F9); `None` rejects it (a score of exactly 0).
-// spec: S-0309 F4 to F6 (cells of 256 leptons; N = trunc(L / 256))
-fn score(w: &World, a: ObjectId, t: ObjectId, kind: SearchKind) -> Option<i32> {
+/// The threat sum of a candidate (S-0309 Terms, F4): the argument of conv
+/// in F4, before conversion and before the modifiers of claim 14.
+// spec: S-0309 F4 (cells of 256 leptons)
+fn threat_sum(w: &World, a: ObjectId, t: ObjectId, kind: SearchKind) -> Option<F64> {
     let r = w.rules();
     let mode = r.mode;
     let ao = w.obj(a)?;
@@ -727,6 +753,7 @@ fn score(w: &World, a: ObjectId, t: ObjectId, kind: SearchKind) -> Option<i32> {
     let k = wp.map_or(g / 256, |x| r.combat.weapon(x).range / 256);
     let rh = rho3(w, a, t);
     // spec: S-0309 F4 (d in cells; in leptons for ground-layer objects of the map-wide search, quirks.hunt_distance_in_leptons)
+    // A landed aircraft of the map-wide search's second pass keeps d in cells (request Q-0079).
     let dd = if kind == SearchKind::MapWide
         && to.kind != Kind::Aircraft
         && r.quirks.hunt_distance_in_leptons
@@ -744,7 +771,20 @@ fn score(w: &World, a: ObjectId, t: ObjectId, kind: SearchKind) -> Option<i32> {
             mode,
         )
         .add(F64::from_i64(100000, mode), mode);
-    let mut sc = sum.to_i32_common();
+    Some(sum)
+}
+
+/// The threat score of a candidate (S-0309 claims 13 and 14, F4 to F6,
+/// F9); `None` rejects it (a score of exactly 0).
+// spec: S-0309 F5 and F6 (N = trunc(L / 256))
+fn score(w: &World, a: ObjectId, t: ObjectId, kind: SearchKind) -> Option<i32> {
+    let r = w.rules();
+    let mode = r.mode;
+    let ao = w.obj(a)?;
+    let to = w.obj(t)?;
+    let tc = type_combat(w, a)?;
+    let s = crate::combat::damage::strength(w, t);
+    let mut sc = threat_sum(w, a, t, kind)?.to_i32_common();
     // spec: S-0309 F5 (normal mode: halved at expected health ≤ 0, doubled at ≤ trunc(S / 2))
     if tc.scan_mode == crate::combat::data::ScanMode::Normal {
         let x = to.combat.expected_health;
@@ -887,7 +927,8 @@ pub fn search(
         for pass in 0..2 {
             for &x in &ids {
                 let Some(o) = w.obj(x) else { continue };
-                if (pass == 0) != (o.kind == Kind::Aircraft) || (pass == 0 && !c.aircraft) {
+                // spec: S-0309 claim 7 (the second pass considers every infantry unit, vehicle, aircraft and building of the ground render layer; no object leaves the ground layer in our engine, so landed aircraft are among them)
+                if pass == 0 && (o.kind != Kind::Aircraft || !c.aircraft) {
                     continue;
                 }
                 let allied = w.allied(ao.owner, o.owner);
@@ -899,7 +940,8 @@ pub fn search(
                 if !consider {
                     continue;
                 }
-                if candidate(w, a, x, c, 0, kind)
+                // spec: S-0309 claim 7 (the zone test applies to the ground-layer objects of the second pass)
+                if candidate(w, a, x, c, 0, kind, pass == 1)
                     && let Some(s) = score(w, a, x, kind)
                 {
                     cands.push((x, s));
@@ -945,7 +987,7 @@ pub fn search(
                             || crate::combat::weapon::healer_for_acquisition(w, a)
                             || friendly_exception(w, a);
                         if tested
-                            && candidate(w, a, x, c, big_r, kind)
+                            && candidate(w, a, x, c, big_r, kind, kind == SearchKind::Area)
                             && let Some(s) = score(w, a, x, kind)
                         {
                             cands.push((x, s));
@@ -963,12 +1005,17 @@ pub fn search(
         .unit(ao.kind, ao.type_index)
         .is_some_and(|u| u.raw.distributed_fire.unwrap_or(false));
     let pick = if distributed {
-        if kind == SearchKind::MapWide && rules.quirks.hunt_ignores_distributed_fire {
-            // spec: S-0309 claim 20 (a map-wide search picks nothing and empties the list, quirks.hunt_ignores_distributed_fire)
+        if kind == SearchKind::MapWide {
             if let Some(ob) = w.obj_mut(a) {
                 ob.combat.fired_at.clear();
             }
-            None
+            if rules.quirks.hunt_ignores_distributed_fire {
+                // spec: S-0309 claim 20 (a map-wide search picks nothing and empties the list, quirks.hunt_ignores_distributed_fire)
+                None
+            } else {
+                // spec: S-0309 Edge cases (hunt_ignores_distributed_fire off: claim 17 among the map-wide candidates, the list empty afterwards)
+                best_of(cands.iter().copied())
+            }
         } else {
             let list = ao.combat.fired_at.clone();
             let not_on: Vec<&(ObjectId, i32)> =
@@ -1004,7 +1051,7 @@ pub fn search(
         ob.combat.limited_scan = false;
     }
     if let Some(x) = pick {
-        set_target_from_search(w, a, x, ctx, distributed);
+        set_target_from_search(w, a, x, ctx, distributed, ao.target);
     }
     pick
 }
@@ -1026,8 +1073,9 @@ fn set_target_from_search(
     x: ObjectId,
     ctx: SearchContext,
     distributed: bool,
+    before: Option<Target>,
 ) {
-    let before = w.obj(a).and_then(|o| o.target);
+    // `before` is the target held before the search, even when the search dropped it (claim 24, table Search outcome row 1).
     let t = redirect(w, a, Target::Object(x));
     let rules = w.rules_arc();
     let expected = match t {
@@ -1072,11 +1120,17 @@ pub fn redirect(w: &World, a: ObjectId, t: Target) -> Option<Target> {
                 q,
                 crate::infantry::Seq::Die1
                     | crate::infantry::Seq::Die2
+                    | crate::infantry::Seq::Die3
+                    | crate::infantry::Seq::Die4
+                    | crate::infantry::Seq::Die5
                     | crate::infantry::Seq::WetDie1
                     | crate::infantry::Seq::WetDie2
+                    | crate::infantry::Seq::AirDeathStart
+                    | crate::infantry::Seq::AirDeathFall
+                    | crate::infantry::Seq::AirDeathEnd
             )
         });
-    // spec: S-0309 claim 24 (a dead or sinking object, or one in a death sequence: no target)
+    // spec: S-0309 claim 24 (a dead or sinking object, or an infantry unit whose current sequence is a death kind of S-0107: die 1 to 5, wet die 1 and 2, the three air-death kinds: no target)
     if o.combat.killed || o.health <= 0 || dying {
         return None;
     }
