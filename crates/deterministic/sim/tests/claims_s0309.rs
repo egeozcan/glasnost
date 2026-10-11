@@ -143,3 +143,26 @@ fn repicked_opportunity_target_is_not_an_opportunity_target() {
         "the object that was the target before the search is not an opportunity target"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Claim 8 and F1
+
+// spec: S-0309 F1 (R = 0: n = trunc(w / 256) + 1 + trunc(b / 256); a type that is underwater, organic and self-healing uses g for w)
+#[test]
+fn underwater_organic_self_healing_type_uses_guard_range_for_rings() {
+    let mut r = base();
+    let cart = r.sim.vehicles.get_mut("CART").unwrap();
+    cart.combat.underwater = Some(true);
+    cart.combat.organic = Some(true);
+    cart.combat.self_healing = Some(true);
+    let mut w = game(&r);
+    let a = veh(&mut w, "CART", 0, 0, 0);
+    // Within the gun's 5.5 cells, but in ring 2: with g = 0, n = 0 + 1 + 0 = 1 looks at ring 0 only.
+    veh(&mut w, "T0", 1, 2, 0);
+    assert_eq!(range_search(&mut w, a), None);
+    // Without the three flags, n = trunc(1408 / 256) + 1 = 6 reaches ring 2.
+    let mut w = game(&base());
+    let a = veh(&mut w, "CART", 0, 0, 0);
+    let b = veh(&mut w, "T0", 1, 2, 0);
+    assert_eq!(range_search(&mut w, a), Some(b));
+}

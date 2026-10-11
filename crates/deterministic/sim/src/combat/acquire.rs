@@ -425,7 +425,11 @@ fn radius(w: &World, a: ObjectId, kind: SearchKind) -> (i32, i32) {
     let n = if big_r != 0 {
         big_r / 256 // spec: S-0309 F1 (n = trunc(R / 256))
     } else {
-        let ww = if crate::combat::weapon::switching(w, a) {
+        let tc = type_combat(w, a);
+        let ww = if tc.is_some_and(|t| t.underwater && t.organic && t.self_healing) {
+            // spec: S-0309 F1 (a type that is underwater, organic and self-healing uses g for w)
+            g
+        } else if crate::combat::weapon::switching(w, a) {
             crate::combat::range::firer_weapon_range(
                 w,
                 a,
@@ -434,7 +438,7 @@ fn radius(w: &World, a: ObjectId, kind: SearchKind) -> (i32, i32) {
         } else {
             w0.max(w1)
         };
-        let b = type_combat(w, a).map_or(0, |t| t.air_range_bonus);
+        let b = tc.map_or(0, |t| t.air_range_bonus);
         // spec: S-0309 F1 (n = trunc(w / 256) + 1 + trunc(b / 256) when R = 0)
         ww / 256 + 1 + b / 256
     };
