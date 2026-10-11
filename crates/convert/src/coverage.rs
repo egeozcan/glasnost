@@ -67,7 +67,12 @@ const CONVERTED: &[(&str, &str, Outcome, &str)] = &[
     ("particle_systems", "BehavesLike", Outcome::Field, "S-0006"),
     ("particles", "BehavesLike", Outcome::Field, "S-0006"),
     ("buildings", "SuperWeapon", Outcome::Field, "S-0004"),
-    ("warheads", "Verses", Outcome::Field, "S-0003, S-0006"),
+    (
+        "warheads",
+        "Verses",
+        Outcome::Field,
+        "S-0003, S-0006, S-0305",
+    ),
     ("superweapons", "RechargeTime", Outcome::Field, "S-0006"),
     ("global:CrateRules", "CrateImg", Outcome::Field, "S-0004"),
     (
@@ -157,12 +162,112 @@ const CONVERTED: &[(&str, &str, Outcome, &str)] = &[
     ("global:ColorAdd", "*", Outcome::Render, "S-0006"),
     ("list", "*", Outcome::Folded, "S-0002, S-0004"),
     ("global:Sides", "*", Outcome::Folded, "S-0004"),
+    // Keys the combat specs say have no effect (read and ignored, with the warnings they ask for).
+    // spec: S-0302 Edge cases (MinDamage, a country's Armor), S-0309 Edge cases (the Dumb coefficients), S-0314 claim 11 (TiberiumHeal, HealScanRadius)
+    (
+        "global:CombatDamage",
+        "MinDamage",
+        Outcome::Ignored,
+        "S-0302",
+    ),
+    ("countries", "Armor", Outcome::Ignored, "S-0302"),
+    (
+        "global:General",
+        "DumbMyEffectivenessCoefficient",
+        Outcome::Ignored,
+        "S-0309",
+    ),
+    (
+        "global:General",
+        "DumbTargetEffectivenessCoefficient",
+        Outcome::Ignored,
+        "S-0309",
+    ),
+    (
+        "global:General",
+        "DumbTargetSpecialThreatCoefficient",
+        Outcome::Ignored,
+        "S-0309",
+    ),
+    (
+        "global:General",
+        "DumbTargetStrengthCoefficient",
+        Outcome::Ignored,
+        "S-0309",
+    ),
+    (
+        "global:General",
+        "DumbTargetDistanceCoefficient",
+        Outcome::Ignored,
+        "S-0309",
+    ),
+    ("global:General", "TiberiumHeal", Outcome::Ignored, "S-0314"),
+    (
+        "global:General",
+        "HealScanRadius",
+        Outcome::Ignored,
+        "S-0314",
+    ),
+    ("infantry", "TiberiumHeal", Outcome::Ignored, "S-0314"),
+    ("vehicles", "TiberiumHeal", Outcome::Ignored, "S-0314"),
+    ("aircraft", "TiberiumHeal", Outcome::Ignored, "S-0314"),
+    ("buildings", "TiberiumHeal", Outcome::Ignored, "S-0314"),
 ];
 
 /// Keys each approved spec's import mapping names, for the `spec` column of
 /// keys this converter does not interpret yet.
-// spec: S-0003, S-0004, S-0006, S-0007, S-0101 to S-0108 (Import mapping key names)
+// spec: S-0003, S-0004, S-0006, S-0007, S-0101 to S-0108, S-0301 to S-0315 (Import mapping key names)
 const NAMED: &[(&str, &[&str])] = &[
+    ("S-0301", &["CompEasyBonus"]),
+    (
+        "S-0303",
+        &[
+            "DestroyableBridges",
+            "HarvesterImmune",
+            "Inert",
+            "ShakeXhi",
+            "ShakeXlo",
+            "ShakeYhi",
+            "ShakeYlo",
+        ],
+    ),
+    (
+        "S-0308",
+        &["Overpowerable", "ResourceDestination", "ResourceGatherer"],
+    ),
+    ("S-0309", &["NeedsEngineer", "Thief"]),
+    ("S-0311", &["EliteFlashTimer"]),
+    (
+        "S-0312",
+        &[
+            "Bright",
+            "CrateBeneath",
+            "CrateBeneathIsMoney",
+            "DestroyParticleSystems",
+            "DestroySmokeOffset",
+            "Wake",
+        ],
+    ),
+    (
+        "S-0313",
+        &[
+            "AlternateFLH0",
+            "AlternateFLH1",
+            "AlternateFLH2",
+            "AlternateFLH3",
+            "AlternateFLH4",
+            "MuzzleFlash0",
+            "MuzzleFlash1",
+            "MuzzleFlash2",
+            "MuzzleFlash3",
+            "MuzzleFlash4",
+            "MuzzleFlash5",
+            "MuzzleFlash6",
+            "MuzzleFlash7",
+            "MuzzleFlash8",
+            "MuzzleFlash9",
+        ],
+    ),
     (
         "S-0003",
         &[
@@ -378,12 +483,26 @@ pub struct Row {
     pub note: String,
 }
 
-fn classify(category: &str, key: &str) -> (Outcome, String, String) {
+/// The simulation keys `convert::sim` converts: (category, key) to spec.
+type SimKeys = BTreeMap<(String, String), &'static str>;
+
+fn sim_keys() -> SimKeys {
+    let mut m = SimKeys::new();
+    for (cat, key, spec) in crate::sim::converted_keys() {
+        m.entry((cat.to_owned(), key)).or_insert(spec);
+    }
+    m
+}
+
+fn classify(category: &str, key: &str, sim: &SimKeys) -> (Outcome, String, String) {
     let hit = CONVERTED.iter().find(|(c, k, _, _)| {
         (*c == "*" || *c == category) && (*k == "*" || k.as_bytes() == key.as_bytes())
     });
     if let Some((_, _, outcome, spec)) = hit {
         return (*outcome, (*spec).to_owned(), String::new());
+    }
+    if let Some(spec) = sim.get(&(category.to_owned(), key.to_owned())) {
+        return (Outcome::Field, (*spec).to_owned(), String::new());
     }
     let named: Vec<&str> = NAMED
         .iter()
@@ -460,6 +579,7 @@ pub fn rows(base: &Document, art: &Document, layered: &Layered) -> Vec<Row> {
             pairs.insert((cat.to_owned(), show(&e.key)));
         }
     }
+    let sim = sim_keys();
     pairs
         .into_iter()
         .map(|(category, key)| {
@@ -468,7 +588,7 @@ pub fn rows(base: &Document, art: &Document, layered: &Layered) -> Vec<Row> {
             } else {
                 category.as_str()
             };
-            let (mut outcome, mut spec, mut note) = classify(lookup_cat, &key);
+            let (mut outcome, mut spec, mut note) = classify(lookup_cat, &key, &sim);
             if category.starts_with("art") {
                 // Art-file keys that S-0007 and S-0103 interpret.
                 const ART_RENDER: [&str; 18] = [
@@ -499,6 +619,11 @@ pub fn rows(base: &Document, art: &Document, layered: &Layered) -> Vec<Row> {
                     } else {
                         "S-0007".into()
                     };
+                    note = String::new();
+                } else if let Some(s) = sim.get(&("art".to_owned(), key.clone())) {
+                    // Art keys the simulation's combat fields read (S-0301, S-0306, S-0310, S-0313).
+                    outcome = Outcome::Field;
+                    spec = (*s).to_owned();
                     note = String::new();
                 }
             }

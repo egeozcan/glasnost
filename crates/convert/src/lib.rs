@@ -52,12 +52,14 @@ pub struct ImportOptions {
     pub map: Option<InputFile>,
     /// Theater for art lookup.
     pub theater: Option<Theater>,
-    /// INI quirk switches (S-0001, S-0002).
+    /// INI quirk switches (S-0001, S-0002, S-0003).
     pub ini: IniQuirks,
     /// Registration and layering quirk switches.
     pub quirks: LayerQuirks,
     /// Art lookup quirk switches (S-0007).
     pub art: art::ArtQuirks,
+    /// Quirk switches of the typed simulation fields (S-0308, S-0309).
+    pub sim: sim::SimQuirks,
     /// The local player's country, which picks the side group mounted for
     /// art lookup (S-0005 claim 13a). Default: the first country that has
     /// a side.
@@ -212,6 +214,8 @@ async fn look_up_art(
         arts: Some(&arts),
         quirks: &options.quirks,
         art_quirks: &options.art,
+        ini_quirks: &options.ini,
+        sim_quirks: &options.sim,
     });
     sim::attach(&mut import.tree, sim_node);
     for w in sim_warnings {
@@ -390,6 +394,9 @@ pub fn convert(inputs: &Inputs, options: &ImportOptions) -> Import {
     for (k, v) in options.art.named() {
         record.quirks.push((k.to_owned(), v));
     }
+    for (k, v) in options.sim.named() {
+        record.quirks.push((k.to_owned(), v));
+    }
 
     // spec: S-0001 Edge cases (warning: a key that differs from a read key only in letter case)
     for l in &layers {
@@ -423,6 +430,8 @@ pub fn convert(inputs: &Inputs, options: &ImportOptions) -> Import {
         arts: None,
         quirks: &options.quirks,
         art_quirks: &options.art,
+        ini_quirks: &options.ini,
+        sim_quirks: &options.sim,
     });
     sim::attach(&mut tree, sim_node);
     warnings.extend(sim_warnings);
@@ -442,7 +451,7 @@ pub fn convert(inputs: &Inputs, options: &ImportOptions) -> Import {
     }
 }
 
-fn q_named(q: &IniQuirks) -> [(&'static str, bool); 4] {
+fn q_named(q: &IniQuirks) -> [(&'static str, bool); 5] {
     [
         (
             "ini_final_line_needs_newline",
@@ -451,5 +460,6 @@ fn q_named(q: &IniQuirks) -> [(&'static str, bool); 4] {
         ("ini_trim_defect", q.ini_trim_defect),
         ("ini_duplicate_hash_order", q.ini_duplicate_hash_order),
         ("ini_hash_identity", q.ini_hash_identity),
+        ("percent_list_integer_prefix", q.percent_list_integer_prefix),
     ]
 }
