@@ -887,7 +887,8 @@ pub fn tables(
             if let Some(v) = &h.verses {
                 // spec: S-0305 claim 1 (eleven versus items)
                 for (i, d) in v.iter().take(11).enumerate() {
-                    verses[i] = d.value(mode);
+                    // The importer writes each versus value as the exact decimal of its double (S-0003 claim 13), read back at double precision.
+                    verses[i] = glasnost_num::decimal::nearest_double(&d.0);
                 }
             }
             WarheadRules {

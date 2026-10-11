@@ -42,7 +42,12 @@ pub fn create(w: &mut World, kind: Kind, type_index: u32, owner: Option<HouseId>
             let b = &r.buildings[type_index as usize];
             (b.strength, b.foundation, Locomotor::None)
         }
-        Kind::Terrain => (0, (1, 1), Locomotor::None),
+        // spec: S-0302 claim 20 (a terrain object has its type's strength)
+        Kind::Terrain => (
+            r.terrain.get(type_index as usize).map_or(0, |t| t.strength),
+            (1, 1),
+            Locomotor::None,
+        ),
         _ => {
             let u = r.unit(kind, type_index).expect("unit type");
             (u.strength, (1, 1), u.locomotor)
@@ -86,7 +91,33 @@ pub fn create(w: &mut World, kind: Kind, type_index: u32, owner: Option<HouseId>
         ),
     };
     w.objects.insert(id, obj);
+    veteran_at_creation(w, id);
     id
+}
+
+/// Experience at creation (S-0311 claim 11): a veteran when the type is in
+/// its house's country veteran list for its kind. Infiltrated factories are
+/// a seam (the special-abilities specs own infiltration).
+fn veteran_at_creation(w: &mut World, id: ObjectId) {
+    let Some(o) = w.obj(id) else { return };
+    let i = match o.kind {
+        Kind::Infantry => 0,
+        Kind::Vehicle => 1,
+        Kind::Aircraft => 2, // spec: S-0311 claim 11 (the country lists for infantry, vehicles and aircraft)
+        _ => return,
+    };
+    let listed = o
+        .owner
+        .and_then(|h| w.houses.get(usize::from(h.0)))
+        .and_then(|h| w.rules().combat.countries.get(h.country as usize))
+        .is_some_and(|c| c.veteran[i].contains(&o.type_index));
+    if listed {
+        let mode = w.rules().mode;
+        if let Some(ob) = w.obj_mut(id) {
+            // spec: S-0311 claim 11 (created as a veteran: experience 1)
+            ob.combat.experience = F64::from_i64(1, mode).to_f32(mode);
+        }
+    }
 }
 
 /// The cells a building's foundation covers.
@@ -120,6 +151,8 @@ pub fn place(w: &mut World, id: ObjectId, pos: Pos, facing: Facing) {
                 w.cells.enter(c, Layer::Ground, id, true);
                 w.cells.claim_building(c, true);
             }
+            // spec: S-0314 claim 10 (a building placed for a house adds its self-heal counts)
+            crate::combat::heal::building_counts(w, id, o.owner, true);
         }
         Kind::Terrain => {
             let pattern = {
@@ -200,6 +233,8 @@ pub fn remove(w: &mut World, id: ObjectId) {
     let mut touched = vec![cell];
     match o.kind {
         Kind::Building => {
+            // spec: S-0314 claim 10 (a building removed or destroyed subtracts its counts, flooring at 0)
+            crate::combat::heal::building_counts(w, id, o.owner, false);
             touched = foundation_cells(cell, o.foundation);
             for &c in &touched {
                 w.cells.leave(c, Layer::Ground, id);
@@ -350,6 +385,8 @@ fn set_starting_health(w: &mut World, id: ObjectId, kind: Kind, value: i32) {
     }
     if let Some(o) = w.obj_mut(id) {
         o.health = h;
+        // spec: S-0309 claim 15 (the expected remaining health starts equal to the health)
+        o.combat.expected_health = h;
     }
 }
 
@@ -535,8 +572,15 @@ pub fn place_map_objects(w: &mut World, map: &Map, sandbox: bool) {
             if kind == Kind::Aircraft {
                 w.note("S-0009 claim 38: aircraft stand landed on their cell; one placed in the air needs its type's flight height (aircraft specs)");
             }
-            if fields.veterancy.is_some() {
-                w.note("S-0009 claim 41: veterancy values need S-0311 (M4); objects keep their type's experience");
+            if let Some(n) = fields.veterancy {
+                // spec: S-0311 claim 11 and F5 (a map object's experience e = RZ₂₄(RZ₅₃(n × 0.01)), replacing the creation rules, not capped)
+                let mode = w.rules().mode;
+                let e = glasnost_num::F64::from_i64(i64::from(n), mode)
+                    .mul(crate::rules::nearest_double("0.01"), mode)
+                    .to_f32(mode);
+                if let Some(o) = w.obj_mut(id) {
+                    o.combat.experience = e;
+                }
             }
             if kind == Kind::Building {
                 if !fields.switched_on() {

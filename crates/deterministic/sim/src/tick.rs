@@ -59,6 +59,8 @@ fn object_turn(w: &mut World, id: ObjectId) {
         crate::combat::death::infantry_death_turn(w, id);
         return;
     }
+    // spec: S-0314 claims 9 and 10 (self-healing, in the object's own turn)
+    crate::combat::heal::turn(w, id);
     process::turn(w, id);
     if w.obj(id).is_none() {
         return;
