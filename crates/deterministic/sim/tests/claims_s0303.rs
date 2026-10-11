@@ -1203,7 +1203,6 @@ fn listed_debris_types() {
 
 // spec: S-0303 F6 (the deals go on while pieces are left; only maxima that are all 0 bring in the departure of Edge cases)
 #[test]
-#[ignore = "combat::death::deal_debris stops after any full pass that places nothing, also with positive maxima (reported)"]
 fn listed_debris_continues_after_a_pass_that_places_nothing() {
     let mut checked = 0;
     for seed in 0..30 {
