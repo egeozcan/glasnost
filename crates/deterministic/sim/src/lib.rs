@@ -15,6 +15,7 @@
 
 pub mod behaviour;
 pub mod cells;
+pub mod combat;
 pub mod consts;
 pub mod corridor;
 pub mod crush;

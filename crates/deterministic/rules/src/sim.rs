@@ -206,7 +206,115 @@ pub struct SimData {
     /// Animation types by type name (their art sections, S-0109).
     #[serde(default)]
     pub animations: BTreeMap<String, AnimationType>,
+    /// The difficulty rows by our name (`easy`, `normal`, `difficult`;
+    /// S-0302 Terms, glossary *difficulty skill block*).
+    #[serde(default)]
+    pub difficulty: BTreeMap<String, DifficultyRow>,
 }
+
+/// The eleven armour classes in class-index order (S-0305 claim 1).
+#[derive(
+    Clone, Copy, Debug, Default, Deserialize, JsonSchema, PartialEq, Eq, PartialOrd, Ord, Hash,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum ArmourClass {
+    /// *none* (0), also the class of a type no layer has given one.
+    #[default]
+    None,
+    /// *flak* (1).
+    Flak,
+    /// *plate* (2).
+    Plate,
+    /// *light* (3).
+    Light,
+    /// *medium* (4).
+    Medium,
+    /// *heavy* (5).
+    Heavy,
+    /// *wood* (6).
+    Wood,
+    /// *steel* (7).
+    Steel,
+    /// *concrete* (8).
+    Concrete,
+    /// *special 1* (9).
+    #[serde(rename = "special_1")]
+    Special1,
+    /// *special 2* (10).
+    #[serde(rename = "special_2")]
+    Special2,
+}
+
+impl ArmourClass {
+    /// The classes in class-index order (S-0305 claim 1).
+    // spec: S-0305 claim 1 (eleven classes, fixed order)
+    pub const ALL: [ArmourClass; 11] = [
+        ArmourClass::None,
+        ArmourClass::Flak,
+        ArmourClass::Plate,
+        ArmourClass::Light,
+        ArmourClass::Medium,
+        ArmourClass::Heavy,
+        ArmourClass::Wood,
+        ArmourClass::Steel,
+        ArmourClass::Concrete,
+        ArmourClass::Special1,
+        ArmourClass::Special2,
+    ];
+
+    /// The class index, 0 to 10 (S-0305 Terms).
+    pub fn index(self) -> usize {
+        Self::ALL.iter().position(|c| *c == self).unwrap_or(0)
+    }
+
+    /// The armour words in class-index order (S-0305 Import mapping).
+    // spec: S-0305 Import mapping (the eleven armour words)
+    pub const WORDS: [&'static str; 11] = [
+        "none",
+        "flak",
+        "plate",
+        "light",
+        "medium",
+        "heavy",
+        "wood",
+        "steel",
+        "concrete",
+        "special_1",
+        "special_2",
+    ];
+
+    /// The class an armour word names, comparing the whole text and folding
+    /// A to Z only (S-0305 claims 3 and 4: an unknown word gives *none*).
+    pub fn from_word(v: &[u8]) -> (ArmourClass, bool) {
+        for (i, w) in Self::WORDS.iter().enumerate() {
+            if v.eq_ignore_ascii_case(w.as_bytes()) {
+                return (Self::ALL[i], true);
+            }
+        }
+        // spec: S-0305 claim 4 (a word that matches nothing gives class none)
+        (ArmourClass::None, false)
+    }
+}
+
+/// One difficulty row's fields (S-0301 claim 3, S-0302 claim 3, S-0309
+/// claim 25 part i).
+#[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct DifficultyRow {
+    /// `ROF`, the row's rate-of-fire factor ℓ (a double).
+    #[serde(default)]
+    pub rof: Option<Decimal>,
+    /// `FirePower`, the row's firepower factor φᵣ (a double).
+    #[serde(default)]
+    pub firepower: Option<Decimal>,
+    /// `DestroyWalls`, the destroy-walls flag.
+    #[serde(default)]
+    pub destroy_walls: Option<bool>,
+}
+
+/// A muzzle position (F, L, H) in leptons (S-0313 Terms).
+// spec: S-0313 Terms (three integers: forward, lateral, up)
+pub type Flh = [i32; 3];
 
 /// An animation type's fields that its creation draws read (S-0109; S-0202
 /// claim 10).
@@ -343,6 +451,208 @@ pub struct General {
     /// `WallTower`: the wall tower type (S-0112).
     #[serde(default)]
     pub wall_tower: Option<String>,
+    // --- Combat (M4): the combat-damage section unless stated.
+    /// `MaxDamage` (S-0302 claim 6).
+    #[serde(default)]
+    pub max_damage: Option<i32>,
+    /// `OccupyROFMultiplier` m (S-0301 claim 7), a single.
+    #[serde(default)]
+    pub occupy_rof_multiplier: Option<Decimal>,
+    /// `BunkerROFMultiplier` b (S-0301 claim 7), a single.
+    #[serde(default)]
+    pub bunker_rof_multiplier: Option<Decimal>,
+    /// `OccupyDamageMultiplier` M_g (S-0302 F1), a single.
+    #[serde(default)]
+    pub occupy_damage_multiplier: Option<Decimal>,
+    /// `BunkerDamageMultiplier` M_b (S-0302 F1), a single.
+    #[serde(default)]
+    pub bunker_damage_multiplier: Option<Decimal>,
+    /// `OpenToppedDamageMultiplier` M_t (S-0302 F1), a single.
+    #[serde(default)]
+    pub open_topped_damage_multiplier: Option<Decimal>,
+    /// `C4Warhead`, the demolition warhead (S-0302 claims 1 and 20).
+    #[serde(default)]
+    pub c4_warhead: Option<String>,
+    /// `CrushWarhead` (S-0303 claim 9).
+    #[serde(default)]
+    pub crush_warhead: Option<String>,
+    /// `IonCannonWarhead` (S-0303 claim 18).
+    #[serde(default)]
+    pub ion_cannon_warhead: Option<String>,
+    /// `BridgeStrength` (S-0303 claim 18).
+    #[serde(default)]
+    pub bridge_strength: Option<i32>,
+    /// `AmmoCrateDamage` (S-0303 claim 19).
+    #[serde(default)]
+    pub ammo_crate_damage: Option<i32>,
+    /// `SplashList`, animation names (S-0303 F5).
+    #[serde(default)]
+    pub splash_list: Option<Vec<String>>,
+    /// `BallisticScatter`, cells (S-0306 claim 4; lepton form of S-0307 claim 1).
+    #[serde(default)]
+    pub ballistic_scatter: Option<Decimal>,
+    /// `OccupyWeaponRange`, cells (S-0307 claim 4).
+    #[serde(default)]
+    pub occupy_weapon_range: Option<i32>,
+    /// `BunkerWeaponRangeBonus`, cells (S-0307 claim 5).
+    #[serde(default)]
+    pub bunker_weapon_range_bonus: Option<i32>,
+    /// `OpenToppedRangeBonus`, cells (S-0307 claim 5).
+    #[serde(default)]
+    pub open_topped_range_bonus: Option<i32>,
+    /// `FireSupress`, cells (S-0309 F6; lepton form).
+    #[serde(default)]
+    pub fire_supress: Option<Decimal>,
+    /// `DeathWeapon`, the game-wide death weapon (S-0312 claim 6).
+    #[serde(default)]
+    pub death_weapon: Option<String>,
+    /// `[General] VeteranROF` v (S-0301 claim 6), a double.
+    #[serde(default)]
+    pub veteran_rof: Option<Decimal>,
+    /// `[General] VeteranCombat` (S-0302 F1), a double.
+    #[serde(default)]
+    pub veteran_combat: Option<Decimal>,
+    /// `[General] VeteranArmor` (S-0302 F2), a double.
+    #[serde(default)]
+    pub veteran_armor: Option<Decimal>,
+    /// `[General] VeteranSight` (S-0311 F4), a double.
+    #[serde(default)]
+    pub veteran_sight: Option<Decimal>,
+    /// `[General] VeteranRatio` (S-0311 F3), a double.
+    #[serde(default)]
+    pub veteran_ratio: Option<Decimal>,
+    /// `[General] VeteranCap` (S-0311 F3), a double.
+    #[serde(default)]
+    pub veteran_cap: Option<Decimal>,
+    /// `[General] DamageFireTypes`, animation names (S-0302 claim 13).
+    #[serde(default)]
+    pub damage_fire_types: Option<Vec<String>>,
+    /// `[General] InfantryExplode`, an animation name (S-0302 claim 15).
+    #[serde(default)]
+    pub infantry_explode: Option<String>,
+    /// `[General] MissileROTVar` m (S-0306 claim 13), a double.
+    #[serde(default)]
+    pub missile_rot_var: Option<Decimal>,
+    /// `[General] MissileSafetyAltitude`, leptons (S-0306 claim 17).
+    #[serde(default)]
+    pub missile_safety_altitude: Option<i32>,
+    /// `[General] HarvesterUnit`: vehicle type keys (S-0303 claim 9).
+    #[serde(default)]
+    pub harvester_unit: Option<Vec<String>>,
+    /// `[General] BarrelExplode`, an animation name (S-0303 claim 19).
+    #[serde(default)]
+    pub barrel_explode: Option<String>,
+    /// `[General] BarrelDebris`, animation names (S-0303 claim 19).
+    #[serde(default)]
+    pub barrel_debris: Option<Vec<String>>,
+    /// `[General] BarrelParticle`, a particle-system name (S-0303 claim 19).
+    #[serde(default)]
+    pub barrel_particle: Option<String>,
+    /// `[General] MetallicDebris`, animation names (S-0303 F6, S-0312 F1).
+    #[serde(default)]
+    pub metallic_debris: Option<Vec<String>>,
+    /// `[General] WeaponNullifyAnim` (S-0303 claim 15).
+    #[serde(default)]
+    pub weapon_nullify_anim: Option<String>,
+    /// `[General] LightningWarhead` (S-0303 F5).
+    #[serde(default)]
+    pub lightning_warhead: Option<String>,
+    /// `[General] WeatherConBoltExplosion` (S-0303 F5).
+    #[serde(default)]
+    pub weather_con_bolt_explosion: Option<String>,
+    /// `[General] CrewEscape` (S-0312 claim 13), a double.
+    #[serde(default)]
+    pub crew_escape: Option<Decimal>,
+    /// `[General] AlliedCrew`, an infantry type key (S-0312 F4).
+    #[serde(default)]
+    pub allied_crew: Option<String>,
+    /// `[General] SovietCrew` (S-0312 F4).
+    #[serde(default)]
+    pub soviet_crew: Option<String>,
+    /// `[General] ThirdCrew` (S-0312 F4).
+    #[serde(default)]
+    pub third_crew: Option<String>,
+    /// `[General] Technician` (S-0312 F4).
+    #[serde(default)]
+    pub technician: Option<String>,
+    /// `[General] Engineer` (S-0312 claim 18).
+    #[serde(default)]
+    pub engineer: Option<String>,
+    /// `[General] AlliedSurvivorDivisor` (S-0312 F5).
+    #[serde(default)]
+    pub allied_survivor_divisor: Option<i32>,
+    /// `[General] SovietSurvivorDivisor` (S-0312 F5).
+    #[serde(default)]
+    pub soviet_survivor_divisor: Option<i32>,
+    /// `[General] ThirdSurvivorDivisor` (S-0312 F5).
+    #[serde(default)]
+    pub third_survivor_divisor: Option<i32>,
+    /// `[General] ShipSinkingWeight` (S-0312 claim 10).
+    #[serde(default)]
+    pub ship_sinking_weight: Option<Decimal>,
+    /// `[General] RepairRate` r_b (S-0314 F1), a double.
+    #[serde(default)]
+    pub repair_rate: Option<Decimal>,
+    /// `[General] URepairRate` r_u (S-0314 F1).
+    #[serde(default)]
+    pub u_repair_rate: Option<Decimal>,
+    /// `[General] IRepairRate` r_i (S-0314 F1).
+    #[serde(default)]
+    pub i_repair_rate: Option<Decimal>,
+    /// `[General] RepairStep` (S-0314 claim 4).
+    #[serde(default)]
+    pub repair_step: Option<i32>,
+    /// `[General] IRepairStep` (S-0314 claim 4).
+    #[serde(default)]
+    pub i_repair_step: Option<i32>,
+    /// `[General] RepairPercent` (S-0314 F2), a double.
+    #[serde(default)]
+    pub repair_percent: Option<Decimal>,
+    /// `[General] SelfHealInfantryFrames`, ticks (S-0314 claim 10).
+    #[serde(default)]
+    pub self_heal_infantry_frames: Option<i32>,
+    /// `[General] SelfHealUnitFrames`, ticks (S-0314 claim 10).
+    #[serde(default)]
+    pub self_heal_unit_frames: Option<i32>,
+    /// `[General] SelfHealInfantryAmount` (S-0314 claim 10).
+    #[serde(default)]
+    pub self_heal_infantry_amount: Option<i32>,
+    /// `[General] SelfHealUnitAmount` (S-0314 claim 10).
+    #[serde(default)]
+    pub self_heal_unit_amount: Option<i32>,
+    /// `[General] ThreatPerOccupant` (S-0309 Terms, *threat value*).
+    #[serde(default)]
+    pub threat_per_occupant: Option<i32>,
+    /// `[General] EnemyHouseThreatBonus` B (S-0309 F4), a double.
+    #[serde(default)]
+    pub enemy_house_threat_bonus: Option<Decimal>,
+    /// The five `[General] …CoefficientDefault` values, in the order
+    /// own-effectiveness, target-effectiveness, special-threat, strength,
+    /// distance (S-0309 Import mapping), doubles.
+    // spec: S-0309 Import mapping (five game-wide default coefficients)
+    #[serde(default)]
+    pub coefficient_defaults: Option<[Decimal; 5]>,
+    /// `[General] DisabledDisguiseDetectionPercent` (S-0309 claim 25 part g).
+    #[serde(default)]
+    pub disguise_detection_percent: Option<Vec<i32>>,
+    /// `[AudioVisual] Gravity` (S-0306 Terms).
+    #[serde(default)]
+    pub gravity: Option<i32>,
+    /// `[WallModel] AlliedWallTransparency` (S-0306 claim 22).
+    #[serde(default)]
+    pub allied_wall_transparency: Option<bool>,
+    /// `[ElevationModel] ElevationIncrement` I (S-0307 F2).
+    #[serde(default)]
+    pub elevation_increment: Option<i32>,
+    /// `[ElevationModel] ElevationIncrementBonus` b (S-0307 F2), a double.
+    #[serde(default)]
+    pub elevation_increment_bonus: Option<Decimal>,
+    /// `[ElevationModel] ElevationBonusCap` c (S-0307 F2), a double.
+    #[serde(default)]
+    pub elevation_bonus_cap: Option<Decimal>,
+    /// `[IQ] RepairSell` (S-0314 claim 8).
+    #[serde(default)]
+    pub iq_repair_sell: Option<i32>,
 }
 
 /// One land type's row (S-0211 claim 2): multipliers per locomotion class and
@@ -428,6 +738,36 @@ pub struct Country {
     /// the early phase of start positions sees (S-0009 claim 33).
     #[serde(default)]
     pub multiplay_passive_base: Option<bool>,
+    /// `Firepower` φ_c (S-0302 claim 3), a double.
+    #[serde(default)]
+    pub firepower: Option<Decimal>,
+    /// `ROF` κ (S-0301 claim 3), a double.
+    #[serde(default)]
+    pub rof: Option<Decimal>,
+    /// `ArmorInfantryMult` (S-0302 F2), a single.
+    #[serde(default)]
+    pub armor_infantry_mult: Option<Decimal>,
+    /// `ArmorUnitsMult` (S-0302 F2), a single.
+    #[serde(default)]
+    pub armor_units_mult: Option<Decimal>,
+    /// `ArmorAircraftMult` (S-0302 F2), a single.
+    #[serde(default)]
+    pub armor_aircraft_mult: Option<Decimal>,
+    /// `ArmorBuildingsMult` (S-0302 F2), a single.
+    #[serde(default)]
+    pub armor_buildings_mult: Option<Decimal>,
+    /// `ArmorDefensesMult` (S-0302 F2), a single.
+    #[serde(default)]
+    pub armor_defenses_mult: Option<Decimal>,
+    /// `VeteranInfantry`: infantry type keys (S-0311 claim 11).
+    #[serde(default)]
+    pub veteran_infantry: Option<Vec<String>>,
+    /// `VeteranUnits`: vehicle type keys (S-0311 claim 11).
+    #[serde(default)]
+    pub veteran_units: Option<Vec<String>>,
+    /// `VeteranAircraft`: aircraft type keys (S-0311 claim 11).
+    #[serde(default)]
+    pub veteran_aircraft: Option<Vec<String>>,
 }
 
 /// One sequence entry of an infantry type (S-0107 claim 1).
@@ -720,6 +1060,260 @@ pub struct UnitType {
     /// `Teleporter`: a self-teleporting type (S-0214 claim 11).
     #[serde(default)]
     pub teleporter: Option<bool>,
+    /// The combat fields shared with buildings (M4).
+    #[serde(default)]
+    pub combat: CombatFields,
+    /// `BurstDelay0` … `BurstDelay3` (S-0301 claim 4), ticks; −1: none.
+    // spec: S-0301 Constants (four burst-delay fields)
+    #[serde(default)]
+    pub burst_delay: Option<[i32; 4]>,
+    /// Art `FiringFrames` F (S-0301 claim 13).
+    #[serde(default)]
+    pub firing_frames: Option<i32>,
+    /// Art `FiringSyncFrame0`, `FiringSyncFrame1` (S-0301 claim 13).
+    // spec: S-0301 Constants (two firing sync frames)
+    #[serde(default)]
+    pub firing_sync_frames: Option<[i32; 2]>,
+    /// `HunterSeeker` (S-0301 claim 9).
+    #[serde(default)]
+    pub hunter_seeker: Option<bool>,
+    /// `MobileFire` (S-0301 claim 11, S-0310 claim 7).
+    #[serde(default)]
+    pub mobile_fire: Option<bool>,
+    /// `Gunner` (S-0308 claim 6).
+    #[serde(default)]
+    pub gunner: Option<bool>,
+    /// `IFVMode` (S-0308 claim 6).
+    #[serde(default)]
+    pub ifv_mode: Option<i32>,
+    /// `OpenTransportWeapon` (S-0308 claims 8, 10).
+    #[serde(default)]
+    pub open_transport_weapon: Option<i32>,
+    /// `DeployFireWeapon` (S-0308 claims 8, 9).
+    #[serde(default)]
+    pub deploy_fire_weapon: Option<i32>,
+    /// `OccupyWeapon` (S-0308 claim 13).
+    #[serde(default)]
+    pub occupy_weapon: Option<String>,
+    /// `EliteOccupyWeapon` (S-0308 claim 13).
+    #[serde(default)]
+    pub elite_occupy_weapon: Option<String>,
+    /// `DeployToFire` (S-0310 claim 9).
+    #[serde(default)]
+    pub deploy_to_fire: Option<bool>,
+    /// `JumpJetTurn` (S-0310 claim 8).
+    #[serde(default)]
+    pub jump_jet_turn: Option<bool>,
+    /// `Crewed` (S-0312 claim 13, F4).
+    #[serde(default)]
+    pub crewed: Option<bool>,
+    /// `CarriesCrate` (S-0312 claim 14).
+    #[serde(default)]
+    pub carries_crate: Option<bool>,
+    /// `Crashable` (S-0312 claims 12, 15).
+    #[serde(default)]
+    pub crashable: Option<bool>,
+    /// `Weight` (S-0312 claim 10).
+    #[serde(default)]
+    pub weight: Option<Decimal>,
+    /// `SuppressionThreshold` (S-0315 claim 6).
+    #[serde(default)]
+    pub suppression_threshold: Option<i32>,
+    /// `MissileSpawn` (S-0311 claim 8).
+    #[serde(default)]
+    pub missile_spawn: Option<bool>,
+}
+
+/// Combat fields that infantry, vehicle, aircraft and building types share
+/// (M4). Each field's spec is in its doc comment.
+#[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct CombatFields {
+    /// `Armor`, the armour class (S-0305; the importer resolves the word).
+    #[serde(default)]
+    pub armor: Option<ArmourClass>,
+    /// The weapon slots 0 … 17 of a multi-weapon type as `Weapon1` …
+    /// `Weapon18` fill them (S-0308 claim 1), the empty string for a slot
+    /// with no weapon; absent: slots 0 and 1 come from `primary` and
+    /// `secondary`.
+    #[serde(default)]
+    pub weapon_slots: Option<Vec<String>>,
+    /// The elite slots of a multi-weapon type (S-0308 claim 1).
+    #[serde(default)]
+    pub elite_weapon_slots: Option<Vec<String>>,
+    /// `IsGattling` (S-0308 claim 7).
+    #[serde(default)]
+    pub is_gattling: Option<bool>,
+    /// `IsChargeTurret` (S-0301 claim 16, S-0308 claim 5).
+    #[serde(default)]
+    pub is_charge_turret: Option<bool>,
+    /// `LandTargeting` (S-0308 rows 13, 18).
+    #[serde(default)]
+    pub land_targeting: Option<i32>,
+    /// `NavalTargeting` (S-0308 table N).
+    #[serde(default)]
+    pub naval_targeting: Option<i32>,
+    /// `Underwater` (S-0308 table N, S-0303 claim 21).
+    #[serde(default)]
+    pub underwater: Option<bool>,
+    /// `Organic` (S-0308 table N, S-0314 claim 10).
+    #[serde(default)]
+    pub organic: Option<bool>,
+    /// `Unnatural` (S-0308 table N).
+    #[serde(default)]
+    pub unnatural: Option<bool>,
+    /// `Naval` (S-0308 row 13, S-0303 claim 21, S-0312 claim 10).
+    #[serde(default)]
+    pub naval: Option<bool>,
+    /// `Ammo` A (S-0301 claim 10).
+    #[serde(default)]
+    pub ammo: Option<i32>,
+    /// `InitialAmmo` (S-0301 claim 10).
+    #[serde(default)]
+    pub initial_ammo: Option<i32>,
+    /// `Reload` L (S-0301 F3).
+    #[serde(default)]
+    pub reload: Option<i32>,
+    /// `EmptyReload` E (S-0301 F3).
+    #[serde(default)]
+    pub empty_reload: Option<i32>,
+    /// `ReloadIncrement` I (S-0301 F3).
+    #[serde(default)]
+    pub reload_increment: Option<i32>,
+    /// `PipWrap` W (S-0301 F3).
+    #[serde(default)]
+    pub pip_wrap: Option<i32>,
+    /// `ManualReload` (S-0301 claim 11).
+    #[serde(default)]
+    pub manual_reload: Option<bool>,
+    /// `DamageReducesReadiness` (S-0301 claim 17, S-0302 claim 10).
+    #[serde(default)]
+    pub damage_reduces_readiness: Option<bool>,
+    /// `ReadinessReductionMultiplier` κ (S-0302 F6), a single.
+    #[serde(default)]
+    pub readiness_reduction_multiplier: Option<Decimal>,
+    /// `AirRangeBonus`, cells (S-0307 claim 3; lepton form).
+    #[serde(default)]
+    pub air_range_bonus: Option<Decimal>,
+    /// `RadialFireSegments` (S-0306 claims 2, 7).
+    #[serde(default)]
+    pub radial_fire_segments: Option<i32>,
+    /// `TypeImmune` (S-0302 claim 8).
+    #[serde(default)]
+    pub type_immune: Option<bool>,
+    /// `ImmuneToPsionicWeapons` (S-0302 claim 8).
+    #[serde(default)]
+    pub immune_to_psionic_weapons: Option<bool>,
+    /// `ImmuneToPoison` (S-0302 claim 8).
+    #[serde(default)]
+    pub immune_to_poison: Option<bool>,
+    /// `ImmuneToPsionics` (S-0302 claim 10).
+    #[serde(default)]
+    pub immune_to_psionics: Option<bool>,
+    /// `DamageSelf` (S-0302 claim 8, S-0303 claim 9).
+    #[serde(default)]
+    pub damage_self: Option<bool>,
+    /// `DamageParticleSystems`: the particle-system names that are
+    /// eligible (behaviour *smoke*, S-0302 claim 13), in list order.
+    #[serde(default)]
+    pub damage_smoke_systems: Option<Vec<String>>,
+    /// `MaxDebris` X (S-0312 F1).
+    #[serde(default)]
+    pub max_debris: Option<i32>,
+    /// `MinDebris` Y (S-0312 F1).
+    #[serde(default)]
+    pub min_debris: Option<i32>,
+    /// `DebrisTypes` (S-0312 F1).
+    #[serde(default)]
+    pub debris_types: Option<Vec<String>>,
+    /// `DebrisMaximums` (S-0312 F1).
+    #[serde(default)]
+    pub debris_maximums: Option<Vec<i32>>,
+    /// `DebrisAnims` (S-0312 F1).
+    #[serde(default)]
+    pub debris_anims: Option<Vec<String>>,
+    /// `Explodes` (S-0312 Terms).
+    #[serde(default)]
+    pub explodes: Option<bool>,
+    /// `DeathWeapon` (S-0312 claim 6).
+    #[serde(default)]
+    pub death_weapon: Option<String>,
+    /// `DeathWeaponDamageModifier` φ (S-0312 F3), a single.
+    #[serde(default)]
+    pub death_weapon_damage_modifier: Option<Decimal>,
+    /// `Explosion`, animation names (S-0312 claims 9, 16, 19).
+    #[serde(default)]
+    pub explosion: Option<Vec<String>>,
+    /// `DestroyAnim`, animation names (S-0312 claims 9, 19).
+    #[serde(default)]
+    pub destroy_anim: Option<Vec<String>>,
+    /// `Trainable` (S-0311 claim 8).
+    #[serde(default)]
+    pub trainable: Option<bool>,
+    /// `DontScore` (S-0311 claim 7).
+    #[serde(default)]
+    pub dont_score: Option<bool>,
+    /// `SelfHealing` (S-0314 claim 9).
+    #[serde(default)]
+    pub self_healing: Option<bool>,
+    /// `CanPassiveAquire` (S-0309 claim 2).
+    #[serde(default)]
+    pub can_passive_aquire: Option<bool>,
+    /// `CanRetaliate` (S-0309 claim 18).
+    #[serde(default)]
+    pub can_retaliate: Option<bool>,
+    /// `DetectDisguise` (S-0309 table C).
+    #[serde(default)]
+    pub detect_disguise: Option<bool>,
+    /// `NoAutoFire` (S-0309 claim 5).
+    #[serde(default)]
+    pub no_auto_fire: Option<bool>,
+    /// `VHPScan`: `none`, `normal` or `strong` (S-0309 claim 14).
+    #[serde(default)]
+    pub vhp_scan: Option<String>,
+    /// `SpecialThreatValue` (S-0309 F4), a double.
+    #[serde(default)]
+    pub special_threat_value: Option<Decimal>,
+    /// The five threat coefficients, in the order own-effectiveness,
+    /// target-effectiveness, special-threat, strength, distance (S-0309
+    /// F4), doubles; an entry given as 0 already replaced by the importer
+    /// where S-0309 Edge cases say.
+    // spec: S-0309 Import mapping (five threat coefficients)
+    #[serde(default)]
+    pub coefficients: Option<[Decimal; 5]>,
+    /// `Insignificant` (S-0309 table C).
+    #[serde(default)]
+    pub insignificant: Option<bool>,
+    /// `ThreatPosed` (S-0309 Terms).
+    #[serde(default)]
+    pub threat_posed: Option<i32>,
+    /// `AirstrikeTeam` (S-0309 claim 24).
+    #[serde(default)]
+    pub airstrike_team: Option<i32>,
+    /// `Drainable` (S-0308 row 8).
+    #[serde(default)]
+    pub drainable: Option<bool>,
+    /// Art `PrimaryFireFLH` (S-0313).
+    #[serde(default)]
+    pub primary_fire_flh: Option<Flh>,
+    /// Art `SecondaryFireFLH` (S-0313).
+    #[serde(default)]
+    pub secondary_fire_flh: Option<Flh>,
+    /// Art `ElitePrimaryFireFLH` (S-0313).
+    #[serde(default)]
+    pub elite_primary_fire_flh: Option<Flh>,
+    /// Art `EliteSecondaryFireFLH` (S-0313).
+    #[serde(default)]
+    pub elite_secondary_fire_flh: Option<Flh>,
+    /// Art `Weapon`n`FLH`, by slot (S-0313).
+    #[serde(default)]
+    pub weapon_flh: Option<Vec<Flh>>,
+    /// Art `EliteWeapon`n`FLH`, by slot (S-0313).
+    #[serde(default)]
+    pub elite_weapon_flh: Option<Vec<Flh>>,
+    /// Art `TurretOffset` δ (S-0313).
+    #[serde(default)]
+    pub turret_offset: Option<i32>,
 }
 
 /// A building type's simulation fields.
@@ -860,6 +1454,61 @@ pub struct BuildingType {
     /// `GateCloseDelay`, game minutes: a gate's close delay (S-0215 F9).
     #[serde(default)]
     pub gate_close_delay: Option<Decimal>,
+    /// The combat fields shared with mobile types (M4).
+    #[serde(default)]
+    pub combat: CombatFields,
+    /// `BuildCat` is `Combat`: a defence building (S-0302 claim 5).
+    #[serde(default)]
+    pub defense: Option<bool>,
+    /// `EligibleForDelayKill` (S-0302 claim 16).
+    #[serde(default)]
+    pub eligible_for_delay_kill: Option<bool>,
+    /// `LeaveRubble` (S-0312 claim 20).
+    #[serde(default)]
+    pub leave_rubble: Option<bool>,
+    /// `Helipad` (S-0312 claim 17).
+    #[serde(default)]
+    pub helipad: Option<bool>,
+    /// `Artillary` (S-0309 claim 18).
+    #[serde(default)]
+    pub artillary: Option<bool>,
+    /// `MaxNumberOccupants` (S-0313 claim 6).
+    #[serde(default)]
+    pub max_number_occupants: Option<i32>,
+    /// `InfantryGainSelfHeal` (S-0314 claim 10).
+    #[serde(default)]
+    pub infantry_gain_self_heal: Option<i32>,
+    /// `UnitsGainSelfHeal` (S-0314 claim 10).
+    #[serde(default)]
+    pub units_gain_self_heal: Option<i32>,
+    /// Art `TargetCoordOffset`, leptons (S-0306 Terms, aim shift).
+    // spec: S-0306 Import mapping (an integer triple)
+    #[serde(default)]
+    pub target_coord_offset: Option<[i32; 3]>,
+    /// Art `Height` H_b (S-0306 claim 6 c).
+    #[serde(default)]
+    pub art_height: Option<i32>,
+    /// Art `TurretAnimIsVoxel` (S-0310 claim 4, S-0313 claim 8).
+    #[serde(default)]
+    pub turret_anim_is_voxel: Option<bool>,
+    /// Art `BarrelAnimIsVoxel` (S-0313 claim 8).
+    #[serde(default)]
+    pub barrel_anim_is_voxel: Option<bool>,
+    /// Art `PrimaryFirePixelOffset`, pixels (S-0313 claim 7).
+    #[serde(default)]
+    pub primary_fire_pixel_offset: Option<[i32; 2]>, // nocite: a pixel pair, our shape
+    /// Art `PrimaryFireDualOffset` (S-0313 claim 7).
+    #[serde(default)]
+    pub primary_fire_dual_offset: Option<bool>,
+    /// Art `TurretAnimX`, `TurretAnimY`, pixels (S-0313 claim 8).
+    #[serde(default)]
+    pub turret_anim_xy: Option<[i32; 2]>, // nocite: a pixel pair, our shape
+    /// Art `IsAnimDelayedFire` (S-0301 claim 14).
+    #[serde(default)]
+    pub is_anim_delayed_fire: Option<bool>,
+    /// Art `DelayedFireDelay`, ticks (S-0301 claim 14).
+    #[serde(default)]
+    pub delayed_fire_delay: Option<i32>,
 }
 
 /// An overlay type's simulation fields.
@@ -908,6 +1557,12 @@ pub struct OverlayType {
     /// `IsVeins`, the veins flag (S-0202 Terms).
     #[serde(default)]
     pub is_veins: Option<bool>,
+    /// `ChainReaction` (S-0303 claim 17).
+    #[serde(default)]
+    pub chain_reaction: Option<bool>,
+    /// `Explodes` (S-0303 claim 19).
+    #[serde(default)]
+    pub explodes: Option<bool>,
 }
 
 /// A terrain-object type's simulation fields.
@@ -923,9 +1578,18 @@ pub struct TerrainObjectType {
     /// `SpawnsTiberium`, the spawns-resources flag (S-0203 claim 2).
     #[serde(default)]
     pub spawns_tiberium: Option<bool>,
+    /// `Strength` (S-0302 claim 20).
+    #[serde(default)]
+    pub strength: Option<i32>,
+    /// `Armor`, the armour class (S-0305).
+    #[serde(default)]
+    pub armor: Option<ArmourClass>,
+    /// `Immune` (S-0302 claim 20).
+    #[serde(default)]
+    pub immune: Option<bool>,
 }
 
-/// A weapon's simulation fields read by M3 rules.
+/// A weapon's simulation fields.
 #[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct WeaponType {
@@ -950,9 +1614,75 @@ pub struct WeaponType {
     /// `RadLevel`.
     #[serde(default)]
     pub rad_level: Option<i32>,
+    /// `ROF` R, ticks (S-0301).
+    #[serde(default)]
+    pub rof: Option<i32>,
+    /// `Burst` B (S-0301 claim 4).
+    #[serde(default)]
+    pub burst: Option<i32>,
+    /// `Speed`, the imported speed field v (S-0306 Import mapping).
+    #[serde(default)]
+    pub speed: Option<i32>,
+    /// `Range`, cells (S-0307 claim 1; lepton form).
+    #[serde(default)]
+    pub range: Option<Decimal>,
+    /// `MinimumRange`, cells (S-0307 claim 1).
+    #[serde(default)]
+    pub minimum_range: Option<Decimal>,
+    /// `CellRangefinding` (S-0307 claim 8).
+    #[serde(default)]
+    pub cell_rangefinding: Option<bool>,
+    /// `IsSonic` (S-0301 claim 5, S-0302 claim 2).
+    #[serde(default)]
+    pub is_sonic: Option<bool>,
+    /// `UseSparkParticles` (S-0301 claim 5).
+    #[serde(default)]
+    pub use_spark_particles: Option<bool>,
+    /// `UseFireParticles` (S-0301 claim 5, S-0302 claim 2).
+    #[serde(default)]
+    pub use_fire_particles: Option<bool>,
+    /// `IsRailgun` (S-0301 claim 5).
+    #[serde(default)]
+    pub is_railgun: Option<bool>,
+    /// `IsMagBeam` (S-0301 claim 5).
+    #[serde(default)]
+    pub is_mag_beam: Option<bool>,
+    /// `Temporal` (S-0301 Terms).
+    #[serde(default)]
+    pub temporal: Option<bool>,
+    /// `Spawner` (S-0301 claim 9).
+    #[serde(default)]
+    pub spawner: Option<bool>,
+    /// `DiskLaser` (S-0301 claim 8).
+    #[serde(default)]
+    pub disk_laser: Option<bool>,
+    /// `DecloakToFire` (S-0301 claim 12).
+    #[serde(default)]
+    pub decloak_to_fire: Option<bool>,
+    /// `Lobber` (S-0306 claim 6 a).
+    #[serde(default)]
+    pub lobber: Option<bool>,
+    /// `NeverUse` (S-0308 claim 4).
+    #[serde(default)]
+    pub never_use: Option<bool>,
+    /// `DrainWeapon` (S-0308 row 8).
+    #[serde(default)]
+    pub drain_weapon: Option<bool>,
+    /// `FireWhileMoving` (S-0310 claim 7).
+    #[serde(default)]
+    pub fire_while_moving: Option<bool>,
+    /// `Suicide` (S-0312 Terms).
+    #[serde(default)]
+    pub suicide: Option<bool>,
+    /// `Supress` (S-0309 claim 14).
+    #[serde(default)]
+    pub supress: Option<bool>,
+    /// `FireOnce` (S-0309 claim 21).
+    #[serde(default)]
+    pub fire_once: Option<bool>,
 }
 
-/// A projectile's simulation fields read by M3 rules.
+/// A projectile's simulation fields.
 #[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct ProjectileType {
@@ -962,9 +1692,87 @@ pub struct ProjectileType {
     /// `AG`.
     #[serde(default)]
     pub ag: Option<bool>,
+    /// `AA` (S-0306 claim 23).
+    #[serde(default)]
+    pub aa: Option<bool>,
+    /// `Arcing` (S-0306 Terms).
+    #[serde(default)]
+    pub arcing: Option<bool>,
+    /// `Vertical` (S-0306 Terms).
+    #[serde(default)]
+    pub vertical: Option<bool>,
+    /// `Inviso` (S-0306 Terms).
+    #[serde(default)]
+    pub inviso: Option<bool>,
+    /// `Inaccurate` (S-0306 claim 4).
+    #[serde(default)]
+    pub inaccurate: Option<bool>,
+    /// `FlakScatter` (S-0306 claim 4).
+    #[serde(default)]
+    pub flak_scatter: Option<bool>,
+    /// `Dropping` (S-0306 claim 5).
+    #[serde(default)]
+    pub dropping: Option<bool>,
+    /// `Airburst` (S-0306 claim 21).
+    #[serde(default)]
+    pub airburst: Option<bool>,
+    /// `VeryHigh` (S-0306 claim 15).
+    #[serde(default)]
+    pub very_high: Option<bool>,
+    /// `Level` (S-0306 T1).
+    #[serde(default)]
+    pub level: Option<bool>,
+    /// `Floater` (S-0306 Terms).
+    #[serde(default)]
+    pub floater: Option<bool>,
+    /// `SubjectToCliffs` (S-0306 claim 22).
+    #[serde(default)]
+    pub subject_to_cliffs: Option<bool>,
+    /// `SubjectToWalls` (S-0306 claim 22).
+    #[serde(default)]
+    pub subject_to_walls: Option<bool>,
+    /// `SubjectToElevation` (S-0307 claim 6).
+    #[serde(default)]
+    pub subject_to_elevation: Option<bool>,
+    /// `Ranged` (S-0306 Terms).
+    #[serde(default)]
+    pub ranged: Option<bool>,
+    /// `Degenerates` (S-0306 claim 18).
+    #[serde(default)]
+    pub degenerates: Option<bool>,
+    /// `Scalable` (S-0306 claim 16).
+    #[serde(default)]
+    pub scalable: Option<bool>,
+    /// `Acceleration` α (S-0306 claims 11, 12).
+    #[serde(default)]
+    pub acceleration: Option<i32>,
+    /// `CourseLockDuration` κ (S-0306 claim 12).
+    #[serde(default)]
+    pub course_lock_duration: Option<i32>,
+    /// `Arm`, ticks (S-0306 claim 9).
+    #[serde(default)]
+    pub arm: Option<i32>,
+    /// `DetonationAltitude`, leptons (S-0306 claim 11).
+    #[serde(default)]
+    pub detonation_altitude: Option<i32>,
+    /// `Cluster` n_c (S-0306 claim 21).
+    #[serde(default)]
+    pub cluster: Option<i32>,
+    /// `AirburstWeapon` (S-0306 claim 21).
+    #[serde(default)]
+    pub airburst_weapon: Option<String>,
+    /// `Trailer`, an animation name (S-0306 claim 16).
+    #[serde(default)]
+    pub trailer: Option<String>,
+    /// `SpawnDelay`, ticks (S-0306 claim 16).
+    #[serde(default)]
+    pub spawn_delay: Option<i32>,
+    /// Art `Voxel`: drawn as a voxel model (S-0306 claim 6 b).
+    #[serde(default)]
+    pub voxel: Option<bool>,
 }
 
-/// A warhead's simulation fields read by M3 rules.
+/// A warhead's simulation fields.
 #[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct WarheadType {
@@ -989,4 +1797,86 @@ pub struct WarheadType {
     /// `InfDeath`.
     #[serde(default)]
     pub inf_death: Option<i32>,
+    /// `Verses`: the eleven versus values in class-index order (S-0003
+    /// claim 13, S-0305), each written as the exact decimal of its double.
+    #[serde(default)]
+    pub verses: Option<Vec<Decimal>>,
+    /// `CellSpread` S, cells (S-0303), a single.
+    #[serde(default)]
+    pub cell_spread: Option<Decimal>,
+    /// `PercentAtMax` p (S-0303), a single.
+    #[serde(default)]
+    pub percent_at_max: Option<Decimal>,
+    /// `ProneDamage` P (S-0302 F2), a double.
+    #[serde(default)]
+    pub prone_damage: Option<Decimal>,
+    /// `PenetratesBunker` (S-0302 claim 8).
+    #[serde(default)]
+    pub penetrates_bunker: Option<bool>,
+    /// `Radiation` (S-0302 claim 8).
+    #[serde(default)]
+    pub radiation: Option<bool>,
+    /// `PsychicDamage` (S-0302 claim 8).
+    #[serde(default)]
+    pub psychic_damage: Option<bool>,
+    /// `Poison` (S-0302 claim 8).
+    #[serde(default)]
+    pub poison: Option<bool>,
+    /// `AffectsAllies` (S-0302 claim 8).
+    #[serde(default)]
+    pub affects_allies: Option<bool>,
+    /// `Psychedelic`: the berserk warhead (S-0302 claim 10).
+    #[serde(default)]
+    pub psychedelic: Option<bool>,
+    /// `Sparky` (S-0302 claim 13).
+    #[serde(default)]
+    pub sparky: Option<bool>,
+    /// `CausesDelayKill` (S-0302 claim 16).
+    #[serde(default)]
+    pub causes_delay_kill: Option<bool>,
+    /// `DelayKillFrames` F (S-0302 F7).
+    #[serde(default)]
+    pub delay_kill_frames: Option<i32>,
+    /// `DelayKillAtMax` α (S-0302 F7), a single.
+    #[serde(default)]
+    pub delay_kill_at_max: Option<Decimal>,
+    /// `WallAbsoluteDestroyer` (S-0303 claim 16).
+    #[serde(default)]
+    pub wall_absolute_destroyer: Option<bool>,
+    /// `Tiberium`, the resource flag (S-0303 claim 17).
+    #[serde(default)]
+    pub tiberium: Option<bool>,
+    /// `Rocker` (S-0303 claim 20).
+    #[serde(default)]
+    pub rocker: Option<bool>,
+    /// `Particle`, a particle-system name (S-0303 claim 20).
+    #[serde(default)]
+    pub particle: Option<String>,
+    /// `Conventional` (S-0303 F5).
+    #[serde(default)]
+    pub conventional: Option<bool>,
+    /// `EMEffect` (S-0303 F5, S-0306 claim 20 c).
+    #[serde(default)]
+    pub em_effect: Option<bool>,
+    /// `AnimList`, animation names (S-0303 F5).
+    #[serde(default)]
+    pub anim_list: Option<Vec<String>>,
+    /// `MaxDebris` X (S-0303 F6).
+    #[serde(default)]
+    pub max_debris: Option<i32>,
+    /// `MinDebris` Y (S-0303 F6).
+    #[serde(default)]
+    pub min_debris: Option<i32>,
+    /// `DebrisTypes` (S-0303 F6).
+    #[serde(default)]
+    pub debris_types: Option<Vec<String>>,
+    /// `DebrisMaximums` (S-0303 F6).
+    #[serde(default)]
+    pub debris_maximums: Option<Vec<i32>>,
+    /// `Airstrike` (S-0308 row 6).
+    #[serde(default)]
+    pub airstrike: Option<bool>,
+    /// `IsLocomotor` (S-0308 row 7).
+    #[serde(default)]
+    pub is_locomotor: Option<bool>,
 }

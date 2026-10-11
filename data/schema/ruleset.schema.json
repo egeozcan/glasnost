@@ -238,6 +238,66 @@
         "weapon"
       ]
     },
+    "ArmourClass": {
+      "description": "The eleven armour classes in class-index order (S-0305 claim 1).",
+      "oneOf": [
+        {
+          "description": "*none* (0), also the class of a type no layer has given one.",
+          "type": "string",
+          "const": "none"
+        },
+        {
+          "description": "*flak* (1).",
+          "type": "string",
+          "const": "flak"
+        },
+        {
+          "description": "*plate* (2).",
+          "type": "string",
+          "const": "plate"
+        },
+        {
+          "description": "*light* (3).",
+          "type": "string",
+          "const": "light"
+        },
+        {
+          "description": "*medium* (4).",
+          "type": "string",
+          "const": "medium"
+        },
+        {
+          "description": "*heavy* (5).",
+          "type": "string",
+          "const": "heavy"
+        },
+        {
+          "description": "*wood* (6).",
+          "type": "string",
+          "const": "wood"
+        },
+        {
+          "description": "*steel* (7).",
+          "type": "string",
+          "const": "steel"
+        },
+        {
+          "description": "*concrete* (8).",
+          "type": "string",
+          "const": "concrete"
+        },
+        {
+          "description": "*special 1* (9).",
+          "type": "string",
+          "const": "special_1"
+        },
+        {
+          "description": "*special 2* (10).",
+          "type": "string",
+          "const": "special_2"
+        }
+      ]
+    },
     "Art": {
       "description": "Art looked up for a type (S-0007), for one theater. Render data.",
       "type": "object",
@@ -405,6 +465,31 @@
           ],
           "default": null
         },
+        "art_height": {
+          "description": "Art `Height` H_b (S-0306 claim 6 c).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "artillary": {
+          "description": "`Artillary` (S-0309 claim 18).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "barrel_anim_is_voxel": {
+          "description": "Art `BarrelAnimIsVoxel` (S-0313 claim 8).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
         "bib": {
           "description": "`Bib` (S-0204 Terms).",
           "type": [
@@ -469,6 +554,10 @@
           ],
           "default": null
         },
+        "combat": {
+          "description": "The combat fields shared with mobile types (M4).",
+          "$ref": "#/$defs/CombatFields"
+        },
         "construction_yard": {
           "description": "`ConstructionYard`.",
           "type": [
@@ -485,6 +574,23 @@
           ],
           "default": null
         },
+        "defense": {
+          "description": "`BuildCat` is `Combat`: a defence building (S-0302 claim 5).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "delayed_fire_delay": {
+          "description": "Art `DelayedFireDelay`, ticks (S-0301 claim 14).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
         "deploy_time": {
           "description": "`DeployTime`, game minutes: a gate's door time (S-0215 F9).",
           "anyOf": [
@@ -495,6 +601,14 @@
               "type": "null"
             }
           ]
+        },
+        "eligible_for_delay_kill": {
+          "description": "`EligibleForDelayKill` (S-0302 claim 16).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
         },
         "emp_cannon": {
           "description": "`EMPulseCannon`.",
@@ -569,6 +683,14 @@
           ],
           "default": null
         },
+        "helipad": {
+          "description": "`Helipad` (S-0312 claim 17).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
         "hospital": {
           "description": "`Hospital`.",
           "type": [
@@ -593,8 +715,25 @@
           ],
           "default": null
         },
+        "infantry_gain_self_heal": {
+          "description": "`InfantryGainSelfHeal` (S-0314 claim 10).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
         "invisible_in_game": {
           "description": "`InvisibleInGame`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "is_anim_delayed_fire": {
+          "description": "Art `IsAnimDelayedFire` (S-0301 claim 14).",
           "type": [
             "boolean",
             "null"
@@ -609,12 +748,29 @@
           ],
           "default": null
         },
+        "leave_rubble": {
+          "description": "`LeaveRubble` (S-0312 claim 20).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
         "legal_target": {
           "description": "`LegalTarget`.",
           "type": [
             "boolean",
             "null"
           ],
+          "default": null
+        },
+        "max_number_occupants": {
+          "description": "`MaxNumberOccupants` (S-0313 claim 6).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
           "default": null
         },
         "naval": {
@@ -649,6 +805,28 @@
             "null"
           ],
           "default": null
+        },
+        "primary_fire_dual_offset": {
+          "description": "Art `PrimaryFireDualOffset` (S-0313 claim 7).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "primary_fire_pixel_offset": {
+          "description": "Art `PrimaryFirePixelOffset`, pixels (S-0313 claim 7).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "maxItems": 2,
+          "minItems": 2
         },
         "repairable": {
           "description": "`Repairable`.",
@@ -708,6 +886,20 @@
           ],
           "default": null
         },
+        "target_coord_offset": {
+          "description": "Art `TargetCoordOffset`, leptons (S-0306 Terms, aim shift).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
         "tech_level": {
           "description": "`TechLevel`.",
           "type": [
@@ -733,6 +925,28 @@
           ],
           "default": null
         },
+        "turret_anim_is_voxel": {
+          "description": "Art `TurretAnimIsVoxel` (S-0310 claim 4, S-0313 claim 8).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "turret_anim_xy": {
+          "description": "Art `TurretAnimX`, `TurretAnimY`, pixels (S-0313 claim 8).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "maxItems": 2,
+          "minItems": 2
+        },
         "undeploys_into": {
           "description": "`UndeploysInto`.",
           "type": [
@@ -755,6 +969,15 @@
             "boolean",
             "null"
           ],
+          "default": null
+        },
+        "units_gain_self_heal": {
+          "description": "`UnitsGainSelfHeal` (S-0314 claim 10).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
           "default": null
         },
         "weapons_factory": {
@@ -795,10 +1018,655 @@
         "hsv"
       ]
     },
+    "CombatFields": {
+      "description": "Combat fields that infantry, vehicle, aircraft and building types share\n(M4). Each field's spec is in its doc comment.",
+      "type": "object",
+      "properties": {
+        "air_range_bonus": {
+          "description": "`AirRangeBonus`, cells (S-0307 claim 3; lepton form).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "airstrike_team": {
+          "description": "`AirstrikeTeam` (S-0309 claim 24).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "ammo": {
+          "description": "`Ammo` A (S-0301 claim 10).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "armor": {
+          "description": "`Armor`, the armour class (S-0305; the importer resolves the word).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ArmourClass"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "can_passive_aquire": {
+          "description": "`CanPassiveAquire` (S-0309 claim 2).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "can_retaliate": {
+          "description": "`CanRetaliate` (S-0309 claim 18).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "coefficients": {
+          "description": "The five threat coefficients, in the order own-effectiveness,\ntarget-effectiveness, special-threat, strength, distance (S-0309\nF4), doubles; an entry given as 0 already replaced by the importer\nwhere S-0309 Edge cases say.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/Decimal"
+          },
+          "maxItems": 5,
+          "minItems": 5
+        },
+        "damage_reduces_readiness": {
+          "description": "`DamageReducesReadiness` (S-0301 claim 17, S-0302 claim 10).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "damage_self": {
+          "description": "`DamageSelf` (S-0302 claim 8, S-0303 claim 9).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "damage_smoke_systems": {
+          "description": "`DamageParticleSystems`: the particle-system names that are\neligible (behaviour *smoke*, S-0302 claim 13), in list order.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "string"
+          }
+        },
+        "death_weapon": {
+          "description": "`DeathWeapon` (S-0312 claim 6).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "death_weapon_damage_modifier": {
+          "description": "`DeathWeaponDamageModifier` φ (S-0312 F3), a single.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "debris_anims": {
+          "description": "`DebrisAnims` (S-0312 F1).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "string"
+          }
+        },
+        "debris_maximums": {
+          "description": "`DebrisMaximums` (S-0312 F1).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "debris_types": {
+          "description": "`DebrisTypes` (S-0312 F1).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "string"
+          }
+        },
+        "destroy_anim": {
+          "description": "`DestroyAnim`, animation names (S-0312 claims 9, 19).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "string"
+          }
+        },
+        "detect_disguise": {
+          "description": "`DetectDisguise` (S-0309 table C).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "dont_score": {
+          "description": "`DontScore` (S-0311 claim 7).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "drainable": {
+          "description": "`Drainable` (S-0308 row 8).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "elite_primary_fire_flh": {
+          "description": "Art `ElitePrimaryFireFLH` (S-0313).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "elite_secondary_fire_flh": {
+          "description": "Art `EliteSecondaryFireFLH` (S-0313).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "elite_weapon_flh": {
+          "description": "Art `EliteWeapon`n`FLH`, by slot (S-0313).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            },
+            "maxItems": 3,
+            "minItems": 3
+          }
+        },
+        "elite_weapon_slots": {
+          "description": "The elite slots of a multi-weapon type (S-0308 claim 1).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "string"
+          }
+        },
+        "empty_reload": {
+          "description": "`EmptyReload` E (S-0301 F3).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "explodes": {
+          "description": "`Explodes` (S-0312 Terms).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "explosion": {
+          "description": "`Explosion`, animation names (S-0312 claims 9, 16, 19).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "string"
+          }
+        },
+        "immune_to_poison": {
+          "description": "`ImmuneToPoison` (S-0302 claim 8).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "immune_to_psionic_weapons": {
+          "description": "`ImmuneToPsionicWeapons` (S-0302 claim 8).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "immune_to_psionics": {
+          "description": "`ImmuneToPsionics` (S-0302 claim 10).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "initial_ammo": {
+          "description": "`InitialAmmo` (S-0301 claim 10).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "insignificant": {
+          "description": "`Insignificant` (S-0309 table C).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "is_charge_turret": {
+          "description": "`IsChargeTurret` (S-0301 claim 16, S-0308 claim 5).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "is_gattling": {
+          "description": "`IsGattling` (S-0308 claim 7).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "land_targeting": {
+          "description": "`LandTargeting` (S-0308 rows 13, 18).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "manual_reload": {
+          "description": "`ManualReload` (S-0301 claim 11).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "max_debris": {
+          "description": "`MaxDebris` X (S-0312 F1).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "min_debris": {
+          "description": "`MinDebris` Y (S-0312 F1).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "naval": {
+          "description": "`Naval` (S-0308 row 13, S-0303 claim 21, S-0312 claim 10).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "naval_targeting": {
+          "description": "`NavalTargeting` (S-0308 table N).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "no_auto_fire": {
+          "description": "`NoAutoFire` (S-0309 claim 5).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "organic": {
+          "description": "`Organic` (S-0308 table N, S-0314 claim 10).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "pip_wrap": {
+          "description": "`PipWrap` W (S-0301 F3).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "primary_fire_flh": {
+          "description": "Art `PrimaryFireFLH` (S-0313).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "radial_fire_segments": {
+          "description": "`RadialFireSegments` (S-0306 claims 2, 7).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "readiness_reduction_multiplier": {
+          "description": "`ReadinessReductionMultiplier` κ (S-0302 F6), a single.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "reload": {
+          "description": "`Reload` L (S-0301 F3).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "reload_increment": {
+          "description": "`ReloadIncrement` I (S-0301 F3).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "secondary_fire_flh": {
+          "description": "Art `SecondaryFireFLH` (S-0313).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "self_healing": {
+          "description": "`SelfHealing` (S-0314 claim 9).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "special_threat_value": {
+          "description": "`SpecialThreatValue` (S-0309 F4), a double.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "threat_posed": {
+          "description": "`ThreatPosed` (S-0309 Terms).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "trainable": {
+          "description": "`Trainable` (S-0311 claim 8).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "turret_offset": {
+          "description": "Art `TurretOffset` δ (S-0313).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "type_immune": {
+          "description": "`TypeImmune` (S-0302 claim 8).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "underwater": {
+          "description": "`Underwater` (S-0308 table N, S-0303 claim 21).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "unnatural": {
+          "description": "`Unnatural` (S-0308 table N).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "vhp_scan": {
+          "description": "`VHPScan`: `none`, `normal` or `strong` (S-0309 claim 14).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "weapon_flh": {
+          "description": "Art `Weapon`n`FLH`, by slot (S-0313).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            },
+            "maxItems": 3,
+            "minItems": 3
+          }
+        },
+        "weapon_slots": {
+          "description": "The weapon slots 0 … 17 of a multi-weapon type as `Weapon1` …\n`Weapon18` fill them (S-0308 claim 1), the empty string for a slot\nwith no weapon; absent: slots 0 and 1 come from `primary` and\n`secondary`.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
     "Country": {
       "description": "A country's simulation fields.",
       "type": "object",
       "properties": {
+        "armor_aircraft_mult": {
+          "description": "`ArmorAircraftMult` (S-0302 F2), a single.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "armor_buildings_mult": {
+          "description": "`ArmorBuildingsMult` (S-0302 F2), a single.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "armor_defenses_mult": {
+          "description": "`ArmorDefensesMult` (S-0302 F2), a single.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "armor_infantry_mult": {
+          "description": "`ArmorInfantryMult` (S-0302 F2), a single.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "armor_units_mult": {
+          "description": "`ArmorUnitsMult` (S-0302 F2), a single.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "firepower": {
+          "description": "`Firepower` φ_c (S-0302 claim 3), a double.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "multiplay_passive": {
           "description": "`MultiplayPassive` (S-0009, S-0214).",
           "type": [
@@ -814,6 +1682,17 @@
             "null"
           ],
           "default": null
+        },
+        "rof": {
+          "description": "`ROF` κ (S-0301 claim 3), a double.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "speed_infantry_mult": {
           "description": "`SpeedInfantryMult` (S-0208 F5), a single.",
@@ -837,6 +1716,39 @@
             }
           ]
         },
+        "veteran_aircraft": {
+          "description": "`VeteranAircraft`: aircraft type keys (S-0311 claim 11).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "string"
+          }
+        },
+        "veteran_infantry": {
+          "description": "`VeteranInfantry`: infantry type keys (S-0311 claim 11).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "string"
+          }
+        },
+        "veteran_units": {
+          "description": "`VeteranUnits`: vehicle type keys (S-0311 claim 11).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "string"
+          }
+        },
         "wall_owner": {
           "description": "The wall-owner flag (S-0210 claim 14, Import mapping).",
           "type": [
@@ -852,6 +1764,43 @@
       "description": "A decimal written as text, `-?digits[.digits][e±digits][%]`, whose value\nis the one S-0003 gives that text (claims 6 and 7).",
       "type": "string"
     },
+    "DifficultyRow": {
+      "description": "One difficulty row's fields (S-0301 claim 3, S-0302 claim 3, S-0309\nclaim 25 part i).",
+      "type": "object",
+      "properties": {
+        "destroy_walls": {
+          "description": "`DestroyWalls`, the destroy-walls flag.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "firepower": {
+          "description": "`FirePower`, the row's firepower factor φᵣ (a double).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "rof": {
+          "description": "`ROF`, the row's rate-of-fire factor ℓ (a double).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
     "Empty": {
       "description": "An empty object.",
       "type": "object",
@@ -861,6 +1810,14 @@
       "description": "Game-wide values (keys of `[General]`, `[AI]`, `[IQ]`, `[AudioVisual]`,\nthe combat-damage section and `[MultiplayerDialogSettings]`).",
       "type": "object",
       "properties": {
+        "allied_crew": {
+          "description": "`[General] AlliedCrew`, an infantry type key (S-0312 F4).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
         "allied_gate_one": {
           "description": "`GDIGateOne`: the first Allied gate type, a building key (S-0112).",
           "type": [
@@ -871,6 +1828,70 @@
         },
         "allied_gate_two": {
           "description": "`GDIGateTwo`: the second Allied gate type (S-0112).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "allied_survivor_divisor": {
+          "description": "`[General] AlliedSurvivorDivisor` (S-0312 F5).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "allied_wall_transparency": {
+          "description": "`[WallModel] AlliedWallTransparency` (S-0306 claim 22).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "ammo_crate_damage": {
+          "description": "`AmmoCrateDamage` (S-0303 claim 19).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "ballistic_scatter": {
+          "description": "`BallisticScatter`, cells (S-0306 claim 4; lepton form of S-0307 claim 1).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "barrel_debris": {
+          "description": "`[General] BarrelDebris`, animation names (S-0303 claim 19).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "string"
+          }
+        },
+        "barrel_explode": {
+          "description": "`[General] BarrelExplode`, an animation name (S-0303 claim 19).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "barrel_particle": {
+          "description": "`[General] BarrelParticle`, a particle-system name (S-0303 claim 19).",
           "type": [
             "string",
             "null"
@@ -897,6 +1918,54 @@
           "format": "int32",
           "default": null
         },
+        "bridge_strength": {
+          "description": "`BridgeStrength` (S-0303 claim 18).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "bunker_damage_multiplier": {
+          "description": "`BunkerDamageMultiplier` M_b (S-0302 F1), a single.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "bunker_rof_multiplier": {
+          "description": "`BunkerROFMultiplier` b (S-0301 claim 7), a single.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "bunker_weapon_range_bonus": {
+          "description": "`BunkerWeaponRangeBonus`, cells (S-0307 claim 5).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "c4_warhead": {
+          "description": "`C4Warhead`, the demolition warhead (S-0302 claims 1 and 20).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
         "cliff_back_impassability": {
           "description": "`CliffBackImpassability` (S-0211 claim 8).",
           "type": [
@@ -916,6 +1985,18 @@
               "type": "null"
             }
           ]
+        },
+        "coefficient_defaults": {
+          "description": "The five `[General] …CoefficientDefault` values, in the order\nown-effectiveness, target-effectiveness, special-threat, strength,\ndistance (S-0309 Import mapping), doubles.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/Decimal"
+          },
+          "maxItems": 5,
+          "minItems": 5
         },
         "condition_red": {
           "description": "`[AudioVisual] ConditionRed` (S-0107 F5).",
@@ -939,6 +2020,17 @@
             }
           ]
         },
+        "crew_escape": {
+          "description": "`[General] CrewEscape` (S-0312 claim 13), a double.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "crush_range": {
           "description": "`Crush`, cells (S-0210 F2).",
           "anyOf": [
@@ -950,6 +2042,95 @@
             }
           ]
         },
+        "crush_warhead": {
+          "description": "`CrushWarhead` (S-0303 claim 9).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "damage_fire_types": {
+          "description": "`[General] DamageFireTypes`, animation names (S-0302 claim 13).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "string"
+          }
+        },
+        "death_weapon": {
+          "description": "`DeathWeapon`, the game-wide death weapon (S-0312 claim 6).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "disguise_detection_percent": {
+          "description": "`[General] DisabledDisguiseDetectionPercent` (S-0309 claim 25 part g).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "elevation_bonus_cap": {
+          "description": "`[ElevationModel] ElevationBonusCap` c (S-0307 F2), a double.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "elevation_increment": {
+          "description": "`[ElevationModel] ElevationIncrement` I (S-0307 F2).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "elevation_increment_bonus": {
+          "description": "`[ElevationModel] ElevationIncrementBonus` b (S-0307 F2), a double.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "enemy_house_threat_bonus": {
+          "description": "`[General] EnemyHouseThreatBonus` B (S-0309 F4), a double.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "engineer": {
+          "description": "`[General] Engineer` (S-0312 claim 18).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
         "engineer_capture_level": {
           "description": "`EngineerCaptureLevel` (S-0214 F2).",
           "anyOf": [
@@ -960,6 +2141,26 @@
               "type": "null"
             }
           ]
+        },
+        "fire_supress": {
+          "description": "`FireSupress`, cells (S-0309 F6; lepton form).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "gravity": {
+          "description": "`[AudioVisual] Gravity` (S-0306 Terms).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
         },
         "guard_area_targeting_delay": {
           "description": "`GuardAreaTargetingDelay`, ticks (S-0206 claim 9, S-0215 F6).",
@@ -981,6 +2182,37 @@
             }
           ]
         },
+        "harvester_unit": {
+          "description": "`[General] HarvesterUnit`: vehicle type keys (S-0303 claim 9).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "string"
+          }
+        },
+        "i_repair_rate": {
+          "description": "`[General] IRepairRate` r_i (S-0314 F1).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "i_repair_step": {
+          "description": "`[General] IRepairStep` (S-0314 claim 4).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
         "idle_action_frequency": {
           "description": "`[AudioVisual] IdleActionFrequency`, game minutes (S-0107 F4).",
           "anyOf": [
@@ -991,6 +2223,22 @@
               "type": "null"
             }
           ]
+        },
+        "infantry_explode": {
+          "description": "`[General] InfantryExplode`, an animation name (S-0302 claim 15).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "ion_cannon_warhead": {
+          "description": "`IonCannonWarhead` (S-0303 claim 18).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
         },
         "iq_auto_crush": {
           "description": "`[IQ] AutoCrush` (S-0210 claim 11; the original's computer houses only).",
@@ -1019,6 +2267,15 @@
           "format": "int32",
           "default": null
         },
+        "iq_repair_sell": {
+          "description": "`[IQ] RepairSell` (S-0314 claim 8).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
         "iq_scatter": {
           "description": "`[IQ] Scatter` (S-0209 claim 11).",
           "type": [
@@ -1026,6 +2283,14 @@
             "null"
           ],
           "format": "int32",
+          "default": null
+        },
+        "lightning_warhead": {
+          "description": "`[General] LightningWarhead` (S-0303 F5).",
+          "type": [
+            "string",
+            "null"
+          ],
           "default": null
         },
         "lobby_game_speed": {
@@ -1037,8 +2302,48 @@
           "format": "int32",
           "default": null
         },
+        "max_damage": {
+          "description": "`MaxDamage` (S-0302 claim 6).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
         "maximum_cheer_rate": {
           "description": "`MaximumCheerRate`, ticks (S-0213 claim 19).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "metallic_debris": {
+          "description": "`[General] MetallicDebris`, animation names (S-0303 F6, S-0312 F1).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "string"
+          }
+        },
+        "missile_rot_var": {
+          "description": "`[General] MissileROTVar` m (S-0306 claim 13), a double.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "missile_safety_altitude": {
+          "description": "`[General] MissileSafetyAltitude`, leptons (S-0306 claim 17).",
           "type": [
             "integer",
             "null"
@@ -1057,6 +2362,57 @@
         },
         "normal_targeting_delay": {
           "description": "`NormalTargetingDelay`, ticks (S-0215 F6).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "occupy_damage_multiplier": {
+          "description": "`OccupyDamageMultiplier` M_g (S-0302 F1), a single.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "occupy_rof_multiplier": {
+          "description": "`OccupyROFMultiplier` m (S-0301 claim 7), a single.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "occupy_weapon_range": {
+          "description": "`OccupyWeaponRange`, cells (S-0307 claim 4).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "open_topped_damage_multiplier": {
+          "description": "`OpenToppedDamageMultiplier` M_t (S-0302 F1), a single.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "open_topped_range_bonus": {
+          "description": "`OpenToppedRangeBonus`, cells (S-0307 claim 5).",
           "type": [
             "integer",
             "null"
@@ -1099,6 +2455,92 @@
           ],
           "default": null
         },
+        "repair_percent": {
+          "description": "`[General] RepairPercent` (S-0314 F2), a double.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "repair_rate": {
+          "description": "`[General] RepairRate` r_b (S-0314 F1), a double.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "repair_step": {
+          "description": "`[General] RepairStep` (S-0314 claim 4).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "self_heal_infantry_amount": {
+          "description": "`[General] SelfHealInfantryAmount` (S-0314 claim 10).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "self_heal_infantry_frames": {
+          "description": "`[General] SelfHealInfantryFrames`, ticks (S-0314 claim 10).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "self_heal_unit_amount": {
+          "description": "`[General] SelfHealUnitAmount` (S-0314 claim 10).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "self_heal_unit_frames": {
+          "description": "`[General] SelfHealUnitFrames`, ticks (S-0314 claim 10).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "ship_sinking_weight": {
+          "description": "`[General] ShipSinkingWeight` (S-0312 claim 10).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "soviet_crew": {
+          "description": "`[General] SovietCrew` (S-0312 F4).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
         "soviet_gate_one": {
           "description": "`NodGateOne`: the first Soviet gate type (S-0112).",
           "type": [
@@ -1113,6 +2555,60 @@
             "string",
             "null"
           ],
+          "default": null
+        },
+        "soviet_survivor_divisor": {
+          "description": "`[General] SovietSurvivorDivisor` (S-0312 F5).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "splash_list": {
+          "description": "`SplashList`, animation names (S-0303 F5).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "string"
+          }
+        },
+        "technician": {
+          "description": "`[General] Technician` (S-0312 F4).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "third_crew": {
+          "description": "`[General] ThirdCrew` (S-0312 F4).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "third_survivor_divisor": {
+          "description": "`[General] ThirdSurvivorDivisor` (S-0312 F5).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "threat_per_occupant": {
+          "description": "`[General] ThreatPerOccupant` (S-0309 Terms, *threat value*).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
           "default": null
         },
         "tracked_downhill": {
@@ -1137,6 +2633,83 @@
             }
           ]
         },
+        "u_repair_rate": {
+          "description": "`[General] URepairRate` r_u (S-0314 F1).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "veteran_armor": {
+          "description": "`[General] VeteranArmor` (S-0302 F2), a double.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "veteran_cap": {
+          "description": "`[General] VeteranCap` (S-0311 F3), a double.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "veteran_combat": {
+          "description": "`[General] VeteranCombat` (S-0302 F1), a double.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "veteran_ratio": {
+          "description": "`[General] VeteranRatio` (S-0311 F3), a double.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "veteran_rof": {
+          "description": "`[General] VeteranROF` v (S-0301 claim 6), a double.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "veteran_sight": {
+          "description": "`[General] VeteranSight` (S-0311 F4), a double.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "veteran_speed": {
           "description": "`VeteranSpeed` (S-0207 claim 2, S-0208 F5).",
           "anyOf": [
@@ -1150,6 +2723,22 @@
         },
         "wall_tower": {
           "description": "`WallTower`: the wall tower type (S-0112).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "weapon_nullify_anim": {
+          "description": "`[General] WeaponNullifyAnim` (S-0303 claim 15).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "weather_con_bolt_explosion": {
+          "description": "`[General] WeatherConBoltExplosion` (S-0303 F5).",
           "type": [
             "string",
             "null"
@@ -1817,6 +3406,14 @@
           ],
           "default": null
         },
+        "chain_reaction": {
+          "description": "`ChainReaction` (S-0303 claim 17).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
         "crate": {
           "description": "`Crate`.",
           "type": [
@@ -1840,6 +3437,14 @@
             "null"
           ],
           "format": "int32",
+          "default": null
+        },
+        "explodes": {
+          "description": "`Explodes` (S-0303 claim 19).",
+          "type": [
+            "boolean",
+            "null"
+          ],
           "default": null
         },
         "has_art": {
@@ -1927,11 +3532,152 @@
       "additionalProperties": false
     },
     "ProjectileType": {
-      "description": "A projectile's simulation fields read by M3 rules.",
+      "description": "A projectile's simulation fields.",
       "type": "object",
       "properties": {
+        "aa": {
+          "description": "`AA` (S-0306 claim 23).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "acceleration": {
+          "description": "`Acceleration` α (S-0306 claims 11, 12).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
         "ag": {
           "description": "`AG`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "airburst": {
+          "description": "`Airburst` (S-0306 claim 21).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "airburst_weapon": {
+          "description": "`AirburstWeapon` (S-0306 claim 21).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "arcing": {
+          "description": "`Arcing` (S-0306 Terms).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "arm": {
+          "description": "`Arm`, ticks (S-0306 claim 9).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "cluster": {
+          "description": "`Cluster` n_c (S-0306 claim 21).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "course_lock_duration": {
+          "description": "`CourseLockDuration` κ (S-0306 claim 12).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "degenerates": {
+          "description": "`Degenerates` (S-0306 claim 18).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "detonation_altitude": {
+          "description": "`DetonationAltitude`, leptons (S-0306 claim 11).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "dropping": {
+          "description": "`Dropping` (S-0306 claim 5).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "flak_scatter": {
+          "description": "`FlakScatter` (S-0306 claim 4).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "floater": {
+          "description": "`Floater` (S-0306 Terms).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "inaccurate": {
+          "description": "`Inaccurate` (S-0306 claim 4).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "inviso": {
+          "description": "`Inviso` (S-0306 Terms).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "level": {
+          "description": "`Level` (S-0306 T1).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "ranged": {
+          "description": "`Ranged` (S-0306 Terms).",
           "type": [
             "boolean",
             "null"
@@ -1946,6 +3692,79 @@
           ],
           "format": "int32",
           "default": null
+        },
+        "scalable": {
+          "description": "`Scalable` (S-0306 claim 16).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "spawn_delay": {
+          "description": "`SpawnDelay`, ticks (S-0306 claim 16).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "subject_to_cliffs": {
+          "description": "`SubjectToCliffs` (S-0306 claim 22).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "subject_to_elevation": {
+          "description": "`SubjectToElevation` (S-0307 claim 6).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "subject_to_walls": {
+          "description": "`SubjectToWalls` (S-0306 claim 22).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "trailer": {
+          "description": "`Trailer`, an animation name (S-0306 claim 16).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "vertical": {
+          "description": "`Vertical` (S-0306 Terms).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "very_high": {
+          "description": "`VeryHigh` (S-0306 claim 15).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "voxel": {
+          "description": "Art `Voxel`: drawn as a voxel model (S-0306 claim 6 b).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
         }
       },
       "additionalProperties": false
@@ -1954,8 +3773,28 @@
       "description": "The quirk switches. Absent fields take the original's behaviour.",
       "type": "object",
       "properties": {
+        "aim_origin_without_target": {
+          "description": "A shot fired with no current target aims at the world origin.",
+          "type": "boolean",
+          "default": true
+        },
         "air_death_fall_generic_follow_up": {
           "description": "The falling air death has the generic completion follow-up.",
+          "type": "boolean",
+          "default": true
+        },
+        "airborne_mutation_hit_raised": {
+          "description": "An airborne infantry unit hit by a warhead of infantry-death kind 9 takes 0, which the defences raise to 1.",
+          "type": "boolean",
+          "default": true
+        },
+        "area_damage_per_foundation_cell": {
+          "description": "A building takes one hit for each scanned foundation cell within the spread radius.",
+          "type": "boolean",
+          "default": true
+        },
+        "barrel_probe_top_left_only": {
+          "description": "An exploding building probes for barrels from its top-left cell only.",
           "type": "boolean",
           "default": true
         },
@@ -1964,8 +3803,28 @@
           "type": "boolean",
           "default": true
         },
+        "building_ammo_fast_rearm": {
+          "description": "A building holding more than 1 round rearms in 1 tick after a shot, over every other kind of delay.",
+          "type": "boolean",
+          "default": true
+        },
         "building_cell_attack_no_weapon": {
           "description": "A building with no weapon in its first slot gets attack over a cell whose generic result is attack (row BC3); off: nothing.",
+          "type": "boolean",
+          "default": true
+        },
+        "building_fire_point_shift_fixed": {
+          "description": "A building's turret displacement does not turn with its aim.",
+          "type": "boolean",
+          "default": true
+        },
+        "building_pitch_term": {
+          "description": "A straight shot at a building pitches by the building's art height term.",
+          "type": "boolean",
+          "default": true
+        },
+        "building_smudge_discarded_draws": {
+          "description": "A destroyed building takes up to two ranged draws whose results are not used.",
           "type": "boolean",
           "default": true
         },
@@ -2019,6 +3878,11 @@
           "type": "boolean",
           "default": true
         },
+        "crash_death_weapon_twice": {
+          "description": "An exploding aircraft fires its death weapon at death and again at the crash.",
+          "type": "boolean",
+          "default": true
+        },
         "crush_slowdown_counts_self": {
           "description": "The driving vehicle counts itself as a vehicle in the cell it drives into.",
           "type": "boolean",
@@ -2051,6 +3915,31 @@
         },
         "crusher_overlay_index0_clear": {
           "description": "A crusher reads obstacle outcomes as clear in cells whose overlay has registration index 0.",
+          "type": "boolean",
+          "default": true
+        },
+        "curtain_nullifies_small_detonation": {
+          "description": "A small detonation that finds a curtain-protected object hits only protected objects.",
+          "type": "boolean",
+          "default": true
+        },
+        "death_weapon_unplaced_projectile": {
+          "description": "The death weapon's projectile tests use its unplaced default position.",
+          "type": "boolean",
+          "default": true
+        },
+        "defeated_enemy_house_kept": {
+          "description": "A defeated enemy house stays the enemy house until an anger value next changes.",
+          "type": "boolean",
+          "default": true
+        },
+        "delay_kill_credited_again": {
+          "description": "Every hit that changes the health of a building in a delayed-kill countdown credits its destruction again.",
+          "type": "boolean",
+          "default": true
+        },
+        "delay_kill_whole_cell_spread": {
+          "description": "The delayed-kill countdown divides by the spread's whole cells, so a spread below one cell gives 0.",
           "type": "boolean",
           "default": true
         },
@@ -2109,6 +3998,26 @@
           "type": "boolean",
           "default": true
         },
+        "elevation_deck_cell_level": {
+          "description": "Elevation levels add 4 for every cell marked as carrying a bridge deck.",
+          "type": "boolean",
+          "default": true
+        },
+        "elite_occupant_skips_occupy_weapon": {
+          "description": "An elite occupant without an elite occupying weapon fires its own primary.",
+          "type": "boolean",
+          "default": true
+        },
+        "expected_damage_firer_armour": {
+          "description": "The expected damage divides by the armour factor for the firer's kind and the firer's armour multiplier.",
+          "type": "boolean",
+          "default": true
+        },
+        "experience_cost_victim_house": {
+          "description": "The recipient's actual cost is computed for the destroyed object's house.",
+          "type": "boolean",
+          "default": true
+        },
         "fire_frame_by_stance": {
           "description": "The fire frame is chosen by stance and weapon, not by the playing kind.",
           "type": "boolean",
@@ -2129,13 +4038,33 @@
           "type": "boolean",
           "default": true
         },
+        "flying_candidates_unfiltered": {
+          "description": "A tracked flying object is not left out for being the source object or a listed harvester.",
+          "type": "boolean",
+          "default": true
+        },
+        "flying_search_sectors": {
+          "description": "The flying-object search reads only the sectors of F7 and can miss a flying object in range.",
+          "type": "boolean",
+          "default": true
+        },
         "follow_index_by_place": {
           "description": "The placed vehicle numbered i takes the follow value numbered i, not its own entry's; off: each vehicle takes its own entry's value.",
           "type": "boolean",
           "default": true
         },
+        "fraidycat_ammo_panic_ignores_fearless": {
+          "description": "A fraidycat that fires its last round panics even when fearless.",
+          "type": "boolean",
+          "default": true
+        },
         "fraidycat_fear_ignores_fearless": {
           "description": "A fearless fraidycat still gets its fear set by a known attacker.",
+          "type": "boolean",
+          "default": true
+        },
+        "garrison_range_drops_air_bonus": {
+          "description": "A garrisoned building's range replaces the weapon range and its air bonus.",
           "type": "boolean",
           "default": true
         },
@@ -2149,6 +4078,16 @@
           "type": "boolean",
           "default": true
         },
+        "gattling_air_test_slot_one": {
+          "description": "A gattling type's anti-air test reads the weapon in slot 1.",
+          "type": "boolean",
+          "default": true
+        },
+        "ground_detonation_misses_aircraft": {
+          "description": "Tracked flying objects are considered only by a detonation above the terrain at the centre of its cell.",
+          "type": "boolean",
+          "default": true
+        },
         "hijack_truce_harvester_check": {
           "description": "The harvester-truce exception of row I15 never applies.",
           "type": "boolean",
@@ -2159,6 +4098,21 @@
           "type": "boolean",
           "default": true
         },
+        "hunt_distance_in_leptons": {
+          "description": "The map-wide search measures ground-layer distance in leptons.",
+          "type": "boolean",
+          "default": true
+        },
+        "hunt_ground_layer_only": {
+          "description": "The map-wide search considers only ground-layer objects besides aircraft.",
+          "type": "boolean",
+          "default": true
+        },
+        "hunt_ignores_distributed_fire": {
+          "description": "A distributed-fire searcher picks nothing in a map-wide search.",
+          "type": "boolean",
+          "default": true
+        },
         "infantry_facing_sector_skew": {
           "description": "Infantry facing groups are skewed 1024 facing units counter-clockwise.",
           "type": "boolean",
@@ -2166,6 +4120,16 @@
         },
         "infantry_fixed_turn_rate": {
           "description": "Infantry bodies turn at the fixed rate 127.",
+          "type": "boolean",
+          "default": true
+        },
+        "mind_controlled_passengers_cell_choice": {
+          "description": "Passengers of a mind-controlled open-topped transport take the cell's last object only.",
+          "type": "boolean",
+          "default": true
+        },
+        "missile_turn_wrap": {
+          "description": "The steering turn step uses only the residue mod 256 and is a signed 16-bit value.",
           "type": "boolean",
           "default": true
         },
@@ -2194,6 +4158,11 @@
           "type": "boolean",
           "default": true
         },
+        "negative_self_heal_counts": {
+          "description": "Negative self-heal counts are added without a floor.",
+          "type": "boolean",
+          "default": true
+        },
         "observer_position_handoff": {
           "description": "An observer's drawn position is handed to the next player needing one.",
           "type": "boolean",
@@ -2214,6 +4183,16 @@
           "type": "boolean",
           "default": true
         },
+        "occupant_experience_next_in_turn": {
+          "description": "A garrison's experience goes to the occupant whose turn to fire it is.",
+          "type": "boolean",
+          "default": true
+        },
+        "occupant_experience_untrained": {
+          "description": "A garrison's firing occupant gains experience whatever its trainable flag.",
+          "type": "boolean",
+          "default": true
+        },
         "omnicrusher_needs_crusher": {
           "description": "The omni-crusher flag alone makes no vehicle a crusher.",
           "type": "boolean",
@@ -2229,6 +4208,11 @@
           "type": "boolean",
           "default": true
         },
+        "origin_as_missing_target_point": {
+          "description": "The world origin stands for no target point in both directions.",
+          "type": "boolean",
+          "default": true
+        },
         "override_suspends_queued": {
           "description": "An override suspends the queued behaviour when one is queued.",
           "type": "boolean",
@@ -2241,6 +4225,11 @@
         },
         "passability_wheel_column": {
           "description": "The passability category judges every class by the wheel column.",
+          "type": "boolean",
+          "default": true
+        },
+        "passenger_weapon_needs_secondary": {
+          "description": "A passenger weapon index is used only by a firer with weapons in both slots.",
           "type": "boolean",
           "default": true
         },
@@ -2304,8 +4293,28 @@
           "type": "boolean",
           "default": true
         },
+        "range_target_on_deck": {
+          "description": "A floor-bound target in a high-bridge cell is measured at deck height even below the bridge.",
+          "type": "boolean",
+          "default": true
+        },
         "ranged_draw_half_span": {
           "description": "A ranged draw whose bounds differ by exactly 2147483647 takes no value and returns the lower bound plus 2147483648, wrapped.",
+          "type": "boolean",
+          "default": true
+        },
+        "readiness_from_defended_damage": {
+          "description": "Readiness loss uses the amount after the defences and before the versus value, even when a later row stops the hit.",
+          "type": "boolean",
+          "default": true
+        },
+        "readiness_heal_over_max": {
+          "description": "A healing hit raises the ammunition of a damage-reduces-readiness type with no upper limit.",
+          "type": "boolean",
+          "default": true
+        },
+        "redirected_shot_aim": {
+          "description": "An area-fire or spray shot is launched towards the firer's own target.",
           "type": "boolean",
           "default": true
         },
@@ -2339,8 +4348,33 @@
           "type": "boolean",
           "default": true
         },
+        "rubble_overlay_by_index": {
+          "description": "Rubble is the overlay type at a fixed registration index.",
+          "type": "boolean",
+          "default": true
+        },
+        "search_one_object_per_cell": {
+          "description": "A search scores only the offered object of each visited cell.",
+          "type": "boolean",
+          "default": true
+        },
+        "secondary_wins_against_air": {
+          "description": "The secondary is chosen against an airborne target whenever it is anti-air.",
+          "type": "boolean",
+          "default": true
+        },
         "set_facing_keeps_target": {
           "description": "Setting a facing at once to its current interpolated value during a turn ends the turn at its target.",
+          "type": "boolean",
+          "default": true
+        },
+        "shared_wave_slot": {
+          "description": "Sonic waves and magnetic-beam waves share one effect slot per firer.",
+          "type": "boolean",
+          "default": true
+        },
+        "shot_distance_wrap": {
+          "description": "The shot-speed distance's sum of squares wraps in 32-bit arithmetic.",
           "type": "boolean",
           "default": true
         },
@@ -2364,6 +4398,11 @@
           "type": "boolean",
           "default": true
         },
+        "spread_ring_eleven": {
+          "description": "A scan radius of 11 uses the original's ring-11 list (one cell twice, some cells missing).",
+          "type": "boolean",
+          "default": true
+        },
         "stale_fill_tiles": {
           "description": "The fill uses the base tiles of the theater loaded before.",
           "type": "boolean",
@@ -2381,6 +4420,11 @@
         },
         "stationary_friendly_exactly_three": {
           "description": "Stationary friendly needs exactly three allied infantry without movement in progress.",
+          "type": "boolean",
+          "default": true
+        },
+        "stored_target_point": {
+          "description": "Arrival, pass-by, same-cell and in-flight line-of-fire rows use the point stored at placement.",
           "type": "boolean",
           "default": true
         },
@@ -2454,6 +4498,11 @@
           "type": "boolean",
           "default": true
         },
+        "undemolishable_heal_is_damage": {
+          "description": "The minimum of 1 on an undemolishable building applies to every hit no row stops, so healing hits damage it.",
+          "type": "boolean",
+          "default": true
+        },
         "unset_role_range": {
           "description": "An unset role's range still counts tile numbers from its unset start.",
           "type": "boolean",
@@ -2469,6 +4518,21 @@
           "type": "boolean",
           "default": true
         },
+        "uphill_arc_45": {
+          "description": "Arcing shots at a higher impact point are launched at 45 degrees.",
+          "type": "boolean",
+          "default": true
+        },
+        "vertical_speed_uncapped": {
+          "description": "A vertical projectile's speed grows by its acceleration without a cap.",
+          "type": "boolean",
+          "default": true
+        },
+        "voxel_turret_exact_aim": {
+          "description": "A building with a voxel turret must point exactly at its target.",
+          "type": "boolean",
+          "default": true
+        },
         "walker_overshoot": {
           "description": "A fast walker can step past its walking target and swing back.",
           "type": "boolean",
@@ -2476,6 +4540,41 @@
         },
         "walker_targets_allied_wall": {
           "description": "A walker that meets an allied wall with no object listed takes the wall as its target.",
+          "type": "boolean",
+          "default": true
+        },
+        "wall_cell_over_same_ring_object": {
+          "description": "A wall candidate wins over a candidate object later in the same ring.",
+          "type": "boolean",
+          "default": true
+        },
+        "wall_hit_minus_one_is_absolute": {
+          "description": "A wall hit of exactly -1 is absolute.",
+          "type": "boolean",
+          "default": true
+        },
+        "yellow_state_at_half": {
+          "description": "The yellow damage state is reported at half the strength, whatever the yellow ratio.",
+          "type": "boolean",
+          "default": true
+        },
+        "zero_distance_arc": {
+          "description": "An arcing shot at a point exactly below the fire point uses F4's zero-distance rule.",
+          "type": "boolean",
+          "default": true
+        },
+        "zero_kill_value_caps": {
+          "description": "A kill value of 0 against an actual cost of 0 sets experience to the cap.",
+          "type": "boolean",
+          "default": true
+        },
+        "zero_score_rejected": {
+          "description": "A final threat score of exactly 0 rejects the candidate.",
+          "type": "boolean",
+          "default": true
+        },
+        "zero_speed_launch": {
+          "description": "A start speed of 0 launches at a horizontal speed of 100.",
           "type": "boolean",
           "default": true
         }
@@ -2579,6 +4678,13 @@
             "$ref": "#/$defs/Country"
           }
         },
+        "difficulty": {
+          "description": "The difficulty rows by our name (`easy`, `normal`, `difficult`;\nS-0302 Terms, glossary *difficulty skill block*).",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/DifficultyRow"
+          }
+        },
         "general": {
           "description": "Game-wide values.",
           "$ref": "#/$defs/General"
@@ -2646,6 +4752,25 @@
       "description": "A terrain-object type's simulation fields.",
       "type": "object",
       "properties": {
+        "armor": {
+          "description": "`Armor`, the armour class (S-0305).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ArmourClass"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "immune": {
+          "description": "`Immune` (S-0302 claim 20).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
         "snow_occupation_bits": {
           "description": "`SnowOccupationBits`.",
           "type": [
@@ -2661,6 +4786,15 @@
             "boolean",
             "null"
           ],
+          "default": null
+        },
+        "strength": {
+          "description": "`Strength` (S-0302 claim 20).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
           "default": null
         },
         "temperate_occupation_bits": {
@@ -2762,8 +4896,30 @@
           ],
           "default": null
         },
+        "burst_delay": {
+          "description": "`BurstDelay0` … `BurstDelay3` (S-0301 claim 4), ticks; −1: none.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "maxItems": 4,
+          "minItems": 4
+        },
         "c4": {
           "description": "`C4`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "carries_crate": {
+          "description": "`CarriesCrate` (S-0312 claim 14).",
           "type": [
             "boolean",
             "null"
@@ -2786,6 +4942,10 @@
           ],
           "default": null
         },
+        "combat": {
+          "description": "The combat fields shared with buildings (M4).",
+          "$ref": "#/$defs/CombatFields"
+        },
         "cost": {
           "description": "`Cost`, credits (S-0009 claim 45).",
           "type": [
@@ -2795,8 +4955,24 @@
           "format": "int32",
           "default": null
         },
+        "crashable": {
+          "description": "`Crashable` (S-0312 claims 12, 15).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
         "crawls": {
           "description": "Art `Crawls` (S-0107 Import mapping).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "crewed": {
+          "description": "`Crewed` (S-0312 claim 13, F4).",
           "type": [
             "boolean",
             "null"
@@ -2854,6 +5030,23 @@
           ],
           "default": null
         },
+        "deploy_fire_weapon": {
+          "description": "`DeployFireWeapon` (S-0308 claims 8, 9).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "deploy_to_fire": {
+          "description": "`DeployToFire` (S-0310 claim 9).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
         "deployed_crushable": {
           "description": "`DeployedCrushable`.",
           "type": [
@@ -2893,6 +5086,14 @@
           "items": {
             "type": "string"
           }
+        },
+        "elite_occupy_weapon": {
+          "description": "`EliteOccupyWeapon` (S-0308 claim 13).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
         },
         "elite_primary": {
           "description": "`ElitePrimary`.",
@@ -2940,6 +5141,29 @@
           "maxItems": 4,
           "minItems": 4
         },
+        "firing_frames": {
+          "description": "Art `FiringFrames` F (S-0301 claim 13).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "firing_sync_frames": {
+          "description": "Art `FiringSyncFrame0`, `FiringSyncFrame1` (S-0301 claim 13).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "maxItems": 2,
+          "minItems": 2
+        },
         "fraidycat": {
           "description": "`Fraidycat`.",
           "type": [
@@ -2959,6 +5183,14 @@
             }
           ]
         },
+        "gunner": {
+          "description": "`Gunner` (S-0308 claim 6).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
         "harvester": {
           "description": "`Harvester`.",
           "type": [
@@ -2973,6 +5205,23 @@
             "boolean",
             "null"
           ],
+          "default": null
+        },
+        "hunter_seeker": {
+          "description": "`HunterSeeker` (S-0301 claim 9).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "ifv_mode": {
+          "description": "`IFVMode` (S-0308 claim 6).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
           "default": null
         },
         "immune": {
@@ -3017,6 +5266,14 @@
         },
         "ivan": {
           "description": "`Ivan`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "jump_jet_turn": {
+          "description": "`JumpJetTurn` (S-0310 claim 8).",
           "type": [
             "boolean",
             "null"
@@ -3078,6 +5335,22 @@
             }
           ]
         },
+        "missile_spawn": {
+          "description": "`MissileSpawn` (S-0311 claim 8).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "mobile_fire": {
+          "description": "`MobileFire` (S-0301 claim 11, S-0310 claim 7).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
         "move_to_shroud": {
           "description": "`MoveToShroud`.",
           "type": [
@@ -3132,6 +5405,14 @@
           ],
           "default": null
         },
+        "occupy_weapon": {
+          "description": "`OccupyWeapon` (S-0308 claim 13).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
         "omni_crush_resistant": {
           "description": "`OmniCrushResistant`.",
           "type": [
@@ -3154,6 +5435,15 @@
             "boolean",
             "null"
           ],
+          "default": null
+        },
+        "open_transport_weapon": {
+          "description": "`OpenTransportWeapon` (S-0308 claims 8, 10).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
           "default": null
         },
         "opportunity_fire": {
@@ -3325,6 +5615,15 @@
           ],
           "default": null
         },
+        "suppression_threshold": {
+          "description": "`SuppressionThreshold` (S-0315 claim 6).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
         "tech_level": {
           "description": "`TechLevel` (S-0009 claim 45).",
           "type": [
@@ -3427,6 +5726,17 @@
             "null"
           ],
           "default": null
+        },
+        "weight": {
+          "description": "`Weight` (S-0312 claim 10).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "additionalProperties": false
@@ -3448,11 +5758,116 @@
       "additionalProperties": false
     },
     "WarheadType": {
-      "description": "A warhead's simulation fields read by M3 rules.",
+      "description": "A warhead's simulation fields.",
       "type": "object",
       "properties": {
+        "affects_allies": {
+          "description": "`AffectsAllies` (S-0302 claim 8).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "airstrike": {
+          "description": "`Airstrike` (S-0308 row 6).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "anim_list": {
+          "description": "`AnimList`, animation names (S-0303 F5).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "string"
+          }
+        },
+        "causes_delay_kill": {
+          "description": "`CausesDelayKill` (S-0302 claim 16).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "cell_spread": {
+          "description": "`CellSpread` S, cells (S-0303), a single.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "conventional": {
+          "description": "`Conventional` (S-0303 F5).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "debris_maximums": {
+          "description": "`DebrisMaximums` (S-0303 F6).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "debris_types": {
+          "description": "`DebrisTypes` (S-0303 F6).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "string"
+          }
+        },
+        "delay_kill_at_max": {
+          "description": "`DelayKillAtMax` α (S-0302 F7), a single.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "delay_kill_frames": {
+          "description": "`DelayKillFrames` F (S-0302 F7).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
         "electric_assault": {
           "description": "`ElectricAssault`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "em_effect": {
+          "description": "`EMEffect` (S-0303 F5, S-0306 claim 20 c).",
           "type": [
             "boolean",
             "null"
@@ -3476,8 +5891,112 @@
           "format": "int32",
           "default": null
         },
+        "is_locomotor": {
+          "description": "`IsLocomotor` (S-0308 row 7).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
         "ivan_bomb": {
           "description": "`IvanBomb`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "max_debris": {
+          "description": "`MaxDebris` X (S-0303 F6).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "min_debris": {
+          "description": "`MinDebris` Y (S-0303 F6).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "particle": {
+          "description": "`Particle`, a particle-system name (S-0303 claim 20).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "penetrates_bunker": {
+          "description": "`PenetratesBunker` (S-0302 claim 8).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "percent_at_max": {
+          "description": "`PercentAtMax` p (S-0303), a single.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "poison": {
+          "description": "`Poison` (S-0302 claim 8).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "prone_damage": {
+          "description": "`ProneDamage` P (S-0302 F2), a double.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "psychedelic": {
+          "description": "`Psychedelic`: the berserk warhead (S-0302 claim 10).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "psychic_damage": {
+          "description": "`PsychicDamage` (S-0302 claim 8).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "radiation": {
+          "description": "`Radiation` (S-0302 claim 8).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "rocker": {
+          "description": "`Rocker` (S-0303 claim 20).",
           "type": [
             "boolean",
             "null"
@@ -3492,8 +6011,42 @@
           ],
           "default": null
         },
+        "sparky": {
+          "description": "`Sparky` (S-0302 claim 13).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "tiberium": {
+          "description": "`Tiberium`, the resource flag (S-0303 claim 17).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "verses": {
+          "description": "`Verses`: the eleven versus values in class-index order (S-0003\nclaim 13, S-0305), each written as the exact decimal of its double.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/Decimal"
+          }
+        },
         "wall": {
           "description": "`Wall`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "wall_absolute_destroyer": {
+          "description": "`WallAbsoluteDestroyer` (S-0303 claim 16).",
           "type": [
             "boolean",
             "null"
@@ -3553,7 +6106,7 @@
       "additionalProperties": false
     },
     "WeaponType": {
-      "description": "A weapon's simulation fields read by M3 rules.",
+      "description": "A weapon's simulation fields.",
       "type": "object",
       "properties": {
         "ambient_damage": {
@@ -3573,6 +6126,23 @@
           ],
           "default": null
         },
+        "burst": {
+          "description": "`Burst` B (S-0301 claim 4).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "cell_rangefinding": {
+          "description": "`CellRangefinding` (S-0307 claim 8).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
         "damage": {
           "description": "`Damage`.",
           "type": [
@@ -3580,6 +6150,97 @@
             "null"
           ],
           "format": "int32",
+          "default": null
+        },
+        "decloak_to_fire": {
+          "description": "`DecloakToFire` (S-0301 claim 12).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "disk_laser": {
+          "description": "`DiskLaser` (S-0301 claim 8).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "drain_weapon": {
+          "description": "`DrainWeapon` (S-0308 row 8).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "fire_once": {
+          "description": "`FireOnce` (S-0309 claim 21).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "fire_while_moving": {
+          "description": "`FireWhileMoving` (S-0310 claim 7).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "is_mag_beam": {
+          "description": "`IsMagBeam` (S-0301 claim 5).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "is_railgun": {
+          "description": "`IsRailgun` (S-0301 claim 5).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "is_sonic": {
+          "description": "`IsSonic` (S-0301 claim 5, S-0302 claim 2).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "lobber": {
+          "description": "`Lobber` (S-0306 claim 6 a).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "minimum_range": {
+          "description": "`MinimumRange`, cells (S-0307 claim 1).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "never_use": {
+          "description": "`NeverUse` (S-0308 claim 4).",
+          "type": [
+            "boolean",
+            "null"
+          ],
           "default": null
         },
         "omni_fire": {
@@ -3605,6 +6266,83 @@
             "null"
           ],
           "format": "int32",
+          "default": null
+        },
+        "range": {
+          "description": "`Range`, cells (S-0307 claim 1; lepton form).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "rof": {
+          "description": "`ROF` R, ticks (S-0301).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "spawner": {
+          "description": "`Spawner` (S-0301 claim 9).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "speed": {
+          "description": "`Speed`, the imported speed field v (S-0306 Import mapping).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "suicide": {
+          "description": "`Suicide` (S-0312 Terms).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "supress": {
+          "description": "`Supress` (S-0309 claim 14).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "temporal": {
+          "description": "`Temporal` (S-0301 Terms).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "use_fire_particles": {
+          "description": "`UseFireParticles` (S-0301 claim 5, S-0302 claim 2).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "use_spark_particles": {
+          "description": "`UseSparkParticles` (S-0301 claim 5).",
+          "type": [
+            "boolean",
+            "null"
+          ],
           "default": null
         },
         "warhead": {

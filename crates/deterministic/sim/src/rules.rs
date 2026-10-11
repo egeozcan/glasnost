@@ -165,6 +165,10 @@ pub struct UnitRules {
     pub visceroid: bool,
     /// The raw record, for fields read only by input rules (S-0214).
     pub raw: UnitType,
+    /// Combat fields (M4).
+    pub combat: crate::combat::data::TypeCombat,
+    /// Vehicle-only combat fields (M4; defaults for other kinds).
+    pub vehicle: crate::combat::data::VehicleCombat,
 }
 
 impl UnitRules {
@@ -200,6 +204,10 @@ pub struct BuildingRules {
     pub gate_door_time: i32,
     /// A gate's close delay Tc in ticks (S-0215 F9).
     pub gate_close_delay: i32,
+    /// Combat fields (M4).
+    pub combat: crate::combat::data::TypeCombat,
+    /// Building-only combat fields (M4).
+    pub building: crate::combat::data::BuildingCombat,
 }
 
 /// An overlay type's resolved fields.
@@ -233,6 +241,12 @@ pub struct OverlayRules {
     pub has_art: bool,
     /// The veins flag (S-0202 Terms).
     pub veins: bool,
+    /// Armour class index (S-0305 claims 3 to 5).
+    pub armour: usize,
+    /// Chain-reaction flag (S-0303 claim 17).
+    pub chain_reaction: bool,
+    /// Explodes flag (S-0303 claim 19).
+    pub explodes: bool,
 }
 
 /// A terrain-object type's resolved fields.
@@ -244,6 +258,12 @@ pub struct TerrainRules {
     pub occupation: (i32, i32),
     /// The spawns-resources flag (S-0203 claim 2).
     pub spawns_resources: bool,
+    /// Strength (S-0302 claim 20).
+    pub strength: i32,
+    /// Armour class index (S-0305).
+    pub armour: usize,
+    /// Immune (S-0302 claim 20).
+    pub immune: bool,
 }
 
 /// One behaviour's properties (S-0215 claims 6, 16 to 21).
@@ -597,6 +617,8 @@ pub struct SimRules {
     pub animations: Vec<AnimRules>,
     /// The ruleset's `sim_rules_hash`.
     pub hash: String,
+    /// The combat rules (M4).
+    pub combat: crate::combat::data::CombatRules,
 }
 
 fn dec(d: &Option<Decimal>, mode: Rounding) -> Option<F64> {
@@ -802,6 +824,19 @@ impl SimRules {
                 }
             })
             .collect();
+        // spec: S-0306 Constants (gravity absent: 3 leptons per tick²)
+        let gravity = g.gravity.unwrap_or(3);
+        let (weapons_c, projectiles_c, warheads_c, weapon_index) =
+            crate::combat::data::tables(&s.weapons, &s.projectiles, &s.warheads, gravity, mode);
+        // spec: S-0309 Import mapping (the game-wide default coefficients; engine default 0)
+        let coefficient_defaults: [F64; 5] = g
+            .coefficient_defaults
+            .as_ref()
+            .map_or([F64::ZERO; 5], |v| v.clone().map(|d| d.value(mode)));
+        let cx = CombatCx {
+            weapons: &weapon_index,
+            coefficients: coefficient_defaults,
+        };
         let mut names = BTreeMap::new();
         let units = |kind: Kind,
                      map: &BTreeMap<String, UnitType>,
@@ -818,6 +853,7 @@ impl SimRules {
                         &quirks,
                         mode,
                         &country_names,
+                        &cx,
                     )
                 })
                 .collect::<Vec<_>>()
@@ -835,6 +871,7 @@ impl SimRules {
                     s.buildings.get(n).cloned().unwrap_or_default(),
                     &quirks,
                     mode,
+                    &cx,
                 )
             })
             .collect();
@@ -857,6 +894,11 @@ impl SimRules {
                     ),
                     // spec: S-0203 Import mapping (SpawnsTiberium absent: no)
                     spawns_resources: t.spawns_tiberium.unwrap_or(false),
+                    // spec: S-0302 Import mapping (Strength absent: 0)
+                    strength: t.strength.unwrap_or(0),
+                    // spec: S-0305 claim 2 (a type no layer has given the field: class none)
+                    armour: t.armor.unwrap_or_default().index(),
+                    immune: t.immune.unwrap_or(false),
                 }
             })
             .collect();
@@ -901,7 +943,16 @@ impl SimRules {
                 }
             })
             .collect();
+        let combat = crate::combat::data::combat_rules(
+            s,
+            (weapons_c, projectiles_c, warheads_c, weapon_index),
+            gravity,
+            &names,
+            &country_names,
+            mode,
+        );
         Self {
+            combat,
             quirks,
             mode,
             general,
@@ -965,6 +1016,13 @@ impl SimRules {
     }
 }
 
+/// What the resolution of a type's combat fields needs from the rules.
+struct CombatCx<'a> {
+    weapons: &'a BTreeMap<String, u32>,
+    coefficients: [F64; 5], // spec: S-0309 F4 (five coefficients)
+}
+
+#[allow(clippy::too_many_arguments)]
 fn unit_rules(
     kind: Kind,
     name: &str,
@@ -972,6 +1030,7 @@ fn unit_rules(
     q: &Quirks,
     mode: Rounding,
     countries: &[String],
+    cx: &CombatCx<'_>,
 ) -> UnitRules {
     let b = |x: Option<bool>| x.unwrap_or(false);
     // spec: S-0211 claim 3 (infantry start as foot and aircraft as winged before their sections)
@@ -1080,12 +1139,109 @@ fn unit_rules(
             .collect(),
         // spec: S-0009 Import mapping (SmallVisceroid, LargeVisceroid: either one on; absent: no)
         visceroid: u.small_visceroid.unwrap_or(false) || u.large_visceroid.unwrap_or(false),
+        combat: unit_combat(kind, &u, cx, mode),
+        vehicle: crate::combat::data::vehicle_combat(&u, mode),
         raw: u,
     }
 }
 
-fn building_rules(name: &str, bt: BuildingType, q: &Quirks, mode: Rounding) -> BuildingRules {
+/// A mobile type's combat fields (S-0308 claim 1 for the slots).
+fn unit_combat(
+    kind: Kind,
+    u: &UnitType,
+    cx: &CombatCx<'_>,
+    mode: Rounding,
+) -> crate::combat::data::TypeCombat {
+    let mut c = crate::combat::data::type_combat(
+        &u.combat,
+        [
+            u.primary.as_ref(),
+            u.secondary.as_ref(),
+            u.elite_primary.as_ref(),
+            u.elite_secondary.as_ref(),
+        ],
+        // spec: S-0308 Import mapping (TurretCount absent: 0)
+        u.turret_count.unwrap_or(0),
+        kind == Kind::Infantry,
+        (&u.veteran_abilities, &u.elite_abilities),
+        cx.coefficients,
+        cx.weapons,
+        mode,
+    );
+    let w = |n: &Option<String>| n.as_ref().and_then(|n| cx.weapons.get(n).copied());
+    c.gunner = u.gunner.unwrap_or(false);
+    // spec: S-0308 Constants (mode index absent 0, passenger weapon index absent −1, deploy weapon index absent 1)
+    c.ifv_mode = u.ifv_mode.unwrap_or(0);
+    c.open_transport_weapon = u.open_transport_weapon.unwrap_or(-1);
+    c.deploy_fire_weapon = u.deploy_fire_weapon.unwrap_or(1);
+    c.deploy_fire = u.deploy_fire.unwrap_or(false);
+    c.occupy_weapon = w(&u.occupy_weapon);
+    c.elite_occupy_weapon = w(&u.elite_occupy_weapon);
+    // spec: S-0301 Import mapping (MobileFire absent: yes)
+    c.mobile_fire = u.mobile_fire.unwrap_or(true);
+    c.immune = u.immune.unwrap_or(false);
+    c.immune_radiation = u.immune_to_radiation.unwrap_or(false);
+    c
+}
+
+fn building_rules(
+    name: &str,
+    bt: BuildingType,
+    q: &Quirks,
+    mode: Rounding,
+    cx: &CombatCx<'_>,
+) -> BuildingRules {
     let f = bt.foundation.unwrap_or([1, 1]);
+    let mut combat = crate::combat::data::type_combat(
+        &bt.combat,
+        [bt.primary.as_ref(), bt.secondary.as_ref(), None, None],
+        0,
+        false,
+        (&[], &[]),
+        cx.coefficients,
+        cx.weapons,
+        mode,
+    );
+    combat.immune = bt.immune.unwrap_or(false);
+    let b = |x: Option<bool>| x.unwrap_or(false);
+    let building = crate::combat::data::BuildingCombat {
+        defense: b(bt.defense),
+        // spec: S-0302 Constants (can-be-demolished flag absent: yes)
+        can_c4: bt.can_c4.unwrap_or(true),
+        delay_kill: b(bt.eligible_for_delay_kill),
+        leave_rubble: b(bt.leave_rubble),
+        helipad: b(bt.helipad),
+        artillary: b(bt.artillary),
+        can_be_occupied: b(bt.can_be_occupied),
+        can_occupy_fire: b(bt.can_occupy_fire),
+        // spec: S-0313 Import mapping (MaxNumberOccupants absent: 0)
+        max_occupants: bt.max_number_occupants.unwrap_or(0),
+        // spec: S-0314 Import mapping (self-heal counts absent: 0)
+        infantry_self_heal: bt.infantry_gain_self_heal.unwrap_or(0),
+        units_self_heal: bt.units_gain_self_heal.unwrap_or(0),
+        // spec: S-0306 Import mapping (TargetCoordOffset absent: 0, 0, 0; Height absent: 2)
+        aim_shift: bt.target_coord_offset.unwrap_or([0; 3]),
+        art_height: bt.art_height.unwrap_or(2), // spec: S-0306 Import mapping (Height absent: 2)
+        voxel_turret: b(bt.turret_anim_is_voxel),
+        voxel_barrel: b(bt.barrel_anim_is_voxel),
+        // spec: S-0313 claim 7 (a pixel shift of (65535, 65535) counts as not given)
+        fire_pixel: bt
+            .primary_fire_pixel_offset
+            .filter(|p| *p != [65535, 65535]),
+        dual_offset: b(bt.primary_fire_dual_offset),
+        turret_anim: bt.turret_anim_xy.unwrap_or([0; 2]), // nocite: a pixel pair, absent 0, 0 (S-0313 Import mapping)
+        anim_delayed_fire: b(bt.is_anim_delayed_fire),
+        // spec: S-0301 Import mapping (DelayedFireDelay absent: 0)
+        delayed_fire_delay: bt.delayed_fire_delay.unwrap_or(0),
+        laser_fence: b(bt.laser_fence),
+        bridge_repair_hut: b(bt.bridge_repair_hut),
+        weapons_factory: b(bt.weapons_factory),
+        sam: b(bt.sam),
+        emp_cannon: b(bt.emp_cannon),
+        stupid_guard: b(bt.stupid_guard_mode),
+        unit_repair: b(bt.unit_repair),
+        capturable: b(bt.capturable),
+    };
     BuildingRules {
         name: name.to_owned(),
         strength: bt.strength.unwrap_or(0),
@@ -1106,6 +1262,8 @@ fn building_rules(name: &str, bt: BuildingType, q: &Quirks, mode: Rounding) -> B
             .as_ref()
             .map_or(0, |d| rate_delay(d.value(mode), mode)),
         raw: bt,
+        combat,
+        building,
     }
 }
 
@@ -1139,6 +1297,16 @@ fn overlay_rules(name: &str, o: rs::OverlayType) -> OverlayRules {
         has_art: o.has_art.unwrap_or(true),
         // spec: S-0202 Import mapping (IsVeins absent: no)
         veins: o.is_veins.unwrap_or(false),
+        // spec: S-0305 claim 5 (a resource overlay has class wood whatever its field says)
+        armour: if tiberium {
+            rs::ArmourClass::Wood.index()
+        } else {
+            o.armor
+                .as_deref()
+                .map_or(0, |a| rs::ArmourClass::from_word(a.as_bytes()).0.index())
+        },
+        chain_reaction: o.chain_reaction.unwrap_or(false),
+        explodes: o.explodes.unwrap_or(false),
     }
 }
 

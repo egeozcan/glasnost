@@ -439,6 +439,230 @@ pub struct Quirks {
     // spec: S-0112 claim 7
     #[serde(default = "on")]
     pub gate_tower_fixed_cells: bool,
+    /// A building holding more than 1 round rearms in 1 tick after a shot, over every other kind of delay.
+    // spec: S-0301 claim 10
+    #[serde(default = "on")]
+    pub building_ammo_fast_rearm: bool,
+    /// Sonic waves and magnetic-beam waves share one effect slot per firer.
+    // spec: S-0301 claim 5
+    #[serde(default = "on")]
+    pub shared_wave_slot: bool,
+    /// The minimum of 1 on an undemolishable building applies to every hit no row stops, so healing hits damage it.
+    // spec: S-0302 claim 7
+    #[serde(default = "on")]
+    pub undemolishable_heal_is_damage: bool,
+    /// The yellow damage state is reported at half the strength, whatever the yellow ratio.
+    // spec: S-0302 claim 12
+    #[serde(default = "on")]
+    pub yellow_state_at_half: bool,
+    /// An airborne infantry unit hit by a warhead of infantry-death kind 9 takes 0, which the defences raise to 1.
+    // spec: S-0302 claim 17
+    #[serde(default = "on")]
+    pub airborne_mutation_hit_raised: bool,
+    /// Readiness loss uses the amount after the defences and before the versus value, even when a later row stops the hit.
+    // spec: S-0302 claim 10
+    #[serde(default = "on")]
+    pub readiness_from_defended_damage: bool,
+    /// The delayed-kill countdown divides by the spread's whole cells, so a spread below one cell gives 0.
+    // spec: S-0302 claim 16
+    #[serde(default = "on")]
+    pub delay_kill_whole_cell_spread: bool,
+    /// Every hit that changes the health of a building in a delayed-kill countdown credits its destruction again.
+    // spec: S-0302 claim 16
+    #[serde(default = "on")]
+    pub delay_kill_credited_again: bool,
+    /// The expected damage divides by the armour factor for the firer's kind and the firer's armour multiplier.
+    // spec: S-0302 claim 18
+    #[serde(default = "on")]
+    pub expected_damage_firer_armour: bool,
+    /// A healing hit raises the ammunition of a damage-reduces-readiness type with no upper limit.
+    // spec: S-0302 claim 10
+    #[serde(default = "on")]
+    pub readiness_heal_over_max: bool,
+    /// A building takes one hit for each scanned foundation cell within the spread radius.
+    // spec: S-0303 claim 8
+    #[serde(default = "on")]
+    pub area_damage_per_foundation_cell: bool,
+    /// A scan radius of 11 uses the original's ring-11 list (one cell twice, some cells missing).
+    // spec: S-0303 table T1
+    #[serde(default = "on")]
+    pub spread_ring_eleven: bool,
+    /// Tracked flying objects are considered only by a detonation above the terrain at the centre of its cell.
+    // spec: S-0303 claim 6
+    #[serde(default = "on")]
+    pub ground_detonation_misses_aircraft: bool,
+    /// The flying-object search reads only the sectors of F7 and can miss a flying object in range.
+    // spec: S-0303 F7
+    #[serde(default = "on")]
+    pub flying_search_sectors: bool,
+    /// A tracked flying object is not left out for being the source object or a listed harvester.
+    // spec: S-0303 claim 9
+    #[serde(default = "on")]
+    pub flying_candidates_unfiltered: bool,
+    /// A small detonation that finds a curtain-protected object hits only protected objects.
+    // spec: S-0303 claim 15
+    #[serde(default = "on")]
+    pub curtain_nullifies_small_detonation: bool,
+    /// A wall hit of exactly -1 is absolute.
+    // spec: S-0303 claim 16
+    #[serde(default = "on")]
+    pub wall_hit_minus_one_is_absolute: bool,
+    /// Arcing shots at a higher impact point are launched at 45 degrees.
+    // spec: S-0306 claim 6
+    #[serde(default = "on")]
+    pub uphill_arc_45: bool,
+    /// A straight shot at a building pitches by the building's art height term.
+    // spec: S-0306 claim 6
+    #[serde(default = "on")]
+    pub building_pitch_term: bool,
+    /// The steering turn step uses only the residue mod 256 and is a signed 16-bit value.
+    // spec: S-0306 claim 13
+    #[serde(default = "on")]
+    pub missile_turn_wrap: bool,
+    /// A shot fired with no current target aims at the world origin.
+    // spec: S-0306 claim 3
+    #[serde(default = "on")]
+    pub aim_origin_without_target: bool,
+    /// The shot-speed distance's sum of squares wraps in 32-bit arithmetic.
+    // spec: S-0306 claim 1
+    #[serde(default = "on")]
+    pub shot_distance_wrap: bool,
+    /// A start speed of 0 launches at a horizontal speed of 100.
+    // spec: S-0306 F1
+    #[serde(default = "on")]
+    pub zero_speed_launch: bool,
+    /// An area-fire or spray shot is launched towards the firer's own target.
+    // spec: S-0306 claim 3
+    #[serde(default = "on")]
+    pub redirected_shot_aim: bool,
+    /// An arcing shot at a point exactly below the fire point uses F4's zero-distance rule.
+    // spec: S-0306 claim 6
+    #[serde(default = "on")]
+    pub zero_distance_arc: bool,
+    /// Arrival, pass-by, same-cell and in-flight line-of-fire rows use the point stored at placement.
+    // spec: S-0306 claim 9
+    #[serde(default = "on")]
+    pub stored_target_point: bool,
+    /// The world origin stands for no target point in both directions.
+    // spec: S-0306 Terms
+    #[serde(default = "on")]
+    pub origin_as_missing_target_point: bool,
+    /// A vertical projectile's speed grows by its acceleration without a cap.
+    // spec: S-0306 claim 11
+    #[serde(default = "on")]
+    pub vertical_speed_uncapped: bool,
+    /// A garrisoned building's range replaces the weapon range and its air bonus.
+    // spec: S-0307 claim 4
+    #[serde(default = "on")]
+    pub garrison_range_drops_air_bonus: bool,
+    /// A floor-bound target in a high-bridge cell is measured at deck height even below the bridge.
+    // spec: S-0307 claim 7
+    #[serde(default = "on")]
+    pub range_target_on_deck: bool,
+    /// Elevation levels add 4 for every cell marked as carrying a bridge deck.
+    // spec: S-0307 claim 6
+    #[serde(default = "on")]
+    pub elevation_deck_cell_level: bool,
+    /// A passenger weapon index is used only by a firer with weapons in both slots.
+    // spec: S-0308 claim 4
+    #[serde(default = "on")]
+    pub passenger_weapon_needs_secondary: bool,
+    /// A gattling type's anti-air test reads the weapon in slot 1.
+    // spec: S-0308 claim 7
+    #[serde(default = "on")]
+    pub gattling_air_test_slot_one: bool,
+    /// The secondary is chosen against an airborne target whenever it is anti-air.
+    // spec: S-0308 table P row 19
+    #[serde(default = "on")]
+    pub secondary_wins_against_air: bool,
+    /// An elite occupant without an elite occupying weapon fires its own primary.
+    // spec: S-0308 claim 13
+    #[serde(default = "on")]
+    pub elite_occupant_skips_occupy_weapon: bool,
+    /// A search scores only the offered object of each visited cell.
+    // spec: S-0309 claim 10
+    #[serde(default = "on")]
+    pub search_one_object_per_cell: bool,
+    /// The map-wide search measures ground-layer distance in leptons.
+    // spec: S-0309 F4
+    #[serde(default = "on")]
+    pub hunt_distance_in_leptons: bool,
+    /// A final threat score of exactly 0 rejects the candidate.
+    // spec: S-0309 claim 13
+    #[serde(default = "on")]
+    pub zero_score_rejected: bool,
+    /// Passengers of a mind-controlled open-topped transport take the cell's last object only.
+    // spec: S-0309 claim 10
+    #[serde(default = "on")]
+    pub mind_controlled_passengers_cell_choice: bool,
+    /// A distributed-fire searcher picks nothing in a map-wide search.
+    // spec: S-0309 claim 20
+    #[serde(default = "on")]
+    pub hunt_ignores_distributed_fire: bool,
+    /// A defeated enemy house stays the enemy house until an anger value next changes.
+    // spec: S-0309 claim 16
+    #[serde(default = "on")]
+    pub defeated_enemy_house_kept: bool,
+    /// The map-wide search considers only ground-layer objects besides aircraft.
+    // spec: S-0309 claim 7
+    #[serde(default = "on")]
+    pub hunt_ground_layer_only: bool,
+    /// A wall candidate wins over a candidate object later in the same ring.
+    // spec: S-0309 claim 25
+    #[serde(default = "on")]
+    pub wall_cell_over_same_ring_object: bool,
+    /// A building with a voxel turret must point exactly at its target.
+    // spec: S-0310 claim 4
+    #[serde(default = "on")]
+    pub voxel_turret_exact_aim: bool,
+    /// The recipient's actual cost is computed for the destroyed object's house.
+    // spec: S-0311 claim 10
+    #[serde(default = "on")]
+    pub experience_cost_victim_house: bool,
+    /// A garrison's firing occupant gains experience whatever its trainable flag.
+    // spec: S-0311 claim 8
+    #[serde(default = "on")]
+    pub occupant_experience_untrained: bool,
+    /// A garrison's experience goes to the occupant whose turn to fire it is.
+    // spec: S-0311 claim 8
+    #[serde(default = "on")]
+    pub occupant_experience_next_in_turn: bool,
+    /// A kill value of 0 against an actual cost of 0 sets experience to the cap.
+    // spec: S-0311 F3
+    #[serde(default = "on")]
+    pub zero_kill_value_caps: bool,
+    /// An exploding aircraft fires its death weapon at death and again at the crash.
+    // spec: S-0312 claim 16
+    #[serde(default = "on")]
+    pub crash_death_weapon_twice: bool,
+    /// A destroyed building takes up to two ranged draws whose results are not used.
+    // spec: S-0312 claim 19
+    #[serde(default = "on")]
+    pub building_smudge_discarded_draws: bool,
+    /// The death weapon's projectile tests use its unplaced default position.
+    // spec: S-0312 claim 6
+    #[serde(default = "on")]
+    pub death_weapon_unplaced_projectile: bool,
+    /// Rubble is the overlay type at a fixed registration index.
+    // spec: S-0312 claim 20
+    #[serde(default = "on")]
+    pub rubble_overlay_by_index: bool,
+    /// An exploding building probes for barrels from its top-left cell only.
+    // spec: S-0312 claim 23
+    #[serde(default = "on")]
+    pub barrel_probe_top_left_only: bool,
+    /// A building's turret displacement does not turn with its aim.
+    // spec: S-0313 claim 4
+    #[serde(default = "on")]
+    pub building_fire_point_shift_fixed: bool,
+    /// Negative self-heal counts are added without a floor.
+    // spec: S-0314 claim 10
+    #[serde(default = "on")]
+    pub negative_self_heal_counts: bool,
+    /// A fraidycat that fires its last round panics even when fearless.
+    // spec: S-0315 claim 2
+    #[serde(default = "on")]
+    pub fraidycat_ammo_panic_ignores_fearless: bool,
 }
 
 impl Default for Quirks {
@@ -549,6 +773,62 @@ impl Default for Quirks {
             skirmish_drops_map_crates: true,
             starting_infantry_share_centre: true,
             gate_tower_fixed_cells: true,
+            building_ammo_fast_rearm: true,
+            shared_wave_slot: true,
+            undemolishable_heal_is_damage: true,
+            yellow_state_at_half: true,
+            airborne_mutation_hit_raised: true,
+            readiness_from_defended_damage: true,
+            delay_kill_whole_cell_spread: true,
+            delay_kill_credited_again: true,
+            expected_damage_firer_armour: true,
+            readiness_heal_over_max: true,
+            area_damage_per_foundation_cell: true,
+            spread_ring_eleven: true,
+            ground_detonation_misses_aircraft: true,
+            flying_search_sectors: true,
+            flying_candidates_unfiltered: true,
+            curtain_nullifies_small_detonation: true,
+            wall_hit_minus_one_is_absolute: true,
+            uphill_arc_45: true,
+            building_pitch_term: true,
+            missile_turn_wrap: true,
+            aim_origin_without_target: true,
+            shot_distance_wrap: true,
+            zero_speed_launch: true,
+            redirected_shot_aim: true,
+            zero_distance_arc: true,
+            stored_target_point: true,
+            origin_as_missing_target_point: true,
+            vertical_speed_uncapped: true,
+            garrison_range_drops_air_bonus: true,
+            range_target_on_deck: true,
+            elevation_deck_cell_level: true,
+            passenger_weapon_needs_secondary: true,
+            gattling_air_test_slot_one: true,
+            secondary_wins_against_air: true,
+            elite_occupant_skips_occupy_weapon: true,
+            search_one_object_per_cell: true,
+            hunt_distance_in_leptons: true,
+            zero_score_rejected: true,
+            mind_controlled_passengers_cell_choice: true,
+            hunt_ignores_distributed_fire: true,
+            defeated_enemy_house_kept: true,
+            hunt_ground_layer_only: true,
+            wall_cell_over_same_ring_object: true,
+            voxel_turret_exact_aim: true,
+            experience_cost_victim_house: true,
+            occupant_experience_untrained: true,
+            occupant_experience_next_in_turn: true,
+            zero_kill_value_caps: true,
+            crash_death_weapon_twice: true,
+            building_smudge_discarded_draws: true,
+            death_weapon_unplaced_projectile: true,
+            rubble_overlay_by_index: true,
+            barrel_probe_top_left_only: true,
+            building_fire_point_shift_fixed: true,
+            negative_self_heal_counts: true,
+            fraidycat_ammo_panic_ignores_fearless: true,
         }
     }
 }
@@ -785,6 +1065,146 @@ impl Quirks {
                 self.starting_infantry_share_centre,
             ),
             ("gate_tower_fixed_cells", self.gate_tower_fixed_cells),
+            ("building_ammo_fast_rearm", self.building_ammo_fast_rearm),
+            ("shared_wave_slot", self.shared_wave_slot),
+            (
+                "undemolishable_heal_is_damage",
+                self.undemolishable_heal_is_damage,
+            ),
+            ("yellow_state_at_half", self.yellow_state_at_half),
+            (
+                "airborne_mutation_hit_raised",
+                self.airborne_mutation_hit_raised,
+            ),
+            (
+                "readiness_from_defended_damage",
+                self.readiness_from_defended_damage,
+            ),
+            (
+                "delay_kill_whole_cell_spread",
+                self.delay_kill_whole_cell_spread,
+            ),
+            ("delay_kill_credited_again", self.delay_kill_credited_again),
+            (
+                "expected_damage_firer_armour",
+                self.expected_damage_firer_armour,
+            ),
+            ("readiness_heal_over_max", self.readiness_heal_over_max),
+            (
+                "area_damage_per_foundation_cell",
+                self.area_damage_per_foundation_cell,
+            ),
+            ("spread_ring_eleven", self.spread_ring_eleven),
+            (
+                "ground_detonation_misses_aircraft",
+                self.ground_detonation_misses_aircraft,
+            ),
+            ("flying_search_sectors", self.flying_search_sectors),
+            (
+                "flying_candidates_unfiltered",
+                self.flying_candidates_unfiltered,
+            ),
+            (
+                "curtain_nullifies_small_detonation",
+                self.curtain_nullifies_small_detonation,
+            ),
+            (
+                "wall_hit_minus_one_is_absolute",
+                self.wall_hit_minus_one_is_absolute,
+            ),
+            ("uphill_arc_45", self.uphill_arc_45),
+            ("building_pitch_term", self.building_pitch_term),
+            ("missile_turn_wrap", self.missile_turn_wrap),
+            ("aim_origin_without_target", self.aim_origin_without_target),
+            ("shot_distance_wrap", self.shot_distance_wrap),
+            ("zero_speed_launch", self.zero_speed_launch),
+            ("redirected_shot_aim", self.redirected_shot_aim),
+            ("zero_distance_arc", self.zero_distance_arc),
+            ("stored_target_point", self.stored_target_point),
+            (
+                "origin_as_missing_target_point",
+                self.origin_as_missing_target_point,
+            ),
+            ("vertical_speed_uncapped", self.vertical_speed_uncapped),
+            (
+                "garrison_range_drops_air_bonus",
+                self.garrison_range_drops_air_bonus,
+            ),
+            ("range_target_on_deck", self.range_target_on_deck),
+            ("elevation_deck_cell_level", self.elevation_deck_cell_level),
+            (
+                "passenger_weapon_needs_secondary",
+                self.passenger_weapon_needs_secondary,
+            ),
+            (
+                "gattling_air_test_slot_one",
+                self.gattling_air_test_slot_one,
+            ),
+            (
+                "secondary_wins_against_air",
+                self.secondary_wins_against_air,
+            ),
+            (
+                "elite_occupant_skips_occupy_weapon",
+                self.elite_occupant_skips_occupy_weapon,
+            ),
+            (
+                "search_one_object_per_cell",
+                self.search_one_object_per_cell,
+            ),
+            ("hunt_distance_in_leptons", self.hunt_distance_in_leptons),
+            ("zero_score_rejected", self.zero_score_rejected),
+            (
+                "mind_controlled_passengers_cell_choice",
+                self.mind_controlled_passengers_cell_choice,
+            ),
+            (
+                "hunt_ignores_distributed_fire",
+                self.hunt_ignores_distributed_fire,
+            ),
+            ("defeated_enemy_house_kept", self.defeated_enemy_house_kept),
+            ("hunt_ground_layer_only", self.hunt_ground_layer_only),
+            (
+                "wall_cell_over_same_ring_object",
+                self.wall_cell_over_same_ring_object,
+            ),
+            ("voxel_turret_exact_aim", self.voxel_turret_exact_aim),
+            (
+                "experience_cost_victim_house",
+                self.experience_cost_victim_house,
+            ),
+            (
+                "occupant_experience_untrained",
+                self.occupant_experience_untrained,
+            ),
+            (
+                "occupant_experience_next_in_turn",
+                self.occupant_experience_next_in_turn,
+            ),
+            ("zero_kill_value_caps", self.zero_kill_value_caps),
+            ("crash_death_weapon_twice", self.crash_death_weapon_twice),
+            (
+                "building_smudge_discarded_draws",
+                self.building_smudge_discarded_draws,
+            ),
+            (
+                "death_weapon_unplaced_projectile",
+                self.death_weapon_unplaced_projectile,
+            ),
+            ("rubble_overlay_by_index", self.rubble_overlay_by_index),
+            (
+                "barrel_probe_top_left_only",
+                self.barrel_probe_top_left_only,
+            ),
+            (
+                "building_fire_point_shift_fixed",
+                self.building_fire_point_shift_fixed,
+            ),
+            ("negative_self_heal_counts", self.negative_self_heal_counts),
+            (
+                "fraidycat_ammo_panic_ignores_fearless",
+                self.fraidycat_ammo_panic_ignores_fearless,
+            ),
         ]
     }
 
@@ -800,7 +1220,7 @@ impl Quirks {
 
 /// Quirk switches named in the specs that are owned by the importer or the
 /// renderer rather than the simulation, with their owner.
-// spec: S-0215 claim 21, S-0104, S-0107 claim 22, S-0009 Edge cases, S-0006 Edge cases, S-0010 Edge cases (the owning specs of these switches)
+// spec: S-0215 claim 21, S-0104, S-0107 claim 22, S-0009 Edge cases, S-0006 Edge cases, S-0010 Edge cases, S-0308 claim 1, S-0309 Edge cases, S-0003 claim 13 (the owning specs of these switches)
 pub const EXTERNAL_QUIRKS: &[(&str, &str)] = &[
     (
         "override_resets_keys",
@@ -880,6 +1300,18 @@ pub const EXTERNAL_QUIRKS: &[(&str, &str)] = &[
         "preview_markers_from_header",
         "importer (convert::map::MapQuirks), S-0009 claim 25",
     ),
+    (
+        "clear_weapons_any_turret_count",
+        "importer (convert::sim::SimQuirks), S-0308 claim 1",
+    ),
+    (
+        "coefficient_zero_replaced",
+        "importer (convert::sim::SimQuirks), S-0309 Edge cases",
+    ),
+    (
+        "percent_list_integer_prefix",
+        "importer (ini::Quirks), S-0003 claim 13",
+    ),
 ];
 
 #[cfg(test)]
@@ -894,7 +1326,7 @@ mod tests {
     fn every_spec_quirk_has_a_switch() {
         let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../../../spec");
         let mut files = Vec::new();
-        for dir in ["simulation", "movement", "infantry", "ui"] {
+        for dir in ["simulation", "movement", "infantry", "ui", "combat"] {
             for e in std::fs::read_dir(format!("{root}/{dir}")).expect("spec dir") {
                 let p = e.expect("entry").path();
                 let name = p
@@ -902,7 +1334,7 @@ mod tests {
                     .and_then(|n| n.to_str())
                     .unwrap_or("")
                     .to_owned();
-                if name.starts_with("S-02") {
+                if name.starts_with("S-02") || name.starts_with("S-03") {
                     files.push(p);
                 }
             }
@@ -932,7 +1364,12 @@ mod tests {
         let mut missing = Vec::new();
         for f in files {
             let text = std::fs::read_to_string(&f).expect("read spec");
-            let mut rest = text.as_str();
+            // A switch a spec only proposes to the project lead is not approved yet.
+            let text = text
+                .split("## Questions for the project lead")
+                .next()
+                .unwrap_or("");
+            let mut rest = text;
             while let Some(i) = rest.find("quirks.") {
                 rest = &rest[i + 7..];
                 let name: String = rest

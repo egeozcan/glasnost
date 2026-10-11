@@ -79,6 +79,11 @@ pub fn create(w: &mut World, kind: Kind, type_index: u32, owner: Option<HouseId>
         leader: None,
         // spec: S-0207 Constants (starting speed bonus factor b = 1.0); S-0208 Terms (speed multiplier 1.0 at creation)
         speed_bonus: F64::from_i64(1, w.rules().mode),
+        combat: crate::combat::state::CombatState::new(
+            health,
+            crate::combat::fire::initial_ammo(&r, kind, type_index),
+            F64::from_i64(1, w.rules().mode),
+        ),
     };
     w.objects.insert(id, obj);
     id

@@ -89,6 +89,55 @@ pub fn table_root(n: u64, mode: Rounding) -> F32 {
     }
 }
 
+/// The table square root of a real argument (S-0105 F1, S-0306 Formulas):
+/// |x| narrowed to single precision by `mode`, then the root of its
+/// significand truncated to 14 significant binary digits, truncated to 24.
+/// The result is a single, returned widened to a double. With `table` false
+/// (`quirks.table_root_distance` off) the exact root truncated to single
+/// precision.
+// spec: S-0105 F1 (√ₜ(x) = trunc₂₄(2^ζ × √m′), m′ the 14-digit truncation of m)
+pub fn table_root_real(x: F64, table: bool, mode: Rounding) -> F64 {
+    let s = x.abs().to_f32(mode);
+    let bits = s.0;
+    // nocite: binary32 field layout (exponent and fraction masks)
+    let exp = (bits >> 23) & 0xff;
+    // nocite: binary32 field layout
+    let frac = bits & 0x7f_ffff;
+    // nocite: binary32 field layout (all-ones exponent: infinity or NaN)
+    if exp == 0xff {
+        return s.to_f64();
+    }
+    if exp == 0 && frac == 0 {
+        return F64::ZERO;
+    }
+    // The single as M × 2^k with M normalised to 24 significant bits.
+    // nocite: binary32 field layout (hidden bit and exponent bias)
+    let (mut m, mut k): (u64, i32) = if exp == 0 {
+        (u64::from(frac), -149)
+    } else {
+        (u64::from(frac | 0x80_0000), exp as i32 - 150)
+    };
+    while m < (1 << 23) {
+        m <<= 1;
+        k -= 1;
+    }
+    // ζ = ⌊log₄ x⌋: x lies in [2^(23 + k), 2^(24 + k)).
+    let zeta = (23 + k).div_euclid(2);
+    // m′ × 2^46 as an integer: m′ = (M >> 10) × 2^(k − 2ζ + 10), k − 2ζ is −23 or −22.
+    let e = k - 2 * zeta + 10 + 46;
+    let radicand = if table {
+        // spec: S-0105 F1 (m truncated toward zero to 14 significant binary digits)
+        u128::from(m >> 10) << e
+    } else {
+        u128::from(m) << (e - 10)
+    };
+    // spec: S-0105 F1 (the exact root, truncated to 24 significant digits)
+    let r = isqrt(radicand);
+    F64::from_parts(false, r, zeta - 23, Rounding::TowardZero)
+        .to_f32(Rounding::TowardZero)
+        .to_f64()
+}
+
 /// ⌊r(n)⌋, the distance term of S-0204 claim 5; with `table` false
 /// (`quirks.table_root_distance` off) ⌊√n⌋.
 pub fn root_floor(n: u64, table: bool, mode: Rounding) -> u64 {
@@ -248,6 +297,22 @@ fn exact_direction(x: i64, y: i64) -> Facing {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn real_root_matches_integer_root_below_two_to_the_24() {
+        for n in [1u64, 2, 3, 4, 7, 99, 255, 256, 65535, 100_000, 16_777_215] {
+            let a = table_root_real(
+                F64::from_i64(n as i64, Rounding::TowardZero),
+                true,
+                Rounding::TowardZero,
+            );
+            assert_eq!(a, table_root(n, Rounding::TowardZero).to_f64(), "{n}");
+        }
+        assert_eq!(
+            table_root_real(F64::ZERO, true, Rounding::TowardZero),
+            F64::ZERO
+        );
+    }
+
     use super::*;
 
     const RZ: Rounding = Rounding::TowardZero;

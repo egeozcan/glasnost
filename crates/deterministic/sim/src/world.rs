@@ -111,6 +111,8 @@ pub struct House {
     pub credits: i32,
     /// Orders waiting to be applied (S-0213 claim 2).
     pub pending: Vec<Order>,
+    /// Combat state (M4).
+    pub combat: crate::combat::state::HouseCombat,
 }
 
 /// A house's role (S-0009 claim 19, glossary *house*).
@@ -195,6 +197,8 @@ pub struct Object {
     /// Speed multiplier (S-0208 Terms) or speed bonus factor (S-0207
     /// claim 13), a double; 1.0 at creation.
     pub speed_bonus: F64,
+    /// Combat state (M4).
+    pub combat: crate::combat::state::CombatState,
 }
 
 /// One house in the game setup.
@@ -255,6 +259,12 @@ pub struct World {
     pub cells: Cells,
     /// Orders are blocked up to and including this tick (S-0201 claim 14).
     pub orders_blocked_through: i32,
+    /// Projectiles in flight by object number (S-0306; in the update order).
+    pub projectiles: BTreeMap<ObjectId, crate::combat::state::Projectile>,
+    /// Effects created since the drawing last took them (explosions,
+    /// launches, deaths): presentation only, neither saved nor hashed.
+    #[serde(skip)]
+    pub effects: Vec<crate::combat::effects::Effect>,
     /// Provisional rules and requests met so far (diagnostics, not game
     /// state: neither saved nor hashed).
     #[serde(skip)]

@@ -191,6 +191,7 @@ pub fn new_game(
             role: h.role,
             credits: 0,
             pending: Vec::new(),
+            combat: crate::combat::fire::house_combat(&rules, country, setup.houses.len()),
         });
     }
     for (i, h) in houses.iter_mut().enumerate() {
@@ -236,6 +237,8 @@ pub fn new_game(
         },
         // spec: S-0201 claim 14 (orders blocked during the cycles of ticks 0 to 3)
         orders_blocked_through: 3,
+        projectiles: Default::default(),
+        effects: Vec::new(),
         notes: Vec::new(),
         theater: map.theater,
         rules: Some(rules.clone()),
