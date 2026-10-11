@@ -1235,3 +1235,43 @@ fn detonation_results() {
         DetonationResult::Missed
     );
 }
+
+// spec: S-0303 claim 21 (over water the splash list replaces the warhead's own, except when the area damage hit something and the first object in the ground layer of Q's cell is a naval vehicle that is not an underwater type: L counts as air)
+#[test]
+fn naval_vehicle_over_water_shows_the_warheads_own_animation() {
+    for (naval, underwater, want) in [
+        (None, None, "Splash"),
+        (Some(true), Some(false), "BoomS"),
+        (Some(true), Some(true), "Splash"),
+        (Some(false), None, "Splash"),
+    ] {
+        let mut r = testkit::combat_ruleset();
+        warhead(&mut r, "SHOW", |h| {
+            h.anim_list = Some(vec!["BoomS".into(), "BoomM".into(), "BoomL".into()]);
+            h.conventional = Some(true);
+            h.cell_spread = Some(glasnost_rules::sim::Decimal("1".into()));
+        });
+        weapon(&mut r, "Show", |t| {
+            t.damage = Some(10);
+            t.warhead = Some("SHOW".into());
+        });
+        r.sim.general.splash_list = Some(vec!["Splash".into()]);
+        let cart = r.sim.vehicles.get_mut("CART").unwrap();
+        cart.combat.naval = naval;
+        cart.combat.underwater = underwater;
+        let mut w = testkit::game_with(&r, SIZE, 1);
+        let s = wp(&w, "Show");
+        let c = centre(0, 0).cell();
+        if naval.is_some() {
+            testkit::spawn(&mut w, Kind::Vehicle, "CART", BETA, c, 0);
+        }
+        // After the placement, which recalculates the cell's terrain.
+        w.cells.grid.get_mut(c).unwrap().land = glasnost_map::terrain::land::WATER;
+        let got = detonation_anims(&mut w, s, 10, false);
+        assert_eq!(
+            got,
+            vec![want.to_string()],
+            "naval {naval:?} underwater {underwater:?}"
+        );
+    }
+}

@@ -1477,7 +1477,7 @@ pub fn projectile_detonation(
         let u = w.rng.raw();
         anim_at = crate::combat::death::nearby_point(w, point, 32, u & 255, false);
     }
-    if let Some(name) = explosion_anim(w, h, damage, q) {
+    if let Some(name) = explosion_anim(w, h, damage, q, res == DetonationResult::Hit) {
         if res == DetonationResult::Nullified {
             // spec: S-0303 claim 21 (a nullified detonation shows the nullify animation instead)
             if let Some(n) = rules.combat.general.nullify_anim.clone() {
@@ -1510,7 +1510,7 @@ pub fn projectile_detonation(
 
 /// The explosion animation of S-0303 F5 (with the electromagnetic case's
 /// draw when it applies).
-fn explosion_anim(w: &mut World, h: WarheadId, d: i32, q: Pos) -> Option<String> {
+fn explosion_anim(w: &mut World, h: WarheadId, d: i32, q: Pos, hit: bool) -> Option<String> {
     let rules = w.rules_arc();
     let half = rules.quirks.ranged_draw_half_span;
     let g = &rules.combat.general;
@@ -1522,7 +1522,21 @@ fn explosion_anim(w: &mut World, h: WarheadId, d: i32, q: Pos) -> Option<String>
     let qc = q.cell();
     let terrain = w.surface_at(q.x, q.y);
     // spec: S-0303 claim 21 (the land type of Q's cell when its height above the terrain is below 208, else air)
-    let land = (q.z - terrain < 208).then(|| w.cells.cell(qc).map_or(0, |c| c.land));
+    let mut land = (q.z - terrain < 208).then(|| w.cells.cell(qc).map_or(0, |c| c.land));
+    // spec: S-0303 claim 21 (the area damage hit something and the first object in the ground layer of Q's cell is a naval vehicle, not underwater: L counts as air)
+    let naval_first = w
+        .cells
+        .list(qc, crate::world::Layer::Ground)
+        .first()
+        .is_some_and(|&x| {
+            w.obj(x)
+                .is_some_and(|o| o.kind == crate::rules::Kind::Vehicle)
+                && crate::combat::veterancy::type_combat(w, x)
+                    .is_some_and(|tc| tc.naval && !tc.underwater)
+        });
+    if hit && naval_first {
+        land = None;
+    }
     let water = land == Some(glasnost_map::terrain::land::WATER);
     // spec: S-0303 F5 (splash: water, conventional, no bridge, q_z < terrain + 208)
     if water && wh.conventional && !w.high_bridge(qc) && q.z < terrain + 208 {
@@ -1598,7 +1612,7 @@ pub fn detonate_area(
     house: Option<HouseId>,
     resources: bool,
 ) {
-    if let Some(name) = explosion_anim(w, warhead, damage, at) {
+    if let Some(name) = explosion_anim(w, warhead, damage, at, false) {
         effects::anim(w, &name, at);
     }
     area::detonate(
