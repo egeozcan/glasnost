@@ -16,6 +16,7 @@ use glasnost_ini::{Document, Section};
 
 use crate::kinds::Kind;
 use crate::names::show;
+use crate::refs;
 
 /// Longest stored type name (S-0004 claim 5).
 pub const STORED_NAME_MAX: usize = 24; // spec: S-0004 Constants (stored name length)
@@ -256,9 +257,9 @@ pub enum How {
         /// The referring type.
         name: Vec<u8>,
         /// The key.
-        key: &'static str,
+        key: String,
     },
-    /// A game-wide section (S-0004 claim 4, row 4).
+    /// A game-wide section (S-0004 claim 4, rows 2 and 4).
     GameWide {
         /// The section.
         section: &'static str,
@@ -269,6 +270,9 @@ pub enum How {
     EmptyParticle,
     /// The side field of a country.
     SideField,
+    /// The particle system the original creates at game start (S-0004
+    /// claim 3).
+    GameStart,
 }
 
 /// A registered type.
@@ -402,10 +406,6 @@ const EXTRA_LIGHT_KEYS: [&str; 3] = ["ExtraUnitLight", "ExtraInfantryLight", "Ex
 const AUDIO_VISUAL: &[u8] = b"AudioVisual"; // spec: S-0004 Import mapping
 /// The special-weapon settings section (S-0004 claim 6).
 const SPECIAL_WEAPONS: &[u8] = b"SpecialWeapons"; // spec: S-0004 Import mapping
-/// The crate rules and the overlays they name (S-0004 Import mapping).
-const CRATE_RULES: &str = "CrateRules"; // spec: S-0004 Import mapping
-// spec: S-0004 Import mapping (crate overlays, created by reference in the late phase)
-const CRATE_KEYS: [&str; 3] = ["CrateImg", "WoodCrateImg", "WaterCrateImg"];
 /// The side list (S-0004 Import mapping).
 const SIDES: &[u8] = b"Sides"; // spec: S-0004 Import mapping
 /// The colour definitions (S-0103 Import mapping).
@@ -604,6 +604,9 @@ pub fn apply_with(
         art,
         art_layer,
         pending: Vec::new(),
+        layer_now: 0,
+        phase: Phase::Early,
+        origin: BTreeMap::new(),
         // spec: S-0006 claim 12 (the table is left with zero in all 16 positions; only the map's entries count)
         map_only_colour_add: bad_language_rules && quirks.bad_language_rules_skips_mode,
     };
@@ -617,6 +620,21 @@ pub fn apply_with(
     run.out
 }
 
+/// A type by kind and registration index.
+type TypeAt = (Kind, usize);
+
+/// Where in a layer types are being created (S-0004 claim 4).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Phase {
+    /// Row 2: the early game-wide sections, before the passes.
+    Early,
+    /// Row 3: the reading pass of a kind.
+    Pass(Kind),
+    /// Rows 4 to 6: the late game-wide sections, the second warhead
+    /// reading and the tiberium list, after every pass.
+    Late,
+}
+
 struct Run<'a> {
     out: Outcome,
     quirks: LayerQuirks,
@@ -625,6 +643,15 @@ struct Run<'a> {
     /// Types created by reference that read the creating layer anyway
     /// (switch `quirks.unlisted_reference_unread` off).
     pending: Vec<(Kind, usize)>,
+    /// The layer being processed (the art database's reads create types
+    /// in this layer).
+    layer_now: usize,
+    /// Where in the layer the run is (S-0004 claim 4).
+    phase: Phase,
+    /// For each type created by reference: the type whose field created
+    /// it and the name it was looked up by (the guard of
+    /// [`Run::repeats`]).
+    origin: BTreeMap<TypeAt, (Option<TypeAt>, Vec<u8>)>,
     /// Only the map layer fills the colour-adjustment table (S-0006 claim
     /// 12).
     map_only_colour_add: bool,
@@ -723,27 +750,15 @@ impl Run<'_> {
         }
     }
 
-    fn layer(&mut self, li: usize, layer: &Layer) {
-        let doc = &layer.doc;
-        // S-0004 claim 2 and Import mapping: every list but the tiberiums', countries first.
-        for kind in Kind::PASSES {
-            if let Some(list) = kind.list_section().and_then(|s| doc.section(s)) {
-                self.register_list(kind, list, li);
-            }
-        }
-        // S-0004 claim 9: the side list takes effect before the countries' side fields.
-        if let Some(sides) = doc.section(SIDES) {
-            self.side_list(sides, li);
-        }
-        // S-0004 claim 6: reading passes in rank order.
-        let mut type_sections: BTreeSet<usize> = BTreeSet::new();
-        for kind in Kind::PASSES {
-            self.pass(kind, li, doc, &mut type_sections);
-        }
-        // S-0004 claim 4, row 4: the late game-wide sections; only the crate rules create types here.
-        self.crate_rules(li, doc);
+    /// With `quirks.unlisted_reference_unread` off, the types created by
+    /// reference that the original leaves unread read the creating layer's
+    /// section (S-0004 claim 6), in creation order.
+    fn drain_pending(&mut self, li: usize, doc: &Document, type_sections: &mut BTreeSet<usize>) {
         // spec: S-0004 claim 6 (switch off: a type created by reference reads the creating layer)
-        while let Some((kind, i)) = self.pending.pop() {
+        let mut next = 0;
+        while next < self.pending.len() {
+            let (kind, i) = self.pending[next];
+            next += 1;
             let name = self.reg(kind)[i].name.clone();
             if kind == Kind::Animations {
                 if let Some(section) = self.art.section(&name) {
@@ -757,19 +772,54 @@ impl Run<'_> {
                 self.read(kind, i, &section, li);
             }
         }
-        // S-0004 claim 6: a layer with the special-weapon settings gives every warhead a second reading.
+        self.pending.clear();
+    }
+
+    fn layer(&mut self, li: usize, layer: &Layer) {
+        let doc = &layer.doc;
+        self.layer_now = li;
+        // S-0004 claim 2 and Import mapping: every list but the tiberiums', countries first.
+        for kind in Kind::PASSES {
+            if let Some(list) = kind.list_section().and_then(|s| doc.section(s)) {
+                self.register_list(kind, list, li);
+            }
+        }
+        // S-0004 claim 9: the side list takes effect before the countries' side fields.
+        if let Some(sides) = doc.section(SIDES) {
+            self.side_list(sides, li);
+        }
+        // S-0004 claim 4, row 2: the early game-wide sections, the AI settings first.
+        self.phase = Phase::Early;
+        for g in refs::EARLY {
+            self.game_wide_refs(g, li, doc);
+        }
+        // S-0004 claim 6: reading passes in rank order (row 3).
+        let mut type_sections: BTreeSet<usize> = BTreeSet::new();
+        for kind in Kind::PASSES {
+            self.phase = Phase::Pass(kind);
+            self.pass(kind, li, doc, &mut type_sections);
+        }
+        // S-0004 claim 4, row 4: the late game-wide sections, in the claim's order.
+        self.phase = Phase::Late;
+        for g in refs::LATE {
+            self.game_wide_refs(g, li, doc);
+        }
+        self.drain_pending(li, doc, &mut type_sections);
+        // S-0004 claim 6: a layer with the special-weapon settings gives every warhead a second reading (row 5).
         if doc.section(SPECIAL_WEAPONS).is_some() {
             for i in 0..self.reg(Kind::Warheads).len() {
                 let name = self.reg(Kind::Warheads)[i].name.clone();
                 if let Some(si) = doc.section_index(&name) {
                     type_sections.insert(si);
-                    let section = &doc.sections()[si];
-                    self.read(Kind::Warheads, i, section, li);
+                    let section = doc.sections()[si].clone();
+                    self.read(Kind::Warheads, i, &section, li);
                 }
             }
+            self.drain_pending(li, doc, &mut type_sections);
         }
-        // S-0004 claim 10: the tiberium list at the end of the layer.
+        // S-0004 claim 10: the tiberium list at the end of the layer (row 6).
         self.tiberiums(li, doc, &mut type_sections);
+        self.drain_pending(li, doc, &mut type_sections);
         self.game_wide(li, layer, &type_sections);
         self.colours(li, doc);
         self.colour_add(li, layer);
@@ -969,8 +1019,8 @@ impl Run<'_> {
             }
         }
 
-        // References the specs name (S-0004 claims 2, 3 and 6, Import mapping).
-        self.references(kind, index, li, &given, has("HoldsWhat"));
+        // The reference fields of the section (S-0004 claim 13, Import mapping).
+        self.references(kind, index, section, li);
 
         if kind == Kind::Countries
             && let Some((_, v, _)) = given.iter().find(|(k, _, _)| k.as_slice() == b"Side")
@@ -984,115 +1034,309 @@ impl Run<'_> {
         }
     }
 
-    fn references(
-        &mut self,
-        kind: Kind,
-        index: usize,
-        li: usize,
-        given: &[(Vec<u8>, Vec<u8>, u32)],
-        holds_what_given: bool,
-    ) {
+    /// The reference fields a type takes from the section it is reading
+    /// (S-0004 claim 13, Import mapping). `hist` is the history layer of
+    /// that section (the art database for animations); the types it
+    /// creates belong to the layer being processed.
+    fn references(&mut self, kind: Kind, index: usize, section: &Section, hist: usize) {
+        let from = Some((kind, index));
         let referrer = self.reg(kind)[index].name.clone();
-        // spec: S-0004 Import mapping (reference fields used in the scenarios)
-        let refs: &[(&'static str, Kind, bool)] = match kind {
-            Kind::Vehicles => &[("DeploysInto", Kind::Buildings, true)],
-            Kind::Projectiles => &[
-                ("AirburstWeapon", Kind::Weapons, true),
-                ("ShrapnelWeapon", Kind::Weapons, true),
-            ],
-            Kind::ParticleSystems => &[("HoldsWhat", Kind::Particles, true)],
-            // spec: S-0004 claim 3 (an unknown superweapon means "none"; find only)
-            Kind::Buildings => &[("SuperWeapon", Kind::Superweapons, false)],
-            _ => &[],
+        // The art section of a building, aircraft or projectile: the one named by its image (S-0004 claim 13; Q-0083).
+        let art_section = if matches!(kind, Kind::Buildings | Kind::Aircraft | Kind::Projectiles) {
+            let image = crate::art::text_as_of(
+                &self.reg(kind)[index],
+                "Image",
+                self.layer_now,
+                crate::art::IMAGE_MAX,
+            )
+            .unwrap_or_else(|| referrer.clone());
+            self.art.section(&image).cloned()
+        } else {
+            None
         };
-        for &(key, target, creates) in refs {
-            let Some((_, stored, line)) = given
-                .iter()
-                .find(|(k, _, _)| k.as_slice() == key.as_bytes())
-            else {
+        for f in refs::type_fields(kind) {
+            let (src, src_layer) = if f.art {
+                match &art_section {
+                    Some(a) => (a, self.art_layer),
+                    None => continue,
+                }
+            } else {
+                (section, hist)
+            };
+            let Some(entry) = src.get(f.key.as_bytes()) else {
                 continue;
             };
-            let name = value::text(stored, value::COMMON_TEXT_LIMIT);
-            if target == Kind::Particles {
-                // spec: S-0004 claim 2 (for the emitted particle only `<none>` means no type)
-                if name.eq_ignore_ascii_case(b"<none>") {
+            let (stored, line) = (entry.value.clone(), entry.line);
+            let how = |key: &str| How::Reference {
+                kind,
+                name: referrer.clone(),
+                key: key.to_owned(),
+            };
+            self.field(f, &stored, src_layer, line, &how(f.key), from);
+        }
+        if refs::has_weapon_slots(kind) {
+            self.weapon_fields(kind, index, section, hist, &referrer);
+        }
+        if kind == Kind::Buildings {
+            for key in refs::SUPERWEAPON_FIELDS {
+                let Some(entry) = section.get(key.as_bytes()) else {
                     continue;
-                }
-                if !self.quirks.particle_none_is_a_name && value::is_no_type(name) {
-                    continue;
-                }
-            } else if value::is_no_type(name) {
-                continue;
-            }
-            if !creates {
-                if self.find(target, name).is_none() {
+                };
+                // spec: S-0004 claims 3 and 13 (the superweapon fields find only; an unknown name means none)
+                let name = value::text(&entry.value, refs::REFERENCE_LIMIT);
+                if !value::is_no_type(name) && self.find(Kind::Superweapons, name).is_none() {
                     self.warn(
-                        li,
-                        *line,
+                        hist,
+                        entry.line,
                         format!(
-                            "{} {} names the unknown {} {:?}, which means none (S-0004 claim 3)",
-                            kind.key(),
+                            "buildings {} {key} names the unknown superweapon {:?}, which means none (S-0004 claim 3)",
                             show(&referrer),
-                            target.key(),
                             show(name)
                         ),
                     );
                 }
+            }
+        }
+        // spec: S-0006 claim 5, S-0004 claim 2 (an omitted emitted particle is the particle with the empty name)
+        if kind == Kind::ParticleSystems
+            && section.get(b"HoldsWhat").is_none()
+            && self.quirks.override_resets_keys
+        {
+            self.reference(Kind::Particles, b"", hist, 0, How::EmptyParticle, from);
+        }
+    }
+
+    /// One creating field's value (S-0004 claim 13): cut to the field's
+    /// limit, split into items for a list, each item found or created.
+    fn field(
+        &mut self,
+        f: &refs::Field,
+        stored: &[u8],
+        hist: usize,
+        line: u32,
+        how: &How,
+        from: Option<(Kind, usize)>,
+    ) {
+        let limit = if f.limit == refs::ATTACHED_SYSTEM_LIMIT && !self.quirks.long_name_duplicates {
+            // spec: S-0004 claim 8 (switch off: the attached-particle-system field reads up to 24 bytes)
+            STORED_NAME_MAX
+        } else {
+            f.limit
+        };
+        let items: Vec<&[u8]> = match f.form {
+            // spec: S-0004 claim 13 (the value is cut to the field's limit, trailing whitespace removed)
+            refs::Form::Single => vec![value::text(stored, limit)],
+            // spec: S-0004 claim 13, S-0003 claim 12 (list items in item order, empty items skipped)
+            refs::Form::List => value::list(stored, limit),
+        };
+        for name in items {
+            if name.is_empty() {
                 continue;
             }
+            match f.names {
+                refs::Names::Standard => {
+                    // spec: S-0004 claims 2 and 13 (`none` and `<none>` mean no type)
+                    if value::is_no_type(name) {
+                        continue;
+                    }
+                }
+                refs::Names::Particle => {
+                    // spec: S-0004 claim 2 (in the four particle fields `<none>` names no type)
+                    if name.eq_ignore_ascii_case(b"<none>") {
+                        if f.limit == refs::ATTACHED_SYSTEM_LIMIT {
+                            // spec: S-0004 Edge cases (quirks.attached_system_none_keeps: the importer warns)
+                            self.warn(
+                                hist,
+                                line,
+                                format!(
+                                    "{} {:?} keeps the attached particle system in force (S-0004 claim 2)",
+                                    f.key,
+                                    show(name)
+                                ),
+                            );
+                        }
+                        continue;
+                    }
+                    // spec: S-0004 Edge cases (quirks.particle_none_is_a_name off: `none` means no type)
+                    if !self.quirks.particle_none_is_a_name && value::is_no_type(name) {
+                        continue;
+                    }
+                }
+            }
+            if f.form == refs::Form::List
+                && (name
+                    .first()
+                    .is_some_and(|&b| glasnost_ini::lex::is_whitespace(b))
+                    || name
+                        .last()
+                        .is_some_and(|&b| glasnost_ini::lex::is_whitespace(b)))
+            {
+                // spec: S-0003 claim 12 (the importer warns for a name item that begins or ends with whitespace)
+                self.warn(
+                    hist,
+                    line,
+                    format!(
+                        "{} item {:?} begins or ends with whitespace, so it names a different type (S-0003 claim 12)",
+                        f.key,
+                        show(name)
+                    ),
+                );
+            }
+            self.reference(f.kind, name, hist, line, how.clone(), from);
+        }
+    }
+
+    /// The weapon fields of a building, vehicle, aircraft or infantry type
+    /// (S-0004 claim 13, weapon-slot table). The turret count, the weapon
+    /// count and the clear-all-weapons flag act with the values the type
+    /// holds once this section has given them.
+    fn weapon_fields(
+        &mut self,
+        kind: Kind,
+        index: usize,
+        section: &Section,
+        hist: usize,
+        referrer: &[u8],
+    ) {
+        let (tc_key, wc_key, clear_key) = refs::SLOT_KEYS;
+        let t = &self.reg(kind)[index];
+        // spec: S-0308 Import mapping (turret count, weapon count: engine default 0; clear flag: no)
+        let tc = crate::art::int_as_of(t, tc_key, self.layer_now, 0);
+        let wc = crate::art::int_as_of(t, wc_key, self.layer_now, 0);
+        let clear = crate::art::bool_as_of(t, clear_key, self.layer_now, false);
+        let mut keys: Vec<String> = Vec::new();
+        if tc < 1 {
+            // spec: S-0004 claim 13 (turret count below 1: the four standard fields, unless the flag is set)
+            if !clear {
+                keys.extend(refs::STANDARD_WEAPONS.iter().map(|k| (*k).to_owned()));
+            }
+        } else {
+            // spec: S-0004 claim 13 (turret count 1 or more: Weapon1, EliteWeapon1, …, Weapon c, EliteWeapon c)
+            let mut numbered: Vec<(u32, usize, String)> = Vec::new();
+            for e in section.entries() {
+                for (j, prefix) in refs::NUMBERED_WEAPONS.iter().enumerate() {
+                    let Some(digits) = e.key.strip_prefix(prefix.as_bytes()) else {
+                        continue;
+                    };
+                    let Some(n) = numbered_suffix(digits) else {
+                        continue;
+                    };
+                    if i64::from(n) <= i64::from(wc) {
+                        numbered.push((n, j, show(&e.key)));
+                    }
+                }
+            }
+            numbered.sort();
+            numbered.dedup();
+            keys.extend(numbered.into_iter().map(|(_, _, k)| k));
+        }
+        // spec: S-0004 Import mapping (DeathWeapon and the slot fields name weapons)
+        let field = refs::Field {
+            key: "",
+            kind: Kind::Weapons,
+            form: refs::Form::Single,
+            limit: refs::REFERENCE_LIMIT,
+            names: refs::Names::Standard,
+            art: false,
+        };
+        for key in keys {
+            let Some(entry) = section.get(key.as_bytes()) else {
+                continue;
+            };
+            let (stored, line) = (entry.value.clone(), entry.line);
             let how = How::Reference {
                 kind,
-                name: referrer.clone(),
-                key,
+                name: referrer.to_vec(),
+                key: key.clone(),
             };
-            self.reference(target, name, li, how, kind);
-        }
-        // spec: S-0006 claim 5 (an omitted emitted particle is the particle with the empty name)
-        if kind == Kind::ParticleSystems && !holds_what_given && self.quirks.override_resets_keys {
-            self.reference(Kind::Particles, b"", li, How::EmptyParticle, kind);
+            self.field(&field, &stored, hist, line, &how, Some((kind, index)));
         }
     }
 
-    /// Creates or finds a type by reference during `during`'s pass.
-    fn reference(&mut self, target: Kind, name: &[u8], li: usize, how: How, during: Kind) {
-        let (i, created) = self.find_or_create(target, name, li, how);
-        // spec: S-0004 claim 6 (a type created during a later-ranked pass is not read in this layer)
-        if created && !self.quirks.unlisted_reference_unread && target.rank() < during.rank() {
-            self.read_now(target, i, li);
+    /// Finds or creates a type by reference (S-0004 claims 6 and 13).
+    fn reference(
+        &mut self,
+        target: Kind,
+        name: &[u8],
+        hist: usize,
+        line: u32,
+        how: How,
+        from: Option<(Kind, usize)>,
+    ) {
+        if self.find(target, name).is_some() {
+            return;
+        }
+        // spec: S-0004 claims 4 and 6 (row 2 is read in the layer; row 3 only if created no later than its kind's pass; rows 4 to 6 not)
+        let read_here = match self.phase {
+            Phase::Early => true,
+            Phase::Pass(k) => target.rank() >= k.rank(),
+            Phase::Late => false,
+        };
+        let read_now = read_here || !self.quirks.unlisted_reference_unread;
+        if read_now && self.repeats(target, name, from) {
+            // Departure (Q-0083): the original would create types without end.
+            self.warn(
+                hist,
+                line,
+                format!(
+                    "{} {:?} would create another {} of that stored name, which would read the same section and name it again without end; not created (S-0004 claim 8, a departure, Q-0083)",
+                    how_key(&how),
+                    show(name),
+                    target.key()
+                ),
+            );
+            return;
+        }
+        let li = self.layer_now;
+        let i = self.create(target, name, li, how);
+        self.origin.insert((target, i), (from, name.to_vec()));
+        if !read_here && !self.quirks.unlisted_reference_unread {
+            self.pending.push((target, i));
         }
     }
 
-    /// Queues a type created by reference for a reading of the creating
-    /// layer's section after that layer's passes (the switch-off form of
-    /// S-0004 claim 6).
-    fn read_now(&mut self, kind: Kind, index: usize, _li: usize) {
-        self.pending.push((kind, index));
+    /// Whether creating a type of `target` by `name` from `from` repeats a
+    /// creation of the same chain in this layer: some type in the chain of
+    /// creators of `from` (itself included), created in this layer, is of
+    /// `target` and was created by the same name. Such a new type would
+    /// get the same stored name, read the same section and create the next
+    /// one in turn (S-0004 claim 8 with names longer than their stored
+    /// form).
+    fn repeats(&self, target: Kind, name: &[u8], from: Option<(Kind, usize)>) -> bool {
+        let mut cur = from;
+        while let Some(c) = cur {
+            if self.reg(c.0)[c.1].created_in != self.layer_now {
+                return false;
+            }
+            let Some((parent, probe)) = self.origin.get(&c) else {
+                return false;
+            };
+            if c.0 == target && value::type_name_eq(probe, name) {
+                return true;
+            }
+            cur = *parent;
+        }
+        false
     }
 
-    fn crate_rules(&mut self, li: usize, doc: &Document) {
-        let Some(section) = doc.section(CRATE_RULES.as_bytes()) else {
+    /// The creating fields of a game-wide section of this layer (S-0004
+    /// claims 4 and 13).
+    fn game_wide_refs(&mut self, g: &refs::GameWide, li: usize, doc: &Document) {
+        let Some(section) = doc.section(g.section.as_bytes()) else {
             return;
         };
-        for key in CRATE_KEYS {
-            let Some(stored) = section.value(key.as_bytes()) else {
+        let section = section.clone();
+        for f in g.fields {
+            let Some(entry) = section.get(f.key.as_bytes()) else {
                 continue;
             };
-            let name = value::text(stored, value::COMMON_TEXT_LIMIT);
-            if name.is_empty() || value::is_no_type(name) {
-                continue;
-            }
             let how = How::GameWide {
-                section: CRATE_RULES,
-                key,
+                section: g.section,
+                key: f.key,
             };
-            let (i, created) = self.find_or_create(Kind::Overlays, name, li, how);
-            // spec: S-0004 claim 6 (types first named by the late sections are not read in that layer)
-            if created && !self.quirks.unlisted_reference_unread {
-                self.pending.push((Kind::Overlays, i));
-            }
+            self.field(f, &entry.value, li, entry.line, &how, None);
         }
     }
-
     fn barrels(&mut self, index: usize, li: usize, section: &Section, has: &dyn Fn(&str) -> bool) {
         if !self.quirks.barrel_recoil_layer_reset {
             return;
@@ -1416,6 +1660,19 @@ impl Run<'_> {
     }
 
     fn finish(&mut self) {
+        // spec: S-0004 claim 3 (at game start the fixed particle system is created if missing; it reads no section)
+        if self
+            .find(Kind::ParticleSystems, refs::GAS_CLOUD_SYSTEM)
+            .is_none()
+        {
+            let li = self.layer_now;
+            self.create(
+                Kind::ParticleSystems,
+                refs::GAS_CLOUD_SYSTEM,
+                li,
+                How::GameStart,
+            );
+        }
         // With the switch off, a barrel value that no layer sets is the turret's after the last layer.
         if !self.quirks.barrel_recoil_layer_reset {
             for t in self.reg_mut(Kind::Buildings) {
@@ -1437,6 +1694,25 @@ impl Run<'_> {
             }
         }
     }
+}
+
+/// The key that created a type, for warnings.
+fn how_key(how: &How) -> String {
+    match how {
+        How::Reference { kind, name, key } => format!("{} {} {key}", kind.key(), show(name)),
+        How::GameWide { section, key } => format!("[{section}] {key}"),
+        How::EmptyParticle | How::SideField | How::GameStart | How::List => String::new(),
+    }
+}
+
+/// The number of a numbered weapon field's key (`Weapon`*n*): the key's
+/// remainder written as a decimal number from 1, without a sign or leading
+/// zeros (S-0004 Import mapping).
+fn numbered_suffix(digits: &[u8]) -> Option<u32> {
+    if digits.is_empty() || digits[0] == b'0' || !digits.iter().all(u8::is_ascii_digit) {
+        return None;
+    }
+    std::str::from_utf8(digits).ok()?.parse().ok()
 }
 
 /// Whether a decimal stored value is zero (either sign).

@@ -665,13 +665,14 @@ fn every_record_kind_resolves() {
     assert_eq!(dec(&s.countries["Ruritania"].speed_units_mult), Some("25%"));
     assert_eq!(s.general.iq_auto_crush, Some(1));
     assert_eq!(s.general.player_auto_crush, Some(true));
-    // Weapons and projectiles exist by reference only (S-0004 claim 3); no
-    // reference the specs list creates one from these sections (Q-0005).
-    assert!(s.weapons.is_empty() && s.projectiles.is_empty());
+    // Weapons and projectiles exist by reference only (S-0004 claims 3 and
+    // 13): the building's primary weapon and that weapon's projectile.
+    assert_eq!(s.weapons.keys().collect::<Vec<_>>(), ["Zap"]);
+    assert_eq!(s.projectiles.keys().collect::<Vec<_>>(), ["Dart"]);
 }
 
-/// Weapon and projectile records carry valid field names (their registries
-/// fill only by references, Q-0005, so the record is put there by hand).
+/// Weapon and projectile records carry valid field names (the record is
+/// put in both registries by hand, so that one section feeds both).
 /// spec: S-0004 claim 3
 #[test]
 fn weapon_and_projectile_fields_resolve() {
@@ -750,10 +751,13 @@ fn starting_unit_gate_and_vein_fields() {
                 [TRUCK]\nCost=600\nTechLevel=3\nOwner=beta,Alpha, Beta,Gamma\nLargeVisceroid=yes\n\
                 [GUY]\nAllowedToStartInMultiplayer=no\n[VEIN]\nIsVeins=yes\n";
     let map = "[MultiplayerDialogSettings]\nTechLevel=2\n[Alpha]\nMultiplayPassive=yes\n";
-    let (s, w) = sim(base, map, "");
+    let (s, _) = sim(base, map, "");
     let g = &s.general;
-    assert_eq!(g.base_unit, Some(vec!["MCV".to_string()]));
-    assert!(warned(&w, "\"NOPE\" names no"));
+    // spec: S-0004 claim 13 ([General] BaseUnit is a creating list field)
+    assert_eq!(
+        g.base_unit,
+        Some(vec!["MCV".to_string(), "NOPE".to_string()])
+    );
     assert_eq!(
         g.multiplayer_tech_level,
         Some(7),

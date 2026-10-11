@@ -25,11 +25,15 @@ pub mod kinds;
 pub mod layers;
 pub mod map;
 pub mod names;
+pub mod refs;
 pub mod sim;
 pub mod theater;
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod refs_tests;
 
 use glasnost_ini::{Document, Quirks as IniQuirks};
 use glasnost_rules::jsonc::Node;

@@ -691,7 +691,11 @@ fn every_combat_key_resolves() {
     let r = &s.countries["Ruritania"];
     assert_eq!(dec(&r.firepower), Some("125e-2"));
     assert_eq!(dec(&r.armor_defenses_mult), Some("25%"));
-    assert_eq!(r.veteran_infantry, Some(vec!["Walker".to_string()]));
+    // spec: S-0004 claim 13 (a country's veteran lists create the types they name)
+    assert_eq!(
+        r.veteran_infantry,
+        Some(vec!["Walker".to_string(), "Nobody".to_string()])
+    );
     assert_eq!(r.veteran_aircraft, Some(vec!["Kite".to_string()]));
     for text in [
         "infantry Walker EliteAbilities: \" faster\" names no ability",
@@ -707,7 +711,6 @@ fn every_combat_key_resolves() {
         "buildings Hut Cost -5 is negative",
         "countries Ruritania Armor 1.5: the original ignores",
         "countries Ruritania ROF -0.5 is negative",
-        "\"Nobody\" names no infantry type",
     ] {
         assert!(warned(&w, text), "{text}: {w:#?}");
     }
@@ -819,7 +822,8 @@ fn game_wide_combat_values() {
     assert_eq!(g.harvester_unit, Some(vec!["Hauler".to_string()]));
     assert_eq!(texts(&g.metallic_debris), ["M1", "M2"]);
     assert_eq!(g.allied_crew.as_deref(), Some("Crewman"));
-    assert_eq!(g.soviet_crew, None);
+    // spec: S-0004 claim 13 ([General] crew fields create the infantry they name)
+    assert_eq!(g.soviet_crew.as_deref(), Some("Ghost"));
     assert_eq!(
         (g.allied_survivor_divisor, g.repair_step, g.i_repair_step),
         (Some(100), Some(0), Some(2))
@@ -883,7 +887,6 @@ fn game_wide_combat_values() {
         "[General] SelfHealUnitFrames -5 is not above 0",
         "[General] SelfHealInfantryAmount -1 is negative",
         "[General] RepairRate 0.0001 gives a building repair period below one tick",
-        "[General] SovietCrew names no infantry type",
         "[General] CrewEscape \"50\" has no `%`",
         "[Normal] Armor 0.5: the original ignores",
         "[Normal] ROF -1 is negative",
@@ -929,7 +932,8 @@ fn combat_coverage() {
         base: Some(file(
             "rules.ini",
             "[VehicleTypes]\n1=Cart\n[Warheads]\n1=Pow\n\
-             [Cart]\nArmor=heavy\nWeapon3=Zap\nAmmo=2\nBurstDelay0=3\nWake=x\n\
+             [Cart]\nArmor=heavy\nWeapon3=Zap\nAmmo=2\nBurstDelay0=3\nWake=x\nPrimary=Gun\n\
+             [Gun]\nROF=5\n[BuildingTypes]\n1=Hut\n[Hut]\nCost=5\n\
              [Pow]\nVerses=50%\nCellSpread=1\nShakeXlo=2\n\
              [CombatDamage]\nMaxDamage=500\nMinDamage=1\n[General]\nCrewEscape=50%\n\
              DumbMyEffectivenessCoefficient=1\n",
