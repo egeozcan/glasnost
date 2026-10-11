@@ -1202,8 +1202,14 @@ pub fn turn(w: &mut World, id: ObjectId) {
         Some(None) => remove(w, id),
         Some(Some(point)) => {
             pr.pos = point;
-            let arrival = rows.arrival;
-            let reached = rows.reached || rows.passed;
+            // spec: S-0306 T1 and claim 20 b (the passed-by row is not a reached row; it counts as arrival when the firer's type is a jumpjet type)
+            let jumpjet = pr
+                .firer
+                .and_then(|x| w.obj(x))
+                .and_then(|o| w.rules().unit(o.kind, o.type_index))
+                .is_some_and(|u| u.jumpjet);
+            let arrival = rows.arrival || (rows.passed && jumpjet);
+            let reached = rows.reached;
             let pt = detonation_point(w, &pr, &p, point, arrival, reached, speed_start);
             if rules.combat.warhead_of(pr.weapon).is_some_and(|h| h.nuke) {
                 // spec: S-0306 claim 25 (the nuclear warhead waits for its fireball animation)
