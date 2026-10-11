@@ -1,0 +1,777 @@
+---
+id: S-0404
+title: Production queue and payment (production lines, price, pay-as-you-go steps, waiting for money, hold, cancel and refunds, queue limit, completion)
+topic: production
+revision: 1
+sources-class: [decomp, design]
+status: approved
+approved-by: Claude (delegated by project lead)
+approved-on: 2026-10-11
+measurements: []
+requests: []
+supersedes: []
+---
+
+# S-0404: Production queue and payment (production lines, price, pay-as-you-go steps, waiting for money, hold, cancel and refunds, queue limit, completion)
+
+## Summary
+
+A house's production lines: the price of an item, how it is paid step by step, waiting for money,
+hold, cancel and refunds, the queue, completion, and how factory buildings appearing, leaving or
+losing power affect the lines. Step length is S-0403, clicks are S-0411 and the credits display is
+S-0416; skirmish only, network games and campaigns are out of scope.
+
+## Terms
+
+Glossary terms are used as defined there (*house*, *country*, *type*, *field*, *credits*, *tick*,
+*building*, *infantry*, *vehicle*, *aircraft*, *AI house*, *human-controlled*, *computer-controlled*,
+*local player*, *difficulty row*, *difficulty skill block*, *quirk switch*, *importer warning*,
+*absent-key default*). From S-0203: *production line*, *turn pass*. From S-0213: *order*, *primary
+factory* (Terms; this spec gives the rule, claim 7). From S-0403: *item*, *line kind*, *defence*,
+*ordinary building*, *progress*, *done*, *step period* *R*, *factory building of a kind*. From S-0205:
+RZ₅₃, RZ₂₄, trunc and the integer quotient ÷. From S-0408: *adjusted cost* *C*′ (claim 2). In
+addition:
+
+- **Single, double.** A *single* is a single-precision floating-point number, a *double* a
+  double-precision one; "narrowed to single precision" means converted from a double to a single.
+- **Owner countries** (of a type). The countries that the type's data names as its owners.
+
+- **Dock types** (of an aircraft type). The building types that an aircraft type docks at, in the
+  sense of the glossary's *refinery, dock types* (S-0408, Terms). Claim 2 uses the first of them.
+- **Price** *P*. What a house pays for one item of a type, in credits (claim 2).
+- **Balance owed** *B*. Per line, the part of the item's price not yet paid, in credits.
+- **Credit balance** *Y*. The house's own stock of credits (glossary *credit balance*). Harvests add
+  to it (S-0402, claim 12), the payments of a step take from it and cancel refunds add to it (this
+  spec), and a sale adds to it (S-0408, claim 1).
+- **House storage** and its value *V*. The original's house has a store of resources of its own,
+  separate from every building's storage (S-0408, claim 10) and from a weeder's store. *V* is the
+  value of the amounts in it, in credits, before the income factor. This spec owns the store
+  (claim 4); in a skirmish it is always empty, so *V* = 0.
+- **Income factor** *M*. The income factor of the house's country, a single, as in S-0402 (Terms and
+  claim 12).
+- **Available credits** *A*. What a house can spend at a given moment: its credit balance plus the
+  value of its house storage (claim 4). In a skirmish *A* = *Y*.
+- **Queue.** Per line, the ordered list of types ordered after the item, waiting to be started. A
+  queued type has no object and costs nothing until it starts.
+- **Player hold.** A line state set by a hold order: no progress until a resume.
+- **Automatic hold.** A line state set by the check of claim 8 on a running or waiting item when
+  none of the house's factory buildings that could make it is switched on, and lifted by that check
+  only. A line is on at most one hold at a time (claim 8): the automatic hold and the player hold
+  exclude each other.
+- **Could make, could release.** A factory building of the item's kind *could make* a type when it
+  is on the map, is not being sold, its type's owner countries share at least one country with the
+  item type's owner countries, it is of the matching kind for vehicles (a naval factory building for
+  a naval vehicle, a non-naval one for every other vehicle, infantry or aircraft item) and the
+  tech-tree rules let its house build the type (S-0407). *Could make without the tech-tree rule*
+  is the same with the last condition left out. Each rule below says whether it also needs the
+  building to be switched on and, for aircraft, to have a *free dock*: an aircraft factory
+  building has a free dock when at least one of its docking places is empty or when no aircraft is
+  docked with it at all. Dock occupancy matters only for aircraft items. A factory building *could
+  release* a done unit when it is switched on, could make the unit's type without the tech-tree
+  rule and, for an aircraft, has a free dock. For an aircraft only, when no building of the
+  house could release it by that definition, every switched-on building that could make it without
+  the tech-tree rule counts as one that could release it (the fallback of claim 7, which gives the
+  choice among such buildings).
+- **Switched on, switched off.** A building's power switch state: the player's power toggle
+  and some trigger actions switch a building off or on, and a map can place a building
+  switched off; the power spec S-0405 owns the power switch. A power deficit does not switch a building
+  off: it only slows production (S-0403, claim 5). Only building types that drain power, or that
+  need power to work, can be switched off.
+- **Waiting for money.** A running line whose last step was refused because the step's payment was
+  more than the house's available credits (claim 4).
+- **Build order, hold order, cancel order, cancel-all order, place order.** The production orders a
+  house gives. Each names a type (and so a line); a place order of a building also names a cell.
+  They are orders in the sense of S-0213: given in one tick and applied at the order boundary that
+  follows it (S-0213, claim 1; S-0203, claim 7). S-0411 says which clicks give them.
+
+## Behaviour
+
+1. **Six independent lines per house.** Each house has at most one production line of each line
+   kind: infantry, ground vehicles, naval vehicles, aircraft, ordinary buildings and defences. A type
+   is built only by the line of its kind (S-0403, Terms). The six lines run in parallel and do not
+   wait for one another; each has its own item, progress, balance owed and queue, and each pays for
+   its own steps. A line exists from the first build order applied for its kind until it has neither
+   an item nor a queued type; the next build order creates it again. Lines take part in the tick as
+   S-0203 (claim 8) states. All lines of all houses are updated in the order in which they were
+   created, a line created again counting as new (so it is updated after every line that existed
+   before it). The order is observable when two lines of one house can each make a step in the same
+   tick but the house can pay for only one of them: the line updated first is paid.
+   - Backing: `measurable` (scenario P1)
+   - Confidence: high (six lines and their independence); medium (the update order among lines)
+
+2. **Price.** The price of an item of a type with cost field *C* (S-0403, claim 2) for a house is
+
+   > *P* = trunc(RZ₅₃(RZ₅₃(*C* × *b*) × *a*))
+
+   where *a* is the country's cost factor for the type's kind (infantry, vehicles, aircraft,
+   ordinary buildings, defences; a single) and *b* is the product of the cost bonuses for that kind of
+   every building the house owns whose type grants cost bonuses (a single, 1 when it owns none,
+   formed one building at a time with each partial product narrowed to single precision, RZ₂₄). The
+   bonus product is worked out again whenever the house gains or loses such a building.
+
+   A building type whose cost field pays for units that come with it is priced in parts. Its *own
+   part* uses, instead of *C*, the type's adjusted cost *C*′, which S-0408 owns (claim 2 and F2: the
+   cost field less the halved cost fields of the first two pad aircraft types when the type is the
+   first dock type of the first pad aircraft type and the separate-aircraft flag is off, less the
+   cost field of the free unit type; raised to 0 only for a type with a free unit). Its price is then
+
+   > *P* = trunc(RZ₅₃(RZ₅₃(*C*′ × *b*) × *a*)) + (*P*₁ + *P*₂) ÷ 2 + *P*ₑ
+
+   limited below by 0 only when the type names a free unit type. The pad term (*P*₁ + *P*₂) ÷ 2
+   (integer quotient, toward zero) is present exactly when S-0408's pad deduction applies to the
+   type, *P*₁ and *P*₂ being the prices of the first two pad aircraft types (each by this claim,
+   with the aircraft factors), and *P*ₑ is the price of the free unit type for the same house (0 when
+   there is none). So the units included in a building's cost are priced with the factors of their
+   own kind, while the refund of a sale (S-0408) works from the cost fields instead of these prices.
+   The difficulty row's cost factor and the country's general cost factor have no effect on any price,
+   so in our engine the optional per-player handicap does not change prices.
+   - Backing: `measurable` (scenario P2)
+   - Confidence: high (the formula for non-building types and ordinary buildings without extra
+     parts; no effect of the row and general factors; the parts of a building price, as the
+     original forms a building type's price); medium (the pad term's rounding)
+
+3. **Starting an item.** A build order for a type is applied only if the house has a factory
+   building that could make it (Terms) and is switched on and, for an aircraft, has a free dock.
+   Otherwise it is ignored, also as a request to queue: for example no aircraft can be ordered, even
+   into the queue, while every switched-on aircraft factory building of the house has all its docking
+   places taken. What an applied order does depends on the state of the line:
+   - **Idle line** (no item, empty queue): the item starts at once: progress 0, balance owed
+     *B* = *P* at this moment, and the step period of S-0403 (claims 1 and 8) starts. No money is
+     needed to start: a house with 0 credits can start an item, which then waits for money at its
+     first step (claim 4).
+   - **Line on a player hold whose item is of the ordered type:** the order resumes the line
+     (claim 5) and adds nothing.
+   - **Line whose item is done and of the ordered type:** the item is left as it is, and nothing is
+     added.
+   - **Any other line:** the type is added at the end of the queue, unless the queue already holds the
+     game-wide maximum number of queued types (Constants); then the order is refused, and the local
+     player hears a refusal sound. A queued type is also refused when its build limit forbids it
+     at queue time; S-0407 (claim 16) owns that test, including how it counts the item in
+     production, its rule for limits of 0 or below and the different test for an aircraft type
+     that must return to a dock.
+   A line on an automatic hold has no switched-on factory building that could make its item's type,
+   so a build order for that type is ignored by the factory condition above, and the line cannot be
+   resumed that way until such a building is switched on (claim 8 then lifts the hold by itself). A
+   build order for another type of the same line is judged by its own factory condition and, when it
+   passes, is queued as above. Likewise a line on the forced-start hold of claim 10 cannot be resumed
+   while every factory building that could make its type is switched off. The item's object exists
+   from the start but is not on the map. The price at the start is the initial balance owed; it
+   has no other effect unless `quirks.refund_at_current_price` is off (Edge cases, *Recorded price*).
+   - Backing: `measurable` (scenario P3, parts a to h, and P7 for the done item)
+   - Confidence: high (start, queue, limit, the free-dock condition for aircraft); medium (the other
+     factory conditions)
+
+4. **Pay as you go.** Each progress step is paid when it is made. When the line's progress goes from
+   *k* − 1 to *k* (*k* = 1 … 54) with balance owed *B* before the step, its payment is
+
+   > *x*ₖ = *B* ÷ (54 − *k*) for *k* = 1 … 53, and *x*₅₄ = *B*;  in each case at most *B*.
+
+   For *k* = 53 the divisor is 1, so the 53rd step pays everything still owed and the 54th step
+   pays 0. The payments add up to exactly *P*. Example: *P* = 1000 pays 18 credits at steps 1 to 7,
+   19 at steps 8 to 53, and 0 at step 54. If *x*ₖ is more than the house's
+   available credits *A* at that moment (a signed comparison: *A* and *x*ₖ can be negative, see
+   claim 6 and Edge cases), the step is not made: progress stays at *k* − 1, nothing is
+   paid, and the line is waiting for money. Its next attempt comes *R* ticks later (S-0403, State and
+   ordering), at the same phase, whether or not money arrived in between; there is no partial
+   payment. Since the lines are updated after the turn pass (S-0203, claim 8), credits that a
+   harvester delivers during the turn pass of the tick of an attempt count for that attempt. A paid
+   step reduces the credit balance by its payment. Nothing puts resources into the house storage in
+   a skirmish (harvests and a sale's stored resources are paid straight into the balance: S-0402,
+   claim 12 and S-0408, claim 10), so *V* is always 0, the payment always fits in the balance and
+   *A* = *Y*. Our engine needs no house storage and keeps the credit balance only. In the original
+
+   > *A* = trunc(RZ₅₃(RZ₅₃(*V* × *M*) + *Y*))
+
+   where *Y* is the credit balance, *V* the value of the house storage and *M* the income factor
+   (S-0402, claim 12). With *V* = 0 this is *Y* exactly. The original also lets a payment that is
+   more than the balance empty the balance and take the rest from the house storage. That is not
+   specified here: which resource is spent first, whether whole units are removed and whether a
+   surplus from the last unit returns to the balance are unknown, and a skirmish never reaches it.
+   A later spec that adds a way to fill the house storage must measure it and state it.
+   - Backing: `measurable` (scenario P4) for the payment, the refusal, the retry period and
+     *A* = *Y*; `unmeasured` for spending from a filled house storage (no skirmish can fill it, so
+     the setup cannot observe it)
+   - Confidence: high (the payment formula, the refusal without partial payment, the retry period,
+     *A* = *Y* in a skirmish); medium (the formula for *A* with a filled house storage); low (the
+     spending order from a filled house storage)
+
+5. **Hold and resume.** A hold order puts a running line (also one waiting for money) on a player
+   hold when it is applied: no further steps, nothing refunded, progress and balance owed kept. It acts
+   on the line of the type it names, whatever type that line's item is. A step
+   that fell due in the tick of the order has already been made (S-0203, claim 8). A hold order to a
+   line already on a hold of either kind, or with a done item, does nothing; in particular a line on
+   an automatic hold stays on an automatic hold, which claim 8 lifts by itself. A build order for the held item's type
+   resumes it (claim 3): the step period is worked out again and the next step comes a full *R* ticks
+   later (S-0403, claim 8). The queue does not advance while the line is held.
+   - Backing: `measurable` (scenario P5)
+   - Confidence: high
+
+6. **Cancel and refund.** What a cancel order for type *X* does to *X*'s line depends on its queue
+   and its item:
+   - **The queue holds a copy of *X*:** the first such copy is removed and nothing else happens (no
+     money changes hands), even when the item is also of type *X*.
+   - **The queue holds no copy of *X*, and the line's item is of type *X*** (running, waiting for
+     money, on either hold or done): the item is cancelled: the house receives *P*′ − *B* credits, where *P*′
+     is the item's price at the moment of the cancel (claim 2), or, with
+     `quirks.refund_at_current_price` off, its price at the start (Edge cases) and *B* its balance owed; the item's object is deleted; and the first queued type,
+     if any, starts at once as a new item (claim 3, with the start conditions of the forced start in
+     claim 10); with an empty queue the line ceases to exist.
+   - **Any other case** (no copy of *X* in the queue and no item of type *X*): nothing happens.
+
+   A cancel-all order for *X* leaves no copy of *X* in the line: every queued copy of *X* is removed,
+   and an item of type *X* is cancelled with the refund above. When the item is cancelled, the line
+   then goes on as after the cancel above, the first queued type other than *X* taking the place of
+   the first queued type, so no copy of *X* starts in its place. The refund is added to the credit
+   balance with no upper limit. When the price has not changed since the start, the refund equals
+   what was paid, so cancelling at any progress costs nothing. The refund is negative when the price
+   of the moment is below the balance owed (a cost bonus gained after the start); a negative refund
+   is taken from the credit balance with no lower limit, so the balance, and with it *A*, can drop
+   below 0. While *A* is below 0 every step is refused, also one that would pay 0 (a payment of 0 is
+   more than *A*), until credits bring *A* back to the step's payment or above; the retry period
+   of claim 4 applies as for any refusal. No switch: this follows from `quirks.refund_at_current_price`
+   and from the signed arithmetic, and it needs a bonus price below the owed balance, so it arises
+   only with data that grants such a bonus.
+   - Backing: `measurable` (scenario P6, parts a to h)
+   - Confidence: high (refund and cancel cases); medium (the negative refund and the refusal at a
+     negative *A*, read from the signed addition and comparison)
+
+7. **Completion.** At step 54 the item is done and the line makes no more steps.
+   - **Units** (infantry, vehicles, aircraft). A place order without a cell releases the unit from a
+     factory building of its kind that is switched on and could make it with the tech-tree condition
+     left out (Terms), and, for an aircraft, has a free dock: among those, the one marked primary if
+     there is one, and otherwise the last in the order in which the house acquired its buildings.
+     An aircraft for which no such building has a free dock uses the same choice with the free-dock
+     condition left out: among the switched-on buildings that could make it without the tech-tree
+     rule (Terms, *could release*).
+     If no such building exists, the order does nothing and the item stays done, blocking the line.
+     When the building releases the unit, the line's next queued type starts at once (claim 3, with the
+     start conditions of the forced start in claim 10); with an empty queue the line ceases to exist. When the building's exit is momentarily blocked, the
+     unit stays done and the building retries by itself (the structures specs own exits). When the
+     release fails for any other reason, the item is cancelled with the refund of claim 6. S-0411
+     (claim 9) gives the place order that the interface issues by itself when a unit is done, in
+     our engine for every player house; its left click may cancel a done unit instead (S-0411,
+     claim 4).
+   - **Buildings and defences.** A done building waits until a place order with a cell puts it on the
+     map. Placement rules are S-0406. When the placement fails, the item stays done and the local
+     player hears a refusal; when it succeeds, the line ceases to exist (buildings never queue,
+     claim 10).
+   - Backing: `measurable` (scenario P7)
+   - Confidence: high (done at step 54, next queued item starts after the release, buildings wait for
+     placement); medium (the choice of the releasing building, the retry, the refund on a failed
+     release)
+
+8. **Factory buildings appearing, leaving or losing power.** Whenever one of a house's factory
+   buildings of a kind is placed, leaves the map, changes owner, or is switched off or on (S-0405),
+   that house's line of the kind is checked at once (for a building that changes owner, the lines of
+   both houses; for a vehicle factory building, the naval-vehicle line when the building is naval
+   and the ground-vehicle line otherwise). A line is looked at only by this check, so it is never
+   put on an automatic hold between two such events. The check judges "could make" (Terms) with
+   docks ignored throughout and with the power switch ignored except where switched-on buildings
+   are named. After a check, the line is as follows:
+   - **Queue.** It holds no queued type that no factory building of the house could make.
+   - **Item that no factory building of the house could make**, in any state (running, waiting for
+     money, on either hold, done): it has been cancelled with the refund of claim 6, and the line
+     goes on as after a cancel, with claim 10's forced start. The type that starts is the first
+     queued type that the queue rule above leaves.
+   - **Running or waiting item that some factory building of the house could make, but none that
+     is switched on:** it is on an automatic hold. An item that the check itself started in place of
+     a cancelled one is not judged by that check (claim 10: only the next check can hold it).
+   - **Automatic hold, and a switched-on factory building that could make the item exists:** the
+     hold is lifted, with a full step period before the next step as for a resume (S-0403, claim 8).
+   - **Done item, or item already on either hold:** left as it is. The check neither adds an
+     automatic hold to it nor lifts a player hold, so a line never carries two holds. In particular
+     the hold of claim 10's forced start is a player hold: the check leaves it, and only a build
+     order for its type resumes it (claim 3 refuses that order while no switched-on factory building
+     could make the type).
+
+   For factory buildings of buildings, the check covers only the ordinary-building line, not the
+   defence line (`quirks.defence_line_partial_factory_check`, Edge cases). Separately, when a factory
+   building is removed for good (destroyed, or sold), every line of its kind, the defence line
+   included, whose item no other factory building could make without the tech-tree rule, whatever its
+   power switch and docks, is cancelled with the refund of claim 6 and the first queued type starts
+   as after a cancel (claim 10). This rule looks only at the item, not at the queue, and works in
+   addition to the check above.
+   - Backing: `measurable` (scenario P8)
+   - Confidence: medium (the conditions and the defence-line exception); high (that a player hold is
+     never lifted by the check)
+
+9. **Items that stop being buildable.** When a type that is in production or queued stops being
+   buildable for its house through the tech-tree rules (S-0407; for example a prerequisite building
+   is lost), the original's interface removes its build icon and issues, in the local player's name,
+   a cancel order for it and a cancel-all order, so the item is refunded (claim 6) and its queued
+   copies removed. This happens only for the local player in the original; the original's
+   computer-controlled houses keep building such items. In our engine it is a rule for every player
+   house: the same two orders are issued automatically for every house, AI houses included (AI-house
+   ruling, glossary *AI house*). The non-player houses never build.
+   - Backing: `measurable` (scenario P9) for the local player's behaviour; `unmeasured` for the
+     original's computer-controlled houses, which the measurement setup keeps out of every observed
+     area (glossary, *bystander computer player*) and which are not a rule of our engine
+   - Confidence: medium (the conditions and the two orders); low (the tick in which the orders are
+     issued, Open questions)
+
+10. **Order legality for every house.** In our engine a production order is legal for a house only
+    when every rule that applies to it holds, judged when the order is issued, for AI houses as for
+    persons (S-0213, claim 3). The rules are:
+    - the state rule of S-0411 (claims 4 to 6): in particular a build order for a building or defence
+      is not legal while that line has an item (in progress, held or done).
+    - the offer rule of S-0407 (claim 13): a build order names a type that is offered to the house
+      and not at its build limit.
+    - for a place order with a cell, adjacency and explored ground (S-0406, claim 6, with S-0411,
+      claim 10); applying the order does not judge them again.
+    A legal build order is then applied or refused by claim 3 (the factory conditions, the queue
+    limit and S-0407's claim 16). This claim only lists the rules; each stays owned by the spec
+    named. The original applies the building-line case differently (Edge cases); its interface never
+    gives it.
+    A type taken from the queue to start after a cancel or a release is started even when
+    the house's only factory buildings that could make it are switched off or (for aircraft) have no
+    free dock, as long as one could make it; in the original such an item then starts on a player
+    hold when the house's available credits are at least *P* ÷ 54 (integer quotient) at the start, and
+    running (and waiting for money at its first step) otherwise; being running, it is put on an
+    automatic hold only by the next check of claim 8. Our engine reproduces this by default
+    (`quirks.forced_start_player_hold`, Edge cases); such an item is resumed by a build order for its
+    type, as any player hold (claim 5), which an AI house has to give like a person. When the first queued type cannot start even so (no factory building could
+    make it), it is dropped from the queue (Edge cases).
+    - Backing: `measurable` (scenario P3 for the refusal of a second building through the sidebar,
+      scenario P10 for the forced start and the dropped queue head)
+    - Confidence: high (the legality rule, a rule of our engine); medium (the forced-start hold and
+      its affordability test); low (dropping a queued type that cannot start, Edge cases)
+
+11. **Random draws: one creation draw per item started.** Starting an item creates its object, and
+    that creation takes one raw value from the scenario random stream (S-0202, claim 10, which
+    leaves the timing of production's creations to the production specs). So one draw is taken at
+    every start of an item, in the part of the tick in which the start is applied: when a build
+    order starts an item on an idle line (claim 3), when a cancel or a release starts the first
+    queued type (claims 6, 7 and 10) and when claim 8 does. A queued type that is only added to the
+    queue, or dropped from it, creates nothing and takes no draw (claim 10). Nothing else of a
+    line's life takes a draw: no step, payment, refusal, retry, hold, resume, cancel, refund,
+    completion or deletion of the item's object, and no line's own update. The order of the lines
+    in claim 1 therefore matters only for money (S-0203, claims 1 and 8 keep the lines' place in the
+    tick). The release of a done unit and the placement of a done building are not part of this
+    claim: their draws belong to the structures and placement specs.
+    - Backing: `measurable` (scenario P11, with the random-state recorder)
+    - Confidence: high (the creation draw at a start, S-0202); medium (that nothing else of the
+      lines draws)
+
+12. **The original's computer players.** The original's computer-controlled houses produce without
+    orders, through their factory buildings directly, with their own pacing. That is behaviour of the
+    original's computer player and not a rule of our engine: an AI house produces only through the
+    orders of this spec (glossary, *AI house*). AI designers may reproduce the original's pacing
+    with ordinary orders.
+    - Backing: `unmeasured` (it describes the original's computer player, which the measurement
+      setup deliberately keeps out of every observed area (bystander computer player, glossary) and
+      which is not a rule of our engine; the line is a note for AI designers)
+    - Confidence: medium
+
+## Formulas
+
+All amounts are integers in credits (S-0205, claim 1). Arithmetic results are RZ₅₃ with
+`quirks.chop_rounding` on and RN₅₃ with it off, and a narrowing to a single is RZ₂₄ with it on and
+RN₂₄ with it off (S-0205, Formulas); trunc is S-0205's conversion and does not depend on the switch.
+The original computes F1 and F3 in floating point (doubles, with the bonus product held as a
+single); the integer quotient ÷ of F2 is exact integer arithmetic.
+
+- **F1 (price).** *P* = trunc(RZ₅₃(RZ₅₃(*C* × *b*) × *a*)); for a building type with included units,
+  claim 2's form with *C*′ (S-0408, F2) and the added prices, limited below by 0 only when the type
+  names a free unit type. *b* = RZ₂₄(… RZ₂₄(RZ₂₄(1 × *β*₁) × *β*₂) … × *β*ⱼ) (RN₂₄ throughout with `quirks.chop_rounding`
+  off) over the house's bonus
+  buildings in the order the house acquired them, *β* their bonuses for the kind (singles). The
+  first product 1 × *β*₁ is exact and a product of two singles does not depend on their order, so
+  the order of acquisition is observable only when the house owns three or more bonus buildings
+  whose bonuses for the kind are not all equal: the partial products are then rounded differently,
+  and the price can differ.
+- **F2 (step payment).** For *k* = 1 … 53: *x*ₖ = min(*B*ₖ₋₁, *B*ₖ₋₁ ÷ (54 − *k*)); *x*₅₄ = *B*₅₃ = 0,
+  *B*ₖ = *B*ₖ₋₁ − *x*ₖ; *B*₀ = *P*. The step is refused when *x*ₖ > *A*, a signed comparison. (With *B* < 0, Edge cases, the minimum
+  makes the first step pay the whole negative balance.)
+- **F3 (available credits, original).** *A* = trunc(RZ₅₃(RZ₅₃(*V* × *M*) + *Y*)), *Y* the credit
+  balance, *V* the value of the house storage (0 in a skirmish), *M* the income factor; so *A* = *Y*
+  in a skirmish.
+- **F4 (refund).** refund = *P*′ − *B*, *P*′ the current price by F1; it can be negative, and the
+  credit balance has no lower limit (claim 6). With `quirks.refund_at_current_price` off, refund =
+  amount paid so far = *P* − *B*, *P* the price at the start.
+
+Worked payments (illustrative): *P* = 100 pays 1 credit at steps 1 to 6, 2 credits at steps 7 to 53
+and 0 at step 54; *P* = 10 pays 0 at steps 1 to 43 and 1 credit at each of steps 44 to 53.
+
+## Constants
+
+| Name (ours) | Value | Unit | Notes |
+|---|---|---|---|
+| Lines per house | 6 | lines | claim 1 |
+| Steps per item | 54 | steps | S-0403 |
+| Last paying step | 53 | step | claim 4 |
+| Absent-key default, maximum queued types | 5 | types per line | claim 3; counts queued types, not the item in production |
+
+## State and ordering
+
+Line states (per line):
+
+| State | Event | Result |
+|---|---|---|
+| no line | build order applied, start conditions met | running, progress 0, *B* = *P* |
+| running | step due, *x*ₖ ≤ *A* | progress + 1, pay *x*ₖ; done at 54 |
+| running | step due, *x*ₖ > *A* | waiting for money; retry *R* ticks later |
+| waiting for money | retry due, *x*ₖ ≤ *A* | running (step made and paid) |
+| waiting for money | retry due, *x*ₖ > *A* | still waiting; retry *R* ticks later |
+| running or waiting | hold order | player hold |
+| player hold (also the forced-start hold, claim 10) | build order for the held type, claim 3's start conditions met (a switched-on factory building could make it and, for an aircraft, has a free dock) | running; next step a full *R* later |
+| any with item | cancel order for the item's type, no queued copy | refund *P*′ − *B*; next queued starts, or no line |
+| any | cancel order with a queued copy of the type | first queued copy removed |
+| any with item | cancel-all order for the item's type | every queued copy removed; the item cancelled as above (refund *P*′ − *B*), the next queued type other than that one starts, or no line |
+| any | cancel-all order for a type with queued copies and no item of that type | every queued copy removed; no money changes hands |
+| any | cancel or cancel-all order for a type with no queued copy and no item of it | no change |
+| running, waiting | check of claim 8: some factory building could make the item, none of them is switched on | automatic hold |
+| automatic hold | check of claim 8: a switched-on factory building that could make the item exists | running; next step a full *R* later |
+| player hold, done | check of claim 8: none switched on | no change (no second hold) |
+| any with item | check of claim 8: no factory building of the house could make the item (tech-tree rule included, power and docks ignored, buildings being sold excluded); line of a factory building of buildings: ordinary-building line only | as a cancel (refund *P*′ − *B*) |
+| any with item | a factory building of its kind removed for good: no other building could make the item without the tech-tree rule (power and docks ignored; defence line included) | as a cancel |
+| done (unit) | place order, release succeeds | next queued starts, or no line |
+| done (unit) | place order, release fails for another reason than a blocked exit | as a cancel |
+| done (building) | place order with a valid cell | building placed; no line |
+| player hold (also the forced-start hold), automatic hold | build order for the held type, claim 3's start conditions not met | ignored; the hold stays |
+| done | build order for the item's type | nothing added |
+| any | build order for any other case of a busy line | type queued (queue limit and build limit permitting) |
+
+Ordering consequences:
+- A hold or cancel order given in the cycle of tick *n* is applied after the lines' update of tick
+  *n*, so a step due in tick *n* is made and paid first (S-0203, claim 8).
+- A refund from a cancel applied at the end of tick *n* is available to every line's step attempts
+  from tick *n* + 1.
+- Between two lines of one house due in the same tick, the earlier-created line pays first (claim 1).
+
+## Edge cases and quirks
+
+- **Refund at the current price** (`quirks.refund_at_current_price`, default on = original). Claim
+  6's refund uses the price at the moment of the cancel. The refund less what was paid is then
+  *P*′ − *P*, *P* being the price at the start. With a bonus below 1 (a cost reduction), a house
+  that owns a bonus building when the item starts, loses it and then cancels, gets more than it
+  paid (*P*′ > *P*); a house that gains a bonus building after the start and then cancels gets less
+  than it paid, even a negative refund (claim 6). A bonus above 1 reverses both. With the switch
+  off, the refund is the amount paid so far, the price at the start minus the balance owed, which is
+  what was paid and never negative for a non-negative price. Our engine then needs, per item, the
+  amount paid so far or equivalently the price at the start; with the switch on it needs neither.
+- **Forced start on a player hold** (`quirks.forced_start_player_hold`, default on = original, medium
+  confidence). An item started by claim 10's forced start (from the queue after a cancel or a
+  release, with no switched-on factory building, or no free dock for an aircraft, that could make its
+  type) starts on a player hold when the house's available credits are at least *P* ÷ 54 (integer
+  quotient) at that moment, and running otherwise. This depends on the credits at the start, which
+  no rule of the line otherwise does. With the switch off, such an item always starts running,
+  waits for money at its first step if need be, and is put on an automatic hold by the next check of
+  claim 8 (the same as the unaffordable case), so that no build order is needed to resume it. A
+  player hold from this switch is lifted by a build order only (claim 5).
+- **A building order to a busy building line (original only).** In the original, a build order for a
+  building or defence applied while that line holds a held or done item cancels that item with a
+  refund and starts the new one; applied while the line is running, it is refused. The original's
+  interface never issues it (S-0411, claim 6). Our engine makes such an order illegal (claim 10), so
+  neither outcome arises; no switch, and no scenario (the interface cannot give the order).
+- **Free last step.** Step 54 never costs anything (claim 4), so an item at progress 53 completes even
+  at 0 credits (not at a negative *A*, claim 6). This follows from the payment formula and has no switch.
+- **Zero-payment steps.** A cheap item's early steps cost 0 credits and are made even at 0
+  available credits, but not at a negative *A* (claim 6).
+- **Price changes during a build** change neither the balance owed nor the remaining payments; only
+  the refund (first quirk) and the price of later items.
+- **Recorded price.** After the start, an item's price at the start has no effect beyond being its
+  initial balance owed: the sale refund uses the adjusted cost and the factors of the moment (S-0408,
+  claim 1), and with the default `quirks.refund_at_current_price` the cancel refund uses the price
+  of the moment (claim 6). In the original the start price reaches only network-game
+  synchronisation, which is out of scope. With the default, our engine keeps no such record; with
+  `quirks.refund_at_current_price` off, it keeps the amount paid so far (that quirk).
+- **Pad aircraft list shorter than 2** (departure, no switch). Claim 2's pad term reads the second
+  pad aircraft type even when the game-wide list has only one, which gives an undefined result in
+  the original. Our engine takes the same departure as S-0408 (Edge cases): a missing entry counts
+  as cost and price 0, no pad term applies when the list is empty or the first pad aircraft has no
+  dock, and the importer warns. Unmeasured: the original's result is undefined, so no scenario can check it.
+- **Defence line partly unchecked** (`quirks.defence_line_partial_factory_check`, default on =
+  original). Claim 8's check after a factory building of buildings is placed, changes owner or is
+  switched off or on covers only the ordinary-building line. The defence line is cancelled by claim 8
+  only when a factory building of buildings is removed for good and no other could make its item
+  without the tech-tree rule, whatever its power switch and docks, and it is never put on an
+  automatic hold. So after a house's last factory building of buildings is
+  captured, its defence item keeps building unless claim 9's orders cancel it. With the switch off,
+  the defence line is checked exactly like the ordinary-building line.
+- **A queued type that cannot start is dropped** (`quirks.unstartable_queue_head_stalls`, default on
+  = original; low confidence). When a cancel or a release starts the first queued type and no factory
+  building could make it (claim 10), that type leaves the queue without starting, and the line is
+  left with no item and the rest of its queue. Such a line starts nothing more: a build order only
+  adds to its queue, and only claim 8's removals or the loss of every queued type end it. With the
+  switch off, the line drops every queued type that cannot start and starts the first one that can.
+- **Negative own part.** A building type with a pad term but no free unit type whose adjusted cost
+  is negative (S-0408, Edge cases) has a negative own part (claim 2), and its price is the sum of the
+  parts without the lower limit of 0. With a balance owed *B* < 0 the first step pays *B* (F2 takes
+  the lesser of *B* and the quotient), which gives the house credits, and the later steps pay 0.
+  This is a data error of the mod, not a rule: our engine reproduces the original's result, which is
+  not a departure, and the importer warns. No switch is proposed, because no other behaviour is
+  defined for such a type.
+- **Queue limit of 0 or below** from data refuses every queued type; the importer warns for a negative
+  value.
+
+## Import mapping
+
+| Key (file, section) | Concept | Form | Absent |
+|---|---|---|---|
+| `Cost` (rules, type) | cost field *C* | integer, credits | 0 |
+| `CostInfantryMult`, `CostUnitsMult`, `CostAircraftMult`, `CostBuildingsMult`, `CostDefensesMult` (rules, country) | country cost factor *a* for infantry, vehicles, aircraft, ordinary buildings, defences | decimal (S-0003, claims 6 and 7), held as a single | 1.0 |
+| `FactoryPlant` (rules, building type) | the type grants cost bonuses | boolean | no |
+| `InfantryCostBonus`, `UnitsCostBonus`, `AircraftCostBonus`, `BuildingsCostBonus`, `DefensesCostBonus` (rules, building type) | cost bonus *β* per kind | decimal, held as a single | 1.0 |
+| `BuildCat` (rules, building type) | combat category: defence line and defence factors | category name | not combat |
+| `Naval` (rules, vehicle type) | naval vehicle line | boolean | no |
+| `Factory` (rules, building type) | factory building of a kind | type kind | none |
+| `MaximumQueuedObjects` (rules, `General`) | maximum queued types per line | integer | 5 |
+| `IncomeMult` (rules, country) | income factor *M* in F3 (S-0402, claim 12) | decimal, held as a single | 1.0 |
+| `Cost` (rules, difficulty-row sections; rules, country) | no effect (claim 2) | decimal | — |
+| `BuildLimit` (rules, type) | build limit (S-0407) | integer | — |
+| `FreeUnit` (rules, building type) | the unit type that comes free with the building (claim 2) | type name | none |
+| `PadAircraft` (rules, `General`) | the pad aircraft types (claim 2) | list of type names | empty |
+| `SeparateAircraft` (rules, `General`) | the separate-aircraft flag (claim 2) | boolean | no |
+| `Dock` (rules, aircraft type) | dock types of an aircraft type; the first one is used in claim 2 and in S-0408's adjusted cost | list of type names | empty |
+
+## Measurement scenarios
+
+Measurement setup (glossary); a small purpose-made skirmish map, one human house, one bystander
+computer player, named test rules files in the map's override sections, scripted input for exact order ticks,
+and slow items (*R* of 100 ticks or more, S-0403) so that the credits display (S-0416) settles
+between steps. "Credits" means the settled display value, which is the house's available credits.
+The display shows a negative value as 0 (S-0416, claim 1), so a scenario that needs a negative *A*
+observes it through the lines' behaviour. "Step ticks" are the ticks at which the build icon's
+clock advances (S-0411, claim 8). The observed
+area of every scenario is the human house's base: its factory buildings, its production lines and
+the test objects the scenario names, plus the bystander's buildings the scenario names. The void rule
+of the glossary's *bystander computer player* applies: a run is repeated when an object of the
+bystander that the scenario does not name enters the observed area or acts on a test object, or when
+the bystander is defeated before the observation ends. Scenarios that use the random-state recorder
+(P11) add their own control.
+
+Runs: each part below (and each "second run" it names) is run three times with the same script. The
+scenarios are deterministic, so a difference between the three runs means that the setup was
+disturbed, and the part is repeated; the three agreeing results are one observation.
+
+**P1. Parallel lines and their update order.**
+- Setup: the house owns factory buildings of every kind; starts an infantry item, a ground vehicle, a
+  naval vehicle, an aircraft, an ordinary building and a defence in one order sequence. Part B: two
+  lines with equal *R* started in the same tick (infantry created first, then vehicles), credits set
+  so that only one step payment can be made in the tick both are due.
+- Observable: step ticks of each line; in part B, which line's clock advances and the credits.
+- Expected: all six advance independently, each at its own *R*; in part B the infantry line is paid
+  and the vehicle line waits. Repeated with the vehicle line created first: the vehicle line is paid.
+- Falsified if: any line waits for another, or in part B the later-created line is paid first.
+
+**P2. Price.** All costs and factors below are test data.
+- Part A (the rounding of the bonus product). Setup: the country's vehicle cost factor 1.0; two
+  test cost-bonus buildings of one type, each with a vehicle bonus of 0.8, both owned; a vehicle
+  type with *C* = 500. Observable: credits before and after the full build (total paid), and the
+  per-step payments, which F2 makes determine *P* exactly. Expected (the original runs with
+  `quirks.chop_rounding` on, so the product is narrowed with RZ₂₄): *b* is just below 0.64 and the
+  total is 319. Falsified if the total is 320, which is the result with RN₂₄ and with an exact
+  decimal product. With this *C* and these bonuses the two roundings give 319 and 320.
+- Part B (the factors). Setup: the country's vehicle cost factor 0.8; two test cost-bonus buildings
+  of one type with a vehicle bonus of 0.9 each, both owned; a vehicle type with *C* = 1001; a test
+  rules file setting the normal row's cost factor and the country's general cost factor to 2.0.
+  Observable: as in part A. Expected: total = F1 = 648; the row and general factors change nothing. Falsified if: the total
+  differs from 648, or the 2.0 factors change it.
+- Building part (the pad term and its rounding). Setup: the first two pad aircraft types with cost
+  fields 1000 and 1002; a test dock building of cost field 3000 that is the first dock type of the
+  first pad aircraft type, separate-aircraft flag off, no free unit; country aircraft cost factor
+  0.5 and building cost factor 1.0; no bonus buildings. Then *C*′ = 3000 − 1001 = 1999, the own part
+  is 1999, the pad prices are 500 and 501 and the pad term is 1001 ÷ 2 = 500. Observable: as in
+  part A. Expected: total = 2499.
+  Falsified if: the total is 3000 (the plain cost field), or 2500 (the pad term rounded up).
+- Free unit part. Setup: a test building of cost field 3000 with a free unit type of cost field 800.
+  Vehicle cost factor 0.5 and building cost factor 1.0; no pad term. Observable: as in part A.
+  Expected: own part 2200, price
+  of the free unit 400, total = 2600. Falsified if: the total is 3000 or 2200.
+- Negative own part (low confidence, Edge cases). Setup: pad aircraft cost fields 1000 and 1000; a
+  test dock building of cost field 100, the first dock type of the first pad aircraft type,
+  separate-aircraft flag off, no free unit; aircraft factor 0.5, building factor 1.0. Then *C*′ =
+  100 − 1000 = −900, the own part is −900, the pad term is 500 and *P* = −400. Observable: credits at
+  the start and after each step. Expected: the credits rise by 400 at step 1 and later steps change
+  nothing. Falsified if: the credits do not rise, or the price is clamped to 0.
+
+**P3. Start, queue and limit.**
+- Observable for every part unless the part names its own: whether the line exists and its clock
+  advances, the queue count (S-0411, claim 7), the refusal sound and the credits.
+- (a) Setup: credits 0; a build order for a vehicle type whose price is at least 53 (so that its
+  first step pays at least 1 credit, F2); then credits given by test trigger; then 7 further build
+  orders of the same vehicle type with the absent-key queue limit. Expected: at 0 credits the item starts and
+  waits at step 1; 5 copies queued and 2 refused with a refusal sound. Falsified if: the item does
+  not start at 0 credits or the queue holds another number.
+- (b) Setup: a build-limit-1 test type ordered twice. Expected: the second order refused.
+  Falsified if: the second copy is queued or started.
+- (c) Setup: a second building ordered through the sidebar while one is being built. Expected: the
+  click is refused with no order effect. Falsified if: the second building starts or replaces the
+  first.
+- (d) Free dock. Setup: an aircraft factory building whose docking places are all taken by docked
+  aircraft of the house (placed by the map or by test trigger, as in P8 run 5), the only switched-on
+  aircraft factory building; a build order for an aircraft on the idle aircraft line. Second run:
+  an aircraft item already running (started before the docks filled), then a further aircraft
+  build order meant for the queue. Observable: whether the aircraft line exists and its queue count
+  (S-0411, claim 7). Expected: no aircraft line is created in the first run, and in the second the
+  queue count stays 0. Falsified if: an aircraft order is applied or queued with every dock taken.
+- (e) Queue limit 0 in the test rules file: a vehicle item started, then a second order. Expected:
+  the first item starts and every further order is refused. Falsified if: a type is queued.
+- (f) Switched-off only factory. Setup: the house's only infantry factory building switched off by
+  the power toggle; an infantry build order. Expected: nothing starts and no line exists.
+  Falsified if: an item starts or is queued.
+- (g) Owner countries. Setup: a test factory building type whose owner countries share no country
+  with an infantry type's owner countries, the only infantry factory building; an order for that
+  infantry type. Expected: ignored. Falsified if: it starts or is queued.
+- (h) Naval match. Setup: only a non-naval vehicle factory building; a build order for a naval
+  vehicle; then the same with only a naval factory building and a ground vehicle. Expected: both
+  orders ignored. Falsified if: either starts or is queued.
+
+**P4. Payment and waiting for money.**
+- Setup: *P* = 1000 item with *R* = 200 at ample credits; then the same with credits 100 and a test
+  trigger that gives 50 credits at a known tick. Part C: a *P* = 10 item at credits 0, and a
+  second run with a *P* = 1000 item whose house has exactly 1000 credits at the start and no other
+  income.
+- Observable: credits after every step; step ticks.
+- Expected: payments follow F2 (18 at steps 1 to 7, 19 at steps 8 to 53, 0 at step 54); in the
+  second run the line stops when the next payment exceeds the credits, retries every 200 ticks at
+  the original phase, and resumes at the first retry after the gift.
+  Part C: with *P* = 10 at 0 credits, steps 1 to 43 are made (they pay 0) and the line waits at
+  step 44; with exactly *P* credits the item completes at step 54 with 0 credits left.
+- Falsified if: payments differ, a partial payment occurs, or the retry phase shifts to the gift tick.
+  In part C, a step of the first 43 waits at 0 credits, or the 54th step waits or charges anything.
+- The harvester delivery in the turn pass of a retry tick (claim 4) is S-0203's scenario O7, part A.
+
+**P5. Hold and resume.**
+- Setup: a unit item (infantry, vehicle or aircraft, not a building or defence: claim 10 and Edge
+  cases, *A building order to a busy building line*) with *R* = 200; hold at a known tick 120 ticks
+  into a step; resume 500 ticks later. Part B:
+  the hold order is given in the cycle of a tick in which a step falls due. Part C: a second hold
+  order to the held line, and a hold order to a line with a done item.
+- Observable: step ticks, credits.
+- Expected: no step and no payment during the hold; next step 200 ticks after the resume; no refund
+  on hold; in part B the step due in that tick is made and paid, and the hold begins after it; in
+  part C neither order changes anything (the held line stays held and resumes as above, the done
+  item stays done).
+- Falsified if: the line keeps the partial step, money is refunded, a step occurs during the hold,
+  in part B the due step is not made, or in part C an order changes the line.
+
+**P6. Cancel and refund.** Test cost-bonus buildings are added or removed by test trigger.
+- (a) Cancel at progress 20 with an unchanged price. Expected: the refund equals the amount paid.
+- (b) Two queued copies of the same type, cancel once. Expected: one queued copy removed, the item
+  continues. Falsified if: the running item is cancelled.
+- (c) Cancel-all with two queued copies. Expected: all copies and the item gone, refund as (a).
+- (d) The house owns a cost-bonus building of bonus 0.8 for the kind; a vehicle with *C* = 1000 and
+  vehicle factor 1.0 is started (*P* = 800); at progress 20 the bonus building is removed and the
+  item is cancelled. Then *B* = 500 and *P*′ = 1000. Expected: refund 500, which is 200 more than
+  the 300 paid. Falsified if: the refund is 300 (the amount paid) or anything but 500.
+- (e) A vehicle with *C* = 1000 and no bonus (*P* = 1000) at ample credits; a bonus building of
+  bonus 0.5 is gained at progress 20; the item runs on to the end. Expected: the payments after the
+  gain follow F2 on the balance owed of the start (19 per step from step 21 on), and the total paid
+  is 1000. Falsified if: the payments change with the bonus building.
+- (f) A second line's item waiting for money with retry ticks known; a cancel on the first line is
+  given in the cycle of one of those retry ticks, and in a second run in the cycle of the tick before
+  it. Expected: in the first run the waiting line's step at the retry tick is refused and made one *R*
+  later, in the second run it is made at the retry tick (a refund is available from the next tick
+  on). Falsified if: the refund is already available in its own tick.
+- (g) Negative refund. Credits 473 at the start and no income; a vehicle with *C* = 1000 and no
+  bonus (*P* = 1000); a second line's item of another kind with *P* = 10 started at the same time.
+  At progress 20 (*B* = 627, 373 paid, 100 credits left) a bonus building of bonus 0.5 is gained
+  and the first item is cancelled: *P*′ = 500, refund −127. Observable: the second line's clock.
+  Expected: the first line's clock disappears; the second line's steps (which pay 0) are refused
+  from then on and its clock stops; after a gift of 27 credits (making *A* = 0) it resumes at its
+  next retry tick. Falsified if: the second line keeps advancing, or does not resume after the gift.
+- (h) A cancel order for a type that has no queued copy and is not the line's item. Expected:
+  nothing changes and no money changes hands. Falsified if: the item or a queued type is removed.
+- Observable for all: credits, queue count, line state; in (e) the per-step payments.
+- Falsified in general by: any refund that differs from F4.
+
+**P7. Completion and release.**
+- Setup: two vehicle factories, the second acquired later, none marked primary; then the first marked
+  primary; a run with the only factory's exit blocked by units; a run with the only factory
+  switched off by the player's power toggle at completion. In the blocked-exit run, while the unit
+  is done and blocked, a build order for the same vehicle type is given.
+- Observable: which factory releases the unit; tick of release; whether the next queued item starts
+  at the release; the item state while blocked; the queue count after the build order.
+- Expected: the later-acquired factory releases without a primary mark, the primary one with it; the
+  next queued item starts in the release tick; blocked exit: the unit stays done and is released by
+  itself when the exit clears, and the build order adds nothing, so the queue count is unchanged.
+  Switched-off only factory: the item stays done until it is switched on and a place order is given
+  (S-0411, claim 4).
+- Falsified if: another factory releases the unit, the next item starts later, the blocked case
+  cancels the item, or the build order for the done item's type is queued.
+
+**P8. Factory buildings leaving or losing power.**
+- Setup, runs 1 to 6: an infantry item in production with two queued infantry types; the only
+  infantry factory is sold; in a second run a second factory exists; in a third run the only factory
+  is switched off by the power toggle, then switched on again; in a fourth run the house falls into
+  a power deficit; in a fifth run an aircraft item runs while every dock of the only aircraft
+  factory gets taken; in a sixth run the house's only factory building of buildings is captured by
+  test trigger while an ordinary building and a defence are in production (a test rules file lets
+  both lines run).
+- Run 7 (a player hold is never lifted by the check): the item put on a player hold, the only
+  factory switched off and on again. Run 8 (the queue rule): an item whose type the sold factory
+  and another factory can both make, with a queued type that only the sold factory could make
+  (by owner countries); the sold factory is sold. Run 9 (removal for good, defence line included):
+  the only factory building of buildings is destroyed by test trigger while an ordinary building and
+  a defence are in production.
+- Observable: credits, queue, line state; in runs 6 and 9 the tick of each refund (credits recorded
+  per tick by the recorder, or the clocks' disappearance).
+- Expected: run 1: the item refunded, the queue cleared; run 2: unchanged; run 3: automatic hold
+  while switched off, resumes by itself with a full step period after it is switched on; run 4: no
+  hold (only slower steps, S-0403 claim 5); run 5: no hold, the item keeps building; run 6: the
+  ordinary building refunded in the capture tick, the defence only through claim 9's cancel orders
+  (not earlier than the next order boundary); run 7: the hold stays through both changes and ends
+  only by a build order; run 8: the queued type leaves the queue and the item continues; run 9: both
+  items refunded in the tick of the destruction.
+- Falsified if: any of these outcomes differs, in particular if run 5 holds the item, run 6
+  refunds the defence in the capture tick itself, or run 7 lifts the hold.
+
+**P9. Items that stop being buildable.**
+- Setup: an item whose type needs a test prerequisite building, which is destroyed by test trigger
+  during production; a queued copy as well.
+- Observable: credits and line state; the build icon.
+- Expected: the build icon disappears, the item is refunded and the queued copy removed, within one or two
+  ticks of the destruction.
+- Falsified if: the item keeps building or is not refunded.
+
+**P10. Forced start (claim 10 and its quirks).**
+- Setup, part A (forced start on a hold): an aircraft factory building with a free dock; an aircraft
+  item in production and a second aircraft type queued, both ordered while the dock was free (claim 3
+  refuses aircraft orders while every dock is taken); then every dock is occupied by test trigger
+  and the item completes and is released through the fallback (claim 7). A second run with the
+  credits set below the queued item's price ÷ 54 (integer quotient) at that moment, a third with
+  them at exactly that bound.
+- Observable: the queued item's state after it starts.
+- Expected: it starts on a player hold when the available credits are at least its price ÷ 54 at
+  the start (the third run: held; the second run: running, and waiting for money at its first
+  step if it cannot pay), and it is resumed by a build order for its type once a dock is free.
+- Falsified if: it is refused, runs while affordable, or is held while unaffordable. A result in
+  which every run is running would show the behaviour of `quirks.forced_start_player_hold` off.
+- Setup, part B (the dropped queue head, low confidence): vehicle item A running with two types B
+  and C queued, where B needs a test prerequisite building X that C does not need. X is destroyed
+  by test trigger in tick *n*, and a cancel order for A is given in the cycle of tick *n*, so it is
+  applied before the interface's own orders of claim 9 (those come one or two ticks later). Run a
+  second time with the cancel order given a few ticks after the interface's cancel orders for B
+  have been applied.
+- Observable: after tick *n*, whether C starts, the queue count and the line's clock.
+- Expected: in the first run B leaves the queue without starting and C stays queued with the line
+  holding no item and starting nothing (build orders only add to the queue); in the second run B is
+  already removed and the cancel of A starts C.
+- Falsified if: in the first run C starts, or B starts. If the first run cannot be timed so that the
+  cancel precedes the interface's orders, the rule stays unverified and keeps its low confidence.
+
+**P11. Random draws of the lines (claim 11).**
+- Setup: a test map with nothing that moves or animates and with the glossary's bystander computer
+  player kept idle by named test data, on which the random-state recorder's control interval (no
+  items, 300 ticks) shows no advance of the scenario stream, as in S-0202's scenario R5 (a); if it
+  advances the scenario first removes the cause. Then, with scripted input at known ticks, in one
+  run, each in a tick of its own (so that no tick holds two starts): start a building item and let it
+  run to step 54 (done, not placed); start an infantry item with a second type queued; give a hold
+  and a resume; a cancel with a refund (which starts the queued type); a cancel-all; a line waiting
+  for money for several retries.
+- Observable: the recorded stream position at every tick, which gives the number of raw values taken
+  per tick (S-0202, scenario R5's method).
+- Expected: exactly one raw value is taken in each tick in which an item starts (the first start
+  of each line, and the start of a queued type after a cancel), and none in any other tick, in
+  particular none at steps, payments, refusals, retries, holds, resumes, refunds or at the
+  building's completion.
+- Falsified if: any other tick takes a raw value, or a start tick takes none or more than one.
+
+## Open questions
+
+1. The tick in which the automatic cancel orders of claim 9 are issued relative to the loss of
+   buildability: in the original they come from the local house's update, and whether they apply at
+   the end of the same tick or the next was not established (scenario P9 bounds it).
+2. The exact conditions under which the releasing building retries a blocked exit (claim 7) belong to
+   the structures specs.
