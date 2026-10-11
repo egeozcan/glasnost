@@ -170,4 +170,7 @@ pub struct Projectile {
     pub fire_point: Pos,
     /// Waiting for the nuclear fireball until this tick (S-0306 claim 25).
     pub nuke_wait: Option<i32>,
+    /// Fired by a vehicle from a scalable type: counted in *N* of S-0306
+    /// claim 16.
+    pub vehicle_scalable: bool,
 }

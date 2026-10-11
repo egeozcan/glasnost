@@ -3386,3 +3386,39 @@ fn quirk_origin_as_missing_target_point_closing_average() {
         assert_eq!(matches!(out, Out::Detonated(_)), on, "quirk {on}: {out:?}");
     }
 }
+
+// spec: S-0306 claim 16 (a scalable type fired by a vehicle: effective delay spawn delay + trunc(max(N − 5, 0) / 3), N its in-play count with the new one; 0 there means the field; removals do not lower it; scenario P10 variants b, d, e)
+#[test]
+fn claim16_scalable_raised_delay() {
+    for (field, shots, want) in [(2, 5, 2), (2, 8, 3), (2, 11, 4), (-1, 8, -1), (-1, 11, 1)] {
+        let mut r = base();
+        ball(&mut r).trailer = Some("TRAIL".into());
+        ball(&mut r).spawn_delay = Some(field);
+        ball(&mut r).scalable = Some(true);
+        let mut s = setup(&r, 5, 5);
+        let from = s.w.obj(s.a).unwrap().pos;
+        let mut ids = Vec::new();
+        for _ in 0..shots {
+            let id = glasnost_sim::combat::projectile::launch(
+                &mut s.w,
+                s.a,
+                s.wp,
+                Target::Object(s.t),
+                from,
+                10,
+            );
+            ids.push(id.expect("launched"));
+        }
+        let pid = s.w.rules().combat.weapon(s.wp).projectile.unwrap();
+        assert_eq!(
+            s.w.scaled_spawn_delay.get(&pid),
+            Some(&want),
+            "{field} {shots}"
+        );
+        // Removals do not lower it.
+        for id in ids {
+            glasnost_sim::combat::projectile::remove(&mut s.w, id);
+        }
+        assert_eq!(s.w.scaled_spawn_delay.get(&pid), Some(&want));
+    }
+}

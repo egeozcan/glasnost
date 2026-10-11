@@ -491,8 +491,24 @@ pub fn launch(
         prev_cell: pos.cell(),
         fire_point,
         nuke_wait: None,
+        vehicle_scalable: o.kind == Kind::Vehicle && p.scalable,
     };
     w.projectiles.insert(id, proj);
+    if o.kind == Kind::Vehicle
+        && p.scalable
+        && let Some(pid) = wr.projectile
+    {
+        // spec: S-0306 claim 16 (N: projectiles of scalable types fired by vehicles in play, the new one included)
+        let n = w
+            .projectiles
+            .values()
+            .filter(|x| x.vehicle_scalable)
+            .count() as i32;
+        // spec: S-0306 claim 16 (spawn delay + trunc(max(N − 5, 0) / 3); a value of 0 means the spawn delay field)
+        let v = p.spawn_delay + (n - 5).max(0) / 3;
+        w.scaled_spawn_delay
+            .insert(pid, if v == 0 { p.spawn_delay } else { v });
+    }
     // spec: S-0306 claim 8 (the projectile enters play; its first turn is in the same tick)
     w.update.enter(id);
     let _ = mode;
@@ -936,9 +952,15 @@ pub fn turn(w: &mut World, id: ObjectId) {
     let h = start.z - w.surface_at(start.x, start.y);
     let speed_start = speed(w, pr.vel);
     // spec: S-0306 claim 16 (a trailer at the start-of-turn position, every turn whose tick number is a multiple of the effective spawn delay)
+    // spec: S-0306 claim 16 (the effective spawn delay: the type's raised value after a vehicle's shot, else its field)
+    let delay = w
+        .scaled_spawn_delay
+        .get(&pid)
+        .copied()
+        .unwrap_or(p.spawn_delay);
     if let Some(trailer) = p.trailer.clone()
-        && p.spawn_delay != 0
-        && tick.rem_euclid(p.spawn_delay) == 0
+        && delay != 0
+        && tick.rem_euclid(delay) == 0
     {
         effects::anim(w, &trailer, start);
     }
@@ -1431,6 +1453,7 @@ fn airburst_children(w: &mut World, pr: &Projectile, aw: WeaponId) {
             prev_cell: cell,
             fire_point: cc,
             nuke_wait: None,
+            vehicle_scalable: false,
         };
         w.projectiles.insert(id, child);
         w.update.enter(id);

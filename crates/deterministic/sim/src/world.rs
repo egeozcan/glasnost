@@ -271,6 +271,9 @@ pub struct World {
     pub orders_blocked_through: i32,
     /// Projectiles in flight by object number (S-0306; in the update order).
     pub projectiles: BTreeMap<ObjectId, crate::combat::state::Projectile>,
+    /// The raised effective spawn delay of each scalable projectile type
+    /// a vehicle has fired (S-0306 claim 16), by projectile type.
+    pub scaled_spawn_delay: BTreeMap<crate::combat::data::ProjectileId, i32>,
     /// Effects created since the drawing last took them (explosions,
     /// launches, deaths): presentation only, neither saved nor hashed.
     #[serde(skip)]

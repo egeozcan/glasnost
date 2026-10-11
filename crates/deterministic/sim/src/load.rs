@@ -238,6 +238,7 @@ pub fn new_game(
         // spec: S-0201 claim 14 (orders blocked during the cycles of ticks 0 to 3)
         orders_blocked_through: 3,
         projectiles: Default::default(),
+        scaled_spawn_delay: Default::default(),
         effects: Vec::new(),
         notes: Vec::new(),
         theater: map.theater,
