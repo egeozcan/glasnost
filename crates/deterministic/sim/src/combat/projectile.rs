@@ -360,7 +360,11 @@ pub fn launch(
             // spec: S-0306 claim 4 (σ = trunc(R(0, B) × D / R_W), D the spatial distance in single precision)
             let rr = w.rng.ranged(0, b, half);
             let dd = d3(w, fire_point, aim);
-            let rw = crate::combat::range::firer_weapon_range(w, firer, 0);
+            // spec: S-0306 claim 4 (R_W: the firer's weapon range of S-0307 claim 13 for that weapon, the slot that holds it)
+            let slot = (0..crate::combat::data::SLOTS)
+                .find(|&i| crate::combat::weapon::slot_weapon(w, firer, i) == Some(weapon))
+                .unwrap_or(0);
+            let rw = crate::combat::range::firer_weapon_range(w, firer, slot);
             // spec: S-0306 Edge cases (a flak range of 0 gives a radius of 0, a departure)
             if rw == 0 { 0 } else { rr.wrapping_mul(dd) / rw }
         };
