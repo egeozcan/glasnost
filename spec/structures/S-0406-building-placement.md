@@ -1,0 +1,1041 @@
+---
+id: S-0406
+title: Building placement (foundation cells, the cell test, adjacency, building off allies, shroud, walls and gates, upgrades)
+topic: structures
+revision: 1
+sources-class: [decomp, design]
+status: approved
+approved-by: Claude (delegated by project lead)
+approved-on: 2026-10-12
+measurements: []
+requests: []
+supersedes: []
+---
+
+# S-0406: Building placement (foundation cells, the cell test, adjacency, building off allies, shroud, walls and gates, upgrades)
+
+## Summary
+
+Where a house may put a finished building: which cells a building covers, the test every one of
+those cells must pass, the distance to the house's own base (adjacency) and to allied bases, the
+shroud condition, what walls, wall towers and gates do to the cells they are placed on, how a wall
+fills the gap to another wall, and how an upgrade is placed onto a building. Skirmish only. Campaign
+behaviour and network games are out of scope. Deploying a vehicle into a building uses the cell test
+of this spec and is S-0415's.
+
+## Terms
+
+Shared terms used here are defined in the glossary: *house*, *building*, *type*, *field*, *tick*,
+*foundation* (with its *top-left cell*), *cell*, *lepton*, *legal cell*, *usable cell*, *overlay*,
+*overlay data value*, *occupancy record*, *land type*, *land multiplier*, *locomotion class*,
+*shroud*, *construction state*, *on the map*, *in play*, *local player*, *AI house*,
+*computer-controlled*, *human-controlled*, *registry*, *registration index*, *absent-key default*,
+*importer warning*, *quirk switch*, *departure*, *place order*, *adjacency*, *cell test*, *upgrade*,
+*recorder*, *bystander computer player*. S-0404's *item*, *line*, *done* and *could make* (Terms) are
+used as S-0404 defines them, and S-0408's *silent wall sale* (Terms) and unsellable flag (claim 3,
+Import mapping) as S-0408 defines them. S-0010's *tileset*, *morphable flag*, *tile number*,
+*water role* and *slope shape* (claims 4 to 6 and 15) and S-0211's buildable flag *B* and
+*high-bridge cell* (Terms, claims 2 and 15) are used as those specs define them. A place order
+names the top-left cell of the foundation. In addition:
+
+- **Refusal sound.** The interface sound that tells the local player a placement or order was
+  refused. S-0411 (claims 10 and 12) owns when it plays and which sound it is; this spec only says
+  that it plays, and for which outcomes.
+- **Cell test.** The test of claim 3 that a cell passes or fails for a building type being placed,
+  together with the wall exceptions of claim 8. S-0415 (claim 3) uses it for deploying.
+- **Filling building.** A building that the wall fill of claim 11 creates in a gap cell.
+- **Foundation cells.** The cells a building covers for placement and occupancy: its foundation's
+  cell list (claim 2), each cell taken relative to the top-left cell. A building is "in" a cell
+  only when the cell is one of its foundation cells.
+- **Foundation rectangle.** The *W* × *H* rectangle of cells whose top-left cell is the foundation's
+  top-left cell, *W* along map *x* and *H* along map *y*, with the foundation's size from S-0108's
+  vocabulary (Import mapping, foundation vocabulary). It never includes a bib row.
+- **Base-normal building.** A building whose type has the base-normal flag (Import mapping). Only
+  base-normal buildings of the house itself support adjacency (claim 4).
+- **Ally-eligible building.** A building whose type has the ally-eligible flag (Import mapping).
+- **Adjacency *A*.** Written *A* below: the building type's adjacency field, an integer in cells
+  (Import mapping).
+- **Build-off-ally option.** S-0412's build-off-ally setting (a lobby check box whose default comes
+  from the rules data): it lets ally-eligible buildings of allied houses support adjacency
+  (claim 4).
+- **Wall type.** A building type with the wall flag of a building type (Import mapping, building
+  type section; not the overlay type's flag below). It never stays a building: it
+  turns into its wall overlay (claim 10).
+- **Wall overlay of a type.** The overlay type a building type names in its to-overlay field
+  (Import mapping), whether or not that overlay type has the wall flag of an overlay type. In this
+  spec *wall overlay* tied to a building type ("the type's wall overlay", "its wall overlay", "a
+  wall type with no wall overlay") always means this to-overlay target. S-0210 (Terms) uses *wall
+  overlay* alone for any overlay type with the wall flag; this spec writes that sense as "an
+  overlay type with the wall flag". A *wall* in a cell is the overlay that cell holds, named by its
+  overlay type or by the building type whose wall overlay it is.
+- **Wall flag of an overlay type.** The flag that marks an overlay type as a wall: what S-0210
+  (Terms, *wall overlay*; Import mapping) defines and owns, absent-key default no. This spec reads
+  it only in claim 11 (Import mapping).
+- **Wall owner.** The house recorded as owning the wall in a cell (S-0210, claim 14).
+- **Builder of a wall overlay.** The first building type in the registry (registration order of
+  S-0004) whose wall overlay is that overlay type, whatever the other types that name the same
+  overlay. S-0408 (claim 12) calls it "the building type that builds that wall"; the unsellable
+  flag it refers to is the builder's.
+- **Damaged wall.** A wall in a cell whose overlay data value is 16 or more.
+- **Wall tower type, gate types.** The building types that the rules data names, game-wide, as the
+  wall tower and as the four gate types (two of a first pair, two of a second pair; Import mapping).
+  A *gate-flag type* is any building type with the gate flag; it need not be one of the named gate
+  types.
+- **Upgrade type.** A building type whose powers-up field names another building type (Import
+  mapping). S-0405 (Terms) calls such a building an upgrade.
+- **Upgrade positions.** The three places, numbered 1 to 3, in which a building records the
+  upgrade types it holds, at most one type per position (S-0405, Terms, uses the same three
+  positions). A position can be empty while a higher one is filled (claim 12). A building's *upgrade
+  count* is a separate number: how much room it has used (claim 12).
+- **Cursor shroud result.** A yes-or-no value that placement mode (S-0411, claim 10) keeps for
+  human input: the result of claim 5's condition for the whole foundation rectangle (9 cells for the
+  8-cell 3 × 3 word) that would lie under the cursor, computed whenever the cell under the cursor
+  changes while placement mode is active (claim 6).
+
+## Behaviour
+
+### What a placement needs
+
+1. **Placement after completion.** A building or defence becomes placeable when its item is done
+   (S-0404, claim 7), and it stays done for as long as needed: completion never places it. A place
+   order is applied only when the item of the house's line of that kind is done and a factory
+   building of the house could make its type with the tech-tree condition, power and docks left out
+   (S-0404, Terms): its build limit (S-0407, claim 9) is not asked again here. Without
+   such a factory building the order does nothing: the item stays done and no sound plays (until
+   the last factory building of the kind is removed for good, when S-0404, claim 8 cancels and
+   refunds the item; a building being sold already counts as unable to make). Otherwise
+   the building is put on the map at the centre of the named cell, (256*x* + 128, 256*y* + 128)
+   leptons (F4), by the rules of this spec:
+   - if the placement succeeds, the building enters play in that tick, its construction state begins
+     (S-0108) and the line ends (S-0404, claim 7),
+   - if it fails, nothing is placed, the local player hears the refusal sound when the house is the
+     local player's, and placement mode resumes with the same building (S-0411, claim 10).
+   The placed building stands at height 0 above the terrain: its world height is the surface
+   height of S-0106 (claim 2) at the centre of the named cell, which on a flat cell is 104 leptons
+   times the cell's height level (glossary, *height level*). This is the same placement as a
+   deployed building's (S-0415, claim 6). The placement point and this height are the building's
+   position in leptons, not its reference point (glossary, *reference point*: the centre of the
+   foundation).
+   - Backing: `measurable` (scenario PL1; run 4 for the placement point of F4 and the world height)
+   - Confidence: high (success and failure outcomes, the factory condition, the placement
+     point); medium (the world height)
+
+2. **Foundation cells.** A building's foundation cells are every cell of its foundation rectangle,
+   with two exceptions: the 8-cell 3 × 3 foundation word of S-0108's vocabulary (Import mapping)
+   lacks the cell 2 cells along map *x* and 1 cell along map *y* from the top-left cell (the same 8
+   cells as S-0302, claim 13), and the zero-size word has no cells (its foundation rectangle is
+   0 × 0). A building type with no foundation cells passes every cell condition of claim 3, since it
+   has no cell to test, and claim 5's shroud condition has no cell to judge either. Claim 4 treats
+   its rectangle as 0 × 0 (F1).
+   - Backing: `measurable` (scenario PL9, parts a and b for the missing cell, part c for the
+     zero-size word's cell conditions and its adjacency ring, part d for its shroud condition)
+   - Confidence: high (the rectangle and the missing cell); medium (no cell conditions for the
+     zero-size word); low (its adjacency ring, and no shroud condition)
+
+3. **The cell test.** A building type with the place-anywhere flag (Import mapping) may be placed
+   whatever its cells hold: none of the conditions (a) to (d) below is asked of it (compare claim
+   11). The place-anywhere flag takes precedence over a to-tile field: a type with both is placed
+   by the place-anywhere rule, and the to-tile rule below is not asked of it (its to-tile field
+   still exempts it from claim 5's shroud condition). For every other type without a to-tile field
+   (Import mapping), placement needs every
+   foundation cell to pass all of the following (the wall exceptions of claim 8 aside). A type with
+   a to-tile field follows the to-tile rule at the end of this claim instead.
+   - (a) **Usable.** The cell is a usable cell in the height-aware form (S-0009, claims 4 and 5a).
+   - (b) **Nothing in the way.** No aircraft is listed in the cell's ground layer (S-0209, Terms,
+     *listed*), whether it is flying or has landed: the condition makes no test of the aircraft's
+     height or state. Whether a flying aircraft is listed in the cell below it is not fixed by
+     this spec (S-0209 owns listing; Open questions 5). No other object occupies the cell (an
+     infantry unit, a vehicle or a building), it holds no terrain object, and the ground layer's
+     occupancy record (S-0209) shows no standing position taken and no vehicle present. Whatever the
+     record shows for buildings and other objects does not matter; buildings are caught by the
+     object condition. Two kinds of type have an object condition of their own instead:
+     - A gate-flag type, or a type with the laser-fence-post flag (Import mapping): an object in
+       the cell does not refuse when it is a building of the placing house whose type has the
+       laser-fence flag; any other object still refuses, and so does the occupancy record as above.
+       Nothing removes that laser-fence building when a post type is placed over it (claim 9
+       removes laser-fence buildings only for gate-flag types). Whether the two then stand in the
+       same cell, or the placement is refused later, is not established (Open questions 1).
+     - A type with the laser-fence flag (Import mapping): only a building or a terrain object in
+       the cell refuses. Aircraft, infantry units and vehicles in the cell, and the occupancy
+       record, do not. This rule applies whatever the type's gate or post flags say.
+   - (c) **No overlay.** The cell holds no overlay. Ore and gem cells therefore refuse placement
+     (S-0401 owns the resources), as do walls of any house, other overlay types, bridge parts and
+     crates. Claim 8 gives the wall exceptions: a cell that meets one of them must still pass (a)
+     and (b), and is exempt from (c) and (d). A type with the laser-fence flag has one more
+     exception: a cell whose overlay is ore, gems, or the overlay type with registration index 126
+     in the overlay registry passes (c) and (d) together when it is not marked as part of a bridge
+     and its slope shape is 0; the buildable flag, the naval range and the float multiplier of (d)
+     are not asked. Every other overlay still refuses it, except that claim 8's wall exceptions
+     apply to a laser-fence type as to any type: a cell that meets one of them is exempt from (c)
+     and (d) for it too.
+   - (d) **Ground.** For a type that is not water-bound, all of these:
+     - the cell is not marked as part of a bridge: it is not a high-bridge cell (S-0211, claim
+       15), nor another cell that a bridge marks as part of its body (the bridge specs own the body
+       cells),
+     - its slope shape (S-0010, claim 6) is 0, and
+     - for a type without the naval flag, the buildable flag *B* of the cell's land type (S-0211,
+       Terms and claim 2 c) is *yes*, or
+     - for a type with the naval flag, *B* is not asked: the cell's tile number lies in the water
+       role range of S-0010 (claim 5 and table R), the 14 tiles from the water role's start. Where
+       the water role is unset, that range covers tile numbers 0 to 12 (S-0010,
+       `quirks.unset_role_range`), and in the theater with index 5 (the theater index of S-0009's
+       Import mapping) the original forces the water role unset whatever the theater data says
+       (S-0010, claim 4).
+
+     For a water-bound type (Import mapping) instead: the land multiplier of the cell's land type
+     for the *float* locomotion class (S-0211) is not 0. The bridge, slope, buildable-flag and
+     tile-range conditions do not apply to a water-bound type, whatever its naval flag says. So a
+     water-bound type may stand on a sloped cell, or on a cell that a high bridge marks without any
+     overlay in it (S-0211, claim 15), when the land type's float multiplier is not 0. A cell that
+     holds a bridge overlay is refused by (c), whatever (d) says of it. This spec owns where a
+     building may stand; S-0211 owns the land types, *B* and the multipliers it reads.
+   - **To-tile rule.** A type with a to-tile field needs only one of its foundation cells to pass,
+     not every cell. That cell must pass (a), (c) and (d) as for any type, the exceptions of (c)
+     included: a cell that meets one of claim 8's wall exceptions is exempt from both (c) and (d),
+     and for a to-tile type with the laser-fence flag the laser-fence overlay exception of (c) also
+     applies. In place of (b) it must hold no building, and its tile must pass the tileset test of
+     S-0010 (claim 15: a tile of a tileset with the morphable flag, or a tile number outside the
+     tile range, which always passes). Infantry units, vehicles, aircraft, terrain objects and the
+     occupancy record in that cell do not matter. The other foundation cells are not tested. A
+     type with no foundation cells passes, as claim 2 says. A to-tile type that also has the
+     laser-fence, gate or laser-fence-post flag keeps the one-cell rule, but in that cell its own
+     object condition of (b) replaces the no-building and tileset conditions.
+   The building being placed never counts as an object in its own foundation cells, so it does not
+   block itself. A unit of the placing house standing in a foundation cell blocks the placement like any
+   other unit; it is not moved away.
+   - Backing: `measurable`, through these scenario parts:
+     - PL3 parts a to n and r for the ordinary rule (a, b, c and d, the gate and post object
+       condition), part o for the height-aware usable test, part p for an aircraft in flight,
+       part q for the fence building under a post type, parts a, e, i, j and s for the
+       place-anywhere flag,
+     - PL3 part t for the to-tile rule, part w for the to-tile rule combined with the laser-fence,
+       gate and post flags, part x for the precedence of the place-anywhere flag over a to-tile
+       field,
+     - PL3 part u for the laser-fence object condition and its overlay exception (ore and gems,
+       the overlay with registration index 126, another overlay type refusing, the slope, the
+       bridge mark, and the buildable flag, naval range and float multiplier not asked), part v
+       for claim 8's wall exceptions under the to-tile and laser-fence rules,
+     - PL4 parts a to f for the water-bound and naval ground rules; S-0211's scenarios L15 and L21
+       also observe the naval range and the high-bridge cells.
+
+     Two parts are `unmeasured`. The occupancy-record condition of (b) on a cell with no object in
+     it: no way is known to set up a record whose object has gone. The bridge body cells other
+     than high-bridge cells in (d): the bridge specs own which cells those are, and every such cell
+     known holds a bridge overlay, which (c) already refuses, so no observable separates the two.
+     If the test map cannot hold ore in a cell that a high bridge marks (PL3 part *u*10), the bridge
+     mark of the laser-fence overlay exception is `unmeasured` too: every other bridge-marked cell
+     known either holds a bridge overlay, which refuses whatever the mark says, or holds no overlay,
+     where the exception is not asked, so no other setup separates the mark.
+   - Confidence: high (a, c, the ore and unit refusals, d for types that are not water-bound apart
+     from the bridge cells), medium (high-bridge cells and other bridge body cells in d, b's
+     occupancy-record part, a landed aircraft refusing, the laser-fence-post and gate
+     exception, d for water-bound types, including the skipped slope, bridge and tile-range
+     conditions, the to-tile rule, the precedence of the place-anywhere flag), low (a flying
+     aircraft refusing, the laser-fence building under a post type, the laser-fence rule, which no
+     stock type uses, the to-tile rule combined with the laser-fence, gate and post flags, and the
+     wall exceptions for to-tile and laser-fence types)
+
+### Conditions checked when the order is given
+
+4. **Adjacency.** A building can be placed only when some cell within *A* + 1 cells of its
+   foundation rectangle holds a supporting building, where *A* is the type's adjacency. Precisely:
+   the cells looked at are those of the rectangle that extends the foundation rectangle by *A* + 1
+   cells on each of its four sides, less the foundation rectangle itself; so a gap of at most *A*
+   empty cells may lie between the new building and its support, along either map axis or both. A
+   building in one of those cells supports the placement when
+   - it is owned by the placing house and is base-normal, or
+   - the build-off-ally option is on, its owner allies the placing house (S-0412, Terms: the
+     one-way relation, read in the direction from the building's owner to the placing house), and
+     it is ally-eligible. A house counts as allying itself, so with the option on its own
+     ally-eligible buildings support it too, base-normal or not.
+   Any building in the cell counts, whatever its state: in its construction state, being sold, or
+   damaged. Adjacency is a condition of the place order only: a vehicle deploying into a building
+   (S-0415) uses the cell test of claim 3 but not this condition. The foundation rectangle, not the
+   cell list of claim 2, decides which cells are looked at. A building is in a cell only when it covers the cell
+   (Terms, *foundation cells*), so the missing cell of the 8-cell 3 × 3 foundation holds no
+   supporter. Since that cell lies in the middle of an edge, any ring that contains it also contains
+   a covered cell of the same building: this cannot change an outcome, and no scenario tests it. The
+   absent-key default of *A* is 3 cells.
+   - Backing: `measurable` (scenarios PL2, parts a to e, part e for a negative *A* (F1), and PL5,
+     parts a to e; PL5's part e separates the two directions of the one-way relation, because only
+     the placing house allies the owner)
+   - Confidence: high (the ring of *A* + 1 cells, own base-normal buildings); medium (allies, the
+     option's default, the states that count, the absent-key defaults, the direction of the
+     relation)
+
+5. **Explored ground.** Every cell of the foundation rectangle must be free of the placing house's
+   shroud (S-0409, claims 1 and 12, owns the shroud: the explored state of the placing house). A
+   type with a to-tile field (Import mapping) is exempt, whatever its foundation cells hold.
+   - Backing: `measurable` (scenario PL6, parts a to c for the shroud condition and part d for the
+     exemption, with a test type that has a to-tile field; part d compares two runs, so it does not
+     need the to-tile rule of claim 3 to be known)
+   - Confidence: high (the shroud condition); low (the to-tile exemption: no stock type with a
+     to-tile field is offered, so no observation of stock play backs it)
+
+6. **When claims 4 and 5 are judged.** Claims 4 and 5 are conditions on giving the order. Applying
+   the place order (claim 1) does not check them again: a supporting building destroyed, or a cell
+   shrouded again, between the issue of the order and its application does not stop the placement.
+   - *Human input in the original.* When the player clicks to place, an order is issued only if both
+     hold; otherwise the refusal sound plays and no order is issued. Adjacency is judged at the
+     click, with the building, the cell under the cursor and the buildings as they are then. The
+     shroud condition is not: the click uses the cursor shroud result, which is recomputed only
+     when the cell under the cursor changes while placement mode is active. If a foundation cell is
+     revealed, or shrouded again, while the cursor stays on the same cell, the click still
+     uses the old result. The cursor shroud result when placement mode begins, before the first
+     change of cell, is not established.
+   - *Our engine.* With `quirks.placement_shroud_at_cursor` (default on, the original's behaviour),
+     the shroud condition of an order from human input is the cursor shroud result as just
+     described. With the switch off, and always for an AI house (which has no cursor), claims 4 and 5
+     are legality conditions of the place order, judged when the order is issued, and are not
+     judged again when it is applied. This follows the AI-house ruling (glossary, *AI house*: AI
+     orders pass the same legality rules as a person's input). The adjacency timing and the human
+     shroud timing with the switch on are the original's; judging an AI house's order at issue is
+     the AI-house ruling, not a departure of this spec.
+   - Backing: `measurable` (scenarios PL6 for the shroud timing at the click, PL7 part a for
+     adjacency lost after the click and PL7 part b for a cell shrouded again after the click)
+   - Confidence: high (adjacency at the click, no check when the order is applied); medium (the
+     shroud result held from the last change of cell)
+
+7. **Which cell a click names.** In placement mode the clicked cell is the centre of the foundation:
+   the place order names the cell (*x* − ⌊(*W* − 1)/2⌋, *y* − ⌊(*H* − 1)/2⌋) for a click on cell
+   (*x*, *y*), where *W* × *H* is the size of the bounding rectangle of the foundation cells (F2).
+   A building with no foundation cells has a bounding rectangle of 1 × 1, so the click names the
+   top-left cell itself. This is an input rule; S-0411 (claim 10) owns placement mode.
+   - Backing: `measurable` (scenarios PL1 and PL9, part c)
+   - Confidence: medium (the displacement); low (the 1 × 1 size for no cells)
+
+### Walls, wall towers and gates
+
+8. **Wall exceptions to the cell test.** A cell that holds an overlay is exempt from conditions (c)
+   and (d) of the cell test (claim 3), though it must still pass (a) and (b), when its wall owner is
+   the placing house and the cell's overlay type (by its registration index in the overlay registry)
+   and the building type being placed form one of these pairs:
+
+   | Overlay type of the cell | Building types exempt on it |
+   |---|---|
+   | registration index 0 or 2 | a type whose wall overlay is that overlay type, on a damaged wall only; the wall tower type; each of the first pair of gate types |
+   | registration index 26 | a type whose wall overlay is that overlay type, on a damaged wall only; each of the second pair of gate types |
+
+   So a wall can be rebuilt on the house's own damaged wall of the same kind, and a wall tower or a
+   named gate can stand on the house's own walls; every other overlay, and every wall of another
+   house, still refuses placement.
+   - Backing: `measurable` (scenario PL8: parts b, c and d for registration indices 0 or 2 and
+     the wall tower type, part e for the first pair of gate types, part j for index 26 and the
+     second pair)
+   - Confidence: medium
+
+9. **What placement does to walls underneath.** When a building is put on the map, what it removes
+   underneath depends only on its type. Every type is in exactly one row of this table:
+
+   | Type | Cells | Removed there |
+   |---|---|---|
+   | The wall tower type | its top-left cell | the wall, when its wall owner is the placing house and its overlay type has registration index 0 or 2 |
+   | Not the wall tower type; has a wall overlay | its top-left cell | the wall, when its wall owner is the placing house and its overlay type is the type's wall overlay |
+   | Neither of the above; a gate-flag type | each of its foundation cells | the wall, when its wall owner is the placing house and its overlay type has registration index 0, 2 or 26; and any building of the placing house with the laser-fence flag (removed from play without refund) |
+   | Any other type | none | nothing |
+
+   The row follows from the type, not from what its cells hold, so the rows do not combine: a type
+   of the first row removes nothing when its top-left cell holds no such wall, even when it also
+   has a wall overlay or the gate flag. So a gate-flag type that is the wall tower type, or that has
+   a wall overlay, can remove the wall in its top-left cell, and no wall or laser-fence building in
+   its other foundation cells. The first two rows look only at the top-left cell, whatever the
+   foundation's size.
+   Each wall removal is the silent wall sale of S-0408 (claim 12) and has that claim's conditions:
+   the wall is removed only when the placing house is human-controlled (in our engine any player
+   house, glossary *AI house*) and the wall's builder (Terms) exists and does not have the
+   unsellable flag; otherwise the wall stays in its cell, and the placement goes on without
+   removing it (the cell test of claim 8 has already passed). No refund, no sound. The removal of
+   a laser-fence building is not a wall sale and has no such conditions.
+   - Backing: `measurable` (scenario PL8: parts c, e and j for the removals, part f for the
+     builder's conditions, part k for which type is the builder, parts l and m for which row applies
+     to a type that has several of these properties, part n for the laser-fence buildings); the part about a placing house that is not
+     human-controlled is `unmeasured` in the original: no input makes a computer-controlled house
+     place a building, so no scenario can reach it, and in our engine it follows from the
+     AI-house ruling
+   - Confidence: medium (walls, the builder, which row applies); low (the laser-fence removal,
+     which no stock type exercises)
+
+10. **A wall type becomes its overlay.** When a building of a wall type passes the cell test, no
+    building enters play and none remains: its wall overlay is created in the cell instead, with the
+    placing house as its wall owner. On a damaged own wall (claim 8), when
+    claim 9's removal of the old wall takes place, the cell ends with an undamaged wall.
+    When claim 9's conditions fail (the builder of the wall type's overlay, Terms, has the
+    unsellable flag, the only one of claim 9's conditions that can fail for a player house in our
+    engine), the damaged wall is not removed. The placement still passes the cell test, no building
+    of the wall type remains and the item is spent; what the cell then holds, the old damaged wall kept or a
+    new undamaged wall, is not established. The working hypothesis, to be tested, is that the old
+    wall stays.
+    A wall type that has no wall overlay (the to-overlay field absent) has no defined behaviour in
+    the original: once its placement passes the cell test, the original fails (a fault, not a
+    refusal). This is a departure with no switch: the importer
+    warns, and a type with the wall flag and no wall overlay is imported as an ordinary building
+    (the wall flag is ignored), so claims 10 and 11 do not apply to it.
+    - Backing: `measurable` (scenario PL8, parts b, f and j for the repair of a damaged wall and the
+      failed removal; every part that places a wall type for the conversion); `unmeasured` for the
+      wall type with no wall overlay: the original does not give a result a scenario could record
+      (it faults), so the departure has nothing to be compared with
+    - Confidence: high (the conversion); medium (the repair of a damaged wall); low (the cell after a
+      failed removal; the fault of the original for a wall type with no wall overlay)
+
+11. **Wall fill.** When a building whose wall overlay (Terms) is an overlay type with the wall flag
+    of an overlay type (Terms), and whose type is not a firestorm-wall type, is placed through a place order, its gaps are filled in the same tick (the
+    types that this applies to are normally the wall types). Let *L* =
+    ⌊*G* / 256⌋ cells, where *G* is the type's guard range in leptons (Import mapping), rounded
+    toward −∞ (F3). In each of the four map directions, let *c*₁, *c*₂, … be the cells leading away
+    from the placed cell, *c*₁ its neighbour; only *c*₁ to *c*<sub>*L*</sub> of that direction count.
+    The direction is filled when the nearest of *c*₁ to *c*<sub>*L*</sub> that holds the type's wall
+    overlay with the placing house as its wall owner is some *c*ₖ, and every cell *c*₁ to *c*ₖ₋₁
+    before it passes the cell test for the type: those *k* − 1 cells each receive a new wall of the
+    same type. For a wall type each of them is placed by claim 10 and so becomes the type's wall overlay in
+    its cell.
+    For a type that is not a wall type (the building type itself has no wall flag, while its wall
+    overlay has the wall flag of an overlay type), each filling building is created and put on the
+    map as a building of that type in its gap cell, passing no further test than the cell test
+    just described; it follows claim 9 like any building put on the map, and whether it shows a
+    construction state is not established (Open questions 1). Otherwise nothing is filled in that direction, either because no
+    such wall lies within *c*₁ to *c*<sub>*L*</sub>, or because a cell before the nearest one fails
+    the cell test. The cell test here is the one of claim 3 without the place-anywhere exemption: a
+    fill cell of a type with the place-anywhere flag still has to pass (a) to (d). A damaged wall
+    counts too: the nearest cell that holds the type's wall overlay with the placing house as its
+    wall owner is that direction's *c*ₖ, whether or not its wall is damaged. That cell is not put
+    through the cell test, so the fill neither repairs nor replaces it, and cells beyond it do not
+    affect the fill. The four directions do not interact:
+    they share no cell, and the walls of one direction never change what another direction finds.
+    So gaps of up to *L* − 1 cells to another wall of the same kind and owner are closed, and with
+    *L* ≤ 1 nothing is filled. The filling walls cost nothing. A wall placed by the fill does not fill
+    further. Each filling wall counts as a building created under S-0202 (claim 10), even when it
+    becomes the type's wall overlay in its cell, and takes one creation draw. The number of draws taken is therefore the
+    number of walls added by the fill; which direction took which draw cannot be observed, so the
+    directions may be handled in any order.
+    Firestorm-wall types (Import mapping) have a fill rule of their own, which no stock type
+    uses and which this spec leaves open.
+    - Backing: `measurable` (scenario PL8: parts a, g, h and i for the directions, the limit, the
+      stop at a failing cell and the draws; part o for the cell test without the place-anywhere
+      exemption; part p for an own damaged wall as the nearest wall; part q for a filling wall
+      not filling further; part r for a type that is not a wall type; part s for a wall overlay
+      without the wall flag of an overlay type, which fills nothing)
+    - Confidence: high (directions, the fill, no cost); medium (the limit *L* − 1, the stop at a
+      failing cell, the nearest own wall deciding, the no-exemption detail, the damaged wall as
+      nearest, no chained fill); low (the draw count, the filling buildings of a type that is not a
+      wall type)
+
+### Upgrades
+
+12. **Placing an upgrade.** An upgrade type is not placed by the cell test. Its place order succeeds
+    when the named cell holds a building of the placing house whose type is the one the upgrade names
+    and which has room for it: with the upgrade's level field absent (−1), the building's upgrade
+    count is below its type's upgrade count (Import mapping); with a level field from 1 to 3, the
+    building's upgrade count is 0. Any other level value refuses. On success the upgrade is added to
+    that building and no building of the upgrade type enters play. Its effects:
+    - the building's upgrade count becomes *c*′ of F5: the count raised by 1 (level field absent)
+      or by the level field *n*, capped at its type's upgrade count except on a building of the
+      wall tower type, whose count is not capped,
+    - the building's health becomes its type's strength (full health), whatever its damage,
+    - the upgrade type is recorded in upgrade position *c*′ when 1 ≤ *c*′ ≤ 3. A *c*′ of 0 or above
+      3 records nothing in the three positions, in the original as in our engine (F5); what else the
+      original does with it is the departure stated after this list. So a level field *n*
+      above 1 on a building with no upgrade records one upgrade, in position *n* (or in the position
+      of the capped count), and the positions below it stay empty; every upgrade recorded counts in
+      the power of S-0405 and in the prerequisite check of S-0407 (claim 8 c), and the part of the
+      level field that is not recorded only uses up room,
+    - the capped and the uncapped count differ only when the level field *n* is above the target
+      type's upgrade count *U*: then a building of the wall tower type reaches the count *n* and
+      records the upgrade in position *n*, where any other building reaches *U* and records it in
+      position *U* (nothing when *U* is 0). So a level-field upgrade on a wall-tower building whose
+      type has upgrade count 0 is recorded and counts, and every later upgrade on that building
+      refuses (its count is no longer 0, and is at least *U*),
+    - the house's power and the types offered to it take the upgrade into account, at the time
+      S-0405 (claim 7) and S-0407 (claim 12) give, and whether the house has radar is decided again
+      under S-0410's rules (claim 1; what that can change is S-0410's).
+    *Departure (bad data).* When *c*′ is 0 or above 3, the original records the upgrade type in no
+    position, so it adds no power and meets no prerequisite, but it also alters some other part of
+    the building's state; which part, and what that changes, is not established, and for the larger
+    counts it may make the original fail. Our engine records nothing and changes
+    nothing else: the upgrade only uses up room and restores health, as the list above says. *c*′
+    above 3 needs a target type whose upgrade count is above 3 (a level field reaches at most 3, and
+    a level-less upgrade needs room below the count), and the importer warns about every such
+    target type; *c*′ of 0 is the level-field case of `quirks.upgrade_level_without_room` (Edge
+    cases and quirks), whose importer warning covers it.
+    A place order of an upgrade type that names such a building passes claim 4 whatever its ring
+    holds, for human input and for an AI house alike; claim 5's shroud condition is still asked of
+    the upgrade type's foundation rectangle at the named cell. S-0408 (claim 5) owns which upgrade
+    a sale removes.
+    - Backing: `measurable` (scenario PL10: parts a and b for the room rule, part c for a type
+      without room, part d for the position, the full repair and the power and prerequisite
+      effects, part e for the adjacency replacement, part f for the shroud condition, part g for
+      level values that refuse, part h for a count above 3 that records no power and no position,
+      part i for the uncapped count of the wall tower type); `unmeasured` for the original's other
+      effects of a *c*′ of 0 or above 3 (no game concept is known that this other alteration of
+      the building's state changes, so there is no observable to propose, the larger counts risk a fault, and
+      our engine's departure does not depend on the answer), and for
+      deciding again whether the house has radar (every input of S-0410's claim 1
+      that an upgrade can change is a power change, which S-0410's claim 2 already lists as
+      requesting that decision; an upgrade that changes none leaves the answer as it was, so
+      no observation separates a decision made because of the upgrade from none)
+    - Confidence: medium (the level rule, the full repair, the position, the replacement of the
+      adjacency condition, the wall tower exception, no position recorded for a *c*′ of 0 or above
+      3); low (several levels at once, deciding radar again, the shroud condition for an upgrade)
+
+### Other houses and the original's computer player
+
+13. **AI houses place like players.** In our engine an AI house places buildings only through place
+    orders under claims 1 to 12 (glossary, *AI house*). Informative, for AI designers (the
+    original's computer player is out of scope): it places its buildings by its own base-planning
+    rules, which apply neither the adjacency nor the shroud condition (they are input checks of the
+    local player). Reproducing its base layouts is a matter of choosing cells that pass these
+    claims.
+    - Backing: `unmeasured`: it is a rule of our engine; the original's computer placement is out of
+      scope
+    - Confidence: high
+
+## Formulas
+
+> **F1. Adjacency ring.** For a foundation rectangle with top-left cell (*x*₀, *y*₀) and size *W* ×
+> *H* (0 × 0 for the zero-size word), and adjacency *A*, with *d* = *A* + 1: the cells looked at are
+> all (*x*, *y*) with *x*₀ − *d* ≤ *x* ≤ *x*₀ + *W* − 1 + *d* and *y*₀ − *d* ≤ *y* ≤ *y*₀ + *H* − 1 + *d*,
+> except those with *x*₀ ≤ *x* ≤ *x*₀ + *W* − 1 and *y*₀ ≤ *y* ≤ *y*₀ + *H* − 1. Integers, in cells; exact,
+> no rounding. Any negative *A* empties the ring (for *A* = −1 the ring and the hole coincide; below
+> that the rectangle lies inside the hole), so the condition always fails.
+
+> **F2. Click cell.** top-left = (*x* − ⌊(*W* − 1)/2⌋, *y* − ⌊(*H* − 1)/2⌋), with *W* × *H* the size of
+> the bounding rectangle of the foundation cells, taken as 1 × 1 when there is no cell. Integers, in
+> cells. *W* and *H* ≥ 1, so the division rounds toward zero and toward −∞ alike.
+
+> **F3. Wall fill limit.** *L* = ⌊*G* / 256⌋, *G* in leptons (integer; the guard range converted as
+> S-0215 states), rounding toward −∞; *L* in cells. Filled cells per direction: *k* − 1 with *k* ≤ *L*.
+
+> **F4. Placement point.** (256*x* + 128, 256*y* + 128) leptons for top-left cell (*x*, *y*), at the
+> world height of claim 1 (104 × ℓ leptons on a flat cell at height level ℓ). Integers, in
+> leptons, exact, no rounding.
+
+> **F5. Upgrade count and position.** *c*′ = min(*c* + *i*, *U*), or *c*′ = *c* + *i* on a building
+> of the wall tower type, where *c* is the building's upgrade count before the addition, *i* is 1
+> when the upgrade's level field is absent and the level field *n* otherwise, and *U* is the target
+> type's upgrade count. The upgrade type is recorded in upgrade position *c*′ when 1 ≤ *c*′ ≤ 3; when
+> *c*′ is 0 or above 3 it is not recorded (the original's other alteration of the building's
+> state in that case is a departure, claim 12). Integers, in upgrade-count units; exact, no rounding.
+
+## Constants
+
+| Name (ours) | Value | Unit | Notes |
+|---|---|---|---|
+| Adjacency absent-key default | 3 | cells | claim 4 |
+| Base-normal flag absent-key default | yes | boolean | claim 4 |
+| Ally-eligible flag absent-key default | no | boolean | claim 4 |
+| Build-off-ally option absent-key default | on | boolean | claim 4 |
+| Place-anywhere flag absent-key default | no | boolean | claim 3 |
+| Damaged wall threshold | 16 | overlay data value | claim 8 |
+| Registration indices of the walls of the first gate pair and the wall tower | 0 and 2 | registration index | claims 8 and 9 |
+| Registration index of the walls of the second gate pair | 26 | registration index | claims 8 and 9 |
+| Overlay registration index a laser-fence type may stand on | 126 | registration index | claim 3 c |
+| Naval placement range | 14 | tiles from the water role's start | claim 3 d; S-0010's water role |
+| Naval placement range with the water role unset | 0 to 12 | tile numbers | claim 3 d; S-0010 |
+| Missing cell of the 8-cell 3 × 3 word | (2, 1) | cells from the top-left cell | claim 2 |
+| Upgrade positions of a building | 3 | positions | claim 12 |
+| Level field values that place on an empty building | 1 to 3 | levels | claim 12 |
+| Creation draws per filling wall | 1 | draws of S-0202 | claim 11 |
+
+## State and ordering
+
+| State | Event | Result |
+|---|---|---|
+| Item done, placement mode on (human input) | click | Adjacency (claim 4) and the cursor shroud result (claims 5 and 6; with `quirks.placement_shroud_at_cursor` off, explored ground judged now) decide whether an order is issued; on failure the refusal sound plays and no order is issued. Placement mode is offered only while the item is done (S-0411) |
+| Item done (an AI house) | place order issued | Adjacency and explored ground are judged when the order is issued (claim 6) |
+| Place order issued | order applied (order application of S-0213) | The order is applied only when the item is done and a factory building could make the type; without such a factory building it does nothing and no sound plays (claim 1). When it is applied, the cell test (claims 3 and 8), or for an upgrade type the upgrade rule (claim 12), decides the outcome; claims 4 and 5 are not judged again. If that test fails, nothing is placed and, for a local player's house, the refusal sound plays |
+| Order applied, every test passed | building put on the map | In that tick: walls removed underneath (claim 9), a wall type becomes its overlay (claim 10), the wall fill (claim 11), the item's line ends; the cell ends with an undamaged wall when the removal under a damaged own wall took place |
+
+Observable consequences:
+- A building is in play from the tick its place order is applied; the adjacency and prerequisites
+  it supports take effect from then on, while it is still in its construction state (S-0407, claim
+  8, for prerequisites).
+- Two place orders applied in the same tick for overlapping cells: the first applied succeeds and the
+  second fails the cell test, since the first building already occupies the cells. The order of
+  application is S-0213's. Confidence medium. Backing: `unmeasured`: scripted input cannot issue
+  two place orders in one tick (a house has one item done per line and placement mode takes one
+  click at a time), and the outcome follows from claim 1 (the building is in play at once) and
+  claim 3 (b) (a building in a cell refuses), both observed by scenarios PL1 and PL3.
+
+## Edge cases and quirks
+
+- **Wall exception skips the ground test.** A cell meeting a wall exception (claim 8) passes without
+  the ground conditions of claim 3 (d), so a wall tower or gate stands on its own wall even on a
+  slope or unbuildable land. `quirks.wall_exception_skips_ground` (default on). Off: claim 3 (d) is
+  still asked of such cells, as (d) applies to the type being placed. With the switch off, a wall
+  cell that fails (d) for that type refuses the repair, tower or gate: for a type that is neither
+  naval nor water-bound, a cell marked as part of a bridge, a sloped cell or a cell whose land type
+  has the buildable flag off; for a naval type that is not water-bound, a bridge-marked or sloped
+  cell or a tile outside the naval range; for a water-bound type, a land type whose float
+  multiplier is 0. So the result depends on the rules data's land type for walls (S-0211 claim 5 reads the cell's land
+  type, which for a wall cell is normally the land type *wall*; whether that land type is buildable
+  is data). Check the default
+  data before using the off state.
+- **Shroud condition from the cursor.** For human input, the click uses the cursor shroud result
+  (claim 6), so a foundation cell that is revealed or shrouded again while the cursor stays on
+  the same cell does not change the click's outcome until the cursor changes cell.
+  `quirks.placement_shroud_at_cursor` (default on). Off: the shroud condition is judged when the
+  order is issued, as for an AI house. The default is the original's behaviour; the choice of the
+  default for our engine is proposed to the project lead (Questions for the project lead).
+- **Own ally-eligible buildings with the option on** support adjacency without the base-normal flag
+  (claim 4). This follows from the house counting as its own ally; no switch.
+- **Water-bound types skip the bridge, slope, buildable-flag and tile-range conditions** (claim 3 d,
+  scenario PL4, parts c to f). No switch: it is the rule of the water-bound flag, which tests the
+  float multiplier instead.
+- **Upgrade beyond the third position** (claim 12, F5). A target type whose upgrade count is above
+  3 lets level-less upgrades reach *c*′ above 3. The original records them in no position and
+  alters some other part of the building's state, with effects not established; our engine records
+  nothing. Departure (bad data), no
+  switch; the importer warns about such target types (Import mapping, upgrade count).
+- **Unknown or absent foundation data.** S-0108 owns the foundation word; a word it does not know
+  gives 1 × 1.
+- **Negative adjacency** (F1) makes placement impossible for that type. The importer warns. No
+  switch: it is what the ring of F1 gives for such a value.
+- **Level-field upgrade on a type without upgrade room** (claim 12). A level field from 1 to 3 asks
+  only that the building holds no upgrade yet, not that its type's upgrade count is above 0. On a
+  building whose type has upgrade count 0 the place order therefore succeeds: the upgrade is
+  consumed and the building is restored to full health. Unless the building is of the wall tower
+  type, its upgrade count stays 0 and no upgrade is recorded, so the upgrade changes neither power,
+  nor prerequisites, nor the room for later upgrades (scenario PL10 part c); the original's other
+  alteration of the building's state is claim 12's departure, and our engine reproduces no other
+  effect.
+  On a building of the wall tower type the count is not capped (F5): the upgrade is recorded in
+  position *n* and counts like any recorded upgrade (scenario PL10 part i).
+  `quirks.upgrade_level_without_room` (default on). Off: the place order refuses when the target
+  type's upgrade count is 0 and the target is not of the wall tower type, the one case in which
+  the upgrade would record nothing; the wall tower case and every other case of claim 12
+  (for example a level-3 upgrade on an empty building whose type's upgrade count is 2, recorded at
+  the capped position 2) are unchanged. The importer warns about such pairs. Backing: `measurable`
+  for the default (scenario PL10 parts c and i); the off state exists on our engine only.
+
+## Import mapping
+
+| Key (file, section) | Concept | Form | Absent |
+|---|---|---|---|
+| `Adjacent` (rules, building type) | adjacency *A* (claim 4) | integer, cells | 3 |
+| `BaseNormal` (rules, building type) | base-normal flag (claim 4) | boolean | yes |
+| `EligibileForAllyBuilding` (rules, building type; the original's spelling) | ally-eligible flag (claim 4) | boolean | no |
+| `BuildOffAlly` (rules, `MultiplayerDialogSettings`; S-0412 owns it) | default of the build-off-ally option (claim 4) | boolean | yes |
+| `PlaceAnywhere` (rules, building type) | place-anywhere flag (claim 3) | boolean | no |
+| `Foundation` (art; S-0108) | foundation word and size (claim 2); the word `3x3Refinery` is the 8-cell 3 × 3 word | word (S-0108) | `1x1` |
+| `WaterBound` (rules, building type) | water-bound type, tested with the class *float* (claim 3 d) | boolean | no, unless the type's locomotion-class key already names *float* |
+| `Naval` (rules, building type) | naval flag (claim 3 d) | boolean | no |
+| `Wall` (rules, building type) | wall type (claim 10); ignored, with an importer warning, when the type has no `ToOverlay` | boolean | no |
+| `ToOverlay` (rules, building type) | wall overlay of the type (claims 8 to 11) | overlay type name | none |
+| `Wall` (rules, overlay type; S-0210 owns it) | wall flag of an overlay type (claim 11) | boolean | no |
+| `Gate` (rules, building type) | gate-flag type (claims 3 b and 9) | boolean | no |
+| `LaserFencePost`, `LaserFence` (rules, building type) | laser-fence-post flag, laser-fence flag (claims 3 b and 9) | boolean | no |
+| `WallTower` (rules, `General`) | wall tower type (claims 8 and 9) | building type name | none |
+| `GDIGateOne`, `GDIGateTwo` (rules, `General`) | first pair of gate types (claim 8) | building type name | none |
+| `NodGateOne`, `NodGateTwo` (rules, `General`) | second pair of gate types (claim 8) | building type name | none |
+| `GuardRange` (rules, building type) | wall fill length *G* (claim 11) | cells in decimal form, converted to leptons as S-0215 (Import mapping) states | 0 (no fill) |
+| `FirestormWall` (rules, building type) | firestorm-wall type (claim 11, left open) | boolean | no |
+| `PowersUpBuilding` (rules, building type) | upgrade type and its target type (claim 12) | building type name | none |
+| `PowersUpToLevel` (rules, building type) | upgrade level field (claim 12) | integer | −1 |
+| `Upgrades` (rules, building type) | upgrade count of the target type (claim 12); a value above 3 on a type that some upgrade type names gets an importer warning (claim 12, departure) | integer | 0 |
+| `ToTile` (rules, building type; read once the theater's tiles are loaded) | to-tile field (claims 3 and 5) | tile name | none |
+| `Morphable` (theater data, tileset; S-0010 owns it) | the tileset test of the to-tile rule (claim 3) | boolean | no |
+| `Buildable` (rules, land type section; S-0211 owns it) | buildable flag *B* (claim 3 d) | boolean | no |
+| The water role (theater data; S-0010 owns it) | start of the naval placement range (claim 3 d) | as in S-0010 | unset: tiles 0 to 12 |
+
+
+## Measurement scenarios
+
+Measurement setup (glossary): a tiny purpose-made skirmish map, one human house and one allied and
+one enemy bystander computer player (glossary; the allied one is also the owner of the allied test
+buildings of PL5, which also uses a second enemy one), named test rules files in the map's override sections, scripted input for exact
+clicks, a recorder noting each building's type, owner and top-left cell per tick (and, for PL1
+run 4, its position in leptons, world height included). Placement
+legality uses no random draw, so every run is deterministic given the same input; each scenario is
+run **3 times** with identical input and must give the same result each time (a run is repeated,
+and the repeat counts as one of the 3, when the void rule of *bystander computer player* voids it).
+Each scenario names its observed area, the cells in which the void rule applies.
+
+**PL1. Place order outcomes and the click cell.**
+- Observed area: the cells of the clicked foundations and of the house's only factory building for
+  buildings (and,
+  in run 3, the two cells holding the limited test building).
+- Setup: run 1, a done 3 × 3 test building on the building line (one item at a time, in its own
+  run); run 1b, a done 2 × 2 test defence on the defence line; clicks on cells chosen so the named
+  top-left cell is known by F2; one click on a blocked cell (a tree in a foundation cell). Run 2, the
+  house's only factory building for buildings is sold while the building is done, with the click placed during
+  the sale (after the sell order, before that building leaves the map); the credits and the line are
+  read in the tick after it has left the map. Run 3, a test building type whose build limit is
+  1 and a second building of that type given to the house by test trigger while the first is done.
+  Run 4, a done 1 × 1 test building placed once on a flat cell at height level 0 and once on a flat
+  cell at height level 2 (both buildable, next to the base), and a done 1 × 1 test type with the
+  place-anywhere flag placed once on a sloped cell at height level ℓ whose surface height at the
+  centre (S-0106, claim 2) differs from 104 × ℓ leptons, with the recorder reading the placed
+  building's position in leptons, world height included, in the tick it first appears.
+- Observable: the building's top-left cell; the tick it first appears in the recorder and its construction state in that tick (run 1); the refusal sound; whether placement mode resumes; whether the item is still done; credits; in run 4 the building's position (*x*, *y*) in leptons and its world height.
+- Expected: the building appears in the tick its order is applied, in its construction state; top-left cells by F2 (the 2 × 2 building's top-left is the clicked cell); the blocked
+  click refuses with the refusal sound and resumes placement mode; in run 2 the click during the
+  sale does nothing (no factory building could make the type: S-0404, Terms, a building being sold
+  is excluded), the item stays done and no sound plays, and in the tick that factory building leaves the map the
+  item is cancelled with the refund of S-0404 claim 8 and the line is empty; run 3 places the done
+  building although the limit is reached; in run 4 the position is (256*x* + 128, 256*y* + 128)
+  leptons for the top-left cell (*x*, *y*) (F4), with world height 0 on the level-0 cell and 208
+  leptons (2 × 104) on the level-2 cell, and on the sloped cell the surface height of S-0106
+  (claim 2) at the cell centre.
+- Falsified if: in run 4 the position differs from F4, or the world height on the level-2 cell is
+  not 208 leptons (for instance 0, which would put the building at world height 0 whatever the
+  cell's height level), or the world height on the sloped cell is not S-0106's surface height at
+  the centre (for instance 104 × ℓ, the flat height of its level); another cell is used; the building appears in a later tick or is not in its construction state when it appears; a failed placement ends placement mode or plays no refusal
+  sound; in run 2 the click during the sale places the building or plays a sound, or the item is
+  not cancelled and refunded when the factory building leaves the map; or run 3's placement is refused.
+
+**PL2. Adjacency distance.**
+- Observed area: the new building's cells, its ring of *A* + 1 cells and the supporting building.
+- Setup: a test building type with adjacency *A* = 2 (test value); the house's factory building
+  for buildings (claim 1) stands outside every ring that this scenario tests, and the house's only
+  building within those rings is a base-normal 1 × 1 test building at a known cell. Place attempts with gaps of 2 and 3 empty cells
+  along map *x*, and diagonally with gaps of 2 along both axes; a second run with *A* = 0.
+  Parts: (a) the placements above; (b) the supporting building in its construction state (the
+  next placement made while it is still being built), being sold (placement made during the sale,
+  before it leaves the map) and damaged to a few health points, each with a gap of *A*; (c) a test
+  type without the adjacency key, gaps of 3 and 4; (d) a supporting test building without the
+  base-normal key, and, with the option on, a nearby allied building without the ally-eligible key,
+  each with a gap of 0; (e) a test type with adjacency *A* = −1 (test value), placed touching the
+  base-normal test building (gap 0).
+- Observable: whether each placement succeeds.
+- Expected: gaps up to *A* succeed (2, and diagonal 2 × 2), a gap of *A* + 1 refuses; with *A* = 0
+  only touching placements (including diagonal touching) succeed. In (b) all three states support.
+  In (c) gap 3 succeeds and gap 4 refuses; in (d) the building without the base-normal key supports, the
+  allied building without the ally-eligible key does not. In (e) the placement refuses although it
+  touches its support (F1: the ring is empty).
+- Falsified if: a gap of *A* + 1 succeeds (ring of *A* + 2) or a gap of *A* refuses (ring of *A*), or
+  in (b) a state does not support; in (c) another gap limit appears; in (d) the outcomes are
+  reversed; in (e) the placement succeeds.
+
+**PL3. Ore, units and objects in the way.**
+- Observed area: the candidate foundation cells, each a 1 × 1 test building's cell next to the base
+  (two cells for the 2 × 1 types of parts t and w).
+- Setup: candidate foundation cells holding (a) one ore cell, (b) one gem cell, (c) an own infantry
+  unit, (d) an own parked vehicle, (e) a tree, (f) a crate, (g) nothing, (h) a landed aircraft,
+  (i) a bridge cell, (j) a sloped cell, (k) a cell whose land type has the buildable flag off
+  (test rules); a test type with the place-anywhere flag on cells (a), (e), (i) and (j); a test gate
+  type, and a test type with the laser-fence-post flag, on a cell holding (l) an own building with
+  the laser-fence flag, (m) an enemy one, (n) an own building without it; (o) a legal cell outside
+  the local area, and a cell at the local area's border whose height level makes the plain and the
+  height-aware tests of S-0009 (scenario M3) differ; (p) a test aircraft of the house flying
+  (hovering or circling) over the candidate cell at the tick of the click, then, as the control,
+  the same aircraft landed on the cell as in (h); (q) after the post-type placement of (l)
+  succeeds, the recorder's list of buildings in the cell; (r) a cell holding an overlay type that
+  is not ore, gems, a wall or a bridge (test rules name one), (s) the same cell with the
+  place-anywhere type. (t) Named test theater data as in S-0010 scenario G1: one tileset with the
+  morphable flag and one without, every tested cell flat and of a land type
+  with the buildable flag on; a 1 × 1 test type with a to-tile field placed on (*t*1) a
+  morphable cell holding an own infantry unit, (*t*2) a cell of the tileset without the flag,
+  (*t*3) a morphable cell holding ore, (*t*4) a morphable cell holding an own building; and a 2 × 1
+  test type with a to-tile field placed (*t*5) with one cell morphable and the other not. (u) A
+  test type with the laser-fence flag placed on (*u*1) a cell holding an own infantry unit, (*u*2)
+  a tree, (*u*3) an ore cell and, separately, a gem cell, (*u*4) a sloped ore cell, (*u*5) a cell holding an own building,
+  (*u*6) a flat cell without overlay whose land type has the buildable flag off (test rules), and
+  (*u*7) a flat ore cell whose land type has the buildable flag off; the cells of (*u*1) to
+  (*u*5) are of a land type with the buildable flag on. For the rest of part u, the test rules
+  fix the overlay registry (S-0004 registration order) so that registration index 126 is a test
+  overlay type that is not ore, gems, a wall or a bridge, and part r's overlay type has another
+  index: the laser-fence type placed on (*u*8) a flat cell holding the index-126 overlay whose land
+  type has the buildable flag off, (*u*9) a flat cell holding part r's overlay type, (*u*10) a flat
+  ore cell that a high bridge marks without a bridge overlay in it (the cell two steps
+  beyond the bridge overlay along its marking direction, S-0211 claim 15, as in PL4; ore is put
+  there by the test map's overlay data); and (*u*11) a test type with the laser-fence and
+  water-bound flags and (*u*12) a test type with the laser-fence and naval flags, each placed on a
+  flat ore cell whose land type has a float multiplier of 0 (test rules) and whose tile lies
+  outside the water role range. If the test map cannot hold ore in the cell of (*u*10) (the ore
+  is gone, or the cell is no longer marked, when the game starts), (*u*10) is not run. (v) In a separate game with part t's test
+  theater data, test rules that name as the wall tower type (*v*1) a 1 × 1 test type with a to-tile field, placed on a morphable
+  cell holding an own wall of an overlay type with registration index 0 or 2, and, in another run,
+  (*v*2) a 1 × 1 test type with the laser-fence flag, placed on such an own wall on a flat
+  cell; each also placed, as the control, on an enemy wall of the same overlay type. (w) With part
+  t's test theater data: a 1 × 1 test type with a to-tile field and the laser-fence flag placed on
+  (*w*1) an empty cell of the tileset without the morphable flag and (*w*2) a morphable cell
+  holding a tree; a 1 × 1 test type with a to-tile field and the gate flag, and one with a to-tile
+  field and the laser-fence-post flag, each placed on (*w*3) an empty cell of the tileset without
+  the morphable flag and (*w*4) a morphable cell holding an own infantry unit; and a 2 × 1 test type
+  with a to-tile field and the laser-fence flag placed (*w*5) with a tree in one cell and the other
+  cell empty and morphable. Every cell of part w is flat, holds no overlay and is of a land type
+  with the buildable flag on. (x) With part t's test theater data: a 1 × 1 test type with both the
+  place-anywhere flag and a to-tile field placed on a cell of the tileset without the morphable
+  flag holding ore, a cell on which the to-tile rule refuses twice over (tileset and overlay).
+- Observable: placement success (for parts t to x, whether the place order succeeds: the item is
+  spent and no refusal sound plays).
+- Expected: (a) to (f), (h) to (k) and (r) refuse; (g) succeeds; (o) both refuse when S-0009's
+  height-aware test says the cell is not usable, and succeed otherwise; (p) hypothesis: the flying
+  aircraft refuses like the landed one, as the condition has no height test (if the aircraft is
+  not listed in the cell while it flies, the flying case succeeds and the finding goes to
+  S-0209); (q) is recorded whatever it shows (the fence building present or gone), as claim 3 (b)
+  leaves it open; (s) succeeds; the place-anywhere type succeeds on all four of its cells; the gate type and
+  the post type succeed on (l) and refuse on (m) and (n); (*t*1) and (*t*5) succeed, (*t*2),
+  (*t*3) and (*t*4) refuse; (*u*1), (*u*3) (on the ore and on the gem cell), (*u*7), (*u*8), (*u*11) and (*u*12) succeed, (*u*2),
+  (*u*4), (*u*5), (*u*6), (*u*9) and (*u*10) refuse; (*v*1) and (*v*2) succeed on the own wall and
+  refuse on the enemy wall; (*w*1), (*w*3) and (*w*5) succeed, (*w*2) and (*w*4) refuse (with the
+  gate type and with the post type alike), each the opposite of what a plain to-tile type gives
+  in parts *t*1 and *t*2; (x) succeeds.
+- Falsified if: any of (a) to (f), (h) to (k) and (r) succeeds, (g) or (s) refuses, (o) follows the
+  plain test where the two tests differ, the landed aircraft in (p) lets the placement succeed, the
+  flying aircraft in (p) lets it succeed (claim 3 (b) is then wrong about the height test, or the
+  aircraft is not listed), the place-anywhere type refuses anywhere, or the gate or post type
+  succeeds on (m) or (n) or refuses on (l); (*t*1) refuses (units would then count for a to-tile
+  type), (*t*5) refuses (every cell would then be tested), or (*t*2), (*t*3) or (*t*4) succeeds,
+  and in part u (*u*1), (*u*3) on either cell, (*u*7), (*u*8), (*u*11) or (*u*12) refuses (the buildable flag,
+  the naval range or the float multiplier would then be asked, or index 126 not excepted), or
+  (*u*2), (*u*4), (*u*5), (*u*6), (*u*9) or (*u*10) succeeds (another overlay type, or a
+  bridge-marked cell, would then pass); in part v a type refuses on the own wall (the wall
+  exceptions would then not apply to it) or succeeds on the enemy wall; in part w (*w*1) or (*w*3)
+  refuses (the tileset test would then still be asked), (*w*2) or (*w*4) succeeds (the to-tile
+  object rule would then apply instead of the type's own), or (*w*5) refuses (every cell would
+  then be tested); (x) refuses (the to-tile rule would then take precedence).
+
+**PL4. Water-bound and naval types.**
+- Observed area: the cells named in the setup, one 1 × 1 test building per placement.
+- Setup: a test water-bound type, a test naval type that is not water-bound, and a test type that
+  is both water-bound and naval; named test cells: water cells, a shore cell whose land type has a
+  float multiplier of zero (test rules), a water cell whose tile is outside the water range, a
+  sloped land cell and a flat land cell whose land type has the buildable flag off (test rules give
+  both land types a float multiplier that is not zero), and a cell that a high bridge marks without
+  any overlay in it (the cell two steps beyond the bridge overlay along its marking direction,
+  S-0211 claim 15), whose land type is water. Parts: (a) the water-bound type on a water cell, on
+  the shore cell and on the out-of-range water cell; (b) the naval type on an in-range water cell
+  and on the out-of-range water cell; (c) the water-bound type on the flat land cell with the
+  buildable flag off; (d) the water-bound type on the sloped land cell; (e) the water-bound type on
+  the high-bridge-marked cell, and, as the control, a type that is neither water-bound nor naval
+  on the same cell; (f) the type that is both water-bound and naval on the out-of-range water cell.
+- Observable: placement success per cell.
+- Expected: (a) succeeds on the water cell and on the out-of-range cell, refuses on the shore
+  cell; (b) succeeds in range, refuses out of range (the tile range of claim 3 d); (c), (d)
+  and (e) succeed for the water-bound type, and the control in (e) refuses (S-0211 claim 15 and
+  scenario L21 there); (f) succeeds (the float multiplier decides, not the tile range).
+- Falsified if: the water-bound type succeeds on the shore cell in (a); it follows the tile range
+  or the buildable flag in (a) or (c),
+  refuses on the sloped cell in (d), or refuses on the high-bridge-marked cell in (e); the naval
+  type does not follow the tile range in (b) (for instance it follows the float multiplier); or
+  (f) refuses out of range.
+
+**PL5. Building off allies.**
+- Observed area: the ring cells of the new building and the one building in range.
+- Setup: the only building in range is (a) an allied ally-eligible building, (b) an allied
+  base-normal building that is not ally-eligible, (c) an enemy ally-eligible building, (d) an own
+  ally-eligible building that is not base-normal, (e) an ally-eligible building of a second enemy
+  bystander computer player to whom the human house has given an alliance order (S-0414, claim 12,
+  test rules that allow the order, as S-0414 scenario V9 uses; the second enemy keeps the order
+  from being the last peace that claim refuses), so that the human house allies the owner and the
+  owner does not ally the human house. Runs with the lobby check box ticked and unticked; a run
+  with a loose test copy of the base rules without the default key, the program started after
+  placing it, and the check box left as the lobby offers it (as S-0412 scenario K1 does); a run
+  with a map override section that names the default key with value off, the check box left as the
+  lobby offers it.
+- Observable: placement success; the state the lobby offers the check box in.
+- Expected: option on: (a) and (d) succeed, (b), (c) and (e) refuse; option off: all five refuse; with
+  the key absent the lobby offers the box ticked, and the placements behave as with it ticked; with
+  the map override the box is still offered ticked (S-0412, claim 1).
+- Falsified if: (b), (c) or (e) supports placement (in (e) the relation is then read from the placing
+  house towards the owner instead), (a) or (d) refuses with the option on, any placement
+  succeeds with the option off, the absent-key default offered is off, or the map override changes
+  the setting.
+
+**PL6. Shroud, and when it is judged.**
+- Observed area: the foundation cells of the test building and the cells that the test trigger
+  reveals or shrouds again.
+- Setup: a map with shroud; a test building next to the base whose foundation has one cell shrouded
+  for the house. Parts: (a) cursor moved onto the foundation, click; then the cell revealed by test
+  trigger, the cursor moved one cell away and back, click; (b) the cursor placed on the foundation
+  with the cell shrouded and left still, the cell revealed by test trigger, then click without
+  moving; (c) a foundation fully explored, the cursor placed and left still, one foundation cell
+  shrouded again by test trigger, then click without moving; (d) a test type with a to-tile field and a foundation cell shrouded for the house, compared with the
+  same placement when every cell is explored, the cursor moved onto the foundation each time, and
+  the same pair of placements with a test type that has both a to-tile field and the place-anywhere
+  flag (claim 3: its to-tile field still exempts it). The original has no off state of the
+  switch of claim 6 to run; a replay on our engine runs both states.
+- Observable: refusal sound, whether an order is issued and the building placed.
+- Expected: (a) the first click refuses, the second places; (b) the click refuses (the old result); (c) the click places (the old result); after moving the cursor one cell away and back, (b) places
+  and (c) refuses. On our engine with the switch off, (b) places and (c) refuses at once.
+  (d) for each of the two types, the outcome with the shrouded cell is the same as with every cell
+  explored (the shroud is not what decides it); the type with both flags succeeds both times.
+- Falsified if: in (a) the first click places or the second refuses; (b) places, or (c) refuses,
+  which would put the judgement at the click; after the cursor moves one cell away and back, (b)
+  refuses or (c) places; or (d) the two outcomes of a type differ, or the type with both flags refuses.
+
+**PL7. Conditions lost between click and application.**
+- Observed area: the foundation and the supporting building's cells; for part b, the foundation
+  cells.
+- Setup: (a) the only supporting building is killed by test trigger in the same tick as the
+  scripted click, ordered so the click is taken before the kill; (b) the foundation fully explored
+  and the cursor left still, one foundation cell shrouded again by test trigger in the same tick as
+  the click, ordered after the click and before the order is applied (S-0213, claim 1: orders
+  issued in a tick are applied at its end). If scripted input and test triggers cannot place
+  the trigger between the click and the end of the tick, part b is not run, and the shroud half of claim 6's application
+  rule stays unmeasured.
+- Observable: whether the building is placed.
+- Expected: (a) and (b) placed (adjacency and shroud were judged at the click and are not judged
+  again when the order is applied).
+- Falsified if: the placement fails for adjacency in (a), or for the cell shrouded again in (b).
+
+**PL8. Walls, towers, gates and fill.**
+- Observed area: the cells along the four rays from the placed wall, up to 5 cells away, and the
+  cells named in each part.
+- Setup: named test rules fix the overlay registry. Wall type *W* has as its wall overlay the
+  overlay type *O* at registration index 0 or 2, with a guard range of 4 cells (*L* = 4) and
+  *W* is the first building type in the registry that names *O* (so it is *O*'s builder). Wall type
+  *W*26 has as its wall overlay the overlay type at registration index 26 (guard range 4 cells).
+  *O* and the index-26 overlay type both have the wall flag of an overlay type (set by the test
+  rules, since its absent-key default is no).
+  The test rules name a building type *G*1 as one of the first pair of gate types and a building
+  type *G*2, which has the gate flag, as one of the second pair. Own walls are made by placing *W* and *W*26. Credits, the
+  sell sound and the random-state recorder's draw count are read throughout. Parts:
+  - (a) place *W* 3 cells from an own wall in line (gap 2) and, separately, 5 cells away (gap 4).
+  - (b) damage an own wall of *O*, then place *W* on it.
+  - (c) place the wall tower type on an own wall of *O*.
+  - (d) place the wall tower type on an enemy wall.
+  - (e) *G*1, which has the gate flag, with a 2 × 1 foundation, across two own walls of *O*.
+  - (f) as (b) with the unsellable flag on *W* (the builder of *O*).
+  - (g) place *W* 4 cells from an own wall (gap 3).
+  - (h) place *W* 3 cells from an own wall with a tree in the cell between them, and, separately,
+    3 cells from an own wall with an enemy wall in the cell next to the placed cell.
+  - (i) own walls 3 cells away in all four directions at once, compared with the draws of a
+    placement that fills nothing (same seed and same input in both runs, so the streams agree
+    until the placement tick).
+  - (j) *G*2 with a 2 × 1 foundation across two own walls of the index-26 overlay (*j*1); *G*2 on
+    an own wall of *O* (*j*2); *G*1 on an own wall of the index-26 overlay (*j*3); *W*26 on an
+    own damaged wall of the index-26 overlay (*j*4) and on an own undamaged one (*j*5).
+  - (k) a second building type *W*b registered after *W* that also names *O*: first the unsellable
+    flag on *W*b only, with *W* placed on a damaged own wall of *O*; then the unsellable flag on
+    *W* only, with *W*b placed on a damaged own wall of *O*.
+  - (l) a type that is the wall tower type and also has the gate flag, with a 2 × 1 foundation,
+    across two own walls of *O*.
+  - (m) a further first-pair gate type with the gate flag, with *O* as its wall overlay (and no
+    wall flag), with a 2 × 1 foundation, across two own walls of *O*.
+  - (n) *G*1 on a cell that holds an own building with the laser-fence flag.
+  - (o) a type like *W* with the place-anywhere flag, with an own wall 3 cells away and a tree in
+    the cell between them.
+  - (p) own damaged wall of *O* 2 cells from the placed cell with an own undamaged one 4 cells away,
+    in line (*p*1); own damaged wall 3 cells away and nothing behind it (*p*2).
+  - (q) an own wall 4 cells east of the placed cell, and an own wall 3 cells north of the cell next
+    to the placed cell on its east side, in the same column as that cell.
+  - (r) a building type that is not a wall type, with *O* as its wall overlay, a guard range of 4
+    cells and no wall flag, placed 3 cells from an own wall of *O* in line (gap 2).
+  - (s) a wall type *W*n whose wall overlay is a test overlay type *O*n without the wall flag of
+    an overlay type, at a registration index other than 0, 2, 26 and 126, with a guard range of 4
+    cells; an own wall of *O*n is made by placing *W*n, then *W*n is placed 3 cells from it in
+    line (gap 2).
+- Observable: overlay per cell and its owner; credits; the overlay's damage state; for part r the
+  recorder's buildings in the gap cells and their construction state; the sell sound,
+  the draws taken in the placement tick, and in part n whether the laser-fence building is still in
+  play afterwards.
+- Expected: (a) gap 2 filled with 2 walls at no extra cost, gap 4 not filled (*L* − 1 = 3); (b)
+  accepted, the wall becomes undamaged; (c) accepted, the wall removed without refund and without
+  sound; (d) refused; (e) both walls removed without refund or sound; (f) accepted and the cell
+  holds the old damaged wall (the hypothesis of claim 10; whatever the cell holds is recorded and
+  revises claim 10, so the cell's content has no falsifier: part f is falsified only by a refusal,
+  listed below); (g)
+  filled with 3 walls; (h) no fill in either case; (i) all four directions filled (8 walls) and 8
+  more draws than the placement that fills nothing, whatever order the recorder sees; (*j*1)
+  accepted, both walls removed without refund; (*j*2) and (*j*3) refused; (*j*4) accepted and the
+  wall becomes undamaged; (*j*5) refused; (k) with the flag on *W*b only the wall of *O* is
+  removed and ends undamaged; with the flag on *W* only the removal does not happen (the builder
+  is *W*, the first type that names *O*), and the cell holds what (f) records; (l) accepted, the
+  wall in the top-left cell removed, the wall in the other cell still there; (m) accepted, the same
+  result as (l); (n) accepted, the laser-fence building gone, no refund; (o) no fill; (*p*1) one
+  wall added in the cell next to the placed cell, the damaged wall still damaged, the cell between
+  the damaged wall and the undamaged one still empty; (*p*2) 2 walls added, the damaged wall still
+  damaged; (q) 3 walls added in the east line and no wall in the two cells between the east
+  neighbour and the northern wall, 3 more draws than a placement that fills nothing; (r)
+  hypothesis: the two gap cells each hold a building of the type (no overlay of *O* is created), with 2 more
+  draws than a placement that fills nothing; whether those buildings show a construction state is
+  recorded; (s) the placed *W*n becomes an overlay of *O*n in its cell (claim 10), the two gap cells
+  stay empty, and the draws taken equal those of a placement that fills nothing.
+- Falsified if: in (r) the gap cells stay empty or hold walls of *O*; in (s) a gap cell receives a
+  wall or a building, or more draws are taken than by a placement that fills nothing; gap 4 fills, gap 3 does not fill, a fill goes past a tree or an enemy wall, fill
+  walls cost credits, (d) succeeds, a refund or a sound appears, or (i) shows a draw count other
+  than the number of walls added; (a) fills gap 2 with other than 2 walls, (*p*2) adds other than 2
+  walls, or (q) adds other than 3 walls in the east line or takes other than 3 more draws; (b),
+  (c), (e) or (f) refuses, the wall in (b) stays damaged, or a wall in (c) or (e) is not removed; (*j*2), (*j*3) or (*j*5) succeeds, or (*j*1) or (*j*4) refuses; in
+  (k) the removal follows the flag of *W*b instead of *W*; in (l) or (m) the wall in the other cell
+  is removed too (the rules combine), or in (m) no wall is removed; in (n) the laser-fence building
+  is still in play; in (o) the fill crosses the tree; in (*p*1) the damaged wall is repaired or
+  replaced, or more than one wall is added; in (q) a wall appears between the east neighbour and the
+  northern wall.
+
+**PL9. The 8-cell 3 × 3 foundation and the zero-size word.**
+- Observed area: the 3 × 3 block of cells from the intended top-left cell (parts a and b); the
+  click cell and the ring (parts c and d).
+- Setup: (a) a test type with the 8-cell 3 × 3 foundation word and a tree in the cell (2, 1) from
+  the intended top-left cell; (b) the tree in (1, 1) instead; (c) a test type with the zero-size
+  word and adjacency 3, clicked on a cell holding a tree, with the only supporting building in
+  turn at 4 cells to the −*x* side of the clicked cell and at 4 cells to its +*x* side (same
+  row); (d) the same type clicked on a cell that is shrouded for the house (the cursor moved onto it
+  first, as in PL6), with the supporting building at 4 cells to the −*x* side.
+- Observable: placement success; the top-left cell of a placed building.
+- Expected: (a) succeeds, (b) refuses; (c) the placement ignores the tree (no cells to test), is
+  named by the clicked cell itself (F2 with 1 × 1), and succeeds with the support at 4 cells to the
+  −*x* side and refuses with it at 4 cells to the +*x* side (F1 with *W* = *H* = 0 reaches
+  *d* = 4 cells to the −*x* side and 3 to the +*x* side); (d) succeeds (no foundation cell, so no
+  shroud to judge).
+- Falsified if: (a) refuses; (b) succeeds; (c) the tree refuses, the top-left cell is not the clicked cell, or both
+  supports succeed or both refuse (a 1 × 1 ring); (d) refuses.
+
+**PL10. Upgrades.**
+- Observed area: the target building and its cells (for parts e and f, also the cells around it).
+- Setup: (a) a target test building with upgrade count 2, damaged to half health before each
+  placement, and a test upgrade type with no level field placed three times on it; (b) a target
+  with upgrade count 3 and a level-1 test upgrade type placed twice; (c) a target type with upgrade
+  count 0, damaged, and a level-1 upgrade type, which also gives a test power output and is a
+  prerequisite of a test building; (d) a target with upgrade count 3 and no upgrade, a level-2 test
+  upgrade type U2 with test power output P2, then a level-less upgrade type U3 with test power
+  output P3 placed on it twice; a test building whose prerequisite is U2; (e) a lone target
+  building with no other building of the house within the ring of the upgrade type's adjacency
+  (test value 0), a level-less upgrade type, and, as the control, the same upgrade type clicked on
+  an empty cell in the same position; (f) a target test type that reveals nothing around itself
+  (test rules), its cell shrouded for the house by test trigger, the cursor moved onto the cell
+  before each click: once with the cell shrouded and once with it explored (revealed by test
+  trigger before the cursor moves); if test triggers cannot keep the cell shrouded, this part is not
+  run and the shroud half of the claim stays unmeasured; (g) a target with upgrade count 2 and
+  test upgrade types whose level fields are 0, 4 and −2, each clicked once on a target with no
+  upgrade; (h) a target with upgrade count 4 (test value; kept at 4 so that no run reaches the larger
+  counts that may make the original fail, claim 12), damaged before each placement, and a
+  level-less test upgrade type with test power output P4 placed on it four times; (i) test rules
+  that name a target test type with no upgrade-count key (count 0) as the wall tower type, the
+  target damaged, and a level-1 test upgrade type with test power output P1 that is also the
+  prerequisite of a test building, placed on it twice.
+- Observable: placement success, the building's health after each placement, the house's power
+  output (S-0405) and whether the test building is offered (S-0407); in (e) and (f) whether the
+  upgrade is placed and the refusal sound.
+- Expected: (a) two successes then a refusal, the building at full health after each success; (b)
+  the first succeeds, the second refuses; (c) the placement succeeds, the building is healed, and
+  the power output does not change and the prerequisite is not met; (d) U2 succeeds, the output
+  rises by P2 (once, not twice) and the test building is offered; U3 then succeeds and the output
+  rises by P3; the second U3 refuses; (e) the upgrade is placed on the target, and the click on
+  the empty cell refuses; (f) the click on the shrouded cell refuses, the click on the explored
+  cell places the upgrade; (g) all three refuse; (h) all four succeed and each restores full
+  health, the output rises by P4 with each of the first three and not with the fourth (*c*′ = 4 is
+  not recorded, F5); (i) the first placement succeeds, restores full health, raises the output by
+  P1 and makes the test building offered (the uncapped count 1 records the upgrade in position 1),
+  and the second refuses (the count is no longer 0).
+- Falsified if: the counts differ, the health stays at half, (c) refuses or changes the output, or
+  (d) raises the output by twice P2 or leaves the test building unoffered; (e) the upgrade is
+  refused for adjacency; (f) the click on the shrouded cell places the upgrade, or the explored one
+  refuses; (g) any of the three places an upgrade; (h) the fourth placement refuses or raises the
+  output; (i) the first placement leaves the output unchanged or the test building not offered
+  (the count was capped, as in part c), or the second placement succeeds.
+
+## Open questions
+
+1. The firestorm-wall fill rule (claim 11), the fate of an own laser-fence building under a placed
+   laser-fence-post type (claim 3 b; scenario PL3 q) and whether the filling buildings of a type
+   that is not a wall type show a construction state (claim 11, scenario PL8 r) are not
+   described. No stock type is known to have the firestorm-wall or laser-fence flags.
+2. Whether the occupancy-record part of claim 3 (b) can refuse a cell that has no object in it (for
+   example a position still recorded by an infantry unit that has just left) was not established.
+3. The cursor shroud result when placement mode begins, before the cursor first changes cell
+   (claim 6): the original may hold the value of an earlier placement. No scenario is proposed
+   until S-0411 fixes how placement mode starts.
+4. What a cell holds after a failed removal under a damaged wall (claim 10; scenario PL8 f).
+5. Whether an aircraft in flight is listed in the ground layer of the cell below it, which decides
+   whether a flying aircraft blocks placement (claim 3 b; scenario PL3 p). S-0209 owns listing.
+
+## Questions for the project lead
+
+- **Claim 6, shroud timing for human input.** The original judges the shroud condition from a
+  result computed when the cursor last changed cell, not at the click. This draft proposes
+  `quirks.placement_shroud_at_cursor`, default on (the original's behaviour) for human input, and
+  judging at issue time for AI houses and for the switch off. The other options: judge at issue time
+  for every player house and call the difference a departure (no switch), or keep the cursor result
+  only in the input layer. Which default should the switch have?
