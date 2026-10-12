@@ -1,9 +1,9 @@
 ---
 id: Q-0030
 title: Where a gate's door reaches rest within the gate's own update
-status: open
+status: answered
 related: [S-0215, S-0203, S-0209]
-answered-by: []
+answered-by: [S-0215]
 ---
 
 ## Need
