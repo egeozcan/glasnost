@@ -2,11 +2,11 @@
 id: S-0211
 title: Land types and passability
 topic: movement
-revision: 9
+revision: 10
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-10
+approved-on: 2026-10-12
 measurements: []
 requests: [Q-0018, Q-0020]
 supersedes: []
@@ -18,8 +18,9 @@ supersedes: []
 
 How a cell's land type follows from its tile, overlay and neighbours, the land-type table of speed
 multipliers and buildable flags, and the land-type and overlay rules that decide which cells a mobile
-object may enter, which movement zones may cross a cell (its passability category) and where
-buildings may be placed.
+object may enter and which movement zones may cross a cell (its passability category). The land
+data it supplies to building placement (*B*, the multipliers, the high-bridge marks) is here; the
+placement rule itself is S-0406's (claim 13).
 
 **Requests.** This revision answers two requests in part. It answers request Q-0020 in its part on
 bridge decks (question 4): which cells carry a bridge deck and are high-bridge cells (claim 15). It
@@ -35,7 +36,7 @@ other specs.
 *absent-key default*, *departure*, *importer warning*, *field*, *theater*, *tileset*, *sub-tile*,
 *type kind*, *building*, *registry*, *registration index*, *house*, *game start*, *session*,
 *unspecified*, *measurement setup* and *recorder* are used as in the glossary. Every spec this one
-cites is approved. S-0006, S-0009, S-0010, S-0207, S-0208, S-0209, S-0210 and S-0212 also have
+cites is approved, except S-0406 (a draft of the same batch, cited only for the placement rule in claim 13 and its pointers). S-0006, S-0009, S-0010, S-0207, S-0208, S-0209, S-0210 and S-0212 also have
 revisions in the same batch as this revision, and the claims and scenarios cited for them are those
 revisions' (for example, S-0009's claim 44, the slope condition of its claim 12, and its scenarios
 M6d and M25 exist only in S-0009's revision). From other specs: *track*, *speed fraction*, *target fraction*, *slowdown distance*, the
@@ -62,10 +63,11 @@ The crusher flag's effect in play is S-0210's (crushing).
 - **Land multiplier** *M*(*ℓ*, *c*). A factor for land type *ℓ* and locomotion class *c*. It is
   stored in single precision (claim 2). S-0207 uses it as a speed factor. Here a multiplier of exactly
   zero means the class cannot enter that land (claim 10).
-- **Buildable flag** *B*(*ℓ*): whether buildings may be placed on land type *ℓ* (claim 13).
+- **Buildable flag** *B*(*ℓ*): whether buildings may be placed on land type *ℓ* (claim 2 c; S-0406
+  claim 3 d uses it for placement).
 - **Crusher flag.** A vehicle-type field (S-0210 owns what it does in play). This spec uses it only
   to choose a vehicle's default locomotion class (claim 3).
-- **Naval flag.** A building-type field that marks buildings placed on water (claim 13).
+- **Naval flag.** A building-type field that marks buildings placed on water (S-0406 claim 3 d).
 - **Tile land code.** An integer that the tile data gives for each cell of a tile (S-0010 calls it
   the terrain code). Its meaning is given by a fixed table (claim 6).
 - **Slope shape index.** The slope shape that a cell's tile gives that cell, an integer. 0 is flat.
@@ -572,24 +574,22 @@ The crusher flag's effect in play is S-0210's (crushing).
 
 ### Other uses of land types
 
-13. **Building placement uses the buildable flag.** Apart from the rules of the structures specs
-    (adjacency, occupancy, prerequisites), a building may be placed on a cell only if all of these
-    hold: the cell is not marked as part of a bridge (a high-bridge cell, claim 15, or another
-    cell that a bridge marks as part of its body; the bridge specs own the body cells), its slope
-    shape index is 0, it has no overlay (the structures specs own the exceptions, such as walls
-    built onto wall cells), and *B*(its land type) is *yes*. A building type with the naval flag
-    ignores *B*: it needs instead a cell whose tile number lies in the water role range of S-0010
-    (claim 5 and table R: 14 tiles from the water role's start). Where the water role is unset, that
-    range covers tile numbers 0 to 12 (S-0010, `quirks.unset_role_range`). In the theater with
-    index 5 (the theater index of S-0009's Import mapping, which S-0010 also uses) the original forces
-    the water role unset whatever the theater data says (S-0010, claim 4).
-    - Backing: `measurable` (scenario L7 for the buildable, flat and no-overlay requirements; L15
-      for the naval range; L21 for high-bridge cells, which refuse placement although they hold no
-      overlay); the other cells that a bridge marks as part of its body are `unmeasured`: the bridge
-      specs own which cells those are, and every such cell known holds a bridge overlay, which the
-      no-overlay requirement already refuses, so no observable separates the two
-    - Confidence: high for the buildable, flat and no-overlay requirements and for the naval
-      range; medium for high-bridge cells and for the other bridge body cells
+13. **Building placement is owned by S-0406.** Where a building may stand (bridge marks, slope
+    shape, the buildable flag *B*, the naval tile range, the float test for water-bound types, the
+    wall and laser-fence overlay exceptions and the to-tile rule) is S-0406 claims 3 and 8. This
+    spec does not repeat it, and a rule here would only drift from it. It supplies what that rule
+    reads:
+    - *B*(*ℓ*) of claim 2 (c), which the ordinary ground test asks of a cell's land type. It is not
+      asked for a type with the naval flag, which tests the tile range instead, nor for a
+      water-bound type, which tests the float multiplier only, nor for a cell that meets a wall
+      exception. So *B* alone does not decide whether a building may stand on a cell.
+    - The land multipliers of claim 2, which include the *float* multiplier of the water-bound test.
+    - The high-bridge marks of claim 15, which the ground test reads as "marked as part of a
+      bridge".
+    - Backing and confidence: those of S-0406 claim 3 for the placement rule. Scenarios L7 (the
+      ordinary ground rule), L15 (the naval range) and L21 (the high-bridge marks) stay here
+      because they exercise this spec's *B*, land types and marks. They test ordinary building
+      types, where S-0406's rule and the old one agree.
 
 14. **Restricted land type.** A vehicle type with a restricted land type may enter a cell only in
     these cases (all other cells count as impassable for it):
@@ -641,7 +641,7 @@ The crusher flag's effect in play is S-0210's (crushing).
     - (d) When a high bridge is destroyed, the cells it marked stop being high-bridge cells, and a
       rebuilt bridge marks them again. Which cells a destruction or a repair touches belongs to the
       bridge specs.
-    - (e) The bridge's other marks (the cells it counts as part of its body for claim 13, its
+    - (e) The bridge's other marks (the cells it counts as part of its body for S-0406 claim 3 d, its
       direction for pathfinding) belong to the bridge specs and S-0212.
     - Backing: `measurable` (scenario L21: runs 1 and 2 for the marked cells and part c, run 3 for
       part b on a steep cell; S-0009 scenario M6d part B for the refusal on an already recomputed
@@ -696,7 +696,7 @@ The crusher flag's effect in play is S-0210's (crushing).
 | Cliff-back reduction modulus | 256 | setting value | Claim 8 and Formulas |
 | Category 6 threshold (rule 3) | 0.01 | factor | Claim 11 |
 | Occupation pattern that gives category 2 | 7 | pattern value | Claim 11, rule 4 |
-| Naval placement range | 14 | tiles | Claim 13; the water role range of S-0010 |
+| Naval placement range | 14 | tiles | Owned by S-0406 (claim 3 d) and S-0010; no claim of this spec uses it, scenario L15 tests it |
 | Tunnel tile sizes with one qualifying cell | 3 × 4, 3 × 5 (sub-tile 6); 4 × 3, 5 × 3 (sub-tile 2) | cells, sub-tile number | Claim 14 |
 | Overlay registration indices passable on a deck | 237, 238 | registration index | Claim 14 |
 | High-bridge overlay indices | 24, 25, 237, 238 | registration index | Claim 15 |
@@ -735,7 +735,7 @@ database*; S-0006, claim 10).
   *clear*, *water*, *beach* and *ice* (row 3's land type is always *clear*, so it is unaffected).
 - `quirks.restricted_deck_overlay_indices` (claim 14): restricted vehicles may use a bridge deck
   only above overlays of registration indices 237 and 238.
-- `quirks.unset_role_range` (owned by S-0010, used by claim 13): with the water role unset, naval
+- `quirks.unset_role_range` (owned by S-0010, used by S-0406 claim 3 d): with the water role unset, naval
   buildings may be placed on tiles 0 to 12.
 - **Firestorm walls are inert in the original.** No event turns a house's firestorm on, so a
   firestorm wall is never a deciding object of rule 4 (claim 11). This is original behaviour, not a
@@ -785,13 +785,13 @@ database*; S-0006, claim 10).
 | vehicle section, key `MovementRestrictedTo` | restricted land type | land-type name (case ignored) or `<none>`; any other text gives none (claim 4) | none |
 | overlay section, key `Land` | overlay land type | land-type name (case ignored) or `<none>`; any other text gives none (claim 4). Our engine reads none as clear, with an importer warning (claim 4's departure) | clear (then tiberium for ore and gem overlays, claim 5) |
 | overlay section, keys `NoUseTileLandType`, `Wall`, `Tiberium`, `Crushable`, `IsARock`, `IsRubble` | own-land-type, wall, tiberium, crushable, rock and rubble flags | boolean | no |
-| building section, key `Naval` | naval flag (claim 13) | boolean | no |
+| building section, key `Naval` | naval flag (S-0406 claim 3 d) | boolean | no |
 | building section, key `LaserFence` | laser-fence flag (claim 11) | boolean | no |
 | building section, key `FirestormWall` | firestorm-wall flag (claim 11) | boolean | no |
 | terrain-object section, keys `TemperateOccupationBits`, `SnowOccupationBits` | occupation patterns (claim 11, rule 4) | integer | 7 (an engine constant; a terrain object without the key gets category 2, claim 11, rule 4) |
 | `[General]`, key `CliffBackImpassability` | cliff-back setting *r* | integer; only its remainder modulo 256 matters (claim 8, Formulas) | 0 (no effect) |
 | Theater tile data, per tile cell | tile land code, slope shape index | public tile format (S-0010) | no image data for a cell: row 3 of claim 5 (claim 6) |
-| Theater data file, the water role | the naval placement range (claim 13) | as in S-0010 | unset: tiles 0 to 12 (claim 13) |
+| Theater data file, the water role | the naval placement range (S-0406 claim 3 d) | as in S-0010 | unset: tiles 0 to 12 (S-0010, `quirks.unset_role_range`) |
 
 ## Measurement scenarios
 
@@ -1008,7 +1008,7 @@ otherwise.
   else blocks the bridge (for example the missing bridge overlay, whose effect the bridge specs own,
   or S-0212's wall-section outcome), and part B cannot decide.
 
-**L7: buildable and flat (claims 2 and 13).** This also settles part of S-0006 open question 7.
+**L7: buildable and flat (claim 2; S-0406 claim 3 d).** This also settles part of S-0006 open question 7.
 - *Setup:* skirmish start with a construction yard (a building that produces buildings) on clear ground, flat cells of clear and of road
   land within placement range, a simple-slope cell of clear land within range, and a flat clear
   cell holding an overlay of a type whose override gives it land type *clear* and turns its
@@ -1199,7 +1199,7 @@ otherwise.
   mean the gate passed and only the occupied cell stopped it, so the category is not one that
   *normal* refuses); or it never passes the gap after the object is destroyed.
 
-**L15: naval placement range (claim 13).**
+**L15: naval placement range (S-0406 claim 3 d).**
 - *Setup:* run A: in a theater whose water role is set, a map with flat water cells whose tiles
   are the first 14 tiles of the water role, and flat cells of any later tiles whose tile land code is
   9, if the theater has them. A building type available to the player whose naval flag an override
@@ -1399,15 +1399,15 @@ otherwise.
   cell *A* = (*x*, *y*), far from everything else, and a single overlay of index 25 in cell
   *B* = (*u*, *v*), far from *A*. The player's construction yard and power plants (buildings
   that supply the house's power) stand so that every tested cell is within the adjacency distance
-  of the structures specs (so no tested cell is refused for adjacency), and none of their
+  (glossary *adjacency*; S-0406 claim 4), so no tested cell is refused for adjacency, and none of their
   foundations touches a tested cell. Run 2 is the
   same with index 237 at *A* and 238 at *B*. Run 3 is run 1 with cell *A* given a tile of slope
   shape 5 or more, and the cells around it raised as the slope needs, so that as many of the
   tested cells as possible, (*x*, *y* + 1), (*x*, *y* − 1) and (*x*, *y* − 2) among them, stay flat
-  (at whatever level); a tested cell that cannot stay flat is left out, since claim 13 refuses it
-  for its slope.
+  (at whatever level); a tested cell that cannot stay flat is left out, since S-0406 claim 3 d refuses
+  it for its slope.
 - *Procedure:* try to place the one-cell building on each cell of the 5 × 5 squares centred on *A*
-  and on *B* (except the overlay cells themselves, which claim 13 refuses for their overlay).
+  and on *B* (except the overlay cells themselves, which S-0406 claim 3 c refuses for their overlay).
 - *Observable:* for each cell, whether placement is allowed.
 - *Expected:* runs 1 and 2: refused at (*x*, *y* + 1), (*x*, *y* − 1) and (*x*, *y* − 2), allowed
   at every other tested cell around *A*; refused at (*u* + 1, *v*), (*u* − 1, *v*) and (*u* − 2, *v*), allowed at every other tested cell
@@ -1483,7 +1483,7 @@ test files).**
 
 - Which events switch a laser-fence section between its active and inactive states (claim 11) belong
   to the structures specs. It matters only with `quirks.passability_laser_fence_lost` off.
-- Which cells a bridge marks as part of its body (claim 13) belongs to the bridge specs. Which cells
+- Which cells a bridge marks as part of its body (S-0406 claim 3 d) belongs to the bridge specs. Which cells
   carry a deck is claim 15.
 - Which game events check *M* ≠ 0 and the absence of an overlay before putting a mobile object on a
   cell (for example a unit leaving a factory) belongs to the occupancy and production specs.
