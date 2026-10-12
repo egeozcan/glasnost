@@ -2,11 +2,11 @@
 id: S-0214
 title: Order targeting rules (what a click means for each kind of object, and group orders)
 topic: ui
-revision: 12
+revision: 13
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-10
+approved-on: 2026-10-12
 measurements: []
 requests: []
 supersedes: []
@@ -53,9 +53,14 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
 - **Own object.** An object owned by the acting house. An actor that is not an own object
   always has the generic result of table G as its final action, which is *select* or *nothing*.
   All kind tables below assume an own actor.
-- **Allied, enemy.** A target object is *allied* with the actor when the target's house and the
-  actor's house are allied, or are the same house. Otherwise it is an *enemy*. A cell has no
-  relation.
+- **Allied, enemy.** Judged from the actor's side, with the glossary's one-way *alliance*: a
+  target object is *allied* when the actor's house allies the target's house (a house counts as
+  allied with itself, so the same house is allied too). Whether the target's house allies the
+  actor's house is not asked. Otherwise the target is an *enemy*. "A house not allied with the
+  actor" in the cell rules means a house that the actor's house does not ally. The two readings
+  differ only for a one-way alliance, which a skirmish has in one case: the special house of
+  S-0412 allies the non-civilian houses and no house allies it, so an own actor treats an object
+  of the special house as an enemy (medium; scenario T11). A cell has no relation.
 - **Modifier roles.** Three keys held while clicking change the action: *force-move*,
   *force-fire* and *force-select*. They are roles. Which physical keys play them is the player's
   key binding (the original's default binding is outside the scope of this spec). The
@@ -85,6 +90,17 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
   object's weapon slots is below 0 (S-0308, claim 15, which states the same difference). The two
   can differ, for example for a type that switches to a healing weapon only through its weapon
   number (S-0308's example). Every row below that names a healing actor uses this test.
+- **Selection response.** One of the spoken lines of a type that is played, for an order that
+  has no acknowledgement of its own kind, by the object that gives the acknowledgement (claim 14).
+  Selecting an object plays one too, which this spec does not specify. A type has an ordered list of them, possibly empty (Import mapping); the
+  list's order is the order of the entries in the user's data, and Formulas F5 numbers the
+  responses from 0 in that order.
+  The alternative lists that the original keeps for slaves and deactivated objects are not examined
+  (Open questions).
+- **Clicked object.** The object that the game finds under the cursor at the moment of a click,
+  from the cursor's position on the battlefield. It is the *target* of the claims when the target
+  is an object. Whether a click finds an invisible building at all is an open question (Open
+  questions).
 - **Disabled.** For these input rules: paralysed, or, for a vehicle, playing its death sequence.
 - **Being erased, phasing in.** An object that an erasing weapon (a temporal weapon) has locked
   onto is *being erased* (glossary), from the first lock until the last lets go or the object is
@@ -271,7 +287,9 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
    *attack* produces an attack-move order instead (S-0213, claim 6): an order that would be *move*
    is issued as *attack-move to a place*, and one that would be *attack* as *attack-move on a
    target*. This covers every action whose order is *move* or *attack* in table M, including bomb,
-   demolish, airstrike and enter tunnel. An object is eligible if it is infantry or a vehicle, has a
+   demolish, airstrike and enter tunnel, and also the actions that part 1 of table M treats as
+   *attack* (heal, disarm bomb and repair vehicle; low, Scenario T3), because the gesture changes
+   the order and not the action. An object is eligible if it is infantry or a vehicle, has a
    weapon in its first slot, and its type does not carry the prevent-attack-move flag. Buildings
    and aircraft are never eligible. One ineligible object in the selection turns the gesture off
    for the whole selection. Whether or not the gesture is on, force-fire and force-select held
@@ -280,8 +298,8 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
    is not empty and every selected unit or building is eligible (otherwise a message appears and
    the mode stays off); it ends when the next battlefield click has been handled or the selection
    is cleared.
-   - Backing: `measurable` (Scenario T3; the prevent-attack-move flag by the T10 line of that
-     name)
+   - Backing: `measurable` (Scenario T3, which includes the healing case; the prevent-attack-move
+     flag by the T10 line of that name)
    - Confidence: medium (low for the end of attack-move mode)
 
 6. **The attack rule.** The attack rule holds for an own actor and a target object when all of
@@ -344,10 +362,9 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
    - Confidence: medium for table V; low for tables AC and B
 
 9. **Actions on a cell.** Over a cell, every actor has a generic cell result *c* by table GC.
-   For an infantry unit, vehicle or aircraft, a shrouded cell changes it into *c*′: if *c* is not
-   *nothing* and the cell is shrouded, *c*′ is *move* (or *patrol*, if *c* is *patrol*) when the
-   actor's type may move into shroud and the cell is inside the usable area, and *no-move*
-   otherwise; in every other case *c*′ = *c*. The final action is a function of *c*′ (of *c* for a
+   For an infantry unit, vehicle or aircraft, the *shroud change* of table S turns *c* into *c*′:
+   on a shrouded cell a result other than *nothing* becomes *move*, *patrol* or *no-move*.
+   The final action is a function of *c*′ (of *c* for a
    building), given by the kind's cell table (IC, VC, ACC or BC). For an
    infantry unit, vehicle or aircraft, a click on a cell outside the usable area produces an order
    only when the action is *no-move*.
@@ -444,7 +461,11 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
     - *Repair mode:* over an own object that can be repaired, *repair switch*. Anywhere else,
       *no-repair*. A click with *repair switch* produces a repair order only on a building.
     - *Power mode:* over an own selectable building that is not vehicle-like, whose type can be
-      switched off, and that makes power or needs power, *power switch*. Anywhere else,
+      switched off, and whose type either has a base drain above 0 (S-0405, Terms) or has the
+      needs-power flag (S-0405, Terms), *power switch*. The test reads the type only, never the
+      building's present output, drain, upgrades or switch state, so a power plant whose type has
+      neither a base drain nor the needs-power flag gets *no-power* whatever it makes, and a
+      building that has a base drain gets *power switch* even when it is already offline. Anywhere else,
       *no-power*.
     - *Superweapon targeting:* the superweapon's own targeting rule (superweapon specs).
 
@@ -528,11 +549,12 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
 
 > **F5 (acknowledgement choice, claim 14).** *i* = *x* mod *n*, where *x* is the next raw value of
 > the unsynchronised random stream, an unsigned 32-bit integer taken whole (S-0202, claim 1), *n*
-> ≥ 1 is the number of selection responses of the type of the object that gives the
+> is the number of selection responses of the type of the object that gives the
 > acknowledgement (the first object of the selection, claim 14), and mod is the remainder
-> of unsigned integer division (never negative). Response *i* is played, the responses being
-> numbered from 0 in the order the type lists them. Exactly one raw value is taken, and none when
-> *n* = 0. Integer arithmetic, no rounding, no rejection of values.
+> of unsigned integer division (never negative). For *n* ≥ 1, exactly one raw value is taken and
+> response *i* is played, the responses being numbered from 0 in the order the type lists them.
+> For *n* = 0, no raw value is taken and no response is played. Integer arithmetic, no rounding,
+> no rejection of values.
 
 ## Constants
 
@@ -598,7 +620,7 @@ whether the target is being erased. That difference is the original's, not an om
 | Row | Condition | *g* |
 |---|---|---|
 | G1 | The actor is berserk, or melee-linked while its type lacks the keep-acting flag | nothing |
-| G2 | The actor is being erased | select when the target can be selected and is not selected yet, the actor is not an own loaner, and it is not the case that the actor is armed and own and the target belongs to another house. Nothing in every other case |
+| G2 | The actor is being erased | select when the target can be selected and is not selected yet, unless the actor is an own loaner, or is armed and own while the target belongs to another house. Nothing in every other case |
 | G3 | The target is the actor itself, it is the only selected object, it is own, and it carries a planted bomb of a kind the general rules let the player set off | detonate |
 | G4 | Force-select held, the actor own and not a loaner | toggle select |
 | G5 | The target is the actor itself, it is the only selected object, and it is own | deploy |
@@ -826,7 +848,7 @@ gives it.
 | GC6 | Movable or a rally-capable building, and the cell outside the usable area | no-move |
 | GC7 | Movable or a rally-capable building, and force-select held | move |
 | GC8 | A rally-capable building, and force-move held | move |
-| GC9 | Movable, and either fog of war is considered for this cell (low), or the actor's entry outcome for the cell (S-0209) is *clear* or *cloaked blocker*, or the actor is a building that undeploys into a resource-gathering vehicle (low) | move |
+| GC9 | Movable, and either a condition that is not yet identified makes the original consider fog of war for this cell (low; Open questions), or the actor's entry outcome for the cell (S-0209) is *clear* or *cloaked blocker*, or the actor is a building that undeploys into a resource-gathering vehicle (low) | move |
 | GC10 | Movable, an underground type, and a relaxed form of the entry test passes (low) | move |
 | GC11 | Movable or a rally-capable building | no-move |
 | GC12 | Otherwise | nothing |
@@ -840,8 +862,17 @@ house, whose type is a legal target.
 house not allied with the actor and its overlay is a wall that the warhead can damage (the warhead
 has the wall flag, or it has the wood flag and the overlay's armour class is wood).
 
-The shroud change of claim 9 is applied to *c* for infantry, vehicles and aircraft; *c*′ below is
-the result.
+**Table S: the shroud change** (claim 9). It applies to *c* for infantry, vehicles and aircraft,
+and *c*′ below is the result. "Permitted" means that the actor's type may move into shroud and the
+cell is inside the usable area.
+
+| *c* | Cell shrouded | Permitted | *c*′ |
+|---|---|---|---|
+| nothing | either | either | nothing |
+| anything else | no | either | *c* |
+| patrol | yes | yes | patrol |
+| neither nothing nor patrol | yes | yes | move |
+| anything other than nothing | yes | no | no-move |
 
 **Table IC: infantry on a cell.**
 
@@ -880,7 +911,7 @@ the result.
 | BC2 | Its type undeploys into a vehicle and gathers and processes resources itself; *c* is move; the cell has the *tiberium* land type and is not fogged | harvest |
 | BC3 | *c* is attack; no weapon in its first slot | attack |
 | BC4 | *c* is attack; its projectile can hit ground targets, its type is not a pulse cannon, and it is not being sold | attack |
-| BC5 | An own rally-capable building | move (sets its rally point) |
+| BC5 | An own rally-capable building | move (the guard-spot order of part 3 of table M) |
 | BC6 | *c* is attack | nothing |
 | BC7 | Otherwise | *c* |
 
@@ -985,7 +1016,7 @@ Ordering consequences:
   is the attack order of table M (behaviour *attack*, target the object), so that an engineer
   with no weapon can start the disarming; what that order then does for an actor with no weapon
   belongs to the special-abilities specs (confidence: medium that the original behaves so,
-  from the check that every kind of object shares; `measurable` by Scenario T10, line I2, which
+  since the able-to-fire check of an attack order is the same for every kind of object; `measurable` by Scenario T10, line I2, which
   tries an unarmed and an armed engineer).
 - **The harvester-truce exception of row I15 never applies.** The original means to stop a
   vehicle thief from hijacking a harvester of the rules' harvester list while the game's
@@ -1095,7 +1126,7 @@ Ordering consequences:
 | Building type `ConstructionYard` | construction yard (Terms, *movable*; deploy readiness) | boolean (S-0003) | no |
 | Building type `InvisibleInGame` | invisible in the game (rows B1, BC1, I16, I18) | boolean (S-0003) | no |
 | Building type `TogglePower` | can be switched off (claim 13) | boolean (S-0003) | yes |
-| Building type `Powered` | needs power (claim 13) | boolean (S-0003) | no |
+| Building type `Powered` | the needs-power flag (claim 13; S-0405, Terms) | boolean (S-0003) | no |
 | Building type `Cloning` | rally-capable (Terms) | boolean (S-0003) | no |
 | Building type `UnitAbsorb`, `InfantryAbsorb` | absorbing building (row B5, table M) | boolean (S-0003) | no (both keys) |
 | Building type `GapGenerator` | gap generator (row B4, table M) | boolean (S-0003) | no |
@@ -1124,6 +1155,7 @@ Ordering consequences:
 | Rules, combat-damage section, `CanDetonateTimeBomb`, `CanDetonateDeathBomb` | row G3 | boolean (S-0003) | no (both keys) |
 | Rules, combat-damage section, `TreeTargeting` | tree targeting (claim 6) | boolean (S-0003) | no |
 | Rules `[General]` `AllowShroudedSubteranneanMoves` | underground moves into shroud (claim 11) | boolean (S-0003) | no |
+| Infantry, vehicle, aircraft and building types, `VoiceSelect` | the type's selection responses (claim 14; Formulas F5): the number *n* of entries is the count of the list, and F5 numbers them from 0 in the order the list gives them | list of sound names (S-0003), kept in the listed order, with no entry dropped or reordered | empty (no response) |
 | Rules `[General]` `HarvesterUnit` | the harvester list of the row I15 quirk | list of vehicle types | empty |
 
 The defaults in the Absent column are the values the original gives a field when the type (or the
@@ -1139,13 +1171,15 @@ construction yards be packed up again (Terms, *movable*) is a lobby setting, not
 ## Measurement scenarios
 
 All scenarios run under the measurement setup: a skirmish on a small purpose-made flat map with
-one human player and one computer player (an enemy) whose start is far away; a scenario that needs an
-allied computer house adds a second computer player allied with the human player. The scenarios do
-not depend on which physical keys play the modifier roles: the measurer uses the original's own
-binding. Objects are pre-placed by the
-map. A recorder logs each object's behaviour, target and destination per tick, and each order
+one human player and one enemy bystander computer player (glossary); a scenario that needs an ally
+adds one allied bystander computer player, made mutually allied with the human player by the lobby
+teams (S-0412, claim 8). The glossary's void rule applies to each bystander, and the *observed area*
+of each scenario is the part of the map that holds its test objects. A scenario that clicks an
+object of the allied bystander uses one of that bystander's objects, which the scenario names. The
+scenarios do not depend on which physical keys play the modifier roles: the measurer uses the
+original's own binding. Objects are pre-placed by the map. A recorder logs each object's behaviour, target and destination per tick, and each order
 issued. The cursor shape is observed on screen and used only to read the representative's action.
-Each test is done once, because no random draw of the scenario random stream is involved. Where a
+Each test is done once, because no click draws from the scenario random stream (the one draw a click makes is from the unsynchronised stream, which T2 part B reads). Where a
 scenario says "alone", that object is the only one selected, so that it is the representative.
 
 **Scenario T1: representative (claim 1).** Select an unarmed engineer and an armed tank, with the
@@ -1239,7 +1273,9 @@ force-fire on a cell: area guard on the cell. With the gesture on a far cell: a 
 attack-move memory (it engages enemies met on the way). Repeat the gesture with a building or an
 aircraft added to the selection: expected a plain move order for the tank (no attack-move memory).
 With the gesture over the enemy tank that is in range: an attack-move order whose target is that
-tank (the *attack-move on a target* of table M). If the command bar is
+tank (the *attack-move on a target* of table M). With the gesture, a medic (a healing infantry
+type) over a wounded friendly infantry unit: expected an attack-move order on that unit, as claim 5 gives (low). Falsified if it gets a plain attack order, or no
+order. If the command bar is
 available, repeat with its attack-move button instead of the gesture; then press the button,
 click a far cell (attack-move expected), and click another far cell without the gesture (a plain
 move expected, since the mode ended with the first click); then press the button, clear the
@@ -1255,7 +1291,7 @@ bomb attached to an own building instead of the tank, the building selected alon
 itself: a detonate order from the building (part 3 of table M). Falsified if any outcome differs.
 
 **Scenario T4: attack rule (claim 6).** An own tank, alone, against: an enemy tank (attack), a
-second own tank without force-fire (select), a tank of an allied computer house without force-fire
+second own tank without force-fire (select), a tank of the allied bystander without force-fire
 (no-move, by rows G9 and V4), an object whose type is immune (no-move cursor), a disguised
 enemy spy, with and without force-fire, a tree, and an own unit of an underground type
 (stock or test type), first on the surface with force-fire held (expected: attack, the baseline
@@ -1440,8 +1476,8 @@ for the garrisoned building with the flag on (Terms, *armed*).
   in another reach region from the tank's): a ground tank clicked onto it with force-move gets
   a nearby cell found by the search as destination, while a jumpjet infantry unit, an aircraft
   and a unit of an underground type (each alone) get the vehicle itself. Falsified if the tank's
-  destination is the vehicle, or one of the other three's is a cell. (c) Shroud: an object of an
-  allied house standing in a region that is shrouded for the clicking player (allied vision is
+  destination is the vehicle, or one of the other three's is a cell. (c) Shroud: an object of
+  the allied bystander standing in a region that is shrouded for the clicking player (allied vision is
   off, or the object is placed in a shrouded region of a map that allows it), clicked by an
   armed unit of an underground type, by an armed aircraft and, as control, by an armed ground tank with the
   may-move-into-shroud flag set on its type by a named test file. All three are armed, so row G9
@@ -1454,10 +1490,11 @@ for the garrisoned building with the flag on (Terms, *armed*).
 an own vehicle on the repair depot, an own vehicle on open ground, an own aircraft (landed, and
 in flight), an own vehicle-like building (Terms; a test type from a named test file if no stock
 one can be placed), an own wall; repair mode over a
-damaged own building twice; power mode over an own power-using building twice. Expected: building
+damaged own building twice; power mode over an own building whose type has a base drain above 0 twice, over one whose type has the needs-power flag but no base drain twice, and over an own power plant whose type has neither
+(a test type from a named test file if no stock one can be placed). Expected: building
 sold, no-sell over both vehicles, the aircraft in both states and the vehicle-like building
 (nothing happens on a click), wall sold, repair on and then off,
-and the building powered off and then on again. Falsified if any of these differs; in particular, a vehicle or aircraft sold by a sell-mode
+the first two buildings powered off and then on again, and for the power plant *no-power* (the click records no order and S-0405 claim 10's refusal is not reached). Falsified if any of these differs; in particular, a vehicle or aircraft sold by a sell-mode
 click would show where a sell unit action comes from, and a vehicle-like building sold by one
 would show that the *not vehicle-like* condition of claim 13 is wrong. If the aircraft in flight
 cannot be clicked, the record says so and that state stays open.
@@ -1527,8 +1564,8 @@ Each line is one actor, alone unless the line says otherwise, and one target or 
 the line says on the usual flat map, and a named test rules file makes any test type the line
 needs (a flag set on a stock type, a weapon removed or given, or a weapon with a flag). A line
 never relies on what stock data happens to give a type: where it needs a property, the test file
-sets it. The observable is the cursor action and the order the recorder logs on a click, with
-the order given by table M. Expected: the action and order in the line. Falsified: any other
+sets it. An allied object in a line is an object of the allied bystander. The observable is the
+cursor action and the order the recorder logs on a click, with the order given by table M. Expected: the action and order in the line. Falsified: any other
 action or order.
 
 | Rows | Actor and target | Expected |
@@ -1567,7 +1604,7 @@ action or order.
 | AC7, AC9, AC11 | A transport aircraft holding a passenger, clicked on itself, and then one holding none; an armed aircraft over an enemy object whose type is immune; an armed aircraft over an enemy tank | deploy (an unload order); nothing, no order; no-move, no order; attack (an attack order) |
 | refusing building | A second plain infantry unit over an allied armory, and over an allied hospital (a hurt unit), while the first unit is still entering it | the cursor is recorded, with the rows it matches (no-enter for e3 and e6, enter for e2 and e5); this records the refusing state if there is one and is not a claim |
 | empty first slot | A test building type of the weapon-switching kind with nothing in its first slot and a weapon in a later one, force-fire held, over a cell; the same with a test aircraft type if it can be given that behaviour; control: the first slot filled | attack (row BC3, quirk on), an attack order for the building if it can fire; for the aircraft *nothing* (table ACC) and for an object target *nothing* (row AC8); control: attack from the building (row BC4). If the type cannot fire at all, the record says so |
-| B1 | An own armed tower (a ground weapon, the target in range) over a building of a test type with the invisible flag (the script puts the cursor on its cell); control: over a visible enemy building | nothing, no order; attack, an attack order. If the pick never finds the invisible building, the record says so and this half of B1 stays open |
+| B1 | An own armed tower (a ground weapon, the target in range) over a building of a test type with the invisible flag (the script puts the cursor on its cell); control: over a visible enemy building | nothing, no order; attack, an attack order. If the click never finds the invisible building as the clicked object, the record says so and this half of B1 stays open |
 | B4 | A gap generator clicked on itself with spare power above the extra drain of its type; with less; with the radius already boosted | deploy (an unload order); nothing; deploy |
 | B5, B6 | A building holding garrison occupants, clicked on itself; a power plant, clicked on itself | deploy (an unload order); nothing |
 | B7, B8 | A building armed only with an anti-air weapon, force-fire held, over an enemy tank; a building with a ground weapon over an enemy object whose type is immune | nothing; no-move, no order |
@@ -1579,6 +1616,18 @@ action or order.
 | GC4 | A tank, force-fire held, over an empty cell; a tank whose weapon's warhead has the wall flag over a wall of an enemy house, and over a wall of its own house; a tank over a cell that holds a live veinhole monster (the map places it; if it cannot, the record says so) | attack (an attack order on the cell); attack (an attack order on the cell); not attack (move or no-move); attack (an attack order whose target is the monster) |
 | VC2 | A weed-eating vehicle over a cell with the *weeds* land type; a vehicle that gathers and processes resources itself over visible ore | harvest (a harvest order with the cell as destination); harvest |
 | IC8 | A berserk infantry unit (a test weapon with that effect), alone, over a cell | no-move (the cursor); no order (part 1 of table M) |
+
+**Scenario T11: the side of *allied* (Terms, *Allied, enemy*).** The one one-way alliance of a
+skirmish is the special house's (S-0412): it allies the non-civilian houses, and no house allies
+it. Setup: the map gives the special house a capturable building (placed below the capture field of
+the named test rules file that sets it to 50 %), and gives the enemy bystander one of the same
+type, also below the field, as control. An own engineer, alone, is hovered over and clicked on
+each. Expected: the action over both is *capture* and the click records a capture order, because the
+actor's house does not ally the special house, so its building is an enemy. Falsified if the
+special house's building shows anything other than what the control shows (an engineer facing an
+allied building gets enter, no-repair or repair building, not capture), which would mean that the
+alliance of the special house with the actor's house, and not the reverse, decides. If the map cannot give the special house a capturable building, the
+record says so and the side stays `unmeasured` (Open questions).
 
 **Coverage of table M.** Each case gives its order in these steps. *Move*, *no-move*: Scenarios T2, T7
 and T10 (lines I9, I27 and V6, self). *Attack-move to a place* and *attack-move on a target*: T3.
@@ -1653,17 +1702,21 @@ Rows with no step, `unmeasured`, each for a reason.
   the human player (Scenario T6).
 - Whether a selected object that changes owner (for example one that an enemy captures) stays
   selected, which decides whether the fallback of *toggle select* (claim 12) can be reached.
-- Whether the pick finds a building whose type is invisible in the game (row B1, target half).
+- Whether a click finds a building whose type is invisible in the game as the clicked object (row B1, target half).
+- Whether the original uses other selection response lists for a slave unit or a deactivated object (Terms, *selection response*), and so whether claim 14's draw uses another list then. Until that is checked, claim 14 and F5 state only the plain list (low).
 - Whether a ground object can stand on a destroyable-cliff cell or on a cell with a live veinhole
   monster (row AC5).
 - Whether the recorder can log a vehicle as inside a tunnel for long enough to click (Scenario T9
   part D).
 - Whether a unit that is below the surface, or one that is cloaked, can be selected (Terms, *can
   be selected*; the T10 line for row b2 records it for a unit below the surface).
-- Whether an object of an allied house can be clicked while it stands in shroud, which Scenario T7
+- Whether an object of the allied bystander can be clicked while it stands in shroud, which Scenario T7
   step (c) needs.
 - Which movement zone a building type has when its section sets none (row B10), and whether S-0211's
   default of *normal* applies to buildings.
+- Whether the map can give the special house a capturable building (Scenario T11); until it does,
+  the side from which *allied* is judged is `unmeasured` for the one one-way alliance of a skirmish
+  (medium).
 - Whether a skirmish can turn fog of war on, which rows IC2, IC3 and the fog parts of rows GC9, VC2
   and BC2 depend on.
 - Whether a permanent takeover that leaves no controlling object makes an object
@@ -1682,8 +1735,8 @@ Rows with no step, `unmeasured`, each for a reason.
 
 ## Questions for the project lead
 
-- **Claim 11 and S-0212.** Claim 11 is the same as in approved revision 11. The sign-off diff
-  should check S-0212's claim 25 (scenario P16, runs (u) and (r)) against it: a click on a cell
+- **Claim 11 and S-0212.** Claim 11 is the same as in approved revision 12 (checked by comparing the
+  two texts). The sign-off diff should check S-0212's claim 25 (scenario P16, runs (u) and (r)) against it: a click on a cell
   uses the nearby-cell search only when the clicked cell is not itself the destination. A free
   mover's *no-move* searches without a reach region on every cell and object, inside the usable
   area or not.
