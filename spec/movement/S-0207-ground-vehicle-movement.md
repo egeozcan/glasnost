@@ -2,13 +2,13 @@
 id: S-0207
 title: Ground vehicle movement (drive locomotor)
 topic: movement
-revision: 5
+revision: 6
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-10
+approved-on: 2026-10-12
 measurements: []
-requests: [Q-0019, Q-0020]
+requests: [Q-0035, Q-0040]
 supersedes: []
 ---
 
@@ -549,10 +549,21 @@ is *on a bridge deck* (glossary *bridge deck*) is set by claim 5 here.
     | clear | it begins the track (claim 7; for a two-cell curve the second cell is checked as in T5) | as the first check |
     | closed friendly gate | it tells the gate to open and waits | as the first check |
     | moving blocker | S-0212 claim 22 | S-0212 claim 22 |
-    | friendly obstacle, enemy obstacle | it discards its stored path and makes a fresh search at once, whatever its path retry timer shows (S-0212 owns the search and the timer). When the search finds a path, the repeated check follows on the same tick | it waits in every case. It takes as its target, and attacks by an override of its behaviour (S-0215 claim 10): the first object listed in the cell (S-0209 claim 13) when its house is not allied with that object (a terrain object is never allied), or, when no object is listed and the cell holds a wall, the wall, whatever its owner. When its house is allied with the first listed object, or when no object is listed and the cell holds no wall, it attacks nothing |
+    | friendly obstacle, enemy obstacle | it discards its stored path and makes a fresh search at once, whatever its path retry timer shows (S-0212 owns the search and the timer). When the search finds a path, the repeated check follows on the same tick | it waits in every case. It takes as its target, and attacks by an override of its behaviour (S-0215 claim 10): the first object listed in the cell (S-0209 claim 13) when its house is not allied with that object (a terrain object is never allied), or, when no object is listed and the cell holds a wall, the wall, whatever its owner. When its house is allied with the first listed object, or when no object is listed and the cell holds no wall, it attacks nothing. The override gives no destination (below) |
     | stationary friendly | as for an obstacle: it discards its stored path, makes a fresh search at once, and makes the repeated check on the same tick | when the give-up test (F7) holds, it gives up the move (Terms). Otherwise it sends a scatter request with no threat point, forced and move-anywhere, to every object listed in the cell layer it drives on (below), and waits. Which of them receive it is S-0209 claim 11; what a vehicle among them does is claim 16, what an infantry unit does is S-0208 claim 11 |
     | cloaked blocker | the cloaked objects in the cell become visible to its house, as in S-0209 claim 9 (the visibility specs own for how long). It discards its stored path. The fresh search that follows (S-0212 claims 20 and 21) is made on the same tick only when its path retry timer has run out, and then the repeated check follows | the cloaked objects become visible to its house again, and it gives up the move |
     | blocked | S-0212 claim 22 (Open questions) | it gives up the move |
+
+    *The override of an obstacle's repeated check.* The override that makes the vehicle attack
+    the first listed object or the wall gives it the behaviour *attack*, that object or the wall's
+    cell as its target, and **no destination**. So by S-0215 claim 10 its move destination is put
+    aside together with its old target, and from that tick on it has no destination: its move ends,
+    it makes no further step check towards that destination, and the override is not made again
+    on the following ticks. What the vehicle does in *attack* (approaching, firing) belongs to
+    S-0215 and the combat specs. When the override is reverted (S-0215 claim 10, for example when
+    the target is destroyed), the move destination that was put aside is the vehicle's destination
+    again, and it drives on towards it (S-0212 claims 20 and 21 own the path it then searches).
+    The same holds for the wall: the wall's cell is the target, and there is no destination.
 
     *The cell layer it drives on.* A request goes to the deck layer of the cell when the cell is a
     high-bridge cell and the vehicle's height level, trunc(*z* / 104) for its world height *z* in
@@ -567,8 +578,8 @@ is *on a bridge deck* (glossary *bridge deck*) is set by claim 5 here.
     | The cell the first step of the new path enters | Effect |
     |---|---|
     | holds a closed gate whose owner is allied with the vehicle's house (gate owner's view) | the gate is told to open |
-    | gives *stationary friendly*, the vehicle is not of a train type, the object nearest the cell's centre belongs to a house allied with the vehicle's house, the give-up test (F7) holds and the vehicle is in contact with nothing (S-0209 claim 8 uses the same contact condition) | the vehicle gives up the move |
-    | gives *stationary friendly*, the vehicle is not of a train type, the object nearest the cell's centre belongs to a house allied with the vehicle's house, and the give-up test (F7) fails or the vehicle is in contact with something | the vehicle sends the same scatter request as in T4 |
+    | gives *stationary friendly*, the vehicle is not of a train type, the nearest object (below) belongs to a house allied with the vehicle's house, the give-up test (F7) holds and the vehicle is in contact with nothing (S-0209 claim 8 uses the same contact condition) | the vehicle gives up the move |
+    | gives *stationary friendly*, the vehicle is not of a train type, the nearest object belongs to a house allied with the vehicle's house, and the give-up test (F7) fails or the vehicle is in contact with something | the vehicle sends the same scatter request as in T4 |
     | gives *stationary friendly*, and the vehicle is of a train type, or no object is found, or the nearest object's house is not allied with the vehicle's house | nothing |
 
     The nearest object is looked for in the cell's deck layer when the vehicle's world height *z*
@@ -577,9 +588,32 @@ is *on a bridge deck* (glossary *bridge deck*) is set by claim 5 here.
     layer otherwise. *H* is the terrain's surface, the same quantity as in claim 9 (c), not a
     bridge deck's height.
 
+    *The nearest object* is chosen among the objects listed in that cell layer (S-0209 claim 13)
+    as follows:
+    - Only infantry units, vehicles, aircraft and buildings take part. Any other listed object (a
+      terrain object such as a tree, for one) never does. No object is left out for being the
+      vehicle itself; the vehicle is listed only in the cell it stands in, which its first step
+      leaves, so in practice it never takes part.
+    - Each one's distance is the distance *d*ₙ of Formulas F8: measured along the map only (heights
+      play no part), from the cell's **top corner**, the corner with the least *x* and least *y*
+      (S-0208 table P names it), to the object's position within the cell that holds that
+      position. It is not measured from the cell's centre (`quirks.drive_nearest_from_top_corner`).
+      For a building listed in this cell whose position lies in another cell, its position within
+      that other cell is used.
+    - The object with the smallest *d*ₙ is the nearest. When several share the smallest *d*ₙ, the
+      one listed first (S-0209 claim 13) is taken.
+    - When no object of those kinds is listed in that layer, no object is found, and the last row
+      (nothing) applies, even though the cell gives *stationary friendly*.
+
+    So among the five standing positions of infantry (S-0208 table P), the top position is nearest
+    (*d*ₙ = 90 leptons), then the centre, where a vehicle resting in the cell also stands (181), then
+    the right and left positions (202 each, a tie between the two), then the bottom position (271).
+    The four values are the same with the table square root and with the exact one (F8).
+
     The step check then follows on that tick when the vehicle faces the step: a first check after a
     fresh search made because it had no stored path, the repeated check after a search made at once
-    by T4. So on a tick of a repeated check
+    by T4 or after the search of T4's *cloaked blocker* row, and after the search of T5's obstacle
+    row a check of the same kind as the T5 check that discarded the path (T5 below). So on a tick of a repeated check
     against stationary friends the vehicle can send the request twice, once here and once by T4,
     when the cell still gives *stationary friendly* at the repeated check.
 
@@ -593,10 +627,25 @@ is *on a bridge deck* (glossary *bridge deck*) is set by claim 5 here.
     | clear | the curve begins | as the first check |
     | moving blocker | the straight or diagonal track into the first cell begins instead (claim 7); the stored path is kept | as the first check |
     | closed friendly gate | the gate is told to open; the vehicle discards its stored path and stops at once with *ρ* = 0 | as the first check |
-    | friendly obstacle, enemy obstacle | it discards its stored path; a fresh search follows once its path retry timer has run out (on the same tick when it already has) | as the first check |
+    | friendly obstacle, enemy obstacle | it discards its stored path; a fresh search follows once its path retry timer has run out (on the same tick when it already has). When that search is made on this tick and finds a path, the look at the new path's first cell and a step check of the new path's first step follow on the same tick (below) | as the first check |
     | stationary friendly | as in T4: it discards its stored path, searches at once and makes the repeated check | when the give-up test of F7 holds (without the contact condition), it gives up the move (Terms); when it fails, it sends the scatter request of T4 to the second cell. In both cases it also discards its stored path and stops at once with *ρ* = 0, except that a vehicle that gives up and falls back to rest (it has approach destinations) may already have stopped by falling back |
     | cloaked blocker | as in T4 | as in T4 |
     | blocked | it discards its stored path and makes a fresh search at once | it gives up the move |
+
+    *After T5's obstacle row.* When the fresh search of T5's *friendly obstacle, enemy obstacle*
+    row is made on the same tick and finds a path, the look at the first cell of the new path
+    (above) is made, and then, when the vehicle faces the new path's first step, a step check of
+    that step follows on that tick. It is a first check when the T5 check that discarded the path
+    was a first check, and the repeated check when that was a repeated check. On that step check
+    the vehicle cannot begin a two-cell curve: when the outcome is *clear* it begins the straight
+    or diagonal track into the new first cell, even when the new path's first two steps would form
+    a curve, as after T5's *moving blocker* row. The limit holds for that one step check only: a
+    search made at once by it (T4, first check) lifts it, and on later ticks curves are chosen as
+    claim 7 says. When the vehicle does not face the new first step, it turns (claim 6) and makes no
+    step check on that tick. Consequences: a vehicle can search twice in one tick (the search of
+    T5, then, when the new first cell gives an obstacle or *stationary friendly* at a first check,
+    the search made at once by T4); and when the search of T5 waits for the path retry timer, the
+    vehicle stays at its cell with no stored path until a later tick.
 
     A train type sees every outcome other than *blocked* as *clear* at a step check (S-0209 part
     5f), so for a train only the *clear* and *blocked* rows apply. Unlike a walker (S-0209 claim 8),
@@ -608,7 +657,11 @@ is *on a bridge deck* (glossary *bridge deck*) is set by claim 5 here.
       that reading, shows *blocked* at a repeated check too), part e for the gate before turning,
       part f for a cloaked blocker, part g for the second cell (its runs 1 to 4 for the T5 rows
       *stationary friendly*, *moving blocker*, *enemy obstacle* and *cloaked blocker*, run 5 for
-      *closed friendly gate*, run 6 for *blocked*), part h for the cell layer of the request).
+      *closed friendly gate*, run 6 for *blocked*, run 7 for the search of T5's obstacle row and
+      the straight track after it), part h for the cell layer of the request, part d also for the
+      override's missing destination and the move resumed after the revert, part i for the
+      nearest object: its distance from the top corner, infantry and vehicles taking part, and the
+      tie).
       `unmeasured` for these parts, each for the reason given:
       - *blocked* at a repeated check of the first cell, if S-0212 claim 22 holds for the first
         check (Open questions): no repeated check then follows a first check that gave *blocked*,
@@ -642,9 +695,25 @@ is *on a bridge deck* (glossary *bridge deck*) is set by claim 5 here.
         claim 27), a vehicle whose search finds no cell takes no draw (claim 16), and a receiver
         that refuses takes none either. That needs every neighbour of the cell to be closed to the
         infantry unit while the vehicle still has a path through the cell, and no setup is known
-        that is sure to give both
-    - Confidence: medium for T4 and for the gate opened before turning; low for the look at the
-      first cell of a new path, for the double request and for T5
+        that is sure to give both.
+      - the step check after the search of T5's obstacle row when the T5 check was a repeated
+        check: that needs a search on the same tick (made at once by T4) whose new path begins
+        with a curve whose second cell gives an obstacle, and which cells the pathfinder routes
+        through next to occupied cells belongs to S-0212, so no setup is known that is sure to give
+        such a path.
+      - that objects other than infantry, vehicles, aircraft and buildings never take part in the
+        nearest object: the only listed objects of another kind that S-0209 names are terrain
+        objects, and a terrain object gives the cell an obstacle or *blocked* (S-0209 row VP29 or
+        VP26), never *stationary friendly*, so the look never runs over a layer that lists one.
+      - no object found while the cell gives *stationary friendly*: that needs the layer the look
+        searches (by *z* > *H* + 208) to list none of those kinds while the layer that decides the
+        entry outcome (S-0209) gives *stationary friendly*, and no setup is known in which the two
+        layers differ in that way
+    - Confidence: medium for T4 and for the gate opened before turning; high for the override
+      giving no destination, medium for the move resumed after the revert; low for the look at the
+      first cell of a new path, for the double request and for T5, except medium for how the
+      nearest object is chosen (who takes part, the distance from the top corner and the tie) and
+      for the search, step check and straight track after T5's obstacle row
 
 ### Scatter requests (every vehicle)
 
@@ -789,6 +858,18 @@ fraction (dimensionless).
 The look at the first cell of a new path (claim 15) adds a fourth condition: the vehicle is in
 contact with nothing. Unit: leptons.
 
+**F8 Distance of the nearest-object choice** (claim 15, the first cell of a new path). For an
+object whose position is (*x*, *y*, *z*) in leptons, *u* = *x* mod 256 and *w* = *y* mod 256, each
+the residue from 0 to 255 (the position within the cell that holds it, measured from that cell's
+top corner). *n* = *u*² + *w*², an exact integer (the original forms the squares and the sum in
+double precision, which is exact here, as *n* ≤ 130050), and *d*ₙ = ⌊*r*(*n*)⌋ with *r* the table
+square root of S-0204 (Formulas F1), truncated to an integer as in F5. *z* plays no part. The
+*d*ₙ of two objects are compared as integers. Among the objects with the smallest *d*ₙ, the one
+listed first (S-0209 claim 13) is the nearest, as claim 15 states. S-0204's `quirks.table_root_distance` covers
+this distance too: off, *d*ₙ = ⌊√*n*⌋. Under `quirks.drive_nearest_from_top_corner` off, *u* and
+*w* are replaced by (*x* mod 256) − 128 and (*y* mod 256) − 128, so the distance is measured from
+the cell's centre. Unit: leptons.
+
 ## Constants
 
 | Name (ours) | Value | Unit | Notes |
@@ -803,7 +884,7 @@ contact with nothing. Unit: leptons.
 | Interpolation snap threshold | 3 | progress units | Claim 4: snap to the next point if *A* > 3 |
 | Braking floor *F*₀.₃ | 0.300000011920928955078125 | fraction | Claims 10 and 11 |
 | Sinking floor *F*₀.₁ | 0.100000001490116119384765625 | fraction | Claim 10 |
-| Sinking deceleration | 0.00150000001303851604461669921875 (single-precision 0.0015) | fraction per progress unit per tick | Multiplied by *V*; claim 10 |
+| Sinking deceleration | 0.00150000001303851604461669921875 (single-precision 0.0015) | fraction per update (claim 10), per progress unit per tick of *V* | Multiplied by *V*; claim 10 |
 | Crushing cap | 0.2 | fraction | Claim 10 |
 | Zero-multiplier fallback | 0.5 | fraction | Claim 9 (d) |
 | Damaged factor | 0.75 | factor | Claim 9 (e) |
@@ -817,8 +898,8 @@ contact with nothing. Unit: leptons.
 | Absent-key default: speed field | type speed 0 | progress units per tick | Claim 1 |
 | Absent-key default: acceleration flag | on | boolean | Claim 10 |
 | Absent-key default: slowdown distance *D*ₛ | 500 | leptons | Claim 10 |
-| Absent-key default: deceleration factor *η* | 0.00200000000000000004163336342344337026588618755340576171875 (the double nearest 0.002) | fraction per progress unit per tick | Claims 10 and 17 |
-| Absent-key default: acceleration factor *a* | 0.0299999999999999988897769753748434595763683319091796875 (the double nearest 0.03) | fraction per tick | Claims 10 and 17 |
+| Absent-key default: deceleration factor *η* | 0.00200000000000000004163336342344337026588618755340576171875 (the double nearest 0.002) | fraction per update (claim 10), per progress unit per tick of *V* | Claims 10 and 17 |
+| Absent-key default: acceleration factor *a* | 0.0299999999999999988897769753748434595763683319091796875 (the double nearest 0.03) | fraction per update (claim 10; two updates in some ticks, claim 12) | Claims 10 and 17 |
 | Absent-key default: uphill and downhill factors | 1.0 each | factor | Claim 9 (c) |
 | Absent-key default: veteran speed factor *ν* | 1.0 | factor | Claim 2 |
 | Absent-key default: country speed factor *κ* | 1.0 | factor | Claim 2 |
@@ -829,6 +910,7 @@ contact with nothing. Unit: leptons.
 | Height level of a vehicle for the cell layer of a request | trunc(*z* / 104), rounded toward zero | height levels | Claim 15 |
 | Level difference that sends a request to the deck layer | 3 or more | height levels | Claim 15 |
 | Height above the surface height *H* at a cell's centre from which the nearest object is looked for in the deck layer | more than 208 (2 height levels of 104) | leptons | Claim 15, first cell of a new path |
+| Point the nearest object is measured from | the cell's top corner: position (0, 0) within the cell | leptons | Claim 15 and F8; the residues *x* mod 256 and *y* mod 256 are taken from 0 to 255 |
 | Range of the target draw of a threat-point scatter | 1 to 4 (accepts on 1) | draw value | Claim 16 |
 | Range of the direction draw of a threat-point scatter | 0 to 2, minus 1 | step directions | Claim 16 |
 
@@ -962,7 +1044,8 @@ of the first group.
 | no track, facing the step | first check: friendly obstacle, enemy obstacle, stationary friendly | discards the stored path and searches at once; repeated check on the same tick when the search finds a path (claim 15, T4) |
 | no track, facing the step | first check: blocked | as S-0212 claim 22 gives (claim 15, T4; Open questions) |
 | no track, facing the step | first check: cloaked blocker | reveals the cloaked objects, discards the stored path; searches on the same tick only if the path retry timer has run out |
-| holding a path found on this tick | repeated check: friendly or enemy obstacle | attacks the first listed object if not allied (a wall if nothing is listed), waits |
+| holding a path found on this tick | repeated check: friendly or enemy obstacle | attacks the first listed object if not allied (a wall if nothing is listed) by an override that gives no destination, so its move destination is put aside until the override is reverted; waits |
+| no track, facing the step, first cell clear, curve chosen | second cell: friendly or enemy obstacle | discards the stored path; when the path retry timer has run out, searches on that tick, looks at the new first cell and makes a step check of the same kind, which can begin only a straight or diagonal track (claim 15, T5) |
 | holding a path found on this tick | repeated check: stationary friendly | gives up the move if the give-up test holds (F7), otherwise sends a forced, move-anywhere scatter request to the cell, waits |
 | holding a path found on this tick | repeated check: cloaked blocker or blocked | gives up the move |
 | any object of the vehicle type kind, whatever its locomotor | scatter request accepted, no threat point | destination from the nearby-cell search, behaviours unchanged, no draw (claim 16) |
@@ -1042,6 +1125,14 @@ its new destination from that tick.
   that accepts takes its own draw (S-0208 claim 13), so a second request could change the number of
   draws. This is original behaviour and has no switch: no setup is known in which the second
   request is observable (claim 15, backing), and no mod is known to need one.
+- **`quirks.drive_nearest_from_top_corner`** (claim 15, F8). Default (original): the nearest object
+  in the look at the first cell of a new path is the one whose position lies nearest to the top
+  corner of the cell holding it, along the map, so an infantry unit at the top position wins over
+  a vehicle or infantry unit at the centre, and the centre over the right, left and bottom
+  positions. Off: the distance is measured from the centre of that cell, so an object at the
+  centre is nearest and the four outer standing positions are equally far. The switch changes
+  which house decides between giving up, the request and nothing when the layer lists objects of
+  more than one house. Scenario D17 part i tells the two apart.
 - **A scatter without a threat point queues no *move*** (claim 16). The vehicle drives to the scatter
   cell in whatever behaviour it has, so after arriving it does what that behaviour does with no
   destination (S-0215). Original behaviour, no switch.
@@ -1067,6 +1158,10 @@ its new destination from that tick.
 
 No other speed field of a country or of a difficulty level enters the formulas of this spec
 (Open questions).
+
+No key feeds the destination of the override of claim 15 or the choice of the nearest object in
+the look at the first cell of a new path (F8): both are engine rules. The close-enough distance
+of the give-up test is imported as S-0209 says.
 
 ## Measurement scenarios
 
@@ -1431,9 +1526,16 @@ cell before *X*.
 - (c) As (a), with *V* placed by the map in *sticky*. *Expected:* *V* never gets a destination
   (claim 16, case a); *M* stays in front of *X*, its stored path replaced on every tick on which it
   faces *X*. *Falsified if:* *V* moves.
-- (d) As (a), with *M* armed and *V* replaced by an unarmed vehicle *E* of the computer player that
+- (d) As (a), with *M* armed (a weapon that reaches the adjacent cell and has no minimum range, so
+  that *attack* gives it no approach destination) and *V* replaced by an unarmed vehicle *E* of the computer player that
   *M* cannot crush. *Expected:* on *M*'s arrival tick *M* takes *E* as its target and its behaviour
-  is overridden to *attack*. *Falsified if:* *M* waits without a target.
+  is overridden to *attack*, and from that tick *M* has no destination (the recorder reads none on
+  the arrival tick and on every tick while the override lasts), and the override is not repeated
+  on the following ticks. A second step: map triggers destroy *E* a fixed number of ticks after the
+  arrival (or *M* destroys it). On the tick of the killing hit *M*'s destination is its corridor
+  cell again, and *M* then drives through *X* to it. *Falsified if:* *M* waits without a target,
+  *M* keeps its corridor cell as its destination while it attacks *E*, or after *E* is destroyed
+  *M* has no destination and stays in front of *X*.
 - (d2) As (d), with *M* of a stock type whose primary weapon can damage walls, and *X* holding a
   wall segment of the human player, placed by the map, and nothing else (a *friendly obstacle*,
   S-0209 row VO5). *Expected:* on *M*'s arrival tick *M* takes the wall's cell as its target and
@@ -1481,6 +1583,19 @@ cell before *X*.
   - Run 6: as run 3 with *M* unarmed, so that *E* gives *blocked*. *Expected:* on *M*'s arrival
     tick *M* searches at once; when the search finds a path, the repeated check gives *blocked*
     again and *M* gives up its move on that tick (destination removed).
+  - Run 7: as run 3, with a fork at *X*: besides the cell after *X* (the 1/8-turn branch, which
+    holds *E*), the corridor also leaves *X* by a 1/8 turn to the other side, through a branch
+    one cell longer than the first, which leads to the same destination. *E* is moved into the cell after
+    *X* by a map trigger a few ticks after *M*'s order, so that *M*'s first path runs through the
+    shorter branch, and stands still there from at least 10 ticks before *M*'s arrival. *M* made
+    its last search when it was ordered and found a path then, so its path retry timer has run
+    out on its arrival tick (S-0212 claim 21). *Expected:* on *M*'s arrival tick *M* has a new
+    stored path through the longer branch and begins a track on that tick: the straight track
+    into *X*, so that its facing stays the corridor's until it reaches *X*'s centre, where it then
+    turns towards the longer branch. *Falsified if:* *M* begins no track on its arrival tick (no
+    step check after the search), or it begins the curve into the longer branch on that tick.
+    Precondition: the new path runs through the longer branch (S-0212 decides whether the cell
+    holding *E* costs more than the extra cell); if it does not, the run is inconclusive.
   - *Falsified if:* *M* curves into an occupied cell (runs 1 and 2); *M* keeps its stored path or
     begins a track on its arrival tick (runs 1 and 3 to 5); in run 4 *E* stays invisible; in run 5
     the gate does not start to open on that tick; in runs 1 and 5 *ρ* is not 0 at the end of that
@@ -1495,12 +1610,44 @@ cell before *X*.
   deck (4 height levels above the water's level, so 3 or more), the vehicle on *X*'s deck gets a
   destination and the ship under *X* does not. *Falsified if:* the ship under *X* gets a destination
   on that tick, or the vehicle on *X*'s deck does not.
+- (i) The nearest object (claim 15, F8, `quirks.drive_nearest_from_top_corner`). *M* is a vehicle
+  of the human player of a driving stock type that is a crusher, standing at rest in the cell
+  before *X* and facing 1/4 turn away from *X*; it is then ordered to the corridor cell 10 cells
+  past *X*, so its first search is a fresh search with no stored path, and the look at *X* comes
+  before it turns. *M*'s type needs at least 2 ticks for a 1/4 turn (S-0206 claim 12), so that
+  the ticks before *M*'s facing first changes can be told from the tick on which it faces *X*.
+  The *order tick* below is the tick on which *M*'s fresh search is made (S-0213 owns when an
+  order takes effect); the observables are read against *M*'s facing, not against that tick. *X*
+  holds an idle unarmed vehicle *V* of the human player in *guard* at the
+  centre, and an idle infantry unit *I* of the computer player, of an unarmed stock type that *M* can crush,
+  placed by the map at a chosen standing position. *V* gives *stationary friendly* (S-0209 row
+  VP20) and *I* no value of its own (row VP25), so *X* gives *stationary friendly*; that is the
+  precondition, and the recorder confirms it by *M* sending a request at all.
+  - Run 1: *I* at the top position (*d*ₙ 90 against *V*'s 181). *Expected:* *I* is the nearest
+    object and is not allied, so the look does nothing: *V* gets no destination until the tick on
+    which *M* first faces *X* after turning (then T4 sends the request). *Falsified if:* *V* gets a
+    destination before *M*'s facing first changes; that would show the distance
+    measured from the centre (the switch off) or *I* left out.
+  - Run 2: *I* at the bottom position (271 against 181). *Expected:* *V* is the nearest object,
+    allied, and the give-up test fails (the destination is far), so the look sends the request on
+    the order tick: *V* gets a destination before *M*'s facing first changes. *Falsified if:* *V*
+    gets its destination only once *M* faces *X*.
+  - Run 3: no *V*; *X* holds an idle infantry unit *A* of the human player in *guard* and *I*, at
+    the right and left positions (202 each, a tie). In run 3a *I* is placed by the map and *A* is
+    then walked into *X* by scripted input, so *A* entered last and is listed first (S-0209 claim
+    13); in run 3b *A* is placed by the map and *I* is walked in by a map trigger. The run counts
+    only when the recorder shows the two at the right and left positions. *Expected:* in 3a the
+    request is sent on the order tick (*A* gets a destination or takes its draw, S-0208 claim 13,
+    before *M*'s facing first changes); in 3b nothing happens until *M* faces *X*. *Falsified if:*
+    both give the same timing (the tie not decided by listing order), or in 3b the request is sent
+    before *M*'s facing first changes.
 - *Switch note:* no situation of the original is known that gives a driving vehicle a contact while
   it stands in front of a stationary friend within the close-enough distance, so
   `quirks.drive_giveup_ignores_contact` has no discriminating run; part (b) tests the default
   without contact.
-- *Runs:* 3 per part and run, with the order given at varied ticks. No part uses infantry, so no
-  scatter draw is expected.
+- *Runs:* 3 per part and run, with the order given at varied ticks. Only part i uses infantry, so
+  no other part expects a scatter draw; in part i the infantry units that accept a request take
+  their draws as S-0208 claim 13 gives.
 
 **D18: vehicle scatter (claim 16).**
 - *Setup:* open flat ground; an idle unarmed vehicle *V* of the human player of a driving stock type,
@@ -1597,6 +1744,11 @@ cell before *X*.
 - Which cells decide crush mode (claim 7) was read but not exercised. Scenario D10 tests it (runs
   C to F for the track, runs A and B together with the start of the crush-slowdown state, which
   S-0210, claim 9 and scenario K5, owns).
+- The original makes a second look for a nearest object, by the same rule as F8: when a fresh
+  search finds no path while the vehicle is near its destination, it looks at the cell in its body
+  facing's step direction. That case was not traced far enough to state it, and this spec does
+  not describe it; the rule of F8 (top corner, not centre) is the one to reuse if a later
+  revision does.
 - The ship locomotor's speed fraction is outside this spec, which covers only the driving
   locomotor. S-0210 claim 9 assumes that the ship locomotor updates its speed fraction like
   claim 10 here, as far as the crush slowdown is concerned; a spec of the ship locomotor should

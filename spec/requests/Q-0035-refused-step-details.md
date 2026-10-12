@@ -1,9 +1,9 @@
 ---
 id: Q-0035
 title: Two details of a driving vehicle's refused step (the attack override and a curve's blocked second cell)
-status: open
+status: answered
 related: [S-0207, S-0215]
-answered-by: []
+answered-by: [S-0207]
 ---
 
 ## Need

@@ -1,9 +1,9 @@
 ---
 id: Q-0040
 title: The object nearest the cell's centre in the look at a new path's first cell
-status: open
+status: answered
 related: [S-0207, S-0209]
-answered-by: []
+answered-by: [S-0207]
 ---
 
 ## Need
