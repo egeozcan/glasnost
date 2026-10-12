@@ -2,11 +2,11 @@
 id: glossary
 title: Glossary of shared terms
 topic: rules-import        # cross-cutting; every topic uses these terms
-revision: 12
+revision: 13
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-11
+approved-on: 2026-10-12
 measurements: []
 requests: []
 supersedes: []
@@ -293,7 +293,13 @@ a *passive house* (S-0009, Terms) is a different thing.
 **cell.** One square of the map grid, identified by integer cell coordinates (x, y). Increasing x
 runs towards the lower right of the screen, increasing y towards the lower left. A cell is 256
 leptons along each map axis, and its centre is at world position (256x + 128, 256y + 128) leptons.
-Its corner topmost on the screen is its *top corner*. See S-0009 and S-0101.
+Its corner topmost on the screen is its *top corner*, the point (256x, 256y) leptons, which S-0009
+(Terms) calls its *cell corner*. See S-0009 and S-0101.
+
+**cell animation.** An animation that the rules data attaches to an overlay type and that starts
+each time an overlay of that type is placed on a cell, map loading included, at a position near
+that cell. Not the same thing as a *terrain animation*. S-0009 owns it (Terms, claim 12); S-0202
+(claim 10) gives its random draws.
 
 **cell layer.** A cell has a ground layer and, when it carries a high bridge, a bridge-deck layer:
 these are its cell layers. An object on a bridge deck belongs to the deck layer, every other object
@@ -329,7 +335,8 @@ person. The specs use the word for the original: a rule given for a "computer-co
 states what the original does for units of such a house. In our engine the computer plays *AI
 houses*, which follow the unit rules and order legality of human-controlled houses (see *AI
 house*). Units of the neutral and special houses keep such a rule in our engine too (*AI house*,
-*Player houses only*). The opposite of *human-controlled*.
+*Player houses only*). Keeping these rules does not give the neutral and special houses the maximum
+*house skill level*: they keep level 0 (S-0412 claim 3). The opposite of *human-controlled*.
 
 **confidence.** How sure the spec author is of a claim: high, medium or low. Low-confidence claims
 should have an open question or a measurement scenario.
@@ -454,7 +461,8 @@ difficulty, easy, normal or difficult. The multipliers a house takes from its ro
 houses are set up (S-0302, claim 3). The *normal row* is the row
 of the normal difficulty, which the original gives every human-controlled house in a skirmish; by
 the decision recorded under *difficulty skill block* it is the row every house uses in our engine by
-default. S-0302 owns the terms (Terms, claim 3); S-0301 (claim 3) uses them.
+default. Rows are applied to player houses only; the neutral and special houses have none (factors
+1.0; S-0412 claim 5). S-0302 owns the terms (Terms, claim 3); S-0301 (claim 3) uses them.
 
 **difficulty skill block, skill block.** In the original, the factors that scale a house's rate of
 fire, firepower, armour, cost and build time, given once for each difficulty. There is one block,
@@ -741,10 +749,10 @@ an unused-house cleanup can remove after they are created (claim 28).
 (indices 16 to 31) with a ramp built from the house's colour definition. See S-0103.
 
 **house skill level.** An integer per house that gates some automatic behaviours of its units,
-by comparison with game-wide thresholds from the rules data. In a skirmish or network game every
-computer-controlled house gets the rules' maximum skill level when the houses are set up, and every
-human-controlled house keeps the level 0 that every house starts with (S-0209, claim 11; S-0215,
-claim 15). The maximum's absent-key default is 5 (S-0209, Import mapping). In a campaign mission a
+by comparison with game-wide thresholds from the rules data. In a skirmish or network game the
+house of every computer player (a lobby computer slot) gets the rules' maximum skill level when the
+houses are set up; human-controlled houses and the neutral and special houses keep the level 0 that
+every house starts with, in our engine too (S-0209, claim 11; S-0215, claim 15; S-0412, claim 3). The maximum's absent-key default is 5 (S-0209, Import mapping). In a campaign mission a
 house that the map defines takes its level from the map (S-0215, claim 15). S-0215's *AI level* is
 the same value; specs write "house skill level". In our engine an *AI house* in a skirmish or
 network game has the level 0 of a human-controlled house, not the rules' maximum, because AI houses
@@ -752,14 +760,14 @@ follow the unit rules of human houses (see *AI house*). So every rule gated by t
 treats its units as it treats a human player's: for example the area-guard row of S-0215 (claim
 15), the cell-wide scatter rule of S-0209 (claim 11) and automatic crushing in S-0210 (claim 11).
 
-**human participant.** A person who takes part in a game through the lobby, observers included.
-S-0412 owns the term (Terms); S-0414 uses it.
-
 **human-controlled.** A house played by a person rather than by the computer. A rule that depends on
 this says "human-controlled owner" or "computer-controlled owner" (see *computer-controlled*). In our
 engine an *AI house* counts as human-controlled for every unit rule and for the legality and
 checking of orders; whether other rules that name human-controlled houses, such as a trigger action
 that acts on every human-controlled house, also cover AI houses is said by the spec that owns them.
+
+**human participant.** A person who takes part in a game through the lobby, observers included.
+S-0412 owns the term (Terms); S-0414 uses it.
 
 **image frame.** One picture in a sprite's shape file, numbered from 0. Not a drawn frame.
 
@@ -988,7 +996,10 @@ to mark a position there. See S-0209 (Terms, claim 1).
 
 **offered.** A type is *offered* to a house when the tech-tree rules let the house order it now, or
 show it at its *build limit*. S-0407 owns it (Terms, claims 1 and 12); S-0415 uses the word, and
-S-0404 (claim 9) and S-0411 (claim 2) write "buildable" for it, pointing to S-0407.
+S-0404 (claim 9) writes "buildable" for it, pointing to S-0407. S-0411 (Terms, claim 2) defines its
+own *buildable*, the sidebar's test made afresh in every tick, which can differ from *offered*: during
+a sale a type can stay offered and no longer be buildable until the next recheck of S-0407 (claim
+12). S-0411 uses *offered* for the legality of orders and *buildable* for the icons.
 
 **open-topped transport.** A transport whose passengers fire from inside it. S-0203 (Terms)
 defines it, as a transport whose type is open-topped, a property taken from the rules data, and
