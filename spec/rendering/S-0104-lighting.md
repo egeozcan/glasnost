@@ -2,13 +2,13 @@
 id: S-0104
 title: Lighting
 topic: rendering
-revision: 9
+revision: 10
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-10
+approved-on: 2026-10-12
 measurements: []
-requests: [Q-0013]
+requests: [Q-0013, Q-0050]
 supersedes: []
 ---
 
@@ -206,7 +206,7 @@ How the map's ambient light, tint and height factors, the light sources and the 
       Anywhere else infantry ignore their height: infantry falling or flying above an ordinary cell are drawn as if on the ground.
     - **Shadow-casting tilesets.** A terrain tile marks cells as shadowed only when its tileset has the shadow-caster flag set and its shadow-tile count is also not 0 (S-0010, claim 18). With the flag unset the count has no effect. With the flag set, a count of 0 or an absent count means the tileset marks no cells at all.
     - **Aircraft:** *b* = *U* + the rules' extra aircraft light + (*h* ÷ 208) × λ<sub>air</sub>. λ<sub>air</sub> is the ion storm's level factor while a storm is in force and the normal level factor otherwise, never the nuke or dominator factor.
-    - **Buildings.** Write *T* for the building's top-left foundation cell (glossary, foundation). The building's light comes from *T* alone, whatever the light on its other foundation cells (`quirks.building_light_from_top_left_cell`). No extra-light value and no height term is added.
+    - **Buildings.** Write *T* for the building's top-left foundation cell (glossary, foundation). Except for the body and sprite parts of a terrain-palette building (below), the building's light comes from *T* alone, whatever the light on its other foundation cells (`quirks.building_light_from_top_left_cell`). No extra-light value and no height term is added.
       - An ordinary building: *b* = *U* of *T*, for every part of it: the body painted in the cell pass, the parts drawn as sprites in the object pass, and the parts drawn as voxel models (turrets and the like).
       - A terrain-palette building: its body and its parts drawn as sprites take the **scaled** ground level of the cell under the building's centre, the cell whose tile shade table they are drawn with (S-0103, claim 8). With an even foundation width or depth the centre lies on a cell edge, and the cell with the larger coordinate counts. Its parts drawn as voxel models still take *U* of *T*.
     - **Terrain tiles.** The ground image of a cell, including the extra image some tile cells carry (S-0010, claim 23), is drawn with the cell's tile shade table at the cell's **scaled** ground level, the same value as a terrain animation on that cell and a plain terrain object standing on it. It is never drawn at the unscaled level *U*. Under a map tint that is not white the unscaled level and the tile's own level differ by the factor *K* of claim 8. Cells that a second, separate pass draws again, if any, use the scaled ground level too (Open questions). The terrain tile, its animations and its terrain objects therefore always agree on brightness, including after an incremental update (claim 9), which scales the unclamped ground.
@@ -254,6 +254,15 @@ How the map's ambient light, tint and height factors, the light sources and the 
     - `quirks.trigger_tint_retints_all_tables`.
     - Backing: `measurable` (Scenario L21)
     - Confidence: high for the retint of every tintable table and the change of their own tint; medium for the action's value being in hundredths, which Scenario L21 checks only for one value. How a map states the action belongs to the trigger specs.
+
+18. **Infantry brightness with `quirks.infantry_height_light_limited` off.** This claim states our engine's alternative to claim 13's infantry rule; it is not behaviour of the original. With the switch off, infantry brightness follows the ranking of claim 2 for λ, as in claim 13, and is the sum of two independent terms:
+    - the height term: (*h* ÷ 208) × λ, always, whatever the cell and whether or not the infantry stand on a bridge deck. *h* is the height above the terrain, never above the deck, so infantry standing on a deck have *h* = 416 leptons (4 height levels of 104) and get 2λ.
+    - the shadowed-cell penalty: −500, added when the cell is shadowed, the infantry are not on a bridge deck and *h* ≤ 208.
+
+    So *b* = *U* + *e*<sub>inf</sub> + (*h* ÷ 208) × λ + *P*, where *P* = −500 under the penalty's conditions and 0 otherwise. The penalty is added to the height term and never replaces it. The two readings differ only at *h* = 208 leptons exactly, where the height term is λ and the result is *U* + *e*<sub>inf</sub> + λ − 500 (claim 13's rule, with the switch on, gives *U* + *e*<sub>inf</sub> − 500 there). Below 208 leptons the height term is 0 and the penalty alone remains, as with the switch on; above 208 the penalty no longer applies and only the height term remains, as with the switch on in a shadowed cell. Infantry on a bridge deck are at *h* ≥ 416 leptons, so the penalty never applies to them. For infantry in a shadowed cell above ordinary ground the two rules therefore differ only at the single height *h* = 208. They differ elsewhere only in that this rule adds the height term above unshadowed ordinary ground and on decks.
+    - Rounding and domain as claim 13: all integer, *h* ÷ 208 truncated toward zero, *b* not clamped.
+    - Backing: `unmeasured`, because the original has no such behaviour to observe. It is our alternative, fixed by this claim, and it is checked against the formula by an engine test (Scenario L25).
+    - Confidence: high that this is the rule the switch selects, because this claim defines it; the original's behaviour is claim 13's.
 
 ## Formulas
 
@@ -353,7 +362,7 @@ For green- or blue-largest tints the divisor *K* is truncated, so *K* ≤ *X*·6
 
 *K* and the normalised tint come from the raw cell tint (Tint normalisation), and the tile table from the normalised tint (Tile table choice). A full recompute gives each cell three light values, each finally clamped to [0, 2000]:
 
-- *unscaled ground* = ground (used by vehicles, infantry, aircraft, ordinary buildings, the voxel parts of terrain-palette buildings, ore-spawning terrain objects, wall overlays, anim-palette animations and the own animations of claim 13),
+- *unscaled ground* = ground (used by vehicles, infantry, aircraft, ordinary buildings, the voxel parts of terrain-palette buildings, ore-spawning terrain objects, wall overlays, anim-palette animations, and a building's own animations and parachutes, claim 13),
 - *scaled ground* = ⌊min(ground, 2000)·*K* / 65536⌋ (used by terrain tiles, by vein animations, by animations created as part of a cell's terrain, by plain terrain objects, by the body and sprite parts of terrain-palette buildings and by overlays other than walls, ore, gems and deck overlays, claim 13),
 - *scaled raised* = ⌊raised·*K* / 65536⌋ (no clamp before scaling; used by the overlays of deck cells, claim 13).
 
@@ -377,6 +386,7 @@ The terrain tile itself is drawn with the scaled ground value (claim 13), so und
 | infantry not on a bridge deck, in a shadowed cell, with *h* > 208 | *U* + (*h* ÷ 208)·λ + *e*<sub>inf</sub> |
 | infantry not on a bridge deck, in a shadowed cell, with *h* ≤ 208 | *U* − 500 + *e*<sub>inf</sub> |
 | any other infantry | *U* + *e*<sub>inf</sub> |
+| any infantry, switch off (claim 18) | *U* + (*h* ÷ 208)·λ + *e*<sub>inf</sub> + *P*, with *P* = −500 when the cell is shadowed, the infantry are not on a bridge deck and *h* ≤ 208, else 0 |
 | aircraft | *U* + (*h* ÷ 208)·λ<sub>air</sub> + *e*<sub>air</sub> |
 | ordinary building, every part | *U* of its top-left foundation cell |
 | terrain-palette building, body and sprite parts | scaled ground of the cell under its centre |
@@ -410,12 +420,12 @@ For each object kind the rows exclude each other. Where a row names no cell, *U*
 | default ground bias (normal) | 0.050 | factor | subtracted once, not per level (claim 9); stored 50 thousandths = 50 ‰ |
 | default level factor (normal) | 0.008 | per height level | 8 ‰ per level |
 | default ion ambient / tint | 0.87 / 0.30, 0.40, 0.75 | factor | engine default for absent keys |
-| default ion ground / level | 0 / 0 | thousandths | |
+| default ion ground / level | 0 / 0 | thousandths / thousandths per height level | |
 | nuke flash ambient / tint | 2.00 / 1.75, 1.50, 1.25 | factor | fixed |
 | nuke flash ground / level | 0.100 / 0.100 | factor / factor per height level | fixed; stored 100 / 100 thousandths (100 ‰, 100 ‰ per level) |
 | default nuke fade interval | 1 | tick | |
 | default dominator ambient / tint | 1.50 / 0.85, 0.20, 0.30 | factor | |
-| default dominator ground / level | 0 / 0 | thousandths | |
+| default dominator ground / level | 0 / 0 | thousandths / thousandths per height level | |
 | default dominator fade interval | 1 | tick | stored value used as ticks |
 | nuke flash phase lengths | 31, then 16 | ticks | brightening (ticks 0–30), fading (ticks 31–46), claim 5 |
 | building light radius default | 5000 | leptons | |
@@ -440,7 +450,7 @@ For each object kind the rows exclude each other. Where a row names no cell, *U*
 
 | State | Event | Result |
 |---|---|---|
-| any | nuclear missile detonates (tick 0) | lighting re-evaluation, which chooses the nuke set: target = nuke ambient, all tintable tables take the nuke tint on this tick; first fade step on tick 1; brightening phase |
+| any | nuclear missile detonates (tick 0) | lighting re-evaluation, which chooses the nuke set: the target ambient becomes the nuke ambient, and all tintable tables take the nuke tint on this tick; first fade step on tick 1; brightening phase |
 | nuke brightening | tick 31 | fading phase (16 ticks); lighting re-evaluation (claim 5 chooses the set); fade interval still the nuke rate |
 | nuke fading | tick 47 | nuke flash over; no re-evaluation, target and tints unchanged; from tick 48 on the fade interval no longer uses the nuke rate |
 | any | ion storm starts, or ion storm ends | lighting re-evaluation |
@@ -469,7 +479,7 @@ For each object kind the rows exclude each other. Where a row names no cell, *U*
 - **Aircraft ignore nuke and dominator level factors** (claim 13). `quirks.aircraft_height_light_ion_only` (default on). Off: aircraft use the level factor chosen by the per-cell ranking of claim 2 (ion storm, then dominator in any phase, then nuke flash brightening phase, then normal), as vehicles on bridge decks and infantry do.
 - **A building is lit from its top-left cell** (claim 13). An ordinary building, every part of it and its own animations take the light of its top-left foundation cell only, so a light that reaches only another part of the foundation does not brighten the building. `quirks.building_light_from_top_left_cell` (default on). Off: they take the unscaled ground level of the cell under the building's centre, the cell a terrain-palette building already uses.
 - **Deploy and undeploy animations ignore the light** (claim 13). They are drawn at 1000 whatever the cell's light, while the unit beside them follows it. `quirks.deploy_animation_unlit` (default on). Off: they take the unscaled ground level of the unit's cell, as a parachute does.
-- **Infantry height light only on bridges and in shadowed cells** (claim 13). Infantry above an ordinary cell ignore their height, and infantry standing on a bridge deck get no deck brightening, unlike vehicles. `quirks.infantry_height_light_limited` (default on). Off: infantry add (*h* ÷ 208) × λ wherever they are, with *h* their height above the terrain (so a deck counts 2λ), and the shadowed-cell penalty still applies at *h* ≤ 208.
+- **Infantry height light only on bridges and in shadowed cells** (claim 13). Infantry above an ordinary cell ignore their height, and infantry standing on a bridge deck get no deck brightening, unlike vehicles. `quirks.infantry_height_light_limited` (default on). Off (claim 18): infantry add (*h* ÷ 208) × λ wherever they are, with *h* their height above the terrain (so a deck counts 2λ), and the shadowed-cell penalty of −500 is added to that term (not instead of it) when the cell is shadowed, they are not on a bridge deck and *h* ≤ 208; at *h* = 208 exactly the result is *U* + *e*<sub>inf</sub> + λ − 500.
 - **Extra-light values lose a unit when truncated** (claim 13). `quirks.extra_light_truncation` (default on). Off: round to nearest.
 - **Near-black tint turns white and drops the scaled level** (claim 8, near-black threshold). A raw cell tint whose largest channel is 1 ‰ or less normalises to white, and the cell's scaled ground level becomes 0 at each full recompute. The unscaled ground level (vehicles, infantry, anim-palette animations) and the raised level keep their values, and the scaled ground level comes back at the next incremental update (Formulas). `quirks.near_black_tint_zeroes_scaled_ground` (default on). Off: the normalised tint is still white with scale factor 1, and the scaled ground level equals the clamped ground level, as after an incremental update.
 - **Red-largest tints normalise one lower** (claim 8). When red is the largest channel, the divisor is a slightly inexact double, so an exact quotient can come out 1 ‰ low (Formulas, "Tint normalisation"). Grey tints with *X* ∈ 𝒟 therefore miss the neutral tile table. `quirks.red_normalisation_divisor` (default on). Off: when red is the largest channel, every other channel becomes the exact quotient ⌊1000·*c* / *X*⌋, so every grey tint normalises to white and uses the neutral tile table. Green- and blue-largest tints are governed by the next switch.
@@ -497,7 +507,8 @@ For each object kind the rows exclude each other. Where a row names no cell, *U*
 | map `[Lighting]` | `NukeAmbientChangeRate` | decimal truncated to integer ticks | nuke fade interval | 1 tick |
 | rules `[AudioVisual]` | `AmbientChangeRate` | decimal game minutes | normal fade interval (×900) | 0.2 (→ 180 ticks) |
 | rules `[AudioVisual]` | `AmbientChangeStep` | decimal → hundredths ⌊×100⌋ | fade step | 0.1 (→ 10 hundredths) |
-| rules `[AudioVisual]` | `ExtraUnitLight`, `ExtraInfantryLight`, `ExtraAircraftLight` | decimal → ‰ ⌊×1000⌋ | object brightness additions | 0 |
+| rules `[AudioVisual]` | `ExtraUnitLight`, `ExtraInfantryLight`, `ExtraAircraftLight` | decimal → ‰ ⌊×1000⌋ | object brightness additions; `ExtraInfantryLight` is *e*<sub>inf</sub> in claims 13 and 18 | 0 |
+| (none) | none | none | claim 18 reads no key: the switch `quirks.infantry_height_light_limited` selects it, and its inputs are the rows above (level factors, extra infantry light) | not applicable |
 | rules, building type | `LightVisibility` | integer leptons | light radius; 0 reaches no cell in our engine, and a non-zero intensity with radius 0 gives an importer warning (claim 11, radius 0) | 5000 |
 | rules, building type | `LightIntensity` | decimal → ‰ ⌊×1000 + 0.1⌋ | light intensity; 0 = no light | 0 |
 | rules, building type | `LightRedTint`, `LightGreenTint`, `LightBlueTint` | decimal → ‰ ⌊×1000 + 0.1⌋ | light tint | 1000.0 (→ 1 000 000 ‰) |
@@ -791,6 +802,13 @@ The nuke flash set has no keys (fixed constants). The rows whose source is the r
 - *Expected:* run 1 crashes when the game starts or, at the latest, at the switch back to high. Run 2 runs normally at detail low with no light anywhere (the infantry unit at brightness 500, row 12), because a building light is not counted below detail level 2, and crashes at the switch to high.
 - *Falsified if:* no crash follows a start at, or a switch to, detail high in either run (the record then notes what the light's cell shows), or run 2 crashes before the switch.
 
+**Scenario L25: infantry brightness with the switch off** (claim 18). An engine test, not a measurement of the original, which has no such behaviour. One run per part, with `quirks.infantry_height_light_limited` off.
+- *Setup:* map level factor 0.100 and neutral test lighting otherwise (λ = 100 ‰, *U* = 1000 ‰, *e*<sub>inf</sub> = 0), one infantry unit whose height above the terrain the test sets directly.
+- *Procedure:* part A: infantry on ordinary ground in a shadowed cell at *h* = 0, 104, 207, 208, 209 and 416 leptons. Part B: the same heights in an unshadowed cell. Part C: the unit on a bridge deck.
+- *Observable:* the brightness *b*, and the shade row of claim 15.
+- *Expected:* part A: 500 at 0, 104 and 207 (height term 0, penalty −500), 600 at 208 (height term 100, penalty −500), 1100 at 209 and 1200 at 416 (no penalty above 208). Part B: 1000 at 0, 104 and 207, 1100 at 208 and 209, 1200 at 416. Part C: 1200 on the deck (height term 2λ from *h* = 416 above the terrain) and no penalty even in a shadowed cell.
+- *Falsified if:* the value at *h* = 208 in part A is 500 (the penalty replaced the height term), or 1100 (no penalty), or the penalty is applied at 209 or above.
+
 ## Open questions
 
 - Which cells a shadow-casting terrain tile marks as shadowed (Terms, claim 13).
@@ -808,8 +826,9 @@ The nuke flash set has no keys (fixed constants). The rows whose source is the r
 - Which tile shade table a cell gets when its table is chosen again after a trigger-action tint change, before the next detail change (claim 17).
 - What tint a house-colour or named palette takes if it is built after a trigger-action tint change (claim 17). Such palettes are normally all built when the game starts; whether any is built later is not established.
 - Whether anything other than the overlays of deck cells reads a cell's raised light level (claims 9 and 10).
+- Whether the level factor λ in the brightness of vehicles on a bridge deck and of infantry (claim 13) follows the effects in force when the object is drawn, or the height terms of the cell's last update. The two differ only after a dominator is over and before the cell's next update (claim 16).
 
 ## Questions for the project lead
 
 - Scope: light sources other than buildings (for example radiation sites) are not covered by this spec. Should they be added here, or left to another spec?
-- Consistency with the glossary, for sign-off. Claim 12 states that the original completes a relighting on the tick of the light change, with no real-time budget. The approved glossary (revision 4) states the opposite in two places: G3's confidence note says the original spreads a relighting of map cells over several ticks by a real-time budget and calls our engine's same-tick relighting a departure of this spec, and the *departure* entry gives "work spread over ticks by a real-time budget" as its example of real-time dependence. The glossary draft in the same batch as this revision (revision 5) drops both statements and says that relighting does not depend on real time (S-0104, claim 12). Our engine relights within the tick either way; only the description of the original, and so whether this is a departure, differs. Should this revision be signed off only together with, or after, that glossary revision? Scenario L7's timing part, once recorded, decides the question of fact; until then claim 12's statement is at medium confidence.
+- Consistency with the glossary, for sign-off. Claim 12 states that the original completes a relighting on the tick of the light change, with no real-time budget. Glossary revision 4 stated the opposite in two places: G3's confidence note said the original spreads a relighting of map cells over several ticks by a real-time budget and called our engine's same-tick relighting a departure of this spec, and the *departure* entry gave "work spread over ticks by a real-time budget" as its example of real-time dependence. The glossary revision of the current batch (revision 12) no longer makes either statement: its *departure* entry gives no relighting example, and G3's confidence note says that relighting does not depend on real time (S-0104, claim 12). Our engine relights within the tick either way; only the description of the original, and so whether this is a departure, differs. Should this revision be signed off only together with, or after, that glossary revision? Scenario L7's timing part, once recorded, decides the question of fact; until then claim 12's statement is at medium confidence.
