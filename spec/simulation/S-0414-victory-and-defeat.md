@@ -1,0 +1,770 @@
+---
+id: S-0414
+title: Victory and defeat (the defeat tests of the normal and short game, what defeat does, when the game ends, the end delay, surrender and alliance orders)
+topic: simulation
+revision: 1
+sources-class: [decomp, design]
+status: approved
+approved-by: Claude (delegated by project lead)
+approved-on: 2026-10-12
+measurements: []
+requests: []
+supersedes: []
+---
+
+# S-0414: Victory and defeat (the defeat tests of the normal and short game, what defeat does, when the game ends, the end delay, surrender and alliance orders)
+
+## Summary
+
+When a skirmish house is defeated, what happens to it, and when the game ends and with which result
+for each house: the defeat test of the normal game and of the short game, the destruction of a
+defeated house's objects, the end test with allied victory, the delay between the end and the
+result, the order of events when several houses fall in one tick, and what the surrender and
+alliance orders of S-0213 do. Campaign missions (whose results come from map triggers) and network
+games are outside this spec.
+
+## Terms
+
+Glossary terms are used as defined there, in particular *house*, *country*, *tick*, *tick number*,
+*game minute*, *in play*, *on the map*, *off the map*, *destroyed*, *removed*, *AI house*,
+*human-controlled*, *computer-controlled*, *local player*, *damage that ignores defences*,
+*warhead*, *quirk switch*, *departure*, *importer warning* and *measurement setup*. S-0009's terms
+*house order*, *passive house*, *neutral house*, *special house*, *observer* and *base unit* (with
+the *base-unit list*), S-0412's terms *alliance*, *allied*, *mutually allied*, *short-game setting*,
+*bases setting* and *human participant*, and S-0203's *house update* (a house's own update in row
+7 of S-0203's table) are used as those specs define them. In addition:
+
+- **Defeated house.** A house that the defeat of claim 5 has struck. A house stays defeated for
+  the rest of the game. A house that is not defeated is *undefeated*.
+- **Contender.** An undefeated house that is not passive. Only contenders are tested (claim 1) and
+  counted (claims 6 and 12).
+- **Observer's house set aside.** In our engine an observer's house (S-0009 claim 22) is never
+  tested (claim 1) and is left out wherever this spec counts or pairs contenders (claims 6 and 12,
+  Formulas *K*), although it stays an undefeated contender by the definition above. The original
+  tests and counts it like any other house (Edge cases, *Observers*).
+- **Person-played house.** A player house created for a human participant who is not an observer.
+  In a skirmish there is at most one: none when every player house is an AI house, or when the one
+  human participant is an observer. An AI house is never person-played, and neither is an
+  observer's house. Our engine's end test does not read this term (claim 6); only the end delay
+  (claim 9) and presentation do. The original's own end condition (claim 6, departure) counts the
+  houses created for human participants, an observer's house included.
+- **Counted building.** A building that does not count as a vehicle (next entry) and whose type is
+  marked neither insignificant nor not scored (Import mapping). It is on *B* and on the short-game
+  count of claim 4.
+- **No-escape marker, ignore-defences marker.** The two markers a hit can carry. S-0302 (Terms and
+  claim 1) owns both and says which sources set them; S-0312 (claim 13) owns the one effect of the
+  no-escape marker, that a destroyed vehicle leaves no crew.
+- **Building that counts as a vehicle.** A building whose type has an undeploy type (the vehicle
+  type it packs up into) and either has a one-cell foundation or names an undeploy type that
+  carries the resource-gatherer flag (Import mapping: the flag is the vehicle type's, not the
+  building type's). It is not a counted building, it is on neither *B* nor *V*, and it does not
+  count in the short-game test (claims 2 and 4).
+- **Object in existence.** An object that has been created for the house and not yet left play
+  for good (S-0312): on the map, off it (inside a transport or a building), or still being
+  produced. Starting an item creates its object (S-0404 claim 11), so an item in production, or
+  finished and waiting to be placed, is in existence.
+- **Nominal survivor.** An infantry unit that comes out of a destroyed building as one of its
+  survivors (S-0312) when its type is marked nominal (Import mapping) and the building is one whose
+  survivors are so marked (a condition on the building that is set when it is created and is
+  not fully identified; low confidence). Its role is claim 4's.
+- **Refinery-list building.** A building whose type is the type at the third position of the
+  rules' refinery list (Import mapping). Its role is claim 3's.
+- **End of the game.** The moment the end test of claim 6 first succeeds. The game keeps running for the
+  end delay (claim 8) and is then over.
+- **End delay.** The number of ticks between the end of the game and the moment it is over (claim
+  8).
+- **Result.** Win or loss, one per player house, fixed at the end of the game (claim 7) and
+  changed only by claim 9. A result is *pending* from the end of the game until the game is over.
+
+## Behaviour
+
+### The defeat test
+
+1. **When houses are tested.** In a skirmish every contender is tested once per tick, during its own
+   house update, in every tick except the first (tick number 0). A defeated house is never tested
+   again, and a passive house is never tested at all: passive houses can be neither defeated nor
+   counted. In our engine an observer's house is never tested either, so it is never defeated
+   (Terms, *observer's house set aside*; Edge cases, *Observers*). The test is claim 2 when the short-game setting is
+   on and claim 3 when it is off.
+   - Backing: `measurable` (scenario V2 for tick 0 and the per-tick test; V3 for passive houses),
+     while the observer's house is a rule of our engine and `unmeasured` (the original tests it, so no
+     run of the original can show our rule; V10 records what the original does)
+   - Confidence: high
+
+2. **The short-game test.** With the short-game setting on, a house passes the test while it has
+   at least one counted building (claim 4) or at least one vehicle of one of the types at the first
+   three positions of the base-unit list. Both counts cover the house's objects in existence
+   (Terms), wherever they are: on the map, inside a transport, or still in production. A vehicle of
+   a type marked insignificant or not scored never counts. Infantry, aircraft, other vehicles,
+   buildings that count as vehicles and buildings that are not counted do not keep the house
+   alive. Only the first three positions are looked at, whatever the list's length (quirk
+   `quirks.short_game_first_three_base_units`). A house that fails is defeated (claim 5).
+   - Backing: `measurable` (scenario V1, with variants g, h and i)
+   - Confidence: high for buildings, the three list positions and vehicles off the map (claim 4:
+     the count runs from an object's creation until it leaves play); medium for items still in
+     production
+
+3. **The normal test.** With the short-game setting off, a house passes the test while
+
+   > *S* = *B* + *V* + *I* + *A* + *R* ≠ 0
+
+   with *B* its counted buildings in existence (claim 4), *V*, *I* and *A* its on-map counts of
+   vehicles, infantry and aircraft as claim 4 keeps them, and *R* the on-map count of its
+   refinery-list buildings (in our engine a zero term when the refinery list has no third position,
+   a departure, since the original's behaviour there is not established: Edge cases,
+   `quirks.vehicle_buildings_keep_nobody_alive`). All are
+   integers; *S* can be negative through claim 4's survivor rule, and a negative *S* passes too.
+   The on-map counts mean that a unit inside a transport or a building does not count, while the
+   transport or building counts by its own kind. A house that fails is defeated (claim 5). The term
+   *R* is what keeps a house alive whose last object is a deployed resource-gathering vehicle that
+   has become a refinery-list building, since such a building counts as a vehicle and not as a
+   building (claim 4). Other buildings that count as vehicles keep nobody alive under this test
+   (quirk `quirks.vehicle_buildings_keep_nobody_alive`).
+   - Backing: `measurable` (scenario V2 with its variants)
+   - Confidence: high for the five terms and the "not zero" test; medium for which building types
+     count as vehicles
+
+4. **How the counts are kept.** Each count changes only at the events in the table, with a change
+   of owner treated as the paragraph after it says; a type marked insignificant or not scored
+   (Import mapping) is treated as the last two columns say.
+
+   | Count | An object is added | It is taken off | Marked insignificant | Marked not scored |
+   |---|---|---|---|---|
+   | *B* (counted buildings) and the short-game vehicle count | when the object is created (production start, map placement, starting units, survivors and any other creation) or comes to the house by a change of owner | when it leaves play for good (S-0312) or passes to another owner | never counted | never counted |
+   | *V* (vehicles on the map) | when it enters the map | when it leaves the map (into a transport or building, or by death), only for a type not marked as not scored | counted | added but never taken off |
+   | *I* (infantry on the map) | when it enters the map, unless it is a nominal survivor (Terms) | when it leaves the map | counted | never counted |
+   | *A* (aircraft on the map) | when it enters the map | when it leaves the map | counted | never counted |
+   | *R* (refinery-list buildings on the map) | when it enters the map | when it leaves the map | counted | never counted |
+
+   **Change of owner.** For the four on-map counts (*V*, *I*, *A*, *R*), a change of owner of an
+   object that is on the map counts as the object leaving the map for the old owner and entering
+   it for the new owner, in the same instant. Each side follows its row and columns as for any
+   leaving or entry: a not-scored vehicle stays on the old owner's *V* and is added to the new
+   owner's *V* as well, and the new owner does not add a nominal survivor to *I* while the old owner
+   takes it off. A change of owner of an object off the map (inside a transport or a building, or
+   still in production) changes no on-map count on either side. *B* and the
+   short-game count move with the object, from the old owner to the new one, wherever the object
+   is (first row). Mind control (S-0215) and every other change of owner follow this rule.
+
+   A building that counts as a vehicle is on neither *B* nor *V*: it is a building on the map, so
+   only *R* can see it. Two consequences of the table are quirks of the original:
+   - **A vehicle of a not-scored type** that has once been on the map stays on *V* for good, so in a
+     normal game its house can never be defeated again (quirk
+     `quirks.unscored_vehicle_stays_counted`, off: such a vehicle is never counted).
+   - **A nominal survivor** is not added when it enters the map but is taken off when it leaves it,
+     so each one that leaves the map (by death, or by entering a transport or building) lowers *I*
+     one below the true number. A house can then fail the normal test while it still has units on
+     the map, or pass it for good with nothing left when *S* has become negative (quirk
+     `quirks.nominal_survivor_count`; off: a nominal survivor is counted like any infantry unit).
+   - Backing: `measurable` (scenario V2, variants d, e, g, h, i, j and k; V1 variants g and h).
+     The change-of-owner rule is measured by V1 variant g run 1 (a building, losing side), V2
+     variant j (a vehicle and an infantry unit, losing side, by mind control) and V2 variant k
+     (an infantry unit, a vehicle and an aircraft, both sides, and a not-scored vehicle, by a test
+     map trigger). A nominal survivor in a change of owner is `unmeasured`: which buildings make
+     their survivors nominal is not identified (V2 variant h), so no run can be arranged to give
+     one to another house until that is found. A change of owner of an object off the map is
+     `unmeasured`: no input is known that changes the owner of an object while it is inside a
+     transport or building (a map trigger leaves such an object's owner as it is, S-0011 claim 24)
+   - Confidence: high for the events of the table, the change-of-owner rule and the not-scored
+     column; medium for the insignificant column and for every kind of change of owner (mind
+     control, a map trigger, a capture) following the one rule; low for which survivors are
+     nominal survivors
+
+### What defeat does
+
+5. **Defeat.** A house that fails its test is defeated at once, in the same house update:
+   - **Its objects are destroyed.** Every infantry unit, vehicle, aircraft and building that the
+     house owns takes a single hit. Its amount is the object's current health and its warhead is the
+     demolition warhead (S-0303, Import mapping); it is damage that ignores defences, it carries the
+     no-escape marker, and it has no attacker and no attacking house (S-0302, S-0312). So passengers
+     do not escape. An object that is
+     being erased (glossary) stops being erased and takes the hit like any other object. Objects
+     under mind control (S-0215, Terms) are treated by their original house:
+
+     | Object | Condition | Effect |
+     |---|---|---|
+     | of another house, held by this house | — | not hit |
+     | of this house, held by another house through a controlling unit | some house of the game plays a country of the civilian side (the civilian side of claim 12, Import mapping) | not hit; the first such house in house order takes this house's place as its original house, so when the control ends it passes to that house instead of coming back |
+     | of this house, held by another house through a controlling unit | no house of the game plays a country of the civilian side | hit |
+     | of this house, taken over for good by another house, with no controlling unit | — | hit |
+
+     How each object dies (death weapons, survivors, remains) is S-0312's.
+   - **The house is marked defeated** (claim 1), whatever happens to those objects afterwards.
+   - **The reveal and the radar** (owned by S-0409 and S-0410, summarised here). In the tick of the defeat the defeated
+     house's whole map becomes explored, as a change of its game state and for every defeated
+     player house, human or AI (S-0409 claim 15, *Defeat*; the original does it for the local
+     player's house only), and its radar comes on at the same moment and stays on (S-0410 claim 1).
+     In our engine a defeated person
+     keeps watching until the game is over (claim 6), so these two effects of the person-played
+     house last for the rest of the game. In the original the game ends at that house's defeat
+     and then runs only for the end delay (claim 8), so there they are observable for that many
+     ticks only; a test rules file may lengthen the delay to see them (S-0409 scenario V9, parts F
+     and F2).
+   - **Presentation.** A message names the defeated house and an announcement plays. Neither
+     happens for an observer's house, which only the original defeats (claim 1; scenario V10).
+     After the local player's house is defeated, some later superweapon launch
+     announcements no longer play; which ones (the house's own launches, or those announced to the
+     local player) is not established (Open questions). These are presentation only and
+     reach no game state.
+   - **The end test** of claim 6 belongs to the same defeat. It counts the house as already
+     defeated, and every house later in house order as it stands before its own house update in
+     that tick, so a house that fails later in the same tick is still a contender at this
+     test (claim 10, State and ordering, scenario V7).
+   The original's computer players may react to a defeat (an option of its computer player makes
+   the remaining computer houses ally each other); our AI houses follow ordinary orders only, so
+   this is recorded for AI designers.
+   - Backing: `measurable` (scenario V2: every object gone in the tick of the defeat; scenario V4
+     part a for the passengers and the mind-control cases of the first two table rows, part b for
+     the civilian-side cases, part c for the ignored defences, the missing crew and the missing
+     credit). Not measured, with reasons: the amount equal to the current health is
+     `unmeasured` (no observable separates an amount equal to the current health from a larger
+     one, and S-0312 owns any effect that reads the amount of a killing hit); which warhead is
+     named is backed by S-0303 (claim 19) and not by this spec's scenarios; the last table row
+     (taken over for good, no controlling unit) is `unmeasured` (no way to arrange such an object
+     is identified)
+   - Confidence: high for the destruction, the ignored defences and the first two table rows, and
+     medium for the missing attacker and attacking house (S-0302 claim 1 gives them, V4 part c
+     checks them through the result screen only); medium for the civilian-side cases
+
+### The end of the game
+
+6. **The end test.** The end test runs only right after a house is defeated (claim 5), never at
+   another time. It counts the contenders, the defeated house no longer among them and, in our
+   engine, an observer's house left out (Terms, *observer's house set aside*). The game ends
+   when **no hostile pair remains**: no two contenders exist of which one does not ally the other.
+   This includes the case of at most one contender. So the game ends when every remaining
+   contender is mutually allied with every other: an *allied victory*, or the victory of the last
+   contender. Otherwise play goes on. AI houses are contenders like any other house, and the test
+   needs no person-played house: a skirmish in which no house is person-played runs, and ends, by
+   the same rule. A person whose house is defeated keeps watching until the game is over, while
+   that house's allies fight on. Once the game has ended, a later success of the test changes
+   nothing: what a later defeat changes is claim 9's. Because the test only runs after a defeat,
+   making peace (claim 12) can never end the game by itself, and claim 12 refuses an alliance that
+   would leave its issuer with no enemy.
+
+   **Departure (design choice of scope, no switch; lead decision of 2026-10-11, "play to the last
+   side").** The original also ends the game when **no contender created for a human participant
+   remains**: in a skirmish, as soon as the human participant's house is defeated, whatever its
+   allies still hold, so the person never watches allies fight on. (With an observer as the only
+   human participant, the observer's house is the one such house, so read literally the original
+   ends the game at that house's defeat in tick 1; Edge cases, *Observers*.) Our engine does not
+   reproduce this second condition. Every other part of the test (when it runs, who is counted,
+   the allied victory) is the original's.
+   - Backing: `measurable` for the original's test (scenario V5: part a for an allied victory, part
+     b for the original's end at the human's defeat while its ally lives, part c for one-way
+     alliances not ending it); that our engine plays on after the person-played house's defeat is
+     a rule of our engine and `unmeasured`, since the original has no such game to observe
+   - Confidence: high
+
+7. **Results.** At the end of the game every player house that is undefeated wins and every
+   defeated player house loses. The local player is shown its own house's result. In the original
+   only the local player's result exists: it wins when its house is undefeated at the end and loses
+   otherwise, which is the same result. Our engine gives every house its result so that no game
+   state depends on the local player (glossary, *local player*). The result is per house: a
+   defeated house loses even when its allies win, so a person who watched their allies win after
+   their own defeat (claim 6) gets a loss. The neutral and special houses get no result, and in our
+   engine neither does an observer's house (Edge cases, *Observers*).
+   - Backing: `measurable` (scenario V5, the result screen) for the local player's result; the
+     results of the other houses are a rule of our engine and `unmeasured`, since the original keeps
+     no result for them
+   - Confidence: high for the local player's result
+
+8. **The end delay.** After the end of the game, play goes on until the game is over in tick
+   *t* + max(*D*, 1), with *t* the tick of the end (Formulas), so at least one more tick runs. During those ticks every rule of play applies as usual: houses are still tested
+   and can still be defeated. In the original the program additionally waits, in real time, for
+   the result announcement to finish before showing the result screen; that wait is presentation
+   only, takes no tick, and our engine does not reproduce it.
+   - Backing: `measurable` (scenario V6)
+   - Confidence: high for the formula; medium for the exact count (it depends on the rounding mode
+     of S-0205)
+
+9. **A defeat during the end delay.** Two effects, both under `quirks.defeat_during_end_delay`:
+   - **The result.** Any player house that is defeated during the end delay loses, even if the end
+     of the game had given it a win (claim 7). This is a rule of our engine for the AI houses,
+     whose results the original does not keep.
+   - **The delay.** When the defeated house is a person-played house whose win is pending, the end
+     delay restarts: the game is over in tick *t* + max(*D*, 1) (Formulas), with *t* the tick of
+     the later defeat. The defeat of any other house during the delay, an
+     AI house included, leaves the delay as it is. This is the original's behaviour put without
+     the local player: in the original the delay restarts only when the local player's house is
+     defeated with a win pending, and the defeat of any other house leaves it as it is; in a
+     skirmish without an observer the local player's house is the one person-played house, so the
+     two statements agree, and the rule
+     depends on no local-player state. A person-played house defeated before the end of the game
+     has no win pending, so no later defeat restarts the delay, and in a game with no
+     person-played house the delay never restarts. (In the original, a game that ended through
+     the human participant's own defeat, claim 6, behaves the same way: a later defeat of a
+     computer house changes nothing, and the delay runs from the end of the game.)
+   With the switch off, the results and the end delay are fixed at the end of the game.
+   - Backing: `measurable` (scenario V6, parts b, c and d); the AI house's result is `unmeasured`
+     (the original keeps no result for an AI house, claim 7)
+   - Confidence: high for the original's local-player case (a later defeat of the local player's
+     house gives a loss and a fresh delay, an earlier loss is not restarted); medium for the exact
+     tick count; the rule for AI houses is ours and has no original to check
+
+10. **Several houses failing in one tick.** Each house is tested in its own house update, and the
+    house updates of a tick follow house order (S-0203 row 7); each defeat's end test sees the houses
+    later in house order as they stand before their own updates (claim 5). So when the last houses of two hostile
+    sides all fail in the same tick, they are defeated one after another in house order, and the
+    game ends at the first of those defeats after which no hostile pair remains, giving the houses
+    still undefeated a win. Those are then tested in their own house updates later in the same
+    tick, fail too, and lose by claim 9. Everyone loses (with `quirks.defeat_during_end_delay` on,
+    while with it off claim 9 leaves the later houses their win). In particular a human who is
+    wiped out in the same tick as the last enemy, with no ally left, loses with the switch on or
+    off: the human's house is first in house order (S-0009 claim 19), so its defeat leaves the enemy as
+    the last contender and ends the game with a loss for the human; were it later, its win would be
+    taken back in the same tick when `quirks.defeat_during_end_delay` is on (with the switch off it
+    would keep that win). When the human still has an undefeated ally, the human's defeat does not
+    end the game, the enemy's later defeat does, and the ally wins while the human loses. In the
+    original the end comes at the human's own defeat (claim 6, departure) even when the human has
+    allies left; the human's result, the only one the original keeps (claim 7), is a loss there as
+    in our engine.
+    - Backing: `measurable` (scenario V7) for the human's result and the defeats in one tick; the
+      results of the other houses are a rule of our engine and `unmeasured`, since the original
+      keeps no result for them (claim 7)
+    - Confidence: medium
+
+### Surrender and alliance orders
+
+11. **Surrender.** A surrender order (S-0213, table T1) marks its house to die when, at the moment
+    the order is applied, the house is undefeated and has no result pending (State and ordering,
+    and orders are checked when they are applied, S-0213). In its next house update, which is in the tick after the
+    order (orders are applied after the houses' updates, S-0203 claim 7), every object of the house
+    is destroyed as in claim 5. The defeat test of that same house update (claim 1) already sees
+    the destruction, so the house is defeated in that tick when nothing counts any more. An object that stays in play for some ticks after its
+    death (an exploding building, a sinking vehicle, a crashing aircraft, S-0312) may keep the house
+    alive until it leaves play, and the counts of claim 4 may keep it alive for good, so the defeat
+    can come later or not at all. A
+    surrender order for a defeated house, or for a house whose result is pending, does nothing.
+    In the original only the local player can surrender, through the options menu, and not when
+    the local player is an observer. In our engine the order is legal for every player house, human
+    or AI (S-0213); an observer's house is not a player house here, and a surrender order of it does
+    nothing (Edge cases, *Observers*). A surrender ends the game
+    only through the end test of claim 6, after the defeat it leads to: in our engine play goes on
+    while a hostile pair remains, and a person who surrendered keeps watching; in the original the
+    human participant's surrender ends the game at that defeat (claim 6, departure).
+    - Backing: `measurable` (scenario V8 and its part b for a pending result); the order for a
+      defeated house is `unmeasured` (such a house has no objects, so the order has no observable
+      effect); the observer's order is a rule of our engine and `unmeasured` (the original offers
+      an observer no surrender, so no run can give it)
+    - Confidence: high for the destruction in the next house update; medium for the timing of the
+      defeat when destroyed buildings stay in play; medium for the pending-result case
+
+12. **Making peace: the alliance order towards a house not yet allied.** An alliance order (S-0213,
+    table T1) from house A naming house B, when A does not ally B yet, makes A ally B (one way: B's
+    view of A does not change) only when all of these hold:
+    - B is not A, and B's country does not belong to the civilian side (Import mapping),
+    - A is undefeated,
+    - A does not leave itself with no enemy: the order is refused when exactly one contender other
+      than A is one that A does not ally, whoever B is (so with one enemy left, A can make peace
+      with no house at all, not even a passive or defeated one). In our engine an observer's
+      house is left out of this count (Terms, *observer's house set aside*), so it never counts as
+      that enemy.
+    Otherwise the order does nothing. When A allies B, A's objects on the map whose current target
+    belongs to a house that A now allies (B, an earlier ally, or A itself) drop that target. When A
+    is person-played and B is not passive, a message reports the new alliance, and an announcement
+    plays when A or B is the local player's house (presentation). The original's computer player
+    reacts to some alliances made by human houses (an option of its computer player makes its
+    houses ally each other); our AI houses act only through orders.
+    - Backing: `measurable` (scenario V9, part a: the one-way effect, the refusal at the last enemy
+      and the dropped targets); `unmeasured` for the refusals "B is A", "B's country is of the
+      civilian side" and "A is defeated" (the original's in-game player list is not known to offer
+      such an order to a player, so no run can give it; a part is added if an input is found that
+      can)
+    - Confidence: high for the last-enemy condition and the one-way effect; medium for the dropped
+      targets; low for the three unmeasured refusals
+
+13. **Breaking an alliance: the alliance order towards an allied house.** An alliance order from
+    house A naming house B, when A already allies B, ends the alliance in both directions: A no
+    longer allies B and B no longer allies A. The order does nothing when A or B is passive. An
+    alliance order that names A itself counts as naming an allied house and changes nothing. Unlike
+    making peace (claim 12), breaking an alliance does not require A to be undefeated: a defeated
+    house's order towards an allied house still ends the alliance in both directions. A message
+    reports a break when A is a person-played house, and an announcement plays when B had allied A
+    and A or B is the local player's house (presentation).
+    - Backing: `measurable` (scenario V9, part b: the break in both directions); `unmeasured` for
+      the passive-house refusal and the order that names A itself (the original's interface is not
+      known to offer them to a player), and for the break by a defeated house (in the original a
+      human's house is defeated only at the end of the game, claim 6, departure, or within the end
+      delay, claim 9, so the order would have to come in the end delay, through an interface not
+      known to offer it there)
+    - Confidence: high for the break; medium for the break by a defeated house; low for the
+      passive-house refusal and the order that names A itself
+
+14. **When the alliance order can be given.** In the original the alliance order can be given only
+    while two flags of the rules' multiplayer settings are both on, the allies-allowed flag and the
+    ally-change-allowed flag (Import mapping; their absent-key defaults are off and on), and the
+    game does not fix alliances. No skirmish does: in every game other than a campaign mission, a
+    fixed-alliance mark that the map sets is cleared once the map has loaded. The two flags are
+    read with the rules layers of the game (S-0006). How the player gives it is interface: from the in-game player
+    list for any house listed there, or by a key for the owner of a selected object, which the
+    original offers only when that owner is a human participant's house. In our engine the two
+    flags are a condition of the alliance order, checked when the order is applied, for every
+    house alike: with either flag off, every alliance order does nothing. Alliances made at game
+    start (S-0412 claim 8) do not depend on the flags.
+    - Backing: `measurable` (scenario V9, part c: both flags, the cleared mark, and the start
+      alliances that ignore the flags); the interface details are `unmeasured` (presentation of the
+      original's menus; they reach no game state)
+    - Confidence: high for the two flags, the cleared mark and the start alliances; medium for the
+      interface details
+
+## Formulas
+
+**End delay** (claim 8). With *d* the end-delay field in game minutes (a double, Import mapping):
+
+> *D* = trunc(RZ₅₃(*d* × 900))
+
+in ticks, where 900 ticks per game minute is the glossary's conversion and RZ₅₃ the rounding of
+S-0205 (`quirks.chop_rounding`). *D* is an integer. The conversion to a whole number is S-0205's
+(claim 7): a product of 2³¹ or more wraps (from a field of about 2.39 million game minutes up, *D* no
+longer follows the field, and whenever the wrapped *D* is 0 or negative the delay is the shortest one
+of the next formula), and a product of 2⁶³ or more gives 0. Example: at the absent-key default *d* = 0.03 the exact product of
+the stored double and 900 lies just below 27, so *D* = 26 with the switch on (the original) and 27
+with it off.
+
+**When the game is over** (claims 8 and 9). With *t* the tick number of the end of the game (or, under
+claim 9, of the later defeat), the game is over in tick *t* + max(*D*, 1): the delay is counted from
+the tick of the end, and a delay of 0 still lets one more tick run. All quantities are integers,
+and the arithmetic is exact.
+
+**End test** (claim 6). With *K* the set of contenders after the defeat (in our engine without an
+observer's house; in the original with it) and *a*(*x*, *y*) true
+when *x* allies *y*: the game ends when *a*(*x*, *y*) holds for every ordered pair of different
+members *x*, *y* of *K* (always true when *K* has at most one member). The original also ends it
+when *P*, the set of members of *K* created for human participants (an observer's house
+included), is empty (claim 6, departure); our engine does not.
+
+## Constants
+
+| Name (ours) | Value | Unit | Notes |
+|---|---|---|---|
+| First tick with a defeat test | 1 | tick number | claim 1 |
+| Base-unit list positions read by the short-game test | first three | list positions | claim 2 |
+| Refinery list position read by the normal test | third | list position | claim 3 |
+| End delay field, absent-key default | 0.03 | game minutes | claim 8 |
+| End delay at that default | 26 | ticks | claim 8, Formulas (27 with `quirks.chop_rounding` off) |
+| Surrender delay before the destruction | 0 | ticks | claim 11; counted from the start of the house's next house update |
+| Shortest end delay that takes effect | 1 | ticks | Formulas, when the game is over |
+| Allies-allowed flag, absent-key default | off | boolean | claim 14 |
+| Ally-change-allowed flag, absent-key default | on | boolean | claim 14 |
+
+## State and ordering
+
+**House states.**
+
+| State | Event | Next state | Effect |
+|---|---|---|---|
+| undefeated | its test fails in its house update (tick ≥ 1) | defeated | claim 5: objects destroyed, end test run |
+| undefeated | surrender order applied, no result pending | undefeated, marked to die | none until its next house update |
+| undefeated, marked to die | its next house update | undefeated | all its objects destroyed (claim 5); the test of the same update already sees this, so the house can be defeated in that tick |
+| defeated | — | defeated | never tested again |
+| any | end of the game | same | result fixed (claim 7); end delay starts |
+| undefeated with a win | defeated during the end delay | defeated | result becomes a loss (claim 9); the end delay restarts when the house is person-played (both with `quirks.defeat_during_end_delay` on) |
+
+**Observable ordering.**
+- The defeat test of a house update already sees the destruction of a surrender pending for that
+  house, so a surrendering house with nothing left that counts is defeated in the tick its objects
+  die (claim 11, V8).
+- A defeat's end test sees every house later in house order as it stands before that house's own
+  test in the same tick, so a house that fails later in the tick still counts as a contender when
+  an earlier defeat ends the game (claim 10, V7).
+- An order issued in tick *t* first acts in tick *t* + 1, since orders take effect after every house
+  update of their tick (S-0203 claim 7): a surrender destroys nothing in the tick it is issued.
+
+## Edge cases and quirks
+
+- **`quirks.short_game_first_three_base_units`** (claim 2). Original: only the first three positions
+  of the base-unit list count, whatever its length. Off: every position counts. A base-unit list
+  shorter than three positions makes the original read past its end, which is unspecified; our
+  engine treats a missing position as holding no type, and the importer warns (a departure).
+- **`quirks.vehicle_buildings_keep_nobody_alive`** (claim 3). Original: a building that counts as a
+  vehicle keeps its house alive in the normal test only when it is a refinery-list building. Off:
+  every building that counts as a vehicle keeps its house alive. With this switch off, such a building is
+  counted in *R* as if it were a refinery-list building: added when it enters the map, taken off
+  when it leaves it, counted when marked insignificant and never counted when marked not scored.
+  A refinery list shorter than three positions: the original's behaviour is not established (low
+  confidence); our engine makes the term *R* count nothing and the importer warns (a departure).
+- **`quirks.unscored_vehicle_stays_counted`** (claim 4). Original: a vehicle of a not-scored type
+  is added to the on-map vehicle count when it enters the map and never taken off, so once one has
+  been on the map its house passes the normal test for the rest of the game. Off: vehicles of
+  not-scored types are never counted, like not-scored infantry and aircraft.
+- **`quirks.nominal_survivor_count`** (claim 4). Original: a nominal survivor is not added to the
+  on-map infantry count but is taken off when it leaves the map, so the count can fall below the
+  true number and below 0; a house can be defeated with units on the map, or never be defeated with
+  none. Off: a nominal survivor is added and taken off like any infantry unit.
+- **`quirks.defeat_during_end_delay`** (claim 9). Original: the local player's house, defeated
+  with a win pending, turns it into a loss and restarts the end delay. In our engine the same
+  holds for the person-played house; any other player house defeated in the delay loses and
+  leaves the delay alone. Off: results and delay fixed at the end of the game.
+- **Short game with the bases setting off** (S-0412 claim 11): every contender fails at tick 1.
+  The houses are defeated one after another in house order, and the game ends at the first defeat
+  after which no hostile pair remains (claim 10); the houses still undefeated then fail in their
+  own updates of the same tick and lose (claim 9), so with `quirks.defeat_during_end_delay` on
+  every player house loses, all in tick 1. In the original the human's house, first in house
+  order, ends the game with its defeat (claim 6, departure); the human's loss in tick 1 is the
+  same.
+- **Observers.** An observer's house (S-0009 claim 22) owns nothing and receives no starting
+  units. *The original* creates it like the house of any human participant: it is tested and
+  counted like any house, and it counts for the original's end condition of claim 6 (the
+  departure). It takes the first country of the rules' country list, so unless that country is
+  passive its test fails at tick 1; with the observer as the only human participant, that defeat
+  leaves no human participant's house among the contenders, and the original ends the game in
+  tick 1, the observer being shown a loss. Confidence low; whether the original's skirmish lobby
+  can start a game with an observer at all is not established (Open questions), and scenario V10
+  records it. *Our engine* (a departure, design choice, no switch): an observer's house is set
+  aside (Terms) and is not a player house for this spec. It is never tested and never defeated
+  (claim 1), it is left out of every count of claims 6 and 12, it gets no result (claims 7 and 9),
+  and surrender and alliance orders it issues do nothing (claims 11 to 14). A game watched by an
+  observer runs and ends like any game with no person-played house, at the first defeat after which
+  no hostile pair remains (claim 6).
+  - Backing: the original's behaviour is `measurable` (scenario V10); our engine's rule is
+    `unmeasured` (a rule of our engine, which the original does not follow)
+  - Confidence: low for the original; high for our engine's rule, a design choice that follows
+    the lead decision of 2026-10-11 (claim 6)
+- **Making peace with the last enemy** is refused (claim 12), so an alliance can never be what ends
+  the game.
+- **Items in production** (claims 2 and 4). A building in production, or finished and waiting to
+  be placed, is a counted building in both tests, and a base-unit vehicle in production counts in
+  the short-game test, because starting an item creates its object (S-0404 claim 11). No switch:
+  it is how the original keeps its counts. How long such an item lives once the factory
+  building of its kind is lost is S-0404's (claim 8): when a house's last factory building of a
+  kind is removed for good (destroyed or sold), every item that no remaining factory building
+  could make is cancelled in the same tick, so it keeps nobody alive after that tick. The
+  exception is S-0404's `quirks.defence_line_partial_factory_check`: after the capture (a change
+  of owner, not a removal for good) of the last factory building of buildings, a defence item
+  goes on and keeps the house alive (variant g of V1).
+- **Mind-controlled objects of a defeated house** (claim 5) pass to the first house of the
+  civilian side when their control ends. No switch.
+
+## Import mapping
+
+| Key | Concept | Parse form | Default when absent |
+|---|---|---|---|
+| `[AudioVisual]` `SavourDelay` | end-delay field *d* (claim 8), in game minutes | decimal, double | 0.03 |
+| `[CombatDamage]` `C4Warhead` | the demolition warhead of the defeat's destruction (claim 5; S-0303, S-0312) | warhead type name | none, as S-0303 (claim 19) and S-0312 give it |
+| `[General]` `BaseUnit` | base-unit list (claim 2) | list of vehicle type names | empty |
+| `[AI]` `BuildRefinery` | refinery list; its third position is the refinery-list building type (claim 3) | list of building type names | empty |
+| any object type, `Insignificant` | marked insignificant (claim 4) | boolean | no |
+| infantry, vehicle, aircraft or building type, `DontScore` | marked as not scored (claim 4) | boolean | no |
+| building type, `UndeploysInto` | undeploy type (Terms) | vehicle type name | none |
+| vehicle type, `ResourceGatherer` (read on the vehicle type that a building's undeploy type names) | resource-gatherer flag (Terms) | boolean | no |
+| infantry type, `Nominal` | marked nominal (Terms, *nominal survivor*) | boolean | no |
+| `[MultiplayerDialogSettings]` `AlliesAllowed` | allies-allowed flag (claim 14) | boolean | no |
+| `[MultiplayerDialogSettings]` `AllyChangeAllowed` | ally-change-allowed flag (claim 14) | boolean | yes |
+| building type, `Foundation` | one-cell foundation (Terms; S-0108) | foundation name | as S-0108 |
+| country section, `MultiplayPassive` | passive house (claim 1; S-0009) | boolean | as S-0009 |
+
+The civilian side of claim 12 is the side named Civilian; the original finds it by that fixed
+name, so the name is an engine constant, not stock data.
+
+## Measurement scenarios
+
+All scenarios use the measurement setup with a skirmish on a small test map, the human against
+computer players, at a fixed game speed. Computer players are bystander computer players
+(glossary), kept away from the observed area; a run is void when a computer player's own defeat,
+alliance or attack changes the events the scenario observes, and is then repeated. Every scenario
+in which the human gives an alliance order (V5 part c, V9) uses a test rules file that sets the
+allies-allowed and ally-change-allowed flags on (claim 14).
+
+Ticks are read from the log of the recorder (glossary, *measurement setup*), which stamps each
+entry with the tick number; the defeat message, or the message of a test map trigger that fires on
+the house's destruction, is matched against that log by a screen capture taken at every tick
+under scripted input. "Defeat tick" is the tick of that message. "Defeated at the first house
+update after the state is reached" means: in the tick in which the state is reached, or in the
+next tick when the state is reached after the house's update of that tick. Each scenario is
+falsified if any of its variants or parts gives other than its expected result.
+
+**V1: the short-game test.** Setup: short-game setting on; test rules file with a base-unit list
+of four test vehicle types B1 to B4. The human keeps only: (a) one building; (b) one B1 vehicle,
+(c) one B3 vehicle; (d) one B4 vehicle; (e) one B1 vehicle inside a test naval transport,
+(f) only infantry, aircraft and tanks (types outside B1 to B4). Achieve each state by selling or
+deleting the rest with test triggers. Observable: whether the human is defeated, and the defeat
+tick. Expected: (a), (b), (c) and (e) alive; (d) and (f) defeated at the first house update after
+the state is reached.
+- *Variant g (an item in production keeps the house alive).* The human owns one factory building
+  of buildings and nothing else that counts (no other building, no B1 to B3 vehicle), and has a
+  defence-building type in production on the defence line, its tech-tree prerequisites met by
+  nothing the test removes. Run 1: a test enemy engineer captures the factory building. Run 2: a
+  test trigger destroys it instead. Observable: whether and when the human is defeated, and
+  whether the item is still in production. Expected: run 1, the factory building leaves the human
+  and the defence item stays in production (S-0404 claim 8,
+  `quirks.defence_line_partial_factory_check`), so the human is not defeated while the item is in
+  existence, and is defeated at the first house update after the item is cancelled or is placed
+  and then lost; run 2, the item is cancelled in the tick of the destruction (S-0404 claim 8: a
+  removal for good cancels every line whose item no other factory building could make), so the
+  human is defeated at the first house update after that tick. A building in production on the
+  ordinary line is no variant of this: with the factory building gone for good it is cancelled in
+  either run.
+- *Variant h (marked types).* Test rules file marking B1 as insignificant and B2 as not scored.
+  Run 1: the human keeps only one B1 vehicle. Run 2: only one B2 vehicle. Expected: defeated at the
+  first house update after the state is reached in both runs (such a vehicle never counts in the
+  short-game test).
+- *Variant i (a building that counts as a vehicle).* The human keeps only one building of a test
+  type that counts as a vehicle (Terms). Expected: defeated at the first house update after the
+  state is reached.
+
+**V2: the normal test.** Setup: short-game setting off. The human is reduced to exactly one of:
+(a) one infantry unit on the map; (b) one test transport vehicle on the map with the human's last
+infantry unit inside; (c) one infantry unit garrisoned in a neutral occupiable building; (d) one
+building of a test type with an undeploy type and a one-cell foundation; (e) one deployed
+resource-gathering vehicle that has become a refinery-list building (test rules file listing its
+building type third in the refinery list), then the same with that type moved to the first
+position; (f) nothing at tick 0 (a test map and setup giving the human no starting units: bases
+off, unit count 0, with a test rules file setting the minimum unit count to 0). Observable:
+whether and in which tick the human is defeated. Expected: (a) and (b) alive; (c) alive exactly
+when the garrisoned building now belongs to the human and its type is neither insignificant nor
+not scored, defeated otherwise; (d) defeated; (e) alive in the first run and defeated in the second
+run; (f) defeated in tick 1, not in tick 0.
+- *Variant g (not-scored vehicle).* Test rules file marking a test vehicle type as not scored. The
+  human's only units are one such vehicle and one infantry unit; the vehicle is destroyed, then the
+  infantry unit. Expected: the human is never defeated.
+- *Variant h (nominal survivor).* Test rules file marking the human's building survivor type as
+  nominal. The human owns one tank, kept away from all fighting, and one building that a test
+  trigger destroys so that survivors come out. The recorder log notes the tick in which each
+  survivor leaves the map. The count after each event is the table of claim 4 applied to those
+  ticks: the tank is one on *V*, a nominal survivor adds nothing to *I* and takes one off when it
+  leaves the map, and the destroyed building leaves *B* when it leaves play.
+  Run 1 (exactly one survivor comes out; the test kills it). Expected: defeated at the first house
+  update after the survivor leaves the map, while the tank is still on the map.
+  Run 2 (two survivors come out and are killed by one area weapon that does not reach the tank).
+  Expected, from the recorded ticks: when both leave the map in the same tick, the human is never
+  defeated, even after the tank is then destroyed (*S* goes from 1 to -1 and then to -2); when
+  they leave in different ticks, the human is defeated at the first house update after the
+  first leaves (*S* is 0 there). The run shows the second case or the first, not neither.
+  Low confidence: if no survivor is created as a nominal survivor, the runs show nothing (the
+  tank alone keeps the human alive, and no defeat comes after the survivors die) and the building
+  condition must be found first; that result is recorded as "no nominal survivor", not as a
+  falsification.
+- *Variant i (marked types).* Test rules file marking one infantry type as insignificant and one
+  as not scored, and one building type as insignificant. The human is reduced to exactly one of:
+  (1) an infantry unit of the insignificant type on the map; (2) an infantry unit of the
+  not-scored type; (3) a building of the insignificant type. Expected: (1) alive, (2) defeated,
+  (3) defeated, each at the first house update after the state is reached for the defeats.
+- *Variant j (a unit taken by mind control).* Run 1: the human's only unit is one vehicle. Run 2:
+  the human's only unit is one infantry unit. In both runs the human owns nothing else that counts,
+  and a computer player's mind-controlling unit takes that unit. Expected: defeated at the first
+  house update after the control begins, in both runs (the unit leaves the human's on-map count
+  by the change of owner).
+- *Variant k (a change of owner by a test map trigger, S-0011 claim 24).* The human owns one
+  infantry unit X on the map and nothing else that counts.
+  Runs 1 to 3 (the gaining side): a test trigger gives the human one object of a computer player
+  that is on the map: an infantry unit (run 1), a vehicle (run 2), an aircraft in the air, kept
+  away from every building it could land at (run 3). A second test trigger then destroys X.
+  Expected: the human is not defeated in any of the three runs while the given object is on the
+  map. A defeat at the first house update after X's death falsifies the gaining side of the
+  change-of-owner rule.
+  Runs 4 to 6 (the losing side): the human owns instead only one infantry unit (run 4), one
+  vehicle (run 5) or one aircraft in the air (run 6), and a test trigger gives that object to a
+  computer player. Expected: defeated at the first house update after the change of owner.
+  Run 7 (a not-scored vehicle, losing side): test rules file marking a test vehicle type as not
+  scored. The human owns X and one vehicle of that type that has been on the map; a test trigger
+  gives the vehicle to a computer player, and a second test trigger then destroys X. Expected:
+  the human is never defeated (the vehicle stays on the human's *V*). A defeat falsifies it.
+
+**V3: passive houses.** Setup: test map whose overrides make a computer player's country passive
+for the late phase (S-0009 claim 33); the computer has no units. Observable: whether it is ever
+defeated and whether the game ends when the human destroys the only other enemy. Expected: never
+defeated; the game ends with a win.
+
+**V4: what defeat destroys.** Setup: the human owns a test transport vehicle with infantry
+inside, a garrisoned building, and a mind-controlling unit that holds one of the computer's
+vehicles. The human surrenders (claim 11 uses the same destruction as claim 5).
+- *Part a.* Observable: which objects die, whether passengers or occupants come out, and what
+  happens to the controlled vehicle. Expected: every human object dies in one tick; no passenger
+  or occupant comes out alive; the controlled vehicle is not hit (it goes back to the computer
+  when its controller dies).
+- *Part b.* A computer's mind-controlling unit holds one of the human's vehicles when the human
+  surrenders. Run 1 with a test rules file that puts the neutral and special countries on the
+  civilian side; run 2 with one that gives them a side other than the civilian side. Expected: run 1, the vehicle is not hit, and when
+  the controlling unit is then destroyed it passes to the first house of the civilian side in house
+  order; run 2, the vehicle is destroyed with the human's objects.
+- *Part c (the hit's markers).* The human owns a test vehicle type, a test infantry type and a
+  test building type, one of each at partial health, in a test rules file that sets every armour
+  multiplier of every warhead to nothing, so that no ordinary hit could hurt them. The vehicle's
+  type is one that leaves a crew when an ordinary hit destroys it (checked first in a run that
+  gives the vehicle ordinary damage under stock multipliers). Observable: whether the three objects die, whether a crew comes out of the
+  vehicle, and the kill counts of every house on the result screen. Expected: all three die
+  although no ordinary hit could hurt them (damage that ignores defences); no crew comes out of
+  the vehicle (the no-escape marker); no house's kill count rises through the defeat (no attacker,
+  no attacking house). The kill counts are the only observable of the last two; if the result
+  screen does not list them, that item is `unmeasured`.
+
+**V5: the end test.**
+- *Part a.* Human and computer A on one team, computer B and C enemies. Destroy B, then C.
+  Expected: the game ends with a win right after C's defeat, A still alive.
+- *Part b.* As part a, but the human's house is destroyed first while A lives. Expected: the game
+  ends with a loss at the human's defeat (the original's condition that our engine drops, claim
+  6, departure; our engine would play on until A or the enemies fall).
+- *Part c.* Human and computer A on no team; during play the human makes peace with A (one way),
+  then destroys B. Expected: the game does not end (A does not ally the human). The run is void if
+  A allies the human back (claim 12, the original's computer-player reaction).
+
+**V6: the end delay.** Setup: test rules file setting the end-delay field to 0.03 (and in a second
+run to 0.1). Observable: ticks from the last enemy's defeat to the tick at which the result screen
+appears, from the recorder log. Expected: 26 in the first run and 90 in the second (the stored
+double of 0.1 lies just above 0.1, so its product with 900 lies just above 90). The wait for the
+announcement is real time and takes no tick (claim 8).
+- *Part b (the person-played house is defeated in the delay).* Human and computer A allied, a
+  computer B at war with both; the end-delay field is raised in a test rules file (0.1, 90 ticks)
+  so that there is room. B is destroyed, the game ends with a pending win, and the human's last
+  object is killed by a delayed explosion 30 ticks later (the human's defeat is then at tick *t* +
+  30, A undefeated). Expected: a loss for the human, game over at tick *t* + 30 + 90 (a game over
+  at tick *t* + 90 would mean the delay was not restarted).
+- *Part c (an AI house is defeated in the delay).* As part b, but the human survives and a test
+  trigger destroys A's last object 30 ticks after B's defeat. Expected: game over at tick *t* + 90
+  with the human's win, not at *t* + 120. A's own result (a loss in our engine) cannot be observed
+  in the original and is not checked.
+- *Part d (the end through the human's own defeat).* The end delay is 0.1 as in part b. Human and
+  computer A allied, computer B at war with both; the human's last object is killed while A and B
+  live, and a test trigger destroys all of A's objects 30 ticks later. Expected: game over at tick
+  *t* + 90 with a loss for the human (the later defeat restarts nothing).
+
+**V7: same-tick wipe-out.** Setup: the human and the last enemy each own one infantry unit standing
+next to a test building that a timed trigger destroys with a large area-damage weapon killing both
+in the same tick. Observable: the result and the tick of each defeat message. Expected: a loss for
+the human, with both defeat messages in the same tick.
+
+**V8: surrender.** Setup: the human surrenders from the options menu at tick *t*. The human has no
+item in production, and no not-scored vehicle or nominal survivor of the human has been on the map
+in the game. Observable: the tick at which the human's objects die and the defeat tick. Expected:
+objects die in tick *t* + 1, defeat in the same tick, or later only when a destroyed object stays
+in play (claim 11); a defeat later with no such object falsifies it.
+- *Part b (a pending result).* The end delay is raised (0.1 in a test rules file). The human and A
+  are allied against B; B is destroyed and the human surrenders in the delay. Expected: nothing
+  is destroyed, the human's result stays a win, game over at the original tick (claim 11).
+
+**V9: alliance orders.**
+- *Part a.* Three computer players B, C, D at war with the human. The human makes peace with B
+  while a human unit is attacking a unit of B, then with C, then tries D. Expected: B and C allied
+  by the human (the attacking unit stops, and the human's units ignore B and C from then on), the
+  order towards D refused (D is the last enemy). B's units still attack the human (the run is void
+  if B allies the human back).
+- *Part b.* Human and B mutually allied through lobby teams; the human breaks the alliance.
+  Expected: B's units attack the human from then on.
+- *Part c.* As part a, with a test rules file setting the allies-allowed flag off (run 1) and the
+  ally-change-allowed flag off (run 2), the other flag on; in both runs the human and a computer
+  player E are also put on one lobby team. Expected: in both runs the order to ally with B cannot
+  be given (no alliance forms), and E stays allied with the human. Run 3: both flags on, and a test
+  map that sets the fixed-alliance mark; expected: the order to ally with B can be given and forms
+  an alliance (the mark is cleared once the map has loaded).
+
+**V10: an observer in the original.** Setup: the skirmish lobby with the one human participant set
+to observe, and two computer players on separate sides; short-game setting off. Observable:
+whether the game can be started, and if so the tick at which the result screen appears and the
+result shown. Expected (low confidence, Edge cases, *Observers*): the game ends in tick 1, so the
+result screen appears in tick 1 + 26 at the absent-key end delay (Formulas), showing a loss; no
+defeat message is shown for the observer's house (claim 5). A game that runs on past that tick
+falsifies the reading. If the lobby offers no way to start a skirmish with an
+observer, that is recorded as "no observer in a skirmish" and is not a falsification; the Edge
+case's description of the original then concerns no game that can be played.
+
+## Open questions
+
+- Whether the original's skirmish lobby can start a game with an observer, and whether the game
+  then ends in tick 1 as Edge cases, *Observers* reads it (scenario V10; our engine's rule does not
+  depend on the answer).
+- Which superweapon launch announcements stop after the local player's house is defeated: the
+  house's own launches, or every launch announced to the local player (claim 5,
+  *Presentation*, which is presentation only).
+- Which buildings mark their survivors as nominal survivors (claim 4; a condition set when the
+  building is created, not identified).
