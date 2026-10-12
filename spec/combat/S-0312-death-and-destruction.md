@@ -2,11 +2,11 @@
 id: S-0312
 title: Death and destruction (death weapons, debris, passengers, crews, survivors, sinking, crashing and building remains)
 topic: combat
-revision: 2
-sources-class: [decomp]
+revision: 3
+sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-10
+approved-on: 2026-10-12
 measurements: []
 requests: []
 supersedes: []
@@ -27,7 +27,7 @@ killed object leaves the turn order is S-0203's (claim 6); the damage itself is 
 ## Terms
 
 Glossary terms are used as defined there, in particular *infantry*, *vehicle*, *aircraft*,
-*building*, *foundation*, *overlay*, *house*, *human-controlled*, *scenario random stream*, *draw*,
+*building*, *foundation*, *overlay*, *house*, *human-controlled*, *computer-controlled*, *AI house*, *neutral house*, *special house*, *player house*, *scenario random stream*, *draw*,
 *ranged draw*, *scatter request*, *contact*, *vehicle thief*, *known attacker*, *departure*,
 *importer warning*. S-0202 owns three terms this spec uses: the ranged-draw notation R(*a*, *b*)
 (a ranged draw over *a* to *b*, both included), the *percent draw* (R(0, 99), compared with an
@@ -68,7 +68,8 @@ claim 19) and *curtain protection* are used as defined there. In addition:
 - **Sinking, crashing.** Two states in which a killed vehicle or aircraft stays in play after its
   death until the naval or the locomotor specs end the state.
 - **Nearby point** N(*Q*, *r*, *b*). A point *r* leptons from *Q* in one of 256 directions, chosen
-  by the lowest 8 bits *b* of one raw value of the scenario random stream (Formulas F2).
+  by the remainder *b* (0 to 255) of one raw value of the scenario random stream modulo 256
+  (Formulas F2).
 - **Rubble overlay.** The overlay type that a destroyed building can leave on its foundation cells
   (claim 20).
 - **Crater, scorch mark.** The two kinds of smudge a destruction can leave. The terrain and smudge
@@ -165,13 +166,16 @@ claim 19) and *curtain protection* are used as defined there. In addition:
 8. **Infantry.** A killed infantry unit takes the shared effects of claims 4 to 7 and then the death
    sequence or removal of S-0107 claim 17, which also owns its corpse. Nothing further belongs to
    this spec.
-   - Backing: `measurable` (scenario D4 for the shared effects; S-0107 scenario M10 for the rest)
-   - Confidence: high
+   - Backing: `measurable` for the debris, the death weapon and the attached bomb of an infantry unit
+     (scenario D4 variant b, D6 variant e; S-0107 scenario M10 for the rest); `unmeasured` for the
+     passengers of an infantry unit (no stock infantry type is believed to carry passengers, so no
+     scenario can show the passenger part of claim 5 for infantry)
+   - Confidence: high for the debris, the death weapon and the bomb; low for the passengers
 
 ### Vehicles
 
 9. **Explosion and destruction animations.** A killed vehicle that neither sinks (claim 10) nor
-   plays death frames (Open questions) shows, at its position, one entry of its type's explosion
+   plays death image frames (Open questions) shows, at its position, one entry of its type's explosion
    list and one entry of its type's destruction-animation list, each chosen by one *list pick*
    (S-0202 claim 6), explosion first, each only when its list is not empty. A vehicle whose type has the explodes
    flag, or which has reached a veterancy rank whose abilities include exploding (S-0311; here the suicide
@@ -194,8 +198,8 @@ claim 19) and *curtain protection* are used as defined there. In addition:
     (Terms) and dies within 10 leptons above a water cell skips claims 4 to 6 and 9 (its attached
     bomb, claim 7, still goes off). Instead it shows the game-wide wake animation and the last entry
     of the game-wide splash list (S-0303, F5) at its position. Claims 12 to 15 then apply as for any
-    other destroyed vehicle, except that its passengers do not get out: a vehicle with the bomb
-    mark kills them instead (claim 12). The wake and splash animations take the place of claim 9's
+    other destroyed vehicle, except that its passengers do not get out: claim 12 kills them, or
+    keeps them inside until the crash when the vehicle's type can crash. The wake and splash animations take the place of claim 9's
     animations in the order of death effects (State and ordering). No situation of stock play is
     believed to give a vehicle the bomb mark, so there is no stock scenario for this claim; it is
     recorded so that an engine that gives some object the mark (a mod's dropped units, say) can
@@ -227,10 +231,13 @@ claim 19) and *curtain protection* are used as defined there. In addition:
     A passenger that has got out is given no order beyond the scatter request when its house is
     human-controlled. When its house is computer-controlled, the original also puts it on the *hunt*
     behaviour (S-0215), unless the destroyed vehicle belonged to a team, which the passenger then
-    joins instead. Our engine gives every house the human-controlled outcome (claim 25).
+    joins instead. Which of these our engine applies depends on the owner (claim 25): a player
+    house's passenger gets no further order, a neutral or special house's passenger is put on
+    *hunt*, and the team join never applies.
     This refines S-0203 claim 6e, which takes every passenger with a destroyed object.
     - Backing: `measurable` (scenario D9; variant e for the orders); `unmeasured` for the team join
-      (the original's team system is outside our scope, and no test map is planned for it)
+      (the original's team system is outside our scope and has no counterpart in our engine, so
+      nothing of ours depends on it, and no test map is planned for it)
     - Confidence: high for the height rule and the escape; medium for the entry-outcome condition
       and the facing; medium for the orders; low for the team join
 
@@ -242,15 +249,15 @@ claim 19) and *curtain protection* are used as defined there. In addition:
       crewed flag and has no passenger capacity, a chance test "less than" with the game-wide crew
       escape chance (one unit-interval value, S-0202 claim 6) decides, and the crew's type is chosen
       by Formulas F4.
-    The crew object is created (taking S-0202's creation draw, claim 10) and then placed at the
-    vehicle's position. Once placed, its health is a ranged draw over 5 to half its type's strength
+    A crew that is due takes S-0202's creation draw (claim 10) whether or not it can then be placed
+    at the vehicle's position. A crew that cannot be placed there never enters play and takes no
+    health draw. A placed crew's health is a ranged draw over 5 to half its type's strength
     (truncated toward zero). It faces map north, receives the same scatter request as escaping
     passengers (claim 12), is put on the *guard* behaviour when its house is human-controlled and
-    on the *hunt* behaviour when it is computer-controlled (S-0215; our engine gives every house the
-    human-controlled one, claim 25), and keeps the vehicle's trigger tag when that tag is of a kind that passes
-    on (trigger specs). If it cannot be placed it is removed again at once, without entering play,
-    and no health draw is taken. The draws come in the order: chance test (not for a hijacker type), crew type
-    (F4, when it takes a draw), creation, health.
+    on the *hunt* behaviour when it is computer-controlled (S-0215; which one our engine applies
+    depends on the owner, claim 25), and keeps the vehicle's trigger tag when that tag is of a kind that passes
+    on (trigger specs). The draws come in the order: chance test (not for a hijacker type), crew type
+    (F4, when it takes a draw), creation, health (only for a placed crew).
     - Backing: `measurable` (scenario D10, statistical for the chance; variant d for the behaviour)
     - Confidence: high for the chance and the health draw; medium for the hijacker case, the tag and
       the behaviour
@@ -309,7 +316,8 @@ claim 19) and *curtain protection* are used as defined there. In addition:
     have used (claim 24).
 
     *Chance.* A cell takes one ranged draw R(0, *g*) when, at its place in the order, fewer than *C*
-    survivors have been released and the owner's game is not over; otherwise it takes no draw. A
+    survivors have been released and the owner's game is not over (the owner is not in the state that
+    S-0414's defeat puts a house in; Open questions); otherwise it takes no draw. A
     result of 1 releases one survivor in that cell. Here *g* = 2, or 1 when an infantry unit had
     planted an explosive charge on the building (it has a charge planter), plus 6 when the building
     has ever changed owner.
@@ -322,18 +330,20 @@ claim 19) and *curtain protection* are used as defined there. In addition:
     | no | no | one percent draw, whose result changes nothing; then F4's percent draw when F4 takes one | F4's type |
     | yes | any | F4's percent draw when F4 takes one | F4's type |
 
-    So an armed building that produces buildings and has not changed owner takes one percent draw
-    when it releases an engineer, and two when it does not.
+    So an armed building that produces buildings and has not changed owner, and whose owner's
+    country belongs to a side (F4), takes one percent draw when it releases an engineer, and two when
+    it does not.
 
-    The survivor object is then created (S-0202's creation draw, claim 10) and put on a free
-    standing position of that cell; when none is free, or it cannot be placed, it is removed again
-    at once without entering play, takes no health draw and does not count against *C*. Once placed,
-    its health is a ranged draw over 5 to its type's strength, and it receives the same scatter
+    After its type draws, a survivor takes S-0202's creation draw (claim 10) whether or not it can
+    then be placed. It goes on a free standing position of that cell. A survivor for which no
+    standing position is free, or which cannot be placed, never enters play, takes no health draw
+    and does not count against *C*. A placed survivor's health is a ranged draw over 5 to its
+    type's strength, and it receives the same scatter
     request as escaping passengers (claim 12). Its behaviour then depends on the building's charge
     planter (Terms): when the building has one and the owner is not allied with it, the survivor is
     ordered to attack it. Otherwise the survivor is put on the *move* behaviour when its house is
-    human-controlled and on the *hunt* behaviour when it is computer-controlled (S-0215; our engine
-    gives every house the human-controlled one, claim 25). The attacker of the killing hit plays no
+    human-controlled and on the *hunt* behaviour when it is computer-controlled (S-0215; which one our
+    engine applies depends on the owner, claim 25). The attacker of the killing hit plays no
     part in this order. When the killing damage ignores defences, the building counts as having no
     crew (F5), so it releases no survivors at all.
     - Backing: `measurable` (scenario D13, statistical; variant d for the damage that ignores
@@ -364,16 +374,18 @@ claim 19) and *curtain protection* are used as defined there. In addition:
       the end of the list (*r* = 0 picks the last eligible entry), placed at its position moved by
       its type's destruction smoke displacement,
     - (g) releases its absorbed passengers (claim 24), then its survivors (claim 18). When *C* = 0
-      (claim 18) nothing more happens in this item. Otherwise every foundation cell that claim 18
-      takes in its cell order (all of them after the cells the absorbed passengers used), whether
-      or not survivors remain to release, gets a smudge step after its survivor step, whatever that
-      step did. The step tests the foundation cell itself, not the
-      cell of the nearby point below: when that cell is clear for movement, a percent draw is taken
-      (below 50 a scorch mark, otherwise a crater), then the raw value of the nearby point N(cell
-      centre, 128, *b*), and then the smudge choice's own draws (terrain and smudge specs); the
-      smudge goes to the cell of the nearby point. So one cell's draws come in this order: its
-      survivor draw (if any); then, if a survivor was released, its type, creation and health draws
-      as claim 18 gives them; then the smudge step's draws,
+      (claim 18) nothing more happens in this item. Otherwise the foundation cells that claim 18
+      takes (in its cell order, starting after the cells the absorbed passengers used) are handled
+      one after another, and each such cell takes the draws of the rows below in the order of the
+      rows, before the next cell takes any. Every such cell has the smudge step, whether or not
+      survivors remain to release and whatever its survivor rows did.
+
+      | Row | Taken when | Draws | Effect |
+      |---|---|---|---|
+      | survivor chance | as claim 18 (*Chance*) gives | one ranged draw R(0, *g*) | a result of 1 releases a survivor |
+      | survivor | the chance row released a survivor | its type, creation and health draws, as claim 18 gives them | one survivor, when it can be placed |
+      | smudge step | the foundation cell itself (not the cell of the nearby point) is clear for movement | one percent draw, then the raw value of the nearby point N(cell centre, 128, *b*), then the smudge choice's own draws (terrain and smudge specs) | a scorch mark when the percent draw is below 50, otherwise a crater, in the cell of the nearby point |
+
     - (h) kills any passengers still inside it.
     - Backing: `measurable` (scenario D14; the draw order through the random-state recorder, which
       gives the number of raw values taken, and through the statistics of the effects)
@@ -400,16 +412,25 @@ claim 19) and *curtain protection* are used as defined there. In addition:
     - Backing: `measurable` (scenario D14, variant c)
     - Confidence: low
 
-22. **Spilled resources.** A destroyed building that stores resources spills them one unit at a
-    time for as long as its holdings, summed over all resource types, are at least one unit. Each
-    spilled unit comes from the resource type earliest in registration order of which the building
-    holds any. It is removed from the building's storage and from its house's total, and added to
+22. **Spilled resources.** In the original a building's holdings of each resource type are
+    fractional amounts (single-precision floating point), and the building spills for as long as the
+    sum of its holdings over all resource types is at least 1. Each spilled unit comes from the
+    resource type earliest in registration order whose holding is above 0, and takes up to 1 from it:
+    a holding of at least 1 drops by exactly 1, and a holding below 1 is emptied. The same amount, by
+    the same rule, is taken from that type in its house's total. One whole resource unit is added to
     the cell of the nearby point N(*Q*, *ρ*, *b*) snapped to the cell centre, where *Q* is the
-    building's position and *ρ* a ranged draw over 256 to 768 leptons. Each unit takes its *ρ* draw
-    and then the raw value of the nearby point. How a cell gains resource belongs to the economy
-    specs.
-    - Backing: `measurable` (scenario D15)
-    - Confidence: medium
+    building's position and *ρ* a ranged draw over 256 to 768 leptons, whatever the amount taken.
+    Each unit takes its *ρ* draw and then the raw value of the nearby point. So holdings of
+    whole units spill exactly their count of units. With fractions, a unit may be taken from a type
+    that holds less than 1 (it is emptied), and the spilling ends when the sum is below 1, so a
+    remainder below 1 in total is not spilled. How a cell gains resource
+    belongs to the economy specs.
+    - Backing: `measurable` for holdings of whole units (scenario D15; how a building comes to hold
+      resources in a skirmish is the economy specs', and the scenario needs a map setting or a
+      start-credit conversion that fills one, Open questions); `unmeasured` for fractional holdings
+      (no stock situation is believed to leave a building with a fraction, so the clamp at 1 cannot
+      be shown)
+    - Confidence: medium for whole units; low for fractions
 
 23. **Exploding buildings set off barrels.** An exploding building probes four points, each one
     cell away from the building's position (the centre of its top-left foundation cell) towards map
@@ -431,8 +452,8 @@ claim 19) and *curtain protection* are used as defined there. In addition:
     start after the last cell used. A vehicle comes out at the cell centre, an infantry unit on a
     free standing position. Each gets out facing the building's facing and receives the scatter
     request of claim 12. Once out, a passenger is given no further order when its house is
-    human-controlled and is put on the *hunt* behaviour when it is computer-controlled (S-0215; our
-    engine gives every house the human-controlled outcome, claim 25). One that cannot be placed
+    human-controlled and is put on the *hunt* behaviour when it is computer-controlled (S-0215; which
+    one our engine applies depends on the owner, claim 25). One that cannot be placed
     dies, credited to the building's charge planter (Terms), if any, and otherwise to no one (not to
     the attacker of the killing hit). When the building has no crew (a map setting, or killing
     damage that ignores defences, F5), all of its absorbed passengers die instead of coming out,
@@ -445,16 +466,28 @@ claim 19) and *curtain protection* are used as defined there. In addition:
 
 ### Computer-controlled houses
 
-25. **No special rules for computer-controlled houses.** Crews, survivors and escaping passengers of
-    a computer-controlled house follow the same rules as those of a human-controlled house in our
-    engine: a crew is put on *guard*, a survivor without an attack order on *move*, and an escaping or
-    absorbed passenger gets no order beyond its scatter request, whoever owns it. The original gives
-    computer-controlled houses other behaviours (*hunt*, and joining the destroyed vehicle's team),
-    which claims 12, 13, 18 and 24 record as behaviour of the original; our AI may give the same
-    orders through normal play.
-    - Backing: `unmeasured` (a design rule of our engine, following the project lead's decision on
-      AI houses)
-    - Confidence: high
+25. **Orders after a death depend on the owner, not on who plays it.** In our engine the orders
+    that claims 12, 13, 18 and 24 give to the units a death releases are:
+
+    | Released unit | Owner is a player house (human-controlled or an AI house) | Owner is the neutral or the special house |
+    |---|---|---|
+    | crew (claim 13) | *guard* | *hunt* |
+    | survivor without an attack order (claim 18) | *move* | *hunt* |
+    | escaping passenger (claim 12), absorbed passenger that came out (claim 24) | no order beyond its scatter request | *hunt* |
+
+    The original gives these units the *hunt* behaviour, and an escaping passenger the join of the
+    destroyed vehicle's team, whenever their owner is computer-controlled. By the project lead's
+    decision (glossary, *AI house*, *Player houses only*) an AI house follows the player-house
+    column, while the neutral and the special house keep the original's rule for owners that are not
+    human-controlled. Our engine has no team system (glossary, *team member*): no vehicle belongs to
+    a team, so the join of claim 12 never happens for any owner, and the neutral and special houses'
+    passengers take *hunt* instead (Questions for the project lead).
+    - Backing: `measurable` for the human-controlled column and for the neutral-house column
+      (scenarios D9 e, D10 d, D13 e and D16 c, each also with a neutral-owned object); `unmeasured`
+      for the AI-house application (a design rule of our engine, following the project lead's
+      decision on AI houses, so no original shows it) and for the team join
+    - Confidence: high for the table; low for the neutral and special houses' passengers, since the
+      team system that the original prefers for them is out of scope
 
 ## Formulas
 
@@ -470,7 +503,7 @@ at the object's position raised by 20 leptons. Otherwise *N* animations from the
 debris list, chosen the same way, at the same point. Exact integer arithmetic. Unit: pieces (*N*).
 
 **F2. Nearby point** (claims 19, 22, 23). For a point *Q* = (*x*, *y*, *z*), a distance *r* in
-leptons and the lowest 8 bits *b* of one raw value:
+leptons and the remainder *b* (0 to 255) of one raw value modulo 256:
 
 > *f* = 256*b* for *b* < 128 and 256*b* − 65536 for *b* ≥ 128, *θ* = RZ₅₃((*f* − 16383) × *κ*),
 >
@@ -507,11 +540,22 @@ a type with the crewed flag owned by house *h*:
 The country column and the side-number column are separate: a house whose country belongs to a side
 can still have a side number other than 0, 1 or 2.
 
-**F5. Survivor count** (claim 18). With *K* the building type's cost for its owner (an integer number
-of credits; the production specs own what the cost includes) and *q* the game-wide survivor divisor of the owner's side (allied, soviet or third; an
-integer), doubled when the building has ever changed owner:
+**F5. Survivor count** (claim 18). With *K* the building type's refund for its owner (S-0408
+claim 1 with its F1: an integer number of credits, which includes the country cost factor, the
+cost-bonus product and the refund percentage, or the type's refund override when it has one, and
+which starts from the type's adjusted cost of S-0408 claim 2) and *q* the game-wide survivor divisor
+of the owner's side (allied, soviet or third; an integer), doubled when the building has ever
+changed owner:
 
 > *C* = min(max(trunc(*K* / *q*), 1), 5)
+
+*K* is the refund as it stands when the survivors are counted, for the building's owner at that
+moment, not the plain cost field and not the price paid. A sold building takes the same count
+(S-0408 claim 7), so the count of a sale and of a destruction agree for the same building type,
+owner and factors. The refund percentage is part of *K* for every player house, as S-0408 claim 1
+gives it (the original leaves it out for a computer-controlled house, whose *K* is then the larger
+unreduced value; S-0408 records that rule); the neutral and special houses take the unreduced
+value, as there. *K* ≤ 0 (a negative refund, S-0408 Edge cases) gives *C* = 1 by the lower bound.
 
 *C* = 0 when the building has no crew, its type lacks the crewed flag, the owner's side is not 0, 1
 or 2, or *q* = 0 (the original makes no division then). A building has no crew when its map entry
@@ -519,8 +563,8 @@ says so, or when its killing damage ignores defences (claims 18 and 24). Integer
 toward zero. Unit: infantry units.
 
 **F6. Delayed death** (claim 3; S-0302 F7 owns it). With *F* the warhead's delay-kill tick count, *A* its delay factor at
-the edge (single precision), *d* the epicentre distance of the killing hit and *S* the warhead's
-spread:
+the edge (single precision), *d* the epicentre distance of the killing hit (leptons, in the number
+domain S-0302 F7 gives it) and *S* the warhead's spread:
 
 > *T* = trunc(RZ₅₃(RZ₅₃(RZ₅₃(RZ₅₃(RZ₅₃(*A* × *F*) − *F*) / (256 × trunc(*S*))) × *d*) + *F*))
 
@@ -578,10 +622,10 @@ game state.
 | 3 | all | attached bomb (claim 7) | the bomb's |
 | 4 | infantry | death sequence or removal (S-0107 claim 17) | S-0107 |
 | 4 | vehicle | sinking (claim 10), or wake and splash (claim 11), or explosion and destruction animations (claim 9) | up to two list picks (claim 9); none for sinking or for claim 11 |
-| 5 | vehicle | passengers (claim 12); they die instead when the vehicle has the bomb mark | their scatter requests' |
+| 5 | vehicle | passengers (claim 12): they get out, or die, or stay inside as the table of claim 12 gives (a vehicle with the bomb mark that cannot crash kills them) | their scatter requests' |
 | 6 | vehicle | crew (claim 13) | unit-interval value, crew type (F4), creation draw, health |
 | 7 | vehicle | crate (claim 14) | the crate's |
-| 8 | vehicle | crash, sinking or leaving play (claim 15) | crash: three |
+| 8 | vehicle | crash, sinking or leaving play (claim 15); passengers still inside die at the start of a crash (claim 16) | crash: three |
 | 4 | aircraft | explosion animation, then crash or leaving play (claim 16) | list pick, crash: three |
 | 4 | building | contacts (claim 17), garrison out | the contacts' deaths |
 | 5 | building | claim 19 (a) to (h), with claim 23 inside (c), claim 22 inside (d), and claims 24 and 18 inside (g); claim 18's cells start after the cells claim 24 used | as listed |
@@ -638,7 +682,7 @@ game state.
   type at registration index 239, a number built into the original, so a mod that changes the
   overlay list changes which type that is, with no sign in the building's data. On: our engine does
   the same when the registry has an entry at that index. When it has fewer than 240 entries the
-  original writes an index with no type (bad data); our engine places no rubble overlay then (a
+  original gives the foundation cells an overlay registration index that names no type (bad data); our engine places no rubble overlay then (a
   departure, not covered by the switch). Off: the importer binds the overlay type that has index 239
   in the unmodified base rules to the rubble role by its name, so a mod that reorders the overlay
   list keeps the same rubble; the importer warns when that type is missing. With the switch on, the
@@ -688,7 +732,8 @@ game state.
 | rules, the combat-damage section, `C4Warhead` | demolition warhead (claims 16, 17) | warhead name | none |
 | rules, the general section, `CrewEscape` | crew escape chance (claim 13) | decimal (double) | owned by the rules specs |
 | rules, the general section, `AlliedCrew`, `SovietCrew`, `ThirdCrew`, `Technician`, `Engineer` | crew types (F4, claim 18) | infantry name | none |
-| rules, the general section, `AlliedSurvivorDivisor`, `SovietSurvivorDivisor`, `ThirdSurvivorDivisor` | *q* (F5) | integer | rules specs |
+| rules, the general section, `AlliedSurvivorDivisor`, `SovietSurvivorDivisor`, `ThirdSurvivorDivisor` | *q* (F5), for owners of side 0, 1 and 2 | integer | 200, 100 and 300 (engine constants) |
+| the inputs of *K* (F5): the type's cost, free-unit, refund-override and pad-aircraft fields, the country and cost-bonus factors, the refund percentage | *K* (F5) | S-0408's Import mapping | S-0408's |
 | rules, the general section, `ShipSinkingWeight` | sinking weight (claim 10) | decimal | rules specs |
 | rules, the general section, `MetallicDebris` | metallic debris list (F1) | animation-name list | empty |
 | rules, the general section, `InfantryExplode`, `Wake` | cyborg crippling animation (claim 2), wake animation (claim 11) | animation name | none |
@@ -703,13 +748,22 @@ divisor above 0, about a delay-kill warhead with a spread below 1 while `quirks.
 ## Measurement scenarios
 
 All scenarios run under the glossary's *measurement setup* on purpose-made flat test maps, in a
-skirmish with one human player and one passive computer player far away, at any game speed, with
+skirmish with one human player and one bystander computer player (glossary), at any game speed, with
 test types given in the test map's override sections (named test files) and invented values. A
 *recorder* that reads the game's state gives health values, object counts, object types, positions
 and each object's current behaviour. The read-only recorder of the scenario random stream (glossary,
 *recorder*) gives the stream's state before and after a kill, and so how many raw values the kill
 took; replaying the claims' draw rules from the recorded start state predicts every outcome. Scenarios
 with random draws are statistical, as stated.
+
+*Observed areas* (glossary, *bystander computer player*, void rule). The bystander's start position
+is the one farthest from the test objects. A scenario's observed area is the cells within 10 of its
+test objects for D1 to D10 and D13 to D16, with these exceptions: D11 observes the aircraft's flight
+path and the cells within 10 of its target and of its impact point; D12 observes the building, its
+exit cells and the vehicle's route. A run is void when an object of the bystander that the scenario
+does not name enters that area or acts on a test object, or when the bystander is defeated
+before the observation ends. Scenarios with a neutral-house object use a test object owned by the
+neutral house as the map gives it, and the same void rule.
 
 **D1. Order inside one death (claim 1).** *Setup:* a test vehicle type with the explodes flag, a test
 death weapon whose detonation (spread 2) kills a second test vehicle standing next to it, a voxel
@@ -737,7 +791,9 @@ if:* it dies at once or the delays differ.
 
 **D4. Death debris (claim 4).** *Setup:* a test vehicle type with minimum debris 1, maximum debris 4
 and no debris types; 200 kills. *Observable:* the number of debris pieces per kill. *Expected:* 1 to
-3 debris pieces each time, roughly uniform. *Falsified if:* 4 pieces or 0 pieces appear.
+3 debris pieces each time, roughly uniform. Variant b (claim 8): the same with a test infantry type.
+*Falsified if:* 4 pieces or 0 pieces appear, or an infantry kill in variant b throws no debris or a
+number outside 1 to 3.
 
 **D5. Passengers of exploding objects (claim 5).** *Setup:* a test transport with the explodes flag
 carrying a transport that carries an infantry unit. *Observable:* each passenger's death and kill
@@ -755,11 +811,14 @@ order of their queued actions shows the same thing; S-0011 owns which.)
 of damage 100 and damage factor 1.5, killed beside a target with versus 100 %; (b) no death weapon
 and no weapon: the game-wide death weapon with half of strength 300; (c) a vehicle carrying a
 planted time bomb, not exploding; (d) a death weapon whose warhead throws metallic debris (a test
-warhead with a positive maximum debris count), killed in the middle of the map. *Observable:* the
+warhead with a positive maximum debris count), killed in the middle of the map; (e) as (a) and (c)
+with a test infantry type that has the explodes flag, and an infantry unit carrying a planted time
+bomb that is not exploding (claim 8). *Observable:* the
 target's health loss, whether the bomb detonates, and where the debris appears. *Expected:* (a) the
 target loses 150 at the centre; (b) 150 times the game-wide weapon's falloff; (c) the bomb detonates
-on death; (d) the debris appears at the map's corner, not at the dying vehicle. *Falsified if:* the
-amounts differ, the bomb does not detonate, or (d) shows the debris at the vehicle (then the
+on death; (d) the debris appears at the map's corner, not at the dying vehicle; (e) the same loss of 150, and
+the bomb detonates. *Falsified if:* the amounts differ, the bomb does not detonate (for the vehicle
+or the infantry unit), or (d) shows the debris at the vehicle (then the
 projectile is placed, and claim 6 and the quirk change).
 
 **D7. Vehicle animations (claim 9).** *Setup:* a test vehicle type with an explosion list of four
@@ -779,11 +838,11 @@ scenario (it is `unmeasured`).
 killed (a) on open ground by normal damage, (b) by a train driving into its cell (damage that
 ignores defences, S-0210 claim 10), (c) as a flying transport more than 208 leptons up; variant d: a
 test crashable vehicle with passengers, killed on the ground; variant e: (a) once with the
-transport owned by the human player and once by the computer player. *Observable:* how many
+transport owned by the human player, once by the computer player and once by the neutral house. *Observable:* how many
 passengers get out and how many die; in variant d the tick of their deaths; in variant e each
 escaped passenger's behaviour and position some ticks later. *Expected:* (a) all five get out and
 scatter; (b) and (c) all die; (d) the passengers die when the vehicle leaves play, which is the end
-of its death effects; (e) the computer player's passengers start hunting (walk towards the other
+of its death effects; (e) the computer player's and the neutral house's passengers start hunting (walk towards the other
 player), the human player's stay where they scattered to. *Falsified if:* any differs.
 
 **D10. Crew (claims 13, 14).** *Setup:* a stock crewed vehicle with no passenger capacity, killed 500
@@ -791,17 +850,26 @@ times; crew escape chance from stock data. *Observable:* share with a crew, crew
 *Expected:* share within 3 standard errors of the chance; health between 5 and half the crew type's
 strength; the type matches F4 (about 15 % technicians for an armed vehicle). Variant b: a vehicle
 taken over by a vehicle thief always leaves that thief's type. Variant c: a test crate carrier with
-crates enabled leaves a crate. Variant d: the vehicle killed once while owned by the human player
-and once by the computer player. *Observable of d:* each crew unit's behaviour and position some
+crates enabled leaves a crate. Variant d: the vehicle killed once while owned by the human player,
+once by the computer player and once by the neutral house. *Observable of d:* each crew unit's behaviour and position some
 ticks after the kill. *Expected of d:* the human player's crew stays near where it scattered to
-(guard); the computer player's crew walks towards the other player (hunt). *Falsified if:* outside.
+(guard); the computer player's and the neutral house's crew walk towards the other player (hunt).
+*Falsified if:* the share lies more than 3 standard errors from the chance, a crew health lies
+outside 5 to half the crew type's strength, the share of technicians among the crews of an armed
+vehicle differs clearly from 15 % (outside 3 standard errors), a variant b vehicle leaves another
+type, variant c leaves no crate, or in variant d the human player's crew hunts or the other two
+crews stay.
 
 **D11. Crashing (claims 15, 16).** *Setup:* a stock aircraft with a test death weapon, shot down in
 flight above a target vehicle; variant b an aircraft that crashes alive (out of a landing place, if
 a stock situation does this). *Observable:* where the death weapon detonates (impact point or point
 of death), and in variant b the amount. *Expected:* the death weapon goes off at the impact point,
 not where the aircraft died; variant b: a detonation with the aircraft's remaining health.
-*Falsified if:* the death weapon goes off in the air for a non-exploding aircraft.
+Variant c (claim 15): a test vehicle type with the crashable flag, killed while above the terrain
+(for example in jumpjet flight): it stays in play until it reaches the ground.
+*Falsified if:* the death weapon goes off in the air for a non-exploding aircraft, the detonation of
+variant b has an amount other than the aircraft's remaining health, or the vehicle of variant c
+leaves play before it reaches the ground.
 
 **D12. Contacts of a destroyed building (claim 17).** *Setup:* a stock building type that produces
 vehicles, destroyed while a vehicle is leaving it; a stock building type that harvesters dock at,
@@ -812,25 +880,28 @@ while an aircraft is docked on it: the aircraft is destroyed whatever its distan
 they survive, or the docked aircraft of variant b survives.
 
 **D13. Survivors (claim 18).** *Setup:* a stock 3 × 3 building with the crewed flag whose cost gives
-*C* = 5, destroyed 300 times; variant b after a capture; variant c with a planted charge. *Observable:*
+*C* = 5 (its refund for the owner at least five times the divisor of the owner's side), destroyed 300 times; variant b after a capture; variant c with a planted charge. *Observable:*
 the number and types of survivors. *Expected:* per cell a chance of 1/3 (b: 1/9, c: 1/2), never more
 than *C* survivors, types by F4; in variant c the survivors are ordered to attack the unit that
 planted the charge, not the unit whose weapon destroyed the building. Variant d, if a stock source of
 damage that ignores defences can destroy a building: no survivors at all. Variant e: a stock building
 type that produces buildings, 300 kills; the share of engineers among the survivors of a building
 that has not changed owner, and the behaviour of survivors of a human-controlled and of a
-computer-controlled owner some ticks after the kill (no planter). *Expected of e:* about a quarter of
+computer-controlled owner and of the neutral house some ticks after the kill (no planter). *Expected of e:* about a quarter of
 the survivors are engineers (the engineer draw is below 25), the others by F4 (about 15 %
-technicians if armed); a human owner's survivors move, a computer owner's hunt. *Falsified if:* the
+technicians if armed); a human owner's survivors move, a computer owner's and the neutral house's hunt. *Falsified if:* the
 statistics fall outside 3 standard errors, more than *C* appear, the survivors of variant c attack
 the destroyer, or the share of engineers differs.
 
-**D14. Building destruction effects (claims 19 to 21, 23).** *Setup:* stock buildings with explosion
-lists, destroyed on clear ground. *Observable:* explosion animations and their positions, smudges,
+**D14. Building destruction effects (claims 19 to 21, 23).** *Setup:* test buildings with explosion
+lists and the crewed flag off (so *C* = 0), one of 1 × 1 and one of 3 × 3 foundation, each
+destroyed 200 times on clear ground. *Observable:* explosion animations and their positions, smudges,
 rubble overlay, crate, the tick the building leaves play, the tick each barrel fire starts, and the
 number of raw values the recorder reports for the destruction. *Expected:* one explosion animation
-per foundation cell within 64 leptons of the cell centres; a scorch mark or crater on clear
-foundation cells about half of each. Variant b: a building type that leaves rubble leaves the rubble
+per foundation cell within 64 leptons of the cell centres; for the 3 × 3 building exactly one smudge
+per destruction (claim 19 (a)), at the centre of the cell of its position, and none at all for the
+1 × 1 building, with scorch marks and craters about half each over the 200 destructions (claim 19
+(a): below 50 a scorch mark). Variant b: a building type that leaves rubble leaves the rubble
 overlay on every foundation cell; a type with a money crate beneath leaves a money crate. Variant c:
 an exploding test building stays in play for at least one tick after its death effects. Variant d:
 barrels placed on the four sides of an exploding 1 × 1 test building catch fire 4 to 6 ticks
@@ -842,27 +913,37 @@ state. In (i) it contains no smudge-step draws at all. In (ii) it contains a smu
 foundation cell, including the cells after *C* survivors have been released, and each smudge goes
 to the cell of its nearby point. Variant f: a test building type with a destruction particle-system
 list: a particle system appears at the position displaced by the type's smoke displacement.
-*Falsified if:* any differs.
+*Falsified if:* a smudge appears on a cell other than the centre of the position cell while
+*C* = 0, the 3 × 3 building leaves no smudge or the 1 × 1 building leaves one, the share of scorch
+marks lies more than 3 standard errors from one half, an explosion animation lies more than 64
+leptons from its cell centre, the raw-value count of a run differs from the replayed count, or
+any other statement of the variants fails.
 
-**D15. Spilled resources (claim 22).** *Setup:* a stock building type that stores resources, holding
-a known amount, destroyed. *Observable:* the house's stored total, and resource units by cell.
+**D15. Spilled resources (claim 22).** *Setup:* a building type that stores resources, filled by a map setting or a start-credit
+conversion (the economy specs say which exists in a skirmish; if none does, claim 22 stays
+`unmeasured` and this scenario is not run), holding a known whole amount in each of two resource
+types, destroyed. *Observable:* the house's stored total, and resource units by cell.
 *Expected:* the house's stored total drops by that amount and the same number of resource units
-appear in cells 1 to 3 cells away. *Falsified if:* the amounts differ.
+appear in cells 1 to 3 cells away (256 to 768 leptons from the building's position), the units of
+the earlier type in registration order being drawn first. *Falsified if:* the total drops by another
+amount, the number of units differs, or a unit appears in a cell that contains no point 256 to 768
+leptons from the building's position (a unit goes to the centre of the cell of its nearby point, so
+the cell centre itself can lie somewhat beyond 768 leptons).
 
 **D16. Absorbed passengers (claim 24).** *Setup:* a stock building that absorbs infantry, holding
 three, destroyed. *Observable:* infantry appearing on the foundation cells. *Expected:* three
 infantry appear on its foundation cells, one in each of the first three cells in the cell order.
 Variant b: the same building with the crewed flag on and *C* ≥ 1, destroyed 100 times: survivors,
 and smudges, appear only on the cells after the first three. Variant c: the same building owned by
-the computer player: the passengers hunt. *Falsified if:* fewer appear while cells are free, or
-survivors or smudges appear on the first three cells.
+the computer player, and by the neutral house: the passengers hunt. *Falsified if:* fewer appear while cells are free,
+survivors or smudges appear on the first three cells, or a passenger of variant c does not hunt.
 
 ## Open questions
 
 - The unplaced default position of a death weapon's projectile (claim 6): believed to be the map
   origin, which would put its warhead debris at the map's corner and take the land type of that
   corner's cell. Scenario D6, variant d, would show it.
-- Vehicles whose type has death frames (a sprite death animation) take another path at death that is
+- Vehicles whose type has death image frames (a sprite death animation) take another path at death that is
   not known (claim 9).
 - What a sinking vehicle does until it leaves play, and how long it takes (claim 10).
 - Whether anything in the original sets the bomb mark (claim 11). None was found, and if something
@@ -874,5 +955,24 @@ survivors or smudges appear on the first three cells.
   beyond factory exits and docking.
 - When an exploding building, or one destroyed while being sold, leaves play (claim 21).
 - Whether jumpjet types and other crashable vehicles crash by the same rules as aircraft (claim 16).
+- Whether the state that suppresses survivors (claim 18, "the owner's game is not over") is set by
+  the defeat of S-0414 itself or only by the destruction of all the defeated house's objects that
+  follows it. The project lead's decision of 2026-10-11 (the game runs on until one alliance
+  remains) does not change this: a defeated house stays defeated.
+- How a building comes to hold resources in a skirmish, and whether a fractional holding can occur
+  (claim 22).
 - The relative order of the death effects of a building that is also exploding and holds absorbed
   passengers and resources, beyond the order listed (claim 1).
+
+## Questions for the project lead
+
+- Decided (2026-10-09, item 4; 2026-10-10 afternoon, item 2): AI houses follow the unit rules and
+  order legality of human-controlled houses, and the neutral and special houses keep the original's
+  rules for owners that are not human-controlled. Claim 25 applies both.
+- Decided (2026-10-11): the game plays on to the last alliance. This spec has no rule that depends
+  on the end test; claim 18's condition on the owner is unaffected (Open questions).
+- Open: a passenger of a destroyed vehicle owned by the neutral or the special house. The original
+  makes it join the vehicle's team when the vehicle belonged to one, and puts it on *hunt*
+  otherwise. The team system is out of scope, so claim 25 proposes that no vehicle belongs to a
+  team and the passenger always takes *hunt*. Should that stand, or should it get no order (as a
+  player house's passenger does)? Reversible: it changes one row of claim 25.
