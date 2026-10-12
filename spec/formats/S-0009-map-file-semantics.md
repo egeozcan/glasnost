@@ -2,13 +2,13 @@
 id: S-0009
 title: Map file semantics (geometry, terrain streams, waypoint markers, start positions, preview)
 topic: formats
-revision: 11
+revision: 12
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-10
+approved-on: 2026-10-12
 measurements: []
-requests: [Q-0010, Q-0016, Q-0018]
+requests: [Q-0023, Q-0045]
 supersedes: []
 ---
 
@@ -112,9 +112,16 @@ Terms used as defined in the shared glossary: *cell*, *lepton*, *height level*, 
   importer warns (a departure).
 - **Crate type.** An overlay type that the rules data marks as a crate: an object that gives a
   random bonus to the unit that picks it up.
-- **Cell animation.** An animation that the rules data attaches to an overlay type and that plays
-  on each cell holding that overlay. An overlay type with a cell animation counts as displayable
-  even when it has no artwork of its own (claim 12).
+- **Cell animation.** An animation that the rules data attaches to an overlay type (Import
+  mapping) and that starts each time an overlay of that type is placed on a cell, at a position
+  near that cell (claim 12). An overlay type with a cell animation counts as displayable even when
+  it has no artwork of its own (claim 12).
+- **Cell corner.** The point of a cell with the smallest x and y, at (256·x, 256·y) leptons: the
+  cell's top corner on the screen. A point's *place within its cell* is (X mod 256, Y mod 256),
+  its lepton coordinates reduced to its own cell.
+- **Ground occupant.** An infantry unit, vehicle, aircraft or building that a cell holds on its
+  ground layer, not on a bridge deck. A building is a ground occupant of every cell of its
+  foundation. Terrain objects, overlays, smudges and animations are not occupants.
 - **Terrain recalculation.** As in S-0010 (Terms, and claim 12 for the passes at map load): the
   step that derives a cell's slope shape and land type from its tile, height and neighbours.
 - **Tile animation.** As in S-0202 (Terms) and S-0010 (claim 19): the animation that a cell's tile
@@ -433,10 +440,35 @@ Terms used as defined in the shared glossary: *cell*, *lepton*, *height level*, 
     Placing the vein overlay takes no draw of its own here (claim 14 covers veins). For the overlay types
     at list indices 24, 25, 237 and 238, creation leaves the cell's own overlay data value as it
     was before the overlay was created.
+    **Cell animations.** Each time an overlay whose type has a cell animation (Terms; Import
+    mapping) is placed on a cell (x, y), while the map loads and in play alike, one animation of
+    that type starts:
+    - **Where.** At the world position (256·x + 512, 256·y + 512, *z*) leptons: the cell's centre
+      moved by 384 leptons along +x and by 384 along +y, which is the cell corner (Terms) of cell
+      (x + 2, y + 2). On the screen that is the overlay cell's own column, one and a half cell
+      heights lower. The height *z* is the terrain surface height (S-0106) at the centre of the
+      overlay's cell (x, y), not at the animation's position.
+    - **How it is created.** An ordinary creation in the sense of S-0109, with no parameter of its
+      own beyond its position. It has no loop delay, so its start event (S-0109 claim 13) happens
+      at once, during map loading included. It has no repeat factor (S-0109 claim 7 with *m* = 1),
+      its creation does not ask for reversed play (the type's own reverse setting still applies,
+      S-0109 claim 8), and it is not a trigger-played animation, so its start event has its start sound and its resource
+      chain reaction. Every effect of the start event, and of the middle event that it produces
+      when μ = 0 (S-0109 claim 14), takes place at the position above: the chain reaction acts on
+      cell (x + 2, y + 2), not on the overlay's cell. What those effects are, and their draws,
+      belong to S-0109 and to the specs of those effects.
+    - **Order.** The animation's creation draws (S-0202 claim 10, *animation creation draws*)
+      come before the draws of any tile animation that the recalculation of the overlay's cell,
+      caused by the same placement, starts. The overlay is already in its cell, and that
+      placement's recalculation of the cell has not yet taken place, when the animation is
+      created.
     - Backing: `measurable` (scenarios M6, including its short-stream save, and M6c; scenario M6d
-      for the slope condition)
+      for the slope condition; scenario M6e for the cell animation's position, its start event,
+      the chain reaction's cell, and (part D) its draws coming before those of the tile animation
+      of the same placement; S-0202's scenario R8, part F, for the creation draws themselves)
     - Confidence: high (the crate exclusion and the four data-preserving indices are medium until
-      measured; medium for the slope condition and its exception)
+      measured; medium for the slope condition and its exception; medium for the cell animation's
+      position and creation)
 
 13. **Overlay data stream.** Same size and order. Every legal cell's overlay data value (0 … 255) is
     set from its value in the stream, whether or not the cell has an overlay. When the map has an overlay data
@@ -747,7 +779,11 @@ Terms used as defined in the shared glossary: *cell*, *lepton*, *height level*, 
     included) than the rules' maximum player count (Import mapping: an integer taken from the base
     rules only, S-0006 claim 2, and 8 when they omit it), a cleanup runs once all map objects are placed,
     before the late phase of claim 20. (One special game mode skips it; it is not identified here,
-    see Open questions.) Call a house *eligible* when it is neither human-controlled nor passive.
+    see Open questions.) In our engine the computer players are the AI houses (glossary, *AI
+    house*) that fill the lobby's computer slots, so the cleanup runs only in a game with no AI
+    house. A game whose players are all AI houses, which the decision of the project lead of
+    2026-10-11 allows (S-0414), has computer players and so no cleanup. Call a house
+    *eligible* when it is neither human-controlled nor passive.
     The cleanup removes a house from the game exactly when the house is eligible and the house just
     before it in house order (claim 19) was not removed (quirk `quirks.cleanup_skips_next_house`).
     In a run of eligible houses that are next to each other in house order, the first, third, fifth and so on
@@ -795,7 +831,9 @@ Terms used as defined in the shared glossary: *cell*, *lepton*, *height level*, 
       late-phase position; variant D for the kept special house; variant E for a trigger of a tag
       created at the end of loading; variant F for the maximum player count, its source and the
       strict "fewer than"; variant G with variant B, and variant D with its second part, for the
-      starting units' tech level 1)
+      starting units' tech level 1). That AI houses count as computer players is our engine's
+      reading of the condition (design); the original's side of it, that one computer player
+      stops the cleanup, is variant B
     - Confidence: high that a removed house is gone with its objects and that the house after a
       removed one is kept; medium for the condition; low for the trigger removal (including that tags created
       at the end of loading escape it), the use of the map's override, the late-phase position and
@@ -1301,7 +1339,14 @@ read, in the placement order of claim 43, while the game's set-up at game start 
       two "no tag" markers of claim 31 (Import mapping) and an empty value place nothing. A name that is not yet a terrain
       object type creates one (S-0004 claim 3, creation outside the rules layers), which is then
       placed. The object stands on the centre of its cell, at (256·x + 128, 256·y + 128) leptons,
-      with its type's full strength. Terrain objects are not among the kinds that take a creation
+      with its type's full strength as its starting health. A terrain type's strength, including
+      the game-wide tree strength it takes when no rules layer gives it one, is S-0102's (claim 23,
+      *Strength of a terrain type*). A terrain object type that the entry's name creates reads no
+      rules section, because every rules layer has been read by then (S-0004 claim 3), so its
+      strength stays unset: such an object starts with health −1 and shows image frame 1 (S-0102
+      claim 23). A map's rules override section for an existing terrain type is a rules layer, so
+      a strength it gives reaches every object of that type that the map places (the overrides are
+      read before the objects). Terrain objects are not among the kinds that take a creation
       draw (Terms). A cell that is not legal is unspecified; our engine places nothing there and
       the importer warns (a departure).
     - **Smudges.** Each entry of the smudge list has the fields type, cell x, cell y and piece
@@ -1314,14 +1359,14 @@ read, in the placement order of claim 43, while the game's set-up at game start 
       of whether those cells may take a smudge. An entry with an x field but no y field is
       unspecified in the original; our engine places nothing and the importer warns (a departure).
     - Backing: `measurable` (scenario M22: variant A for the terrain objects, variant B for the
-      smudge fields and covered cells, variant C for the untested placement). Two parts are
-      `unmeasured`: the terrain object type created from an unknown name, because such a type has
-      no artwork and no rules data, so nothing on screen shows it, and whether it blocks its cell
-      belongs to the terrain-object rules, which have no spec yet; and the terrain object's full
-      strength, because a terrain object shows no health bar and the hits it takes belong to
-      those same rules
-    - Confidence: high for the terrain-object key and value, medium for the smudge fields, the
-      covered cells and the untested placement
+      smudge fields and covered cells, variant C for the untested placement, variant D for the
+      starting health through the image frame). One part is `unmeasured`: the terrain object type
+      created from an unknown name, because such a type has no artwork and no rules data, so
+      nothing on screen shows it or its health −1, and whether it blocks its cell belongs to the
+      terrain-object rules, which have no spec yet
+    - Confidence: high for the terrain-object key and value and the starting health; medium for
+      the smudge fields, the covered cells and the untested placement, and for the health −1 of an
+      object whose type the map creates
 
 43. **Placement order.** The map's objects are placed kind by kind: terrain objects, then
     vehicles, then aircraft, then infantry, then buildings (each building's upgrades directly after
@@ -1463,16 +1508,25 @@ read, in the placement order of claim 43, while the game's set-up at game start 
       with first radius 4.
     - **The placement search** with first radius *r*₀, for the base unit and every other starting
       unit alike, uses this acceptance test: a cell *accepts* the unit when it is a usable cell
-      (the height-aware test of claim 4) and, in addition, either holds no infantry, vehicle,
-      aircraft or building or, for an infantry unit, has an infantry unit as its occupant nearest
-      to its centre. A cell that is not a legal cell is never usable, so it never accepts a unit,
-      not even as the first element *b* of the sequence. The search is one ordered sequence of
+      (the height-aware test of claim 4) and, in addition, either has no ground occupant (Terms)
+      or, for an infantry unit, has an infantry unit as its *nearest ground occupant*. The
+      nearest ground occupant is the one whose reference point (S-0204 claim 4: its position, or
+      the centre of a building's foundation), taken by its place within its own cell (Terms), lies
+      nearest to the cell corner: the one with the smallest distance ⌊*r*(*a*² + *b*²)⌋, where
+      (*a*, *b*) is that place, *r* the table square root (S-0204 claim 5 and its Formulas F1) and the
+      height plays no part (Formulas, *nearest ground occupant*). It is not measured to the cell's
+      centre. On a tie, the occupant that came into the cell last wins among infantry, vehicles
+      and aircraft, and any of them wins over a building; between buildings, the one that came
+      into the cell first wins. Objects on a bridge deck are never ground occupants, so on a
+      bridge cell only what stands on the ground under the deck counts. A cell that is not a legal
+      cell is never usable, so it never accepts a unit, not even as the first element *b* of the
+      sequence. The search is one ordered sequence of
       elements, each with the draws that belong to it, defined by the table below. The sequence
       is the start element, followed by the blocks of the radii *r*₀, *r*₀ + 1, …, 31 in that
       order, where the block of radius *r* is *ρ*(*r*), *F*(*r*, 0), …, *F*(*r*, 7),
       *G*(*r*, 0), …, *G*(*r*, 7). The unit is put at
       the centre of the first candidate in that sequence that accepts it, at the terrain's height
-      there, with body facing 0. A candidate equal to *b* other than the start element never takes
+      there (on the ground, under the deck of a bridge cell), with body facing 0. A candidate equal to *b* other than the start element never takes
       the unit. The draws taken are those of every element of the sequence up to and including
       the candidate that takes the unit, a candidate equal to *b* that is passed over included,
       and none after it. When no candidate accepts the unit, the placement fails (claim 45), and
@@ -1500,13 +1554,18 @@ read, in the placement order of claim 43, while the game's set-up at game start 
     - Backing: `measurable` (scenario M26: the cells, the standing positions and the count of raw
       values taken; variant C for the land type being ignored while the map loads; variant D for
       radii beyond the first and the second pass, which pre-placed objects around the base cell
-      force; variant E for a placement that fails). The base unit's search is `unmeasured`: on a
+      force; variant E for a placement that fails; variant J for the nearest ground occupant
+      measured to the cell corner and its tie rule; variant K for deck objects not counting and
+      the unit standing under the deck). The base unit's search is `unmeasured`: on a
       legal base cell no established case makes the direct placement fail, and on a base cell
       that is not legal the original's result is unspecified (above), so no setup gives a result
       of the original to compare with.
-    - Confidence: high for the search's order, radii, clamping and draws; medium for the
-      acceptance rule (the occupant test), for the placement always succeeding while the map
-      loads, and for the visceroid draw being the only draw of a vehicle's placement
+    - Confidence: high for the search's order, radii, clamping and draws, and for the cell
+      corner as the point the nearest ground occupant is measured to (revision 12 corrects the
+      earlier "nearest to its centre"); medium for the rest of the acceptance rule (which objects
+      are ground occupants, a building in every cell of its foundation, the tie rule, the deck),
+      for the placement always succeeding while the map loads, and for the visceroid draw being
+      the only draw of a vehicle's placement
 
 ## Formulas
 
@@ -1527,6 +1586,18 @@ direction *e* with unit step (*s*ₓ, *s*ᵧ) (glossary *step direction*, both c
 the first-pass candidate is (clamp(*b*ₓ + *r*·*s*ₓ), clamp(*b*ᵧ + *r*·*s*ᵧ)) with clamp(*v*) =
 min(max(*v*, 1), W + H − 1). The second-pass candidate replaces its x by clamp(x + *a*ₓ) when
 *p*ₓ < 50 and by clamp(x − *a*ₓ) otherwise, and its y likewise with *a*ᵧ and *p*ᵧ. Integers, exact.
+
+**Nearest ground occupant** (claim 46). For a ground occupant whose reference point is (X, Y, Z)
+leptons (S-0204 claim 4), *a* = X mod 256 and *b* = Y mod 256 (least non-negative residues; on a
+legal cell X and Y are positive), and its distance is δ = ⌊*r*(*a*² + *b*²)⌋ with *r* the table
+square root of S-0204 (Formulas F1); *a*² + *b*² is an exact integer of at most 130050. Z plays no
+part. Number domain in the original: the root comes from the table of single-precision values of
+the distance sum below. Its argument here is an integer below 2²⁴, so, as stated there, the
+narrowing to single precision is exact and ⌊*r*(*a*² + *b*²)⌋ does not depend on the rounding mode
+in force. The nearest ground occupant has the smallest δ; ties as claim 46 says. Examples: an object
+at its cell's centre has *a* = *b* = 128 and δ = ⌊*r*(32768)⌋, at most 181 (S-0204 claim 5); a 2 × 2
+building's reference point is a cell corner, so it has δ = 0 in each of its four cells and is the
+nearest ground occupant there unless another occupant also has δ = 0.
 
 **Cell number decoding.** For an integer n, a signed 32-bit integer (a waypoint value read as an
 integer by S-0003 claims 3 and 4, or a cell-tag or terrain-object key read as its leading decimal
@@ -1700,6 +1771,7 @@ non-negative remainder. Integers, exact.
 | no-overlay value | 255 | overlay type stream value | |
 | no-tile marker | 65535 | tile number | in the terrain stream's tile number |
 | level height | 104 | leptons per height level | engine constant; see S-0101 |
+| cell animation displacement | 384 | leptons, along +x and along +y | claim 12: from the centre of the overlay's cell to the cell animation's position; engine constant |
 | water fill variants | 4 | tiles | water base tile + 0 … 3 |
 | fill base tiles before any theater is loaded | 0 | tile number | clear and water base tile alike; see quirk `quirks.stale_fill_tiles` |
 | overlay indices whose data value survives creation | 24, 25, 237, 238 | overlay list index | creation leaves the cell's data value unchanged (claim 12) |
@@ -1822,7 +1894,13 @@ Every quirk switch below defaults to the original (YR) behaviour described first
 - **`quirks.start_waypoint_gap`.** The start list skips undefined start waypoint markers, and the count K
   stops at the first gap (claim 17), so a gap shifts positions and creates random starts even when
   enough start waypoint markers exist further on. *Fixed behaviour:* position i is waypoint i whenever
-  waypoint i is defined, and only undefined waypoint markers become random.
+  waypoint i is defined, and only undefined waypoint markers become random. N stays max(P, K), with
+  K still counted consecutively from waypoint 0 as in claim 17, so the list has the same length and
+  the same number of random entries as with the switch on; only which positions they fill changes.
+  The random entries are found in increasing position order, each by claim 18 with its draws. In
+  claim 17's example (waypoint markers 0, 1, 3 and 5, 4 players) the list becomes [wp0, wp1,
+  random, wp3]. A defined start waypoint marker numbered N or higher is still not used. (A design
+  choice of our engine for the switched-off state; the original has no such state.)
 - **`quirks.lobby_counts_zero_waypoint`.** The lobby counts a start waypoint stored as 0 as defined,
   but the game treats it as undefined and gives that slot a random start (claims 15, 23). *Fixed
   behaviour:* the lobby uses the same "undefined" test as the game.
@@ -1831,7 +1909,11 @@ Every quirk switch below defaults to the original (YR) behaviour described first
   waypoint cells, projected onto the preview.
 - **`quirks.random_start_asymmetric_range`.** The random start candidate's y range runs 10 cells
   further than its x range and can leave the map (claim 18). *Fixed behaviour:* draw both
-  coordinates from 11 … W + H − 10. This changes which cells come out. Each attempt still takes two
+  coordinates from 11 … W + H − 10, in the original's order: the first ranged draw
+  R(11, W + H − 10) gives y and the second, over the same range, gives x, and the candidate is
+  (x, y). Each is one ranged draw by the range rule (Terms), and when W + H < 21 the upper bound
+  lies below the lower one and the range rule takes the two bounds in either order, as in Formulas
+  (*Random start candidate*). This changes which cells come out. Each attempt still takes two
   ranged draws, but the number of attempts can change, because a different candidate may need more
   or fewer retries to find a clear area.
 - **`quirks.double_start_resolution`.** Start positions are resolved in two phases from three start
@@ -1923,6 +2005,16 @@ Every quirk switch below defaults to the original (YR) behaviour described first
   with them (claim 46), with no draw. *Alternative:* it gets the standing position that S-0208
   claim 3 gives for a desired point of class centre, with that claim's draw, and a cell with no
   free position for it does not accept it. The draws of the step then differ from the original's.
+  In the alternative, the placement search's acceptance test (claim 46) gains one condition for an
+  infantry unit: S-0208 claim 3 must give the unit a position in the cell, judged on the cell's
+  ground occupancy record. That is the case unless the first row of that claim's table applies
+  (vehicle-present or object-present without an open gate) or the cell's right, left and bottom
+  positions are all taken. Every row of S-0208's table O for class centre holds those same three
+  positions, so whether a position exists does not depend on the draw, and testing a cell takes
+  no draw. The draw R(0, 3) of S-0208 claim 3 is taken once, on the cell that accepts the unit,
+  right after the draws of the search element that reached that cell and before the next unit's
+  draws; the unit then stands at the position that draw gives. (A design choice of our engine for the
+  switched-off state.)
 - **Empty infantry pool when infantry is due** (departure, no switch). When a house's remaining
   budget is at or below trunc(*B* / 3), or its vehicle pool is empty, the original takes the next
   unit from the infantry pool even when that pool is empty, with an unspecified result. Our engine
@@ -2073,7 +2165,9 @@ Keys from other files that this spec relies on (theater file and rules file):
 | theater file [General] WaterSet | tileset whose first tile is the water base tile (claim 6); ignored for theater 5 | integer tileset number | none: water base tile −1 |
 | theater file [TileSetNNNN] TilesInSet, LastTilesInSet | actual tile count C and authored tile count A of a tileset (Formulas, tile translation) | integer | A absent: no translation pair for that tileset |
 | rules overlay type: Crate | crate type (claim 12) | boolean | not a crate type |
-| rules overlay type: its cell-animation key | cell animation (claim 12) | animation type name | none |
+| rules overlay type: CellAnim | the overlay type's cell animation (claims 12 and its *Cell animations* part; Terms). The importer's "has artwork or a cell animation" test of claim 12 reads this same value. The name is compared without regard to letter case; a name that is not yet an animation type creates one (S-0004 claim 13 and its Import mapping). The values <none> and none (any letter case) mean no cell animation and clear a value an earlier layer gave | animation type name (string) | none when the type is created; a layer that omits the key or gives it an empty value keeps the value in force (S-0006 claim 3) |
+| rules terrain type: Strength | the terrain type's strength, and so a map-placed terrain object's starting health (claim 42); how it is read and filled is S-0102's (claim 23) | integer, health points | unset; filled from the game-wide tree strength (S-0102 claim 23) |
+| rules [General] TreeStrength | the game-wide tree strength that a terrain type without a strength takes (claim 42; S-0102 claim 23) | integer, health points | 25 (S-0102) |
 | rules country: MultiplayPassive | passive house (claims 19, 28) | boolean | false when the country is created; when a later read or rules layer omits the key, the value already in force is kept (S-0006 claim 3) |
 | rules smudge type: Width, Height | the w × h cells a smudge covers (claim 42) | integers | 1 and 1 |
 | rules [General] BaseUnit | the base-unit list (claim 45): its first type that a house's country owns is the house's base unit; its types are left out of the budget pool and the vehicle pools | list of vehicle type names | empty: no base unit |
@@ -2356,6 +2450,36 @@ that the stream can be computed by S-0202 and compared with what the game shows 
   cell lacks *T*, or the part-B cell holds *T* while the part-C cell does. *Inconclusive if* the
   part-C cell keeps type 96 (then a placement does not replace an end-row overlay, and part B
   shows nothing).
+- **M6e, cell animation position and start event (claim 12, *Cell animations*).** Format version 4,
+  a 30 × 30 flat clear map at level 0, revealed to the human player. *T* is an overlay type as in
+  M6d (with artwork, not a resource, not a wall, no cell animation in the rules data, not a crate
+  type) and *A* a stock animation type with a long, clearly visible first image frame and no
+  follow-up type. The map's override sections (S-0006) give *T* the cell animation *A* (Import
+  mapping) and give *A* the resource chain-reaction setting of S-0109 (claim 13; its Import
+  mapping). The overlay type stream puts *T* on cell (12, 12) in parts A to C. Part A: one ore
+  cell at (14, 14) and no other resource within 6 cells. Part B, the control: one ore cell at
+  (12, 15) instead, which touches neither (12, 12) nor (14, 14), and none at (14, 14). Part C: as
+  part A without *A*'s chain-reaction setting. 1 run per part, read from a save at the first tick
+  and watched on screen.
+  *Expected:* in every part the animation appears in the screen column of cell (12, 12), one and
+  a half cell heights below that cell's centre (at the top corner of cell (14, 14)), and its start
+  sound plays as the game starts. In part A the ore at (14, 14) is gone at the first tick; in
+  parts B and C the ore cell is still there. *Falsified if* the animation appears centred on
+  cell (12, 12), part A's ore remains while part C's also remains, or part B's ore at (12, 15) is
+  gone (the chain reaction acted on another cell than (14, 14)). *Inconclusive if* part C's ore is
+  gone too (then something other than the chain reaction removed it).
+  Part D, order of draws, with the random-state recorder: *A* without the chain-reaction setting
+  but with a random rate pair that gives a range of 3 values (S-0109 claim 3, so its stage-delay
+  draw may take more than one raw value), and *T* placed on the attaches-to cell of a stock tile
+  whose tile animation (S-0010 claim 19) also has such a pair, of another range, and no other
+  start-event effect. Nothing else on the map draws in the overlay type stream's part of the
+  load. 3 runs. From the recorded seed, predict the load's draws twice: with the cell
+  animation's draw first and with the tile animation's draw first. Each prediction gives the cell
+  animation's stage delay and the stream position at the first tick (the tile animation itself
+  may be removed later in the load, S-0010 claim 19, but its draw stays taken). Read the cell
+  animation's first image-frame change from saves at consecutive ticks, and the stream position
+  with the recorder. *Expected:* the prediction with the cell animation first holds. *Falsified if* only the other prediction holds. *Inconclusive if*
+  the two predictions coincide (choose other seeds or ranges).
 - **M7, waypoint encoding and home (claims 15, 16).** A map with waypoint 699 undefined and no home
   setting. 1 run. *Expected:* the initial view, before it moves to the player, is centred on cell
   (⌊(W+H)/2⌋, ⌊(W+H)/2⌋). A variant defines waypoint 699 at a legal cell at least 5 cells from that
@@ -2933,6 +3057,12 @@ that the stream can be computed by S-0202 and compared with what the game shows 
     (13, 13) are water cells and the cells around them are clear ground. *Expected:* the smudge
     covers all four cells, the water cells included, since its placement tests no cell (claim 42).
     *Falsified if* it is missing or covers only the clear cells.
+  - (D) Starting health of a terrain object (claim 42). Two maps, each with one terrain-object
+    entry for a stock tree type *K* that is not animated and has two image frames, at (12, 12).
+    The first map's override section gives *K* the strength 1; the second gives it the strength 5.
+    *Expected:* the tree shows image frame 1 on the first map and image frame 0 on the second
+    (S-0102 claim 23: frame 1 below a health of 2), at the first tick. *Falsified if* both show the
+    same image frame. S-0102's scenario D27 tests the game-wide tree strength and its quirk.
 - **M23, heights, shared cells and placement order (claims 38, 43).** A 20 × 20 flat clear map
   with one high bridge, revealed to the human player. 1 run per variant.
   - (A) A vehicle on a bridge cell with the bridge flag 1 and one with the flag 0. *Expected:* the
@@ -3112,6 +3242,35 @@ that the stream can be computed by S-0202 and compared with what the game shows 
     the first tick equals the prediction without the final draw R(0, 65535) of claim 20.
     *Falsified if* a starting unit of the neutral house appears, or the stream position fits the
     prediction with the final draw.
+  - Variant J, the nearest ground occupant (claim 46): M26's map with the bases setting off and,
+    on base cell 0, two objects of the neutral house (by its country name, claim 27): a vehicle,
+    which stands at the cell's centre (claim 38), and an infantry unit. Every placement search of
+    house 0 starts at base cell 0, so the cell's acceptance decides whether house 0's infantry
+    units stand there. Before running, check from the prediction (with the base cell refused)
+    that house 0 buys at least one infantry unit. 3 runs per part.
+    (J1) The infantry unit's standing position number is 1, the top position (S-0208 claims 5
+    and table P), whose place in the cell is (64, 64). Measured to the cell corner it is nearer
+    than the vehicle (⌊*r*(8192)⌋ against ⌊*r*(32768)⌋), so it is the nearest ground occupant.
+    *Expected:* every infantry unit of house 0 stands on base cell 0, at its centre position, and
+    no vehicle of house 0 does. (J2, control) Standing position number 4, the bottom position
+    (192, 192), farther from the corner than the vehicle. *Expected:* no starting unit of house 0
+    stands on base cell 0. (J3, tie) Standing position number 0, the centre: both objects have
+    the same distance, and the infantry unit came into the cell after the vehicle (claim 43), so
+    it wins the tie. *Expected:* as in J1.
+    *Falsified if* in J1 no infantry unit of house 0 stands on base cell 0 (the reading "nearest to
+    the centre", by which the vehicle at the centre would be nearest), or in J3 none does (the tie
+    going to the occupant that came first), or in J2 any does. The stream position at the first
+    tick equals the prediction made with the rule of claim 46 in every part.
+  - Variant K, bridge cells (claim 46): M26's map with a high bridge whose cells under the deck
+    are clear ground (check in the theater data that such a bridge exists; otherwise the variant
+    is not run), with start waypoint marker 0 on a bridge cell of it. The bases setting is off.
+    (K1) A vehicle of the neutral house stands on the deck at base cell 0 (bridge flag 1, claim
+    38). *Expected:* house 0's first budget unit stands on base cell 0, on the ground under the
+    deck, with no search draw. (K2, control) The same vehicle with bridge flag 0, on the ground.
+    *Expected:* house 0's first budget unit is a vehicle and stands on the cell that the
+    placement search predicts, not on base cell 0. 3 runs each. *Falsified if* in K1 the first
+    budget unit stands anywhere but on the ground of base cell 0, or in K2 it stands on base
+    cell 0.
 
 ## Open questions
 
