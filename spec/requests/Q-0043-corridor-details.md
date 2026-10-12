@@ -1,9 +1,9 @@
 ---
 id: Q-0043
 title: Corridor details S-0212 r15 leaves open (end of the coarse search, a bridge's axis, the exemption's layers)
-status: open
+status: answered
 related: [S-0212, S-0211]
-answered-by: []
+answered-by: [S-0212]
 ---
 
 ## Need

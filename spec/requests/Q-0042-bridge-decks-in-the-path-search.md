@@ -1,9 +1,9 @@
 ---
 id: Q-0042
 title: Bridge decks in the path search (the height rule's 4-level step, the reference level, bridge links)
-status: open
+status: answered
 related: [S-0212, S-0209, S-0207, S-0211]
-answered-by: []
+answered-by: [S-0212]
 ---
 
 ## Need

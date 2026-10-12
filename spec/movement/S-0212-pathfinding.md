@@ -2,13 +2,13 @@
 id: S-0212
 title: Pathfinding (observable behaviour)
 topic: movement
-revision: 16
+revision: 17
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-10
+approved-on: 2026-10-12
 measurements: []
-requests: [Q-0017]
+requests: [Q-0041, Q-0042, Q-0043]
 supersedes: []
 ---
 
@@ -34,7 +34,8 @@ cell*, *movement zone*, *locomotor*, *game minute*, *map size*, *round-toward-ze
 *type kind*, *quirk switch*, *step direction* (written *d*) and *follower car* (with its *leader*
 and *car chain*) are used as in the glossary.
 
-Terms from other specs, all of them approved and cited by claim. S-0003 (value forms), S-0006
+Terms from other specs, cited by claim. All of them are approved, except S-0010 claim 25 and the
+bridge conditions of S-0010 claim 17, which enter the spec folder together with this revision. S-0003 (value forms), S-0006
 (rules layering) and S-0009 (map file semantics, which defines the *waypoint marker*) are cited by
 claim, and S-0104 (lighting) for the *ion storm*, a global effect (table T5). The others give:
 - From S-0201 (game speed and tick rate): the **tick number** of a tick (its Terms and claim 1).
@@ -83,9 +84,14 @@ claim, and S-0104 (lighting) for the *ion storm*, a global effect (table T5). Th
   a unit is ordered, and when an order applies, belong to S-0213 and S-0214.
 - From S-0010 (theater and tileset semantics): the **destroyable-cliff role** of a theater's tiles
   (its claim 4 and table R), the *bridge* and *wooden bridge* roles of the same table (Terms,
-  *bridge ends*), and the burrowing test of its claim 17, which is the further test of claim 25.
-- From S-0214 (order targeting rules): the *destroyable-cliff cell*, a cell whose tile is the
-  first tile of that role or the tile after it (its Terms).
+  *bridge ends*), the burrowing test of its claim 17, which is the further test of claim 25, and
+  the **bridge spans** of its claim 25 (its Terms: *bridge span*, *high span*, *low span*, each with
+  a *start cell* and a *far end*), which are this spec's bridge links (claim 3).
+- From S-0009 (map file semantics): the *visiting order* of the map's cells (its claim 3) and the
+  order of the overlay type stream (its claim 12: increasing y, and within one y increasing x).
+- From S-0214 (order targeting rules): the *free mover* of its Terms, which decides the no-move
+  rows of table T5, and the *destroyable-cliff cell*, a cell whose tile is the first tile of that
+  role or the tile after it (its Terms).
 
 Terms specific to this spec:
 
@@ -98,7 +104,31 @@ Terms specific to this spec:
 - **Vein-hole field:** the vein overlay that a vein-hole object spreads around itself and that grows
   and shrinks during play. Stock data is not known to use it.
 - **Chebyshev distance** between cells (x₁, y₁) and (x₂, y₂): max(|x₁ − x₂|, |y₁ − y₂|), in cells.
-- **Bridge cell:** a cell that carries a high bridge's bridge deck.
+- **Bridge cell:** a cell that carries a high bridge's bridge deck: a high-bridge cell of S-0211
+  claim 15.
+- **Deck-entry mark:** a yes-or-no mark of a cell, kept by the cells that an intact high-bridge
+  overlay marks (S-0211 claim 15, with its marking direction *d*). Of the four cells that overlay
+  marks, it sets the mark on the cell one step against *d*, on its own cell and on the cell one step
+  along *d*, and clears it on the cell two steps along *d*. When several overlays mark one cell, the
+  one placed last, in the order of the overlay type stream (S-0009 claim 12), decides. A destroyed
+  high bridge clears the mark on the cells whose high-bridge marking it clears (S-0211 claim 15 d),
+  and a rebuilt one sets it again as at map load. So of a high bridge's deck, normally 4 cells wide
+  across its axis, 3 rows carry the mark. In this spec only the height rule of claim 10 reads it.
+- **Bridge axis** of a bridge cell: along cell x or along cell y. It is set on all four cells an
+  intact high-bridge overlay marks: along cell x when the overlay's marking direction is step
+  direction 0 (indices 24 and 237 of S-0211 claim 15, which mark cells along y), along cell y when
+  it is step direction 6 (indices 25 and 238). When several overlays mark one cell, the one placed
+  last decides, as for the deck-entry mark. At game start the band of a low span (S-0010 claim 25)
+  also sets it on each of its four cells, bridge cells included: along cell x for a span running
+  east, along cell y for one running south; where bands of several spans cover one cell, the span
+  whose start cell comes first in the visiting order decides. The axis is read by the bridge ends
+  and the anchors (F8).
+- **Bridge link:** a link (claim 3) of a bridge. Its two **end cells** are a bridge span's start cell
+  and far end (S-0010 claim 25), and its **line** is the row or column of cells from one to the
+  other, along cell x for a span running east and along cell y for one running south. A cell lies
+  *within* *k* *cells of the link* when it lies between the two end cells along the line (both end
+  cells included) and at most *k* cells to the side of the line. The link's *first end* is the
+  span's start cell, its *second end* the far end.
 - **Search layer:** a bridge cell is two places for the search: its ground and its deck. The deck
   layer sits 4 height levels above the cell's height level. Every other cell has only the ground
   layer.
@@ -117,8 +147,7 @@ Terms specific to this spec:
   across (claim 13b). A connection is either *straight* or *diagonal* (claim 13b); entering a
   sector across a diagonal connection costs slightly more (F9).
 - **Bridge ends** of a bridge cell *X*: walking from *X* along its bridge, one cell at a time, in
-  each of the two directions of the bridge's axis (along cell x for a bridge running east–west,
-  along cell y for one running north–south; the original keeps the axis with the bridge's cells),
+  each of the two directions of *X*'s bridge axis (Terms),
   the first cell that is not a bridge cell, provided its tile is one of the 16 tiles of the bridge
   role or of the wooden-bridge role of its theater (S-0010 claims 4 and 5, table R) and its land type
   (S-0211) is not rock. A direction whose first such cell fails this condition has no bridge end.
@@ -136,7 +165,8 @@ Terms specific to this spec:
 - **Drive locomotor, walk locomotor:** the locomotor of driving vehicles and the locomotor of
   walking infantry (glossary *locomotor*).
 - **Corridor exemption:** a ground-layer cell is exempt when one of its eight neighbours holds a
-  vehicle, an infantry unit, a terrain object or a wall section (claim 13).
+  vehicle, an infantry unit, an aircraft, a terrain object or a wall section, on either layer
+  (claim 13).
 - **Corridor:** at each level, the chain of sectors, from the start's sector to the destination's,
   that the coarse search of claim 13 selects.
 - **Cost unit:** the unit of every path cost in this spec, in the cell search and in the coarse
@@ -217,6 +247,21 @@ Terms specific to this spec:
    above. A **link** (a bridge connection or a tunnel connection, while it is enabled) makes the
    regions of its two end cells adjacent.
 
+   *Bridge links.* The bridge links are the bridge spans that S-0010 claim 25 finds at game start,
+   one link per span, created in the visiting order of their start cells (S-0009 claim 3). A link
+   is enabled at game start when its span is high and not enabled when it is low. So the two end cells
+   of an intact high bridge's link lie in one reach region of every movement zone that can use
+   both of their regions, whatever lies under the bridge. In play, the bridge specs name a cell for
+   each section of a high bridge that is lost or repaired, and the bridge links change as follows:
+
+   | Bridge links within 3 cells (Terms) of the named cell | Result |
+   |---|---|
+   | at least one | each of them stops being enabled when the section is lost, and becomes enabled when it is repaired |
+   | none | every bridge link is replaced by the links of the spans that S-0010 claim 25's rules for the spans and for high and low find on the map as it stands at that moment. Each new link within 3 cells of the named cell stops being enabled or becomes enabled as in the row above. When no new link lies within 3 cells, no link changes |
+
+   Which cell each destruction or repair names belongs to the bridge specs. Claim 5 brings
+   connectivity up to date after each of these changes.
+
    The relation is symmetric: a step of 2 or 3 levels along cell x joins the two cells whichever of
    them is higher. The original builds regions by labelling the map in a fixed order, and in rare
    configurations its result differs from this rule: a region can stay separate from a neighbour
@@ -228,12 +273,16 @@ Terms specific to this spec:
    2 or more is affected in the same way: the original records it in some labelling orders and not
    in others. Departure D4 (accepted by the project lead, 2026-10-10) makes our engine follow the
    rule.
-   - Backing: `measurable` (scenario P4, maps F, F3, F5, I and H)
+   - Backing: `measurable` (scenario P4, maps F, F3, F5, I and H; map K for a high bridge's link,
+     and P8 for a link that stops being enabled). `unmeasured` for the new search of spans in play
+     and for a link enabled by a repair: which cell a destruction or repair names belongs to the
+     bridge specs, and stock play gives no way to make that lookup find no link
    - Confidence: high for the height limits 1 and 3. Medium that the rule matches the original's
      reach regions on stock maps for movement zones that do not allow the category *blocked*. Low
      for the zones that allow it (subterranean and fly), where the original's labelling departs from
-     the rule far more often. Low for which bridge connections exist and when they are enabled,
-     which belongs to the bridge specs
+     the rule far more often. Medium for which bridge links exist and that a high span's link is
+     enabled at game start. Low for the changes in play, whose triggering cells belong to the
+     bridge specs
 
 4. **Reach regions.** For a movement zone *Z*, each region gets the zone table's answer for its
    category. Regions whose answer is *yes* and that are adjacent to one another, directly or through
@@ -243,15 +292,37 @@ Terms specific to this spec:
    off-map cells. An off-map cell, a cell of no reach region and a cell of a reach region all count
    as lying in different reach regions. Each movement zone has its own reach regions, all built from
    the same regions.
+
+   *A bridge cell read for its deck.* Where this spec reads a bridge cell's reach region *for its
+   deck* (claims 6, 14 and 25 say when), the cell stands for the deck and gets the reach region of
+   another cell, found through the first bridge link, in creation order (claim 3), that the bridge
+   cell lies within 1 cell of (Terms):
+
+   | Link | Reach region of the deck |
+   |---|---|
+   | found, enabled | that of the link's first end |
+   | found, not enabled | going from the bridge cell one cell at a time east along cell x when the link's line runs along cell x, or south along cell y when it runs along cell y, take the first cell that is not a bridge cell: that of the link's second end when that cell's tile is one of the 16 tiles of the bridge or wooden-bridge role of its theater and its land type is not rock, otherwise that of the link's first end |
+   | none found | a reach region of its own: such a deck counts as lying in the same reach region as any other deck read with no link found, and in a different one from every other cell, off-map cells and cells of no reach region included |
+
+   Every other read of a bridge cell, and every read of another cell, takes the cell's own reach
+   region as above, which for a bridge cell is that of its ground.
    - Backing: `measurable` for reach regions and their differences between cells inside the usable
-     area (scenarios P3, P4), and for a destination that is off-map or in no reach region while the
-     unit stands in a reach region (P11 run 3). `unmeasured` for the two shared comparisons. Two
+     area (scenarios P3, P4), for a destination that is off-map or in no reach region while the
+     unit stands in a reach region (P11 run 3), and for a deck read through an enabled link (P4 map
+     K run 2). `unmeasured` for the two shared comparisons. Two
      off-map cells are compared only when the unit's own cell is outside the usable area, and then
      the second exception of claim 6 skips the comparison. Two cells of no reach region are compared
      only when the unit stands on a cell that its own movement zone cannot use, which no order or
      map placement of the measurement setup is known to bring about. For the same reasons an off-map
-     cell is never compared with a cell of no reach region
-   - Confidence: medium (the two shared comparisons: low)
+     cell is never compared with a cell of no reach region. `unmeasured` for a deck read through a
+     link that is not enabled or with no link found: the first needs a bridge cell within 1 cell of
+     a link that is not enabled, such as a low span laid beside a high bridge, or a high bridge whose
+     link a destruction has disabled while some of its deck stands, which belongs to the bridge
+     specs; the second needs a deck cell more than 1 cell to the side of every link's line, which
+     depends on where a map's end tiles (S-0010 table B) and overlays lie, and no scenario of this
+     spec places one at will
+   - Confidence: medium (the two shared comparisons: low; the deck read: medium for an enabled link,
+     low for the other two rows)
 
 5. **When connectivity is recomputed.** After each of the following changes of the map content, a
    path computation sees the reach regions and the corridors that the new map content gives, even
@@ -289,8 +360,9 @@ Terms specific to this spec:
 ### The reachability gate
 
 6. **No search across reach regions.** Every path computation compares the reach region
-   (claim 4) of the unit's cell with that of the destination cell as ordered, both for the unit's
-   movement zone and search layer. When they differ, no search is made: the unit gets no path, and
+   (claim 4) of the unit's cell with that of the destination cell as ordered, for the unit's
+   movement zone. The unit's cell is read for its deck (claim 4) when the unit is on a bridge deck,
+   and the destination cell when it is a bridge cell (for an aircraft as well). When they differ, no search is made: the unit gets no path, and
    the gate-failure row of claim 23 applies. Only a destination that passes the comparison can be
    replaced by a nearby cell (claim 24); one that fails it never is. The comparison is
    skipped (the destination counts as reachable) in three cases, the *exceptions* of this claim:
@@ -322,6 +394,20 @@ Terms specific to this spec:
    every unit that is not an aircraft). A candidate step onto a bridge cell is on that cell's ground
    layer when the height level of the pair being expanded is within 1 of the cell's height level,
    and on its deck otherwise.
+
+   Each pair has a height level: its cell's height level, plus 4 on a deck. The start pair is on the
+   deck when the unit is on a bridge deck and is not an aircraft. For a type marked as a train
+   standing on a bridge cell, let *H*₀ be the start pair's height level by these rules and *z* the
+   train's world height in leptons. The start pair's height level is then
+
+   > *H* = *H*₀ + 4 when |trunc(*z* / 104) − *H*₀| > 2, and *H* = *H*₀ otherwise
+
+   where 104 leptons is the world height of one height level (glossary), trunc converts the
+   quotient toward zero to an integer, and every other operation is exact integer arithmetic. So
+   a train at deck height that is not marked as on the deck still starts on the deck. The entry outcome of a candidate (S-0209) is asked for a step from
+   the cell of the pair being expanded, in the candidate's step direction, with the height level of
+   that pair as the mover's reference height level. The height rule of claim 10 is part of that
+   outcome.
 
    The estimate *h* is the table square root (S-0204) of the squared straight-line distance in
    cells (F2), while a straight and a diagonal step cost about the same (F1). *h* therefore
@@ -399,20 +485,48 @@ Terms specific to this spec:
      for the unmarked entrance, and the fourfold cost through claim 19 (scenario P14)
    - Confidence: medium for the costs. Low that no rule sets the mark permanently
 
-10. **Height rule for a step.** A step between two cells has outcome *blocked* when their height
-    levels differ by 2, 3, or more than 4. A difference of 1 is allowed only when the lower of the
-    two cells is a slope (a cell whose slope shape index, S-0211 Terms, is not 0), whichever of the
-    two the step starts from. A slope that is the higher cell of the pair does not count. A
-    difference of 4 is allowed only between a bridge deck and the ground at a bridge's end, in the
-    way the bridge specs define. A step that this rule refuses is *blocked* whatever occupies the
-    target cell. Only the two height levels and whether the lower cell is a slope count: the
-    slope's shape and which of its sides is raised play no part. Bridge ends aside, every step of
-    a route therefore changes the height level by at most 1, and each step up by one level needs a
-    slope as its lower cell. So a route that climbs from level *h* to level *h* + *n* passes
-    through a slope cell at each of the levels *h*, *h* + 1, …, *h* + *n* − 1, and a single slope
-    cell never leads onto ground 2 levels higher.
-    - Backing: `measurable` (scenario P4, maps A, C, C2, C3, I, F3 and K)
-    - Confidence: medium
+10. **Height rule for a step.** A step from a pair at cell *F* (claim 7) to a neighbouring cell *T*
+    compares two height levels: *T*'s height level, and *F*'s height level, which for a bridge cell
+    *F* is the level of its ground even when the pair is its deck. With Δ = level(*T*) − level(*F*):
+
+    | Δ | The step is allowed when | Layer of *T* entered (claim 7) |
+    |---|---|---|
+    | 0 | the pair is not a deck; or *F* is a bridge cell, the pair is its deck, and *T* is a bridge cell with the deck-entry mark (Terms) | *T*'s ground from a ground pair; *T*'s deck from a deck pair |
+    | +1 or −1 | the lower of the two cells is a slope (a cell whose slope shape index, S-0211 Terms, is not 0), whichever of the two the step starts from, from a ground pair and from a deck pair alike, with no deck-entry mark needed | as claim 7 gives: from a deck pair, *T*'s deck when *T* is a bridge cell (a deck laid over sloping ground), *T*'s ground otherwise (`quirks.deck_side_step_ground_level`) |
+    | +4 | *F* is a bridge cell and the pair is its deck: the step off a deck onto ground at deck level | *T*'s ground |
+    | −4 | *T* is a bridge cell with the deck-entry mark, from either layer of *F*: the step onto a deck from ground at deck level | *T*'s deck |
+    | 2, 3, 5 or more (either sign) | never | — |
+
+    A step that this rule refuses has outcome *blocked* whatever occupies *T*. Only the two height
+    levels, whether the lower cell is a slope, which layer the pair is on and the deck-entry mark
+    count: the slope's shape and which of its sides is raised play no part, and neither do the
+    tiles at a bridge's ends. In particular:
+    - A step of 4 levels off a deck needs nothing of *T*: any cell at the deck's level next to a
+      deck pair can be entered from it, sideways as well as at the bridge's ends. A step of 4 levels
+      onto a deck needs the deck-entry mark. So on level ground the deck of the row without the
+      mark (Terms) is never entered by a step, neither from the rest of the deck nor from ground at
+      deck level; only the ground under it is.
+    - From a deck pair a step to a cell at the level of the ground under the deck is refused unless
+      that cell is a bridge cell with the deck-entry mark. So a unit on a deck never steps sideways
+      onto the ground 4 levels below it, and a deck-to-deck step between cells of equal ground level
+      needs the mark. A deck-to-deck step between cells whose ground levels differ by 1 needs no
+      mark, only the slope condition.
+    - From a ground pair of a bridge cell (under the deck), the steps are those between ground
+      cells: Δ = 0 is always allowed, so a unit drives under a bridge as over open ground.
+
+    Away from bridges every step of a route therefore changes the height level by at most 1, and
+    each step up by one level needs a slope as its lower cell. So a route that climbs from level *h*
+    to level *h* + *n* passes through a slope cell at each of the levels *h*, *h* + 1, …,
+    *h* + *n* − 1, and a single slope cell never leads onto ground 2 levels higher.
+
+    Because a deck pair is judged by its cell's ground level, a unit on a deck may step sideways
+    onto a cell that is not a bridge cell, 1 level above or below the ground under the deck, when
+    the slope condition holds for the ground levels: it lands on that cell's ground and so drops 3
+    levels (Δ = +1) or 5 levels (Δ = −1) in one step (`quirks.deck_side_step_ground_level`, Edge
+    cases).
+    - Backing: `measurable` (scenario P4, maps A, C, C2, C3, I, F3 and K; map K2 for the deck rows)
+    - Confidence: high for the table and for the cells that carry the deck-entry mark. Medium that
+      no other condition of the original enters a step's height test in the search
 
 11. **A pair is recorded once.** The first time a search considers a (cell, search layer) pair as a
     candidate, it records the pair with that candidate's cost *g*, and the pair becomes *pending*. For
@@ -511,6 +625,14 @@ Terms specific to this spec:
       exception. While the limit has not been reached, continuing from an undercut route changes
       no sector's cost, since the cheaper route to the same sector came up first. Connections
       closed by the retry below are not used.
+    - **End of a level's search.** A level's search ends when the pending route taken next (the
+      cheapest, ties by claim 12a) is a route to the destination's sector: that route's chain of
+      sectors, from the start's sector to the destination's, is the level's corridor, and that route
+      is not continued from. A route to the destination's sector that is recorded but not yet taken
+      does not end the search, so a cheaper route to that sector found before it is taken still wins.
+      When several routes to the destination's sector are pending, the first one taken decides. A
+      route recorded while 9999 routes are pending is never taken, so it never ends the search. The
+      level's search fails when no route is pending.
     - The movement zone used here is the unit's own, except that an infantry type that is also a
       jumpjet type (Import mapping) always uses movement zone *infantry* for the coarse search of
       a path computation, while the reach regions of claims 6 and 14 and the free part of claim 13a
@@ -522,9 +644,12 @@ Terms specific to this spec:
       chose, not every sector it explored. At level 0 that is a chain of blocks of 2 × 2 cells.
       Ground-layer cells whose level-0 sector is off the corridor are not considered, except cells
       with the **corridor exemption**: a cell one of whose eight neighbours holds a vehicle, an
-      infantry unit, a terrain object or a wall section (placed by the map or built in play). A unit
-      counts in the cell it was last
-      recorded in, which follows it as it moves (Open questions). Bridge-deck cells are never
+      infantry unit, an aircraft, a terrain object or a wall section (placed by the map or built in
+      play). The exemption belongs to the cell, not to a layer: an object on a neighbour's bridge deck
+      gives it as one on that neighbour's ground does. A unit counts in the cell it was last
+      recorded in, from the moment it enters play, and that cell follows it as it moves (Open
+      questions). An aircraft counts like a vehicle, so one standing on the ground gives the
+      exemption; whether one in flight keeps giving it, and from which cell, is not established. Bridge-deck cells are never
       excluded this way. Consequently every ground-layer cell of a path *found* with a corridor lies
       in that chain or has the exemption (straightening, claims 17 and 18, may later move cells off
       it). In particular the first step of a path is normally not held to the corridor, because the
@@ -569,7 +694,7 @@ Terms specific to this spec:
       follows an abandoned corridor counts towards the 5. When the first coarse search fails, the
       single search without a corridor is the only cell search made, so the limit plays no part.
     - Backing: `measurable` through path shape and failure (scenarios P1, P10, P12). `unmeasured`
-      for the internal ordering of the coarse search and for the limit of 9999 pending routes, which
+      for the internal ordering of the coarse search, its end rule and for the limit of 9999 pending routes, which
       needs thousands of sectors reached at once, more than the maps of the measurement setup
       produce, and whose effect could not be told from a route choice. `unmeasured` for the corridor
       exemption: whether a found path needs an exempt cell off the chain depends on which chain the
@@ -578,7 +703,8 @@ Terms specific to this spec:
       and the secondary checks of P1 and P12 compare whole routes with it included, but neither is a
       test of the exemption alone
     - Confidence: medium for the overall scheme, the cost formula, the progress rule, the retry's
-      two branches and the corridor exemption. High for the limit of 5 cell searches and that the
+      two branches and the corridor exemption. High for the limit of 5 cell searches, the end of a
+      level's search, that the exemption ignores layers and that aircraft count, and that the
       threat term is 0 at level 0. Low for the coarse threat at levels 1 and 2 (F5), the per-category
       constants' effect, and for when a moving unit's recorded cell changes. The sectors and
       connections carry the confidence of claim 13b
@@ -661,10 +787,8 @@ Terms specific to this spec:
       cells in the same way, with the found cell in place of the start, which counts as on a bridge
       deck when it is a bridge cell. The corridor condition of claim 14 reads the coarse end cells.
 
-      The bridge's link is a link of a bridge whose two end cells lie on one line along cell x
-      or cell y with *X* between them along that line and at most 2 cells to the side of it. When
-      more than one link meets this condition, the original takes the first in the order in which
-      it creates links, and that order is not established (Open questions). With *o* the distance,
+      The bridge's link is the first bridge link, in creation order (claim 3: the visiting order of
+      the spans' start cells), that *X* lies within 2 cells of (Terms). With *o* the distance,
       signed, by which *X* lies to the side of the link's first end cell across that line, the two
       **lane cells** are the link's two end cells, each moved by *o* across the line. *Y* is the
       nearest cell that is not a bridge cell, going from *X* east along cell x for a link along
@@ -709,7 +833,7 @@ Terms specific to this spec:
     train never uses the corridor: before it has first entered the usable area the first condition
     fails, and afterwards it is in the corridor-disabling state. When
     the corridor is used and the reach regions of start and destination (the destination after
-    claim 24) differ, the path computation fails at once. That failure counts as a failed
+    claim 24) differ, read as in claim 6, the path computation fails at once. That failure counts as a failed
     search with the gate passed, so the search-failure rows of claim 23 apply. Without the corridor,
     the cell search runs over the whole map even when the reach regions differ.
     - Backing: `measurable` (scenario P11: run 1 for a unit that has not yet entered the usable
@@ -1201,12 +1325,12 @@ Terms specific to this spec:
 
     | User | Centre | Locomotion class | Movement zone | Reach region | In deck mode when | Height condition | Further test | Reference cell |
     |---|---|---|---|---|---|---|---|---|
-    | Destination substitution (claim 24) | the destination | the unit's | the simplified movement zone | that of the unit's cell, on its search layer, for the simplified zone | the unit is on a bridge deck | yes | for a unit of movement zone *subterranean*, as below | the unit's cell |
+    | Destination substitution (claim 24) | the destination | the unit's | the simplified movement zone | that of the unit's cell, read for its deck when the unit is on a bridge deck (claim 4), for the simplified zone | the unit is on a bridge deck | yes | for a unit of movement zone *subterranean*, as below | the unit's cell |
     | Scatter (S-0208 claim 13) | as S-0208 claim 13 says | the unit's | *normal* | none | the unit is on a bridge deck | yes | no | none |
-    | Move order onto a cell (S-0214 claim 11), when that claim uses the search, except the next row | the clicked cell | the unit's | own zone, *subterranean* counted as *normal*, and *fly* counted as *infantry* while an ion storm (a global effect, S-0104) is active | that of the unit's cell, on its search layer, for that zone | the centre is a bridge cell | yes | no | none |
-    | No-move order onto a cell (S-0214 claim 11) by a unit that is in the air, travels underground, is of a jumpjet infantry type (no ion storm active) or is an aircraft | the clicked cell | the unit's | as in the row above | none | the centre is a bridge cell | yes | for a unit of movement zone *subterranean*, under a further condition of the unit's state that is not established | none |
-    | Move order onto an object (S-0214 claim 11), when that claim uses the search, except the next row | the object's cell | the unit's | own zone, *subterranean* counted as *normal* and *fly* as *infantry*, whether or not an ion storm is active | that of the unit's cell, on its search layer, for that zone | the centre is a bridge cell | yes | no | none |
-    | No-move order onto an object (S-0214 claim 11) by a unit that is in the air, travels underground, is of a jumpjet infantry type (whether or not an ion storm is active) or is an aircraft | the object's cell | the unit's | as in the row above | none | the centre is a bridge cell | yes | as in the no-move row for a cell | none |
+    | Move order onto a cell (S-0214 claim 11), when that claim uses the search, except the next row | the clicked cell | the unit's | own zone, *subterranean* counted as *normal*, and *fly* counted as *infantry* while an ion storm (a global effect, S-0104) is active | that of the unit's cell, read for its deck when the unit is on a bridge deck (claim 4), for that zone | the centre is a bridge cell | yes | no | none |
+    | No-move order onto a cell (S-0214 claim 11) by a free mover (S-0214 Terms: a unit that is in the air, is of movement zone *subterranean* whatever its state, is of a jumpjet infantry type with no ion storm active, or is an aircraft) | the clicked cell | the unit's | as in the row above | none | the centre is a bridge cell | yes | for a unit of movement zone *subterranean* that is below the ground surface when the search is made (below) | none |
+    | Move order onto an object (S-0214 claim 11), when that claim uses the search, except the next row | the object's cell | the unit's | own zone, *subterranean* counted as *normal* and *fly* as *infantry*, whether or not an ion storm is active | that of the unit's cell, read for its deck when the unit is on a bridge deck (claim 4), for that zone | the centre is a bridge cell | yes | no | none |
+    | No-move order onto an object (S-0214 claim 11) by a unit that is in the air, is of movement zone *subterranean* whatever its state, is of a jumpjet infantry type (whether or not an ion storm is active) or is an aircraft | the object's cell | the unit's | as in the row above | none | the centre is a bridge cell | yes | as in the no-move row for a cell | none |
     | Rally point (S-0213 claim 20) | the clicked cell | *foot*; *amphibious* for a naval factory; *winged* for an aircraft factory | *normal*; *amphibious-crusher* for a naval factory; *fly* for an aircraft factory | that of the building's own cell for that zone | the centre is a bridge cell | no | no | none |
 
     A cell **qualifies** when all of these hold:
@@ -1228,15 +1352,21 @@ Terms specific to this spec:
       Bridge cells may qualify in every use of the search,
     - when the user asks for it, it passes the *further test* of a cell, which is the burrowing test
       of S-0010 claim 17: the test of whether a tunnelling unit may dig in or come up on the cell.
-      Every cell outside the usable area passes it. A cell inside it passes only when its tile
-      belongs to a tileset with the allow-burrowing flag, it is flat (slope shape index 0), it is
-      not a bridge cell, and its ground layer holds no building and no terrain object; the
-      original also refuses some other cells of a bridge's structure, by a mark it keeps on them that
-      was not identified further (S-0010 owns the full rule). Claim 24 asks for it only for a unit of movement zone
-      *subterranean*, and only when the destination itself passes the same test. It is one test of
-      a cell, applied first to the destination: when the destination passes it, every candidate cell
-      must pass it too and the estimate *E* of claim 24 uses movement zone *normal*; when the
-      destination fails it, neither applies.
+      S-0010 claims 17 and 25 give the whole test, among its conditions the tileset's
+      allow-burrowing flag, a flat cell, and the bridge cells and bridge-body marks (the band of a
+      low span and the cells of a destroyed high bridge) that refuse it. This spec adds no condition
+      of its own. Two users ask for it, in different ways:
+      - Claim 24 asks for it only for a unit of movement zone *subterranean*, and only when the
+        destination itself passes the same test. The destination's own result decides both: when
+        the destination passes, every candidate cell must pass too and the estimate *E* of claim 24 uses movement zone
+        *normal*; when it fails, neither applies.
+      - The no-move rows of table T5 ask for it when the unit is of movement zone *subterranean* and
+        is below the ground surface at the moment the search is made: its world height is less than
+        the world height of the ground at its position, counting a bridge deck's height when the
+        unit is on one. That is the case while it travels underground and while it is partway into
+        digging in or coming up. Here the clicked cell's own result does not decide whether the test applies: every candidate cell,
+        the centre included, must pass, whether or not the clicked cell passes. A subterranean unit
+        on the surface, and every other free mover, gets no further test.
 
     For locomotion class *winged*, only the first condition, the height condition and the further
     test apply: the reach region, the class rule and the occupancy record are not consulted. In
@@ -1270,11 +1400,10 @@ Terms specific to this spec:
       runs 1, 2, 4, 8 and 8b), for the occupancy condition (P7 runs 1, 2, 8 and 8b, P16), for the
       class rule with walls (P7 run 9, P16) and for the choice without a reference cell (P16, runs
       (s), (u) and (r), which also test the parameters of table T5 for a scatter, a move order onto
-      an unreachable cell and a rally point). `unmeasured` for the other rows of T5 (the no-move
-      orders of units in the air, underground or of a jumpjet type, and orders onto an object):
-      they differ from the move-order row only in parameters that need a flying, underground or
-      jumpjet unit next to occupied cells, and the state under which they ask for the further test
-      is not established.
+      an unreachable cell and a rally point), and for the further test of the no-move row for a
+      cell, with the state that decides it (P16 run (t), test data). `unmeasured` for the other
+      parameters of the no-move rows and for the rows of orders onto an object: they differ from the
+      move-order row only in parameters that need a flying or jumpjet unit next to occupied cells.
       `unmeasured` for the 24-cell limit and the stop rule in deck mode. Both differ from the plain
       ring rule only when every qualifying cell of the inner rings fails the visibility test, which
       needs terrain built to hide whole rings (S-0208's scenario W7, part f, tests the check itself
@@ -1290,8 +1419,8 @@ Terms specific to this spec:
       scan order, the 24-cell limit, the distance choice, the choice without a reference cell and
       the parameters of table T5. Medium that the visibility test is S-0208's screen-cover check
       and that the further test is S-0010's burrowing test, each applied as stated; their content
-      carries the confidence of those specs. Low for the condition under which the no-move rows of
-      T5 ask for the further test (Open questions)
+      carries the confidence of those specs. High for the condition under which the no-move rows of
+      T5 ask for the further test, and that they test no destination first
 
 ### Linked vehicles
 
@@ -1460,9 +1589,9 @@ claims 13 and 18 compares *k* exactly with the binary64 value nearest 0.00001.
 **F8. Legs of the coarse estimate (claim 24).** The coarse search of the estimate runs from the
 found cell's coarse end cell to the destination's (claim 13b). Let *s*₁, …, *s*ₙ be the sectors of
 its level-0 corridor, *s*₁ holding the found cell's coarse end cell and *s*ₙ the destination's.
-- When the found cell and the destination are both bridge cells of one bridge (both on the same
-  bridge link, each at most 3 cells to the side of its line, between its two end cells), *E* is
-  just their Chebyshev distance, and no legs apply.
+- When the found cell and the destination are both bridge cells of one bridge (for each of them,
+  the first bridge link in creation order that it lies within 3 cells of, Terms, is the same link),
+  *E* is just their Chebyshev distance, and no legs apply.
 - Otherwise, when the destination is a bridge cell, a *destination leg* is added: the Chebyshev
   distance from the destination to its anchor for *s*ₙ₋₁ when *n* ≥ 4, and for *s*ₙ when *n* < 4.
   When the anchor for *s*ₙ₋₁ does not exist, the anchor for *s*ₙ is used; when that does not exist
@@ -1529,6 +1658,10 @@ large arise only with large threat terms.
 | Diagonal connection cost | 0.001 | cost units | claims 13 and 13b, F9 |
 | Lane reach of a bridge link | 2 | cells to the side of the link's line | coarse end cells, claim 13b |
 | Lane reach for the same-bridge test | 3 | cells to the side of the link's line | F8 |
+| Lane reach for a deck's reach region | 1 | cells to the side of the link's line | claim 4 |
+| Lane reach for a link changed in play | 3 | cells to the side of the link's line | claim 3 |
+| Height step onto or off a deck | 4 | height levels | claim 10 |
+| Train start-layer tolerance | 2 | height levels | claim 7: the train's start pair is raised to the deck beyond it |
 | Bridge-role tiles that count as a bridge end | 16 | tiles per role | Terms, *bridge ends* |
 | Ticks per game minute | 900 | ticks per game minute | glossary |
 | Leptons per cell | 256 | leptons | glossary |
@@ -1663,6 +1796,13 @@ Ordering consequences:
 - **`quirks.coarse_limit_records_cost`** (default: on). In claim 13, a route found while 9999
   routes are pending still sets the sector's recorded cost, although it is never pending, so later
   routes to that sector must beat it. Off: such a route leaves the sector's recorded cost unchanged.
+- **`quirks.deck_side_step_ground_level`** (default: on). Claim 10 judges a step from a deck pair
+  by the height level of the ground under the deck, so the slope rule for a difference of 1 lets a
+  unit on a deck step sideways onto a cell that is not a bridge cell, 1 level above or below that
+  ground, when the lower of the two cells is a slope: it lands on that cell's ground, 3 levels
+  (difference +1) or 5 levels (difference −1) below the deck. Off: from a deck pair, a difference
+  of 1 onto a cell that is not a bridge cell is refused. A step of 1 onto another bridge cell's
+  deck (a deck over sloping ground) is allowed either way.
 - **`quirks.train_exclusion_search_only`** (default: on). Claim 16's exclusion of the three cells
   behind a train holds for the search only, so straightening can give the stored path a reversing
   first step. Off: the straightening passes also treat the three cells as not enterable, and make
@@ -1759,7 +1899,7 @@ firestorm walls and laser fences) and the locomotion class are S-0211's.
 | `MovementZone` | named value as in S-0211's import mapping (text cut to 31 characters, letter case ignored, the spelling `subterannean`) | `normal` | movement zone (claims 4, 6, 13, 25). A value outside the vocabulary: S-0211 claim 4, departure D1 |
 | `ThreatAvoidanceCoefficient` | decimal, single precision (S-0003 claim 6), held as a double | 0.0 | threat coefficient *k* (claims 13, 17, 18), copied to the unit when it enters play |
 | `Speed` | integer, converted to the speed number 0 to 255 (Terms): by S-0207 claim 1 for a vehicle type, by S-0208 F4 for an infantry type, each with its rule for the value −1 | speed number 0 | speed comparison of claim 19 |
-| `IsTrain` (vehicle types) | boolean | false | marks the type as a train: train rules (claims 8, 14, 16, 20, 24). Stock data is not known to set it |
+| `IsTrain` (vehicle types) | boolean | false | marks the type as a train: train rules (claims 7, 8, 14, 16, 20, 24). Stock data is not known to set it |
 | `JumpJet` | boolean | false | an infantry type with this flag uses movement zone *infantry* for the coarse search of a path computation (claim 13), whatever its own movement zone. The estimate of claim 24 uses its own movement zone (Open questions) |
 | `Passive` (vehicle types only) | boolean | false | exception of claim 15 |
 
@@ -1777,6 +1917,13 @@ firestorm walls and laser fences) and the locomotion class are S-0211's.
 
 The close-enough distance *C* (claim 24) and the blockage delay *B* (claim 22) are imported as
 S-0209's Import mapping says.
+
+**Bridge data** (read by other specs; listed for the uses here)
+
+| Data | Owner | Use here |
+|---|---|---|
+| `BridgeSet`, `WoodBridgeSet` (the bridge and wooden-bridge roles of the theater) | S-0010 Import mapping | the bridge spans of S-0010 claim 25, which are the bridge links (claim 3); the deck read of claim 4 (not-enabled row); the bridge ends (Terms) and anchors (F8) |
+| map overlays at the high-bridge overlay indices 24, 25, 237 and 238 (overlay type stream, S-0009 claim 12) | S-0211 claim 15 | bridge cells, the deck-entry mark and the bridge axis (Terms), and so claims 4, 7 and 10 |
 
 **Map tunnel list**
 
@@ -1871,7 +2018,7 @@ draws (claim 25), so one run per variant is enough unless stated.
   - Falsified if: the vehicle drives to the shore first, waits before its destination is cleared,
     or (run 2) leaves its team or heads for a new destination of its house, which would mean the
     search-failure rows of claim 23 ran instead of the gate.
-- **P4 (claims 1, 3, 6, 10, 23): plateaus, slopes and a building pocket.**
+- **P4 (claims 1, 3, 4, 6, 10, 15, 23): plateaus, slopes, a building pocket and bridge decks.**
   - Setup: map A: a goal cell on a plateau 2 height levels above the surrounding ground with cliff
     edges and no slope. Map B: the same goal at ground level, enclosed by a ring of the house's own
     buildings with no gap. Run B1 with a vehicle of the human-controlled house, run B2 with a vehicle of a
@@ -1895,7 +2042,20 @@ draws (claim 25), so one run per variant is enough unless stated.
     and F5: as map F, with the two plateaus 1, 3 and 5 height levels above the low ground. In maps
     F, I, F3 and F5 the vehicle is a team member of a computer-controlled house, as in run B2, so
     that a failed search shows as a team exit and a failed gate does not. Map K: a river crossed by
-    an intact high bridge, the goal on the far bank, the vehicle on the near bank. Map H: the
+    an intact high bridge, the goal on the far bank, the vehicle on the near bank, and no other
+    crossing; run 2 has the goal on a free deck cell over the middle of the river. Map K2: a high
+    bridge laid as a map's bridge normally is (end tiles of the bridge role and high-bridge overlays
+    of index 24 or 237, so that its axis runs along cell x and its north deck row is the one
+    without the deck-entry mark, Terms), over dry flat clear ground of height level *h*, the deck at
+    *h* + 4. Along the western half of the bridge's south side lies a strip of clear land at height
+    level *h* + 4 next to the south deck row, joined to the west bank; beside the eastern half of the
+    south deck row the ground stays at *h*. Along the whole north side lies another such strip next
+    to the north deck row. The bank cells at each end are at *h* + 4 with a ramp of slope cells down
+    to *h*. Runs: (a) the vehicle on the middle deck row over the eastern half, ordered to the ground
+    cell at level *h* 2 cells south of the south deck row, in the eastern half; (b) the vehicle on the south strip, ordered onto the south deck
+    cell next to it; (c) the vehicle on the north strip, ordered onto the north deck cell that lies
+    beside the strip cell 3 cells east of it; (d) the vehicle on the middle deck row over the western half, ordered onto the south strip cell
+    beside the south deck row. Map H: the
     2 × 2 configuration of claim 3, made with a crushable overlay on the cell (x, y), every other
     neighbour of the four cells being land of a category the test vehicle's movement zone cannot use
     (for example category *blocked*). A crusher vehicle (movement zone allowing *open* and
@@ -1919,7 +2079,19 @@ draws (claim 25), so one run per variant is enough unless stated.
     in every direction), and both searches fail because a step of 1 level needs a slope (claim 10):
     team exit in both runs. F3: as F (a difference of 3 still joins along cell x, and the step is
     refused). F5: both refused at once, no team exit. K: the vehicle drives over the bridge, onto and
-    off its deck (steps of 4 levels at the bridge's ends), and reaches the goal.
+    off its deck (steps of 4 levels at the bridge's ends), and reaches the goal; in run 2 the gate
+    passes (the deck is read through the enabled link as the bank's reach region, claim 4) and the
+    vehicle stops on the deck cell. K2 (claim 10): (a) the vehicle never steps from the deck straight
+    down onto a cell at level *h*, although such cells lie beside the deck: it leaves the deck
+    sideways onto a strip (a step of 4 levels off a deck needs nothing of the cell) or at a bridge
+    end, and reaches the goal by a ramp; (b) it steps
+    sideways onto the south deck cell (marked) at once; (c) it never enters the north deck cell. Two outcomes
+    are expected, each telling something: it drives along the north strip and stops on the strip
+    cell beside the deck cell (the unmarked row can be entered neither from the strip nor from the
+    deck, so the search ends beside the destination, claim 15), or its destination is cleared at
+    once with no step (the deck read of that row found no link within 1 cell, claim 4, row "none
+    found"); (d) it steps sideways off
+    the deck onto the strip.
     H (original, low confidence): the order is dropped at once by the gate, although the rule of
     claim 3 would let the vehicle drive onto the cell. This result supports departure D4's
     description of the original.
@@ -1929,7 +2101,12 @@ draws (claim 25), so one run per variant is enough unless stated.
     a team exit, D/E disagree with S-0211's occupation rule, the two plateaus of F behave
     alike, a vehicle reaches a plateau in map I, F3 or F5, either plateau of I is refused without a
     team exit, the two plateaus of F3 behave alike, either plateau of F5 gives a team exit, or the
-    vehicle of K does not reach the goal. For map H, the vehicle driving onto (x, y) falsifies the
+    vehicle of K does not reach the goal or is refused at once in run 2. K2: the vehicle of (a)
+    steps from the deck onto a cell at level *h*; (b) does not enter the south deck cell from the
+    strip; (c) enters the north deck cell; (d) does not step off sideways. K2, except run (c), is void if a run is refused at once by
+    the gate because a deck read (the vehicle's on the deck, or a destination deck cell) found no
+    link within 1 cell (claim 4), or if the recorder shows that the north deck row carries the mark after all (the
+    bridge was laid with overlays of another index). For map H, the vehicle driving onto (x, y) falsifies the
     corner-case description of claim 3 (and makes D4 unnecessary).
 - **P5 (claim 20): path refresh, stale paths and chase re-paths.**
   - Setup: map 1: a flat corridor map, a 1-cell-wide road between impassable land, 60 cells long,
@@ -2110,7 +2287,7 @@ draws (claim 25), so one run per variant is enough unless stated.
     value). The unit's distance *D*ᵤ to the destination (F6a, at height level 0) is 512 leptons in
     run 3 (2 cells) and 2560 leptons in run 2 (10 cells). Run 3 is void if *C* is below 512 leptons,
     and run 2 is void if *C* is not below 2560 leptons.
-- **P8 (claims 5, 6, 23): bridge destroyed.**
+- **P8 (claims 3, 5, 6, 23): bridge destroyed.**
   - Setup: a river with one high bridge. A vehicle on the near bank ordered to a far-bank cell.
   - Procedure: destroy the bridge (a trigger action that detonates a weapon at a waypoint marker on
     the bridge) while the vehicle approaches, at least 30 cells from the bridge.
@@ -2433,7 +2610,33 @@ draws (claim 25), so one run per variant is enough unless stated.
     click (S-0213 claim 20). Expected: the same five cells as in run (s), in the same order, so the
     guard spot is the cell at position (*N* mod 5). Falsified if: it is a wall cell or a vehicle's
     cell, or it differs from that cell.
-  - For runs (u) and (r): if the recorder cannot fix which tick number is in force when the click
+  - Run (t), the further test of a no-move order (table T5, no-move row for a cell; test data).
+    Setup: a test map whose usable area leaves a strip of legal cells outside it on its west side,
+    the usable area starting at column *x*₀; all ground at one height level *h*, not shrouded for the
+    human house. The three cells (*x*₀, *y* − 1), (*x*₀, *y*) and (*x*₀, *y* + 1) are slope cells of
+    height level *h* (a slope tile of clear land, made with the map's height and tile data); every
+    other cell within 3 cells is flat clear land, with no object. A test override gives one vehicle
+    type of the human house movement zone *subterranean* and the tunnelling locomotor; one unit of that type stands 8 cells east of
+    (*x*₀, *y*), on a tileset that allows burrowing. Procedure: click a no-move order for the unit
+    onto the strip cell (*x*₀ − 1, *y*), as S-0214's scenario T7 step (a2) does, 10 times: 5 times
+    while the unit stands on the surface, and 5 times while it travels underground (after an order
+    that makes it dig in, while the recorder shows its world height below the ground's), each click
+    in a different tick and with the unit placed afresh. Observable: the tick number *N* in force
+    when the click is handled, the unit's height above the ground at that moment, and its
+    destination after the order. Expected: the clicked cell lies outside the usable area, so it
+    never qualifies. On the surface no further test applies, ring 1 holds the three slope cells,
+    and the destination is the one at position (*N* mod 3) in scan order: (*x*₀, *y* − 1),
+    (*x*₀, *y* + 1), (*x*₀, *y*). Underground, the three slope cells fail the further test (S-0010
+    claim 17: not flat), so ring 1 contributes nothing and the destination is a flat cell of ring 2
+    inside the usable area, the one at position (*N* mod 7) of the scan order (*x*₀, *y* − 2),
+    (*x*₀, *y* + 2), (*x*₀ + 1, *y* − 2), (*x*₀ + 1, *y* + 2), (*x*₀ + 1, *y* − 1), (*x*₀ + 1, *y*),
+    (*x*₀ + 1, *y* + 1). Falsified if: an underground click gives a slope
+    cell, or a surface click gives a ring-2 cell (which would mean the test does not depend on the
+    unit's state), or the clicked cell's own failure decides it (no destination at all underground,
+    which would mean the clicked cell is tested as claim 24 tests the destination). Void if the clicks do not give
+    the no-move action (S-0214 claim 11 then takes another branch), or if no test override can make
+    a unit travel underground in the setup.
+  - For runs (u), (r) and (t): if the recorder cannot fix which tick number is in force when the click
     is handled, one shift *o* of 0 or 1 is allowed, the same for all 10 clicks of a run: the
     expected cell is then the one at position ((*N* + *o*) mod *n*). The run falsifies the claim if
     some click fits neither shift, or if its clicks need different shifts.
@@ -2466,13 +2669,11 @@ draws (claim 25), so one run per variant is enough unless stated.
 - Sectors and connections (claim 13b): which further cells a tunnel's link joins, and how often the
   labelling-order cases of claim 13b occur on stock maps, are not established. The secondary checks
   of scenarios P1 and P12 are the practical check.
-- Coarse end cell on a bridge (claim 13b): when more than one bridge link meets the condition for a
-  bridge cell, the original takes the first in the order in which it creates links. That order is
-  not established, and neither is whether two links can meet the condition for one cell on a map
-  that the original accepts.
 - For the corridor exemption (claim 13): exactly when a moving unit's recorded cell changes (on
-  entering a new cell or at some other moment of its move), and whether an aircraft on the ground or
-  in the air also counts, are only partly established.
+  entering a new cell or at some other moment of its move), and whether an aircraft in flight keeps
+  counting and from which cell, are only partly established.
+- Bridge links in play (claim 3): which cell each destruction or repair of a high bridge names, and
+  so which links change, belongs to the bridge specs.
 - When exactly a drive-locomotor follower car's destination is cleared after its computation of
   claim 26 fails (at once, or only at the car's next path computation) is not established.
 - The coarse threat at levels 1 and 2 (F5): which value the house's records hold for a level-1
@@ -2484,8 +2685,6 @@ draws (claim 25), so one run per variant is enough unless stated.
 - Whether the region corner cases of claim 3 occur on stock maps, and whether a configuration other
   than the 2 × 2 case of claim 3 is common enough to matter, is not settled. Scenario P4 map H tests
   the smallest case.
-- For the no-move rows of table T5, the state of a subterranean unit under which the nearby-cell
-  search asks for the further test (claim 25) is not established.
 - Whether any rule sets the congestion mark of a cell permanently (Terms, claim 9). None was found.
 - Which units are loaners (claim 14) in stock play, and the exact team state that goes with the
   "move to a waypoint marker" condition, are only partly established.
