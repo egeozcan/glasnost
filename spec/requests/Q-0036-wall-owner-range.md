@@ -1,9 +1,9 @@
 ---
 id: Q-0036
 title: Is there a distance limit on the building that gives a map-placed wall its owner?
-status: open
+status: answered
 related: [S-0210, S-0209]
-answered-by: []
+answered-by: [S-0210]
 ---
 
 ## Need

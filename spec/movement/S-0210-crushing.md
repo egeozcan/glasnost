@@ -2,13 +2,13 @@
 id: S-0210
 title: Crushing (who crushes whom, when, the outcome, walls, warnings, slowdown and automatic crushing)
 topic: movement
-revision: 13
+revision: 14
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-10
+approved-on: 2026-10-12
 measurements: []
-requests: [Q-0020]
+requests: [Q-0036]
 supersedes: []
 ---
 
@@ -184,10 +184,11 @@ S-0107: *crushable* (the flag), *deploying*. Terms used by this spec:
    the request is not effectively forced (S-0208 claim 11), so such a unit refuses it unless all of
    these hold: it is a fraidycat, and its current behaviour has the scatter property, and one of
    the following applies: its owner is computer-controlled, it is a team member, the game-wide
-   player-scatter rule is on, or it has the scatter veterancy ability. The first two alternatives
-   describe the original only: an AI house counts as human-controlled and has no team members
+   player-scatter rule is on, or it has the scatter veterancy ability. For units of an AI house the
+   first two alternatives never hold: an AI house counts as human-controlled and has no team members
    (glossary, *AI house* and *team member*), so for its units only the rule or the ability can make
-   up the last condition. A walking unit
+   up the last condition. Units of the neutral and special houses keep the computer-controlled
+   alternative (glossary, *AI house*, *Player houses only*). A walking unit
    that refuses keeps walking and can walk into the crusher's path.
    - Backing: `measurable` (scenario K2 part b for the driving locomotor, K10 part a for the ship
      locomotor)
@@ -338,17 +339,20 @@ S-0107: *crushable* (the flag), *deploying*. Terms used by this spec:
     picked by itself while moving, harvesting or guarding.
 
     **Our engine and the original's computer-controlled houses.** The rules above are the rules of
-    our engine for every house, human-controlled or AI house (glossary, *AI house*). The original
-    treats a house that its computer player plays differently in three places, and our engine does
-    not reproduce them. As the glossary entry *AI house* says, an AI house follows the rules of a
-    human-controlled house, so for an AI house:
+    our engine for every player house, human-controlled or AI house (glossary, *AI house*). The
+    original treats a house that its computer player plays differently in three places, and our
+    engine does not reproduce them for AI houses. As the glossary entry *AI house* says, an AI house
+    follows the rules of a human-controlled house, so for an AI house:
     - the permission to choose targets automatically is the third condition of the list above, never
       the computer-controlled row of the table below,
-    - the attack-target variant below does not exist, for any house,
-    - the opportunity-target exception of the omni-crusher variant applies to it as to any other
-      house.
+    - the attack-target variant below does not exist for its units,
+    - the opportunity-target exception of the omni-crusher variant applies to it as to a
+      human-controlled house.
 
-    This is a departure of our engine by design choice of scope, with no quirk switch. Our AI may
+    This is a departure of our engine by design choice of scope, with no quirk switch. Units of the
+    neutral and special houses are not units of an AI house: they keep the original's
+    computer-controlled rules below (the table row, the attack-target variant and the exemption from
+    the opportunity-target exception) in our engine (glossary, *AI house*, *Player houses only*). Our AI may
     obtain the original's computer behaviour by giving its crushers ordinary move orders to the cells
     of targets it chooses. The original's rules, which scenario K7 measures with computer-owned
     crushers:
@@ -419,7 +423,11 @@ S-0107: *crushable* (the flag), *deploying*. Terms used by this spec:
       its foundation, at the building's height) to the centre of the wall's cell at the terrain
       surface height there (S-0106), without the building reduction of S-0204, compared after
       truncation to whole leptons. On equal distances the building created earliest wins (for
-      map-placed buildings, the order in which the map lists them). When no building qualifies, the wall has no owner. This happens
+      map-placed buildings, the order in which the map lists them). **There is no distance limit:** a building qualifies however far it is
+      from the wall, so a wall far from every building is still owned by the nearest qualifying
+      building anywhere on the map. A wall has no owner only when no building on the map
+      qualifies (none is on the map, all are destroyed, or the owner of each lacks the wall-owner
+      flag). This happens
       once per map load; later changes of building ownership, new buildings and destroyed
       buildings do not change the owner of a map-placed wall.
     - (b) **Consequences.** In a skirmish, the human player's own map-placed structures are not
@@ -431,8 +439,8 @@ S-0107: *crushable* (the flag), *deploying*. Terms used by this spec:
     - (c) A wall that loses its last damage stage, is sold or is removed has no owner from then
       on. Who owns a wall that a house builds during play belongs to the structures specs.
     - Backing: `measurable` (scenario K12)
-    - Confidence: high for the rule and the time it applies; medium for the tie rule (order of the
-      building list, read), and for the cell height used (a difference of height between wall
+    - Confidence: high for the rule, the absence of a distance limit and the time it applies; medium for the tie rule (the order of the
+      map's building list), and for the cell height used (a difference of height between wall
       cell and building changes the result only when two buildings are almost equally near)
 
 ## Formulas
@@ -592,9 +600,10 @@ Ordering stated as consequences:
   either.
 - **AI houses and the original's computer-controlled rules (departure).** The computer-controlled
   row of the table, the attack-target variant and the computer-controlled exemption from the
-  opportunity-target exception (claim 11) describe the original only. In our engine every house,
-  AI houses included, follows the human-controlled rules. This is a departure with no switch, as the
-  glossary entry *AI house* states for every spec.
+  opportunity-target exception (claim 11) describe the original only, except for units of the
+  neutral and special houses, which keep them. In our engine every player house, AI houses
+  included, follows the human-controlled rules. This is a departure with no switch, as the glossary
+  entry *AI house* states for every spec (with its *Player houses only* exception).
 - **Rounding.** F2 follows the round-toward-zero mode of S-0205 (number domains), switch
   `quirks.chop_rounding`.
 
@@ -617,7 +626,7 @@ Ordering stated as consequences:
 | Rules, overlay sections, `Crushable`, `Wall` | crushable overlay, wall overlay | boolean | no |
 | Art data, the section of the overlay type's image (S-0007), `DamageLevels` | damage-stage count *D* (claims 8 and 13) | integer (S-0003, claim 3) | keeps the value in force; engine default 1. The same key in the rules overlay section is not read |
 | Rules, overlay sections, `Strength` | wall strength *S* (F3, claim 13) | integer | keeps the value in force; engine default 1 |
-| Rules, country (house type) sections, `WallOwner` | wall-owner flag of the country (claim 14) | boolean | keeps the value in force; engine default yes |
+| Rules, country (house type) sections, `WallOwner` | wall-owner flag of the country (claim 14) | boolean | keeps the value in force; engine default yes. Not tied to any distance: the flag only decides whether the country's buildings qualify (claim 14 (a)) |
 | Rules, the combat-damage section, `Crush` | crush range *c* (F2) | real, cells; exactly −1 counts as absent | keeps the value in force; before any rules layer gives it, 384 leptons |
 | Rules, the combat-damage section, `PlayerAutoCrush` | player-auto-crush rule | boolean | no |
 | Rules, unit type sections, `AutoCrush` | auto-crush flag | boolean | no |
@@ -629,7 +638,7 @@ Ordering stated as consequences:
 ## Measurement scenarios
 
 All run under the *measurement setup* on purpose-made flat maps of clear terrain, with one human
-player and one computer player whose start position is far away, unless stated. The computer house
+player and one bystander computer player (glossary), unless stated. The computer house
 plays at the hardest difficulty unless stated. A *recorder* reads object lists, health, positions,
 owners and overlay data values per tick. Where a scenario needs a type property that no stock type
 has, it is set through a named test map's override section, and the scenario says so. "The overlay
@@ -787,7 +796,7 @@ type of index 0" means the overlay type with registration index 0 in the data in
   neighbours, and take screenshots with an audio capture. In (c) the random-state recorder also reads
   the scenario random stream's state on every tick. A second set of (c) runs, (c2), uses a wall
   type with *S* ≤ 200 (set through the override section if no stock type has it). Nothing else on
-  the map draws from the scenario random stream: the computer house is idle and no other unit is near.
+  the map is meant to draw from the scenario random stream: no other unit is near.
 - *Observable:* when each crossed overlay disappears, whether each neighbour's stage changes or its
   wall disappears, the direction in which the body pitches in the screenshots, and whether the
   overlay type's crush sound starts on the tick each crossed overlay disappears.
@@ -816,7 +825,7 @@ type of index 0" means the overlay type with registration index 0 in the data in
   driving locomotor, the crusher flag, the omni-crusher flag and the crusher-all movement zone, owned
   by the human player (a stock type if one has all of these, otherwise set through the test map's
   override section). The enemy vehicle used is of a type the test vehicle can crush and is kept
-  stationary (computer house idle, the vehicle with no orders). Runs:
+  stationary (the vehicle is given no orders). Runs:
   - (a) an enemy vehicle in cell 5 and a wall section in cell 25. Order the test vehicle to cell 20.
     When it has stopped, order it to cell 30.
   - (b) no vehicle, only the wall in cell 25. Order the test vehicle to cell 30.
@@ -874,7 +883,7 @@ type of index 0" means the overlay type with registration index 0 in the data in
   crushable infantry of the other player standing idle. Cases with a computer-owned crusher measure
   the original's computer-controlled rules of claim 11; our engine does not apply them to AI houses,
   and the human-owned cases (3, 7, 10, 12h, 13 to 16) measure the rules our engine applies to every
-  house. Where a
+  player house. Where a
   case says *unarmed*, the crusher's weapons are removed through the test map's override section, so
   that it never gets a target to attack and only the first list of claim 11 can move it. Where it
   says *armed*, the stock weapons are kept and the victim's health is raised through the override
@@ -1062,24 +1071,29 @@ type of index 0" means the overlay type with registration index 0 in the data in
 - *Runs:* one each; B three times (draws vary).
 
 **Scenario K12: owner of map-placed walls (claim 14).**
-- *Setup:* skirmish, human player and one computer player far away. The map places, for a map
+- *Setup:* skirmish, human player and one bystander computer player. The map places, for a map
   house *N* whose country has the wall-owner flag (stock default) and a map house *P* whose
   country is given the flag off through the map's override section, one building each: *P*'s
   building 3 cells from a wall cell *w*₁, *N*'s building 6 cells from *w*₁; a second wall cell
   *w*₂ more than 6 cells from every building of *N* and *P*, with *N*'s building the nearest
-  qualifying one; and a third wall cell *w*₃ on a part of the map with no building within 40 cells,
-  on a map with no other buildings. Neither map house is allied with the human player.
+  qualifying one; and a third wall cell *w*₃ at least 40 cells from every building of the map
+  (*N*'s building is the nearest qualifying one). A second map (part b) places the same walls but
+  no building of any house, or only buildings whose owner's country has the wall-owner flag off.
+  Neither map house is allied with the human player.
 - *Procedure:* a human-player tank with a weapon that can damage walls is ordered through each of
   the three walls in turn, from a cell next to it; a second run makes *N* allied with the human
   player through a map trigger at the start.
 - *Observable:* the recorder's owner of each wall cell after loading, and each tank's reaction
   (enemy obstacle: attacks the wall; friendly obstacle: does not attack, re-routes or waits; S-0209
   rows WO3, WO4 and the vehicle rows).
-- *Expected:* *w*₁ and *w*₂ owned by *N* (*P* is skipped although nearer), *w*₃ owned by no house.
-  First run: the tank treats all three as walls of another house. Second run: *w*₁ and *w*₂ as
-  friendly, *w*₃ still as another house's.
-- *Falsified if:* *w*₁ owned by *P*, any owner for *w*₃, or *w*₃ treated as friendly in the second
-  run.
+- *Expected:* *w*₁ and *w*₂ owned by *N* (*P* is skipped although nearer), *w*₃ owned by *N*, however far (no distance limit). On the part b map all three walls are
+  owned by no house.
+  First run: the tank treats all three as walls of another house. Second run: *w*₁, *w*₂ and *w*₃ as
+  friendly. On the part b map the tank treats all three as walls of another house.
+- *Falsified if:* *w*₁ owned by *P*, *w*₃ owned by no house on the first map (a distance limit), any owner
+  for any wall on the part b map, or *w*₃ treated as another house's in the second run.
+  Optionally place *w*₃ at 10, 20, 30 and 40 cells from *N*'s building to show that the owner
+  does not change.
 - *Runs:* one each.
 
 ## Open questions
