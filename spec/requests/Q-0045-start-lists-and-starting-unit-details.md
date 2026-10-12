@@ -1,9 +1,9 @@
 ---
 id: Q-0045
 title: Start lists and starting units, details the specs leave open
-status: open
+status: answered
 related: [S-0009, S-0208]
-answered-by: []
+answered-by: [S-0412]
 ---
 
 ## Need
