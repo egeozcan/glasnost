@@ -1,9 +1,9 @@
 ---
 id: Q-0041
 title: The further test of the nearby-cell search, in the no-move rows of table T5 and on bridge structure
-status: open
+status: answered
 related: [S-0212, S-0010]
-answered-by: []
+answered-by: [S-0010]
 ---
 
 ## Need

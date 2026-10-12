@@ -62,7 +62,6 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0315](combat/S-0315-suppression-panic.md) | Suppression and panic (infantry fear, prone and panic in combat; parasite suppression) | combat | 4 | approved | — |
 | [S-0006](rules-import/S-0006-rules-layering.md) | Rules layering | rules-import | 8 | approved | — |
 | [S-0009](formats/S-0009-map-file-semantics.md) | Map file semantics (geometry, terrain streams, waypoint markers, start positions, preview) | formats | 11 | approved | — |
-| [S-0010](formats/S-0010-theater-tileset-semantics.md) | Theater data, tilesets and the terrain values of a cell | formats | 9 | approved | — |
 | [S-0107](rendering/S-0107-infantry-sprite-sequences.md) | Infantry sprite sequences | rendering | 5 | approved | — |
 | [S-0208](infantry/S-0208-infantry-movement.md) | Infantry movement (standing positions, walking step and speed, crawling, scatter destinations) | infantry | 13 | approved | — |
 | [S-0209](movement/S-0209-occupancy-crowding.md) | Cell occupancy and crowding (capacity, entry outcomes, waiting, re-routing, scatter requests) | movement | 15 | approved | — |
@@ -94,3 +93,4 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0301](combat/S-0301-firing-cycle.md) | Firing cycle (delay between shots, bursts, ammunition and reloading, the firing check) | combat | 3 | approved | — |
 | [S-0302](combat/S-0302-damage-resolution.md) | Damage resolution (shot damage, defences, versus values, rounding, healing, health thresholds) | combat | 10 | approved | — |
 | [S-0211](movement/S-0211-land-types-passability.md) | Land types and passability | movement | 10 | approved | — |
+| [S-0010](formats/S-0010-theater-tileset-semantics.md) | Theater data, tilesets and the terrain values of a cell | formats | 10 | approved | — |

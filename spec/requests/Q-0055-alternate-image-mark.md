@@ -1,9 +1,9 @@
 ---
 id: Q-0055
 title: Where a tile file carries the alternate-image mark
-status: open
+status: answered
 related: [S-0010]
-answered-by: []
+answered-by: [S-0010]
 ---
 
 ## Need
