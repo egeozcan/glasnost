@@ -1,9 +1,9 @@
 ---
 id: Q-0023
 title: Terrain object strength when the type omits it, and the frames of animated terrain objects
-status: open
+status: answered
 related: [S-0102, S-0009]
-answered-by: []
+answered-by: [S-0102]
 ---
 
 ## Need

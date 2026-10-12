@@ -1,9 +1,9 @@
 ---
 id: Q-0021
 title: Depth bias of overlay shadows, and the standing-pose state of vehicles drawn as sprites
-status: open
+status: answered
 related: [S-0102, S-0112]
-answered-by: []
+answered-by: [S-0102]
 ---
 
 ## Need

@@ -2,13 +2,13 @@
 id: S-0102
 title: Draw order, render layers, depth compositing, sprite placement and shadow pixels
 topic: rendering
-revision: 3
+revision: 4
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-10
+approved-on: 2026-10-12
 measurements: []
-requests: [Q-0011, Q-0015]
+requests: [Q-0021, Q-0023]
 supersedes: []
 ---
 
@@ -88,7 +88,9 @@ screen rows.
 | ion-blast wobble | A signed number of screen rows by which a vehicle or infantry unit's sprite is drawn higher while an ion-cannon blast (claim 2) shakes the area around it; 0 at all other times. Which blasts set it, and to what, is not specified here (Open questions). |
 | walk counter | A per-unit integer that the movement of a vehicle advances (claim 22). It picks the walking image frame of a vehicle drawn as a sprite. |
 | firing counter, death counter | Per-unit integers of a vehicle drawn as a sprite. While one of them is 0 or more it selects the vehicle's firing or death image frames (claim 22). How the death counter runs is in claim 22; which shots start the firing counter is not settled (Open questions). |
-| standing-pose state | A per-unit on/off state of a vehicle drawn as a sprite, on when the vehicle is created. It chooses between the rows of claim 22's image-frame table. What turns it on and off is not settled (Open questions). |
+| standing-pose state | A per-unit on/off state of a vehicle drawn as a sprite. It chooses between the rows of claim 22's image-frame table. It is on when the vehicle is created, turns off when the vehicle starts a movement step and on again when the step ends (claim 22). |
+| overlay shadow level *ℓ*<sub>s</sub> | The height level of the cell that holds an overlay, without the 4 levels that a bridge deck adds to *ℓ* (claim 13). It sets the depth bias of the overlay's shadow image frame. |
+| game-wide tree strength | A game-wide integer, in health points, that a terrain type takes as its strength when no rules layer gives the type a strength (claim 23, Import mapping). |
 
 ## Behaviour
 
@@ -99,8 +101,8 @@ screen rows.
    the cell pass). The object pass then draws the five layers in the fixed order underground, surface,
    ground, air, top, and within a layer in layer-list order. So wherever two objects overlap and both
    pass the depth test, the one in the later layer, or later in the same list, is visible. After the
-   last layer, the status extras of every vehicle, infantry, aircraft and building drawn in that frame
-   are painted, so every status extra appears above every object of every layer.
+   last layer, the status extras of every vehicle, infantry, aircraft and building drawn in that drawn
+   frame are painted, so every status extra appears above every object of every layer.
    - Backing: `measurable` (scenarios D1, D6, D7)
    - Confidence: high
 2. **Effects around the layers.** Ion-cannon blast effects are drawn before the layers, so objects of
@@ -271,7 +273,7 @@ screen rows.
     surface *h* is greater than 0 uses −*L*(*z* − *h*) (claim 13). An object at any height is therefore depth-compared as if it stood at its
     ground reference row: a flying aircraft is hidden only by terrain, overlays or buildings that lie
     in front of the point below it, never by terrain behind that point even though it is drawn over
-    that terrain. Overlays use the exact 15 pixels per level instead of *L(z)* (claim 13).
+    that terrain. Overlays and their shadows use the exact 15 pixels per level instead of *L(z)* (claim 13).
     - Backing: `measurable` (scenario D7)
     - Confidence: high
 12. **Depth profile per drawing.** Ground-lying images (projectile sprites and shadows, the other shadows drawn as sprites,
@@ -282,7 +284,7 @@ screen rows.
     exception among shadows: they use the upright profile (claim 18). The profiles are defined in F2. Overlay types are drawn flat
     unless their type says otherwise (absent-key default: flat), except walls, which are always
     upright. A vehicle drawn as a sprite whose type is too big to fit under a bridge uses the flat
-    profile near a bridge (claim 13). Smudges have no profile: they take no part in the depth test
+    profile near a bridge while its column factor is 0 (claim 13). Smudges have no profile: they take no part in the depth test
     (claim 25).
     - Backing: `measurable` (scenarios D8, D11, D15; voxel shadows D23 (c); vehicles drawn as
       sprites D33 (a)); the too-big vehicle is `unmeasured` (claim 13)
@@ -336,9 +338,14 @@ screen rows.
     | animation drawn entirely as a shadow (a per-animation state) | type vertical draw shift − *L(z)* | flat | no |
     | overlay, flat type, ore and gems, wall, rock | −2 − 15 × *ℓ* | see claim 12 | yes |
     | overlay, any other upright type | −17 − 15 × *ℓ* | upright | yes |
+    | shadow image frame of an overlay, every kind (ore and gems, walls, crates, bridge decks, rubble, other flat and upright types) | −2 − 15 × *ℓ*<sub>s</sub> | flat | yes |
 
-    Here *ℓ* is the cell's height level, plus 4 if the cell carries a bridge deck. The vertical
-    draw shift is in pixels and counts as depth units here.
+    Here *ℓ* is the cell's height level, plus 4 if the cell carries a bridge deck, and *ℓ*<sub>s</sub>
+    is the cell's height level alone (Terms): an overlay's shadow never takes the deck's 4 levels nor
+    the −15 of an upright type. So on a cell without a bridge deck the shadow has the same bias as a
+    flat overlay body there, and on a deck cell it is 60 depth units farther than the deck's own
+    pixels, which it therefore never darkens (claim 27). The vertical draw shift is in pixels and
+    counts as depth units here.
 
     **Which unloading image is drawn.** While a building is unloading, its body is drawn as follows:
 
@@ -367,7 +374,7 @@ screen rows.
       under-door sprites, non-animated terrain object and its shadow D15; projectile sprite,
       projectile shadow,
       ordinary, flat and tiled animations and animation shadow D15; overlays, wall, rock, ore and gems
-      D11, D15; vehicle drawn as a sprite with *h* = 0 and its own shadow D33 (a), (b); shadow of a
+      D11, D15; overlay shadows D35; vehicle drawn as a sprite with *h* = 0 and its own shadow D33 (a), (b); shadow of a
       vehicle drawn as a sprite whose type has a turret D29 (c) (its place under the vehicle's
       image, and its bias through a bib); animated terrain object D33 (c) (that it is a reader, and
       its bias against a wall). `unmeasured`:
@@ -391,7 +398,7 @@ screen rows.
         tested only against drawings ranked before it, mainly its own body, whose companion depth
         image has reference points that are not yet settled (F5). D17 tests where these drawings rank (claim 16), not their
         biases.
-    - Confidence: high for projectile sprites, overlays, animations, building bodies, infantry
+    - Confidence: high for projectile sprites, overlays, overlay shadows, animations, building bodies, infantry
       bodies, the own shadows of sprite units, the smudge row, non-animated terrain objects and their
       shadows, and the −*L(z)* term; medium for the rows with *h* not 0, the generic infantry shadow,
       vehicles drawn as sprites, voxel units, the voxel shadow, the voxel turret row and its absent-key
@@ -451,7 +458,7 @@ screen rows.
     |---|---|
     | 1 | terrain tiles, each followed at once by the pieces of the smudges on its cell (claim 25), which take no part in the depth test |
     | 2 | with fog of war on, the remembered images of fogged buildings, one building after another, nearest first (measure below); each building's group ranks its body, shadow and bib before its remembered animations |
-    | 3 | overlays with their shadows |
+    | 3 | overlays, then overlay shadows: every overlay of the repainted area ranks before every overlay shadow of that area, so no overlay's shadow ranks before a neighbouring overlay |
     | 4 | terrain objects that are not animated (trees and the like), with their shadows |
     | 5 | the ground layer's buildings that are not hidden under fog, one building after another; each building's group ranks its body (or the image drawn in its place: a deploying sprite, a roof-deploying sprite or a gate image, claim 13), then its shadow, then its bib, then its under-door sprites |
 
@@ -471,7 +478,10 @@ screen rows.
     - Where a tile pixel and another cell-pass writer give a pixel exactly the same depth, the tile
       shows. Where two other cell-pass writers tie, the one ranked earlier shows. So where a
       building's body and its own shadow, bib or under-door sprite tie, the body pixel shows, and
-      where its bib and an under-door sprite tie, the bib pixel shows.
+      where its bib and an under-door sprite tie, the bib pixel shows. Likewise, where an overlay's
+      shadow falls on an ore, gem or other flat overlay at the same height level, both have the
+      same depth (claim 13) and the overlay pixel shows undarkened, whichever of the two cells comes
+      first.
     - The remembered image of a fogged building's animation is a reader. It is tested against the
       depth left by the tiles, by the remembered images ranked before it (its own building's body
       among them) and by nothing else. Any cell-pass writer ranked after it whose pixel passes the
@@ -487,16 +497,17 @@ screen rows.
       `quirks.remembered_animation_in_cell_pass`).
     - Apart from ties and these remembered animations, the result does not depend on the ranking,
       because every other cell-pass drawing is a writer that keeps the nearest depth.
-    - Backing: `measurable` (scenario D17: trees in (a), a second remembered building in (b)); the
-      live-body case is `unmeasured` (D17 (c) gives the reason). The tie rules, and with them the
-      order inside a live building's group, are `unmeasured`, because exact depth ties between two
-      writers cannot be set up on purpose. That terrain objects, overlays and smudges are never remembered is
+    - Backing: `measurable` (scenario D17: trees in (a), a second remembered building in (b); the
+      overlay shadows ranking after every overlay, through the tie with a neighbouring flat overlay,
+      D35 (b)); the live-body case is `unmeasured` (D17 (c) gives the reason). The other tie rules,
+      and with them the order inside a live building's group, are `unmeasured`, because exact depth
+      ties between those writers cannot be set up on purpose. That terrain objects, overlays and smudges are never remembered is
       `unmeasured`: it would show when one of them changes inside a fogged area, but whether such a
       change repaints that area at once is not settled (claim 8 lists the redraw events at
       medium confidence), so no expected result can be stated.
     - Confidence: high for tiles first, for buildings being the only remembered objects, for the
-      measure *N* and for the order inside a live building's group; medium for the order of the
-      later steps
+      measure *N*, for overlay shadows ranking after all overlays and for the order inside a live
+      building's group; medium for the order of the later steps
 
 ### Building slot animations and voxel shadows
 
@@ -557,10 +568,10 @@ screen rows.
 19. **Centred placement.** Every sprite drawing named in this spec is placed centred on its draw
     point. Let the shape file's canvas be *W* × *H* and let the image frame's rectangle have its
     top-left pixel at column *c* and row *r* inside the canvas. With the draw point at screen pixel
-    (*x*<sub>p</sub>, *y*<sub>p</sub>), the frame's top-left pixel lands at
-    (*x*<sub>p</sub> − ⌊*W*/2⌋ + *c*, *y*<sub>p</sub> − ⌊*H*/2⌋ + *r*) (F6). The frame's own width
-    and height play no part, and every image frame of the file shares the same canvas, so frames of
-    different sizes stay aligned. An odd canvas size puts the draw point on the pixel just left of
+    (*x*<sub>p</sub>, *y*<sub>p</sub>), the image frame's top-left pixel lands at
+    (*x*<sub>p</sub> − ⌊*W*/2⌋ + *c*, *y*<sub>p</sub> − ⌊*H*/2⌋ + *r*) (F6). The image frame's own
+    width and height play no part, and every image frame of the file shares the same canvas, so
+    image frames of different sizes stay aligned. An odd canvas size puts the draw point on the pixel just left of
     (or just above) the canvas's true centre: a canvas 61 pixels wide has its draw point on column 30.
     This is the meaning of "drawn centred" in S-0108 claim 8. It applies to building images (body,
     build-up, bib, shadow, unloading, under-door and door sprites), infantry, vehicles drawn as
@@ -606,7 +617,7 @@ screen rows.
       for map north-west, 1 for map north, 2 for map north-east and so on clockwise: the art stores
       the eight facings clockwise starting with map north-west. Otherwise *d* = 0: a type whose
       facing count is not 8 always shows its first facing (`quirks.sprite_vehicle_eight_facings_only`).
-    - **Image frame.** The first row that applies gives the frame (integers; ⌊·⌋ and mod act on
+    - **Image frame.** The first row that applies gives the image frame (integers; ⌊·⌋ and mod act on
       values that are 0 or more):
 
       | Vehicle state | Image frame |
@@ -626,31 +637,81 @@ screen rows.
       started, at 0, only when the vehicle is destroyed and its type's death frame count
       *F*<sub>d</sub> is greater than 0; from then on it grows by 1 per tick until the vehicle is
       removed (removal belongs to S-0312). So the dying row applies only to types with
-      *F*<sub>d</sub> > 0, and its frames run from *S*<sub>d</sub> upward, one every
+      *F*<sub>d</sub> > 0, and its image frames run from *S*<sub>d</sub> upward, one every
       *R*<sub>d</sub> ticks, holding the last one. With the absent-key default
       *F*<sub>d</sub> = 0 (and so *S*<sub>d</sub> = −1) the dying row never applies.
-    - When the firing counter runs, the standing-pose state, and one further case in which the
-      walk counter grows while the vehicle is in the air are not settled (Open questions).
+    - **Standing-pose state.** It is on when the vehicle is created, so also when the map places it,
+      and nothing turns it off before the vehicle first moves. With driving, hovering, mech or ship
+      movement it turns off when the vehicle starts a movement step (with mech movement only once
+      any turning on the spot before the step has finished) and on again when that step ends: for driving and ship movement at the end
+      of every step from one cell to the next, so it goes off and on at each cell of a route; for
+      hovering movement when the vehicle comes within its arrival distance of the point it is
+      moving to; for mech movement at the end of each step. It is also turned on when the vehicle's
+      movement type changes, when a superweapon moves the vehicle to a new place, and at one further
+      event that re-places the vehicle (not identified). Other movement types never turn it off.
+      Consequences:
+      - a vehicle placed by the map shows, from the first drawn frame and before any tick has run,
+        the row for *F*<sub>s</sub> > 0 if its type has standing frames and otherwise the last row
+        (*S*<sub>w</sub> + *d*·*F*<sub>w</sub>), never the row *d*, unless its type's idle rate is
+        not 0 (then the moving row).
+      - a vehicle that has ended a move shows the same rows.
+      - the row *d* needs the state off while the vehicle does not count as moving, that is, a
+        vehicle standing still part-way through a movement step with an idle rate of 0, not firing
+        and not dying. No stock situation that produces this has been identified (Open questions).
+    - When the firing counter runs, and one further case in which the walk counter grows while the
+      vehicle is in the air, are not settled (Open questions).
     - A vehicle whose type has a turret and is drawn as a sprite draws its body frame as above and
       a turret image frame ((*t*<sub>32</sub> + 4) mod 32) + 8·*F*<sub>w</sub>, *t*<sub>32</sub>
       being the 32-step facing of its turret facing, combined into one image. Its shadow, the body
       frame plus ⌊*N*/2⌋, has the bias of claim 13 and lies under that combined image: unlike
       claim 28, the shadow never darkens the vehicle's own body or turret pixels.
-    - Backing: `measurable`: the facing part and the walking and standing rows D29 (a); the turret
+    - Backing: `measurable`: the facing part and the walking and standing rows D29 (a), the
+      standing-pose state at placement and after a move D29 (f); the turret
       path D29 (c) (the turret flag set through the override section); facing counts other than 8
       D29 (d) and the dying row and death counter D29 (e), both with a named loose copy of the art
       file. `unmeasured` for the firing row: which shots start the firing counter is not settled
-      (Open questions), so no setup can make the row show at a known tick.
-    - Confidence: high for the facing part and the frame formulas, medium for the walk counter and
-      the death counter, low for the standing-pose state and the turret path
+      (Open questions), so no setup can make the row show at a known tick. `unmeasured` for the row
+      *d* and for the events of the standing-pose state other than creation and movement steps
+      (change of movement type, superweapon move): no stock situation stops a vehicle part-way
+      through a step, so the state cannot be seen off while the vehicle is not moving.
+    - Confidence: high for the facing part and the image-frame formulas, medium for the walk counter, the
+      death counter and the standing-pose state (high that it is on at creation and after a
+      completed step; medium for the other events that turn it on), low for the turret path
 23. **Terrain objects.** A terrain object (a tree and the like) stands at the centre of its cell, at
     the terrain surface height there (S-0106). Its draw point is the screen pixel of that position,
-    and a terrain object whose type spawns ore is drawn 16 rows higher. Its body image frame is:
-    - for a type marked animated, its current animation stage (not specified here),
+    and a terrain object whose type spawns ore is drawn 16 rows higher. It is an animated terrain
+    object (glossary), drawn in the object pass instead of the cell pass (claims 10, 16), when its
+    type is marked animated and also once its destruction sequence has begun; a burning terrain
+    object whose destruction sequence has not begun stays in the cell pass. Its body image frame is:
+    - for a type marked animated, its current animation stage, whatever its health. The stage is 0
+      when the object is placed, so every animated terrain object first shows image frame 0. Only
+      an ore mine (a terrain object whose type has the spawns-resources flag, S-0401 claim 15)
+      advances its stage: it shows image frame *k* during the *k*-th rate interval of an animation
+      that S-0401 claim 15 starts and times, for *k* = 0 to ⌊*N*/2⌋ − 1, and its stage returns to 0
+      in the same turn in which it reaches ⌊*N*/2⌋, so image frame ⌊*N*/2⌋ is never shown as its
+      body. A mine with ⌊*N*/2⌋ = 0 never returns: once its animation starts, its image frame only
+      grows (S-0401 claim 15). An animated terrain object whose type lacks the spawns-resources flag takes no turns
+      (S-0203 claim 2), so its stage stays 0 and it shows image frame 0 for as long as it stands
+      (until its destruction sequence, below). It is still drawn in the object pass as an animated
+      terrain object (claims 10, 16).
     - during its destruction sequence, an image frame that depends on that sequence (not specified here),
     - otherwise image frame 0 while its health is 2 or more and image frame 1 when it is below 2.
       A terrain object starts with its type's strength as its health, so it first shows image
-      frame 0, unless that strength is 1.
+      frame 0, unless that strength is below 2.
+
+    **Strength of a terrain type.** A terrain type's strength is unset until a rules layer gives
+    it. Each time a rules layer that holds the type's section has been read (S-0006), a strength
+    that is still unset is set to the game-wide tree strength as it stands at that moment. Within a
+    layer the general settings, an early game-wide section (S-0006, Terms; S-0004, claim 4), are
+    read before the type sections, so a game-wide tree strength that the same layer gives counts. Writing −1 as the type's strength (in any spelling that reads
+    as −1, S-0003) unsets it, so that layer then sets it to the game-wide tree strength again.
+    Once set, the strength keeps its value in later layers that give the type's section without a
+    strength, even if such a layer changes the game-wide tree strength
+    (`quirks.tree_strength_fixed_at_first_section`). How an empty or unreadable strength value is
+    read is S-0003's and S-0006's rule for integer keys. A terrain type whose section no layer holds
+    keeps its strength unset: its objects start with health −1 and show image frame 1. The
+    game-wide tree strength's absent-key default is 25 health points; as a game-wide key it carries
+    over between the games of a session (S-0006, claim 10).
 
     Its shadow image frame is the body frame plus ⌊*N*/2⌋, placed centred on the same draw point.
     The 16-row raise of an ore-spawning object moves its whole drawing rectangle, and with it the
@@ -659,39 +720,52 @@ screen rows.
     the depth of the screen rows it lies on, as for any terrain object.
     - Backing: `measurable` (scenario D27) for the placement, the 16-row raise and its depth
       consequence, the initial image frame and image frame 1 (D27 (iii): the type's strength set to
-      1 through the override section, which pre-placed objects already follow, S-0009), and
-      `unmeasured` for the animated and destruction frames, because which terrain objects count as
-      animated and what their stages and destruction sequence are is not settled (Open questions),
-      so no expected image frame can be stated.
-    - Confidence: high for the position, the draw point and frames 0 and 1; medium for the depth
-      consequence of the raise; low for the animated and destruction frames
+      1 through the override section, which pre-placed objects already follow, S-0009), the
+      strength of a terrain type and its quirk (D27 (iv) and (v)), and the image frames of animated
+      terrain objects (D27 (vi)); animated terrain objects by the type's flag D33 (c). `unmeasured`
+      for the destruction frames and for the object pass of an object whose destruction has begun,
+      because the destruction sequence is not settled (Open questions), so no expected image frame can be stated, and for a
+      terrain type whose section no layer holds: the original's type lists name only types that
+      have sections in stock data, and whether a test map can add one without a section is not
+      known.
+    - Confidence: medium for which terrain objects are animated terrain objects (the type's flag:
+      high); high for the position, the draw point and image frames 0 and 1, for the stage being 0 at
+      placement, for the strength rule and its default and for the image frames of animated objects.
+      Medium for the depth consequence of the raise and for the type whose section no layer holds.
+      low for the destruction frames
 24. **Overlays.** The draw point of an overlay on cell (*x*, *y*) at height level ℓ is the screen
     pixel of the world pixel (30(*x* − *y*), 15(*x* + *y*) + 15 − 15ℓ + *s*): the cell's centre at
     level 0, lifted by exactly 15 rows per level (S-0101 claim 11), plus a vertical shift *s* in
-    rows (negative is up). *s* is the sum of the shifts of every row of this table that applies
-    to the overlay, and 0 when none applies:
+    rows (negative is up):
 
-    | Overlay and cell | Shift (rows) |
-    |---|---|
-    | ore or gems, a wall, a crate, or the overlay type with index 126 | −12 |
-    | an overlay type whose land type is railroad | −1 |
-    | the overlay type with index 126 | −1 |
-    | any overlay on a cell that carries a bridge deck | −16 |
-    | any overlay on a cell that carries a bridge deck and has an overlay data value of 9 to 17 | −15 |
-    | the overlay type with index 239, on a cell that carries no bridge deck | −15 |
+    > *s* = *s*<sub>type</sub> + *s*<sub>rail</sub> + *s*<sub>cell</sub> (integers, screen rows)
 
-    Indices count from 0 in the overlay type list, in the order of S-0004. For example, the overlay
-    type with index 126 gets −12 − 1 − 1 = −14 if its land type is railroad and −13 otherwise, and
-    any overlay on a deck cell with an overlay data value of 9 to 17 gets −16 − 15 = −31, plus the
-    rows above that apply to its type (but never the index-239 row).
+    | Term | Condition | Value (rows) |
+    |---|---|---|
+    | *s*<sub>type</sub> | the overlay type with index 126 | −13 |
+    | | otherwise, ore or gems, a wall or a crate | −12 |
+    | | otherwise | 0 |
+    | *s*<sub>rail</sub> | the overlay type's land type is railroad | −1 |
+    | | otherwise | 0 |
+    | *s*<sub>cell</sub> | the cell carries a bridge deck and has an overlay data value of 9 to 17 | −31 |
+    | | otherwise, the cell carries a bridge deck | −16 |
+    | | otherwise (no bridge deck), the overlay type with index 239 | −15 |
+    | | otherwise | 0 |
+
+    The three terms are independent. Indices count from 0 in the overlay type list, in the order of
+    S-0004. For example, the overlay type with index 126 gets −13 − 1 = −14 if its land type is
+    railroad and −13 otherwise, and any overlay on a deck cell with an overlay data value of 9 to 17
+    gets −31 plus its *s*<sub>type</sub> and *s*<sub>rail</sub> (the index-239 value never applies on
+    a deck cell).
 
     There is no horizontal shift. The two indices and the data range 9 to 17 are engine
     constants. The overlay's shadow image frame is placed on the same draw point, except on a cell
     that carries a bridge deck and has an overlay data value of 9 to 17, where it is placed 15
     columns to the left and 7 rows below that draw point.
     - Backing: `measurable` (scenario D26)
-    - Confidence: high for the base point and the −12 group; medium for the railroad, deck and
-      index shifts and for the shadow's displacement
+    - Confidence: high for the base point and for −12 of *s*<sub>type</sub> (ore and gems, walls,
+      crates and the index-126 type); medium for the index-126 type's further −1, for
+      *s*<sub>rail</sub>, for *s*<sub>cell</sub> and for the shadow's displacement
 25. **Smudges.** A smudge is painted in the cell pass, right after the terrain tile of each cell it
     covers (claim 16, rank 1), with image frame 0. For a cell (*x*, *y*) at level ℓ holding piece *p*
     of a smudge *w* cells wide, let *i* = *p* mod *w* and *j* = ⌊*p*/*w*⌋ (integers). The draw
@@ -752,10 +826,17 @@ screen rows.
     | animation shadow (−2) | bib, ore or gems | not at all: the animation's shadow does not show there |
     | projectile shadow (−10, over ground of level 0) | building shadow or terrain-object shadow | twice |
     | generic shadow of an infantry unit in the air (−5 − *L*(*z* − *h*), over ground of level 0: −5) | building shadow or terrain-object shadow | twice |
+    | overlay shadow (−2) | bare terrain tile | once |
+    | overlay shadow (−2) | an ore, gem or other flat overlay on a cell of the same level (drawn earlier, claim 16) | not at all: the overlay shows undarkened |
+    | overlay shadow (−2) | another overlay's shadow on the same level | once: equal depths |
+    | overlay shadow (−2) | a wall, an upright overlay or a bridge deck on a cell of the same level | not at all: those pixels are nearer |
+    | terrain-object shadow (−3) or building shadow (−4) | overlay shadow | twice |
+    | own shadow of an infantry unit or vehicle drawn as a sprite (−4), projectile shadow (−10) | overlay shadow | twice |
+    | animation shadow (−2) | overlay shadow | once: the animation's shadow does not show there |
 
-    - Backing: `measurable` (scenario D31)
-    - Confidence: high for the mechanism; medium for the rows that involve the building shadow
-      and the bib, whose biases are medium (claim 13)
+    - Backing: `measurable` (scenario D31; the overlay-shadow rows D35)
+    - Confidence: high for the mechanism and for the overlay-shadow rows; medium for the rows that
+      involve the building shadow and the bib, whose biases are medium (claim 13)
 28. **A sprite unit's shadow over its own body.** An infantry unit or vehicle drawn as a sprite
     draws its own shadow right after its body, and the body stores no depth. So where its shadow
     image frame overlaps its own body frame, the shadow darkens the body's pixels (wherever it passes
@@ -889,10 +970,10 @@ confidence).
 rectangle starts at column *c* and row *r* of the canvas, and a draw point (*x*<sub>p</sub>,
 *y*<sub>p</sub>):
 
-> top-left pixel of the frame = (*x*<sub>p</sub> − ⌊*W*/2⌋ + *c*, *y*<sub>p</sub> − ⌊*H*/2⌋ + *r*)
+> top-left pixel of the image frame = (*x*<sub>p</sub> − ⌊*W*/2⌋ + *c*, *y*<sub>p</sub> − ⌊*H*/2⌋ + *r*)
 
 *W* and *H* are positive, so ⌊·/2⌋ is the integer half rounded down (truncation gives the same).
-The frame's pixel at (*u*, *v*) inside its rectangle lands at the top-left pixel plus (*u*, *v*).
+The image frame's pixel at (*u*, *v*) inside its rectangle lands at the top-left pixel plus (*u*, *v*).
 
 **F7. Darkening** (integers). For a hi-colour pixel with channels *r*, *g*, *b* (as stored: in the
 5-6-5 layout *r* and *b* in 0…31 and *g* in 0…63):
@@ -929,6 +1010,7 @@ red or blue *C*, and likewise with 4 for green.
 | too-big vehicle constant | −16 | depth units | Added to a vehicle drawn as a sprite whose type is too big to fit under a bridge, near a bridge (−18 in all, flat profile); already contained in claim 13 |
 | ordinary unit situational term | −1 | depth units | *s* in claim 14 |
 | overlay depth bias | −2 − 15 × level (−17 − 15 × level for upright non-wall, non-rock types) | depth units | Level + 4 for bridge decks |
+| overlay shadow depth bias | −2 − 15 × level | depth units | Every overlay kind; the cell's level alone, never + 4 for a bridge deck; flat, writer (claim 13) |
 | companion-image width limit | 8 | cells | Foundations this wide or wider get no companion depth image |
 | companion-image constants (*K<sub>x</sub>*, *K<sub>y</sub>*) | (198, 446) live, (144, 172) remembered | pixels | F5 |
 | voxel-turret sort bonus | +32 | leptons (sort key) | Buildings |
@@ -946,7 +1028,10 @@ red or blue *C*, and likewise with 4 for green.
 | centring | ⌊*W*/2⌋, ⌊*H*/2⌋ | pixels | Canvas point placed on the draw point (F6) |
 | ore-spawning terrain object raise | 16 | screen rows | Draw point moved up (claim 23) |
 | terrain object damaged frame threshold | 2 | hit points | Image frame 1 below it (claim 23) |
-| overlay shifts | −12 (ore and gems, walls, crates, overlay type index 126); −1 (railroad land type); −1 (index 126); −16 and −15 (bridge-deck cell; data value 9 to 17); −15 (index 239, other cells) | screen rows | Claim 24; indices count from 0 in the order of S-0004 |
+| game-wide tree strength default | 25 | health points | Absent-key default of a game-wide key; carries over between games of a session (S-0006, claim 10) (claim 23) |
+| unset terrain type strength | −1 | health points | A terrain type's strength before any layer gives it; writing it unsets the strength; the starting health of objects of a type whose section no layer holds (claim 23) |
+| animated terrain object stage at placement | 0 | image frames | Claim 23 |
+| overlay shifts | *s*<sub>type</sub>: −13 (overlay type index 126), −12 (ore and gems, walls, crates); *s*<sub>rail</sub>: −1 (railroad land type); *s*<sub>cell</sub>: −31 (bridge-deck cell with data value 9 to 17), −16 (other bridge-deck cells), −15 (index 239, cell without a bridge deck) | screen rows | Claim 24; the three terms add; indices count from 0 in the order of S-0004 |
 | overlay shadow displacement on deck cells with data 9 to 17 | 15 left, 7 down | pixels | Claim 24 |
 | vehicle sprite facing count that rotates | 8 | facings | Any other count shows facing part 0 (claim 22) |
 | vehicle sprite facing rotation | +1 | 8-step facings | *d* = (*f*<sub>8</sub> + 1) mod 8 (claim 22) |
@@ -1066,21 +1151,33 @@ building's key. Between two units, the one later in the list is drawn on top whe
   and sort adjustment, an absent slot key counting as 0 (claim 17). Alternative: add the slot's
   values to the type's, so that an animation type's own adjustments also apply when a building
   plays it. D22 (b) tells the two apart.
-- **`quirks.overlay_lift_exact_levels`** (default: on). Overlay depth uses 15 per level while object
+- **`quirks.overlay_lift_exact_levels`** (default: on). Overlay depth, and that of overlay shadows, uses 15 per level while object
   depth uses −*L(z)*; at levels ≥ 20 the two disagree by a few units (see S-0101 quirk
   `quirks.height_lift_float_scale`). Alternative: use the same lift for both.
 - **`quirks.sprite_vehicle_eight_facings_only`** (default: on). A vehicle drawn as a sprite turns its
   image only when its type's facing count is exactly 8; with any other count it always shows the
   facing part 0 (claim 22). With the absent-key defaults, a type with no firing frames and no turret
   has a facing count of 1, so it never turns its image unless its art sets the count to 8.
-  Alternative: with a count *n* that is a power of two from 2 to 256, use the *n*-step facing of the
-  body facing, rotated so that part 0 is map north-west as for 8.
+  Alternative (off): with a count *n* that is a power of two from 2 to 256, the facing part *d* is
+  the *n*-step facing (glossary; rounding of S-0204, claim 10 and F4) of the body facing turned
+  clockwise by an eighth of a turn, 8192 facing units. For *n* = 8 this is exactly
+  (*f*<sub>8</sub> + 1) mod 8, the formula of the on state; for *n* ≥ 8 it is
+  (*f*<sub>n</sub> + *n*/8) mod *n*; for *n* = 2 and *n* = 4 the turned facing is rounded to *n*
+  steps by the same rule, halves going to the next step clockwise (so with *n* = 4 a vehicle facing
+  map north shows part 1). In both states a count that is not a power of two from 2 to 256, and a
+  disguised vehicle, give *d* = 0.
 - **`quirks.cell_pass_shadows_write_depth`** (default: on). Shadows painted in the cell pass store
   their depth where they darken (claim 27). So two building shadows overlapping on the same level
   darken once, a sprite unit's own shadow does not show inside a building's shadow, and a unit
   standing on a building shadow is depth-tested against the shadow (claim 13). Alternative: these
   shadows darken without storing depth; then overlapping shadows always darken twice and units are
   tested against what lies under the shadow.
+- **`quirks.tree_strength_fixed_at_first_section`** (default: on). A terrain type that no layer
+  gives a strength takes the game-wide tree strength in force when the first layer holding its
+  section is read, and keeps it (claim 23). So a map whose override section changes only the
+  game-wide tree strength does not change the strength of terrain types that the base rules
+  already describe. Alternative: such a type takes the game-wide tree strength in force after the
+  last layer of the game has been read. D27 (v) tells the two apart.
 - **Depth ties.** A tile pixel replaces a stored value equal to its own (≤), an object pixel does not
   (<). Two units at exactly the same depth do not hide each other in any case (readers only).
 - **Depth wrap.** Depth values are taken modulo 65536 before the bias is added; in normal play the
@@ -1100,7 +1197,7 @@ building's key. Between two units, the one later in the list is drawn on top whe
 | rules, building type | the key for the searchlight flag; no stock type sets it | the building has a building light effect, created when the building is placed (claim 3); used by D19 (e) | boolean | no |
 | art, building image | `NormalZAdjust` | building's normal depth adjustment (body in the cell pass) | integer, depth units | 0 |
 | art, building image | `ZShapePointMove` | depth-image displacement (*m<sub>x</sub>*, *m<sub>y</sub>*) in F5 | two integers, pixels | 0, 0 |
-| art, building image | `SpecialZOverlay`, `SpecialZOverlayZAdjust` | an image and an adjustment that are read but have no known effect on drawing: no drawing of this image was found | image name; integer | none; 0 |
+| art, building image | `SpecialZOverlay`, `SpecialZOverlayZAdjust` | an image and an adjustment that are read but have no known effect on drawing: no drawing of this image was found | image name; integer (no unit stated, since no effect is known) | none; 0 |
 | art, building image | `BibShape` | the building's bib | image name | none (no bib) |
 | art, building image | `DeployingAnim` | the deploying sprite | image name | none |
 | art, building image | `RoofDeployingAnim` | the roof-deploying sprite | image name | none |
@@ -1126,22 +1223,25 @@ building's key. Between two units, the one later in the list is drawn on top whe
 | rules, overlay type | `Crate` | −12 placement shift (claim 24) | boolean | no |
 | rules, overlay type | `Land` | a railroad land type gives the further −1 placement shift (claim 24) | land-type name | as S-0211 says |
 | art, vehicle or aircraft image | `Voxel` | drawn as a voxel model instead of a sprite (S-0007, claim 4); an aircraft type without it shows no body (claim 21); used by D34 | boolean | no |
-| art, vehicle image | `Facings` | facing count of a vehicle drawn as a sprite; only 8 turns the image (claim 22) | integer | 8, but 1 when the type has no firing frames and no turret |
-| art, vehicle image | `WalkFrames`, `FiringFrames` | walking and firing frame counts *F*<sub>w</sub>, *F*<sub>f</sub> (claim 22) | integer | 12; 0 |
-| art, vehicle image | the keys for the standing frame count, the death frame count, the death frame rate and the four start frames (standing, walking, firing, death); no stock file sets them (claim 22) | *F*<sub>s</sub>, *F*<sub>d</sub>, *R*<sub>d</sub>, *S*<sub>s</sub>, *S*<sub>w</sub>, *S*<sub>f</sub>, *S*<sub>d</sub> | integer | *F*<sub>s</sub>: 0, or 1 when *F*<sub>f</sub> > 0. *F*<sub>d</sub>: 0. *R*<sub>d</sub>: 1, and a value below 1 is raised to 1. With *n* the facing count after reading: *S*<sub>w</sub>: 0. *S*<sub>s</sub>: *F*<sub>w</sub>·*n* if *F*<sub>s</sub> > 0, else *S*<sub>w</sub>. *S*<sub>f</sub>: (*F*<sub>w</sub> + *F*<sub>s</sub>)·*n* if *F*<sub>f</sub> > 0, else *S*<sub>s</sub>. *S*<sub>d</sub>: (*F*<sub>f</sub> + *F*<sub>w</sub> + 1)·*n* if *F*<sub>d</sub> > 0, else −1. Each default is computed only when its own key is absent |
+| art, vehicle image | `Facings` | facing count of a vehicle drawn as a sprite; only 8 turns the image (claim 22) | integer, facings | 8, but 1 when the type has no firing frames and no turret |
+| art, vehicle image | `WalkFrames`, `FiringFrames` | walking and firing frame counts *F*<sub>w</sub>, *F*<sub>f</sub> (claim 22) | integer, image frames | 12; 0 |
+| art, vehicle image | the keys for the standing frame count, the death frame count, the death frame rate and the four start frames (standing, walking, firing, death); no stock file sets them (claim 22) | *F*<sub>s</sub>, *F*<sub>d</sub>, *R*<sub>d</sub>, *S*<sub>s</sub>, *S*<sub>w</sub>, *S*<sub>f</sub>, *S*<sub>d</sub> | integer: counts and start frames in image frames, *R*<sub>d</sub> in ticks per image frame | *F*<sub>s</sub>: 0, or 1 when *F*<sub>f</sub> > 0. *F*<sub>d</sub>: 0. *R*<sub>d</sub>: 1, and a value below 1 is raised to 1. With *n* the facing count after reading: *S*<sub>w</sub>: 0. *S*<sub>s</sub>: *F*<sub>w</sub>·*n* if *F*<sub>s</sub> > 0, else *S*<sub>w</sub>. *S*<sub>f</sub>: (*F*<sub>w</sub> + *F*<sub>s</sub>)·*n* if *F*<sub>f</sub> > 0, else *S*<sub>s</sub>. *S*<sub>d</sub>: (*F*<sub>f</sub> + *F*<sub>w</sub> + 1)·*n* if *F*<sub>d</sub> > 0, else −1. Each default is computed only when its own key is absent |
 | rules, vehicle or infantry type | `WalkRate`, `IdleRate` | walk counter of a vehicle drawn as a sprite (claim 22) | integer, ticks | 1; 0 |
 | rules, any unit type | `NoShadow` | suppresses the own shadow of a sprite unit (claims 20, 21) | boolean | no |
 | rules, vehicle type | `SmallVisceroid`, `LargeVisceroid` | either one suppresses the own shadow of a vehicle drawn as a sprite (claim 21) | boolean | no |
 | rules, vehicle type | `TooBigToFitUnderBridge` | the *U* − 18 flat row near a bridge (claim 13) | boolean | no |
 | rules, vehicle type | `Turret` | the turret path of a vehicle drawn as a sprite (claim 22); also a default of `Facings` | boolean | no |
-| rules, terrain type | `SpawnsTiberium` | the 16-row raise (claim 23) | boolean | no |
-| rules, terrain type | `IsAnimated` | body frame from the animation stage, drawn in the object pass (claim 23) | boolean | no |
-| rules, terrain type | `Strength` | starting health, and so image frame 0 or 1 (claim 23) | integer | as the rules specs say |
+| rules, terrain type | `SpawnsTiberium` | the 16-row raise (claim 23); the only animated terrain objects whose stage advances (ore mines, S-0401 claim 15) | boolean | no |
+| rules, terrain type | `IsAnimated` | body frame from the animation stage, drawn in the object pass (claim 23); the stage advances only for an ore mine (S-0401 claim 15) | boolean | no |
+| rules, terrain type | `Strength` | the terrain type's strength: starting health, and so image frame 0 or 1 (claim 23); −1 unsets it | integer, health points | unset (−1); after the first layer holding the type's section is read, the game-wide tree strength then in force (claim 23) |
+| rules, terrain type | `AnimationRate`, `AnimationProbability` | the timing and start of an ore mine's animation (S-0401 claim 15); used by D27 (vi) | integer, ticks; decimal | S-0401 |
+| rules, `[General]` | `TreeStrength` | game-wide tree strength (claim 23) | integer, health points | 25, until a rules layer first gives the key in the session; after that a game-wide key keeps the value an earlier game of the session gave it (S-0006, claim 10) |
 
 ## Measurement scenarios
 
 **Common setup.** The measurement setup of the glossary: an unmodified install with no loose
-override files other than a scenario's named test files, and no engine add-ons, stock data, purpose-made test maps. Where a scenario changes a
+override files other than a scenario's named test files and no engine add-ons; stock data only; purpose-made
+test maps. Where a scenario changes a
 type's field, it does so through the test map's override section, or, for art data, through a
 named loose copy of the art file (the glossary's named test files; test data, removed afterwards).
 Screen resolution 800×600, any game speed, fog of war off unless stated. The *test house* is the
@@ -1566,10 +1666,10 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
   S-0208) and a stock tree. Prefer sprites whose canvas width or height is odd. For each, read from
   its shape file the canvas *W* × *H* and the rectangle of the image frame shown (format data, not
   copied into any spec). Observable: the screen column and row of one chosen non-transparent pixel
-  (*u*, *v*) of the frame. Expected: F6 with the draw point of S-0108 claim 8, claim 20 and
+  (*u*, *v*) of the image frame. Expected: F6 with the draw point of S-0108 claim 8, claim 20 and
   claim 23. Falsified if any pixel is off by one or more columns or rows, in particular by one for
   an odd canvas size (the result of rounding the half up), or by the frame rectangle's position (the
-  result of centring the frame instead of the canvas).
+  result of centring the image frame instead of the canvas).
 - **D25, infantry placement (claim 20).** Setup: a flat map at level 0. (a) An infantry unit
   standing still. Observable: the screen position of a chosen pixel of its body frame and of its
   own shadow frame. Expected: both by F6 on the one draw point, the screen pixel of its position.
@@ -1601,6 +1701,31 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
   one and to 2 in the other (pre-placed objects follow the override, S-0009). Observable: the image
   frame shown at the start. Expected: image frame 1 with strength 1, image frame 0 with strength 2.
   Falsified if the two games show the same image frame.
+  (iv) Strength of a terrain type. A stock tree type whose section in the stock rules gives no
+  strength (check the stock rules; copy no value), on a flat level-0 cell, in two games: the test
+  map's override section sets that type's strength to −1 and the game-wide tree strength to 1 in
+  one, and to −1 and 2 in the other. Observable: the image frame shown at the start. Expected:
+  image frame 1, then image frame 0 (the map's layer sets the unset strength to its own game-wide
+  tree strength). Falsified if both games show the same image frame.
+  (v) The quirk `quirks.tree_strength_fixed_at_first_section`. The same tree type and cell; the
+  test map's override section sets only the game-wide tree strength, to 1, and nothing in the tree
+  type's section. Observable: the image frame shown at the start. Expected: image frame 0 if the
+  stock rules' game-wide tree strength is 2 or more (the type took it in the base rules and keeps
+  it); image frame 1 is the quirk-off result. Not measurable if the stock game-wide tree strength
+  is below 2.
+  (vi) Animated terrain objects. Part 1: a stock terrain type marked animated that has the
+  spawns-resources flag (an ore mine), placed by the map on a flat cell, with its animation
+  probability set to 1 and its animation rate to 4 ticks through the override section, so that its
+  animation starts in its first turn. Observable: per tick, the image frame shown (matched against
+  its shape file of *N* image frames). Expected: image frame 0 in the first drawn frame; then image
+  frames 0, 1, …, ⌊*N*/2⌋ − 1, each for 4 ticks, then image frame 0 again, the sequence repeating:
+  the stage returns to 0 in the turn that would show image frame ⌊*N*/2⌋ and a new animation starts in
+  the next turn, so between two sequences image frame 0 shows for 5 ticks. Image frame ⌊*N*/2⌋ never
+  appears. Part 2: the same type
+  with its spawns-resources flag cleared through the override section. Expected: image frame 0 in
+  every drawn frame over at least 1000 ticks (and no 16-row raise). Falsified if part 1 shows another
+  sequence, or image frame ⌊*N*/2⌋, or if part 2 ever shows another image frame. Not measurable if no stock
+  animated type can be placed on a test map.
 - **D28, smudges (claim 25).** Setup: test maps with flat cells at level 0 and at level 2, a
   one-cell smudge and a smudge several cells wide, placed by the map's smudge list. Observable: the
   screen position of a chosen pixel of each smudge's image frame. Expected: image frame 0 placed by
@@ -1613,14 +1738,15 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
   0, set it to 0 through the test map's override section). Not measurable if stock data has no
   such type. A flat map at level 0; the vehicle belongs to the test house.
   - (a) Order the vehicle to move one cell in each of the eight directions and to stop.
-    Observable: per tick, the image frame shown (matched against the frames of its shape file) and
+    Observable: per tick, the image frame shown (matched against the image frames of its shape file) and
     its body facing. Expected: the facing part *d* = (*f*<sub>8</sub> + 1) mod 8; while moving, the
     walking frames of that facing in turn, one step in each tick whose tick number is a multiple of
-    its walk rate; after stopping, an image frame given by the standing rows of claim 22, that is
-    *d*, *S*<sub>s</sub> + *d*·*F*<sub>s</sub> (only if *F*<sub>s</sub> > 0) or *S*<sub>w</sub> +
-    *d*·*F*<sub>w</sub>. Falsified if the facing parts run counter-clockwise, start at another
-    direction than map north-west, if the walking frame steps at another rate, or if a frame shown
-    after stopping is none of those three.
+    its walk rate; after stopping, *S*<sub>s</sub> + *d*·*F*<sub>s</sub> if *F*<sub>s</sub> > 0,
+    otherwise *S*<sub>w</sub> + *d*·*F*<sub>w</sub> (the standing-pose state is on again, claim
+    22). Falsified if the facing parts run counter-clockwise, start at another direction than map
+    north-west, if the walking image frame steps at another rate, or if an image frame shown after
+    stopping is another image frame, in particular image frame *d* where it differs from the
+    expected one.
   - (b) The vehicle stands still, alone, on open ground. Observable: the screen position of a
     chosen pixel of its body frame and of its shadow frame. Expected: both by F6 on the screen
     pixel of its position, the shadow being the body frame plus ⌊*N*/2⌋. Three further games, each
@@ -1657,8 +1783,20 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
     vehicle is gone, the image frame shown. Expected: image frames 0, 1, 2 and 3 in that order,
     each shown for 2 ticks (the first may show for 1 tick only, depending on where in the tick
     the destruction falls), then 3 until the vehicle is removed, whatever its body facing; in the
-    stock-art game no dying frames are shown (S-0312). Falsified if the frames depend on the body
+    stock-art game no dying frames are shown (S-0312). Falsified if the image frames depend on the body
     facing, run in another order or at another rate, or if the stock-art game shows the dying row.
+
+  - (f) Standing-pose state. The vehicle of (a), of a type with firing frames, so that
+    *F*<sub>s</sub> > 0 by the absent-key defaults (Import mapping; if the chosen type has none,
+    give it standing frames through a named loose copy of the art file), placed by the map facing a
+    direction with *d* ≠ 0. Observable: the image frame in the first drawn frame of the game, in
+    every drawn frame while it turns on the spot before its first step toward a cell behind it,
+    and in the first drawn frame after it has driven one cell and stopped. Expected:
+    *S*<sub>s</sub> + *d*·*F*<sub>s</sub> at the start and after stopping, *d* being the facing part
+    of its body facing at that moment; while it turns, the moving row or this standing row, never
+    image frame *d* alone. Falsified if any of these pictures shows image frame *d* where it differs
+    from the expected image frames (image frame *d* while turning would show a state turned off before the
+    turn).
 
 - **D30, darkening (claim 26).** Setup: a flat map at level 0 with the test lighting of S-0104 and a
   display path that presents a 5-6-5 surface (S-0103, *Reading a pixel*). An infantry unit stands
@@ -1735,6 +1873,37 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
   first game. (Whether its shadow shows is not part of the claim.) Not measurable if the original does not
   start a game with the changed file.
 
+- **D35, overlay shadows (claims 13, 16, 27).** Setup and reading as in D30, on a flat test map
+  at level 0 and on a copy with the same layout at level 2. Each part compares a ground pixel with
+  the same pixel in a control game whose map lacks the overlay that casts the shadow (value *v* per
+  channel). Choose the overlays by reading the stock data (copy no value); a part is not measurable
+  if its overlay's sprite has no shadow image frames or its shadow does not reach the pixels named.
+  - (a) An ore overlay whose shadow falls partly on bare ground. Expected ⌊*v*/2⌋ there. Further
+    pixels of that shadow are covered in turn by: a tree's shadow (terrain object placed by the
+    map), a building's shadow, the own shadow of an infantry unit standing still, and the shadow of
+    an animation type with the shadow flag, created as in D15 at height 0 above the terrain. Expected ⌊*v*/4⌋ under the tree's,
+    the building's and the infantry unit's shadows, and ⌊*v*/2⌋ under the animation's shadow. The
+    tree part shows the bias is above −3 and the animation part that it is at most −2, so together
+    they fix −2.
+  - (b) Two ore cells side by side such that the shadow of one falls on the ore pixels of the
+    other. Expected: those ore pixels are the same as in a game without the first cell's ore (not
+    darkened), read in the first drawn frames, before resource growth or spread changes either
+    cell. Where the two cells' shadows overlap on bare ground: ⌊*v*/2⌋.
+  - (c) An upright overlay type that is neither a wall nor a rock (its type not drawn flat), whose
+    shadow overlaps a tree's shadow on bare ground. Expected ⌊*v*/4⌋ in the overlap (with the
+    −17 of the upright body it would be ⌊*v*/2⌋).
+  - (d) Parts (a) and (c) on the level-2 map. Expected: the same results (the shadow's bias follows
+    the cell's level as the other drawings do).
+  - (e) A high bridge over dry ground, a deck cell whose shadow (with the displacement of claim 24
+    where it applies) falls on ground outside the deck's pixels, and a tree on a cell of the same
+    height level as the deck cell's own cell (the low ground under the deck, not a bank 4 levels
+    up), placed so that its shadow also falls there. Not measurable if no such layout can be
+    built. Expected ⌊*v*/4⌋ in the overlap (with the deck's 4 levels added the overlay
+    shadow would be 60 depth units nearer, and the tree's shadow would not darken it again:
+    ⌊*v*/2⌋).
+
+  Falsified if any part gives another value.
+
 ## Open questions
 
 
@@ -1747,11 +1916,10 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
 - **Building parts drawn as sprites in the object pass, and the door sprite:** the −2 is inferred
   from how other building and unit sprites are drawn, and when exactly the door sprite shows (which
   door stages) is not fully mapped. Low confidence.
-- **Terrain objects:** which terrain objects count as animated, and so are drawn in the object pass
-  as readers rather than in the cell pass (burning or falling trees, for example), is not fully
-  mapped, and neither are the image frames of animated objects and of the destruction sequence
-  (claim 23). The 16-row raise of ore-spawning objects and its depth consequence are settled
-  (claim 23).
+- **Terrain objects:** the image frames of the destruction sequence (claim 23) are not mapped,
+  nor whether an object whose destruction has begun takes turns. The image frames of animated
+  terrain objects, the strength of a terrain type and the 16-row raise of ore-spawning objects
+  with its depth consequence are settled (claim 23).
 - **Sprite placement and image frames, leftovers (claims 20 to 22, 25):**
   - which ion-cannon blasts set the ion-blast wobble, and to how many rows.
   - a per-unit state, set and cleared in the course of an aircraft carrying units, in which the own
@@ -1761,9 +1929,10 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
     *F*<sub>f</sub> > 0 can set it to 2*F*<sub>f</sub> − 1, after which it falls by 1 per tick to
     −1, so the firing image frames would show from the last to the first, each for two ticks; but
     some shots leave it alone, and which ones is not settled. Low confidence.
-  - what turns the standing-pose state of a vehicle drawn as a sprite on and off (it is on when
-    the vehicle is created), and a case in which its walk counter also grows while it is in the
-    air.
+  - the standing-pose state of a vehicle drawn as a sprite (claim 22): which stock situation, if
+    any, leaves a vehicle standing still part-way through a movement step, so that the row *d*
+    shows, and the one event that turns the state on without being identified; and a case in which
+    its walk counter also grows while it is in the air.
   - the turret path of a vehicle drawn as a sprite (low confidence; no stock type has it, D29 (c)
     gives the turret flag to one).
   - which cells count as near a bridge for the row of a vehicle drawn as a sprite whose type is
