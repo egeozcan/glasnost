@@ -2,11 +2,11 @@
 id: S-0213
 title: Human orders (the order set, when orders apply, and what each order changes)
 topic: simulation
-revision: 6
+revision: 7
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-10
+approved-on: 2026-10-12
 measurements: []
 requests: []
 supersedes: []
@@ -46,8 +46,8 @@ Terms).
 
 - **AI house.** A house of our engine that our own AI plays, in place of the original's computer
   player. By decision of the project lead (2026-10-09), an AI house has the same unit rules and the
-  same order legality as a human-controlled house; the batch's glossary (revision 7, *AI house*)
-  records the decision. For this spec that means: its orders are applied although the original
+  same order legality as a human-controlled house; the batch's glossary (*AI house*) records the
+  decision. For this spec that means: its orders are applied although the original
   drops orders in a computer house's name (claim 3); it is held to S-0214's input rules when it
   issues an order (claim 3); it has the same pending-order limit (claim 2) and the same checks when
   its orders are applied (claims 4 and 15), with no exemption; it counts as human-controlled
@@ -112,6 +112,8 @@ Terms).
 - **Cycle, order block.** As S-0201 (Terms) defines them: a cycle is the stretch of real time in
   which the game takes the player's input once and runs one tick; during an order block the game
   accepts no orders from the player.
+- **Construction yard.** In this spec, a building whose type has the construction-yard flag
+  (Import mapping), the sense of S-0214 and S-0415 (Terms), not S-0215's.
 - **Vehicle-like building, packs up.** A building whose type undeploys into a vehicle *packs up*
   when it turns back into that vehicle. *Vehicle-like building* is S-0214's term (Terms) for such a
   building with a 1 × 1 foundation.
@@ -484,9 +486,13 @@ Terms).
     - The *repair* order switches an object's repair on if it is off and off if it is on. It needs
       only a live actor, which may be off the map; input creates it for buildings only (S-0214,
       claim 13).
-    - The *power* orders (*power off* and *power on*) take a building offline or bring it online.
+    - The *power* orders (*power off* and *power on*) switch a building off or on (*switched off*,
+      *switched on*).
       They need a building that is live and on the map, and do nothing to a building whose type
-      carries the firestorm-wall flag (Edge cases).
+      carries the firestorm-wall flag (Edge cases). What the order then changes, and the further
+      conditions under which it changes nothing (a power-off order on a building whose type has
+      neither a base drain above 0 nor the needs-power flag; a power-on order while a pulse
+      disables the building), belong to S-0405 (claim 10).
     - The *primary* order needs a live building, which may be off the map, whose type is a
       factory. It is a switch: if the building is already its house's primary factory, it stops
       being primary; otherwise it becomes primary, and every other building of the same house
@@ -510,8 +516,9 @@ Terms).
 
 14. **House orders.** Some orders have no actor (table T1, lower part): place a finished building,
     start, hold or cancel production, fire a superweapon at a cell, change an alliance, surrender,
-    change the game speed, and order all infantry to cheer. Each belongs to the spec of its topic.
-    This spec only lists them, and fixes that they too are applied at the tick boundary of claim 1,
+    change the game speed, and order all infantry to cheer. Each belongs to the spec of its topic:
+    the alliance and surrender orders to S-0414 (claims 11 to 14), whose checks and effects table
+    T1 repeats only as pointers. This spec only lists them, and fixes that they too are applied at the tick boundary of claim 1,
     in the order of claim 3. The game-speed order arises only in a network game (S-0201, claim
     13): in a single-player game the options menu changes the speed directly, with no order, and
     the new speed takes effect from the next cycle (S-0201, claim 8).
@@ -701,13 +708,13 @@ from claim 17. Every row that carries an actor also ends the actor's planned rou
 | Guard spot | actor, object or cell | actor live (it may be off the map) | The actor's guard spot becomes the object or cell (claim 20) |
 | Sell wall | cell | (economy specs) | The wall in the cell is sold |
 | Repair | actor | actor live (it may be off the map) | Repair switched on or off (claim 13) |
-| Power off, power on | actor (a building) | live and on the map; no firestorm-wall flag | Building offline or online (claim 13) |
+| Power off, power on | actor (a building) | live and on the map; no firestorm-wall flag | Building switched off or on (claim 13), under the further conditions of S-0405 (claim 10) |
 | Primary | actor (a building) | live (it may be off the map); its type is a factory | Primary factory switched (claim 13) |
 | Place | building type, cell | (production specs) | A finished building is placed |
-| Produce, hold, cancel, cancel all | type | (production specs) | Production started, held or cancelled |
+| Build, hold, cancel, cancel all | type | (production specs) | Production started, held or cancelled |
 | Fire superweapon | superweapon, cell | (superweapon specs) | The superweapon fires at the cell |
-| Alliance | other house | none | Alliance with that house switched on or off |
-| Surrender | none | none | The issuing house is defeated (victory specs) |
+| Alliance | other house | both multiplayer alliance flags on (S-0414, claim 14); towards a house not yet allied, the conditions of S-0414 (claim 12); towards an allied house, the condition of S-0414 (claim 13) | The issuer allies the other house one way, or the alliance ends in both directions (S-0414, claims 12 and 13) |
+| Surrender | none | issuing house undefeated and with no result pending (S-0414, claim 11) | The issuer's objects are destroyed in its next house update, and the house is defeated when its defeat test then fails, which may be later or never (S-0414, claims 5 and 11); the game ends only through S-0414 claim 6 (play to the last side; a defeated person keeps watching); legal for every player house, human or AI |
 | Game speed | speed index | none | Game speed changed; network games only (claim 14; S-0201, claims 8 and 13) |
 | Cheer | none | none | All of the issuer's infantry cheer |
 | Route point add, commit, delete | route data | (claim 16) | Route mode (claim 16) |
@@ -819,15 +826,15 @@ The defaults in the Absent column are the values the original gives a field when
 ## Measurement scenarios
 
 All scenarios run under the measurement setup: a skirmish on a small purpose-made flat map, one
-human player and one computer player whose start position is far away, with the computer
-player's units out of reach unless a scenario places some of them (Scenarios O3, O5, O11 and
+human player and one bystander computer player (glossary) whose start position is far away, with
+the bystander's units out of reach unless a scenario places some of them (Scenarios O3, O5, O11 and
 O13 do) or hands objects to it (Scenario O16 does). A recorder reads the tick counter and, where
 named, an object's behaviour, target, destination, guard spot, contact, position and owner, and
 whether it is being sold, or the house's production, each tick. The recorder samples once per
 tick, at the moment the tick counter advances, so a sample shows the state after all of that
 tick's work, the applied orders included. The orders are given by hand, or by scripted input
 where a scenario says so or exact timing helps. Scripted input is one of the allowances of the
-measurement setup in the batch's glossary (revision 7, *measurement setup*), added by the
+measurement setup in the batch's glossary (*measurement setup*), added by the
 project lead's decision of 2026-10-09: a script produces mouse and keyboard input through the
 game's normal input only, as a player would, and never writes into the game.
 
@@ -1107,20 +1114,20 @@ game's normal input only, as a player would, and never writes into the game.
 
 **Scenario O12: power and primary switches (claim 13).**
 - *Setup:* two factory buildings of the player's that build the same kind of object (for example
-  two barracks), not naval; one building of the player's that needs power and can be switched
-  off. For step 3 only, a named test rules file sets the firestorm-wall flag on that power-using
+  two barracks), not naval; one building of the player's that needs power (its type has a base drain above 0 or the
+  needs-power flag, S-0405 claim 10) and can be switched off. For step 3 only, a named test rules file sets the firestorm-wall flag on that power-using
   building type.
 - *Procedure:* (1) power mode: click the power-using building twice. (2) Select factory *A* and
   click it on itself; then select factory *B* and click it on itself; then click *B* on itself
   again (a click that creates no order, by the input rule of claim 13). (3) With the test rules file: power mode, click the power-using building once.
 - *Runs:* 3 from the same start. No random draw is involved.
-- *Observable:* (1) whether the building is online after each click (its power use in the house's
-  power balance); (2) which factory shows the primary marker after each click; (3) whether the
-  building's online state changes.
-- *Expected:* (1) offline after the first click, online after the second; (2) *A* primary, then
+- *Observable:* (1) whether the building is switched on after each click (its power use in the
+  house's power balance); (2) which factory shows the primary marker after each click; (3) whether
+  the building's power switch changes state.
+- *Expected:* (1) switched off after the first click, switched on after the second; (2) *A* primary, then
   *B* primary and *A* not, then still *B* primary; (3) no change.
 - *Falsified if:* (1) the state does not switch; (2) *A* stays primary after *B* is made primary,
-  or *B* stops being primary at the third click; (3) the flagged building goes offline.
+  or *B* stops being primary at the third click; (3) the flagged building is switched off.
 
 **Scenario O13: checks when the order is applied (claims 4 and 17).**
 - *Setup:* (a) an armed vehicle *V* of the player's, selected, moving towards a far cell *D*; an
@@ -1266,8 +1273,10 @@ game's normal input only, as a player would, and never writes into the game.
 
 ## Questions for the project lead
 
-No decision is pending: revision 6 applies the project lead's decisions of 2026-10-09 (AI houses,
-scripted input, the click marker). Items for the lead to route at sign-off:
+No decision is pending: revision 6 applied the project lead's decisions of 2026-10-09 (AI houses,
+scripted input, the click marker). Revision 7 defers the surrender, alliance and power rows of
+table T1 to S-0414 (claims 11 to 14) and S-0405 (claim 10); the game-end decision of 2026-10-11
+(play to the last side) is S-0414's. Items for the lead to route at sign-off:
 
 - **Cited specs of the same batch,** as they stand in it: S-0003 (revision 7), S-0006 (revision
   6), S-0009 (revision 6), S-0011 (revision 4), S-0107 (revision 4), S-0201 (revision 6), S-0203
