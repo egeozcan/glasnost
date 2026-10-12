@@ -2,11 +2,11 @@
 id: S-0301
 title: Firing cycle (delay between shots, bursts, ammunition and reloading, the firing check)
 topic: combat
-revision: 2
+revision: 3
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-10
+approved-on: 2026-10-12
 measurements: []
 requests: []
 supersedes: []
@@ -46,6 +46,7 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
 - **Burst counter** *k*. A per-firer integer, 0 when the firer is created. It counts the shots
   made in the current burst, and one counter serves all weapons of a firer.
 - **House rate-of-fire factor** *h*. A per-house double, set when the houses are set up (claim 3).
+  The neutral and special houses (glossary, *house*) have *h* = 1.0 exactly.
 - **Difficulty row.** As S-0302 (Terms): the entry of the glossary's *difficulty skill block* for
   one difficulty, one of the three rules sections *easy*, *normal* and *difficult* (Import
   mapping). Each row has a rate-of-fire factor *ℓ*. The *normal row* is the one the original gives
@@ -139,8 +140,9 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    and the berserk halving of claim 8 applies to whichever kind was chosen. The burst counter
    advances in every case (claim 4).
 
-   Creating the emitter or trail is taken to always succeed; a failing creation (memory exhaustion
-   in the original) is not modelled and has no scenario.
+   Creating the emitter or trail is taken to always succeed. A creation that fails because the host
+   machine runs out of memory, which can happen in the original, is not modelled and has no
+   scenario.
 
    The full delay is *D* of Formula F1. Its base is the weapon's rate-of-fire
    field *R* times the firing house's rate-of-fire factor *h* (claim 3) plus one ranged draw
@@ -154,27 +156,40 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
      before in-burst, since stock data has no effect weapon with a burst count above 1: test data
      must supply the case)
 
-3. **The house rate-of-fire factor.** In a skirmish, *h* is the rate-of-fire factor of the house's
-   difficulty row times the rate-of-fire factor of the house's country, a product of two doubles
-   (Formula F2). In a campaign mission *h* is the row's factor alone; the country's factor is not used
-   (this records the original; our engine's campaign rule is deferred, see below).
-   - *Our engine: every house, human or AI, uses the normal row* (a rule of our engine by decision
-     of the project lead; no switch; the glossary's *difficulty skill block*). AI difficulty comes
-     from the AI's strategy modules and never from this factor. A house's row can differ only
+3. **The house rate-of-fire factor.** In a skirmish, *h* of a player house is the rate-of-fire factor
+   of the house's difficulty row times the rate-of-fire factor of the house's country, a product of two
+   doubles (Formula F2). In a campaign mission *h* is the row's factor alone; the country's factor is
+   not used (this records the original; our engine's campaign rule is deferred, see below).
+   - **Exception: the neutral and special houses.** The two non-player houses every skirmish creates
+     have *h* = 1.0 exactly: no difficulty row and no country factor applies to them, whatever their
+     countries' rate-of-fire factors or the rows hold. This is the original's rule, and our engine
+     keeps it by decision of the project lead (S-0412 claim 5; S-0413 claim 8). Their delay is
+     therefore the rate-of-fire field *R* plus the draw, before the other factors of Formula F1.
+   - *Our engine: every player house, human or AI, uses the normal row* (a rule of our engine by
+     decision of the project lead; no switch; the glossary's *difficulty skill block*). AI difficulty
+     comes from the AI's strategy modules and never from this factor. A house's row can differ only
      through an optional per-player handicap setting, which is off by default and is never tied to
      an AI house's difficulty automatically. A difficulty row that a map sets for a house is
      ignored in a skirmish; only the handicap setting can change a house's row. Campaign
      difficulty is deferred to the future campaign spec (campaigns are out of scope for now).
-   - *The original's set-up (a departure, no switch).* The original gives every human-controlled
-     house in a skirmish the normal row, and each computer-controlled house the row of its lobby
-     difficulty (in the order easy, normal, difficult), moved one row towards easy when more than
-     one human player is in the game, the rules' computer-easy-bonus flag is on and the row is not
-     already the easy one. In a campaign mission the original takes the row of the player's chosen
-     difficulty for the player's house and the row of the scenario's computer difficulty for the
-     others. Our engine does not reproduce these assignments; the handicap setting can.
-   - Backing: `measurable` (scenario F2)
-   - Confidence: high (the product, and that the campaign uses the row's factor alone); medium (the
-     original's row assignments, recorded as set-up behaviour only)
+   - *The original's set-up (a departure, no switch).* The original gives the house of every
+     human player in a skirmish the normal row. The house of each computer player gets the row that
+     its lobby entry selects (S-0412 claim 4 owns the pairing): the easy computer the difficult row,
+     the normal computer the normal row and the hard computer the easy row. When more than one human
+     player is in the game and the rules' computer-easy-bonus flag is on, a computer player's row
+     moves one step towards the easy row, unless it is the easy row already: the easy computer then
+     gets the normal row, the normal computer the easy row, and the hard computer stays on the easy
+     row. In a campaign mission the original takes the row of the player's chosen difficulty for the
+     player's house and the row of the scenario's computer difficulty for the others. Our engine does
+     not reproduce these assignments; the handicap setting can.
+   - Backing: `measurable` (scenario F2); `unmeasured` for the one-step move of the
+     computer-easy-bonus flag (it needs a game with more than one human player: a skirmish does not
+     have one in our engine, and network games are out of scope)
+   - Confidence: high (the product, that the campaign uses the row's factor alone, and the factor of
+     exactly 1.0 of the two non-player houses, as S-0412 scenario K5 part d measures it); high for
+     the row each lobby entry selects (S-0302 scenario D19 part c measures it); medium for the
+     one-step move (never observed: it needs a game with more than one human player, which a
+     skirmish does not have in our engine and network games are out of scope)
 
 4. **Bursts.** A weapon with burst count *B* fires bursts of *B* shots. A shot made while the
    firer's burst counter is *k* is the *j*-th shot of its burst, *j* = *k* + 1, and leaves the
@@ -328,7 +343,8 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
 
 ### Ammunition and reloading
 
-10. **Ammunition.** A firer starts with its type's initial ammunition (Import mapping). Each shot
+10. **Ammunition.** A firer's starting ammunition comes from its type's initial ammunition (Import
+    mapping, which leaves to the production specs how it is set from that field and from *A*). Each shot
     that a vehicle, infantry or building makes uses one round when *a* > 0; *a* = −1 is never
     changed. With *a* = 0 the firing check answers *out of ammunition*. A disc laser shot uses no
     round (and it neither advances a garrison's muzzle index, S-0313, nor restarts a vehicle's
@@ -479,7 +495,8 @@ Every value is a whole number of ticks. Examples (with *h* = 1, *v* = 0.5 as a d
 gives *D*₃ = 3 and *D*₄ = 1.
 
 **F2. House factor** (claim 3). With *ℓ* the difficulty row's rate-of-fire factor and *κ* the country's
-(doubles): *h* = RZ₅₃(*ℓ* × *κ*) in a skirmish; *h* = *ℓ* in a campaign mission.
+(doubles): *h* = RZ₅₃(*ℓ* × *κ*) for a player house in a skirmish, *h* = *ℓ* in a campaign mission, and
+*h* = 1.0 for the neutral and special houses, whatever *ℓ* and *κ* hold.
 
 **F3. Reload delay** (claim 11). Integers, ticks. With *A* the maximum ammunition, *a* the current
 ammunition, *E* the empty-reload field, *L* the reload field, *I* the reload-increment field and *W*
@@ -559,8 +576,9 @@ berserk firer that value is then halved and truncated toward zero, as in the las
 - **The campaign ignores the country factor** (claim 3). Original behaviour; no switch. Backing: `measurable` (scenario F2, campaign run), confidence
   high.
 - **Burst count 0 or less** (departure, no switch). The original fails on a burst count of 0 (a
-  division by zero). For a negative count *B* it keeps going: the burst counter wraps at |*B*|
-  (the remainder keeps the sign of the positive position), but no position is below *B*, so every
+  division by zero). For a negative count *B* it keeps going: after the shot at position *j* the burst
+  counter is the remainder of *j* divided by |*B*|, a value from 0 to |*B*| − 1, but no position is
+  below *B*, so every
   shot gets the full delay and never an in-burst delay. Our engine treats any burst count below 1
   as 1, and the importer warns, naming the weapon. Policy: bad data gives a safe deterministic
   result plus an importer warning. Backing: `unmeasured` for the original's negative-count
@@ -652,8 +670,10 @@ firer's shots are made, read from projectile creation or the target's health dro
 - Setup: as F1, with a test rules file that sets the house's normal-row factor to 1.5 and its
   country factor to 0.8 (expected *h* as Formula F2 gives it, about 1.2), and a run of a campaign mission set up for the test (our engine defers campaigns; this run only
   records the original), played at the difficulty whose row the test file sets, where the country factor must not count,
-  and optionally computer houses at each lobby difficulty (the original's set-up of claim 3, recorded
-  and not reproduced by our engine); a veteran vehicle of a type with the veteran
+  and optionally computer houses at each lobby entry (easy, normal and hard computer: the original's
+  set-up of claim 3 with the pairing of S-0412 claim 4, recorded and not reproduced by our engine; in
+  these runs the rows' factors differ, and the expected *h* is the factor of the row that claim 3
+  gives the entry times the country factor); a veteran vehicle of a type with the veteran
   rate-of-fire ability, and an elite one of a type with only the veteran ability; the test rules
   file also sets *v* = 0.5.
 - Observable: shot intervals and draws.
@@ -661,6 +681,13 @@ firer's shots are made, read from projectile creation or the target's health dro
   *D*₁ is 10.
 - Expected: Formulas F1 and F2 exactly; elite gets the factor once. The 0.6 run gives *D*₂ = 6 (the single
   just above 0.6), the 60% run *D*₂ = 5 (a double just below 0.6 under the round-toward-zero mode).
+- A further run (the non-player houses): the test rules file gives the three rows the factors 2.0,
+  1.5 and 0.5 (easy, normal, difficult) and the neutral country the factor 1.5 (all exact in binary).
+  A defence building of the neutral house with a rate-of-fire field of 40, not veteran, fires at a
+  stationary target of the special house (S-0412 scenario K5 part d sets this up) over 20 shots.
+  Expected: every interval 40, 41 or 42 ticks (*D*₁ with *h* = 1.0 and the draw *u*). Falsified if an
+  interval lies outside 40 to 42, in particular at 60 to 62, 80 to 82 or 90 to 92 (a country factor
+  or a row applied).
 - Falsified if: the country factor acts in the campaign run, does not act in the skirmish run, the
   skirmish intervals do not follow that *h*, the elite interval shows the factor twice, the 0.6 run
   gives a *D*₂ other than 6, or the 60% run gives one other than 5.
