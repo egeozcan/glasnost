@@ -2,13 +2,13 @@
 id: S-0112
 title: Overlay and terrain object drawing
 topic: rendering
-revision: 5
+revision: 6
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-10
+approved-on: 2026-10-12
 measurements: []
-requests: [Q-0012]
+requests: [Q-0021]
 supersedes: []
 ---
 
@@ -16,13 +16,10 @@ supersedes: []
 
 ## Summary
 
-This spec covers the palettes, shade tables, images and image frames of overlays, smudges and
-terrain objects. For every overlay, smudge and terrain object it says which palette and shade table it is
-drawn with and which brightness rule of S-0104 applies. For every overlay it also says which sprite
-supplies its picture and which image frame of that sprite its body and its shadow show; the image
-frames of smudges and terrain objects are S-0102's (claim 3). Where the picture goes on screen, how it
-takes part in the depth test and how a shadow darkens the screen are S-0102's (claims 15, 16 and
-23 to 26). How a palette is turned into shade rows is S-0103's and S-0104's.
+Which palette, shade table and brightness rule each overlay, smudge and terrain object is drawn
+with, and which sprite and image frame each overlay's body and shadow show (including wall
+connection bits and tiberium image runs). Placement, depth and shadow darkening are S-0102's, and
+building shade rows is S-0103's and S-0104's.
 
 ## Terms
 
@@ -31,13 +28,18 @@ terrain object*, *palette*, *house colour*, *local player*, *image frame*, *spri
 *slope*, *theater*, *tiberium* (the resource type kind), *type list*, *departure*, *importer warning*
 and *quirk switch*.
 
-- **Smudge** and its *pieces* are S-0102's terms (Terms there).
+- **Smudge** and its *pieces* are S-0102's terms (Terms there). The *overlay shadow level*
+  *ℓ*<sub>s</sub> is S-0102's too: the height level of the cell that holds an overlay, without the
+  4 levels a bridge deck adds.
 - **Lighting terms of S-0104.** *Shade table*, *shade row*, *brightness*, *scaled ground level*,
   *unscaled ground level U*, *scaled raised level*, *map tint*, *global effect*, *tile shade table*
   of a cell, the *untinted table* (claim 6), the *light-alpha value* and the *light-glow image*
   (Terms there) and *neutral test lighting* are used only as S-0104 defines them. *Deck cell*, *wall overlay* and *ore-spawning terrain object* are S-0104's terms
   (Terms there) and keep that meaning. *Plain terrain object* is a terrain object that is not
   ore-spawning.
+- **Depth terms of S-0102.** *Depth bias*, *depth units*, the *flat profile*, *upright* types and
+  bodies, *writing depth*, the *repainted area* and its *ranks* are used as S-0102 claims 13 and
+  16 use them (claim 8, Constants, OV16).
 - **Palette terms of S-0103.** *Unit palette*, *tile palette*, *theater palette*, *anim palette*,
   the theater names and file names of S-0103 claim 2 and Constants, and the *53-shade house-colour
   palette* of a house (S-0103 claim 5) are S-0103's.
@@ -76,6 +78,8 @@ and *quirk switch*.
   unit palette** (file `UNITSNO.PAL`, ×4 by S-0103 claim 1), read once when the program starts. It
   is built from the file's own colours, multiplied by 4 once, so it is never built from the palette
   multiplied by 4 twice that S-0103 describes for a missing unit palette file (S-0103 Edge cases).
+  What it is built from when the snow unit palette file itself is missing at program start is an
+  open question (Open questions).
 - **Connection bits.** For a wall overlay with data value *d*, the four binary digits of
   *d* mod 16, digit *k* (worth 2^*k*, *k* = 0 … 3) standing for one edge neighbour (claim 7).
   ⌊*d*/16⌋ is the wall's damage stage, which the wall-damage rules own (S-0303 claim 16 and
@@ -115,7 +119,7 @@ and *quirk switch*.
    |---|---|---|---|---|---|
    | 1 | holds a veinhole marker overlay | — | — | not drawn | — |
    | 2 | a deck cell, whatever its overlay type | the cell's tile shade table | the cell's scaled raised level | the cell's overlay type | claim 6 |
-   | 3 | tiberium overlay | the start-up resource table | 1000 | chosen by claim 4 | the overlay data value |
+   | 3 | tiberium overlay | the start-up resource table | 1000 ‰ | chosen by claim 4 | the overlay data value |
    | 4 | wall overlay | the local player's 53-shade house-colour palette | the cell's unscaled ground level *U* | the cell's overlay type | the overlay data value |
    | 5 | the vein overlay | the start-up resource table | the cell's scaled ground level | the cell's overlay type | the overlay data value |
    | 6 | overlay type with the crate flag | the cell's tile shade table | the cell's scaled ground level | the cell's overlay type | 0 |
@@ -176,13 +180,13 @@ and *quirk switch*.
      appears during play can land in a deck cell depends on where crates may appear, which is not
      covered here. So no scenario of this spec puts a vein or a crate in a deck cell (Open
      questions).
-     Also `unmeasured`: that only the four bridge positions make deck cells. Testing it needs a
-     reordered overlay list that puts another type at a bridge position. Every map cell stores
-     list positions, so such a list changes the types of all the map's overlays, and it yields no
-     bridge that a scenario could compare.
+     OV17 for which positions make deck cells: it swaps flagless types into the four bridge
+     positions with a reordered overlay type list in a loose rules copy (named test file) and
+     moves the bridge types elsewhere. It samples the four positions and a few others; it cannot
+     check every other position, so "only these four" rests on the sample.
    - Confidence: high for rows 3, 4, 5 and 8; medium for rows 1, 2, 6 and 7, for row 1's
      precedence over row 2, for row 2's precedence over rows 3, 4 and 7, for the precedence among
-     rows 3 to 7 and for the bridge positions that make deck cells; low for row 2's precedence
+     rows 3 to 7 and for the bridge positions that make deck cells (a sample, OV17); low for row 2's precedence
      over rows 5 and 6.
 
 2. **The start-up tables never change during a session.** The start-up resource table and the
@@ -264,7 +268,8 @@ and *quirk switch*.
    *d*, except that for *d* = 0 and *d* = 9 it is *d* + *T*(*x* mod 4, *y* mod 4), with the
    engine table *T* of Constants. Neighbouring deck pieces of the same data value therefore
    cycle through four consecutive image frames in a fixed 4 × 4 pattern.
-   - Backing: `measurable` (OV7)
+   - Backing: `measurable` (OV7, part E for the data value 9 and the values that do not vary; OV17
+     for which cells are deck cells)
    - Confidence: medium
 
 7. **Wall connection bits.** A wall overlay's image frame is its overlay data value (claim 1,
@@ -319,29 +324,35 @@ and *quirk switch*.
      without the tower. What the hit does is S-0303's (F4). Placing a tower gives no wall hits.
      Two consequences follow from F4:
      - A wall whose only link was the tower has no link when the hit lands. If its type has two
-       damage stages, a successful hit removes it, and the removal recomputes its own reach.
-     - A departure hit never sets off F4's neighbour hits. It takes a wall from stage 0 to stage 1,
-       and those hits need a type with more than two stages whose wall has just reached its
-       last-but-one stage, which is stage 2 or later.
-   - **Initial state.** The map's overlay list, with its overlay data stream, is placed before the
-     map's buildings, and the buildings are placed in entry order (S-0009 table "Map content" and
-     claim 43). Each placement recomputes the cells of the table. So a wall from the overlay list
-     starts with:
-     - in a map without the overlay data stream, the bits toward its neighbours of the same overlay
-       type, and in a map with the stream, the data value the stream gives, connected or not
-       (S-0009 claim 13),
-     - then, once for each building of the map whose placement recomputes the wall's cell (a wall
-       building in an edge neighbour, a gate whose two cells reach it, a wall tower within two edge
-       steps), the bits computed at that placement, from the buildings placed by then. The stage
-       is kept.
+       damage stages, a successful hit removes it, and the removal recomputes its own reach. If
+       its type has more, a successful hit leaves it standing at stage 1.
+     - A departure hit never sets off F4's neighbour hits. It takes a wall from stage 0 to stage 1.
+       Those hits need a type with more than two damage stages (*L* > 2) whose wall has just
+       reached stage *L* − 1, the last stage at which it stands (a type with *L* stages stands at
+       stages 0 to *L* − 1), so stage 2 or later. A three-stage type gets them at stage 2, not at
+       stage 1.
+     - Backing of these two consequences: they apply S-0303's F4 to the tower's hits. OV6 cases b
+       and n read the first one. The second has no scenario of its own here and is
+       `unmeasured`: S-0303's measurements of F4 are its evidence.
+   - **Initial state.** At map load the overlay list, with its overlay data stream, is placed
+     before the map's buildings, and the buildings are placed in entry order (S-0009 table "Map
+     content" and claim 43); each placement recomputes the cells of the event table above. So a wall's
+     connection bits at the start of the game are fixed by the last building placement of the map
+     that recomputes its cell (the wall building that placed it, if any; a wall building in an edge
+     neighbour; a gate whose two cells reach it; a wall tower within two edge steps), and its stage
+     is always the one it was placed with:
 
-     A wall from a wall building of the map's building list is placed as a wall built in play,
-     owned by the building's owner, and is recomputed in the same way by the buildings after it.
+     | Wall | Last building placement that recomputes its cell | Connection bits at the start |
+     |---|---|---|
+     | from the overlay list | none | without the overlay data stream: toward its edge neighbours of the same overlay type; with the stream: those of the data value the stream gives, connected or not (S-0009 claim 13) |
+     | from the overlay list | a building of the map's building list | from the neighbours as they stand once that building is placed: the overlay list's walls and everything the map's building list has placed up to and including that entry (the walls of its wall buildings among them) |
+     | from a wall building of the map's building list (placed as a wall built in play, so at stage 0, owned by the building's owner) | its own placement or a later one | as in the row above, for that last placement |
+
      Consequences: a wall at either end of a gate three cells long, or beside a one-cell tower,
      starts joined to it, whether it comes from the overlay list or from a wall building listed
      before or after the gate or tower. The connection bits of a stream value in the reach of a
      gate or tower are recomputed before the game starts, and only its stage survives. A wall
-     beside a deeper gate or a longer tower, outside the cells of the table, starts without a bit
+     beside a deeper gate or a longer tower, outside the cells of the event table, starts without a bit
      toward it unless a later placement, for example a wall building next to it, recomputes it.
    - What damage does to the stage, the removal of damaged pieces, and the hits on neighbouring
      walls belong to the wall-damage rules (S-0303 claim 16 and F4, S-0210 claim 8). Who may sell a
@@ -368,7 +379,7 @@ and *quirk switch*.
 8. **Overlay shadows.** Every cell that holds an overlay also draws the shadow, if any, that the
    table below gives it, in every game and at every detail level, cells with a veinhole marker
    overlay included.
-   The drawing order and the darkening are S-0102's (claims 16 and 26). The shadow's sprite and
+   The depth bias, the drawing order and the darkening are S-0102's (claims 13, 16 and 26). The shadow's sprite and
    image frame follow the first row of this table that the cell meets, with *N* the frame count of
    that sprite and *d* the overlay data value:
 
@@ -389,13 +400,30 @@ and *quirk switch*.
    body is: it is whatever type the cell stores. In a
    deck cell the shadow leaves out the position term of claim 6. Body and shadow can therefore come
    from different sprites or image frames (`quirks.overlay_shadow_from_stored_type`).
+   **Depth of every overlay shadow.** Whichever row above chose the sprite, an overlay shadow has
+   one depth bias: −2 − 15 × *ℓ*<sub>s</sub> depth units, with the flat profile, and it writes depth
+   (S-0102 claim 13, last overlay row). It does not depend on the overlay's kind or flags (ore and
+   gems, walls, crates, rubble, bridge decks, the veinhole markers, any other flat or upright type),
+   on the row of claim 1 that draws the body, on the slope, or on the 4 levels of a bridge deck. So:
+   - the shadow of an upright type does not take the −15 of the upright body, and the shadow of a
+     deck cell does not take the deck's 4 levels: it lies 60 depth units farther than the deck's own
+     pixels and never darkens them.
+   - every overlay body of the repainted area is drawn before every overlay shadow (S-0102 claim 16,
+     rank 3), so where a shadow falls on a flat overlay body at the same level the two tie and the
+     body shows undarkened.
+   - what overlay shadows do where they meet other shadows, bodies and drawings is S-0102 claim 27
+     (its overlay-shadow rows), and holds for every shadow of this claim, the marker overlays' too.
    - Backing: `measurable` (OV3 part B and OV7 part A for the stored-type shadow and the deck
-     shadow, OV10 for the veinhole markers, OV8 for rows 2, 4 and 5, OV9 for row 1, OV7 part B
+     shadow, S-0102 D35 for the depth of ore, upright and deck-cell shadows and OV16 for the depth of
+     the shadows of walls, marker cells and rubble, OV10 for the veinhole markers, OV8 for rows 2, 4 and 5, OV9 for row 1, OV7 part B
      for row 2 in a deck cell, OV15 part I for row 1 over row 2 and part J for row 1 over rows 4
      and 5). `unmeasured` for row 3, and so for row 1's precedence over it, since row 3 cannot
      arise in play (claim 5).
-   - Confidence: high for the general row and the stored-type sprite; medium for the rubble and
-     crate rows, for the precedence of row 1 over rows 2 to 5 and for the veinhole markers' shadows.
+     `unmeasured` for the depth of a crate's shadow: crates cannot be placed on a skirmish map
+     (S-0009 claim 12) and appear only in play, so no layout puts one beside a chosen shadow.
+   - Confidence: high for the general row and the stored-type sprite, and for the depth of the
+     shadows of ore, upright types, walls and deck cells; medium for the depth of the shadows of marker cells,
+     rubble and crates, and for the rubble and crate rows, for the precedence of row 1 over rows 2 to 5 and for the veinhole markers' shadows.
 
 9. **An image frame beyond the sprite draws nothing.** When the image frame chosen for a body or a
    shadow is not below the sprite's frame count, or that image frame holds no picture, nothing is
@@ -499,6 +527,7 @@ leave rubble, and the other cells with the rubble overlay, draw no shadow.
 | deck variation table *T* | see the table below | image frames | by (*x* mod 4, *y* mod 4), claim 6 |
 | deck data values that vary | 0, 9 | overlay data value | claim 6 |
 | rubble image frame of a body sprite | 3 | image frame | claim 5 |
+| overlay shadow depth bias | −2 − 15 × *ℓ*<sub>s</sub> | depth units | every overlay kind, flat profile, writes depth; *ℓ*<sub>s</sub> without a deck's 4 levels (claim 8; S-0102 claim 13) |
 | ore and gem brightness | 1000 | ‰ | row 26 of 53, S-0104 |
 | start-up table rows | 53 | rows | untinted, S-0104 claim 6 |
 | start-up resource palette file | `TEMPERAT.PAL` | file name | read once per session |
@@ -565,7 +594,7 @@ original, not stock data:
   it.
   `quirks.wall_local_player_colour` (default on). Off: a wall is drawn with the 53-shade
   house-colour palette of the house recorded as its owner; a wall with no owner (placed by the
-  map) keeps the local player's palette.
+  map's overlay list) keeps the local player's palette.
 - **Resource and mine palettes fixed at program start** (claim 2). Ore, gems and veins use the
   temperate theater palette, and ore-spawning terrain objects the snow unit palette, whatever the
   theater. `quirks.resource_palettes_from_start` (default on). Off: both tables are rebuilt with the
@@ -592,7 +621,8 @@ original, not stock data:
   the tower's wall hits still go to the edge neighbours of its top-left foundation cell, as in
   claim 7.
 - **Shadows of the marker overlays** (claims 1 and 8). The marker overlays' bodies are skipped but their
-  shadows are not. No switch: it follows the general shadow rule.
+  shadows are not, and those shadows have the depth of every overlay shadow (claim 8). No switch: it
+  follows the general shadow rule.
 - **Crates ignore their data value** (claim 1, row 6, and claim 8). No switch.
 - **Image number 2 keeps the sloped run** (claim 10). Image number 2 sets the first position and
   the flat run but leaves the sloped run as it was, so whether such a tiberium has sloped pictures
@@ -705,7 +735,7 @@ comparison.
   flat picture or the wrong slope pair, part B shows types other than those stated, or part C
   draws the cell.
 - **OV5, wall colour (claim 1, row 4).** A skirmish map with walls placed as overlays and a wall
-  line placed as wall buildings in the map's structures section, owned by the opponent's house
+  line placed as wall buildings in the map's building list, owned by the opponent's house
   (such buildings become wall overlays when the map loads). Two runs that swap the local player
   between house slots 0 and 1, with different colours. *Observable:* the colours of every wall
   piece, compared with each house's 53-shade house-colour palette. *Expected:* in each run every wall, the
@@ -856,7 +886,7 @@ comparison.
     when its gate leaves or keeps it after its tower leaves; in map D *W* loses its bit or *W*2
     gains one.
 - **OV7, bridge decks (claims 1, 6 and 8).** A high bridge four cells long, on legal cells, whose
-  deck cells have data value 0, at known coordinates, under a red map tint of 0.50. Four runs.
+  deck cells have data value 0, at known coordinates, under a red map tint of 0.50. Six runs.
   - *Observable:* the sprite frames each deck cell shows as its body and its shadow, matched
     against offline renders, and the deck's colours compared with the terrain beside the bridge.
   - *Part A,* stock rules. *Expected:* deck cell (*x*, *y*) shows sprite frame *T*(*x* mod 4,
@@ -868,6 +898,15 @@ comparison.
     palette's colours, turned red like the terrain. Part D reads only the colours, because the wall
     flag can change the data values. Each part is inconclusive if the bridge does not appear with
     its deck cells.
+  - *Part E, other data values.* Two runs as part A, except that the overlay data stream gives
+    every deck cell data value 9 (run E1) or one value *d*′ that is neither 0 nor 9 (run E2).
+    Choose *d*′ so that every image frame named here lies among the deck type's body image frames
+    (check the stock sprite). *Expected:* in run E1 deck cell (*x*, *y*) shows sprite frame
+    9 + *T*(*x* mod 4, *y* mod 4); in run E2 every deck cell shows sprite frame *d*′. *Falsified
+    if* run E1 shows the same sprite frame in every deck cell or any frame other than
+    9 + *T*(*x* mod 4, *y* mod 4), or the sprite frames of run E2 vary with position. Each run is
+    inconclusive if the bridge does not appear with its deck cells, or if a sprite frame named
+    here lies beyond the deck type's body image frames.
   - *Falsified if:* in part A every deck cell shows sprite frame 0, or the shadow varies with
     position; in part B the deck cells draw no body, or cast a shadow; in part C a deck cell shows a picture from a
     tiberium's run, or untinted colours of the temperate theater palette; in part D the deck shows
@@ -1055,8 +1094,48 @@ comparison.
     shadow appears at a top-left foundation cell, or a foundation cell lacks the rectangle or its
     shadow.
 
+- **OV16, depth of overlay shadows by kind (claim 8; S-0102 claims 13 and 27, which D35 measures
+  for ore, an upright type and a deck cell).** Setup and reading as in S-0102 D35: a flat test map at
+  level 0 and a copy at level 2; each part compares a ground pixel with the same pixel in a control
+  game without the overlay that casts the shadow (value *v* per channel); a part is not measurable
+  if its overlay's sprite has no shadow image frames or the shadow does not reach the pixels named.
+  Every part puts a tree (a terrain object placed by the map) so that its shadow overlaps the
+  overlay shadow on bare ground.
+  - *Part A (wall).* A wall overlay (the local player's, placed by the map). *Expected:* ⌊*v*/4⌋ in the
+    overlap, as in D35 (a): the tree's shadow darkens it a second time. With the −15 of an
+    upright body the overlay shadow would be farther than the tree's and the overlap would be ⌊*v*/2⌋.
+  - *Part B (veinhole marker).* A veinhole as in OV10 part A with loose marker sprites whose shadow
+    image frames are full rectangles; a tree whose shadow overlaps a marker cell's rectangle.
+    *Expected:* ⌊*v*/4⌋ in the overlap.
+  - *Part C (rubble).* A destroyed building that leaves rubble (OV8's first building), the tree beside
+    the rubble cell. *Expected:* ⌊*v*/4⌋ in the overlap.
+  - *Part D (level 2).* Parts A to C on the level-2 map. *Expected:* the same values (the bias follows
+    the cell's level alone).
+  *Falsified if* any part gives ⌊*v*/2⌋ in the overlap or another value.
+- **OV17, which positions make deck cells (claims 1 and 6).** One run, from a fresh program start,
+  on a temperate map with neutral test lighting. A loose copy of the rules file (named test
+  file) reorders the overlay type list (S-0004) so that four overlay types *A*, *B*, *C* and *D*
+  that have none of the four flags and whose sprites have at least four body image frames
+  with distinguishable pictures (check the base file) sit at positions 24, 25, 237 and 238, and the
+  four bridge types take the positions that *A* to *D* held in the stock list, *X*₁ to *X*₄. A fifth
+  such type *E* keeps its stock position, which is no bridge position, as the control. The map's overlay list is written for the reordered list. Rows
+  of four by four cells on flat ground, all at data value 0, so that every combination of *x* mod 4
+  and *y* mod 4 occurs: one block per position 24, 25, 237, 238, one block per *X*₁ to *X*₄ and
+  one block of *E*.
+  - *Observable:* the sprite frame each cell shows as its body, matched against offline renders of
+    the sprites, and the cells' colours compared with the terrain beside them.
+  - *Expected:* in each of the four blocks at positions 24, 25, 237 and 238, cell (*x*, *y*)
+    shows sprite frame *T*(*x* mod 4, *y* mod 4) of the type stored there (claim 6) in the tile
+    palette's colours. In each block of a moved bridge type at *X*<sub>*i*</sub> every cell shows
+    sprite frame 0. The block of *E* shows sprite frame 0 in every cell.
+  - *Falsified if:* a block at one of the four positions shows sprite frame 0 in every cell, a moved
+    bridge type shows the 4 × 4 pattern, or the block of *E* shows the pattern. The run is
+    inconclusive if the game refuses the reordered list or a block does not appear.
+
 ## Open questions
 
+- **Deck cells beyond the sampled positions.** OV17 samples a few positions besides the four
+  bridge positions; that no other position makes deck cells is not checked position by position.
 - **Missing start-up palette files.** What happens when the temperate theater palette file or the
   snow unit palette file is missing at program start is not established.
 - **Veins and crates in deck cells.** Whether vein growth during play, the vein rebuild at load
