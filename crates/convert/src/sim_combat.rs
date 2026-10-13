@@ -219,6 +219,7 @@ const WEAPON_COMBAT: &[Row] = &[
     ("suicide", "Suicide", Bool, "S-0312"),
     ("supress", "Supress", Bool, "S-0309"),
     ("fire_once", "FireOnce", Bool, "S-0309"),
+    ("reveal_on_fire", "RevealOnFire", Bool, "S-0409"),
 ];
 
 /// Combat fields of projectiles.

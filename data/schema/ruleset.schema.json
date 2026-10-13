@@ -2546,6 +2546,15 @@
           ],
           "default": null
         },
+        "sight": {
+          "description": "Buildings: `Sight`, the sight field *S* in cells (S-0409 claims 4\nand 8; infantry, vehicles and aircraft carry it in their own\nsection); absent: 0.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
         "slave_regen_rate": {
           "description": "Units: `SlaveRegenRate`, ticks (S-0402 claim 14); absent: 0.",
           "type": [
@@ -8358,6 +8367,14 @@
               "type": "null"
             }
           ]
+        },
+        "reveal_on_fire": {
+          "description": "`RevealOnFire`, the reveal-on-fire flag (S-0409 claim 16); absent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
         },
         "rof": {
           "description": "`ROF` R, ticks (S-0301).",

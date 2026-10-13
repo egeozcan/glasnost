@@ -219,6 +219,7 @@ pub fn place(w: &mut World, id: ObjectId, pos: Pos, facing: Facing) {
         // spec: S-0215 Terms (the placement fall-back: an actor falls back to rest when placed)
         crate::process::fall_back(w, id, true);
     }
+    crate::econ::events::entered_map(w, id, false);
 }
 
 /// Takes an object off the map and out of play (destroyed, removed or gone
@@ -229,6 +230,7 @@ pub fn remove(w: &mut World, id: ObjectId) {
     let Some(o) = w.obj(id).cloned() else {
         return;
     };
+    crate::econ::events::leaving_map(w, id, true);
     let skip = w.rules().quirks.update_order_removal_skip;
     w.update.leave(id, skip);
     let q = occ_quirks(w);
@@ -587,7 +589,10 @@ pub fn place_map_objects(w: &mut World, map: &Map, sandbox: bool) {
             }
             if kind == Kind::Building {
                 if !fields.switched_on() {
-                    w.note("S-0009 claim 40: a building that starts switched off needs the power topic (no spec); it starts switched on");
+                    // spec: S-0405 Terms (a building is switched on when created in play, unless the map places it switched off, S-0009)
+                    if let Some(o) = w.obj_mut(id) {
+                        o.econ.building.switched_off = true;
+                    }
                 }
                 // spec: S-0009 claim 40 (min(c, 3) upgrade fields, each naming a building type, placed right after the building)
                 let c = fields.upgrade_count.unwrap_or(0).clamp(0, 3) as usize; // spec: S-0009 claim 40 (a count above 3: our engine uses 3)

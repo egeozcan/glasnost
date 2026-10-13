@@ -32,7 +32,7 @@ fn import(base: &str, art: &str) -> (SimData, Vec<String>) {
 
 const BASE: &str = "[Countries]\n0=Ruritania\n[Ruritania]\nCostUnitsMult=1.25\nIncomeMult=0.75\nSide=Blue\nMultiplay=yes\nCost=2\n\
 [BuildingTypes]\n0=MILL\n1=PLANT\n[MILL]\nPower=-30\nRefinery=yes\nAdjacent=4\nPrerequisite=plant,power\nOwner=Ruritania,Nowhere\nUnitsCostBonus=0.5\nFactory=Whatever\nImage=MILLART\n\
-[PLANT]\nPower=100\nExtraPower=7\n\
+[PLANT]\nPower=100\nExtraPower=7\nSight=6\n\
 [VehicleTypes]\n0=TRUCK\n[TRUCK]\nDock=MILL,Elsewhere\nBuildLimit=3\nPoweredUnit=yes\n\
 [Tiberiums]\n0=Rubies\n[Rubies]\nValue=33\nGrowthPercentage=0.2\n\
 [SuperWeaponTypes]\n0=Zap\n[Zap]\nDisableableFromShell=yes\nType=Thing\n\
@@ -62,6 +62,8 @@ fn building_econ_fields_are_converted() {
     assert_eq!(mill.econ.art_number_of_docks, Some(2));
     assert_eq!(mill.econ.special_anim.as_deref(), Some("SPIN"));
     assert_eq!(s.buildings["PLANT"].econ.extra_power, Some(7));
+    // spec: S-0409 Import mapping (a building's Sight, cells)
+    assert_eq!(s.buildings["PLANT"].econ.sight, Some(6));
     // Q-0100: the factory field is not converted and the importer warns.
     assert_eq!(mill.factory, None);
     assert!(w.iter().any(|m| m.contains("Q-0100")));

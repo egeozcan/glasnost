@@ -772,6 +772,8 @@ impl Decoder<'_> {
                 .to_vec(),
             official: self.boolean(b"Basic", b"Official", false),
             multiplayer_only: self.boolean(b"Basic", b"MultiplayerOnly", false),
+            // spec: S-0410 Import mapping ([Basic] FreeRadar, absent: no)
+            free_radar: self.boolean(b"Basic", b"FreeRadar", false),
         }
     }
 

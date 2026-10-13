@@ -16,6 +16,7 @@ pub mod deploy;
 pub mod events;
 pub mod harvest;
 pub mod houses;
+pub mod minimap;
 pub mod placement;
 pub mod power;
 pub mod production;
@@ -101,12 +102,22 @@ pub struct WorldEcon {
 /// ([`crate::rules::SimRules`] holds them). Each topic owns its part and the
 /// absent-key defaults its spec gives.
 #[derive(Clone, Debug, Default)]
-pub struct EconRules {}
+pub struct EconRules {
+    /// Power (S-0405).
+    pub power: power::Rules,
+    /// Shroud and sight (S-0409).
+    pub shroud: shroud::Rules,
+    /// Radar (S-0410).
+    pub radar: radar::Rules,
+}
 
 impl EconRules {
     /// The typed rules of a resolved ruleset.
     pub fn new(r: &glasnost_rules::schema::Ruleset, mode: glasnost_num::Rounding) -> Self {
-        let _ = (r, mode);
-        Self {}
+        Self {
+            power: power::Rules::new(r, mode),
+            shroud: shroud::Rules::new(r, mode),
+            radar: radar::Rules::new(r, mode),
+        }
     }
 }

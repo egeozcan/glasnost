@@ -264,6 +264,12 @@ pub fn check(
     let Some(weapon) = weapon else {
         return Answer::Impossible;
     };
+    // spec: S-0405 claim 9 and T1 (a building's own answers, at rank 4)
+    if kind == Kind::Building
+        && let Some(a) = crate::econ::power::firing_answer(w, firer)
+    {
+        return a;
+    }
     let wr = r.combat.weapon(weapon);
     if let Some(t) = target
         && projectile_illegal(w, weapon, t)
