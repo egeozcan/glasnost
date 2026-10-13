@@ -230,7 +230,7 @@ pub struct Header {
     /// the matching component of the mark in force at that phase (S-0009
     /// claim 29, our engine's departure). Pairs 1 … 8 come completed from
     /// the value in force, (0, 0).
-    pub pairs: Vec<Option<[Option<i32>; 2]>>,
+    pub pairs: Vec<Option<[Option<i32>; 2]>>, // spec: S-0009 Import mapping ([Header] WaypointN: two integers)
 }
 
 impl Default for Header {
