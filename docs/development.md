@@ -214,7 +214,7 @@ Every quirk switch of the implemented specs has a field in `ini::Quirks` (includ
 | Where | Placeholder | Request |
 |---|---|---|
 | `ini::Document::layer` | a layered load that leaves two occurrences with one name hash in a changed table is refused (hash order on) | Q-0004 |
-| `convert::layers` | the trailer animations of aircraft and projectiles are created from the art file (S-0004), while `convert::sim` reads a projectile's `Trailer` from its rules section (S-0306); the art-file fields read the art section named by the image in force, without the arctic suffix; a self-naming long name stops after one copy per layer, with a warning; numbered weapon fields above 18 create weapons | Q-0083 |
+| `convert::layers` | the trailer animations of aircraft and projectiles are created from the art file (S-0004), while `convert::sim` reads a projectile's `Trailer` from its rules section (S-0306); the art-file fields read the art section named by the image in force, without the arctic suffix; a self-naming long name stops after one copy per layer, with a warning (numbered weapon fields above 18 creating weapons is now S-0308 claim 16) | Q-0083 |
 | `convert` import options | the game-mode file is named by the user; the mode list is not read | Q-0006 |
 | `convert::layers`, `convert::sim` | land-type resets (S-0211 claim 2) are applied in `sim.land_types` only; `ini_globals` keeps per-key layering | Q-0007 |
 | `convert::art` | a building secondary sprite dropped by a later read's art section is left undetermined (a note, no file); no art for projectiles, particles and voxel animations | Q-0008 |

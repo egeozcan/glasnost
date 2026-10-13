@@ -1445,9 +1445,9 @@ impl Builder<'_> {
             }
         }
         let name = format!("{} {}", kind.key(), show(&t.name));
-        // spec: S-0308 Edge cases (a weapon count above 18: our engine reads the first 18 numbered keys; the importer warns)
+        // spec: S-0308 claim 16 and Edge cases (a weapon count above 18: our engine fills only the first 18 slots and their elite slots, the higher references still register weapons; the importer warns)
         self.each_int(key(t, "WeaponCount"), |n| n > SLOTS as i32, |v| {
-            format!("{name} WeaponCount {v} is above 18; only Weapon1 … Weapon18 are read (S-0308 claim 1, a departure)")
+            format!("{name} WeaponCount {v} is above 18; only Weapon1 … Weapon18 fill firing slots, the higher numbered weapons are registered but never fired (S-0308 claim 16, a departure)")
         });
         let tc = int_of(key(t, "TurretCount")).unwrap_or(0);
         let unit = kind != Kind::Buildings;
