@@ -184,6 +184,7 @@ pub fn build(w: &World) -> Sectors {
 
 /// The two side displacements of S-0212 claim 13b's table for the place
 /// *i* of the first end's tile in its bridge or wooden-bridge role.
+// nocite: the array length is the claim's two sides, not a behavioural number
 pub fn side_displacements(i: i32) -> Option<[(i32, i32); 2]> {
     // spec: S-0212 claim 13b (table: 0, 1, 6 to 10 map north then south; 3, 4, 11 to 15 map east then west; 2, 5 map north-west then south-east)
     match i {
