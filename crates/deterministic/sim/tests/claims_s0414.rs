@@ -640,3 +640,208 @@ fn s0309_claim_16_anger_on_alliance_changes() {
     assert_eq!(w.houses[1].combat.anger[0], before);
     assert_eq!(w.houses[0].combat.enemy, Some(B));
 }
+
+/// The scene with production: BARR (infantry factory), YARD (factory of
+/// buildings), PLANT (power output 50), SHED (a plain building), TOWER (a
+/// defence) and GI (infantry), all buildable by every country at tech level
+/// 1, with slow invented costs. Alpha is rich.
+fn production_scene() -> Scene {
+    let mut s = scene(false);
+    let owners = Some(vec![
+        "Alphaland".to_string(),
+        "Betaland".into(),
+        "Gammaland".into(),
+    ]);
+    let make = |f: &dyn Fn(&mut BuildingType)| {
+        let mut b = building([2, 2]);
+        b.tech_level = Some(1);
+        b.owner = owners.clone();
+        b.cost = Some(2000);
+        f(&mut b);
+        b
+    };
+    s.building("BARR", make(&|b| b.factory = Some("infantry".into())));
+    s.building("YARD", make(&|b| b.factory = Some("building".into())));
+    s.building("PLANT", make(&|b| b.econ.power = Some(50)));
+    s.building("SHED", make(&|_| {}));
+    s.building("TOWER", make(&|b| b.defense = Some(true)));
+    let mut gi = unit_type(FOOT, 4, 5);
+    gi.tech_level = Some(1);
+    gi.owner = owners.clone();
+    gi.cost = Some(2000);
+    s.infantry("GI", gi);
+    s
+}
+
+fn production_world(s: &Scene) -> World {
+    let mut w = s.build();
+    armed(&mut w);
+    w.houses[0].credits = 1_000_000;
+    common::run(&mut w, 4);
+    w
+}
+
+fn type_ref(w: &World, kind: Kind, name: &str) -> glasnost_sim::econ::TypeRef {
+    glasnost_sim::econ::TypeRef {
+        kind,
+        index: w.rules().index_of(kind, name).unwrap(),
+    }
+}
+
+/// The object of Alpha's item of type `t`, done or not.
+fn item_of(w: &World, t: glasnost_sim::econ::TypeRef) -> Option<ObjectId> {
+    glasnost_sim::econ::production::line_of(w, A, t)
+        .and_then(|l| l.item.as_ref())
+        .map(|i| i.object)
+}
+
+/// The objects killed in the next tick, in order of their deaths.
+fn deaths_next_tick(w: &mut World) -> Vec<ObjectId> {
+    w.effects.clear();
+    common::run(w, 1);
+    w.effects
+        .iter()
+        .filter_map(|e| match e {
+            glasnost_sim::combat::effects::Effect::Killed { id, .. } => Some(*id),
+            _ => None,
+        })
+        .collect()
+}
+
+// spec: S-0414 claim 15 (the destruction hits in creation order across all four kinds, not kind order; an object off the map is hit)
+#[test]
+fn claim_15_creation_order() {
+    let s = production_scene();
+    let mut w = production_world(&s);
+    let b1 = spawn(&mut w, Kind::Building, "HUT", 0, 4, 4);
+    let i1 = spawn(&mut w, Kind::Infantry, "MAN", 0, 8, 4);
+    let r = w.rules_arc();
+    let tank = r.index_of(Kind::Vehicle, "TANK").unwrap();
+    let off = glasnost_sim::objects::create(&mut w, Kind::Vehicle, tank, Some(A));
+    let b2 = spawn(&mut w, Kind::Building, "HUT", 0, 4, 8);
+    let v1 = spawn(&mut w, Kind::Vehicle, "TANK", 0, 8, 8);
+    victory::surrender(&mut w, A);
+    let a0 = w.objects.values().find(|o| o.owner == Some(A)).unwrap().id;
+    let mut expect = vec![a0, b1, i1, off, b2, v1];
+    expect.sort();
+    let order: Vec<ObjectId> = deaths_next_tick(&mut w)
+        .into_iter()
+        .filter(|id| expect.contains(id))
+        .collect();
+    assert_eq!(order, expect);
+    assert!(defeated(&w, A));
+}
+
+// spec: S-0414 claim 15 (V11 part c: an item in production is hit off the map at its creation place, before a factory made later; it is then deleted by the cancellation, not hit again)
+#[test]
+fn claim_15_production_item_hit() {
+    let s = production_scene();
+    let mut w = production_world(&s);
+    let f1 = spawn(&mut w, Kind::Building, "BARR", 0, 4, 4);
+    let gi = type_ref(&w, Kind::Infantry, "GI");
+    glasnost_sim::econ::production::build(&mut w, A, gi);
+    let p = item_of(&w, gi).expect("item started");
+    glasnost_sim::econ::production::hold(&mut w, A, gi);
+    let f2 = spawn(&mut w, Kind::Building, "BARR", 0, 8, 8);
+    kill(&mut w, f1);
+    assert_eq!(item_of(&w, gi), Some(p), "the later factory keeps the item");
+    victory::surrender(&mut w, A);
+    let order = deaths_next_tick(&mut w);
+    let at = |id| order.iter().position(|&x| x == id);
+    assert!(at(p).is_some(), "the item is hit while off the map");
+    assert!(at(p) < at(f2), "before the later factory");
+    assert_eq!(order.iter().filter(|&&x| x == p).count(), 1);
+    assert!(w.obj(p).is_none(), "deleted by the factory loss");
+}
+
+/// V11 part d: Alpha holds an ordinary-building item and, with `two`, a
+/// defence item; a factory of buildings is made after both, the old one
+/// leaves, two infantry follow. Returns the world and the infantry.
+fn cancellation_run(on: bool, two: bool) -> (World, ObjectId, ObjectId) {
+    let mut s = production_scene();
+    s.ruleset.globals.quirks.defeat_cancellation_skip = on;
+    let mut w = production_world(&s);
+    let y1 = spawn(&mut w, Kind::Building, "YARD", 0, 4, 4);
+    for (name, wanted) in [("SHED", true), ("TOWER", two)] {
+        if !wanted {
+            continue;
+        }
+        let t = type_ref(&w, Kind::Building, name);
+        glasnost_sim::econ::production::build(&mut w, A, t);
+        assert!(item_of(&w, t).is_some());
+        glasnost_sim::econ::production::hold(&mut w, A, t);
+    }
+    spawn(&mut w, Kind::Building, "YARD", 0, 8, 8);
+    kill(&mut w, y1);
+    let i1 = spawn(&mut w, Kind::Infantry, "MAN", 0, 12, 4);
+    let i2 = spawn(&mut w, Kind::Infantry, "MAN", 0, 12, 8);
+    victory::surrender(&mut w, A);
+    common::run(&mut w, 1);
+    (w, i1, i2)
+}
+
+// spec: S-0414 claim 15 (cancellation exception: the factory's hit deletes two earlier items, k = 2, so the next place is skipped and the one after is hit; one item skips none; quirks.defeat_cancellation_skip off skips none)
+#[test]
+fn claim_15_cancellation_skip() {
+    let alive = |w: &World, id: ObjectId| w.obj(id).is_some_and(|o| o.health > 0);
+    let (w, i1, i2) = cancellation_run(true, true);
+    assert!(alive(&w, i1), "the first following place is skipped");
+    assert!(!alive(&w, i2), "the second is hit");
+    let (w, i1, i2) = cancellation_run(true, false);
+    assert!(!alive(&w, i1) && !alive(&w, i2), "one deletion skips none");
+    let (w, i1, i2) = cancellation_run(false, true);
+    assert!(!alive(&w, i1) && !alive(&w, i2), "switch off: no skip");
+}
+
+// spec: S-0414 claim 16 (power does not see the update's surrender destruction until the next house update; the tech-tree recheck sees it in the same update)
+#[test]
+fn claim_16_house_update_consequences() {
+    let s = production_scene();
+    let mut w = production_world(&s);
+    spawn(&mut w, Kind::Building, "PLANT", 0, 4, 4);
+    spawn(&mut w, Kind::Building, "BARR", 0, 8, 8);
+    common::run(&mut w, 2);
+    let gi = type_ref(&w, Kind::Infantry, "GI");
+    assert_eq!(w.houses[0].econ.power.output, 50);
+    assert!(glasnost_sim::econ::tech::offered(&w, A, gi));
+    victory::surrender(&mut w, A);
+    common::run(&mut w, 1);
+    assert!(defeated(&w, A));
+    assert_eq!(w.houses[0].econ.power.output, 50, "power: not yet");
+    assert!(
+        !glasnost_sim::econ::tech::offered(&w, A, gi),
+        "the tech tree sees the destruction at once"
+    );
+    common::run(&mut w, 1);
+    assert_eq!(w.houses[0].econ.power.output, 0, "the next house update");
+}
+
+// spec: S-0414 claim 16 (a defeat in the final tick keeps the committed win and buys no extra ticks, even with quirks.defeat_during_end_delay on; one tick earlier the win changes and the delay restarts, claim 9)
+#[test]
+fn claim_16_final_tick_commitment() {
+    for last in [true, false] {
+        let mut w = scene(false).build();
+        let [_, b, _] = armed(&mut w);
+        w.houses[0].allies = vec![A, B];
+        w.houses[1].allies = vec![A, B];
+        let id = w.objects.values().find(|o| o.owner == Some(C)).unwrap().id;
+        kill(&mut w, id);
+        common::run(&mut w, 2);
+        assert_eq!(w.econ.end.over, Some(27));
+        // Beta's last object goes before the houses of tick 27 (or of tick 26).
+        let at = if last { 27 } else { 26 };
+        while w.tick < at {
+            common::run(&mut w, 1);
+        }
+        kill(&mut w, b);
+        common::run(&mut w, 1);
+        assert!(defeated(&w, B));
+        if last {
+            assert_eq!(verdict(&w, B), Some(Verdict::Win), "committed");
+            assert_eq!(w.econ.end.over, Some(27));
+        } else {
+            assert_eq!(verdict(&w, B), Some(Verdict::Loss));
+            assert_eq!(w.econ.end.over, Some(26 + 26));
+        }
+    }
+}

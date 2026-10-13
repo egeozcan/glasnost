@@ -11,9 +11,11 @@
 //!
 //! The tests run only in a skirmish ([`GameEnd::active`], set by
 //! [`crate::econ::setup::start_game`]); the counts of claim 4 are kept in
-//! every game. The defeat test runs at the start of each house update
-//! ([`house_update`], called by `econ::houses`), after the destruction of a
-//! pending surrender; its place there is interim (request Q-0151).
+//! every game. In each house update the power and radar work comes first,
+//! then ([`house_update`], called by `econ::houses`) a pending surrender's
+//! destruction and the defeat test, then the tech tree (claim 16). The
+//! results are committed at the start of the houses' part of the final
+//! tick ([`commit`]).
 
 use std::collections::BTreeMap;
 
@@ -67,6 +69,14 @@ pub struct GameEnd {
     pub ended: Option<i32>,
     /// The tick in which the game is over (claims 8 and 9).
     pub over: Option<i32>,
+    /// The results are committed (claim 16): later defeats change neither
+    /// a result nor the tick in which the game is over.
+    #[serde(default)]
+    pub committed: bool,
+    /// Production objects deleted at once (S-0404 claim 6) during the
+    /// current destruction hit (claim 15); `None` outside a hit.
+    #[serde(skip)]
+    pub deleted: Option<Vec<ObjectId>>,
 }
 
 /// The game's outcome once it is over.
@@ -242,9 +252,8 @@ pub fn verdict(w: &World, house: HouseId) -> Option<Verdict> {
     result(w, house).and_then(|r| r.verdict)
 }
 
-/// The outcome once the game is over (S-0414 claims 7 and 8): after tick
-/// `over` has run (interim reading of "over in tick *t* + max(*D*, 1)",
-/// request Q-0151).
+/// The outcome once the game is over (S-0414 claims 7, 8 and 16): after
+/// tick `over`, which runs in full, has run.
 pub fn outcome(w: &World) -> Option<Outcome> {
     let e = &w.econ.end;
     let (ended, over) = (e.ended?, e.over?);
@@ -498,7 +507,7 @@ pub fn house_update(w: &mut World, h: HouseId) {
     if w.tick < 1 {
         return;
     }
-    // Interim (request Q-0151): no test after the game is over.
+    // spec: S-0414 claim 8 (no tick runs after the final one; a caller that runs on tests nothing)
     if w.econ.end.over.is_some_and(|o| w.tick > o) {
         return;
     }
@@ -508,6 +517,17 @@ pub fn house_update(w: &mut World, h: HouseId) {
     }
     if !passes(w, h) {
         defeat(w, h);
+    }
+}
+
+/// The start of the houses' part of a tick (S-0414 claim 16): in the final
+/// tick the pending results are committed, before any surrender
+/// destruction and defeat test of that tick.
+pub fn commit(w: &mut World) {
+    let e = &mut w.econ.end;
+    if e.over == Some(w.tick) {
+        // spec: S-0414 claims 8 and 16 (the result and expiry committed at the start of the houses' part of the final tick)
+        e.committed = true;
     }
 }
 
@@ -527,6 +547,10 @@ pub fn defeat(w: &mut World, h: HouseId) {
     // spec: S-0414 claim 5, S-0409 claim 15 and S-0410 claim 1 (the whole map explored and radar on, at once)
     crate::econ::radar::on_defeat(w, h);
     if ended(w) {
+        // spec: S-0414 claim 16 (a defeat tested in the final tick changes neither the committed result nor the expiry, whatever quirks.defeat_during_end_delay)
+        if w.econ.end.committed {
+            return;
+        }
         if q.defeat_during_end_delay && pending_win {
             // spec: S-0414 claim 9 (a player house defeated during the end delay loses, quirks.defeat_during_end_delay)
             if let Some(r) = result_mut(w, h) {
@@ -578,41 +602,60 @@ fn end(w: &mut World) {
     }
 }
 
+/// Whether an object is one of the four kinds a destruction sweep counts
+/// (S-0414 claim 15).
+fn swept_kind(k: Kind) -> bool {
+    matches!(
+        k,
+        Kind::Infantry | Kind::Vehicle | Kind::Aircraft | Kind::Building
+    )
+}
+
 /// Destroys every infantry unit, vehicle, aircraft and building of the
-/// house on the map (claim 5): one hit each of its current health with the
+/// house (claims 5 and 15): one hit each of its current health with the
 /// demolition warhead, ignoring defences, with the no-escape marker and no
-/// attacker. The objects are hit in object number order (interim, request
-/// Q-0150). Objects off the map: passengers die with their transport (the
-/// no-escape marker); items in production go with the house's last factory
-/// (S-0404 claim 8). Mind control (the table of claim 5) and being erased
-/// are seams: no object is under mind control or being erased yet.
+/// attacker, in creation order across the four kinds, on the map or off it
+/// (production items included). Each object's eligibility is judged at its
+/// place in that order, so an object an earlier death removed is not hit
+/// and one an earlier death created is. Under
+/// `quirks.defeat_cancellation_skip` a hit whose effects delete k objects
+/// at once (production cancellations) at or before its place skips the
+/// next max(k − 1, 0) objects of the four kinds, whoever owns them. Mind
+/// control and being erased are seams: no object is under mind control or
+/// being erased yet.
 fn destroy_all(w: &mut World, h: HouseId) {
-    let ids: Vec<ObjectId> = w
-        .objects
-        .values()
-        .filter(|o| {
-            o.owner == Some(h)
-                && o.on_map
-                && matches!(
-                    o.kind,
-                    Kind::Infantry | Kind::Vehicle | Kind::Aircraft | Kind::Building
-                )
-        })
-        .map(|o| o.id)
-        .collect();
     let warhead = w.rules().combat.general.c4_warhead;
-    for id in ids {
-        let Some(o) = w.obj(id) else { continue };
-        if o.owner != Some(h) || !o.on_map {
+    let skip_quirk = w.rules().quirks.defeat_cancellation_skip;
+    let mut place: Option<ObjectId> = None;
+    let mut skip = 0usize;
+    loop {
+        // spec: S-0414 claim 15 (creation order across all four kinds; object numbers are given in creation order)
+        let next = w
+            .objects
+            .range(place.map_or(ObjectId(0), |p| ObjectId(p.0 + 1))..)
+            .map(|(_, o)| o)
+            .find(|o| swept_kind(o.kind))
+            .map(|o| (o.id, o.owner, o.health));
+        let Some((id, owner, health)) = next else {
+            break;
+        };
+        place = Some(id);
+        if skip > 0 {
+            // spec: S-0414 claim 15 (a skipped place, whoever owns the object)
+            skip -= 1;
             continue;
         }
-        let amount = o.health;
+        // spec: S-0414 claim 15 (eligibility at the object's place; an already dead object gets no second death)
+        if owner != Some(h) || health <= 0 {
+            continue;
+        }
+        w.econ.end.deleted = Some(Vec::new());
         // spec: S-0414 claim 5 (amount: current health; the demolition warhead; ignores defences; no-escape marker; no attacker, no attacking house)
         crate::combat::damage::apply(
             w,
             id,
             crate::combat::damage::Hit {
-                amount,
+                amount: health,
                 warhead,
                 distance: 0,
                 attacker: None,
@@ -621,6 +664,27 @@ fn destroy_all(w: &mut World, h: HouseId) {
                 no_escape: true,
             },
         );
+        let k = w
+            .econ
+            .end
+            .deleted
+            .take()
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|&d| d <= id)
+            .count();
+        if skip_quirk {
+            // spec: S-0414 claim 15 (quirks.defeat_cancellation_skip: max(k − 1, 0) following places skipped)
+            skip = k.saturating_sub(1);
+        }
+    }
+}
+
+/// Records a production object deleted at once (S-0404 claim 6), for the
+/// cancellation exception of S-0414 claim 15.
+pub fn object_deleted(w: &mut World, id: ObjectId) {
+    if let Some(d) = w.econ.end.deleted.as_mut() {
+        d.push(id);
     }
 }
 

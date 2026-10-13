@@ -246,8 +246,10 @@ pub fn remove(w: &mut World, id: ObjectId) {
     let on_ground = o.on_map
         && o.layer == Layer::Ground
         && !(o.kind == Kind::Aircraft && crate::combat::weapon::in_air(w, id));
-    let mut touched = vec![cell];
+    let mut touched = if o.on_map { vec![cell] } else { Vec::new() };
     match o.kind {
+        // An object off the map (an item in production, S-0414 claim 15) holds no cell.
+        _ if !o.on_map => {}
         Kind::Building => {
             // spec: S-0314 claim 10 (a building removed or destroyed subtracts its counts, flooring at 0)
             crate::combat::heal::building_counts(w, id, o.owner, false);

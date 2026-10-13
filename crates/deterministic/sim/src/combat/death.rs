@@ -220,6 +220,11 @@ pub fn kill(w: &mut World, id: ObjectId, hit: &Hit) {
     let rules = w.rules_arc();
     let half = rules.quirks.ranged_draw_half_span;
     mark_killed(w, id);
+    if !o.on_map && crate::econ::production::is_item_object(w, id) {
+        // spec: S-0414 claim 15 (an item in production takes its hit off the map and stays until its line deletes it; it is not hit again)
+        // Q-0193 (interim: no other death effect, no draws; it stays on its line with health 0)
+        return;
+    }
     // spec: S-0312 table, step 1 (debris)
     debris(w, id);
     // spec: S-0312 table, step 2 (an exploding object: passengers die, then the death weapon)

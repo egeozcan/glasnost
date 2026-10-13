@@ -788,6 +788,21 @@ pub fn item_object(w: &World, house: HouseId, t: TypeRef) -> Option<ObjectId> {
         .map(|i| i.object)
 }
 
+/// Whether an object is the object of a line's item (S-0404 claim 11).
+pub fn is_item_object(w: &World, id: ObjectId) -> bool {
+    w.econ
+        .lines
+        .lines
+        .iter()
+        .any(|l| l.item.as_ref().is_some_and(|i| i.object == id))
+}
+
+/// Whether an item's object still exists and is alive: a defeat's hit can
+/// kill it in production (S-0414 claim 15).
+fn item_alive(w: &World, id: ObjectId) -> bool {
+    w.obj(id).is_some_and(|o| o.health > 0)
+}
+
 /// Removes the lines with neither an item nor a queued type (S-0404 claim
 /// 1: such a line ceases to exist).
 fn cleanup(w: &mut World) {
@@ -903,6 +918,8 @@ fn delete_item_object(w: &mut World, id: ObjectId) {
     if w.obj(id).is_some_and(|o| !o.on_map) {
         tech::object_ends(w, id);
         w.objects.remove(&id);
+        // spec: S-0414 claim 15 (an object that ceases to exist at once, for the cancellation exception)
+        super::victory::object_deleted(w, id);
     }
 }
 
@@ -1097,6 +1114,14 @@ pub fn place(w: &mut World, house: HouseId, t: TypeRef, cell: Option<CellXY>) {
         return;
     }
     let Some(cell) = cell else { return };
+    let alive = w.econ.lines.lines[li]
+        .item
+        .as_ref()
+        .is_some_and(|i| item_alive(w, i.object));
+    if !alive {
+        // Q-0193 (interim: a building item killed in production, S-0414 claim 15, waits for its line's deletion)
+        return;
+    }
     // spec: S-0404 claim 7 (a done building waits for a place order with a cell; S-0406 places it)
     if !super::placement::place_building(w, house, t, cell) {
         return;
@@ -1162,6 +1187,14 @@ fn release(w: &mut World, house: HouseId, t: TypeRef) {
     else {
         return;
     };
+    if !item_alive(w, object) {
+        // spec: S-0404 claim 13 (a unit that cannot be put on the map: failed, cancelled with the refund as claim 7 says)
+        // Q-0193 (interim: an item killed by a destruction hit counts as such a unit)
+        cancel_item(w, li);
+        start_next(w, li, None);
+        cleanup(w);
+        return;
+    }
     // spec: S-0404 claim 7 (no releasing building: the order does nothing and the item stays done)
     let Some(factory) = releasing_building(w, house, t) else {
         if let Some(i) = w.econ.lines.lines[li].item.as_mut() {
