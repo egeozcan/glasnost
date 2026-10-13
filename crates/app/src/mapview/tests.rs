@@ -376,7 +376,8 @@ fn overlay_shadow_depth_and_rank() {
 }
 
 /// spec: S-0102 claims 13 and 27, S-0112 claims 1 and 8 (a deck cell's shadow takes the cell's
-/// level alone: 60 depth units farther than the deck's own pixels)
+/// level alone: 60 depth units farther than the deck's own pixels); S-0102 claims 15 and 24 (the
+/// deck's draw point is claim 24's, with no extra lift for its 4 levels)
 #[test]
 fn deck_overlay_shadow_skips_the_deck_levels() {
     // Overlay types 0 … 24, the deck at bridge position 24 (S-0112 claim 1).
@@ -403,6 +404,11 @@ fn deck_overlay_shadow_skips_the_deck_levels() {
     // Body: −2 − 15 × (1 + 4); shadow: −2 − 15 × 1.
     assert_eq!(bias(body), (Profile::Flat, -77));
     assert_eq!(bias(shadow), (Profile::Flat, -17));
+    // Draw point: cell (5, 9)'s top corner (−120, 210), + 15 to the centre, − 15 for level 1,
+    // s = −16 for a deck cell with data 0; the 10 × 10 canvas centred there, the frame at (4, 4).
+    let (px, py) = (-120, 210 + 15 - 15 - 16);
+    assert_eq!((body.x, body.y), (px - 5 + 4, py - 5 + 4));
+    assert_eq!((shadow.x, shadow.y), (body.x, body.y));
 }
 
 /// A 1 × 1 tile file whose diamond holds `value`, with an optional extra

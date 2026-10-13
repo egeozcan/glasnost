@@ -49,11 +49,11 @@ pub const CANVAS_SHIFT: i32 = 30; // spec: S-0110 Constants (canvas shift 30 pix
 /// The switch of S-0110.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ShroudQuirks {
-    /// `quirks.shroud_on_flat_grid` (claims 7 and 8, Edge cases): the
-    /// pieces lie on the height-0 grid and the point test projects the
-    /// point down onto it. Off: each canvas is placed at its cell's top
-    /// corner at the cell's own terrain height, and the point test uses the
-    /// cell under the point.
+    /// `quirks.shroud_on_flat_grid` (claim 7, Edge cases): the pieces lie
+    /// on the height-0 grid. Off: each canvas is placed at its cell's top
+    /// corner at the cell's own terrain height. The switch also governs
+    /// claim 8's point test, which is the simulation's
+    /// (`econ::shroud::point_shrouded`) and keeps the on state there.
     pub shroud_on_flat_grid: bool,
 }
 

@@ -1837,11 +1837,8 @@ pub fn section_order(depths: &[f32], quirks: &VoxelQuirks) -> Vec<usize> {
     if !quirks.voxel_section_sort_ties {
         // spec: S-0105 Edge cases (voxel_section_sort_ties off: stable order); F8 (exact
         // comparisons: equal values, −0 and +0 included, tie)
-        pi.sort_by(|&a, &b| {
-            depths[a]
-                .partial_cmp(&depths[b])
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
+        // (adding +0 turns −0 into +0, keeping a total order for any value)
+        pi.sort_by(|&a, &b| (depths[a] + 0.0).total_cmp(&(depths[b] + 0.0)));
         return pi;
     }
     // spec: S-0105 F8 (distinct depths ascend; the tie rows A, B → A, B and A, B, C with
