@@ -2,7 +2,7 @@
 id: S-0009
 title: Map file semantics (geometry, terrain streams, waypoint markers, start positions, preview)
 topic: formats
-revision: 13
+revision: 14
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -28,10 +28,15 @@ This revision specifies skirmish only. Network games and campaigns are out of sc
 below to their differing behaviour are retained as historical context, not requirements or
 measurement proposals for this revision.
 
-**Revision dependency.** S-0012, *Map block encodings*, revision 1, is a draft in this same
-review and sign-off batch, not an approved spec or a planned-spec pointer. Its claim 9,
-Formulas F3 and scenario R2 supply the partial-value refinements below. These two drafts
-must be reviewed and handed off together.
+S-0012 claim 9, Formulas F3 and scenario R2 own partial terrain values. Claims 45 and 46
+cover standard skirmish starting units; the all-base-units family follows S-0412 claim 13,
+including its different placement and draw rules. Sign-off checks these scopes against
+S-0412's revision in the same hand-off.
+
+**Cross-spec clarification required.** S-0012 claim 9 must limit its earlier-record
+prerequisite to partial coordinates: partial tile numbers after complete first-record
+coordinates also follow F3 (claim 7 below). Its R2 should include that first-record control,
+and its historical revision-12 hand-off request should acknowledge the approved revision 13.
 
 ## Terms
 
@@ -192,8 +197,9 @@ Terms used as defined in the shared glossary: *cell*, *lepton*, *height level*, 
 - **Starting units.** The units a house receives around its base cell when a skirmish or
   multiplayer game starts, after the map is loaded (claim 20): its base unit, if any, and the
   units bought with its budget (claims 45 and 46).
-- **Base unit.** The one vehicle a house receives first, at its base cell, when the game's bases
-  setting is on (claim 45).
+- **Base unit.** In standard skirmish mode, the one vehicle a house receives first, at its
+  base cell, when the game's bases setting is on (claim 45). The all-base-units family
+  instead grants the vehicles specified by S-0412 claim 13.
 - **Budget, start pools.** The budget is the amount of credits' worth of starting units every
   house receives besides its base unit. The budget pool is the set of types whose costs set it,
   and a house's start pools are its vehicle pool and its infantry pool, from which its units are
@@ -353,8 +359,10 @@ Terms used as defined in the shared glossary: *cell*, *lepton*, *height level*, 
    name the same cell, the later one wins. Cells with no record keep the initial fill. A record's
    height level lies in −128 … 127. The stream may also end without a (0, 0) record. Then the
    complete records take effect as above, and the effect of the last record depends on how much of it is
-   present. The table's deterministic cut-off rules require at least one earlier complete
-   record. A nonempty packed block supplying fewer than four expanded bytes for its first
+   present. A partial coordinate pair has the table's deterministic effect only after an
+   earlier complete record. Partial tile numbers and missing one-byte values have their
+   stated effects even in the first record when its coordinate pair is complete.
+   A nonempty packed block supplying fewer than four expanded bytes for its first
    coordinate pair has unspecified coordinates in the original; our engine applies no record
    from that block and warns, without a switch, as S-0012 claim 9 specifies. An absent block simply keeps
    the initial fill.
@@ -366,7 +374,11 @@ Terms used as defined in the shared glossary: *cell*, *lepton*, *height level*, 
    | The coordinates, selecting no legal cell | none |
    | The coordinates, selecting a legal cell, but no tile number | the selected cell's tile becomes the no-tile marker 65535; its other values keep the values already in force |
    | The coordinates, selecting a legal cell, and one or more later complete values | the complete values are applied; the values not present keep the values already in force |
-   | Part of a coordinate pair or tile number, after an earlier complete record | S-0012 claim 9 and Formulas F3 apply: available low-order bytes replace those of a zero coordinate pair or the preset tile number 65535, respectively; the resulting tile number is translated normally. Three coordinate bytes can select a legal cell. Our engine reproduces these effects by default and warns |
+   | Part of a coordinate pair, after an earlier complete record | Available low-order bytes replace those of a zero coordinate pair (S-0012 claim 9). Three coordinate bytes can select a legal cell, whose tile then becomes 65535 and whose other values remain in force. Our engine reproduces this by default and warns |
+   | Complete coordinates selecting a legal cell, but only part of its tile number | Available low-order bytes replace those of the preset tile number 65535 (S-0012 Formulas F3); the resulting tile number is translated normally. Our engine reproduces this by default and warns |
+
+   Missing sub-tile, height and ice-growth values retain the selected cell's values already
+   in force, including values from an earlier duplicate record, not necessarily the fill.
 
    No stock map is cut off. Our engine reproduces the cases the table specifies, and the importer
    warns about a terrain stream that ends without a (0, 0) record.
@@ -374,7 +386,10 @@ Terms used as defined in the shared glossary: *cell*, *lepton*, *height level*, 
      negative level, and its selected-cell variant)
    - Confidence: high (medium for duplicates, negative levels and the cut-off records, which no
      stock map exercises). The partial-value refinements carry S-0012 claim 9's medium
-     confidence and `measurable` backing through its scenario R2.
+     confidence. Partial coordinates, zero/two/three tile bytes and missing sub-tile/height
+     are `measurable` through M4 and S-0012 R2. The exact one-tile-byte result, missing ice-growth
+     retention and unspecified first coordinates are `unmeasured` for the reasons in S-0012
+     claim 9; failure recording does not establish a deterministic original result.
 
 8. **Tile number translation.** A record's tile number is either the "no tile" marker 65535, which
    is kept, or an index in the *authoring index space*. The authoring space differs from the
@@ -2006,9 +2021,10 @@ Every quirk switch below defaults to the original (YR) behaviour described first
   water base tile is −1 either way (claim 6). *Fixed behaviour:* such a field gives the unset base
   tile −1, as a field that names a tileset number beyond the first missing one does. The number of
   random draws is the same either way.
-- **`quirks.partial_terrain_values` (owned by S-0012).** After an earlier complete terrain
-  record, partial coordinate and tile values have S-0012 claim 9's low-byte replacement
-  effects (claim 7). With the switch off, partial multi-byte values count as absent:
+- **`quirks.partial_terrain_values` (owned by S-0012, default original).** Partial coordinate
+  pairs after an earlier complete terrain record, and partial tile values whenever complete
+  coordinates select a legal cell, have the low-byte replacement effects of claim 7 and
+  S-0012 Formulas F3. With the switch off, partial multi-byte values count as absent:
   a partial coordinate pair ends the stream and a partial tile number gives 65535.
   Complete one-byte values still take effect. The importer warns either way. An incomplete
   first coordinate pair is the separate safe departure of claim 7, not governed by this switch.
@@ -2409,11 +2425,20 @@ that the stream can be computed by S-0202 and compared with what the game shows 
   changes. *Partial-value variants:* use S-0012 scenario R2's complete-chunk variants,
   each after an earlier complete record: three coordinate bytes with legal x and y below 256,
   and one, two or three tile bytes. Record the selected cell's tile and height at the first
-  view. *Expected:* the coordinate and tile results of S-0012 claim 9 and F3, translated by
-  claim 8; missing one-byte values keep the values in force. *Falsified if* the resulting cell,
-  tile or height differs. Choose valid tile results wherever possible; an unspecified picture
-  for an out-of-range result is not a falsifier. An incomplete first coordinate pair is
-  unspecified and gives no original conformance expectation.
+  view. Include an earlier duplicate with a visibly distinctive sub-tile and height, then
+  cut the later record before either value: each omitted value must retain the earlier
+  duplicate's value rather than restore the fill. Also repeat the two-/three-tile-byte
+  variants as the first record with complete coordinates, using valid distinctive tiles.
+  *Expected:* the coordinate and tile results of S-0012 claim 9 and F3, translated by
+  claim 8, including those first-record tile variants. *Falsified if* a selected legal cell,
+  a valid two-/three-byte tile control, or a retained sub-tile/height differs. The exact
+  one-tile-byte number and missing ice-growth retention remain unmeasured; an unspecified
+  out-of-range picture is not a falsifier. For zero through three expanded bytes before
+  the first complete coordinate pair, predict no original coordinates; our engine must
+  apply no record and warn. Replay on our engine with the partial-value switch off:
+  partial coordinates stop the stream and partial tiles use 65535, while complete
+  one-byte values still apply. Failure of these warnings or alternate outcomes falsifies
+  the engine requirement, not an original-game claim.
   *Selected-cell variant (claim 7, quirk `quirks.cell_index_alias`):* a 20 × 20 map whose terrain
   stream holds one complete record with coordinates (527, 10) and the tile of a clearly different
   tileset from the rest of the map (for example a pavement tile on a map of clear ground), then a
