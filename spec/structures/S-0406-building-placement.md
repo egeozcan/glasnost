@@ -2,11 +2,11 @@
 id: S-0406
 title: Building placement (foundation cells, the cell test, adjacency, building off allies, shroud, walls and gates, upgrades)
 topic: structures
-revision: 1
+revision: 2
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-12
+approved-on: 2026-10-13
 measurements: []
 requests: []
 supersedes: []
@@ -142,9 +142,10 @@ names the top-left cell of the foundation. In addition:
    a to-tile field follows the to-tile rule at the end of this claim instead.
    - (a) **Usable.** The cell is a usable cell in the height-aware form (S-0009, claims 4 and 5a).
    - (b) **Nothing in the way.** No aircraft is listed in the cell's ground layer (S-0209, Terms,
-     *listed*), whether it is flying or has landed: the condition makes no test of the aircraft's
-     height or state. Whether a flying aircraft is listed in the cell below it is not fixed by
-     this spec (S-0209 owns listing; Open questions 5). No other object occupies the cell (an
+     *listed*): the condition makes no test of the aircraft's height or state. S-0209 claim 13
+     owns listing: an aircraft in ordinary flight is not listed in either cell layer, while a
+     landed aircraft is listed in the ground layer. Thus ordinary flight over an otherwise empty
+     foundation cell does not block placement, but a landed aircraft does. No other object occupies the cell (an
      infantry unit, a vehicle or a building), it holds no terrain object, and the ground layer's
      occupancy record (S-0209) shows no standing position taken and no vehicle present. Whatever the
      record shows for buildings and other objects does not matter; buildings are caught by the
@@ -170,8 +171,8 @@ names the top-left cell of the foundation. In addition:
      and (d) for it too.
    - (d) **Ground.** For a type that is not water-bound, all of these:
      - the cell is not marked as part of a bridge: it is not a high-bridge cell (S-0211, claim
-       15), nor another cell that a bridge marks as part of its body (the bridge specs own the body
-       cells),
+       15) and does not carry the bridge-body mark of S-0010 claim 25; that mark's band can include
+       cells without overlays,
      - its slope shape (S-0010, claim 6) is 0, and
      - for a type without the naval flag, the buildable flag *B* of the cell's land type (S-0211,
        Terms and claim 2 c) is *yes*, or
@@ -216,22 +217,22 @@ names the top-left cell of the foundation. In addition:
        bridge mark, and the buildable flag, naval range and float multiplier not asked), part v
        for claim 8's wall exceptions under the to-tile and laser-fence rules,
      - PL4 parts a to f for the water-bound and naval ground rules; S-0211's scenarios L15 and L21
-       also observe the naval range and the high-bridge cells.
+       also observe the naval range and the high-bridge cells; L21 part d observes the
+       bridge-body mark's placement refusal on cells without overlays.
 
-     Two parts are `unmeasured`. The occupancy-record condition of (b) on a cell with no object in
-     it: no way is known to set up a record whose object has gone. The bridge body cells other
-     than high-bridge cells in (d): the bridge specs own which cells those are, and every such cell
-     known holds a bridge overlay, which (c) already refuses, so no observable separates the two.
+     The occupancy-record condition of (b) on a cell with no object in it is `unmeasured`:
+     no way is known to set up a record whose object has gone.
      If the test map cannot hold ore in a cell that a high bridge marks (PL3 part *u*10), the bridge
      mark of the laser-fence overlay exception is `unmeasured` too: every other bridge-marked cell
      known either holds a bridge overlay, which refuses whatever the mark says, or holds no overlay,
      where the exception is not asked, so no other setup separates the mark.
    - Confidence: high (a, c, the ore and unit refusals, d for types that are not water-bound apart
      from the bridge cells), medium (high-bridge cells and other bridge body cells in d, b's
-     occupancy-record part, a landed aircraft refusing, the laser-fence-post and gate
+     occupancy-record part, a landed aircraft refusing and ordinary flight not blocking placement,
+     the laser-fence-post and gate
      exception, d for water-bound types, including the skipped slope, bridge and tile-range
-     conditions, the to-tile rule, the precedence of the place-anywhere flag), low (a flying
-     aircraft refusing, the laser-fence building under a post type, the laser-fence rule, which no
+     conditions, the to-tile rule, the precedence of the place-anywhere flag), low (the
+     laser-fence building under a post type, the laser-fence rule, which no
      stock type uses, the to-tile rule combined with the laser-fence, gate and post flags, and the
      wall exceptions for to-tile and laser-fence types)
 
@@ -715,9 +716,9 @@ Each scenario names its observed area, the cells in which the void rule applies.
   type, and a test type with the laser-fence-post flag, on a cell holding (l) an own building with
   the laser-fence flag, (m) an enemy one, (n) an own building without it; (o) a legal cell outside
   the local area, and a cell at the local area's border whose height level makes the plain and the
-  height-aware tests of S-0009 (scenario M3) differ; (p) a test aircraft of the house flying
-  (hovering or circling) over the candidate cell at the tick of the click, then, as the control,
-  the same aircraft landed on the cell as in (h); (q) after the post-type placement of (l)
+  height-aware tests of S-0009 (scenario M3) differ; (p) a test aircraft of the house in ordinary
+  flight over the otherwise empty candidate cell at both the click and the application of the
+  place order, then, in a separate run as the control, the same aircraft landed on the cell as in (h); (q) after the post-type placement of (l)
   succeeds, the recorder's list of buildings in the cell; (r) a cell holding an overlay type that
   is not ore, gems, a wall or a bridge (test rules name one), (s) the same cell with the
   place-anywhere type. (t) Named test theater data as in S-0010 scenario G1: one tileset with the
@@ -759,10 +760,9 @@ Each scenario names its observed area, the cells in which the void rule applies.
 - Observable: placement success (for parts t to x, whether the place order succeeds: the item is
   spent and no refusal sound plays).
 - Expected: (a) to (f), (h) to (k) and (r) refuse; (g) succeeds; (o) both refuse when S-0009's
-  height-aware test says the cell is not usable, and succeed otherwise; (p) hypothesis: the flying
-  aircraft refuses like the landed one, as the condition has no height test (if the aircraft is
-  not listed in the cell while it flies, the flying case succeeds and the finding goes to
-  S-0209); (q) is recorded whatever it shows (the fence building present or gone), as claim 3 (b)
+  height-aware test says the cell is not usable, and succeed otherwise; (p) placement succeeds
+  during ordinary flight but fails when the aircraft has landed (S-0209 claim 13); (q) is
+  recorded whatever it shows (the fence building present or gone), as claim 3 (b)
   leaves it open; (s) succeeds; the place-anywhere type succeeds on all four of its cells; the gate type and
   the post type succeed on (l) and refuse on (m) and (n); (*t*1) and (*t*5) succeed, (*t*2),
   (*t*3) and (*t*4) refuse; (*u*1), (*u*3) (on the ore and on the gem cell), (*u*7), (*u*8), (*u*11) and (*u*12) succeed, (*u*2),
@@ -772,8 +772,7 @@ Each scenario names its observed area, the cells in which the void rule applies.
   in parts *t*1 and *t*2; (x) succeeds.
 - Falsified if: any of (a) to (f), (h) to (k) and (r) succeeds, (g) or (s) refuses, (o) follows the
   plain test where the two tests differ, the landed aircraft in (p) lets the placement succeed, the
-  flying aircraft in (p) lets it succeed (claim 3 (b) is then wrong about the height test, or the
-  aircraft is not listed), the place-anywhere type refuses anywhere, or the gate or post type
+  flying aircraft in (p) blocks placement despite every other placement condition being satisfied, the place-anywhere type refuses anywhere, or the gate or post type
   succeeds on (m) or (n) or refuses on (l); (*t*1) refuses (units would then count for a to-tile
   type), (*t*5) refuses (every cell would then be tested), or (*t*2), (*t*3) or (*t*4) succeeds,
   and in part u (*u*1), (*u*3) on either cell, (*u*7), (*u*8), (*u*11) or (*u*12) refuses (the buildable flag,
@@ -1028,8 +1027,6 @@ Each scenario names its observed area, the cells in which the void rule applies.
    (claim 6): the original may hold the value of an earlier placement. No scenario is proposed
    until S-0411 fixes how placement mode starts.
 4. What a cell holds after a failed removal under a damaged wall (claim 10; scenario PL8 f).
-5. Whether an aircraft in flight is listed in the ground layer of the cell below it, which decides
-   whether a flying aircraft blocks placement (claim 3 b; scenario PL3 p). S-0209 owns listing.
 
 ## Questions for the project lead
 
