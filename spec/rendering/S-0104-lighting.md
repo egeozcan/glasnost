@@ -2,11 +2,11 @@
 id: S-0104
 title: Lighting
 topic: rendering
-revision: 10
+revision: 11
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-12
+approved-on: 2026-10-13
 measurements: []
 requests: [Q-0013, Q-0050]
 supersedes: []
@@ -47,10 +47,10 @@ How the map's ambient light, tint and height factors, the light sources and the 
 - **Shade table, shade row, shade count *N*.** See claim 6.
 - **Tile shade table.** A shade table of the tile palette. Each one except the neutral tile table is built for one quantised tint and is shared by all cells that use that quantised tint (claim 8).
 - **Detail level.** The player's visual-detail option, kept in the settings file (glossary; Import mapping): 0 = low, 1 = medium, 2 = high. The in-game options switch only between 0 and 2, so detail level 1 is reached only by setting it in the settings file before the game starts.
-- **Light-alpha value.** A per-screen-pixel integer, 127 by default, that light-glow images can change locally. Values other than 127 come only from light-glow images, and their range is open (Open questions). It modulates object brightness (claim 15).
+- **Light-alpha value.** For battlefield rendering, a per-screen-pixel integer from 0 to 255, initially 127 in each drawn frame, that cover pieces and light-glow images can change locally. It modulates object brightness (claim 15); S-0110 claims 5 and 6 specify the battlefield updates. Other display paths are outside those claims.
 - **Cell light level (ground), cell light level (raised).** Two light levels per cell (claim 9). The first is for things at ground height. The second is computed for things four height levels up. The overlays of deck cells read it (claim 13); whether anything else does is open (Open questions).
 - **Scaled and unscaled ground level.** The two forms of a cell's ground light level that drawn objects read (Formulas, "Cell light"): the *unscaled* one ignores the raw cell tint, the *scaled* one is multiplied by the tint-normalisation factor of claim 8.
-- **Light-glow image.** An image that some objects and animations draw into the light-alpha values instead of onto the screen, to brighten or darken the screen pixels under it locally (a lamp's glow, for example). Only its effect on brightness belongs to this spec (claim 15). How it writes the values is open.
+- **Light-glow image.** An image that some objects and animations draw into the light-alpha values instead of onto the screen, to brighten or darken the screen pixels under it locally (a lamp's glow, for example). Only its effect on brightness belongs to this spec (claim 15). For battlefield rendering, S-0110 claim 6 specifies how it updates the values; writes on other display paths remain outside that claim.
 - **Shadowed cell.** A cell marked as lying under overhanging terrain, which darkens vehicles and infantry in it (claim 13). Two things mark cells: an intact high bridge (one with a raised deck) marks the cells it spans, and the mark is cleared when the bridge is destroyed; and a terrain tile whose tileset (glossary) is declared a shadow caster in the theater's data, with a shadow-tile count that is not 0 (claim 13), marks a fixed set of cells around it (Import mapping). Which cells a shadow-casting tile marks is open.
 - **Height above the surface.** An object's world height minus the height of the surface below it, in leptons. The surface is the bridge deck for an object on a bridge deck, and the terrain of the object's cell otherwise. A bridge deck is 4 height levels (416 leptons) above the terrain of its cell.
 - **Bridge deck.** The raised deck of a high bridge, 4 height levels above the terrain of its cell (S-0102, claim 15). An object "on a bridge deck" is standing or driving on it, as opposed to passing under it. A *deck cell* is a cell that the raised deck covers. The deck itself is drawn as overlays in the deck cells (S-0102).
@@ -235,7 +235,7 @@ How the map's ambient light, tint and height factors, the light sources and the 
 
 15. **Brightness to shade row.** An object drawn at brightness *b* (‰) with a shade table of *N* rows uses, per pixel, row ⌊*a*·*ρ*·(*N* − 1)/32258⌋, capped at *N* − 1.
     - *ρ* = min(254, ⌊max(*b*, 0)·261/2048⌋).
-    - *a* is the pixel's light-alpha value, 127 unless a light-glow image covers it.
+    - For battlefield rendering, *a* is the pixel's light-alpha value, initially 127 in each drawn frame and updated by cover pieces and light-glow images as specified in S-0110 claims 5 and 6.
 
     So *b* = 1000 gives row 26 of 53 (neutral), *b* = 2000 gives row 52, and *b* ≤ 0 gives row 0, which is entirely black (tint-exempt indices included).
     - Backing: `measurable` (Scenario L5)
@@ -812,7 +812,7 @@ The nuke flash set has no keys (fixed constants). The rows whose source is the r
 ## Open questions
 
 - Which cells a shadow-casting terrain tile marks as shadowed (Terms, claim 13).
-- How light-glow images write the light-alpha value, and the range of values it can then take (Terms, claim 15).
+- How light-glow images write light-alpha values on display paths other than battlefield rendering (Terms, claim 15); battlefield cover-piece and glow updates are specified in S-0110 claims 5 and 6.
 - Which drawing paths use the anim palette's untinted table, and whether any of them apply a tint elsewhere.
 - Whether any overlay type outside the four overlay cases of claim 13 is drawn with another light value; none is known.
 - The palette of ore-spawning terrain objects, and whether it takes any tint (claim 13).
