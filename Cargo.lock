@@ -1058,6 +1058,7 @@ dependencies = [
 name = "glasnost-sim-gate"
 version = "0.0.0"
 dependencies = [
+ "glasnost-ai",
  "glasnost-sim",
 ]
 

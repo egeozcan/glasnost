@@ -2,7 +2,7 @@
 //! scenario. Regenerate with
 //! `GLASNOST_UPDATE_GOLDEN=1 cargo test --release -p glasnost-sim-gate -- --include-ignored`.
 
-use glasnost_sim_gate::{DEBUG_TICKS, Scenario, TICKS, golden_text};
+use glasnost_sim_gate::{DEBUG_TICKS, Scenario, golden_text};
 
 fn path(s: Scenario) -> String {
     format!("{}/golden/{}.txt", env!("CARGO_MANIFEST_DIR"), s.name())
@@ -18,6 +18,15 @@ fn check(s: Scenario, ticks: i32) {
     let got = golden_text(s, ticks);
     let want_lines: Vec<&str> = want.lines().skip(1).collect();
     let got_lines: Vec<&str> = got.lines().skip(1).collect();
+    let complete = ticks >= s.ticks();
+    if complete {
+        assert_eq!(
+            want_lines.len(),
+            got_lines.len(),
+            "the {} golden file and the run differ in length",
+            s.name()
+        );
+    }
     assert!(
         want_lines.len() >= got_lines.len(),
         "the {} golden file is shorter than {ticks} ticks",
@@ -50,11 +59,11 @@ fn debug_prefix_matches_golden() {
 fn full_run_matches_golden() {
     if std::env::var_os("GLASNOST_UPDATE_GOLDEN").is_some() {
         for s in Scenario::ALL {
-            std::fs::write(path(s), golden_text(s, TICKS)).expect("golden file written");
+            std::fs::write(path(s), golden_text(s, s.ticks())).expect("golden file written");
         }
         return;
     }
     for s in Scenario::ALL {
-        check(s, TICKS);
+        check(s, s.ticks());
     }
 }
