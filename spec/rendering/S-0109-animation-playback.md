@@ -2,7 +2,7 @@
 id: S-0109
 title: Animation playback
 topic: rendering
-revision: 7
+revision: 8
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -213,8 +213,9 @@ as in S-0007, *turn pass* and *update order* as in S-0203.
 10. **Shadow types.** For a shadow type, the sprite end is ⌊*N* / 2⌋ instead of *N*
     (*E*<sub>s</sub>, claim 25). Wherever image frame *f* = *a* + *k* is drawn, image frame *f* +
     ⌊*N* / 2⌋ is also drawn at the same place as its shadow (darkening the pixels below it), never
-    translucent, whatever claims 20 and 21 give for the image. How the shadow is composited is S-0102's
-    (Open questions). A type that is also drawn flat or tiled (S-0102) draws no shadow image at
+    translucent, whatever claims 20 and 21 give for the image. Shadow depth testing, darkening, and
+    overlap behaviour are specified by S-0102 claims 10, 13 and 26 to 28. A type that is also drawn
+    flat or tiled (S-0102) draws no shadow image at
     all. Its last pass also ends when *k* is at or above λ<sub>e</sub> − *a*, as the other passes
     do, unless it is reversed. The middle image frame (claim 14) is not
     halved.
@@ -249,16 +250,20 @@ as in S-0007, *turn pass* and *update order* as in S-0203.
 
 13. **Start event.** The start event happens when the animation is created with no loop delay, when
     a loop delay ends (claim 11), and when it switches to a follow-up type (claim 15). It plays the
-    type's start sound, starts the type's resource chain reaction if the type has one (which at
-    least removes all the resource in the animation's cell when there is any; the economy specs own
-    the rest of its effect), and also produces the middle event at once when μ = 0 (claim 14). So an
+    type's start sound and produces the middle event at once when μ = 0 (claim 14). The middle
+    event's effects and draws precede the type's resource chain reaction, when enabled; S-0401
+    claim 20 owns that reaction and its draws. Consequently a crater from this immediate middle
+    event can empty the animation's cell before the reaction tests it, leaving no reaction draws
+    or detonation. When resource remains, the reaction removes all of it. So an
     animation plays its start sound once for each type it plays as: at creation (or at the end of
     the loop delay its creator gave), and at each follow-up switch. One with random loop delays also
     plays it at every pass that follows a delay *D* > 0. A trigger-played animation has no start
     sound and no chain reaction (and delivers no damage, claim 17), but its middle events happen as
     for any other animation.
-    - Backing: `measurable` (scenarios AN9, AN10, and AN21 for the chain reaction)
-    - Confidence: high; medium for the chain reaction, whose effect the economy specs own
+    - Backing: `measurable` (scenarios AN9, AN10, AN21, and S-0401 E17 for the immediate
+      middle event preceding the chain reaction)
+    - Confidence: high for event timing and the middle-before-reaction order; the reaction's
+      effects and composed draw sequence have the confidence of S-0401 claim 20
 
 14. **Middle event.** The middle event happens on every advance after which *a* + *k* = μ,
     provided μ ≠ 0, so it can happen once per pass, and for reversed and ping-pong animations on the
@@ -792,7 +797,7 @@ forms are those of S-0003.
 | `DoubleThick` | boolean | claim 21 | no |
 | `ShouldFogRemove` | boolean | fog-remove flag (claim 24) | yes |
 | `Report` | sound name | start sound (claim 13) | none |
-| `TiberiumChainReaction` | boolean | resource chain reaction of the start event (claim 13; economy specs) | no |
+| `TiberiumChainReaction` | boolean | resource chain reaction of the start event (claim 13; S-0401 claim 20) | no |
 | `SpawnsParticle` | particle-type name | particle requests of the middle event (claim 14) | none |
 | `NumParticles` | integer | number of particle requests per middle event (claim 14) | 0 |
 | `Scorch`, `Crater` | boolean | scorch and crater requests of the middle event (claim 14) | no |
@@ -1170,8 +1175,9 @@ building that can cloak), it sets them in the test map's override section, which
 - Q-0046 Q2c is answered by claim 25, including animations created during map loading. Claim 14
   answers the event gates, height condition and scorch-or-crater choice in Q2b, but not the full
   downstream draw sequence: the particle and smudge specs still need to state particle creation
-  draws, eligible smudge types and their selection and placement draws. Q2a's complete chain-reaction
-  draw sequence belongs to the resource specs. Do not treat these unresolved effects as taking
+  draws, eligible smudge types and their selection and placement draws. S-0401 claim 20 answers
+  Q2a's chain-reaction draw sequence, including its no-resource gate and ordering after an
+  immediate middle event. Do not treat the unresolved particle and smudge effects as taking
   zero draws at map load.
 - Whether the first image frame is held one extra tick when *d* = 1 depends on the part of the tick
   that creates the animation (claim 5). The specs of the creators (combat, structures, triggers)
@@ -1187,8 +1193,6 @@ building that can cloak), it sets them in the test map's override section, which
   say and to measure.
 - A creator can also ask for translucent drawing of its own, which would combine with the codes of
   claims 20 and 21 as in Terms. No creator is known to ask for one; the creators' specs should confirm it.
-- Where exactly the shadow image is darkened, and with which depth bias, belongs to S-0102; this spec
-  says only that it is drawn.
 - A "random start" of animations has been suggested. No random starting image frame exists (claim 12); if a
   measurement shows one, this spec needs a revision.
 - When a building's fade level changes, and exactly which viewers a fully cloaked building is
