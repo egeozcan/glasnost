@@ -1,9 +1,9 @@
 ---
 id: Q-0088
 title: Which side cells a bridge link connects (S-0212 claim 13b)
-status: open
+status: answered
 related: [S-0212, S-0010]
-answered-by: []
+answered-by: [S-0212]
 ---
 
 ## Need

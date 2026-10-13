@@ -2,13 +2,13 @@
 id: S-0212
 title: Pathfinding (observable behaviour)
 topic: movement
-revision: 18
+revision: 19
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-13
 measurements: []
-requests: [Q-0017, Q-0041, Q-0042, Q-0043]
+requests: [Q-0017, Q-0041, Q-0042, Q-0043, Q-0088]
 supersedes: []
 ---
 
@@ -24,6 +24,10 @@ exists, and when the destination is replaced by a nearby cell. How a unit then m
 steps (speed, turning, collisions, blocked-step reactions) belongs to the movement specs. The spec
 covers skirmish games. Network games and campaigns are out of scope for now, and the few mentions
 of them describe the original only.
+
+**Cross-spec change required at hand-off.** S-0207 claim 15, its state table, D17 part d3
+and its blocked-first-check Open question must follow claim 22's immediate fresh search,
+not the former delayed-search reading.
 
 ## Terms
 
@@ -772,9 +776,23 @@ Terms specific to this spec:
       no height or usable-area condition: between the sectors of its two end cells and, for a
       bridge, also between the sectors of the cell beside one end cell and the cell beside the
       other end cell on the same side of the bridge, for each of the two sides across the bridge's
-      axis. Which side is which comes from the end cell's tile. For two of the 16 tiles of each
-      bridge role the original takes the two diagonal neighbours (north-west and south-east)
-      instead; whether those tiles occur at a link's end is not established. For a tunnel, which cells besides its two end cells are joined is not established.
+      axis. The tile of the link's **first end alone** decides the displacement at both ends.
+      the second end's tile and the link's line do not decide it. Let *i* be the first end's
+      tile's place, 0 to 15, in its bridge or wooden-bridge role (S-0010 table B). The two
+      side connections use these displacements, in integer cells:
+
+      | First end's *i* (either role) | First side displacement | Second side displacement |
+      |---|---|---|
+      | 0, 1, 6, 7, 8, 9, 10 | (0, −1), map north | (0, +1), map south |
+      | 3, 4, 11, 12, 13, 14, 15 | (+1, 0), map east | (−1, 0), map west |
+      | 2, 5 | (−1, −1), map north-west | (+1, +1), map south-east |
+
+      Each side connects the sector of the first end plus its displacement to the sector of
+      the second end plus **the same displacement**. All additions are exact integer cell
+      arithmetic, without rounding. Thus a diagonal first-end tile uses diagonal side cells
+      at both ends even when the second end has an ordinary tile. For ordinary span starts
+      of S-0010 table B these are the two neighbours across the span's line; places 2 and 5
+      do not start a span under that table, but this rule fixes their side cells too. For a tunnel, which cells besides its two end cells are joined is not established.
       In our engine two sectors share at most one connection: when a link joins two sectors that are
       already connected, their connection is straight. The original can keep the two side by side,
       which gives the same route costs (departure D7).
@@ -815,7 +833,10 @@ Terms specific to this spec:
     - Backing: `measurable` only in aggregate, through the routes of scenarios P1 and P12 and their
       secondary checks. `unmeasured` for the coarse end cells on a bridge: a corridor that starts
       in the wrong sector changes only which corridor is chosen, and a coarse search that fails
-      falls back on a search without a corridor that still finds a path, so no route isolates them
+      falls back on a search without a corridor that still finds a path, so no route isolates them.
+      `unmeasured` for the bridge side connections (Q-0088): they affect only corridor choice,
+      inseparable from the coarse-search ties and labelling departures. The displacement table
+      and use of the first end's tile have high confidence
     - Confidence: medium for the sectors, the connections and their two kinds as stated, and for
       the agreement with the original on ground without steps of 2 levels or more. Low for the
       links' side cells and for the coarse end cells on a bridge
@@ -894,33 +915,36 @@ Terms specific to this spec:
     *j* qualifies, the V is *not flattened* and stays as it is. For two diagonal runs the new steps
     end on the same cell as the steps they replace, so the rest of the path is unchanged.
 
-    *Which V's are flattened.* V's are judged one at a time in path order, each on the path as the
-    judgements before it have left it. The next V judged is the one whose first run begins earliest
-    among the steps that are not yet final. Each judgement makes steps final:
-    - A flattened V makes final every step before its new steps, the *n* − *j* steps kept from its
-      first run included.
-    - A V that is not flattened makes final every step up to the end of its first run.
+    *Which V's are flattened.* Apply the following state table to the path left by the preceding
+    judgement. The next judgement concerns the V whose first run begins earliest among the steps
+    that are not final.
 
-    A final step belongs to no later V and never joins a later run, even when it is equal to that
-    run's steps. Everything after the final steps is judged as it now stands. Consequences:
-    - When the whole first run is replaced (*j* = *n*), the step before the old first run is final.
-      It never forms a V with the new steps, even when it is a straight step at a right angle to
+    | Judgement result | Steps made final | Remaining path considered by later judgements |
+    |---|---|---|
+    | V flattened | Every step before the replacement's new steps, including the *n* − *j* steps retained from its first run | The path after those final steps, beginning at the first new step |
+    | V not flattened | Every step through the end of its first run | The path after those final steps, beginning at the start of its second run |
+
+    A final step belongs to no later V and never joins a later run, even when its direction equals
+    that run's steps. Everything after the final steps is judged as it then stands. This gives the
+    following consequences:
+    - When the whole first run is replaced (*j* = *n*), the step before the old first run is final
+      and never forms a V with the new steps, even when it is a straight step at a right angle to
       them (example (b)).
     - Two stretches of equal steps that end up side by side count as one run only when the earlier
-      one is not final. So the new straight steps of a flattened V never join equal straight steps
-      before them, which are final (example (c)), and do join equal straight steps directly after
+      one is not final. Thus new straight steps of a flattened V do not join equal straight steps
+      before them, which are final (example (c)), but do join equal straight steps directly after
       them (example (d)).
-    - Judging resumes at the first new step: the *n* − *j* kept steps are final and are never read
-      again, and the 2*j* new steps, with any equal steps directly after them, are the run judged
-      next. Whether that run can open a V depends on its direction and on how it arose: a run of
-      diagonal steps always can, a run of straight steps only in the cases listed under *V's of
-      straight runs*. After a flattened V of diagonal runs the new steps are straight. The rest of
-      the second run (*m* − *j* steps, diagonal) is a run of its own after them and can open a
-      further V. After a V that is not flattened, judging resumes at the start of its second run,
-      which can be the first run of a further V. After a flattened V of straight runs, see
-      *V's of straight runs*.
-    - Where two V's would share a run, the one nearer the path's start is judged first and the
-      later one sees only what that judgement left of the shared run (examples (a) and (c)).
+    - After a flattened V, the *n* − *j* retained steps are final and are not read again; judgement
+      resumes at the first new step. The 2*j* new steps, together with any equal steps directly
+      after them, form the run judged next. Whether that run can open a V depends on its direction
+      and how it arose: a run of diagonal steps always can, while a run of straight steps can only
+      in the cases listed under *V's of straight runs*. After a flattened V of diagonal runs, the
+      new steps are straight; the remaining *m* − *j* diagonal steps of the second run form their
+      own run after them and can open a further V. After an unflattened V, judgement resumes at the
+      start of its second run, which can be the first run of a further V. After a flattened V of
+      straight runs, the rules under *V's of straight runs* apply.
+    - Where two V's would share a run, the one nearer the path's start is judged first; the later
+      V sees only what the earlier judgement left of the shared run (examples (a) and (c)).
 
     *V's of straight runs* (`quirks.flatten_straight_run_v`). A run of straight steps can open a V
     in three cases: it begins with the new straight steps of a flattened V of diagonal runs (with
@@ -1185,7 +1209,7 @@ Terms specific to this spec:
 21. **Retry delay.** The retry delay is *R* = trunc(*P* × 900) ticks (F3), where *P* is the
     path-retry delay field in game minutes. The path retry timer of S-0209 counts it down. A unit
     computes no new path while its retry delay runs, with these exceptions: the immediate
-    recomputation of claim 20 (drive locomotor), the computation a follower car makes when its
+    recomputation of claim 20 and immediate fresh searches of S-0207 claim 15 (drive locomotor), the computation a follower car makes when its
     leader sends it after itself (claim 26), and the immediate new path of a walker that meets an
     obstacle (S-0209 claim 7, walk locomotor). The delay after a follower car's computation is
     claim 26's, not the fresh-search rule below: in particular a failed gate leaves the car's delay
@@ -1220,13 +1244,19 @@ Terms specific to this spec:
     retry delay of claim 21 has passed, it computes a new path in search mode 1 while the blockage
     timer runs, and in search mode 2 once it has run out. A unit with a stored path but a next step
     of another outcome, other than *blocked*, reacts as S-0209 and the movement specs say (opening a
-    gate, attacking an obstacle, waiting). An outcome *blocked* for the next step clears the stored
-    path, which leads to a fresh search under claim 20, after the retry delay of claim 21.
+    gate, attacking an obstacle, waiting). At the first check of a track's first cell,
+    an outcome *blocked* clears the stored path and makes a fresh search in mode 0 on the
+    same tick, regardless of the path retry timer. A found path gets the repeated check
+    of S-0207 claim 15 on that tick. This is the same immediate-search timing as that claim's
+    first check of an obstacle or stationary friend, not the delayed fresh search used after
+    a cloaked blocker. A repeated check with outcome *blocked* gives up the move. Checks
+    of a curve's second cell follow S-0207 claim 15's separate table, not this first-cell rule.
 
     The walk locomotor's reactions to every outcome of its next step are S-0209's (claims 7 to 10).
     Its re-paths for a moving blocker (S-0209 claim 10) use search modes 1 and 2 as above, and the
     immediate new path it makes after an obstacle (S-0209 claim 7) is a search in mode 0.
-    - Backing: `measurable` (scenarios P6, P14). `unmeasured` for what ends a blockage with this
+    - Backing: `measurable` (scenarios P6, P14; S-0207 scenario D17 part d3 for the immediate
+      fresh search on outcome *blocked*, also specified here as P18). `unmeasured` for what ends a blockage with this
       locomotor: P6's shuttling blocker does not isolate a step taken between two waits from a
       replaced destination, and S-0209's scenario C5 measures the step for the walk locomotor only
     - Confidence: medium (the other locomotors are not established). Low for what ends a blockage
@@ -1266,7 +1296,8 @@ Terms specific to this spec:
       *E* = max(Chebyshev distance, 2*n* − 2 + legs) cells, where *n* is the number of sectors on the
       level-0 corridor found and the legs are given by F8, except in the first case of F8 (both cells
       on the same bridge), where *E* is the Chebyshev distance alone. When the coarse search fails,
-      the cell is not adopted.
+      the cell is not adopted. This substitution allowance is 6 cells, not the 8-cell detour
+      allowance of the obstructed approach-position choice in S-0307 claim 16.
     - When the destination cell's outcome is *blocked* and the cell holds a building, the original
       always adopts the cell found by the nearby-cell search, with no distance or estimate test. When
       that search finds no cell, the original's new destination is undefined. Our engine keeps the
@@ -1325,6 +1356,7 @@ Terms specific to this spec:
     | User | Centre | Locomotion class | Movement zone | Reach region | In deck mode when | Height condition | Further test | Reference cell |
     |---|---|---|---|---|---|---|---|---|
     | Destination substitution (claim 24) | the destination | the unit's | the simplified movement zone | that of the unit's cell, read for its deck when the unit is on a bridge deck (claim 4), for the simplified zone | the unit is on a bridge deck | yes | for a unit of movement zone *subterranean*, as below | the unit's cell |
+    | Failed approach with empty radii (S-0307 claim 17), ordinary ground infantry or vehicle on terrain without bridges | the cell of the target's reference point | the actor's | own zone | that of the actor's ground cell for its own zone | never | yes | no | none |
     | Scatter (S-0208 claim 13) | as S-0208 claim 13 says | the unit's | *normal* | none | the unit is on a bridge deck | yes | no | none |
     | Move order onto a cell (S-0214 claim 11), when that claim uses the search, except the next row | the clicked cell | the unit's | own zone, *subterranean* counted as *normal*, and *fly* counted as *infantry* while an ion storm (a global effect, S-0104) is active | that of the unit's cell, read for its deck when the unit is on a bridge deck (claim 4), for that zone | the centre is a bridge cell | yes | no | none |
     | No-move order onto a cell (S-0214 claim 11) by a free mover (S-0214 Terms: a unit that is in the air, is of movement zone *subterranean* whatever its state, is of a jumpjet infantry type with no ion storm active, or is an aircraft) | the clicked cell | the unit's | as in the row above | none | the centre is a bridge cell | yes | for a unit of movement zone *subterranean* that is below the ground surface when the search is made (below) | none |
@@ -1348,7 +1380,8 @@ Terms specific to this spec:
       bridge cell. The centre's level is its height level, plus 4 only when the centre is a bridge
       cell and the use is in deck mode (in claim 24's use, `quirks.substitution_centre_ground_level`
       off changes this to plus 4 whenever the centre is a bridge cell; no other use is changed).
-      Bridge cells may qualify in every use of the search,
+      Bridge cells may qualify except in the empty-radius approach-failure row of T5, which
+      excludes them independently of locomotion class,
     - when the user asks for it, it passes the *further test* of a cell, which is the burrowing test
       of S-0010 claim 17: the test of whether a tunnelling unit may dig in or come up on the cell.
       S-0010 claims 17 and 25 give the whole test, among its conditions the tileset's
@@ -1367,8 +1400,8 @@ Terms specific to this spec:
         the centre included, must pass, whether or not the clicked cell passes. A subterranean unit
         on the surface, and every other free mover, gets no further test.
 
-    For locomotion class *winged*, only the first condition, the height condition and the further
-    test apply: the reach region, the class rule and the occupancy record are not consulted. In
+    For locomotion class *winged*, only the first condition, the height condition, the further
+    test and any user's bridge exclusion apply: the reach region, the class rule and the occupancy record are not consulted. In
     claim 24 the centre is the destination, whose occupant gave the outcome that started the search,
     so it normally does not qualify, and the double entry of the centre matters only where the
     centre can be empty.
@@ -1393,11 +1426,16 @@ Terms specific to this spec:
     preferred cells, a centre collected twice counting twice, and *N* is the tick number (S-0201)
     in force when the search is made: for a scatter, that of the tick of the scatter request; for a
     move order or a rally point, the one in force when the click is handled, since the search is
-    made then (S-0213 claim 20, S-0214 claim 11). When no cell qualifies, there is no result. No draw from
+    made then (S-0213 claim 20, S-0214 claim 11); for the empty-radius approach failure,
+    the tick of that failure. S-0307 claim 16 owns qualification of obstructed approach
+    positions before failure, including its two alternative coarse-estimate tests. These are
+    not nearby-cell-search qualification and do not change the failure row's parameters.
+    When no cell qualifies, there is no result. No draw from
     any random stream is taken.
     - Backing: `measurable` for the ring rule, the scan order and the distance choice (scenario P7,
       runs 1, 2, 4, 8 and 8b), for the occupancy condition (P7 runs 1, 2, 8 and 8b, P16), for the
-      class rule with walls (P7 run 9, P16) and for the choice without a reference cell (P16, runs
+      class rule with walls (P7 run 9, P16), for the empty-radius approach-failure parameters
+      (S-0307 scenario RG12), and for the choice without a reference cell (P16, runs
       (s), (u) and (r), which also test the parameters of table T5 for a scatter, a move order onto
       an unreachable cell and a rally point), and for the further test of the no-move row for a
       cell, with the state that decides it (P16 run (t), test data). `unmeasured` for the other
@@ -1412,6 +1450,10 @@ Terms specific to this spec:
       only while the unit's locomotor is not moving (S-0208 claim 11), so that case cannot be set up
       at will. In the uses of table T5 for orders, a qualifying centre on flat ground ends the
       collection with ring 0, so the result is the centre at either position.
+      `unmeasured` for the failure row's bridge exclusion in isolation: RG12 has no bridges,
+      and on its flat ground the height condition already rejects a neighbouring deck 4 levels
+      higher. The exclusion is independent of that height condition, but no scenario here
+      isolates it on raised terrain.
       `unmeasured` for the winged class, which no unit of this spec's scenarios has (S-0213's
       scenario O14, step 5, covers the rally point of an aircraft factory)
     - Confidence: high for the occupancy condition and the class rule. Medium for the ring rule, the
@@ -1698,7 +1740,7 @@ south and west.
 | stored path, more than one step | the next step begins | the step is taken |
 | stored path, one step left, drive locomotor | that step begins, heading point more than 512 leptons away | immediate recomputation in mode 0 (claim 20), the old step is still taken |
 | stored path, drive locomotor | next step *moving blocker* | blockage timer starts if not running. When the retry delay is over, re-path in mode 1, or 2 once the blockage timer has run out |
-| stored path, drive locomotor | next step outcome *blocked* | stored path cleared, fresh search once the retry delay is over |
+| stored path, drive locomotor | first check of the track's first cell: outcome *blocked* | stored path cleared, fresh search on this tick regardless of the retry timer; a found path gets a repeated check on this tick (claim 22) |
 | stored path, walk locomotor | next step of any outcome other than *clear* | reacts as S-0209 claims 7 to 10 say, with the delays of claim 21 |
 | any | destination changes | stored path cleared, fresh search, which waits for a running retry delay like any fresh search (claims 20 and 21; whether a new order also clears the delay is S-0213's and S-0209's) |
 
@@ -1921,7 +1963,7 @@ S-0209's Import mapping says.
 
 | Data | Owner | Use here |
 |---|---|---|
-| `BridgeSet`, `WoodBridgeSet` (the bridge and wooden-bridge roles of the theater) | S-0010 Import mapping | the bridge spans of S-0010 claim 25, which are the bridge links (claim 3); the deck read of claim 4 (not-enabled row); the bridge ends (Terms) and anchors (F8) |
+| `BridgeSet`, `WoodBridgeSet` (the bridge and wooden-bridge roles of the theater) | S-0010 Import mapping, including its absent-key defaults; the integer tile number minus the role's first tile number gives the role-relative place that selects both ends' side cells (claim 13b, Q-0088) | the bridge spans of S-0010 claim 25, which are the bridge links (claim 3); the deck read of claim 4 (not-enabled row); the bridge ends (Terms) and anchors (F8) |
 | map overlays at the high-bridge overlay indices 24, 25, 237 and 238 (overlay type stream, S-0009 claim 12) | S-0211 claim 15 | bridge cells, the deck-entry mark and the bridge axis (Terms), and so claims 4, 7 and 10 |
 
 **Map tunnel list**
@@ -2660,6 +2702,20 @@ draws (claim 25), so one run per variant is enough unless stated.
     more cells than the Chebyshev distance. That would mean the search does not favour the
     candidate that closes the straight-line distance fastest (claim 7), or that its estimate or
     step costs differ from F1, F2 and T4.
+
+**P18. Immediate fresh search after a blocked first step (claim 22).** Use S-0207 D17
+part d3's narrow clear-ground corridor, unarmed human-owned mover and enemy blocker, with
+one bystander computer player isolated from the observed corridor. Game speed 2, director
+and mods off, except the named test map and retry-delay override. Set the path-retry delay
+to 1 game minute. Introduce the blocker by the map's supported reinforcement trigger after
+the mover has a stored path, before its check of the blocked cell. A read-only recorder takes
+stored steps, destination, track state, search ticks and retry timer each tick. The run qualifies
+only if the refused first check occurs with the retry timer still running and the old step
+still stored. Obtain one qualifying run; otherwise report inconclusive. Expected: a mode-0
+search occurs on the refusal tick despite the timer. A found path is checked again that tick.
+A failed search follows claim 23. Falsifier: no search on the refusal tick and a later search
+only after the timer expires. Scripted input plus the movement recorder is the proposed tool.
+Void the run if the bystander enters the corridor or acts on either test unit.
 
 ## Open questions
 
