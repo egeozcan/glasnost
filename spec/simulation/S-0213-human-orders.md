@@ -2,7 +2,7 @@
 id: S-0213
 title: Human orders (the order set, when orders apply, and what each order changes)
 topic: simulation
-revision: 8
+revision: 9
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -168,7 +168,7 @@ Terms).
    - Backing: `measurable` (Scenario O2)
    - Confidence: medium (the limit is certain; that no other limit on selection size applies
      first is not)
-   - Quirk: `quirks.pending_order_limit` (default: the original's limit of 128). With the switch
+   - Quirk: `quirks.pending_order_limit` (default: the YR limit of 128). With the switch
      off, no house's pending list has a limit.
 
 3. **Order of application within a tick.** For one house, non-behaviour orders have issue-order precedence among themselves, and behaviour orders have issue-order precedence among themselves. When a non-behaviour order and a behaviour order conflict for the same actor in one tick, the resulting state is the one produced by the behaviour order, regardless of which was issued later. Thus a stop issued after a move to the same actor in that tick leaves the move in force. A person's input in the original cannot produce that conflict, because each tick's orders come from one input event (claim 1); it can arise through our engine's AI houses, whose orders follow the same precedence rule.
@@ -216,7 +216,9 @@ Terms).
    table T3 in State and ordering. If part (a) of that table holds, the order is ignored (it still
    ends the actor's planned route, claim 17) and parts (b) to (h) do not apply; otherwise each part from (b) to (h) whose condition holds
    applies. An attack-move order has the effect of the plain order that claim 6 makes of it, and
-   "the resulting behaviour" in table T3 means that order's behaviour.
+   "the resulting behaviour" in table T3 means that order's behaviour. Every destination
+   assignment uses S-0107 claim 15's repeated-current-nonempty-destination get-up rule
+   (claim 21 here), regardless of the behaviour named by the order.
    - Backing: `measurable` (Scenario O3) for parts d, e, f (step 7 for its passenger clause) and
      the guard-spot part of g, and `measurable` (Scenario O4) for parts a and h and for the
      contact break of part b at a building of the unloading kind (Scenario O4, part iii, with a
@@ -436,7 +438,7 @@ Terms).
       decided by the project lead (2026-10-09): AI houses follow the order rules of human houses.
     - Backing: `measurable` (Scenario O6, step 4, and Scenario O11)
     - Confidence: medium
-    - Quirk: `quirks.detonate_in_planter_name` (default: the original). With the switch off, the
+    - Quirk: `quirks.detonate_in_planter_name` (default: YR behaviour). With the switch off, the
       order is issued and applied in the name of the house of the player who gave it. Input offers
       the detonate action only on the player's own object (S-0214), so that house is always the
       owner of the object that carries the bomb. In our engine the switch decides which house's
@@ -580,7 +582,7 @@ Terms).
     accepted until the tick counter passes the tick of the last cheer of an earlier game plus *R*.
     - Backing: `measurable` (Scenario O7)
     - Confidence: medium
-    - Quirk: `quirks.cheer_memory_spans_session` (default: the original). With the switch off, the
+    - Quirk: `quirks.cheer_memory_spans_session` (default: YR behaviour). With the switch off, the
       remembered tick is set to −100 at every game start, so it never carries over from an
       earlier game.
 
@@ -789,8 +791,8 @@ applies. "The resulting behaviour" is the order's behaviour, or for an attack-mo
 | (b) | Always | If the actor is not tethered, it breaks off any contact. If it is tethered, it keeps its link, unless the object it is in contact with is a building of the unloading kind (Import mapping), in which case it breaks off the contact and is no longer tethered. The actor also forgets any building it was waiting in line to enter |
 | (c) | The actor is a team member (Terms) and the behaviour is not *unload* | It leaves the team. Only the original's computer player has teams; an AI house has none (Terms, *AI house*), so this part never applies to its units |
 | (d) | Always | The resulting behaviour becomes the actor's queued behaviour, as S-0215 (claim 12) describes. When it becomes current belongs to S-0215. For a mobile actor, claim 6 also says what happens to its attack-move memory |
-| (e) | *Area guard*, mobile actor | Target: nothing. Destination and guard spot: both the order's target (an object or a cell). The order's destination is not used. The queued destinations are kept |
-| (f) | Any other behaviour, or *area guard* to a building | Target: the order's target. Destination: the order's destination. Either may be nothing. An open-topped transport (a type whose passengers can fire out of it) gives the same target to its passengers when the target is not nothing |
+| (e) | *Area guard*, mobile actor | Target: nothing. Destination and guard spot: both the order's target (an object or a cell). Destination assignment uses S-0107 claim 15 (claim 21 here). The order's destination is not used. The queued destinations are kept |
+| (f) | Any other behaviour, or *area guard* to a building | Target: the order's target. Destination: the order's destination. Destination assignment uses S-0107 claim 15 (claim 21 here). Either may be nothing. An open-topped transport (a type whose passengers can fire out of it) gives the same target to its passengers when the target is not nothing |
 | (g) | As (f), and the actor is a mobile actor | It also forgets its guard spot and its queued destinations |
 | (h) | The actor controls slave units (a slave-miner harvester, which works with its slaves) and the resulting behaviour is not *attack* | Its slaves are sent back to guard it |
 
@@ -812,7 +814,7 @@ only when they actually assign a destination.
 ## Edge cases and quirks
 
 - **Repeated-destination get-up** (claim 21): S-0107 claim 15 owns
-  `quirks.prone_get_up_repeated_destination`, default original. With it off, every non-empty
+  `quirks.prone_get_up_repeated_destination`, default YR behaviour. With it off, every non-empty
   destination assignment requests get-up for an otherwise eligible prone unit, not only a
   reassignment of the same destination. This applies across order families, not just move.
 - **Partial group orders** (claim 2): `quirks.pending_order_limit`.
