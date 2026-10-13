@@ -677,6 +677,7 @@ pub fn choose_refinery(w: &mut World, id: ObjectId, waiting: bool) -> Option<Obj
     let o = w.obj(id)?.clone();
     let owner = o.owner?;
     let docks = unit(w, id)?.docks.clone();
+    // Provisional (request Q-0144): the holding order is the house's acquisition list.
     let order = w.houses[usize::from(owner.0)].econ.acquired.clone();
     let mut bests = Vec::new();
     for &ty in &docks {
