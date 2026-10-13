@@ -323,6 +323,71 @@ fn base_only_and_not_given() {
     );
 }
 
+/// spec: S-0006 claim 5 (the twelve land-type sections reset omitted keys in the layered game-wide data)
+#[test]
+fn land_type_sections_reset_in_the_layering() {
+    let base = "[Clear]\nFoot=50%\nBuildable=yes\n[Other]\nFoot=50%\n";
+    let map = "[Clear]\nTrack=1\n[Other]\nTrack=1\n";
+    let o = apply(&[layer(Role::Base, base), layer(Role::Map, map)], "");
+    let clear = &o.globals[&b"Clear"[..]];
+    for k in [
+        "Foot",
+        "Wheel",
+        "Hover",
+        "Float",
+        "Amphibious",
+        "FloatBeach",
+        "Buildable",
+    ] {
+        assert!(clear[k.as_bytes()].reset, "{k}");
+        assert!(clear[k.as_bytes()].value.is_none(), "{k}");
+    }
+    assert_eq!(clear[&b"Track"[..]].value.as_deref(), Some(&b"1"[..]));
+    // A section that is not a land type keeps per-key layering.
+    let other = &o.globals[&b"Other"[..]];
+    assert_eq!(other[&b"Foot"[..]].value.as_deref(), Some(&b"50%"[..]));
+    let q = LayerQuirks {
+        override_resets_keys: false,
+        ..LayerQuirks::default()
+    };
+    let o = apply_with(
+        &[layer(Role::Base, base), layer(Role::Map, map)],
+        "",
+        GameKind::Skirmish,
+        q,
+    );
+    let clear = &o.globals[&b"Clear"[..]];
+    assert_eq!(clear[&b"Foot"[..]].value.as_deref(), Some(&b"50%"[..]));
+    assert!(!clear[&b"Buildable"[..]].reset);
+}
+
+/// spec: S-0006 claim 3 (the "not given" values of the pitch and roll angles and of a voxel
+/// animation's angular velocities)
+#[test]
+fn angle_keys_not_given() {
+    let base = "[VehicleTypes]\n1=Cart\n[Cart]\nPitchAngle=5\nRollAngle=6\n\
+                [VoxelAnims]\n1=Spin\n[Spin]\nMinAngularVelocity=2\nMaxAngularVelocity=3\n";
+    let map = "[Cart]\nPitchAngle=-100%\nRollAngle=-1.0\n\
+               [Spin]\nMinAngularVelocity=0\nMaxAngularVelocity=0.0\n";
+    let o = apply(&[layer(Role::Base, base), layer(Role::Map, map)], "");
+    assert_eq!(
+        val(&o, Kind::Vehicles, "Cart", "PitchAngle").as_deref(),
+        Some("5")
+    );
+    assert_eq!(
+        val(&o, Kind::Vehicles, "Cart", "RollAngle").as_deref(),
+        Some("6")
+    );
+    assert_eq!(
+        val(&o, Kind::VoxelAnimations, "Spin", "MinAngularVelocity").as_deref(),
+        Some("2")
+    );
+    assert_eq!(
+        val(&o, Kind::VoxelAnimations, "Spin", "MaxAngularVelocity").as_deref(),
+        Some("3")
+    );
+}
+
 /// spec: S-0105 claim 27 and `quirks.barrel_recoil_layer_reset`
 #[test]
 fn barrel_values_follow_the_turret_per_layer() {

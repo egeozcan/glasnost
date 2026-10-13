@@ -190,6 +190,25 @@ fn land_type_rows() {
     assert!(!s.land_types.contains_key(&LandType::Water));
 }
 
+/// spec: S-0006 claim 5 (land-type rows reset on override; `quirks.override_resets_keys` off keeps the held value), S-0211 claim 2
+#[test]
+fn land_type_resets_follow_the_switch() {
+    let base = "[Road]\nWheel=0.5\nBuildable=yes\n";
+    let map = "[Road]\nHover=0.25\n";
+    let (s, _) = sim(base, map, "");
+    let road = &s.land_types[&LandType::Road];
+    assert_eq!(road.wheel, None);
+    assert_eq!(road.buildable, None);
+    assert_eq!(dec(&road.hover), Some("25e-2"));
+    let mut o = ImportOptions::default();
+    o.quirks.override_resets_keys = false;
+    let (s, _) = sim_with(base, map, "", &o);
+    let road = &s.land_types[&LandType::Road];
+    assert_eq!(dec(&road.wheel), Some("5e-1"));
+    assert_eq!(road.buildable, Some(true));
+    assert_eq!(dec(&road.hover), Some("25e-2"));
+}
+
 /// spec: S-0215 Import mapping (behaviour sections and keys), claim 21 (`quirks.anti_air_rate_layer_reset`)
 #[test]
 fn behaviours_and_anti_air_rate() {

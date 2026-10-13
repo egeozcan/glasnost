@@ -361,6 +361,11 @@ fn reset_keys(kind: Kind) -> &'static [&'static str] {
     }
 }
 
+/// The buildable key of a land-type section, which resets to no (S-0006
+/// claim 5, Import mapping).
+// spec: S-0006 Import mapping (land-type keys and reset values)
+const LAND_BUILDABLE: &str = "Buildable";
+
 /// The difficulty sections and their reset keys (S-0006 claim 5).
 // spec: S-0006 Import mapping (difficulty sections and keys)
 const DIFFICULTY_SECTIONS: [&str; 3] = ["Easy", "Normal", "Difficult"];
@@ -437,6 +442,13 @@ fn type_not_given(kind: Kind, key: &[u8]) -> Option<NotGivenForm> {
     match (kind, key) {
         // spec: S-0006 claim 3 (a superweapon's recharge time: 0)
         (Kind::Superweapons, b"RechargeTime") => Some(DecimalZero),
+        // spec: S-0006 claim 3, Import mapping (pitch and roll angles: −1)
+        (
+            Kind::Infantry | Kind::Vehicles | Kind::Aircraft | Kind::Buildings,
+            b"PitchAngle" | b"RollAngle",
+        ) => Some(DecimalMinusOne),
+        // spec: S-0006 claim 3, Import mapping (a voxel animation's angular velocities: 0)
+        (Kind::VoxelAnimations, b"MinAngularVelocity" | b"MaxAngularVelocity") => Some(DecimalZero),
         // spec: S-0207 claim 1 (vehicle speed field: −1 keeps the held value), S-0208 Import mapping (infantry)
         (Kind::Vehicles | Kind::Infantry, b"Speed") => Some(IntegerMinusOne),
         // spec: S-0215 Import mapping (GuardRange: absent or −1 keeps the held value; a type section)
@@ -1635,6 +1647,29 @@ impl Run<'_> {
                     .any(|d| d.as_bytes() == name.as_slice())
             {
                 for k in DIFFICULTY_KEYS {
+                    if !has(k) {
+                        let state = keys.entry(k.as_bytes().to_vec()).or_default();
+                        state.value = None;
+                        state.reset = true;
+                        state.history.push(Event {
+                            layer: li,
+                            line: section.line(),
+                            what: What::Reset,
+                        });
+                    }
+                }
+            }
+            // spec: S-0006 claim 5 (the twelve land-type sections reset omitted keys: multipliers 100 %, buildable no), S-0211 claim 2
+            if quirks.override_resets_keys
+                && crate::sim::LAND_TYPES
+                    .iter()
+                    .any(|(_, l)| l.as_bytes() == name.as_slice())
+            {
+                let land_keys = crate::sim::LAND_MULTIPLIERS
+                    .iter()
+                    .map(|(_, k)| *k)
+                    .chain([LAND_BUILDABLE]);
+                for k in land_keys {
                     if !has(k) {
                         let state = keys.entry(k.as_bytes().to_vec()).or_default();
                         state.value = None;
