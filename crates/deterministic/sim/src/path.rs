@@ -1136,11 +1136,16 @@ pub fn nearby(w: &World, centre: CellXY, use_: NearbyUse) -> Option<CellXY> {
         } else {
             0
         };
+    // spec: S-0212 claim 25 (the empty-radius approach-failure row of T5 excludes bridge cells, whatever the locomotion class)
+    let no_bridges = matches!(use_, NearbyUse::Approach { .. });
     let mut collected: Vec<CellXY> = Vec::new();
     let mut stop_after_ring = false;
     'rings: for r in 0..=max_r {
         let ring = ring_cells(centre, r, q.nearby_centre_twice);
         for c in ring {
+            if no_bridges && is_bridge(w, c) {
+                continue;
+            }
             // spec: S-0212 claim 25 (the further test, when the user asks for it)
             if qualifies(
                 w,

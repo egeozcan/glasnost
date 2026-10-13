@@ -1088,6 +1088,38 @@ fn blocked_step_keeps_the_destination() {
     assert_eq!(w.obj(e).expect("e").pos.cell(), cell(0, -1));
 }
 
+// spec: S-0212 claim 22 (at the first check of a track's first cell, blocked clears the stored path and makes a fresh search on the same tick, whatever the path retry timer)
+// spec: S-0207 claim 15 table T4 (first check, blocked: as S-0212 claim 22 gives)
+#[test]
+fn blocked_first_cell_searches_at_once() {
+    // Facing map east, a stored path due north: the vehicle turns first,
+    // and the first check comes when it faces the step.
+    let s = scene(car(WHEEL, 30, false), 64);
+    let (mut w, id) = start(&s, &[N, N, N]);
+    // The first cell turns to rock after the path was stored.
+    let rock = cell(0, -1);
+    w.cells.grid.get_mut(rock).expect("cell").land = glasnost_map::terrain::land::ROCK;
+    glasnost_sim::regions::cell_changed(&mut w, rock);
+    // The retry timer never runs out: only the immediate search can help.
+    w.obj_mut(id).expect("vehicle").path.retry_at = i32::MAX;
+    let mut replaced = false;
+    for _ in 0..80 {
+        tick::step(&mut w);
+        let o = w.obj(id).expect("vehicle");
+        assert_ne!(o.pos.cell(), rock, "never enters");
+        assert!(o.dest.is_some(), "the move is kept");
+        if let Some(&d) = o.path.steps.first()
+            && o.path.steps.as_slice() != [N, N, N]
+        {
+            let (dx, dy) = STEPS[usize::from(d)];
+            assert_ne!(CellXY::new(cell(0, 0).x + dx, cell(0, 0).y + dy), rock);
+            replaced = true;
+            break;
+        }
+    }
+    assert!(replaced, "a fresh path around the rock on the check's tick");
+}
+
 // spec: S-0207 claim 16 (the scatter order moves an idle vehicle to the nearby-cell search's cell; one with a destination refuses; sleep and the teleporting locomotor refuse)
 #[test]
 fn vehicle_scatter_order() {

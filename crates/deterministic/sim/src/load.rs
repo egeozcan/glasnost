@@ -382,7 +382,7 @@ pub fn new_game(
     // Late phase: list 3 and the late assignments (S-0009 claims 20, 28 and 29).
     let mut bases: Vec<Option<CellXY>> = vec![None; w.houses.len()];
     if !setup.sandbox {
-        // spec: S-0202 claim 14 and S-0009 claim 28 (the unused-house cleanup follows the second whole-map recalculation and precedes the late start-position phase)
+        // spec: S-0202 claim 14 and S-0009 claim 28 (the unused-house cleanup follows the second pass and precedes the late phase; its removals recalculate the occupied cells)
         cleanup(&mut w, setup);
         let list3 = starts::build_list(&mut w, map, players)?;
         let n = list3.len();

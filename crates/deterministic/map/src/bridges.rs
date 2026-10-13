@@ -33,7 +33,7 @@ pub struct Span {
 /// A tile's place *i* in the bridge role's range, else in the wooden-bridge
 /// role's (S-0010 claim 25: the bridge role decides when both ranges hold
 /// the tile; an unset role has no tiles here).
-fn role_index(roles: &Roles, tile: i32) -> Option<i32> {
+pub fn role_index(roles: &Roles, tile: i32) -> Option<i32> {
     // spec: S-0010 claim 25 (an unset role has no tiles; the bridge role is read before the wooden-bridge role)
     [roles.bridge, roles.wooden_bridge]
         .into_iter()

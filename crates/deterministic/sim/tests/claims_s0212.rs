@@ -1065,8 +1065,7 @@ fn moving_blocker_wait_then_detour() {
     assert_ne!(o.pos.cell(), cell(1, 0));
 }
 
-// spec: S-0212 claim 21 (a fresh search waits for the retry delay to be over)
-// spec: S-0212 claim 22 (a next step with outcome blocked clears the stored path; a fresh search follows after the delay)
+// spec: S-0212 claim 22 (at the first check of a track's first cell, blocked clears the stored path and makes a fresh search in mode 0 on the same tick, regardless of the path retry timer)
 #[test]
 fn blocked_next_step_clears_the_path() {
     let mut s = scene();
@@ -1075,7 +1074,6 @@ fn blocked_next_step_clears_the_path() {
     let mut w = s.build();
     open_orders(&mut w);
     let id = vehicles(&w)[0];
-    let start = w.obj(id).unwrap().pos;
     let t = w.tick;
     {
         let o = w.obj_mut(id).unwrap();
@@ -1084,20 +1082,17 @@ fn blocked_next_step_clears_the_path() {
         o.path.retry_at = t + 5;
     }
     common::run(&mut w, 1);
+    // On the same tick, although the retry delay still runs, a fresh path
+    // goes round the rock.
     let o = w.obj(id).unwrap();
-    assert!(o.path.steps.is_empty());
-    assert_eq!(o.pos, start);
     assert!(o.dest.is_some());
-    // While the retry delay runs no new path is computed.
-    common::run(&mut w, 3);
-    assert!(w.obj(id).unwrap().path.steps.is_empty());
-    // Once it is over, a fresh search goes round the rock.
-    common::run_until(&mut w, 5, |w| !w.obj(id).unwrap().path.steps.is_empty());
-    let o = w.obj(id).unwrap();
-    assert!(!o.path.steps.is_empty() || o.pos != start);
-    if let Some(&d) = o.path.steps.first() {
-        assert_ne!(d, 2);
-    }
+    let first = o.path.steps.first().copied();
+    assert!(
+        first.is_some_and(|d| d != 2),
+        "a new path: {:?}",
+        o.path.steps
+    );
+    assert_ne!(o.pos.cell(), cell(1, 0));
 }
 
 // ------------------------------------------------------------------ failures
@@ -1752,6 +1747,74 @@ fn a_high_span_is_an_enabled_link_joining_the_banks() {
     );
     // A high span sets no bridge-body mark.
     assert!(w.cells.bridge_body.iter().all(|&b| !b));
+}
+
+// spec: S-0212 claim 13b (the side displacements by the first end's tile place i: 0, 1, 6 to 10 north then south; 3, 4, 11 to 15 east then west; 2 and 5 north-west then south-east)
+#[test]
+fn link_side_displacement_table() {
+    for i in 0..16 {
+        let want = match i {
+            0 | 1 | 6..=10 => [(0, -1), (0, 1)],
+            3 | 4 | 11..=15 => [(1, 0), (-1, 0)],
+            _ => [(-1, -1), (1, 1)],
+        };
+        assert_eq!(corridor::side_displacements(i), Some(want), "place {i}");
+    }
+    assert_eq!(corridor::side_displacements(16), None);
+}
+
+/// Whether a level-0 connection joins the sectors of `a` and `b`.
+fn connected(w: &World, a: CellXY, b: CellXY) -> bool {
+    let (s, t) = (sector(w, 0, a), sector(w, 0, b));
+    w.regions.sectors.levels[0].conns[s as usize]
+        .iter()
+        .any(|&(x, _)| x == t)
+}
+
+// spec: S-0212 claim 25 and table T5 (the empty-radius approach failure's search excludes bridge cells, whatever the class)
+#[test]
+fn approach_failure_search_skips_bridge_cells() {
+    let (mut w, car) = river(&[]);
+    // The river bed turns to clear ground, so the cells under the deck
+    // share the car's ground reach region.
+    let bed: Vec<CellXY> = w
+        .cells
+        .grid
+        .iter()
+        .map(|(c, _)| c)
+        .filter(|c| (cell(1, 0).x..=cell(5, 0).x).contains(&c.x))
+        .collect();
+    for &c in &bed {
+        w.cells.grid.get_mut(c).expect("cell").land = glasnost_map::terrain::land::CLEAR;
+        regions::cell_changed(&mut w, c);
+    }
+    regions::ensure(&mut w);
+    let centre = cell(3, 0);
+    assert!(w.cells.is_bridge(centre));
+    let got = glasnost_sim::path::nearby(
+        &w,
+        centre,
+        glasnost_sim::path::NearbyUse::Approach { unit: car },
+    )
+    .expect("a cell off the bridge");
+    assert!(!w.cells.is_bridge(got), "{got:?} is a bridge cell");
+}
+
+// spec: S-0212 claim 13b (an enabled link joins the sectors of its first end and second end each moved by the same displacement, which the first end's tile alone decides)
+#[test]
+fn link_side_cells_follow_the_first_end_tile() {
+    // Place 6: the cells map north and south of both ends.
+    let (w, _) = river(&[]);
+    assert!(connected(&w, cell(0, -1), cell(6, -1)));
+    assert!(connected(&w, cell(0, 1), cell(6, 1)));
+    assert!(!connected(&w, cell(-1, -1), cell(5, -1)));
+    // The first end's tile at place 2 (the second end's unchanged): the
+    // north-west and south-east neighbours of both ends.
+    let (mut w, _) = river(&[]);
+    w.cells.grid.get_mut(cell(0, 0)).unwrap().tile = BRIDGE_ROLE + 2;
+    regions::rebuild(&mut w);
+    assert!(connected(&w, cell(-1, -1), cell(5, -1)));
+    assert!(connected(&w, cell(1, 1), cell(7, 1)));
 }
 
 // spec: S-0010 claim 25 (a low span: its band of four cells across each between cell that is not a high-bridge cell carries the bridge-body mark and, S-0212 Terms, the span's axis)
