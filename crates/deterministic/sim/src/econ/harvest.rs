@@ -916,11 +916,18 @@ fn exhausted(w: &mut World, id: ObjectId, cell: CellXY) -> i32 {
 }
 
 fn returning(w: &mut World, id: ObjectId) -> i32 {
-    // spec: S-0402 State and ordering (returning with a destination: keeps driving)
+    let chrono = unit(w, id).is_some_and(|u| u.teleporter);
     if w.obj(id).is_some_and(|o| o.dest.is_some()) {
+        if chrono && choose_refinery(w, id, false).is_some() {
+            // spec: S-0402 claim 17 (a chrono miner moving in returning drops its movement when the normal choice finds a refinery; its next processing reserves it)
+            crate::drive::stop(w, id);
+            if let Some(ob) = w.obj_mut(id) {
+                ob.dest = None;
+            }
+        }
+        // spec: S-0402 State and ordering (returning with a destination: keeps driving)
         return standard(w, id);
     }
-    let chrono = unit(w, id).is_some_and(|u| u.teleporter);
     let hr = &w.rules().econ.harvest;
     // spec: S-0402 claim 9 (the too-far field, chrono miners' field for a chrono miner, in cells × 256 leptons)
     let limit = i64::from(if chrono {
