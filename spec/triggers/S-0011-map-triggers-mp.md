@@ -2,7 +2,7 @@
 id: S-0011
 title: Map triggers (multiplayer subset)
 topic: triggers
-revision: 5
+revision: 6
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -19,7 +19,16 @@ supersedes: []
 How the triggers that a map defines are set up while a game loads, when they are evaluated and fire,
 and what the actions of this revision's subset do (the event and action codes of Import mapping,
 tables I3 and I4), including the order in which the scenario random stream is drawn while a map loads.
-Codes outside the subset are parsed, and their meaning is left to a later revision.
+This revision covers skirmish only; network games and campaigns are out of scope. Codes outside
+the subset are parsed, and their meaning is left to a later revision.
+
+**Changes required at hand-off.** S-0109's Terms, claim 13 and scenarios AN9/AN21 must distinguish
+the creation start event from later start events of a trigger-played animation (claim 36 here).
+S-0202 must replace its stale statement that this spec leaves overlay and vein draws open.
+S-0302 must drop its now-satisfied request to extend the survivor cases and warning of claim 27.
+S-0409 must replace its stale statement that claims 26 and 36 cover humans only with their
+all-player-house scope. S-0003 claim 14 must explicitly exclude the owner-country and exact
+trigger-event type-name rules of claims 5 and 21. These companion corrections must be checked together at sign-off.
 
 ## Terms
 
@@ -114,7 +123,8 @@ engine does instead (claims 26 and 36). The terms below are specific to this spe
    already in it never finishes loading (Edge cases,
    *Unparseable entries*). Our engine ends the chain before the first repeated member, and the
    importer warns (a departure).
-   - Backing: `measurable` (scenario T1)
+   - Backing: `measurable` (scenario T1 for chain membership and independent instances; T24 D
+     for the loading hang on a cycle). The safe chain cut is our engine's departure
    - Confidence: high (medium for the shared member)
 
 2. **One tag per tag definition.** Every carrier of a tag definition carries the same tag, so all
@@ -140,21 +150,24 @@ engine does instead (claims 26 and 36). The terms below are specific to this spe
    - Backing: `measurable` (scenario T2)
    - Confidence: high
 
-4. **Difficulty position of skirmish and multiplayer games.** In a skirmish or multiplayer game the
+4. **Difficulty position of a skirmish.** In a skirmish the
    difficulty position is the session's computer-difficulty setting. The program initialises it
    from the base rules' multiplayer-dialog difficulty field when the base rules' game-wide values
    are read (Import mapping; S-0006 says when that happens). A lobby control can change it.
    Whether the stock lobby shows such a control, and whether the value restored at a later game
-   start replaces a lobby choice, are not established (Open questions). Campaign missions take it from the chosen campaign difficulty, which is outside this
-   spec. A setting outside 0 … 2 selects no difficulty flag: every trigger instance whose disabled
+   start replaces a lobby choice, are not established (Open questions). This setting gates triggers only; it is not a house's
+   difficulty row or handicap (glossary). A setting outside 0 … 2 selects no difficulty flag: every trigger instance whose disabled
    flag is clear then starts enabled, and the enable action (claim 25) enables every instance it
-   names, whatever their difficulty flags. Original data behaviour, kept, and the importer warns.
-   - Backing: `measurable` (scenario T2, variant C for the out-of-range setting)
-   - Confidence: medium for "the session setting, initialised from the base rules" and for the
-     out-of-range setting, low for the lobby
+   names, whatever their difficulty flags. This is fixed compatibility behaviour, not an optional
+   quirk, and the importer warns.
+   - Backing: `measurable` (scenario T2, variant C for the out-of-range setting). The presence of
+     a stock lobby control and restoration of its choice at a later game start are `unmeasured`:
+     no scenario identifies that control or follows a choice across starts; they remain open
+   - Confidence: medium for the session setting, its base-rules initialisation and out-of-range
+     behaviour; low for the lobby
 
 5. **Owner house.** Each trigger instance has the owner house defined in Terms, as it stands at the
-   moment the owner house matters, so it follows the houses that exist at that moment. In a skirmish or multiplayer game,
+   moment the owner house matters, so it follows the houses that exist at that moment. In a skirmish,
    where players choose countries, a trigger whose owner country nobody plays has no owner house,
    and when two players play the owner country, only the one earlier in house order is the owner.
    The owner-country field names a country as follows:
@@ -181,18 +194,21 @@ engine does instead (claims 26 and 36). The terms below are specific to this spe
 ### Polling, evaluation and firing
 
 6. **Polled tags are raised once per tick.** Once per tick, at the start of that tick's game logic,
-   the original polls every polled tag, one tag after the other in the registration order of claim
-   7. For the events of this subset, polling a tag has the effect of a single raise of it in which
+   The observable results of a tick's poll follow tag registration order: when an earlier-registered
+   tag's actions change state that a later-registered tag evaluates, that later evaluation observes
+   the changed state. For the events of this subset, polling a tag has the effect of a single raise of it in which
    no code-matched event is judged true: condition events, the any-event code, empty event lists
-   and latches decide (claim 8). So in every tick each polled tag is evaluated, and it fires at most
-   once in that tick from polling. Its carriers can raise it
+   and latches decide (claim 8). So in every tick each polled tag is evaluated once by polling,
+   and each of its trigger instances fires at most once from that poll. Its carriers can raise it
    again in the same tick (claims 18 to 20), and so can its owner house (claim 35). Actions that a polled tag fires take effect before the
    later polled tags are evaluated in the same tick, and before the rest of that tick's game logic.
    Whether a tag is polled is decided once, at the end of loading (Terms), from the codes of its
    chain's events. This applies to every tag that exists then, including those created earlier in
    loading by cell tags and pre-placed objects.
-   - Backing: `measurable` (scenario T4)
-   - Confidence: high for once per tick and at most one firing per tick, medium for the position at
+   - Backing: `measurable` (T4 for tag order; T5 b for one poll firing per tick; T20 C for polls
+     before owner-house raises). The position before every object's update is `unmeasured`:
+     these scenarios do not make a moving object depend on an action in that same tick
+   - Confidence: high for once per tick and at most one firing per instance per poll, medium for the position at
      the start of the tick's logic and for the order
 
 7. **Registration order of tag definitions.** Tag definitions are registered in the order in which
@@ -228,21 +244,29 @@ engine does instead (claims 26 and 36). The terms below are specific to this spe
    combines two code-matched events of different codes can never be satisfied without a latch, and
    one that combines a code-matched event with a condition event fires only in a raise of that code
    in which the condition already holds.
-   - Backing: `measurable` (scenarios T5 and T10)
+   - Backing: `measurable` (scenarios T5 and T10) for evaluation and the hit raise; T7 for the
+     post-destruction raise. The second arrival raise, airborne-unit raises, building-under-attack
+     raises and team raises are `unmeasured`: these scenarios do not isolate their firings from
+     arrival, damage or team activity; their precise conditions remain open
    - Confidence: high (low for the list of out-of-subset raises)
 
 9. **Latches on repeating tags.** When an event of the latchable set (Constants) is judged true in
    an evaluation of a trigger instance of a repeating tag, it is latched, whether or not the
-   trigger as a whole is satisfied. A latch is never cleared. So, after its first satisfaction, a
+   trigger as a whole is satisfied. A latch is never cleared except for the timer-position
+   alias described below. So, after its first satisfaction, a
    latched event counts as satisfied in every later raise of its tag, of any code. Example: a
    repeating tag carried by two vehicles, with one trigger whose single event is
    destroyed-by-anything. The first vehicle's destruction fires the trigger twice: in the
    destroyed-by-anything raise, and again, by the latch, in the raise that follows it (claim 19).
    After that the trigger fires again in every later raise of the tag, for example in each of the
    raises that every hit on the second vehicle causes (`quirks.persistent_event_latch`). Latches are kept per event position, and positions from 33
-   on share the latch of the position 32 lower (`quirks.event_latch_aliasing`). A few codes outside
+   on share the latch of the position 32 lower (`quirks.event_latch_aliasing`). Arming a timer
+   clears the latch at each timer event's position; with aliasing on this also clears any
+   latchable event sharing that position. Such an aliased latch can therefore be lost on creation
+   or re-arming, including the re-arming caused by a firing. With aliasing off, timer positions
+   cannot clear a latchable event's independent latch. A few codes outside
    this subset also latch on other repeat types (Open questions).
-   - Backing: `measurable` (scenario T7; variant C for the shared latch of positions 1 and 33)
+   - Backing: `measurable` (scenario T7; variants C and D for alias satisfaction and clearing)
    - Confidence: medium
 
 10. **Repeat types.** The repeat type decides what happens when a trigger instance is satisfied in a
@@ -252,21 +276,20 @@ engine does instead (claims 26 and 36). The terms below are specific to this spe
     an all-carriers tag with no carrier (for example one that is only polled) never fires
     (`quirks.all_carriers_without_carrier`). A repeating tag fires the trigger every time and stays.
     Any other repeat value never fires, and the importer warns.
-    - Backing: `measurable` (scenario T6)
+    - Backing: `measurable` (scenario T6, including G for an unknown repeat value)
     - Confidence: high for one-time and repeating, medium for all-carriers
 
 11. **Firing.** When a trigger fires, its actions take effect in the order of its action list,
     immediately, within the raise that satisfied it: the effects are in force for whatever follows
-    in the same tick. Every action takes effect even when an earlier one had no effect. All chain
-    members satisfied in the same raise fire in that raise, the last member of the chain first and
-    the first trigger last. Each member is judged only when its turn comes, after the actions of the
-    members that fired before it in that raise have taken effect. So a member that fires earlier in
-    a raise can stop a later one (by disabling it, for example) or let it be satisfied (by setting a
-    variable that it tests). A fired member of a one-time tag is removed at once. The other members
-    of a one-time tag that fired stay able to fire through other raises until the end of that tick
+    in the same tick. Every action takes effect even when an earlier one had no effect. All chain members satisfied in the same raise fire in that raise. Their observable effects have
+    the reverse of chain order: the first trigger's effects are observed after those of later
+    members. A member's eligibility reflects effects that are observable before its own effects in
+    this order. Thus one member's actions can prevent another member from firing (for example, by
+    disabling it) or make it satisfy a condition (for example, by setting a variable it tests). A fired member of a one-time tag is removed at once. The other members
+    that have not fired in a one-time tag stay eligible for other raises until the end of that tick
     and are gone from the next tick on, together with the tag.
-    - Backing: `measurable` (scenario T8; variant B for the effect of an earlier member on a later
-      one) for the order within a raise. The survival of the other
+    - Backing: `measurable` (scenario T8; B for an earlier member's effect on a later one and
+      C for action order and continuation after a no-effect action) for the order within a raise. The survival of the other
       members until the end of the tick is `unmeasured`: it needs two different raises of one
       one-time tag in one tick after it fired, which no test map can arrange reliably
     - Confidence: medium for the order within a raise, high for the action order, low for the
@@ -286,8 +309,10 @@ engine does instead (claims 26 and 36). The terms below are specific to this spe
     one written first in the trigger's event list sets the timer, and both kinds of timer event
     are satisfied when that one timer has run out (F3). A trigger without a timer event ignores its
     timer. Consequence: a one-time polled trigger whose only event is elapsed-time with value *v*
-    fires in the tick numbered 15*v* (the first tick is numbered 0).
-    - Backing: `measurable` (scenario T10)
+    fires in the tick numbered 15*v* when that product is nonnegative and fits the integer
+    range (the first tick is numbered 0). A nonpositive length has already run out in tick 0.
+    - Backing: `measurable` (scenario T10, variant H for a wrapped product). Timer subtraction
+      across tick-counter overflow is `unmeasured`: no scenario runs through that boundary
     - Confidence: high for the length and the tick, medium for "first written wins"
 
 14. **Random delay.** A random-delay event with value *v* arms the timer with the length of
@@ -297,7 +322,9 @@ engine does instead (claims 26 and 36). The terms below are specific to this spe
     15 and 34).
     - Backing: `measurable` (scenario T11). Variant A, statistical, gives the distribution of the
       delay. Variant B reads the number, order and values of the draws with the random-state
-      recorder of the measurement setup, which only reads the original's seed and stream state
+      recorder of the measurement setup, which only reads the original's seed and stream state.
+      Variant C tests a negative value. Sum/product overflow in F2 is `unmeasured`: these
+      variants use small values and do not distinguish a wrapped random-delay result
     - Confidence: high for the formula, medium for the draw count and order
 
 15. **Re-arming.** A trigger timer is armed again, at the current tick, with a new length (and new
@@ -305,20 +332,22 @@ engine does instead (claims 26 and 36). The terms below are specific to this spe
     - the instance is satisfied in a raise (whether or not its repeat type then lets it fire),
       and either the tag is repeating or an entered-by event of the trigger was judged true in that
       raise. An entered-by event judged true in a raise in which the trigger as a whole is not
-      satisfied does not re-arm the timer. For a repeating tag this means: a repeating timer
-      trigger fires every *D* ticks (a new *D* each time for a random delay),
+      satisfied does not re-arm the timer. A repeating polled trigger with only a timer event
+      therefore fires every *D* ticks when *D* > 0 (a new *D* each time for a random delay).
+      With *D* ≤ 0 it fires at each poll, once per tick, and can fire at other raises too,
     - the enable action enables it (claim 25), even when it was already enabled,
     - a map trigger variable changes value and the trigger has a variable-set or variable-clear
       event for that variable (claim 22).
 
-    Nothing else arms it again. In particular disabling does not.
+    Nothing else arms it again. In particular disabling does not. The exhaustive assertion
+    “nothing else” applies to the events and actions covered here, not to the deferred codes.
     - Backing: `measurable` (scenario T10, variants B to D; scenario T5 (c) for the entered-by
-      case)
+      case; T10 G for re-enabling an already-enabled instance)
     - Confidence: medium
 
 16. **Game-time event.** A game-time event with value *v* is satisfied in the tick numbered *t*
     exactly when F4 holds. It counts from the start of the game, so it is not affected by arming.
-    - Backing: `measurable` (scenario T10, variant E)
+    - Backing: `measurable` (scenario T10, variants E and I)
     - Confidence: high
 
 ### Events of the subset
@@ -349,8 +378,9 @@ engine does instead (claims 26 and 36). The terms below are specific to this spe
     event is judged true, so an action always reads the house of that raise. For a one-time or all-carriers
     tag the raising carrier loses the tag when the trigger fires or is satisfied (State and
     ordering).
-    - Backing: `measurable` (scenario T3, in a skirmish with one human player and one computer
-      player)
+    - Backing: `measurable` (scenario T3, including variants B and C for the bridge and capture)
+     for cell arrival, capture, country matching and the triggering house. Other entry methods
+     are pointers only, to the specs of those abilities
     - Confidence: medium (low for the bridge rule, the capture case and the other entries)
 
 19. **Destroyed-by-anything.** When an object that carries a tag is destroyed, whatever destroyed it,
@@ -377,15 +407,19 @@ engine does instead (claims 26 and 36). The terms below are specific to this spe
     type-exists is satisfied when at least *n* objects of that type exist, counting every object of
     the type of every house, including objects inside transports or buildings. When *n* ≤ 0 it is
     satisfied as soon as any building, vehicle, infantry or aircraft object exists, of any type
-    (original data behaviour, kept, and the importer warns about a count below 1).
+    (fixed compatibility behaviour, not an optional quirk; the importer warns about a count below 1).
     Type-does-not-exist is satisfied when no object of the found type exists. The exact match is an
     exception to S-0003 claim 14, which matches type names without regard to case (Edge cases,
-    *Exact type names*). The `<none>` and `none` markers get no special treatment here: they match no type,
-    so the events are never judged true.
+    *Exact type names*). The text `<none>` and `none` gets no marker treatment here: each is
+    looked up as an ordinary exact type name. When no type has that exact name, neither event
+    is judged true.
     - Backing: `measurable` (scenario T14; variant C for *n* ≤ 0, variant D for an object inside a
       building)
     - Confidence: medium (low for which objects count while inside another object, and for
-      type-does-not-exist)
+      type-does-not-exist). Which duplicate type name wins across kinds is `unmeasured`: T14
+      uses a unique name and the combined lookup order remains open. The absence of marker
+      treatment is `unmeasured`: when no registered type has a marker spelling, lookup failure
+      and marker rejection both make these events false, so T14 cannot distinguish them
 
 22. **Map trigger variables.** The map trigger variables of S-0009 claim 32 are numbered 0 to 99.
     The variable-set event is satisfied while its variable is set, and the variable-clear event while
@@ -397,7 +431,9 @@ engine does instead (claims 26 and 36). The terms below are specific to this spe
     effect. A variable event naming a variable outside 0 … 99 is unspecified in the original. Our
     engine treats that variable as clear (the set event is never judged true and the clear event
     always is), and the importer warns (a departure).
-    - Backing: `measurable` (scenario T12)
+    - Backing: `measurable` (scenario T12 and T10 D/J for re-arming and unchanged assignments). Out-of-range variable-event
+      results are `unmeasured`: the original is unspecified, so there is no stable oracle value
+      for our clear-variable fallback
     - Confidence: medium
 
 ### Actions of the subset
@@ -424,13 +460,16 @@ engine does instead (claims 26 and 36). The terms below are specific to this spe
     action asks for a change without announcement.
     - Backing: `measurable` (scenario T15)
     - Confidence: high for which objects change (medium for objects whose destruction has begun),
-      medium for "without announcement"
+      medium for "without announcement". The destruction-in-progress exclusion is `unmeasured`:
+      T15 does not align this action with a surviving death sequence; “without announcement” is
+      `unmeasured` because T15 records ownership only, not announcements
 
 25. **Enable and disable a trigger.** The enable action names a trigger definition. Every existing
     instance of that definition, in any tag, becomes enabled and has its timer re-armed (claim 15) when its difficulty flag at the game's difficulty position is set. If that position is outside 0 … 2, every existing instance of the definition becomes enabled and has its timer re-armed, whatever its three difficulty flags. Instances that do not meet the applicable condition are left as they are. The disable action disables every instance of the
     named definition. Neither action creates instances, so naming a definition that is no member of
     any existing tag's chain has no effect.
-    - Backing: `measurable` (scenario T2, variant B, and T10, variant C)
+    - Backing: `measurable` (scenario T2 B, T8 B for disable, T10 C/G for enable, and T1's
+      independent-instance variant for enabling all instances)
     - Confidence: high
 
 26. **Reveal around a waypoint.** The action's number slot is a waypoint number. If the local player has
@@ -440,7 +479,7 @@ engine does instead (claims 26 and 36). The terms below are specific to this spe
     only). In a skirmish the local player is the single human-controlled house, so
     that house has the area revealed and no computer-controlled house has. In a network game each
     machine reveals the area for its own local player, which is outside this spec (Terms). Our
-    engine applies the reveal to every human-controlled house that has not had the whole map
+    engine applies the reveal to every player house (human or AI) that has not had the whole map
     revealed, observers included, so the result does not depend on the machine (a departure
     from the original's per-machine result).
     - Backing: `measurable` (scenario T16) for the area in a skirmish. The condition "not already had the whole map revealed"
@@ -452,22 +491,29 @@ engine does instead (claims 26 and 36). The terms below are specific to this spe
 27. **Destroy attached objects.** Every present object (Terms) that carries the tag holding the
     firing trigger takes damage equal to its current health, with no attacker and no attacking house. The damage is applied with defences
     ignored: armour, the warhead's percentages and temporary invulnerability do not reduce it, so the
-    object is normally destroyed. At least two kinds of protection still apply, because they depend
-    on the warhead's kind rather than on defences: a type immune to radiation, psychic or poison damage
-    takes no damage from a warhead of that kind, and a warhead that makes its target go berserk
-    takes no health. The rules' demolition warhead (Import mapping) is named as the damage's warhead, which
-    matters only for how the destruction looks and what it leaves (combat specs, a pointer only). 
-    If such an object survives the damage (possible through the protections above, which need a
-    demolition warhead of such a kind), the action never completes in the original: from that tick
+    object is normally destroyed. Protections that depend on the warhead's kind still apply: a type
+    immune to radiation, psychic or poison damage takes no damage from a warhead of that kind,
+    and a warhead that makes its target go berserk takes no health. The immune bridge-repair-hut
+    rule can also stop the hit. A building that is eligible for a delayed kill remains alive at
+    1 health when the demolition warhead causes delayed kills. An airborne infantry unit hit by
+    a demolition warhead of infantry-death kind 9 has its delivered amount reset to 0 and the
+    hit is stopped by the zero-amount rule. These additional cases are the damage-resolution
+    rules of S-0302 claims 8, 9, 16 and 17; airborne has the meaning and the unsettled height
+    reference of S-0302 claim 17. The rules' demolition warhead (Import mapping) is named as the
+    damage's warhead. Its kind matters for the protections above as well as for how the destruction
+    looks and what it leaves (S-0312, a pointer only).
+    If such an object survives the damage, the action never completes in the original: from that tick
     on the game stops responding, the tick counter stops advancing, and neither the trigger's later
     actions nor any later tick happen. Our engine
     damages each such object once per firing and goes on, so a survivor stays (a departure: the
-    original's result is a hang), and the importer warns about a demolition warhead of such a kind. For a trigger fired from a cell, the original also acts on the
-    cell, which is not established here (Open questions).
-    - Backing: `measurable` (scenario T9, including a carrier whose armour the demolition warhead
-      cannot damage, and variant C for the survivor and the hang)
-    - Confidence: medium (low for the two remaining protections; the hang has not been observed
-      yet and becomes high-confidence only once variant C has run)
+    original's result is a hang), and the importer warns when a trigger-kill setup can leave an
+    object alive under one of these protections. For a trigger fired from a cell, the original
+    also acts on the cell, which is not established here (Open questions).
+    - Backing: `measurable` (scenario T9, including the armour variant and variants C and D for
+      warhead-kind survivors; S-0302 scenario D16 parts d2, d3 and d4 for the immune hut,
+      delayed-kill building and airborne infantry survivors and the resulting hangs). The cell
+      effect is `unmeasured`: T9 raises no tag from a cell and no expected cell outcome is known
+    - Confidence: medium (the hang has not been observed)
 
 28. **Explosion at a waypoint.** The action's number slot is a weapon's registration index (S-0004)
     and its waypoint slot names a point: the centre of the waypoint's cell, at the cell's centre
@@ -494,7 +540,8 @@ engine does instead (claims 26 and 36). The terms below are specific to this spe
 29. **Make a house cheer.** Every object owned by the resolved house is told to cheer, and a cheer
     sound plays. For infantry this starts the cheer sequence of S-0107 (claims 6 and 21), which a unit
     cannot interrupt, so it can delay its next shot. What other objects do is not established.
-    - Backing: `measurable` (scenario T18)
+    - Backing: `measurable` (scenario T18 for infantry and the sound). Effects on other object
+      kinds are `unmeasured`: T18 observes infantry only and their responses remain open
     - Confidence: medium
 
 30. **Actions that hand over to other specs.** These actions are recognised, and their parameters are
@@ -518,7 +565,8 @@ engine does instead (claims 26 and 36). The terms below are specific to this spe
     subset.
     - Backing: `measurable` (scenario T19: the main setup for timer-set and timer-extend, variant B
       for timer-stop and timer-start, variant C for timer-shorten, variant D for timer-text and the
-      default label)
+      default label). Extension/shortening of a stopped timer and the clamp at 0 are
+      `unmeasured`: these variants modify a running timer only and never cross below 0
     - Confidence: medium (low for timer-start, timer-stop, timer-extend and timer-shorten, and for
       what the default label shows)
 
@@ -538,7 +586,9 @@ engine does instead (claims 26 and 36). The terms below are specific to this spe
     warns. A waypoint parameter that decodes to −1 (no letter, Formulas F5), and a reveal action whose
     waypoint number lies outside 0 … 701, are unspecified in the original. Our engine gives such an
     action no effect, and the importer warns (a departure).
-    - Backing: `measurable` (scenario T17, variant B)
+    - Backing: `measurable` (scenario T17, variants B and D). Unspecified original results for
+      invalid waypoint numbers have no stable expectation and are `unmeasured`; the no-effect
+      fallback is our engine's design rule
     - Confidence: medium
 
 ### Loading and draws
@@ -552,7 +602,7 @@ engine does instead (claims 26 and 36). The terms below are specific to this spe
     created at cell tags come after the draws of the initial fill and before the draws of the first terrain recalculation pass (table *Load-time draw order*). For
     a pre-placed object the draws come in this order: the object's creation draw (S-0202 claim 10),
     then the draws of its tag if the tag is created there, then the draws of placing the object on
-    the map. An object whose house or type is not found is not created and creates no tag. The table *Load-time draw order* (State and ordering)
+    the map (S-0202's map-loading table owns the established placement draws; others remain open). An object whose house or type is not found is not created and creates no tag. The table *Load-time draw order* (State and ordering)
     puts these draws together with the draws that S-0009, S-0010, S-0109 and S-0202 assign to
     loading, in one stream order. Every one of them happens before the first tick.
     - Backing: `measurable` (scenario T23): the random-state recorder reads the stream state before
@@ -570,11 +620,10 @@ engine does instead (claims 26 and 36). The terms below are specific to this spe
     starting units are placed, so a house that the cleanup removed gets no tags.
     In every tick whose number is a multiple of 8 (tick 0 included), each house, as part of its own
     per-tick update near the end of that tick's game logic, raises every tag assigned to it with the
-    any-event code, without a causing object or cell. The houses take their turns in house order
-    (S-0009 claim 19), and a house raises its tags in reverse registration order (claim 7). So the
-    actions that one house's raises fire are in force when the next house raises its tags, and
-    within one house the actions fired by a later-registered tag are in force when an
-    earlier-registered tag is raised. The
+    any-event code, without a causing object or cell. The observable effects of house raises follow house order (S-0009 claim 19): effects of an
+    earlier house are in force when a later house's assigned tags are evaluated. For tags assigned
+    to one house, the observable effects follow reverse registration order (claim 7): effects of a
+    later-registered tag are in force when an earlier-registered tag is evaluated. The
     owner-house raise evaluates every trigger of the tag like any other (claim 8), so condition events (elapsed
     time, game time, variables, type counts) and latches can fire in it, as well as the any-event
     code. The assignment is made once and never changes. A defeated house stays in the house list and keeps
@@ -582,7 +631,11 @@ engine does instead (claims 26 and 36). The terms below are specific to this spe
     this way. A house also raises all its assigned tags, with a code outside this subset, each time
     it is told that one of its buildings is under attack; how often that happens belongs to the
     combat specs (a pointer only). That raise, too, evaluates condition events and latches.
-    - Backing: `measurable` (scenario T20)
+    - Backing: `measurable` (scenario T20, including variant C for house/tag order). Continued
+      raises after defeat and the under-attack raise are `unmeasured`: T20 does not defeat a
+      house or isolate attack notifications, and this subset does not control their timing.
+      The position after all objects' updates is `unmeasured`: T20 compares house and poll
+      effects, not movement effects in the same tick
     - Confidence: medium (low for the reverse order within a house and for the under-attack raise)
 
 ### Animations at a waypoint
@@ -609,35 +662,46 @@ engine does instead (claims 26 and 36). The terms below are specific to this spe
       already had the whole map revealed. How an area is revealed
       belongs to the visibility specs (a pointer only). As in claim 26, the original reveals for each machine's
       local player, which is outside this spec for network games (Terms), and our engine applies the
-      reveal to every human-controlled house, observers included, so the result does not depend on
+      reveal to every player house (human or AI), observers included, so the result does not depend on
       the machine (a departure).
     - A play-animation number-slot value that is no registration index of an animation type is unspecified in
       the original, which does not reject it. Our engine gives such an action no effect, and the importer
       warns (a departure). Without a drop-zone animation type in the rules, the drop-zone action is
       not covered here.
-    - Backing: `measurable` (scenario T21). That the drop-zone reveal takes place whether or not
+    - Backing: `measurable` (scenario T21 for creation, location, radius and the first start
+      event; later marked events inherit S-0109's backing, subject to the companion correction
+      named in Summary). The creator's repeat factor, direction and owner attachment are
+      `unmeasured`: T21 does not vary loop/reversal settings or test an owner-specific effect. That the drop-zone reveal takes place whether or not
       the whole map is already revealed is `unmeasured`, for the reason given under claim 26
     - Confidence: high for the point, the creation and the timing of the mark; medium for the
       drop-zone reveal and its radius, and for the point on a sloped cell
 
 ## Formulas
 
-> **F1. Elapsed-time length.** *D* = 15 × *v*, where *v* is the event's integer value. Exact integer
-> arithmetic. Unit: ticks.
+Integer game-state calculations use signed 32-bit integers and wrap after each addition,
+subtraction and multiplication as in S-0205 claim 1, unless a formula explicitly gives exact
+integer arithmetic. Quotients truncate toward zero. This revision's tick examples assume the
+tick counter has not wrapped. Overflow of an imported decimal item is still outside this
+revision's import coverage.
+
+> **F1. Elapsed-time length.** *D* = the signed 32-bit wrapped value of 15 × *v*, where *v* is the
+> event's integer value. Integer arithmetic, with no rounding. Unit: ticks.
 
 > **F2. Random-delay length.** *D* = 15 × (*q* + *r*), where *q* = *v* quo 2 (truncated toward zero)
 > and *r* is a ranged draw over the inclusive range between 0 and *v* (from *v* to 0 when *v* is
-> negative). When *v* = 0 there is no draw and *r* = 0. Exact integer arithmetic. Unit: ticks.
+> negative). When *v* = 0 there is no draw and *r* = 0. The sum and product each wrap to signed
+> 32 bits; no floating point is used. Unit: ticks.
 > Example: *v* = 10 gives lengths from 75 to 225 ticks.
 
 > **F3. Timer run out.** The timer armed at tick *s* with length *D* has run out in the tick numbered *t*
-> when *t* − *s* ≥ *D*. Integers. Unit: ticks.
+> when the signed 32-bit wrapped difference *t* − *s* ≥ *D*. Unit: ticks.
 
 > **F4. Game time reached.** *v* ≤ *t* quo 15, with *t* ≥ 0 the tick number and quo the integer quotient
 > truncated toward zero. For *v* ≥ 1 this is *t* ≥ 15*v*. Unit: trigger time units.
 
 > **F5. Letters of a waypoint parameter.** A waypoint parameter is read from its first two characters
-> *c*₁ and *c*₂; further characters are ignored. Let *L*(*c*) be the position of letter *c* in the
+> *c*₁ and *c*₂; further characters are ignored. Here “letter” means an ASCII letter A … Z or a … z.
+> Let *L*(*c*) be the position of letter *c* in the
 > alphabet, A = 0 to Z = 25, upper and lower case alike. The waypoint number is
 >
 > - *w* = −1 when *c*₁ is not a letter,
@@ -699,28 +763,31 @@ by one each time.
 |---|---|---|
 | enabled | satisfied in a raise | fires as the repeat-type table says |
 | enabled | disable action | disabled (timer keeps running) |
-| enabled | enable action | stays enabled, timer re-armed |
-| disabled | enable action, difficulty flag set | enabled, timer re-armed |
-| disabled | enable action, difficulty flag clear | stays disabled |
+| enabled | enable action, difficulty flag set or position outside 0 … 2 | stays enabled, timer re-armed |
+| enabled | enable action, difficulty flag clear at a position in 0 … 2 | stays enabled, timer unchanged |
+| disabled | enable action, difficulty flag set or position outside 0 … 2 | enabled, timer re-armed |
+| disabled | enable action, difficulty flag clear at a position in 0 … 2 | stays disabled |
 | disabled | any raise | nothing |
 | any | fired in a one-time or all-carriers tag, or its tag deleted | removed: never evaluated again |
 
 **Observable ordering within a tick.**
-- The polled tags are evaluated at the start of the tick's game logic, in registration order (claims
-  6 and 7). So a polled trigger and a carrier event in the same tick: the polled trigger's actions are
-  in force first.
-- A raise by a carrier (arrival, destruction, capture, bridge collapse) happens during the game logic
-  that causes it, and the actions it fires are in force for the rest of that logic.
-- In ticks whose number is a multiple of 8, the owner-house raises (claim 35) come near the end of the
-  tick's game logic, after the polled tags and after the objects' own updates of that tick.
-- In one raise, chain members fire last-member first (claim 11), and each member's actions take effect
-  in list order.
+- Poll-caused effects are observable at the start of the tick's game logic. Their relative outcomes
+  follow tag registration order (claims 6 and 7). If a carrier event and a poll occur in the same
+  tick, the poll-caused actions are in force before the carrier event's actions.
+- A carrier raise (arrival, destruction, capture or bridge collapse) is observable during the game
+  logic that causes it; its actions are in force for the remainder of that logic.
+- On ticks whose number is a multiple of 8, owner-house effects (claim 35) are observable near the
+  end of the tick's game logic, after poll-caused effects and after the objects' updates of that
+  tick.
+- In one raise, the observable effects of chain members follow reverse chain order (claim 11),
+  while each member's actions take effect in action-list order.
 
 **Load-time draw order.** The draws that the scenario random stream gives while a map loads, by
 point in loading, in stream order: every draw of a row comes after the draws of the rows above it,
 and within a row the draws come in the order listed. It merges S-0009's table "Start position
-resolution" with the draws of this spec, of S-0010, S-0109 and S-0202. A row marked "not established"
-names a point at which draws may happen that no spec yet lists. Draws at points the table does not
+resolution" with the draws of this spec, of S-0010, S-0109 and S-0202. S-0202 claim 10 owns the
+overlay, vein-pattern and animation-creation draws, including immediate start-event effects.
+A row marked "not established" names a point at which draws may happen that no spec yet lists. Draws at points the table does not
 name are not established either. Nothing else in the table fixes an order of internal work.
 
 | Point in loading | Draws, in stream order | Owning spec |
@@ -728,55 +795,81 @@ name are not established either. Nothing else in the table fixes an order of int
 | Early phase | list 1's random entries; list 2's random entries; the random-position draws, in house order | S-0009, claim 20 |
 | Initial fill | one per visited cell, for a water fill only | S-0009, claim 6 |
 | Cell tags, in entry order | for each tag created there: claim 14's draws for each of its trigger instances, in chain order | this spec, claim 34 |
-| Terrain stream, tunnels, overlays | none known | S-0009 |
-| First terrain recalculation pass, in S-0009's visiting order | for each tile animation started (S-0010 claim 19): the draws of its creation (S-0109 claim 3) and of its immediate start event (S-0109 claim 13 and the specs of its effects). These animations are removed again before the second pass, but their draws and start-event effects remain | S-0010, claims 12 and 19; S-0109 |
-| Vein set-up around veinhole markers | draws for the vein overlays, when the map has veinholes (not established) | no spec yet |
+| Terrain stream, tunnels | no draws established | S-0009 |
+| Overlay type stream, in stream order | S-0202 claim 10's overlay-placement draws: one raw value per low-bridge piece (3 per cell step of a completed bridge), and the creation and immediate start-event draws of cell animations. Recalculations caused by overlay placement or a bridge piece can start tile animations and take their draws here too. A placement's cell-animation draws precede its own recalculation's tile-animation draws. Placing a vein from this stream takes no draw | S-0202, claim 10 |
+| First terrain recalculation pass, in S-0009's visiting order | for each tile animation started (S-0010 claim 19): S-0202 claim 10's creation and immediate start-event draws. A cell that already started a tile animation at an earlier loading recalculation starts no second one in this pass. These animations are removed again before the second pass, but their draws and start-event effects remain | S-0010, claims 12 and 19; S-0202, claim 10; S-0109 |
+| Vein candidate rebuilding, in reverse visiting order | every vein is removed first; each candidate that passes the placement test takes the vein-pattern draws of S-0202 claim 10: one raw value for the placed cell and one for each edge neighbour set or re-patterned under that claim. Recalculations that start a tile animation take its creation and immediate start-event draws here too | S-0009, claim 14; S-0202, claim 10 |
 | Terrain objects | not established | no spec yet |
 | Pre-placed objects: the vehicle entries, then aircraft, then infantry, then buildings, each in entry order | per object: its creation draw (S-0202 claim 10); then, if its tag is created there, claim 14's draws for that tag's instances; then the draws of placing it (not established). A building's upgrades are created after the building's tag and take their own creation draws | S-0202; this spec, claim 34 |
 | Smudges | not established | no spec yet |
-| Second terrain recalculation pass | as the first pass, for the tile animations it starts | S-0010, claim 12; S-0109 |
+| Second terrain recalculation pass | as the first pass, for the tile animations it starts, replacing the earlier loading animations | S-0010, claims 12 and 19; S-0202, claim 10; S-0109 |
 | Unused-house cleanup | none known | S-0009, claim 28 |
 | Late phase | list 3's random entries; the re-assignment draws | S-0009, claims 20, 28 and 29 |
-| Starting units | the creation draw of each starting unit, and whatever else placing it draws (not established) | S-0202; starting-unit rules, no spec yet |
+| Starting units | the draws of type choice, creation and placement that S-0009 claims 45 and 46 list, in their order, including the raw draw after all houses' starting units | S-0009, claims 45 and 46; S-0202 |
 | Starting crates, when crates are on | the draws of placing them (not established) | crate rules, no spec yet |
 | End of loading: remaining tag set-up (Terms) | claim 14's draws for every tag created there, in registration order, and for each tag its instances in chain order | this spec, claim 34 |
-| Game-start terrain recalculation pass, in S-0009's visiting order | as the first pass, for the tile animations it starts. A cell that already started one in the second pass starts no second animation, so takes no further animation-creation draws in this pass | S-0010, claims 12 and 19; S-0109 |
+| Game-start terrain recalculation pass, in S-0009's visiting order | as the first pass, for the tile animations it starts. A cell that already started one in the second pass starts no second animation, so takes no further animation-creation draws in this pass | S-0010, claims 12 and 19; S-0202, claim 10; S-0109 |
 
 ## Edge cases and quirks
 
-- **Persistent latch** (`quirks.persistent_event_latch`, default: original). A latchable event of a
-  repeating tag stays satisfied forever after its first satisfaction (claim 9). *Fixed behaviour:* the
+- **Persistent latch** (`quirks.persistent_event_latch`, YR default: on). A latchable event of a
+  repeating tag stays satisfied after its first satisfaction, except for timer-position alias
+  clearing (claim 9). *Fixed behaviour:* the
   latches of a trigger instance are cleared each time it fires.
-- **Latch aliasing** (`quirks.event_latch_aliasing`, default: original). Event positions 33 and later
-  share latches with the positions 32 lower. *Fixed behaviour:* every position has its own latch.
-- **All-carriers tag without a carrier** (`quirks.all_carriers_without_carrier`, default: original).
+- **Latch aliasing** (`quirks.event_latch_aliasing`, YR default: on). Event positions 33 and later
+  share latches with the positions 32 lower, including clearing by aliased timer positions
+  (claim 9). *Fixed behaviour:* every position has its own latch.
+- **All-carriers tag without a carrier** (`quirks.all_carriers_without_carrier`, YR default: on).
   It never fires (claim 10). *Fixed behaviour:* a carrier count of 0 counts like 1, so the tag fires
   once and is deleted.
-- **Entered-by with a player position** (`quirks.entered_by_country_only`, default: original). The
+- **Entered-by with a player position** (`quirks.entered_by_country_only`, YR default: on). The
   entered-by value is read only as a country index, so the player-position values never match (claim
   18). *Fixed behaviour:* the value is resolved like an action's house value (claim 23), and the event
   is satisfied when the causing object's owner is that house (including the "References" rule of
   S-0009 claim 29 on maps with 9 or more header pairs). The importer warns about such a value in
   either case.
 - **“None” owner.** `quirks.none_owner_is_first_country` (YR default: on). An owner written as `<none>` gives the first country of the country list (claim 5), with an importer warning. Off: `<none>` names no owner country.
-- **Exact type names.** `quirks.exact_trigger_type_names` (YR default: on). The type name of the type-exists and type-does-not-exist events is matched case-sensitively, and `none` and `<none>` are ordinary unmatched type names (claim 21); the importer warns when the name matches no type. Off: use S-0003 claim 14's case-insensitive type-name matching and no-type markers.
-- **Short references are registry indexes.** A reference parameter whose text is shorter than 3
-  characters is read as a registration index into the team, trigger or tag definitions (Import
-  mapping, I2), not as a name. Original data behaviour, kept for every map, with an importer warning.
-  An index outside the registry is unspecified in the original. Our engine treats the reference as
-  empty and warns (a departure).
-- **Missing disabled field.** A trigger entry that ends before its fourth field starts disabled, and
-  one that ends before a difficulty field has that flag clear. Original data behaviour, kept, and the
-  importer warns about a trigger entry with fewer than seven fields.
+- **Exact type names.** `quirks.exact_trigger_type_names` (YR default: on). The type name of the type-exists and type-does-not-exist events is matched case-sensitively, and `none` and `<none>` are ordinary type-name text, not no-type markers (claim 21); the importer warns when the name matches no type. Off: use S-0003 claim 14's case-insensitive type-name matching and no-type markers.
+
+### Fixed input-compatibility rules
+
+The following are fixed compatibility rules of this revision, not optional quirks: the short
+**action** reference syntax, absent trigger-field defaults, creation of definitions by unresolved
+IDs, the out-of-range difficulty position (claim 4), and the nonpositive type-exists count
+(claim 21). They have no switch or alternative mode. Their importer warnings do not change the
+result. In particular, no ID-only reference mode or rejection of missing definitions is implied.
+The switches above are the optional corrections; crash, hang and unspecified results use the
+explicit departures below or in the owning claims.
+
+- **Short action references are registry indexes.** An action reference parameter whose text is
+  shorter than 3 characters is read by its decimal integer prefix as a registration index into
+  the team, trigger or tag definitions (Import mapping, I2), not as an ID. A prefix of −1 means no
+  reference even for longer text. A short text with no digits gives index 0. The importer warns
+  about the short-index form. This does not apply to linked triggers, a tag's first trigger or
+  cell-tag values: those are ID text even when short. An index outside the registry is
+  unspecified in the original. Our engine treats it as empty and warns (a departure).
+  - Backing: `measurable` (T24 A for trigger action references and short ID links; T4 for tag
+    registration). Short tag action references are `unmeasured`: no action of this subset uses
+    the resolved tag, so it has no isolated effect here. The team-reference variant is `unmeasured`: its effects belong to the
+    out-of-scope team system; exact registration orders not established here remain open
+  - Confidence: high for the syntax, medium for the ID-only contexts
+- **Missing disabled field.** A trigger entry that ends before its fourth field starts disabled,
+  and one that ends before a difficulty field has that flag clear. The importer warns about a
+  trigger entry with fewer than seven fields.
+  - Backing: `measurable` (T24 B)
+  - Confidence: high
 - **References that create definitions.** A linked trigger, a tag's first trigger or an action
   parameter that gives an ID that no trigger definition of the map has creates an empty one: no events,
   no actions, no owner country, not disabled, and all three difficulty flags set. Its instance is
   therefore satisfied in every raise of a tag that holds it (an empty event list, claim 8) and fires
   with no effect. In a one-time tag that firing removes the tag at its first raise of any kind (claim
-  10), so the other members of the chain lose their chance; in an all-carriers tag it detaches each
-  raising carrier until one is left. A tag reference (or a cell tag) giving an undefined tag ID
+  10). Other members can still fire during that same raise in claim 11's order; deletion stops
+  later raises after that tick, not the other members' evaluation in the current raise.
+  In an all-carriers tag it detaches each raising carrier until one is left. A tag reference (or a cell tag) giving an undefined tag ID
   creates a tag definition with an empty chain, which has no effect. A pre-placed object's tag field
-  creates nothing (claim 2). Original data behaviour, kept, and the importer warns.
+  creates nothing (claim 2). The importer warns.
+  - Backing: `measurable` (T24 C for the empty trigger and T4 run 4 for the empty tag)
+  - Confidence: high for the empty definition's defaults, medium for its firing consequences
 - **Unparseable entries.** A trigger list key written as the "none" marker, a trigger entry that ends
   before its second field, a tag entry that ends before its third item, an event or action count
   that is negative or larger than the values that follow, an event that ends before its value item,
@@ -784,6 +877,8 @@ name are not established either. Nothing else in the table fixes an order of int
   never finish loading. Our engine skips the entry (for a count: reads only the complete events or
   actions; for a short trigger entry: treats the missing fields as absent; for a chain cycle: ends
   the chain before its first repeated member, claim 1), and the importer warns (departures).
+  - Backing: `measurable` (T24 D); our safe fallback has no oracle counterpart
+  - Confidence: medium
 
 ## Import mapping
 
@@ -794,8 +889,11 @@ empty one move up one field. The importer warns about every empty item. An item 
 integer is read by the decimal form of S-0003 claim 3 only: the `$` and `h` hexadecimal forms do not
 apply to these items. Overflow of such an item is not covered here. Trigger, event and action values
 are limited only by the line length limit of S-0001 claim 3 (their own text limit, in the sense of
-S-0003, is at least as long as any value a line can hold, so it never binds), and a tag value has a text limit of 127 bytes (medium
-confidence for both limits). A long event or action list cut by the line limit whose count needs
+S-0003, is at least as long as any value a line can hold, so it never binds), and a tag value has a text limit of 127 bytes. Backing for the tag-value limit is `unmeasured`:
+no scenario here distinguishes truncation from a missing final reference; confidence: medium.
+The independent trigger/event/action limit is `unmeasured` because the physical-line limit binds
+first; confidence: medium. Non-ASCII waypoint text is outside this revision's coverage.
+A long event or action list cut by the line limit whose count needs
 items beyond the cut is an unparseable entry (Edge cases). The importer warns about every cut value.
 
 **I1. Trigger list** — section `[Triggers]`, one key per trigger definition (the key is its ID).
@@ -851,21 +949,24 @@ A reference names a team, trigger or tag definition as follows:
 
 | Reference text | Names |
 |---|---|
-| shorter than 3 characters | the definition with that registration index (Edge cases, *Short references are registry indexes*) |
+| decimal integer prefix −1, regardless of length | nothing |
+| otherwise shorter than 3 characters | the definition with the decimal-prefix registration index (0 if no digits), not that ID (Edge cases, *Short action references are registry indexes*) |
 | `<none>` or `none`, in any letter case | nothing |
 | any other text | the definition whose ID (key) equals the text without regard to letter case, never one whose name field does. An ID that is not defined creates the definition (Edge cases, *References that create definitions*) |
 
-The linked trigger of I1 and the first trigger of a tag are looked up the same way. A missing eighth
-item leaves the waypoint slot at 0 (waypoint A).
+The linked trigger of I1, the first trigger of a tag and a cell-tag value always use the ID lookup
+of the last two rows, regardless of length: `0` names ID `0`, not registration index 0. They do not
+use the action parameter's decimal-prefix −1 test. A missing eighth item leaves the waypoint slot
+at 0 (waypoint A).
 
 **Tags** — section `[Tags]`, key = tag ID. Value: three items, the repeat type (an integer), the
 name (cut to 48 bytes and matched by pre-placed objects' tag fields, claim 2) and the first trigger
 (a trigger ID, or `<none>` or `none`). A key whose value is empty is skipped.
 
 **Cell tags, variables, objects.** `[CellTags]` and `[VariableNames]` are read as S-0009 claims 31
-and 32 say; a cell tag's value is matched against tag IDs like a reference (I2). A pre-placed
-object's tag field is matched against tag IDs and tag names as claim 2 says (the object entries
-have no spec yet).
+and 32 say; a cell tag's value is matched against tag IDs by the ID-only rule of I2. A pre-placed
+object's tag field is matched against tag IDs and tag names as claim 2 says (S-0009 claims
+34 to 43 own the other object-entry semantics).
 
 **Rules fields.**
 
@@ -928,12 +1029,29 @@ but not specified in this revision.
 | 113 | make a house cheer | number slot as house value | 29 |
 | 135 | preferred target at a waypoint | waypoint slot | 30 |
 
+**Import evidence coverage.** The effects and action slots in I3/I4 inherit the backings of their
+named claims. Splitting, missing trigger-field defaults, ID-only links and short action-reference
+syntax are `measurable` through T24 (confidence: high, except ID-only contexts: medium).
+The waypoint-letter decoding and its missing-item default are `measurable` through T17 D (confidence:
+high). The 24-byte event/type-name cut and 31-byte action-text cut are `unmeasured`: no scenario
+here contrasts long names/labels with their prefixes (confidence: medium). Parameter kinds unused
+by the covered effects and the carry-over flag's effects are `unmeasured`: no action/event in this
+subset supplies an observable for them (confidence: medium); their deferred effects remain open.
+The set membership of event codes outside this subset is `unmeasured`: these scenarios do not
+exercise the deferred codes (confidence: medium).
+Absent rules defaults are `unmeasured`: T16/T21 use the stock imported fields, not absent keys
+(confidence: high for the defaults). All importer warnings and safe fallbacks are design rules,
+`unmeasured` against the oracle, which has no such reporting/fallback contract (confidence: high).
+
 ## Measurement scenarios
 
-**Common setup.** Unless a scenario says otherwise: the measurement setup of the glossary, with a
-purpose-made test map as named test data, removed after the run. The map is small and flat with two
+**Common setup.** Unless a scenario says otherwise: standard skirmish mode, game speed index 3,
+800 × 600 pixels, director and mods off, no engine add-ons, and the measurement setup of the
+glossary, with a purpose-made test map as named test data, removed after the run. The map is small and flat with two
 start waypoint markers. It is played as a skirmish of one human player at position A and one computer
-player at position B, at any game speed. The human player's actions are scripted mouse and keyboard input. The recorder is a program that
+player at position B. The computer player is a bystander kept away from the observed area (the
+scenario's named objects, cells and counters); apply the glossary's bystander void rule, except
+where the scenario deliberately uses its units. The human player's actions are scripted mouse and keyboard input. The recorder is a program that
 only reads the running game's state: each tick's number (the first tick is 0), and the owner, health and existence of the objects
 the scenario names. Two observation devices are used:
 - *Owner marker.* A pre-placed neutral vehicle. A trigger "marks" it with a change-owner action
@@ -945,6 +1063,12 @@ the scenario names. Two observation devices are used:
   leaves the building standing. Each firing shows as one health drop in the tick of the firing, and
   several firings in one tick show as one drop that many times the size of a single firing's drop,
   so the number of firings in a tick is the tick's health loss divided by a single firing's loss.
+  Calibrate that loss with one firing first; select a weapon/counter pairing with a constant
+  positive loss and no healing, repair or variable defensive state, with enough health for the
+  run. If necessary use a named map override raising only the counter type's strength. Separate
+  counters beyond the weapon's spread. A counter destroyed or damaged by another source makes
+  the run void. Health-loss division is exact integer arithmetic; a nonintegral ratio is a
+  failed calibration, not a rounded firing count.
 - *Owner countries.* Unless a scenario says otherwise, every test trigger's owner country is one that
   no house plays (a playable country that neither player chose), so that no owner-house raise
   (claim 35) adds firings. Scenarios T20 and T22 test that raise. House values in actions are unaffected.
@@ -952,14 +1076,24 @@ the scenario names. Two observation devices are used:
   trigger or tag definition, it gives that definition's ID (Import mapping, I2), except where the
   scenario says it gives the name field (T6, variants E and F).
 
-Runs: 1 per variant unless stated, since nothing below depends on the random stream except T11 and T23, which read it with the random-state recorder.
+Runs: 1 per variant unless stated. T11, T17 C and T23 use the random-state recorder for
+stream-dependent results. When a scenario recovers a loading draw sequence, record the seed and
+stream state during loading as well as before tick 0; take paired control runs with one test group
+omitted. Compare each run with the sequence predicted from its own recorded seed, never assume
+that two new games share a seed. A log too coarse to separate the relevant groups is inconclusive,
+not a passing draw-order measurement.
 
 **Scenario T1 (claim 1).** *Setup:* trigger definitions P and Q, Q linked from P, both with event
 any-event and a count action, and U, a trigger definition with the same event and a count action that
 no tag's chain reaches. Tag X (one-time) names P. Variant: a second tag Y (one-time) names Q as its
 first trigger. *Observable:* firings per tick on the counter. *Expected:* two firings in tick 0 (P
 and Q), three in the variant (P, Q in X, and Q in Y), none from U and none in later ticks.
-*Falsified if:* any other number of firings.
+*Falsified if:* any other number of firings. Independent-instance variant: replace Q's any-event
+with elapsed time 2, make X and Y repeating, and re-enable Q with a separate trigger in tick 75.
+*Expected:* Q in both tags fires in ticks 30, 60 and 105, giving two counter increments at each.
+P still fires every poll. Use a separate counter for Q. *Falsified if:* Q fires only once at a
+shared deadline, or one instance's re-arming postpones the other's firing. Variant with a cycle
+is T24 D, not part of this successful-load setup.
 
 **Scenario T2 (claims 3, 4, 25).** *Setup:* three one-time triggers with event any-event, each with
 exactly one difficulty flag set (fifth, sixth, seventh field), each marking its own owner marker, and
@@ -992,6 +1126,17 @@ house is not the first house of country C), a drop with the entry in run Y. −1
 in both runs. 4475: never a drop. *Falsified if:* value C drops in run X or does not drop in run Y, −1
 does not drop in either run, or 4475 drops. *Inconclusive if* a computer-player unit reaches the cell.
 
+T3 variant B (bridge): use a one-time cell tag with entered-by −1 on a high bridge cell, and a
+human vehicle whose route can cross that cell's ground layer and, separately, its deck. Give the
+trigger a count action and a change-owner action with house value 9013 on an attached neutral owner
+marker. *Procedure:* traverse under the bridge, then cross the deck. *Observable:* counter and
+marker owner against the arrival ticks. *Expected:* no firing below; one firing on deck entry,
+and the marker becomes the arriving unit's owner's. *Falsified if:* a firing below, none on the
+deck, or another owner. T3 variant C (capture): put that tag on a capturable neutral building
+instead of a cell, and order a human engineer to capture it. *Expected:* one count in the capture
+tick and the marker becomes the engineer's owner's. *Falsified if:* no count, a count before entry,
+or another marker owner. Other entry abilities are not tested here.
+
 **Scenario T4 (claims 6, 7).** *Setup:* two one-time polled tags G and H. G's trigger has elapsed
 time 1 and sets map trigger variable 1. H's trigger has elapsed time 1 and variable-clear 1, and sets
 variable 2. A repeating polled trigger R with variable-set 2 counts. Run 1: the tag list lists G before
@@ -1020,13 +1165,15 @@ at a waypoint actions: one at a waypoint marker on the cell of a pre-placed neut
 other at a waypoint marker on an empty cell, both naming a looping sound of the kind that stock
 maps give buildings with this action (chosen from the game's sound list; no value here).
 (f) A one-time trigger with elapsed time 1 and two radar events of the same kind, at one waypoint marker.
+In part (e), another trigger at elapsed time 3 gives the building an unknown sound name.
 *Observable:* firings per tick on each counter, and what is seen and heard in parts (a), (e) and (f).
 *Expected:* (a) one firing in tick 0, and the four presentation actions are seen and heard at the
 start. (b) one firing in every tick. (c) one firing, at the second entry (the first entry is judged
 true but the trigger is not satisfied, so it does not re-arm the timer, claim 15). (d) exactly one
 firing, in the tick of the first hit (the hit raises the tag at least once, claim 8), and none at
 later hits, since the vehicle then carries no tag. (e) the building keeps playing the sound as its
-ambient sound while the view is near it, and the sound at the empty cell is played once. (f) one
+ambient sound while the view is near it, then stops it at tick 45 when the unknown sound is
+assigned; the sound at the empty cell is played once. (f) one
 radar event is shown, not two. *Falsified if:* any differs. In part (c), in particular, no firing at
 the second entry (which would mean that the first entry re-armed the timer).
 
@@ -1040,7 +1187,8 @@ as type 0, but the tag's name is 50 characters long; the three vehicles' tag fie
 first. *Observable:* counter drops after each destruction. *Expected:* type 1: one drop, after the
 third destruction. Type 0: one drop, after the first; the other two no longer carry the tag. Type 2:
 a drop after each destruction (and more, see T7). D: no drop. E: as type 0. F: no drop at the fourth
-vehicle's destruction (it carries no tag), then as type 0. *Falsified if:* any differs.
+vehicle's destruction (it carries no tag), then as type 0. Variant G: repeat value 3; no firing
+at any destruction. *Falsified if:* any differs.
 
 **Scenario T7 (claims 9, 19).** *Setup:* two neutral vehicles V1 and V2 carry one repeating tag whose
 only trigger has the single event destroyed-by-anything and a count action. The human destroys V1, then
@@ -1058,6 +1206,13 @@ later tick, because position 33 shares the latch that position 1 gets (the tag i
 its chain contains any-event). With `quirks.event_latch_aliasing` off, which only our engine offers,
 no firing at all. *Falsified if:* in the main run V1's destruction brings other than two firings or
 the ticks of the hits on V2 bring no drops, or a variant differs from its expectation.
+Variant D (timer alias clearing): use position 1 destroyed-by-anything, positions 2 … 32
+any-event, and position 33 elapsed-time 1. Destroy V1 after tick 15, then hit V2 without killing
+it. *Expected:* one firing on V1's destruction, not two; no firings at later polls or V2 hits.
+Re-arming clears the timer's shared latch. With aliasing off and persistent latching on, the
+destruction event stays latched: one firing at the destruction, then one every 15 ticks from
+that firing as the independent timer expires. *Falsified if:* the oracle shows two destruction
+firings or later firings under the original aliasing behaviour.
 
 **Scenario T8 (claim 11).** *Setup:* an owner marker carries a one-time tag whose chain is K1 → K2,
 both with elapsed time 1. K1 changes the marker's owner with house value 4475, K2 with 4476.
@@ -1065,7 +1220,10 @@ Variant B: K2 also has, after its change-owner action, a disable action naming K
 marker's owner at the end of tick 15. *Expected:* K2 acts first and K1 last, so the owner is the
 human player (4475). Variant B: K1 is judged after K2's actions have taken effect, so it is disabled
 and does not fire, and the owner is the computer player (4476). *Falsified if:* the owner is the
-computer player in the main run, or the human player in variant B.
+computer player in the main run, or the human player in variant B. Variant C (action list):
+K1 instead has a no-effect change-owner action with value −1, then values 4476 and 4475, in
+that order. *Expected:* human owner, because the last action wins and the earlier no-effect
+action stops nothing. *Falsified if:* another owner.
 
 **Scenario T9 (claims 12, 27).** *Setup:* a neutral vehicle V carries a repeating tag with two
 triggers: A (elapsed time 2, destroy attached objects) and B (destroyed-by-anything, count). Control
@@ -1094,8 +1252,20 @@ or V is destroyed. Variant D (berserk protection): use the main-run setup, but m
 - *F:* a one-time trigger with two timer events, elapsed time 2 written first and elapsed time 6
   second. Expected: a drop in tick 30.
 
-*Observable:* ticks of the counter drops. *Falsified if:* any tick differs, allowing one tick of slack
-where the scenario's own enabling or variable change and the tested tag share a tick (C, D, E).
+*Observable:* ticks of the counter drops. *Falsified if:* any tick differs. C, D and E have
+positive delays after the enabling or variable change, so registration order permits no extra
+tick of slack at their deadlines.
+
+T10 variant G (already enabled): a repeating elapsed-time 4 trigger counts. A separate one-time
+trigger enables it at tick 30. *Expected:* no count at tick 60; first count at tick 90, then every
+60 ticks. *Falsified if:* enabling did not restart the timer. Variant H (wrapped length): a
+one-time elapsed-time trigger has value 286331154. *Expected:* the product with 15 wraps to
+14 ticks, so one count in tick 14. *Falsified if:* another firing tick or no firing by tick 15.
+Variant I: one-time game-time events with values 0 and −1, each on its own counter.
+*Expected:* both count at tick 0. *Falsified if:* either starts later or never fires.
+Variant J: repeat D, adding another set-variable-5 action at tick 90, when variable 5 is already
+set. *Expected:* first count remains tick 105, not 120: an unchanged assignment does not re-arm.
+*Falsified if:* the extra assignment postpones the count.
 
 **Scenario T11 (claim 14).** Variant A, statistical. *Setup:* a one-time polled trigger with random
 delay *v* = 10 and another with *v* = 1, each with its own counter. 220 runs, a new game each run.
@@ -1107,7 +1277,7 @@ rejects.
 Variant B, with the random-state recorder; one run per case. *Setup:* a one-time polled trigger with
 two random-delay events (values 10 and 7) and one with a random-delay event of value 0, each tag
 carried by a pre-placed neutral vehicle so that it is created during loading, plus a trigger with no
-random-delay event. A second case adds an elapsed-time event before the random-delay events in the
+random-delay event. Each tested trigger has its own count action and counter. A second case adds an elapsed-time event before the random-delay events in the
 event list. *Observable:* the recorder's log of the stream state before the first tick and in every
 tick, from which the number and values of the draws taken by each trigger instance's arming are
 recovered by replaying the stream's recurrence (S-0202) from the logged state, and the tick of each
@@ -1115,7 +1285,11 @@ counter drop. *Expected:* the arming takes one draw per random-delay event of no
 reverse order of the event list, and none for the value 0 or for the trigger without such an event.
 The delay is the claim 14 formula applied to the draw of the event that sets the timer, as the tick
 of the drop shows. *Falsified if:* another number or order of draws, or a delay taken from the other
-event's draw.
+event's draw. Variant C: use random-delay values −3 and 0 on separate one-time triggers,
+created at pre-placed vehicles. Read each trigger timer's initial length with the read-only
+recorder as well as its stream state. *Expected:* −3 uses one ranged draw from −3 … 0 and
+length 15 × (−1 + the drawn value), with lengths −60, −45, −30 or −15 ticks; 0 uses no draw
+and length 0. Both fire at tick 0. *Falsified if:* another draw range/count, length or firing tick.
 
 **Scenario T12 (claim 22).** *Setup:* map trigger variable 3 starts clear (the map gives it initial
 state 0). Trigger S (one-time, elapsed time 2) sets it, trigger C (one-time, elapsed time 6) clears
@@ -1128,18 +1302,21 @@ before C's). Variant: W never. *Falsified if:* W drops only once, outside that r
 **Scenario T13 (claim 20).** *Setup:* a destroyable bridge whose cells carry a one-time tag with the
 bridge-destroyed code and a count action. The human destroys the bridge. *Observable:* the tick of the
 drop against the tick of the collapse. *Expected:* the same tick. *Falsified if:* no drop, or a drop
-without a collapse.
+without a collapse. Variant: give each cell of the span a distinct one-time tag and counter.
+Record which cells actually collapse. *Expected:* each collapsed tagged cell gives its own count
+in that tick, and a cell that did not collapse gives none. *Falsified if:* a collapsed cell gives
+no count or an intact cell gives one. The extent of a collapse is observed, not predicted here.
 
 **Scenario T14 (claim 21).** *Setup:* a repeating polled trigger with type-exists (a vehicle type name,
 count 2) and one with type-does-not-exist (same name), each with its own counter. The human builds two
 vehicles of the type, loads one into a transport, then loses both. Variant B: the name in different
-letter case. Variant C: type-exists only, with count 0, naming a vehicle type of which no object
+letter case. Variant C: type-exists only, with count 0 and, in a separate run, count −1, naming a vehicle type of which no object
 exists during the run. Variant D: type-exists only, with count 1, naming an infantry type; the human
 has exactly one infantry unit of that type and garrisons it in a pre-placed neutral building, then
 takes it out again. *Observable:* the ticks in which each counter drops, against the number of
 such vehicles. *Expected:* type-exists drops in every tick with at least 2 vehicles of the type, the
 one in the transport included. Type-does-not-exist drops in every tick with none. In variant B neither
-ever drops. In variant C the counter drops in every tick from tick 0, because the common setup's
+ever drops, provided no registered type has that differently cased exact name. In variant C the counter drops in every tick from tick 0, because the common setup's
 pre-placed objects exist. In variant D the counter drops in every tick, including those in which
 the unit is inside the building. *Falsified if:* any differs.
 
@@ -1169,18 +1346,30 @@ towards the top corner of the second cell. *Falsified if:* the centre or the rad
 weapon's registration index, with a neutral vehicle on the waypoint's cell. Variant B, on a map whose cell
 (0, 0) is legal: the waypoint slot names an undefined waypoint marker, with a neutral vehicle on cell
 (0, 0). *Observable:* the vehicles' health loss, compared with the named weapon's damage against the
-vehicle's armour by the combat rules. *Expected:* the loss matches that weapon's single hit. In B, the
+vehicle's armour by S-0303's area-damage rules and S-0302's damage resolution, including its
+distance from the detonation point. *Expected:* the loss matches that one area-damage application. In B, the
 vehicle on cell (0, 0) takes it. Variant C, with the random-state recorder: a weapon whose warhead selects a damage
 animation for the cell's land and whose area damage takes a draw (S-0303); the recorder's log shows
 the draws of the animation's creation before those of the damage. *Falsified if:* no damage, a loss
 that does not match the weapon, or in variant C the damage's draws before the animation's.
+
+T17 variant D (waypoint syntax): place durable neutral counters at distinct legal waypoint
+markers numbered 0, 25, 26, 51 and 701, away from each other. One run per text, using a one-time
+explosion action: `A`, `Z`, `AA`, `AZ`, `ZZ`, `aaZ`, `A?` and a last action whose eighth item
+is absent. *Observable:* which counter loses health. *Expected:* respectively markers 0, 25, 26,
+51, 701, 26, 0 and 0; every other counter stays unchanged. *Falsified if:* another counter changes
+or none does. Each counter's loss is compared with a control action at that same marker.
 
 **Scenario T18 (claim 29).** *Setup:* computer-player infantry firing at a target. A polled trigger
 makes the computer player's country cheer. *Observable:* the infantry's sequence and the tick of its next
 shot. *Expected:* the cheer starts in the trigger's tick, and the next shot comes only after it ends.
 *Falsified if:* no cheer, or a shot during the cheer.
 
-**Scenario T19 (claim 31).** *Setup:* a polled trigger with timer-set *v* = 4 and elapsed time 1, and a
+T18 also records whether the cheer sound is heard. *Falsified if:* the sound is absent despite
+working audio and a successful control cheer. Other object kinds are not tested by this scenario.
+
+**Scenario T19 (claim 31).** Read the mission timer's remaining ticks with the recorder as well
+as recording its on-screen label: the display alone need not resolve a single tick. *Setup:* a polled trigger with timer-set *v* = 4 and elapsed time 1, and a
 second polled trigger with timer-extend 2 and elapsed time 2. *Observable:* the on-screen timer against
 the tick count. *Expected:* the timer reaches 0 in tick 15 + 60 + 30 = 105 and stops there. *Falsified
 if:* it reaches 0 in another tick. Variants, each with the timer-set trigger (tick 15) and the actions named, but without the
@@ -1206,6 +1395,15 @@ tick. R1: one firing in every tick, and two in ticks 0, 8, 16, 24, 32 and 40. Va
 in every tick (its tag is assigned to no house, because the first trigger's owner country is not
 played). *Falsified if:* R1 shows no second firing in ticks that are multiples of 8, a second firing in
 other ticks, or R2 or variant B shows a second firing.
+
+T20 variant C (ordering): two repeating any-event tags G then H in registration order; G sets
+variable 9 and H clears it. Both own no other actions and the variable starts clear. Run 1: both
+triggers are owned by the human's country. Run 2: G belongs to the house earlier in house order,
+H to the later one; choose distinct countries. *Observable:* variable 9, read by the recorder at
+the end of tick 0. *Expected:* run 1 set, because the house raises H before G, reversing the poll
+order; run 2 clear, because the later house's H acts last. *Falsified if:* run 1 clear or run 2
+set. The run is void if another action changes variable 9. Continued raises after defeat and
+under-attack notifications are not tested by T20.
 
 **Scenario T21 (claim 36).** *Setup:* named test data as in S-0109's common setup: a test
 expansion archive whose art database copy adds an animation type R with a resource chain reaction
@@ -1243,13 +1441,16 @@ one.
 carries a cell tag naming tag A (one polled trigger with a random-delay event); one pre-placed
 vehicle carries tag B (the same kind of trigger); tag C is named by a cell tag and, later, by a
 pre-placed object; a purely polled tag D with a random-delay event is carried by nothing; tag E is
-polled and defined last in the tag list. A pre-placed vehicle and a pre-placed building each carry a
-further tag with a random-delay event. *Observable:* the recorder's log of the stream state before
+polled and defined last in the tag list. A pre-placed vehicle, aircraft, infantry unit and
+building each carry a further tag with a random-delay event. Give A two linked random-delay
+triggers with separate counters to test chain-order arming too. Every timer trigger has a distinct count action/counter
+so its firing deadline identifies its arming value. *Observable:* the recorder's log of the stream state before
 the first tick, replayed (S-0202) into the sequence of draws, with the draws of the other loading
 steps (S-0009, S-0010, S-0109, S-0202) identified by count, and the drop ticks of the counters, which
 identify the arming draws. *Expected:* the arming draws of A and C come at their cell tags, in
 cell-tag entry order, before the draws of the first terrain recalculation pass; for each pre-placed object the creation
-draw comes before the draws of its tag; the vehicle entries come before the building entries; D and
+draw comes before the draws of its tag; the kinds' tag draws occur in vehicle, aircraft,
+infantry, building order; A's trigger arming draws occur in chain order; D and
 E take their draws at the end of loading, in registration order; every draw happens before the first
 tick. *Falsified if:* another order, or a tag created at its object or cell tag taking its draws at
 the end of loading.
@@ -1263,14 +1464,67 @@ before D and E take their arming draws, and the game-start pass takes no further
 for that cell. Both runs finish these draws before tick 0. *Falsified if:* the draw groups occur in
 another order, or run 2 creates a second tile animation in that cell. A run in which a unit enters
 or leaves the observed cell before the first drawn frame is void.
+Variant C: retain the tags above and use the isolated bridge and vein sites of S-0202 scenario
+R8 parts A and B, and its cell-animation and placement-recalculation setups of parts F and I,
+each on a separate map, with the recorder. Use those scenarios' run counts and observed areas.
+*Observable:* the raw values that determine bridge pieces and vein patterns, the animations at
+those sites, and the stream positions of these draws relative to the tags' arming draws.
+*Expected:* bridge-piece and overlay cell-animation draws lie after the cell-tag arming draws
+and before the first terrain pass; vein-pattern draws lie after that pass and before pre-placed
+objects' creation and tag draws. A cell animation's creation and immediate start-event draws
+precede its placement's tile-animation draws. Counts and values are S-0202 claim 10's, not
+additional draws of this spec. *Falsified if:* a group lies on the other side of a tag-arming
+group, the cell-animation/tile-animation order is reversed, or a count or value differs from R8.
+
+**Scenario T24 (input-compatibility rules).** Common setup and recorder. One run per case,
+using named test maps removed afterwards.
+- *A, references:* create a disabled trigger `Alpha` first, with all difficulty flags set, an
+  any-event and its own count action. A separate enabled elapsed-time 2 trigger enables it.
+  Run once with the action reference `0`, once with `xx` (no decimal digits), and once with
+  `-1suffix`. No earlier reference registers another trigger. *Expected:* the first two enable
+  Alpha, which counts in tick 30 or 31 depending on tag order; the third never does.
+  Contrast: a separate map defines trigger ID `0` with any-event/count, reached through a tag's
+  first-trigger field `0`, while an earlier unrelated disabled Alpha occupies index 0. It counts
+  in tick 0 by ID, not by index. Repeat the contrast with `0` as a linked-trigger field instead.
+  *Observable:* counter drops. *Falsified if:* the first runs do not enable Alpha, the −1-prefix
+  run does, or a short ID link selects Alpha instead. This tests trigger references only, not teams.
+- *B, missing fields:* use T2 C's named base rules test copy with session position 3 and no lobby
+  replacement. A trigger entry ends after its name (before disabled), has any-event/count, and
+  a separate elapsed-time 2 trigger enables it. *Expected:* no count in tick 0; one in tick 30 or
+  31 after enabling. In a separate map with session position 1, end the tested entry after its
+  position-0 flag, which is set, with disabled clear. *Expected:* it never counts, even after an
+  enable action, because the absent position-1 flag is clear. *Falsified if:* a premature count
+  in the first run, no count after enabling there, or any count in the second. *Inconclusive if:*
+  the lobby replaces the test session position.
+- *C, undefined definitions:* an enabled trigger P (elapsed time 1/count) links to undefined
+  trigger ID `Missing`. A one-time tag naming P is carried by a neutral vehicle. *Observable:*
+  carrier attachment after tick 0, read by the recorder, and the counter through tick 16.
+  *Expected:* the empty linked trigger fires at the tag's first poll in tick 0, the vehicle loses
+  its tag, and P never counts at tick 15. Control: no link; the vehicle keeps its tag until P
+  counts at tick 15. *Falsified if:* the main run retains the tag after tick 0 or counts, or the
+  control drops its tag early. Repeat with each session position 0, 1 and 2 using T2's named
+  base-rules test copy; this checks the empty definition's three enabled difficulty flags.
+  Undefined cell-tag definitions are tested by T4 run 4.
+- *D, malformed entries:* run a valid control map, then one separate map for each of: a trigger
+  key that is a no-definition marker, a trigger ending before its link field, a tag ending before
+  its first-trigger field, a negative event count, a count greater than the complete events,
+  an event missing its value, an action missing its seventh item, and a linked-trigger cycle.
+  *Observable:* whether tick 0 is reached and whether loading reports a program error or ceases
+  responding. *Expected:* the control reaches tick 0; no malformed case reaches tick 0.
+  A cycle is expected to stay in loading without progress. Record a 60-second timeout as
+  provisional evidence of a loading hang, not proof of an infinite wait. *Falsified if:* any
+  malformed case finishes loading. Our engine's safe fallbacks are not oracle expectations.
+- *E, empty items:* a valid one-time any-event trigger entry with disabled clear and all three
+  difficulty flags set. Insert an empty item between its name and disabled flag, without
+  removing any of the nonempty items. *Observable:* its counter at tick 0. *Expected:* one
+  count, just as the control without the extra comma: empty items do not reserve a field.
+  *Falsified if:* the extra comma disables it or prevents loading.
 
 ## Open questions
 
-- **Trigger-played animations (for S-0109).** S-0109 says that a trigger-played animation has no
-  start sound and no chain reaction. By claim 36 that holds only for the start events after its
-  creation: its first start event, at its creation, is not under the mark. Scenario T21 discriminates. To be
-  settled with the owner of S-0109.
-- **Lobby control for the computer difficulty.** Whether the stock skirmish and multiplayer lobbies set
+The S-0109 correction is a required companion change in Summary, not an unresolved behaviour
+question; T21 is its discriminating measurement.
+- **Lobby control for the computer difficulty.** Whether the stock skirmish lobby sets
   the session computer difficulty (claim 4), from which control, and whether the value restored at a
   later game start replaces a lobby choice.
 - **Carry-over flag.** Its use in captures and in one vehicle-destruction case (Import mapping, I1) is
@@ -1291,7 +1545,6 @@ or leaves the observed cell before the first drawn frame is void.
 - **Registration order of trigger definitions.** A trigger reference shorter than 3 characters
   names the trigger definition with that registration index (Import mapping, I2), but this revision
   does not state the order in which trigger definitions are registered.
-- **Entered-by on a high-bridge cell** (claim 18). That only units on the bridge deck raise the tag
-  of a cell that carries a high bridge is not covered by scenario T3.
-- **Order of the owner-house raises** (claim 35). The house order between houses, and the reverse
-  registration order within one house, are not covered by scenario T20.
+- **Other cheering objects** (claim 29). What the cheer action does to non-infantry objects.
+- **Continued owner-house raises after defeat** (claim 35). T20 does not test defeat or the
+  frequency of building-under-attack notifications.
