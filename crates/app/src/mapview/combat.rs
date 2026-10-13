@@ -4,7 +4,7 @@
 //! flight, shots, detonations, animations).
 //!
 //! The placeholders are presentation of our own design, not game art: the
-//! importer looks up no projectile art yet (Q-0008), and animation playback
+//! importer looks up no projectile art yet (S-0007 claims 26 to 30 are not implemented), and animation playback
 //! (S-0109) is not implemented, so an animation event is drawn as a marker
 //! instead of its art. They are marked provisional and can be hidden with the
 //! other provisional items, or with their own layer toggle.
