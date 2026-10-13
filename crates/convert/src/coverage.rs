@@ -487,7 +487,10 @@ type SimKeys = BTreeMap<(String, String), &'static str>;
 
 fn sim_keys() -> SimKeys {
     let mut m = SimKeys::new();
-    for (cat, key, spec) in crate::sim::converted_keys() {
+    for (cat, key, spec) in crate::sim::converted_keys()
+        .into_iter()
+        .chain(crate::sim::econ_converted_keys())
+    {
         m.entry((cat.to_owned(), key)).or_insert(spec);
     }
     m

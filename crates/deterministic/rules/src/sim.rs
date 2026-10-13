@@ -210,6 +210,13 @@ pub struct SimData {
     /// S-0302 Terms, glossary *difficulty skill block*).
     #[serde(default)]
     pub difficulty: BTreeMap<String, DifficultyRow>,
+    /// Tiberiums by section name (S-0401 Import mapping); the registry
+    /// `tiberiums` gives their order (S-0004 claim 10).
+    #[serde(default)]
+    pub tiberiums: BTreeMap<String, crate::sim_econ::TiberiumType>,
+    /// Superweapon types by type name (S-0407 and S-0412 Import mapping).
+    #[serde(default)]
+    pub superweapons: BTreeMap<String, crate::sim_econ::SuperweaponType>,
 }
 
 /// The eleven armour classes in class-index order (S-0305 claim 1).
@@ -653,6 +660,9 @@ pub struct General {
     /// `[IQ] RepairSell` (S-0314 claim 8).
     #[serde(default)]
     pub iq_repair_sell: Option<i32>,
+    /// Game-wide economy values (M5, S-0401 to S-0416).
+    #[serde(default)]
+    pub economy: crate::sim_econ::EconGeneral,
 }
 
 /// One land type's row (S-0211 claim 2): multipliers per locomotion class and
@@ -722,6 +732,9 @@ pub struct BehaviourProps {
 #[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct Country {
+    /// Economy fields (M5).
+    #[serde(default)]
+    pub econ: crate::sim_econ::CountryEcon,
     /// `SpeedUnitsMult` (S-0207 claim 2), a single.
     #[serde(default)]
     pub speed_units_mult: Option<Decimal>,
@@ -1066,6 +1079,9 @@ pub struct UnitType {
     /// The combat fields shared with buildings (M4).
     #[serde(default)]
     pub combat: CombatFields,
+    /// Economy fields (M5).
+    #[serde(default)]
+    pub econ: crate::sim_econ::EconFields,
     /// `BurstDelay0` … `BurstDelay3` (S-0301 claim 4), ticks; −1: none.
     // spec: S-0301 Constants (four burst-delay fields)
     #[serde(default)]
@@ -1469,6 +1485,12 @@ pub struct BuildingType {
     /// The combat fields shared with mobile types (M4).
     #[serde(default)]
     pub combat: CombatFields,
+    /// Economy fields (M5).
+    #[serde(default)]
+    pub econ: crate::sim_econ::EconFields,
+    /// `Owner`, the owner countries (S-0407 claims 1 and 11), country keys.
+    #[serde(default)]
+    pub owner: Option<Vec<String>>,
     /// `Cost`, credits (S-0311 F1, S-0314 claim 5).
     #[serde(default)]
     pub cost: Option<i32>,
@@ -1593,6 +1615,15 @@ pub struct TerrainObjectType {
     /// `SpawnsTiberium`, the spawns-resources flag (S-0203 claim 2).
     #[serde(default)]
     pub spawns_tiberium: Option<bool>,
+    /// `IsAnimated`, the animated flag of an ore mine (S-0401 claim 15).
+    #[serde(default)]
+    pub is_animated: Option<bool>,
+    /// `AnimationRate`, *R* in ticks (S-0401 claim 15); absent: 0.
+    #[serde(default)]
+    pub animation_rate: Option<i32>,
+    /// `AnimationProbability`, *p*, a single (S-0401 F8); absent: 0.
+    #[serde(default)]
+    pub animation_probability: Option<Decimal>,
     /// `Strength` (S-0302 claim 20).
     #[serde(default)]
     pub strength: Option<i32>,

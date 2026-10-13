@@ -611,6 +611,10 @@
             }
           ]
         },
+        "econ": {
+          "description": "Economy fields (M5).",
+          "$ref": "#/$defs/EconFields"
+        },
         "eligible_for_delay_kill": {
           "description": "`EligibleForDelayKill` (S-0302 claim 16).",
           "type": [
@@ -814,6 +818,17 @@
           ],
           "format": "int32",
           "default": null
+        },
+        "owner": {
+          "description": "`Owner`, the owner countries (S-0407 claims 1 and 11), country keys.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "string"
+          }
         },
         "powered": {
           "description": "`Powered`.",
@@ -1690,6 +1705,10 @@
             }
           ]
         },
+        "econ": {
+          "description": "Economy fields (M5).",
+          "$ref": "#/$defs/CountryEcon"
+        },
         "firepower": {
           "description": "`Firepower` φ_c (S-0302 claim 3), a double.",
           "anyOf": [
@@ -1794,6 +1813,169 @@
       },
       "additionalProperties": false
     },
+    "CountryEcon": {
+      "description": "Economy fields of a country (written into `econ`).",
+      "type": "object",
+      "properties": {
+        "build_time_aircraft_mult": {
+          "description": "`BuildTimeAircraftMult`, the build-time factor *c* for aircraft, a single (S-0403 claim 3); absent: 1.0.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "build_time_buildings_mult": {
+          "description": "`BuildTimeBuildingsMult`, the build-time factor *c* for ordinary buildings, a single (S-0403 claim 3); absent: 1.0.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "build_time_defenses_mult": {
+          "description": "`BuildTimeDefensesMult`, the build-time factor *c* for defences, a single (S-0403 claim 3); absent: 1.0.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "build_time_infantry_mult": {
+          "description": "`BuildTimeInfantryMult`, the build-time factor *c* for infantry, a single (S-0403 claim 3); absent: 1.0.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "build_time_units_mult": {
+          "description": "`BuildTimeUnitsMult`, the build-time factor *c* for vehicles, a single (S-0403 claim 3); absent: 1.0.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "color": {
+          "description": "`Color`, the colour definition name as written (S-0413 claim 5);\nabsent: the definition at position 0.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "cost_aircraft_mult": {
+          "description": "`CostAircraftMult`, the cost factor *a* for aircraft, a single (S-0404 claim 2); absent: 1.0.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "cost_buildings_mult": {
+          "description": "`CostBuildingsMult`, the cost factor *a* for ordinary buildings, a single (S-0404 claim 2); absent: 1.0.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "cost_defenses_mult": {
+          "description": "`CostDefensesMult`, the cost factor *a* for defences, a single (S-0404 claim 2); absent: 1.0.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "cost_infantry_mult": {
+          "description": "`CostInfantryMult`, the cost factor *a* for infantry, a single (S-0404 claim 2); absent: 1.0.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "cost_units_mult": {
+          "description": "`CostUnitsMult`, the cost factor *a* for vehicles, a single (S-0404 claim 2); absent: 1.0.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "income_mult": {
+          "description": "`IncomeMult`, the income factor *M*, a single (S-0402 claim 12);\nabsent: 1.0.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "multiplay": {
+          "description": "`Multiplay`, the multiplayer listing flag (S-0413 claim 4); absent:\noff.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "side": {
+          "description": "`Side`, the side name as written (S-0413, S-0004 claim 9); absent: no\nside.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "speed_aircraft_mult": {
+          "description": "`SpeedAircraftMult`, a single (S-0413 claim 3); absent: 1.0.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
     "Decimal": {
       "description": "A decimal written as text, `-?digits[.digits][e±digits][%]`, whose value\nis the one S-0003 gives that text (claims 6 and 7).",
       "type": "string"
@@ -1823,6 +2005,1323 @@
         },
         "rof": {
           "description": "`ROF`, the row's rate-of-fire factor ℓ (a double).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "EconFields": {
+      "description": "Economy fields that infantry, vehicle, aircraft and building types carry\n(written into `econ`). Fields that only one kind reads say so.",
+      "type": "object",
+      "properties": {
+        "adjacent": {
+          "description": "Buildings: `Adjacent`, adjacency *A* in cells (S-0406 claim 4);\nabsent: 3.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "ai_base_planning_side": {
+          "description": "Buildings: `AIBasePlanningSide` (S-0407 claim 6); absent: −1.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "aircraft_cost_bonus": {
+          "description": "Buildings: `AircraftCostBonus`, the cost bonus *β* for aircraft, a single (S-0404 claim 2); absent: 1.0.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "airport_bound": {
+          "description": "Aircraft: `AirportBound` (S-0407 claim 16); absent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "art_number_of_docks": {
+          "description": "Buildings: the art `NumberOfDocks`, dock slots (S-0402 Terms, claim\n10; values below 1 give 1); absent: 1.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "base_normal": {
+          "description": "Buildings: `BaseNormal` (S-0406 claim 4); absent: yes.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "build_limit": {
+          "description": "`BuildLimit` (S-0407 claims 9, 10, 16); absent: 2³¹ − 1.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "build_time_multiplier": {
+          "description": "`BuildTimeMultiplier`, the type multiplier *m* (S-0403 claim 4), a\nsingle; absent: 1.0.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "buildings_cost_bonus": {
+          "description": "Buildings: `BuildingsCostBonus`, the cost bonus *β* for ordinary buildings, a single (S-0404 claim 2); absent: 1.0.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "click_repairable": {
+          "description": "Buildings: `ClickRepairable` (S-0408 claim 14); absent: yes.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "defenses_cost_bonus": {
+          "description": "Buildings: `DefensesCostBonus`, the cost bonus *β* for defences, a single (S-0404 claim 2); absent: 1.0.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "deploy_facing": {
+          "description": "Buildings: `DeployFacing`, the deploy facing *D* in 1/256 turn\n(S-0415 claims 5 and 10); absent: 128.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "dock": {
+          "description": "Units: `Dock`, the dock types (S-0402 Terms and claim 8; S-0404\nTerms); absent: empty.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "string"
+          }
+        },
+        "dock_unload": {
+          "description": "Buildings: `DockUnload` (S-0402 claim 10); absent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "eligible_for_ally_building": {
+          "description": "Buildings: `EligibileForAllyBuilding` (S-0406 claim 4); absent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "enslaves": {
+          "description": "Units: `Enslaves`, the slave type (S-0402 claim 14); absent: none.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "extra_power": {
+          "description": "Buildings: `ExtraPower` (S-0405 claims 1, 2 and 16); absent: 0.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "factory_plant": {
+          "description": "Buildings: `FactoryPlant`, grants cost bonuses (S-0404 claim 2);\nabsent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "forbidden_houses": {
+          "description": "`ForbiddenHouses`, country names as written (S-0407 claim 5); absent:\nno restriction.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "string"
+          }
+        },
+        "free_unit": {
+          "description": "Buildings: `FreeUnit` (S-0404 claim 2, S-0408 claim 2); absent: none.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "gap_radius_in_cells": {
+          "description": "`GapRadiusInCells`, the gap radius *R* (S-0409 claim 11); absent: 0.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "guard_range": {
+          "description": "Buildings: `GuardRange`, the wall fill length *G* as the decimal text\nof cells (S-0406 claim 11; leptons as S-0215 Import mapping states);\nabsent: 0.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "harvest_rate": {
+          "description": "Infantry: `HarvestRate`, a slave's interval between bales *h*, ticks\n(S-0402 claim 14); absent: 1.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "infantry_cost_bonus": {
+          "description": "Buildings: `InfantryCostBonus`, the cost bonus *β* for infantry, a single (S-0404 claim 2); absent: 1.0.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "invisible": {
+          "description": "`Invisible` (S-0410 claim 7); absent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "laser_fence_post": {
+          "description": "Buildings: `LaserFencePost` (S-0406 claims 3 b and 9); absent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "nominal": {
+          "description": "Infantry: `Nominal` (S-0414 Terms, *nominal survivor*); absent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "number_of_docks": {
+          "description": "Buildings: the rules `NumberOfDocks`, docks the building adds to the\nhouse total (S-0407 claim 16); absent: 0.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "ore_purifier": {
+          "description": "Buildings: `OrePurifier` (S-0402 Terms, claim 12); absent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "place_anywhere": {
+          "description": "Buildings: `PlaceAnywhere` (S-0406 claim 3); absent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "power": {
+          "description": "Buildings: `Power`, base output (≥ 0) or base drain (−value)\n(S-0405 claims 1 and 2); absent: 0.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "powered_special": {
+          "description": "Buildings: `PoweredSpecial`, the special-power flag (S-0405 claim 8);\nabsent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "powered_unit": {
+          "description": "Vehicles: `PoweredUnit` (S-0405 claim 13); absent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "powers_unit": {
+          "description": "Buildings: `PowersUnit`, the control centre's powered unit type\n(S-0405 claim 13); absent: none.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "powers_up_building": {
+          "description": "Buildings: `PowersUpBuilding`, the target type of an upgrade (S-0406\nclaim 12); absent: none.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "powers_up_to_level": {
+          "description": "Buildings: `PowersUpToLevel` (S-0406 claim 12); absent: −1.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "pre_production_anim": {
+          "description": "Buildings: the art `PreProductionAnim`, an animation type name as written (S-0402 Terms, claim 11); absent: none.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "pre_production_anim_damaged": {
+          "description": "Buildings: the art `PreProductionAnimDamaged`, an animation type name as written (S-0402 Terms, claim 11); absent: none.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "prerequisite": {
+          "description": "`Prerequisite`, the prerequisite list (S-0407 claim 8): building type\nnames and the group words, as written (upper case).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "string"
+          }
+        },
+        "prerequisite_override": {
+          "description": "`PrerequisiteOverride`, the override list (S-0407 claim 3), names as\nwritten (upper case).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "string"
+          }
+        },
+        "production_anim": {
+          "description": "Buildings: the art `ProductionAnim`, an animation type name as written (S-0402 Terms, claim 11); absent: none.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "production_anim_damaged": {
+          "description": "Buildings: the art `ProductionAnimDamaged`, an animation type name as written (S-0402 Terms, claim 11); absent: none.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "queueing_cell": {
+          "description": "Buildings: the art `QueueingCell`, the queueing shift in cells\n(S-0402 Terms, claim 9); absent: 0, 0.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "maxItems": 2,
+          "minItems": 2
+        },
+        "radar": {
+          "description": "Buildings: `Radar` (S-0410 claim 1, S-0409 claim 15); absent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "radar_invisible": {
+          "description": "`RadarInvisible` (S-0410 claim 7); absent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "radar_visible": {
+          "description": "`RadarVisible` (S-0410 claim 7); absent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "refinery": {
+          "description": "Buildings: `Refinery` (S-0402 Import mapping); absent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "required_houses": {
+          "description": "`RequiredHouses`, country names as written (S-0407 claim 5); absent:\nno restriction.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "string"
+          }
+        },
+        "requires_stolen_allied_tech": {
+          "description": "`RequiresStolenAlliedTech` (S-0407 claim 6); absent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "requires_stolen_soviet_tech": {
+          "description": "`RequiresStolenSovietTech` (S-0407 claim 6); absent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "requires_stolen_third_tech": {
+          "description": "`RequiresStolenThirdTech` (S-0407 claim 6); absent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "resource_destination": {
+          "description": "Units: `ResourceDestination` (S-0402 claim 14); absent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "resource_gatherer": {
+          "description": "Units: `ResourceGatherer` (S-0402 claim 14; S-0414 Terms; S-0415\nclaim 4); absent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "reveal_to_all": {
+          "description": "`RevealToAll` (S-0409 claim 8); absent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "secret_building": {
+          "description": "Buildings: `SecretBuilding`; absent: none.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "secret_infantry": {
+          "description": "Buildings: `SecretInfantry`, a lab's fixed secret type (S-0407 claim\n14); absent: none.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "secret_lab": {
+          "description": "Buildings: `SecretLab` (S-0407 claims 4 and 14); absent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "secret_unit": {
+          "description": "Buildings: `SecretUnit`; absent: none.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "slave_regen_rate": {
+          "description": "Units: `SlaveRegenRate`, ticks (S-0402 claim 14); absent: 0.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "slave_reload_rate": {
+          "description": "Units: `SlaveReloadRate`, ticks (S-0402 claim 14); absent: 0.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "slaves_number": {
+          "description": "Units: `SlavesNumber` (S-0402 claim 14); absent: 0.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "soylent": {
+          "description": "`Soylent`, the refund override *v* (S-0408 claim 1); absent: 0.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "special_anim": {
+          "description": "Buildings: the art `SpecialAnim`, an animation type name as written (S-0402 Terms, claim 11); absent: none.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "special_anim_damaged": {
+          "description": "Buildings: the art `SpecialAnimDamaged`, an animation type name as written (S-0402 Terms, claim 11); absent: none.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "spy_sat": {
+          "description": "Buildings: `SpySat` (S-0409 claim 15); absent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "super_gap_radius_in_cells": {
+          "description": "`SuperGapRadiusInCells` (S-0405 claim 16, S-0409); absent: 0.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "super_weapon": {
+          "description": "Buildings: `SuperWeapon`, the first superweapon (S-0407 claim 7,\nS-0412 claim 9); absent: none.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "super_weapon2": {
+          "description": "Buildings: `SuperWeapon2`, the second superweapon; absent: none.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "to_overlay": {
+          "description": "Buildings: `ToOverlay`, the wall overlay type (S-0406 claims 8 to\n11); absent: none.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "to_tile": {
+          "description": "Buildings: `ToTile`, a tile name as written (S-0406 claims 3 and 5);\nabsent: none.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "units_cost_bonus": {
+          "description": "Buildings: `UnitsCostBonus`, the cost bonus *β* for vehicles, a single (S-0404 claim 2); absent: 1.0.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "unsellable": {
+          "description": "Buildings: `Unsellable` (S-0408 claims 3 and 12); absent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "upgrades": {
+          "description": "Buildings: `Upgrades`, the upgrade count (S-0406 claim 12); absent: 0.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "wall": {
+          "description": "Buildings: `Wall`, wall type (S-0406 claim 10, S-0403 claim 7);\nabsent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "water_bound": {
+          "description": "Buildings: `WaterBound` (S-0406 claim 3 d); absent: no, unless the\nlocomotion-class key names *float*.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "additionalProperties": false
+    },
+    "EconGeneral": {
+      "description": "Game-wide economy values (written into `general.economy`), from the\nsections `[General]`, `[AI]`, `[AudioVisual]`, `[CombatDamage]`,\n`[CrateRules]` and `[MultiplayerDialogSettings]` of the rules.",
+      "type": "object",
+      "properties": {
+        "ai_virtual_purifiers": {
+          "description": "`[General] AIVirtualPurifiers`, per difficulty (S-0402 claim 12, the\noriginal only); absent: empty.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "allies_allowed": {
+          "description": "`[MultiplayerDialogSettings] AlliesAllowed` (S-0414 claim 14); absent:\nno.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "ally_change_allowed": {
+          "description": "`[MultiplayerDialogSettings] AllyChangeAllowed` (S-0414 claim 14);\nabsent: yes.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "ally_reveal": {
+          "description": "`[AudioVisual] AllyReveal` (S-0409 claim 2); absent: yes.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "bases": {
+          "description": "`[MultiplayerDialogSettings] Bases`, the base rules' value only\n(S-0412 claim 1); absent: yes.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "build_off_ally": {
+          "description": "`[MultiplayerDialogSettings] BuildOffAlly`, a default offered (S-0412 Import mapping); absent: yes.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "build_refinery": {
+          "description": "`[AI] BuildRefinery`, the refinery list, building type keys (S-0414\nclaim 3); absent: empty.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "string"
+          }
+        },
+        "build_speed": {
+          "description": "`[General] BuildSpeed`, *S* in game minutes per 1000 credits, a double\n(S-0403 claim 2); absent: 1.0.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "build_tech": {
+          "description": "`[AI] BuildTech`, the tech-lab list, building type keys (S-0407\nclaims 6 and 7); absent: empty.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "string"
+          }
+        },
+        "c4_warhead": {
+          "description": "`[CombatDamage] C4Warhead`, a warhead key (S-0414 claim 5); absent:\nnone.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "chrono_harv_too_far_distance": {
+          "description": "`[General] ChronoHarvTooFarDistance`, cells (S-0402 claims 9, 17);\nabsent: 50.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "comp_easy_bonus": {
+          "description": "`[AI] CompEasyBonus` (S-0412 claim 4, the original only); absent: yes.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "crate_maximum": {
+          "description": "`[CrateRules] CrateMaximum` (S-0412 claim 10); absent: 255.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "crate_minimum": {
+          "description": "`[CrateRules] CrateMinimum` (S-0412 claim 10); absent: 1.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "crates": {
+          "description": "`[MultiplayerDialogSettings] Crates`, a default offered (S-0412 Import mapping); absent: yes.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "flash_frame_time": {
+          "description": "`[General] FlashFrameTime`, *F* in ticks (S-0410 claim 10); absent: 7.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "fog_rate": {
+          "description": "`[AudioVisual] FogRate`, *f* in game minutes (S-0409 F5); absent: 0.05.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "harvester_dump_rate": {
+          "description": "`[General] HarvesterDumpRate`, *D* in game minutes (S-0402 claim 11);\nabsent: the double nearest 0.016.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "harvester_load_rate": {
+          "description": "`[General] HarvesterLoadRate`, *L* in ticks (S-0402 claim 5); absent: 2.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "harvester_too_far_distance": {
+          "description": "`[General] HarvesterTooFarDistance`, cells (S-0402 claim 9); absent: 5.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "leptons_per_sight_increase": {
+          "description": "`[General] LeptonsPerSightIncrease`, *P* (S-0409 F1); absent: 50.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "low_power_penalty_modifier": {
+          "description": "`[General] LowPowerPenaltyModifier`, *q*, a single (S-0403 claim 5);\nabsent: 1.0.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "max_low_power_production_speed": {
+          "description": "`[General] MaxLowPowerProductionSpeed`, a single (S-0403 claim 5);\nabsent: the single nearest 0.9.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "max_money": {
+          "description": "`[MultiplayerDialogSettings] MaxMoney` (interface, S-0412 Import mapping); absent: 10000.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "max_unit_count": {
+          "description": "`[MultiplayerDialogSettings] MaxUnitCount` (S-0412 Import mapping); absent: 20.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "maximum_queued_objects": {
+          "description": "`[General] MaximumQueuedObjects` (S-0404 claim 3); absent: 5.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "mcv_redeploys": {
+          "description": "`[MultiplayerDialogSettings] MCVRedeploys`, a default offered (S-0412 Import mapping); absent: yes.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "min_low_power_production_speed": {
+          "description": "`[General] MinLowPowerProductionSpeed`, a single (S-0403 claim 5);\nabsent: 0.5.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "min_money": {
+          "description": "`[MultiplayerDialogSettings] MinMoney` (interface, S-0412 Import mapping); absent: 2500.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "min_unit_count": {
+          "description": "`[MultiplayerDialogSettings] MinUnitCount` (S-0412 Import mapping); absent: 1.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "money": {
+          "description": "`[MultiplayerDialogSettings] Money`, the default credits setting\noffered (S-0412 Import mapping); absent: 10000.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "money_increment": {
+          "description": "`[MultiplayerDialogSettings] MoneyIncrement` (interface, S-0412 Import mapping); absent: 100.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "multiplayer_aicm": {
+          "description": "`[General] MultiplayerAICM`, the original's extra-credit percentages\nby difficulty index (S-0412 claim 3); absent: no entries.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "multiple_factory": {
+          "description": "`[General] MultipleFactory`, *g*, a single (S-0403 claim 6); absent: 1.0.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "pad_aircraft": {
+          "description": "`[General] PadAircraft`, aircraft type keys (S-0404 claim 2, S-0408\nclaim 2, S-0407 claim 16); absent: empty.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "string"
+          }
+        },
+        "prerequisite_barracks": {
+          "description": "`[General] PrerequisiteBarracks`, the members of the generic group BARRACKS, building type keys (S-0407 claim 8 b); absent: empty.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "string"
+          }
+        },
+        "prerequisite_factory": {
+          "description": "`[General] PrerequisiteFactory`, the members of the generic group FACTORY, building type keys (S-0407 claim 8 b); absent: empty.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "string"
+          }
+        },
+        "prerequisite_power": {
+          "description": "`[General] PrerequisitePower`, the members of the generic group POWER, building type keys (S-0407 claim 8 b); absent: empty.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "string"
+          }
+        },
+        "prerequisite_proc": {
+          "description": "`[General] PrerequisiteProc`, the members of the generic group PROC, building type keys (S-0407 claim 8 b); absent: empty.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "string"
+          }
+        },
+        "prerequisite_proc_alternate": {
+          "description": "`[General] PrerequisiteProcAlternate`, a vehicle type key (S-0407\nclaim 8 b); absent: none.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "prerequisite_radar": {
+          "description": "`[General] PrerequisiteRadar`, the members of the generic group RADAR, building type keys (S-0407 claim 8 b); absent: empty.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "string"
+          }
+        },
+        "prerequisite_tech": {
+          "description": "`[General] PrerequisiteTech`, the members of the generic group TECH, building type keys (S-0407 claim 8 b); absent: empty.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "string"
+          }
+        },
+        "purifier_bonus": {
+          "description": "`[General] PurifierBonus`, *b*, a single (S-0402 claim 12); absent:\nthe single nearest 0.25.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "radar_combat_flash_time": {
+          "description": "`[General] RadarCombatFlashTime`, ticks (S-0410 claim 10); absent: 21.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "refund_percent": {
+          "description": "`[General] RefundPercent`, *r*, a double (S-0408 claim 1); absent: 0.5.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "reveal_by_height": {
+          "description": "`[General] RevealByHeight` (S-0409 claim 7); absent: yes.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "savour_delay": {
+          "description": "`[AudioVisual] SavourDelay`, *d* in game minutes, a double (S-0414\nclaim 8); absent: 0.03.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "secret_buildings": {
+          "description": "`[General] SecretBuildings`, a secret list, type keys (S-0407 claim 14); absent: empty.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "string"
+          }
+        },
+        "secret_infantry": {
+          "description": "`[General] SecretInfantry`, a secret list, type keys (S-0407 claim 14); absent: empty.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "string"
+          }
+        },
+        "secret_units": {
+          "description": "`[General] SecretUnits`, a secret list, type keys (S-0407 claim 14); absent: empty.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "string"
+          }
+        },
+        "separate_aircraft": {
+          "description": "`[General] SeparateAircraft` (S-0404 claim 2, S-0408 claim 2); absent:\nno.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "short_game": {
+          "description": "`[MultiplayerDialogSettings] ShortGame`, a default offered (S-0412 Import mapping); absent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "shroud": {
+          "description": "`[MultiplayerDialogSettings] Shroud`, the lobby shroud setting (S-0409\nclaim 3); absent: yes.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "shroud_grow": {
+          "description": "`[AudioVisual] ShroudGrow` (S-0409 claim 18); absent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "shroud_rate": {
+          "description": "`[AudioVisual] ShroudRate`, *g* in game minutes (S-0409 F5); absent: 4.0.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "slave_miner_kick_frame_delay": {
+          "description": "`[General] SlaveMinerKickFrameDelay`, *k* in ticks (S-0402 claim 14,\nF5); absent: 2147483647.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "slave_miner_long_scan": {
+          "description": "`[General] SlaveMinerLongScan`, lepton form; absent: 20480 leptons.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "slave_miner_scan_correction": {
+          "description": "`[General] SlaveMinerScanCorrection`, lepton form; absent: 768 leptons.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "slave_miner_short_scan": {
+          "description": "`[General] SlaveMinerShortScan`, lepton form (S-0402 claim 14);\nabsent: 1280 leptons.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "slave_miner_slave_scan": {
+          "description": "`[General] SlaveMinerSlaveScan`, lepton form; absent: 4096 leptons.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "spy_power_blackout": {
+          "description": "`[General] SpyPowerBlackout`, *d* in ticks (S-0405 claim 6); absent: 0.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "super_weapons_allowed": {
+          "description": "`[MultiplayerDialogSettings] SuperWeaponsAllowed`, a default offered (S-0412 Import mapping); absent: yes.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "tiberium_long_scan": {
+          "description": "`[General] TiberiumLongScan`, cells as decimal text (lepton form,\nS-0402 Terms); absent: 8192 leptons.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "tiberium_short_scan": {
+          "description": "`[General] TiberiumShortScan`, cells as decimal text (lepton form);\nabsent: 1536 leptons.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "unit_count": {
+          "description": "`[MultiplayerDialogSettings] UnitCount` (S-0412 Import mapping); absent: 10.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "wall_build_speed_coefficient": {
+          "description": "`[General] WallBuildSpeedCoefficient`, *w*, a double (S-0403 claim 7);\nabsent: 0.5.",
           "anyOf": [
             {
               "$ref": "#/$defs/Decimal"
@@ -2114,6 +3613,10 @@
             "type": "integer",
             "format": "int32"
           }
+        },
+        "economy": {
+          "description": "Game-wide economy values (M5, S-0401 to S-0416).",
+          "$ref": "#/$defs/EconGeneral"
         },
         "elevation_bonus_cap": {
           "description": "`[ElevationModel] ElevationBonusCap` c (S-0307 F2), a double.",
@@ -3822,6 +5325,11 @@
           "type": "boolean",
           "default": true
         },
+        "alliance_message_slot_colour": {
+          "description": "Alliance messages take the colour of the country's colour field rewritten by the lobby slot.",
+          "type": "boolean",
+          "default": true
+        },
         "area_damage_per_foundation_cell": {
           "description": "A building takes one hit for each scanned foundation cell within the spread radius.",
           "type": "boolean",
@@ -3834,6 +5342,16 @@
         },
         "berserk_carrier_tote": {
           "description": "A berserk carrier aircraft can still get tote and its move order; off: it gets no order, like every berserk object.",
+          "type": "boolean",
+          "default": true
+        },
+        "blackout_one_short": {
+          "description": "A blackout of length d counts as 0 output in at most d − 1 house updates.",
+          "type": "boolean",
+          "default": true
+        },
+        "build_step_period_cap": {
+          "description": "The step period never exceeds 255 ticks.",
           "type": "boolean",
           "default": true
         },
@@ -3854,6 +5372,11 @@
         },
         "building_pitch_term": {
           "description": "A straight shot at a building pitches by the building's art height term.",
+          "type": "boolean",
+          "default": true
+        },
+        "building_sight_top_left": {
+          "description": "A building's sight, area reveal and gap field are centred on its top-left foundation cell.",
           "type": "boolean",
           "default": true
         },
@@ -3907,6 +5430,11 @@
           "type": "boolean",
           "default": true
         },
+        "country_index_wraps": {
+          "description": "Country lists cannot tell apart countries whose indices are equal modulo 32.",
+          "type": "boolean",
+          "default": true
+        },
         "cow_idle": {
           "description": "The hard-coded cow type's idle action can scatter it.",
           "type": "boolean",
@@ -3914,6 +5442,11 @@
         },
         "crash_death_weapon_twice": {
           "description": "An exploding aircraft fires its death weapon at death and again at the crash.",
+          "type": "boolean",
+          "default": true
+        },
+        "crate_count_humans_only": {
+          "description": "Only human participants count for the initial crate count.",
           "type": "boolean",
           "default": true
         },
@@ -3962,8 +5495,23 @@
           "type": "boolean",
           "default": true
         },
+        "defeat_during_end_delay": {
+          "description": "A house defeated during the end delay loses (the person-played house's win turns into a loss and restarts the delay).",
+          "type": "boolean",
+          "default": true
+        },
+        "defeat_reveal_keeps_pending": {
+          "description": "The defeat reveal leaves the defeated house's pending re-cover marks in place.",
+          "type": "boolean",
+          "default": true
+        },
         "defeated_enemy_house_kept": {
           "description": "A defeated enemy house stays the enemy house until an anger value next changes.",
+          "type": "boolean",
+          "default": true
+        },
+        "defence_line_partial_factory_check": {
+          "description": "The factory check after a building-factory event covers only the ordinary-building line.",
           "type": "boolean",
           "default": true
         },
@@ -3974,6 +5522,11 @@
         },
         "delay_kill_whole_cell_spread": {
           "description": "The delayed-kill countdown divides by the spread's whole cells, so a spread below one cell gives 0.",
+          "type": "boolean",
+          "default": true
+        },
+        "deploy_refuses_own_walls": {
+          "description": "A deploying vehicle cannot deploy onto its own house's wall.",
           "type": "boolean",
           "default": true
         },
@@ -3994,6 +5547,16 @@
         },
         "disarm_bomb_needs_weapon": {
           "description": "Disarm bomb gives its attack order only to an actor able to fire; off: it needs only that the actor is movable.",
+          "type": "boolean",
+          "default": true
+        },
+        "dock_bound_aircraft_ignores_limit": {
+          "description": "A dock-bound aircraft type is tested at queue time by the dock test only.",
+          "type": "boolean",
+          "default": true
+        },
+        "done_aircraft_click_cancels": {
+          "description": "A left click on a done aircraft with every dock taken cancels it.",
           "type": "boolean",
           "default": true
         },
@@ -4052,8 +5615,18 @@
           "type": "boolean",
           "default": true
         },
+        "failed_packup_keeps_vehicle": {
+          "description": "The vehicle of a failed pack-up remains.",
+          "type": "boolean",
+          "default": true
+        },
         "fire_frame_by_stance": {
           "description": "The fire frame is chosen by stance and weapon, not by the playing kind.",
+          "type": "boolean",
+          "default": true
+        },
+        "fire_reveal_expires": {
+          "description": "The reveal on fire is a plain reveal that the next re-cover sweep undoes.",
           "type": "boolean",
           "default": true
         },
@@ -4087,6 +5660,11 @@
           "type": "boolean",
           "default": true
         },
+        "forced_start_player_hold": {
+          "description": "A forced start with no switched-on factory starts on a player hold when the house can pay P ÷ 54.",
+          "type": "boolean",
+          "default": true
+        },
         "fraidycat_ammo_panic_ignores_fearless": {
           "description": "A fraidycat that fires its last round panics even when fearless.",
           "type": "boolean",
@@ -4094,6 +5672,21 @@
         },
         "fraidycat_fear_ignores_fearless": {
           "description": "A fearless fraidycat still gets its fear set by a known attacker.",
+          "type": "boolean",
+          "default": true
+        },
+        "full_cell_no_regrowth": {
+          "description": "Harvesting a full cell takes it out of growth until a rebuilding.",
+          "type": "boolean",
+          "default": true
+        },
+        "gap_end_keeps_cover": {
+          "description": "When a hostile gap field stops, its cells stay unexplored until a sight reaches them.",
+          "type": "boolean",
+          "default": true
+        },
+        "gap_radius_wrap": {
+          "description": "A gap radius is read reduced into −128 … 127.",
           "type": "boolean",
           "default": true
         },
@@ -4119,6 +5712,11 @@
         },
         "ground_detonation_misses_aircraft": {
           "description": "Tracked flying objects are considered only by a detonation above the terrain at the centre of its cell.",
+          "type": "boolean",
+          "default": true
+        },
+        "height_block_cell": {
+          "description": "The height block tests the displaced cell and the step directions of table T2.",
           "type": "boolean",
           "default": true
         },
@@ -4157,6 +5755,16 @@
           "type": "boolean",
           "default": true
         },
+        "infantry_limit_exception_exact": {
+          "description": "The infantry in-production exception of the build limit applies only at exactly L owned.",
+          "type": "boolean",
+          "default": true
+        },
+        "last_bale_lost": {
+          "description": "The last bale taken from a cell yields nothing.",
+          "type": "boolean",
+          "default": true
+        },
         "mind_controlled_passengers_cell_choice": {
           "description": "Passengers of a mind-controlled open-topped transport take the cell's last object only.",
           "type": "boolean",
@@ -4164,6 +5772,11 @@
         },
         "missile_turn_wrap": {
           "description": "The steering turn step uses only the residue mod 256 and is a signed 16-bit value.",
+          "type": "boolean",
+          "default": true
+        },
+        "multiple_factory_counts_all": {
+          "description": "Every factory building of the kind counts for the several-factories factor, also those that cannot make the item.",
           "type": "boolean",
           "default": true
         },
@@ -4197,6 +5810,11 @@
           "type": "boolean",
           "default": true
         },
+        "nominal_survivor_count": {
+          "description": "A nominal survivor is not added to the infantry count but is taken off when it leaves.",
+          "type": "boolean",
+          "default": true
+        },
         "observer_position_handoff": {
           "description": "An observer's drawn position is handed to the next player needing one.",
           "type": "boolean",
@@ -4227,6 +5845,11 @@
           "type": "boolean",
           "default": true
         },
+        "offmap_cells_shared": {
+          "description": "Every cell that is not legal shares one explored state per house.",
+          "type": "boolean",
+          "default": true
+        },
         "omnicrusher_needs_crusher": {
           "description": "The omni-crusher flag alone makes no vehicle a crusher.",
           "type": "boolean",
@@ -4247,8 +5870,23 @@
           "type": "boolean",
           "default": true
         },
+        "overlay_list_position_rules": {
+          "description": "Radar overlay colours depend on the overlay type's position in the overlay list.",
+          "type": "boolean",
+          "default": true
+        },
         "override_suspends_queued": {
           "description": "An override suspends the queued behaviour when one is queued.",
+          "type": "boolean",
+          "default": true
+        },
+        "packup_release_by_guard_spot": {
+          "description": "A packing building releases survivors according to its guard spot and undeploy type only.",
+          "type": "boolean",
+          "default": true
+        },
+        "packup_sound_on_sale": {
+          "description": "A sold building with a pack-up sound also plays it.",
           "type": "boolean",
           "default": true
         },
@@ -4297,6 +5935,16 @@
           "type": "boolean",
           "default": true
         },
+        "placed_buildings_not_ever_built": {
+          "description": "A building put on the map by a place order does not raise its type's ever-built count.",
+          "type": "boolean",
+          "default": true
+        },
+        "placement_shroud_at_cursor": {
+          "description": "A person's placement click takes the shroud result from when the cursor entered the cell.",
+          "type": "boolean",
+          "default": true
+        },
         "prone_attack_state_persists": {
           "description": "A prone unit stays in the attack state and can fire again without a new firing sequence.",
           "type": "boolean",
@@ -4307,13 +5955,33 @@
           "type": "boolean",
           "default": true
         },
+        "queue_limit_counts_item_twice": {
+          "description": "The queue-time limit test counts the item in production twice.",
+          "type": "boolean",
+          "default": true
+        },
         "queued_move_sleeps": {
           "description": "Queued move and attack move are processed as sleep.",
           "type": "boolean",
           "default": true
         },
+        "radar_first_building_decides": {
+          "description": "Only the first qualifying radar building decides whether the house has radar.",
+          "type": "boolean",
+          "default": true
+        },
+        "radar_pixel_cell_shift": {
+          "description": "The cell a radar pixel stands for is the one F3 gives, shifted from the point colour's cell.",
+          "type": "boolean",
+          "default": true
+        },
         "ramp_shape_zero": {
           "description": "A tile of the ramp range or of the smooth-ramp range whose slope shape is 0 becomes the tile just before the ramp range.",
+          "type": "boolean",
+          "default": true
+        },
+        "random_country_fixed_range": {
+          "description": "A random country is drawn from registration indices 0 … 9.",
           "type": "boolean",
           "default": true
         },
@@ -4347,8 +6015,28 @@
           "type": "boolean",
           "default": true
         },
+        "recover_keeps_pending": {
+          "description": "The whole-map re-cover and reveal leave pending re-cover marks in place.",
+          "type": "boolean",
+          "default": true
+        },
+        "recover_skips_allied_units": {
+          "description": "The whole-map re-cover takes in allied units' sights only at their next refresh.",
+          "type": "boolean",
+          "default": true
+        },
         "redirected_shot_aim": {
           "description": "An area-fire or spray shot is launched towards the firer's own target.",
+          "type": "boolean",
+          "default": true
+        },
+        "refinery_distance_wraps": {
+          "description": "The squared refinery distance is a signed 32-bit integer that wraps.",
+          "type": "boolean",
+          "default": true
+        },
+        "refund_at_current_price": {
+          "description": "A cancel refunds the item's price at the moment of the cancel less the balance owed.",
           "type": "boolean",
           "default": true
         },
@@ -4367,13 +6055,28 @@
           "type": "boolean",
           "default": true
         },
+        "release_order_once": {
+          "description": "The automatic place order of a done unit is sent once.",
+          "type": "boolean",
+          "default": true
+        },
         "repeat_direction_snap": {
           "description": "A completed sequence's declared direction is snapped on every tick it stays current.",
           "type": "boolean",
           "default": true
         },
+        "resource_timers_carry_over": {
+          "description": "Resource timers carry over between games of one session.",
+          "type": "boolean",
+          "default": true
+        },
         "restricted_deck_overlay_indices": {
           "description": "Restricted vehicles may use a deck only above overlays of registration indices 237 and 238.",
+          "type": "boolean",
+          "default": true
+        },
+        "resume_restarts_step": {
+          "description": "A resumed line waits a full step period before its next step.",
           "type": "boolean",
           "default": true
         },
@@ -4387,6 +6090,11 @@
           "type": "boolean",
           "default": true
         },
+        "sale_start_no_recheck": {
+          "description": "The start of a sale calls for no recheck of the offer.",
+          "type": "boolean",
+          "default": true
+        },
         "search_one_object_per_cell": {
           "description": "A search scores only the offered object of each visited cell.",
           "type": "boolean",
@@ -4397,8 +6105,18 @@
           "type": "boolean",
           "default": true
         },
+        "secret_lab_pick_by_position": {
+          "description": "Each secret lab picks its entry by position with replacement, so labs can share a type.",
+          "type": "boolean",
+          "default": true
+        },
         "set_facing_keeps_target": {
           "description": "Setting a facing at once to its current interpolated value during a turn ends the turn at its target.",
+          "type": "boolean",
+          "default": true
+        },
+        "shared_control_centre_count": {
+          "description": "One count of active control centres per house serves every control-centre type.",
           "type": "boolean",
           "default": true
         },
@@ -4407,8 +6125,33 @@
           "type": "boolean",
           "default": true
         },
+        "short_game_first_three_base_units": {
+          "description": "Only the first three positions of the base-unit list count in the short-game test.",
+          "type": "boolean",
+          "default": true
+        },
+        "short_game_without_bases": {
+          "description": "A short game with the bases setting off is allowed (every house without a counted building fails at tick 1).",
+          "type": "boolean",
+          "default": true
+        },
         "shot_distance_wrap": {
           "description": "The shot-speed distance's sum of squares wraps in 32-bit arithmetic.",
+          "type": "boolean",
+          "default": true
+        },
+        "shroud_point_cell_wrap": {
+          "description": "A cell coordinate outside 0 … 511 is read as another cell by gap fields and the shroud point test.",
+          "type": "boolean",
+          "default": true
+        },
+        "sight_bonus_wrap": {
+          "description": "The height bonus of sight wraps into −128 … 127.",
+          "type": "boolean",
+          "default": true
+        },
+        "sight_centre_off_map": {
+          "description": "A sight whose centre is not a legal cell reveals nothing.",
           "type": "boolean",
           "default": true
         },
@@ -4422,6 +6165,11 @@
           "type": "boolean",
           "default": true
         },
+        "slave_kick_delay_wraps": {
+          "description": "The slave miner's kick delay wraps when added to the tick number.",
+          "type": "boolean",
+          "default": true
+        },
         "slow_walker_stall": {
           "description": "A walker of speed 1 heading between east and south stalls.",
           "type": "boolean",
@@ -4432,13 +6180,43 @@
           "type": "boolean",
           "default": true
         },
+        "spread_attempts_count_failures": {
+          "description": "Failed spread attempts count and the cell returns to the front of the list.",
+          "type": "boolean",
+          "default": true
+        },
+        "spread_mark_kept_on_last_neighbour": {
+          "description": "A cell dropped from the spread list with one free neighbour can rejoin only through a rebuilding.",
+          "type": "boolean",
+          "default": true
+        },
+        "spread_offer_by_emptied_type": {
+          "description": "Neighbours of an emptied cell join the emptied cell's tiberium's spread list.",
+          "type": "boolean",
+          "default": true
+        },
         "spread_ring_eleven": {
           "description": "A scan radius of 11 uses the original's ring-11 list (one cell twice, some cells missing).",
           "type": "boolean",
           "default": true
         },
+        "spread_stage_from_index": {
+          "description": "The stage a cell needs to spread depends on the tiberium's index.",
+          "type": "boolean",
+          "default": true
+        },
+        "spy_satellite_first_building_decides": {
+          "description": "Only the first qualifying spy-satellite building is looked at.",
+          "type": "boolean",
+          "default": true
+        },
         "stale_fill_tiles": {
           "description": "The fill uses the base tiles of the theater loaded before.",
+          "type": "boolean",
+          "default": true
+        },
+        "stale_offer_orderable": {
+          "description": "A type left in the offer after it stopped qualifying can be ordered until the next recheck.",
           "type": "boolean",
           "default": true
         },
@@ -4472,6 +6250,11 @@
           "type": "boolean",
           "default": true
         },
+        "superweapon_setting_tests_first_only": {
+          "description": "The superweapon setting's build bar tests only a building type's first superweapon.",
+          "type": "boolean",
+          "default": true
+        },
         "table_direction": {
           "description": "Directions follow the tabulated arctangent and the short facing scale; off: the exact angle.",
           "type": "boolean",
@@ -4484,6 +6267,11 @@
         },
         "table_trig_negative_bias": {
           "description": "The table sine and cosine of a negative angle can land two steps short.",
+          "type": "boolean",
+          "default": true
+        },
+        "thinning_hits_waypoint_only": {
+          "description": "The waypoint-thinning action takes every bale from the waypoint's own cell only.",
           "type": "boolean",
           "default": true
         },
@@ -4532,13 +6320,33 @@
           "type": "boolean",
           "default": true
         },
+        "uncounted_sight": {
+          "description": "The original applies an uncounted sight at a few moments, never removed.",
+          "type": "boolean",
+          "default": true
+        },
         "undemolishable_heal_is_damage": {
           "description": "The minimum of 1 on an undemolishable building applies to every hit no row stops, so healing hits damage it.",
           "type": "boolean",
           "default": true
         },
+        "unit_changes_no_recheck": {
+          "description": "Unit entries, departures, owner changes and removals below the limit call for no recheck.",
+          "type": "boolean",
+          "default": true
+        },
+        "unscored_vehicle_stays_counted": {
+          "description": "A vehicle of a not-scored type is counted on entering the map and never taken off.",
+          "type": "boolean",
+          "default": true
+        },
         "unset_role_range": {
           "description": "An unset role's range still counts tile numbers from its unset start.",
+          "type": "boolean",
+          "default": true
+        },
+        "unstartable_queue_head_stalls": {
+          "description": "A queued type that cannot start is dropped and the line starts nothing more.",
           "type": "boolean",
           "default": true
         },
@@ -4552,8 +6360,23 @@
           "type": "boolean",
           "default": true
         },
+        "upgrade_level_without_room": {
+          "description": "An upgrade is placed even when the target records nothing.",
+          "type": "boolean",
+          "default": true
+        },
+        "upgrade_prerequisite_last_building": {
+          "description": "An upgrade prerequisite examines only the most recently acquired eligible building.",
+          "type": "boolean",
+          "default": true
+        },
         "uphill_arc_45": {
           "description": "Arcing shots at a higher impact point are launched at 45 degrees.",
+          "type": "boolean",
+          "default": true
+        },
+        "vehicle_buildings_keep_nobody_alive": {
+          "description": "A building that counts as a vehicle keeps its house alive only when it is a refinery-list building.",
           "type": "boolean",
           "default": true
         },
@@ -4582,8 +6405,18 @@
           "type": "boolean",
           "default": true
         },
+        "wall_exception_skips_ground": {
+          "description": "A cell meeting a wall exception passes without the ground conditions of claim 3 (d).",
+          "type": "boolean",
+          "default": true
+        },
         "wall_hit_minus_one_is_absolute": {
           "description": "A wall hit of exactly -1 is absolute.",
+          "type": "boolean",
+          "default": true
+        },
+        "wall_sale_no_refund": {
+          "description": "A wall sale pays nothing.",
           "type": "boolean",
           "default": true
         },
@@ -4599,6 +6432,11 @@
         },
         "zero_kill_value_caps": {
           "description": "A kill value of 0 against an actual cost of 0 sets experience to the cap.",
+          "type": "boolean",
+          "default": true
+        },
+        "zero_load_period_stalls": {
+          "description": "A load period of 0 keeps the harvester loading for good after its first bale.",
           "type": "boolean",
           "default": true
         },
@@ -4751,11 +6589,25 @@
             "$ref": "#/$defs/ProjectileType"
           }
         },
+        "superweapons": {
+          "description": "Superweapon types by type name (S-0407 and S-0412 Import mapping).",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/SuperweaponType"
+          }
+        },
         "terrain_objects": {
           "description": "Terrain-object types by type name.",
           "type": "object",
           "additionalProperties": {
             "$ref": "#/$defs/TerrainObjectType"
+          }
+        },
+        "tiberiums": {
+          "description": "Tiberiums by section name (S-0401 Import mapping); the registry\n`tiberiums` gives their order (S-0004 claim 10).",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/TiberiumType"
           }
         },
         "vehicles": {
@@ -4782,10 +6634,53 @@
       },
       "additionalProperties": false
     },
+    "SuperweaponType": {
+      "description": "A superweapon type (S-0407 and S-0412 Import mapping).",
+      "type": "object",
+      "properties": {
+        "disableable_from_shell": {
+          "description": "`DisableableFromShell` (S-0412 claim 9 b, S-0407 claim 7); absent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "kind": {
+          "description": "`Type`, the kind word as written (S-0407 claim 12 j); absent: none.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "additionalProperties": false
+    },
     "TerrainObjectType": {
       "description": "A terrain-object type's simulation fields.",
       "type": "object",
       "properties": {
+        "animation_probability": {
+          "description": "`AnimationProbability`, *p*, a single (S-0401 F8); absent: 0.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "animation_rate": {
+          "description": "`AnimationRate`, *R* in ticks (S-0401 claim 15); absent: 0.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
         "armor": {
           "description": "`Armor`, the armour class (S-0305).",
           "anyOf": [
@@ -4799,6 +6694,14 @@
         },
         "immune": {
           "description": "`Immune` (S-0302 claim 20).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "is_animated": {
+          "description": "`IsAnimated`, the animated flag of an ore mine (S-0401 claim 15).",
           "type": [
             "boolean",
             "null"
@@ -4833,6 +6736,71 @@
         },
         "temperate_occupation_bits": {
           "description": "`TemperateOccupationBits`.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        }
+      },
+      "additionalProperties": false
+    },
+    "TiberiumType": {
+      "description": "A tiberium (S-0401 Import mapping), keyed by its section name; the\nregistry `tiberiums` gives the order.",
+      "type": "object",
+      "properties": {
+        "growth": {
+          "description": "`Growth`, the growth field *G* (S-0401 F3); absent: 0.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "growth_percentage": {
+          "description": "`GrowthPercentage`, *g* (S-0401 F5), a single widened to double;\nabsent: the double nearest 0.1.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "image": {
+          "description": "`Image`, the image number (S-0112 claim 10).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "spread": {
+          "description": "`Spread`, the spread field *S* (S-0401 F4); absent: 0.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "spread_percentage": {
+          "description": "`SpreadPercentage`, *s* (S-0401 F6), a single widened to double;\nabsent: the double nearest 0.1.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "value": {
+          "description": "`Value`, the value per bale *V* (S-0401 claims 2, 3); absent: 0.",
           "type": [
             "integer",
             "null"
@@ -5112,6 +7080,10 @@
             "null"
           ],
           "default": null
+        },
+        "econ": {
+          "description": "Economy fields (M5).",
+          "$ref": "#/$defs/EconFields"
         },
         "elite_abilities": {
           "description": "`EliteAbilities`, upper-case ability names.",
