@@ -169,6 +169,9 @@ const DOCK_ANIMS: &[(&str, &str)] = &[
     ("production_anim_damaged", "ProductionAnimDamaged"),
 ];
 
+/// The build-up sprite name's text limit (S-0108 Import mapping).
+const BUILDUP_MAX: usize = 15; // spec: S-0108 Import mapping (Buildup, text cut to 15 characters)
+
 /// Country fields.
 const COUNTRY_ECON: &[Row] = &[
     ("cost_infantry_mult", "CostInfantryMult", Dec, "S-0404"),
@@ -356,6 +359,7 @@ const GENERAL_ECON: &[(&str, &[u8], &str, Form, &str)] = &[
     ),
     ("spy_power_blackout", GENERAL, "SpyPowerBlackout", Int, "S-0405"),
     ("refund_percent", GENERAL, "RefundPercent", Dec, "S-0408"),
+    ("buildup_time", GENERAL, "BuildupTime", Dec, "S-0108"),
     (
         "prerequisite_power",
         GENERAL,
@@ -543,6 +547,7 @@ pub fn converted_keys() -> Vec<(&'static str, String, &'static str)> {
     }
     out.push(("art", "QueueingCell".to_owned(), "S-0402"));
     out.push(("art", "NumberOfDocks".to_owned(), "S-0402"));
+    out.push(("art", "Buildup".to_owned(), "S-0108, S-0408"));
     out
 }
 
@@ -625,6 +630,21 @@ impl Builder<'_> {
                 "queueing_cell",
                 jsonc::array(v.iter().map(|&x| int_node(x)).collect()),
             );
+        }
+        // spec: S-0108 Import mapping (Buildup: a name; none gives no build-up sprite, an empty value keeps the earlier name)
+        let buildup = self
+            .art_values(kind, index, t, "Buildup")
+            .iter()
+            .fold(None, |held, (v, _)| {
+                let name = value::text(v, BUILDUP_MAX);
+                if name.is_empty() {
+                    held
+                } else {
+                    Some(!value::is_no_type(name))
+                }
+            });
+        if buildup == Some(true) {
+            econ.put("buildup", jsonc::boolean(true));
         }
         // spec: S-0402 Import mapping (the docking, payment and unloading animations: animation type names)
         for &(field, k) in DOCK_ANIMS {

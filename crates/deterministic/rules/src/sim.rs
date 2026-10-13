@@ -1358,6 +1358,10 @@ pub struct BuildingType {
     // nocite: a pair of numbers (width, height), our format's shape
     #[serde(default)]
     pub foundation: Option<[i32; 2]>,
+    /// Art `Foundation` is the 8-cell 3 × 3 word `3x3Refinery`, which lacks
+    /// the cell (2, 1) (S-0406 claim 2, S-0302 claim 13); absent: no.
+    #[serde(default)]
+    pub foundation_refinery: Option<bool>,
     /// `Bib` (S-0204 Terms).
     #[serde(default)]
     pub bib: Option<bool>,
