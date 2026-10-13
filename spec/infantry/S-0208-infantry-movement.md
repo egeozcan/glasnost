@@ -2,11 +2,11 @@
 id: S-0208
 title: Infantry movement (standing positions, walking step and speed, crawling, scatter destinations)
 topic: infantry
-revision: 14
+revision: 15
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-13
+approved-on: 2026-10-14
 measurements: []
 requests: [Q-0017, Q-0072]
 supersedes: []
@@ -31,7 +31,9 @@ points to S-0209 and S-0209 decides. This spec owns the infantry scatter from da
 For an infantry unit that approaches its target, S-0215 claim 37 owns when the approach step runs
 and whether it keeps, renews or takes a destination, S-0307 owns the approach position and the
 outcomes of a failed search, and S-0310 claim 8 owns the firing check's *moving* answer. This spec
-owns only when such a walker stops and loses its destination (claims 16 and 17). Infantry of a
+answers Q-0072 question 3 for ordinary walking infantry: when the walker stops and what happens
+to its destination (claims 16 and 17, scenario W10). The approach step keeping a destination
+does not exempt it from these arrival rules. Infantry of a
 jumpjet type move by the jumpjet locomotor, which belongs to other movement specs; claims 16 and
 17 do not cover them.
 
@@ -681,8 +683,8 @@ used by this spec:
       height condition, which matters only where the locomotor destination and the arrived position
       differ in height in one cell (a bridge deck over its ground cell, Edge cases)
 
-17. **An approaching walker stops when its target comes into range.** On each arrival tick, before
-    claim 16's test, an infantry unit loses its destination when all of these hold:
+17. **An approaching walker's stop and destination outcome (Q-0072, question 3).** On each
+    arrival tick, before claim 16's test, an infantry unit loses its destination when all of these hold:
     - its target (Terms) is a mobile actor: an infantry unit, vehicle or aircraft. A building, a
       cell, an overlay or a terrain object never triggers this stop.
     - its current behaviour (S-0215), or, when it has none, its queued behaviour, is *attack*, *area
@@ -698,6 +700,9 @@ used by this spec:
 
     The unit loses only its destination: its target is kept. Claim 16 then finds no locomotor
     destination, so the walk ends on this same arrival tick, at the standing position just reached.
+    This is an arrival rule, not a processing of the approach step: it does not wait for the next
+    behaviour processing of S-0215 claim 37. That step's retention of a destination while the
+    target is in range does not prevent this stop.
     Consequences:
     - A walker stops only at standing positions, never in the middle of a step. A target that comes
       into range while the walker is between two standing positions is noticed on the next arrival
@@ -715,7 +720,7 @@ used by this spec:
 
     **Exception: the target is the destination.** When the unit's destination is its target object
     itself (the object destinations of S-0307 claim 17: a hunter-seeker, or a vehicle thief), and
-    its firing check (S-0310) answers *fire*, the unit loses its destination and any movement still
+    its firing check (S-0301, S-0310) answers *can fire*, the unit loses its destination and any movement still
     in progress ends on the tick on which it starts its firing sequence. By S-0310 claim 8 the check
     answers *moving* while the speed fraction is above 0.1, so this happens only to a walker that is
     already standing (for example blocked, S-0209), never in the middle of a step.
@@ -850,7 +855,7 @@ positions are never taken, as claim 3 says).
 | Walking, arrival tick | target is a mobile actor in range at its cell centre, behaviour attack, area guard, hunt or rescue (claim 17) | loses its destination, keeps its target; the walk ends on this tick (claim 16) |
 | Walking, arrival tick | no locomotor destination, or arrived in the locomotor destination's cell within two height levels (claim 16) | walk ends: no destination, speed fraction 0, stands at the position reached |
 | Walking, arrival tick | neither of the above | continues; asks for its next walking target on the next tick (claim 6) |
-| Walking, destination is its target object | firing check answers *fire* (claim 17, exception) | loses its destination and stops as its firing sequence starts |
+| Walking, destination is its target object | firing check answers *can fire* (claim 17, exception) | loses its destination and stops as its firing sequence starts |
 
 Ordering stated as consequences (the draw counts and order are checked with the read-only recorder
 of the random stream, scenario W9): the random draw of claim 3 happens on the tick on which the walker
