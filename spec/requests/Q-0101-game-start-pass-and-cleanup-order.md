@@ -1,9 +1,9 @@
 ---
 id: Q-0101
 title: Where the game-start recalculation pass, the unused-house cleanup and low-bridge cell animations sit among the load's draws
-status: open
+status: answered
 related: [S-0009, S-0010, S-0202, S-0412]
-answered-by: []
+answered-by: [S-0202]
 ---
 
 ## Need
