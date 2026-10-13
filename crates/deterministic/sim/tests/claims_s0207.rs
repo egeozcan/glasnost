@@ -1517,12 +1517,14 @@ fn acceleration_defaults_are_doubles() {
 // Getting onto and off a bridge deck (claim 5)
 
 /// A high bridge along map north over ground at level 0: the vehicle's
-/// column x = 0 has land at level 4 at y = 0 and y = −5 and the four
-/// high-bridge cells y = −1 … −4 (an overlay of index 24 at y = −2, S-0211
-/// claim 15) at level 0 between them.
+/// column x = 0 has land at level 4 at y = 1, 0, −5 and −6 and the four
+/// high-bridge cells y = −1 … −4 at level 0 between them, laid by overlays
+/// of index 25 in each of those cells (S-0211 claim 15: each marks x − 2 …
+/// x + 1 of its row; S-0212 Terms: the bridge axis along cell y, the
+/// deck-entry mark on x − 1 … x + 1).
 fn bridge_scene() -> Scene {
     let mut s = Scene::new();
-    for i in 0..=24 {
+    for i in 0..=25 {
         let name = format!("OV{i}");
         s.register("overlays", &name);
         s.ruleset.sim.overlays.insert(
@@ -1536,33 +1538,23 @@ fn bridge_scene() -> Scene {
     for y in [0, 1, -5, -6] {
         s.set_cell(cell(0, y), 0, 4);
     }
-    s.cell_mut(cell(0, -2)).overlay = 24;
+    for y in -4..=-1 {
+        s.cell_mut(cell(0, y)).overlay = 25;
+    }
     s
 }
 
-// spec: S-0207 claim 5 (world height H + 416 on the deck, kept between high-bridge cells; off the deck into a cell that is not a high-bridge cell)
-// (Getting onto a deck from land 4 levels higher needs S-0212 claim 10's step between a deck and a
-// bridge end, which the pathfinder does not take yet.)
+// spec: S-0207 claim 5 (onto the deck from land 4 levels higher, world height H + 416 on the deck, kept between high-bridge cells; off the deck into a cell that is not a high-bridge cell)
+// spec: S-0212 claim 10 (steps of 4 levels onto a marked deck and off it; deck to deck along marked cells)
 #[test]
 fn driving_along_and_off_a_bridge_deck() {
     use glasnost_sim::world::Layer;
     let mut s = bridge_scene();
-    // The far end at the deck's ground level, so the vehicle can drive off.
-    for y in [-5, -6] {
-        s.set_cell(cell(0, y), 0, 0);
-    }
     s.vehicle("TESTCAR", car(WHEEL, 30, false));
-    s.place_unit(0, "TESTCAR", cell(0, -1), 0);
-    let (mut w, id) = start(&s, &[N; 4]);
-    // Put the vehicle on the deck, as a vehicle that has driven onto it.
-    let c0 = cell(0, -1);
-    w.cells.leave(c0, Layer::Ground, id);
-    w.cells.enter(c0, Layer::Deck, id, false);
-    let ob = w.obj_mut(id).expect("v");
-    ob.layer = Layer::Deck;
-    ob.pos.z = 416;
+    s.place_unit(0, "TESTCAR", cell(0, 0), 0);
+    let (mut w, id) = start(&s, &[N; 5]);
     let mut seen_deck = 0;
-    for _ in 0..200 {
+    for _ in 0..300 {
         tick::step(&mut w);
         let o = w.obj(id).expect("v");
         let y = o.pos.cell().y - 40;
@@ -1572,7 +1564,6 @@ fn driving_along_and_off_a_bridge_deck() {
             seen_deck += 1;
         } else {
             assert_eq!(o.layer, Layer::Ground, "off the deck at y = {y}");
-            assert_eq!(o.pos.z, 0);
         }
         if y == -5 && o.drive.as_ref().is_some_and(|d| d.track.is_none()) {
             break;

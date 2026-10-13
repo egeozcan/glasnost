@@ -383,6 +383,9 @@ pub fn new_game(
         starting::give(&mut w, &bases, setup);
     }
 
+    // spec: S-0010 claim 25 (once at game start, before the first tick: the bridge spans, S-0212's bridge links, and the bridge-body marks of low spans)
+    crate::bridges::find_spans(&mut w, &order);
+
     // Passability categories (S-0211 claim 11) after loading.
     let all: Vec<CellXY> = w.cells.grid.iter().map(|(c, _)| c).collect();
     for c in all {

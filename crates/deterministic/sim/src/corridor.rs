@@ -4,10 +4,9 @@
 //! inside a corridor.
 //!
 //! Sectors are derived data, rebuilt with the regions ([`crate::regions`]),
-//! never saved. No links exist yet (request Q-0042), so no link
-//! connections arise. Interim rules: a level's coarse search ends when a
-//! route to the destination's sector comes up, and a bridge cell is its
-//! own coarse end cell (request Q-0043).
+//! never saved. Enabled bridge links ([`crate::bridges`]) add their
+//! connections; the coarse end cells of bridge cells are
+//! [`crate::path`]'s.
 
 use std::collections::{BTreeMap, BTreeSet, BinaryHeap};
 
@@ -150,6 +149,19 @@ pub fn build(w: &World) -> Sectors {
                 *straight.entry((s, t)).or_insert(false) |= !slant;
             }
         }
+        // spec: S-0212 claim 13b (an enabled link adds straight connections at every level, with no height or usable-area condition)
+        for link in w.cells.links.iter().filter(|x| x.enabled) {
+            for (a, b) in link_pairs(link) {
+                let s = lv.sector(w, a);
+                let t = lv.sector(w, b);
+                if s == NONE || t == NONE || s == t {
+                    continue;
+                }
+                // spec: S-0212 claim 13b (two sectors share at most one connection: joined by a link, it is straight)
+                straight.insert((s, t), true);
+                straight.insert((t, s), true);
+            }
+        }
         lv.conns = vec![Vec::new(); lv.category.len()];
         for (&(s, t), &st) in &straight {
             // spec: S-0212 claim 13b (diagonal when every such pair crosses on the slant, straight otherwise)
@@ -168,6 +180,24 @@ pub fn build(w: &World) -> Sectors {
     }
     levels[LEVELS - 1].parent = vec![NONE; levels[LEVELS - 1].category.len()];
     Sectors { levels }
+}
+
+/// The cell pairs whose sectors an enabled bridge link connects (S-0212
+/// claim 13b): its two end cells, and for each side across the bridge's
+/// axis the cells beside the two end cells on that side. Which side cells
+/// the original takes for two of the 16 tiles of each bridge role (the
+/// diagonal neighbours) is not stated by tile (request Q-0088); the cells
+/// across the axis are used for every tile.
+// nocite: the three cell pairs the claim lists, not a behavioural number
+fn link_pairs(l: &crate::cells::BridgeLink) -> [(CellXY, CellXY); 3] {
+    let (sx, sy) = if l.along_x { (0, 1) } else { (1, 0) };
+    let by = |c: CellXY, k: i32| CellXY::new(c.x + k * sx, c.y + k * sy);
+    // spec: S-0212 claim 13b (the end cells, and the cells beside them on the same side, for each of the two sides)
+    [
+        (l.first, l.second),
+        (by(l.first, -1), by(l.second, -1)),
+        (by(l.first, 1), by(l.second, 1)),
+    ]
 }
 
 /// Connections closed by the retries of one path computation, per level,
@@ -236,8 +266,7 @@ fn coarse_level(
     while let Some(rt) = heap.pop() {
         let (s, _) = routes[rt.seq as usize];
         if s == dest {
-            // The route that comes up for the destination's sector ends the
-            // level's search; its chain is the corridor (interim, Q-0043).
+            // spec: S-0212 claim 13 (the level's search ends when the pending route taken next is a route to the destination's sector; its chain is the corridor)
             let mut chain = Vec::new();
             let mut k = rt.seq;
             while k != NONE {
@@ -336,9 +365,8 @@ pub fn coarse(
 }
 
 /// Whether a ground-layer cell has the corridor exemption (S-0212 claim
-/// 13): one of its eight neighbours holds a vehicle, an infantry unit, a
-/// terrain object or a wall section. Objects on either layer of the
-/// neighbour count (interim, Q-0043).
+/// 13): one of its eight neighbours holds a vehicle, an infantry unit, an
+/// aircraft, a terrain object or a wall section, on either layer.
 pub fn exempt(w: &World, c: CellXY) -> bool {
     let r = w.rules();
     STEPS.iter().any(|&(dx, dy)| {
@@ -354,10 +382,13 @@ pub fn exempt(w: &World, c: CellXY) -> bool {
         wall || [crate::world::Layer::Ground, crate::world::Layer::Deck]
             .iter()
             .flat_map(|&l| w.cells.list(n, l).iter())
-            // spec: S-0212 claim 13 (a vehicle, an infantry unit or a terrain object in a neighbour)
+            // spec: S-0212 claim 13 (a vehicle, an infantry unit, an aircraft or a terrain object in a neighbour, on its ground or its deck)
             .any(|&o| {
                 w.obj(o).is_some_and(|x| {
-                    matches!(x.kind, Kind::Vehicle | Kind::Infantry | Kind::Terrain)
+                    matches!(
+                        x.kind,
+                        Kind::Vehicle | Kind::Infantry | Kind::Aircraft | Kind::Terrain
+                    )
                 })
             })
     })

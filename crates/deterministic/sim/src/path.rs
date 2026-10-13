@@ -216,25 +216,35 @@ fn candidate_layer(w: &World, from_level: i32, c: CellXY) -> Layer {
 }
 
 /// Whether the height rule of S-0212 claim 10 allows a step from the pair
-/// (`a`, `la`) to the pair (`b`, `lb`). The rule compares the two cells'
-/// height levels.
-fn height_ok(w: &World, a: CellXY, la: Layer, b: CellXY, lb: Layer) -> bool {
-    let (Some(ca), Some(cb)) = (w.cells.cell(a), w.cells.cell(b)) else {
+/// at cell `f` (its deck when `deck`) to the neighbouring cell `t`. The
+/// rule compares `t`'s height level with `f`'s, which for a deck pair is
+/// the level of the ground under the deck; the layer of `t` entered is
+/// claim 7's ([`candidate_layer`]).
+fn height_ok(w: &World, f: CellXY, deck: bool, t: CellXY) -> bool {
+    let (Some(cf), Some(ct)) = (w.cells.cell(f), w.cells.cell(t)) else {
         return false;
     };
-    let diff = (i32::from(ca.level) - i32::from(cb.level)).abs();
-    let (lower, lower_layer, higher) = if ca.level < cb.level {
-        ((a, ca), la, b)
-    } else {
-        ((b, cb), lb, a)
-    };
-    match diff {
-        0 => true,
-        // spec: S-0212 claim 10 (a difference of 1 only when the lower cell is a slope)
-        1 => lower.1.slope != 0,
-        // spec: S-0212 claim 10 (4 only between a bridge deck and the ground at a bridge's end; which cells count as the end, interim: Q-0042)
-        4 => lower_layer == Layer::Deck && is_bridge(w, lower.0) && !is_bridge(w, higher),
-        // spec: S-0212 claim 10 (2, 3 and more than 4 levels: blocked)
+    // spec: S-0212 claim 10 (Δ = level(T) − level(F), F's ground level even when the pair is its deck)
+    let delta = i32::from(ct.level) - i32::from(cf.level);
+    let deck = deck && is_bridge(w, f);
+    let marked = w.cells.deck_entry_at(t);
+    match delta {
+        // spec: S-0212 claim 10 (Δ = 0: a ground pair; from a deck pair only onto a bridge cell with the deck-entry mark)
+        0 => !deck || marked,
+        1 | -1 => {
+            let lower = if delta > 0 { cf } else { ct };
+            // spec: S-0212 claim 10 (Δ = ±1: the lower of the two cells is a slope, from a ground pair and from a deck pair alike, no mark needed)
+            let slope = lower.slope != 0;
+            // spec: S-0212 Edge cases (`quirks.deck_side_step_ground_level` off: from a deck pair, Δ = ±1 onto a cell that is not a bridge cell is refused)
+            let side_step =
+                !deck || is_bridge(w, t) || w.rules().quirks.deck_side_step_ground_level;
+            slope && side_step
+        }
+        // spec: S-0212 claim 10 (Δ = +4: off a deck onto ground at deck level; nothing is asked of T)
+        4 => deck,
+        // spec: S-0212 claim 10 (Δ = −4: onto a bridge cell with the deck-entry mark, from either layer of F)
+        -4 => marked,
+        // spec: S-0212 claim 10 (2, 3, 5 or more levels, either sign: never)
         _ => false,
     }
 }
@@ -247,12 +257,9 @@ fn height_ok(w: &World, a: CellXY, la: Layer, b: CellXY, lb: Layer) -> bool {
 /// layer the entry outcome reads (S-0209 Terms).
 pub fn step_outcome(w: &World, id: ObjectId, from: CellXY, to: CellXY, reference: i32) -> Outcome {
     // spec: S-0212 Terms (a pair 4 levels above its bridge cell is on the deck)
-    let from_layer = if is_bridge(w, from) && reference - level(w, from) == 4 {
-        Layer::Deck
-    } else {
-        Layer::Ground
-    };
-    if !height_ok(w, from, from_layer, to, candidate_layer(w, reference, to)) {
+    let from_deck = is_bridge(w, from) && reference - level(w, from) >= 4;
+    // spec: S-0212 claim 7 (the height rule of claim 10 is part of the entry outcome)
+    if !height_ok(w, from, from_deck, to) {
         return Outcome::Blocked;
     }
     let Some(o) = w.obj(id) else {
@@ -400,12 +407,7 @@ fn search(
                 .idx(c)
                 .map(|i| 2 * i + usize::from(l == Layer::Deck))
         };
-        // spec: S-0212 claim 7 (the start pair: the unit's cell on the search layer the unit is on)
-        let from_layer = if o.layer == Layer::Deck && is_bridge(w, from) {
-            Layer::Deck
-        } else {
-            Layer::Ground
-        };
+        let (from_layer, start_level) = start_pair(w, req.unit, from);
         // spec: S-0212 claim 7 (the destination pair: a bridge cell's deck for every unit that is not an aircraft, else the ground)
         let to_layer = if is_bridge(w, to) && o.kind != Kind::Aircraft {
             Layer::Deck
@@ -433,7 +435,6 @@ fn search(
         // spec: S-0212 claim 13 (progress: e₀ is the start cell)
         *progress = from;
         let mut next_sector: usize = 1;
-        let start_level = pair_level(w, from, from_layer);
         // spec: S-0212 claim 16 (a train may not enter the three cells behind it, on the ground layer unless the start's search layer lies at least 2 levels above the cell)
         let behind: Vec<(CellXY, Layer)> = if train {
             behind_cells(w, req.unit, from)
@@ -480,7 +481,11 @@ fn search(
             expansions += 1;
             sc.closed[ni] = stamp;
             let ge = sc.g(ni).unwrap_or(F32::ZERO);
-            let here_level = pair_level(w, next.cell, next.layer);
+            let here_level = if (next.cell, next.layer) == (from, from_layer) {
+                start_level
+            } else {
+                pair_level(w, next.cell, next.layer)
+            };
             for (d, (dx, dy)) in STEPS.iter().enumerate() {
                 let c = CellXY::new(next.cell.x + dx, next.cell.y + dy);
                 let cl = candidate_layer(w, here_level, c);
@@ -577,6 +582,34 @@ fn search(
             }
         }
     }
+}
+
+/// The start pair of a search from `from` (S-0212 claim 7): its search layer
+/// and height level. The start pair is on the deck when the unit is on a
+/// bridge deck and is not an aircraft; a train standing on a bridge cell
+/// whose world height lies more than 2 levels from that pair's level starts
+/// 4 levels higher.
+pub fn start_pair(w: &World, id: ObjectId, from: CellXY) -> (Layer, i32) {
+    let Some(o) = w.obj(id) else {
+        return (Layer::Ground, level(w, from));
+    };
+    // spec: S-0212 claim 7 (the start pair is on the deck when the unit is on a bridge deck and is not an aircraft)
+    let mut layer = if o.layer == Layer::Deck && is_bridge(w, from) && o.kind != Kind::Aircraft {
+        Layer::Deck
+    } else {
+        Layer::Ground
+    };
+    let h0 = pair_level(w, from, layer);
+    let train = w
+        .rules()
+        .unit(o.kind, o.type_index)
+        .is_some_and(|u| u.train);
+    // spec: S-0212 claim 7 (a train on a bridge cell: H = H₀ + 4 when |trunc(z / 104) − H₀| > 2; 104 leptons per height level)
+    if train && is_bridge(w, from) && (o.pos.z / 104 - h0).abs() > 2 {
+        layer = Layer::Deck;
+        return (layer, h0 + 4);
+    }
+    (layer, h0)
 }
 
 /// The three neighbours of `from` behind a unit's body facing (S-0212
@@ -1002,8 +1035,9 @@ pub enum NearbyUse {
         unit: ObjectId,
         /// The click was on an object (its cell is the centre).
         on_object: bool,
-        /// A no-move order by a unit that is in the air, travels
-        /// underground, is of a jumpjet infantry type or is an aircraft.
+        /// A no-move order by a free mover (S-0214 Terms: a unit in the air,
+        /// of movement zone subterranean, of a jumpjet infantry type, or an
+        /// aircraft).
         free_no_move: bool,
     },
 }
@@ -1026,9 +1060,10 @@ pub fn nearby(w: &World, centre: CellXY, use_: NearbyUse) -> Option<CellXY> {
                 let o = w.obj(unit)?;
                 let u = w.rules().unit(o.kind, o.type_index)?.clone();
                 let z = simplified(u.zone);
-                let rr = regions::reach_in(w, o.pos.cell(), z);
                 // spec: S-0212 table T5 (substitution: in deck mode when the unit is on a bridge deck)
                 let deck = o.layer == Layer::Deck;
+                // spec: S-0212 table T5 (the reach region of the unit's cell, read for its deck when the unit is on a bridge deck, claim 4)
+                let rr = regions::reach_read(w, o.pos.cell(), z, deck);
                 // spec: S-0212 claim 24 (quirks.substitution_centre_ground_level off: the centre's level includes the deck whenever it is a bridge cell, for a unit that is not an aircraft)
                 let centre_deck =
                     deck || (!q.substitution_centre_ground_level && o.kind != Kind::Aircraft);
@@ -1071,14 +1106,16 @@ pub fn nearby(w: &World, centre: CellXY, use_: NearbyUse) -> Option<CellXY> {
                     MovementZone::Fly if on_object => MovementZone::Infantry,
                     other => other,
                 };
-                // spec: S-0212 table T5 (the no-move rows: no reach region; the others: that of the unit's cell for that zone)
-                let rr = (!free_no_move).then(|| regions::reach_in(w, o.pos.cell(), z));
+                let on_deck = o.layer == Layer::Deck;
+                // spec: S-0212 table T5 (the no-move rows: no reach region; the others: that of the unit's cell, read for its deck when the unit is on a bridge deck, for that zone)
+                let rr = (!free_no_move).then(|| regions::reach_read(w, o.pos.cell(), z, on_deck));
                 // spec: S-0212 table T5 (orders: in deck mode when the centre is a bridge cell)
                 let deck = is_deck(centre);
-                // The no-move rows ask for the further test for a subterranean unit under a
-                // condition of its state that S-0212 does not establish (request Q-0041): not
-                // asked meanwhile.
-                (u.class, z, rr, deck, true, false, None, deck)
+                // spec: S-0212 claim 25 (the no-move rows ask for the further test when the unit is of zone subterranean and below the ground surface: its world height below the ground's at its position, a deck's height counted when it is on one)
+                let ground = w.surface_at(o.pos.x, o.pos.y) + if on_deck { 416 } else { 0 }; // spec: S-0207 claim 5 (a bridge deck's height: H + 416)
+                let further =
+                    free_no_move && u.zone == MovementZone::Subterranean && o.pos.z < ground;
+                (u.class, z, rr, deck, true, further, None, deck)
             }
         };
     let centre_level = w.cells.cell(centre).map_or(0, |c| i32::from(c.level))
@@ -1156,23 +1193,34 @@ pub fn nearby(w: &World, centre: CellXY, use_: NearbyUse) -> Option<CellXY> {
 
 /// The further test of the nearby-cell search (S-0212 claim 25): the
 /// burrowing test of S-0010 claim 17. Every cell outside the usable area
-/// passes; a cell inside it passes when it is flat, not a bridge cell, and
-/// its ground layer holds no building and no terrain object. Two parts are
-/// placeholders: the tileset's allow-burrowing flag reads as its absent-key
-/// default (allowed), since the tile catalogue does not carry it yet, and
-/// the further cells of a bridge's structure that the original refuses are
-/// not stated (request Q-0041).
+/// passes; a cell inside it passes when its tile's tileset allows burrowing
+/// (a tile number outside the theater's tiles always does), it is flat, it
+/// is neither a high-bridge cell nor marked as a bridge's body, and its
+/// ground layer holds no building and no terrain object.
 pub fn burrow_ok(w: &World, c: CellXY) -> bool {
-    // spec: S-0010 claim 17 (every cell outside the usable area passes, by the height-aware test)
+    // spec: S-0010 claim 17 (every cell outside the playable area passes, by the height-aware test)
     if !w.cells.usable(c) {
         return true;
     }
     let Some(cell) = w.cells.cell(c) else {
         return true;
     };
-    let bridge = w.cells.idx(c).is_some_and(|i| w.cells.deck[i]);
-    // spec: S-0212 claim 25 (inside: flat, not a bridge cell, no building and no terrain object on the ground layer)
-    cell.slope == 0
+    // spec: S-0010 claim 17 (the tileset's allow-burrowing flag; a tile number outside 0 … tile count − 1 passes this condition)
+    let tileset_ok = w
+        .catalogue
+        .as_ref()
+        .and_then(|cat| {
+            usize::try_from(cell.tile)
+                .ok()
+                .and_then(|t| cat.tiles.get(t))
+        })
+        .is_none_or(|t| !t.no_burrowing);
+    let i = w.cells.idx(c);
+    // spec: S-0010 claim 17 (not a high-bridge cell and no bridge-body mark)
+    let bridge = i.is_some_and(|i| w.cells.deck[i] || w.cells.bridge_body[i]);
+    // spec: S-0010 claim 17 (flat, and no building and no terrain object on the ground layer)
+    tileset_ok
+        && cell.slope == 0
         && !bridge
         && !w.cells.list(c, Layer::Ground).iter().any(|&x| {
             w.obj(x)
@@ -1447,14 +1495,87 @@ fn congestion(w: &World, id: ObjectId, mode: Mode) -> Option<BTreeSet<CellXY>> {
     )
 }
 
-/// The coarse end cell of a cell (S-0212 claim 13b): the cell itself,
-/// except for a bridge cell (a start on a deck, or a destination on a bridge
-/// cell), whose coarse end cell lies at an end of the bridge. No bridge
-/// links exist and no bridge's axis is kept yet, so no bridge end is found,
-/// and a bridge cell is its own coarse end cell (interim, Q-0043; the
-/// fallback of departure D6).
-fn coarse_end(_w: &World, c: CellXY) -> CellXY {
-    c
+/// The coarse end cell of `c` (S-0212 claim 13b): the cell itself, except
+/// for a bridge cell `c` read as on its deck (a start on a deck, a
+/// destination that is a bridge cell), whose coarse end cell lies at an end
+/// of the bridge on the same lane, by the table of claim 13b.
+pub fn coarse_end(w: &World, c: CellXY, deck: bool) -> CellXY {
+    if !deck || !is_bridge(w, c) {
+        return c;
+    }
+    // spec: S-0212 claim 13b (the bridge's link: the first in creation order that X lies within 2 cells of)
+    match crate::bridges::link_within(w, c, 2) {
+        Some(l) => {
+            // spec: S-0212 claim 13b (the lane cells: the two end cells moved by X's signed side offset o across the line)
+            let o = l.side(c);
+            let shift = |e: CellXY| {
+                if l.along_x {
+                    CellXY::new(e.x, e.y + o)
+                } else {
+                    CellXY::new(e.x + o, e.y)
+                }
+            };
+            let (lane1, lane2) = (shift(l.first), shift(l.second));
+            if l.enabled {
+                let d = |e: CellXY| {
+                    let (dx, dy) = (i64::from(e.x - c.x), i64::from(e.y - c.y));
+                    // spec: S-0212 claim 13b (the table square root of the squared distance in cells, truncated to a whole number)
+                    root_floor((dx * dx + dy * dy) as u64, true, w.rules().mode)
+                };
+                // spec: S-0212 claim 13b (found, enabled: the nearer lane cell; the second end's on equal distances)
+                if d(lane1) < d(lane2) { lane1 } else { lane2 }
+            } else {
+                let y = crate::bridges::first_off_bridge(w, c, l.along_x);
+                // spec: S-0212 claim 13b (found, not enabled: the second end's lane cell when Y meets the bridge-end condition, the first end's otherwise)
+                if y.is_some_and(|y| crate::bridges::end_condition(w, y)) {
+                    lane2
+                } else {
+                    lane1
+                }
+            }
+        }
+        None => {
+            let ends = crate::bridges::ends(w, c);
+            let inside: Vec<CellXY> = ends
+                .iter()
+                .flatten()
+                .copied()
+                .filter(|&e| w.cells.usable(e))
+                .collect();
+            let dist = |e: CellXY| (e.x - c.x).abs().max((e.y - c.y).abs());
+            // spec: S-0212 claim 13b (none found: the nearer bridge end inside the usable area, the first on equal distance; neither: X itself, departure D6)
+            let mut best: Option<CellXY> = None;
+            for e in inside {
+                if best.is_none_or(|b| dist(e) < dist(b)) {
+                    best = Some(e);
+                }
+            }
+            best.unwrap_or(c)
+        }
+    }
+}
+
+/// The anchor of the bridge cell `x` for sector `s` (S-0212 F8): the first
+/// of x's first bridge end, the two cells beside it across the bridge's
+/// axis, x's second bridge end and the two cells beside that, that lies
+/// inside the usable area with level-0 sector `s`.
+fn anchor(w: &World, x: CellXY, s: u32) -> Option<CellXY> {
+    let level0 = w.regions.sectors.levels.first()?;
+    // spec: S-0212 F8 (along cell x: east end, south of it, north of it, west end, south, north; along cell y: south end, west, east, north end, west, east)
+    let beside: [(i32, i32); 3] = match w.cells.axis(x) {
+        crate::cells::Axis::X => [(0, 0), (0, 1), (0, -1)],
+        crate::cells::Axis::Y => [(0, 0), (-1, 0), (1, 0)],
+        crate::cells::Axis::None => return None,
+    };
+    crate::bridges::ends(w, x)
+        .iter()
+        .flatten()
+        .flat_map(|e| {
+            beside
+                .iter()
+                .map(move |&(dx, dy)| CellXY::new(e.x + dx, e.y + dy))
+        })
+        .find(|&c| w.cells.usable(c) && level0.sector(w, c) == s)
 }
 
 /// The estimate test of S-0212 claim 24 for adopting `found` in place of
@@ -1467,24 +1588,63 @@ fn estimate_ok(w: &World, u: &crate::rules::UnitRules, found: CellXY, dest: Cell
     } else {
         u.zone
     };
+    let direct = (found.x - dest.x).abs().max((found.y - dest.y).abs());
+    // spec: S-0212 claim 24 (adopted when E ≤ Chebyshev distance + 6; not when the coarse search fails)
+    coarse_estimate(w, zone, found, dest).is_some_and(|e| e <= direct + 6) // spec: S-0212 Constants (substitution detour allowance 6 cells)
+}
+
+/// The coarse estimate E of S-0212 claim 24 and F8 from `found` to `dest`
+/// for movement zone `zone`, in cells; `None` when the coarse search fails.
+/// The regions must be up to date ([`regions::ensure`]).
+pub fn coarse_estimate(w: &World, zone: MovementZone, found: CellXY, dest: CellXY) -> Option<i32> {
+    // spec: S-0212 claim 13b (the found cell counts as on a bridge deck when it is a bridge cell)
+    let found_end = coarse_end(w, found, true);
+    let dest_end = coarse_end(w, dest, true);
     // spec: S-0212 claim 24 (the coarse search alone, between the coarse end cells; when it fails the cell is not adopted)
-    let Some(chains) = corridor::coarse(
+    let chains = corridor::coarse(
         w,
         &w.regions.sectors,
         zone,
-        coarse_end(w, found),
-        coarse_end(w, dest),
+        found_end,
+        dest_end,
         &Default::default(),
-    ) else {
-        return false;
+    )?;
+    let chain = &chains[0];
+    let n = chain.len() as i32;
+    let cheb = |a: CellXY, b: CellXY| (a.x - b.x).abs().max((a.y - b.y).abs());
+    let direct = cheb(found, dest);
+    let link3 = |c: CellXY| crate::bridges::link_within(w, c, 3); // spec: S-0212 Constants (lane reach for the same-bridge test: 3 cells)
+    // spec: S-0212 F8 (both bridge cells of one bridge: the first link within 3 cells is the same for both; E is the Chebyshev distance alone)
+    if is_bridge(w, found)
+        && is_bridge(w, dest)
+        && link3(found).is_some()
+        && link3(found) == link3(dest)
+    {
+        return Some(direct);
+    }
+    let s = |k: i32| chain.get((k - 1) as usize).copied();
+    // A leg: the Chebyshev distance from x to its anchor for the first
+    // sector that has one, else to its coarse end cell.
+    let leg = |x: CellXY, first: Option<u32>, then: Option<u32>, end: CellXY| -> i32 {
+        let a = first
+            .and_then(|t| anchor(w, x, t))
+            .or_else(|| then.and_then(|t| anchor(w, x, t)))
+            .unwrap_or(end);
+        cheb(x, a)
     };
-    let n = chains[0].len() as i32;
-    let cheb = (found.x - dest.x).abs().max((found.y - dest.y).abs());
-    // spec: S-0212 F8 (the legs: with no bridge end found, the anchor falls back to the coarse end cell, the cell itself, so each leg is 0; interim, Q-0043)
-    let legs = 0;
-    // spec: S-0212 claim 24 (E = max(Chebyshev distance, 2n − 2 + legs); adopted when E ≤ Chebyshev distance + 6)
-    let e = cheb.max(2 * n - 2 + legs);
-    e <= cheb + 6 // spec: S-0212 Constants (substitution detour allowance 6 cells)
+    let mut legs = 0;
+    if is_bridge(w, dest) {
+        // spec: S-0212 F8 (destination leg: its anchor for sₙ₋₁ when n ≥ 4, for sₙ when n < 4; then for sₙ; then its coarse end cell)
+        let first = if n >= 4 { s(n - 1) } else { s(n) };
+        legs += leg(dest, first, s(n), dest_end);
+    }
+    if is_bridge(w, found) {
+        // spec: S-0212 F8 (found-cell leg: its anchor for s₂ when n ≥ 4, for s₁ when n < 4; then for s₁; then its coarse end cell)
+        let first = if n >= 4 { s(2) } else { s(1) };
+        legs += leg(found, first, s(1), found_end);
+    }
+    // spec: S-0212 claim 24 (E = max(Chebyshev distance, 2n − 2 + legs))
+    Some(direct.max(2 * n - 2 + legs))
 }
 
 /// The cell searches of a fresh path computation with the corridor (S-0212
@@ -1512,8 +1672,9 @@ pub fn corridor_find(w: &World, id: ObjectId, to: CellXY) -> Option<Vec<u8>> {
         &req,
         coarse_zone,
         u.zone,
-        coarse_end(w, from),
-        coarse_end(w, to),
+        // spec: S-0212 claim 13b (the start's coarse end cell when the unit is on a bridge deck; the destination's when it is a bridge cell)
+        coarse_end(w, from, o.layer == Layer::Deck),
+        coarse_end(w, to, true),
     )
 }
 
@@ -1603,13 +1764,13 @@ pub fn compute(w: &mut World, id: ObjectId, mode: Mode) -> Search {
     // spec: S-0212 claim 6 (the gate is skipped for a unit outside the usable area, and in the corridor-disabling state for a legal destination outside it)
     let gate_skipped =
         !inside || (disabling && w.cells.cell(goal).is_some() && !w.cells.usable(goal));
-    // spec: S-0212 claim 6 (the gate compares the reach regions of the unit's cell and the destination)
-    if !gate_skipped {
-        let a = regions::reach(w, from, u.zone);
-        let b = regions::reach(w, goal, u.zone);
-        if a != b {
-            return Search::GateFailed;
-        }
+    let on_deck = o.layer == Layer::Deck;
+    // spec: S-0212 claim 6 (the gate compares the reach regions of the unit's cell, read for its deck when the unit is on a bridge deck, and of the destination, read for its deck when it is a bridge cell, for an aircraft as well)
+    let gate = |w: &World, goal: CellXY| {
+        regions::reach_read(w, from, u.zone, on_deck) == regions::reach_read(w, goal, u.zone, true)
+    };
+    if !gate_skipped && !gate(w, goal) {
+        return Search::GateFailed;
     }
     // spec: S-0212 claim 24 (destination substitution after the gate, not for trains)
     if !u.train {
@@ -1677,14 +1838,14 @@ pub fn compute(w: &mut World, id: ObjectId, mode: Mode) -> Search {
         mode,
         congested: congested.clone(),
     };
-    // spec: S-0212 claim 13b (the coarse end cells of the start and the destination)
-    let start_end = coarse_end(w, from);
-    let dest_end = coarse_end(w, goal);
+    // spec: S-0212 claim 13b (the coarse end cells: the start's when the unit is on a bridge deck, the destination's when it is a bridge cell)
+    let start_end = coarse_end(w, from, on_deck);
+    let dest_end = coarse_end(w, goal, true);
     // spec: S-0212 claim 14 (the corridor is used when the unit has entered the usable area, both coarse end cells are inside it, and it is not in the corridor-disabling state)
     let use_corridor =
         entered && w.cells.usable(start_end) && w.cells.usable(dest_end) && !disabling;
-    if use_corridor && regions::reach_in(w, from, u.zone) != regions::reach_in(w, goal, u.zone) {
-        // spec: S-0212 claim 14 (with the corridor, reach regions that differ fail the computation at once, as a failed search)
+    if use_corridor && !gate(w, goal) {
+        // spec: S-0212 claim 14 (with the corridor, reach regions that differ, read as in claim 6, fail the computation at once, as a failed search)
         return Search::SearchFailed;
     }
     // spec: S-0212 claim 13 (a jumpjet infantry type uses zone infantry for the coarse search of a path computation)
@@ -1710,7 +1871,8 @@ pub fn compute(w: &mut World, id: ObjectId, mode: Mode) -> Search {
     } else {
         Vec::new()
     };
-    let reference = occupancy::reference_level(w, id);
+    // The height level of the start pair (S-0212 claim 7).
+    let reference = start_pair(w, id, from).1;
     // The search layer of each cell the found path passes through (claim 7).
     let mut layers: BTreeMap<CellXY, Layer> = BTreeMap::new();
     {
