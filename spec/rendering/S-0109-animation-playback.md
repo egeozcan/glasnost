@@ -2,13 +2,13 @@
 id: S-0109
 title: Animation playback
 topic: rendering
-revision: 6
+revision: 7
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-10
+approved-on: 2026-10-13
 measurements: []
-requests: []
+requests: [Q-0046]
 supersedes: []
 ---
 
@@ -266,13 +266,46 @@ as in S-0007, *turn pass* and *update order* as in S-0203.
     say. It does not happen on the advances of a bouncing type (the start event's middle event of
     claim 13 still does). An animation that never shows image frame μ (because *a* > μ, or its loop
     range excludes it) has no middle event, except through claim 13.
-    The scorch marks and craters of the middle event appear only when the animation's height above
-    the terrain (glossary) is less than 30 leptons; their specs own the rest. The test uses the height
-    above the terrain, not above the surface, so an animation on a high bridge's deck, about one
-    deck height above the terrain of its cell, makes no scorch mark or crater, while one created on
-    raised ground at that ground's height makes them as on flat ground.
-    - Backing: `measurable` (scenarios AN10, AN19)
-    - Confidence: high; medium for the height condition
+    These rules apply during map loading too. A tile animation (S-0010 claim 19) or an overlay's
+    cell animation (S-0009 claim 12) with μ = 0 produces this event at creation, not at its first
+    update. The event requests the type's particle count of its named particle type when a particle
+    type is given and the count is positive, otherwise none. Particle creation is not gated by
+    height. The particle requests precede any random choice between a scorch mark and a crater,
+    so their creation draws change the stream state used by that choice. The particle specs own
+    the draws within each particle's creation.
+
+    The scorch marks and craters of the middle event are attempted only when the animation's
+    height above the terrain (glossary) is less than 30 leptons. For world position (X, Y, Z),
+    this is the integer difference Z − H(X, Y), with H the terrain surface height of S-0106 claims
+    2 and 3 at that position, including its in-cell displacement. It is not the height of the
+    creator's cell, nor height above a bridge deck. There is no lower bound: a negative difference
+    also passes. A displaced cell animation can therefore pass or fail according to the terrain
+    at its displaced position even though its creation height came from the overlay's cell.
+    An animation on a high bridge's deck makes no scorch mark or crater, while one at the terrain
+    height on raised ground passes as on flat ground. At exactly 30 leptons neither is attempted.
+
+    | Height test | Type's effect flags | Middle-event request |
+    |---|---|---|
+    | fails | any | no scorch mark, no crater, no choice draw |
+    | passes | neither | neither effect, no choice draw |
+    | passes | scorch only | scorch mark, no choice draw |
+    | passes | crater only | crater, no choice draw |
+    | passes | both | one scenario ranged draw over [0, 2147483646], scorch mark when the integer result is below 1073741824, crater otherwise |
+
+    The choice range follows S-0202 claim 4, including any rejected raw values. The original
+    compares a floating-point product with 0.5: the integer result times the nearest binary64
+    value to 1 / 2147483646, multiplied with a 53-bit significand in round-toward-zero mode
+    (S-0205 claims 4 and 5). That constant lies slightly below the exact reciprocal. Thus even
+    result 1073741823 gives a product below 0.5, and the table's integer threshold is equivalent
+    in that mode. With `quirks.chop_rounding` off, use that floating-point comparison in the
+    selected mode instead of assuming the integer threshold remains equivalent. This choice is
+    made even if the chosen effect cannot subsequently be placed. Its own type selection,
+    placement and any further draws belong to the smudge specs, not to this choice. A crater
+    request removes 6 resource levels from the animation's cell, bounded below by no resource,
+    before placement is attempted, so failure to place a crater does not undo that removal.
+    - Backing: `measurable` (scenarios AN10, AN19, AN23)
+    - Confidence: high for event timing, the request gates, the choice and resource removal,
+      medium for the terrain-height test
 
 15. **Follow-up type.** When an animation's last pass ends and its type names a follow-up type, the
     same animation continues as that type, at the same place and with the same owner. The start
@@ -480,7 +513,12 @@ as in S-0007, *turn pass* and *update order* as in S-0203.
       pass an end limit of 0, claim 6). The exception is a new-theater type whose sprite is
       found at the theater refresh. Its end field of 0 then takes *E*<sub>s</sub> of the refreshed
       sprite, and a loop end of 0 then takes the end field,
-    - **μ** comes from the last sprite found at a type read or at a new-theater refresh,
+    - **μ** comes from the last sprite found at a type read or at a new-theater refresh.
+      This also determines μ for an animation created during map loading (Q-0046 Q2c): the
+      map's theater sprite does not automatically supply μ. For a type with the theater flag,
+      the refresh changes the drawn sprite but keeps the μ left by the last successful type
+      read. For a new-theater type it recomputes μ from the sprite successfully found at that
+      refresh. For a type with neither flag it keeps μ from the last successful type read,
     - a type that never finds a sprite at those moments keeps an end field and loop end of 0 when
       they are absent or 0, and has μ = 0, so its start event also produces the middle event (claim
       13).
@@ -488,7 +526,7 @@ as in S-0007, *turn pass* and *update order* as in S-0203.
     These cases differ from the simple reading (every value from the sprite that is drawn) only when
     the sprites a type gets in one game have different image-frame counts, or when a type read
     finds no sprite.
-    - Backing: `measurable` (scenario AN18)
+    - Backing: `measurable` (scenarios AN18, AN23 part C)
     - Confidence: medium (the order of the type reads and the refresh is S-0007's; the rule itself
       is clear)
 
@@ -680,9 +718,7 @@ advance of the same update. So:
   *E*<sub>s</sub> even when the end field is given (claims 6 and 25). Off: an absent loop end
   takes the end field *E*. Stock data is affected only where a type gives an end field without a
   loop end and loops, is reversed or is a shadow type.
-- **Explicit end field or loop end 0** (no switch). Kept as 0, except for new-theater types at the
-  theater refresh (claim 25). Both are what the original does; the importer warns about an explicit
-  0.
+- **Explicit end field or loop end 0** (no switch). Kept as 0, except for new-theater types at the theater refresh (claim 25). Both are what the original does; the importer warns about an explicit 0. This is an importer-warning edge case, not a mod-configurable playback quirk; no alternative behaviour is defined.
 - **`quirks.anim_followup_start_doubled`** (default: on). The follow-up type starts at *k* = *a*′,
   showing image frame 2*a*′ (claim 15). Off: it starts at *k*<sub>0</sub> of F3 for the follow-up
   type: *k* = 0, or *k* = λ<sub>e</sub>′ − 1 when the animation is reversed under the follow-up
@@ -757,7 +793,10 @@ forms are those of S-0003.
 | `ShouldFogRemove` | boolean | fog-remove flag (claim 24) | yes |
 | `Report` | sound name | start sound (claim 13) | none |
 | `TiberiumChainReaction` | boolean | resource chain reaction of the start event (claim 13; economy specs) | no |
-| `SpawnsParticle`, `NumParticles`, `Scorch`, `Crater`, `ForceBigCraters` | as in their own specs | middle event effects (claim 14) | none |
+| `SpawnsParticle` | particle-type name | particle requests of the middle event (claim 14) | none |
+| `NumParticles` | integer | number of particle requests per middle event (claim 14) | 0 |
+| `Scorch`, `Crater` | boolean | scorch and crater requests of the middle event (claim 14) | no |
+| `ForceBigCraters` | boolean | request a large crater when a crater is chosen (the smudge specs own size selection) | no |
 | `Bouncer`, `IsMeteor` | boolean | bouncing type (Terms) | no |
 | `MakeInfantry` | integer | infantry created at the end (claim 16) | −1 (none) |
 | `Theater`, `NewTheater` | boolean | which sprites the type gets (S-0007), and so claim 25 | no |
@@ -766,11 +805,11 @@ Game-wide keys:
 
 | Section and key | Form | Feeds | Absent |
 |---|---|---|---|
-| rules, combat-damage section, `C4Warhead` | warhead name | warhead of claim 17 for the type named `INVISO` | none: no damage is done |
+| rules, combat-damage section, `C4Warhead` | warhead name | warhead of claim 17 for the built-in invisibility-animation type, identified by an exact, byte-for-byte type-name comparison | none: no damage is done |
 | rules, combat-damage section, `FlameDamage2` | warhead name | warhead of claim 17 for every other type | none: no damage is done |
 | settings file, detail level | integer | claim 19 (S-0104 Import mapping) | as in S-0104 |
 
-The type name `INVISO` is compared exactly, byte for byte, as the original's built-in name.
+The built-in invisibility-animation type is identified by an exact, byte-for-byte comparison against its built-in type name.
 
 The importer warns, so that a mod author learns of each quirk, for:
 - a `RandomRate` pair written in ascending order (claim 3),
@@ -1083,8 +1122,57 @@ building that can cloak), it sets them in the test map's override section, which
     pilot run, the scenario is inconclusive. The campaign case (an allied building cloaked from the
     viewer) needs a test mission; it is not covered here.
 
+- **AN23 (claims 14 and 25; Q-0046 map-load events).** Common measurement setup, skirmish at
+  speed 4, director and mods off except named test data. A tiny test map names one test animation
+  on a tile (S-0010 claim 19), and a separate run gives an overlay a cell animation (S-0009
+  claim 12). Record each creation separately, including creations removed later during loading,
+  rather than counting only animations left at the first drawn frame. Use the read-only recorder
+  for animation positions, event times, cell resource levels and scenario-stream state. Take one
+  valid run per deterministic case and 32 fixed seeds for the choice cases. Void a run if an
+  unrelated effect acts on the observed cells before recording finishes.
+  - Part A, height: use a sprite with one image frame, so μ = 0, no particles or chain reaction,
+    and scorch only, then crater only. Put the animation position on clear, smudge-placeable
+    ground and repeat with world heights giving Z − H of −1, 0, 29 and 30 leptons. The tile
+    displacement or terrain in the displaced cell supplies these differences where available,
+    record the actual difference rather than assuming the creator cell's height. For a crater
+    case also put resource in the displaced cell and record its level before and after the
+    event. Include a separate case whose crater placement is blocked but whose cell has resource.
+    If the map creators cannot reach a listed difference, use a weapon-impact animation at that
+    height to test the boundary, and record that it is not a map-load observation.
+    Expected: events occur at creation during loading when μ = 0. Differences below 30 permit
+    the requested ground effect, 30 forbids it. A crater request removes up to 6 resource levels
+    even in the blocked-placement case. A ground effect at 30, no removal in the blocked case,
+    or an event deferred to the first update falsifies the corresponding rule. An inability to
+    reach a boundary is inconclusive, not confirmation.
+  - Part B, draws: repeat with neither flag, scorch only, crater only and both, with particles
+    absent. Read stream state immediately before and after the scorch-or-crater choice, separately
+    from smudge placement. Expected: only both flags below the height boundary take the choice
+    ranged draw. Apply S-0202's range rule to the recorded incoming state: the predicted result
+    below 1073741824 requests scorch, otherwise crater. Repeat with a positive particle count,
+    recording the state after particle creation and before the choice: that later state must
+    predict the choice. A choice draw in another flag/height case, a different request from the
+    predicted result, or particle creation after that choice falsifies the rule. Do not infer the
+    full event's draw count from the choice alone.
+  - Part C, sprite: use named copies of stock sprites with different image-frame counts, one
+    with a single image frame and the other with at least four. Use the lookup fixtures of AN18
+    and S-0007 A8 to make the last successful type read find the first sprite and the theater
+    refresh find the second. Test a theater-flag type and a new-theater type without the theater
+    flag, both scorch only with no chain reaction or particles. Confirm the two resolved sprites
+    with the recorder. Expected: the theater-flag type has μ = 0 and attempts a scorch mark at
+    map-load creation despite drawing the multi-image sprite. The new-theater type has μ > 0
+    and attempts none until playback reaches that image frame. An immediate middle event for
+    the new-theater type, or none for the theater-flag type on eligible ground, falsifies the
+    sprite rule. A fixture that does not produce the intended two successful sprite finds is
+    inconclusive.
+
 ## Open questions
 
+- Q-0046 Q2c is answered by claim 25, including animations created during map loading. Claim 14
+  answers the event gates, height condition and scorch-or-crater choice in Q2b, but not the full
+  downstream draw sequence: the particle and smudge specs still need to state particle creation
+  draws, eligible smudge types and their selection and placement draws. Q2a's complete chain-reaction
+  draw sequence belongs to the resource specs. Do not treat these unresolved effects as taking
+  zero draws at map load.
 - Whether the first image frame is held one extra tick when *d* = 1 depends on the part of the tick
   that creates the animation (claim 5). The specs of the creators (combat, structures, triggers)
   should say which part that is for each creator. For the animations that a shot or a death creates

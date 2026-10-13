@@ -2,11 +2,11 @@
 id: S-0203
 title: Tick order
 topic: simulation
-revision: 8
+revision: 9
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-10
+approved-on: 2026-10-13
 measurements: []
 requests: [Q-0018]
 supersedes: []
@@ -20,7 +20,8 @@ What happens within one tick of a single-player game, and in which observable or
 player's orders take effect, in which order objects act, when a shot's damage lands, when a
 destroyed object stops acting, and the consequences, such as two units killing each other in the
 same tick. How many ticks run per second is S-0201, and what each object does in its own turn
-(moving, firing, harvesting) belongs to the topic specs of those actions.
+(moving, firing, harvesting) belongs to the topic specs of those actions. This revision covers
+skirmishes only; network games and campaigns are out of scope.
 
 ## Terms
 
@@ -46,6 +47,11 @@ same tick. How many ticks run per second is S-0201, and what each object does in
   and give no orders in this sense.
 - **Projectile.** The object that carries a shot from the firer to the target or impact point and
   applies the shot's warhead where it detonates. For some weapons nothing is drawn for it.
+- **House update.** A house's share of the once-per-tick work on house-wide matters, distinct
+  from the turns of its objects and from the updates of its production lines. Claim 8 places it
+  after the turn pass and the production-line updates of the same tick, and before that tick's
+  orders; row 7 of **State and ordering** names this part of the tick. The topic specs own what
+  each house update does.
 - **Production line.** One of a house's production processes: the item it is building, its progress,
   whether it is on hold, and its queue. The production specs own how many lines a house has and
   what a line does; this spec places the lines' update in the tick.
@@ -80,7 +86,8 @@ same tick. How many ticks run per second is S-0201, and what each object does in
   Terms, and the *counter* in its common measurement setup. The *chrono-flash* action is as in
   S-0201, scenario T6.
 - **Infantry-death kind, *die-1* entry.** As in S-0107, claim 17.
-- **Single-player game.** As in S-0201: a skirmish or a campaign mission.
+- **Single-player game.** As in S-0201: a skirmish or a campaign mission. Only skirmishes are
+  covered here.
 - **Cycle.** As in S-0201: the unit of real time in which the original runs a game. A cycle that is
   not frozen takes the player's input and then runs one tick.
 
@@ -94,9 +101,11 @@ same tick. How many ticks run per second is S-0201, and what each object does in
    after in the same tick.
    - **Draw order.** Every part that takes draws from the scenario random stream (S-0202), or can
      take them, has a fixed place relative to every other such part, and the table links every two
-     of them. Each draw shifts every later draw of the stream (S-0202, claim 10), so running such a
-     part at another place, or swapping two of them, changes all later random outcomes of the game.
-     That is the observable consequence of these places, even where no other is known. The parts
+     of them. Moving or swapping drawing parts changes which part receives which raw values
+     (S-0202, claim 10). This can change their outcomes and, when their draw counts depend on those
+     outcomes, later outcomes too. It need not change the final stream state of the tick: swapping
+     two fixed-length groups consumes the same total number of raw values. The consequence to
+     test is the assignment of values to outcomes, not merely the tick's total draw count. The parts
      that draw or can draw are rows 1 to 3 and 5 to 16. Each of them holds its place in the
      original's sequence, so that whatever draws they take come in this order: the polling of map
      triggers (row 1), resource growth and spread (row 9), planted bombs (row 2),
@@ -106,18 +115,41 @@ same tick. How many ticks run per second is S-0201, and what each object does in
      and the orders (row 8). Inside a part that holds several members (several teams, disc lasers,
      radiation fields, houses), the members take their draws in the order the row states. Within a
      part, the spec of the topic owns which draws are taken; this spec owns only where the part
-     stands. For teams and for the decisions of computer-controlled houses, which belong to the
-     original's own computer player and not to our engine's (Terms, *Order*), the place fixes only
-     where our engine's equivalent work takes its draws.
-     - Backing: `unmeasured`. S-0202's state recorder reads the scenario random stream at the end
-       of a tick, so it shows how many draws a tick took but not their order among its parts.
-       Telling that order needs a tick in which two parts draw and in which each part's outcome
-       identifies its own draws; no setup is known that gives this for a single link without
-       replaying a whole game from an exact seed.
+     stands. The teams and computer-player decisions describe the original only. Our AI uses
+     normal orders under S-0213 and the glossary's *AI house* rule; this table does not require a
+     replacement team system or require AI decisions to draw during row 11 or row 7.
+     - Backing: `measurable` for the relative draw order of rows 1, 5 and 8 (scenario O13).
+       The remaining relative draw places, and the member orders within rows 9 to 16 and 7,
+       are `unmeasured` here, with the following specific limits. This does not mean that the
+       permitted random-state recorder cannot check draw order. It supplies the raw values.
+       Identifying which effect used them requires a phase-specific outcome and a complete draw
+       description, as O13 demonstrates.
+       - Rows 2 and 3: O10 times the deaths but does not identify the bomb's or storm's complete
+         animation and damage draw groups. It therefore tests neither their draw order relative
+         to each other nor their places relative to resource work and disc lasers.
+       - Row 9: no scenario here aligns a resource growth or spread update with a second drawing
+         part and predicts both complete draw groups. Resource timing and draws remain owned by
+         S-0401; its isolated tests do not establish this cross-part order.
+       - Rows 10, 13 and 14: no drawing case is established here. Their places are precautionary
+         fidelity constraints, not claims that a draw occurs every tick or even occurs at all.
+         A stream record with no draw cannot distinguish their positions.
+       - Row 11 and the computer-decision draws in row 7: the original's team and strategy
+         systems are outside scope. No test script predicts their decisions and complete draw
+         groups; our AI's ordinary orders cannot stand in for those groups in an oracle test.
+       - Rows 12, 15 and 16: no phase-specific draw probe is specified here for a disc laser,
+         blast ring or crate reappearance. Their feature specs must establish the damage timing,
+         creation effects or crate-placement choices needed to allocate raw values to these rows.
+       - Row 6 relative to row 7: a production update has no established draw in its own work.
+         A queued creation can draw, but no scenario here aligns that creation with an identified
+         house-update draw. O7 tests the credit and hold consequences, not this draw comparison.
+       These are limits of the proposed scenarios, not a restriction on recorder access or a
+       requirement to choose the oracle's seed. Each untested place stays an explicit fidelity
+       rule pending a discriminating scenario; it is not reported as confirmed by O13.
      - Confidence: high for the sequence itself; medium that rows 12 and 15 take their draws only
        through the damage, animations and objects they create (not every path was traced); low
-       that rows 6, 10, 13 and 14 take draws at all. None was found in their own update, but their
-       work runs through paths that were not traced in full, so they keep the original's place.
+       that rows 6, 10, 13 and 14 take draws in their own updates at all. None was found in their
+       own update, but their work runs through paths that were not traced in full, so they keep
+       the original's place.
    - **Row 1, the polling of map triggers, comes before the turn pass.** Row 1 is the per-tick raise
      of every polled tag (S-0011, claim 6), which also owns how the raise works. A trigger action
      that this polling sets off (for example one that destroys an object) takes effect before any
@@ -169,8 +201,10 @@ same tick. How many ticks run per second is S-0201, and what each object does in
      This freedom covers only work that takes no draws from the scenario random stream. Work that
      another spec adds and that takes such draws needs a place in the table, set by its owning spec
      in the original's order.
-     - Backing: `unmeasured` here for the existence of such work in the original and for its taking
-       no draws; each owning spec tests its own part
+     - Backing: the existence and effects of each item use its owning spec's backing. The
+       aggregate assertion that none of these paths draws is `unmeasured` here: no finite
+       quiet-map run exercises every condition and effect of all the listed work, so a zero
+       draw count would confirm only the tested paths, not this whole exclusion.
      - Confidence: high that the original does such work once per tick outside any object's turn,
        medium that it takes no draws (none was found, but not every path was traced)
 
@@ -182,11 +216,12 @@ same tick. How many ticks run per second is S-0201, and what each object does in
    turn), and neither do overlays, smudges or other terrain objects. An object out of play takes no
    turns. A passenger of an open-topped transport stays in play while it is inside, so it does take
    turns (claim 3).
-   - Backing: `measurable` in part (scenarios O1 and O3 for infantry, vehicles and buildings,
-     scenario O5 for open-topped passengers). `unmeasured` for the other kinds. The turn of an
-     animation, a particle system, a beam or a terrain object has no effect of its own that a
-     recorder can time against other turns. The one indirect route, the turn that the end of an
-     animation costs the next object (claim 10), needs to know where the animation stands in the
+   - Backing: `measurable` in part (scenarios O1 and O3 for infantry, vehicles, buildings and
+     projectiles, scenario O5 for open-topped passengers, O13 for a sprite animation's turn).
+     `unmeasured` here for aircraft, voxel animations, particle systems, beams, searchlights and
+     terrain objects: no scenario here isolates their turn against another object's turn. The
+     indirect route through an animation's removal skip (claim 10) needs to know where that
+     animation stands in the
      update order. For the animations a shot or a death creates, that depends on whether the
      animation enters play before or after the projectile or object that comes with it, which is
      not established, so no setup can yet predict which object loses its turn.
@@ -250,8 +285,10 @@ same tick. How many ticks run per second is S-0201, and what each object does in
      after its own turn: claim 11's backing (`unmeasured`).
    - Confidence: high
 
-5. **Shots are resolved in the projectile's own turn.** A shot's damage is applied at the moment
-   its projectile detonates, during the projectile's own turn, to every object the warhead reaches.
+5. **Projectile shots are resolved in the projectile's own turn.** A projectile shot's damage is
+   applied at the moment its projectile detonates, during the projectile's own turn, to every
+   object the warhead reaches. This is not a rule for damage without an in-play projectile,
+   such as a death weapon, planted bomb, storm bolt or the beam and disc laser cases below.
    There is no separate damage step later in the tick. A projectile that detonates leaves play in
    that same turn. A projectile fired in tick *n* takes its first turn in tick *n* (claim 4), unless
    a removal costs it that turn (claim 10), in which case its first turn is in tick *n* + 1. The
@@ -269,18 +306,18 @@ same tick. How many ticks run per second is S-0201, and what each object does in
      later in the update order is hit in tick *n* and the earlier one in tick *n* + 1. With the
      switch of claim 10 off, both are hit in tick *n*.
      - Backing: `measurable` (scenarios O1, O3 and O8)
-     - Confidence: high for the rule; medium that a projectile with no visible flight always
-       detonates on its first turn
+     - Confidence: high for the rule; the first-turn detonation conditions are owned by S-0306
    - **(c) Projectiles with a flight.** A projectile with a longer flight detonates in a later
      tick, in its own turn, and leaves play in that turn. That detonation is a removal like any
      other for claim 10.
      - Backing: `measurable` (scenario O3, variant e)
      - Confidence: high
-   - **(d) Detonation after an animation.** Some projectiles first start an animation where they
-     arrive and detonate in a later turn, once that animation has ended.
-     - Backing: `unmeasured`. Which property of a projectile selects this behaviour is not
-       established, so no test projectile can be made to show it. The combat specs own it.
-     - Confidence: low
+   - **(d) Detonation after an animation.** S-0306 claim 25 owns the nuclear-warhead case:
+     when its waiting animation type exists, the projectile starts that animation and detonates
+     in its first turn after the animation ends. When the type is absent it detonates without
+     that wait. Neither case creates a separate damage phase.
+     - Backing: `measurable` (S-0306 scenario P19)
+     - Confidence: high for the selection and wait, as S-0306 claim 25
    - **(e) Beam and wave weapons.** A weapon that fires a travelling beam or wave instead of a
      projectile applies its damage in the beam's own turns, while the beam lasts.
      - Backing: `unmeasured`. Which weapons fire such beams, and how often a beam deals damage,
@@ -339,9 +376,9 @@ same tick. How many ticks run per second is S-0201, and what each object does in
      leaves play when it dies, which is at the latest when the object itself leaves play. A
      passenger of an open-topped transport is in play (claim 3), so each one that dies is one more
      removal for claim 10, under the same condition as any other. A passenger that gets out
-     instead does not leave play: one of an open-topped transport is back on the map and keeps its
-     place in the update order, as when it gets out by itself (claim 3), so it is no removal; any
-     other enters play then (claim 4). Passengers inside an object that is not open-topped are out
+     instead, if it was in an open-topped transport, stays in play: it is back on the map and
+     keeps its place in the update order, as when it gets out by itself (claim 3), so it is no
+     removal. Any other escaping passenger was out of play and enters play then (claim 4). Passengers inside an object that is not open-topped are out
      of play, so their deaths are no removals.
      - Backing: `measurable` (scenario O8, variant c against variant b for passengers that die, and
        variant f against variant c for passengers that get out)
@@ -364,7 +401,8 @@ same tick. How many ticks run per second is S-0201, and what each object does in
    is the draw order of claim 1: carrying out an order can take draws from the scenario random
    stream (for example by creating objects or firing a superweapon), and so can a house's update.
    - Backing: `measurable` (scenario O2 for the turn pass; scenario O7, part C, for the production
-     lines); for the place after the houses, claim 1's draw-order backing (`unmeasured`)
+     lines; O13 for the drawing order after row 5); for the place after the houses, claim 1's
+     row-7 draw-order backing (`unmeasured`)
    - Confidence: high for the turn pass and for the place after the houses; medium for the
      production lines
 
@@ -481,6 +519,9 @@ labels of revision 2, and rows 1 to 8 those of revision 5, so that other specs c
 Every two parts that take draws from the scenario random stream are linked, so their order is
 total (claim 1, draw order). Following the "Comes after" links, the drawing parts stand in the
 order 1, 9, 2, 10, 11, 12, 3, 13, 14, 5, 15, 16, 6, 7, 8, which is the order of their draws.
+Claim 1 explicitly separates the measurable links from the unmeasured fidelity constraints.
+The table does not imply that all draw places have measurement scenarios. Row 11 and the
+computer-strategy work within row 7 describe the original only, not our AI's order interface.
 
 | Row | Part | Comes after | Observable consequence of its place | Claim |
 |---|---|---|---|---|
@@ -545,8 +586,10 @@ entries (claim 3), whose format S-0009 owns:
 ## Measurement scenarios
 
 **Common setup.** All scenarios run under the glossary's *measurement setup*, as skirmish games on
-purpose-made maps, at game speed index 6. The speed does not change the results, and the slowest
-speed makes manual orders easiest.
+purpose-made maps, at game speed index 6, with director and mods off except the named test data.
+The slowest speed makes manual orders easiest. The ordering rules do not depend on speed.
+sequence durations can depend on it under the glossary's speed-normalised-delay rules, so the
+scenarios' timing expectations use the stated index.
 - *Recorder.* At the end of every tick the *recorder* reads, without changing anything: the tick
   number; for the named objects their position, health and presence and the tick in which a
   weapon's delay between shots starts; a production line's progress and whether it is on hold; the
@@ -987,14 +1030,65 @@ speed makes manual orders easiest.
   U's removal did not count because U had missed its turn. Both hit in tick *c* falsifies the skip
   itself. Any other pattern is recorded and sends claim 10 back for review.
 
+**Scenario O13: assigning random draws to parts of one tick (claim 1, rows 1, 5 and 8).**
+- *Setup:* the common flat-map skirmish setup, with crates off, no resource cells or spawning
+  terrain, no combat, and one distant bystander computer player. Named test data consists of the
+  map's trigger and rules overrides and a temporary test art file defining three non-bouncing,
+  non-normalised animation types with no particles, damage, smudges, resource chain reactions or
+  other start, middle or end effects. Animation A is played by an elapsed-time trigger in row 1
+  of tick *n*. Animation B is started by an earlier trigger and switches to follow-up type C in
+  its own turn in tick *n*, under S-0109 claim 15. Choose fixed playback settings for B in a pilot
+  run so that its switch falls on a positive multiple of 15 ticks; set A's elapsed-time parameter
+  to that tick divided by 15. A and C each have a descending random-rate pair that converts to a
+  stage-delay range of 1 to 900 ticks (S-0109 claim 3). Neither has any further random delay or
+  follow-up switch during the observation. A human house owns the powered factory building and
+  prerequisites for a test infantry type, with ample credits and no active production. The test
+  infantry has no creation effects beyond its creation draw and any initial idle-timer draws
+  specified by S-0107. The building and the idle map objects have no random animation effects.
+- *Tool and observable:* a read-only state recorder, extending the common recorder to read the
+  scenario stream's seed and full state before and after each tick, A's and C's chosen stage
+  delays, B's current animation type, and the start of production. Reconstruct the raw values
+  between the recorded states using S-0202, including rejected values in ranged draws. Only
+  reads and ordinary scripted mouse input are used: no seed setting, injected logging or
+  suspension of the oracle. This is a recorder proposal, not a change to an existing harness.
+- *Controls:* first run A alone, B's switch alone, and the production-start order alone, five
+  times each. Predict their complete draw groups from S-0109 claim 3, S-0202 claim 10 and S-0107.
+  Check both the count and the chosen delays, and check quiet intervals with none of the three
+  effects. If controls reveal an unexplained draw group or a creation effect not accounted for
+  by those specs, this setup is inconclusive until that effect is identified; it is not evidence
+  for or against a phase order. The original chooses a new seed in each run; controls compare
+  predictions from each run's own recorded state, not results from different seeds.
+- *Procedure, part A:* let the row-1 creation of A and B's row-5 switch coincide in tick *n*,
+  giving no orders. From the state before *n*, predict the two ranged draws in order A then C
+  and also in order C then A. A run is discriminating only when those predictions differ in at
+  least one labelled delay. Record all non-discriminating runs as such.
+- *Expected, part A:* A's chosen delay uses the first ranged draw, and C's the next, with exactly
+  their combined draw count. *Falsified if:* a discriminating run matches C then A instead, or
+  the observed delays match neither prediction despite the controls accounting for all draws.
+- *Procedure, part B:* omit A's trigger, keep B's row-5 switch, and use scripted input to start
+  one infantry production in the cycle of tick *n*. Count only a run whose production starts in
+  tick *n* and whose B switches to C in tick *n*. Predict C's ranged draw followed by the
+  production-creation group, and the reverse order. Count as discriminating only when the
+  predicted C delays differ. No object is released from the factory during the counted tick.
+- *Expected, part B:* C receives the first ranged draw, before the production-start order's
+  creation group, with exactly the combined count. *Falsified if:* a discriminating run matches
+  the reverse allocation or matches neither predicted C delay despite fully accounted controls.
+- *Runs and validity:* obtain 20 discriminating runs of each part, at most 100 attempts per part.
+  The counted tick is *n*. Apply the common void rule, with A, B and C explicitly named objects,
+  and also void a run when an unrelated named effect is active or the bystander acts on the test
+  area. If fewer than 20 runs qualify, that part is inconclusive. Unexpected stream consumption
+  that survives the control checks is reported for investigation, never silently allocated to a
+  row. Part A tests row 1 before row 5, part B tests row 5 before row 8, and together they test
+  row 1 before row 8. Neither part confirms the untested rows listed in claim 1's backing.
+
 ## Open questions
 
 - Network games are out of scope here, as in S-0201 (claim 13) and S-0202 (claim 12). They run the
   same parts of a tick plus some of their own, and take the orders of every player. A future
   multiplayer spec owns them, including their extra draws from the scenario random stream.
-- Whether a projectile with no visible flight always detonates on its first turn, or can need a
-  second one at long range, is not traced in full (claim 5). Scenarios O1, O3 and O8 settle the
-  cases they use.
+- S-0306 owns the arrival and detonation conditions, including invisible projectiles and the
+  nuclear wait. Scenarios O1, O3 and O8 require first-turn detonation for their test weapons and
+  check it in pilot runs; they do not establish it for every weapon.
 - Whose turn removes an infantry unit when its death sequence completes is not traced (claim 6).
   Scenario O9 tests the unit's own turn.
 - Whose turn performs boarding, the boarding unit's or the transport's, is not traced, and neither
@@ -1033,10 +1127,11 @@ speed makes manual orders easiest.
   might take, draws from the scenario random stream, in the original's sequence, and limits the
   freedom to place other once-per-tick work to work that takes no draws. Rows 9 to 16 are new. Some
   of them (teams, the decisions of computer houses inside row 7) belong to the original's computer
-  player, which our engine replaces; for those the rows fix only where our engine's equivalent work
-  takes its draws, since the draws themselves cannot match the original. Four rows (6, 10, 13 and
-  14) are placed although no draw was found in them, because their work was not traced through
-  every path. The alternative is to release them until a draw is shown. Please confirm.
+  player, which our engine replaces; those portions describe original scheduling only. Our AI
+  still acts through normal orders, not through those rows. Four rows (6, 10, 13 and 14) are
+  placed although no draw was found in their own updates, because their work was not traced
+  through every path. The alternative is to release them until a draw is shown. Please confirm
+  retaining the unmeasured fidelity constraints; O13 tests only rows 1, 5 and 8.
 - **Removal condition (revision 5).** The scrub of revision 4 found that claim 10 stated its
   condition two ways. Revision 5 keeps one: a removal counts when the removed object is the object
   taking its turn or stands before it in the update order, whether or not it took its turn in this
@@ -1048,18 +1143,24 @@ speed makes manual orders easiest.
     its passengers with it; S-0312 claims 10, 12, 15, 16, 21 and 24 have exceptions. Claim 6 now
     states the general rule and points to S-0312 for the exceptions, which S-0312 owns. Scenario
     O8 gives W1 the crash flag in variants b and c, so that its passengers die with it as the
-    scenario needs, and adds variant f, in which they get out. S-0312's sentences "this refines
-    S-0203 claim 6b" and "6e, which takes every passenger with a destroyed object" now describe an
-    older revision; S-0312's owner may drop them at its next revision. Claim 6 rates the general
-    rules of points (a) and (b) high, after a fresh trace: a destroyed building that is neither
+    scenario needs, and adds variant f, in which they get out. S-0312's sentence "This refines
+    S-0203 claim 6b" remains valid. Its claim-12 description of claim 6e as taking every passenger
+    with a destroyed object describes older wording; S-0312's owner must update that
+    cross-reference in this review round to say that claim 6e refers to S-0312 for passenger
+    death or escape, and claim 3 here owns open-topped passengers' in-play status. S-0312 claim 1
+    must also qualify its statement that death effects share an object's turn: deaths from
+    out-of-turn effects share that effect's place in the tick, not a turn (rows 2, 3 and 12 here).
+    Claim 6 rates the general rules of points (a) and (b) high, after a fresh trace: a destroyed
+    building that is neither
     exploding nor being sold leaves play at the moment of the damage. S-0312 claim 21 rates the
     same rule low, and its owner may raise it.
-  - S-0011, S-0201, S-0202 and S-0213, cited above, are drafts of the same batch.
+  - S-0011, S-0201, S-0202 and S-0213, cited above, are approved specs; where a newer draft exists,
+    this revision has also checked that draft.
   - S-0107 (approved), claim 17, is assumed by scenarios O8, O9 and O12: row 8 of its table removes
     a killed unit at once, infantry-death kind 1 reaches *die-1* through row 5, and a death request
     is turned down when the *die-1* entry has no image frames, which is why the test infantry type
     needs frames there.
-  - The trigger words used in claims 1 and 8 and scenarios O6 and O7 come from the S-0011 draft.
+  - The trigger words used in claims 1 and 8 and scenarios O6 and O7 come from S-0011.
     *Tag* and *raise* are defined in its Terms, and so is the trigger time unit of 15 ticks behind
     "elapsed time *v*" (tick 15 × *v*). The *counter* is defined in its common measurement setup.
   - S-0201 cites rows 1 and 4 and claims 7 and 9 of this spec. Those labels and subjects are kept.
@@ -1067,8 +1168,6 @@ speed makes manual orders easiest.
     step, which is the part S-0201 means, so the citation still resolves.
   - S-0213 cites claim 8 for "the production lines of a tick are updated before that tick's
     orders". Claim 8 keeps that statement, now measurable (scenario O7, part C).
-  - S-0213's open-questions line saying that claim 7 of this spec applies one tick's orders in the
-    order given is out of date: claim 7 leaves the order among one tick's orders to S-0213, claim 3.
   - Revision 6 fixes again the orders after the houses' updates (claim 7), the houses in house
     order and after the production lines (claim 8), for the draw order of claim 1. S-0213's claim 3
     fixes its own order between houses' orders as a rule of our engine; that is unaffected.
@@ -1083,5 +1182,5 @@ speed makes manual orders easiest.
     processing of orders" of this spec's table. A computer house that starts production does so in
     its own update, so row 7 belongs in that list too. That is for S-0202's owner; nothing here
     depends on it.
-  - S-0213 cites revision 5 of this spec. Its citations of claims 7 and 8 still hold; claim 7 now
-    also places the orders after the houses.
+  - S-0213's citations of claims 7 and 8 still hold; claim 7 also places the orders after the
+    houses.

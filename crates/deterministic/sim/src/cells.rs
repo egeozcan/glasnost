@@ -22,6 +22,57 @@ pub mod position {
     pub const SIDES: [u8; 3] = [RIGHT, LEFT, BOTTOM]; // spec: S-0208 Terms (side positions)
 }
 
+/// The bridge axis of a cell (S-0212 Terms).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Axis {
+    /// No axis.
+    #[default]
+    None,
+    /// Along cell x.
+    X,
+    /// Along cell y.
+    Y,
+}
+
+/// A bridge link (S-0212 Terms and claim 3): a bridge span of S-0010 claim
+/// 25 with its two end cells.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BridgeLink {
+    /// The first end: the span's start cell.
+    pub first: CellXY,
+    /// The second end: the span's far end.
+    pub second: CellXY,
+    /// Whether the link's line runs along cell x (a span running east);
+    /// otherwise along cell y (a span running south).
+    pub along_x: bool,
+    /// Whether the link is enabled (S-0212 claim 3).
+    pub enabled: bool,
+}
+
+impl BridgeLink {
+    /// Whether `c` lies within `k` cells of the link (S-0212 Terms): between
+    /// the two end cells along the line, both included, and at most `k`
+    /// cells to the side of it.
+    pub fn within(&self, c: CellXY, k: i32) -> bool {
+        let (a, b, side, along) = if self.along_x {
+            (self.first.x, self.second.x, c.y - self.first.y, c.x)
+        } else {
+            (self.first.y, self.second.y, c.x - self.first.x, c.y)
+        };
+        (a.min(b)..=a.max(b)).contains(&along) && side.abs() <= k
+    }
+
+    /// The signed distance by which `c` lies to the side of the first end
+    /// across the line.
+    pub fn side(&self, c: CellXY) -> i32 {
+        if self.along_x {
+            c.y - self.first.y
+        } else {
+            c.x - self.first.x
+        }
+    }
+}
+
 /// What marked a standing position.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Marker {
@@ -104,10 +155,14 @@ pub struct Cells {
     /// Whether a cell is a high-bridge cell, with a bridge deck (S-0211
     /// claim 15).
     pub deck: Vec<bool>,
-    /// The bridge-body mark of each cell (S-0010 Terms and claim 25): clear
-    /// after map load, set at game start on the bands of low bridge spans.
-    #[serde(default)]
+    /// The deck-entry mark of each cell (S-0212 Terms).
+    pub deck_entry: Vec<bool>,
+    /// The bridge axis of each cell (S-0212 Terms).
+    pub bridge_axis: Vec<Axis>,
+    /// The bridge-body mark of each cell (S-0010 Terms, claim 25).
     pub bridge_body: Vec<bool>,
+    /// The bridge links, in creation order (S-0212 claim 3).
+    pub links: Vec<BridgeLink>,
     /// Marking counter.
     pub mark_seq: u32,
     /// The owner of each cell's wall (S-0210 claim 14); `None`: no owner.
@@ -147,7 +202,10 @@ impl Cells {
             occ: vec![[Occupancy::default(); 2]; n], // spec: S-0209 Terms (two cell layers)
             lists: vec![[Vec::new(), Vec::new()]; n],
             deck: vec![false; n],
+            deck_entry: vec![false; n],
+            bridge_axis: vec![Axis::None; n],
             bridge_body: vec![false; n],
+            links: Vec::new(),
             mark_seq: 0,
             wall_owner: vec![None; n],
             anim_started: vec![false; n],
@@ -158,17 +216,42 @@ impl Cells {
     /// An overlay of `overlay` placed in `c` marks its high-bridge cells
     /// (S-0211 claim 15): for a high-bridge overlay index, the cell one step
     /// against its marking direction d, its own cell, and the cells one and
-    /// two steps along d. Marking looks at nothing in the marked cells.
+    /// two steps along d. Marking looks at nothing in the marked cells. The
+    /// same four cells get the overlay's bridge axis, and the first three the
+    /// deck-entry mark, which the fourth loses (S-0212 Terms); called in
+    /// placement order, the overlay placed last decides.
     pub fn mark_high_bridge(&mut self, c: CellXY, overlay: u8) {
         let Some(&(_, (dx, dy))) = HIGH_BRIDGE_OVERLAYS.iter().find(|h| h.0 == overlay) else {
             return;
         };
+        // spec: S-0212 Terms (bridge axis: along cell x for marking direction 0, along cell y for direction 6)
+        let axis = if dx == 0 { Axis::X } else { Axis::Y };
         // spec: S-0211 claim 15 (four cells: one step against d, its own, one and two steps along d)
         for k in [-1, 0, 1, 2] {
             if let Some(i) = self.idx(CellXY::new(c.x + k * dx, c.y + k * dy)) {
                 self.deck[i] = true;
+                self.bridge_axis[i] = axis;
+                // spec: S-0212 Terms (deck-entry mark set one step against d, on its own cell and one step along d; cleared two steps along d)
+                self.deck_entry[i] = k < 2;
             }
         }
+    }
+
+    /// Whether `c` is a high-bridge cell (S-0211 claim 15), a bridge cell
+    /// of S-0212.
+    pub fn is_bridge(&self, c: CellXY) -> bool {
+        self.idx(c).is_some_and(|i| self.deck[i])
+    }
+
+    /// Whether `c` is a bridge cell with the deck-entry mark (S-0212 Terms).
+    pub fn deck_entry_at(&self, c: CellXY) -> bool {
+        self.idx(c)
+            .is_some_and(|i| self.deck[i] && self.deck_entry[i])
+    }
+
+    /// The bridge axis of `c` (S-0212 Terms).
+    pub fn axis(&self, c: CellXY) -> Axis {
+        self.idx(c).map_or(Axis::None, |i| self.bridge_axis[i])
     }
 
     /// The map's footprint.

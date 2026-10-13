@@ -543,7 +543,7 @@ pub fn build_time(w: &World, house: HouseId, t: TypeRef) -> i32 {
             cost: p.cost,
             country,
             multiplier: p.multiplier,
-            power: super::power::power_fraction(w, house),
+            power: super::power::fraction(w, house),
             factories: factory_count(w, house, t),
             wall: t.kind == Kind::Building && p.wall,
         },
@@ -560,11 +560,11 @@ pub fn period(w: &World, house: HouseId, t: TypeRef) -> i32 {
     )
 }
 
-/// S-0403 claim 8: at each power re-evaluation of a house, every line of
-/// the house works out its step period again; the step under way keeps its
-/// period. S-0405's house update must call this whenever it works out the
-/// house's power (S-0405 claim 7).
-pub fn on_power_reevaluated(w: &mut World, house: HouseId) {
+/// The house has worked out its power again (S-0405 claim 11, called from
+/// `crate::econ::power::house_update`): every line of the house works out
+/// its step period again from the power fraction `crate::econ::power::fraction`
+/// (S-0403 claim 8); the step under way keeps its period.
+pub fn power_changed(w: &mut World, house: HouseId) {
     for li in 0..w.econ.lines.lines.len() {
         let l = &w.econ.lines.lines[li];
         if l.house != house {
@@ -965,6 +965,7 @@ pub fn part(w: &mut World) {
         release(w, house, t);
     }
 }
+
 
 /// Applies a build order (S-0404 claim 3).
 pub fn build(w: &mut World, house: HouseId, t: TypeRef) {

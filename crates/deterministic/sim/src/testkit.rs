@@ -101,10 +101,13 @@ pub fn catalogue() -> Arc<TileCatalogue> {
         })],
         variants: 0,
         anim: None,
+        no_burrowing: false,
     };
     Arc::new(TileCatalogue {
         tiles: (0..=4).map(tile).collect(),
         roles: Roles::default(),
+        // Every tile's tileset allows new resource (S-0010 claim 16).
+        allow_tiberium: vec![true; 5],
     })
 }
 
@@ -535,6 +538,7 @@ pub fn game_with_non_players(ruleset: &Ruleset, size: i32, seed: u32) -> World {
             human: false,
             start: None,
             role,
+            ai: false,
         });
     }
     crate::load::new_game(rules, &empty_map(size), catalogue(), &s)

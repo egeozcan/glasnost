@@ -15,6 +15,7 @@ use glasnost_map::Map;
 use glasnost_sim::rules::SimRules;
 
 use glasnost_render::palette::{ANIM_PALETTE_FILE, PaletteQuirks, PaletteState};
+use glasnost_render::voxel::VoxelCanvas;
 use glasnost_vfs::Vfs;
 use glasnost_vfs::theater::Theater;
 
@@ -50,9 +51,22 @@ pub struct Loaded {
     pub rules: Option<Arc<SimRules>>,
     /// The cells after loading, when the game was set up.
     pub cells: Option<glasnost_map::CellGrid>,
+    /// The voxel buffer the scene's fresh voxel draws left, when no live
+    /// game holds it (S-0105 claim 34, S2).
+    canvas: VoxelCanvas,
 }
 
 impl Loaded {
+    /// The voxel buffer and depth-buffered mode as this map's drawing left
+    /// them, for the next map loaded in the program: S-0105 claim 34 and
+    /// S2 keep both across games.
+    pub fn voxel_canvas(&self) -> VoxelCanvas {
+        match &self.live {
+            Some(live) => live.voxel_canvas().clone(),
+            None => self.canvas.clone(),
+        }
+    }
+
     /// The scene inputs and the live game, borrowed apart.
     pub fn split(&mut self) -> (Inputs<'_>, Option<&mut Live>) {
         (
@@ -91,13 +105,17 @@ async fn read_named(vfs: &Vfs, name: &str) -> Option<Vec<u8>> {
 /// Loads `bytes` (a map file found at `origin`) from the install mounted in
 /// `vfs`, whose search order is built. With `play`, the sandbox game starts
 /// too; when it does, the scene shows every owner's objects (the sandbox
-/// places them all), whatever `options.skirmish` says.
+/// places them all), whatever `options.skirmish` says. `canvas` is the
+/// voxel buffer earlier games of the program left ([`Loaded::voxel_canvas`];
+/// [`VoxelCanvas::new`] at program start), which S-0105 claim 34 and S2 keep
+/// across games.
 pub async fn load(
     vfs: &mut Vfs,
     bytes: Vec<u8>,
     origin: String,
     options: &Options,
     play: bool,
+    canvas: VoxelCanvas,
 ) -> Loaded {
     let GameInputs {
         map,
@@ -178,13 +196,15 @@ pub async fn load(
         rules: rules.as_deref(),
         cells: cells.as_ref(),
     };
-    let (mut built, painter) = build::build_parts(&inputs, started.is_ok());
+    let (mut built, painter) = build::build_parts_with(&inputs, started.is_ok(), canvas);
+    let mut canvas = VoxelCanvas::new();
     let live = match started {
         Ok(s) => Some(Live::new(&inputs, &mut built, painter, s)),
         Err(e) => {
             if play {
                 problems.push(format!("the sandbox game did not start: {e}"));
             }
+            canvas = painter.canvas().clone();
             None
         }
     };
@@ -203,5 +223,6 @@ pub async fn load(
         live,
         rules,
         cells,
+        canvas,
     }
 }

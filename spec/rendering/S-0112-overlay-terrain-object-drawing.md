@@ -2,13 +2,13 @@
 id: S-0112
 title: Overlay and terrain object drawing
 topic: rendering
-revision: 6
+revision: 7
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-12
+approved-on: 2026-10-13
 measurements: []
-requests: [Q-0021]
+requests: [Q-0012, Q-0021]
 supersedes: []
 ---
 
@@ -379,8 +379,9 @@ and *quirk switch*.
 8. **Overlay shadows.** Every cell that holds an overlay also draws the shadow, if any, that the
    table below gives it, in every game and at every detail level, cells with a veinhole marker
    overlay included.
-   The depth bias, the drawing order and the darkening are S-0102's (claims 13, 16 and 26). The shadow's sprite and
-   image frame follow the first row of this table that the cell meets, with *N* the frame count of
+   S-0102 claim 13, row "shadow image frame of an overlay", owns the shadow's depth bias, flat
+   profile and depth writing; claims 16 and 26 own its drawing order and darkening. This claim owns
+   its sprite and image frame, which follow the first row of this table that the cell meets, with *N* the frame count of
    that sprite and *d* the overlay data value:
 
    | Precedence | Cell | Sprite of the shadow | Shadow image frame |
@@ -402,7 +403,7 @@ and *quirk switch*.
    from different sprites or image frames (`quirks.overlay_shadow_from_stored_type`).
    **Depth of every overlay shadow.** Whichever row above chose the sprite, an overlay shadow has
    one depth bias: −2 − 15 × *ℓ*<sub>s</sub> depth units, with the flat profile, and it writes depth
-   (S-0102 claim 13, last overlay row). It does not depend on the overlay's kind or flags (ore and
+   (S-0102 claim 13, row "shadow image frame of an overlay"). It does not depend on the overlay's kind or flags (ore and
    gems, walls, crates, rubble, bridge decks, the veinhole markers, any other flat or upright type),
    on the row of claim 1 that draws the body, on the slope, or on the 4 levels of a bridge deck. So:
    - the shadow of an upright type does not take the −15 of the upright body, and the shadow of a

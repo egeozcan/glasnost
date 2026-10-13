@@ -2,11 +2,11 @@
 id: S-0209
 title: Cell occupancy and crowding (capacity, entry outcomes, waiting, re-routing, scatter requests)
 topic: movement
-revision: 15
+revision: 16
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-10
+approved-on: 2026-10-13
 measurements: []
 requests: [Q-0019, Q-0020]
 supersedes: []
@@ -89,8 +89,9 @@ house's *firestorm*, the passability categories (*wall-like* among them) and the
     measurement.
 - **Cell layer.** A cell has a ground layer and, when it carries a high bridge, a bridge-deck layer.
   These are its cell layers. Every object in a cell belongs to one of them: an object on a bridge
-  deck to the deck layer, every other object to the ground layer. It is neither a rules layer nor a
-  render layer.
+  deck to the deck layer, every other object to the ground layer. This classification does not
+  mean every object is listed there: claim 13 excludes aircraft in flight from both lists. It is
+  neither a rules layer nor a render layer.
 
   *The cell layer that counts* for a neighbouring cell that is asked about depends on a *reference
   height level*, which goes with the mover and the situation:
@@ -98,10 +99,12 @@ house's *firestorm*, the passability categories (*wall-like* among them) and the
     own height level, that is, the height level of its cell, plus 4 while it is on a bridge deck,
   - a ground vehicle, in the check it makes as it begins a movement step (claim 5): its own height
     level, counted in the same way,
-  - a walker or a ground vehicle in its path costs (S-0212), in order targeting (S-0213, S-0214)
-    and in every other situation: not established (Open questions). It may be the mover's own
-    height level or the height level of the search layer (S-0212) of the pair the path search is
-    expanding.
+  - a walker or a ground vehicle in a path search: the height level of the pair being expanded,
+    its cell's height level plus 4 on its deck search layer, with the start-pair adjustment for
+    trains as S-0212 claim 7 gives it. The step starts from that pair's cell, not necessarily the
+    cell the mover currently stands in. S-0212 claims 7 and 10 own the search and its height rule,
+  - in order targeting (S-0213, S-0214) and other situations not listed above: not established
+    (Open questions).
 
   For an asked cell that carries a high bridge:
   - the objects listed are those of the deck layer when the reference height level differs from
@@ -118,9 +121,10 @@ house's *firestorm*, the passability categories (*wall-like* among them) and the
   switch is among the Questions for the project lead). A step between two cells whose height levels differ by 2, 3 or more than 4 is
   *blocked* by the height rule of S-0212 (claim 10) before the cell layer matters.
   - Confidence: medium for the two rules and for the walker's height level on its asking tick,
-    medium for the vehicle's at the start of a step, low for the uneven-ground case.
+    medium for the vehicle's at the start of a step, high for the path search's reference level
+    and start cell, low for the uneven-ground case.
   - Backing: `measurable` (scenario C22, parts a and b, for a deck over level ground; part c uses
-    the vehicle's case). `unmeasured` for the uneven-ground case: which ground a high bridge may span
+    the vehicle's case; S-0212 scenario P4, maps K and K2, for the path-search reference). `unmeasured` for the uneven-ground case: which ground a high bridge may span
     belongs to the bridge specs, and whether such a bridge can be built at all is not established,
     so no map is known that shows the case.
 - **Occupancy record.** For each cell layer, it holds:
@@ -970,13 +974,26 @@ rank* and *elite weapon*), *n*
     cell has not entered it yet: it enters on the tick on which its position moves into the cell,
     although its reservation there counts from the asking tick (claim 1).
 
-    This order is observable in three ways: which object a blocked walker attacks (claim 9), which
-    occupant decides when an override meets a *blocked* (claim 4), and the order of the random draws
-    of a cell-wide request (State and ordering).
+    An aircraft in flight is not listed in either cell layer: for an aircraft using ordinary
+    flight, a positive integer height above the terrain surface keeps it out of the cell's
+    lists. At height 0 above that surface it is listed in the ground layer. The surface is the
+    terrain height at its horizontal position (S-0106 claim 2), not the projected cell beneath its
+    drawn image.
+    Taking off removes its listing and landing adds it again. A render layer is not a cell layer.
+    Consequently an aircraft passing over an otherwise empty foundation cell does not block
+    building placement through S-0406 claim 3 (b)'s aircraft-list test; a landed aircraft does.
+
+    This order is observable in four ways: which object a blocked walker attacks (claim 9), which
+    occupant decides when an override meets a *blocked* (claim 4), the order of the random draws
+    of a cell-wide request (State and ordering), and which object wins a tie for smallest distance
+    in S-0207 claim 15's nearest-object choice (F8): the one listed first wins.
     - Backing: `measurable` (scenario C9 for the front and end rule and the map's order; scenario C18
-      for the override case; scenario C26, parts b and c2, for the moment a walker enters)
+      for the override case; scenario C26, parts b and c2, for the moment a walker enters,
+      S-0207 scenario D17 (d), runs 3a and 3b, for the nearest-object tie; scenario C29 for aircraft
+      listing)
     - Confidence: high for the front and end rule and for the moment a walking unit counts as
-      entering. Medium for the order among objects placed by the map.
+      entering and for the nearest-object tie. Medium for the order among objects placed by the
+      map and for aircraft listing.
 
 ### Entry outcomes for an aircraft
 
@@ -2581,6 +2598,26 @@ That moment is called the *window*. Common setup:
   *U*'s position leaves the cell, in (b) the first cell's flag clears at another point, or in (c)
   the flag stays set after *U* is gone.
 
+**Scenario C29: aircraft listing during flight (claim 13).**
+- *Setup:* a tiny flat skirmish map, game speed index 2, stock data, director and mods off, with
+  one human player and one bystander computer player kept outside the observed area. The observed
+  area contains an empty, explored and buildable foundation site within adjacency of the human
+  player's buildings, and an ordinary transport aircraft belonging to that player. Prepare a
+  completed ordinary building whose foundation fits that site.
+- *Procedure:* fly the transport over the site and issue a placement order while its horizontal
+  position is inside a foundation cell and its height above the terrain is positive. In a fresh
+  run, land it in that same foundation cell before issuing the placement order. In a third run,
+  land there, take off and repeat placement once its height becomes positive.
+- *Observable:* record the aircraft's horizontal position, integer height above terrain and the
+  placement-order tick with the read-only recorder, and whether the building enters play. Use
+  scripted input to align the order with the crossing; discard a crossing outside the foundation.
+- *Runs:* one valid run per part; void any run in which an unnamed bystander object enters the
+  observed area or acts on its objects, or the bystander is defeated before observation ends.
+- *Expected:* placement succeeds during flight and after takeoff, but fails while the aircraft
+  is landed. All other placement conditions must pass in each run.
+- *Falsified if:* the flying aircraft alone refuses placement, a landed aircraft allows it, or
+  the takeoff leaves a listing that still refuses placement after height becomes positive.
+
 ## Open questions
 
 - The exact list of behaviours that have a mission target in claim 4 belongs to the behaviour specs.
@@ -2600,11 +2637,10 @@ That moment is called the *window*. Common setup:
 - The underground locomotor's rule (claim 5, part 5b): which cells it makes *blocked*, the
   game-wide setting that turns it off, and the situations in which it applies belong to the specs
   of underground travel. Stock data gives no unit type that locomotor.
-- Which reference height level path costs (S-0212), order targeting (S-0213, S-0214) and the other
-  situations use, for a walker other than on its asking tick and for a ground vehicle other than in
-  its check at the start of a movement step, and so which cell layer of a high-bridge cell counts
-  for them (Terms, *cell layer*), was not established. Scenario C22 (a) and (b) would show a wrong
-  cell layer in path costs too: the walker would find no path past *X*.
+- Which reference height level order targeting (S-0213, S-0214) and other situations outside the
+  walking ask, vehicle step check and path search use, and so which cell layer of a high-bridge
+  cell counts for them (Terms, *cell layer*), is not established. Path-search queries use the
+  expanded pair's height level and cell, as S-0212 claims 7 and 10 give them.
 - Whether any situation asks for an entry outcome without a reference height level is not
   established. If one does, the original appears to list the objects of the deck layer of a
   high-bridge cell and to read the record of its ground layer (low confidence).

@@ -129,6 +129,7 @@ fn live_maps_move_and_draw() {
                 m.archive.clone(),
                 &Default::default(),
                 true,
+                Default::default(),
             )
             .await;
             let load_ms = t0.elapsed().as_millis();
@@ -405,6 +406,7 @@ fn live_maps_fight_and_draw() {
                 m.archive.clone(),
                 &Default::default(),
                 true,
+                Default::default(),
             )
             .await;
             let load_ms = t0.elapsed().as_millis();

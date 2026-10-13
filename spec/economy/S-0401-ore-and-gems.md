@@ -2,13 +2,13 @@
 id: S-0401
 title: Ore and gems (resource cells, bales and value, growth, spread, ore mines)
 topic: economy
-revision: 2
+revision: 3
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-11
+approved-on: 2026-10-13
 measurements: []
-requests: []
+requests: [Q-0046]
 supersedes: []
 ---
 
@@ -156,10 +156,7 @@ claim 4), which can take more than one raw draw. In addition:
 ### Growth and spread updates
 
 6. **Per-tiberium timers, and the order within a tick.** Each tiberium has a growth timer and a
-   spread timer. In every tick, while the map growth switch is on, the growth updates of all
-   tiberiums take effect before any of the tick's spread updates, each kind in the registration
-   order of the tiberiums: a spread update sees every stage change and list entry that the tick's
-   growth updates made, and its draws come after theirs. This is row 9 of S-0203 (growth first),
+   spread timer. In any tick when the map growth switch is on and both update kinds occur, the resulting cell stages, list entries, and scenario-stream draws are those of all tiberiums' growth updates followed by all tiberiums' spread updates. Within each kind, the observable results and draws follow tiberium registration order. Thus each spread update reflects the stage changes and list entries produced by that tick's growth updates, and its draws follow the growth-update draws. This is row 9 of S-0203 (growth first),
    which comes after the polling of map triggers and before planted bombs. A tiberium's update
    runs in a tick when its timer has run out: when the tick number minus the tick of its last
    update is at least its period. After an update the timer
@@ -241,15 +238,7 @@ claim 4), which can take more than one raw draw. In addition:
 
 9. **Spread update.** A spread update of a tiberium with *n* entries in its spread list takes one
    raw draw and works out *m* (Formulas F6): *m* is between 1 and 25 and grows with *n* × *s*. It
-   then takes entries one after another until it has made *m* attempts or the list is empty. The
-   result of an entry taken depends on *c*, the number of its cell's eight neighbours that are
-   germinable (claim 10) when it is taken, before its spread step:
-
-   | *c* | Result |
-   |---|---|
-   | 0 | the cell is unmarked; no new entry; no attempt is counted |
-   | 1 | one attempt is counted; the cell tries a spread step (below), whether or not it can still spread; no new entry; the cell stays marked |
-   | 2 or more | one attempt is counted; the cell tries a spread step (below), whether or not it can still spread; the cell is put back in the list with key 0, ahead of every entry with a positive key, and marked |
+   then takes entries one after another until it has made *m* attempts or the list is empty. Judge an entry using *c*, the number of its cell's eight neighbours that are germinable (claim 10) when it is taken, before its spread step. When *c* is 0, unmark the cell, discard the entry without adding another one, and count no attempt. When *c* is 1, count one attempt and try the spread step whether or not the cell can still spread; do not add another entry, and leave the cell marked. When *c* is 2 or more, count one attempt and try the spread step whether or not the cell can still spread; add the cell again, marked, with key 0, ahead of every entry with a positive key.
 
    Because a cell put back with key 0 goes ahead of every entry with a positive key and, among key-0
    entries, behind those added earlier (claim 14), it is taken again in the same update when no
@@ -421,6 +410,7 @@ claim 4), which can take more than one raw draw. In addition:
       damage.
     - (b) **The start event of an animation** (S-0109, claim 13): an animation whose type has the
       chain-reaction flag takes every bale of the cell it is in, so a resource cell there is emptied.
+      Claim 20 gives the accompanying effects and draws, including during map loading.
     - (c) **The middle event of an animation** (S-0109, claim 14; the craters of its claim 18):
       when the animation's height above the terrain is below 30 leptons, and its type has the
       crater flag and either no scorch flag or the scorch flag with a draw that does not choose the
@@ -497,6 +487,50 @@ claim 4), which can take more than one raw draw. In addition:
     - Backing: `measurable` (scenario E11)
     - Confidence: medium (that nothing restarts the timers at game start is inferred, not observed; the
       first game's tick-0 update depends on the tick number when the tiberiums are created)
+
+20. **Animation start-event resource chain reaction (Q-0046 Q2a).** The chain reaction is
+    enabled by the animation type's resource-chain-reaction flag and is suppressed for a
+    trigger-played animation (S-0109 claim 13). It acts on the cell containing the animation's
+    position, not necessarily the cell whose overlay created the animation (S-0009 claim 12).
+    The following applies during map loading as well as during play.
+
+    When that cell holds no resource at the time of the chain reaction, there is no resource
+    change, debris trial, debris selection or detonation, and the chain reaction takes **zero
+    draws**. This does not suppress the animation's other creation or middle-event draws.
+    When a start event also produces a middle event because μ = 0, that middle event's effects
+    and draws precede the chain reaction. Thus a crater that has already emptied the cell can
+    make the chain reaction take no draws (S-0109 claim 14 and claim 16c here).
+
+    When the cell holds resource of tiberium *T*, it is emptied as in claim 5. The draws of any
+    neighbour offers that add spread entries occur in step-direction order 0 to 7, before the
+    debris trial. There is no growth-list draw for the emptied cell (claim 18).
+    With *L* the length of *T*'s resource-debris animation list:
+    - *L* = 0: no debris draw and no debris animation.
+    - *L* > 0: one raw scenario-stream draw *r* tests whether |*r*| mod 3 = 0. The arithmetic
+      is signed 32-bit integer arithmetic, with remainder after division truncated toward zero,
+      as in F2 and S-0202's `quirks.random_magnitude_overflow`. For *r* = −2³¹ the remainder
+      is −2 with that switch on and 2 with it off; neither passes the trial.
+    - A passing trial takes one ranged scenario-stream draw *U*(0, *L* − 1), choosing that
+      list entry, then creates one animation of the chosen type at the source animation's
+      position with world height raised by 10 leptons. Its creation has no loop delay, repeat
+      factor 1 and no request for reversed play. Its creation draws and immediate start-event
+      effects are those of S-0202 claim 10 and S-0109; they come after the selection and before
+      the detonation below. A singleton list's selection takes no raw draw (S-0202 claim 4).
+      A failed trial takes no selection draw and creates nothing.
+
+    Whether or not debris was created, the emptied-cell case produces a detonation at the
+    source animation's position with the game-wide resource-explosion damage, the demolition
+    warhead, no source object and no source house. This detonation does **not** allow the
+    scanned-cell resource removal of S-0303 claim 17, so it makes no neighbour spread-offer
+    draws through that rule. S-0303 owns its other effects and conditional draws. There is
+    no separate chance draw for that detonation and no projectile explosion-animation selection
+    (S-0303 claim 21 belongs to projectiles). Therefore the total chain-reaction draw sequence
+    is the emptying's spread-offer draws, then the optional debris trial, optional selection
+    and selected animation's creation draws, then the detonation's draws. It is not a fixed
+    raw-draw count: ranged rejection and downstream effects can add draws.
+    - Backing: `measurable` (scenario E17)
+    - Confidence: high for the no-resource gate and direct draw conditions; medium for the
+      complete composed sequence during map loading until E17 is run
 
 ## Formulas
 
@@ -645,7 +679,11 @@ later in the tick. Harvesting, which takes bales, happens in harvesters' turns (
 | Rules, tiberium section, `Spread` | spread field *S* (F4) | integer | 0 |
 | Rules, tiberium section, `SpreadPercentage` | spread fraction *s* (F6) | decimal, as above | the double nearest 0.1 |
 | Rules, tiberium section, `Image` | image number (S-0112, claim 10) | integer | owned by S-0112 |
-| Rules, tiberium section, `Power`, `Color`, `Debris` | not used by this spec | — | — |
+| Rules, tiberium section, `Debris` | resource-debris animation list (claim 20) | ordered list of animation names | empty list |
+| Rules, tiberium section, `Power`, `Color` | not used by the resource amounts or direct draws in this spec | — | — |
+| Art, animation section, `TiberiumChainReaction` | resource-chain-reaction flag (claim 20; S-0109) | boolean | no |
+| Rules, `[CombatDamage]`, `TiberiumExplosionDamage` | resource-explosion damage (claim 20) | integer, damage units | 100 |
+| Rules, `[CombatDamage]`, `C4Warhead` | demolition warhead (claim 20; S-0303) | warhead name | none |
 | Rules, overlay section, `Tiberium` | tiberium flag of an overlay type (Terms, *resource cell*) | boolean | no |
 | Map, `[Basic]`, `TiberiumGrowthEnabled` | map growth switch of claim 4 | boolean | yes; a layer without the key keeps the value in force |
 | Map, `[SpecialFlags]`, `TiberiumGrows`, `TiberiumSpreads` | grows and spreads settings in a campaign mission only; ignored in a skirmish (claim 4) | boolean | — |
@@ -856,6 +894,34 @@ empties it). *Observable:* the tick at which the emptied cell becomes a B cell o
 *Expected:* within 10 ticks of the emptying (the cell joins A's list, period 10; an update takes
 entries whatever their keys). With `quirks.spread_offer_by_emptied_type` off the cell would join B's
 list and appear only at B's next update (about tick 2000). *Falsified if:* the new cell appears only near tick 2000.
+
+**E17. Start-event chain-reaction draws (claim 20; Q-0046 Q2a).** *Setup:* a purpose-made
+skirmish map, game speed 2, the usual human and bystander houses, director and mods off. Named
+art test data gives a tile animation the resource-chain-reaction flag, no particles, crater or
+scorch flags, no bouncing, and a sprite with μ > 0. Named map overrides set growth and spread
+fractions to 0 and the resource-explosion damage to 0, isolating the direct draws. Use the
+random-state recorder during map loading and a cell-content recorder at the first tick.
+*Procedure:* create that tile animation over (A) an empty cell, (B) a resource cell whose
+resource-debris list is empty, (C) the same resource cell with a singleton debris list, and
+(D) a two-entry list. Debris types have μ > 0 and no immediate effects. Account separately for
+each animation's stage-delay draw (S-0202). Repeat C and D until both passing and failing trials
+occur, at least 10 of each. *Expected:* A takes no chain-reaction draws or detonation and leaves
+the cell empty; B empties its cell and takes no direct chain-reaction draw; C and D empty the
+cell and take exactly one raw debris trial. A trial with |*r*| mod 3 ≠ 0 creates nothing. A
+passing C trial creates the sole debris animation, with no raw selection draw; D takes the
+ranged selection before its debris creation draws. Debris starts 10 leptons above the source.
+*Falsified if:* A advances the stream beyond the animation's independent creation draws, B takes
+a debris trial, or C or D deviates from those conditions or ordering.
+
+*Variants:* repeat during play using a weapon explosion animation with the same settings,
+subtracting its projectile and explosion-selection draws. Enable spreading on unmarked eligible
+neighbours in this variant: their claim-5 entry draws must precede the debris trial. Restore a
+nonzero resource-explosion damage and put a wall in its scanned cells: its S-0303 wall draws
+must follow debris creation. Finally use μ = 0 and a crater-only animation over a stage-0
+resource cell: the middle event empties the cell and the later chain reaction has no debris trial
+or detonation. Repeat the load cases with an overlay cell animation whose position, rather than
+its overlay cell, is over the test resource (S-0009 M6e). Any differing gate or draw order
+falsifies claim 20; unrelated middle-event draws are accounted for by their owning specs.
 
 ## Open questions
 

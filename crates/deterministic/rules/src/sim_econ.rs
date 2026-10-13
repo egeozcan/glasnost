@@ -122,6 +122,11 @@ pub struct EconFields {
     /// (S-0405 claim 13); absent: none.
     #[serde(default)]
     pub powers_unit: Option<String>,
+    /// Buildings: `Sight`, the sight field *S* in cells (S-0409 claims 4
+    /// and 8; infantry, vehicles and aircraft carry it in their own
+    /// section); absent: 0.
+    #[serde(default)]
+    pub sight: Option<i32>,
     /// Buildings: `Radar` (S-0410 claim 1, S-0409 claim 15); absent: no.
     #[serde(default)]
     pub radar: Option<bool>,
@@ -266,6 +271,17 @@ pub struct EconFields {
     /// Buildings: the art `ProductionAnimDamaged`, an animation type name as written (S-0402 Terms, claim 11); absent: none.
     #[serde(default)]
     pub production_anim_damaged: Option<String>,
+    /// Buildings: whether the type has a build-up sprite, from the art
+    /// `Buildup` name (S-0108 claims 1 and 5, Import mapping; S-0408 claims
+    /// 3 and 4); absent: no build-up sprite.
+    #[serde(default)]
+    pub buildup: Option<bool>,
+    /// Buildings: the image-frame count *N_b* of the build-up sprite (S-0108
+    /// claim 5: *n* = ⌊*N_b* / 2⌋ build-up frames); absent: unknown, which
+    /// the simulation reads as *n* = 0 (the importer does not count the
+    /// sprite's frames yet).
+    #[serde(default)]
+    pub buildup_frames: Option<i32>,
     /// Buildings: `DeployFacing`, the deploy facing *D* in 1/256 turn
     /// (S-0415 claims 5 and 10); absent: 128.
     #[serde(default)]
@@ -352,6 +368,14 @@ pub struct TiberiumType {
     /// `Image`, the image number (S-0112 claim 10).
     #[serde(default)]
     pub image: Option<i32>,
+    /// The image run (*P*, *F*, *S*) that the image numbers given by every
+    /// rules layer leave (S-0112 claim 10, Constants), worked out by the
+    /// importer from the key's history (the value 2 keeps an earlier *S*);
+    /// absent: worked out from `image` alone, and no run when that is
+    /// absent too (S-0112 claim 12).
+    // nocite: a triple (P, F, S), our format's shape
+    #[serde(default)]
+    pub image_run: Option<[i32; 3]>,
 }
 
 /// A superweapon type (S-0407 and S-0412 Import mapping).
@@ -456,6 +480,10 @@ pub struct EconGeneral {
     /// `[General] SpyPowerBlackout`, *d* in ticks (S-0405 claim 6); absent: 0.
     #[serde(default)]
     pub spy_power_blackout: Option<i32>,
+    /// `[General] BuildupTime`, the build-up time *B* in game minutes, a
+    /// double (S-0108 claim 5, F1); absent: the double nearest 0.05.
+    #[serde(default)]
+    pub buildup_time: Option<Decimal>,
     /// `[General] RefundPercent`, *r*, a double (S-0408 claim 1); absent: 0.5.
     #[serde(default)]
     pub refund_percent: Option<Decimal>,

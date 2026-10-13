@@ -56,28 +56,26 @@ pub fn harvester_guard_rule(_w: &mut World, _id: ObjectId) -> bool {
     false
 }
 
-/// Whether a house is short of power (S-0405), for the SAM power row of
-/// S-0215 claim 32. Power is not modelled before M5a, so no house is.
-pub fn short_of_power(_w: &World, _house: HouseId) -> bool {
-    // spec: S-0405 (short of power; a seam until the power topic exists)
-    false
+/// Whether a house is short of power (S-0215 Terms), for the SAM power row
+/// of S-0215 claim 32: S-0405's low power, as the house last worked out its
+/// power (S-0405 claims 4 and 7).
+pub fn short_of_power(w: &World, house: HouseId) -> bool {
+    // spec: S-0215 Terms (short of power: output below drain) and S-0405 claim 4 (low power: D > 0 and O < D)
+    crate::econ::power::low_power(w, house)
 }
 
 /// The power row of a SAM building's *aiming* stage (S-0215 claim 32):
-/// its type has the needs-power flag, drains power (a negative power value,
-/// S-0405's base drain) and its owner is short of power. The power value is
-/// imported with the power topic, so the row never applies before M5a.
+/// its type has the needs-power flag, drains power (S-0405's base drain
+/// above 0, from a negative power value) and its owner is short of power.
 pub fn sam_held_by_low_power(w: &World, building: ObjectId) -> bool {
     let Some(o) = w.obj(building) else {
         return false;
     };
-    let needs = w
-        .rules()
-        .buildings
-        .get(o.type_index as usize)
-        .is_some_and(|b| b.raw.powered.unwrap_or(false));
-    // spec: S-0215 claim 32 and S-0405 (needs power, drains power, owner short of power; the drain test waits for the power value)
-    needs && o.owner.is_some_and(|h| short_of_power(w, h))
+    let Some(t) = w.rules().econ.power.buildings.get(o.type_index as usize) else {
+        return false;
+    };
+    // spec: S-0215 claim 32 and S-0405 Terms (needs-power flag, base drain above 0, owner short of power)
+    t.needs_power && t.drain > 0 && o.owner.is_some_and(|h| short_of_power(w, h))
 }
 
 /// A house's available credits (glossary; S-0404 claim 4), from the

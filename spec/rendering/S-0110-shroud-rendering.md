@@ -2,11 +2,11 @@
 id: S-0110
 title: Shroud and fog rendering
 topic: rendering
-revision: 4
+revision: 5
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-10
+approved-on: 2026-10-13
 measurements: []
 requests: []
 supersedes: []
@@ -21,7 +21,9 @@ from the states of the cell and its eight neighbours, which sprite the pieces co
 piece is placed on the screen, how pieces of neighbouring cells combine, how a piece darkens the
 drawing under it by setting the light-alpha values of S-0104 that such drawing reads, and the test
 by which a world point counts as lying under the shroud. When a cell becomes explored or seen
-belongs to the visibility specs; this spec reads those states.
+belongs to S-0409; this spec reads those states. Skirmish is the scope: fog of war is always off
+there (S-0409 claim 19; S-0412 claim 1). Conditional fog rules below document deferred behaviour
+for later modes, not a reachable skirmish setting; network games and campaigns are out of scope.
 
 ## Terms
 
@@ -29,23 +31,30 @@ belongs to the visibility specs; this spec reads those states.
 frame*, *image frame*, *sprite*, *shroud*, *fog of war*, *local player*, *house*,
 *measurement setup*, *recorder* and *quirk switch* are used as in the glossary. The projection, the
 object height lift and the terrain height lift (15 pixels per height level, S-0101 claim 4) are those
-of S-0101. *Light-alpha value*, *light-glow image*, *shade row* and the brightness mapping
-are those of S-0104 (claim 15). The *repair wrench* is that of S-0111 (claim 19).
+of S-0101. *Shade row* and the brightness mapping are those of S-0104 (claim 15). For battlefield
+rendering, *light-alpha value* means a per-screen-pixel integer from 0 to 255, initially 127
+in each drawn frame, modified by cover pieces and light-glow images as specified here.
+A *light-glow image* has S-0104's meaning; claim 6 here owns its battlefield pixel updates.
+This corrects S-0104 revision 10's Terms assertion that only glows produce non-default values
+and claim 15's assertion that the value is 127 unless a glow covers it: a cover can change it
+without any glow. The shade-row formula itself is unchanged. The *repair wrench* is that of
+S-0111 (claim 19).
 
 | Term | Meaning |
 |---|---|
-| explored cell | A cell whose shroud the local player has removed. The visibility specs own when a cell becomes explored and when it is covered again. |
-| seen cell | With fog of war on, a cell that the visibility specs count as seen by the local player, i.e. not under fog. The visibility specs own when a cell is seen and when it stops being seen. |
+| explored cell | A cell whose shroud the local player has removed. S-0409 owns when a cell becomes explored and when it is covered again. |
+| seen cell | A cell with S-0409's seen state for the local player. With fog on this means not under fog; in skirmish it is bookkeeping only. S-0409 owns its changes. |
 | map neighbours | The eight cells around cell (*x*, *y*), named by glossary map directions: the side neighbours N = (*x*, *y* − 1), E = (*x* + 1, *y*), S = (*x*, *y* + 1), W = (*x* − 1, *y*), and the corner neighbours NW = (*x* − 1, *y* − 1), NE = (*x* + 1, *y* − 1), SE = (*x* + 1, *y* + 1), SW = (*x* − 1, *y* + 1). On the screen N is up-right, E down-right, S down-left, W up-left, NW straight up, NE right, SE straight down and SW left. |
-| covered neighbour | For the shroud: a map neighbour that is not explored. For the fog: a map neighbour that is not seen. A map neighbour that is not a legal cell is always covered (claim 1). |
-| cover piece | An image-frame index from 0 to 46 chosen per cell for one cover. 0 is "no cover" and 15 is "fully covered". |
+| covered neighbour | For the shroud: a map neighbour that is not explored. For the fog: a map neighbour that is not seen. A map neighbour that is not a legal cell is covered; for the shroud only, S-0409's shared off-map explored-state quirk is the exception (claim 1). |
+| cover piece | An image-frame index from 0 to 46 chosen per cell for one cover. 0 designates an uncovered cell with no covered neighbours (explored for shroud, seen for fog); 15 designates a fully covered state. These are state labels, not promises about the imported artwork: even piece 0 can change pixels under claim 5. |
 | shroud cover, fog cover | The two covers drawn for each cell (claims 1 and 4). |
 | shroud sprite, fog sprite | The two sprites the pieces come from (claim 3; Import mapping gives their file names). |
 | canvas | The 60 × 30 pixel screen rectangle in which the pieces of one cell may act (claim 7, F2). |
 | shrouded point | A world point that the point test of claim 8 places under the shroud. |
-| gap generator | The stock building type that SH1 uses to make explored cells unexplored again (Edge cases). Its rule belongs to the visibility specs. |
+| candidate cells | The one cell for even *u*, or the two cells for odd *u*, whose explored states claim 8 tests. *u* is the point's count of whole height levels, not a radar column. |
+| gap generator | A gap-generating object as defined by S-0409; SH1 uses a stock building of that kind. |
 | cell's diamond | The 60 × 30 pixel diamond inscribed in a cell's canvas, with its top corner at the middle of the canvas's top edge: the screen area of the cell's ground at height 0. |
-| test shroud sprite | The named test file of the Measurement scenarios that replaces the shroud sprite in SH1's capture sub-test B, SH6 and SH8. |
+| test shroud sprite | The diamond-only named test file of the Measurement scenarios that replaces the shroud sprite in SH1's capture sub-test B, SH5, SH6 and SH8, and supplies SH7's state-reading reference. Other scenarios explicitly define their own variants. |
 
 ## Behaviour
 
@@ -56,17 +65,19 @@ are those of S-0104 (claim 15). The *repair wrench* is that of S-0111 (claim 19)
    - an explored cell gets the piece of claim 2 for its set of covered neighbours.
 
    A map neighbour that is not a legal cell (S-0009 claim 1) counts as covered: a cell that is not
-   legal is never explored or seen. This holds whether its coordinates lie inside or outside the
-   range the map size spans, so it covers the non-legal cells beside every border cell of the map's
-   diamond as well as cells beyond the coordinate range. The piece
+   legal is normally neither explored nor seen. S-0409 claim 14 and
+   `quirks.offmap_cells_shared` own the exception: after the shared off-map state becomes explored,
+   those neighbours count as explored for the shroud piece. Their seen state is unchanged. This
+   applies both inside and outside the range the map size spans, including beside border cells
+   of the map's diamond. The piece
    depends only on these current states, not on the cell's history: a cell that is covered again
    after being explored gets piece 15 like a cell that was never explored. The result is the same
    as if the whole battlefield view were redrawn from the current states in every drawn frame; an
    implementation may redraw less, as long as what is shown stays the same (claim 9).
    - Backing: `measurable` (scenario SH1 with its re-cover and border sub-tests; SH8 for a
-     neighbour beyond the coordinate range)
-   - Confidence: high; medium for non-legal neighbours (that no rule ever marks a non-legal cell
-     explored or seen) and for the re-covered case
+     neighbour beyond the coordinate range; SH8 part Q2 for the shared-state exception)
+   - Confidence: high for ordinary legal cells; medium for non-legal neighbours and the
+     re-covered case; low for the shared-state exception
 
 2. **Piece for a set of covered neighbours.** The piece depends only on the *reduced set*: the
    covered side neighbours, together with each covered corner neighbour neither of whose two
@@ -76,13 +87,19 @@ are those of S-0104 (claim 15). The *repair wrench* is that of S-0111 (claim 19)
      if X is in the set and 0 otherwise; so the empty set gives 0 and all four sides give 15,
    - otherwise the piece is the entry of table T1 (Constants).
 
-   The 256 possible sets reduce to 47 distinct sets, and the 47 pieces are all different.
-   - Backing: `measurable` (scenario SH1)
+   The sum uses exact integer arithmetic, with no rounding. The 256 possible sets reduce to
+   47 distinct sets, and the 47 piece indices are all different; this does not imply different
+   artwork if the user's sprite reuses images.
+   - Backing: `measurable` for neighbour sets reached in SH1; `unmeasured` for the exhaustive
+     256-set mapping, since SH1 does not arrange every set and no stock-data setup for independently
+     setting each neighbour's state is identified. The reduced-set count follows mathematically
+     from the reduction rule.
    - Confidence: high
 
 3. **Which sprite.** With fog of war off, shroud pieces are image frames of the shroud sprite. With
    fog of war on, both covers take their pieces from the fog sprite, the shroud cover included.
-   - Backing: `measurable` (scenario SH2)
+   - Backing: `measurable` for fog-off sprite selection (SH1 and SH2); `unmeasured` for fog-on
+     selection, since no skirmish reaches fog on and later modes are out of scope.
    - Confidence: high
 
 4. **Fog piece of a cell.** With fog of war on, every cell that gets a shroud piece in a drawn frame
@@ -91,12 +108,14 @@ are those of S-0104 (claim 15). The *repair wrench* is that of S-0111 (claim 19)
    seen. Like the shroud piece it depends only on the current states, so a cell that stops being
    seen gets 15. The fog piece is not drawn once the local player's house has been defeated; then
    only the shroud cover remains.
-   - Backing: `measurable` (scenario SH2)
+   - Backing: `unmeasured`: every part requires fog on, which no skirmish reaches; later modes
+     are out of scope. SH2 checks that no fog piece appears in skirmish, not this conditional rule.
    - Confidence: high for the piece; medium for the defeated case
 
 5. **Pieces set light-alpha values.** A piece is not painted onto the screen. Its pixels change the
-   light-alpha values *a* of the screen pixels under it. Drawing that is shaded by light-alpha values
-   through S-0104 claim 15 uses the resulting value, so the cover darkens it: the terrain tiles and
+   light-alpha values *a* of the screen pixels under it. Before any cover or glow acts in a drawn
+   frame the value is 127; earlier drawn frames do not leave darkening behind. Drawing that is shaded by light-alpha values
+   through S-0104 claim 15 uses the resulting value, so ordinary cover art darkens it: the terrain tiles and
    the objects shaded that way. Drawing that does not read light-alpha values is not darkened by the
    cover and keeps its palette colours under shroud and fog; S-0111 claim 2 names such drawing among
    the overlay images (health segments and pips). Which other kinds of drawing read the values
@@ -107,22 +126,28 @@ are those of S-0104 (claim 15). The *repair wrench* is that of S-0111 (claim 19)
      *v* − 127) for *v* < 128; indices of 128 and above leave *a* unchanged.
 
    So a shroud pixel of index 0 makes the pixels below it black (shade row 0), index 127 leaves them
-   at the default light-alpha value, and a fog pixel of index *v* darkens by 127 − *v* steps. Pixels
+   at the default light-alpha value by setting it to 127, and a fog pixel of index *v* darkens by
+   127 − *v* steps when *v* < 128. Pixels
    outside the image frame's own rectangle are not touched. (Formulas F1.)
-   - Backing: `measurable` (scenario SH3)
-   - Confidence: high for the shroud rule, the fog formula and the darkening of terrain tiles,
-     medium for which kinds of object drawing read the values (S-0104 claim 15 has the same caveat)
+   - Backing: `measurable` for shroud pixel updates, untouched pixels outside the image rectangle,
+     and terrain/vehicle shading (SH3, including its rectangle sub-test); SH1 capture sub-test B
+     tests restoration of the initial value where newly explored cells' pieces become transparent,
+     `unmeasured` for fog pixel updates, since fog on is unreachable in skirmish. Which other
+     drawing reads the values is a claim of its own drawing spec, not of SH3.
+   - Confidence: high for the shroud rule, the fog formula and terrain shading,
+     medium for vehicle shading
 
 6. **Light-glow images over the covers.** The light-glow images act on the values that the pieces
    of all cells produced in the same drawn frame: each pixel *g* of a glow image turns *a* into
    *a*′ = min(255, ⌊*a*·*g* / 127⌋). Every pixel of the rectangle of the glow image's image frame
    that lies in the battlefield view takes part; no index is skipped, so a glow image is expected to use 127 wherever
    it should leave the light unchanged. A glow therefore scales the covered value and cannot lighten
-   a pixel whose shroud value is 0: a lamp does not show through full shroud, but it does brighten
-   fog.
-   - Backing: `measurable` (scenario SH4)
-   - Confidence: high for the formula and for its acting on the values the covers produced; medium
-     for the order among several glows (Open questions)
+   a pixel whose shroud value is 0: that pixel stays black under a lamp. A non-zero covered value
+   can be brightened, including one produced by fog.
+   - Backing: `measurable` for the formula, image rectangle and action over shroud (SH4),
+     `unmeasured` for action over fog, since fog on is unreachable in skirmish. The order among
+     several glows is not fixed here (Open questions).
+   - Confidence: high
 
 7. **Pieces lie on the height-0 grid.** The piece of cell (*x*, *y*) is placed as if the cell were
    at world height 0, whatever its terrain height. The top-left corner of the cell's canvas is at the
@@ -146,15 +171,25 @@ are those of S-0104 (claim 15). The *repair wrench* is that of S-0111 (claim 19)
      (*u* + 1)/2) nor cell (*c*<sub>x</sub> − (*u* − 1)/2, *c*<sub>y</sub> − (*u* − 1)/2) is explored.
 
    A candidate cell whose coordinates both lie in 0 … 511 and that is not a legal cell counts as
-   not explored. A candidate with a coordinate outside 0 … 511 is read as another cell, or as no
-   cell (Edge cases, `quirks.shroud_point_cell_wrap`). For odd *u* the point is drawn half-way between
-   the height-0 positions of the two candidate cells, so it counts as uncovered when either is. Which
+   not explored, except when S-0409's `quirks.offmap_cells_shared` has made the shared off-map
+   state explored (claim 1). A candidate with a coordinate outside 0 … 511 is read as another cell, or as no
+   cell (Edge cases, `quirks.shroud_point_cell_wrap`). For odd *u* the candidates are adjacent
+   along the map south-east diagonal, and either being explored makes the point uncovered. Which
    rules use this test belongs to their own specs; S-0111's repair wrench uses it, and scenarios SH6
    and SH8 observe the test through it.
-   - Backing: `measurable` (scenario SH6; SH8 for a non-legal candidate cell inside 0 … 511 and for
-     a candidate outside 0 … 511)
-   - Confidence: high for the formula; medium for non-legal candidate cells and for candidates
-     outside 0 … 511. Heights below 0 are not covered by this claim; S-0111 claim 19 states the
+
+   For a radar pixel, S-0410 F3 first supplies the cell shown at that pixel; it does not supply
+   these candidate cells. S-0410 claim 6 applies this point test at that cell's centre, at its
+   surface height (S-0106 claims 2 and 3). Thus (*c*<sub>x</sub>, *c*<sub>y</sub>) here is the
+   cell from F3, and *u* comes from that centre's height in leptons, not necessarily its terrain
+   height level. S-0410 calls this count *z* and uses *u* for a radar column. Its radar scenarios
+   R3 and R4 own the pixel mapping and its shroud consequence.
+   - Backing: `measurable` for cell-centre heights used by SH6 and SH8 (including SH8 Q2),
+     `unmeasured` for arbitrary off-centre points and fractional height levels, since these
+     wrench scenarios test only cell centres at flat whole-level heights and no controllable
+     observable for the remaining inputs is identified.
+   - Confidence: high for the formula; medium for non-legal candidate cells and coordinate wrap,
+     low for the shared-state exception. Heights below 0 are not covered by this claim; S-0111 claim 19 states the
      test for the centre heights below 0 that its wrench uses.
 
 9. **When pieces change.** Every drawn frame shows the pieces for the states at the time of that
@@ -168,7 +203,8 @@ are those of S-0104 (claim 15). The *repair wrench* is that of S-0111 (claim 19)
      repair wrench of S-0111 claim 19, which uses the point test of claim 8.
 
    An implementation may cache pieces, as long as no drawn frame shows a stale one.
-   - Backing: `measurable` (scenario SH1, its drawn-frame capture sub-tests)
+   - Backing: `measurable` for explored-state updates (SH1 drawn-frame capture sub-tests),
+     `unmeasured` for seen-state updates of fog pieces, since fog on is unreachable in skirmish
    - Confidence: medium
 
 10. **Neighbouring canvases.** The canvases of cells (*x*, *y*) and (*x* + 1, *y*), and of (*x*, *y*)
@@ -178,9 +214,10 @@ are those of S-0104 (claim 15). The *repair wrench* is that of S-0111 (claim 19)
     254, it sets the value, whatever the upper cell's shroud and fog pieces produced, and the lower
     cell's fog pixel acts on that value; where it is 254, the lower cell's fog pixel acts on the
     upper cell's result (Observable order in State and ordering). So a fogged cell's darkening does not show
-    where a lower neighbour's shroud piece has pixels other than 254. In the stock sprites no two
-    neighbouring pieces change the same pixel, so this is visible only with modded sprites.
-    - Backing: `measurable` (scenario SH7)
+    where a lower neighbour's shroud piece has pixels other than 254. The overlap rule can be
+    distinguished with named test sprites whose active pixels extend outside the cell's diamond.
+    - Backing: `measurable` for canvas geometry and shroud replacement/transparent preservation
+      (SH7); `unmeasured` for interleaved fog composition, since fog on is unreachable in skirmish
     - Confidence: high
 
 ## Formulas
@@ -195,7 +232,7 @@ light-alpha value and *v* the piece's palette index at that pixel.
 > glow (claim 6): *a*′ = min(255, ⌊*a*·*g* / 127⌋) for a glow pixel *g*
 
 All operands are non-negative integers, so the floor is integer division. The resulting *a* feeds
-the shade row ⌊*a*·ρ·(*N* − 1) / 32258⌋ of S-0104 claim 15, with ρ and *N* as defined there.
+the shade row min(*N* − 1, ⌊*a*·ρ·(*N* − 1) / 32258⌋) of S-0104 claim 15, with ρ and *N* as defined there.
 
 **F2. Canvas placement** (integers, world pixels). With *P*(*x*, *y*) the world pixel of the top
 corner of cell (*x*, *y*) at world height 0 (S-0101), the cell's canvas spans
@@ -212,7 +249,7 @@ of each canvas is shared with the upper halves of the canvases of (*x* + 1, *y*)
 | Name (ours) | Value | Unit | Notes |
 |---|---|---|---|
 | Cover pieces | 47 | image frames (0 … 46) | claim 2 |
-| No-cover piece | 0 | image frame | claim 1 |
+| Clear-neighbour piece | 0 | image frame | claims 1 and 2; state label, not guaranteed transparency |
 | Full-cover piece | 15 | image frame | claim 1 |
 | Shroud transparent index | 254 | palette index | claim 5 |
 | Fog neutral index | 127 | palette index | claim 5; also the default light-alpha value of S-0104 |
@@ -274,17 +311,18 @@ about it.
 | fog | fog of war on and local player not defeated | not seen | 15 | fog sprite |
 | fog | fog of war on and local player not defeated | seen | claim 2 over unseen neighbours | fog sprite |
 
-**Observable order.** For one screen pixel, let *C*<sub>1</sub>, *C*<sub>2</sub> be the cells whose
-canvases contain it (one or two, claim 10), with *x* + *y* of *C*<sub>2</sub> larger. Drawing at that
+**Observable order.** For one screen pixel, let *C*<sub>1</sub>, *C*<sub>2</sub> name the legal cells
+whose canvases contain it (at most two, claim 10), with *x* + *y* of *C*<sub>2</sub> larger when
+both exist. With only one cell, name it *C*<sub>1</sub>; outside all legal canvases neither exists. Drawing at that
 pixel that reads light-alpha values (claim 5) is shaded with the light-alpha value
 
-> *a* = *G*<sub>*k*</sub>(… *G*<sub>1</sub>(*F*<sub>2</sub>(*S*<sub>2</sub>(*F*<sub>1</sub>(*S*<sub>1</sub>(*a*<sub>0</sub>))))) …)
+> *a* = (*G*<sub>*k*</sub> ∘ … ∘ *G*<sub>1</sub> ∘ *F*<sub>2</sub> ∘ *S*<sub>2</sub> ∘ *F*<sub>1</sub> ∘ *S*<sub>1</sub>)(*a*<sub>0</sub>)
 
-where *a*<sub>0</sub> is the pixel's light-alpha value before the covers, *S*<sub>*i*</sub> and
+where *a*<sub>0</sub> = 127 is the pixel's initial light-alpha value in that drawn frame, *S*<sub>*i*</sub> and
 *F*<sub>*i*</sub> are the shroud and fog rules of F1 for the pixel of *C*<sub>*i*</sub>'s shroud and
 fog piece there, and *G*<sub>1</sub> … *G*<sub>*k*</sub> the glow rule of F1 for each light-glow
-image over the pixel (their order is an open question). A rule whose piece does not reach the pixel,
-or is not drawn, leaves the value unchanged. Consequences: a fog piece darkens on top of the shroud
+image over the pixel (their order is an open question). A rule for a nonexistent cell, or whose
+piece does not reach the pixel or is not drawn, leaves the value unchanged. Consequences: a fog piece darkens on top of the shroud
 piece of the same cell; a lower cell's shroud piece can replace an upper cell's fog darkening
 (claim 10); and a light glow scales the result of all covers.
 
@@ -298,28 +336,34 @@ piece of the same cell; a lower cell's shroud piece can replace an upper cell's 
   fog sprite is the cover set designed for games with fog of war, and it serves both covers there.
   Our engine does the same and has no switch.
 - **Non-legal neighbours count as covered** (claim 1). Every cell on the border of the map's
-  diamond of legal cells has map neighbours that are not legal, so when it is explored it gets edge
-  pieces towards them, and these never go away. Whether those border cells lie inside the local area
+  diamond of legal cells has map neighbours that are not legal, so when it is explored it normally
+  gets edge pieces towards them. Under `quirks.offmap_cells_shared` (owned by S-0409, default on,
+  original behaviour), when the shared off-map state becomes explored those shroud edge pieces
+  disappear. Off: non-legal cells always count as unexplored. Claims 1 and 8 read the same shared
+  state; SH8 part Q2 tests both consequences. Whether those border cells lie inside the local area
   (S-0009), and so can be seen, depends on the map. This is the original's behaviour and our engine
-  reproduces it; it needs no switch.
+  reproduces it; there is no additional switch beyond S-0409's shared-state switch.
 - **Cell coordinates outside 0 … 511 in the point test** (claim 8). The original reads a candidate
   cell (*x*, *y*) of the point test as the cell (*x* mod 512, *y* + ⌊*x* / 512⌋) when
-  *y* + ⌊*x* / 512⌋ lies in 0 … 511, and as no cell (not explored) otherwise. All values are
+  *y* + ⌊*x* / 512⌋ lies in 0 … 511, and otherwise as the shared off-map state (normally
+  not explored; S-0409 owns the exception). All values are
   integers; *x* mod 512 lies in 0 … 511, and ⌊ ⌋ rounds toward −∞. So a
-  candidate with *x* < 0 is read as (*x* + 512, *y* − 1), and one with *x* > 511 as (*x* − 512,
-  *y* + 1). This can read a legal cell only on maps whose legal cells reach coordinates near 511
+  candidate with −512 ≤ *x* < 0 is read as (*x* + 512, *y* − 1), and one with
+  512 ≤ *x* < 1024 as (*x* − 512, *y* + 1); the general formula applies beyond those ranges. This can read a legal cell only on maps whose legal cells reach coordinates near 511
   (W + H close to 512, S-0009 claim 2), for points high above cells near the map's edge.
   `quirks.shroud_point_cell_wrap` (default: on, the original). Off: a candidate with a coordinate
-  outside 0 … 511 is not legal and counts as not explored. The map neighbours of claim 1 never read
+  outside 0 … 511 counts as not explored even if the shared off-map state is explored; this
+  rejection takes precedence over `quirks.offmap_cells_shared`. The map neighbours of claim 1 never read
   a legal cell this way: legal cells have coordinates 1 … 511, and a neighbour with a coordinate of
-  0 or 512 is read as a cell that is not legal, or as no cell. Example: on a map of size
+  0 or 512 is read as a cell that is not legal, or as no cell; such a result reads the shared
+  off-map explored state of S-0409. Example: on a map of size
   258 × 254 (W + H = 512), a point 4 height levels above the centre of the corner cell (1, 258)
   has the candidate (−1, 256), which is read as the legal cell (511, 255) at the opposite end of
   the map. Confidence: medium. Scenario SH8.
 - **Overlapping pieces** (claim 10). The lower cell's (larger *x* + *y*) shroud piece wins even over
   the upper cell's fog darkening. This is the original's composition rule, not a quirk, and our engine reproduces it.
-  With sprites whose pixels stay inside their own cell's diamond, as the stock ones do, the order
-  has no visible effect.
+  With sprites whose active pixels stay inside their own cell's diamond, neighbouring pieces
+  do not change the same pixel and the order has no visible effect.
 - **Re-covered cells.** A cell that becomes unexplored again (for example under an enemy gap
   generator) or stops being seen gets piece 15 for that cover from the next drawn frame, and its
   neighbours get edge pieces towards it, as for any other covered cell (claims 1, 4 and 9).
@@ -330,17 +374,27 @@ piece of the same cell; a lower cell's shroud piece can replace an upper cell's 
 |---|---|---|---|
 | file `SHROUD.SHP` (resolved by S-0005) | shroud sprite, image frames 0 … 46 (claim 3) | sprite | no shroud pieces drawn; the importer warns |
 | file `FOG.SHP` (resolved by S-0005) | fog sprite, image frames 0 … 46 (claims 3, 4) | sprite | no pieces drawn with fog of war on; the importer warns |
-| game setting fog of war (lobby or map; the visibility specs own it) | claims 3 and 4 | boolean | off |
+| fog-of-war setting (S-0409 claim 19; S-0412 claim 1) | conditional rules of claims 3 and 4 | boolean | always off in skirmish, regardless of lobby defaults or map data |
 
 A missing sprite is bad data: the original draws no cover from it. Our engine does the same and the
 importer warns. An image frame index that the sprite does not have draws nothing.
+- Backing: `measurable` (SH9 for the missing shroud sprite and unavailable frame),
+  `unmeasured` for the missing fog sprite, since fog on is unreachable in skirmish. The warning
+  is an importer requirement, not an observation of the original.
+- Confidence: medium
 
 ## Measurement scenarios
 
 **Common setup.** The glossary's *measurement setup*, a tiny purpose-made map of one theater with flat
-ground except where stated, one human player and one computer player far away unless a scenario states otherwise, no lighting effects
-(ambient neutral). Screenshots at a fixed screen resolution; pixels are compared with the image frames
-of the shroud and fog sprites read from the stock archives, and with the shade rows of S-0104.
+ground except where stated, one human player and one bystander computer player far away unless a
+scenario states otherwise, no lighting effects (ambient neutral), game speed index 2, 800×600.
+Director and mods are off; named test data below are the only overrides and are removed afterwards.
+A run is void if an unnamed opponent object enters the observed area or acts on a test object.
+Fog is off in every run; SH2 also tests that attempts to enable it do not survive skirmish start.
+Screenshots are compared with the selected shroud sprite's image frames and S-0104 shade rows.
+Use whole-drawn-frame capture for changing-state tests and screenshots for stationary cases.
+Wrench cases require repair to remain active throughout the observations; completed repair voids
+that observation, not the shroud test. Record the retry count and every unreached case.
 
 **Test shroud sprite** (a named test file: a loose shroud sprite that wins over the stock one, removed
 after the run; used only with fog of war off). Image frames 0 … 46 each cover the 60 × 30 rectangle.
@@ -369,7 +423,9 @@ appears several times; that is harmless, since each check below is made within o
   - **Re-cover sub-test.** The computer player owns a powered stock gap generator next to ground that
     the human player's unit has explored. The unit then leaves the area. Once the area has been
     covered again, screenshot it.
-  - **Border sub-test.** The unit walks to a cell on the border of the map's diamond (S-0009 claim 1)
+  - **Border sub-test.** No spy satellite is active and no earlier satellite-assisted gap removal
+    has occurred, so the shared off-map state remains unexplored (SH8 Q2 tests the exception).
+    The unit walks to a cell on the border of the map's diamond (S-0009 claim 1)
     and back to the middle of the map. Screenshot the border cells while the unit is there and after
     it has left.
   - **Capture sub-test A (neighbour agreement).** During the main test's move, capture every drawn
@@ -402,49 +458,57 @@ appears several times; that is harmless, since each check below is made within o
     neighbour, or loses it; a single captured drawn frame in sub-test A fails the check; or a single
     captured drawn frame in sub-test B shows the wrench over a darkened diamond of (*c*), or no
     wrench over an undarkened one.
-- **SH2 (claims 3, 4).** As SH1's main test with fog of war on: the unit walks away so that part of
-  the explored area becomes unseen. **Defeat sub-test:** the human player's only object is one
-  infantry unit, and it walks into the range of a stock defensive building of the computer player
-  placed by map data, which destroys it. The defeat sub-test is void if the game leaves the
-  battlefield view before a screenshot can be taken after the defeat.
-  - Observable: as in SH1, for both covers: which image frame, and of which sprite, the shroud
-    darkening and the fog darkening of each cell near the edges match. After the defeat, whether
-    the fog darkening remains.
-  - Expected: shroud and fog pieces both match image frames of the fog sprite; fogged cells show the
-    fog piece over the shroud piece as F1 combines them; every fog piece is the one claim 2 gives
-    for the fogged (dark-grey) neighbours read from the same screenshot; and after the defeat the
-    fog darkening vanishes and the shroud darkening stays.
-  - Falsified if: the shroud pieces match the shroud sprite with fog on, a fog piece disagrees with
-    claim 2 for the fogged cells around it, or the fog darkening remains after defeat.
-- **SH3 (claim 5).** One run with fog of war off and one with it on. A stock vehicle of a neutral
-  house (one that reveals nothing for the human player) stands on flat ground, placed by map data
-  with no orders; a run in which it moves before the screenshot is void. The human player's
-  infantry unit stands so that the edge of its revealed area runs through the vehicle's cell: that
-  cell is explored and its map neighbour N is not, so the cell gets a shroud edge piece (claim 2)
-  and the vehicle is drawn partly over that piece. In the fog-on run the infantry unit then steps
-  back until the vehicle's cell is explored but no longer seen, so that a fog piece 15 acts on top
-  of the shroud edge piece. A reference screenshot shows the same vehicle type, with the same
-  facing, on uncovered ground.
-  - Pixels: from the image frames of the pieces the cell gets (read from the sprite that claim 3
-    names), pick at least
-    three terrain pixels and three vehicle pixels inside the piece's rectangle: one under a piece
-    pixel of index 254 (shroud) or 128 or above (fog), as a control, and the others under pixels of
-    different indices below 127.
-  - Observable: the shade row of each chosen pixel, found by matching its colour against the shade
-    rows of S-0104 for the palette index the reference screenshot shows at that place.
-  - Expected: each pixel shows the shade row that S-0104 claim 15 gives for *a* from F1 (*a* = *v* for
-    the shroud, and the fog combination where both apply); the control pixels keep their uncovered
-    shade row.
-  - Falsified if: the observed shade rows differ by more than one row from F1 and claim 15.
-- **SH4 (claim 6).** A stock building that casts a light glow (a lamp post or similar), placed so that
-  its glow overlaps the edge of the shroud; with fog of war on, a second lamp in a fogged area.
-  - Observable: the shade rows of fully shrouded pixels inside the glow, and of fogged pixels inside
-    and outside the glow.
-  - Expected: pixels under full shroud stay black inside the glow; fogged pixels inside the glow are
-    brighter than fogged pixels outside it, by the factor *g*/127 (truncated).
-  - Falsified if: the glow lightens fully shrouded pixels, or fogged pixels inside the glow differ
-    from F1 by more than one shade row.
-- **SH5 (claim 7).** A map with a plateau 4 height levels high next to flat ground; the player's
+- **SH2 (claim 3, skirmish scope).** Repeat SH1's main test and walk away from the explored area.
+  Two runs: first with a named test rules file setting the lobby fog default on, then with a test
+  map setting its fog flag as well (the imported settings of S-0409 and S-0412). Wait at least
+  twice the imported fog period after leaving. This is also S-0409 scenario V12.
+  - Observable: shroud edge pieces and the explored ground left behind, in screenshots.
+  - Expected: shroud uses the shroud sprite, and explored ground is not darkened by fog in either
+    run; starting the skirmish has forced fog off.
+  - Falsified if: shroud uses the fog sprite or fog darkening appears. These runs cannot test the
+    deferred fog-on rules of claims 3 to 5 or the fog-on defeat gate of claim 4.
+- **SH3 (claim 5).** Fog off. A neutral-house stock vehicle is placed on flat explored ground,
+  with no orders. Capture a reference at its fixed facing. Named test shroud sprite: every piece
+  has the same 60 × 30 image, index *v* throughout the cell's diamond and 254 outside it. Make
+  one run per *v* = 0 … 255, with the same vehicle and ground; no glow. Runs in which the vehicle
+  moves or changes facing are void. A control run uses 254 everywhere.
+  - Observable: terrain and vehicle pixel colours, matched to the reference's palette indices
+    and S-0104 shade rows. Choose pixels well inside the diamond; ambiguous colour matches are
+    excluded, not treated as confirmation.
+  - Expected: *v* ≠ 254 sets *a* = *v*, including index 0; *v* = 254 preserves the reference
+    shading. Compare each value's capture with a fully transparent reference of the same scene. Each chosen pixel has the capped shade row of F1 and S-0104 claim 15. Pixels outside
+    the image rectangle preserve their reference shading.
+  - Falsified if: a chosen pixel has a colour inconsistent with that shade row, index 254 changes
+    it, or the effect extends beyond the image rectangle. If palette quantisation makes two
+    candidate rows identical, that pixel does not distinguish them; record that limitation.
+    The fog formula is not tested, since skirmish cannot enable fog.
+  - **Rectangle sub-test.** A separate named sprite gives every piece a 10 × 6 pixel image
+    rectangle centred within the 60 × 30 canvas, uniformly index 64; the remainder of the canvas
+    is outside that image rectangle, not transparent pixels within it. Compare with a fully
+    transparent reference of the same stationary scene. Choose terrain pixels immediately inside
+    and outside all four image edges, away from other cells' active rectangles. One valid run.
+    Expected: inside pixels use *a* = 64; outside pixels keep their reference shading.
+    Falsified if: any unambiguous inside pixel fails that shade-row check, or any outside pixel
+    changes. Record the image rectangle's placement with the capture.
+- **SH4 (claim 6).** Fog off. Place one stock glow-casting building so its glow reaches into
+  explored and unexplored ground. Named test files replace its light-glow image with a rectangle
+  divided into bands of values *g* = 0, 64, 127, 254 and 255, and replace every shroud piece with
+  SH3's diamond image. One run per shroud value *v* = 0, 64 and 127. No second glow overlaps it.
+  The glow rectangle must cross both canvas halves and extend outside the building's own cell.
+  A reference capture for each *v* has the glow absent (named test map suppresses that image
+  only); a second reference uses the fully transparent shroud sprite as well, to identify the
+  terrain palette indices before covering.
+  - Observable: shade rows at known image-band pixels and at pixels just outside its rectangle,
+    using both references and S-0104; record ambiguous colour matches as inconclusive.
+  - Expected: inside the whole glow rectangle the row follows F1 with
+    *a*′ = min(255, ⌊*v*·*g*/127⌋), not a glow followed by shroud replacement. No index is skipped:
+    *g* = 0 produces black, 127 preserves the covered value, and 254/255 scale it, with saturation.
+    *v* = 0 stays black for all bands. Outside the rectangle the reference shading remains.
+  - Falsified if: any unambiguous chosen pixel disagrees with the capped shade row, an image band
+    fails to act in a canvas half or outside the source cell, or pixels beyond the rectangle change.
+    Multiple-glow order and the deferred fog consequence are not tested.
+- **SH5 (claim 7).** With the diamond-only test shroud sprite, a map with a plateau 4 height
+  levels high next to flat ground; the player's
   unit explores the flat ground only, up to the foot of the plateau.
   - Observable: the screen position of the dark diamond of each unexplored plateau cell relative to
     the cell's drawn terrain, and whether a unit later walking onto an explored plateau cell is
@@ -453,7 +517,12 @@ appears several times; that is harmless, since each check below is made within o
     height lift of S-0101 claim 4) below its drawn terrain, on the screen position the cell would
     have at height 0. A unit on the plateau is darkened exactly where the pixels it is drawn on lie
     under a cover piece, whatever the state of the cell it stands on.
-  - Falsified if: the cover follows the plateau's terrain.
+  - Falsified if: the displacement differs from 60 pixels, the cover follows the plateau's
+    terrain, or the unit's shading disagrees with the cover at its drawn pixels.
+  - Canvas-clip sub-test: a named test shroud sprite gives every frame a 90 × 60 image extending
+    beyond its 60 × 30 canvas, with a distinctive dark band outside the canvas and index 254
+    inside. Expected: no dark band is applied; a screenshot matches the transparent-sprite
+    reference. Falsified if: any outside-band darkening appears. One valid run.
 - **SH6 (claim 8).** Fog of war off, with the test shroud sprite. A test map with plateaus 3 and 4
   height levels high and flat ground around them, with ramps so that infantry can reach every side.
   On a flat cell of each plateau's top, and on the flat ground as a control, stands a stock building
@@ -474,9 +543,12 @@ appears several times; that is harmless, since each check below is made within o
     (*c* − 2).
   - Flat control. B's target is (*c*).
 
-  If a step explores more cells than intended, the run still counts: the expected result follows
-  the states actually recorded. In every case the building's own cell (*c*) is explored, so the
-  building is drawn whatever S-0111 decides for objects in unexplored cells.
+  The expected result follows the states actually recorded, not the intended movement. A case
+  is valid only when its recorded explored states reach the corresponding row below; extra
+  reveals that erase that distinction void the case. In every valid case the building's own
+  cell (*c*) is explored, so the building is drawn whatever S-0111 decides for objects in
+  unexplored cells. Each row must be reached, including both single-candidate rows at 3 levels,
+  an unreached row stays unmeasured after the five-attempt limit.
   - Observable: after each run, whether each cell (*c* − *k*), *k* = 0 … 3, is explored (read from
     whether its diamond is darkened under the test shroud sprite), and whether the building shows
     the repair wrench (S-0111).
@@ -495,22 +567,20 @@ appears several times; that is harmless, since each check below is made within o
   - Falsified if: any row differs. In particular, the wrench following the building's own cell on a
     plateau (shown in the "not shown" rows), depending on only one of the two candidate cells on the
     3-level plateau, or depending on (*c* − 1) or (*c* − 3) on the 4-level plateau.
-- **SH7 (claim 10).** Fog of war on, flat map, with a named test file: a loose fog sprite whose image
-  frames 0 … 46 each fill the whole 60 × 30 rectangle, with index 127 everywhere in every image frame
-  except image frame 15, which is index 64 everywhere. The human player's unit explores an area and then
-  walks away, so that a fogged area borders a seen area. Screenshot the border. The test file is
-  removed after the run.
-  - Under the test sprite every shroud piece of an explored cell sets 127, a fog piece 15 darkens by
-    63 steps and every other fog piece changes nothing. Each screen pixel lies in the upper half of
-    exactly one cell's canvas (on flat ground, the upper half of the bounding box of that cell's
-    tile) and in the lower half of one other, upper cell's canvas.
-  - Observable: the darkened terrain pixels near the border, compared with the grid of canvas upper
-    halves, each 60 × 15 pixels and made of a left and a right 30 × 15 half.
-  - Expected: each pixel takes the result of the lower cell, the one whose upper half holds it, so
-    the darkened area is a union of whole upper halves (those of the fogged cells), darkened by 63
-    steps.
-  - Falsified if: some upper half is darkened in only its left or only its right 30 × 15 half. That
-    is what the upper cells' fog darkening surviving under the lower cell's shroud piece would show.
+- **SH7 (claim 10).** Fog off, flat map. Named test shroud sprite: frames 0 … 46 fill the entire
+  60 × 30 rectangle with 127 except frame 15, which uses 64. A human infantry unit reveals an
+  area; screenshot its boundary. Read explored states separately using the diamond-only test
+  shroud sprite on an otherwise identical map and stationary units; a changed boundary voids
+  the comparison. Choose overlaps where the upper and lower cells have different cover values.
+  - Observable: terrain shades in the 30 × 15 overlap rectangles, matched against S-0104.
+  - Expected: every overlap takes the lower cell's value, not the upper cell's; same-row canvases
+    never overlap. Thus each cell's upper 60 × 15 half uniformly takes its value (64 or 127).
+  - Transparency sub-test: repeat with the upper 15 rows of every test image changed to 254,
+    leaving its lower half as before. Expected: each overlap now preserves the upper cell's
+    lower-half value. One valid run for each sprite variant is required.
+  - Falsified if: a selected overlap shows the upper value in the first run, the lower value
+    in the transparency run, another shade in either, or the overlap size differs from 30 × 15.
+    This tests shroud-only ordering; fog interleaving remains unmeasured.
 - **SH8 (claims 1 and 8 at the edge of the coordinate range, `quirks.shroud_point_cell_wrap`).**
   Fog of war off, with the test shroud sprite. A test map of size W × H = 258 × 254, so that
   W + H = 512 and the cell (511, 255) is legal (S-0009 claims 1 and 2:
@@ -525,16 +595,18 @@ appears several times; that is harmless, since each check below is made within o
   back on both axes:
   - P's candidate is (−1, 256). With the switch on (the original) it is read as the legal cell
     (511, 255) (Edge cases); with it off it counts as not explored.
-  - Q's candidate is (0, 257), inside 0 … 511 but not a legal cell, so it counts as not explored
-    whatever the switch.
+  - **Q (non-legal candidate).** Q's candidate is (0, 257), inside 0 … 511 but not a legal cell,
+    so it counts as not explored
+    whatever the wrap switch, before the shared-state sub-test Q2.
 
   Both wrenches are drawn near the top edge of the map; under the test shroud sprite no cover can
   hide them. Three runs, each needing one valid run: case A, case B, and case B again with the stock
   shroud sprite. In case A no unit of the human player is near (511, 255). In case B a second
   infantry unit of the human player starts beside (511, 255) (map data), so that cell is explored.
   The two cases make both states of (511, 255) likely, but the expected result follows the state
-  observed in the run: the reveal of the unit at the corner might itself reach (511, 255) (Open
-  questions). A run is void if the original does not create both buildings, the computer player
+  observed in the run. S-0409 claim 5 rejects non-legal sight targets, so the point-test wrap
+  does not itself reveal (511, 255). Cases A and B must record different explored states there,
+  otherwise the wrap discrimination is inconclusive. A run is void if the original does not create both buildings, the computer player
   does not start repairing both of them, or the view cannot be scrolled to show both wrench places.
   - Observable: whether P and Q show the repair wrench; whether (511, 255) is explored (its diamond
     under the test shroud sprite); and, from the stock-sprite run, the piece of cell (511, 255) and
@@ -547,28 +619,63 @@ appears several times; that is harmless, since each check below is made within o
   - Falsified if: P's wrench disagrees with the observed state of (511, 255) (no wrench while that
     cell is explored is what the switch turned off would give); Q shows the wrench in any run; or
     either corner cell
-    shows no edge towards a neighbour outside the map.
+    shows no edge towards a neighbour outside the map, before the shared-state exception below.
+  - **Q2 (shared off-map state; claims 1 and 8; S-0409 V8 part H).** Repeat the Q observation
+    while the human player owns an active stock spy satellite and sufficient power. A hostile
+    stock gap generator has its field crossing the map border, with no other hostile gap field
+    covering non-legal cells; destroy its power supply so the field stops. Q must still be under
+    repair during the before/after captures; confirm repair by increasing health, and void a run
+    where it has ended. Before the field stops, explored border cells away from the field have
+    edge pieces towards non-legal neighbours and Q has no wrench. After it stops, with
+    `quirks.offmap_cells_shared` on, those edges disappear and Q shows its wrench: its candidate
+    (0, 257) now reads the shared explored state. A purpose-made map trigger then performs a
+    whole-map re-cover (S-0011; S-0409 claim 15); keep the infantry beside Q so its own cell is
+    explored again, and repeat the capture. Expected: both effects persist. With the switch off in our engine,
+    the edges remain and Q has no wrench. One valid run; falsified if either effect disagrees.
+    Use a stock-sprite capture for edge pieces and the test shroud sprite for the wrench.
+    Changing the sprite between captures requires a fresh run with the same preconditions.
+- **SH9 (Import mapping, missing shroud data).** Named test archives reproduce the mounted stock
+  contents except that the shroud sprite is omitted; ensure no other mounted copy supplies it
+  (S-0005). On SH1's map, capture before and after the infantry explores. Control: the same map
+  with the stock sprite restored. A second named test shroud sprite has only frames 0 … 14,
+  each a recognisable dark diamond; screenshot an unexplored area that requires piece 15.
+  - Observable: terrain darkening in screenshots; one valid run per case.
+  - Expected: no shroud darkening in the absent-file case, and no piece-15 darkening in the
+    short-sprite case, while available frames still darken explored boundary cells. Restoring
+    the stock sprite restores the ordinary cover.
+  - Falsified if: a missing file or unavailable frame instead draws cover or prevents the game
+    from reaching the battlefield view. Fog data absence is not tested in skirmish.
 
 ## Open questions
 
-- Several glow images over one area are applied one after another in a fixed order (the order the
-  light sources were created, low confidence). Because each step truncates, the order can change a
-  value by one step; S-0104 should say which order it uses.
-- Which cells stop being seen when the unit walks away (SH2) is the visibility specs' to say; the
-  original may keep some cells seen after the units that saw them have left. The pieces follow the
-  seen states whatever they are, so SH2 reads the fogged cells from the screenshot itself.
-- Whether the tactical radar draws the shroud with the same pieces is not covered; it belongs to the
-  interface specs.
-- Whether a unit's reveal near the corner of a map with W + H = 512 explores cells across the
-  coordinate wrap of the Edge cases (for example (511, 255) from a unit near (1, 258)) belongs to
-  the visibility specs. SH8 reads the state of (511, 255) from the screen, so its result does not
-  depend on the answer.
+- Multiple-glow order is not specified. Creation order is a low-confidence hypothesis,
+  `unmeasured` here: SH4 uses a single glow, and no discriminating multi-glow capture is arranged.
+  Per-image truncation and saturation can make the order visible, so commutativity must not be
+  assumed. S-0104 and this spec need a common ordering rule after a distinguishing measurement.
+- Which cells stop being seen with fog on belongs to S-0409's deferred fog rule (claim 19).
+  The conditional rendering rules follow seen states whatever they are, but no current scenario
+  observes them in skirmish.
+- The radar's shroud display is owned by S-0410 claim 6 and F3: it uses claim 8's point test,
+  not these cover pieces.
+- The exhaustive piece table and arbitrary-point inputs of claim 8 remain unmeasured in the
+  parts their backings name. Measurements must not report SH1 or SH6 as confirming those parts.
 
-## Questions for the project lead
+## Cross-spec consistency
 
-- S-0104 says in its Terms and in claim 15 that light-alpha values other than 127 come only from
-  light-glow images. Claim 5 here shows that the shroud and fog pieces set them too, through the same
-  shading. Either S-0104 gets a revision of that sentence (its claim 15 formula is unchanged), or
-  this spec is read as extending it; the project lead decides. Claim 6 also answers S-0104's open
-  question of how light-glow images write the values on the battlefield view, after the covers.
-  Whether glows are written the same way anywhere else is S-0104's to say.
+- S-0409 owns explored/seen states, the off-map shared-state exception and fog being off in
+  skirmish. Claims 1 and 8 here read that exception; they do not override it. Its sight reveal
+  tests legality before acting, so the point-test wrap does not imply wrapped sight reveals.
+- S-0101 owns projection and the 15-pixel terrain lift; S-0106 owns centre surface height.
+  SH6 and SH8 use flat cells so their centre heights really are whole levels. S-0111 claim 19
+  supplies the wrench observable and retains the negative-height extension outside claim 8.
+  S-0410 claim 6 and F3 supply radar's initial cell, not the candidate cells of this spec.
+- For battlefield rendering, this revision explicitly corrects the two glow-only assertions of
+  S-0104 revision 10 identified in Terms: claims 5 and 6 here own the writers, while S-0104
+  claim 15 owns the unchanged shade-row formula, including its final cap. This is not an
+  additional lighting channel or a departure from the original. The companion S-0104 revision
+  must replace those assertions and point here before coordinated approval; until then the
+  approved S-0104 wording remains inconsistent, so this draft must not be handed off alone.
+  Claim 6 supplies the battlefield glow update, not an assertion about other displays.
+- S-0414's original skirmish ends at the human player's defeat, unlike our engine's play-to-last-side
+  departure. No scenario here requires the original to play on after defeat. The fog-on defeat
+  rule remains unmeasured and deferred, rather than borrowing our engine's end condition.

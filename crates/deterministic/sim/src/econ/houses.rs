@@ -14,10 +14,14 @@ pub fn part(w: &mut World) {
 
 /// One house's update.
 fn house_update(w: &mut World, h: HouseId) {
-    // spec: S-0405 claim 7 and S-0403 claim 8 (power worked out when due; every line of the house then works out its step period)
-    if super::power::work_out_if_due(w, h) {
-        super::production::on_power_reevaluated(w, h);
+    // Power, then radar (S-0405 claim 7, S-0410 claim 2): the radar recheck
+    // after an event sees the power worked out in the same update (S-0410
+    // scenario R1, the power changes at (d) and (e)).
+    if crate::econ::power::house_update(w, h) {
+        // spec: S-0410 claim 2 (a change of the power balance asks for a recheck)
+        crate::econ::radar::mark_due(w, h);
     }
+    crate::econ::radar::house_update(w, h);
     // spec: S-0411 claim 2 (the removal of icons and its orders, at the house update)
     super::sidebar::remove_unbuildable(w, h);
     // spec: S-0407 claim 12 (a recheck in the first house update after an event)

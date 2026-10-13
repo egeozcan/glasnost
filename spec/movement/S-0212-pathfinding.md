@@ -2,13 +2,13 @@
 id: S-0212
 title: Pathfinding (observable behaviour)
 topic: movement
-revision: 17
+revision: 18
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-12
+approved-on: 2026-10-13
 measurements: []
-requests: [Q-0041, Q-0042, Q-0043]
+requests: [Q-0017, Q-0041, Q-0042, Q-0043]
 supersedes: []
 ---
 
@@ -34,8 +34,7 @@ cell*, *movement zone*, *locomotor*, *game minute*, *map size*, *round-toward-ze
 *type kind*, *quirk switch*, *step direction* (written *d*) and *follower car* (with its *leader*
 and *car chain*) are used as in the glossary.
 
-Terms from other specs, cited by claim. All of them are approved, except S-0010 claim 25 and the
-bridge conditions of S-0010 claim 17, which enter the spec folder together with this revision. S-0003 (value forms), S-0006
+Terms from other specs, cited by claim. All of them are approved. S-0003 (value forms), S-0006
 (rules layering) and S-0009 (map file semantics, which defines the *waypoint marker*) are cited by
 claim, and S-0104 (lighting) for the *ion storm*, a global effect (table T5). The others give:
 - From S-0201 (game speed and tick rate): the **tick number** of a tick (its Terms and claim 1).
@@ -2032,9 +2031,7 @@ draws (claim 25), so one run per variant is enough unless stated.
     by claim 10 only its height level and its being a slope count. Maps C, C2 and C3 are made with the
     map's height and tile data, the slope tiles of a land type the vehicle can enter, and in map C3
     the vehicle is a team member of a computer-controlled house, as in run B2.
-    Map D (snow theater) and map E (temperate theater): the goal enclosed by a ring of one stock tree
-    type whose occupation patterns differ between the two theaters (S-0211 claim 11), ordered for
-    one infantry unit and one vehicle. Map F: two goal plateaus of clear land 2 height levels above
+    Map D (snow theater) and map E (another theater): the goal enclosed by a ring of one purpose-made terrain-object test type. Test overrides set the type's two theater-specific occupation-pattern fields to controlled values, one equal to 7 and the other not equal to 7 (S-0211 claim 11 and Import mapping). The maps otherwise use identical geometry; no stock terrain-object type or stock occupation-pattern value is used. Order for one infantry unit and one vehicle. Map F: two goal plateaus of clear land 2 height levels above
     the clear land next to them, with no cliff tiles in between (the map's height data alone raises
     them) and no slope. The first plateau is a strip whose only edges with the low ground run across
     cell x (its neighbours at x − 1 and x + 1 are low), the second a strip whose only such edges run

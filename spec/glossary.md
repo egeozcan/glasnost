@@ -2,23 +2,37 @@
 id: glossary
 title: Glossary of shared terms
 topic: rules-import        # cross-cutting; every topic uses these terms
-revision: 13
+revision: 14
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-12
+approved-on: 2026-10-13
 measurements: []
 requests: []
 supersedes: []
 ---
 
-# Glossary of shared terms
+# glossary: Glossary of shared terms
 
 ## Summary
 
+**Document identity.** This file, `glossary.md`, is the draft under review, not a supplementary
+copy of an approved glossary. Its spec ID is `glossary`; it deliberately has no S-number. Review
+its numbered claims G1 to G3 and its shared-term definitions under the same checklist as a
+numbered spec. Its front matter records the revision and draft status.
+
 The shared vocabulary of the specs. A spec may use any term below without defining it again. A term
 used by one spec only stays in that spec's **Terms** section. Where a spec gives a term a narrower
-meaning, the spec says so and wins for that spec.
+meaning, the spec says so and wins for that spec. Behavioural claims here cover skirmish only.
+Network games and campaigns are out of scope. References to those modes preserve vocabulary,
+not rules for implementing them.
+
+**Cross-spec changes required at hand-off.** S-0411's approved Terms and claim 2 must follow
+S-0407's recheck-based offer membership, not per-tick icon removal. S-0404's approved claim 9
+must likewise tie automatic cancellation orders to removal from the taken-up set. Their current
+batch drafts supply these corrections and must accompany this glossary. S-0407's current draft
+must drop its stale claim 1/Open question 4 request to correct S-0411; the current S-0411 draft
+already makes that correction.
 
 ## Conventions
 
@@ -47,11 +61,10 @@ meaning, the spec says so and wins for that spec.
   this glossary listed as planned; S-0301, which revision 7 listed as planned; and every draft of
   the third batch (combat), S-0301 to S-0315, all now approved, S-0309 among them, which revision
   11 cited as a draft of its batch. A draft of a later batch is still planned.
-- This revision of the glossary cites the specs of its batch, the fourth (economy, production,
-  power, visibility and the skirmish rules), as they stand in it: every approved spec of the index
-  in `spec/README.md` at its current revision, any revision of an approved spec made in the batch,
-  and the sixteen drafts S-0401 to S-0416 as drafts of the batch. It is signed off in the same
-  batch as those drafts.
+- This revision cites approved specs at their indexed revisions and the latest revisions of
+  them in its current correction batch. S-0401 to S-0416 are now approved; their revised drafts
+  in this batch are plain spec pointers, not planned specs. Sign-off checks every cross-spec
+  change against the versions handed off together.
 - Open questions are questions about the original's behaviour that a spec leaves open. They need
   no Q-ID: Q-IDs number the implementers' spec requests only, and a spec's `requests` field lists
   just the Q-IDs it answers. Specs therefore don't say that no request tracks a question.
@@ -62,8 +75,8 @@ meaning, the spec says so and wins for that spec.
 - The glossary keeps the id `glossary` and lives at `spec/glossary.md`, beside the specs rather than
   under a topic. It takes no S-number.
 - An entry otherwise only fixes what a word means in the specs. That is a choice of vocabulary, not
-  a claim about the original, so it needs no backing. Where an entry names a topic that has no
-  approved spec and no draft in this batch (for example superweapons, structures or crates), its
+  a claim about the original, so it needs no backing. Where an entry names a rule that has no
+  approved spec and no draft in this batch (for example transport entry or superweapon charging), its
   description is a pointer only: specs must not cite it as a rule.
 - The few statements about the original that the glossary makes itself are the numbered claims G1
   to G3 in **Behaviour**, each with its backing, confidence and measurement scenario. They were
@@ -238,8 +251,8 @@ deck". An object "on a bridge deck" stands or drives on the deck, as opposed to 
 **bridge repair hut.** A building type that rebuilds the bridge linked to it when an engineer
 enters it. The structures specs own it. See S-0214 (Terms).
 
-**build icon, cameo.** One entry of a *sidebar tab* (S-0004, Terms): a type that the local player
-may build, shown by its picture. S-0004 (claim 11) owns the tab and position of each icon, and
+**build icon, cameo.** One entry of a *sidebar tab* (S-0004, Terms): a type *offered* to the local
+player, shown by its picture. S-0004 (claim 11) owns the tab and position of each icon, and
 S-0411 what an icon shows and which orders its clicks give (Terms, claims 1 to 12); S-0404 and
 S-0407 use the term. Specs write "build icon"; "cameo" means the same.
 
@@ -344,7 +357,7 @@ should have an open question or a measurement scenario.
 **construction state.** The state of a building while it plays its build-up sprite (see *sprite*):
 forwards after it is placed (*build-up*), and backwards while it is sold (*selling*). Specs write
 "construction state" for the state, and "build-up" or "selling" only for one direction of it, so a
-rule that holds "outside the construction state" also holds while selling. S-0408 and S-0415 call
+rule that holds "outside the construction state" excludes both build-up and build-down. S-0408 and S-0415 call
 the backwards direction the *build-down* (S-0408, Terms). S-0108 owns its timing. See S-0108.
 
 **construction yard.** Ambiguous on its own. S-0213, S-0214 and S-0415 (Terms) mean a building
@@ -471,7 +484,7 @@ factor and S-0302 (claim 3, Edge cases) their firepower and armour factors; S-04
 what the rows' cost factor does and S-0403 (claim 9) their build-time factor. It is not the *house
 skill level*. Which row
 a house takes is set-up behaviour of the original, recorded by the specs that use the factors
-(S-0301 and S-0302, claim 3). By decision of the project lead, in our engine every house, human or
+(S-0301 and S-0302, claim 3). By decision of the project lead, in our engine every player house, human or
 AI, uses by default the row the original gives a human-controlled house in a skirmish, the *normal
 row*. AI difficulty comes from the AI's strategy modules, never from these factors. Choosing
 another row per difficulty is available only as an optional per-player handicap setting, off by
@@ -562,7 +575,7 @@ x (lower right), map south increasing y (lower left) and map west decreasing x (
 Compound names follow: map north-west is straight up the screen. Arithmetic on facings wraps modulo
 65536. The 65536 units per turn are our own unit, a definition. That the original uses this same
 zero and sense is claim G1. S-0204 owns the rest (claims 10 and 11, Formulas F4 and F5): that the
-original stores every facing at the full resolution of one facing unit, how a coarser *n-step
+original's facings retain the full resolution of one facing unit, how a coarser *n-step
 facing* (*n* a power of two from 2 to 256) is derived from a facing, and how two facings are
 compared (the *signed facing difference*). A spec that derives a coarse facing in another way says
 so.
@@ -851,7 +864,8 @@ program start or was valid then and has since been edited or replaced, it is ign
 and so is that game's game-mode layer. Stock data has none. See S-0005 and S-0006.
 
 **layer.** Ambiguous on its own. Write *rules layer* for a rules file applied on top of earlier ones,
-or *render layer* for one of the ordered drawing lists.
+*render layer* for one of the ordered drawing lists, or *cell layer* for ground or bridge-deck
+occupancy.
 
 **legal cell.** A cell that exists on a given map. Which cells are legal follows from the map size
 (S-0009, claim 1). See S-0009.
@@ -981,7 +995,7 @@ network-game spec.
 is the *8-direction*; it is a *step direction*. See S-0204 (claim 10, Formulas F4), which owns the
 rounding.
 
-**object.** Anything placed on the map that the game tracks individually: infantry, vehicles,
+**object.** Anything that the game tracks individually, on or off the map: infantry, vehicles,
 aircraft, buildings, overlays, terrain objects, smudges, animations, projectiles and so on. Every
 object is an instance of one type.
 
@@ -994,12 +1008,17 @@ rendering terms; the *turn pass* of S-0203 is a part of a tick. See S-0102.
 whether a vehicle, a building or another object is present, and the house of the last infantry unit
 to mark a position there. See S-0209 (Terms, claim 1).
 
-**offered.** A type is *offered* to a house when the tech-tree rules let the house order it now, or
-show it at its *build limit*. S-0407 owns it (Terms, claims 1 and 12); S-0415 uses the word, and
-S-0404 (claim 9) writes "buildable" for it, pointing to S-0407. S-0411 (Terms, claim 2) defines its
-own *buildable*, the sidebar's test made afresh in every tick, which can differ from *offered*: during
-a sale a type can stay offered and no longer be buildable until the next recheck of S-0407 (claim
-12). S-0411 uses *offered* for the legality of orders and *buildable* for the icons.
+**offered.** A type is *offered* to a house while it is in the house's taken-up set (S-0407,
+Terms and claims 1 and 12). The set changes only at a recheck. A type can therefore remain offered
+after current conditions change, until a recheck removes it. *Buildable* describes current
+conditions: the type's current tech-tree answer is allowed or at limit, and some factory building
+of the house could make it without the tech-tree rule; a factory building being sold does not count
+(S-0411, Terms; S-0404, Terms; S-0407, claim 1). A type can remain offered while no longer
+buildable, or become buildable before the next recheck while remaining unoffered. Buildability
+alone does not remove an icon or give cancellation orders (S-0411, claim 2; S-0404, claim 9).
+S-0411 uses the offer for order legality and icon membership, and current conditions for darkening
+(claims 2 to 4). Darkening is not a full buildability test: stale prerequisite refusal alone does
+not darken an icon (S-0411, claim 3). S-0415 also uses *offered*.
 
 **open-topped transport.** A transport whose passengers fire from inside it. S-0203 (Terms)
 defines it, as a transport whose type is open-topped, a property taken from the rules data, and
@@ -1227,9 +1246,10 @@ send each kind of request.
 **scenario random stream.** The specs' name for the original's pseudo-random stream whose draws
 decide game state, as opposed to the *unsynchronised random stream*. A *draw* takes one raw value
 from it. A *ranged draw* gives a number in an inclusive range and may take no raw value, one or
-several (S-0202, claim 4; S-0009). Our engine reproduces the original's draws in number and in
-order, so that a game played from the same seed with the same orders has the same outcome as in
-the original; that is why specs state how many draws happen and in which order. Network games are
+several (S-0202, claim 4; S-0009). Each topic spec states how many draws happen and in which
+order so that our engine can reproduce the random choices of the behaviour it specifies. This is
+not a promise of identical match outcomes where a departure or a non-default quirk changes a rule
+or its draws. Network games are
 left to a future spec (see *multiplayer game, network game*). S-0202
 owns its algorithm, seeding and derived forms (claims 1 to 9) and the kinds of systems that draw
 from it (claim 10); each topic spec states the draws it takes.
@@ -1272,8 +1292,10 @@ S-0204 (claim 11, Formulas F5).
 
 **single-player game.** A skirmish or a campaign mission, as opposed to a *network game*. See S-0201.
 
-**skirmish.** A game against computer opponents, set up in the game's lobby screen with chosen houses,
-start positions and a game mode.
+**skirmish.** A non-campaign game set up in the skirmish lobby with chosen houses, start positions
+and a game mode, rather than played over a network. In the original the opponents are computer
+players. Our engine also permits a skirmish with no person-played house; its end test is S-0414's
+(claim 6), by the project lead's decision.
 
 **slope.** A cell whose ground is inclined rather than flat. Its slope shape comes from its terrain
 tile (S-0010, claim 6). S-0106 owns the slope shapes and the surface height within the cell (claims
@@ -1518,7 +1540,7 @@ G1. **Direction convention.** Directions in the original have the zero and the s
     turn to map south (increasing y) and three quarters of a turn to map west (decreasing x). A
     vehicle pre-placed by a map starts facing *v*/256 of a turn, where *v* is the map's facing value
     (an integer from 0 to 255), that is, *v* × 256 facing units. The 65536 facing units of a full
-    turn are our own unit (see *facing*). How finely the original stores a direction in general is
+    turn are our own unit (see *facing*). How finely the original distinguishes directions in general is
     S-0204's (claim 10).
     - Backing: `measurable` (Scenario G1) for the zero, the sense and the map value's scale to
       within the 1/32 turn that a drawn vehicle body shows (S-0105, claim 3). The step of the map
@@ -1602,8 +1624,11 @@ G3. **Game speed and timings counted in ticks (skirmish).** In a skirmish game t
     S-0201 owns this path (claim 11). G3 only points to it. (S-0201 also has a chrono flash step
     during the freeze of a radar-panel movie, but that happens only in a campaign mission, which
     always runs at index 2 (S-0201, claims 11 and 12), so it is outside G3's skirmish scope.)
-    - Backing: `measurable` (Scenario G3 for the timings outside the exceptions; the exceptions are
-      measured by the scenarios of the specs that own them)
+    - Backing: `measurable` for production and fixed-route movement (Scenario G3). The assertion
+      that these are the only two kinds of exception is `unmeasured`: no finite set of scenarios
+      checks every game-state timing and every interaction; Scenario G3 tests examples, not that
+      exhaustive assertion. Each named exception inherits the backing and scenarios of its owning
+      spec; no completed measurement is claimed here
     - Confidence: medium (no other use of the game-speed index by a game rule is known. The one
       timer of the original known to run in real time during a game and reach game state is the
       length of a timed freeze, which reaches it only through exception 2 (S-0201, claims 10 and
@@ -1711,9 +1736,10 @@ switch for the same behaviour:
   of this switch.
 - `quirks.last_bale_lost`: the last bale of a resource cell, owned by S-0401 (claim 3); S-0402
   names it for what a harvester gets.
-- `quirks.radar_first_building_decides`: the first radar building deciding a house's radar,
-  described by S-0405 (claim 12) and S-0410 (claim 1) and named by S-0409. It is one switch with
-  this one name, whichever of S-0405 and S-0410 comes to own it.
+- `quirks.radar_first_building_decides`: the first qualifying radar building deciding a house's
+  radar, owned by S-0410 (claim 1, Edge cases and quirks). S-0405 (claim 12) and S-0409 point
+  to it. The original tests only that first building; with the switch off any qualifying building
+  that is neither electromagnetically locked nor being erased can provide radar.
 
 ## Import mapping
 
@@ -1727,8 +1753,11 @@ Every other key belongs to the import mapping of the spec that owns its concept.
 
 ## Measurement scenarios
 
-All three run under the *measurement setup*: an unmodified install with no loose override files and
-no engine add-ons. None of them needs test data beyond its test map. Observations are made with a
+All three run under the *measurement setup*: an unmodified install with no engine add-ons.
+Use the standard skirmish mode at 800 × 600 pixels, with the director and mods off, no superweapon
+use, and no trigger effects unless a referenced sub-test explicitly needs them.
+Their local tests need no extra data beyond their test maps. The finer-facing sub-test delegated
+by G1 to S-0206 R2 uses the named test rules file of that scenario. Observations are made with a
 *recorder*. Each scenario records the display path it used, naming any display compatibility layer
 generically (see *measurement setup*).
 
@@ -1798,7 +1827,8 @@ generically (see *measurement setup*).
   whose control did not start at the position of its index tests S-0201 claim 7, not this claim,
   and is void here. No result falsifies part (b′), which is `unmeasured` (claim G2).
 - *Resolution:* the scenario resolves differences of 1 % or more. A run set with
-  *N*₀ ≥ 0.99 × *N*₁ confirms part (b). A run set in which *N*₀ is not above 1.01 × *N*₁ cannot
+  *N*₀ ≥ 0.99 × *N*₁ supports part (b) within this tolerance; it cannot establish exact equality.
+  A run set in which *N*₀ is not above 1.01 × *N*₁ cannot
   test part (a), because the machine may have limited the rate; part (a) is judged only on a run
   set, on this or a faster machine or display path, in which it is. For part (a), each pair of
   neighbouring indices falls in one of three regions: *N*ₛ < 0.99 × *N*ₛ₋₁ confirms the claim for
@@ -1814,19 +1844,25 @@ scenario T6, part G.
 - *Setup:* a purpose-made map with open flat ground. A skirmish with one human player who has a
   construction yard (a building that produces buildings), enough credits for one building and one vehicle standing at the start of a
   straight, free route 10 cells long; one bystander computer player whose start position is on the
-  far side of the map. The observed area is the construction yard and the vehicle's route. Game
-  speeds 1 and 5.
+  far side of the map. Use the same stock vehicle type, initial body facing and route at every
+  speed. The house has enough unchanged power for production, one factory building of the chosen
+  building's kind, and no harvesting, damage, construction or sale during the observation. The
+  observed area includes that factory building, its power buildings and the vehicle's route.
+  Test all game-speed indices 0 to 6.
 - *Procedure:* in each run, order one building of one stock type (the same type in every run), and
   order the vehicle to the cell at the end of the route. The orders may be given at any time; no
   exact tick is needed.
 - *Observable:* *D*ᵇ, the number of ticks from the first tick on which the building's production
   shows progress to the tick on which it becomes ready to place; *D*ᵐ, the number of ticks from the
   first tick on which the vehicle moves to the tick on which it reaches its destination cell.
-- *Runs:* 3 per speed.
-- *Expected:* the same *D*ᵇ and the same *D*ᵐ in every run at both speeds. If the runs at one speed
-  differ among themselves, the range of values at speed 1 and the range at speed 5 overlap.
-- *Falsified if:* for either duration, every value at speed 5 is below every value at speed 1, or
-  every value at speed 5 is above every value at speed 1.
+- *Runs:* 3 per speed. Record each endpoint's tick number with a read-only tick recorder and
+  tick-labelled captures. A run is void if another unit interferes, power or factory count
+  changes, credits run out, or an endpoint cannot be identified to an exact tick. Repeated
+  variation at one speed with these controls is inconclusive and needs investigation, not a pass
+  based merely on overlapping ranges.
+- *Expected:* the same integer *D*ᵇ and the same integer *D*ᵐ in every valid run at all speeds.
+- *Falsified if:* either duration is repeatably different at any two speeds under these controls.
+  Equality supports only these two examples; it cannot confirm the exhaustive part of G3.
 
 ## Open questions
 

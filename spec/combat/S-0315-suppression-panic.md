@@ -2,13 +2,13 @@
 id: S-0315
 title: Suppression and panic (infantry fear, prone and panic in combat; parasite suppression)
 topic: combat
-revision: 4
+revision: 5
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-10
+approved-on: 2026-10-13
 measurements: []
-requests: []
+requests: [Q-0087]
 supersedes: []
 ---
 
@@ -33,7 +33,7 @@ Shared terms used here are defined in the glossary: *infantry*, *vehicle*, *hous
 - **Fear level, prone state, fraidycat, fearless, cyborg, can crawl.** As S-0107 (Terms): the fear
   level is an integer from 0 to 300 per infantry unit; the prone state means lying down; the other
   four are infantry type properties (S-0107 and S-0208; Import mapping lists the flags that this
-  spec reads: fraidycat, fearless and can crawl). A unit whose type cannot crawl never lies down
+  spec reads: fraidycat, fearless, cyborg and can crawl). A unit whose type cannot crawl never lies down
   (S-0107, claims 6 and 15); the only such unit that can be prone is a crippled cyborg (S-0208,
   Terms and claim 8; S-0302, claim 15).
 - **Panicking.** An infantry unit whose fear level is above 199, so that walking shows the *panic*
@@ -122,15 +122,31 @@ Shared terms used here are defined in the glossary: *infantry*, *vehicle*, *hous
    - it moves at the prone speed of S-0208 claim 8: slower than walking when its type can crawl,
      and faster when it cannot, which is possible only for a crippled cyborg
      (`quirks.prone_noncrawler_speedup`, S-0208's switch),
-   - a human-controlled unit that is ordered to move gets up first, unless it is a fraidycat or a
-     cyborg (S-0107, claim 15),
+   - a prone unit of a human-controlled owner asks (not forced) for *get-up* only when
+     a non-empty destination is reassigned that is already its current destination, unless
+     its type is a fraidycat or a cyborg (S-0107, claim 15). The same cell or the same object
+     counts; occupying the destination cell alone does not. A first or different destination,
+     clearing a destination, and merely queuing a waypoint do not trigger this request.
+     It happens at destination assignment, whether by an applied order or later by a
+     behaviour, not at the start of locomotion. No order family guarantees it: move,
+     attack-move, attack pursuit, area guard, scatter, enter and capture all use the same
+     rule when they assign a destination; S-0107 claim 15 gives the Q-0087 order table.
+     The request can be refused by S-0107 claim 6 and is not saved or retried by movement.
+     If accepted, prone protection and prone firing end when *get-up* starts, not when its
+     image frames finish. Thus a first move can begin crawling, rather than getting up
+     first. Fear-driven get-up is a separate rule (S-0107, claim 15). Our AI houses follow
+     the human-controlled rule; neutral and special houses make no destination-driven
+     request (glossary *AI house*),
    - a cyborg that is prone dies without being crippled first (S-0302, claim 15) and without a death
      sequence (S-0107, claim 17).
    No other effect of the prone state on combat was found: it does not change the unit's range,
    its rate of fire, whether others can target it, or the chance that a shot hits it.
    - Backing: `measurable` (through the owners' scenarios; scenario P3 for the absence of other
-     effects)
-   - Confidence: high for the cited effects; medium for the absence of others
+     effects; scenario P5 and S-0107 scenario M4 for destination-driven get-up),
+     `unmeasured` (the fraidycat exception to destination-driven get-up: such a type never
+     lies down in stock play, as S-0107 claim 15 explains)
+   - Confidence: high for the cited effects and the repeated-destination test; medium for
+     the fraidycat exception and the absence of other effects
 
 4. **Effects of panic.** A panicking unit walks with the *panic* sequence (S-0107, claim 7) at its
    ordinary speed (S-0208, claim 10). Panic changes nothing else in combat: the unit's weapon,
@@ -145,7 +161,7 @@ Shared terms used here are defined in the glossary: *infantry*, *vehicle*, *hous
    of a move. In our engine an *AI house* follows the rule for human-controlled houses (glossary *AI
    house*): its infantry do not lie down while moving. The original's behaviour is recorded for
    the designers of our AI only.
-   - Backing: `measurable` (S-0107 scenario M6)
+   - Backing: `measurable` (scenario P6 below)
    - Confidence: high (the original's rule, as S-0107)
 
 ### Parasite suppression
@@ -288,6 +304,11 @@ destroyed while they carry a parasite.
   stays as it was and no *guard* is queued for it, and every other unit is as before. S-0107's own
   switch for the same effect after a hit (`quirks.fraidycat_fear_ignores_fearless`) is
   separate; the two can be set independently.
+- **Repeated destination required for get-up.** S-0107 owns
+  `quirks.prone_get_up_repeated_destination` (default: on, the original). On: claim 3's
+  destination-driven request requires the same current non-empty destination. Off: any
+  non-empty destination assignment can request get-up, with the other owner, type and
+  sequence conditions unchanged. This spec adds no separate switch.
 - **The prone non-crawler speed-up** belongs to S-0208 (`quirks.prone_noncrawler_speedup`); this
   spec names no switch of its own.
 
@@ -295,7 +316,9 @@ destroyed while they carry a parasite.
 
 | User data | Feeds | Form | Absent |
 |---|---|---|---|
-| Rules, infantry type section, `Fraidycat`, `Fearless` | fraidycat, fearless (claims 1, 2) | boolean | no (S-0107) |
+| Rules, infantry type section, `Fraidycat`, `Fearless` | fraidycat, fearless (claims 1, 2; fraidycat also excludes destination-driven get-up in claim 3) | boolean | no (S-0107) |
+| Rules, infantry type section, `Cyborg` | cyborg, including exclusion from destination-driven get-up (claim 3) | boolean | no (S-0107) |
+| Art, infantry image section, `Sequence`; referenced sequence section, `Up` | get-up sequence that claim 3 requests | section name; integer triple and optional facing, as S-0107 | no section; zero image-frame count, so the request is refused (S-0107) |
 | Rules, type section, `Ammo` | ammunition limit (claim 2) | integer | owned by S-0301 (no limit) |
 | Rules, infantry type section, `Engineer` | engineer (Edge cases, the original's computer-only rule) | boolean | no |
 | Rules, warhead section, `Sonic` | sonic warhead (Terms) | boolean | no |
@@ -494,6 +517,47 @@ comes out alive beside the host, stays attached, or is gone without coming out.
 - *Falsified if* (parts a to g): any outcome differs from the one expected; part c's probes
   measure the formula 2*d* − *T*, and part c2 the boundary.
 - *Runs:* 3 per part (5 for part c's two timings), with different random seeds; all must agree.
+
+**P5: first move versus repeated destination (claim 3; Q-0087).** A small flat skirmish
+map, stock rules and art, director and mods off, game speed index 2. A human player's
+ordinary crawl-capable soldier survives a hit and finishes lying down; a bystander computer
+player is kept outside the observed area (the soldier and its route). Script input to give
+it a move to a distant reachable cell while fear is still at least 50, then repeat that
+same move while it is crawling and still has that destination. Use a fresh prone soldier
+for a different-destination control and a move-to-occupied-cell control with no current
+destination. Repeat with a prone cyborg for the type exception.
+- *Observable:* record destination, stance and current sequence at each order boundary and
+  each tick with the read-only recorder, plus drawn image frames and movement.
+- *Expected:* first/different assignments and the occupied-cell control do not themselves
+  start get-up; the repeated destination starts get-up at assignment when the sequence
+  permits it, and ends prone state at that start. The cyborg does not get up from either
+  assignment. Any fear-driven get-up before the test finishes invalidates that run.
+- *Falsified if:* an eligible first/different assignment starts get-up, a repeated assignment
+  with an interruptible current sequence fails to start it, the cyborg gets up from the
+  assignment, or stance stays prone until get-up finishes. Three valid runs per case.
+- *Order-family and refusal coverage:* S-0107 scenario M4 additionally varies attack-move,
+  attack pursuit, area guard, queued route points, scatter, enter and capture, missing get-up
+  image frames and a non-interruptible sequence. Its expected equality and timing results
+  apply here; S-0213 owns which assignment each order makes.
+
+**P6: lying down during a move (claim 5).** Use a purpose-made flat test map and named test data
+   for two crawl-capable infantry test units, one owned by a human-controlled house and one by an
+   original computer-controlled house. Neither is fraidycat or fearless. Keep both out of combat
+   except for a single test hit from a known attacker that makes each survive with its fear level
+   at 100; apply the hit only after each unit has begun a long, reachable move. Have the human
+   player order the first unit to move by scripted input. Have a computer-player team script give
+   the second unit its long, reachable move. Record each unit's movement destination, whether
+   movement is in progress, its fear level (or the lie-down effect used by S-0107's measurement
+   scenarios), and whether it lies down, from the hit until arrival. Void a run if a unit takes
+   another hit, loses its destination, or fails to remain in movement.
+   The team script and test data are measurement setup, not claims about our engine's AI.
+   *Expected:* the human-owned original unit does not lie down while it has a destination or
+   movement in progress; the original computer-owned unit lies down during its move while its
+   post-hit fear remains above the lie-down threshold. On our engine, a corresponding AI-house
+   unit follows the human-controlled rule, as the glossary's AI-house decision specifies.
+   *Falsified if:* the human-owned original unit lies down during movement, or the original
+   computer-owned unit does not lie down during a valid moving interval with fear above the
+   threshold. Three valid runs per owner, with all runs agreeing.
 
 ## Open questions
 

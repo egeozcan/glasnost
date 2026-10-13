@@ -2403,6 +2403,7 @@ fn walled_game(r: &Ruleset) -> World {
         })],
         variants: 0,
         anim: None,
+        no_burrowing: false,
     });
     let mut map = testkit::empty_map(SIZE);
     let wall_x = at(2, 0).x;

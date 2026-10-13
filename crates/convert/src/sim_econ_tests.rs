@@ -32,9 +32,9 @@ fn import(base: &str, art: &str) -> (SimData, Vec<String>) {
 
 const BASE: &str = "[Countries]\n0=Ruritania\n[Ruritania]\nCostUnitsMult=1.25\nIncomeMult=0.75\nSide=Blue\nMultiplay=yes\nCost=2\n\
 [BuildingTypes]\n0=MILL\n1=PLANT\n[MILL]\nPower=-30\nRefinery=yes\nAdjacent=4\nPrerequisite=plant,power\nOwner=Ruritania,Nowhere\nUnitsCostBonus=0.5\nFactory=Whatever\nImage=MILLART\n\
-[PLANT]\nPower=100\nExtraPower=7\n\
+[PLANT]\nPower=100\nExtraPower=7\nSight=6\n\
 [VehicleTypes]\n0=TRUCK\n[TRUCK]\nDock=MILL,Elsewhere\nBuildLimit=3\nPoweredUnit=yes\n\
-[Tiberiums]\n0=Rubies\n[Rubies]\nValue=33\nGrowthPercentage=0.2\n\
+[Tiberiums]\n0=Rubies\n1=Opals\n[Rubies]\nValue=33\nGrowthPercentage=0.2\nImage=1\n[Opals]\nImage=2\n\
 [SuperWeaponTypes]\n0=Zap\n[Zap]\nDisableableFromShell=yes\nType=Thing\n\
 [General]\nHarvesterLoadRate=9\nPrerequisitePower=PLANT\nPadAircraft=Ghost\n\
 [AI]\nBuildTech=MILL\n\
@@ -62,6 +62,8 @@ fn building_econ_fields_are_converted() {
     assert_eq!(mill.econ.art_number_of_docks, Some(2));
     assert_eq!(mill.econ.special_anim.as_deref(), Some("SPIN"));
     assert_eq!(s.buildings["PLANT"].econ.extra_power, Some(7));
+    // spec: S-0409 Import mapping (a building's Sight, cells)
+    assert_eq!(s.buildings["PLANT"].econ.sight, Some(6));
     // Q-0100: the factory field is not converted and the importer warns.
     assert_eq!(mill.factory, None);
     assert!(w.iter().any(|m| m.contains("Q-0100")));
@@ -97,6 +99,8 @@ fn country_econ_fields_and_no_effect_warning() {
 fn tiberiums_superweapons_and_general_econ() {
     let (s, _) = import(BASE, ART);
     assert_eq!(s.tiberiums["Rubies"].value, Some(33));
+    assert_eq!(s.tiberiums["Rubies"].image_run, Some([102, 12, 8]));
+    assert_eq!(s.tiberiums["Opals"].image_run, Some([27, 12, 0]));
     assert_eq!(s.superweapons["Zap"].disableable_from_shell, Some(true));
     assert_eq!(s.superweapons["Zap"].kind.as_deref(), Some("Thing"));
     let g = &s.general.economy;
@@ -119,4 +123,37 @@ fn one_text() {
     assert!(!is_one_text("2"));
     assert!(!is_one_text("-1"));
     assert!(!is_one_text("11e-1"));
+}
+
+// spec: S-0112 claim 10 and Constants (the image run from the image numbers in layer order; 2 keeps an earlier S; −1 changes nothing)
+#[test]
+fn tiberium_image_runs() {
+    use super::econ::image_run;
+    assert_eq!(image_run(&[]), None);
+    assert_eq!(image_run(&[-1]), None);
+    assert_eq!(image_run(&[2]), Some([27, 12, 0]));
+    assert_eq!(image_run(&[1, 2]), Some([27, 12, 8]));
+    assert_eq!(image_run(&[3, -1]), Some([127, 12, 8]));
+    assert_eq!(image_run(&[4]), Some([147, 12, 8]));
+    assert_eq!(image_run(&[0]), Some([102, 12, 8]));
+}
+
+// spec: S-0108 Import mapping (Buildup, BuildupTime), S-0406 Import mapping (the word 3x3Refinery)
+#[test]
+fn buildup_and_refinery_foundation_are_converted() {
+    let base = "[BuildingTypes]\n0=MILL\n1=PLANT\n2=SHED\n[MILL]\nImage=MILLART\nStrength=5\n[PLANT]\nImage=PLANTART\nStrength=5\n[SHED]\nImage=SHEDART\nStrength=5\n\
+                [General]\nBuildupTime=0.25\n";
+    let art = "[MILLART]\nFoundation=3X3REFINERY\nBuildup=MILLMK\n[PLANTART]\nFoundation=3x3\nBuildup=none\n[SHEDART]\nBuildup=\n";
+    let (s, _) = import(base, art);
+    let b = &s.buildings;
+    assert_eq!(b["MILL"].foundation, Some([3, 3]));
+    assert_eq!(b["MILL"].foundation_refinery, Some(true));
+    assert_eq!(b["PLANT"].foundation_refinery, None);
+    assert_eq!(b["MILL"].econ.buildup, Some(true));
+    assert_eq!(b["PLANT"].econ.buildup, None);
+    assert_eq!(b["SHED"].econ.buildup, None);
+    assert_eq!(
+        s.general.economy.buildup_time.as_ref().map(|d| d.0.as_str()),
+        Some("25e-2")
+    );
 }

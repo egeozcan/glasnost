@@ -2,11 +2,11 @@
 id: S-0407
 title: Tech tree (what a house may build: prerequisites and generic groups, tech level, country lists, stolen tech, build limits, captured buildings, secret labs)
 topic: production
-revision: 3
+revision: 4
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-12
+approved-on: 2026-10-13
 measurements: []
 requests: []
 supersedes: []
@@ -141,7 +141,9 @@ stream*, *game start*, *absent-key default*, *importer warning*, *quirk switch*,
    for which they have started to hold is not offered, until the next recheck. Two cases in which
    this can be seen: at the start of a sale of the house's only factory building of a kind, (b)
    fails for the types of that kind, yet they stay offered until the building's removal (claim 12,
-   event (b)); and when a refinery-alternative vehicle without the don't-score flag enters a
+   event (b)); the build icon also stays until that recheck, rather than disappearing one tick
+   after the sale starts (see Open question 4 for the needed correction to S-0411); and when a
+   refinery-alternative vehicle without the don't-score flag enters a
    transport, a type that needed it for the refinery group (claim 8 (b)) stays offered until the
    next recheck. Whether an offered type is at limit, by contrast, follows the current counts at
    every moment: a type at limit is offered but a build order for it is refused (claim 13), and its
@@ -973,3 +975,12 @@ Backing).
    or another transfer of ownership was not verified; T8 (e) uses two buildings placed one after
    the other. A measurement would capture an older building after a newer one is placed and
    repeat (e).
+4. **Cross-spec correction to confirm at sign-off.** S-0411 claim 2 currently removes icons at a
+   per-tick buildability test, so it predicts removal in the tick after the sell order is applied,
+   while its claim 4, Legality keeps the type offered until the sale's removal recheck. That is not
+   the rule of claims 1 and 12 here: both the icon and the offer remain until a recheck, and the
+   start of a sale alone calls for none. S-0411 claim 2 and its Terms must follow that recheck
+   timing; its claim 4's legal-but-ignored build or resume order during a sale remains consistent
+   with claim 13 here. This is a needed change to S-0411, not an answered timing question.
+   Confirmation remains pending T14 run 7 and S-0411 scenarios S2 and S4 (e3); an icon removed
+   before any recheck event would falsify this spec's prediction.

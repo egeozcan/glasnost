@@ -1,9 +1,9 @@
 ---
 id: Q-0079
 title: Landed aircraft in the map-wide search (both passes, and the distance unit of the score)
-status: open
+status: answered
 related: [S-0309]
-answered-by: []
+answered-by: [S-0309]
 ---
 
 ## Need

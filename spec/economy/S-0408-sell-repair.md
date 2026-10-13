@@ -2,11 +2,11 @@
 id: S-0408
 title: Selling and building repair (refund, what a sale releases, selling vehicles and walls, which buildings can be sold or repaired)
 topic: economy
-revision: 2
+revision: 3
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-11
+approved-on: 2026-10-13
 measurements: []
 requests: []
 supersedes: []
@@ -75,6 +75,10 @@ house state, on or off). In addition:
 - **Armed** (scenario S6 only). In S-0312's sense (F4): the object has the primary
   weapon of S-0312's claim 6 second choice, or, for a building infantry can occupy, its occupants
   can fire from it.
+- **Builder of a wall overlay.** The first building type in the registry whose wall overlay is
+  that overlay, as defined in S-0406 (Terms, *builder of a wall overlay*). "The building type that
+  builds that wall" means this builder, even when other types name the same overlay or the builder
+  itself has no wall flag. The unsellable flag in claim 12 is that first type's.
 - **Silent wall sale.** A wall sale (claim 12) that plays no sound whoever the house is. The only
   one is the removal of walls under a building being placed (S-0406, claim 9). A sale ordered by
   a sell-wall order is not silent.
@@ -163,27 +167,18 @@ house state, on or off). In addition:
      with the random-state recorder)
    - Confidence: medium (one upgrade per sale, its refund, the creation draw)
 
-6. **The course of a sale.** The selling behaviour's processings are 1 tick apart (claim 16). The
-   sale of a building without upgrades runs as follows (state table in State and ordering). A
-   building that packs up goes through the same course with the differences of S-0415 (claim 9),
-   among them which buildings release survivors, passengers and garrison
-   (`quirks.packup_release_by_guard_spot`); the releases below are those of an ordinary sale:
-   - At its first processing the building tells every docked unit (Terms; for example a harvester
-     unloading at a refinery, a vehicle on a repair depot, an aircraft on its pad) to leave, a building that
-     holds a vehicle in its bunker lets the vehicle out, and its burning-damage animations end.
-     Nothing else is released yet and the build-down has not begun.
-   - At each later processing, as long as a unit is still docked to it, the sale waits.
-     At the first processing at which no unit is docked, the building releases its absorbed
-     passengers, then its garrisoned infantry, then its sale survivors (claims 7 to 9), the local
-     player hears the sell sound for an own building, and the build-down begins. The order is
-     visible in the positions taken (a unit that comes out first can occupy a standing position
-     that a later one would have got) and in the order of the draws that each release takes
-     (claim 9 for the occupants). With nothing
-     docked this is the second processing, 1 tick after the first.
-   - The build-down runs for the time S-0108 (claim 5) gives.
-   - At the first processing after the build-down has finished, the house receives the building's
-     refund (claim 1), then the value of the resources it stores (claim 10), and the building is
-     removed.
+6. **The course of a sale.** The selling behaviour's processings are 1 tick apart (claim 16).
+   The sale of a building without upgrades has the following observable states. A building that packs up goes through the same course with the differences of S-0415 (claim 9), among them which buildings release survivors, passengers and garrison (`quirks.packup_release_by_guard_spot`); the releases below are those of an ordinary sale.
+
+   | Sale state or condition | Observable result |
+   |---|---|
+   | First processing | Every docked unit (for example, a harvester unloading at a refinery, a vehicle on a repair depot, or an aircraft on its pad) is told to leave; a vehicle held in the building's bunker is let out; burning-damage animations end. No other release occurs and build-down has not begun. |
+   | A later processing while any unit remains docked | The sale waits. |
+   | First processing at which no unit is docked | Absorbed passengers, garrisoned infantry and then sale survivors (claims 7 to 9) are released, in that order. The local player hears the sell sound for an own building, and build-down begins. The order is observable in the positions taken (an earlier unit can occupy a standing position a later unit would otherwise take) and in the order of release draws (claim 9 for the occupants). |
+   | Build-down | It lasts for the time S-0108, claim 5, gives. |
+   | First processing after build-down has finished | The house receives the building's refund (claim 1), then the value of its stored resources (claim 10), and the building is removed. |
+
+   With no unit docked, the release and build-down-start state is reached on the second processing, one tick after the first.
 
    The building is not in operation from the start of the sale (S-0405, claim 8), so a defence stops
    firing at once, but a power plant keeps its output until it is removed (S-0405, claim 3). A
@@ -288,15 +283,18 @@ house state, on or off). In addition:
 
 12. **Selling a wall.** A sell-wall order (S-0213, table T1) for a cell removes the wall in it when
     all of these hold: the cell holds a wall overlay, the wall has an owner, the owner is
-    human-controlled (in our engine: any player house, glossary *AI house*), and the building type
-    that builds that wall exists and does not have the unsellable flag. The silent wall sale of
+    human-controlled (in our engine: any player house, glossary *AI house*), and the first building
+    type in the registry whose wall overlay is that overlay exists and does not have the unsellable
+    flag (S-0406 Terms, *builder of a wall overlay*). Only that first type's flag matters; a later
+    type naming the same overlay cannot make the wall sellable. The silent wall sale of
     S-0406 (claim 9) follows the same rule, without the sound. The order does not check
     that the wall's owner is the issuing house; input offers it only on the acting house's own walls
     (S-0214, claim 13). The wall leaves its cell with no owner, the cell's passability and the
     pathfinding regions are worked out again (S-0211, S-0212), and the sell sound plays when the
     issuing house is the local player's and the sale is not a silent wall sale (Terms). **The house receives
     nothing** (`quirks.wall_sale_no_refund`, Edge cases).
-    - Backing: `measurable` (scenario S8)
+    - Backing: `measurable` (scenario S8; S-0406 scenario PL8 part k for the same builder choice
+      during a silent wall sale)
     - Confidence: medium
 
 ### Building repair
@@ -417,7 +415,7 @@ tick the building disappears.
 ## Edge cases and quirks
 
 - **A wall sale pays nothing** (`quirks.wall_sale_no_refund`, default: the original). With the
-  switch off, the house receives the refund of claim 1 for the building type that builds the wall.
+  switch off, the house receives the refund of claim 1 for the builder of the wall overlay (Terms).
   This is a quirk, not a rule: the missing payment looks like a lost refund rather than a design.
 - **At most one engineer per sale.** The repeated choice of claim 7 is the original's rule, with no
   switch: it keeps a sale from releasing several engineers. Each repetition takes its draws.
@@ -624,12 +622,17 @@ tick number. Any game speed.
   file).
 - *Procedure:* (a) sell it in sell mode. (b) Sell a section of a second wall test type whose building
   has the unsellable flag, by a sell-wall order (a test map's scripted click on the cell). (c) After
-  (a), order a ground vehicle through the cell.
+  (a), order a ground vehicle through the cell. (d) In a named test map, define two building types
+  naming the same wall overlay, the first without a wall flag and with the unsellable flag, the
+  later a wall type without the unsellable flag. Sell an own section of that overlay, then repeat
+  in a fresh game with only the first type's unsellable flag off. Repeat both runs with the first
+  type's wall flag on; each run uses one section.
 - *Observable:* the cell's overlay and the credits; in (c) the vehicle's route.
 - *Expected:* (a) the wall vanishes and the credits do not change; (b) the wall stays; (c) the vehicle
-  passes through the cell.
-- *Falsified if:* the credits rise in (a), the wall in (b) is removed, or the vehicle is still blocked
-  in (c).
+  passes through the cell; (d) the wall stays when the first type is unsellable and vanishes with
+  no credit change when it is not, whatever that type's wall flag says.
+- *Falsified if:* the credits rise in (a), the wall in (b) is removed, the vehicle is still blocked
+  in (c), or any outcome in (d) differs.
 
 **S9: repairable test (claim 14).**
 - *Setup:* own buildings: one at full health, one damaged, one damaged of a test type with the

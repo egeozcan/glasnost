@@ -697,6 +697,59 @@ mod tests {
         assert_eq!(g.color[0], darken565(darken565(darken565(0xFFFF))));
     }
 
+    /// spec: S-0102 claim 27 (the overlay-shadow rows), claim 13 (an overlay shadow: −2 − 15 × ℓ_s,
+    /// flat, writes), claim 16 (rank 3: overlays before overlay shadows)
+    #[test]
+    fn overlay_shadow_rows() {
+        let q = ComposeQuirks::default();
+        let img = IndexedImage::new(1, 1, vec![5]).unwrap();
+        let draw = |bias, paint| Drawing {
+            image: &img,
+            x: 0,
+            y: 0,
+            test: DepthTest::Writer,
+            depth: DepthSource::Profile {
+                profile: Profile::Flat,
+                bias,
+                companion: None,
+            },
+            paint,
+        };
+        let fresh = || {
+            let mut f = Frame::new(1, 1, 0, Frame::reset_reference(0));
+            f.color[0] = 0xFFFF;
+            f
+        };
+        let once = darken565(0xFFFF);
+        // On a bare tile pixel (stored 65535): darkened once.
+        let mut f = fresh();
+        f.draw(&draw(-2, Paint::Shadow), &rows(), &q);
+        assert_eq!(f.color[0], once);
+        // A second overlay shadow at the same level: equal depths, once.
+        f.draw(&draw(-2, Paint::Shadow), &rows(), &q);
+        assert_eq!(f.color[0], once);
+        // A tree's shadow (−3) and then a building's (−4) over it: darkened again each time.
+        f.draw(&draw(-3, Paint::Shadow), &rows(), &q);
+        assert_eq!(f.color[0], darken565(once));
+        // An animation shadow (−2, a writer here as the worst case) over it: not again.
+        f.draw(&draw(-2, Paint::Shadow), &rows(), &q);
+        assert_eq!(f.color[0], darken565(once));
+        // A flat ore body at the same level, drawn earlier (rank 3): the shadow ties and the ore
+        // shows undarkened.
+        let mut g = fresh();
+        g.draw(&draw(-2, Paint::Row(0)), &rows(), &q);
+        let ore = g.color[0];
+        g.draw(&draw(-2, Paint::Shadow), &rows(), &q);
+        assert_eq!(g.color[0], ore);
+        // A deck cell at level 1: its body −2 − 15 × 5, its shadow −2 − 15 × 1, so the shadow
+        // never darkens the deck's own pixels.
+        let mut h = fresh();
+        h.draw(&draw(-77, Paint::Row(0)), &rows(), &q);
+        let deck = h.color[0];
+        h.draw(&draw(-17, Paint::Shadow), &rows(), &q);
+        assert_eq!(h.color[0], deck);
+    }
+
     /// spec: S-0010 claim 22 (a diamond paints all 900 pixels, index 0 included; row 29 never)
     #[test]
     fn diamond_paints_index_zero() {

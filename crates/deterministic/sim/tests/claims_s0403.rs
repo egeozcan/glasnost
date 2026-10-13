@@ -422,6 +422,7 @@ fn claim_8_resume_quirk_off() {
 }
 
 // spec: S-0403 claim 8 (a new factory changes R only at the house's power re-evaluation; the step under way keeps its period; B7 (b))
+// spec: S-0405 claims 7 and 11 (placing a building makes the house due; working out its power re-evaluates the lines' periods)
 #[test]
 fn claim_8_refresh() {
     let mut r = ruleset();
@@ -435,14 +436,16 @@ fn claim_8_refresh() {
     step(&mut w);
     let before = item(&w, 0, tank).unwrap();
     assert_eq!(before.period, 16);
+    // A second factory, counted from now on, but R is not worked out until
+    // the power re-evaluation: a direct call to the counting gives 8 while
+    // the line still holds 16.
     building(&mut w, "WARFACT", 0, 2, 0);
-    for _ in 0..20 {
-        step(&mut w);
-    }
-    // No power re-evaluation (the power topic's stub never makes one due): R unchanged.
+    assert_eq!(production::period(&w, HouseId(0), tank), 8);
     assert_eq!(item(&w, 0, tank).unwrap().period, 16);
     let due = item(&w, 0, tank).unwrap().due;
-    production::on_power_reevaluated(&mut w, HouseId(0));
+    // The placement made the house due (S-0405 claim 7): its next house
+    // update works out power and then every line's period (S-0405 claim 11).
+    step(&mut w);
     let after = item(&w, 0, tank).unwrap();
     // T = 450: R = 8; the step under way keeps its due tick.
     assert_eq!(after.period, 8);

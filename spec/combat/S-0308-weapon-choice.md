@@ -2,13 +2,13 @@
 id: S-0308
 title: Weapon choice (primary or secondary per target, elite weapons, multi-weapon types, deployed, passenger and garrison weapons)
 topic: combat
-revision: 1
-sources-class: [decomp]
+revision: 2
+sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-10
+approved-on: 2026-10-13
 measurements: []
-requests: []
+requests: [Q-0083]
 supersedes: []
 ---
 
@@ -75,11 +75,14 @@ gives them; *elite weapon* is S-0311's (claim 6), with the slots here.
 
 ## Behaviour
 
+This spec covers skirmish combat and import. Network games and campaigns are out of scope.
+
 ### Weapon slots and elite weapons
 
 1. **Slots come from the type.** Which weapons a type holds in its slots is read from its type
    section (Import mapping). A type whose turret count is above 0 fills slots 0 to *N* − 1 from its
-   numbered weapon keys, where *N* is its weapon count; a type whose turret count is 0 or less fills
+   numbered weapon keys, where *N* is its weapon count (supported counts are 0 … 18; claim 16
+   gives the safety departure for larger counts); a type whose turret count is 0 or less fills
    slot 0 from its primary key and slot 1 from its secondary key, and the elite slots 0 and 1 from
    the two elite keys. Neither form reads the other's keys. When a rules layer gives a type's
    section and the type's clear-weapons flag is set as that section leaves it (a layer that omits
@@ -234,9 +237,14 @@ gives them; *elite weapon* is S-0311's (claim 6), with the slots here.
     versus bands of S-0304, the threat scoring and candidate tests of S-0309 and the attack rule of
     S-0214 all look at the weapon this spec chooses against the object concerned, asked afresh each
     time.
-    - Backing: `measurable` (for the firing check, scenario W8 parts a and d, where the shot is
-      refused or made according to the weapon chosen here; for the others, through the scenarios of
-      those specs)
+    - Backing: `measurable` (for the firing check, scenario W8 parts a and d, where the chosen
+      slot's firing legality determines whether a shot is refused or made; for the versus choice,
+      S-0304 scenario V2, where the non-zero-versus weapon is selected and the zero-versus weapon
+      is not; for acquisition candidate and scoring uses, S-0309 scenarios A2 and A4, where the
+      stated weapon-dependent candidate/score result determines which target is selected, and A8,
+      where expected-health preference determines the selected target; for the attack rule,
+      S-0214 scenario T4, where the target's legality for the weapon it would use determines the
+      attack result)
     - Confidence: high
 
 15. **Mean weapon damage.** Some rules (S-0309: who heals and who retaliates) use an object's *mean
@@ -252,6 +260,23 @@ gives them; *elite weapon* is S-0311's (claim 6), with the slots here.
     differ, for example for a type that switches to a healing weapon only through its weapon number.
     - Backing: `measurable` (scenario W10)
     - Confidence: high
+
+16. **Registration is not limited by usable slots.** With a positive turret count, normal and elite
+    numbered weapon references take effect for every positive integer number up to the imported
+    weapon count, including numbers above 18. They resolve or create weapon types by S-0004
+    claims 13 and 16. Newly created weapons read their sections in that same rules layer by
+    S-0004 claim 6, so their own references can create further types even when the weapon has no
+    safe usable slot. The normal reference precedes the elite reference at each number, and
+    lower numbers precede higher numbers for registration. Missing references create nothing.
+    - The original has no registration cutoff at 18, but an excessive count makes its overall
+      result undefined. This does not promise that such a game completes loading or can fire.
+    - **Departure for bad data.** Our engine provides only slots 0 … 17 and their elite slots,
+      keeps the registration and section-reading effects of higher-numbered references, and warns
+      about the excessive count. No usable firing slot is supplied for those higher references.
+    - Backing: `measurable` (scenario W11, shared with S-0004 K6). The safe slot limit and warning
+      are design rules, not predicted oracle results.
+    - Confidence: high for registration without a cutoff; medium for observing it in an original
+      game that successfully loads the unsafe test data.
 
 ## Formulas
 
@@ -296,7 +321,7 @@ secondary" and "the primary" are the weapons in slots 1 and 0.
 
 | Row | Firer and target | Slot |
 |---|---|---|
-| 1 | the firer is of a switching type (gunner and charge-turret types included) | its weapon number (claim 5) |
+| 1 | the firer is of a switching type (including a gunner type only when it is also a switching type) | its weapon number (claim 5) |
 | 2 | the firer is a building that can be occupied, lets occupants fire, and holds occupants | 0 (claim 13) |
 | 3 | slot 1 or slot 0 is empty, or the secondary has the never-use flag, or there is no target | 0 |
 | 4 | the firer rides in an open-topped transport and its passenger weapon index is not −1 | that index (claim 10) |
@@ -411,8 +436,9 @@ moment (for example the gattling stage and the deployed state of the same tick).
   `quirks.clear_weapons_any_turret_count` (default on = original). Off: the flag acts only on types
   whose turret count is 0 or less.
 - **Weapon count above 18** (claim 1). With a weapon count above 18 the original's result is
-  undefined. **Departure** (bad data): our engine reads only the first 18
-  numbered keys and the importer warns.
+  undefined. **Departure** (bad data): our engine fills only the first 18 usable slots and their
+  elite slots, but higher-numbered references still register weapons and those weapons read
+  sections (claim 16; S-0004 claims 6 and 16). The importer warns about the excessive count.
 - **Upgrade weapons win over occupants** (claim 12). A garrisoned building with an installed upgrade
   that supplies slot 0 fires the upgrade's weapon, not its occupants'. No switch proposed; this is a
   consequence of the slot rule.
@@ -423,7 +449,7 @@ moment (for example the gattling stage and the deployed state of the same tick).
 |---|---|---|---|
 | Rules, type section, key `TurretCount` | turret count: above 0 makes a multi-weapon type (claims 1, 5) | integer | held value; engine default 0 |
 | Rules, type section, key `WeaponCount` | *N* of claim 1 | integer | held value; engine default 0 |
-| Rules, type section, keys `Weapon1` … `Weapon18` and `EliteWeapon1` … `EliteWeapon18` (the number *k* fills slot *k* − 1) | slots and elite slots of a multi-weapon type, for *k* ≤ *N* | weapon type name | held value; engine default nothing |
+| Rules, type section, numbered keys `Weapon1` … `WeaponN` and `EliteWeapon1` … `EliteWeaponN`, where *N* is `WeaponCount` | weapon registration for positive integer *k* ≤ *N* on a multi-weapon type (claim 16), including *k* above 18; only *k* ≤ 18 fills usable slot *k* − 1 or its elite slot in our engine | creating weapon type reference, 127-byte text limit, trimmed and resolved as S-0004 claim 13 specifies | held slot value for supported slots; engine default nothing; absent references create nothing |
 | Rules, type section, keys `Primary`, `Secondary`, `ElitePrimary`, `EliteSecondary` | slots 0 and 1 and elite slots 0 and 1 of a type with turret count 0 or less (claim 1) | weapon type name | held value; engine default nothing |
 | Rules, type section, key `ClearAllWeapons` | clear-weapons flag (claim 1): when set on a type with turret count 0 or less, its primary, secondary and elite keys create no weapon type in that layer (S-0004, claim 13); on every type, when set as a layer leaves the section, slots 0 and 1 and elite slots 0 and 1 are empty after that layer, even if the layer names weapons for them | boolean | held value; engine default no |
 | Rules, type section, key `IsGattling` | gattling type (claim 7) | boolean | held value; default no |
@@ -617,6 +643,27 @@ secondary 3 (*M* = 0) it does not. With primary −1 and secondary 2 (*M* = trun
 not retaliate when attacked (S-0309, claim 18), with primary −1 and secondary 4 (*M* = 1) it does.
 - *Falsified if:* the unit with *M* = −1 does not pick the damaged ally, the unit with *M* = 0 does,
   or the retaliation results are reversed.
+
+**W11: registration beyond usable slots (claim 16; S-0004 K6).**
+- *Setup:* named test files: a loose base-rules copy and art copy, tiny skirmish map, one human
+  observer and one bystander computer player kept outside the test area. Director and mods off
+  apart from the named test files. Any fixed game speed. A vehicle type has positive turret count
+  and weapon count 19. Only its nineteenth normal weapon reference names a new weapon *W*.
+  No other field names *W*. Its section names a new firing animation *A*, not listed elsewhere.
+  The art section of *A* uses stock artwork and names a new decorative spawned overlay. Give the
+  map that overlay's rules section and place its expected registration index as in S-0004 G3.
+  Use a mode with no extra overlay registrations.
+- *Procedure:* load once with this normal reference, once with only the nineteenth elite
+  reference naming *W*, and once with count 18 while retaining the nineteenth reference.
+  A positive control names *W* in the first slot instead. Keep the bystander away throughout.
+- *Observable:* record the artwork at the expected new overlay index by screenshot. The overlay
+  demonstrates that *W* read its section, created *A*, and *A* read its art in a later layer.
+- *Expected:* the overlay appears in both count-19 runs and the first-slot control, not in the
+  count-18 control. A successful count-19 load lacking the overlay while the first-slot control
+  shows it falsifies the claim. Failure to load is inconclusive: the original's excessive count
+  is unsafe. No firing through a nineteenth slot is attempted or predicted.
+- *Our engine:* both count-19 imports create the overlay but provide no nineteenth firing slot,
+  and issue the excessive-count warning. This checks the safety departure, not oracle behaviour.
 
 ## Open questions
 

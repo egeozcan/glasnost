@@ -787,6 +787,25 @@ fn map_walls_take_the_owner_of_the_nearest_qualifying_building() {
     assert_eq!(wall_owner(&w, w1), None);
 }
 
+// spec: S-0210 claim 14 (a) (no distance limit: a wall far from every building still takes the nearest qualifying building's owner)
+#[test]
+fn a_wall_far_from_every_building_still_has_an_owner() {
+    let far = cell(-15, -15);
+    let near = cell(13, 15);
+    // Alpha's hut more than 40 cells from `far`; Beta's (flag off) much nearer.
+    let w = owner_world(
+        &[far, near],
+        &[(BETA, cell(-12, -15)), (ALPHA, cell(15, 15))],
+        Some(false),
+    );
+    assert_eq!(wall_owner(&w, far), Some(HouseId(ALPHA)));
+    assert_eq!(wall_owner(&w, near), Some(HouseId(ALPHA)));
+    // No building on the map: no owner, wherever the walls lie.
+    let w = owner_world(&[far, near], &[], None);
+    assert_eq!(wall_owner(&w, far), None);
+    assert_eq!(wall_owner(&w, near), None);
+}
+
 // spec: S-0210 claim 14 (a) (equal distances: the building created first, in map order)
 #[test]
 fn equally_near_buildings_the_first_created_wins() {

@@ -2,13 +2,13 @@
 id: S-0003
 title: INI value forms
 topic: rules-import
-revision: 8
+revision: 9
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-10
+approved-on: 2026-10-13
 measurements: []
-requests: []
+requests: [Q-0061, Q-0075]
 supersedes: []
 ---
 
@@ -212,7 +212,9 @@ our engine's result.
      infinity rather than the largest finite single. No observable known to this spec shows a
      decimal field to one part in 2²⁴, and in the fields checked a threshold or factor cannot tell
      infinity from the largest finite single; if such an observable is found, these parts become
-     measurable through it, as claim 17 is through scenario V12
+     measurable through it, as claim 17 is through scenario V12. The single-first input
+     precision is now `measurable` for the red health ratio through S-0302 scenario D11d
+     (also scenario V13 here); that backing supersedes the precision limitation for this field
    - Confidence: high (the syntax, single precision, the rounding rule outside the three cases, and
      overflow to infinity); low (the original's results in the three cases)
 
@@ -228,8 +230,17 @@ our engine's result.
    Some fields keep the value in single precision. For those the double result is narrowed to single,
    also rounded toward zero: `10%` in such a field is 0.0999999940395… (the single just below 0.1),
    while `0.1` without `%` stays 0.100000001490116… Which fields are single precision belongs to the
-   topic specs that define them.
-   - Backing: `measurable` (scenario V4, for the factor of 100)
+   topic specs that define them. The red and yellow health ratios are held as doubles, but their
+   text still undergoes claim 6's single conversion first: without `%`, widening that single
+   is exact, not a fresh conversion of the text to double. With `%`, the double product is kept
+   without a final single narrowing. For example, `0.6` without `%` gives exactly
+   0.60000002384185791015625 for either ratio. S-0302 F5 therefore gives a strength of 1000
+   a red threshold of exactly 600.00002384185791015625 hit points: a hit from 601 to 600
+   reports *now red*, not the later hit from 600 to 599. S-0302 owns that report and its effects.
+   - Backing: `measurable` (scenario V4, for the factor of 100; V13 and S-0302 D11d,
+     for the red ratio's input precision); `unmeasured` (the yellow ratio's identical input
+     precision: V13's original-game observable tests the red ratio, while the original's
+     yellow damage-state threshold is fixed at half strength, S-0302 claim 13)
    - Confidence: high (the rounding mode is claim 17's, which holds from before the first data
      file is read)
 
@@ -456,6 +467,39 @@ our engine's result.
       claim 7's, measured by scenario V4)
     - Confidence: high
 
+### Combat name and integer lists
+
+19. **No-type items in combat name lists do not occupy places.** The animation-name and
+    voxel-animation-name lists identified in Import mapping rows C15 and C16 omit `none` and
+    `<none>`, ignoring ASCII letter case. The remaining items keep their relative order,
+    including repetitions. A list written `none,Alpha,<none>,Beta` therefore has two entries,
+    `Alpha` and `Beta`, not four. Selection indices and random-choice ranges use this retained
+    list; a no-type item cannot itself be selected. Claim 12's splitting and whitespace rules
+    still apply: a space attached to a no-type word prevents that word from matching while
+    `quirks.list_items_untrimmed` is on. Other non-empty names find or create a type
+    (S-0004), rather than reserving an empty place. A present non-empty value containing only
+    no-type items replaces the list with an empty list; a missing or empty key keeps the list
+    in force. These lists start empty before any layer supplies them.
+    - Backing: `measurable` (scenario V14; S-0303 A18 for detonation lists)
+    - Confidence: high
+
+20. **Debris maxima lists use decimal integer prefixes only.** Every non-empty item contributes
+    one signed 32-bit integer by claim 3's decimal form and claim 4's wrapping rule. The scalar
+    hexadecimal forms do not apply: `$10` gives 0, `10h` gives 10, and a `0x` prefix followed by `10` gives 0.
+    An item with no decimal digits contributes 0 and retains its place, whereas an empty
+    comma-separated item contributes no place. For example, `2,,abc,3` gives three entries,
+    2, 0 and 3. Claim 3's no-digit, trailing-text and overflow warnings apply to each item,
+    with no suffix exception for `h`. The text limit is 511 bytes, not the common 127 bytes.
+    A missing or empty key keeps the list in force; it starts empty. A present non-empty
+    value replaces it. The maxima and type lists are independent: omitting a no-type name
+    from the type list does not omit an integer from the maxima list. The first retained
+    type pairs with the first integer, and so on; S-0303 F6 and S-0312 F1 own the effects
+    and the safe results for mismatched list lengths.
+    - Backing: `measurable` (scenario V15; S-0303 A19); `unmeasured` (the 511-byte
+      reader limit: S-0001's physical-line limit cuts a value sooner once the key and `=`
+      take part of that line, so file input cannot reach this separate limit)
+    - Confidence: high
+
 ## Formulas
 
 Notation. For a real number *z*: RN₅₃(*z*) and RN₂₄(*z*) are *z* rounded to the nearest double
@@ -561,13 +605,14 @@ integer from claim 9.
 
 | Name (ours) | Value | Unit | Notes |
 |---|---|---|---|
-| percent_factor | RN₅₃(1/100), the double nearest to 0.01 | ratio | *c* in the formulas. Applied when `%` is present |
-| tuple_text_limit | 63 | bytes | Integer pairs, triples and quadruples, colour and byte triples |
-| common_text_limit | 127 | bytes | Most text and list fields |
-| type_list_text_limit | 31 | bytes | Values in type list sections |
-| type_name_max | 24 | bytes | Longest type name kept when a type is created (claim 15) |
-| int_bits | 32 | bits | Integer results, two's complement, wrap modulo 2³² |
-| armour_class_count | 11 | armour classes | *k* of the armour-modifier list (claim 13); the class order is in Import mapping row C5 |
+| Percentage factor | RN₅₃(1/100), the double nearest to 0.01 | ratio | *c* in the formulas. Applied when `%` is present |
+| Tuple text limit | 63 | bytes | Integer pairs, triples and quadruples, colour and byte triples |
+| Common text limit | 127 | bytes | Most text and list fields |
+| Debris-maxima text limit | 511 | bytes | Claim 20; physical-line truncation normally imposes a smaller limit |
+| Type-list text limit | 31 | bytes | Values in type list sections |
+| Maximum stored type-name length | 24 | bytes | Longest type name kept when a type is created (claim 15) |
+| Integer width | 32 | bits | Integer results, two's complement, wrap modulo 2³² |
+| Number of armour classes | 11 | armour classes | *k* of the armour-modifier list (claim 13); the class order is in Import mapping row C5 |
 
 ## State and ordering
 
@@ -662,12 +707,15 @@ unspecified in the original; our engine leaves the value in force and warns (cla
 | C6 | Entries of `[Colors]` | Colour-definition byte triples (claim 11, unread components 0) |
 | C7 | Other byte triples: colour fields of the rules file's `[AudioVisual]` and `[Radiation]` sections, the entries of the rules file's colour-adjustment section, and colour fields of some types (for example `LaserColor` of a particle system) | Generic byte triple (claim 11: unread components unspecified in the original; in our engine, the value in force's components) |
 | C8 | `PrimaryFireFLH`, `SecondaryFireFLH` and the other fire-position triples of a type (art file) | Integer triple (claim 9) |
-| C9 | Percentage fields (Terms, claim 18) known here: `ConditionYellow`, `ConditionRed` (in `[AudioVisual]`); `RefundPercent`, `RepairPercent`, `SpyMoneyStealPercent`, `CrewEscape` (in `[General]`). Topic specs may mark further decimal fields | Decimal with optional `%` (claims 6 to 8). A value without `%` above 1 in magnitude raises claim 18's importer warning; the value is unchanged |
+| C9 | Percentage fields (Terms, claim 18) known here: `ConditionYellow`, `ConditionRed` (in `[AudioVisual]`); `RefundPercent`, `RepairPercent`, `SpyMoneyStealPercent`, `CrewEscape` (in `[General]`). Topic specs may mark further decimal fields | Decimal with optional `%` (claims 6 to 8). Both health ratios keep the widened-single input, or its double percent product, as doubles, as claim 7 specifies; missing or empty keeps the value in force, with starting defaults owned by S-0302. Other fields' storage precision and defaults remain their topic specs'. A value without `%` above 1 in magnitude raises claim 18's importer warning; the value is unchanged |
 | C10 | Boolean fields such as `Selectable` | Boolean (claim 2) |
 | C11 | `Speed` and `Strength` of a type | Integer (claim 3) |
 | C12 | `Waypoint1` … `WaypointN` in a map's `[Header]`, *N* = the header's start-position count (S-0009) | Integer pair (claim 9). An unread number is unspecified in the original; in our engine it is the matching number of the value in force |
 | C13 | Rectangles in a map, such as `LocalSize` and `Size` in `[Map]` and the preview's `Size` | Integer quadruple (claim 10). Absent or empty: 0, 0, 0, 0. The map consequences and each field's component fallback are in S-0009 |
 | C14 | `MovementZone`, `SpeedType`, `Pip` of a type, `Foundation` of a building (art file) | Named value (claim 16) |
+| C15 | Warhead `AnimList`; `[CombatDamage]` `SplashList`; type `DebrisAnims`, `Explosion`, `DestroyAnim`; `[General]` `DamageFireTypes`, `MetallicDebris` | Animation-name lists, 127-byte text limit. Claims 12, 14 and 19: `none` and `<none>` are omitted, not empty slots. Start empty; missing or empty keeps the list in force |
+| C16 | Type or warhead `DebrisTypes`; `[General]` `BarrelDebris` | Voxel-animation-name lists, 127-byte text limit, otherwise as C15 (claim 19) |
+| C17 | Type or warhead `DebrisMaximums` | Decimal-prefix integer list (claim 20), 511-byte text limit. Unreadable non-empty items retain a place with 0; empty items are skipped. Start empty; missing or empty keeps the list in force |
 
 ## Measurement scenarios
 
@@ -798,6 +846,49 @@ spec's scenario use that scenario's named test data.
   which round-to-nearest arithmetic gives. S-0108 scenario B1 (a build-up delay one tick shorter
   than round-to-nearest gives) corroborates the claim but cannot falsify it, since how that spec's
   time value is first converted is not established.
+
+- **V13 (single-first health ratios, Q-0075).** Use S-0302 D11d's purpose-made skirmish
+  map, one human player and one distant bystander computer player, game speed 2, director
+  and mods off. Named map overrides give a test vehicle strength 1000, starting health 601,
+  red ratio written `0.6`, yellow ratio `0.75`, one smoke damage effect, and an attacking
+  weapon that delivers exactly 1 damage per hit. Record health and the first tick of smoke
+  with video and a read-only recorder, over one run of two hits. Expected: smoke begins
+  on the hit to 600, not on the hit to 599. The latter falsifies the single-first red-ratio
+  reading. Health-bar colour alone is not the observable because its comparison differs
+  (S-0302 D11d). The yellow ratio's original-game storage precision remains unmeasured
+  here for claim 7's stated reason.
+- **V14 (no-type omissions, Q-0061).** Common setup, game speed 2, one human player and
+  one distant bystander computer player, director and mods off. Named map overrides use
+  two existing, visibly distinct animation types, called `Alpha` and `Beta` here, and two
+  visibly distinct voxel-debris types. Compare each C15/C16 list written with the corresponding
+  two names against the same list with `none`, `<NONE>` and repeated empty comma-separated
+  items inserted before and between them. Also compare a previously populated list overridden
+  with `none` against one left absent. For the warhead animation list choose damage selecting
+  entry 0 under S-0303 F5; observe `Alpha`, not no animation. For splash, damage-fire,
+  explosion, destruction and debris lists, trigger their effect as S-0303 A18 and S-0312's
+  death scenarios describe, recording animation types/counts and the scenario random stream.
+  Use 100 events per list form; predict selections and draw counts from each recorded initial
+  random state and the owning formula, rather than comparing unmatched seeds. Expected:
+  inserted no-type/empty items leave the two-entry choice and its draw rules unchanged.
+  An all-no-type override gives an empty list, not the previously populated list. Any selection
+  of an empty slot, changed list-selection range, shifted entry-0 animation, or retained prior
+  list in the all-no-type run falsifies claim 19. Observe only the test objects and their effects.
+  Void the run under the bystander's rule if it interferes.
+- **V15 (decimal-prefix maxima, Q-0061).** Common setup at game speed 2 with director and
+  mods off; use S-0303 A19's warhead-debris test and a killed test vehicle under S-0312 F1.
+  Named map overrides supply two distinct voxel-debris types and enough requested debris
+  to distinguish the per-deal maxima through recorded random draws. Run each role ten times per maxima spelling `2,abc,3`,
+  `2,,3`, `$10,3`, `10h,3`, a `0x` prefix followed by `10,3`, and `none,3`; also insert a no-type name before
+  the first real debris type without changing the maxima. Record debris types and counts,
+  and random state for the owning formula's predictions. Expected imported integer lists:
+  (2, 0, 3), (2, 3), (0, 3), (10, 3), (0, 3), (0, 3), respectively. The inserted no-type
+  name does not shift the maxima paired with real types. Choose safe configurations with
+  a positive total and sufficient maxima entries; unused trailing maxima are harmless.
+  Counts inconsistent with these per-deal maxima and S-0303 F6 or S-0312 F1 falsify
+  claim 20; in particular a positive first-type count for `$10` or the `0x` spelling,
+  a per-deal maximum of 16 rather than 10 for `10h`, or
+  second-type debris for `2,abc,3` would do so. Observe the test kill/detonation area only
+  and apply the bystander's void rule.
 
 ## Open questions
 

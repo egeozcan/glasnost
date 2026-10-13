@@ -2,11 +2,11 @@
 id: S-0411
 title: Sidebar behaviour (build icons, clicks and the orders they give, icon states, queue counts, ready and placement)
 topic: ui
-revision: 4
+revision: 5
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-12
+approved-on: 2026-10-13
 measurements: []
 requests: []
 supersedes: []
@@ -23,6 +23,17 @@ building placement. The state rules for clicks (the busy-line, build-limit and r
 4) are also legality rules for every house's production orders (S-0404, claim 10); the offer rule
 is S-0407's; tab assignment and icon order are S-0004's (claim 11),
 production rules S-0404's, build times S-0403's and the credits display S-0416's.
+Network games and campaigns are out of scope.
+
+**Cross-spec changes required at hand-off.** Approved S-0404 revision 1 claim 9, P9 and Open question 1 must be revised to follow claim 2's
+recheck timing: destruction during tick *n*'s turn pass gives removal orders in tick *n*, applied
+at its end, not one or two ticks later. S-0404's factory eligibility wording must also distinguish
+its build-limit-only application test from a full current tech-tree test, so that it does not
+contradict S-0407 claim 13's stale-offer production. S-0407 claim 13 and its state/order table must
+distinguish orders issued in the recheck's house update from cancellation at the end of that tick.
+S-0407 revision 3 claim 1 already states that offer membership changes only at a recheck; that
+approved revision has no Open question 4. The glossary's *offered* entry must distinguish current
+buildability from the offer kept between rechecks and must not make icon removal a per-tick test.
 
 ## Terms
 
@@ -34,21 +45,21 @@ From S-0004 (Terms, claim 11): *sidebar tab*. From S-0213: *order*. From S-0403:
 hold*, *automatic hold*, *waiting for money*, *build order*, *hold order*, *cancel order*, *cancel-all
 order*, *place order*. From S-0405: *switched on*, *switched off*. From S-0407: *tech-tree rules*,
 *at limit* (a tech-tree answer) and *offered* (S-0407 claim 1: in the house's taken-up set as of the
-last recheck, which can lag the sidebar's own test below). In addition:
+last recheck). In addition:
 
-- **Buildable.** This spec's own test, made by the sidebar (claim 2): a type is *buildable* for a
-  house when its tech-tree answer is allowed or at limit and some factory building of the house
-  could make it without the tech-tree rule (S-0404, Terms; a factory building that is being sold
-  does not count). It differs from *offered* in two ways: it is judged afresh in every tick, while
-  the offer changes only at the rechecks of S-0407 (claim 12); and it does not wait for a taken-up
-  set. So a type can be offered and no longer buildable, between the start of a sale and the
-  recheck at its removal. Legality (claim 4) uses *offered*; the icons (claims 2 and 3) use
-  *buildable*.
+- **Buildable.** A type is *buildable* for a house when its current tech-tree answer is allowed or
+  at limit and some factory building of the house could make it without the tech-tree rule
+  (S-0404, Terms; a factory building that is being sold does not count). Unlike *offered*, this
+  describes current conditions, not membership in the taken-up set. A type can remain offered
+  and keep its icon after it stops being buildable, until the next recheck of S-0407 (claim 12).
+  Buildability alone does not remove an icon or give cancellation orders. Legality (claim 4) and
+  icon membership (claim 2) follow the offer; darkening (claim 3) follows current conditions.
 - **House update, turn pass.** As S-0203 (claim 8) places them: the *turn pass* is the part of a tick
   in which objects take their turns; each house's own *house update* follows it in the same tick and
   comes before the orders of the tick.
 - **Tick boundary.** As S-0213 (claim 1): an order given in tick *n* is applied at the end of tick
-  *n*, so an order's effect is first seen in tick *n* + 1.
+  *n*. An object first acts on it in tick *n* + 1; the drawn frame after the application boundary
+  can already show immediate changes (S-0203 claim 7).
 
 - **Build icon (cameo).** The glossary term, narrowed: a superweapon icon is also an entry of a tab
   (S-0004, claim 11), outside this spec.
@@ -63,7 +74,8 @@ last recheck, which can lag the sidebar's own test below). In addition:
   only for the tab flash of claim 11.
 - **New-build click.** A left click on an icon whose line has no item, that gives a build order which
   starts an item (claim 4, last row). *Pending* means: its build order has not yet been applied.
-  A left click on an icon whose line has an item gives a build order that queues a copy, or none.
+  A left click while the line has an item follows claim 4: it may resume, queue, cancel, request
+  release, start placement mode or give no order.
 - **Icon's line.** The production line of the icon type's kind (S-0404, claim 1).
 - **Icon's item.** The line's item when it is of the icon's type.
 - **Shift.** The keyboard modifier held during a click.
@@ -83,60 +95,64 @@ last recheck, which can lag the sidebar's own test below). In addition:
    - Confidence: high
 
 2. **Icons appear and disappear.** An icon is added when its type becomes offered to the local
-   player (S-0407, at the recheck of its claim 12; S-0004 claim 11 places it). It is removed when the type stops being buildable: no
-   factory building of the house could make it without the tech-tree rule (S-0404, Terms: a factory
-   building that is being sold no longer counts; whether a building is switched on, and whether an
-   aircraft factory building has a free dock, play no part), or the tech-tree rules refuse it. The
-   removal follows buildability (Terms), not the offer. In which tick the removal and its orders
-   come, relative to the tick of the loss, is not established (low confidence; scenario S2 records
-   it). Until it is measured, our engine takes buildability as it stands at the house update of each
-   tick (S-0203, claim 8: after the turn pass of the tick and before the orders), for every player
-   house alike, the local player's included: the icon is removed, and its orders are given, in the
-   first tick at whose house update the type is no longer buildable, and a type that stops being
-   buildable and is buildable again before that point is not removed. For a player house other than
-   the local player the orders are the same and no icon is involved. So for a loss in the turn
-   pass of tick *n* (a factory building or prerequisite destroyed) the icon goes and the orders are
-   given in tick *n*; for a loss that an order brings about (the start of a sale, an order applied
-   at the end of tick *n*, tick boundary in Terms) they come in tick *n* + 1. An order the sidebar
-   gives is applied at the end of the tick it is given in.
+   player (S-0407, at the recheck of its claim 12; S-0004 claim 11 places it). It is removed only
+   when a recheck removes the type from the taken-up set. The removal and its cancellation orders
+   occur in the house update containing that recheck: the first house update after a listed event
+   of S-0407 claim 12, not a separate check in every tick. The recheck considers every offered
+   type, including changes left pending by earlier non-events. A type that stops being buildable
+   and becomes buildable again before the next recheck keeps its icon.
+
+   When destruction of a prerequisite or factory building in the turn pass of tick *n* makes
+   the offered type fail the recheck, the recheck,
+   icon removal and orders occur in tick *n*. The start of a sale alone removes no icon and gives
+   no cancellation orders. With no intervening recheck event, the icon remains until the first
+   house update after the sold building's removal. An intervening event can cause an earlier
+   recheck and removal (S-0407 claim 12). In our engine the cancellation orders are given at that
+   same recheck for every player house, the local player's included; for another player house no
+   icon is involved. An order given by the sidebar is applied at the end of the tick it is given in.
 
    On the removal the sidebar gives a cancel order when the removed type is the item of its line, and
    a cancel-all order for the type when the house has a production line of the type's kind (S-0404,
    claim 9). When it gives both, a recorder logs the cancel order before the cancel-all order. The
-   end state is the same either way: item refunded, every queued copy of the type removed. When the
+   final state for that type is the same either way: item refunded, every queued copy of the type
+   removed. This does not claim that intermediate starts of other queued types are identical. When the
    tab being shown has no icons left, the sidebar switches to the first tab that has icons.
 
    Separately, S-0404 (claim 8) cancels an item itself when its last factory building leaves the map
    for good. So a done unit whose last factory building is lost is refunded by one path or the other,
    or earlier by a click (claim 4, rows 1 and 3); no click after the loss gives it a place order.
    The left-click rows that test for a missing factory building (claim 4, rows 1 and 3) are
-   therefore reached, for a non-aircraft type, only in the span between the loss of the last factory
-   building (the start of the sale, for a sale) and the removal (low confidence; scenario S4 (e),
-   (e2) and (e3) probe that span with a click in every tick). In that span the type is no longer
-   buildable, the icon is still shown and a click gives the order its row says (claim 4).
-   - Backing: `measurable` (scenario S2)
-   - Confidence: medium (the removal and its two orders); low (the tick of the recheck, and the span)
+   therefore reached, for a non-aircraft type, only in the span between the last factory building
+   ceasing to be able to make the type and the icon's removal at a recheck. For a sale with no
+   intervening recheck event, this span runs from the sale start to the recheck after the building's
+   removal. In that span the type is no longer buildable, the icon is still shown and a click gives
+   the order its row says (claim 4). Scenarios S4 (e), (e2) and (e3) probe reachable click ticks in separate runs.
+   - Backing: `measurable` (scenarios S2 and S4 e to e3; S-0407 scenario T14 run 7) for the
+     local player's behaviour; `unmeasured` for extending automatic orders to every player
+     house, a project rule rather than behaviour observable in the original
+   - Confidence: high (recheck timing); medium (the removal, its two orders and the click span)
 
 3. **Unavailable icons.** An icon is drawn darkened while any of these holds: it is a building or
    defence and its line has an item; no factory building of the house that is switched on could make
-   the type (S-0404, Terms); its build limit is reached (S-0407, tech-tree answer *at limit*, the
-   only answer that leaves an icon buildable but darkened). The icon that holds its own line's item
+   the type with the full tech-tree condition left out (but with the build-limit test retained,
+   including its allowance for an item in production, S-0407 claim 9); its build limit is reached (S-0407, tech-tree answer *at limit*, the
+   answer that keeps a type buildable while its limit alone darkens the icon). The icon that holds its own line's item
    is never darkened, whichever of these holds: it shows its state display instead (claim 8). So
    in a building line the item's icon stays lit while every other icon of that line is darkened, and a held item of a type at its build limit keeps its lit icon. (The cycle of a new-build click
-   that is still pending, before the item exists, is not claimed; scenario S3 records it.) The factory building test includes the tech-tree
-   condition, but a type the tech-tree rules refuse is removed from the sidebar (claim 2), so such
-   an icon is darkened at most until that removal. Dock occupancy plays no part in the darkening: an
+   that is still pending, before the item exists, is not claimed; scenario S3 records it.) A stale refusal of a prerequisite or another full tech-tree condition
+   does not by itself darken an icon: the offer stays until the next recheck, and its build order
+   can still take effect under S-0407 claim 13. S3's third run probes that case. Dock occupancy plays no part in the darkening: an
    aircraft icon stays lit while every dock is taken, although a build order for it is then ignored
    (S-0404, claim 3). Darkening is only a display: it does not change which order a click gives. What a click on a
    darkened icon does is given by claim 4 alone. A darkened icon never has the line's
    item, so none of claim 4's rows for an icon's own item (rows 1 to 5) applies to it: the causes
    "building line has an item" and "build limit reached" are covered by the two rows that give no
-   order (rows 6 and 7). A darkened icon whose cause is the
+   order (rows 6 and 7). A darkened icon whose only cause is the
    missing switched-on factory building gives a build order like any other, and S-0404 (claim 3)
    then ignores it when it is applied, so nothing starts or queues.
    - Backing: `measurable` (scenario S3)
-   - Confidence: medium (the three causes; the lit icon of the line's item); low (the cycle of a
-     pending new-build click)
+   - Confidence: medium (the three causes, the stale-refusal case and the lit icon of the line's
+     item). No prediction is made for a pending new-build click.
 
 4. **Left click.** A left click on an icon gives at most one order, by the first row that applies:
 
@@ -146,7 +162,7 @@ last recheck, which can lag the sidebar's own test below). In addition:
    | icon's item done, unit, in any other case | place order without a cell | |
    | icon's item done, building, and no factory building of the house could make the type without the tech-tree rule, switched on or not | cancel order | |
    | icon's item done, building, in any other case | none: placement mode starts | |
-   | icon's item on a player hold or automatic hold | build order | resumes, S-0404 claim 5 |
+   | icon's item on a player hold or automatic hold | build order | requests resume, subject to S-0404 claim 3's application tests |
    | building or defence whose line has an item (any type, not covered by the rows above) | none | a refusal sound plays (claim 12) |
    | type at its build limit (S-0407), not covered by the rows above | none | no sound is claimed (claim 12) |
    | any other state, including a type no switched-on factory building could make (darkened, claim 3) | build order | starts or queues (S-0404, claim 3) |
@@ -163,7 +179,8 @@ last recheck, which can lag the sidebar's own test below). In addition:
    No click with a modifier key gives several build orders at once. For a new build (the last three
    rows), which order a left click gives depends only on the state of the icon's line and on whether
    the type is at its build limit. Whether a factory building could make the type, and the tech-tree
-   condition, play no part in it; they are judged only when the order is applied.
+   condition, play no part in choosing the click's order. Application checks are S-0404 claim 3's,
+   and offer legality is S-0407 claim 13's.
 
    *Legality* (S-0404, claim 10 takes its state rule from here; the offer rule is S-0407's, claim
    13). A build order that starts or queues an item is legal when its type is offered, is not at its
@@ -171,22 +188,28 @@ last recheck, which can lag the sidebar's own test below). In addition:
    held item from its own icon (row 5) is exempt from the last two tests: it is legal whatever the
    type's build-limit state, and also for a building or defence whose line has that item; its type
    must still be offered. Both kinds stay legal when no switched-on factory building could make the
-   type; S-0404 (claim 3) then ignores the order when it is applied.
+   type because the factory is missing, selling or switched off; S-0404 (claim 3) then ignores
+   the order when it is applied. Exemption from a limit at issue time does not remove the
+   build-limit allowance tested with the factory when the order is applied.
 
    *In the span of claim 2.* The click table looks only at the state of the icon and its line, so a
    click on a shown icon of a type that is no longer buildable gives the order its row says: a build
    order from an idle icon, or a resume from the icon of a held item (row 5). What Legality then
    says depends on the cause of the loss. When the last factory building is being sold, the type is
-   still offered (the offer changes only at the recheck of the sale's removal, S-0407 claim 12), so
+   still offered until the next recheck (with no intervening event, the sale's removal recheck,
+   S-0407 claim 12), so
    the order is legal; no factory building could make the type, so S-0404 (claim 3) ignores it
-   when it is applied, and nothing starts, queues or resumes. When the loss is that the tech-tree
-   rules now refuse the type, the order is not legal (S-0407, claim 13) and has no effect. Either
-   way the line ends as it would without the click, and a recorder logs the order. So the sidebar's
+   when it is applied, and nothing starts, queues or resumes. When a non-event of S-0407 claim 12
+   makes the tech-tree rules refuse the type, its offer likewise remains unchanged until a recheck.
+   Under S-0407 claim 13, the build order is still legal while the offer remains, provided it passes
+   the other legality tests above, and it may take effect under S-0404 claim 3. Once a recheck removes the offer, the icon is gone and no further click
+   on it is possible. A recorder logs the orders given during the span. So the sidebar's
    rules and Legality agree: Legality is the rule for what takes effect, and the sidebar gives
    orders from the icon's state alone.
-   - Backing: `measurable` (scenarios S3 and S4; the span by S4 (e3))
-   - Confidence: medium (the table); high (one build order per click); low (the orders given in the
-     span); medium (no factory building test in the click; the exemption of the resume click from the build-limit and busy-line tests)
+   - Backing: `measurable` (scenarios S3 and S4; the sale span by S4 e3; stale tech-tree refusal
+     by S-0407 scenario T11)
+   - Confidence: medium (the table and the orders given in the span); high (one build order per
+     click); medium (no factory building test in the click; the exemption of the resume click from the build-limit and busy-line tests)
 
 5. **Right click.** A right click on an icon gives the order of the row that applies, if any:
 
@@ -197,32 +220,37 @@ last recheck, which can lag the sidebar's own test below). In addition:
    | no icon's item, but a copy of the type in its line's queue | cancel order (removes one queued copy, S-0404 claim 6); with Shift, cancel-all order |
    | otherwise | none |
 
-   *Extra hold order.* When the icon received a new-build click in the same cycle and that click is
-   still pending, a right click gives a hold order (the rows above give none at that moment, because
-   the item does not exist yet). After the tick the item exists and is on a player hold, and a
-   recorder logs the build order before the hold order.
+   *Extra hold order, unreachable through skirmish input.* If a right click could reach an icon
+   in the same cycle as its still-pending new-build click, it would give a hold order, leaving the
+   new item on player hold after the build order and then the hold order were applied. S-0213
+   claim 1 takes at most one input event per cycle, so scripted input cannot arrange those two
+   clicks in a skirmish. This conditional rule is `unmeasured`: the permitted input cannot reach
+   it, and a recorder cannot make it reachable.
 
    *No claim for other cases.* This spec makes no claim whether a right click in the same cycle as
    (i) a left click that queues a copy (the line has an item of another type, or, for a unit line,
    an item of the icon's own type), or (ii) a left click that resumes a held item, also gives a hold
-   order. They are not established. Scenario S5 (third run) records both so that a later revision can
-   state them; until then an engine may choose either.
+   order. They are not established and have the same input restriction as the extra hold order.
+   A later revision may state them if a reachable input is found; until then this spec constrains
+   neither case.
 
    So a running item is first held and then cancelled by a second right click; queued copies of a
    type are removed before its item (S-0404, claim 6).
-   - Backing: `measurable` (scenario S5; the right click on a done unit that waits for release, by
-     S7's fourth run; on a done building, by S8's third run)
+   - Backing: `measurable` (scenario S5 for reachable clicks; the right click on a done unit that
+     waits for release, by S7's fourth run; on a done building, by S8's third run); `unmeasured`
+     for the conditional extra hold order, for the input restriction explained above
    - Confidence: medium (the Shift variant); high (hold first, then cancel); medium (the extra hold
      order after a pending new-build click)
 
 6. **Building line exclusivity.** While a building or defence line has an item, the sidebar gives no
    build order that would start or queue an item on it, whatever the item's state (claim 4,
    busy-line row). The one build order it gives while such a line has an item is the resume of a
-   held item from that item's own icon (claim 4, row 5); the icon of a done item gives a place order
-   or starts placement mode instead. In our engine this is also a legality rule: no house, AI houses
+   held item from that item's own icon (claim 4, row 5); the icon of a done building starts
+   placement mode or gives a cancel order instead. In our engine this is also a legality rule: no house, AI houses
    included, has a starting or queuing build order take effect for a building or defence while that line
    has an item, and the resume of the held item stays legal (claim 4, Legality; S-0404, claim 10).
-   - Backing: `measurable` (scenario S4, parts b2 and c)
+   - Backing: `measurable` (scenario S4, parts b2 and c) for sidebar clicks; `unmeasured` for
+     extending legality to AI houses, a project rule not tested on the original
    - Confidence: high (the refusal while the line has an item); medium (the resume of a held
      building through its own icon)
 
@@ -238,24 +266,23 @@ last recheck, which can lag the sidebar's own test below). In addition:
      (0 to 54) plus 1, so it advances by one stage at every progress step (S-0403, claim 1). When the
      item is done the stage is the last one (55) and the *ready* label shows, in place of the running display.
      Whether stage 55 still covers part of the icon is not settled (low confidence; scenario S6). The
-     first stage can already show in the tick of the click, before the build order is applied; the
-     shown stage then moves gradually toward progress + 1. This early stage and the movement are
-     presentation only and not yet established or predicted: they change nothing in game state and their
-     exact timing is not established; scenario S6 records the stage in every drawn frame so that a later revision can state
-     them.
+     display around the new-build click may differ from progress + 1, but no early-stage or
+     smoothing rule is asserted here. Scenario S6 records those drawn frames for a later revision.
+     They are presentation only and do not change progress. After the item exists, the claimed
+     stage is progress + 1, which S6 tests against recorded progress.
    - A *ready* label is shown while the item is done (for buildings until placed; for units only
      while the release waits, S-0404 claim 7).
    - An *on hold* label is shown while the line is on a player or automatic hold and the item is not
      done.
    - A line waiting for money shows neither label; its clock simply stops.
    - Backing: `measurable` (scenario S6)
-   - Confidence: medium (labels, clock stage); low (the stage at done, the early first stage and the
-     movement)
+   - Confidence: medium (labels, clock stage); low (the stage at done). Early-stage timing and
+     smoothing remain open, not predicted claims.
 
 9. **Automatic release of finished units.** When a unit item of the local player becomes done in
    tick *n*, the sidebar gives a place order without a cell for it (S-0404, claim 7) in tick *n* + 1,
-   without any click. The order is applied at the end of tick *n* + 1, so the unit leaves its
-   factory building at the end of tick *n* + 1. If the unit is not released in tick *n* + 1, the sidebar does not repeat the
+   without any click. The order is applied at the end of tick *n* + 1; when a factory building
+   could release it and its exit is clear, the unit is released at that boundary. If the unit is not released in tick *n* + 1, the sidebar does not repeat the
    order. When no factory building of the house could release the unit (S-0404, Terms, *could release*,
    which includes the switched-on test and, for an aircraft, its fallback), the item stays done
    until a left click on the icon (claim 4), even after such a building appears. When a building holds the unit but cannot
@@ -265,17 +292,23 @@ last recheck, which can lag the sidebar's own test below). In addition:
    included, gets this automatic place order, issued in tick *n* + 1 for an item done in tick *n*,
    as the local player's is (AI-house ruling).
    - Backing: `measurable` (scenario S7 for units; scenario S8 for the announcement and the tab
-     flash of a building item)
+     flash of a building item); `unmeasured` for issuing the automatic place order for every
+     player house, a project rule not observable in the original
    - Confidence: high (automatic release of units); medium (the one-tick delay, the announcement
      and the flash)
 
 10. **Placement.** In placement mode a left click on a battlefield cell gives a place order with that
-    cell (S-0404, claim 7). Whether the cell is valid is S-0406. When the order fails, a refusal sound
-    plays and placement mode resumes with the same building. Which sound it is, and whether it is the
+    cell (S-0404, claim 7), subject to the order-legality checks of S-0406 claim 6. Placement mode
+    keeps S-0406's cursor shroud result, refreshed when the cell under the cursor changes; that
+    spec owns its use and the unknown value at mode start. A placement refused by its placement
+    tests plays a refusal sound and placement mode resumes with the same building. A place order
+    ignored because its factory condition fails instead follows S-0406 claim 1: the item stays
+    done and no sound plays. Which sound it is, and whether it is the
     one of the refusal row of claim 4, belongs to the sound spec (claim 12; planned S-0701). When it succeeds, placement mode ends.
     A right click on the icon while it is ready gives a cancel order (claim 5), which also ends
     placement mode.
-    - Backing: `measurable` (scenario S8, with its third run for the right-click cancel)
+    - Backing: `measurable` (scenario S8, with its third run for the right-click cancel,
+      S-0406 PL1 for ignored placement with no factory, and its claim 6's scenarios for legality)
     - Confidence: medium
 
 11. **Tab flashing.** While the local player has a done building or defence waiting for placement,
@@ -284,11 +317,11 @@ last recheck, which can lag the sidebar's own test below). In addition:
     ticks (every 10 drawn frames in a single-player game outside frozen cycles), also when the flash
     started in the middle of a period. The first period of a flash that starts at tick *t* lasts
     10 − (*t* mod 10) ticks, which is 10 when *t* is a multiple of 10. Which look (lit or dark)
-    belongs to which periods is not established; it is probably fixed by the parity of ⌊*t* / 10⌋
-    (low confidence; scenario S8 records it). Presentation only.
+    belongs to which periods is not established; scenario S8 records it without a prediction.
+    Presentation only.
     - Backing: `measurable` (scenario S8, with its second run for the superweapon)
     - Confidence: medium (done building, the multiples of 10 and the first period); low (ready
-      superweapon; the look of each period)
+      superweapon). The look of each period remains open.
 
 12. **Sounds.** Clicks that start, queue, resume, hold, cancel or refuse play interface sounds; done
     items play announcements. Which sound plays, and whether the refusals of claims 4 and 10 are one
@@ -296,7 +329,7 @@ last recheck, which can lag the sidebar's own test below). In addition:
     for:
     - a left click whose order starts or queues an item, resumes one or cancels one (claim 4, rows 1,
       3 and 5 and the last row, each only when its order takes effect: not a build order that is
-      ignored when it is applied, nor one that is not legal, as in the span of claim 2)
+      ignored when it is applied, as in the sale span of claim 2, nor one that is not legal)
     - the refusal row for a busy building line (claim 4)
     - a right click that holds or cancels (claim 5)
     - the done announcement (claim 9)
@@ -353,12 +386,11 @@ Ordering consequences:
   holds the unit but cannot release it yet retries by itself (S-0404, claim 7). With the switch off,
   the sidebar sends the place order in every tick in which a unit item of a player house is done and
   not yet released, so the unit leaves at the end of the first tick whose order finds a building
-  that could release it.
+  that could release it with an unblocked exit.
   Scenario S7 (second run) measures the default.
 - **Left click on a done item with no factory building** (claim 4, rows 1 and 3): the click refunds
   the item, as the removal of claim 2 does. It has no switch: for a non-aircraft type it is reached
-  only in the span of claim 2 (an engine that removes the icon in the same tick as the loss never
-  shows it, and the refund is the same), and for an aircraft it is the quirk below.
+  only in the span of claim 2, until a recheck removes the icon, and for an aircraft it is the quirk below.
 - **Left click on a done aircraft with every dock taken cancels it**
   (`quirks.done_aircraft_click_cancels`, default on = original). The test of claim 4's first row
   counts, for an aircraft, only aircraft factory buildings with a free dock, so a click on a done
@@ -380,8 +412,14 @@ that decide buildability S-0407's, and those of the production rules S-0403's an
 Measurement setup (glossary); a small purpose-made skirmish map; one human house (the observed
 house) and one bystander computer player, whose void rule applies with the observed house's base as
 the observed area; scripted input for exact click ticks; screen and audio capture of the sidebar at
-every drawn frame; a recorder (Terms) where a scenario names it. No scenario involves a random draw,
-so each part is run once; repeat a part only to confirm a surprising result.
+every drawn frame; a recorder (Terms) where a scenario names it. Game speed 6, resolution
+800 × 600, director off and mods off, except the named test map overrides. The test map is
+named SidebarProbe and contains the test types, limits, prerequisites and timing overrides each
+part needs; its chosen field values are recorded with the measurement. No predicted outcome
+depends on random draws, although production starts do take creation draws (S-0404 claim 11).
+Each part is run once; repeat a part only to confirm a surprising result. Scripted clicks are
+scheduled in distinct cycles, respecting S-0213 claim 1; the recorder's order-issue tick, not
+the time the script sent a button event, dates a click.
 
 **S1. Tabs and parallel lines.**
 - Setup: the house owns every kind of factory building, including a naval and an aircraft factory building, and
@@ -398,21 +436,37 @@ so each part is run once; repeat a part only to confirm a surprising result.
 **S2. Icons disappearing.**
 - Setup: a test unit type that needs a test prerequisite building; an item of it in production and one
   queued; the prerequisite destroyed by test trigger; second run: the last factory building of its kind sold.
-- Observable: the icon, the credits, the tab shown; with a recorder, the orders given and the
-  tick of the removal counted from the tick of the loss (recorded for a later revision, claim 2).
-- Expected: the icon disappears, the item is refunded and the queue cleared; when it was the tab's
+  Third run: use the named map overrides to make the removed type the only offered type in
+  the displayed tab, with icons in at least one other tab.
+- Procedure: record the destruction tick in the first run; in the sale run record both the sale
+  start and the building's removal, with no other event of S-0407 claim 12 between them. Void and
+  repeat the sale run if another recheck event occurs during that interval. In the third run
+  destroy the prerequisite while showing its tab. Use a recorder in all three runs. Fourth run:
+  reproduce the stale refinery-group loss of S-0407 T14 run 8, then unload the required vehicle
+  before any recheck event and place an unrelated building afterward. Void this run if another
+  event intervenes or the vehicle does not restore the prerequisite.
+- Observable: the icon, the credits, the tab shown; with a recorder, the orders given and their
+  ticks relative to the destruction, sale start and building removal.
+- Expected: first run, the icon disappears and cancellation orders are given in the destruction
+  tick's house update. Sale run, the icon remains throughout the sale until the first house update
+  after the building's removal, with no removal orders at sale start. The item is refunded and the
+  queue cleared; when it was the tab's
   last icon, the sidebar shows the first tab with icons. In the first run the recorder logs a
-  cancel order and a cancel-all order, the cancel order first.
+  cancel order and a cancel-all order, the cancel order first. In the fourth run the icon
+  remains throughout the loss and restoration, and the later recheck gives no cancellation
+  orders for that type.
 - Falsified if: the icon stays, production continues, the item is not refunded, queued copies
   remain, or, when it was the tab's last icon, the sidebar does not show the first tab with icons,
   or, with a recorder (first run), the cancel order and the cancel-all order are not both logged
-  with the cancel order first (claim 2).
+  with the cancel order first, or the icon or removal orders change at a tick other than the
+  predicted recheck tick, or the fourth run removes the icon or cancels production despite
+  restored buildability before the recheck (claim 2).
 
 **S3. Unavailable icons.**
 - Setup: a building in production; an aircraft factory building with all docks full; a build-limit-1 type
   already built.
 - Observable: whether each icon is darkened (including the icon of the building in production and
-  the limited type's icon in a second house state where a held item of that type exists), whether a
+  the limited type's icon in the held, over-limit infantry state of S4 b2), whether a
   click starts anything, and the sounds played by each click.
 - Procedure: click each icon once and record the sounds; for the icon of the building in production
   also in the cycle of its new-build click, drawn frame by drawn frame.
@@ -427,87 +481,117 @@ so each part is run once; repeat a part only to confirm a surprising result.
   sounds of the build-limit icon's click, the second run's darkened icon's click and the lit aircraft icon's
   click are recorded without a prediction (claim 12).
 
+- Third run: reproduce S-0407 T11 run 2's stale refinery-group refusal, with the test type's line
+  idle and a switched-on factory, no reached build limit and no other darkening cause. Record
+  its icon and click it before another recheck. Expected: the icon stays lit and the build order
+  starts an item. Falsified if: stale prerequisite refusal alone darkens it or the click cannot
+  start production (claims 3 and 4).
+
 **S4. Left clicks.**
 - Setup and procedure: left-click (a) an idle infantry icon three times; (b) a held item's icon,
   (b2) the icon of a held building, and in a second house state the icon of a held unit item of a
-  build-limit-1 type; (c) a second building icon while a building is in progress, held and ready,
+  build-limit-1 infantry type, with an extra on-map infantry of that type supplied by test trigger
+  after the item is held so its current answer really is at limit. Also run the held limited
+  infantry case without the extra on-map object (the production allowance then applies).
+  (c) a second building icon
+  while a building is in progress, held and ready,
   (d) a ready building icon; (e) a done unit icon after its only factory building has been sold:
   the item is left done by switching the factory building off at completion (as S7, second run), the
-  building is then sold, and the icon is clicked by scripted input in every tick from the tick of
-  the sell order until the icon is gone or the building has left the map; (e2) the same for a done
+  building is then sold. In separate fresh runs, click the shown icon once at each reachable
+  input cycle after sale start until icon removal, dating each by the recorder. Do not click
+  in the sell-order cycle. No other recheck event is allowed between sale start and
+  removal (void and repeat if one occurs); (e2) the same for a done
   building waiting for placement and the last factory building that could make it; (e3) with a
   recorder, in the same sale as (e) but with the type's line idle (the done item cancelled before
   the sale, a second run with a held item of the type instead), left-click the idle icon, and in
-  the second run the held item's icon, in every tick from the tick of the sell order until the icon
-  is gone; (f) a done
+  the second run the held item's icon, once at each reachable cycle after sale start in separate
+  fresh runs, until the icon is gone; (f) a done
   aircraft icon while every dock of the house's aircraft factory buildings has been taken during its
-  build; (g) in a fresh run for each modifier key, left-click an idle infantry icon once with that key held; (j) a done unit icon
+  build. Switch those buildings off at the end of the done tick, before the automatic place order,
+  and leave them off through the click so the item remains done; (g) in a fresh run for each modifier key, left-click an idle infantry icon once with that key held; (j) a done unit icon
   while a factory building holds the unit but its exit is blocked.
-- Observable: line state, queue count, credits, sounds played; in (e) and (e2) also the tick of the
-  icon's removal and, with a recorder, the orders given.
+- Observable: line state, queue count, credits, sounds played; a recorder logs orders in every
+  part, including no-order refusals and the place order of (j). In (e) to (e3) it also dates
+  sale start, the click, building removal and icon removal.
 - Expected: (a) one item and two queued; (b) resumed, no new copy; (b2) the held building and the
-  held limited unit are resumed, with no refusal and no new copy (claim 4, Legality); (c) no item
+  held limited unit without the extra on-map object are resumed, with no refusal and no new copy
+  (claim 4, Legality). With the extra object the at-limit held infantry icon still gives a build
+  order requesting resume, but the application-time limit allowance does not permit it, so the
+  item stays held and nothing queues (S-0404 claim 3; S-0407 claim 9); (c) no item
   starts or queues in any of the three states, and each click plays a refusal sound; (d) placement
   mode; (e) and (e2) the item ends refunded, and no click after the start of the sale gives a place
   order or starts placement mode (rows 1 and 3, or the removal of claim 2); which path gave the
-  refund is recorded; (e3) the recorder logs the orders the clicks give in the span (a build order
-  from the idle icon, a resume from the held item's icon, or none), recorded without a prediction
-  beyond claim 4's table; nothing starts, queues or resumes in either run; (f) refund (the done aircraft is cancelled); (g) at most one copy started or
-  queued. Each click that starts, queues, resumes, cancels or is refused plays an interface sound
+  refund is recorded. In a no-click control of parts e and e2, the icon remains until the removal's
+  recheck. In (e3), it remains until that recheck too: the recorder logs one build order per
+  click on the shown idle icon, or one build order requesting resume per click on the held item's
+  icon; nothing starts, queues or resumes in either run. (f) refund (the done aircraft is cancelled); (g) at most one copy started or
+  queued. In (j) the click gives a place order without a cell and does not cancel the item.
+  Each click that starts, queues, resumes, cancels or is refused plays an interface sound
   (claim 12); the sounds of (d) and (j) are recorded without a prediction.
 - Falsified if: any outcome differs, a left click with a modifier key gives more than one build order, a resume in
-  (b2) is refused or queues a copy, or in (e) or (e2) the item is still done after the building has
+  (b2)'s eligible control is refused or queues a copy, the over-limit held infantry icon gives no
+  build order or its order resumes or queues an item, or in (e) or (e2) the item is still done after the building has
   left the map or a click in the span gives a place order or starts placement mode, or an (e3) click starts,
-  queues or resumes an item.
+  queues or resumes an item, or the no-click controls or (e3) remove the icon before the removal's
+  recheck, or an (e3) click on the shown icon gives no build or resume order.
 
 **S5. Right clicks.**
 - Setup and procedure: right-click a running item's icon twice; repeat with two queued copies of the
   same type; Shift-right-click a held item with queued copies; right-click an icon whose type is only
-  queued. Second run: left-click the icon of a type whose line is free and right-click the same icon
-  in the same tick (scripted input). Third run, with a recorder: (i) left-click an
-  infantry icon while another infantry type is in production and right-click it in the same tick
-  (a queued copy); (ii) left-click the icon of a running unit item of the same type and right-click
-  it in the same tick (a queued copy of the item's own type); (iii) left-click a held item's icon (a
-  resume) and right-click it in the same tick.
-- Observable: line state, queue count, credits, sounds played; in the second and third runs also the
-  orders given (recorder) and the line state after the tick.
+  queued. Second run: left-click an idle icon, then right-click it in a later cycle after the
+  recorder confirms that the item exists. Also right-click an idle icon with no queued copy,
+  and an item waiting for money. The same-cycle two-click cases are not oracle runs: S-0213
+  claim 1 makes them unreachable through permitted scripted input (claim 5).
+- Observable: line state, queue count, credits, sounds played; in the second run also the orders
+  given (recorder) and the line state after each order's application.
 - Expected: hold, then cancel with refund; queued copies removed first; Shift removes all copies and
   the item; the only-queued icon loses one copy; each hold and cancel click plays an interface sound
-  (claim 12). Second run: after the tick the item exists and is on a player hold (clock frozen, *on
-  hold* label); the recorder shows a build order and then a hold order. Third run: recorded
-  only, no prediction (claim 5 makes no claim for the three cases).
+  (claim 12). Second run: the later right click holds the running item; the idle icon gives no
+  order, and the waiting-for-money item is put on player hold.
 - Falsified if: the first right click cancels a running item, a cancel removes the item before
   the queued copies, a Shift-right click leaves a queued copy or the item, the right click on the
   only-queued icon removes other than one copy, a hold or cancel click plays no interface sound,
-  or, in the second run, the item runs on after the tick.
+  or, in the second run, the item runs on after the hold is applied, the idle icon gives an order,
+  or the waiting-for-money item is not held.
 
 **S6. Queue count and labels.**
-- Setup: queue two infantry types A, A, B while A is in production; hold; run out of money.
-- Procedure: after the money test, let the item run to completion with enough money.
+- Setup: queue two infantry types A, A, B while A is in production; use slow steps so settled
+  clock stages can be distinguished. A recorder logs actual progress per tick as well as drawn
+  stages. Second run: an unfinished item on automatic hold after its only factory is switched off.
+- Procedure: hold A, resume it, exhaust the money and then restore enough to complete the items.
+  Record through the last queued A becoming the item, with B still queued. In the second run
+  record the label and clock during automatic hold, then switch the factory on. Include a done
+  building waiting for placement, so the done stage can be observed for several ticks.
 - Observable: the numbers on every icon, including the icon of a type with no queued copy while its item runs (claim 7), and the labels; the clock stage in every drawn frame, from the
   click tick on; the icon of the done item compared with an idle icon.
 - Expected: A shows 3, B shows 1 (only queued); once A's last copy is the item and B is queued, A shows no number; the held line shows the on-hold label; the
-  money-starved line shows no label and a frozen clock; the clock advances one stage per step; the
-  done item shows the *ready* label and the last stage.
+  money-starved line shows no label and a frozen clock; once an item exists the clock stage equals
+  recorded progress + 1; the done item shows the *ready* label and the last stage. The automatic
+  hold also shows the on-hold label and a frozen clock, and those end after switch-on.
 - Falsified if: any number or label differs, no *ready* label shows at done, the stage shown from
-  the tick after the one in which the build order was applied differs from progress + 1, or the
-  stage shown at done is not 55 (low confidence, claim 8). The frames before that tick are recorded
+  the first drawn frame in which the item exists differs from recorded progress + 1, or the
+  stage shown at done is not 55 (low confidence, claim 8), or the automatic hold lacks its label
+  or keeps advancing the clock. The frames before the item exists are recorded
   for a later revision (claim 8).
 
 **S7. Automatic release.**
 - Setup: a vehicle type whose build time gives a step period *R* of 1 (S-0403, claim 1; for example a
   test type with a very low cost field); the recorder's tick counter; second run with the only vehicle
-  factory building switched off by its power switch, S-0405, at completion, so that no building
+  factory building switched off by its power switch, S-0405, by an order applied at the end
+  of the done tick (after completion but before the automatic place order), so that no building
   could release the unit (S-0404, Terms), then switched on again; third run with the only vehicle factory building's exit blocked
   by units at completion, then cleared (as S-0404, scenario P7); fourth run as the second, then a
   right click on the done icon before switching on, with a recorder.
-- Observable: the done tick (clock full) and the tick the unit appears outside the factory building; the
-  sounds played.
-- Expected: the unit appears at the end of the tick after the done tick; in the second run it does not
+- Observable: recorded progress and done tick, automatic place-order issue and application
+  ticks, release tick and first drawn frame showing the unit outside the factory building; sounds.
+  The recorder distinguishes release at a boundary from later movement out of the exit.
+- Expected: in the clear-exit control the automatic order is issued in the tick after the done
+  tick and releases the unit at that tick's end; in the second run it does not
   appear after switching on until a left click on the icon; in the third run the unit stays done and
   is released by the building's own retry once the exit clears (S-0404, claim 7), without a click. In the fourth run the recorder shows a cancel order and the item is refunded (claim 5).
   The done item plays an announcement (claim 12).
-- Falsified if: in the first run the unit appears at the end of any tick other than the tick after the done tick, the sidebar re-sends the
+- Falsified if: in the first run the automatic order or release boundary differs from the
+  prediction, the sidebar re-sends the
   order by itself in the second run, or the third run needs a click, or the fourth-run right click gives no cancel order or no refund, or the
   second-run unit appears after switching on without a click, or no announcement plays when the
   item is done.
@@ -518,37 +602,38 @@ so each part is run once; repeat a part only to confirm a surprising result.
   that the done ticks differ in their remainder modulo 10. Second run: a house that owns a ready superweapon, the
   tab of its icon not shown. Third run: as the first.
 - Procedure: first run: watch the first tab's button from the done tick; open the tab, click the
-  icon, click an invalid cell, then a valid one. Third run: click the icon (placement mode), then
+  icon, click an explored, adjacent cell blocked by an immovable object (legal order, failed
+  placement), then a valid cell. Third run: click the icon (placement mode), then
   right-click the icon.
 - Observable: the tab button's look per drawn frame, with the tick number of each change; the sounds played from the done tick on,
   whether placement mode continues after the invalid click; in the third run whether placement mode
   ends and the credits.
 - Expected: the construction-complete announcement plays and the button starts flashing when the item is done (claims 9 and 11; the exact tick is recorded for a later
   revision), with its look changing only at ticks whose number is a multiple of 10 (so
-  every 10 ticks, 10 drawn frames) and a first period of 10 − (*t* mod 10) ticks for a done tick
-  *t* (claim 11); which look belongs to which period is recorded; the
+  every 10 ticks, 10 drawn frames outside frozen cycles) and a first period of
+  10 − (*t* mod 10) ticks, where *t* is the recorded flash-start tick, not an assumed done tick
+  (claim 11); which look belongs to which period is recorded; the
   invalid click plays a refusal sound and placement mode continues; the valid click places the
   building and ends the mode. Second run: the superweapon's tab button flashes the same way. Third
   run: placement mode ends, the item is cancelled and refunded.
 - Falsified if: the look changes at a tick that is not a multiple of 10, the first period differs
   from 10 − (*t* mod 10) ticks, the announcement is missing, placement mode ends after the
-  invalid click, the superweapon tab does not flash, or the right click leaves placement mode on.
+  invalid click, valid placement fails to place or end the mode, the superweapon tab does not
+  flash, or the right click leaves placement mode on or fails to cancel and refund the item.
 
 ## Open questions
 
 1. Whether a right click on the battlefield, or a key, also leaves placement mode without cancelling
    is not established.
-2. The smoothing of the clock while a build order is pending (claim 8) is only roughly known.
+2. Early clock stages and smoothing around a new-build click are not established (claim 8).
 3. Whether the last clock stage (55) of a done item still covers part of the icon (claim 8, S6).
 4. Whether the sound of a refused build click (claim 4) and of a refused placement (claim 10) are
    the same (claim 12; planned S-0701).
 5. Whether a right click in the same cycle as a queueing or resuming left click gives an extra hold
-   order (claim 5, S5 third run).
+   order (claim 5). S-0213 claim 1 makes these cases unreachable through permitted skirmish input.
 6. Which sound, if any, the build-limit click, the darkened-icon click and the click on a lit
    aircraft icon with every dock taken play (claims 4 and 12, S3).
-7. The tick of the sidebar's recheck of buildability relative to the loss of a factory building or a
-   prerequisite, and so the span in which claim 4's rows 1 and 3 can be reached (claim 2, S2, S4).
-8. Which look (lit or dark) the tab flash shows in each period (claim 11, S8).
+7. Which look (lit or dark) the tab flash shows in each period (claim 11, S8).
 
 ## Questions for the project lead
 

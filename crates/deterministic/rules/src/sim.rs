@@ -1358,6 +1358,10 @@ pub struct BuildingType {
     // nocite: a pair of numbers (width, height), our format's shape
     #[serde(default)]
     pub foundation: Option<[i32; 2]>,
+    /// Art `Foundation` is the 8-cell 3 × 3 word `3x3Refinery`, which lacks
+    /// the cell (2, 1) (S-0406 claim 2, S-0302 claim 13); absent: no.
+    #[serde(default)]
+    pub foundation_refinery: Option<bool>,
     /// `Bib` (S-0204 Terms).
     #[serde(default)]
     pub bib: Option<bool>,
@@ -1644,6 +1648,12 @@ pub struct TerrainObjectType {
     /// `AnimationProbability`, *p*, a single (S-0401 F8); absent: 0.
     #[serde(default)]
     pub animation_probability: Option<Decimal>,
+    /// The number of image frames *N* of the type's sprite (S-0401 claim
+    /// 15, S-0112 Terms *frame count*), from its art; absent: not known,
+    /// and an animated ore mine never makes resource (a provisional rule:
+    /// the importer does not read terrain sprites yet).
+    #[serde(default)]
+    pub image_frames: Option<i32>,
     /// `Strength` (S-0302 claim 20), with the game-wide tree strength
     /// already applied by the importer (S-0102 claim 23); absent: unset,
     /// which a placed object starts with as health −1 (S-0009 claim 42).
@@ -1748,6 +1758,9 @@ pub struct WeaponType {
     /// `FireOnce` (S-0309 claim 21).
     #[serde(default)]
     pub fire_once: Option<bool>,
+    /// `RevealOnFire`, the reveal-on-fire flag (S-0409 claim 16); absent: no.
+    #[serde(default)]
+    pub reveal_on_fire: Option<bool>,
 }
 
 /// A projectile's simulation fields.

@@ -2,13 +2,13 @@
 id: S-0301
 title: Firing cycle (delay between shots, bursts, ammunition and reloading, the firing check)
 topic: combat
-revision: 3
+revision: 4
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-12
+approved-on: 2026-10-13
 measurements: []
-requests: []
+requests: [Q-0060]
 supersedes: []
 ---
 
@@ -90,8 +90,10 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
 - **Materialising.** The state of an object that has just teleported and is phasing in at its
   destination, until the teleport specs end it.
 - **Gattling type.** As S-0308 (Terms). **Spray-attack type.** As S-0313 (Terms).
-- **Ammunition** *a*. A per-firer integer. A type's *maximum ammunition* *A* is an imported field, and
-  *A* = −1 means the type does not use ammunition, and then *a* stays −1 (unlimited).
+- **Ammunition** *a*. A per-firer integer, in rounds. A type's *maximum ammunition* *A* and
+  *initial-ammunition field* *J* are imported integers. An initial field of −1 selects *A*
+  (claim 10); ammunition of −1 is unlimited. A maximum of −1 disables vehicle reloading,
+  but does not override an explicit initial field.
 - **Reload countdown.** A per-firer countdown in ticks, used only by vehicles (claim 11).
 - **Firing check.** The test that every attempt to fire a weapon at a target makes. Its *answer*
   is one of the categories of claim 9: *can fire*, or a reason why not. An attempt either asks for
@@ -296,7 +298,7 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    | 1 | impossible | a vehicle that is playing its death frames (S-0102, claim 22: its death counter has started; vehicles only) |
    | 2 | busy | a vehicle that is launching spawned aircraft |
    | 3 | illegal | a vehicle that is melee-linked (S-0214, Terms), whatever its target (vehicles only) |
-   | 4 | illegal, impossible, rearming | most *illegal* and *impossible* reasons (those about the firer's state, the other weapon's alive effect and most target tests), and the early *rearming* cases: the firer is materialising, it already holds this very target with a temporal or magnetic-beam weapon, or the weapon is a spawner weapon none of whose spawned aircraft is alive. Their precedence among each other is not stated |
+   | 4 | illegal, impossible, rearming | most *illegal* and *impossible* reasons (those about the firer's state, the other weapon's alive effect and most target tests), the *illegal* answer of an infantry healer (S-0310, claim 11), and the early *rearming* cases: the firer is materialising, it already holds this very target with a temporal or magnetic-beam weapon, or the weapon is a spawner weapon none of whose spawned aircraft is alive. Their precedence among each other is not stated |
    | 5 | rearming | the rearm countdown runs, the firing-frame gate of claim 13 is closed, or the weapon's own effect is alive (claim 5) |
    | 6 | (not used) | an earlier numbering kept the weapon's own live effect here, with the same answer as rank 5; the two are one rank, and the number stays unused so that other specs' pointers to the later ranks stay valid |
    | 7 | out of ammunition | |
@@ -304,7 +306,7 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    | 9 | out of range, illegal | the late target tests: a seeker type (Terms) answers *out of range*, whatever the distance; a warhead that cannot affect the target's armour class, and the capture and parasite tests, give *illegal* |
    | 10 | out of range | the attempt asked for the range test and the target is beyond the weapon's range |
    | 11 | must deploy | a vehicle only (S-0310, claim 9) |
-   | 12 | illegal, impossible | the remaining vehicle tests: a vehicle that is tethered (glossary) with a building as its contact gets *impossible*, and a healing weapon gets *illegal* (S-0314). Which of the two wins when both hold is not stated; stock data has no vehicle that gives both |
+   | 12 | illegal, impossible | the remaining vehicle tests: a vehicle that is tethered (glossary) with a building as its contact gets *impossible*, and a vehicle whose default weapon is a healing weapon gets *illegal* (S-0310, claim 11; S-0314). Which of the two wins when both hold is not stated; stock data has no vehicle that gives both |
    | 13 | moving | |
    | 14 | still turning | |
    | 15 | not facing | |
@@ -343,12 +345,20 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
 
 ### Ammunition and reloading
 
-10. **Ammunition.** A firer's starting ammunition comes from its type's initial ammunition (Import
-    mapping, which leaves to the production specs how it is set from that field and from *A*). Each shot
+10. **Ammunition.** A new vehicle, infantry unit, building or aircraft starts with ammunition
+    *a*₀ = *A* when its type's initial-ammunition field *J* is −1, and *a*₀ = *J* otherwise
+    (Formula F6). Thus an absent initial field fills a finite magazine, including 0 rounds
+    for a maximum of 0; it does not grant unlimited ammunition. An explicit initial value is
+    used without clamping to the maximum, even above it (`quirks.initial_ammo_above_capacity`,
+    default original). An explicit 0 starts empty, including when the maximum is −1.
+    The same rule applies to objects placed by the map and objects created for production.
+    there is no separate map ammunition value. This is the starting count, before any turns
+    that can reload a vehicle (claim 11) or service an aircraft. Each shot
     that a vehicle, infantry or building makes uses one round when *a* > 0; *a* = −1 is never
     changed. With *a* = 0 the firing check answers *out of ammunition*. A disc laser shot uses no
     round (and it neither advances a garrison's muzzle index, S-0313, nor restarts a vehicle's
-    reload, claim 11). Aircraft ammunition belongs to the aircraft specs. The 1-tick rule depends on
+    reload, claim 11). Aircraft spending and servicing of ammunition belong to the aircraft specs.
+    only their starting count is owned here. The 1-tick rule depends on
     a building's ammunition before the shot: a building that holds more than 1 round before a shot
     has a delay of exactly 1 tick after that shot, with no draw, whatever its weapon's burst count
     or kind (claim 2's order; `quirks.building_ammo_fast_rearm`). The shot made with its last round gets the normal delay of
@@ -356,29 +366,25 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
     building with 3 rounds therefore fires in ticks *t*, *t* + 1 and *t* + 2, then answers
     *rearming* until its countdown ends, and only then *out of ammunition*.
     - Backing: `measurable` (scenario F9; the building part of scenario F3 for a burst weapon; the building part of scenario F4)
-    - Confidence: high (rounds used, out of ammunition); medium (the building rule: it needs a building with
+    - Confidence: high (starting count, no clamp, the same rule for map and production,
+      rounds used, out of ammunition); medium (the building rule: it needs a building with
       ammunition above 1, so test data must supply it)
 
-11. **Reloading (vehicles only).** A vehicle whose type has *A* ≥ 0 regains ammunition over time:
-    - Whenever the vehicle makes a shot that launches a projectile and then has *a* < *A*, its
-      reload countdown restarts at the reload delay of Formula F3, unless its type has the manual-reload
-      flag or *A* = 0. So continuous firing keeps postponing the reload.
-    - A reload countdown that has never been started counts as over. So a vehicle whose countdown
-      has never been restarted (no shot of it has restarted it and nothing else has, which is also
-      the case for a manual-reload vehicle until its first regained round) regains a round in the
-      first of its turns in which *a* < *A*, whenever that turn comes, and the countdown then
-      starts as in the next bullet.
-    - When the reload countdown is over and *a* < *A*, *a* grows by 1 and the countdown restarts at
-      the reload delay of Formula F3 for the new *a*, so one round comes back per reload delay.
-    - The reload delay is the type's empty-reload field when *a* = 0 and that field is not −1,
-      otherwise the reload field plus the reload-increment field times *q*², where *q* = 1 when the
-      type's pip-wrap field is 0, else *q* is *a* divided by the pip-wrap field in integer
-      division toward zero (Formula F3).
-    - While a vehicle whose type lacks the mobile-fire flag is being moved by its locomotor, its
-      reload countdown does not advance.
+11. **Reloading (vehicles only).** A vehicle whose type has *A* ≥ 0 regains ammunition over time.
 
-    Infantry and buildings never regain ammunition over time. A vehicle regains at most one round
-    in each of its turns, so a reload delay of 0 or less still gives one round per tick.
+    | Vehicle state or event | Reload behaviour |
+    |---|---|
+    | A projectile-launching shot leaves *a* < *A*; the type lacks the manual-reload flag and *A* ≠ 0 | The reload countdown restarts at the reload delay of Formula F3 for the current *a*. Continuous firing therefore keeps postponing the reload. |
+    | The reload countdown has never been started and *a* < *A* | The countdown counts as over. The vehicle regains one round in the first of its turns in which *a* < *A*, whenever that turn comes; the countdown then starts as described in the next row. This includes a manual-reload vehicle until its first regained round. |
+    | The reload countdown is over and *a* < *A* | *a* grows by 1 and the countdown restarts at the reload delay of Formula F3 for the new *a*. One round comes back per reload delay. |
+    | The vehicle lacks the mobile-fire flag and its locomotor is moving it | Its reload countdown does not advance. |
+
+    The reload delay is the type's empty-reload field when *a* = 0 and that field is not −1; otherwise
+    it is the reload field plus the reload-increment field times *q*², where *q* = 1
+    when the type's pip-wrap field is 0, else *q* is *a* divided by the pip-wrap field in integer
+    division toward zero (Formula F3). Infantry and buildings never regain ammunition over time.
+    A vehicle regains at most one round in each of its turns, so a reload delay of 0 or less still
+    gives one round per tick.
     - Backing: `measurable` (scenario F10)
     - Confidence: high (formula, restart on each shot, one round per completion); medium (the
       never-started countdown that counts as over, the frozen countdown while moving, and the restart
@@ -515,6 +521,11 @@ berserk firer that value is then halved and truncated toward zero, as in the las
 **F5. Charge-turret number** (claim 16; multi-image, non-gattling types only). *c* = min(*N* − 1, max(0, trunc(*N* × *r* / *D*))) when
 *D* > 0 and the countdown runs; else 0. Integer arithmetic.
 
+**F6. Starting ammunition** (claim 10). *a*₀ = *A* when *J* = −1, otherwise *J*.
+All three quantities are signed 32-bit integers in rounds; this is an exact selection,
+with no rounding. With `quirks.initial_ammo_above_capacity` off, a result above a
+nonnegative *A* is capped at *A*.
+
 ## Constants
 
 | Name (ours) | Value | Unit | Notes |
@@ -529,7 +540,7 @@ berserk firer that value is then halved and truncated toward zero, as in the las
 | Difficulty-row and country factors, absent-key default | 1.0 | factor | Import mapping |
 | Burst count, absent-key default | 1 | shots | Import mapping |
 | Rate-of-fire field, absent-key default | 0 | ticks | Import mapping |
-| Maximum and initial ammunition, absent-key default | −1 | rounds | Import mapping; −1 = unlimited |
+| Maximum and initial ammunition, absent-key default | −1 | rounds | Maximum −1 disables vehicle reloading; initial −1 selects the maximum (claim 10) |
 | Empty-reload field, absent-key default | −1 | ticks | Import mapping; −1 = not used |
 | Reload, reload increment, pip wrap, absent-key default | 0 | ticks, ticks, rounds | Import mapping |
 
@@ -595,9 +606,14 @@ berserk firer that value is then halved and truncated toward zero, as in the las
   part, confidence high). The original
   also skips the division for a factor that holds a not-a-number value; no imported text produces
   one, so there is no scenario for it (`unmeasured`, confidence low).
-- **Ammunition below −1.** Only *A* = −1 is documented as unlimited. A firer whose *a* is below
-  0 never has *a* changed (a round is used only when *a* > 0) and is never *out of ammunition*
-  (that answer needs *a* = 0), so it behaves as unlimited. Backing: `measurable` (scenario F9, below-minus-one part), with
+- **Starting ammunition above the maximum** (`quirks.initial_ammo_above_capacity`, default
+  original). An explicit initial field above a nonnegative maximum supplies that many rounds,
+  not the maximum. With the switch off, the starting count is capped at the maximum.
+  Backing: `measurable` (scenario F9, starting-count part); confidence high.
+- **Ammunition below −1.** A firer whose *a* is below 0 spends no rounds when firing
+  (a round is used only when *a* > 0) and is never *out of ammunition*
+  (that answer needs *a* = 0). Without reloading it therefore behaves as unlimited.
+  vehicle reloading is still governed by claim 11. Backing: `measurable` (scenario F9, below-minus-one part), with
   confidence medium.
 - **Firing sync frame at or above the counter's start.** The counter starts at 2*F* − 1 and only
   falls, so a sync frame *s* ≥ 2*F* is never reached: read literally, claim 13's gate gives the
@@ -625,8 +641,8 @@ berserk firer that value is then halved and truncated toward zero, as in the las
 | `BurstDelay` followed by 0, 1, 2 or 3 (rules, vehicle type) | burst delay *j* = 1 … 4 (claim 4) | integer, ticks | −1 |
 | `FiringFrames` (art, vehicle image) | firing frames *F* (claim 13) | integer | 0 |
 | `FiringSyncFrame` followed by 0 or 1 (art, vehicle image) | firing sync frames for burst-counter values 0 and 1 (claim 13) | integer | −1 |
-| `Ammo` (rules, type) | maximum ammunition *A* | integer | −1 |
-| `InitialAmmo` (rules, type) | initial ammunition (how a new object's *a* is set from it and from *A* belongs to the production specs) | integer | −1 |
+| `Ammo` (rules, type) | maximum ammunition *A*, also the starting count when *J* = −1 (claim 10) | signed integer, rounds | −1 |
+| `InitialAmmo` (rules, type) | initial-ammunition field *J*: −1 selects *A*, every other value is literal, with no cap by default (claim 10, Formula F6) | signed integer, rounds | −1 (selects *A*, not necessarily unlimited) |
 | `Reload`, `EmptyReload`, `ReloadIncrement` (rules, type) | *L*, *E*, *I* of Formula F3 | integer, ticks | 0, −1, 0 |
 | `PipWrap` (rules, type) | *W* of Formula F3 | integer | 0 |
 | `ManualReload` (rules, type) | no reload restart on firing (claim 11) | boolean | no |
@@ -647,7 +663,7 @@ value below −1 (Edge cases).
 
 ## Measurement scenarios
 
-Scenario labels F1 to F16 are separate from the formulas F1 to F5; the text says "scenario" or
+Scenario labels F1 to F16 are separate from the formulas F1 to F6; the text says "scenario" or
 "Formula" each time. All scenarios use stock data unless a named test rules file is listed, under the measurement setup
 (glossary), a small purpose-made skirmish map, one game speed (any; claim 1 says it does not matter),
 and the random-state recorder where draws matter. "Shot ticks" means the tick numbers at which the
@@ -809,6 +825,36 @@ firer's shots are made, read from projectile creation or the target's health dro
   again.
 - Falsified if: the building fires a fourth time, its intervals differ, it drops its target while
   its countdown runs, or either regains rounds.
+- Starting-count part (Q-0060 question 1): a named test rules file sets a buildable vehicle,
+  infantry and ungarrisoned defence building to maximum ammunition 4. Remove the initial field
+  from every rules layer for those types. Use a small isolated skirmish test area, speed index 2,
+  director off and other mods off, with one bystander computer player kept outside the area
+  under the glossary's void rule. Repeat with an explicit initial field of −1, 0 and 6.
+  also test maximum 0 with the initial field absent, and maximum −1 with initial field 0.
+  Supply a single-shot ordinary weapon and a durable stationary enemy target in range.
+  Set the vehicle's ordinary and empty reload delays longer than the observation window,
+  leave manual reload off, and exclude damage, servicing and ammo-changing effects.
+- Procedure: in each case compare one map-placed object with one produced and released by the
+  human house. Map-placed vehicles and infantry belong to the human house; map-placed
+  buildings belong to the neutral house, since the original skips human-house buildings
+  placed by a skirmish map (S-0009). Give each a target hostile to its own house.
+  Order sustained fire where orders apply, and let the neutral building acquire its target.
+  Record projectile creation ticks by
+  tick-labelled video, counting shots until no shot occurs for several full delays, before
+  the vehicle's reload can finish. Run each case once for each creation method and kind.
+  For the aircraft starting count, compare map-placed and produced aircraft of a test type
+  with the same field pairs, using its ammunition pips before takeoff or servicing; if pips
+  cannot distinguish an overfull count, report that observation as inconclusive rather than
+  interpreting a full display as a cap.
+- Expected: absent or explicit −1 with maximum 4 gives four shots. Initial 0 starts empty:
+  infantry and buildings make no shot; the vehicle regains one round in its first turn
+  (claim 11's never-started countdown), so makes one shot before the long reload wait.
+  Initial 6 gives six, not four. Maximum 0 with the initial field absent gives none.
+  Maximum −1 with initial 0 also gives none. Map placement and production agree.
+  Aircraft start with the same counts under Formula F6. Falsified by another count,
+  an unlimited result for absent initial ammunition with a finite maximum, a cap at four
+  in the six-round case, or a difference between creation methods. An aircraft count not
+  distinguishable through pips remains an unconfirmed part of the proposed measurement.
 - Below-minus-one part: test rules file, an infantry unit with maximum and initial ammunition −2
   (both keys set), firing at a durable target for 20 shots. Expected: it never answers *out of
   ammunition*, fires every full delay as an unlimited unit does, and shows no ammunition change.
@@ -935,7 +981,8 @@ is absent (the control).
 - Claim 9 lists only the members of *illegal* and *impossible* that matter here; the combat specs
   named there and the feature specs own the rest. The precedence among those is not stated.
 - The amount of ammunition lost to damage (claim 17) is S-0302's.
-- Aircraft ammunition and rearming at landing pads belong to the aircraft specs.
+- Aircraft ammunition spending and rearming at landing pads belong to the aircraft specs.
+  the starting ammunition is answered by claim 10 (Q-0060 question 1).
 - The support charging of a prism-type building (claim 14) needs a structures spec.
 - The temporal weapon is believed to restart the rearm countdown when its beam lets go. That is not
   a claim of this spec; whether it holds, with its backing and confidence, belongs to the combat

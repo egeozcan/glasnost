@@ -71,11 +71,8 @@ const DELTA_BITS: u64 = 0x3F50_624D_D2F1_A9FC;
 /// Quirk switches of S-0104 implemented here. Each defaults to the
 /// original's behaviour (on).
 ///
-/// `quirks.infantry_height_light_limited` is not offered: its off state is
-/// not fully stated (whether the shadowed-cell penalty replaces or adds to
-/// the height term at 208 leptons, asked in Q-0050), so infantry always
-/// follow the on state. The other switches of S-0104 act on simulation
-/// state, the importer or the effect state machine, outside this module
+/// The other switches of S-0104 act on simulation state, the importer or
+/// the effect state machine, outside this module
 /// (`app::mapview::quirks::NOT_IMPLEMENTED`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct LightQuirks {
@@ -119,6 +116,12 @@ pub struct LightQuirks {
     /// building light tint is 1000.0, stored 1 000 000 ‰
     /// ([`building_light_tint_default`]). Off: 1.0, stored 1000 ‰.
     pub building_light_tint_default_1000: bool,
+    /// `quirks.infantry_height_light_limited` (claim 13): infantry add their
+    /// height term only on a bridge deck (measured from the deck) and in a
+    /// shadowed cell above 208 leptons. Off (claim 18): (h ÷ 208) × λ
+    /// always, h above the terrain, plus −500 in a shadowed cell off a deck
+    /// at h ≤ 208.
+    pub infantry_height_light_limited: bool,
 }
 
 impl Default for LightQuirks {
@@ -135,13 +138,14 @@ impl Default for LightQuirks {
             building_light_from_top_left_cell: true,
             deploy_animation_unlit: true,
             building_light_tint_default_1000: true,
+            infantry_height_light_limited: true,
         }
     }
 }
 
 impl LightQuirks {
     /// The switches by name.
-    pub fn named(&self) -> [(&'static str, bool); 10] {
+    pub fn named(&self) -> [(&'static str, bool); 11] {
         [
             (
                 "tile_table_kept_on_relight",
@@ -176,6 +180,10 @@ impl LightQuirks {
             (
                 "building_light_tint_default_1000",
                 self.building_light_tint_default_1000,
+            ),
+            (
+                "infantry_height_light_limited",
+                self.infantry_height_light_limited,
             ),
         ]
     }
@@ -1000,6 +1008,9 @@ const SHADOW_PENALTY: i32 = -500; // spec: S-0104 claim 13, Constants (shadowed-
 /// Height levels of a bridge deck above its cell's terrain.
 const DECK_LEVELS: i32 = 4; // spec: S-0104 Constants (bridge deck height 4 height levels)
 
+/// Leptons per height level.
+const LEVEL_LEPTONS: i32 = 104; // spec: S-0104 claim 18 (4 height levels of 104 leptons)
+
 /// An object's brightness *b* in ‰ (S-0104 claim 13, Formulas "Object
 /// brightness"), unclamped. `cell` holds the levels of the cell
 /// [`LitObject`] names. `lambda` is the level factor of the set the
@@ -1030,6 +1041,28 @@ pub fn object_brightness(
                 // spec: S-0104 Formulas, "Object brightness" (any other vehicle: U + e_unit)
                 u + extra.unit
             }
+        }
+        LitObject::Infantry {
+            on_bridge_deck,
+            shadowed_cell,
+            height,
+        } if !q.infantry_height_light_limited => {
+            // spec: S-0104 claim 18 (switch off: h above the terrain, so a deck adds its 4 levels
+            // of 104 leptons)
+            let h = if on_bridge_deck {
+                height + DECK_LEVELS * LEVEL_LEPTONS
+            } else {
+                height
+            };
+            // spec: S-0104 claim 18 (the −500 penalty is added to the height term, in a shadowed
+            // cell, off a bridge deck, at h ≤ 208)
+            let penalty = if shadowed_cell && !on_bridge_deck && h <= HEIGHT_STEP {
+                SHADOW_PENALTY
+            } else {
+                0
+            };
+            // spec: S-0104 claim 18 (b = U + e_inf + (h ÷ 208)·λ + P)
+            u + extra.infantry + h / HEIGHT_STEP * lambda + penalty
         }
         LitObject::Infantry {
             on_bridge_deck,
@@ -1100,6 +1133,7 @@ mod tests {
         building_light_from_top_left_cell: true,
         deploy_animation_unlit: true,
         building_light_tint_default_1000: true,
+        infantry_height_light_limited: true,
     };
 
     /// Synthetic palette: entry i = (i, 255 − i, i / 2).
@@ -2004,5 +2038,58 @@ mod tests {
         let l = LightSource::building((10, 20), (3, 2), 5000, 100, [1000; 3]);
         assert_eq!((l.x, l.y), (11 * 256 + 128, 21 * 256));
         assert_eq!(l.required_detail, DetailLevel::High);
+    }
+
+    /// spec: S-0104 claim 18, Scenario L25 (quirks.infantry_height_light_limited off: the height
+    /// term always, h above the terrain, plus −500 in a shadowed cell off a deck at h ≤ 208);
+    /// claim 13 (on)
+    #[test]
+    fn infantry_light_switch_off() {
+        let off = LightQuirks {
+            infantry_height_light_limited: false,
+            ..LightQuirks::default()
+        };
+        let cell = CellLevels {
+            unscaled_ground: 1000,
+            scaled_ground: 1000,
+            scaled_raised: 1000,
+        };
+        let b = |shadowed_cell, on_bridge_deck, height, q: &LightQuirks| {
+            object_brightness(
+                LitObject::Infantry {
+                    on_bridge_deck,
+                    shadowed_cell,
+                    height,
+                },
+                cell,
+                100,
+                100,
+                ExtraLight::default(),
+                q,
+            )
+        };
+        // Part A: shadowed ordinary ground.
+        let a: Vec<i32> = [0, 104, 207, 208, 209, 416]
+            .iter()
+            .map(|&h| b(true, false, h, &off))
+            .collect();
+        assert_eq!(a, [500, 500, 500, 600, 1100, 1200]);
+        // Part B: unshadowed ordinary ground.
+        let bb: Vec<i32> = [0, 104, 207, 208, 209, 416]
+            .iter()
+            .map(|&h| b(false, false, h, &off))
+            .collect();
+        assert_eq!(bb, [1000, 1000, 1000, 1100, 1100, 1200]);
+        // Part C: standing on a deck (height 0 above the deck, 416 above the terrain), shadowed
+        // or not: 2λ and no penalty.
+        assert_eq!(b(true, true, 0, &off), 1200);
+        assert_eq!(b(false, true, 0, &off), 1200);
+        // The two states differ in a shadowed cell only at h = 208.
+        let on = LightQuirks::default();
+        assert_eq!(b(true, false, 208, &on), 500);
+        assert_eq!(b(true, false, 207, &on), b(true, false, 207, &off));
+        assert_eq!(b(true, false, 209, &on), b(true, false, 209, &off));
+        // On a deck the on state measures h from the deck: nothing extra.
+        assert_eq!(b(false, true, 0, &on), 1000);
     }
 }

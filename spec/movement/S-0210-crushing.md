@@ -2,13 +2,13 @@
 id: S-0210
 title: Crushing (who crushes whom, when, the outcome, walls, warnings, slowdown and automatic crushing)
 topic: movement
-revision: 14
+revision: 15
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-12
+approved-on: 2026-10-13
 measurements: []
-requests: [Q-0036]
+requests: [Q-0020, Q-0036]
 supersedes: []
 ---
 
@@ -360,7 +360,13 @@ S-0107: *crushable* (the flag), *deploying*. Terms used by this spec:
     | Original: crusher's owner | Automatic crushing allowed when |
     |---|---|
     | human-controlled | the game-wide player-auto-crush rule is on, or the crusher's type has the auto-crush flag |
-    | computer-controlled | its house skill level is at least the game-wide auto-crush threshold, and it is not playing at the easiest computer difficulty level (the auto-crush flag and the player-auto-crush rule play no part) |
+    | computer-controlled | its house skill level is at least the game-wide auto-crush threshold, and its difficulty index is not 2, the index given by the lobby's easy computer entry (S-0412 claim 4; the auto-crush flag and the player-auto-crush rule play no part) |
+
+    The neutral and special houses have difficulty index 1 and house skill level 0 (S-0412
+    claims 3 and 5). They therefore fail this table's skill-level condition with the engine-default
+    auto-crush threshold of 2, or with any positive imported threshold. A threshold of 0 or less
+    lets them pass it. This restriction belongs only to the table's automatic choice: it does not
+    exclude the attack-target or omni-crusher variants.
 
     - *Original: attack-target variant.* A crusher of a computer-controlled house that already has a
       target to attack drives at it instead of attacking it in the usual way when all of these hold:
@@ -377,7 +383,7 @@ S-0107: *crushable* (the flag), *deploying*. Terms used by this spec:
       range in force and its absent-key default (F2), and 8 and 9 for the
       range condition under a computer-controlled owner. The omni-crusher variant: case 10, and 12h
       for its exception. The original's computer-controlled rules: cases 1, 2 and 4 (the table
-      row), 5, 6, 9 and 11 (the attack-target variant, 11 for its move-destination condition) and
+      row), 17 (the neutral and special houses' skill-level condition), 5, 6, 9 and 11 (the attack-target variant, 11 for its move-destination condition) and
       12c (opportunity targets); case 7 shows that a human-controlled vehicle with an attack
       order does not get the variant. The departure itself is a design rule that no measurement of
       the original can confirm.
@@ -931,11 +937,17 @@ type of index 0" means the overlay type with registration index 0 in the data in
     infantry placed once at 0.9 and once at 1.1 times the range in force from the rules layers
     below the override,
   - (16) as (14), with a named test rules file in which no layer gives the crush-range key (F2), and
-    the infantry placed once at about 1.4 cells and once at about 1.6 cells from the crusher.
+    the infantry placed once at about 1.4 cells and once at about 1.6 cells from the crusher,
+  - (17) unarmed crusher without the omni-crusher flag, owned in separate runs by the neutral
+    and special houses, with their countries made non-passive through the test map's override
+    section. Place hostile crushable infantry at half the crush range. Use named test rules
+    that set the auto-crush threshold first to 2, then to 0. The houses' alliances must make the
+    infantry hostile from the crusher's side. Observe only runs that give the crusher an occasion
+    to pick a target of its own under S-0215; otherwise the run decides nothing.
 - *Procedure:* wait 600 ticks, or give the order and wait 600 ticks.
 - *Observable:* whether the crusher drives to the victim's cell and crushes it, and whether it fires,
   and in cases 11 and 12 also whether it leaves the route before reaching its end.
-- *Runs:* 10 per case (per run in case 12). In cases 5, 6 and 9 a run in which the crusher neither
+- *Runs:* 10 per case (per run in case 12; per house and threshold in case 17). In cases 5, 6 and 9 a run in which the crusher neither
   fires nor moves (it never took the infantry as a target) decides nothing. In cases 11 and 12 a run
   in which it does not fire at the victim while on the route (it never took the victim as an
   opportunity target) decides nothing. Run 12c is the positive control for case 11: case 11
@@ -947,7 +959,8 @@ type of index 0" means the overlay type with registration index 0 in the data in
   range), 3, 4, 6 (beyond the range), 7 (the variant is for computer-controlled houses only, and the
   attack order is not an occasion on which it picks a target of its own), 9 (*d* is not less than *R*), 11 (it has a move destination) and
   run 12h (a human-controlled vehicle with an opportunity target). In cases 6, 7, 9, 11 and run 12h it
-  fires at the victim instead, and in 11 and 12h it keeps to the route.
+  fires at the victim instead, and in 11 and 12h it keeps to the route. In case 17 neither house's
+  crusher chooses to drive over the victim with threshold 2; each does with threshold 0.
 - *Falsified if:* a different pattern, including case 15 behaving as if the range were zero or
   unbounded, or case 16 using any other range than 1.5 cells; in particular, the crusher leaving the
   route for the victim in case 11 or run 12h, or keeping to the route while firing at the vehicle in run 12c.

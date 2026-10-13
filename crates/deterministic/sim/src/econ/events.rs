@@ -22,6 +22,14 @@ pub fn entered_map(w: &mut World, id: ObjectId, by_order: bool) {
         house.econ.acquired.push(id);
     }
     let _ = by_order;
+    crate::econ::power::entered_map(w, id);
+    if kind == Kind::Building
+        && let Some(h) = owner
+    {
+        // spec: S-0410 claim 2 (a house that gains a building is rechecked)
+        crate::econ::radar::mark_due(w, h);
+    }
+    crate::econ::shroud::entered_map(w, id);
     if let Some(h) = owner {
         if kind == Kind::Building {
             // spec: S-0407 claim 12 (a) (a building put on the map)
@@ -40,6 +48,14 @@ pub fn entered_map(w: &mut World, id: ObjectId, by_order: bool) {
 pub fn leaving_map(w: &mut World, id: ObjectId, for_good: bool) {
     let Some(o) = w.obj(id) else { return };
     let (kind, owner) = (o.kind, o.owner);
+    crate::econ::power::leaving_map(w, id);
+    crate::econ::shroud::leaving_map(w, id, for_good);
+    if kind == Kind::Building
+        && let Some(h) = owner
+    {
+        // spec: S-0410 claim 2 (a house that loses a building is rechecked)
+        crate::econ::radar::mark_due(w, h);
+    }
     if let Some(h) = owner {
         if kind == Kind::Building {
             // spec: S-0407 claim 12 (b) (a building leaves the map)
@@ -73,6 +89,7 @@ pub fn leaving_map(w: &mut World, id: ObjectId, for_good: bool) {
 pub fn owner_changed(w: &mut World, id: ObjectId, old: Option<HouseId>) {
     let Some(o) = w.obj(id) else { return };
     let (kind, new) = (o.kind, o.owner);
+    crate::econ::shroud::owner_changed(w, id);
     if kind.is_mobile() && !w.rules().quirks.unit_changes_no_recheck {
         // spec: S-0407 claim 12 (n) and quirks.unit_changes_no_recheck (both houses)
         for h in [old, new].into_iter().flatten() {
@@ -82,7 +99,10 @@ pub fn owner_changed(w: &mut World, id: ObjectId, old: Option<HouseId>) {
     if kind != Kind::Building {
         return;
     }
+    crate::econ::power::owner_changed(w, id, old);
     for h in [old, new].into_iter().flatten() {
+        // spec: S-0410 claim 2 (a house that gains or loses a building is rechecked)
+        crate::econ::radar::mark_due(w, h);
         // spec: S-0407 claims 12 (a), (b) and 15 (a captured building counts for its new owner, no longer for the old)
         super::tech::recheck_due(w, h);
         // spec: S-0404 claim 8 (a factory building that changes owner: the lines of both houses)
@@ -103,11 +123,28 @@ pub fn owner_changed(w: &mut World, id: ObjectId, old: Option<HouseId>) {
 
 /// A building was switched off or on (S-0405 claim 10).
 pub fn switched(w: &mut World, id: ObjectId) {
-    let Some(h) = w.obj(id).and_then(|o| o.owner) else {
+    let Some(owner) = w.obj(id).and_then(|o| o.owner) else {
         return;
     };
+    // spec: S-0405 claim 7 (a building switched on or off makes its house due)
+    crate::econ::power::make_due(w, owner);
+    // spec: S-0410 claim 2 (our engine treats switching a radar building off or on as an event)
+    crate::econ::radar::mark_due(w, owner);
     // spec: S-0407 claim 12 (c) (a building switched on or off)
-    super::tech::recheck_due(w, h);
+    super::tech::recheck_due(w, owner);
     // spec: S-0404 claim 8 (a factory building switched off or on: its lines checked at once)
-    super::production::factory_event(w, h, id, false);
+    super::production::factory_event(w, owner, id, false);
+}
+
+/// An object's own turn, after its locomotor (`moved`: it moved in this
+/// tick). The topics that act in an object's turn (S-0405 claims 7, 9 and
+/// 13; S-0409 claim 8) are called from here.
+pub fn turn(w: &mut World, id: ObjectId, moved: bool) {
+    let Some(o) = w.obj(id) else { return };
+    match o.kind {
+        Kind::Building => crate::econ::power::building_turn(w, id),
+        Kind::Vehicle => crate::econ::power::vehicle_turn(w, id),
+        _ => {}
+    }
+    crate::econ::shroud::object_turn(w, id, moved);
 }
