@@ -2,11 +2,11 @@
 id: S-0103
 title: Palettes and house colour
 topic: rendering
-revision: 4
+revision: 5
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-13
+approved-on: 2026-10-14
 measurements: []
 requests: []
 supersedes: []
@@ -25,7 +25,7 @@ Glossary terms used here include *palette*, *theater*, *house*, *house colour*, 
 - **Palette file.** Supplies 256 ordered colours, each with red, green and blue components represented by byte values intended to range from 0 to 63.
 - **Unit palette.** The theater's palette for units, infantry, aircraft and buildings. House-colour palettes are built from it.
 - **Tile palette.** The theater's palette for terrain tiles.
-- **Theater palette.** The theater's general-purpose palette. No drawn object in this spec takes its colours from it (Open questions).
+- **Theater palette.** The theater's general-purpose palette. The temperate theater palette read at program start supplies the start-up resource table (S-0112, Terms and claims 1 and 2); later theater loads do not change that table.
 - **Anim palette.** The palette for animations that use neither the tile palette nor a house-colour palette. It is the same in every theater (claim 1).
 - **Colour definition.** A named colour given as three bytes (H, S, V): hue, saturation, value. The hue runs 0–255 over the full circle, so 0 and 255 are both red.
 - **Definition position.** Colour definitions are numbered from 0 in the order the game creates them in each game: the entries of the base rules' colour section in their order, then each new name that a later rules layer adds, in order. A later layer's entry whose name already exists creates nothing (claim 5). A line with an empty value is no entry at all (S-0001, claim 11), so it creates no definition and takes no position: the definitions after it each move one position lower. The **first colour definition** is the one at position 0.
@@ -37,7 +37,7 @@ Glossary terms used here include *palette*, *theater*, *house*, *house colour*, 
 - **Hi-colour pixel.** A 16-bit packed RGB value in the display surface's pixel layout.
 - **Lobby colour slot.** The colour a player picks in the skirmish lobby, numbered 0–7 in the order the lobby lists the eight colours.
 - **Vein animation.** An animation whose art marks it as a vein animation (Import mapping).
-- **Terrain animation.** An animation that the game creates as part of a cell's terrain when the map's terrain is set up or when the cell is recalculated, rather than one created by an object or an event.
+- **Terrain animation.** An animation that the game creates as part of a cell's terrain when the map's terrain is set up or when the cell is recalculated in play, rather than one created by an object or an event.
 - **Object's own animation.** An animation that belongs to one object and shows part of that object: an animation a building plays as part of itself, the animation of a unit deploying or undeploying, and the parachute that carries an object down, unless that object is a projectile (claim 8).
 - **Projectile.** What a weapon launches, from launch until it detonates. The combat specs own its rules. Here it matters only because a projectile can come down by parachute (claim 8).
 - **Test lighting.** S-0104's neutral test lighting, with every value it changes set by the test map itself: the map's lighting values, and the three extra-light fields set to 0 in the test map's override section for the game-wide visual settings. Under it objects and tiles are drawn at brightness 1000 (row 26 of a 53-row shade table, S-0104).
@@ -68,10 +68,10 @@ Glossary terms used here include *palette*, *theater*, *house*, *house colour*, 
    - Before the first theater load of a session, the unit palette in force is the snow theater's unit palette, loaded from its file (×4, claim 1) when the program starts. The tile palette in force is all black: every component 0.
    - The unit-palette rule applies on every load. If the unit palette file stays missing for *n* loads in a row, a component that was *c* in the file last loaded becomes (4^(*n*+1)·*c*) mod 256. From *n* = 3 on, every component is 0. Before the first load, the "file last loaded" is the snow unit palette file.
    - House-colour palettes are built from whichever unit palette is in force (claim 3).
-   - Backing: `measurable` (PB) for the unit and tile palette names. `measurable` (PH) for the missing unit and tile palette files, the palettes in force before the first load and the repeated multiplication. `unmeasured` for the theater palette's name and for its missing-file row, because no drawn object in this spec shows the theater palette (Open questions).
+   - Backing: `measurable` (PB) for the unit and tile palette names. `measurable` (PH) for the missing unit and tile palette files, the palettes in force before the first load and the repeated multiplication. `unmeasured` for the theater palette's per-theater file names and missing-file row during theater loading, because no drawing subject here is established to show that loaded palette directly. The resource table shows the temperate palette read at program start instead (S-0112, claims 1 and 2).
    - Confidence: high for the names, the table and the repeated multiplication. Medium for the palettes in force before the first load.
 
-3. **When palettes are loaded and house-colour palettes built.** The unit, tile and theater palettes are reloaded only when a game starts in a different theater from the previous game of the session. The first game of a session always loads them. Every game, whatever its theater, builds all its house-colour palettes afresh from that game's colour definitions and the unit palette in force for it. So every house-colour palette always uses the unit palette of the theater being played. The anim palette never changes during a session (claim 1).
+3. **When palettes are loaded and house-colour palettes built.** The unit, tile and theater palettes are reloaded only when a game starts in a different theater from the previous game of the session. The first game of a session always loads them. Every game, whatever its theater, builds all its house-colour palettes afresh from that game's colour definitions and the unit palette then in force. When the theater's unit palette file is found, that palette is the one in force; when it is missing, the missing-file rule in claim 2 determines which palette is in force. The anim palette never changes during a session (claim 1).
    - Backing: `measurable` (PB for the theater change; PH for the rule that a game in the same theater keeps the loaded palettes rather than reading the files again, which is visible only through claim 2's missing-file behaviour)
    - Confidence: high
 
@@ -126,9 +126,10 @@ Glossary terms used here include *palette*, *theater*, *house*, *house colour*, 
      - A parachute is drawn at the unscaled ground level of the carried object's cell, taken once when the parachute opens. It does not follow later light changes while the object comes down (Edge cases).
      - A deploy or undeploy animation is drawn at brightness 1000 (neutral), whatever the cell's light (Edge cases).
    - An animation flagged in its art to use normal light is drawn at brightness 1000 instead of the brightness in the last column. This changes nothing for row 4.
-   - **Ore and gem overlays** are always drawn at neutral brightness and ignore cell lighting (S-0104, claim 13). Their palette is not established (Open questions).
-   - Backing: `measurable` (PE for the object kinds and rows 1 to 5, the parachute, the normal-light flag and the brightness of row 3, a light change during a parachute's descent and during a building's own animation included; PJ for a building's own animation with the drawing-with-object flag off and for the precedence of rows 1, 2 and 3 over row 4). `unmeasured` for the projectile's parachute, because the measurement setup offers no known way to make a projectile come down by parachute (Open questions). `unmeasured` for the precedence between rows 1, 2 and 3, because no way is known to create an animation that meets two of those conditions; it matters only if one exists.
-   - Confidence: high for tiles, terrain-palette buildings, units, infantry, aircraft and buildings, and rows 1, 4 and 5. High for the palette of deploy, undeploy and parachute animations and for the projectile exception. Medium for rows 2 and 3 otherwise, for the brightness of row 3 and for the precedence between rows. The ore and gem overlay palette is open.
+   - **Ore and gem overlays** are drawn at neutral brightness and ignore the cell's light level (S-0104, claim 13). They use the start-up resource table: a 53-row untinted table built at program start from the temperate theater palette and unchanged when theaters are loaded (S-0112, claims 1 and 2). Shroud cover pieces and light-glow images can still change their shade row through the per-pixel light-alpha value (S-0112, claim 1; S-0110, claims 5 and 6).
+   - **Other overlays, smudges and terrain objects.** S-0112 claims 1 to 3 own their palettes, tint and brightness. S-0112 claim 1's first-applicable-row rule also owns exceptions to the ore and gem rule above, including deck-cell precedence.
+   - Backing: `measurable` (S-0112 scenarios OV1, OV2 and OV18 for ore and gem palette, tint, theater independence and per-pixel shade-row changes; PE for the object kinds and rows 1 to 5, the parachute, the normal-light flag and the brightness of row 3, a light change during a parachute's descent and during a building's own animation included; PJ for a building's own animation with the drawing-with-object flag off and for the precedence of rows 1, 2 and 3 over row 4). `unmeasured` for the projectile's parachute, because the measurement setup offers no known way to make a projectile come down by parachute (Open questions). `unmeasured` for the precedence between rows 1, 2 and 3, because no way is known to create an animation that meets two of those conditions; it matters only if one exists.
+   - Confidence: high for tiles, terrain-palette buildings, units, infantry, aircraft and buildings, and rows 1, 4 and 5. High for the palette of deploy, undeploy and parachute animations and for the projectile exception. Medium for rows 2 and 3 otherwise, for the brightness of row 3 and for the precedence between rows. High for the ore and gem overlay palette and tint, as specified by S-0112 claims 1 and 2.
 
 9. **Output pixel format.** Shading turns every palette into 16-bit hi-colour pixels in the display surface's pixel layout. Each 8-bit component keeps only its top bits: 5 bits red, 6 green and 5 blue in the 5-6-5 layout, and 5 bits each in the 5-5-5 layout. A 24- or 32-bit display therefore shows only colours that survive this 16-bit step.
    - Backing: `measurable` (PA)
@@ -226,7 +227,7 @@ Theaters. These names are engine constants of the original, not stock data. Each
 |---|---|---|
 | program started | — | the unit palette in force is the snow theater's unit palette, loaded from its file (×4); the tile palette in force is all black; the anim palette is loaded from its file (×4) |
 | palettes for theater A in force | a game in theater A starts | no palette file is read; house-colour palettes are built from that game's colour definitions and A's unit palette |
-| palettes for theater A in force (or none loaded yet, as after program start, even when B is snow) | a game in theater B starts | unit, tile and theater palettes are loaded from B's files (claim 2 if one is missing); house-colour palettes are built from that game's colour definitions and B's unit palette |
+| palettes for theater A in force (or none loaded yet, as after program start, even when B is snow) | a game in theater B starts | the palettes for theater B are loaded under claim 2, including its missing-file rules; house-colour palettes are built from that game's colour definitions and the unit palette then in force |
 | rules layers read | each new colour name | a single-shade and a 53-shade house-colour palette exist under that name, at the next definition position |
 | rules layers read | a colour name that already exists | nothing changes |
 
@@ -259,7 +260,7 @@ Theaters. These names are engine constants of the original, not stock data. Each
 
 ## Measurement scenarios
 
-Scenario labels PA to PJ are local to this spec; they are not measurement-record IDs.
+Scenario labels PA to PJ are local to this spec; they are not measurement-record IDs. The ore and gem rules of claim 8 use S-0112's scenarios OV1 (palette and theater independence), OV2 (brightness and tint) and OV18 (shroud and glow shade-row changes), with the setup, procedure, observables, expected results and falsifiers given there.
 
 All scenarios run under the *measurement setup* (glossary): an unmodified install, stock data and no engine add-ons, with the three allowances the glossary lists. Every scenario that reads pixels may use a presentation-only display compatibility layer (Display path below). Scenarios PG to PJ add named test files, and each says which: a loose palette file that overrides a shipped one on purpose (PG), a loose copy of a stock archive with two palette files left out to make them absent (PH), a loose copy of the base rules (PI), or a copy of the art database in a loose test archive that wins over the stock archives (PJ; S-0005 and S-0007 say how such an archive ranks). The test files are used only for the scenario that names them and are removed after the run.
 
@@ -444,8 +445,7 @@ Every scenario that reads pixels shares these rules:
 
 - **Saved games.** Whether loading a saved game makes the next game reload the palette files, whatever its theater, is not established.
 - **Snow unit palette missing at program start.** What the game does if the snow unit palette file itself is missing when the program starts is not established.
-- **Ore, gems and other objects.** Which palette ore and gem overlays, other overlays, smudges and terrain objects use. The overlay palette comes from a per-type choice that is not established.
-- **The theater palette.** No drawn object in this spec takes its colours from the theater palette. It is also passed into every shade-table build (S-0104), with no visible effect established on 16-bit output. Whether any drawing depends on it is open.
+- **The theater palette after theater loading.** The start-up resource table uses the temperate theater palette read at program start (S-0112, claims 1 and 2). Whether any drawing depends directly on the theater palette loaded later for the current theater remains open. That loaded palette is also an input to shade-table building (S-0104), with no visible effect established on 16-bit output.
 - **Rows 2 and 3 of claim 8.** Which animations count as terrain animations, beyond animated terrain tiles, is not fully established. The list of an object's own animations (claim 8, row 3) may also be incomplete.
 - **Brightness of a building's own animation.** How a building's flashing, or an effect that changes the building's brightness, changes the brightness its own animation takes (claim 8) is not established. Which cell of a multi-cell building gives the ground level is not established either; under the uniform test lighting it makes no difference.
 - **Projectiles by parachute.** What makes a projectile come down by parachute, and whether stock play ever does, is not established. Until a way is known, the projectile exception of claim 8 cannot be measured. What happens when the rules name no parachute animation (the "not established" defaults in Import mapping) is not established either.
