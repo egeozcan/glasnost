@@ -1065,8 +1065,7 @@ fn moving_blocker_wait_then_detour() {
     assert_ne!(o.pos.cell(), cell(1, 0));
 }
 
-// spec: S-0212 claim 21 (a fresh search waits for the retry delay to be over)
-// spec: S-0212 claim 22 (a next step with outcome blocked clears the stored path; a fresh search follows after the delay)
+// spec: S-0212 claim 22 (at the first check of a track's first cell, blocked clears the stored path and makes a fresh search in mode 0 on the same tick, regardless of the path retry timer)
 #[test]
 fn blocked_next_step_clears_the_path() {
     let mut s = scene();
@@ -1075,7 +1074,6 @@ fn blocked_next_step_clears_the_path() {
     let mut w = s.build();
     open_orders(&mut w);
     let id = vehicles(&w)[0];
-    let start = w.obj(id).unwrap().pos;
     let t = w.tick;
     {
         let o = w.obj_mut(id).unwrap();
@@ -1084,20 +1082,17 @@ fn blocked_next_step_clears_the_path() {
         o.path.retry_at = t + 5;
     }
     common::run(&mut w, 1);
+    // On the same tick, although the retry delay still runs, a fresh path
+    // goes round the rock.
     let o = w.obj(id).unwrap();
-    assert!(o.path.steps.is_empty());
-    assert_eq!(o.pos, start);
     assert!(o.dest.is_some());
-    // While the retry delay runs no new path is computed.
-    common::run(&mut w, 3);
-    assert!(w.obj(id).unwrap().path.steps.is_empty());
-    // Once it is over, a fresh search goes round the rock.
-    common::run_until(&mut w, 5, |w| !w.obj(id).unwrap().path.steps.is_empty());
-    let o = w.obj(id).unwrap();
-    assert!(!o.path.steps.is_empty() || o.pos != start);
-    if let Some(&d) = o.path.steps.first() {
-        assert_ne!(d, 2);
-    }
+    let first = o.path.steps.first().copied();
+    assert!(
+        first.is_some_and(|d| d != 2),
+        "a new path: {:?}",
+        o.path.steps
+    );
+    assert_ne!(o.pos.cell(), cell(1, 0));
 }
 
 // ------------------------------------------------------------------ failures
@@ -1774,6 +1769,35 @@ fn connected(w: &World, a: CellXY, b: CellXY) -> bool {
     w.regions.sectors.levels[0].conns[s as usize]
         .iter()
         .any(|&(x, _)| x == t)
+}
+
+// spec: S-0212 claim 25 and table T5 (the empty-radius approach failure's search excludes bridge cells, whatever the class)
+#[test]
+fn approach_failure_search_skips_bridge_cells() {
+    let (mut w, car) = river(&[]);
+    // The river bed turns to clear ground, so the cells under the deck
+    // share the car's ground reach region.
+    let bed: Vec<CellXY> = w
+        .cells
+        .grid
+        .iter()
+        .map(|(c, _)| c)
+        .filter(|c| (cell(1, 0).x..=cell(5, 0).x).contains(&c.x))
+        .collect();
+    for &c in &bed {
+        w.cells.grid.get_mut(c).expect("cell").land = glasnost_map::terrain::land::CLEAR;
+        regions::cell_changed(&mut w, c);
+    }
+    regions::ensure(&mut w);
+    let centre = cell(3, 0);
+    assert!(w.cells.is_bridge(centre));
+    let got = glasnost_sim::path::nearby(
+        &w,
+        centre,
+        glasnost_sim::path::NearbyUse::Approach { unit: car },
+    )
+    .expect("a cell off the bridge");
+    assert!(!w.cells.is_bridge(got), "{got:?} is a bridge cell");
 }
 
 // spec: S-0212 claim 13b (an enabled link joins the sectors of its first end and second end each moved by the same displacement, which the first end's tile alone decides)
