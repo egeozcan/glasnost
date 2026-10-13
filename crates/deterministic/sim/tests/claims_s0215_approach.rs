@@ -178,3 +178,37 @@ fn per_tick_drop_of_an_unreachable_target() {
     approach::per_tick(&mut w, a);
     assert_eq!(w.obj(a).unwrap().target, Some(Target::Object(t)));
 }
+
+// spec: S-0207 claim 19 (a) (a driving vehicle never stops, nor loses its destination or a stored step, because its target came in range; it drives on to its destination)
+#[test]
+fn driving_attacker_keeps_its_move_in_range() {
+    let r = rules(None, None);
+    let mut w = testkit::game_with(&r, SIZE, 3);
+    let (a, t) = duel(&mut w, 0, 12, Behaviour::Attack);
+    // A sturdy target, so that it outlives the drive.
+    w.obj_mut(t).unwrap().health = i32::MAX / 2;
+    let goal = at(10, 0);
+    w.obj_mut(a).unwrap().dest = Some(Target::Cell(goal));
+    let mut in_range_moving = false;
+    for _ in 0..400 {
+        let before = w.obj(a).unwrap().path.steps.clone();
+        testkit::run(&mut w, 1);
+        let o = w.obj(a).unwrap();
+        if o.dest.is_none() {
+            assert_eq!(o.pos.cell(), goal, "stopped only at the destination");
+            break;
+        }
+        if approach::in_range(&w, a, Target::Object(t)) {
+            in_range_moving = true;
+            assert_eq!(o.dest, Some(Target::Cell(goal)));
+            // No step is dropped: at most the one just taken is gone.
+            assert!(
+                o.path.steps.len() + 1 >= before.len(),
+                "steps kept: {before:?} -> {:?}",
+                o.path.steps
+            );
+        }
+    }
+    assert!(in_range_moving, "the target came in range on the way");
+    assert_eq!(w.obj(a).unwrap().target, Some(Target::Object(t)));
+}

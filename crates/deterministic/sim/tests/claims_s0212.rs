@@ -1754,6 +1754,45 @@ fn a_high_span_is_an_enabled_link_joining_the_banks() {
     assert!(w.cells.bridge_body.iter().all(|&b| !b));
 }
 
+// spec: S-0212 claim 13b (the side displacements by the first end's tile place i: 0, 1, 6 to 10 north then south; 3, 4, 11 to 15 east then west; 2 and 5 north-west then south-east)
+#[test]
+fn link_side_displacement_table() {
+    for i in 0..16 {
+        let want = match i {
+            0 | 1 | 6..=10 => [(0, -1), (0, 1)],
+            3 | 4 | 11..=15 => [(1, 0), (-1, 0)],
+            _ => [(-1, -1), (1, 1)],
+        };
+        assert_eq!(corridor::side_displacements(i), Some(want), "place {i}");
+    }
+    assert_eq!(corridor::side_displacements(16), None);
+}
+
+/// Whether a level-0 connection joins the sectors of `a` and `b`.
+fn connected(w: &World, a: CellXY, b: CellXY) -> bool {
+    let (s, t) = (sector(w, 0, a), sector(w, 0, b));
+    w.regions.sectors.levels[0].conns[s as usize]
+        .iter()
+        .any(|&(x, _)| x == t)
+}
+
+// spec: S-0212 claim 13b (an enabled link joins the sectors of its first end and second end each moved by the same displacement, which the first end's tile alone decides)
+#[test]
+fn link_side_cells_follow_the_first_end_tile() {
+    // Place 6: the cells map north and south of both ends.
+    let (w, _) = river(&[]);
+    assert!(connected(&w, cell(0, -1), cell(6, -1)));
+    assert!(connected(&w, cell(0, 1), cell(6, 1)));
+    assert!(!connected(&w, cell(-1, -1), cell(5, -1)));
+    // The first end's tile at place 2 (the second end's unchanged): the
+    // north-west and south-east neighbours of both ends.
+    let (mut w, _) = river(&[]);
+    w.cells.grid.get_mut(cell(0, 0)).unwrap().tile = BRIDGE_ROLE + 2;
+    regions::rebuild(&mut w);
+    assert!(connected(&w, cell(-1, -1), cell(5, -1)));
+    assert!(connected(&w, cell(1, 1), cell(7, 1)));
+}
+
 // spec: S-0010 claim 25 (a low span: its band of four cells across each between cell that is not a high-bridge cell carries the bridge-body mark and, S-0212 Terms, the span's axis)
 // spec: S-0212 claim 3 (a low span's link is not enabled: the banks stay apart)
 // spec: S-0010 claim 17 (the bridge-body mark refuses burrowing)
