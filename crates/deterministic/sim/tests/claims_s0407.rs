@@ -553,7 +553,7 @@ fn claim_13_orders_follow_offer() {
         assert!(offered(&w, miner));
         assert_eq!(issue(&mut w, 0, Order::Build { what: miner }), stale);
         // The stale order is produced: applying it tests only the factory
-        // conditions and the build limit (claim 13; Q-0122).
+        // conditions and the build limit (claim 13; S-0404 claim 3).
         step(&mut w);
         assert_eq!(
             glasnost_sim::econ::production::line_of(&w, H, miner).is_some(),
@@ -694,5 +694,48 @@ fn claim_16_dock_bound() {
         issue(&mut w, 0, Order::Build { what: a });
         step(&mut w);
         assert_eq!(line(&w, 0, a).unwrap().queue.len(), accepted, "T = {docks}");
+    }
+}
+
+// spec: S-0407 claim 16 and S-0404 claim 10 (T12 run 6: a dock-bound copy queued past its limit is accepted but does not start once the first is released; control L = 2 starts it)
+#[test]
+fn claim_16_queued_copy_needs_the_allowance() {
+    for (limit, starts) in [(1, false), (2, true)] {
+        let mut r = ruleset();
+        r.sim.buildings.get_mut("AIRPAD").unwrap().helipad = Some(true);
+        r.sim
+            .buildings
+            .get_mut("AIRPAD")
+            .unwrap()
+            .econ
+            .number_of_docks = Some(3);
+        r.registries.get_mut("aircraft").unwrap().push("PADA".into());
+        let mut a = r.sim.aircraft["PLANE"].clone();
+        a.econ.airport_bound = Some(true);
+        a.econ.build_limit = Some(limit);
+        a.cost = Some(54);
+        r.sim.aircraft.insert("PADA".into(), a);
+        r.sim.general.economy.pad_aircraft = Some(vec!["PADA".into(), "PLANE".into()]);
+        let mut w = game(&r);
+        building(&mut w, "AIRPAD", 0, 0, 0);
+        ready(&mut w);
+        set_credits(&mut w, 0, 100_000);
+        let a = t(&w, Kind::Aircraft, "PADA");
+        assert!(issue(&mut w, 0, Order::Build { what: a }));
+        step(&mut w);
+        assert!(issue(&mut w, 0, Order::Build { what: a }));
+        step(&mut w);
+        assert_eq!(line(&w, 0, a).unwrap().queue, vec![a], "L = {limit}");
+        run_to_done(&mut w, 0, a, 20_000).expect("done");
+        for _ in 0..3 {
+            step(&mut w);
+        }
+        let owned = w
+            .objects
+            .values()
+            .filter(|o| o.on_map && o.kind == Kind::Aircraft)
+            .count();
+        assert_eq!(owned, 1, "L = {limit}");
+        assert_eq!(item(&w, 0, a).is_some(), starts, "L = {limit}");
     }
 }

@@ -519,7 +519,7 @@ pub fn factory_count(w: &World, house: HouseId, t: TypeRef) -> i32 {
                 // spec: S-0403 claim 6 (naval and ground vehicle factories counted apart; every other kind counts all its factories)
                 t.kind != Kind::Vehicle || br.naval == naval_item
             } else {
-                // spec: S-0403 Edge cases (quirks.multiple_factory_counts_all off: only factories that could make the item, power and docks ignored)
+                // spec: S-0403 Edge cases (quirks.multiple_factory_counts_all off: only factories that could make the item with the tech-tree rules allowing it, power and docks ignored)
                 tech::could_make(w, b, t, true)
             }
         })
@@ -858,8 +858,9 @@ fn start_next(w: &mut World, li: usize, exclude: Option<ObjectId>) {
     let house = w.econ.lines.lines[li].house;
     while !w.econ.lines.lines[li].queue.is_empty() {
         let head = w.econ.lines.lines[li].queue.remove(0);
+        // spec: S-0404 claim 10 (the forced start tests the factory conditions and the build-limit answer with the production allowance, not the full tech tree or S-0407 claim 16 again) and S-0411 claim 14 (not a factory queued to be sold)
         let can = factories(w, house, |b| {
-            Some(b.id) != exclude && tech::could_make(w, b, head, true)
+            Some(b.id) != exclude && tech::could_start(w, b, head)
         });
         if !can.is_empty() {
             // spec: S-0404 claim 10 (started even when every factory that could make it is switched off or has no free dock)
@@ -989,10 +990,10 @@ pub fn part(w: &mut World) {
 /// Applies a build order (S-0404 claim 3).
 pub fn build(w: &mut World, house: HouseId, t: TypeRef) {
     let Some(lk) = line_kind(w, t) else { return };
-    // spec: S-0404 claim 3 (applied only with a switched-on factory that could make it and, for an aircraft, a free dock; S-0407 claim 13: only the factory conditions and the build limit are tested, Q-0122)
+    // spec: S-0404 claim 3 (applied only with a switched-on factory that could make it without the tech-tree rule and, for an aircraft, a free dock, and the build-limit answer with the production allowance; no full tech-tree test, S-0407 claim 13; a resume too) and S-0411 claim 14 (not a factory queued to be sold)
     let ok = !factories(w, house, |b| {
         switched_on(b)
-            && tech::could_make_limit_only(w, b, t)
+            && tech::could_start(w, b, t)
             && (t.kind != Kind::Aircraft || dock_free(w, b.id))
     })
     .is_empty();
@@ -1124,7 +1125,10 @@ pub fn place(w: &mut World, house: HouseId, t: TypeRef, cell: Option<CellXY>) {
 /// (with a free dock, for an aircraft; the fallback without it), the one
 /// marked primary, else the last the house acquired.
 pub fn releasing_building(w: &World, house: HouseId, t: TypeRef) -> Option<ObjectId> {
-    let base = |b: &Object| switched_on(b) && tech::could_make(w, b, t, false);
+    // spec: S-0404 Terms (could release: switched on, could make without the tech-tree rule) and S-0411 claim 14 (not a factory queued to be sold)
+    let base = |b: &Object| {
+        switched_on(b) && tech::could_make(w, b, t, false) && !tech::queued_to_be_sold(b)
+    };
     let mut cands = factories(w, house, |b| {
         base(b) && (t.kind != Kind::Aircraft || dock_free(w, b.id))
     });
@@ -1219,7 +1223,8 @@ pub fn check_line(w: &mut World, house: HouseId, lk: LineKind, exclude: Option<O
     };
     let can = |w: &World, t: TypeRef, on: bool| {
         !factories(w, house, |b| {
-            Some(b.id) != exclude && (!on || switched_on(b)) && tech::could_make(w, b, t, true)
+            // spec: S-0404 claim 8 (could make: the build-limit answer with the production allowance, not the full tech tree)
+            Some(b.id) != exclude && (!on || switched_on(b)) && tech::could_make_limit_only(w, b, t)
         })
         .is_empty()
     };

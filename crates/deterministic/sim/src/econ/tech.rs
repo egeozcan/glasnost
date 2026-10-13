@@ -680,10 +680,11 @@ fn answer_with(w: &World, house: HouseId, t: TypeRef, production_exception: bool
     }
 }
 
-/// Whether a building is a factory building that *could make* type `t` for
-/// its owner (S-0404 Terms), with the tech-tree condition when `tech`, and
-/// ignoring the power switch and docks. `exclude`: a building about to
-/// leave the map.
+/// Whether a building is a factory building that could make type `t` for
+/// its owner *without the tech-tree rule* (S-0404 Terms), ignoring the power
+/// switch and docks; with `tech`, the full tech-tree answer must not refuse
+/// the type as well (only S-0403's `quirks.multiple_factory_counts_all` off
+/// asks that). S-0404's own *could make* is `could_make_limit_only`.
 pub fn could_make(w: &World, b: &Object, t: TypeRef, tech: bool) -> bool {
     let r = w.rules();
     if b.kind != Kind::Building || !b.on_map || being_sold(b) {
@@ -722,11 +723,13 @@ pub fn could_make(w: &World, b: &Object, t: TypeRef, tech: bool) -> bool {
 }
 
 /// Whether the house has a factory building that could make `t` (claim 1
-/// (b): tech-tree condition, power and docks left out).
+/// (b): tech-tree condition, power and docks left out; not being sold or
+/// queued to be sold).
 fn factory_condition(w: &World, house: HouseId, t: TypeRef) -> bool {
-    w.objects
-        .values()
-        .any(|b| b.owner == Some(house) && could_make(w, b, t, false))
+    // spec: S-0407 claim 1 (b) (a factory not being sold or queued to be sold)
+    w.objects.values().any(|b| {
+        b.owner == Some(house) && could_make(w, b, t, false) && !queued_to_be_sold(b)
+    })
 }
 
 /// A qualifying factory for a type (S-0407 Terms): a factory building of
@@ -818,17 +821,25 @@ pub fn at_limit(w: &World, house: HouseId, t: TypeRef) -> bool {
     limit_answer(w, house, t, true) == Answer::AtLimit
 }
 
-/// Whether a factory building could make `t` when a build order is applied
-/// or for an icon's darkening (S-0407 claim 13, S-0411 claims 3 and 4):
-/// could make without the tech-tree rule, with the build-limit test kept,
-/// including its allowance for an item in production (S-0407 claim 9).
-/// Interim rule of request Q-0122: S-0404 claim 3's wording names the full
-/// tech-tree condition.
+/// Whether a factory building *could make* `t` (S-0404 Terms, revision 3):
+/// the factory conditions and the build-limit answer with the allowance
+/// for an item in production (S-0407 claim 9), not the full tech tree. The
+/// factory check of S-0404 claim 8, the darkening of S-0411 claim 3 and,
+/// through `could_start`, the application of build orders and the forced
+/// start of S-0404 claims 3 and 10 use it.
 pub fn could_make_limit_only(w: &World, b: &Object, t: TypeRef) -> bool {
-    // spec: S-0407 claim 13 (the build order checks only the factory conditions and the build limit when applied) and S-0411 claim 3 (the build-limit test retained); Q-0122
+    // spec: S-0404 Terms (could make: the factory conditions and the build-limit answer with the production allowance, no full tech-tree test) and S-0407 claim 13
     could_make(w, b, t, false)
         && b.owner
             .is_some_and(|h| limit_answer(w, h, t, true) == Answer::Allowed)
+}
+
+/// Whether a factory building may serve a new start, a queue request, a
+/// resume or a release (S-0411 claim 14): it could make `t` (S-0404 Terms)
+/// and is not queued to be sold either.
+pub fn could_start(w: &World, b: &Object, t: TypeRef) -> bool {
+    // spec: S-0411 claim 14 (a factory queued to be sold is excluded from new starts, queue requests, resumes and releases; request Q-0190)
+    could_make_limit_only(w, b, t) && !queued_to_be_sold(b)
 }
 
 /// The house's part of the house update for the tech tree (S-0407 claim 12):
@@ -899,10 +910,11 @@ pub fn queue_refused(w: &World, house: HouseId, t: TypeRef, copies: i32) -> bool
             // spec: S-0407 claim 16 (the item in production counted in the owned count and in the line; quirks.queue_limit_counts_item_twice)
             let item = !q.queue_limit_counts_item_twice && in_production(w, house, t);
             // spec: S-0407 F3 (L > 0: refused when O + Q ≥ L)
-            owned_count(w, house, t).saturating_add(copies - i32::from(item)) >= l
+            // spec: S-0407 F3 (signed 32-bit sums, wrapping modulo 2³², S-0205 claim 1)
+            owned_count(w, house, t).wrapping_add(copies.wrapping_sub(i32::from(item))) >= l
         } else {
-            // spec: S-0407 F3 (L ≤ 0: refused when L = −2³¹ or E + Q ≥ −L)
-            l == i32::MIN || ever_built(w, house, t).saturating_add(copies) >= -l
+            // spec: S-0407 F3 (L ≤ 0: refused when L = −2³¹ or E + Q ≥ −L, the sum wrapping)
+            l == i32::MIN || ever_built(w, house, t).wrapping_add(copies) >= -l
         }
     };
     if t.kind == Kind::Aircraft && f.airport_bound {
@@ -914,8 +926,10 @@ pub fn queue_refused(w: &World, house: HouseId, t: TypeRef, copies: i32) -> bool
                 kind: Kind::Aircraft,
                 index: p,
             };
-            d += present_count(w, house, pt);
-            d += crate::econ::production::copies_in_line(w, house, pt);
+            // spec: S-0407 F3 (the sums wrap modulo 2³²)
+            d = d
+                .wrapping_add(present_count(w, house, pt))
+                .wrapping_add(crate::econ::production::copies_in_line(w, house, pt));
         }
         // spec: S-0407 claim 16 (T: the docks of the house's dock buildings)
         let total: i32 = w
@@ -924,7 +938,8 @@ pub fn queue_refused(w: &World, house: HouseId, t: TypeRef, copies: i32) -> bool
             .filter(|b| b.kind == Kind::Building && b.on_map && b.owner == Some(house))
             .filter_map(|b| r.buildings.get(b.type_index as usize))
             .map(|b| b.docks)
-            .sum();
+            // spec: S-0407 F3 (the sums wrap modulo 2³²)
+            .fold(0i32, i32::wrapping_add);
         let dock = d >= total;
         // spec: S-0407 F3 (a dock-bound aircraft: refused when D ≥ T; quirks.dock_bound_aircraft_ignores_limit)
         return if q.dock_bound_aircraft_ignores_limit {

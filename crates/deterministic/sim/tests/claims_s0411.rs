@@ -144,6 +144,44 @@ fn claim_2_sale_keeps_icon() {
     assert!(line(&w, 0, tank).is_none());
 }
 
+// spec: S-0411 claim 14 (production during a sale: a factory queued to be sold keeps its running item paying, gives no new start, queue or release; its removal refunds the item once, in the removal tick, and the later cancellation orders refund nothing more)
+// spec: S-0404 claim 8 (the permanent-removal refund)
+#[test]
+fn claim_14_production_during_a_sale() {
+    let (mut w, f, _) = base(&ruleset());
+    let tank = t(&w, Kind::Vehicle, "TANK");
+    let jeep = t(&w, Kind::Vehicle, "JEEP");
+    assert!(issue(&mut w, 0, Order::Build { what: tank }));
+    step(&mut w);
+    // The sale is queued, not yet current.
+    w.obj_mut(f).unwrap().beh.queued = Some(glasnost_sim::rules::Behaviour::Selling);
+    let (progress, paid) = (item(&w, 0, tank).unwrap().progress, credits(&w, 0));
+    for _ in 0..40 {
+        step(&mut w);
+        assert!(w.houses[0].pending.is_empty());
+    }
+    assert!(item(&w, 0, tank).unwrap().progress > progress);
+    assert!(credits(&w, 0) < paid);
+    assert!(sidebar::icons(&w, H).contains(&tank));
+    // A queue request is legal (the type is offered) but not applied: the
+    // only factory is queued to be sold.
+    assert!(issue(&mut w, 0, Order::Build { what: jeep }));
+    step(&mut w);
+    assert!(line(&w, 0, tank).unwrap().queue.is_empty());
+    // The removal: the refund comes at once, the icon at the next house
+    // update, whose cancellation orders refund nothing more.
+    let i = item(&w, 0, tank).unwrap();
+    let price = glasnost_sim::econ::production::price(&w, H, tank);
+    let before = credits(&w, 0);
+    objects::remove(&mut w, f);
+    assert!(item(&w, 0, tank).is_none());
+    assert_eq!(credits(&w, 0), before + price - i.owed);
+    let refunded = credits(&w, 0);
+    step(&mut w);
+    assert!(!sidebar::icons(&w, H).contains(&tank));
+    assert_eq!(credits(&w, 0), refunded);
+}
+
 // spec: S-0411 claim 2 (a type that stops being buildable without a recheck event keeps its icon; a later recheck event removes it)
 #[test]
 fn claim_2_stale_until_recheck() {
@@ -320,7 +358,7 @@ fn claim_4_6_legality() {
 }
 
 // spec: S-0411 claim 3 (S3 third run: a stale prerequisite refusal alone does not darken an icon, and its build order starts an item)
-// spec: S-0407 claim 13 and quirks.stale_offer_orderable (a stale offer can be ordered and produced; Q-0122)
+// spec: S-0407 claim 13 and quirks.stale_offer_orderable (a stale offer can be ordered and produced; S-0404 claim 3's application test has no full tech-tree test)
 #[test]
 fn claim_3_stale_refusal_lit() {
     let mut r = ruleset();
