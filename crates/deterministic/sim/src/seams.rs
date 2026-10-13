@@ -91,11 +91,10 @@ pub fn pay(w: &mut World, house: HouseId, amount: i32) {
 }
 
 /// A building type's adjusted cost (S-0408 claim 2, F2), for the step
-/// cost of S-0314 claim 5. `None` until M5a: the deductions for a free unit
-/// and pad aircraft are S-0408's.
-pub fn building_adjusted_cost(_w: &World, _building_type: u32) -> Option<i32> {
-    // spec: S-0408 claim 2 (the adjusted cost of a building type; a seam until selling exists)
-    None
+/// cost of S-0314 claim 5: `crate::econ::sell::adjusted_cost`.
+pub fn building_adjusted_cost(w: &World, building_type: u32) -> Option<i32> {
+    // spec: S-0408 claim 2 (the same adjusted cost is the type's cost in S-0314's step cost)
+    Some(crate::econ::sell::adjusted_cost(w, building_type))
 }
 
 /// A building's refund for its owner (S-0408 claim 1, F1), the *K* of

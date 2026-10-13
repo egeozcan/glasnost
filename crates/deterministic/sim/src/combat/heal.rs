@@ -150,8 +150,8 @@ pub fn f2_step_cost(
 
 /// The step cost of an object (S-0314 claim 5): 0 for infantry, else F2
 /// on the type's cost field without house or country factors; for a
-/// building type the adjusted cost of S-0408 claim 2, which is M5a's
-/// (`None` until then).
+/// building type the adjusted cost of S-0408 claim 2. `None` only for
+/// objects that have no step (terrain).
 pub fn step_cost(w: &World, id: ObjectId) -> Option<i32> {
     let o = w.obj(id)?;
     let r = w.rules();
@@ -207,8 +207,8 @@ pub fn repair_step(w: &mut World, id: ObjectId) -> Option<StepOutcome> {
 }
 
 /// One step of a building's repair (S-0314 claim 8), paid by its owner:
-/// returns whether repair stays on, or `None` when the step cost is not
-/// known (the adjusted cost of S-0408 is M5a's). There is no full-health
+/// returns whether repair stays on, or `None` when the object has no
+/// owner or no step cost. There is no full-health
 /// test: a building at full health pays one step and repair turns off.
 pub fn building_repair_step(w: &mut World, id: ObjectId) -> Option<bool> {
     let o = w.obj(id)?;

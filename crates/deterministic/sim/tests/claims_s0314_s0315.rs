@@ -151,11 +151,13 @@ fn f2_step_cost_and_its_departure() {
 }
 
 // spec: S-0314 claim 4 (the step size: the infantry repair step for infantry, the repair step for others, at least 1)
-// spec: S-0314 claim 5 (an infantry unit's step costs 0; a vehicle's is F2 on its type's cost field; a building's needs S-0408's adjusted cost, a seam)
+// spec: S-0314 claim 5 (an infantry unit's step costs 0; a vehicle's is F2 on its type's cost field; a building's is F2 on S-0408's adjusted cost)
+// spec: S-0408 claim 2 (the adjusted cost of a type without free unit or pad deduction is its cost field)
 #[test]
 fn claims_4_and_5_step_size_and_cost() {
     let mut r = repair_rules();
     r.sim.general.i_repair_step = Some(0);
+    r.sim.buildings.get_mut("SHED").unwrap().cost = Some(900);
     let mut w = game(&r);
     let g = spawn(&mut w, Kind::Infantry, "GRUNT", 0, 0, 0);
     let t = spawn(&mut w, Kind::Vehicle, "TRUCK", 0, 2, 0);
@@ -164,7 +166,12 @@ fn claims_4_and_5_step_size_and_cost() {
     assert_eq!(heal::step_size(&w, t), 10);
     assert_eq!(heal::step_cost(&w, g), Some(0));
     assert_eq!(heal::step_cost(&w, t), Some(3));
-    assert_eq!(heal::step_cost(&w, b), None);
+    let p = w.rules().combat.general.repair_percent;
+    let sb = glasnost_sim::combat::damage::strength(&w, b);
+    assert_eq!(
+        heal::step_cost(&w, b),
+        Some(heal::f2_step_cost(900, sb, 10, p, w.rules().mode))
+    );
 }
 
 // spec: S-0314 claim 3 (the rows in order: full health is not needed, before the money test; cannot pay changes nothing; otherwise the paying house, the object's owner, pays and health rises by the step size, more needed, or becomes the strength, done)
