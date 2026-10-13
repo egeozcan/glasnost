@@ -38,6 +38,34 @@ pub enum Effect {
         /// Where.
         pos: Pos,
     },
+    /// A sound or announcement of the structures topics (S-0406, S-0408,
+    /// S-0415). Which sound it is, from the rules data, and whether the
+    /// local player hears it (`house`) are the presentation's.
+    Sound {
+        /// Which sound.
+        sound: Sound,
+        /// The type whose sound it is (a building or vehicle type).
+        of: Option<crate::econ::TypeRef>,
+        /// The house it concerns (for sounds only its own player hears).
+        house: Option<crate::world::HouseId>,
+        /// Where, for a sound played at a position.
+        pos: Option<Pos>,
+    },
+}
+
+/// The sounds of [`Effect::Sound`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Sound {
+    /// A type's deploy sound (S-0415 claims 6 and 9).
+    Deploy,
+    /// A building type's pack-up sound, when it has one (S-0415 claim 9).
+    Packup,
+    /// The sell sound (S-0408 claims 6 and 12).
+    Sell,
+    /// The refusal announcement of a deploy (S-0415 claim 4).
+    CannotDeploy,
+    /// The unit-sold announcement (S-0408 claim 11).
+    UnitSold,
 }
 
 /// Creates an animation: its creation draws (S-0202 claim 10) and a

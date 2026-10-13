@@ -1321,3 +1321,18 @@ pub fn slave_wake_rule_holds(w: &World, id: ObjectId) -> bool {
         || false,
     )
 }
+
+/// Whether a vehicle's *unload* follows the harvesting rules: rank 3 of
+/// S-0415 claim 1, after the transport and deploy-fire ranks.
+pub fn unload_is_harvesting(w: &World, id: ObjectId) -> bool {
+    let Some(o) = w.obj(id) else { return false };
+    let Some(u) = w.rules().unit(o.kind, o.type_index) else {
+        return false;
+    };
+    // spec: S-0415 claim 1 ranks 1 and 2 (a passenger capacity, or deploy fire without the simple-deployer flag, take precedence)
+    if u.passengers > 0 || (u.combat.deploy_fire && !u.simple_deployer) {
+        return false;
+    }
+    // spec: S-0415 claim 1 rank 3 (the harvester flag: the harvesting rules of S-0402)
+    is_harvester(w, id)
+}

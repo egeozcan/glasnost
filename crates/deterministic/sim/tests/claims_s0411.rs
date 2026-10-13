@@ -289,13 +289,32 @@ fn claim_4_6_legality() {
     // The resume of the held item is legal whatever its limit and the busy line.
     assert!(issue(&mut w, 0, Order::Build { what: hut }));
     assert!(!issue(&mut w, 0, Order::Build { what: plant }));
-    // Place orders with a cell ask S-0406 (a stub until it is implemented: legal).
-    assert!(issue(
+    // Place orders with a cell are legal exactly when S-0406's conditions
+    // (claims 4 to 6) hold; a cell far from every building fails them.
+    let legal = glasnost_sim::econ::placement::place_legal(
+        &w,
+        glasnost_sim::world::HouseId(0),
+        hut,
+        testkit_cell(),
+    );
+    assert_eq!(
+        issue(
+            &mut w,
+            0,
+            Order::Place {
+                what: hut,
+                cell: Some(testkit_cell())
+            }
+        ),
+        legal
+    );
+    let far = glasnost_sim::testkit::mid(SIZE, 20, -20);
+    assert!(!issue(
         &mut w,
         0,
         Order::Place {
             what: hut,
-            cell: Some(testkit_cell())
+            cell: Some(far)
         }
     ));
 }

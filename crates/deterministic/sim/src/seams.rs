@@ -98,10 +98,19 @@ pub fn building_adjusted_cost(w: &World, building_type: u32) -> Option<i32> {
 }
 
 /// A building's refund for its owner (S-0408 claim 1, F1), the *K* of
-/// S-0312 F5. `None` until M5a.
-pub fn building_refund(_w: &World, _building: ObjectId) -> Option<i32> {
-    // spec: S-0408 claim 1 and F1 (the refund; a seam until selling exists)
-    None
+/// S-0312 F5. `None` for a building without an owner.
+pub fn building_refund(w: &World, building: ObjectId) -> Option<i32> {
+    let o = w.obj(building)?;
+    let house = o.owner?;
+    // spec: S-0408 claim 1 and F1 (the refund for the building's owner)
+    Some(crate::econ::sell::refund(
+        w,
+        house,
+        crate::econ::TypeRef {
+            kind: o.kind,
+            index: o.type_index,
+        },
+    ))
 }
 
 /// Whether a house's game is over, the state S-0414's defeat puts it in

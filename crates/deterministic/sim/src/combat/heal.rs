@@ -13,7 +13,7 @@ use crate::world::{HouseId, ObjectId, World};
 
 /// "A multiple of" a period, treating 0 as 1 and a negative period by its
 /// magnitude (S-0314 Edge cases, a departure for 0).
-fn multiple(t: i32, p: i32) -> bool {
+pub(crate) fn multiple(t: i32, p: i32) -> bool {
     // spec: S-0314 Edge cases (a period of 0 is treated as 1 tick; a negative one behaves as its absolute value)
     let p = p.unsigned_abs().max(1) as i64;
     i64::from(t).rem_euclid(p) == 0

@@ -78,6 +78,9 @@ pub struct ObjectEcon {
     pub dock: Option<harvest::DockState>,
     /// Deploying or packing up (S-0415).
     pub deploy: deploy::DeployState,
+    /// A building's construction state (S-0108, S-0406 claim 1).
+    #[serde(default)]
+    pub construction: placement::Construction,
     /// Sight applied for each house (S-0409).
     pub sight: shroud::ObjectSight,
     /// Counts this object is in (S-0414 claim 4, S-0407 claim 9).
@@ -113,6 +116,8 @@ pub struct EconRules {
     pub shroud: shroud::Rules,
     /// Radar (S-0410).
     pub radar: radar::Rules,
+    /// Placement, selling and deploying (S-0406, S-0408, S-0415).
+    pub placement: placement::Rules,
     /// Build time, price and lines (S-0403, S-0404).
     pub production: production::Rules,
     /// The tech tree (S-0407).
@@ -130,6 +135,7 @@ impl EconRules {
             power: power::Rules::new(r, mode),
             shroud: shroud::Rules::new(r, mode),
             radar: radar::Rules::new(r, mode),
+            placement: placement::Rules::new(r, mode),
             production: production::Rules::new(r, mode),
             tech: tech::Rules::new(r, mode),
             resource: resource::Rules::new(r, mode),

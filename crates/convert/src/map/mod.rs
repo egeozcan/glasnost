@@ -355,7 +355,9 @@ impl Decoder<'_> {
         let mut cut = false;
         // spec: S-0012 claim 1 (entries in enumeration order, each value by name resolution)
         for e in section.entries() {
-            let v = section.get(&e.key).map_or(e.value.as_slice(), |w| w.value.as_slice());
+            let v = section
+                .get(&e.key)
+                .map_or(e.value.as_slice(), |w| w.value.as_slice());
             // spec: S-0012 claim 1 (quirks.map_pack_line_limit: the first 127 characters, trimmed)
             let v = if q.map_pack_line_limit {
                 cut |= v.len() > PACK_LINE_LIMIT;
@@ -475,7 +477,9 @@ impl Decoder<'_> {
                     // spec: S-0012 claim 6, Formulas F2 (x and y signed 16-bit, the tile number signed
                     // 32-bit, little-endian)
                     (0 | 1, true) => i64::from(i16::from_le_bytes([bytes[0], bytes[1]])),
-                    (2, true) => i64::from(i32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]])),
+                    (2, true) => {
+                        i64::from(i32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
+                    }
                     // spec: S-0012 claim 6 (sub-tile and ice flag unsigned, the level a signed byte)
                     (_, true) => i64::from(bytes[0]),
                     // spec: S-0012 claim 9 (a partial coordinate: the available low-order bytes of 0)

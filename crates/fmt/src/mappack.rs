@@ -253,7 +253,13 @@ pub fn unpack_prefix(data: &[u8], codec: PackCodec) -> (Vec<u8>, Option<ChunkPro
             Ok(d) if d.len() == size => d,
             Ok(_) => return (out, fail(chunk, "expansion shorter than its stated length")),
             Err(Error::Truncated { .. }) => {
-                return (out, fail(chunk, "compressed content without an end marker or cut short"));
+                return (
+                    out,
+                    fail(
+                        chunk,
+                        "compressed content without an end marker or cut short",
+                    ),
+                );
             }
             Err(Error::TooLarge(_)) => {
                 return (out, fail(chunk, "expansion longer than its stated length"));
@@ -597,22 +603,38 @@ mod tests {
     fn s0012_claim_2_text_groups() {
         // spec: S-0012 claim 2 (standard groups, and the padded final group)
         let t = decode_text_groups(b"YWJjZA==");
-        assert_eq!((t.bytes.as_slice(), t.nonstandard, t.short_tail), (&b"abcd"[..], 0, 0));
+        assert_eq!(
+            (t.bytes.as_slice(), t.nonstandard, t.short_tail),
+            (&b"abcd"[..], 0, 0)
+        );
         assert_eq!(decode_text_groups(b"YWJjZGU=").bytes, b"abcde");
         // a group crossing a line boundary is joined text (claim 1): no separator
         assert_eq!(decode_text_groups(b"YWJjZGVm").bytes, b"abcdef");
         // characters outside the alphabet are skipped inside their group
         let t = decode_text_groups(b"Y*Jj");
         // digits Y, J, j: three digits, two bytes; nonstandard
-        assert_eq!(t.bytes, [((24u32 << 18 | 9 << 12 | 35 << 6) >> 16) as u8, ((24u32 << 18 | 9 << 12 | 35 << 6) >> 8) as u8]);
+        assert_eq!(
+            t.bytes,
+            [
+                ((24u32 << 18 | 9 << 12 | 35 << 6) >> 16) as u8,
+                ((24u32 << 18 | 9 << 12 | 35 << 6) >> 8) as u8
+            ]
+        );
         assert_eq!((t.nonstandard, t.first_nonstandard), (1, Some(0)));
         // `=` ends only its group; interpretation resumes with the next group
         let t = decode_text_groups(b"YQ==YWJj");
         assert_eq!(t.bytes, b"aabc");
-        assert_eq!(t.first_nonstandard, Some(0), "a padded group that is not final");
+        assert_eq!(
+            t.first_nonstandard,
+            Some(0),
+            "a padded group that is not final"
+        );
         // zero digits emit one byte 0; two digits emit ⌊(64·d₀ + d₁) / 16⌋
         assert_eq!(decode_text_groups(b"====").bytes, [0]);
-        assert_eq!(decode_text_groups(b"YW=x").bytes, [((64 * 24 + 22) / 16) as u8]);
+        assert_eq!(
+            decode_text_groups(b"YW=x").bytes,
+            [((64 * 24 + 22) / 16) as u8]
+        );
         // no `-` and `_` alphabet
         assert_eq!(decode_text_groups(b"-_AB").bytes, [0]);
         // a short final group is discarded; earlier groups stay
@@ -642,14 +664,27 @@ mod tests {
         let mut early = pack(b"xyz", PackCodec::Lcw, MAX_BLOCK);
         early.push(0x80);
         early[0] += 1;
-        assert_eq!(unpack_prefix(&early, PackCodec::Lcw).1.map(|p| p.chunk), Some(0));
+        assert_eq!(
+            unpack_prefix(&early, PackCodec::Lcw).1.map(|p| p.chunk),
+            Some(0)
+        );
         // spec: S-0012 claim 10 (empty chunks and chunks above 8192 bytes are unsupported)
         let (out, p) = unpack_prefix(&[0, 0, 0, 0], PackCodec::Lcw);
-        assert_eq!((out.len(), p.map(|p| p.what)), (0, Some("unsupported chunk size")));
+        assert_eq!(
+            (out.len(), p.map(|p| p.what)),
+            (0, Some("unsupported chunk size"))
+        );
         let big = [1, 0, 0x01, 0x20, 0x80];
-        assert_eq!(unpack_prefix(&big, PackCodec::Lcw).1.map(|p| p.what), Some("unsupported chunk size"));
+        assert_eq!(
+            unpack_prefix(&big, PackCodec::Lcw).1.map(|p| p.what),
+            Some("unsupported chunk size")
+        );
         // spec: S-0012 claim 10 (a copy before the chunk's first byte rejects it: no shared history)
-        let two = [&pack(b"abc", PackCodec::Lcw, 3)[..], &[3, 0, 3, 0, 0x00, 0x03, 0x80]].concat();
+        let two = [
+            &pack(b"abc", PackCodec::Lcw, 3)[..],
+            &[3, 0, 3, 0, 0x00, 0x03, 0x80],
+        ]
+        .concat();
         let (out, p) = unpack_prefix(&two, PackCodec::Lcw);
         assert_eq!((out.as_slice(), p.map(|p| p.chunk)), (&b"abc"[..], Some(1)));
     }

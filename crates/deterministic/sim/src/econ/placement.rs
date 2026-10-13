@@ -1,27 +1,876 @@
 //! Building placement (S-0406): foundation cells, the cell test, adjacency,
-//! explored ground, walls and upgrades.
+//! explored ground, walls and upgrades; the construction state a placed
+//! building begins (S-0108 claim 5).
+//!
+//! One core, [`put_on_map`], puts an existing building object on the map
+//! for a place order ([`place_building`]), for a deploying vehicle
+//! (`crate::econ::deploy`) and for a filling building of the wall fill.
+//! The conditions judged when a place order is issued (claims 4 to 6) are
+//! [`place_legal`]; the input rules of placement mode (claim 7, the cursor
+//! shroud result of claim 6) are [`click_cell`] and [`cursor_shroud_result`].
 
-use glasnost_map::CellXY;
+use glasnost_map::{CellXY, NO_OVERLAY, Theater};
+use glasnost_num::{F64, Rounding};
+use glasnost_rules::schema::Ruleset;
+use serde::{Deserialize, Serialize};
 
 use super::TypeRef;
-use crate::world::{HouseId, World};
+use crate::rules::{Behaviour, Kind};
+use crate::world::{HouseId, HouseRole, Layer, ObjectId, Pos, World};
 
-/// Puts the house's done building item of type `t` on the map at `cell`
-/// (S-0406; the place order of S-0404 claim 7). It must place the item's
-/// existing object, `crate::econ::production::item_object(w, house, t)`,
-/// and create none (its creation draw was taken when the item started,
-/// S-0404 claim 11); an upgrade is added to the building at `cell` instead
-/// (S-0406 claim 12). Returns whether the placement succeeded. A stub until
-/// S-0406 is implemented: every placement fails, so the item stays done.
-pub fn place_building(w: &mut World, house: HouseId, t: TypeRef, cell: CellXY) -> bool {
-    let _ = (w, house, t, cell);
+/// The game-wide values the structures topics read (S-0406, S-0408,
+/// S-0415, S-0108).
+#[derive(Clone, Debug, Default)]
+pub struct Rules {
+    /// The default of the build-off-ally option (S-0406 claim 4; S-0412
+    /// owns the lobby setting).
+    pub build_off_ally: bool,
+    /// The default of the redeploy setting (S-0415 Terms; S-0412 owns the
+    /// lobby setting).
+    pub mcv_redeploys: bool,
+    /// The build-up time *B* in game minutes, a double (S-0108 claim 5).
+    pub buildup_time: F64,
+    /// The refund percentage *r*, a double, narrowed when used (S-0408
+    /// claim 1).
+    pub refund_percent: F64,
+}
+
+impl Rules {
+    /// The structures rules of a resolved ruleset.
+    pub fn new(r: &Ruleset, mode: Rounding) -> Self {
+        let g = &r.sim.general.economy;
+        Self {
+            // spec: S-0406 Constants (build-off-ally option absent-key default: on)
+            build_off_ally: g.build_off_ally.unwrap_or(true),
+            // spec: S-0412 Import mapping via S-0415 Terms (MCVRedeploys absent: yes)
+            mcv_redeploys: g.mcv_redeploys.unwrap_or(true),
+            // spec: S-0108 claim 5 and Import mapping (BuildupTime absent: the double nearest 0.05)
+            buildup_time: g
+                .buildup_time
+                .as_ref()
+                .map_or_else(|| crate::rules::nearest_double("0.05"), |d| d.value(mode)),
+            // spec: S-0408 Constants (refund percentage absent-key default 0.5)
+            refund_percent: g
+                .refund_percent
+                .as_ref()
+                .map_or_else(|| crate::rules::nearest_double("0.5"), |d| d.value(mode)),
+        }
+    }
+}
+
+/// A building's construction state (S-0108 claim 5): set while it builds
+/// up after a placement or a deploy, cleared when the construction has
+/// completed. A building the map places is complete (S-0009 claim 40), so
+/// the default is "complete".
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Construction {
+    /// The construction has not completed yet (S-0408 claim 3 (a)).
+    pub building_up: bool,
+}
+
+/// The placement fields of a building type (S-0406 Import mapping), with
+/// their absent-key defaults.
+#[derive(Clone, Debug, Default)]
+pub struct PlaceType {
+    /// Foundation rectangle *W* × *H* (S-0108 vocabulary).
+    pub size: (i32, i32),
+    /// The 8-cell 3 × 3 word (claim 2).
+    pub refinery: bool,
+    /// Place-anywhere flag (claim 3).
+    pub anywhere: bool,
+    /// Has a to-tile field (claims 3 and 5).
+    pub to_tile: bool,
+    /// Water-bound (claim 3 d).
+    pub water_bound: bool,
+    /// Naval flag (claim 3 d).
+    pub naval: bool,
+    /// The wall overlay, by overlay registration index (Terms).
+    pub wall_overlay: Option<u8>,
+    /// A wall type that has a wall overlay (claim 10; without one the wall
+    /// flag is ignored).
+    pub wall: bool,
+    /// Gate flag (claims 3 b and 9).
+    pub gate: bool,
+    /// Laser-fence flag (claim 3 b, c).
+    pub laser_fence: bool,
+    /// Laser-fence-post flag (claim 3 b).
+    pub post: bool,
+    /// Firestorm-wall flag (claim 11).
+    pub firestorm: bool,
+    /// Adjacency *A* (claim 4).
+    pub adjacent: i32,
+    /// Base-normal flag (claim 4).
+    pub base_normal: bool,
+    /// Ally-eligible flag (claim 4).
+    pub ally_eligible: bool,
+    /// Guard range *G* in leptons (claim 11).
+    pub guard_range: i32,
+    /// The target type of an upgrade type (claim 12).
+    pub upgrade_of: Option<u32>,
+    /// The upgrade level field (claim 12).
+    pub level: i32,
+    /// The upgrade count *U* of the type (claim 12).
+    pub upgrades: i32,
+}
+
+/// The placement fields of building type `t`.
+pub fn place_type(w: &World, t: u32) -> PlaceType {
+    let r = w.rules();
+    let Some(b) = r.buildings.get(t as usize) else {
+        return PlaceType::default();
+    };
+    let e = &b.raw.econ;
+    let mode = r.mode;
+    let wall_overlay = e.to_overlay.as_deref().and_then(|n| overlay_index(w, n));
+    PlaceType {
+        size: b.foundation,
+        // spec: S-0406 claim 2 (the 8-cell 3 × 3 word; absent: no)
+        refinery: b.raw.foundation_refinery.unwrap_or(false),
+        // spec: S-0406 Constants (place-anywhere absent-key default: no)
+        anywhere: e.place_anywhere.unwrap_or(false),
+        // spec: S-0406 Import mapping (ToTile absent: none)
+        to_tile: e.to_tile.is_some(),
+        // spec: S-0406 Import mapping (WaterBound absent: no)
+        water_bound: e.water_bound.unwrap_or(false),
+        naval: b.naval,
+        wall_overlay,
+        // spec: S-0406 claim 10 (a wall flag without a wall overlay is ignored, departure)
+        wall: e.wall.unwrap_or(false) && wall_overlay.is_some(),
+        gate: b.gate,
+        // spec: S-0406 Import mapping (LaserFence, LaserFencePost, FirestormWall absent: no)
+        laser_fence: b.raw.laser_fence.unwrap_or(false),
+        post: e.laser_fence_post.unwrap_or(false),
+        firestorm: b.raw.firestorm_wall.unwrap_or(false),
+        // spec: S-0406 Constants (adjacency absent-key default 3 cells)
+        adjacent: e.adjacent.unwrap_or(3),
+        // spec: S-0406 Constants (base-normal absent-key default yes)
+        base_normal: e.base_normal.unwrap_or(true),
+        // spec: S-0406 Constants (ally-eligible absent-key default no)
+        ally_eligible: e.eligible_for_ally_building.unwrap_or(false),
+        // spec: S-0406 Import mapping (GuardRange: cells converted to leptons as S-0215 states, trunc(256 × c); absent 0)
+        guard_range: e.guard_range.as_ref().map_or(0, |d| {
+            d.value(mode)
+                .mul(F64::from_i64(256, mode), mode)
+                .to_i32_common()
+        }),
+        upgrade_of: e
+            .powers_up_building
+            .as_deref()
+            .and_then(|n| r.index_of(Kind::Building, n)),
+        // spec: S-0406 Import mapping (PowersUpToLevel absent: −1)
+        level: e.powers_up_to_level.unwrap_or(-1),
+        // spec: S-0406 Import mapping (Upgrades absent: 0)
+        upgrades: e.upgrades.unwrap_or(0),
+    }
+}
+
+/// The overlay registration index of an overlay type name.
+fn overlay_index(w: &World, name: &str) -> Option<u8> {
+    w.rules()
+        .overlays
+        .iter()
+        .position(|o| o.name.eq_ignore_ascii_case(name))
+        .and_then(|i| u8::try_from(i).ok())
+        .filter(|&i| i != NO_OVERLAY)
+}
+
+/// The builder of a wall overlay (S-0406 Terms): the first building type
+/// in the registry whose wall overlay is `overlay`.
+pub fn wall_builder(w: &World, overlay: u8) -> Option<u32> {
+    let r = w.rules();
+    (0..r.buildings.len() as u32).find(|&t| {
+        r.buildings[t as usize]
+            .raw
+            .econ
+            .to_overlay
+            .as_deref()
+            .and_then(|n| overlay_index(w, n))
+            == Some(overlay)
+    })
+}
+
+/// The foundation cells of a building of type `t` with top-left cell
+/// `top_left` (S-0406 claim 2): the foundation rectangle, less the cell
+/// (2, 1) of the 8-cell 3 × 3 word.
+pub fn foundation_cells(w: &World, t: u32, top_left: CellXY) -> Vec<CellXY> {
+    let p = place_type(w, t);
+    cells_of(&p, top_left)
+}
+
+fn cells_of(p: &PlaceType, top_left: CellXY) -> Vec<CellXY> {
+    let mut v = crate::objects::foundation_cells(top_left, p.size);
+    if p.refinery {
+        // spec: S-0406 claim 2 and Constants (the 8-cell 3 × 3 word lacks the cell (2, 1))
+        v.retain(|c| (c.x - top_left.x, c.y - top_left.y) != (2, 1));
+    }
+    v
+}
+
+/// Whose walls the wall exceptions of claim 8 accept.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WallRule {
+    /// The placing house's walls (S-0406 claim 8).
+    Owner(HouseId),
+    /// Only walls that have no owner (S-0415 claim 3,
+    /// `quirks.deploy_refuses_own_walls`).
+    Unowned,
+}
+
+/// How a cell test is asked.
+#[derive(Clone, Copy, Debug)]
+pub struct Test {
+    /// The house placing.
+    pub house: HouseId,
+    /// Whose walls the wall exceptions accept.
+    pub walls: WallRule,
+    /// The place-anywhere flag counts (not for a fill cell, claim 11).
+    pub anywhere: bool,
+    /// An object that does not count as being in the way (the deploying
+    /// vehicle, S-0415 claim 3).
+    pub ignore: Option<ObjectId>,
+}
+
+impl Test {
+    /// The test of a place order by `house`.
+    pub fn order(house: HouseId) -> Self {
+        Self {
+            house,
+            walls: WallRule::Owner(house),
+            anywhere: true,
+            ignore: None,
+        }
+    }
+}
+
+/// Whether the cell `c` meets a wall exception of claim 8 for type `t`.
+fn wall_exception(w: &World, t: u32, p: &PlaceType, c: CellXY, rule: WallRule) -> bool {
+    let Some(i) = w.cells.idx(c) else {
+        return false;
+    };
+    let Some(cell) = w.cells.grid.get(c).copied() else {
+        return false;
+    };
+    if cell.overlay == NO_OVERLAY {
+        return false;
+    }
+    let owner = w.cells.wall_owner[i];
+    let owned = match rule {
+        WallRule::Owner(h) => owner == Some(h),
+        WallRule::Unowned => owner.is_none(),
+    };
+    if !owned {
+        return false;
+    }
+    let g = w.rules().gates;
+    let t = Some(t);
+    // spec: S-0406 Constants (damaged wall threshold: overlay data value 16)
+    let damaged = cell.overlay_data >= 16;
+    let own_kind = p.wall_overlay == Some(cell.overlay) && damaged;
+    match cell.overlay {
+        // spec: S-0406 claim 8 (indices 0 and 2: own type's damaged wall, the wall tower, the first gate pair)
+        0 | 2 => own_kind || t == g.tower || t == g.allied_one || t == g.allied_two,
+        // spec: S-0406 claim 8 (index 26: own type's damaged wall, the second gate pair)
+        26 => own_kind || t == g.soviet_one || t == g.soviet_two,
+        _ => false,
+    }
+}
+
+/// Whether the tile number lies in the naval placement range (S-0406
+/// claim 3 d).
+fn naval_tile(w: &World, tile: i32) -> bool {
+    // spec: S-0406 claim 3 d (the theater with index 5 forces the water role unset)
+    let start = if w.theater == Theater::Lunar {
+        -1
+    } else {
+        w.catalogue.as_deref().map_or(-1, |c| c.roles.water)
+    };
+    if start < 0 {
+        // spec: S-0406 Constants (water role unset: tile numbers 0 to 12, quirks.unset_role_range)
+        return w.rules().quirks.unset_role_range && (0..=12).contains(&tile);
+    }
+    // spec: S-0406 Constants (naval placement range: 14 tiles from the water role's start)
+    (start..start + 14).contains(&tile)
+}
+
+/// Whether a cell is marked as part of a bridge (S-0406 claim 3 d).
+fn bridge_marked(w: &World, c: CellXY) -> bool {
+    w.cells
+        .idx(c)
+        .is_some_and(|i| w.cells.deck[i] || w.cells.bridge_body[i])
+}
+
+/// Condition (d), ground (S-0406 claim 3 d).
+fn ground_ok(w: &World, p: &PlaceType, c: CellXY) -> bool {
+    let Some(cell) = w.cells.cell(c) else {
+        return false;
+    };
+    if p.water_bound {
+        // spec: S-0406 claim 3 d (water-bound: the float multiplier of the land type is not 0)
+        let m = w
+            .rules()
+            .multiplier(cell.land, glasnost_rules::sim::LocomotionClass::Float);
+        return m != glasnost_num::F32::ZERO;
+    }
+    // spec: S-0406 claim 3 d (not bridge-marked and slope shape 0)
+    if bridge_marked(w, c) || cell.slope != 0 {
+        return false;
+    }
+    if p.naval {
+        // spec: S-0406 claim 3 d (naval: the tile in the water role range, B not asked)
+        naval_tile(w, cell.tile)
+    } else {
+        // spec: S-0406 claim 3 d (the buildable flag B of the land type)
+        w.rules()
+            .land
+            .get(usize::from(cell.land))
+            .is_some_and(|l| l.buildable)
+    }
+}
+
+/// The vehicle-present claims the ignored object holds in `c`.
+fn ignored_claims(w: &World, ignore: Option<ObjectId>, c: CellXY) -> u8 {
+    ignore
+        .and_then(|id| w.obj(id))
+        .and_then(|o| o.drive.as_ref())
+        .map_or(0, |d| u8::from(d.claims.contains(&c)))
+}
+
+/// Condition (b), nothing in the way (S-0406 claim 3 b), with the object
+/// conditions of gate, post and laser-fence types.
+fn nothing_in_way(w: &World, p: &PlaceType, c: CellXY, test: &Test) -> bool {
+    for &id in w.cells.list(c, Layer::Ground) {
+        if Some(id) == test.ignore {
+            // spec: S-0415 claim 3 (the deploying vehicle does not count as being in the way)
+            continue;
+        }
+        let Some(o) = w.obj(id) else { continue };
+        if p.laser_fence {
+            // spec: S-0406 claim 3 b (a laser-fence type: only a building or a terrain object refuses)
+            if matches!(o.kind, Kind::Building | Kind::Terrain) {
+                return false;
+            }
+            continue;
+        }
+        if (p.gate || p.post)
+            && o.kind == Kind::Building
+            && o.owner == Some(test.house)
+            && w.rules().buildings[o.type_index as usize]
+                .raw
+                .laser_fence
+                .unwrap_or(false)
+        {
+            // spec: S-0406 claim 3 b (a gate or post type: an own laser-fence building does not refuse)
+            continue;
+        }
+        // spec: S-0406 claim 3 b (an aircraft, infantry unit, vehicle, building or terrain object refuses)
+        return false;
+    }
+    if p.laser_fence {
+        return true;
+    }
+    let Some(rec) = w.cells.occ(c, Layer::Ground) else {
+        return false;
+    };
+    // spec: S-0406 claim 3 b (the occupancy record: no standing position taken and no vehicle present)
+    let taken = rec.marks.iter().any(Option::is_some);
+    let vehicles = rec
+        .vehicles
+        .saturating_sub(ignored_claims(w, test.ignore, c));
+    !taken && vehicles == 0
+}
+
+/// Condition (c) with its exceptions: `Some(true)` when the cell is exempt
+/// from (c) and (d), `Some(false)` when it passes (c) and must pass (d),
+/// `None` when (c) refuses.
+fn overlay_ok(w: &World, t: u32, p: &PlaceType, c: CellXY, test: &Test) -> Option<bool> {
+    let cell = w.cells.cell(c)?;
+    if cell.overlay == NO_OVERLAY {
+        return Some(false);
+    }
+    if wall_exception(w, t, p, c, test.walls) {
+        // spec: S-0406 claim 8 (a wall exception: exempt from (c) and (d))
+        let ground = !w.rules().quirks.wall_exception_skips_ground;
+        // spec: S-0406 Edge cases (quirks.wall_exception_skips_ground off: (d) still asked)
+        return Some(!ground);
+    }
+    if p.laser_fence {
+        let ov = w.rules().overlays.get(usize::from(cell.overlay));
+        // spec: S-0406 claim 3 c (a laser-fence type on ore, gems or overlay index 126, not bridge-marked, slope 0)
+        let fence_overlay = cell.overlay == 126 || ov.is_some_and(|o| o.tiberium);
+        if fence_overlay && !bridge_marked(w, c) && cell.slope == 0 {
+            return Some(true);
+        }
+    }
+    // spec: S-0406 claim 3 c (any other overlay refuses)
+    None
+}
+
+/// The cell test of one cell for type `t` (S-0406 claims 3 and 8), the
+/// to-tile rule's tileset condition aside.
+fn cell_passes(w: &World, t: u32, p: &PlaceType, c: CellXY, test: &Test, to_tile: bool) -> bool {
+    // spec: S-0406 claim 3 a (a usable cell, height-aware)
+    if !w.cells.usable(c) {
+        return false;
+    }
+    let way = if to_tile && !(p.laser_fence || p.gate || p.post) {
+        // spec: S-0406 claim 3 (to-tile rule: no building in place of (b), and the tileset test)
+        let no_building = !w.cells.list(c, Layer::Ground).iter().any(|&id| {
+            Some(id) != test.ignore && w.obj(id).is_some_and(|o| o.kind == Kind::Building)
+        });
+        no_building && tileset_passes(w, c)
+    } else {
+        nothing_in_way(w, p, c, test)
+    };
+    if !way {
+        return false;
+    }
+    match overlay_ok(w, t, p, c, test) {
+        None => false,
+        Some(true) => true,
+        Some(false) => ground_ok(w, p, c),
+    }
+}
+
+/// The tileset test of the to-tile rule (S-0406 claim 3; S-0010 claim
+/// 15): a tile of a morphable tileset, or a tile number outside the tile
+/// range. Seam: the tile catalogue does not carry the morphable flag yet,
+/// so only a tile number outside the range passes.
+fn tileset_passes(w: &World, c: CellXY) -> bool {
+    let tile = w.cells.cell(c).map_or(-1, |x| x.tile);
+    let count = w.catalogue.as_deref().map_or(0, |cat| cat.tile_count());
+    // spec: S-0406 claim 3 (a tile number outside the tile range always passes)
+    !(0..count).contains(&tile)
+}
+
+/// The cell test (S-0406 claims 3 and 8) of type `t` at top-left cell
+/// `top_left`.
+pub fn cell_test(w: &World, t: u32, top_left: CellXY, test: &Test) -> bool {
+    let p = place_type(w, t);
+    if test.anywhere && p.anywhere {
+        // spec: S-0406 claim 3 (place-anywhere: none of (a) to (d) is asked; it takes precedence over a to-tile field)
+        return true;
+    }
+    let cells = cells_of(&p, top_left);
+    if p.to_tile {
+        // spec: S-0406 claim 3 (to-tile rule: one foundation cell passing is enough; no cells passes)
+        return cells.is_empty() || cells.iter().any(|&c| cell_passes(w, t, &p, c, test, true));
+    }
+    // spec: S-0406 claim 3 (every foundation cell passes; no cells passes every condition, claim 2)
+    cells.iter().all(|&c| cell_passes(w, t, &p, c, test, false))
+}
+
+/// Whether the build-off-ally option is on (S-0406 claim 4; S-0412 owns
+/// the lobby setting, which is a seam until S-0412: the rules' default).
+pub fn build_off_ally(w: &World) -> bool {
+    w.rules().econ.placement.build_off_ally
+}
+
+/// The adjacency condition (S-0406 claim 4, F1).
+pub fn adjacent(w: &World, house: HouseId, t: u32, top_left: CellXY) -> bool {
+    let p = place_type(w, t);
+    // spec: S-0406 F1 (d = A + 1; the zero-size word's rectangle is 0 × 0)
+    let d = p.adjacent.saturating_add(1);
+    let (fw, fh) = (p.size.0.max(0), p.size.1.max(0));
+    let (x0, y0) = (top_left.x, top_left.y);
+    let ally_option = build_off_ally(w);
+    for y in (y0 - d)..=(y0 + fh - 1 + d) {
+        for x in (x0 - d)..=(x0 + fw - 1 + d) {
+            // spec: S-0406 F1 (the foundation rectangle itself is not looked at)
+            if (x0..x0 + fw).contains(&x) && (y0..y0 + fh).contains(&y) {
+                continue;
+            }
+            let c = CellXY::new(x, y);
+            for &id in w.cells.list(c, Layer::Ground) {
+                let Some(o) = w.obj(id) else { continue };
+                if o.kind != Kind::Building {
+                    continue;
+                }
+                let Some(owner) = o.owner else { continue };
+                let q = place_type(w, o.type_index);
+                // spec: S-0406 claim 4 (own base-normal building, any state)
+                if owner == house && q.base_normal {
+                    return true;
+                }
+                // spec: S-0406 claim 4 (build-off-ally: the owner allies the placing house, an ally-eligible building; a house allies itself)
+                let allies = owner == house
+                    || w.houses
+                        .get(usize::from(owner.0))
+                        .is_some_and(|h| h.allied_with(house));
+                if ally_option && allies && q.ally_eligible {
+                    return true;
+                }
+            }
+        }
+    }
     false
 }
 
-/// Whether a place order with a cell is legal when it is issued: adjacency
-/// and explored ground (S-0406 claim 6, S-0411 claim 10; S-0404 claim 10).
-/// A stub until S-0406 is implemented: legal.
+/// The explored-ground condition (S-0406 claim 5): every cell of the
+/// foundation rectangle is explored by `house`; a to-tile type is exempt.
+pub fn explored(w: &World, house: HouseId, t: u32, top_left: CellXY) -> bool {
+    let p = place_type(w, t);
+    if p.to_tile {
+        // spec: S-0406 claim 5 (a type with a to-tile field is exempt)
+        return true;
+    }
+    // spec: S-0406 claim 5 (every cell of the foundation rectangle, 9 cells for the 8-cell word)
+    crate::objects::foundation_cells(top_left, p.size)
+        .into_iter()
+        .all(|c| crate::econ::shroud::explored(w, house, c))
+}
+
+/// The conditions judged when a place order is issued (S-0406 claims 4 to
+/// 6 and 12): adjacency, or for an upgrade type a building it can go on,
+/// and explored ground. Applying the order does not judge them again.
 pub fn place_legal(w: &World, house: HouseId, t: TypeRef, cell: CellXY) -> bool {
-    let _ = (w, house, t, cell);
+    if t.kind != Kind::Building {
+        return false;
+    }
+    let p = place_type(w, t.index);
+    let support = if p.upgrade_of.is_some() {
+        // spec: S-0406 claim 12 (an upgrade order that names such a building passes claim 4)
+        upgrade_target(w, house, t.index, cell).is_some()
+    } else {
+        adjacent(w, house, t.index, cell)
+    };
+    // spec: S-0406 claims 5 and 12 (the shroud condition is asked of an upgrade type's rectangle too)
+    support && explored(w, house, t.index, cell)
+}
+
+/// The cell a click on `click` names in placement mode (S-0406 claim 7,
+/// F2).
+pub fn click_cell(w: &World, t: u32, click: CellXY) -> CellXY {
+    let p = place_type(w, t);
+    let cells = cells_of(&p, CellXY::new(0, 0));
+    // spec: S-0406 F2 (the bounding rectangle of the foundation cells; 1 × 1 with no cell)
+    let (bw, bh) = if cells.is_empty() {
+        (1, 1)
+    } else {
+        let mx = cells.iter().map(|c| c.x).max().unwrap_or(0);
+        let my = cells.iter().map(|c| c.y).max().unwrap_or(0);
+        let nx = cells.iter().map(|c| c.x).min().unwrap_or(0);
+        let ny = cells.iter().map(|c| c.y).min().unwrap_or(0);
+        (mx - nx + 1, my - ny + 1)
+    };
+    // spec: S-0406 F2 (top-left = (x − ⌊(W − 1)/2⌋, y − ⌊(H − 1)/2⌋))
+    CellXY::new(click.x - (bw - 1) / 2, click.y - (bh - 1) / 2)
+}
+
+/// The cursor shroud result (S-0406 Terms, claim 6): claim 5 for the
+/// foundation rectangle that a click on `cursor` would name. Placement mode
+/// recomputes it whenever the cell under the cursor changes
+/// (`quirks.placement_shroud_at_cursor`).
+pub fn cursor_shroud_result(w: &World, house: HouseId, t: u32, cursor: CellXY) -> bool {
+    explored(w, house, t, click_cell(w, t, cursor))
+}
+
+/// Whether a factory building of `house` could make building type `t`
+/// without the tech-tree rule (S-0406 claim 1, S-0404 Terms): on the map,
+/// not being sold, a factory of buildings, sharing an owner country with
+/// the type.
+pub fn factory_could_make(w: &World, house: HouseId, t: u32) -> bool {
+    let r = w.rules();
+    let Some(item) = r.buildings.get(t as usize) else {
+        return false;
+    };
+    let item_owners = item.raw.owner.clone().unwrap_or_default();
+    w.objects.values().any(|o| {
+        o.kind == Kind::Building
+            && o.owner == Some(house)
+            && o.on_map
+            && o.health > 0
+            // spec: S-0404 Terms via S-0406 claim 1 (a building being sold cannot make)
+            && o.beh.current != Some(Behaviour::Selling)
+            && r.buildings[o.type_index as usize].factory
+                == Some(crate::rules::FactoryKind::Building)
+            // spec: S-0404 Terms (its type's owner countries share one with the item type's)
+            && r.buildings[o.type_index as usize]
+                .raw
+                .owner
+                .iter()
+                .flatten()
+                .any(|c| item_owners.contains(c))
+    })
+}
+
+/// The building object a place order places: the done item's object
+/// (S-0404 claim 7), which the placement puts on the map without creating
+/// one. A caller with no done item of the type (a direct engine call, as in
+/// the claim tests; no order reaches here without one, since S-0404 claim 7
+/// asks for the done item first) gets a new object with its creation draw.
+fn item_object(w: &mut World, house: HouseId, t: TypeRef) -> ObjectId {
+    crate::econ::production::item_object(w, house, t)
+        .filter(|&id| w.obj(id).is_some())
+        .unwrap_or_else(|| crate::objects::create(w, Kind::Building, t.index, Some(house)))
+}
+
+/// Applies the placement of a done building (S-0406 claims 1, 3, 8 to
+/// 12): the item's object is put on the map at `cell`, or added as an
+/// upgrade to the building there. Returns whether it was placed; on
+/// failure nothing is placed (the refusal sound and placement mode are the
+/// input's, S-0411). The factory condition of claim 1 is asked first.
+pub fn place_building(w: &mut World, house: HouseId, t: TypeRef, cell: CellXY) -> bool {
+    if t.kind != Kind::Building {
+        return false;
+    }
+    // spec: S-0406 claim 1 (without a factory building that could make the type the order does nothing)
+    if !factory_could_make(w, house, t.index) {
+        return false;
+    }
+    let p = place_type(w, t.index);
+    if p.upgrade_of.is_some() {
+        // spec: S-0406 claim 12 (an upgrade type is not placed by the cell test)
+        let Some(target) = upgrade_target(w, house, t.index, cell) else {
+            return false;
+        };
+        add_upgrade(w, target, t.index);
+        return true;
+    }
+    if !cell_test(w, t.index, cell, &Test::order(house)) {
+        return false;
+    }
+    let id = item_object(w, house, t);
+    put_on_map(w, id, cell, true);
     true
+}
+
+/// Puts the building `id` on the map with top-left cell `cell`, after its
+/// cell test has passed (S-0406 claims 1 and 9 to 11): walls underneath
+/// removed, a wall type turned into its overlay, otherwise the building put
+/// at the centre of the cell at the surface height in its construction
+/// state; then the wall fill for a place order (`by_order`). The facing is
+/// 0 unless the caller sets one.
+pub fn put_on_map(w: &mut World, id: ObjectId, cell: CellXY, by_order: bool) {
+    // The facing of a placed building is not stated (request Q-0133): 0.
+    put_on_map_facing(w, id, cell, by_order, 0);
+}
+
+/// [`put_on_map`] with a body facing (a deploy, S-0415 claim 6).
+pub fn put_on_map_facing(
+    w: &mut World,
+    id: ObjectId,
+    cell: CellXY,
+    by_order: bool,
+    facing: glasnost_num::geom::Facing,
+) {
+    let Some(o) = w.obj(id) else { return };
+    let (t, house) = (o.type_index, o.owner);
+    let p = place_type(w, t);
+    if let Some(h) = house {
+        remove_underneath(w, t, &p, h, cell);
+    }
+    if p.wall {
+        // spec: S-0406 claim 10 (a wall type: its wall overlay in the cell, the placing house its owner; no building remains)
+        w.objects.remove(&id);
+        // spec: S-0406 claim 10 (a damaged wall that claim 9 could not remove stays: the spec's working hypothesis)
+        let kept = w.cells.cell(cell).is_some_and(|x| x.overlay != NO_OVERLAY);
+        if let Some(ov) = p.wall_overlay
+            && !kept
+        {
+            put_wall(w, cell, ov, house);
+        }
+    } else {
+        // spec: S-0406 claim 1 and F4 (the centre of the cell, (256x + 128, 256y + 128), at the surface height)
+        let z = w.surface_at(256 * cell.x + 128, 256 * cell.y + 128);
+        begin_construction(w, id);
+        crate::objects::place_with(w, id, Pos::centre(cell, z), facing, by_order);
+    }
+    if by_order
+        && let (Some(h), Some(ov)) = (house, p.wall_overlay)
+        && crate::walls::is_wall(w, ov)
+        && !p.firestorm
+    {
+        wall_fill(w, t, &p, h, cell, ov);
+    }
+}
+
+/// Starts a building's construction state (S-0108 claim 5): its behaviour
+/// becomes *construction* (S-0406 claim 1, S-0415 claim 6).
+pub fn begin_construction(w: &mut World, id: ObjectId) {
+    let t = w.tick;
+    if let Some(o) = w.obj_mut(id) {
+        o.beh.force(Behaviour::Construction, t);
+        o.econ.construction.building_up = true;
+    }
+}
+
+/// Puts a wall overlay in a cell for its owner (S-0406 claim 10; S-0112
+/// claim 7: a new wall starts with data value 0).
+fn put_wall(w: &mut World, c: CellXY, overlay: u8, owner: Option<HouseId>) {
+    let Some(i) = w.cells.idx(c) else { return };
+    if let Some(cell) = w.cells.grid.get_mut(c) {
+        cell.overlay = overlay;
+        // spec: S-0112 claim 7 (a newly placed wall starts with data value 0)
+        cell.overlay_data = 0;
+    }
+    w.cells.wall_owner[i] = owner;
+    // spec: S-0112 claim 7 (a wall placed in c: c and its four edge neighbours)
+    crate::walls::wall_placed(w, c);
+    crate::load::recalc_cells(w, &[c]);
+    crate::regions::cell_changed(w, c);
+}
+
+/// What a placement removes underneath (S-0406 claim 9).
+fn remove_underneath(w: &mut World, t: u32, p: &PlaceType, house: HouseId, cell: CellXY) {
+    let g = w.rules().gates;
+    let overlay_at = |w: &World, c: CellXY| w.cells.cell(c).map_or(NO_OVERLAY, |x| x.overlay);
+    let owned = |w: &World, c: CellXY| {
+        w.cells
+            .idx(c)
+            .is_some_and(|i| w.cells.wall_owner[i] == Some(house))
+    };
+    if Some(t) == g.tower {
+        // spec: S-0406 claim 9 (the wall tower: its top-left cell's own wall of index 0 or 2)
+        if owned(w, cell) && matches!(overlay_at(w, cell), 0 | 2) {
+            crate::econ::sell::wall_sale(w, house, cell, true);
+        }
+    } else if let Some(ov) = p.wall_overlay {
+        // spec: S-0406 claim 9 (a type with a wall overlay: its top-left cell's own wall of that overlay)
+        if owned(w, cell) && overlay_at(w, cell) == ov {
+            crate::econ::sell::wall_sale(w, house, cell, true);
+        }
+    } else if p.gate {
+        // spec: S-0406 claim 9 (a gate-flag type: each foundation cell's own wall of index 0, 2 or 26, and own laser-fence buildings)
+        for c in cells_of(p, cell) {
+            if owned(w, c) && matches!(overlay_at(w, c), 0 | 2 | 26) {
+                crate::econ::sell::wall_sale(w, house, c, true);
+            }
+            let fences: Vec<ObjectId> = w
+                .cells
+                .list(c, Layer::Ground)
+                .iter()
+                .copied()
+                .filter(|&x| {
+                    w.obj(x).is_some_and(|o| {
+                        o.kind == Kind::Building
+                            && o.owner == Some(house)
+                            && w.rules().buildings[o.type_index as usize]
+                                .raw
+                                .laser_fence
+                                .unwrap_or(false)
+                    })
+                })
+                .collect();
+            for f in fences {
+                // spec: S-0406 claim 9 (a laser-fence building removed from play without refund)
+                crate::objects::remove(w, f);
+            }
+        }
+    }
+}
+
+/// The wall fill (S-0406 claim 11, F3).
+fn wall_fill(w: &mut World, t: u32, p: &PlaceType, house: HouseId, cell: CellXY, ov: u8) {
+    // spec: S-0406 F3 (L = ⌊G / 256⌋, toward −∞)
+    let l = p.guard_range.div_euclid(256);
+    let test = Test {
+        house,
+        walls: WallRule::Owner(house),
+        // spec: S-0406 claim 11 (the fill's cell test has no place-anywhere exemption)
+        anywhere: false,
+        ignore: None,
+    };
+    // spec: S-0406 claim 11 (four map directions; they do not interact, any order)
+    for (dx, dy) in crate::walls::EDGE_STEPS {
+        let mut gap = Vec::new();
+        let mut found = false;
+        for k in 1..=l {
+            let c = CellXY::new(cell.x + k * dx, cell.y + k * dy);
+            let holds = w.cells.idx(c).is_some_and(|i| {
+                w.cells.wall_owner[i] == Some(house)
+                    && w.cells.cell(c).is_some_and(|x| x.overlay == ov)
+            });
+            if holds {
+                // spec: S-0406 claim 11 (the nearest own wall of the type, damaged or not, ends the direction)
+                found = true;
+                break;
+            }
+            // spec: S-0406 claim 11 (every cell before it passes the cell test)
+            if !cell_test(w, t, c, &test) {
+                break;
+            }
+            gap.push(c);
+        }
+        if !found {
+            continue;
+        }
+        for c in gap {
+            // spec: S-0406 claim 11 (each filling wall is a building created under S-0202 claim 10: one creation draw)
+            let id = crate::objects::create(w, Kind::Building, t, Some(house));
+            // spec: S-0406 claim 11 (a filling building passes no further test; it does not fill further)
+            put_on_map(w, id, c, false);
+        }
+    }
+}
+
+/// The building an upgrade of type `u` placed at `cell` by `house` goes
+/// on (S-0406 claim 12), if there is one with room.
+pub fn upgrade_target(w: &World, house: HouseId, u: u32, cell: CellXY) -> Option<ObjectId> {
+    let p = place_type(w, u);
+    let target = p.upgrade_of?;
+    let tower = w.rules().gates.tower == Some(target);
+    w.cells
+        .list(cell, Layer::Ground)
+        .iter()
+        .copied()
+        .find(|&id| {
+            let Some(o) = w.obj(id) else { return false };
+            if o.kind != Kind::Building || o.owner != Some(house) || o.type_index != target {
+                return false;
+            }
+            let c = o.econ.building.upgrade_count;
+            let cap = place_type(w, target).upgrades;
+            match p.level {
+                // spec: S-0406 claim 12 (level field absent: the count below the type's upgrade count)
+                -1 => c < cap,
+                // spec: S-0406 claim 12 (level 1 to 3: the count is 0)
+                1..=3 => {
+                    // spec: S-0406 Edge cases (quirks.upgrade_level_without_room off: refused when U = 0 and not the wall tower)
+                    let no_room =
+                        cap == 0 && !tower && !w.rules().quirks.upgrade_level_without_room;
+                    c == 0 && !no_room
+                }
+                // spec: S-0406 claim 12 (any other level value refuses)
+                _ => false,
+            }
+        })
+}
+
+/// Adds an upgrade of type `u` to building `b` (S-0406 claim 12, F5).
+pub fn add_upgrade(w: &mut World, b: ObjectId, u: u32) {
+    let p = place_type(w, u);
+    let Some(o) = w.obj(b) else { return };
+    let target = o.type_index;
+    let tower = w.rules().gates.tower == Some(target);
+    let cap = place_type(w, target).upgrades;
+    let strength = crate::combat::damage::strength(w, b);
+    let owner = o.owner;
+    let c = o.econ.building.upgrade_count;
+    // spec: S-0406 F5 (i = 1 for an absent level field, else n)
+    let i = if p.level == -1 { 1 } else { p.level };
+    // spec: S-0406 F5 (c′ = min(c + i, U); uncapped on the wall tower type)
+    let c2 = if tower { c + i } else { (c + i).min(cap) };
+    if let Some(ob) = w.obj_mut(b) {
+        ob.econ.building.upgrade_count = c2;
+        // spec: S-0406 claim 12 (full health: the type's strength)
+        ob.health = strength;
+        // spec: S-0406 F5 (recorded in position c′ when 1 ≤ c′ ≤ 3; otherwise nothing, departure)
+        if (1..=3).contains(&c2) {
+            ob.econ.building.upgrades.push(u);
+        }
+    }
+    if let Some(h) = owner {
+        // spec: S-0406 claim 12 (power and the offer take the upgrade into account, S-0405 claim 7, S-0407 claim 12)
+        crate::econ::power::make_due(w, h);
+        // spec: S-0406 claim 12 (radar decided again under S-0410's rules)
+        crate::econ::radar::mark_due(w, h);
+    }
+}
+
+/// Whether a house is a player house (glossary *AI house*: every player
+/// house counts as human-controlled in our engine).
+pub fn player_house(w: &World, h: HouseId) -> bool {
+    w.houses
+        .get(usize::from(h.0))
+        .is_some_and(|x| x.role == HouseRole::Player && x.human)
 }

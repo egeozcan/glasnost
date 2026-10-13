@@ -141,7 +141,11 @@ fn s0012_partial_terrain_values() {
     };
     let d = decode_text(&m.text());
     assert_eq!(at(&d, 2, 10).tile, NO_TILE);
-    assert!(d.warnings.iter().any(|w| w.text.contains("partial_terrain_values")));
+    assert!(
+        d.warnings
+            .iter()
+            .any(|w| w.text.contains("partial_terrain_values"))
+    );
     // Switch off: the partial pair ends the stream, the cell keeps the fill.
     let d = decode_with(&m.text(), off);
     assert_ne!(at(&d, 2, 10).tile, NO_TILE);
@@ -167,7 +171,11 @@ fn s0012_partial_terrain_values() {
         ..Default::default()
     };
     let d = decode_text(&m.text());
-    assert!(d.warnings.iter().any(|w| w.text.contains("first coordinate pair")));
+    assert!(
+        d.warnings
+            .iter()
+            .any(|w| w.text.contains("first coordinate pair"))
+    );
     assert_ne!(at(&d, 1, 10).tile, NO_TILE);
 }
 
@@ -207,13 +215,20 @@ fn s0012_claim_1_joining() {
     assert!(long.len() > 127, "{}", long.len());
     let s = terrain_text(&[long.clone()]);
     let d = decode_text(&s);
-    assert!(d.warnings.iter().any(|w| w.text.contains("map_pack_line_limit")));
+    assert!(
+        d.warnings
+            .iter()
+            .any(|w| w.text.contains("map_pack_line_limit"))
+    );
     let off = MapQuirks {
         map_pack_line_limit: false,
         ..MapQuirks::default()
     };
     let d = decode_with(&s, off);
-    assert_eq!(d.map.cells.get(CellXY::new(12, 10)).unwrap().tile, 12 * 7919 + 13);
+    assert_eq!(
+        d.map.cells.get(CellXY::new(12, 10)).unwrap().tile,
+        12 * 7919 + 13
+    );
 }
 
 /// spec: S-0012 claim 2 (nonstandard groups, quirks.map_base64_groups)
@@ -225,14 +240,22 @@ fn s0012_claim_2_nonstandard_groups() {
     odd.insert(2, '*');
     let s = terrain_text(&[odd]);
     let d = decode_text(&s);
-    assert!(d.warnings.iter().any(|w| w.text.contains("map_base64_groups")));
+    assert!(
+        d.warnings
+            .iter()
+            .any(|w| w.text.contains("map_base64_groups"))
+    );
     // Switch off: the block is absent; the fill remains.
     let off = MapQuirks {
         map_base64_groups: false,
         ..MapQuirks::default()
     };
     let d = decode_with(&s, off);
-    assert!(d.warnings.iter().any(|w| w.text.contains("the block is ignored")));
+    assert!(
+        d.warnings
+            .iter()
+            .any(|w| w.text.contains("the block is ignored"))
+    );
     assert_ne!(d.map.cells.get(CellXY::new(1, 10)).unwrap().tile, 5);
 }
 
@@ -375,7 +398,9 @@ fn preview_and_header() {
 fn map_growth_switch() {
     let on = decode_text(&format!("{BASE}[Map]\n"));
     assert_eq!(on.map.basic.tiberium_growth, None);
-    let off = decode_text("[Basic]\nNewINIFormat=4\nTiberiumGrowthEnabled=no\n[Map]\nSize=0,0,10,6\nLocalSize=1,2,8,3\nTheater=snow\n");
+    let off = decode_text(
+        "[Basic]\nNewINIFormat=4\nTiberiumGrowthEnabled=no\n[Map]\nSize=0,0,10,6\nLocalSize=1,2,8,3\nTheater=snow\n",
+    );
     assert_eq!(off.map.basic.tiberium_growth, Some(false));
 }
 

@@ -1155,7 +1155,13 @@ impl Builder<'_> {
 
     /// The stored value of an art key in the type's image section after
     /// each type read (S-0007 claim 1), in read order.
-    pub(super) fn art_values(&self, kind: Kind, index: usize, t: &TypeRec, k: &str) -> Vec<(Vec<u8>, u32)> {
+    pub(super) fn art_values(
+        &self,
+        kind: Kind,
+        index: usize,
+        t: &TypeRec,
+        k: &str,
+    ) -> Vec<(Vec<u8>, u32)> {
         self.images(kind, index, t)
             .iter()
             .filter_map(|image| {

@@ -65,7 +65,12 @@ pub fn credit_tick_sounds(import: &Import) -> Vec<Vec<u8>> {
         .and_then(|s| s.get(&b"CreditTicks"[..]))
         .and_then(|k| k.value.as_deref())
         // spec: S-0003 claim 1 (lists read with the usual 127-byte text limit)
-        .map(|v| value::list(v, value::COMMON_TEXT_LIMIT).into_iter().map(<[u8]>::to_vec).collect())
+        .map(|v| {
+            value::list(v, value::COMMON_TEXT_LIMIT)
+                .into_iter()
+                .map(<[u8]>::to_vec)
+                .collect()
+        })
         .unwrap_or_default()
 }
 

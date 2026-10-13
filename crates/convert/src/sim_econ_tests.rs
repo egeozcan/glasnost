@@ -57,7 +57,10 @@ fn building_econ_fields_are_converted() {
         Some(&["PLANT".to_owned(), "POWER".to_owned()][..])
     );
     assert_eq!(mill.owner.as_deref(), Some(&["Ruritania".to_owned()][..]));
-    assert_eq!(mill.econ.units_cost_bonus.as_ref().map(|d| d.0.as_str()), Some("5e-1"));
+    assert_eq!(
+        mill.econ.units_cost_bonus.as_ref().map(|d| d.0.as_str()),
+        Some("5e-1")
+    );
     assert_eq!(mill.econ.queueing_cell, Some([2, 3]));
     assert_eq!(mill.econ.art_number_of_docks, Some(2));
     assert_eq!(mill.econ.special_anim.as_deref(), Some("SPIN"));
@@ -87,7 +90,10 @@ fn unit_econ_fields_are_converted() {
 fn country_econ_fields_and_no_effect_warning() {
     let (s, w) = import(BASE, ART);
     let c = &s.countries["Ruritania"].econ;
-    assert_eq!(c.cost_units_mult.as_ref().map(|d| d.0.as_str()), Some("125e-2"));
+    assert_eq!(
+        c.cost_units_mult.as_ref().map(|d| d.0.as_str()),
+        Some("125e-2")
+    );
     assert_eq!(c.income_mult.as_ref().map(|d| d.0.as_str()), Some("75e-2"));
     assert_eq!(c.side.as_deref(), Some("Blue"));
     assert_eq!(c.multiplay, Some(true));
@@ -105,7 +111,10 @@ fn tiberiums_superweapons_and_general_econ() {
     assert_eq!(s.superweapons["Zap"].kind.as_deref(), Some("Thing"));
     let g = &s.general.economy;
     assert_eq!(g.harvester_load_rate, Some(9));
-    assert_eq!(g.prerequisite_power.as_deref(), Some(&["PLANT".to_owned()][..]));
+    assert_eq!(
+        g.prerequisite_power.as_deref(),
+        Some(&["PLANT".to_owned()][..])
+    );
     assert_eq!(g.pad_aircraft.as_deref(), Some(&["Ghost".to_owned()][..]));
     assert_eq!(g.build_tech.as_deref(), Some(&["MILL".to_owned()][..]));
     assert_eq!(g.crate_maximum, Some(4));
@@ -153,7 +162,11 @@ fn buildup_and_refinery_foundation_are_converted() {
     assert_eq!(b["PLANT"].econ.buildup, None);
     assert_eq!(b["SHED"].econ.buildup, None);
     assert_eq!(
-        s.general.economy.buildup_time.as_ref().map(|d| d.0.as_str()),
+        s.general
+            .economy
+            .buildup_time
+            .as_ref()
+            .map(|d| d.0.as_str()),
         Some("25e-2")
     );
 }

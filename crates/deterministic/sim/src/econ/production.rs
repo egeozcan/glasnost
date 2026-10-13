@@ -614,8 +614,9 @@ fn bonus_product(w: &World, house: HouseId, factor: usize) -> F64 {
     b
 }
 
-/// trunc(RZ₅₃(RZ₅₃(C × b) × a)) for a cost and a type's kind (S-0404 F1).
-fn base_price(w: &World, house: HouseId, cost: i32, lk: LineKind) -> i32 {
+/// The country cost factor *a* and the cost bonus product *b* of a house
+/// for a kind (S-0404 claim 2, F1).
+fn factors_of(w: &World, house: HouseId, lk: LineKind) -> (F64, F64) {
     let r = w.rules();
     let mode = r.mode;
     let a = w
@@ -623,7 +624,26 @@ fn base_price(w: &World, house: HouseId, cost: i32, lk: LineKind) -> i32 {
         .get(usize::from(house.0))
         .and_then(|h| r.econ.production.countries.get(h.country as usize))
         .map_or(F64::from_i64(1, mode), |c| c.cost[lk.factor()]);
-    let b = bonus_product(w, house, lk.factor());
+    (a, bonus_product(w, house, lk.factor()))
+}
+
+/// The factors *a* and *b* (S-0404 claim 2) of a house for type `t`'s
+/// kind, as they stand now, which S-0408's refund (claim 1, F1) uses; 1 and
+/// 1 for a type with no line kind.
+pub fn cost_factors(w: &World, house: HouseId, t: TypeRef) -> (F64, F64) {
+    match line_kind(w, t) {
+        Some(lk) => factors_of(w, house, lk),
+        None => {
+            let one = F64::from_i64(1, w.rules().mode);
+            (one, one)
+        }
+    }
+}
+
+/// trunc(RZ₅₃(RZ₅₃(C × b) × a)) for a cost and a type's kind (S-0404 F1).
+fn base_price(w: &World, house: HouseId, cost: i32, lk: LineKind) -> i32 {
+    let mode = w.rules().mode;
+    let (a, b) = factors_of(w, house, lk);
     // spec: S-0404 F1 (P = trunc(RZ₅₃(RZ₅₃(C × b) × a)))
     F64::from_i64(i64::from(cost), mode)
         .mul(b, mode)
