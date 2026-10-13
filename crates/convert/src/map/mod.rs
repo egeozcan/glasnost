@@ -772,6 +772,11 @@ impl Decoder<'_> {
                 .to_vec(),
             official: self.boolean(b"Basic", b"Official", false),
             multiplayer_only: self.boolean(b"Basic", b"MultiplayerOnly", false),
+            // spec: S-0401 Import mapping ([Basic] TiberiumGrowthEnabled, the map growth switch; absent: on)
+            tiberium_growth: self
+                .doc
+                .value(b"Basic", b"TiberiumGrowthEnabled")
+                .and_then(value::boolean),
         }
     }
 

@@ -1636,6 +1636,12 @@ pub struct TerrainObjectType {
     /// `AnimationProbability`, *p*, a single (S-0401 F8); absent: 0.
     #[serde(default)]
     pub animation_probability: Option<Decimal>,
+    /// The number of image frames *N* of the type's sprite (S-0401 claim
+    /// 15, S-0112 Terms *frame count*), from its art; absent: not known,
+    /// and an animated ore mine never makes resource (a provisional rule:
+    /// the importer does not read terrain sprites yet).
+    #[serde(default)]
+    pub image_frames: Option<i32>,
     /// `Strength` (S-0302 claim 20).
     #[serde(default)]
     pub strength: Option<i32>,

@@ -323,6 +323,11 @@ pub struct Basic {
     pub official: bool,
     /// Multiplayer-only switch.
     pub multiplayer_only: bool,
+    /// The map growth switch (S-0401 claim 4, `[Basic]
+    /// TiberiumGrowthEnabled`); `None`: the key is absent, and the switch
+    /// is on.
+    #[serde(default)]
+    pub tiberium_growth: Option<bool>,
 }
 
 /// A defined entry of the start list: waypoint number and cell.

@@ -697,6 +697,16 @@ impl Builder<'_> {
     /// A tiberium record.
     pub(super) fn tiberium(&mut self, rec: &mut Rec, t: &TypeRec) {
         self.efields(rec, t, Kind::Tiberiums, TIBERIUM_FIELDS);
+        let images: Vec<i32> = Self::set_values(t.keys.get(&b"Image"[..]))
+            .iter()
+            .filter_map(|(v, _, _)| value::integer(v))
+            .collect();
+        if let Some([p, f, s]) = image_run(&images) {
+            rec.put(
+                "image_run",
+                jsonc::array(vec![int_node(p), int_node(f), int_node(s)]),
+            );
+        }
     }
 
     /// A superweapon record.
@@ -755,4 +765,27 @@ pub(super) fn is_one_text(d: &str) -> bool {
     // value = trimmed × 10^(zeros − frac + exp − (2 if pct))
     let e = zeros - frac + exp - if pct { 2 } else { 0 };
     trimmed == "1" && e == 0
+}
+
+/// The image run (*P*, *F*, *S*) that a tiberium's image numbers leave, in
+/// the order the rules layers gave them (S-0112 claim 10 and Constants): a
+/// value other than 2 and −1 sets all three, 2 sets *P* and *F* and keeps
+/// *S* (0 for a tiberium that never had another value), −1 changes
+/// nothing. `None`: no run (S-0112 claim 12).
+pub(crate) fn image_run(values: &[i32]) -> Option<[i32; 3]> {
+    // spec: S-0112 Constants (F = 12 for every image number; S = 8 for every value other than 2 and −1)
+    const FLAT: i32 = 12;
+    const SLOPED: i32 = 8; // spec: S-0112 Constants (S = 8)
+    let mut run: Option<[i32; 3]> = None;
+    for &v in values {
+        // spec: S-0112 Constants (image runs: 2 → P 27, keeps S; 3 → 127; 4 → 147; any other value except −1 → 102)
+        run = match v {
+            -1 => run,
+            2 => Some([27, FLAT, run.map_or(0, |r| r[2])]),
+            3 => Some([127, FLAT, SLOPED]),
+            4 => Some([147, FLAT, SLOPED]),
+            _ => Some([102, FLAT, SLOPED]),
+        };
+    }
+    run
 }

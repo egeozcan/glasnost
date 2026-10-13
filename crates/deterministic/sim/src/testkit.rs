@@ -105,6 +105,8 @@ pub fn catalogue() -> Arc<TileCatalogue> {
     Arc::new(TileCatalogue {
         tiles: (0..=4).map(tile).collect(),
         roles: Roles::default(),
+        // Every tile's tileset allows new resource (S-0010 claim 16).
+        allow_tiberium: vec![true; 5],
     })
 }
 
