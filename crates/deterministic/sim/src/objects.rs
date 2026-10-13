@@ -242,6 +242,10 @@ pub fn remove(w: &mut World, id: ObjectId) {
     w.update.leave(id, skip);
     let q = occ_quirks(w);
     let cell = o.pos.cell();
+    // spec: S-0202 claim 14 (taking an object out of its occupied ground cells recalculates them; removing one that occupies no ground cell implies no ground-cell recalculation)
+    let on_ground = o.on_map
+        && o.layer == Layer::Ground
+        && !(o.kind == Kind::Aircraft && crate::combat::weapon::in_air(w, id));
     let mut touched = vec![cell];
     match o.kind {
         Kind::Building => {
@@ -277,7 +281,9 @@ pub fn remove(w: &mut World, id: ObjectId) {
         }
     }
     w.objects.remove(&id);
-    crate::load::recalc_cells(w, &touched);
+    if on_ground {
+        crate::load::recalc_cells(w, &touched);
+    }
     for c in touched {
         crate::regions::cell_changed(w, c);
     }
