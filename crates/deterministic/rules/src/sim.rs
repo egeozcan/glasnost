@@ -388,6 +388,10 @@ pub struct General {
     /// `GuardModeStray`, cells (S-0215 F5).
     #[serde(default)]
     pub guard_mode_stray: Option<Decimal>,
+    /// `ApproachTargetResetMultiplier`, the approach reset multiplier m
+    /// (S-0215 claim 37 e, F10).
+    #[serde(default)]
+    pub approach_target_reset_multiplier: Option<i32>,
     /// `VeteranSpeed` (S-0207 claim 2, S-0208 F5).
     #[serde(default)]
     pub veteran_speed: Option<Decimal>,
@@ -949,6 +953,9 @@ pub struct UnitType {
     /// `CloseRange`.
     #[serde(default)]
     pub close_range: Option<bool>,
+    /// `CanApproachTarget`, the can-approach property (S-0215 claim 37 d).
+    #[serde(default)]
+    pub can_approach_target: Option<bool>,
     /// `DistributedFire`.
     #[serde(default)]
     pub distributed_fire: Option<bool>,

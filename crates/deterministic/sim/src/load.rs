@@ -132,10 +132,12 @@ fn tile_anim_due(w: &mut World, cat: &TileCatalogue, c: CellXY) -> Option<String
 /// The creation draws of an animation created with no loop delay (S-0202
 /// claim 10, *Animation creation draws*): the stage-delay draw of S-0109
 /// claim 3 when its range holds more than one value, then a bouncing type's
-/// three raw values and three ranged draws over −65535 … 65535. The start
-/// event's draws are not stated by any approved spec (request Q-0046): none
-/// is taken. An animation type the rules do not list has no fields (S-0004
-/// claim 3) and takes no draw.
+/// three raw values and three ranged draws over −65535 … 65535. A start
+/// event's chain reaction on a cell holding no resource takes no draw
+/// (S-0202 claim 10); one on a resource cell (S-0401 claim 20, the economy
+/// topic's seam) and the middle event's effects (request Q-0046 question
+/// 2b) are not taken. An animation type the rules do not list has no fields
+/// (S-0004 claim 3) and takes no draw.
 pub fn anim_creation_draws(w: &mut World, name: &str) {
     let rules = w.rules_arc();
     let Some(a) = rules.animation(name) else {
@@ -158,7 +160,8 @@ pub fn anim_creation_draws(w: &mut World, name: &str) {
         }
     }
     if a.start_effects {
-        w.note("S-0109 claim 13: an animation's start-event draws (chain reaction, middle-event effects) are not taken (request Q-0046)");
+        // spec: S-0202 claim 10 (a chain reaction on a cell without resource takes no draw and has no effect)
+        w.note("S-0109 claim 13: an animation's start-event draws (a chain reaction on a resource cell, middle-event effects) are not taken (request Q-0046)");
     }
 }
 

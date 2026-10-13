@@ -985,7 +985,10 @@ fn tower_duel(r: &Ruleset) -> (World, ObjectId, ObjectId) {
 /// Puts a building in *attack* (S-0215 claim 32).
 fn attack(w: &mut World, t: ObjectId) {
     let tick = w.tick;
-    w.obj_mut(t).unwrap().beh.force(Behaviour::Attack, tick);
+    w.obj_mut(t)
+        .unwrap()
+        .beh
+        .force(Behaviour::Attack, tick, true);
 }
 
 /// Runs a building's attack processing once per tick for `n` ticks from

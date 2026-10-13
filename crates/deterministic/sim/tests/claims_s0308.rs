@@ -550,7 +550,10 @@ fn row_nine_area_fire_secondary_in_unload() {
     let (mut w, f, t) = duel(&r, Kind::Vehicle, "TGT", 1);
     assert_eq!(slot(&w, f, t), 0, "in guard");
     let tick = w.tick;
-    w.obj_mut(f).unwrap().beh.force(Behaviour::Unload, tick);
+    w.obj_mut(f)
+        .unwrap()
+        .beh
+        .force(Behaviour::Unload, tick, true);
     assert_eq!(slot(&w, f, t), 1);
 }
 

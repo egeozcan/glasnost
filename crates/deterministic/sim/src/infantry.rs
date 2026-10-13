@@ -7,7 +7,8 @@ use glasnost_num::F64;
 use glasnost_rules::sim::MovementZone;
 use serde::{Deserialize, Serialize};
 
-use crate::world::{ObjectId, World};
+use crate::rules::Kind;
+use crate::world::{ObjectId, Target, World};
 
 /// The 42 sequence kinds (S-0107 Terms), with our snake-case names.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -255,6 +256,35 @@ fn substitute(w: &World, id: ObjectId, q: Seq) -> Seq {
     q
 }
 
+/// Destination-driven get-up (S-0107 claim 15, S-0213 claim 21): called
+/// after a destination is assigned to `id`, with the destination it held
+/// before. A prone infantry unit of a human-controlled owner whose type is
+/// neither a fraidycat nor a cyborg asks (not forced) for *get-up* when the
+/// non-empty destination assigned is the one it already had (the same cell
+/// or the same object). A first or different destination and a cleared one
+/// make no request. The request is not saved when refused.
+pub fn destination_assigned(w: &mut World, id: ObjectId, before: Option<Target>) {
+    let Some(o) = w.obj(id) else { return };
+    // spec: S-0107 claim 15 (clearing a destination makes no request)
+    let Some(new) = o.dest else { return };
+    if o.kind != Kind::Infantry || !o.infantry.as_ref().is_some_and(|i| i.prone) {
+        return;
+    }
+    // spec: S-0107 claim 15 (only the current destination assigned again; quirks.prone_get_up_repeated_destination off: any non-empty one)
+    if w.rules().quirks.prone_get_up_repeated_destination && before != Some(new) {
+        return;
+    }
+    let human = o.owner.is_some_and(|h| w.houses[usize::from(h.0)].human);
+    let exempt = w
+        .rules()
+        .unit(o.kind, o.type_index)
+        .is_some_and(|u| u.fraidycat || u.cyborg);
+    // spec: S-0107 claim 15 (a human-controlled owner's unit, not a fraidycat or a cyborg, asks, not forced; claim 6 may refuse)
+    if human && !exempt {
+        request(w, id, Seq::GetUp, false);
+    }
+}
+
 /// A start request (S-0107 claim 6). Returns whether the kind started.
 pub fn request(w: &mut World, id: ObjectId, q: Seq, forced: bool) -> bool {
     let tick = w.tick;
@@ -327,7 +357,7 @@ pub fn update(w: &mut World, id: ObjectId, moving_now: bool, in_progress: bool, 
     }
     if f > 0 {
         // spec: S-0107 claim 15 (lie down at f′ ≥ 50, at rest for a human-controlled owner or an AI house, moving or not for the neutral and special houses; get up below 50)
-        // The get-up of a prone unit on a movement order is `orders::prone_get_up`.
+        // Destination-driven get-up is `destination_assigned`.
         if !s.prone
             && !deploying
             && !u.fraidycat

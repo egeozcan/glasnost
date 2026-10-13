@@ -493,7 +493,7 @@ fn search(
                 if w.cells.cell(c).is_none() || behind.contains(&(c, cl)) {
                     continue;
                 }
-                // The reference height level of the entry outcome: the expanded pair's (interim, Q-0042).
+                // spec: S-0209 Terms (reference height level in a path search: the expanded pair's, plus 4 on its deck layer, with the start-pair adjustment of S-0212 claim 7; the step starts from that pair's cell)
                 let v = step_outcome(w, req.unit, next.cell, c, here_level);
                 if v == Outcome::Blocked {
                     // spec: S-0212 claim 15 (a blocked destination is approached from a neighbour whose search layer is within 1 level of the destination's; not for passive vehicles)

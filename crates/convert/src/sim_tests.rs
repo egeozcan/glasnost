@@ -954,3 +954,14 @@ fn animation_fields() {
     assert_eq!(rock.is_meteor, Some(true));
     assert_eq!(rock.spawns_particle, None);
 }
+
+/// spec: S-0215 Import mapping (ApproachTargetResetMultiplier, an integer in [General]; CanApproachTarget, a type boolean; absent keeps the held value)
+#[test]
+fn approach_keys() {
+    let base = "[General]\nApproachTargetResetMultiplier=3\n[VehicleTypes]\n1=Cart\n2=Rover\n\
+                [Cart]\nCanApproachTarget=no\n[Rover]\nSpeed=5\n";
+    let (s, _) = sim(base, "", "");
+    assert_eq!(s.general.approach_target_reset_multiplier, Some(3));
+    assert_eq!(s.vehicles["Cart"].can_approach_target, Some(false));
+    assert_eq!(s.vehicles["Rover"].can_approach_target, None);
+}

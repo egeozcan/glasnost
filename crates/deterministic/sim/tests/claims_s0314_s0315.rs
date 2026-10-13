@@ -759,7 +759,7 @@ fn last_round(r: &Ruleset, ty: &str, b: Behaviour, veteran: bool) -> (i32, Optio
     let id = spawn(&mut w, Kind::Infantry, ty, 0, 0, 0);
     let t = w.tick;
     let o = w.obj_mut(id).unwrap();
-    o.beh.force(b, t);
+    o.beh.force(b, t, true);
     o.beh.queued = None;
     o.combat.ammo = 0;
     o.infantry.as_mut().unwrap().fear = 40;
@@ -871,7 +871,7 @@ fn s0315_claim_2_unlimited_ammunition() {
     let id = spawn(&mut w, Kind::Infantry, "FRAID", 0, 0, 0);
     assert_eq!(w.obj(id).unwrap().combat.ammo, -1);
     let t = w.tick;
-    w.obj_mut(id).unwrap().beh.force(Behaviour::Attack, t);
+    w.obj_mut(id).unwrap().beh.force(Behaviour::Attack, t, true);
     fear::last_round(&mut w, id);
     assert_eq!(w.obj(id).unwrap().infantry.as_ref().unwrap().fear, 0);
 }
@@ -974,63 +974,122 @@ fn s0315_claim_5_no_lying_down_while_moving() {
     assert_eq!(frightened_walker(false), Some(Seq::GoProne));
 }
 
-// spec: S-0107 claim 15 (a prone unit of a human-controlled owner asks for get-up when given a movement order, unless a fraidycat or a cyborg; Q-0087 for which orders count)
-// spec: S-0315 claim 3 (the get-up of a prone unit on a movement order)
-#[test]
-fn prone_unit_gets_up_on_a_move_order() {
+/// A prone, crawling WALKER of house 0 at cell (0, 0), tick 10.
+fn prone_walker(
+    fraidycat: bool,
+    cyborg: bool,
+    quirk: bool,
+) -> (glasnost_sim::world::World, ObjectId) {
+    let mut r = testkit::combat_ruleset();
+    r.globals.quirks.prone_get_up_repeated_destination = quirk;
+    let wk = r.sim.infantry.get_mut("WALKER").unwrap();
+    wk.fraidycat = Some(fraidycat);
+    wk.cyborg = Some(cyborg);
+    wk.crawls = Some(true);
+    // Image frames for the kinds involved (S-0107 claim 6 row 1).
+    for k in ["stand", "walk", "go_prone", "get_up", "prone", "crawl"] {
+        wk.sequences.insert(
+            k.into(),
+            glasnost_rules::sim::SequenceEntry {
+                start: 0,
+                count: 4,
+                multiplier: 0,
+                direction: None,
+            },
+        );
+    }
+    let mut w = testkit::game_with(&r, 32, 3);
+    let id = testkit::spawn(
+        &mut w,
+        Kind::Infantry,
+        "WALKER",
+        0,
+        testkit::mid(32, 0, 0),
+        0,
+    );
+    w.obj_mut(id).unwrap().infantry.as_mut().unwrap().prone = true;
+    w.tick = 10;
+    (w, id)
+}
+
+/// Whether the prone unit has asked for get-up (or already stood up).
+fn asked_get_up(w: &glasnost_sim::world::World, id: ObjectId) -> bool {
+    let s = w.obj(id).unwrap().infantry.clone().unwrap();
+    s.seq == Some(glasnost_sim::infantry::Seq::GetUp) || !s.prone
+}
+
+/// Whether a prone WALKER asks for get-up when a plain move order to cell
+/// (4, 0) is applied, with `before` its destination beforehand.
+fn prone_move_asks(fraidycat: bool, cyborg: bool, before: Option<(i32, i32)>, quirk: bool) -> bool {
     use glasnost_sim::orders::{self, Order};
     use glasnost_sim::world::{HouseId, Target};
+    let (mut w, id) = prone_walker(fraidycat, cyborg, quirk);
+    w.obj_mut(id).unwrap().dest = before.map(|(x, y)| Target::Cell(testkit::mid(32, x, y)));
+    assert!(orders::issue(
+        &mut w,
+        HouseId(0),
+        Order::Behaviour {
+            actor: id,
+            behaviour: Behaviour::Move,
+            attack_move: false,
+            target: None,
+            dest: Some(Target::Cell(testkit::mid(32, 4, 0))),
+        },
+    ));
+    testkit::run(&mut w, 1);
+    asked_get_up(&w, id)
+}
+
+// spec: S-0107 claim 15 (a prone unit of a human-controlled owner asks, not forced, for get-up only when its current non-empty destination is assigned again, unless a fraidycat or a cyborg)
+// spec: S-0213 claim 21 (a plain move order's destination assignment governs the get-up; a first or different destination makes no request)
+// spec: S-0315 claim 3 (the get-up of a prone unit on a repeated destination)
+#[test]
+fn prone_unit_gets_up_on_a_repeated_destination() {
     for (fraidycat, cyborg, want_up) in [
         (false, false, true),
         (true, false, false),
         (false, true, false),
     ] {
-        let mut r = testkit::combat_ruleset();
-        let wk = r.sim.infantry.get_mut("WALKER").unwrap();
-        wk.fraidycat = Some(fraidycat);
-        wk.cyborg = Some(cyborg);
-        wk.crawls = Some(true);
-        // Image frames for the kinds involved (S-0107 claim 6 row 1).
-        for k in ["stand", "walk", "go_prone", "get_up", "prone", "crawl"] {
-            wk.sequences.insert(
-                k.into(),
-                glasnost_rules::sim::SequenceEntry {
-                    start: 0,
-                    count: 4,
-                    multiplier: 0,
-                    direction: None,
-                },
-            );
-        }
-        let mut w = testkit::game_with(&r, 32, 3);
-        let id = testkit::spawn(
-            &mut w,
-            Kind::Infantry,
-            "WALKER",
-            0,
-            testkit::mid(32, 0, 0),
-            0,
-        );
-        w.obj_mut(id).unwrap().infantry.as_mut().unwrap().prone = true;
-        w.tick = 10;
-        assert!(orders::issue(
-            &mut w,
-            HouseId(0),
-            Order::Behaviour {
-                actor: id,
-                behaviour: Behaviour::Move,
-                attack_move: false,
-                target: None,
-                dest: Some(Target::Cell(testkit::mid(32, 4, 0))),
-            },
-        ));
-        testkit::run(&mut w, 1);
-        let s = w.obj(id).unwrap().infantry.clone().unwrap();
-        let asked = s.seq == Some(glasnost_sim::infantry::Seq::GetUp) || !s.prone;
         assert_eq!(
-            asked, want_up,
-            "fraidycat {fraidycat} cyborg {cyborg}: {:?} prone {}",
-            s.seq, s.prone
+            prone_move_asks(fraidycat, cyborg, Some((4, 0)), true),
+            want_up,
+            "fraidycat {fraidycat} cyborg {cyborg}"
         );
+    }
+    assert!(
+        !prone_move_asks(false, false, None, true),
+        "first destination"
+    );
+    assert!(
+        !prone_move_asks(false, false, Some((5, 0)), true),
+        "different destination"
+    );
+}
+
+// spec: S-0107 claim 15 (quirks.prone_get_up_repeated_destination off: any non-empty destination assignment asks)
+#[test]
+fn prone_get_up_repeated_destination_off() {
+    assert!(prone_move_asks(false, false, None, false));
+    assert!(prone_move_asks(false, false, Some((5, 0)), false));
+    assert!(!prone_move_asks(true, false, None, false));
+}
+
+// spec: S-0107 claim 15 (every destination assignment counts, not only orders: a first queued destination taken by the move fall-back is a first destination, which asks only with quirks.prone_get_up_repeated_destination off)
+// spec: S-0215 claim 14 row 3 (the first queued destination becomes the destination)
+#[test]
+fn prone_get_up_on_a_queued_destination() {
+    use glasnost_sim::world::Target;
+    for quirk in [true, false] {
+        let (mut w, id) = prone_walker(false, false, quirk);
+        let t = w.tick;
+        let o = w.obj_mut(id).unwrap();
+        o.queued_dests = vec![Target::Cell(testkit::mid(32, 4, 0))];
+        o.beh.force(Behaviour::Move, t, true);
+        testkit::run(&mut w, 1);
+        assert!(
+            w.obj(id).unwrap().dest.is_some(),
+            "the queued destination was taken"
+        );
+        assert_eq!(asked_get_up(&w, id), !quirk, "quirk {quirk}");
     }
 }

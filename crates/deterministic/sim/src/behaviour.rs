@@ -109,13 +109,27 @@ impl Behaviours {
         true
     }
 
+    /// What an effective start-next or force does to the suspended slot.
+    /// `stale` is `quirks.stale_suspended_revert`: on (the original), the
+    /// slot and the put-aside target and destination stay as they are; off,
+    /// both are emptied, so a later revert finds nothing (S-0215 Edge cases).
+    fn on_start(&mut self, stale: bool) {
+        // spec: S-0215 claims 8 and 9, Edge cases (quirks.stale_suspended_revert)
+        if !stale {
+            self.suspended = None;
+            self.aside = None;
+        }
+    }
+
     /// Start-next (S-0215 claim 8). Returns whether a behaviour started.
-    pub fn start_next(&mut self, tick: i32) -> bool {
+    /// `stale` is `quirks.stale_suspended_revert`.
+    pub fn start_next(&mut self, tick: i32, stale: bool) -> bool {
         match self.queued.take() {
             Some(b) => {
-                // spec: S-0215 claim 8 (the queued behaviour becomes current; suspended untouched)
+                // spec: S-0215 claim 8 (the queued behaviour becomes current; suspended untouched, quirks.stale_suspended_revert)
                 self.current = Some(b);
                 self.start(tick);
+                self.on_start(stale);
                 true
             }
             None => false,
@@ -124,21 +138,21 @@ impl Behaviours {
 
     /// A queue request with the readiness-dependent immediate start (S-0215
     /// claim 7).
-    pub fn queue_and_start(&mut self, b: Option<Behaviour>, ready: bool, tick: i32) {
+    pub fn queue_and_start(&mut self, b: Option<Behaviour>, ready: bool, tick: i32, stale: bool) {
         if self.queue(b) && ready {
-            self.start_next(tick);
+            self.start_next(tick, stale);
         }
     }
 
     /// Queues and starts at once, whether or not ready (S-0215 claim 7).
-    pub fn queue_and_start_at_once(&mut self, b: Behaviour, tick: i32) {
+    pub fn queue_and_start_at_once(&mut self, b: Behaviour, tick: i32, stale: bool) {
         if self.queue(Some(b)) {
-            self.start_next(tick);
+            self.start_next(tick, stale);
         }
     }
 
-    /// Force (S-0215 claim 9).
-    pub fn force(&mut self, b: Behaviour, tick: i32) {
+    /// Force (S-0215 claim 9). `stale` is `quirks.stale_suspended_revert`.
+    pub fn force(&mut self, b: Behaviour, tick: i32, stale: bool) {
         // spec: S-0215 claim 9 (wait refuses a forced guard; selling does not refuse)
         if self.current == Some(Behaviour::Wait) && b == Behaviour::Guard {
             return;
@@ -146,6 +160,7 @@ impl Behaviours {
         self.current = Some(b);
         self.queued = None;
         self.start(tick);
+        self.on_start(stale);
     }
 
     /// Override (S-0215 claim 10): returns the target and destination to put
@@ -241,21 +256,57 @@ mod tests {
             progress: 5,
             ..Default::default()
         };
-        assert!(s.start_next(10));
+        assert!(s.start_next(10, true));
         assert_eq!(
             (s.current, s.queued, s.suspended),
             (Some(B::Move), None, Some(B::Hunt))
         );
         assert!(s.expired && s.start_tick == 10 && s.progress == 0);
-        s.force(B::Selling, 11);
-        s.force(B::Guard, 12);
-        assert_eq!(s.current, Some(B::Guard));
+        s.force(B::Selling, 11, true);
+        s.force(B::Guard, 12, true);
+        assert_eq!((s.current, s.suspended), (Some(B::Guard), Some(B::Hunt)));
         let mut w = Behaviours {
             current: Some(B::Wait),
             ..Default::default()
         };
-        w.force(B::Guard, 1);
+        w.force(B::Guard, 1, true);
         assert_eq!(w.current, Some(B::Wait));
+    }
+
+    // spec: S-0215 Edge cases (quirks.stale_suspended_revert off: an effective start-next or force empties the suspended slot and the put-aside pair; a refused force or an empty start-next does nothing)
+    #[test]
+    fn stale_suspended_revert_off() {
+        let base = Behaviours {
+            current: Some(B::Attack),
+            queued: Some(B::Move),
+            suspended: Some(B::Guard),
+            aside: Some((None, None)),
+            ..Default::default()
+        };
+        let mut s = base.clone();
+        assert!(s.start_next(3, false));
+        assert_eq!((s.suspended, s.aside), (None, None));
+        assert!(s.revert().is_none());
+        let mut s = base.clone();
+        s.force(B::Hunt, 3, false);
+        assert_eq!(
+            (s.current, s.suspended, s.aside),
+            (Some(B::Hunt), None, None)
+        );
+        // Nothing queued: start-next does nothing.
+        let mut s = Behaviours {
+            queued: None,
+            ..base.clone()
+        };
+        assert!(!s.start_next(3, false));
+        assert_eq!(s.suspended, Some(B::Guard));
+        // A refused force (wait refusing guard) does nothing.
+        let mut s = Behaviours {
+            current: Some(B::Wait),
+            ..base
+        };
+        s.force(B::Guard, 3, false);
+        assert_eq!(s.suspended, Some(B::Guard));
     }
 
     // spec: S-0215 claim 10 (override suspends the queued behaviour when one is queued; revert restores)

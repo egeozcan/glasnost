@@ -420,6 +420,8 @@ pub struct GeneralRules {
     pub guard_area_targeting_delay: i32,
     /// Normal targeting delay, ticks.
     pub normal_targeting_delay: i32,
+    /// Approach reset multiplier m (S-0215 F10).
+    pub approach_reset_multiplier: i32,
     /// Veteran speed factor ν.
     pub veteran_speed: F64,
     /// Tracked uphill, downhill; wheeled uphill, downhill.
@@ -783,6 +785,8 @@ impl SimRules {
             guard_area_targeting_delay: g.guard_area_targeting_delay.unwrap_or(36),
             // spec: S-0215 Constants (normal targeting delay absent: 27 ticks)
             normal_targeting_delay: g.normal_targeting_delay.unwrap_or(27),
+            // spec: S-0215 Constants (approach reset multiplier absent: 1)
+            approach_reset_multiplier: g.approach_target_reset_multiplier.unwrap_or(1),
             // spec: S-0207 Constants (veteran speed factor absent: 1.0)
             veteran_speed: dec(&g.veteran_speed, mode).unwrap_or(one),
             // spec: S-0207 Constants (uphill and downhill factors absent: 1.0)

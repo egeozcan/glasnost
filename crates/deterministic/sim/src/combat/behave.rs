@@ -260,6 +260,7 @@ fn aa_delay(w: &mut World, id: ObjectId) -> i32 {
 /// *attack* (S-0215 claim 32). Returns the delay.
 // spec: S-0215 F8 (b = |256 × w₈|, w₈ the value modulo 256 in −128 … 127)
 pub fn building_process(w: &mut World, id: ObjectId) -> i32 {
+    let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
     let Some(o) = w.obj(id).cloned() else {
         return 450; // spec: S-0215 claim 4 (450 ticks)
     };
@@ -276,7 +277,8 @@ pub fn building_process(w: &mut World, id: ObjectId) -> i32 {
         let Some(t) = o.target else {
             // spec: S-0215 claim 32 (no target: queues guard and starts it at once, 1 tick)
             if let Some(ob) = w.obj_mut(id) {
-                ob.beh.queue_and_start_at_once(Behaviour::Guard, tick);
+                ob.beh
+                    .queue_and_start_at_once(Behaviour::Guard, tick, stale);
             }
             return 1;
         };
@@ -336,7 +338,8 @@ pub fn building_process(w: &mut World, id: ObjectId) -> i32 {
                 if let Some(ob) = w.obj_mut(id) {
                     ob.target = None;
                     ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
-                    ob.beh.queue_and_start_at_once(Behaviour::Guard, tick);
+                    ob.beh
+                        .queue_and_start_at_once(Behaviour::Guard, tick, stale);
                 }
                 1
             }
@@ -357,7 +360,8 @@ pub fn building_process(w: &mut World, id: ObjectId) -> i32 {
         if o.target.is_some() && !b.building.emp_cannon && !b.building.can_be_occupied {
             // spec: S-0215 claim 32 (a target: queues attack and starts it at once, 1 tick)
             if let Some(ob) = w.obj_mut(id) {
-                ob.beh.queue_and_start_at_once(Behaviour::Attack, tick);
+                ob.beh
+                    .queue_and_start_at_once(Behaviour::Attack, tick, stale);
             }
             return 1;
         }
@@ -379,6 +383,7 @@ pub fn building_process(w: &mut World, id: ObjectId) -> i32 {
 
 /// A SAM building's *attack* (S-0215 claim 32).
 fn sam_attack(w: &mut World, id: ObjectId) -> i32 {
+    let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
     let Some(o) = w.obj(id).cloned() else {
         return 1;
     };
@@ -399,7 +404,8 @@ fn sam_attack(w: &mut World, id: ObjectId) -> i32 {
             if let Some(ob) = w.obj_mut(id) {
                 ob.target = None;
                 ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
-                ob.beh.queue_and_start_at_once(Behaviour::Guard, tick);
+                ob.beh
+                    .queue_and_start_at_once(Behaviour::Guard, tick, stale);
             }
             return 1;
         }
