@@ -1,6 +1,8 @@
 //! Documents: sections and entries with the original's name resolution
 //! (S-0001 claims 12 to 14, S-0002).
 
+use std::collections::{BTreeMap, BTreeSet};
+
 use crate::lex::{self, FinalLine, RawSection};
 use crate::table::{Table, name_hash};
 use crate::{Quirks, Warning, WarningKind};
@@ -37,7 +39,7 @@ impl Section {
                 line: e.line,
             })
             .collect();
-        let table = Table::new(entries.iter().map(|e| e.key.as_slice()));
+        let table = Table::new(entries.iter().map(|e| e.key.as_slice()), &quirks);
         Self {
             name: raw.name,
             line: raw.line,
@@ -47,8 +49,26 @@ impl Section {
         }
     }
 
-    fn rebuild(&mut self) {
-        self.table = Table::new(self.entries.iter().map(|e| e.key.as_slice()));
+    /// A section that a layered load creates, before its first entry.
+    fn created(name: Vec<u8>, line: u32, quirks: Quirks) -> Self {
+        Self {
+            name,
+            line,
+            entries: Vec::new(),
+            table: Table::new(std::iter::empty(), &quirks),
+            quirks,
+        }
+    }
+
+    /// Drops the entries a layered load replaced and renumbers the table.
+    fn compact(&mut self, discarded: &BTreeSet<u32>) {
+        let mut i = 0u32;
+        self.entries.retain(|_| {
+            let keep = !discarded.contains(&i);
+            i += 1;
+            keep
+        });
+        self.table.compact(discarded);
     }
 
     /// The name as written between the brackets.
@@ -69,9 +89,7 @@ impl Section {
 
     /// The entry a lookup of `key` returns (S-0002 claims 1 and 3).
     pub fn get(&self, key: &[u8]) -> Option<&Entry> {
-        let i = self
-            .table
-            .lookup(key, &self.quirks, |i| &self.entries[i as usize].key)?;
+        let i = self.table.lookup(key)?;
         self.entries.get(i as usize)
     }
 
@@ -99,33 +117,6 @@ pub struct Document {
     quirks: Quirks,
 }
 
-/// A layered load that this engine refuses (see [`Document::layer`]).
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct LayerError {
-    /// The section whose table (or `None`: the section-name table) would
-    /// be left holding two occurrences with one name hash.
-    pub section: Option<Vec<u8>>,
-    /// Line in the second file that changed that table.
-    pub line: u32,
-}
-
-impl std::fmt::Display for LayerError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let what = match &self.section {
-            Some(s) => format!("the keys of section [{}]", String::from_utf8_lossy(s)),
-            None => "the section names".to_owned(),
-        };
-        write!(
-            f,
-            "line {}: a layered load changes {what}, which already hold two names with one \
-             name hash; the winner afterwards is not specified (S-0002 open question, Q-0004)",
-            self.line
-        )
-    }
-}
-
-impl std::error::Error for LayerError {}
-
 impl Document {
     /// Reads `bytes` by a fresh load (S-0001, S-0002). Warnings are
     /// appended to `warnings`.
@@ -137,7 +128,7 @@ impl Document {
             .filter(|s| !s.entries.is_empty())
             .map(|s| Section::new(s, quirks))
             .collect();
-        let table = Table::new(sections.iter().map(|s| s.name.as_slice()));
+        let table = Table::new(sections.iter().map(|s| s.name.as_slice()), &quirks);
         let doc = Self {
             sections,
             table,
@@ -151,7 +142,7 @@ impl Document {
     pub fn empty(quirks: Quirks) -> Self {
         Self {
             sections: Vec::new(),
-            table: Table::default(),
+            table: Table::new(std::iter::empty(), &quirks),
             quirks,
         }
     }
@@ -180,9 +171,7 @@ impl Document {
     /// Position (in [`Document::sections`]) of the section a lookup of
     /// `name` returns.
     pub fn section_index(&self, name: &[u8]) -> Option<usize> {
-        let i = self
-            .table
-            .lookup(name, &self.quirks, |i| &self.sections[i as usize].name)?;
+        let i = self.table.lookup(name)?;
         Some(i as usize)
     }
 
@@ -213,18 +202,13 @@ impl Document {
     }
 
     /// Reads a second file into this document by a layered load (S-0002
-    /// claims 6, 9 and 10). Each entry of `bytes` replaces the occurrence
-    /// a lookup returns (or is added), moving to the end of its section's
-    /// entry order; empty values and empty headers change nothing; the
-    /// final line is read without a line feed.
-    ///
-    /// When hash order is on and a table that the load changes ends up
-    /// holding two occurrences with one name hash, which one wins is not
-    /// specified (S-0002 open question); this engine refuses the load and
-    /// leaves the document unchanged (request Q-0004). The original reads
-    /// no stock file this way.
-    pub fn layer(&mut self, bytes: &[u8], warnings: &mut Vec<Warning>) -> Result<(), LayerError> {
-        let mut out = self.clone();
+    /// claims 6 and 9 to 12). Each entry of `bytes` replaces the occurrence
+    /// that a lookup returns, or is added, and goes to the end of its
+    /// section's entry order; empty values and empty headers change
+    /// nothing; the final line is read without a line feed. Which
+    /// occurrence a lookup returns, during the load and after it, follows
+    /// the name-table model of S-0002 State and ordering.
+    pub fn layer(&mut self, bytes: &[u8], warnings: &mut Vec<Warning>) {
         let raw = lex::lex(bytes, &self.quirks, FinalLine::Read, warnings);
         // The second file's own repeats warn too (S-0002 Edge cases).
         for s in &raw {
@@ -234,65 +218,123 @@ impl Document {
                 warnings,
             );
         }
-        let order = out.quirks.ini_duplicate_hash_order;
-        let identity = out.quirks.ini_hash_identity;
-        let mut touched = std::collections::BTreeSet::new();
+        // spec: S-0002 claim 12 (every table starts the layered load with nothing remembered)
+        self.table.forget();
+        for s in &mut self.sections {
+            s.table.forget();
+        }
+        // Tables of the earlier file that hold a repeated name hash; the
+        // first change to one warns (S-0002 claim 12, Edge cases). `None`
+        // stands for the table of section names. This is a superset of the
+        // tables that the original's rules reading looks up.
+        let mut repeated: BTreeSet<Option<usize>> = self
+            .sections
+            .iter()
+            .enumerate()
+            .filter(|(_, s)| s.table.has_repeated_hash())
+            .map(|(i, _)| Some(i))
+            .collect();
+        if self.table.has_repeated_hash() {
+            repeated.insert(None);
+        }
+        let mut discarded: BTreeMap<usize, BTreeSet<u32>> = BTreeMap::new();
         for s in raw {
             // spec: S-0002 claim 10 (an empty header in the second file creates nothing)
             for e in s.entries {
-                let idx = match out.section_index(&s.name) {
-                    Some(i) => i,
-                    None => {
-                        // spec: S-0002 State and ordering (section created if needed, at the end)
-                        out.sections.push(Section {
-                            name: s.name.clone(),
-                            line: s.line,
-                            entries: Vec::new(),
-                            table: Table::default(),
-                            quirks: out.quirks,
-                        });
-                        out.table = Table::new(out.sections.iter().map(|x| x.name.as_slice()));
-                        if order && out.table.has_repeated_hash() {
-                            return Err(LayerError {
-                                section: None,
-                                line: s.line,
-                            });
+                // spec: S-0002 claim 11 (each line looks up its section name, then its key)
+                let idx = match self.table.lookup_mut(&s.name) {
+                    Some(i) => {
+                        let found = &self.sections[i as usize];
+                        if found.name != s.name {
+                            // spec: S-0002 claim 11 (writes into a section of a different name, which keeps its own)
+                            warnings.push(Warning::new(
+                                e.line,
+                                WarningKind::LayeredSharedHash {
+                                    section: None,
+                                    name: s.name.clone(),
+                                    other: found.name.clone(),
+                                },
+                            ));
                         }
-                        out.sections.len() - 1
+                        i as usize
+                    }
+                    None => {
+                        if repeated.remove(&None) {
+                            warnings.push(Warning::new(
+                                s.line,
+                                WarningKind::LayeredOntoRepeatedHash { section: None },
+                            ));
+                        }
+                        if let Some(o) = self
+                            .table
+                            .other_name_with_hash(&s.name, |i| &self.sections[i as usize].name)
+                        {
+                            let other = &self.sections[o as usize];
+                            warnings.push(Warning::new(
+                                s.line,
+                                WarningKind::HashCollision {
+                                    section: None,
+                                    name: s.name.clone(),
+                                    other: other.name.clone(),
+                                    other_line: other.line,
+                                },
+                            ));
+                        }
+                        // spec: S-0002 State and ordering (section created if needed, at the end)
+                        self.table.add(&s.name);
+                        self.sections
+                            .push(Section::created(s.name.clone(), s.line, self.quirks));
+                        self.sections.len() - 1
                     }
                 };
-                let section = &mut out.sections[idx];
-                // With hash order on, a table that holds a repeated hash keeps it, and
-                // its winner after the load is open (S-0002 open question): refuse.
-                if order && touched.insert(idx) && section.table.has_repeated_hash() {
-                    return Err(LayerError {
-                        section: Some(section.name.clone()),
-                        line: e.line,
-                    });
+                let section = &mut self.sections[idx];
+                if repeated.remove(&Some(idx)) {
+                    warnings.push(Warning::new(
+                        e.line,
+                        WarningKind::LayeredOntoRepeatedHash {
+                            section: Some(section.name.clone()),
+                        },
+                    ));
                 }
-                touched.insert(idx);
-                // The occurrence a lookup returns: with hash order on the table holds no
-                // repeated hash, so it is the only match; with it off, the last one.
-                let h = name_hash(&e.key);
-                let counts = |x: &Entry| {
-                    if identity {
-                        name_hash(&x.key) == h
-                    } else {
-                        x.key == e.key
+                let gone = discarded.entry(idx).or_default();
+                match section.table.lookup_mut(&e.key) {
+                    Some(old) => {
+                        let replaced = &section.entries[old as usize];
+                        if replaced.key != e.key {
+                            // spec: S-0002 claim 11 (replaces an entry of a different name with the same hash)
+                            warnings.push(Warning::new(
+                                e.line,
+                                WarningKind::LayeredSharedHash {
+                                    section: Some(section.name.clone()),
+                                    name: e.key.clone(),
+                                    other: replaced.key.clone(),
+                                },
+                            ));
+                        }
+                        // spec: S-0002 claim 10 (only the occurrence the line's lookup returns is replaced)
+                        section.table.replace(old);
+                        gone.insert(old);
                     }
-                };
-                // spec: S-0002 claim 10 (only the occurrence lookups return is replaced)
-                if let Some(p) = section.entries.iter().rposition(counts) {
-                    section.entries.remove(p);
-                }
-                if order && section.entries.iter().any(|x| name_hash(&x.key) == h) {
-                    // A different name with the same hash stays beside the new entry.
-                    return Err(LayerError {
-                        section: Some(section.name.clone()),
-                        line: e.line,
-                    });
+                    None => {
+                        if let Some(o) = section
+                            .table
+                            .other_name_with_hash(&e.key, |i| &section.entries[i as usize].key)
+                        {
+                            let other = &section.entries[o as usize];
+                            warnings.push(Warning::new(
+                                e.line,
+                                WarningKind::HashCollision {
+                                    section: Some(section.name.clone()),
+                                    name: e.key.clone(),
+                                    other: other.key.clone(),
+                                    other_line: other.line,
+                                },
+                            ));
+                        }
+                    }
                 }
                 // spec: S-0002 claim 10 (a replaced or added entry goes to the end)
+                section.table.add(&e.key);
                 section.entries.push(Entry {
                     key: e.key,
                     value: e.value,
@@ -300,11 +342,10 @@ impl Document {
                 });
             }
         }
-        for idx in touched {
-            out.sections[idx].rebuild();
+        for (idx, gone) in discarded {
+            self.sections[idx].compact(&gone);
         }
-        *self = out;
-        Ok(())
+        self.table.settle();
     }
 }
 
@@ -526,8 +567,7 @@ mod tests {
         d.layer(
             b"[M]\nBriefing=One\nBriefing=Own\nUIName=\n[]\n[New]\nA=1",
             &mut w,
-        )
-        .unwrap();
+        );
         assert_eq!(d.value(b"M", b"Briefing"), Some(&b"Own"[..]));
         assert_eq!(d.value(b"M", b"UIName"), Some(&b"Name1"[..]));
         assert_eq!(d.value(b"New", b"A"), Some(&b"1"[..]));
@@ -546,23 +586,156 @@ mod tests {
         );
     }
 
-    /// spec: S-0002 claim 10 (third item) and its open question (Q-0004)
-    #[test]
-    fn layered_load_onto_duplicates_is_refused() {
-        let (mut d, _) = parse("[M]\nBriefing=X\nBriefing=Y\n");
-        let before = d.clone();
-        let err = d.layer(b"[M]\nBriefing=Z\n", &mut Vec::new()).unwrap_err();
-        assert_eq!(err.section.as_deref(), Some(&b"M"[..]));
-        assert_eq!(d, before);
-        // With hash order off the result is defined: the last occurrence.
+    fn layered(earlier: &str, later: &str, q: Quirks) -> (Document, Vec<Warning>) {
         let mut w = Vec::new();
-        let q = Quirks {
+        let mut d = Document::parse(earlier.as_bytes(), q, &mut w);
+        w.clear();
+        d.layer(later.as_bytes(), &mut w);
+        (d, w)
+    }
+
+    /// A name made of `prefix` and a number whose hash satisfies `ok`.
+    fn name_where(prefix: &str, ok: impl Fn(i32) -> bool) -> String {
+        (0..10_000)
+            .map(|i| format!("{prefix}{i}"))
+            .find(|n| ok(name_hash(n.as_bytes())))
+            .unwrap()
+    }
+
+    /// spec: S-0002 claim 10 (third item) and claim 11; State and ordering
+    /// (the name-table model). Outcomes derived by hand from the model.
+    #[test]
+    fn layered_load_onto_a_repeated_key() {
+        let q = Quirks::default();
+        // (K1 = A, K2 = B): the line's lookup sorts to (K2, K1) and returns
+        // K1, which is replaced; the table (K2, new) is re-sorted after the
+        // load to (new, K2), and the bisection probes K2.
+        let (d, w) = layered("[T]\nCost=A\nCost=B\n", "[T]\nCost=Own\n", q);
+        assert_eq!(cost(&d), Some("B"));
+        let s = d.section(b"T").unwrap();
+        assert_eq!(s.entries().len(), 2);
+        assert!(w.iter().any(|w| matches!(
+            &w.kind,
+            WarningKind::LayeredOntoRepeatedHash { section: Some(s) } if s == b"T"
+        )));
+        // (K1 = A, K2 = B, G) with G's hash smaller (fixture 2): the lookup
+        // sorts to (G, K2, K1) and returns K2, which is replaced; (G, K1,
+        // new) re-sorts to (G, new, K1), and the bisection probes the new
+        // entry.
+        let (d, _) = layered("[T]\nCost=A\nCost=B\nFiller0=1\n", "[T]\nCost=Own\n", q);
+        assert_eq!(cost(&d), Some("Own"));
+        // A later line of the same section changes the outcome. After the
+        // first line the working order is (G, K1, new), not ordered; the
+        // Filler0 line sorts it to (G, new, K1), finds G and replaces it,
+        // leaving (new, K1, G').
+        let (d, _) = layered(
+            "[T]\nCost=A\nCost=B\nFiller0=1\n",
+            "[T]\nCost=Own\nFiller0=2\n",
+            q,
+        );
+        let s = d.section(b"T").unwrap();
+        let keys: Vec<&[u8]> = s.entries().iter().map(|e| e.key.as_slice()).collect();
+        assert_eq!(keys, [&b"Cost"[..], b"Cost", b"Filler0"]);
+        // Sorting (new, K1, G') puts G' first, then (K1, new); the
+        // bisection probes position 1, K1.
+        assert_eq!(cost(&d), Some("A"));
+        // With hash order off the last occurrence is replaced and wins.
+        let off = Quirks {
             ini_duplicate_hash_order: false,
             ..Quirks::default()
         };
-        let mut d = Document::parse(b"[M]\nBriefing=X\nBriefing=Y\n", q, &mut w);
-        d.layer(b"[M]\nBriefing=Z\n", &mut w).unwrap();
+        let (d, _) = layered("[M]\nBriefing=X\nBriefing=Y\n", "[M]\nBriefing=Z\n", off);
         assert_eq!(d.value(b"M", b"Briefing"), Some(&b"Z"[..]));
-        assert_eq!(d.section(b"M").unwrap().entries().len(), 2);
+        let values: Vec<&[u8]> = d
+            .section(b"M")
+            .unwrap()
+            .entries()
+            .iter()
+            .map(|e| e.value.as_slice())
+            .collect();
+        assert_eq!(values, [&b"X"[..], b"Z"]);
+    }
+
+    /// spec: S-0002 claim 11 (two copies of a section) and State and
+    /// ordering (the remembered occurrence outlasts an addition that is
+    /// not made at a forgetting peak)
+    #[test]
+    fn remembered_copy_after_the_load() {
+        let q = Quirks::default();
+        // A section name whose hash is larger than that of "M": sorting
+        // (M#1, M#0, N) would leave N last and return M#1.
+        let n = name_where("N", |h| h > name_hash(b"M"));
+        let earlier = "[M]\nBriefing=X\n[M]\nBriefing=Y\n";
+        // A fresh load: copies (M#0, M#1) sort to (M#1, M#0); M#0 wins.
+        assert_eq!(parse(earlier).0.value(b"M", b"Briefing"), Some(&b"X"[..]));
+        // The line writes into M#0 and remembers it; adding N (2 sections,
+        // not a forgetting peak) keeps it, and the lookup after the load
+        // returns it without re-sorting.
+        let (d, w) = layered(earlier, &format!("[M]\nBriefing=Own\n[{n}]\nA=1\n"), q);
+        assert_eq!(d.value(b"M", b"Briefing"), Some(&b"Own"[..]));
+        assert_eq!(d.sections().len(), 3);
+        assert!(w.iter().any(|w| matches!(
+            &w.kind,
+            WarningKind::LayeredOntoRepeatedHash { section: None }
+        )));
+        // Re-sorting would return the other copy: a fresh load of the
+        // sections in the load's working order (M#1, M#0, N) shows it.
+        let fresh = format!("[M]\nBriefing=Y\n[M]\nBriefing=Own\n[{n}]\nA=1\n");
+        assert_eq!(parse(&fresh).0.value(b"M", b"Briefing"), Some(&b"Y"[..]));
+        // An empty header in the second file creates nothing.
+        let (d, _) = layered(earlier, "[E]\n[M]\nBriefing=Own\n", q);
+        assert!(d.section(b"E").is_none());
+        assert_eq!(d.sections().len(), 2);
+    }
+
+    /// spec: S-0002 claim 11 (names identified by hash in a layered load),
+    /// Edge cases (importer warnings, the switch combinations)
+    #[test]
+    fn layered_load_with_shared_hashes() {
+        let q = Quirks::default();
+        // A key that shares its hash replaces the entry, under its own
+        // spelling.
+        let (d, w) = layered("[T]\nCost=A\n", "[T]\nZdxeLZgd=B\n", q);
+        let s = d.section(b"T").unwrap();
+        assert_eq!(s.entries().len(), 1);
+        assert_eq!(s.entries()[0].key, b"ZdxeLZgd");
+        assert_eq!(cost(&d), Some("B"));
+        assert!(w.iter().any(|w| matches!(
+            w.kind,
+            WarningKind::LayeredSharedHash {
+                section: Some(_),
+                ..
+            }
+        )));
+        // A section name that shares its hash writes into the section,
+        // which keeps its spelling.
+        let (d, w) = layered("[Cost]\nA=1\n", "[ZdxeLZgd]\nB=2\n", q);
+        assert_eq!(d.sections().len(), 1);
+        assert_eq!(d.sections()[0].name(), b"Cost");
+        assert_eq!(d.value(b"Cost", b"B"), Some(&b"2"[..]));
+        assert!(
+            w.iter()
+                .any(|w| matches!(w.kind, WarningKind::LayeredSharedHash { section: None, .. }))
+        );
+        // Hash identity off: the names stay apart, and the pair warns as a
+        // collision.
+        let off = Quirks {
+            ini_hash_identity: false,
+            ..Quirks::default()
+        };
+        let (d, w) = layered("[T]\nCost=A\n", "[T]\nZdxeLZgd=B\n", off);
+        assert_eq!(d.section(b"T").unwrap().entries().len(), 2);
+        assert_eq!(cost(&d), Some("A"));
+        assert_eq!(d.value(b"T", b"ZdxeLZgd"), Some(&b"B"[..]));
+        assert!(w.iter().any(|w| matches!(
+            w.kind,
+            WarningKind::HashCollision {
+                section: Some(_),
+                ..
+            }
+        )));
+        // No warning about repeated hashes when the earlier file has none.
+        let (_, w) = layered("[T]\nCost=A\n", "[T]\nCost=B\n", q);
+        assert!(w.is_empty());
     }
 }
