@@ -2,13 +2,13 @@
 id: S-0204
 title: Coordinates, distance and facing
 topic: simulation
-revision: 5
+revision: 6
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-10
+approved-on: 2026-10-13
 measurements: []
-requests: []
+requests: [Q-0077]
 supersedes: []
 ---
 
@@ -19,7 +19,10 @@ supersedes: []
 How the original places objects in the world (positions in leptons, cells, heights), how it measures
 the distance between two objects, how it turns the direction from one point to another into a
 facing, and how coarse facings (*n* steps of a turn, *n* a power of two from 2 to 256) are derived
-from a facing.
+from a facing. This spec covers skirmish; network games and campaigns are out of scope.
+The exact object-distance formula is specified for squared separations below 2⁵³ square leptons,
+and the direction formula for map-axis differences of magnitude below 2²⁴ leptons. These are
+arithmetic bounds, not a claim that every representable position satisfies them (Open questions).
 Distances and directions use tabulated functions, so they differ slightly from exact Euclidean
 geometry; this spec gives the exact results. Turning over time is S-0206.
 
@@ -30,7 +33,8 @@ level*, *facing*, *foundation*, *top corner*, *tick* and *round-toward-zero mode
 
 - **Position.** An object's location in the world: three integers (*x*, *y*, *z*) in leptons. *x*
   and *y* are the map axes of the glossary's *cell* entry; *z* is the world height. Each component
-  is an integer from −2³¹ to 2³¹ − 1.
+  is an integer from −2³¹ to 2³¹ − 1. This is its representational range, not a bound on the
+  separation of legal objects or a guarantee that every value can occur in play.
 - **Reference point.** The point of an object that distance and direction measurements use (claim
   4). For a building it is the centre of its foundation; for every other object it is its position.
 - **Bib flag, bib row.** The *bib flag* is a yes/no field of a building type (Import mapping),
@@ -95,26 +99,30 @@ level*, *facing*, *foundation*, *top corner*, *tick* and *round-toward-zero mode
    leptons, which is its foundation's top corner plus (128*W*, 128*H*). *W* × *H* is the foundation
    without a bib row (Terms), even when the building type has the bib flag set. Every other object is
    measured from its position.
-   - Backing: `measurable` (scenario C2: runs d to g for the reference point, runs h and i for the
-     bib row; for a 1 × 1 building the reference point is its position)
+   - Backing: `measurable` for the distance reference point (C2 runs d to g) and ignoring the bib
+     row there (C2 runs h and i); for a 1 × 1 building the reference point is its position.
+     `unmeasured` for the building direction reference point: C1 uses non-building targets and
+     does not distinguish a building's foundation centre from its top-left cell centre.
    - Confidence: high
 
 ### Distance
 
 5. **The table square root.** Distances between objects are taken with the table square root of
-   Formulas F1, not the exact square root. The squared distance is formed exactly (F2; it is an integer
-   below 2⁵³ for every pair of map points). The result truncated to an integer, ⌊*r*(*n*)⌋, is never more than ⌊√*n*⌋. Its
-   shortfall *s*(*n*) = ⌊√*n*⌋ − ⌊*r*(*n*)⌋ grows with the distance, because the table keeps only
+   Formulas F1, not the exact square root. F2 forms the squared distance exactly when its
+   mathematical sum *n* is below 2⁵³ square leptons; no universal bound on world-height
+   differences is asserted here. The following shortfall properties describe F1 with that exact
+   integer input. The result truncated to an integer, ⌊*r*(*n*)⌋, is never more than ⌊√*n*⌋. The
+   possible shortfall *s*(*n*) = ⌊√*n*⌋ − ⌊*r*(*n*)⌋ increases with distance, although *s* itself
+   is not monotone, because the table keeps only
    14 significant binary digits of *n* (relative error of *r* below 2⁻¹⁴):
    - *s* = 0 for every *n* below 16641 (distances below 129 leptons).
    - *s* ≤ 1 for every *n* below 536987929 (distances below 23173 leptons, about 90.5 cells); for
      distances of 2 to 10 cells about 4 % of values are one lepton short, and from 10 to 50 cells
      about 20 %.
    - *s* first reaches 2 at *n* = 536987929 and first reaches 3 at *n* = 2147673649 (46343
-     leptons, about 181 cells); in general *s* < √*n* / 16384 + 1, so up to about 12 leptons at
-     the far end of the largest maps.
+     leptons, about 181 cells); in general *s* < √*n* / 16384 + 1.
 
-   Positions on cell centres give squared distances *n* = 65536 × *m*, with *m* a sum of two
+   Equal-height positions on cell centres give squared distances *n* = 65536 × *m*, with *m* a sum of two
    squares of cell differences, and *r*(65536 × *m*) = 256 × *r*(*m*) exactly. For *m* below 16384
    (pairs of cell centres less than 128 cells apart) the result equals ⌊√*n*⌋. From *m* = 16393 on
    it is often short, and the first *m* that is 2 leptons or more short is 32770: of the 82489
@@ -123,10 +131,11 @@ level*, *facing*, *foundation*, *top corner*, *tick* and *round-toward-zero mode
    (`quirks.table_root_distance`). That one switch covers every use of the table square root that
    measures a distance: the object distances of this spec and the farthest-sum start-position rule
    of S-0009, which measures each pair of start positions with the same table.
-   - Backing: `measurable` (scenario C3, when a placement at exactly 129 leptons exists; if none does,
-     the shortfall is `unmeasured` and rests on F1) for the existence of the shortfall; the exact values are
-     `unmeasured` (a shortfall of a few leptons at an arbitrary distance cannot be isolated in
-     play) and rest on the table, which is reproduced exactly by F1
+   - Backing: `unmeasured` for the shortfall and exact arithmetic properties, including F1's
+     rounding-mode dependence: no verified legal placement and range-source combination isolates
+     the needed lepton-scale boundary. C3 is a conditional proposal, not established measurement
+     coverage. The properties rest on F1; C2 tests distances whose root rounding does not
+     distinguish the table from the exact root.
    - Confidence: high
 
 6. **Distance between two objects.** The distance from object *A* to object *B* is
@@ -140,8 +149,9 @@ level*, *facing*, *foundation*, *top corner*, *tick* and *round-toward-zero mode
      (scenario C2: the range test of claim 7 asks whether ⌊*r*(*n*)⌋ ≤ range + *β*(*B*), which for a
      non-negative range is the same test as *D*(*A*, *B*) ≤ range; it shows the reference point and
      *β* of the shared formula in that test, while the rules that use the value of *D* itself measure
-     it through their own specs) and for the root (C3).
-     `unmeasured` for the clamp max(0, …) and for *D* with the building as the *first* object.
+     it through their own specs).
+     `unmeasured` for the table-root distinction (claim 5), the spatial height term (C2 keeps
+     heights equal), the clamp max(0, …) and *D* with the building as the *first* object.
      The clamp matters only for an object *A* closer to a building's reference point than *β*, that
      is, standing on or near the building's foundation, and only for a rule that uses
      the value of *D* rather than comparing it with a non-negative threshold. No such rule is
@@ -177,8 +187,9 @@ level*, *facing*, *foundation*, *top corner*, *tick* and *round-toward-zero mode
      runs, and the chosen weapon may supply another source position) and for the inventory
 
    **Quirk (one-sided building reduction).** *D*(*A*, *B*) is reduced only when the *second* object
-   *B* is a building. So the distance from a unit to a building is shorter than the distance from the
-   building to the unit, and two buildings measure each other only from the second one's edge.
+   *B* is a building. So the distance from a unit to a building is no greater than the reverse
+   distance, and is shorter when the unreduced integer root is positive and the foundation
+   reduction is non-zero. Two buildings apply only the second one's reduction.
    Which object a rule puts second is owned by the spec of that rule. Our engine keeps this
    (`quirks.one_sided_building_distance`).
 
@@ -211,20 +222,21 @@ level*, *facing*, *foundation*, *top corner*, *tick* and *round-toward-zero mode
    - (c) The diagonal directions (|Δ*x*| = |Δ*y*|) are 8315 (north-east), 24451 (south-east),
      41082 (south-west) and 57221 (north-west), about 123 facing units off the exact eighths.
 
-   It is used whenever a rule needs the facing towards another object or point, for example the
-   turret or body facing towards a target (S-0206, with the reference points of claim 4) and the
-   walking direction of infantry (S-0208, F7, which gives the same scale). Our engine
+   Known uses include the turret or body facing towards a target (S-0206, with the reference
+   points of claim 4) and the walking direction of infantry (S-0208, F7, which gives the same
+   scale). This is not a claim that every rule needing a direction uses F3. Our engine
    reproduces it by default (`quirks.table_direction`).
-   - Backing: `measurable` (scenario C1) for parts (a), (b) and (c), with a recorder that reads the
-     turret facing (runs a, c and e for the axis values of parts (a) and (b), runs b and f for the
-     table quantisation, run d for part (c)). The never-taken facings of part (b) follow from F3
-     and are tested through it: a resting facing among them in any C1 run falsifies F3. The 50
-     table exceptions of F3 are `measurable` through one of them, index 1024 (C1 run g). The other
-     49 are `unmeasured`: each needs two objects whose map-axis differences have a ratio of about
+   - Backing: `measurable` for the four axes (C1 runs a, c, e and h), two non-axis
+     quantised directions (runs b and f), the north-east diagonal (run d) and exception index
+     1024 (run g), with a recorder that reads the turret facing.
+     `unmeasured` for the complete gap inventory, the other three diagonals, the rounding-mode
+     independence of F3 and the universal inventory of rules using it: C1 does not isolate all
+     their inputs or change the rounding mode. They rest on F3 and the owning rules, not on
+     coverage of the entire direction domain. The other 49 exceptions are `unmeasured`: each needs two objects whose map-axis differences have a ratio of about
      10:1 or steeper and fall in a narrow band. Of all pairs of cell centres up to 60 cells apart,
      only those 1 cell apart along the map *x* axis and 25 along the map *y* axis, or 2 and
      50, reach an exception index, and it is always 1024. They rest on the table itself.
-   - Confidence: high for F3 and parts (a) to (c); medium for "whenever a rule needs" (some rules
+   - Confidence: high for F3 and parts (a) to (c); medium for the inventory of uses (some rules
      may compute directions differently, Open questions)
 
 9. **8-directions and neighbour cells.** Moving one step in 8-direction *d* changes the cell by
@@ -249,14 +261,35 @@ level*, *facing*, *foundation*, *top corner*, *tick* and *round-toward-zero mode
     facing units counter-clockwise of the compass points (`quirks.infantry_facing_sector_skew`,
     S-0107). A facing given as a value *v* from 0 to 255, as in a map file, is
     *v* × 256 facing units (glossary, claim G1).
-    - Backing: `measurable` (S-0206 scenario R2 tests the full resolution of a map facing through
-      turn times; this answers the glossary's open question on claim G1)
+    - Backing: `measurable` for retaining the map's 1/256-turn step (S-0206 R2).
+      `measurable` for non-multiples of 256 facing units through the resting turret facings of C1.
+      `unmeasured` for F4's complete set of coarse-facing boundaries and half-step ties: neither
+      scenario isolates those conversions. The full-resolution and coarse-conversion formulas
+      are not established by the map-facing test alone.
     - Confidence: high
 
-11. **Signed facing difference.** Whenever the original compares or interpolates two facings it
-    uses the signed facing difference of Formulas F5. Of the two ways round, the shorter is taken. A
+11. **Signed facing difference.** The turning comparisons and interpolation of S-0206
+    use the signed facing difference of Formulas F5. Of the two ways round, the shorter is taken. A
     difference of exactly half a turn is −32768, so a half turn is made counter-clockwise (S-0206).
     - Backing: `measurable` (S-0206 scenario R1)
+    - Confidence: high
+
+12. **Table-angle conversion for projectile pitch.** The 50 exceptions of F3 also apply to
+    both the current and goal velocity pitches of S-0306 F12 and the straight launch pitch of
+    S-0306 F13. Both use
+    the same angle-to-facing conversion as F3 with a non-negative horizontal argument. At an
+    exception index, a positive elevation angle gives a pitch one facing unit larger than the
+    surrogate gives; a negative elevation angle gives one unit smaller. Both are nearer to
+    level, whose pitch facing is 16383. In F13 the correction follows the sign of the angle
+    after its negation for a negative aim height, not the sign of the argument supplied to
+    the table. At every other index the surrogate conversion is exact for these pitches.
+    F6 defines the conversion without requiring the raw table angles. The projectile rules,
+    their inputs, velocity rebuild and imported settings remain owned by S-0306.
+    - Backing: `measurable` (C4 for the current pitch, goal pitch and straight launch pitch,
+      each with both elevation signs at index 1024).
+      `unmeasured` for the other 49 exception indices and the exhaustive non-exception result:
+      no scenario isolates their narrow input bands for both pitch uses. Those results rest on F6,
+      not on C4's one tested index.
     - Confidence: high
 
 ## Formulas
@@ -291,8 +324,13 @@ truncation to 14 significant digits.
 > *n* = (*x*_B − *x*_A)² + (*y*_B − *y*_A)² [+ (*z*_B − *z*_A)² for the spatial form],
 > *D*(*A*, *B*) = max(0, ⌊*r*(*n*)⌋ − *β*(*B*)), *β*(*B*) = 64 × (*W*_B + *H*_B) for a building, else 0.
 
-Integer leptons. In the original the squares are summed in double precision, which is exact for
-every *n* below 2⁵³.
+Differences are exact integer leptons within the signed 32-bit range. This formula specifies
+the planar or spatial distance when the mathematical sum *n* is below 2⁵³ square leptons.
+In that domain every square and partial sum is exactly representable in double precision,
+so the original's double-precision multiplication and addition introduce no rounding error.
+The signed 32-bit position range does not imply this bound: two representable world heights
+can differ by 2³² − 1 leptons. Separations outside this domain are unresolved here, not
+silently replaced by exact-integer arithmetic (Open questions).
 
 **F3. Direction** (claim 8). For points *P* and *Q* (positions or reference points, in leptons) let
 *X* = *x*_Q − *x*_P and *Y* = *y*_P − *y*_Q (note the sign: *Y* grows towards map north). The
@@ -328,9 +366,10 @@ with trunc toward zero to an integer and mod the non-negative remainder. Unit: f
 
 Number domain in the original: every floating-point result of F3 is rounded toward zero (the
 round-toward-zero mode; S-0205, number domains). *X* and *Y* are single-precision values (exact
-here); the quotient *Y* / *X* and the quotient of that by *σ* are double-precision values; the
-conversion of the latter to the integer *i* truncates. The integer formula for *i* gives the same
-index for every |*Y*| below 2²⁴ leptons, so it covers every pair of map points. trunc₂₄ is exact
+when |*X*| and |*Y*| are below 2²⁴ leptons); the quotient *Y* / *X* and the quotient of that by
+*σ* are double-precision values; the conversion of the latter to the integer *i* truncates.
+F3's exact integer index is specified in that bounded domain. It is not a generalisation to
+arbitrary signed 32-bit position differences. trunc₂₄ is exact
 for every table entry: no value arctan(*i σ*) lies within 10⁻⁴ of a single-precision step of a
 boundary, so any correctly rounded double-precision arctangent gives the same *T*(*i*).
 
@@ -340,8 +379,10 @@ larger, and the largest gap is about 1.55 × 10⁻⁶ radians (13 single-precisi
 closed formula for them is known. For direction facings the gap matters only at the 50 indices
 *i* listed below: there the facing *φ* comes out one facing unit nearer to map east (when *X* > 0)
 or map west (when *X* < 0) than the surrogate formula gives, in all four quadrants. For every
-other index, the surrogate gives the original's facing exactly. Any other use of the raw angle
-(outside this spec) needs the original's table values, not the surrogate.
+other index, the surrogate gives the original's facing exactly. The pitch conversions of
+claim 12 are also exact with the corrections of F6. A use that retains the raw angle, rather
+than converting it by this same facing scale and truncation, still needs the original's table
+values, not the surrogate. The exceptions correct the final integer facing, not the angle.
 
 > 441, 486, 789, 810, 842, 993, 1024, 1115, 1148, 1183, 1203, 1405, 1419, 1443, 1504, 1542, 1582,
 > 1618, 1810, 1907, 2015, 2044, 2094, 2136, 2202, 2225, 2400, 2513, 2605, 2621, 2670, 2704, 2721,
@@ -389,6 +430,34 @@ facing = *f*ₙ × 65536 / *n*, an exact integer.
 
 Integers, mod the non-negative remainder. Range −32768 … 32767.
 
+**F6. Pitch from a signed table angle** (claim 12; S-0306 F12 and F13). Let *α* be the
+signed elevation angle that the owning rule supplies, and *i* its table index after that
+rule's single-precision narrowing and quotient rounding. Let *α*ₛ be the same signed angle
+using the surrogate of F3 instead of the original's table entry. Define
+
+> *p*ₛ = trunc(trunc₅₃(trunc₅₃(*α*ₛ − *c*₁) × *c*₂)),
+> *p* = (*p*ₛ + *e*) mod 65536.
+
+The correction *e* is given by this table:
+
+| Table index | Signed elevation angle *α* | *e* (facing units) |
+|---|---|---:|
+| In F3's exception list | Positive | 1 |
+| In F3's exception list | Negative | −1 |
+| In F3's exception list | Zero | 0 |
+| Not in F3's exception list, including no table index or an index beyond 4096 | Any sign | 0 |
+
+Number domain: single-precision table entry, double-precision
+subtraction and multiplication rounded toward zero, then integer truncation toward zero.
+The correction is exact integer arithmetic. Unit: facing units. No correction is made to
+an angle subsequently used in a different calculation.
+
+At index 1024, a positive angle gives *p* = 417 rather than *p*ₛ = 416; a negative angle
+gives *p* = 32349 rather than *p*ₛ = 32350. These are the pitches for F12 at a narrowed
+vertical-to-horizontal ratio of +25 or −25, and for F13 when its unnegated table arguments
+have ratio 25 and the aim height has the corresponding sign. The formula describes the
+original table behaviour, with the default setting of `quirks.table_direction`.
+
 ## Constants
 
 | Name (ours) | Value | Unit | Notes |
@@ -431,8 +500,8 @@ moment a rule asks for them; the order of the rules within a tick is S-0203's.
   the angle θ = (*f̂* − 16383) × (−2π / 65534), with *f̂* = *δ*(0, *f*) (F5), the facing as a value
   from −32768 to 32767. Off, that angle is θ = (*f̂* − 16384) × (−2π / 65536), with the floating-point
   rules S-0208 F3 gives. One switch covers both directions of the scale, so that a facing made by
-  F3 and turned back into an angle lands on the axis it came from with the switch on or off; a
-  mixed setting would put exact facings one facing unit off.
+  F3 and turned back into an angle uses a matching scale convention with the switch on or off.
+  The original's table and integer truncation still prevent a generally exact round trip.
 - **`quirks.one_sided_building_distance`** (default: on, the original). The building reduction
   *β* applies only to the second object of *D*(*A*, *B*) (claim 7). Off: *β*(*A*) + *β*(*B*) is
   subtracted, so the distance between two objects is the same in both orders. The weapon range
@@ -454,11 +523,17 @@ own specs import. One key is listed so that implementers know this spec ignores 
 | rules file, a building type's section | `Bib` | the bib flag (Terms) | boolean (S-0003) | no (flag off) |
 
 Distance, direction and the range test ignore the flag (claims 4, 6 and 7). The structure specs own
-what else it does.
+what else it does. Claim 12 and F6 introduce no rules or art key: the table, scale and exception
+indices are engine constants, not imported settings. The projectile settings and their parse
+forms and absent-key defaults belong to S-0306's Import mapping.
 
 ## Measurement scenarios
 
-All scenarios run under the *measurement setup* of the glossary. Where a scenario needs a turn rate
+All scenarios run under the *measurement setup* of the glossary, at game speed index 2 and
+800 × 600 resolution, with director and mods off except the named test data. C1 to C3 use a
+bystander computer player: the observed area contains only the named test objects, and any
+unnamed bystander object entering it or acting on a test object, or the bystander's defeat,
+voids the run. Where a scenario needs a turn rate
 or a weapon range that stock data does not have, it names a test rules file (a loose copy of the
 rules file with only the fields the scenario names changed), removed after the run. Turn-time
 arithmetic is S-0206's (F1 there).
@@ -468,7 +543,9 @@ arithmetic is S-0206's (F1 there).
   the attacker's turret facing every tick. A named test rules file gives a turn rate of 1 to one stock
   vehicle type that has a turret (S-0206 Import mapping), sets the range field of that vehicle's
   weapon to 26 cells (the conversion of the range field belongs to the combat specs) and makes no
-  other change. The weapon is chosen to have no minimum range. That vehicle is
+  other change. The weapon is chosen to have no minimum range and no omni-fire or turret-lock
+  setting, and its projectile does not home. The target must survive until the resting facing
+  is recorded; its destruction beforehand voids the run. That vehicle is
   pre-placed by the map with facing value 0 on cell (*x*, *y*), and its turret facing is checked to
   be 0 at the start. An unarmed enemy vehicle owned by the computer player, which the map leaves
   without orders, is pre-placed on a cell for each run:
@@ -479,17 +556,19 @@ arithmetic is S-0206's (F1 there).
   - run e: (*x* − 10, *y*), due map west,
   - run f: (*x* − 10, *y* + 1), ten cells west and one south (Δ*x* = −2560, Δ*y* = 256),
   - run g: (*x* + 1, *y* − 25), one cell east and 25 north (Δ*x* = 256, Δ*y* = −6400, table index
-    1024, one of the 50 exceptions of F3).
+    1024, one of the 50 exceptions of F3),
+  - run h: (*x*, *y* − 10), due map north.
   The farthest target (run g) is about 25.02 cells away, inside the 26-cell range, so the vehicle
-  does not move. The measurement setup reveals the map, so every target is visible.
+  does not move. The test map reveals the observed area for the human player, so every target
+  is visible.
 - *Procedure:* order the attack and record until the turret facing stops changing.
 - *Observable:* the turret facing at rest, the number of ticks over which it changes, and the
-  sense in which it changes.
+  sense in which it changes. Run h tests the absence of a turn.
 - *Runs:* 1 per target position (no random draw is involved).
 - *Expected:* resting turret facings 16383, 15368, 32767, 8315, 49153, 48135 and 417 (F3), reached
   clockwise in runs a to d and g in 63, 60, 127, 32 and 1 ticks (S-0206, F1), and
   counter-clockwise in runs e and f in 63 and 67 ticks (δ(0, 49153) = −16383, δ(0, 48135) =
-  −17401).
+  −17401). Run h remains at facing 0 with no turning ticks.
 - *Falsified if:* any resting facing differs from the expected one; in particular 16384, 15344,
   32768, 8192, 49152 or 48112 would be the exact angles. In run g, 416 (F3 without the exception)
   falsifies the exception list. Run g does not separate F3 from the exact angle, which also
@@ -516,8 +595,9 @@ arithmetic is S-0206's (F1 there).
   unarmed vehicle. The map leaves every target without orders.
 - *Procedure:* order the attacker to attack the target and watch it until it fires or moves, for at
   most 300 ticks.
-- *Observable:* whether the attacker fires its first shot without leaving cell (*x*, *y*) ("fires"),
-  or moves before it fires ("moves").
+- *Observable:* record the attacker's position every tick and the first shot's tick. "Fires"
+  means it fires before any position change; "moves" means its position changes before the first
+  shot. No shot and no position change within 300 ticks is inconclusive, not "moves".
 - *Runs:* 1 per row of the table (no random draw is involved).
 - *Expected:* the "Expected" column. Δ is the difference from the attacker's position to the
   target's reference point (claim 4), in leptons, and the limit is 1280 + *β* (claim 6). The
@@ -558,7 +638,7 @@ arithmetic is S-0206's (F1 there).
   1413, limit 1280 without lengthening and 1536 with it); run n, a control, a vehicle on (*x* + 5, *y*)
   (Δ = (1280, 0), 1280 ≤ 1280). Expected: runs l and m "moves" and run n "fires". Without a
   lengthening, the first two are out of range; with it, both would fire.
-- *Falsified if:*
+- *Falsified if:* any valid run differs from its stated expected result. In particular:
   - runs c, d and f give "moves": the range is not lengthened by *β*.
   - runs e and g give "fires" (with d and f also "fires"): the building is measured from its top-left
     cell centre, not from its foundation's centre.
@@ -577,7 +657,7 @@ arithmetic is S-0206's (F1 there).
   ground vehicle the scenario assumes it is the vehicle's position, and for a 1 × 1 building its
   reference point. Runs a, b, j and k check this assumption on targets that are not buildings.
 
-**C3. Table root shortfall (claim 5).**
+**C3. Conditional proposal for table root shortfall (claim 5; presently unmeasured).**
 - *Setup:* a purpose-made flat map; one stock infantry type of the human player and one enemy
   infantry of the computer player. A named test rules file sets the attacker's weapon range field
   to half a cell, which is 128 leptons (the conversion of the range field belongs to the combat
@@ -585,7 +665,10 @@ arithmetic is S-0206's (F1 there).
   be cell centres. The two soldiers are placed (with the sub-cell positions of the infantry specs) so
   that their positions differ by exactly 129 leptons along one map axis and 0 along the other, on
   flat ground at the same height.
-- *Procedure:* order the attack while the attacker is held in place (guard order, no movement).
+- *Procedure:* order the attack from rest. Record both positions and the range-source point
+  read-only until the first shot or the first movement. Do not also issue a guard order, which
+  would replace the attack. The test is valid only if the source point equals the attacker's
+  recorded position and the recorded initial separation is exactly the intended value.
 - *Observable:* whether it fires without moving.
 - *Runs:* 1 per axis (x and y).
 - *Expected:* it fires: the squared distance is 16641 and ⌊*r*(16641)⌋ = 128, which is within a
@@ -598,10 +681,60 @@ arithmetic is S-0206's (F1 there).
   lepton or two away from the attacker's position. C2 runs a and b check the assumption for
   vehicles, not for infantry. The scenario also depends on infantry sub-cell positions and on the
   range-field conversion, which other specs own. If no placement gives an exact 129-lepton
-  separation, the claim stays measurable only in principle, and the table root rests on F1 alone.
+  separation with that source point, no valid run exists. Until those setup conditions are
+  established, claim 5 is `unmeasured`; this proposal does not count as its measurement backing.
+
+**C4. Exceptions in projectile pitch (claim 12, F6; Q-0077).**
+- *Setup:* the glossary's measurement setup, game speed index 2, a purpose-made map with one
+  human player and one bystander computer player kept outside the test area. Use S-0306 P4's
+  straight-shot setup and P9 run c's direct-steering setup, with their named test data and
+  read-only recorder of projectile velocities. A named test art file changes only the firing
+  position as imported by S-0313, to arrange P4's recorded planar distance as 32 leptons and
+  its non-building target's aim height as +820 leptons in run a and −820 in run b. Place the
+  target on higher or lower terrain as needed. This gives table arguments (800, 32), ratio
+  25, index 1024, after the straight-shot height allowance. If the recorded fire and impact
+  points do not give these inputs, the run is void. P9 runs c and d use direct steering,
+  with positive and negative vertical velocity respectively; vary the firing position and
+  target until a turn's recorded, narrowed vertical-to-horizontal ratio selects index 1024.
+  Runs e and f use the same direct-steering setup to isolate the goal pitch instead:
+  arrange a turn whose vector from the new projectile position to its target point,
+  as evaluated by S-0306 F12, has narrowed vertical-to-horizontal ratio +25 or −25.
+  Record the target point as well as the projectile position. Select a turn whose current
+  pitch has a non-exception index and whose pitch step reaches the goal under both
+  predictions. The goal pitch correction then affects the rebuilt velocity, rather than
+  being hidden by a turn that advances only partway towards the goal. Do not change the
+  game's velocities or other state with the recorder.
+- *Procedure:* record the first velocity of each straight shot. For steering, record the
+  velocity, position and target point before and after an observed turn; evaluate S-0306
+  F12 from the recorded inputs, once with F6 and once without the correction to the pitch
+  being tested. Use a turn whose two predictions differ in a recorded component,
+  otherwise repeat with another turn.
+- *Observable:* projectile velocity components in leptons per tick, together with the fire
+  point, impact point and tick number. Infer the straight shot's pitch by comparing the
+  first velocity with S-0306 F1, not by applying the disputed inverse pitch to that velocity.
+- *Runs:* one valid run per sign and conversion, six in total; repeat void runs. The bystander's
+  arrival or action in the test area, or its defeat, voids a run.
+- *Expected:* straight-shot pitch 417 for positive aim height and 32349 for negative aim
+  height, and the corresponding S-0306 F1 velocities. Steering's current pitch at index
+  1024 is likewise 417 for positive vertical velocity and 32349 for negative vertical
+  velocity, and its next velocity follows S-0306 F12 with those corrected pitches.
+  Runs e and f likewise reach goal pitch 417 or 32349, respectively, and rebuild the
+  velocity with that goal rather than 416 or 32350.
+- *Falsified if:* a valid run's recorded velocity differs from the corrected prediction.
+  Matching pitch 416 or 32350 respectively, or a steering turn's rebuilt velocity matching
+  the uncorrected prediction rather than F6, specifically falsifies the correction.
+  Compare the full recorded floating-point components, not the image or the next position
+  alone, whose integer truncation can conceal a one-unit pitch difference.
 
 ## Open questions
 
+- The largest world-height separation that legal play or imported settings can produce has not
+  been established. F2 does not specify separations whose squared sum is at least 2⁵³ square
+  leptons, or whose exact component difference is outside the signed 32-bit range. Their
+  arithmetic rounding and integer conversion need investigation if an owning rule can reach
+  them; the representational range alone is not evidence of reachability.
+- F3 is specified only for |*X*| and |*Y*| below 2²⁴ leptons. Behaviour outside that domain,
+  where narrowing can alter the index, is unresolved if an owning rule can reach it.
 - Whether any game rule measures distance with an integer approximation (for example the longer
   side plus half the shorter side) instead of the table square root. None was found, but the search
   was not exhaustive.

@@ -3,7 +3,7 @@ id: Q-0077
 title: Whether pitch facings made from the table angle take S-0204's 50 table exceptions
 status: answered
 related: [S-0306, S-0204]
-answered-by: [S-0306]
+answered-by: [S-0306, S-0204]
 ---
 
 ## Need
