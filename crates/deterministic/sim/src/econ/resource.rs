@@ -53,7 +53,7 @@ pub struct Tiberium {
     pub spread_fraction: F64,
     /// The image run (*P*, *F*, *S*) of S-0112; `None`: never given an image
     /// number (S-0112 claim 12).
-    pub run: Option<[i32; 3]>,
+    pub run: Option<[i32; 3]>, // spec: S-0112 claim 10 (the run P, F, S)
 }
 
 /// The resource rules: the tiberiums in registration order.
@@ -586,10 +586,10 @@ fn new_resource_cell(w: &mut World, c: CellXY, t: usize, a: u8) {
         return;
     };
     // spec: S-0401 claim 11 (no new cell at stage 12 or more, nor of a tiberium never given an image number)
-    let Some([p, f, _]) = tib.run else { return };
     if a >= 12 {
         return;
     }
+    let Some([p, f, _]) = tib.run else { return };
     let Some(slope) = w.cells.cell(c).map(|x| x.slope) else {
         return;
     };
@@ -622,8 +622,9 @@ fn spread_step(w: &mut World, from: CellXY, t: usize) {
     let half = w.rules().quirks.ranged_draw_half_span;
     // spec: S-0401 claim 9 (one ranged draw U(0, 7) gives the starting step direction)
     let j = w.rng.ranged(0, 7, half);
+    // spec: S-0401 claim 9 (the neighbours in step directions j, j + 1, …, j + 7, modulo 8)
     for k in 0..8 {
-        let n = neighbour(from, ((j + k) % 8) as u8);
+        let n = neighbour(from, ((j + k) % 8) as u8); // spec: S-0401 claim 9 (modulo 8)
         if germinable(w, n) {
             new_resource_cell(w, n, t, NEW_STAGE);
             return;
@@ -632,7 +633,7 @@ fn spread_step(w: &mut World, from: CellXY, t: usize) {
 }
 
 fn count_germinable(w: &World, c: CellXY) -> u8 {
-    (0..8).filter(|&d| germinable(w, neighbour(c, d))).count() as u8
+    (0..8).filter(|&d| germinable(w, neighbour(c, d))).count() as u8 // spec: S-0401 claim 9 (c counts the eight neighbours)
 }
 
 /// The count *m* of F5 and F6: trunc(RZ₅₃(*n* × *f*)) clamped to
@@ -748,8 +749,8 @@ fn spread_update(w: &mut World, t: usize) {
             spread_step(w, c, own);
         }
         let l = &mut w.econ.resources.tiberiums[t].spread;
+        // spec: S-0401 claim 9 (c ≥ 2: added again, marked, with key 0)
         if g >= 2 {
-            // spec: S-0401 claim 9 (c ≥ 2: added again, marked, with key 0)
             l.add(c, 0);
             l.marks.insert(c);
         } else if !q.spread_mark_kept_on_last_neighbour {
@@ -880,7 +881,7 @@ pub fn mine_turn(w: &mut World, id: ObjectId) {
         return;
     }
     let now = w.tick;
-    let half = tt.image_frames / 2;
+    let half = tt.image_frames / 2; // spec: S-0401 claim 15 (⌊N/2⌋)
     match w.econ.resources.mines.get(&id).copied() {
         None => {
             let r = w.rng.raw() as i32;

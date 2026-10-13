@@ -186,10 +186,10 @@ impl Rules {
             dump_threshold: F64::from_i64(900, mode).mul(dump, mode),
             // spec: S-0402 Import mapping (TiberiumLongScan, TiberiumShortScan absent: 8192 and 1536 leptons)
             long_scan: scan_cells(&g.tiberium_long_scan, 8192, mode),
-            short_scan: scan_cells(&g.tiberium_short_scan, 1536, mode),
+            short_scan: scan_cells(&g.tiberium_short_scan, 1536, mode), // spec: S-0402 Import mapping (TiberiumShortScan absent: 1536 leptons)
             // spec: S-0402 Import mapping (HarvesterTooFarDistance absent: 5; ChronoHarvTooFarDistance absent: 50)
             too_far: g.harvester_too_far_distance.unwrap_or(5),
-            chrono_too_far: g.chrono_harv_too_far_distance.unwrap_or(50),
+            chrono_too_far: g.chrono_harv_too_far_distance.unwrap_or(50), // spec: S-0402 Import mapping (ChronoHarvTooFarDistance absent: 50)
             // spec: S-0402 Import mapping (SlaveMinerShortScan absent: 1280 leptons)
             slave_short_scan: scan_cells(&g.slave_miner_short_scan, 1280, mode),
             // spec: S-0402 Import mapping (SlaveMinerKickFrameDelay absent: 2147483647)
@@ -344,7 +344,7 @@ pub struct HouseHarvest {
     pub no_field: bool,
 }
 
-fn unit<'a>(w: &'a World, id: ObjectId) -> Option<&'a UnitHarvest> {
+fn unit(w: &World, id: ObjectId) -> Option<&UnitHarvest> {
     let o = w.obj(id)?;
     if o.kind != Kind::Vehicle {
         return None;
@@ -357,7 +357,7 @@ pub fn is_harvester(w: &World, id: ObjectId) -> bool {
     unit(w, id).is_some_and(|u| u.harvester)
 }
 
-fn building<'a>(w: &'a World, id: ObjectId) -> Option<&'a BuildingHarvest> {
+fn building(w: &World, id: ObjectId) -> Option<&BuildingHarvest> {
     let o = w.obj(id)?;
     if o.kind != Kind::Building {
         return None;
@@ -540,7 +540,7 @@ pub fn docking_cell(w: &World, refinery: ObjectId) -> Option<CellXY> {
     let tl = o.pos.cell();
     let (fw, fh) = o.foundation;
     // Provisional (request Q-0140): the docking cell east of the foundation, in row ⌊H/2⌋.
-    Some(CellXY::new(tl.x + fw, tl.y + fh / 2))
+    Some(CellXY::new(tl.x + fw, tl.y + fh / 2)) // spec: S-0402 Terms (the refinery in step direction 6 of the docking cell); provisional cell, request Q-0140
 }
 
 /// Whether a refinery accepts a harvester (S-0402 claim 10); `waiting`: the
