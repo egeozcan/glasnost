@@ -2,11 +2,11 @@
 id: S-0412
 title: Skirmish setup rules (setup values, starting credits, random lobby choices, handicap, alliances at game start, superweapon and crate settings)
 topic: simulation
-revision: 1
+revision: 2
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-12
+approved-on: 2026-10-13
 measurements: []
 requests: [Q-0045]
 supersedes: []
@@ -444,6 +444,8 @@ S-0413 claim 6). In addition:
     | every vehicle created and placed | one vehicle of each listed type; its budget units and left-over credits as in S-0009 claim 45 | starting units as usual |
     | at least one failure | every vehicle of the list that could be created and placed, and nothing else: no budget units, no left-over credits | no starting units (S-0009 claim 45's early stop) |
 
+    This mode is an exception to S-0009 claim 45's single-base-unit and early-stop rules. S-0009 claim 45 must be revised in the same hand-off to scope those rules to other modes and defer this mode's starting-unit outcome to this claim.
+
     Other game modes may change further setup rules; they are outside this spec (Open questions).
     - Backing: `measurable` (scenario K8: the list rule and the cells in part a, the reverse order
       in part b, the failure rule and the early stop in part c; part d for the family being what
@@ -575,11 +577,14 @@ resolution").
   skirmish starts with max(*C*<sub>min</sub>, 1) crates, capped by *C*<sub>max</sub> (in our engine
   max(*C*<sub>min</sub>, 0) when the skirmish has no human participant, claim 10). Off: every
   player house counts.
-- **`quirks.short_game_without_bases`** (claim 11). Original: short game with bases off fails every house that
-  owns no counted building and no vehicle of the first three base-unit types, in tick 1; on a map
-  that pre-places none of those the game ends in tick 1, in our engine with every player house
-  losing when `quirks.defeat_during_end_delay` is on (S-0414 claims 6 and 10; claim 11). Off: such
-  a setup is refused.
+- **`quirks.short_game_without_bases`** (claim 11; default on, original). Short game with bases
+  off fails every non-passive house that owns no counted building and no vehicle of the first
+  three base-unit types, in tick 1. When neither the map nor the budget units supply any of those
+  objects, the original ends at the human's defeat with a loss in tick 1 (S-0414 claim 6,
+  departure). Our engine instead ends at the first defeat that leaves no hostile pair, and the
+  remaining houses are defeated later in house order in the same tick. Every player house loses
+  when `quirks.defeat_during_end_delay` is on; with it off, those undefeated at the end keep
+  their wins (S-0414 claims 6, 9 and 10; claim 11). Off: such a setup is refused.
 - **Extra-credit percentage list too short** (claim 3). When the list holds fewer entries than the
   house's difficulty index needs (or none), the original's result is unspecified (claim 3); our
   engine gives 0 extra credits and the importer warns.
@@ -884,13 +889,16 @@ not hold and the run says nothing).
   game start); they are not covered here.
 - Whether *H* in claim 10 is the human count on every way a skirmish can start.
 
-## Questions for the project lead
+## Cross-spec hand-off
 
-1. Claims 3 and 4 are settled in the original (the lobby entry to index pairing and the maximum
-   skill level for computer player houses only). Approved S-0301 claim 3, S-0302 claim 3 (with
-   its scenario D19 part c), S-0215 (Terms and claim 15) and the glossary's *house skill level*
-   and *computer-controlled* entries state or imply otherwise. Please hand off their revisions in the
-   same batch as this spec, so that no approved spec contradicts it.
+S-0414 claims 6, 9 and 10 own the end-test and end-delay rules used by claim 11. Claims 3, 4
+and 5 and scenario K10 remain unchanged from approved revision 1: S-0215's current revision
+cites those approved rules, so that dependency needs no simultaneous hand-off. The all-base-units
+mode in claim 13 is an exception to S-0009 claim 45's single-base-unit and early-stop rules.
+S-0009 claim 45 must be revised in the same hand-off to scope those rules to other modes and
+defer this mode's starting-unit outcome to claim 13. The earlier requests to reconcile the lobby
+difficulty pairing and the non-player houses' skill levels have been resolved in the approved
+specs and glossary.
 
 Decided and applied: every house uses the normal row in a skirmish, a map's difficulty row is
 ignored and only the optional handicap changes a row (claim 5; 2026-10-10); the neutral and
