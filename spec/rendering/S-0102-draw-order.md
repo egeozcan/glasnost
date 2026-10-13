@@ -2,13 +2,13 @@
 id: S-0102
 title: Draw order, render layers, depth compositing, sprite placement and shadow pixels
 topic: rendering
-revision: 4
-sources-class: [decomp]
+revision: 5
+sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-12
+approved-on: 2026-10-13
 measurements: []
-requests: [Q-0021, Q-0023]
+requests: [Q-0011, Q-0015, Q-0021, Q-0023, Q-0050]
 supersedes: []
 ---
 
@@ -617,6 +617,8 @@ screen rows.
       for map north-west, 1 for map north, 2 for map north-east and so on clockwise: the art stores
       the eight facings clockwise starting with map north-west. Otherwise *d* = 0: a type whose
       facing count is not 8 always shows its first facing (`quirks.sprite_vehicle_eight_facings_only`).
+      The off state's facing part, including counts 2 and 4, is defined in *Edge cases and quirks*.
+      It is an alternative of our engine, not behaviour of the original (Q-0050 part 2).
     - **Image frame.** The first row that applies gives the image frame (integers; ⌊·⌋ and mod act on
       values that are 0 or more):
 
@@ -1163,8 +1165,12 @@ building's key. Between two units, the one later in the list is drawn on top whe
   clockwise by an eighth of a turn, 8192 facing units. For *n* = 8 this is exactly
   (*f*<sub>8</sub> + 1) mod 8, the formula of the on state; for *n* ≥ 8 it is
   (*f*<sub>n</sub> + *n*/8) mod *n*; for *n* = 2 and *n* = 4 the turned facing is rounded to *n*
-  steps by the same rule, halves going to the next step clockwise (so with *n* = 4 a vehicle facing
-  map north shows part 1). In both states a count that is not a power of two from 2 to 256, and a
+  steps by the same rule, halves going to the next step clockwise. Explicitly, for body facing
+  *f* in 0…65535 facing units, let *g* = (*f* + 8192) mod 65536. Then
+  *d* = ⌊*g*·*n*/65536 + ½⌋ mod *n*, using exact rational arithmetic and returning an integer
+  facing-part number in 0…*n* − 1. Thus at *n* = 2 map north gives part 0 and map east gives part 1.
+  At *n* = 4 map north gives part 1 and map north-west gives part 0. Map north lies exactly at
+  a rounding boundary for *n* = 4. In both states a count that is not a power of two from 2 to 256, and a
   disguised vehicle, give *d* = 0.
 - **`quirks.cell_pass_shadows_write_depth`** (default: on). Shadows painted in the cell pass store
   their depth where they darken (claim 27). So two building shadows overlapping on the same level
