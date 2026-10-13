@@ -3,10 +3,11 @@
 //!
 //! Seams for milestone M4 (combat): the target-acquisition specs are not
 //! written, so no automatic search runs (claims 26, 27 and 33 see "may not
-//! search"), approaching and engaging a target does nothing, and weapon
-//! ranges and rearm times are unknown (the close-range shortening of F3
-//! applies only through the infantry close-range flag; no actor is ever
-//! rearming). The behaviours that other topics own (claim 34) and *hunt*,
+//! search"), and weapon ranges and rearm times are unknown (the close-range
+//! shortening of F3 applies only through the infantry close-range flag; no
+//! actor is ever rearming). Approaching a target is the approach step of
+//! [`crate::approach`] (claim 37), whose position search (S-0307) finds
+//! nothing yet. The behaviours that other topics own (claim 34) and *hunt*,
 //! *capture*, *sabotage*, *enter*, and *unload* for vehicles, are processed as behaviours
 //! without a processing rule until their topics are implemented; that is
 //! recorded as a note on the world.
@@ -119,7 +120,7 @@ fn close_range(w: &World, id: ObjectId) -> bool {
 
 /// A target's position: an object's position, or a cell's centre at its
 /// height (S-0215 F4).
-fn target_pos(w: &World, t: Target) -> Pos {
+pub(crate) fn target_pos(w: &World, t: Target) -> Pos {
     match t {
         Target::Object(x) => w.obj(x).map_or(Pos::default(), |o| o.pos),
         Target::Cell(c) => {
@@ -435,6 +436,8 @@ pub fn turn(w: &mut World, id: ObjectId) {
         if kind == Kind::Building {
             second_start(w, id);
         }
+        // spec: S-0215 claim 37 (a) (the per-tick approach of an actor that cannot reach its target; its place in the tick is interim, request Q-0161)
+        crate::approach::per_tick(w, id);
         // spec: S-0215 claim 33 (b) and (d) (the per-tick search after the processing)
         crate::combat::acquire::per_tick(w, id);
         return;
@@ -446,6 +449,8 @@ pub fn turn(w: &mut World, id: ObjectId) {
     if kind == Kind::Building {
         second_start(w, id);
     }
+    // spec: S-0215 claim 37 (a) (the per-tick approach of an actor that cannot reach its target; its place in the tick is interim, request Q-0161)
+    crate::approach::per_tick(w, id);
     // spec: S-0215 claim 33 (b) and (d) (the per-tick search after the processing, judged on the behaviour it leaves)
     crate::combat::acquire::per_tick(w, id);
 }
@@ -772,7 +777,10 @@ fn process_attack(w: &mut World, id: ObjectId) -> i32 {
         // spec: S-0215 claim 23 (fall-back: no target)
         fall_back(w, id, false);
     }
-    // Approaching a target out of reach is not stated by any approved spec (request Q-0072); the firing rules engage it when they can.
+    if w.obj(id).is_some_and(|o| o.target.is_some()) {
+        // spec: S-0215 claim 23 (approach: an actor with a target takes the approach step of claim 37)
+        crate::approach::step(w, id);
+    }
     let d = standard_delay(w, id);
     // spec: S-0215 claim 23 and F3 (halved under the close-range condition, the draw taken either way)
     if close_range(w, id) { d / 2 } else { d }
@@ -876,11 +884,15 @@ fn process_hunt(w: &mut World, id: ObjectId) -> i32 {
                     // spec: S-0107 claim 15 (a destination assigned: the destination-driven get-up)
                     crate::infantry::destination_assigned(w, id, before);
                 }
-            } else if o.kind == Kind::Infantry
-                && let Some(ob) = w.obj_mut(id)
-            {
-                // spec: S-0215 claim 27 (any other infantry unit clears its destination and approaches; approach: request Q-0072)
-                ob.dest = None;
+            } else {
+                if o.kind == Kind::Infantry
+                    && let Some(ob) = w.obj_mut(id)
+                {
+                    // spec: S-0215 claim 27 (any other infantry unit clears its destination)
+                    ob.dest = None;
+                }
+                // spec: S-0215 claim 27 (and takes the approach step of claim 37; other kinds take that step)
+                crate::approach::step(w, id);
             }
         }
         None => {
@@ -990,6 +1002,9 @@ fn process_area_guard(w: &mut World, id: ObjectId) -> i32 {
         } else if holds || o.target.is_none() {
             // spec: S-0215 claim 26 (may not search: attempts its idle action)
             idle(w);
+        } else {
+            // spec: S-0215 claim 26 (the leash does not hold and a target is present: the approach step of claim 37)
+            crate::approach::step(w, id);
         }
     }
     let Some(o) = w.obj(id).cloned() else {

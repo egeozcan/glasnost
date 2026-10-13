@@ -3461,6 +3461,15 @@
           "format": "int32",
           "default": null
         },
+        "approach_target_reset_multiplier": {
+          "description": "`ApproachTargetResetMultiplier`, the approach reset multiplier m\n(S-0215 claim 37 e, F10).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
         "ballistic_scatter": {
           "description": "`BallisticScatter`, cells (S-0306 claim 4; lepton form of S-0307 claim 1).",
           "anyOf": [
@@ -6050,6 +6059,11 @@
           "type": "boolean",
           "default": true
         },
+        "prone_get_up_repeated_destination": {
+          "description": "A prone unit asks for get-up only when its current non-empty destination is assigned again; off: every non-empty destination assignment asks.",
+          "type": "boolean",
+          "default": true
+        },
         "prone_noncrawler_speedup": {
           "description": "A prone unit whose type cannot crawl walks half as fast again.",
           "type": "boolean",
@@ -6317,6 +6331,11 @@
         },
         "stale_offer_orderable": {
           "description": "A type left in the offer after it stopped qualifying can be ordered until the next recheck.",
+          "type": "boolean",
+          "default": true
+        },
+        "stale_suspended_revert": {
+          "description": "Start-next and force leave the suspended behaviour and the put-aside target and destination in place, so a late revert can bring them back; off: an effective start-next or force empties them.",
           "type": "boolean",
           "default": true
         },
@@ -7042,6 +7061,14 @@
         },
         "c4": {
           "description": "`C4`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "can_approach_target": {
+          "description": "`CanApproachTarget`, the can-approach property (S-0215 claim 37 d).",
           "type": [
             "boolean",
             "null"

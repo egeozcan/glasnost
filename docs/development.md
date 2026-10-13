@@ -285,7 +285,8 @@ Provisional rules of combat, each tied to a request:
 | `combat::data` | crew escape, sinking weight, bridge strength and ammunition-crate damage absent from every layer are "not given", and the rules that need them do not take effect | Q-0060 |
 | `convert::sim` | a type's threat coefficient, the defence category word and the `none` items of name lists are imported as the request's workaround says | Q-0061 |
 | `combat::death::building_death` | the smudge choice of a destroyed building takes no draw and places no smudge | Q-0070 |
-| `process::process_attack` | an actor in *attack* does not approach a target it cannot fire at yet; it keeps its target and fires when the firing check lets it | Q-0072 |
+| `approach` | the approach step of S-0215 claim 37 keeps or drops targets and destinations, but its approach-position search (S-0307 claims 15 to 17) finds nothing, so an actor does not move towards a target out of range; it keeps its target and fires when the firing check lets it | Q-0072 |
+| `process::turn`, `approach::per_tick` | the per-tick approach step of claim 37 (a) runs after the actor's processing (or its per-tick start) and before its per-tick search, every tick | Q-0161 |
 | `combat::projectile` | the rows of T1 test the position before the cruise lift; a vertical projectile crossing a deck detonates at its new height | Q-0078 |
 | `combat::acquire` | a landed aircraft counts in the map-wide search's second pass and is scored with its distance in cells | Q-0079 |
 | `combat::damage`, `combat::death` | a building's delayed-kill countdown ends without effect; an exploding building, or one destroyed while being sold, leaves play at once | Q-0081 |
