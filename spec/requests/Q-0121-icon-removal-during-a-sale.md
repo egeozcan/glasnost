@@ -1,9 +1,9 @@
 ---
 id: Q-0121
 title: Does the start of a sale of the last factory building remove its icons and cancel their items?
-status: open
+status: answered
 related: [S-0411, S-0407, S-0404]
-answered-by: []
+answered-by: [S-0411]
 ---
 
 ## Need

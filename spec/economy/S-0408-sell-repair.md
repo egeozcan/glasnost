@@ -2,7 +2,7 @@
 id: S-0408
 title: Selling and building repair (refund, what a sale releases, selling vehicles and walls, which buildings can be sold or repaired)
 topic: economy
-revision: 3
+revision: 4
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -164,7 +164,7 @@ house state, on or off). In addition:
    object takes one), as the creation of a building object of the upgrade's type would, although
    no such object appears.
    - Backing: `measurable` (scenario S4, parts a and b; the creation draw is counted in part b
-     with the random-state recorder)
+     by comparing the scenario random stream's state before and after the sale)
    - Confidence: medium (one upgrade per sale, its refund, the creation draw)
 
 6. **The course of a sale.** The selling behaviour's processings are 1 tick apart (claim 16).
@@ -182,10 +182,20 @@ house state, on or off). In addition:
 
    The building is not in operation from the start of the sale (S-0405, claim 8), so a defence stops
    firing at once, but a power plant keeps its output until it is removed (S-0405, claim 3). A
-   building destroyed during its sale pays no refund; its destruction follows S-0312 (claims 18 to
-   21), and it releases no sale survivors that it has not released already.
-   - Backing: `measurable` (scenario S5, parts a to e)
-   - Confidence: high (refund at the end, no refund when destroyed, the releases before the
+   building destroyed during its sale pays no refund. Its sale stops at the killing hit: no
+   further sale survivors appear and no later selling processing completes the sale. Its death
+   effects happen at once, but it keeps occupying its foundation until its own next eligible
+   turn, later in the same tick if that turn has not yet come, otherwise in a later tick. Being
+   erased or under an electromagnetic-pulse effect postpones removal. On the removal turn it
+   ceases to occupy its foundation and takes a second destruction-survivor and smudge round,
+   with the count worked out afresh, as S-0312 (claims 18, 19(g) and 21) gives under
+   `quirks.building_removal_second_round`. Sale survivors released before the killing hit remain
+   unaffected. Killing damage that ignores defences leaves no crew and therefore no survivors
+   in either destruction round. A sale that removes the still-living building before a pending
+   delayed-kill expiry instead leaves no death or destruction rounds (S-0312 claim 3).
+   - Backing: `measurable` (scenario S5, parts a to f; S-0312 scenario D14, variant g)
+   - Confidence: high (refund at the end, no refund when destroyed, the stopped sale, the next
+     eligible own-turn removal and second destruction round, the releases before the
      build-down), medium (the step timing of the releases), low (which links count as docked and
      hold the sale; the bunker release, measured by S5 part d; the place of the garrison in the
      order, measured by S5 part a)
@@ -224,7 +234,7 @@ house state, on or off). In addition:
    Since the centre position is never given, one cell takes at most 3 survivors, fewer when absorbed
    passengers (claim 8) or other infantry already stand there; on a 1 × 1 building at most 3 of 5
    attempts can succeed. A building with no crew (S-0312, F5) releases none.
-   - Backing: `measurable` (scenario S6, parts a to d; the draws through the random-state recorder)
+   - Backing: `measurable` (scenario S6, parts a to d; the draws by comparing the scenario random stream's state before and after the sale)
    - Confidence: high (the count of attempts and its *K*, the placement within the chosen cell, that
      the percent draw is taken for every building that has never changed owner), medium (the type
      choice, the single engineer, full health, the other draws and their order)
@@ -403,7 +413,7 @@ storage order (claim 10).
 | building, any behaviour, type with no build-up sprite | sell order, type with the firestorm-wall flag | removed at once; no refund, no survivors (claim 4) |
 | building, any behaviour, type with no build-up sprite and no firestorm-wall flag | sell order | nothing (claim 4) |
 | build-down | build-down finished, next processing | refund and stored resources credited; building removed |
-| *selling*, any stage (the build-down included) | building destroyed | no refund; S-0312 |
+| *selling*, any stage (the build-down included) | building destroyed | sale stops; no refund or further sale survivors; awaits its own next eligible turn, with a second destruction-survivor and smudge round on removal (claim 6; S-0312 claim 21) |
 | *selling* | sell order | nothing changes, except that the local player hears the order sound again for an own building (claim 4) |
 | vehicle or aircraft on a building | sell order (no input creates one) | refund; removed at once (claim 11) |
 | wall cell | sell-wall order, conditions of claim 12 | wall removed; no credits |
@@ -417,8 +427,10 @@ tick the building disappears.
 - **A wall sale pays nothing** (`quirks.wall_sale_no_refund`, default: the original). With the
   switch off, the house receives the refund of claim 1 for the builder of the wall overlay (Terms).
   This is a quirk, not a rule: the missing payment looks like a lost refund rather than a design.
-- **At most one engineer per sale.** The repeated choice of claim 7 is the original's rule, with no
-  switch: it keeps a sale from releasing several engineers. Each repetition takes its draws.
+- **At most one engineer per sale (rule, not a quirk).** The repeated choice of claim 7 is the
+  original's rule: it keeps a sale from releasing several engineers. It is reproduced without a
+  switch; each repetition takes its draws. The 100-repetition limit for a choice that always gives
+  an engineer is a separate departure for bad data, described below.
 - **Pad-aircraft list shorter than 2** (departure). When the list has fewer than two entries, or
   the first pad aircraft has no dock, the original's adjusted cost (F2) is undefined for every
   building type, not only for dock types. Our engine counts a missing entry as cost 0, applies no deduction when the list is empty
@@ -435,13 +447,18 @@ tick the building disappears.
   type with no build-up sprite that has neither the unsellable flag nor the firestorm-wall flag,
   since input would still not offer *sell* on it (a firestorm-wall type is sellable through claim
   3(b), so it gets no such warning).
-- **Destroyed during its sale.** No refund, at whatever stage (claim 6). The original's rule; no switch.
-- **A crew choice that always gives an engineer** (departure). When the data makes the crew choice
-  of claim 7 give an engineer every time (for example a side crew type that is an engineer type),
-  the original repeats the choice for ever after the first engineer of a sale and the game hangs.
-  Our engine stops after 100 repetitions of one survivor's choice and releases no survivor for that
-  attempt (its draws up to then stay taken), and the importer warns for a side crew type or
-  a technician type that is an engineer type (Terms).
+- **Destroyed during its sale.** No refund or further sale survivors, at whatever stage (claim 6).
+  Its second destruction-survivor and smudge round is covered by
+  `quirks.building_removal_second_round` (S-0312): default original, with that second round omitted
+  when off. If the sale removes the building while it is still alive, no later delayed-kill expiry
+  destroys it.
+- **A crew choice that always gives an engineer** (departure for bad data). When the data makes the
+  crew choice of claim 7 give an engineer every time (for example a side crew type that is an
+  engineer type), the original repeats the choice for ever after the first engineer of a sale and
+  the game hangs. Our engine stops after 100 repetitions of one survivor's choice and releases no
+  survivor for that attempt (its draws up to then stay taken), and the importer warns for a side
+  crew type or a technician type that is an engineer type (Terms). This is a safety departure, not
+  a quirk switch.
 - **The original's computer player** (a note for the designers of our AI, not a rule of our
   engine). Besides the full refund of claim 1, the original, when a building holding upgrades changes
   owner to a computer-controlled house in a game that is not a campaign mission, sells its top upgrade
@@ -531,8 +548,8 @@ tick number. Any game speed.
   cost 300 and the one added second of cost 500; refund percentage absent (so 0.5), country cost
   factors 1, no cost-bonus buildings.
 - *Procedure:* (a) sell it three times, waiting for each sale to end. (b) In a second run, on a
-  map where nothing else takes a random draw, log the random state with the random-state recorder
-  across the first sale (an upgrade sale) and across the second.
+  map where nothing else takes a random draw, record the scenario random stream state before and
+  after the first sale (an upgrade sale) and the second.
 - *Observable:* (a) the credit changes; the upgrades and building that remain. (b) The number of
   draws taken between the sell order's tick and the end of each upgrade sale.
 - *Expected:* (a) the first sale removes only the second upgrade (+250), the second the first
@@ -545,26 +562,40 @@ tick number. Any game speed.
 - *Setup:* an own crewed test building of cost 1000, holding an infantry garrison, with a known
   build-down time (S-0108 claim 5); for part c an own refinery with a harvester docked and
   unloading; for part d an own tank bunker holding a vehicle; for part e the refinery of part c.
-- *Procedure:* (a) sell it, with the random-state recorder logging, and record where the occupants
-  and the survivors stand. (b) In a second run, destroy it during its build-down. (c) Sell the
-  refinery while the harvester is docked. (d) Sell the bunker. (e) Sell the refinery of part c and
-  destroy it while the harvester is still docked.
+  For part f use a building with a pending delayed death and a sale that can finish before expiry.
+- *Procedure:* (a) sell it, recording the scenario random stream state before and after the sale,
+  and record where the occupants and the survivors stand. (b) In a second run, destroy it during
+  its build-down. (c) Sell the refinery while the harvester is docked. (d) Sell the bunker. (e)
+  Sell the refinery of part c and destroy it while the harvester is still docked. In parts b and e
+  use killing damage that does not ignore defences, record the building's turns and the scenario
+  random stream state, and repeat across 50 seeds. (f) Complete a sale before the delayed death
+  expires and keep recording through the expiry tick.
 - *Observable:* the tick of the sell order, the ticks at which the occupants and survivors appear,
   the first tick of the build-down, the tick of the credit change and of the building's removal,
   in (c) the tick at which the harvester leaves the dock, in (d) the tick at which the vehicle
   leaves the bunker, in (a) the draws of the occupants' leaving against the survivors' draws.
+  In parts b and e record both destruction rounds' survivor appearances and draws, the killing
+  tick, foundation occupancy until removal and the removal turn. In part f record the refund
+  and any effects at the former building's position after removal.
 - *Expected:* (a) occupants, then survivors, appear 1 tick after the sale's first processing (within
   3 ticks of the order), on the tick the build-down starts; the credits rise on the tick the
   building disappears, after the build-down; (b) no credit rise; (c) the harvester is told to leave
   at once, and the releases and the build-down start only once it has left the dock; (d) the
   vehicle leaves the bunker at the sale's first processing, before any release; (e) no credit rise
-  and no sale survivors (only the destruction survivors of S-0312, if any).
+  and no sale survivors (only the destruction survivors of S-0312, if any). In both b and e the
+  sale stops at death, the foundation remains occupied until the next eligible own turn, and
+  removal takes a second destruction-survivor and smudge round, with all the applicable draws
+  of S-0312 claim 21. The second round need not produce a survivor on every seed. (f) The sale
+  pays its normal refund and removes the living building; no death effects or survivor rounds
+  occur at the later expiry.
 - *Falsified if:* the refund comes at the start of the sale, the destroyed building pays (in (b) or
   (e)), the build-down starts before the releases, in (c) the build-down starts while the
   harvester is still docked, in (d) the vehicle stays until the releases, or in (a) the survivors'
   draws come before the occupants' leaving or a survivor stands on a position an occupant has
   taken (the order of claim 9 is then wrong; it stays low confidence until measured), or in (a) the
-  occupants and survivors appear more than 3 ticks after the order.
+  occupants and survivors appear more than 3 ticks after the order. Also falsified if b or e
+  advances the sale after death, frees the foundation before its next eligible own turn or omits
+  the second round's applicable draws, or if f produces a death after the completed sale.
 
 **S6: sale survivors (claims 7 and 8).**
 - *Setup:* survivor divisor 100 for the owner's side (a named test file); crewed test buildings
@@ -575,10 +606,10 @@ tick number. Any game speed.
   one without a weapon (both of refund 500, neither producing buildings), and a crewed armed
   building that produces buildings, of refund 500.
 - *Procedure:* (a) sell the 500 and 150 buildings. (b) Sell each variant of the producing type 200
-  times (fresh games or rebuilt), with the random-state recorder logging. (c) With the random-state
-  recorder, sell the armed and the unarmed building of refund 500 and the armed producing building of
-  refund 500 (about 20 sales of the producing one, to see both outcomes of its first draw), and log the
-  draws. (d) Destroy the
+  times (fresh games or rebuilt), recording the scenario random stream state before and after each
+  sale. (c) For about 20 sales of the producing building, to see both outcomes of its first draw,
+  record the scenario random stream state before and after selling the armed and unarmed buildings
+  of refund 500 and the armed producing building of refund 500, and record the draws. (d) Destroy the
   500 building in 50 runs. (e) Sell the two absorbing test types.
 - *Observable:* the number, types and health of the survivors; the draws; the passengers; in part b
   the number of sales in which an engineer survivor appears on the map, and the number of sales in

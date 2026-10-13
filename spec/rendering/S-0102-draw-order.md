@@ -2,13 +2,13 @@
 id: S-0102
 title: Draw order, render layers, depth compositing, sprite placement and shadow pixels
 topic: rendering
-revision: 5
+revision: 6
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-13
 measurements: []
-requests: [Q-0011, Q-0015, Q-0021, Q-0023, Q-0050]
+requests: [Q-0011, Q-0015, Q-0021, Q-0023, Q-0050, Q-0051]
 supersedes: []
 ---
 
@@ -22,7 +22,8 @@ terrain, overlays, buildings, units, projectiles and animations hide each other.
 a sprite's image frame lands on the screen relative to the object that draws it (infantry, vehicles
 drawn as sprites, terrain objects, overlays and smudges), which image frame a vehicle drawn as a
 sprite shows, and what a shadow does to the pixels under it. Positions, world pixels and the height
-lift *L(z)* are those of S-0101.
+lift *L(z)* are those of S-0101. This spec covers skirmish; network games and campaigns are out
+of scope.
 
 ## Terms
 
@@ -269,13 +270,18 @@ screen rows.
       units; medium for the other building images
 11. **Depth is anchored to the ground footprint.** Every object's depth bias contains −*L(z)* of its
     own position, which cancels its height lift; a projectile's shadow uses −*L* of the world height of
-    the terrain under it instead, and the generic shadow of an infantry unit whose height above the
-    surface *h* is greater than 0 uses −*L*(*z* − *h*) (claim 13). An object at any height is therefore depth-compared as if it stood at its
+    the terrain under it instead. Over ordinary terrain, the generic shadow of an infantry unit whose
+    height above the surface *h* is greater than 0 uses −*L*(*z* − *h*) (claim 13). The generic
+    shadow above a high-bridge cell at or above the deck is excluded from this rule: its point and
+    depth depend on the unresolved case in S-0107 claim 19 (claim 20; Open questions).
+    An object's body at any height is therefore depth-compared as if it stood at its
     ground reference row: a flying aircraft is hidden only by terrain, overlays or buildings that lie
     in front of the point below it, never by terrain behind that point even though it is drawn over
     that terrain. Overlays and their shadows use the exact 15 pixels per level instead of *L(z)* (claim 13).
-    - Backing: `measurable` (scenario D7)
-    - Confidence: high
+    - Backing: `measurable` (D7 for aircraft bodies; the sprite, projectile, animation, overlay
+      and ordinary-terrain shadow terms use the scenarios assigned in claim 13). The excluded
+      above-deck shadow is `unmeasured` for the reason in claim 20.
+    - Confidence: high for body anchoring; the per-kind biases retain claim 13's confidence
 12. **Depth profile per drawing.** Ground-lying images (projectile sprites and shadows, the other shadows drawn as sprites,
     flat animations, ore and gems, overlays whose type is drawn flat, the building bib, under-door
     sprites and door sprite) use the flat profile; vehicles, infantry, aircraft, voxel models, building
@@ -310,7 +316,8 @@ screen rows.
     | vehicle or aircraft drawn as a voxel model | *U* (no further constant) | upright | no |
     | voxel shadow of a vehicle or aircraft (claim 18) | *U* of the object casting it (no further constant) | upright | no |
     | own shadow image frame of an infantry unit or a vehicle drawn as a sprite (claims 20, 21; only while *h* = 0) | −*L(z)* − 4 (*U* does not apply) | flat | no |
-    | generic shadow of an infantry unit with *h* > 0 (claim 20) | −5 − *L*(*z* − *h*) | flat | no |
+    | generic shadow of an infantry unit with *h* > 0 over ordinary terrain (claim 20) | −5 − *L*(*z* − *h*) | flat | no |
+    | generic shadow of an infantry unit above a high-bridge cell at or above the deck, not on the deck (S-0107 claim 19) | not specified; see Open questions | flat | no |
     | shadow of an infantry unit falling in a drop pod | *U* − 2 | flat | no |
     | shadow of a vehicle drawn as a sprite whose type has a turret (claim 22) | *U* − 2 | flat | no |
     | smudge (claim 25) | none: no depth test and no depth write | — | no |
@@ -367,7 +374,7 @@ screen rows.
     rows would otherwise make it *n* depth units nearer; the bias keeps its depth tied to its position.
     - Backing: `measurable`. Coverage by row: infantry body with *h* = 0 and the own shadow of
       infantry D8, D15, D20, D31; generic shadow of infantry with *h* > 0 D25 (b) (placement only)
-      and D31 (e); voxel units
+      and D31 (e), on ordinary terrain only; voxel units
       D7, D9, D10 (relative tests only); voxel shadow D23 (profile; its bias only relative to the
       body's); voxel turret D22 (d), including the absent-key default 0 of the turret slot depth
       adjustment; building body, both unloading bodies, gate body, shadow, bib,
@@ -378,6 +385,9 @@ screen rows.
       vehicle drawn as a sprite whose type has a turret D29 (c) (its place under the vehicle's
       image, and its bias through a bib); animated terrain object D33 (c) (that it is a reader, and
       its bias against a wall). `unmeasured`:
+      - the generic infantry shadow above a high-bridge cell at or above the deck: S-0107 claim 19
+        leaves the neighbouring-cell condition unresolved, so its point and depth cannot be
+        predicted for a controlled setup here.
       - building parts drawn as sprites and the door sprite: the only writer they overlap is their
         own body, whose companion depth image has reference points that are not yet settled (F5,
         Open questions).
@@ -440,8 +450,11 @@ screen rows.
       the key absent)
     - Confidence: high for the cliff fudge and the ordinary *s* = −1; medium for column, tunnel and
       bridge detection
-15. **Bridges.** A bridge deck is an overlay drawn in the cell pass, lifted 4 levels above
-    its cell, with a flat profile and depth written (bias per claim 13). A unit under the bridge is
+15. **Bridges.** A bridge deck is an overlay drawn in the cell pass. Its world height is 4 levels
+    above the terrain of its cell, and its depth uses that 4-level elevation (claim 13). Its screen
+    draw point is given by claim 24: the image is lifted by 15 rows per level of the cell's terrain
+    and receives the deck-cell shift, without an extra 60-row lift for the deck's 4 world-height
+    levels. It has a flat profile and depth is written (bias per claim 13). A unit under the bridge is
     drawn later with the depth of its own ground reference row; the deck pixels covering it belong to
     ground rows nearer to the viewer, so the deck hides it. A unit on the deck is lifted by its height
     and has the bias of claim 13, which contains −*L(z)*; the deck pixels behind and around its
@@ -449,7 +462,7 @@ screen rows.
     on the deck (its lowest one or two rows can be lost to the deck's −2 bias, the unit's own small
     constants and the rounding of the upright profile). The bridge fudge (claim 14) exists for tall
     units passing under.
-    - Backing: `measurable` (scenario D10)
+    - Backing: `measurable` (scenario D10 for unit occlusion, D26 for screen placement)
     - Confidence: medium
 16. **Precedence inside the cell pass.** Within each area it repaints, the cell pass ranks its
     drawings as follows:
@@ -545,9 +558,10 @@ screen rows.
     is a depth reader only, with the same depth bias *U* as the object's body (claim 13) and the
     upright profile of F2, anchored at the last row of the shadow image's own copy rectangle, not
     the flat profile of the other shadows. So:
-    - an aircraft's shadow, drawn in the top layer, darkens every ground-layer object it falls on,
-      and a ground vehicle's shadow darkens the ground-layer objects before the vehicle in the
-      ground list and is covered by those after it.
+    - an aircraft's shadow, drawn in the top layer, darkens ground-layer object pixels it falls on
+      wherever its depth test passes and its own body does not cover them. A ground vehicle's
+      shadow similarly darkens qualifying pixels of ground-layer objects before the vehicle in
+      the ground list, and is covered by those after it wherever their own tests pass.
     - where the shadow falls on a writer that is nearer than its depth (a wall, a cliff face, a
       building's body), it is hidden or shown as a whole, like an upright drawing, not cut along a
       fixed row.
@@ -581,15 +595,23 @@ screen rows.
     - Confidence: high
 20. **Infantry.** An infantry unit's draw point is the screen pixel of its position (S-0101 F1,
     which includes *L(z)*), moved up by its ion-blast wobble. Its body image frame and, while its
-    height above the surface is 0, its own shadow image frame (S-0107 claim 19) are both placed
+    height above the surface is 0 and its type does not suppress shadows, its own shadow image
+    frame (S-0107 claim 19) are both placed
     centred on that one draw point; the shadow is drawn right after the body (claim 28). While its
     height above the surface *h* is greater than 0 it draws no shadow from its own sprite but the
-    generic infantry shadow of S-0107 claim 19, placed centred on the point *L*(*h*) rows below its
-    draw point, that is, about where the ground under it appears. Its depth bias is in claim 13.
+    generic infantry shadow of S-0107 claim 19. On ordinary terrain, the shadow is centred on the
+    point *L*(*h*) rows below its draw point, about where the ground under it appears. For a unit
+    above a high-bridge cell at or above the deck, and not on the deck, S-0107 claim 19 says the
+    deck can count as the ground under an unresolved neighbouring-cell condition. This claim does
+    not specify the shadow point or depth anywhere in that unresolved case. The ordinary-terrain
+    depth bias is in claim 13.
     - Backing: `measurable` (scenario D25 (a) for the body and own shadow, (b) for the generic
-      shadow). The ion-blast wobble: `unmeasured`, because no stock weapon or event that makes an
-      ion-cannon blast is known (claim 2).
-    - Confidence: high for the body and its own shadow; medium for the generic shadow's point
+      shadow over ordinary terrain). The above-deck case is `unmeasured`: its neighbouring-cell
+      condition is not identified, so no scenario can predict the shadow point there. The ion-blast
+      wobble: `unmeasured`, because no stock weapon or event that makes an ion-cannon blast is known
+      (claim 2).
+    - Confidence: high for the body and its own shadow; medium for the generic shadow's
+      ordinary-terrain point; low for the unresolved above-deck case
 21. **Vehicles drawn as sprites; aircraft.** A vehicle drawn as a sprite has the same draw point as
     an infantry unit: the screen pixel of its position, moved up by its ion-blast wobble. Its body
     image frame (claim 22) is placed centred on it. Its own shadow image frame is the body frame
@@ -716,6 +738,8 @@ screen rows.
     over between the games of a session (S-0006, claim 10).
 
     Its shadow image frame is the body frame plus ⌊*N*/2⌋, placed centred on the same draw point.
+    In the object pass its shadow can darken its own body (claim 30); the ore-spawning raise and
+    destruction state do not change that ordering.
     The 16-row raise of an ore-spawning object moves its whole drawing rectangle, and with it the
     anchor row of its upright depth profile (F2): every pixel of its image has a depth 16 units
     greater (farther) than the same pixel would have without the raise. Its shadow, being flat, has
@@ -827,7 +851,7 @@ screen rows.
     | animation shadow (−2) | building shadow or terrain-object shadow | once: the animation's shadow does not show there |
     | animation shadow (−2) | bib, ore or gems | not at all: the animation's shadow does not show there |
     | projectile shadow (−10, over ground of level 0) | building shadow or terrain-object shadow | twice |
-    | generic shadow of an infantry unit in the air (−5 − *L*(*z* − *h*), over ground of level 0: −5) | building shadow or terrain-object shadow | twice |
+    | generic shadow of an infantry unit in the air over ordinary terrain (−5 − *L*(*z* − *h*), over ground of level 0: −5) | building shadow or terrain-object shadow | twice |
     | overlay shadow (−2) | bare terrain tile | once |
     | overlay shadow (−2) | an ore, gem or other flat overlay on a cell of the same level (drawn earlier, claim 16) | not at all: the overlay shows undarkened |
     | overlay shadow (−2) | another overlay's shadow on the same level | once: equal depths |
@@ -849,6 +873,33 @@ screen rows.
       because the body's depth comes with its companion depth image, whose placement is not settled
       (F5).
     - Confidence: high for sprite units; medium for buildings
+
+29. **Sprite vehicle facings with the switch off.** With
+    `quirks.sprite_vehicle_eight_facings_only` off, the facing part is the exact integer formula
+    in *Edge cases and quirks*: turn the full body facing clockwise by 8192 facing units, then
+    round to the imported facing count, with halves going clockwise. This includes counts 2 and 4,
+    not a rounded rotation applied after choosing the coarse facing. Disguise and unsupported
+    counts still give part 0. This is our engine's alternative, not behaviour of the original
+    (Q-0050 part 2); revision 5 already defined it.
+    - Backing: `unmeasured`, because the original has no such alternative to observe; engine test
+      D37 checks the definition. The original's rule is claim 22, tested by D29.
+    - Confidence: high, as the definition of the alternative
+30. **Animated terrain body and shadow ordering.** In the object pass an animated terrain
+    object's body and its own shadow form one group at that object's place in its layer list:
+    the body ranks before its shadow, with no other object's drawing between them. There is no
+    separate terrain-shadow pass. Both are depth readers (claims 10 and 13), so where the
+    shadow image frame overlaps a body pixel and passes its depth test against the terrain
+    picture, it darkens that already-painted body pixel by claim 26's channel halving. The body
+    does not shield itself through depth. Another object later in the layer list paints over
+    both wherever its own depth test passes.
+
+    The ordering is identical for an ore mine, whose body and shadow both receive the 16-row
+    raise of claim 23, and for a terrain object whose destruction sequence has begun. The
+    destruction state affects the body-frame selection of claim 23 and makes an otherwise
+    non-animated type use the object pass; it does not reverse or separate body and shadow.
+    This claim fixes ordering, not the still-open destruction-frame timing.
+    - Backing: `measurable` (D36, including the mine and destruction cases)
+    - Confidence: high
 
 ## Formulas
 
@@ -915,7 +966,10 @@ supports it.
 
 Note: clipping at the view's bottom edge moves *r*₁, so an upright image partly below the view is
 depth-anchored at the view's last row instead of at its own base (quirk
-`quirks.upright_depth_anchor_after_clip`).
+`quirks.upright_depth_anchor_after_clip`). Backing: `measurable` (D38) for the clipping
+consequence on sprite readers; confidence: high. Its persistence on cell-pass writers is
+`unmeasured`: no controlled writer-repaint test is given here; confidence: medium. The slope
+profile is `unmeasured`: no stock drawing using it is identified; confidence: high for the formula.
 
 **Comparing two drawings** (consequences of F2, used by the measurement scenarios; *b* is the last
 row *r*₁ of a drawing, *β* its bias, all in integers, ±1 for the rounding Q and the floors; valid only
@@ -965,7 +1019,9 @@ constants are measured from different reference points of the body sprite, and w
 each uses (and so the sign convention of the displacement) is not yet confirmed. Low confidence.
 This spec owns the question (Open questions). No building's art supplies a depth image of its own:
 every building narrower than 8 cells uses the shared image, live and remembered alike (high
-confidence).
+confidence). Backing: `unmeasured` for this displacement, its constants, the width threshold and
+shared-image selection: the reference points are unresolved, so no scenario here predicts the
+per-pixel body depth needed to isolate those values.
 
 
 **F6. Centred placement** (integers, screen pixels). For a canvas *W* × *H*, an image frame whose
@@ -999,12 +1055,12 @@ red or blue *C*, and likewise with 4 for green.
 | depth value range | 0…65535 | depth units | Values wrap modulo 65536 |
 | projectile depth bias | −30 | depth units | Plus −*L(z)*; final |
 | animation depth bias | −2 (ordinary), −3 (flat), −50 (tiled) | depth units | Plus type and instance adjustments and −*L(z)*; final |
-| shadow depth bias | −2 | depth units | Animation shadows, plus −*L(z)*. Own shadows of sprite units: −4 − *L(z)*; generic infantry shadow: −5 − *L*(*z* − *h*) (claim 13) |
+| shadow depth bias | −2 | depth units | Animation shadows, plus −*L(z)*. Own shadows of sprite units: −4 − *L(z)*; generic infantry shadow over ordinary terrain: −5 − *L*(*z* − *h*) (claim 13) |
 | building shadow bias | −4 | depth units | Plus −*L(z)* (−2 for remembered fogged images); final |
 | terrain object bias | −12 (body), −3 (shadow) | depth units | Plus −*L(z)*; final; non-animated and animated terrain objects alike |
 | projectile shadow bias | −10 | depth units | Plus −*L* of the world height of the terrain under the projectile; final (claim 13) |
 | other building image biases | −3 (bib), −2 (under-door sprites), −7 (door sprite), −22 (deploying sprite), −42 (roof-deploying sprite) | depth units | Plus −*L(z)*; final; the deploying and roof-deploying values replace the normal depth adjustment (claim 13) |
-| generic infantry shadow bias | −5 | depth units | Plus −*L*(*z* − *h*); final (claim 13) |
+| generic infantry shadow bias | −5 | depth units | Over ordinary terrain only, plus −*L*(*z* − *h*); final (claim 13). Above-deck case unresolved |
 | own-shadow bias of sprite units | −4 | depth units | Plus −*L(z)*; final (claim 13) |
 | remembered-building ranking weights | 37962 per cell of *x*, 37814 per cell of *y* | dimensionless, per cell | *N* in claim 16 |
 | sprite constant | −2 | depth units | Already contained in the claim 13 rows for vehicles, infantry and buildings drawn as sprites; listed for reference only |
@@ -1229,7 +1285,9 @@ building's key. Between two units, the one later in the list is drawn on top whe
 | rules, overlay type | `Crate` | −12 placement shift (claim 24) | boolean | no |
 | rules, overlay type | `Land` | a railroad land type gives the further −1 placement shift (claim 24) | land-type name | as S-0211 says |
 | art, vehicle or aircraft image | `Voxel` | drawn as a voxel model instead of a sprite (S-0007, claim 4); an aircraft type without it shows no body (claim 21); used by D34 | boolean | no |
-| art, vehicle image | `Facings` | facing count of a vehicle drawn as a sprite; only 8 turns the image (claim 22) | integer, facings | 8, but 1 when the type has no firing frames and no turret |
+| art, vehicle image | `Facings` | facing count of a vehicle drawn as a sprite; only 8 turns the image with the switch on (claim 22); counts 2 to 256 that are powers of two use claim 29 with the switch off | integer, facings | 8, but 1 when the type has no firing frames and no turret |
+| none | none | claim 29 reads no additional key: its switch selects the alternative and the facing count is imported above | not applicable | switch on (original) |
+| none | none | claim 30 reads no ordering key; the animated and ore-spawning flags below select the drawing and its raise, and destruction is an object's state, not an imported ordering setting | not applicable | body before its own shadow |
 | art, vehicle image | `WalkFrames`, `FiringFrames` | walking and firing frame counts *F*<sub>w</sub>, *F*<sub>f</sub> (claim 22) | integer, image frames | 12; 0 |
 | art, vehicle image | the keys for the standing frame count, the death frame count, the death frame rate and the four start frames (standing, walking, firing, death); no stock file sets them (claim 22) | *F*<sub>s</sub>, *F*<sub>d</sub>, *R*<sub>d</sub>, *S*<sub>s</sub>, *S*<sub>w</sub>, *S*<sub>f</sub>, *S*<sub>d</sub> | integer: counts and start frames in image frames, *R*<sub>d</sub> in ticks per image frame | *F*<sub>s</sub>: 0, or 1 when *F*<sub>f</sub> > 0. *F*<sub>d</sub>: 0. *R*<sub>d</sub>: 1, and a value below 1 is raised to 1. With *n* the facing count after reading: *S*<sub>w</sub>: 0. *S*<sub>s</sub>: *F*<sub>w</sub>·*n* if *F*<sub>s</sub> > 0, else *S*<sub>w</sub>. *S*<sub>f</sub>: (*F*<sub>w</sub> + *F*<sub>s</sub>)·*n* if *F*<sub>f</sub> > 0, else *S*<sub>s</sub>. *S*<sub>d</sub>: (*F*<sub>f</sub> + *F*<sub>w</sub> + 1)·*n* if *F*<sub>d</sub> > 0, else −1. Each default is computed only when its own key is absent |
 | rules, vehicle or infantry type | `WalkRate`, `IdleRate` | walk counter of a vehicle drawn as a sprite (claim 22) | integer, ticks | 1; 0 |
@@ -1250,7 +1308,11 @@ override files other than a scenario's named test files and no engine add-ons; s
 test maps. Where a scenario changes a
 type's field, it does so through the test map's override section, or, for art data, through a
 named loose copy of the art file (the glossary's named test files; test data, removed afterwards).
-Screen resolution 800×600, any game speed, fog of war off unless stated. The *test house* is the
+Skirmish only, with the director and mods off. Use one bystander computer player at the farthest
+start position, unreachable from the observed test area during the run, and void the run if it
+enters that area, affects a test object or is defeated before observation ends. Reveal the test
+area to the local player before recording; no shroud covers the compared pixels. Screen resolution
+800×600, game speed 2 unless a scenario says otherwise, fog of war off unless stated. The *test house* is the
 local player, whose view the captures show. The observable is read from
 screenshots or a capture of the battlefield view, one image per drawn frame; a unit's position is
 read from its cell and the ticks it has moved at a known speed. Where a scenario counts ticks, each captured
@@ -1683,7 +1745,8 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
   Observable: the screen row of a chosen pixel of the generic shadow, and the screen row of the
   unit's health bar compared with a standing unit on the same cell, which gives its lift. Expected:
   the generic shadow image frame 1 placed by F6 on the point *L*(*h*) rows below the unit's draw
-  point. Falsified if either part is off by more than one row.
+  point. Falsified if either part is off by more than one row or one column. No high-bridge cell
+  is used in either part; the unresolved above-deck shadow is not tested.
 - **D26, overlay placement (claim 24).** Setup: test maps with flat cells at level 0 and at level 2,
   carrying a wall, an ore field, a crate, a fence (an overlay of none of the shifted kinds), an
   overlay type whose land type is railroad, the overlay types with indices 126 and 239 (counted from
@@ -1736,7 +1799,8 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
   one-cell smudge and a smudge several cells wide, placed by the map's smudge list. Observable: the
   screen position of a chosen pixel of each smudge's image frame. Expected: image frame 0 placed by
   F6 on the top corner of the smudge's first cell, lifted 15 rows per level. Falsified if it is
-  centred on the cell centre (15 rows lower) or on each piece's own cell.
+  centred on the cell centre (15 rows lower), on each piece's own cell, or differs from F6 by any
+  other pixel displacement.
 - **D29, vehicles drawn as sprites (claims 13, 21, 22).** Setup: a stock land vehicle type drawn as
   a sprite whose facing count is 8 (its art's facing count, or the absent-key default of 8 for a
   type with firing frames or a turret, Import mapping), with several walking frames and an idle
@@ -1826,7 +1890,16 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
     bib. Expected ⌊*v*/4⌋ on the tree's shadow and ⌊*v*/2⌋ of the bib's own pixel on the bib.
   - (d) A building placed so that its shadow overlaps a tree's shadow. Expected ⌊*v*/4⌋.
   - (e) Two buildings whose shadows overlap. Expected ⌊*v*/2⌋; and a jumpjet infantry unit hovering
-    so that its generic shadow falls inside a building's shadow: ⌊*v*/4⌋.
+    over ordinary terrain (no high-bridge cell), so that its generic shadow falls inside a
+    building's shadow: ⌊*v*/4⌋.
+  - (f) A stock projectile with a shadow passes over a building's shadow, then a tree's shadow,
+    on level-0 ordinary terrain. Compare only pixels outside the projectile body and other
+    effects. Expected ⌊*v*/4⌋ in either overlap. A run with no qualifying overlap is inconclusive.
+  - (g) A stock animation with a shadow, no vertical draw shift and no depth adjustment, created
+    at height 0 as in D15, overlaps in turn a building's shadow, a tree's shadow, a bib, and ore
+    or gems. Record pixels inside its shadow but outside its body. Expected: the earlier shadows
+    remain ⌊*v*/2⌋, and bib/ore/gem pixels retain their control-game values without the animation
+    shadow. A part with no qualifying overlap is inconclusive.
 
   Falsified if any part gives another value. A result of ⌊*v*/4⌋ in (b) or in the two-building part
   of (e) is the alternative of `quirks.cell_pass_shadows_write_depth`.
@@ -1910,8 +1983,74 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
 
   Falsified if any part gives another value.
 
+- **D36, animated terrain body/shadow overlap (claim 30; Q-0051).** Use the common
+  measurement setup, game speed 2, a fixed view, no fog and a flat level-0 test area with no
+  overlays or buildings beside the test object. Capture lossless pixels in the 5-6-5 display
+  layout as in D30. One run per part; keep the bystander outside this area.
+  - (a) Place a stock terrain type marked animated. Choose the type and a displayed body frame
+    by reading its shape file: require at least one non-transparent body pixel inside the
+    non-transparent outline of its corresponding shadow frame. Record the displayed body frame
+    and the pixels in that overlap, excluding pixels covered by another effect. Compare each
+    channel with the body's lit colour before shadow darkening, calculated with S-0104 and
+    S-0112 claim 3. Expected: where both depth tests pass, the result is the channel's rounded-down
+    half (claim 26), not the undarkened body colour. Ground pixels outside the body but inside
+    the shadow provide a control for shadow visibility and darkening.
+  - (b) Repeat with a stock ore mine; capture each distinct displayed body frame while its
+    animation runs. Match the body and shadow at the common draw point raised by 16 rows.
+    Expected: the same rounded-down half in every qualifying overlap, not an undarkened body
+    or a shadow left at the unraised draw point.
+  - (c) Place a stock destructible terrain object, and have a human-controlled stock armed unit
+    destroy it by firing at its cell. Capture every drawn frame through destruction. Identify
+    each displayed body frame from the shape file rather than assuming the still-open sequence
+    timing. For each visible destruction frame with qualifying body/shadow overlap, compare
+    the pixels as in (a), excluding weapon, fire and other effect pixels. Expected: the same
+    channel halving where both tests pass, including an otherwise non-animated type once it
+    uses the object pass. Record which frames qualify; a case with no qualifying visible
+    overlap is inconclusive, not evidence for the opposite order.
+  - Falsified if any qualifying overlap shows the undarkened body where shadow darkening should
+    pass, or if the mine or destruction state reverses the result. Use pixels whose unshadowed
+    channel value is nonzero, so that the two outcomes differ. A separate-shadow-pass
+    alternative can also be tested by placing a second animated terrain object later in the
+    ground list whose body overlaps the first object's shadow: its pixels must remain
+    undarkened by the first object's shadow wherever its own body passes depth. Record both
+    objects' positions and placement order and check claim 6's list order. Falsified if the
+    first object's shadow darkens a qualifying body pixel of the later object.
+
+- **D37, off-state sprite vehicle facings (claim 29; Q-0050 part 2).** This is an engine
+  test, not a measurement of the original. Use an undisguised sprite vehicle, turn the switch
+  off and record its integer facing part for every body facing in 0…65535, once for each
+  supported facing count. Compare with the exact rational formula in *Edge cases and quirks*.
+  Boundary checks: count 2 gives part 0 at facing 8191 and part 1 at 8192, part 1 at 40959 and
+  part 0 at 40960. Count 4 gives part 0 at 65535 and part 1 at 0, part 1 at 16383 and part 2 at
+  16384. Counts 8 and above must equal the glossary's coarse facing plus one eighth of the
+  count, modulo the count. Repeat disguised and with unsupported counts; expected part 0.
+  Any different part falsifies the alternative's implementation, not a claim about the original.
+
+- **D38, upright reader clipped at the bottom (F2).** Use the common setup and a sprite vehicle
+  with all terrain fudges 0, on ordinary level-0 terrain. Put an upright overlay that is neither
+  wall nor rock in front of it (set its flat flag off through the map override if needed), with
+  bias −17 and no companion depth image. The vehicle has bias −3. Choose a placement whose
+  unclipped rectangle bottoms differ by at least 15 rows and whose non-transparent pixels
+  overlap. First capture both rectangles fully inside the view: the vehicle must show throughout
+  the overlap by F2. Scroll, without a view jump, until the overlay's last row lies 5 rows above
+  the view's bottom and the vehicle's last row lies below the view. Record a qualifying shared
+  pixel still inside the view and the rectangle rows in both captures. Expected: in the second
+  capture, the reader's anchor is the view's bottom, only 5 rows below the writer's anchor, so
+  its pixels in the overlap are hidden. The alternative using the unclipped anchor leaves them
+  visible. Falsified if a qualifying pixel stays visible in the second capture. Inconclusive if
+  no non-transparent shared pixel survives clipping; choose a different stock sprite or placement.
+  This tests a reader, not the still-unconfirmed repaint persistence of a clipped writer or the
+  clipping of a reused voxel image.
+
 ## Open questions
 
+- **Generic infantry shadow above a high bridge:** S-0107 claim 19 leaves unresolved the
+  neighbouring-cell condition under which the deck counts as ground for a unit above a high-bridge
+  cell at or above the deck and not on it. Claims 11, 13 and 20 here do not specify the shadow
+  point or depth for that whole case. Determine the condition, placement and final depth together.
+  Do not infer a deck-relative formula from the ordinary-terrain formula. Backing: `unmeasured`,
+  because a controlled scenario cannot predict the result until that condition is known.
+  Confidence: low.
 
 - **Building images:** the building shadow's bias (−4 − *L(z)*) has been tied to how building and unit
   images drawn as sprites get their shadow in general, not yet to the live building drawing with

@@ -1,9 +1,9 @@
 ---
 id: Q-0072
 title: How an attacking unit approaches a target it cannot fire at yet
-status: open
+status: answered
 related: [S-0215, S-0307, S-0213]
-answered-by: []
+answered-by: [S-0207, S-0215, S-0208]
 ---
 
 ## Need

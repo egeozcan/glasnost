@@ -2,7 +2,7 @@
 id: S-0412
 title: Skirmish setup rules (setup values, starting credits, random lobby choices, handicap, alliances at game start, superweapon and crate settings)
 topic: simulation
-revision: 2
+revision: 3
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -426,8 +426,10 @@ S-0413 claim 6). In addition:
 
 13. **A mode that gives every base unit.** The mode list files some game modes under a family
     named in the Import mapping, the *all-base-units family*. Each mode of that family gives every
-    house the whole base-unit list, and in it the bases setting is forced on. No other field of the mode or of
-    its game-mode file selects this rule: it belongs to the family. Instead of S-0009's single base unit, every house receives one vehicle of each
+    eligible house the whole base-unit list, and in it the bases setting is forced on. A house is
+    eligible under the same non-passive, non-observer conditions as S-0009 claim 45. No other
+    field of the mode or of its game-mode file selects this rule: it belongs to the family.
+    Instead of S-0009's single base unit, every eligible house receives one vehicle of each
     type in the base-unit list, whatever that type's owner list says. The vehicles are placed in
     reverse list order, the last entry's first and the first entry's last; the order is observable
     through which vehicle takes which cell. Their cells:
@@ -444,12 +446,28 @@ S-0413 claim 6). In addition:
     | every vehicle created and placed | one vehicle of each listed type; its budget units and left-over credits as in S-0009 claim 45 | starting units as usual |
     | at least one failure | every vehicle of the list that could be created and placed, and nothing else: no budget units, no left-over credits | no starting units (S-0009 claim 45's early stop) |
 
-    This mode is an exception to S-0009 claim 45's single-base-unit and early-stop rules. S-0009 claim 45 must be revised in the same hand-off to scope those rules to other modes and defer this mode's starting-unit outcome to this claim.
+    S-0009 claims 45 and 46 describe standard skirmish starting units. This claim replaces their
+    single-base-unit placement and failure rules for the all-base-units family. The budget,
+    budget-unit purchases and shared placement search still follow those claims, except where
+    this claim states an alternative.
+
+    **Starting-unit draws in this family.** Houses retain S-0009's house order. For each house,
+    the base-list vehicles' draws follow reverse list order: each vehicle's creation draw,
+    followed by its placement-search draws when a search is needed, then its placement draw
+    if its type has a visceroid flag (S-0009 claim 46). Selecting a base-list type takes no
+    random draw. A successful direct placement of the first list entry takes no search draw.
+    Every search uses S-0009 claim 46's candidate priority and draw boundary, with first
+    radius 3 rather than the standard base unit's radius 1. Thus this family's starting-unit
+    draw sequence need not equal the standard mode's. When all base-list vehicles succeed,
+    the house's budget-unit draws follow as in S-0009 claim 46. After all houses succeed,
+    the final draw R(0, 65535) of S-0009 claim 20 is taken. A base-list failure does not cancel
+    the draws or placements of the other base-list vehicles of that house, but it prevents
+    that house's budget-unit draws, every later house's starting-unit draws and the final draw.
 
     Other game modes may change further setup rules; they are outside this spec (Open questions).
     - Backing: `measurable` (scenario K8: the list rule and the cells in part a, the reverse order
       in part b, the failure rule and the early stop in part c; part d for the family being what
-      selects the rule)
+      selects the rule; part e for the starting-unit draw sequence)
     - Confidence: medium for the list rule, the order and the early stop; low for the placements
       and their draws; medium that the family is the selector (K8 part d)
 
@@ -461,11 +479,14 @@ S-0413 claim 6). In addition:
     this spec (claim 13 is the exception), and this claim fixes no order between those additions
     and the items below, except that all of it is over before tick 0.
     - **Draws.** The draws that game start takes from the scenario random stream fall into three
-      groups, in this order: the draws of the starting units (S-0009 claims 45 and 46); the draws
+      groups, in this order: the draws of the starting units (S-0009 claims 45 and 46 for standard
+      skirmish mode); the draws
       of the crates, when the crate setting is on, each crate taking its own draws (claim 10; crate
       rules, no spec yet); and the secret-lab draws, one ranged draw per secret lab when the
       conditions of S-0407 claim 14 hold. The secret-lab draws are the last draws of game start:
-      no draw follows them before tick 0.
+      no draw follows them before tick 0. The all-base-units family retains this group order,
+      but its starting-unit group's draws follow claim 13, not the standard mode's base-unit
+      draw sequence. Scenario K9 part a tests the group order in both families.
     - **Removed houses.** A house that the unused-house cleanup (S-0009 claim 28) removes takes no
       draw for starting units and receives no starting units (K9 part d). It also gets no
       left-over budget, none of the extra credits of claim 3, none of the alliances of claim 8 and
@@ -554,7 +575,7 @@ resolution").
 | House creation | player houses get the credits setting (claim 2), the index and row of claims 4 and 5; neutral and special houses get 0 credits and, by claim 5, an index and no row; the place of this step relative to map loading is S-0009's | values: this spec; order: S-0009 claim 19 |
 | Map loading | start positions, map objects | S-0009 |
 | Game start | the unused-house cleanup: a removed house takes no starting-unit draw and receives nothing from the rows below (claim 14) | S-0009 claim 28; claim 14 |
-| Game start, first group of draws | starting units of the remaining houses; each house's balance gains what its own starting units left of its budget | S-0009 claims 45, 46 |
+| Game start, first group of draws | starting units of the remaining houses; each house's balance gains what its own starting units left of its budget | S-0009 claims 45, 46; claim 13 for the all-base-units family |
 | Game start, after the starting units | crates placed when the crate setting is on; the second group of draws | claim 10 |
 | Game start, not ordered against other houses | the extra credits of claim 3 for each house that gets them, computed on a balance that includes the house's own left-over budget (claim 14) | claim 3; claim 14 |
 | Game start, before tick 0, after the cleanup | the alliances of claim 8 and the wall-owner flag rewrites, in no observable order | claim 8; S-0413 claim 6; claim 14 |
@@ -783,11 +804,13 @@ only; the human on a country of the side of V1; the other houses are computer pl
   their cells. Expected: one of each of the three types; V1 on the cell three cells further along
   x and y from the base cell; V2 and V3 around the base cell within radius 3 or more. Falsified if
   the human receives only the type of its own side, or V1 is elsewhere while that cell is free.
-- *Part b (the order).* Setup: as part a, with the cell three further along x and y blocked for
-  vehicles by a test object, so that all three go through the placement search. Observable: which
-  cell each vehicle takes. Expected: V3 takes the cell the search finds first, then V2, then V1
-  (reverse list order). Falsified if V1 takes the cell found first, or the cells are not
-  consistent with any one order of the three searches.
+- *Part b (the order).* Setup: as part a, on open flat ground with no pre-placed objects near
+  the base cell. Observable: the three vehicles' cells at tick 0. Expected: V3 occupies the
+  base cell (the search's initial candidate), V2 occupies the first accepting radius-3
+  candidate, and V1 occupies the cell three further along x and y. Falsified if V2 occupies
+  the base cell instead of V3, or the cells disagree with those predictions. A test object
+  at V1's direct-placement cell does not by itself establish that the direct placement fails:
+  S-0009 claim 46's loading-time placement bypass applies.
 - *Part c (failure and early stop).* Setup: as part a on the map of S-0009 scenario M26 variant E
   (only the base cell can take a unit), with the list's second type made a type that cannot be
   created in the test (an empty list position, a name that matches no vehicle type), and unit-count
@@ -803,6 +826,19 @@ only; the human on a country of the side of V1; the other houses are computer pl
   one of each of V1, V2 and V3 in the all-base-units mode, and the single base unit of S-0009
   claim 45 in the standard mode. Falsified if the two modes give the human the same vehicles.
 
+- *Part e (draw sequence).* Setup: part b's open map, the random-state recorder, crate setting
+  off, no secret labs, unit-count setting 0 and V1, V2 and V3 without visceroid flags. At game
+  speed index 2, record 20 games from seeding through tick 0. Procedure: replay the starting-unit
+  draws from the recorded state and the observed base cells, using claim 13 and S-0009's
+  creation-draw and search rules. Observable: every vehicle's cell and the stream state after
+  starting-unit generation. Expected: per house, V3's creation draw with no search draw on the
+  free base cell, V2's creation and radius-3 search draws, V1's creation draw with no search
+  draw at its direct-placement cell; after the last house, R(0, 65535). Repeat with part c's
+  failed list position: the other entries of that house retain their draws, but no budget-unit,
+  later-house or final draw occurs. Falsified if the predicted cells or stream state differ in
+  any run. Record counts of raw values using S-0202's ranged-draw rule, not an assumption that
+  every ranged draw uses exactly one raw value.
+
 **K9: game start.** All parts use a test map and the random-state recorder of the measurement
 setup.
 - *Part a (the draw groups).* Setup: a test map with the crate setting on (crate minimum 3, so
@@ -814,7 +850,10 @@ setup.
   with unit count 0, the difference in draw count in each run identifying the group). Expected: the
   draws of the labs are the last of the sequence, after those of the crates, which are after those
   of the starting units. Falsified if a lab draw is followed by any other draw before tick 0, or if
-  the groups are in another order.
+  the groups are in another order. Repeat this part in the all-base-units family with the
+  test base-unit list of K8: its starting-unit group follows claim 13 and can take different
+  draws, but the three groups must retain the same order. A different group order falsifies
+  claim 14 for that family.
 - *Part b (extra credits of computer player houses, claim 3).* Setup: a test rules file (a loose
   copy of the base rules, placed before the program starts, as K1 run 2 and K3 use one) whose
   extra-credit percentage list is 7, 30, 55, whose minimum unit count is 0 and whose credits slider
@@ -893,10 +932,11 @@ not hold and the run says nothing).
 
 S-0414 claims 6, 9 and 10 own the end-test and end-delay rules used by claim 11. Claims 3, 4
 and 5 and scenario K10 remain unchanged from approved revision 1: S-0215's current revision
-cites those approved rules, so that dependency needs no simultaneous hand-off. The all-base-units
-mode in claim 13 is an exception to S-0009 claim 45's single-base-unit and early-stop rules.
-S-0009 claim 45 must be revised in the same hand-off to scope those rules to other modes and
-defer this mode's starting-unit outcome to claim 13. The earlier requests to reconcile the lobby
+cites those approved rules, so that dependency needs no simultaneous hand-off. S-0009's current
+claims 45 and 46 already scope their starting-unit rules to standard skirmish mode and defer
+all-base-units outcomes to claim 13. Joint sign-off checks those scopes together with claim 13's
+reuse of the shared search and claim 14's group ordering: the two families need not take the
+same starting-unit draws. No further S-0009 scope edit is required. The earlier requests to reconcile the lobby
 difficulty pairing and the non-player houses' skill levels have been resolved in the approved
 specs and glossary.
 

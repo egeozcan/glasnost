@@ -1,9 +1,9 @@
 ---
 id: Q-0112
 title: Which radar pixels a building is listed at
-status: open
+status: answered
 related: [S-0410]
-answered-by: []
+answered-by: [S-0410]
 ---
 
 ## Need

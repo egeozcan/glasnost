@@ -2,7 +2,7 @@
 id: S-0309
 title: Target acquisition (automatic searches, candidate tests, threat score, retaliation, target switching)
 topic: combat
-revision: 3
+revision: 4
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -129,8 +129,7 @@ this spec:
 - **Disguise-detection list.** A game-wide list of integers, one per difficulty row, that sets
   how likely a searcher of the neutral or special house is to see through a blinking disguise
   (claim 25, part g; Import mapping).
-- **Destroy-walls flag.** A yes/no setting of each difficulty row (Import mapping); claim 25, part
-  i, reads the normal row's.
+- **Destroy-walls flag.** A yes/no entry in the per-difficulty settings (Import mapping). Claim 25, part i, uses the entry selected by the house's difficulty index; the neutral and special houses have index 1, which selects the second entry. This is a per-difficulty-list selection, not an applied difficulty row.
 - **Wall candidate, wall score.** A cell holding an enemy wall that a searcher of the neutral or
   special house could shoot, and the integer that ranks such cells (claim 25, part i).
 - **Wall target.** A target that is a cell holding a wall, not an object (claim 25, part i).
@@ -529,9 +528,12 @@ this spec:
     claim 25, part g, says for which objects it is taken. The weapon tested is the weapon *A*
     would use against *T* (S-0308).
     - Backing: `measurable`, each row through the scenario part named in table C's last column,
-      except three rows that are `unmeasured`. *Exists* and *self*: no setup can offer a searcher
-      itself, or an object that has left play or has 0 health, as a target that the other rows
-      would accept, so these rows only make the list complete. *Firing check*: every *illegal*
+      including the 0-health case of *exists* through scenario A14, part o: a destroyed building
+      awaiting removal remains in its foundation cells with 0 health (S-0312, claim 21), but is
+      not a candidate. The nonexistent and removed-from-play cases of *exists* remain
+      `unmeasured`: no setup offers such an object to a search. Two other rows are `unmeasured`.
+      *Self*: no setup offers a searcher itself as a target that the other rows would accept, so
+      this row only makes the list complete. *Firing check*: every *illegal*
       case known to the combat specs is either also rejected by another row (a versus value of
       0 by the versus row, a class the projectile cannot hit by the class row) or belongs to
       feature specs not yet written, so no setup known here isolates the row. That no row takes a
@@ -631,12 +633,7 @@ this spec:
       "healer"), while anger
       towards an ally never makes an enemy house. `measurable` for the tie rule and for *C* not
       depending on the attacker's owner (scenario A9, part d, where two equal hits from two houses
-      give equal anger). `unmeasured` for the two alliance rules:
-      in a skirmish of our engine no alliance changes after set-up (the trigger subset of S-0011
-      has no alliance action, and network games are out of scope). Making allies at set-up, when
-      every anger is 0, changes nothing visible. Whether the set-up also makes houses enemies
-      (which would give an anger of 1 before any damage) belongs to the set-up specs; scenario A9,
-      part b, records it without depending on it (Open questions)
+      give equal anger). `measurable` for the anger change when a house becomes an enemy or an ally: S-0414 (claims 12–14) permits alliance orders in skirmishes, and proposed scenario A9, part e, distinguishes the two changes through target preference. The initial alliance and anger state is still setup-owned; scenario A9, part b, records the initial enemy-house state without depending on it (Open questions).
     - Confidence: medium (high for the cost term, low for the tie rule and the alliance rules,
       medium for the defeated enemy house, since no rule of our engine that changes anger on
       defeat is known)
@@ -845,13 +842,7 @@ this spec:
       to *A*'s owner, when *A*'s type cannot detect disguises, is rejected unless *T*'s disguise is
       blinking (the disguise specs own when it blinks) and one ranged draw *R*(0, 99) from the
       scenario random stream, taken for this test, is at most the house's entry of the game-wide
-      *disguise-detection list* (Terms, Import mapping). The entry is the one at the position of
-      the house's difficulty row in the order easy, normal, difficult. In our engine it is the
-      second entry, the normal row's, as for every other row choice (S-0302, claim 3; the
-      delegated decision of 2026-10-10 on difficulty skill blocks; and the project lead's decision
-      of 2026-10-10, morning, item 2, that a difficulty row a map sets for a house is ignored in a
-      skirmish). Which row the original gives
-      these two houses is not established (Open questions). The draw is taken only for an object
+      *disguise-detection list* (Terms, Import mapping). The entry is selected by the house's difficulty index from the list in easy, normal, difficult order. The neutral and special houses have difficulty index 1, which selects the second entry (S-0412, claim 5). In our engine this index-based list selection remains the same; it does not mean that a difficulty row is applied to either house. The draw is taken only for an object
       that every other row of table C lets through, except the rows "capture", "engineer",
       "storage", "bridge layers", "healer" and "score": an object that one of those six rows
       rejects has still taken the draw, and an object that any other row rejects takes none (row
@@ -872,9 +863,7 @@ this spec:
       behaviour, owner and distance conditions are S-0215's (claim 18); its rules for
       computer-controlled owners hold for these two houses by the same decision, as S-0215 (claim
       18) states.
-    - *(i) Enemy walls (claims 9 and 17; table Search outcome and target state).* This part applies to the range and area searches of a searcher of these
-      houses whose difficulty row has the destroy-walls flag (in our engine, the normal row's
-      flag), when the search looks at rings (claim 9). The map-wide search looks at no walls, and a
+    - *(i) Enemy walls (claims 9 and 17; table Search outcome and target state).* This part applies to the range and area searches of a searcher of these houses when the destroy-walls entry selected by its difficulty index is set (in our engine, the second entry selected by index 1), and the search looks at rings (claim 9). This per-difficulty-list selection does not mean that a difficulty row is applied to either house. The map-wide search looks at no walls, and a
       distributed-fire searcher, which picks by claim 20 among candidate objects, never takes a
       wall target.
       A *wall candidate* is a cell that the search looks at before it has any candidate object,
@@ -936,8 +925,7 @@ this spec:
       comparison of (h) decides together with it and no setup known isolates it; (j), because the
       interval and the nearness measure are not established, so no expected tick or house can be
       stated
-    - Confidence: medium for parts a, b, e, f, g and i; low for parts c, d, h and j, for the
-      opportunity mark of a wall target, and for the row used by parts g and i
+    - Confidence: medium for parts a, b, e, f, g and i; low for parts c, d, h and j, and for the opportunity mark of a wall target
 
 26. **Initial threat coefficients and layers.** Each of a newly registered type's five threat
     coefficients starts at double-precision 0, independently of the game-wide defaults. Whenever
@@ -1113,7 +1101,7 @@ truncated toward zero (Notation above), so the difference is an integer.
 
 | Row | *T* is rejected when | Confidence | Scenario |
 |---|---|---|---|
-| exists | *T* does not exist, has been removed from play, or has 0 health | high | none (claim 12) |
+| exists | *T* does not exist, has been removed from play, or has 0 health | high | A14, part o (0 health); the other cases are `unmeasured` (claim 12) |
 | self | *T* is *A* | high | none (claim 12) |
 | legal target | *T*'s type is not a legal target (Import mapping) | high | A14, part e |
 | class | *T*'s kind is not among the search classes (claim 5). A search for vehicles also accepts aircraft and any object that counts as a vehicle (S-0214); the scan of airborne objects (claim 9) also accepts infantry and vehicles | high (medium for the two extensions) | A2 (part h for the first extension); A14, part m, for the second |
@@ -1912,6 +1900,8 @@ set in the test map's override sections.
   tie keeps the present enemy house or goes to the later house, or that the two increments
   differed, for example because *C* depends on the attacker's owner).
 
+- *Part e (anger changes when alliances change):* use houses *H* (human), *P* and *Q* (computer), two candidate objects of the same type owned respectively by *P* and *Q*, and a human searcher whose enemy-house bonus is positive and large enough to decide between equal-score candidates. Arrange the scan order so that *Q*'s object is first. Set the alliance-order settings required by S-0414, and ensure the proposed orders satisfy its conditions. In the first run, *H* and *P* start allied, *Q* is not allied with *H*, and neither anger value is positive; the person issues the alliance-breaking order from *H* to *P*. *Expected:* the anger increment when *P* becomes an enemy makes *P* the enemy house, so the searcher picks *P*'s object despite *Q*'s earlier scan position. In a separate fresh run, *P* and *Q* start as enemies of *H*; damage raises *H*'s anger towards *P* above 0, while anger towards *Q* stays 0. The person then issues a permitted alliance order from *H* to *P*, with *Q* remaining an enemy. *Expected:* *H*'s anger towards the new ally *P* becomes 0 and *P* ceases to be the enemy house; the searcher picks *Q*'s object by scan order. *Falsified if:* either pick contradicts the stated enemy-house bonus and tie outcome. A run in which S-0414 refuses the alliance order does not decide the corresponding rule.
+
 **A10: suppression (claim 14).**
 - *Setup (all parts):* a firer of the human house, of a type that is not a multi-weapon type, with
   a suppressing weapon in slot 0, target-health scan mode *none*, strength and distance
@@ -2097,6 +2087,21 @@ range; the part says which object.
   grows with the number of targets (checked with a third pair of runs using five targets). A pair
   whose stream states already differ at the start of the search tick does not decide and is
   repeated with another seed.
+- *Part o (0 health, row "exists"):* on a tiny flat skirmish test map, put a stock building
+  whose type has the explodes flag in the human house, and an armed ground searcher of the
+  neutral house in *guard* nearby. Keep the bystander computer player's objects away from the
+  observed area. Use game speed 6, with director and mods off, and target, health and tick
+  recorders. The neutral searcher avoids the human owner's harmless-building rejection; choose
+  positions where the living building passes every other candidate row and is picked in a
+  control run. In the test run, destroy the building by a separate human-owned unit's
+  force-fire before a search by the targetless searcher, while the building still awaits removal
+  under S-0312 claim 21. Repeat with fresh seeds until three runs contain a search in that
+  interval; a run with no such search does not decide. Record the searcher's new target, the
+  building's health and whether it still occupies its foundation cells at that search.
+  *Expected:* the building is picked in the living control, but never newly picked at 0 health
+  while awaiting removal. *Falsified if:* a qualifying search newly picks the building at
+  0 health before removal. Merely retaining a target picked while it was alive does not decide
+  this candidate test (claim 4).
 - *Falsified if:* any part differs as it says.
 
 **A15: the neutral and special houses (claim 25).** Objects of the neutral house are placed by
@@ -2324,11 +2329,7 @@ different health ratios; for distance use different distances.
   scope for now (project lead, 2026-10-10). When they get their own spec, it should decide whether
   to reproduce the rule as a rule on objects discovered by the acting house, or to follow table C
   as it stands.
-- The neutral and special houses (claim 25): which difficulty row the original gives them, which
-  decides the entry of the disguise-detection list (part g) and the destroy-walls flag (part i).
-  Our engine uses the normal row. Scenario A15, parts c and g, avoid the question by setting every
-  row alike. Also open: whether the original ever makes these two houses choose a building for
-  their engineers (part c), and whether they are allied with each other (part e).
+- The neutral and special houses (claim 25): S-0412 claim 5 establishes that their difficulty index is 1, selecting the second entry of per-difficulty lists; no difficulty row is applied to them. Scenario A15, parts c and g, avoid needing to distinguish list entries by setting every entry alike. Still open: whether the original ever makes these two houses choose a building for their engineers (part c), and whether they are allied with each other (part e).
 
 
 ## Questions for the project lead

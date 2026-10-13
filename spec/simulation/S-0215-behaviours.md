@@ -2,13 +2,13 @@
 id: S-0215
 title: Behaviours (standing orders) and their processing
 topic: simulation
-revision: 14
+revision: 15
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-13
 measurements: []
-requests: [Q-0019, Q-0020, Q-0030]
+requests: [Q-0019, Q-0020, Q-0030, Q-0072]
 supersedes: []
 ---
 
@@ -23,11 +23,13 @@ behaviour, which resting behaviour it falls back to, and the per-behaviour prope
 rules data can set. It also gives what the general-purpose behaviours and a gate's *open* behaviour
 do at each processing, the approach step by which an attacking infantry unit or vehicle decides
 whether to keep, renew or take a destination towards its target (claim 37, answering the behaviour
-side of Q-0072; the approach position itself is S-0307's), the area-guard threshold's engine default (the guard stray distance has
+side of Q-0072; the approach position and failure outcomes are S-0307 claims 15 to 18), the area-guard threshold's engine default (the guard stray distance has
 none in the original, and our engine's replacement is a documented departure), and pointers to the topics
 that own the other behaviours (harvesting, structures, superweapons, team scripts).
 
 ## Terms
+
+This spec covers skirmish. Campaigns and network games are out of scope.
 
 Terms from the glossary are used as defined there, in particular *tick*, *game minute*, *house*,
 *human-controlled*, *lepton*, *cell*, *facing*, *foundation*, *object*, *infantry*, *vehicle*,
@@ -56,7 +58,11 @@ importer warning (claim 36 b). It answers request Q-0019 in its part on behaviou
 which behaviours make a vehicle refuse every scatter request, and that the paralysed property
 refuses only requests with a threat point (claims 17 and 19), with the vehicle's acceptance and
 destination left to S-0207 claim 16. It answers request Q-0030, where within a gate's own turn its
-door reaches rest, in claim 35 (d) and scenario B28 case g.
+door reaches rest, in claim 35 (d) and scenario B28 case g. Q-0072 is answered in part:
+claim 37 gives the approach triggers, destination retention and renewal, and the building and
+deployed-infantry exceptions. S-0307 claims 15 to 18 give covered searches and failure outcomes.
+S-0207 claim 19 gives driving, sailing and hovering outcomes after coming in range. Infantry
+stopping and exceptional searches remain open, so this is not a complete answer to the request.
 
 **Queueing wording.** Throughout this spec, "queues *b*" without further words means a queue
 request (claim 7) *without* an immediate start. A rule that asks for the readiness-dependent
@@ -1949,8 +1955,8 @@ apply in our engine to the actors of every player house.
       The can-recalculate property is described in words in the Import mapping. A kept
       destination ends the step for an actor that is not in the air (S-0307's airborne test):
       nothing else happens in this step, **also when the target is in range**. The approach step
-      never clears a destination because the target came in range; stopping is the movement
-      specs' (part h). An actor in the air that keeps its destination is treated by part f as if
+      never clears a destination because the target came in range; movement outcomes are
+      part i's pointers. An actor in the air that keeps its destination is treated by part f as if
       it had none. So a target that moves is followed by renewing the destination only at
       processings of the behaviour (part a), and only once it is more than the threshold away
       from the destination; the per-tick case of part a never renews a destination, because it
@@ -1960,9 +1966,9 @@ apply in our engine to the actors of every player house.
 
       | Situation | Outcome |
       |---|---|
-      | the target is in range, the actor is in the playfield (Terms), and the actor is not the deploy-to-fire vehicle of part f2 | the step ends with no destination |
+      | the target is in range, the actor is in the playfield (Terms), and the actor is not the deploy-to-fire vehicle of part f2 | destination unchanged: an absent one stays absent, and an airborne actor's held one stays held |
       | not the case above, and the actor is a vehicle with at least one approach destination (Terms) | it takes the first approach destination as its destination, that entry leaves the list, and the step ends |
-      | neither of the cases above | the actor searches for an approach position; the search, its result and what happens when it finds none are S-0307's (claim 15 and its open questions) |
+      | neither of the cases above | the actor searches for an approach position; the covered search results and failure outcomes are S-0307 claims 15 to 17, subject to that spec's open questions; the failure nearby-cell search is known to centre on the target only in claim 17's empty-radius case |
 
       (f2) **Deploy-to-fire vehicle.** A vehicle whose type deploys to fire (S-0301), standing on
       a cell where its deploy test fails (S-0301, the must-deploy answer), searches as in the
@@ -1976,21 +1982,36 @@ apply in our engine to the actors of every player house.
       towards a target out of range (claim 23, third infantry row, and the infantry deploy
       specs). **Original only:** a deployed infantry unit of a computer-controlled owner whose
       type fires when deployed undeploys when its target is out of range (our AI can order an
-      undeploy). A unit whose type cannot move has no movement zone that takes it anywhere; the
-      step may still give it a destination, which the movement specs then cannot follow (no
-      claim is made here about such data).
+      undeploy). Zero type speed is not an exclusion from the approach step. An otherwise
+      ordinary, non-deployed infantry unit or vehicle with zero type speed takes the same step
+      and can receive a destination from the same search. Zero speed does not mean that its
+      movement zone is absent or that its target is unreachable. The step alone supplies no
+      movement: actual displacement depends on the locomotor and the speed rules (S-0207,
+      S-0208). This is distinct from setting the can-approach property to no, which still permits
+      approach in *attack* (part d). A building, by contrast, never receives an approach
+      destination: a non-SAM building drops an out-of-range target and starts *guard*, and a
+      SAM building follows its aim-then-check stages (claim 32).
     - (h) **Special vehicle approaches.** Before the parts above, a vehicle may take its target
       object itself as destination instead, and then nothing else of the step happens: the
       crushing approaches of S-0210 claim 11 (its attack-target variant for the original's
       computer-controlled houses, which is the original's only, and its omni-crusher variant), and
       a balloon-hover type whose weapon chosen for the target has a vertical projectile (S-0307
-      owns the latter with the search). When an approaching actor stops once its target is in
-      range is not specified here: it belongs to the movement specs (S-0207, S-0208; Open
-      questions).
+      claim 18). Search failure can also give hunter-seeker types and vehicle-thief infantry the
+      target object as destination (S-0307 claim 17), but that is not an earlier replacement of
+      the step.
+    - (i) **Coming into range during movement.** The step does not require arrival before
+      firing, and coming into range does not itself remove a destination (part e). For driving,
+      sailing and hovering vehicles, S-0207 claim 19 owns the subsequent movement: driving
+      and sailing continue to their destination, while hovering discards stored steps at step
+      points and can wait for a path retry, without ending the approach for good. Firing during
+      that movement remains subject to the firing check (S-0301, S-0310). Infantry's stopping
+      transition remains an open question for S-0208; no immediate stop or destination clear
+      for infantry is implied here.
     - Backing: `measurable` (scenario B32: case a for the cadence and the in-range rule, case b
       for the kept destination and its renewal, case c for the can-approach property in
       *attack* and *area guard*, case c2 for *hunt* with a human-controlled owner, case d for
-      the per-tick rule with an unreachable target, case e for deployed infantry). These parts are `unmeasured`: the magnetic-beam case of part c (the beam's
+      the per-tick rule with an unreachable target, case e for deployed infantry, case f for zero-speed types; B16 case e for buildings).
+      Part i's vehicle outcomes have S-0207 claim 19's backing and confidence. These parts are `unmeasured`: the magnetic-beam case of part c (the beam's
       rules belong to the combat topic, which no spec states); the draining case of part d (the
       draining link belongs to the structures and combat topics); the *sticky* and *any other*
       rows of part d (an actor in those behaviours takes the step only by the per-tick case of
@@ -2000,8 +2021,7 @@ apply in our engine to the actors of every player house.
       (no setup here has an attacker outside the usable area in range of its target); part f2,
       whose cell test is S-0301's; the computer-controlled rows of parts d and g.
     - Confidence: high (parts a, b, c, d, e and the outcomes of part f); medium (the per-tick rule of
-      part a, the in-the-playfield mark, part f2, part g's deployed infantry); low (part g's
-      immobile types)
+      part a, the in-the-playfield mark, part f2, part g's deployed infantry and zero-speed types)
 
 ## Formulas
 
@@ -3585,7 +3605,12 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   attack processing tick and changes only on processing ticks; in the other two runs the attacker
   never gets a destination and does not move. Falsified by a destination set on a tick that is not
   a processing tick of *attack* (other than by the order itself), or by any destination in the
-  in-range runs.
+  in-range runs. Add a run with the enemy 3 cells away but a wall blocking the weapon's
+  line of fire: use a projectile subject to walls and a warhead that cannot damage walls, and
+  keep an open firing position available around the wall. Expected: an approach destination
+  appears at an attack processing even though geometric distance is within range (S-0307
+  claim 11 refuses the line of fire). Falsified by staying without a destination and target
+  loss in that run while an eligible firing position exists.
   (b) The target is an enemy vehicle under a scripted move order that drives it straight away from
   the attacker at a steady speed, starting 7 cells away. Expected: after the first destination,
   each new destination appears on the first attack processing tick at which the 3-D distance from
@@ -3624,6 +3649,14 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   order on an enemy 10 cells away. Expected: it neither moves nor gets a destination while
   deployed. Falsified by a destination or movement while its sequence is a deploy kind. A run in
   which the order does not leave *attack* current with the enemy as target is invalid.
+  (f) Repeat (a)'s distant-target run with each ordinary attacker type's speed set to zero in
+  the named test file, keeping its locomotion class and movement zone unchanged. Issue the same
+  attack order as in (a): zero type speed alone excludes neither *movable* nor *able to fire*
+  under S-0214's Terms. Expected: the first attack processing with a target
+  gives the same first destination as the positive-speed control, with no displacement for the
+  ordinary driving or walking locomotor. Falsified by exclusion from the step solely because
+  speed is zero, or a different destination with identical positions, tick and search conditions.
+  A run is void if the target is not assigned or *attack* is not current at the processing.
   Runs: three per case and attacker kind (vehicle, infantry; only infantry for e).
 
 ## Open questions
@@ -3681,11 +3714,14 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   search, no idle action). The two differ in the draws and the targeting-timer restart of that
   first processing; scenario B10 (g) checks only the guard spot afterwards.
 
-- **Q-0072, question 3 (stopping).** The approach step never clears a held destination because
-  the target came in range (claim 37 e), so an approaching actor stops by the movement rules. For
-  hover locomotion the original cuts the path at its next step once the target is in range; for
-  ground vehicles and infantry the rule that stops them is not traced, and a driving vehicle whose
-  movement ends with its target out of range drops the target. S-0207 and S-0208 own these.
+- **Q-0072, question 3 (infantry stopping).** The approach step never clears a held destination
+  because the target came in range (claim 37 e). S-0207 claim 19 resolves the driving, ship and
+  hovering locomotors; it does not support a target drop merely because a vehicle's move ends
+  out of range. The corresponding infantry stopping and destination outcome remain for S-0208.
+- **Q-0072, question 2 (exceptional searches).** S-0307 claims 15 to 18 cover open and
+  obstructed level ground, specified failures and balloon-hover destinations, not every search.
+  In particular the nearby-cell search centre after non-empty candidate failure is not yet
+  established; it must not be assumed to be the target's cell.
 - Which parts of the approach fill a vehicle's approach destinations (Terms; claim 37 f).
 - The in-the-playfield mark (Terms; claim 37 f): which objects other than ones arriving from
   outside the usable area lack it.

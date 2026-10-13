@@ -2,7 +2,7 @@
 id: S-0010
 title: Theater data, tilesets and the terrain values of a cell
 topic: formats
-revision: 11
+revision: 12
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -39,7 +39,8 @@ S-0101's (claim 5 and its formula F1). The *land
 type* rules of a cell (its *land recompute*, the *cliff-back setting*, the *own-land-type flag*) are
 S-0211's. *Visiting
 order*, *blank cell*, *no-tile marker* (65535), *unset base tile*, the *playable area* (claim 4)
-and the *terrain stream* are S-0009's. *Terrain smoothing* is S-0009's name for ground and ramp smoothing (claims 10 and 11); S-0009
+and the *terrain stream* are S-0009's. S-0012 claim 6 owns the terrain stream's byte encoding,
+including the tile number and sub-tile values in each cell record. *Terrain smoothing* is S-0009's name for ground and ramp smoothing (claims 10 and 11); S-0009
 defines it as part of every terrain recalculation, at map load (claim 12) and in play, and
 this spec owns its rules. The terms below are specific to this spec.
 
@@ -541,6 +542,9 @@ this spec owns its rules. The terms below are specific to this spec.
     (Terms) and one that holds a negative tile number. So for such a cell the picture it shows
     (claim 24) does not matter to the test. Other conditions of placement belong to S-0406
     claim 3's to-tile rule; what a to-tile building does once placed is not covered here.
+    The morphable flag also constrains where destruction smudges can be placed; S-0312 claim 26
+    owns that rule, its footprint test and its backing. This is a separate use of the flag, not
+    the to-tile placement test above.
     The original also uses the flag in its random map generator.
     - Backing, by part:
 

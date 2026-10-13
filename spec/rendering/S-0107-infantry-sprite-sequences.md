@@ -2,7 +2,7 @@
 id: S-0107
 title: Infantry sprite sequences
 topic: rendering
-revision: 6
+revision: 7
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -464,7 +464,8 @@ used by this spec only:
     object, not merely two objects in the same cell. The request is subject to claim 6:
     a missing *get-up* entry or a non-interruptible current sequence can refuse it. It is
     not saved for later, and neither starting to crawl nor entering a new cell retries it.
-    No fear threshold is tested by this destination rule.
+    No fear threshold is tested by this destination rule. Fear-driven get-up is separate:
+    it follows the fear table above, not the destination-equality condition.
 
     The name of the order does not decide this rule. The following table gives its application
     to the orders Q-0087 asks about. S-0213 owns how an applied order assigns destinations,

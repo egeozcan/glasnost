@@ -1,9 +1,9 @@
 ---
 id: Q-0051
 title: Order of an animated terrain object's body and shadow in the object pass
-status: open
+status: answered
 related: [S-0102]
-answered-by: []
+answered-by: [S-0102]
 ---
 
 ## Need

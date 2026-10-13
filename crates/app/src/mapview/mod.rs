@@ -12,5 +12,7 @@ mod live_tests;
 pub mod load;
 pub mod png;
 pub mod quirks;
+pub mod radar;
+pub mod sidebar;
 #[cfg(test)]
 mod tests;

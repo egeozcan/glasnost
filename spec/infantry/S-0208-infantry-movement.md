@@ -2,13 +2,13 @@
 id: S-0208
 title: Infantry movement (standing positions, walking step and speed, crawling, scatter destinations)
 topic: infantry
-revision: 13
+revision: 14
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-10
+approved-on: 2026-10-13
 measurements: []
-requests: [Q-0017]
+requests: [Q-0017, Q-0072]
 supersedes: []
 ---
 
@@ -17,8 +17,9 @@ supersedes: []
 ## Summary
 
 This spec covers where inside a cell an infantry unit stands and walks to, how far and how fast it
-walks per tick (crawling included), when it accepts a scatter request and where it then goes, and
-which scatter requests damage sends it.
+walks per tick (crawling included), when a walk ends and the unit loses its destination (also for
+an infantry unit that approaches its target: the infantry part of Q-0072, question 3), when it
+accepts a scatter request and where it then goes, and which scatter requests damage sends it.
 
 ### Scope and cited specs
 
@@ -27,6 +28,12 @@ panic, belong to S-0107 (claims 7, 10, 15 and 16). How many infantry a cell hold
 walker does and every entry outcome of a cell belong to S-0209, which owns occupancy outcomes (a
 decision under the delegated sign-off, 2026-10-10): where this spec names such an outcome, it
 points to S-0209 and S-0209 decides. This spec owns the infantry scatter from damage (claims 11 and 15).
+For an infantry unit that approaches its target, S-0215 claim 37 owns when the approach step runs
+and whether it keeps, renews or takes a destination, S-0307 owns the approach position and the
+outcomes of a failed search, and S-0310 claim 8 owns the firing check's *moving* answer. This spec
+owns only when such a walker stops and loses its destination (claims 16 and 17). Infantry of a
+jumpjet type move by the jumpjet locomotor, which belongs to other movement specs; claims 16 and
+17 do not cover them.
 
 Every spec cited here is approved, and the claim, formula, table and scenario numbers cited are
 those of the approved revisions in the spec index: S-0003 (INI value forms), S-0006 (rules
@@ -36,7 +43,9 @@ sequences, revision 4, which drops its damage-scatter passages and points here),
 speed and tick rate), S-0202 (the random streams), S-0204 (coordinates, distance and facing),
 S-0205 (number domains), S-0207 (ground vehicle movement), S-0209 (cell occupancy and crowding),
 S-0210 (crushing), S-0211 (land types and passability), S-0212 (pathfinding), S-0215 (behaviours)
-and S-0311 (veterancy).
+and S-0311 (veterancy), and for claims 16 and 17 S-0307 (weapon range test), S-0308 (weapon
+choice) and S-0310 (turrets and facing for fire, for the firing check's answers and the infantry
+speed fraction).
 
 ## Terms
 
@@ -129,12 +138,18 @@ used by this spec:
   current destination (a cell or object it moves to). Either may be absent.
 - **Locomotor moving.** "Its locomotor is moving" means that the unit *has movement in progress* in
   the sense of S-0107 Terms. It does not mean S-0107's narrower *is moving now*.
-- **Locomotor destination.** The point the unit's locomotor is currently taking it to. While a unit
-  walks under a move it is the position of its destination; a unit with no movement in progress has
-  none. For a unit travelling through a tunnel (S-0212 Terms: the map-defined passage from a
-  tunnel entrance to a tunnel exit, not the land type *tunnel* of S-0211), the tunnel's exit cell
-  counts as its locomotor destination here (Open questions). It differs from the *destination* above: claim 15 tests the destination, the scatter
-  centre cell uses the locomotor destination.
+- **Locomotor destination.** The point the unit's locomotor is currently taking it to as the end of
+  its walk: while a unit walks under a move, the point that its destination gives (for a cell
+  destination, a point in that cell). A unit with no movement in progress has none. It differs from the
+  *destination* above, which is the cell or object the unit's orders and behaviour give it. Claim
+  16 tests the locomotor destination, not the destination. It is not the walking target (Terms below), which is only the next standing
+  position on the way.
+- **Scatter reference point.** The point that the scatter centre cell is taken from: the unit's
+  walking target (Terms below) while it has one, and otherwise its own position. For a unit
+  travelling through a tunnel (S-0212 Terms: the map-defined passage from a tunnel entrance to a
+  tunnel exit, not the land type *tunnel* of S-0211), the tunnel's exit cell centre counts as its
+  scatter reference point here (Open questions). Claim 15 tests the destination; the scatter
+  centre cell uses the scatter reference point.
 - **Tick number.** As defined in S-0201 (Terms and claim 1): the number of ticks the game has
   completed, read during the tick in question.
 - **Player-scatter rule.** A game-wide imported yes/no rule (Import mapping) that lets units of
@@ -154,8 +169,11 @@ used by this spec:
   building), and S-0209 and S-0210 the requests of crowding and crushing, each with its options. The flee rule, the idle scatters and the scatter
   off a building send forced requests without a threat point that are not move-anywhere.
 - **Scatter centre cell.** The cell around which a scattering unit looks for a destination (claims 12
-  and 13): the cell of its locomotor destination, when it has one, and otherwise the unit's own
-  cell.
+  and 13): the cell of its scatter reference point. So it is the cell of the standing position a
+  walker is heading for at that moment (the next cell of its path, or its own cell when it walks
+  to another position in the cell it is in), and the unit's own cell when it has no walking target:
+  when it stands still, and also on a walker's arrival tick and asking tick (claim 6). It is never
+  the cell of a farther destination.
 - **Screen-cover check.** A test of a candidate cell *C* at its own height level ℓ (claim 12). *C*ᵢ is the
   cell *i* cells from *C* towards the bottom of the screen along the cell diagonal (*C* moved by +*i*
   cells along both map axes), and its *effective level* *e*(*C*ᵢ), in height levels, is its height
@@ -489,7 +507,7 @@ used by this spec:
         other rules can change during play, and not every rule that changes them is known (S-0009
         claim 44), so a measured value could not tell this rule apart from such an
         earlier change. Our engine reads the blank cell of that claim.
-      - the tunnel exit as scatter centre cell (Terms *locomotor destination*): whether a unit in
+      - the tunnel exit as scatter centre cell (Terms *scatter reference point*): whether a unit in
         a tunnel can be sent a scatter request at all belongs to S-0212 and the movement specs,
         which do not say (Open questions)
     - Confidence: high for the direction rounding, the draw and the preference order; medium for the
@@ -512,7 +530,7 @@ used by this spec:
 
     Consequences, from S-0212 claim 25 and S-0209 claim 1: the search does not give the cell the
     unit stands in while the unit's own standing position is marked there, but it can give the
-    scatter centre cell itself when that is the empty locomotor destination of a walking unit. The
+    scatter centre cell itself when that is a walker's next cell and its record is empty. The
     unit's own position is marked except in the case of Edge cases (the top position recorded as the
     centre): a unit left at the top or the centre position after its cell-mate at the other of these
     two positions has gone is not marked, and what the search then gives for its own cell is
@@ -610,12 +628,13 @@ used by this spec:
     sequence is not one of the deploy kinds. When a hit sends both requests and both are accepted,
     two draws are taken on the tick of the hit. The first draw is request A's and the second is
     request B's. When request B finds a destination, the unit heads for it at the end of that tick:
-    claim 12 gives it from the second draw, around a scatter centre cell left open below. Whenever
+    claim 12 gives it from the second draw, around the unit's own cell. Whenever
     request B finds a destination, it replaces request A's, so request A's draw shows nothing at the
     end of the tick; on open ground it does not even decide request A's own destination, which
-    claim 13 takes from the search (scenarios W7, part j, and W9, part c). Which scatter centre cell
-    request B uses then (the unit's own cell, or the destination that request A has just given it)
-    was not determined (Open questions). Consequences with the player-scatter rule off (its
+    claim 13 takes from the search (scenarios W7, part j, and W9, part c). Request B's scatter
+    centre cell is the unit's own cell: request A gives the unit a destination but no walking
+    target, which the unit chooses only at its next walking step (claim 6), so its scatter reference
+    point (Terms) is still its own position. Consequences with the player-scatter rule off (its
     absent-key default, Import mapping) and without the scatter veterancy ability:
     - An infantry unit of a human-controlled house (in our engine, also of an AI house) that is not
       a fraidycat never scatters because of damage (it may still move to retaliate, S-0215 claim
@@ -638,9 +657,73 @@ used by this spec:
       for the outcome when both requests are accepted). `unmeasured` for the tether-link condition
       of the second case: no situation is known in which an infantry unit holds a tether link
       (Terms, Open questions), so no setup can show its effect
-    - Confidence: medium for the two cases of request A and for request B; low for the situations
-      that set the tether link (Terms, Open questions) and for the scatter centre cell of request B
-      when both requests are accepted
+    - Confidence: medium for the two cases of request A, for request B and for the scatter centre
+      cell of request B when both requests are accepted; low for the situations that set the tether
+      link (Terms, Open questions)
+
+### End of a walk and the approaching walker
+
+16. **When a walk ends.** On each arrival tick (claim 6), after the walker has been placed on its
+    walking target, the walk ends when either of these holds:
+    - the unit has no locomotor destination (Terms), for example because claim 17 or another rule
+      cleared its destination on this tick or earlier, or
+    - the walker's new position is in the same cell as its locomotor destination, and the two heights
+      differ by less than two height levels (|Δ*z*| < 208 leptons, strict).
+
+    The test is made only for a unit that is alive, on the map and not falling. When the walk ends,
+    the unit loses its destination, its speed fraction (S-0310 Terms *infantry speed fraction*)
+    becomes 0 and it stands at the standing position it arrived on, with no movement in progress
+    from then on (Terms *locomotor moving*). Otherwise the walk continues by claim 6. This claim
+    never ends a walk between two arrival ticks; a rule that stops the unit there (claim 17's
+    exception) does so itself.
+    - Backing: `measurable` (scenario W10, parts a and d)
+    - Confidence: high that the walk ends on the arrival tick in the destination cell; medium for the
+      height condition, which matters only where the locomotor destination and the arrived position
+      differ in height in one cell (a bridge deck over its ground cell, Edge cases)
+
+17. **An approaching walker stops when its target comes into range.** On each arrival tick, before
+    claim 16's test, an infantry unit loses its destination when all of these hold:
+    - its target (Terms) is a mobile actor: an infantry unit, vehicle or aircraft. A building, a
+      cell, an overlay or a terrain object never triggers this stop.
+    - its current behaviour (S-0215), or, when it has none, its queued behaviour, is *attack*, *area
+      guard*, *hunt* or *rescue* (*rescue* is the team behaviour, out of scope here; it is listed
+      only so that the rule is complete).
+    - the target is in range. For a type that is not open-topped, this is the weapon range test of
+      S-0307 for the weapon that S-0308 selects against the target, with the source point of S-0307
+      claim 8, run as if the target were the cell that holds it: the measured point is that cell's
+      centre (S-0307 claim 7 for a cell), not the target's own reference point. For an open-topped
+      type it is instead a three-dimensional test: the approximate distance (F8) from the target's
+      reference point to the actor's, truncated to an integer, strictly less than the actor's
+      weapon range ρ of S-0307 claim 13.
+
+    The unit loses only its destination: its target is kept. Claim 16 then finds no locomotor
+    destination, so the walk ends on this same arrival tick, at the standing position just reached.
+    Consequences:
+    - A walker stops only at standing positions, never in the middle of a step. A target that comes
+      into range while the walker is between two standing positions is noticed on the next arrival
+      tick. Until then the walker walks on, and its firing check answers *moving* (S-0310 claim 8),
+      so it does not fire while walking.
+    - A walker approaching a building, a cell or another non-mobile target gets no early stop: it
+      walks on to the approach cell that S-0307 gave it (claim 15 there), keeping its destination
+      (S-0215 claim 37), and stops there by claim 16.
+    - Under any other behaviour (*move*, *attack move*, *guard*, *capture*, *enter* and the others)
+      there is no early stop either: the walker continues to its destination.
+    - Because the measured point is the target cell's centre, a target standing near
+      its cell's edge can be found out of range by this test while S-0215 claim 37's own range test,
+      which measures to the target's own reference point, finds it in range, and the reverse. The two disagree only
+      within half a cell of the range boundary (Edge cases).
+
+    **Exception: the target is the destination.** When the unit's destination is its target object
+    itself (the object destinations of S-0307 claim 17: a hunter-seeker, or a vehicle thief), and
+    its firing check (S-0310) answers *fire*, the unit loses its destination and any movement still
+    in progress ends on the tick on which it starts its firing sequence. By S-0310 claim 8 the check
+    answers *moving* while the speed fraction is above 0.1, so this happens only to a walker that is
+    already standing (for example blocked, S-0209), never in the middle of a step.
+    - Backing: `measurable` (scenario W10, parts a, b, b2 and b3 for the rule; part c checks
+      only the exception's end state)
+    - Confidence: medium for the rule and its four behaviours; medium for the measured point being
+      the target cell's centre; low for the exception, which was found by reading and not traced
+      through a whole approach (Open questions)
 
 ## Formulas
 
@@ -751,6 +834,7 @@ positions are never taken, as claim 3 says).
 | Screen-cover threshold for the cell *i* cells away | 2*i* − 1 | height levels above *C* | Terms, *screen-cover check* |
 | Screen-cover high-bridge raise | 4 | height levels | Terms, *screen-cover check* (applied whenever *C*ᵢ is a high-bridge cell) |
 | Level of a cell outside the map, for the screen-cover check | 0 | height level | Terms, *screen-cover check* |
+| Height tolerance for the end of a walk | 2 height levels (208 leptons, strict) | leptons | claim 16 |
 
 ## State and ordering
 
@@ -763,6 +847,10 @@ positions are never taken, as claim 3 says).
 | Any | scatter request refused (claim 11) | no draw and no new destination; a unit whose current sequence is a deploy kind, sent a forced, move-anywhere request, has still been sent a request for *undeploy* (claim 11) |
 | Any | scatter request accepted, destination found | moves to that cell as under a move order |
 | Any | scatter request accepted, no destination found | does not move; the draw has been taken |
+| Walking, arrival tick | target is a mobile actor in range at its cell centre, behaviour attack, area guard, hunt or rescue (claim 17) | loses its destination, keeps its target; the walk ends on this tick (claim 16) |
+| Walking, arrival tick | no locomotor destination, or arrived in the locomotor destination's cell within two height levels (claim 16) | walk ends: no destination, speed fraction 0, stands at the position reached |
+| Walking, arrival tick | neither of the above | continues; asks for its next walking target on the next tick (claim 6) |
+| Walking, destination is its target object | firing check answers *fire* (claim 17, exception) | loses its destination and stops as its firing sequence starts |
 
 Ordering stated as consequences (the draw counts and order are checked with the read-only recorder
 of the random stream, scenario W9): the random draw of claim 3 happens on the tick on which the walker
@@ -773,8 +861,12 @@ claim 11 takes no draw, while an accepted request takes its one draw even when n
 then found. When one hit sends both damage requests of claim 15, both arrive on the tick of the hit.
 When both are accepted, two draws are taken, the first by request A and the second by request B.
 When request B finds a destination, the unit heads for it at the end of the tick: claim 12 gives it
-from the second draw (around either of the scatter centre cells that claim 15 leaves open), and it
+from the second draw (around the unit's own cell, claim 15), and it
 replaces request A's destination (scenarios W7, part j, and W9, part c).
+On an arrival tick, claim 17's in-range stop is decided before claim 16's end-of-walk test, both
+after the walker has been placed on its walking target, so a walker that comes into range at a
+standing position stops on that same tick and does not ask for a next walking target (scenario
+W10).
 
 ## Edge cases and quirks
 
@@ -867,11 +959,23 @@ replaces request A's destination (scenarios W7, part j, and W9, part c).
   that switch off (round to nearest), the drift disappears.
 - **Rounding mode.** Every floating-point operation and truncation above follows the
   round-toward-zero mode of S-0205, switch `quirks.chop_rounding`.
-- **Scatter around the destination.** A walking unit that accepts a scatter request looks for its
-  new destination around its locomotor destination (the scatter centre cell), not around the cell it
-  is in (claims 12 and 13), while the direction away from a threat point is still taken from the
-  unit's own position. It is listed here because it is easy to miss; it is ordinary behaviour of the
-  original, not a defect, and has no switch.
+- **Scatter around the next cell.** A walking unit that accepts a scatter request looks for its
+  new destination around the cell of its walking target (the scatter centre cell), which is
+  usually the next cell of its path, not around the cell it is in and not around its farther
+  destination (claims 12 and 13), while the direction away from a threat point is still taken from
+  the unit's own position. On its arrival tick and its asking tick it has no walking target, so it
+  looks around its own cell. It is listed here because it is easy to miss; it is ordinary behaviour
+  of the original, not a defect, and has no switch.
+- **The in-range stop tests the target's cell centre** (claim 17). The approaching walker's stop
+  measures range to the centre of the target's cell at that cell's terrain height, not to the
+  target itself, while S-0215 claim 37 and the firing check measure to the target's own reference
+  point (S-0307 claim 7). Near the range
+  boundary the walker can therefore walk one standing position further than needed, or stop one
+  standing position short and then be moved again by S-0215 claim 37. It is the original's
+  behaviour, not a defect we fix, and has no switch; a variant measuring to the target's own
+  position would differ only within half a cell of the boundary (scenario W10, part b2).
+- **No early stop against non-mobile targets** (claim 17). A walker approaching a building or a
+  cell always walks to its approach cell, even when it came into range earlier. It has no switch.
 
 ## Import mapping
 
@@ -1101,7 +1205,11 @@ cases).**
   file) turns it off. Where a part needs a behaviour with the scatter property and stock data does not
   give it, a named test file gives it. In parts c, g, h1, h4 to h7, i and j the unit that scatters stands on
   open flat ground with no other unit within 2 cells, so its search collects exactly its eight
-  neighbours (claim 13). The recorder reads the tick number (Terms) of every tick.
+  neighbours (claim 13). The recorder reads the tick number (Terms) of every tick. For a unit that
+  walks when a request reaches it, *Z* is its scatter centre cell on the tick of the request: the
+  cell of the standing position it is walking to (the next cell of its run), or its own cell when
+  the request falls on its arrival tick or asking tick (claim 6). The recorder reads it from the
+  walker's position and walking target on that tick.
   - (a) Four infantry units on open ground: an idle soldier of the human player standing in the path
     of an enemy crusher driving towards it (a forced request, S-0210); a soldier of the human player
     walking across the crusher's path at the moment it approaches (these two in a separate game, in
@@ -1135,10 +1243,12 @@ cases).**
     *G* through the gap. *G* gives it the outcome *stationary friendly* (S-0209 claim 4), and since its
     destination is farther than the close-enough distance (S-0209 Terms) it sends every occupant of
     *G* a forced, move-anywhere request without a threat point (S-0209 claim 8).
-  - (f) As (b), but on uneven ground around *D*: the map raises some cells near *D* so that, for at
+  - (f) As (b), but on uneven ground around *Z*₀, the cell of the run 3 cells before *D* (the
+    walker's next cell when it is hit 4 cells from *D*); only runs whose *Z* is *Z*₀ count. The map
+    raises some cells near *Z*₀ so that, for at
     least one of the five draws, the first qualifying candidate fails the screen-cover check. For
-    example, the cell map south of *D* stands at least one height level above the cell map west of
-    *D*, which makes the west candidate fail (the cell one step towards the bottom of the screen
+    example, the cell map south of *Z*₀ stands at least one height level above the cell map west of
+    *Z*₀, which makes the west candidate fail (the cell one step towards the bottom of the screen
     from it is that raised cell). The recorder reads every cell's height level and passability from
     the test map.
   - (g) An idle soldier of the human player, not a fraidycat, on open flat ground, in a behaviour in
@@ -1173,7 +1283,7 @@ cases).**
     a behaviour with the scatter property, on open flat ground with no other unit within 3 cells:
     (i1) one owned by the computer player, (i2) one owned by the human player. Each takes one hit
     from that source that it survives; record from the tick of its first hit.
-  - (j) Both damage requests at once (claim 15, Open questions). An idle computer-owned fraidycat
+  - (j) Both damage requests at once (claim 15). An idle computer-owned fraidycat
     civilian standing in *guard* on open flat ground, with no other unit within 3 cells. A named
     test file gives *guard* the scatter property and removes its retaliate property, so that the
     unit may not retaliate (Terms) and the hit sends it request A by its second case as well as
@@ -1263,11 +1373,12 @@ cases).**
     and outside it by the height-aware test, while its map north-east and map south-west
     neighbours, on its own screen row, are inside it by both. The recorder reads the local area
     from the test map. A computer-owned fraidycat civilian of an unarmed type, whose move
-    behaviour has the scatter property, walks map north-east along the screen row of *D* under a
-    map trigger's move to *D*. When it is 3 cells from *D* it is hit once by a long-range weapon
-    fired from a unit due map south-east of it (on its cell diagonal towards the bottom of the
-    screen). Its locomotor is moving, so the hit sends it request B only (claim 15), and its
-    scatter centre cell is *D*. *d*₀ is map north-west (direction 7), so the first choice *d* is
+    behaviour has the scatter property, walks map north-east along the screen row of *D*, through
+    *D*, under a map trigger's move to the cell 3 cells beyond *D* on that row. It is hit once by a
+    long-range weapon fired from a unit due map south-east of it (on its cell diagonal towards the
+    bottom of the screen), on a tick on which it walks towards a standing position in *D*; runs in
+    which the hit falls on another tick do not count. Its locomotor is moving, so the hit sends it
+    request B only (claim 15), and its scatter centre cell *Z* is *D*. *d*₀ is map north-west (direction 7), so the first choice *d* is
     5, 6, 7, 0 or 1 for the draws 0 to 4.
   - (q) Scatter permission of a fraidycat whose owner is human-controlled (claim 11). A fraidycat
     civilian of an unarmed type, owned by the human player, at the lowest veterancy rank unless a
@@ -1296,10 +1407,10 @@ cases).**
     passes within 2 cells of *D* do not count.
 - *Procedure:* observe whether each unit moves away, and to which cell.
 - *Observable:* moved or not, and the tick on which its new destination was set. In (b) and (f), the
-  cell of its new destination, given as a step direction from *D* in (b). In (c), (g), (h) and (i),
+  cell of its new destination, given as a step direction from *Z* in (b), and *Z* itself. In (c), (g), (h) and (i),
   the first cell it moves to, as a step direction from its own cell, together with the residue of
   the tick number mod 8 on the tick its destination was set. In (d), whether the cell it moves to
-  is a neighbour of *D* or of the cell it was in when hit. In (e), whether it undeploys and leaves
+  is a neighbour of *Z*, of *D* or of the cell it was in when hit. In (e), whether it undeploys and leaves
   *G*. In (j), the destination it holds at the end of the tick of the hit (the first cell it walks
   to), as a cell relative to its own cell, and the residue of the tick number mod 8 on that tick.
   In (k), the first cell the civilian moves to, as a step direction from its cell, and the residue
@@ -1308,8 +1419,8 @@ cases).**
   it has a destination, and, from W9, whether a draw was taken on the tick of the request. In (p),
   the cell of its new destination, as a step direction from *D*. In (q), whether its destination
   changes on the tick of the hit and, if it does, the new destination as a step direction from
-  *D*. In (r), the cell of the new destination set on the tick of the crusher's request, and its
-  distance in cells from *D* and from the civilian's own cell. A move towards the attacker by a
+  *Z*. In (r), *Z*, and the cell of the new destination set on the tick of the crusher's request,
+  with its distance in cells from *D* and from *Z*. A move towards the attacker by a
   unit of an armed type counts as an attack, not a scatter; for a unit of an unarmed type every
   move counts as a scatter.
 - *Runs:* (a) 1 each. (b) and (f) until 100 runs have counted (see Expected). (c) 20. (d) the runs of
@@ -1325,14 +1436,16 @@ cases).**
     moves on the tick of the hit.
   - (b) The flee rule of S-0107 claim 15 can redirect a fraidycat later, so only runs whose
     destination changes on the tick of the hit count. In the counted runs the new destination is a
-    neighbour of *D* in the relative directions −2 … +2 around map west only, each in 8 to 32 of the
+    neighbour of *Z* in the relative directions −2 … +2 around map west only, each in 8 to 32 of the
     100 counted runs (about three standard deviations around 20), and never in the three directions
     pointing back towards the threat.
   - (c) the hit does not move the unit. Its first move goes to a neighbour of its own cell, never
     staying in its own cell, and runs whose request ticks have the same residue mod 8 move to the
     same neighbour, whatever the draw (claim 13: the neighbour at position (*N* mod 8) of the
     search's collection order).
-  - (d) in every run the cell it moves to is a neighbour of *D*.
+  - (d) in every run the cell it moves to is a neighbour of *Z*: of the next cell of its run when
+    the hit falls on a tick on which it walks, of its own cell when the hit falls on its arrival
+    or asking tick, and never a neighbour of *D* that is not also a neighbour of *Z*.
   - (e) the deployed unit starts undeploying on the tick the request arrives (S-0107 claim 6 row 6,
     since *deployed* is interruptible; the undeploy table of claim 11), and later leaves *G*.
   - (f) in every counted run the new destination is the cell that claim 12 gives, from the recorded
@@ -1356,14 +1469,13 @@ cases).**
     computer-controlled owner does: a unit treated as human-controlled would be sent no request A
     (the player-scatter rule is off) and would refuse request B (no scatter permission), so it
     would not move on that tick. Let *A* be the neighbour of its cell that the residue
-    gives (the destination of request A). Request B ends as its destination (claim 15), and claim 15
-    leaves open around which cell B looks. Two outcome sets are predicted, each the set of
-    destinations that claim 12 gives for the five draws 0 to 4, with the threat due map east (so
-    *d*₀ is map west): *H*₁ with the unit's own cell as scatter centre cell, and *H*₂ with *A* as
-    scatter centre cell. On open ground these are the neighbours of the own cell, respectively of
-    *A*, in the relative directions −2 … +2 around map west, unless the first candidate is not
-    enterable. In every run the destination lies in *H*₁ or *H*₂. Runs in which it lies in
-    only one of them decide the open question: all such runs are expected to agree on one set.
+    gives (the destination of request A). Request B ends as its destination, and B looks around
+    the unit's own cell (claim 15). Two sets are named, each the set of destinations that claim 12
+    gives for the five draws 0 to 4, with the threat due map east (so *d*₀ is map west): *H*₁ with
+    the unit's own cell as scatter centre cell, and *H*₂ with *A* as scatter centre cell. On open
+    ground these are the neighbours of the own cell, respectively of *A*, in the relative
+    directions −2 … +2 around map west, unless the first candidate is not enterable. In every run
+    the destination lies in *H*₁.
   - (k) the civilian moves, and its first cell is the neighbour of its cell in step direction
     (1 + *j* − 2) mod 8 for a draw *j* from 0 to 4: the facing from its cell's centre to the right
     position rounds to direction 1 (F6), so the directions are 7, 0, 1, 2 and 3, each with
@@ -1397,15 +1509,16 @@ cases).**
     plain test would let the map west, map north-west or map north neighbour qualify first.
   - (q) in (q1) the destination never changes on the tick of the hit (claim 11 refuses request B:
     no scatter permission). In (q2) and (q3) it changes on the tick of the hit in every run, to a
-    neighbour of *D* in the relative directions −2 … +2 around map west, as in (b), never in the
+    neighbour of *Z* in the relative directions −2 … +2 around map west, as in (b), never in the
     three directions pointing back towards the threat.
-  - (r) in every counted run the new destination is a neighbour of *D* (the search around the
-    scatter centre cell *D*, claim 13), set on the tick of the crusher's request, and not a cell
-    next to the civilian's own cell.
+  - (r) in every counted run the new destination is a neighbour of *Z* (the search around the
+    scatter centre cell *Z*, claim 13), so within 2 cells of the civilian, set on the tick of the
+    crusher's request, and not a neighbour of *D*, which lies at least 3 cells from the civilian.
 - *Falsified if:* (a) a different move-or-stay pattern. (b) a direction pointing towards the threat,
   or a count outside 8 to 32. (c) the hit itself moves the unit, two first moves with the same
   residue mod 8 end in different cells, or it stays although free cells are next to it. (d) it
-  moves to a neighbour of the cell it was in that is not a neighbour of its destination. (e) it
+  moves to a cell that is not a neighbour of *Z* (a neighbour of *D* far from *Z* would mean the
+  centre is the farther destination, as revision 13 of this spec said). (e) it
   stays deployed, or undeploys but never leaves *G* although cells next to the gap are free. (f) any counted destination differs from every predicted one; a candidate that fails
   the check is chosen while a later qualifying candidate passes; or a count falls outside its band
   (in particular, if the west candidate is chosen at the rate flat ground would give). (g) in (g1) or
@@ -1417,9 +1530,10 @@ cases).**
   the source fails (pick another source); (i1) stays while free cells are next to it, or two runs
   with the same residue end in different cells; (i2) moves. A scatter of (h3), or (i1) staying,
   would contradict this spec's claim 15 and S-0107's revised scenario M15(b), and so would the hit
-  itself moving the unit in (c). (j) in any variant the unit does not move on the tick of the hit, a destination lies in neither *H*₁ nor *H*₂ (for example *A* itself when *A*
-  is in neither set, which would mean request B was refused or was judged before request A), or the
-  deciding runs split between the two sets. (k) the civilian never moves while the neighbours are
+  itself moving the unit in (c). (j) in any variant the unit does not move on the tick of the hit,
+  or a destination lies outside *H*₁: in *H*₂ only (request B would then look around request A's
+  destination), or in neither set (for example *A* itself when *A* is in neither, which would mean
+  request B was refused or was judged before request A). (k) the civilian never moves while the neighbours are
   enterable (no fallback), it moves in direction 4, 5 or 6, a count falls outside its band, or every
   pair of runs with the same residue mod 8 ends in the same direction while the directions follow
   the residue (which would mean a search result and not the draw). (l) the destination is *K*₂ in
@@ -1436,9 +1550,9 @@ cases).**
   or map north neighbour of *D* (which the plain form of the usable-area test would give), or a
   count falls outside its band. (q) in (q1) the destination changes on the tick of the hit in any
   run; in (q2) or (q3) a run keeps its destination on the tick of the hit, or a new destination
-  points towards the threat. (r) a counted new destination lies next to the civilian's own cell
-  and not next to *D* (the scatter centre cell would then be the unit's own cell), or the
-  destination does not change on the tick of the request although the neighbours of *D* are free.
+  points towards the threat. (r) a counted new destination is a neighbour of *D* (the scatter
+  centre cell would then be the farther destination), or is not a neighbour of *Z*, or the
+  destination does not change on the tick of the request although the neighbours of *Z* are free.
 
 **Scenario W8: sideways drift on the map axes, and very slow and very fast walkers (claims 6 and
 14, Edge cases).**
@@ -1564,8 +1678,7 @@ cases).**
     tick of the request the walking soldier refuses.
   - (c) two draws over 0 to 4 on the tick of the hit, besides the hit's own draws. The destination
     held at the end of that tick is the one that claim 12 gives for the value of the second of
-    them (request B), around the unit's own cell or around *A*, the outcome sets *H*₁ and *H*₂ of
-    W7 part (j). Request A takes the first of them, which does not decide its destination here:
+    them (request B), around the unit's own cell: the outcome set *H*₁ of W7 part (j). Request A takes the first of them, which does not decide its destination here:
     claim 13 takes that from the search, which finds a cell on this open ground.
   - (d) two draws over 0 to 4 on the tick of the hit, besides the hit's own draws, and the
     civilian takes no new destination and does not move on that tick.
@@ -1575,10 +1688,64 @@ cases).**
 - *Falsified if:* (a) a draw on another tick, or two on one asking tick. (b) no draw or two
   draws for the accepted request, or a draw for the refused one. (c) one or
   three draws besides the hit's own draws, or a final destination that matches what claim 12
-  gives for the value of the first of the two draws, around either cell, but not for the value
-  of the second. (d) fewer than two draws besides the hit's own draws (which would mean that a
+  gives for the value of the first of the two draws, around the unit's own cell, but not for the
+  value of the second, or a destination outside *H*₁. (d) fewer than two draws besides the hit's own draws (which would mean that a
   request that finds no destination takes no draw), or the civilian moves on the tick of the hit. (e) two draws besides the hit's own draws (which would
   mean that request A was sent to a walking unit and accepted), or none.
+
+**Scenario W10: end of a walk and the approaching walker's stop (claims 16, 17).**
+- *Setup:* a tiny flat map at level 0, clear terrain, game speed index 2. A named test file (a loose
+  copy of the rules file, removed after the runs) gives one ordinary ground infantry type of the
+  human player a weapon with range 5 cells, zero minimum range and no close-range, elevation,
+  cliff or wall property, as S-0307 scenario RG10 does; the type is not open-topped. The recorder
+  reads, at the end of every tick, the tick number, the attacker's world position, walking target,
+  target, destination (its kind, cell or object, and whether it is empty) and infantry speed
+  fraction (S-0310 Terms), and the tick on which each of its firing sequences starts. Every arrival
+  tick (claim 6) is read from the walker's position and walking target. For each arrival tick, the
+  recorder also evaluates S-0307's range test with the attacker's reference point of S-0307 claim 8
+  and, as target point, the centre of the target's cell at that cell's terrain height: the result
+  is called *in range at the cell centre*. The attacker starts ten cells along a map axis from the
+  target, on a straight run of clear cells.
+  - (a) The target is an unarmed enemy building of a one-cell foundation.
+  - (b) The target is an idle unarmed enemy infantry unit standing at its cell's centre position.
+    (b2) As (b), but the target stands at a side position (claim 1) on the attacker's side of its
+    cell, and the start distance is adjusted so that, on one arrival tick of the approach, the
+    target's own position is within range while its cell centre is not.
+    (b3) As (b), with a move order to the cell next to the target instead of an attack order.
+  - (c) The failed search of S-0307 scenario RG12: the infantry type's weapon range is 1 cell,
+    the named test file also gives the type the hunter-seeker property, and the target is an
+    unarmed enemy vehicle, so that the destination becomes the target object. This part does not
+    separate the exception from the main rule, which can clear the destination first on an arrival
+    tick in range (Open questions); it checks only the state once firing has begun.
+  - (d) No target: a move order to an empty cell eight cells away.
+- *Procedure:* (a) to (c): issue an attack order on the target; (b3) and (d): the move order. Record
+  until the attacker has stood still for 30 ticks. One run per part, repeated on four map axes.
+- *Observable:* the tick and the standing position at which the walk ends (the first tick after
+  which the position stays the same), whether the destination is empty from that tick on, the speed
+  fraction on that tick, the in-range result of every arrival tick, and the first tick of a firing
+  sequence.
+- *Expected:*
+  - (a) the walk ends on the arrival tick in the approach cell that S-0307 gave as destination (as
+    recorded), with the destination empty from that tick on; no firing sequence starts before that
+    arrival tick, whatever the in-range result of earlier arrival ticks.
+  - (b) the walk ends on the first arrival tick that is in range at the cell centre, which comes
+    before the walker reaches its recorded destination cell; the destination is empty from that
+    tick on, the target is kept, the speed fraction is 0, and no firing sequence starts before it.
+    (b2) the walker does not stop on the arrival tick on which only the target's own position is in
+    range; it stops on the first one that is in range at the cell centre. (b3) the walker walks on
+    to the cell it was ordered to.
+  - (c) the destination is the target object until the walker stops; from the tick on which its
+    first firing sequence starts, its destination is empty and it does not move.
+  - (d) the walk ends on the arrival tick on the standing position in the ordered cell: destination
+    empty and speed fraction 0 from that tick on.
+- *Falsified if:* (a) the walker stops before the recorded approach cell, or fires before arriving
+  there. (b) the walker walks on past an arrival tick that is in range at the cell centre, stops on
+  an arrival tick that is not, stops between two arrival ticks, loses its target, or fires while
+  walking. (b2) it stops on the arrival tick on which only the target's own position is in range.
+  (b3) it stops early. (c) it keeps a destination, or moves, after its first firing sequence starts. (d) it keeps a
+  destination or a non-zero speed fraction after the arrival tick in the ordered cell, or the walk
+  ends on another tick. A run in which S-0215 claim 37 renews the destination during the approach
+  still counts; the parts test only when the walker stops.
 
 ## Open questions
 
@@ -1589,17 +1756,24 @@ cases).**
   levels; and that the check matches what a viewer sees hidden on the screen is an interpretation.
   Scenario W7(f) tests the rule on uneven ground; W7(b) relies only on flat ground, where every cell
   passes.
-- When one hit sends both damage requests of claim 15 and both are accepted, request B's scatter
-  centre cell may already be the destination that request A gave the unit, rather than its own
-  cell. This was not determined. Scenarios W7(b) and W7(c) avoid the case (a walking unit, to which
-  request A is not sent; a behaviour without the scatter property, in which neither request moves
-  the unit). Scenario W7(j) settles it.
 - Which situations of an infantry unit set the tether link (Terms) was not determined, and no situation
   on the map in which an infantry unit holds one is known. The link only removes the second case of
   request A (claim 15), so it matters only for an infantry unit hurt while it holds one.
 - While a unit travels through a tunnel (S-0212 Terms), its scatter centre cell appears to be the
-  tunnel's exit cell. Tunnels belong to S-0212 and the movement specs, and this was not checked
+  tunnel's exit cell (Terms *scatter reference point*). Tunnels belong to S-0212 and the movement specs, and this was not checked
   further.
+- Infantry of a jumpjet type are left out of claims 16 and 17: their movement belongs to the
+  jumpjet locomotor, whose arrival and stop rules were not traced. The same in-range stop is a rule of
+  every mobile actor in the original, not only of infantry; for vehicles and aircraft it belongs to
+  their movement specs (S-0207 for ground vehicles), and whether their locomotors apply it on their
+  own arrival processing was not checked here.
+- The exception of claim 17 (the target is the destination) was found by reading only. When it
+  triggers before the main rule does, and whether a standing walker with that destination ever
+  reaches it, were not traced; scenario W10 part c checks only the end state.
+- The height condition of claim 16 (two height levels) has no scenario: it matters only where an
+  arrived position and the locomotor destination share a cell at different heights (a high-bridge
+  deck over its ground cell), and how a walker's locomotor destination is placed there was not
+  traced.
 - No other factor (for example a game-wide speed bias of the movement specs) is known to scale a
   walking infantry unit's speed during a step, and F5 has none; that none exists is not confirmed.
 - The height of a walker between standing positions, while it steps across a slope or onto a bridge

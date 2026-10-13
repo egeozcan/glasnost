@@ -2,7 +2,7 @@
 id: S-0210
 title: Crushing (who crushes whom, when, the outcome, walls, warnings, slowdown and automatic crushing)
 topic: movement
-revision: 15
+revision: 16
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -337,6 +337,13 @@ S-0107: *crushable* (the flag), *deploying*. Terms used by this spec:
     required for this choice, although without it the vehicle crushes nothing (claim 1). Unlike the first list, the variant is not tied to the occasions on which a unit picks a target of its own: it applies also while the vehicle has a move destination. There is one exception: the
     vehicle does not do this when its target is an opportunity target (S-0215 claim 33), one that it
     picked by itself while moving, harvesting or guarding.
+
+    **Replacement approach.** The omni-crusher variant above and the original's attack-target
+    variant below replace the common approach step of S-0215 claim 37 (part h). Their destination
+    is the target object itself, not a fixed cell chosen by the common approach rules. The
+    cadence and occasions for taking that step are S-0215 claim 37 (part a); the eligibility
+    conditions remain those of this claim. This differs from the automatic choice in the first
+    list, which gives a move to the chosen target's cell.
 
     **Our engine and the original's computer-controlled houses.** The rules above are the rules of
     our engine for every player house, human-controlled or AI house (glossary, *AI house*). The
@@ -815,9 +822,7 @@ type of index 0" means the overlay type with registration index 0 in the data in
   back on each crush. (c) the crossed cells are removed as in (a); on that tick each undamaged
   neighbour of the same type either is hit (its stage changes, or its wall is removed; what a hit does
   is for the overlay specs) or keeps stage 0, the share hit being about 200 / (*S* + 1), or all of
-  them when *S* ≤ 200. With the recorder, in (c) the raw values taken on the tick of the crush give,
-  by S-0202 claim 4, one ranged draw R(0, *S*) for each undamaged neighbour in the order north,
-  east, south, west, and a neighbour is hit exactly when its draw is below 200. In (c2) no raw value
+  them when *S* ≤ 200. With the recorder, the raw values taken on the crush tick correspond, under the inclusive ranged-draw rule of S-0202 claim 4, to one draw from the integers 0 through *S* for each undamaged neighbour, in the order north, east, south, west. A neighbour is hit exactly when its draw is below 200. In (c2) no raw value
   is taken on that tick and every neighbour is hit.
 - *Falsified if:* a crushed wall or fence survives the crusher's passage at a lower stage, is removed
   with no crush sound, or changes at a moment other than the tick on which the crusher reaches its
@@ -946,7 +951,8 @@ type of index 0" means the overlay type with registration index 0 in the data in
     to pick a target of its own under S-0215; otherwise the run decides nothing.
 - *Procedure:* wait 600 ticks, or give the order and wait 600 ticks.
 - *Observable:* whether the crusher drives to the victim's cell and crushes it, and whether it fires,
-  and in cases 11 and 12 also whether it leaves the route before reaching its end.
+  and in cases 11 and 12 also whether it leaves the route before reaching its end. In cases 5,
+  10 and 12c the recorder also reads whether the destination names the victim object or a cell.
 - *Runs:* 10 per case (per run in case 12; per house and threshold in case 17). In cases 5, 6 and 9 a run in which the crusher neither
   fires nor moves (it never took the infantry as a target) decides nothing. In cases 11 and 12 a run
   in which it does not fire at the victim while on the route (it never took the victim as an
@@ -961,7 +967,12 @@ type of index 0" means the overlay type with registration index 0 in the data in
   run 12h (a human-controlled vehicle with an opportunity target). In cases 6, 7, 9, 11 and run 12h it
   fires at the victim instead, and in 11 and 12h it keeps to the route. In case 17 neither house's
   crusher chooses to drive over the victim with threshold 2; each does with threshold 0.
-- *Falsified if:* a different pattern, including case 15 behaving as if the range were zero or
+  In cases 5, 10 and 12c the crushing approach sets the destination to the victim object itself,
+  including when that victim is already within weapon range; the common approach's in-range
+  rule does not prevent this destination.
+- *Falsified if:* in those variant cases the destination is a fixed cell rather than the victim
+  object, or no destination is set solely because the victim is within weapon range; or a
+  different pattern, including case 15 behaving as if the range were zero or
   unbounded, or case 16 using any other range than 1.5 cells; in particular, the crusher leaving the
   route for the victim in case 11 or run 12h, or keeping to the route while firing at the vehicle in run 12c.
 

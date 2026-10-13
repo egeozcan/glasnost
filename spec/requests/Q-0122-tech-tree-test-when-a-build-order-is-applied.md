@@ -1,9 +1,9 @@
 ---
 id: Q-0122
 title: Does a build order test the tech-tree rules when it is applied?
-status: open
+status: answered
 related: [S-0404, S-0407, S-0411]
-answered-by: []
+answered-by: [S-0404]
 ---
 
 ## Need

@@ -1,9 +1,9 @@
 ---
 id: Q-0100
 title: Which words the factory field of a building type takes, and how they are compared
-status: open
+status: answered
 related: [S-0403, S-0404, S-0407, S-0213, S-0214, S-0003]
-answered-by: []
+answered-by: [S-0003]
 ---
 
 ## Need

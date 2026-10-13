@@ -2,11 +2,11 @@
 id: S-0101
 title: Isometric projection, height lift, view position and scroll limits
 topic: rendering
-revision: 3
+revision: 4
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-09
+approved-on: 2026-10-13
 measurements: []
 requests: []
 supersedes: []
@@ -19,8 +19,15 @@ supersedes: []
 How a world position (leptons, with height) becomes a pixel position in the battlefield view, how
 terrain, overlays and objects are lifted by height, how the view position is chosen and limited by the map's
 local area, and how a screen pixel is turned back into a ground position or a cell for the cursor.
-Every integer step is exact; the two calculations the original does in floating point are named,
-with their rounding direction, and each is given an exact equivalent.
+Every integer step is exact; the two calculations covered here that the original does in floating
+point are named, with their rounding direction, and each is given an exact equivalent.
+This spec covers skirmish; network games and campaigns are out of scope.
+
+**Cross-spec clarification required at hand-off.** S-0102 claim 15's description of a deck as
+"lifted 4 levels above its cell" must distinguish the deck's world height and depth from its image
+placement. S-0102 claim 24 already specifies that placement, including the deck-cell shifts. The
+two claims must agree without applying an additional four-level screen lift to claim 24's draw
+point. This revision removes S-0101's competing bridge-deck assertion; S-0102 owns the clarification.
 
 ## Terms
 
@@ -46,7 +53,7 @@ Terms used as defined in the shared glossary: *cell*, *lepton*, *height level*, 
 | probe rows | For a cursor at view pixel (*x*, *y*), the 180 view pixels (*x*, *y* + 1) … (*x*, *y* + 180) directly below it in its column (claim 10, F8). |
 | ground box | The box in world leptons, given by F4a, that claim 6 tests an object's ground position against. |
 | screen band | The band of view pixels, given by F4b, that claim 6 tests the view pixel of an object's position against. |
-| animated terrain object, terrain object that is not animated | The two groups of terrain objects that S-0102 distinguishes, in S-0102's wording. Terrain objects that are not animated are painted in the cell pass (S-0102). Animated ones are drawn as objects, subject to the on-screen tests of claim 6 (the ground box only). Which terrain objects fall in each group is S-0102's to say, and S-0102 does not yet say it (Open questions). Until it does, the terrain-object parts of claim 6 apply to whichever objects that rule puts in each group. |
+| animated terrain object, terrain object that is not animated | The two groups of terrain objects distinguished by S-0102. Terrain objects that are not animated are painted in the cell pass; animated terrain objects are drawn as objects. S-0102 claim 23 specifies which terrain objects belong to each group. The on-screen tests for animated terrain objects are given in claim 6. |
 | cell pass, object pass | The two drawing passes that S-0102 distinguishes, in S-0102's wording. Which images each pass draws is S-0102's to say. Claim 6 names the ones this spec relies on. |
 | bib (of a building) | A part of a building's image, in S-0102's wording. S-0102 defines it. This spec says only that the cell pass paints it (claim 6). |
 | *M<sub>w</sub>* | The map width of the map size (S-0009 writes it *W*; here *W* is the view width). |
@@ -139,6 +146,7 @@ Terms used as defined in the shared glossary: *cell*, *lepton*, *height level*, 
      | Vehicles use it | `measurable` (scenario M4d, if its precondition holds; otherwise unconfirmed) |
      | Projectiles use it | `measurable` (scenario M4e) |
      | A building's body is drawn whatever its position relative to the band | `measurable` (scenario M4b, if its precondition holds; otherwise unconfirmed) |
+     | Cell-pass building shadows, bibs and non-animated terrain objects are not culled by the band or ground box | `unmeasured`: M4b observes the body only; no scenario here makes these other images reach into the view from beyond either bound |
      | The parts of a building drawn as objects skip it | `measurable` (scenario M4b, only if the chosen building has such a part inside the view in run 1; otherwise unconfirmed) |
      | Animations and animated terrain objects skip it | `unmeasured` (reason below) |
      | Every other kind uses it | `unmeasured` (reason below) |
@@ -184,7 +192,9 @@ Terms used as defined in the shared glossary: *cell*, *lepton*, *height level*, 
    centring on a point left of the minimum aligns the view's left edge with the local area's left
    edge, and centring on any other point aligns the view's right edge with the local area's right
    edge. See quirk `quirks.oversized_view_clamp`.
-   - Backing: `measurable` (scenario M3a, M3b)
+   - Backing: `measurable` (scenario M3a, M3b). The vertical oversized case uses M3b's
+     vertical variant; if no accepted map permits its two centre requests, that part is
+     `unmeasured` for the setup limitation stated there.
    - Confidence: high for the formulas and the oversized-view result. Medium for the mapping of the
      map file's numbers onto the rectangle roles, which follows S-0009 and is not yet measured (M3a
      would confirm it).
@@ -192,11 +202,11 @@ Terms used as defined in the shared glossary: *cell*, *lepton*, *height level*, 
    pixel. The result is at world height 0 and ignores terrain height. Its cell, by F7, is the
    flat-ground cell under the pixel, which is the cell under the cursor wherever no probe row
    qualifies (claim 10).
-   - F6 is not an exact inverse of F1. Projecting its result back with F1 gives the original pixel,
-     or one pixel above it, and in either case either the same column or one column closer to the
-     screen column of the X = Y diagonal. It never lands below the pixel or farther from the diagonal.
-     This follows from F1 and F6 and was checked for every world pixel with |*q<sub>x</sub>*| ≤ 1200
-     and 0 ≤ *q<sub>y</sub>* ≤ 2400. See quirk `quirks.screen_to_ground_not_exact_inverse`.
+   - F6 is not an exact inverse of F1. Projecting its result back with F1, for |*q<sub>x</sub>*| ≤ 1200 and 0 ≤ *q<sub>y</sub>* ≤ 2400, gives the
+     original pixel or one pixel above it, and in either case either the same column or one column
+     closer to the screen column of the X = Y diagonal. Within that range it never lands below the
+     pixel or farther from the diagonal. This follows from F1 and F6 and holds for every world
+     pixel in the stated range. See quirk `quirks.screen_to_ground_not_exact_inverse`.
    - Backing, by part of the claim:
 
      | Part | Backing |
@@ -234,34 +244,23 @@ Terms used as defined in the shared glossary: *cell*, *lepton*, *height level*, 
       result can differ, and this spec does not specify it (see Open questions).
     - Backing: `measurable` (scenario M6; the level-0 case by M5)
     - Confidence: high
-11. **Overlay height lift.** Overlays (walls, fences, ore and gem fields, crates, bridge parts and
-    the like) and their shadows are lifted on the screen like terrain tiles: by exactly 15 pixels
-    per height level of their own cell (integer, no rounding), never by *L(z)*.
-    - A bridge deck follows the same rule. On the screen it is lifted only by the height level of
-      its cell. The 4 extra levels at which the deck lies (glossary *bridge deck*; S-0102, claim 15)
-      enter its depth (S-0102) and the world height of objects on it, but they are not an extra
-      60-pixel lift of its image. The raise that the player sees therefore comes from the deck's
-      image itself.
-    - Consequence: an overlay stays aligned with its cell's tile at every level. On a cell at level
-      20 or above, an object standing on the same cell is drawn one or more pixels lower than both
-      (claim 4).
-    - This claim fixes only how the lift depends on the cell's height level. Where on its cell an
-      overlay's image is placed is not specified here: some overlay kinds and some deck images are
-      drawn a few pixels higher than others, by fixed amounts that do not depend on the level (Open
-      questions). The lift is added to that placement.
-    - Backing, by part of the claim:
-
-      | Part | Backing |
-      |---|---|
-      | Overlays, their shadows and bridge decks lift by 15 pixels per level of their cell, not by *L(z)* | `measurable` (scenario M2e; shadows only if the chosen overlay types draw one) |
-      | A bridge deck gets no extra lift for its 4 levels | `unmeasured` (reason below) |
-
-      Reason. With the placement on the cell left open, a fixed extra lift of the same 60 pixels for
-      every deck would look the same as a deck image drawn 60 pixels higher. The part says only that
-      an implementation must not add the 4 levels to the screen lift on top of an image that already
-      shows the raise. It can be checked only together with a placement rule.
-    - Confidence: high for the per-level lift of overlays, their shadows and decks. High that the
-      deck's 4 levels do not enter its screen lift.
+11. **Overlay height lift outside bridge-deck cells.** Overlays (walls, fences, ore and gem
+    fields, crates and the like) and their shadows are lifted on the screen like terrain tiles:
+    by exactly 15 pixels per height level of their own cell (integer, no rounding), never by *L(z)*.
+    - **Bridge decks are outside this claim.** Their placement and lift belong to S-0102
+      claims 15 and 24, subject to the clarification named in Summary. This spec supplies
+      no separate bridge-deck screen-lift formula. Their
+      depth and the world height of objects on them remain as specified by S-0102.
+    - Consequence outside bridge-deck cells: an overlay stays aligned with its cell's tile at
+      every level. On a cell at level 20 or above, an object standing on the same cell is drawn
+      one or more pixels lower than both (claim 4).
+    - This claim fixes only how the lift depends on the cell's height level, not the image's
+      fixed placement on its cell. The lift is added to the placement specified by S-0102 claim 24.
+    - Backing: `measurable` for wall and ore images and any shadows they draw (scenario M2e).
+      Other overlay kinds and their shadows: `unmeasured`, because M2e samples only walls and
+      ore, and no scenario here separately tests their placement across height levels. Bridge
+      decks are not asserted by this claim.
+    - Confidence: high.
 
 ## Formulas
 
@@ -299,8 +298,7 @@ precision):
   −300 000 to 300 000 leptons, checked with exact arithmetic for each step. Cell heights lie
   within levels −128 to 127 (S-0009), that is −13 312 to 13 208 leptons. An implementation may
   therefore use either mode at those three steps. The final conversion must truncate toward zero.
-  The program-wide mode and its switch `quirks.chop_rounding` belong to S-0205 (number domains,
-  planned). This spec defines no switch for it, and at every height a map can produce *L(z)* is
+  The program-wide mode and its switch `quirks.chop_rounding` belong to S-0205 (number domains). This spec defines no switch for it, and at every height a map can produce *L(z)* is
   the same whichever way that switch is set.
 - *k* is (60 / *D*) × *s*, each step rounded to double precision, with 60 in pixels. Here
   *D* = 362.0386657714844 leptons is the single-precision value nearest to 256·√2 (exact:
@@ -382,7 +380,7 @@ world row 15·(*M<sub>w</sub>* + 2·*V<sub>y</sub>*) − 75. At y<sub>max</sub>,
   in which both products are exact. Rounding toward zero can never carry a value across an integer
   (every integer below 2²⁴ is representable), so the result equals the exact formula above.
 - The rounding toward zero at those two steps is the program-wide *round-toward-zero mode*
-  (glossary). Its switch, `quirks.chop_rounding`, belongs to S-0205 (number domains, planned), and
+  (glossary). Its switch, `quirks.chop_rounding`, belongs to S-0205 (number domains), and
   this spec defines no switch for it. With that switch on (the default), F6 is the exact formula
   above. If that switch is off and the two steps round to nearest instead, some results change by
   one lepton: about 0.14 % of them in a sample of world pixels with |*q<sub>x</sub>*| ≤ 1500 and
@@ -468,10 +466,10 @@ part of the request that was cut off.
   With the quirk off, the cell under a pixel is still given by F7's pixel formula, so only the
   lepton position returned changes. No observable difference in play is known
   (claim 9).
-- **Rounding mode.** F2 and F6 are the only floating-point steps evaluated during play (the
+- **Rounding mode.** F2 and F6 are the only floating-point calculations covered here that are evaluated during play (the
   derivation of *k* in F2 gives the same *k* in either mode). Both rely on the
   program-wide *round-toward-zero mode* (glossary), whose single switch `quirks.chop_rounding`
-  belongs to S-0205 (number domains, planned). This spec defines no switch of its own for it. The
+  belongs to S-0205 (number domains). This spec defines no switch of its own for it. The
   mode does not change *L(z)* at any height a map can produce (F2). With the mode on, F6 equals its exact formula; rounding to
   nearest would move about 0.14 % of its lepton results by one lepton and no cell (F6).
 - **`quirks.oversized_view_clamp`** (default: on). When the view is larger than the local area on
@@ -517,7 +515,10 @@ spec, not yet written and without a number, will give them. They are not rules d
 
 All scenarios use the glossary's measurement setup: an unmodified install with no loose override
 files and no engine add-ons, and stock data apart from the purpose-made test maps named here. Any
-game speed, 800×600 unless stated. The observable is a screenshot or a recording of the battlefield
+game speed, 800×600 unless stated. Each skirmish has the local human-controlled player and one
+bystander computer player, kept outside the observed map area under the glossary's void rule.
+The director and mods are off. Keep the test objects visible and unshrouded throughout each
+observation; fog and shroud are not culling outcomes of claim 6. The observable is a screenshot or a recording of the battlefield
 view. "Pixel position" is read relative to the view's top-left pixel. Rendering and the cursor pick
 are deterministic, so **one run of each scenario is enough**. A second run is useful only to rule out
 a reading mistake.
@@ -581,14 +582,8 @@ a reading mistake.
     difference at level 20 or 34 (the overlay lifts by exactly 15 pixels per level), while the
     building of (b) is 1 px lower at level 20 and 2 px lower at level 34. Falsified if either
     overlay or shadow sits 1 px lower at level 20 or 2 px lower at level 34 (a lift by *L(z)*), or differs
-    from its level-0 distance in any other way. Bridge decks: a second purpose-made map with two
-    high bridges of the same type and length, one over ground at level 0 and one over ground at
-    level 20, if the game accepts such a map. Observable: on each bridge, the vertical distance
-    between one fixed pixel of a deck image and the row its cell's top corner would have at level
-    0, which is F1 of that corner, read from the level-0 tile grid as in (a). Expected: the
-    distance on the level-20 bridge is exactly 300 px (15 × 20) larger than on the level-0 bridge.
-    Falsified if it is 299 px larger (a lift by *L(z)*) or differs from 300 in any other way. If the game rejects either map,
-    record that; the matching part of claim 11 stays unconfirmed.
+    from its level-0 distance in any other way. No bridge-deck screen-lift expectation is proposed
+    here: that behaviour is owned by S-0102 claim 15, not claim 11.
 - **M3 — view position and scroll limits** (claims 7, 8).
   - (a) Normal case. Setup: a purpose-made map whose local area is smaller than the map size on all
     sides and larger than the view. Scroll hard to each of the four edges and take a screenshot.
@@ -598,7 +593,11 @@ a reading mistake.
     local player's start position in the local area's top-left corner cell and take a screenshot in
     the first drawn frame of the game. Expected: the view does not extend beyond the limits from F5,
     and its left and top edges are at those limits if the game centres the view on or near the start
-    position. Falsified if the view extends beyond either limit.
+    position. Falsified if the view extends beyond either limit. At each edge, keep scrolling
+    outward for ten more drawn frames, then reverse direction for ten drawn frames, recording the
+    terrain's pixel displacement in every drawn frame. Expected: the first inward scroll request
+    moves the view, just as in a control reversal made away from an edge. Falsified if the edge
+    run needs extra inward requests before movement begins (the State and ordering consequence).
   - (b) Oversized view. Setup: a purpose-made map whose local area width satisfies *W*/120 <
     *V<sub>w</sub>* < *W*/60, so that the view is wider than the local area but x<sub>min</sub> lies
     inside it. Its vertical scroll range, 30·*V<sub>h</sub>* + 135 pixels, is taller than the view,
@@ -609,12 +608,24 @@ a reading mistake.
     Centred on Q, the view's right edge is at the local area's right edge, so the view moves left,
     away from Q. Falsified if centring on P does not put the view's left edge at the local area's
     left edge, or if centring on Q leaves the view's left edge at the local area's left edge.
+    Repeat with an area wider than the view but with 0 < 30·*V<sub>h</sub>* + 135 < *H*.
+    Place level-0 units so their requested centre rows are respectively less than y<sub>min</sub>
+    and at or above it, and centre on each. Expected: the first origin row is
+    y<sub>min</sub> − trunc₀(*H*/2), the second y<sub>max</sub> − trunc₀(*H*/2).
+    Falsified if either measured origin differs. If no accepted map permits both requests,
+    this vertical oversized case is `unmeasured`: no setup here then exposes both outcomes.
   - (c) Centring with height. Setup: a large map. A unit standing on a 4-level plateau in the middle
     of the local area, far from every scroll limit, and a unit standing at level 0 likewise.
-    Centre the view on each in turn. Observable: the view pixel of a fixed feature of each unit's
-    image. Expected: the same view pixel in both cases, with the plateau terrain shifted. Falsified
+    Use the same unit type and facing in both places. Centre the view on each in turn. Observable:
+    the view pixel of the same fixed feature of each unit's image. Expected: the same view pixel
+    in both cases, with the plateau terrain shifted. Falsified
     if the two view pixels differ. The likeliest failure is the plateau unit appearing 60 px higher
     than the level-0 unit, which is where it would be if centring used the ground point below it.
+    Airborne variant: on flat ground, use the same jumpjet type, facing and cell in two runs,
+    hovering without bobbing at 416 and 2080 leptons, set by a named test-map override section as
+    in M2c. Centre on it once it is stationary. Expected: the same image feature lands at the
+    same view pixel in both runs. Falsified if it differs, notably by the 239-pixel lift difference
+    that ground-only centring would leave. The cell is far from all scroll limits.
 - **M4 — on-screen band** (claim 6).
   - (a) Setup: flat map. An aircraft flying with a world height *z* of at least 1700 leptons, so that
     *L(z)* ≥ 245 px, set through a test-map override section if needed. It flies straight down the
@@ -660,7 +671,7 @@ a reading mistake.
     drawn frame. Observable: the drawn frame in which its shadow first appears and the shadow's row
     in it. Expected: the shadow appears suddenly about 119 px (*L(z)* − 180) below the top edge, in
     the drawn frame in which the unit's lifted position reaches row −180. Falsified if the shadow's
-    first row lies above row 119 by more than the number of rows the unit moves in one drawn frame,
+    first row differs from row 119 by more than the number of rows the unit moves in one drawn frame,
     in particular if the shadow first appears at the top edge and slides in.
   - (d) Vehicles. The same as (c), with a vehicle type made a jumpjet type through the same override
     section: its imported jumpjet flag set, its imported locomotor field set to the jumpjet
@@ -736,15 +747,9 @@ a reading mistake.
   bridge.
 - The view size *W*, *H* for each resolution belongs to a later user-interface spec, not yet
   written.
-- Which terrain objects are animated, and so drawn as objects under the ground box of claim 6, and
-  which are painted in the cell pass. The Terms leave this to S-0102, whose own open questions say
-  it is not yet fully mapped. Until S-0102 states it, the terrain-object parts of claim 6 have no
-  defined membership.
-- Where on its cell an overlay's image, and its shadow, is placed (claim 11). Some overlay kinds,
-  among them ore and gem fields, walls and crates, and bridge-deck cells are drawn a few pixels
-  higher than other overlays, and some deck shadows a few pixels to the side, by fixed amounts that do not depend on the height level, and some of
-  these shifts depend on the overlay type's position in the overlay type list. A later overlay or
-  bridge spec should state the placement in full.
+- Overlay image and shadow placement is specified by S-0102 claim 24, not an open question
+  here. The bridge wording of S-0102 claim 15 needs the clarification named in Summary before
+  hand-off; it must not be inferred from claim 11.
 - Whether any game mode lifts the scroll limits. None is known in skirmish play.
 - Whether the screen band also decides anything else drawn for a building, such as its selection
   outline, its health bar and other status markers. The original appears to draw these only while

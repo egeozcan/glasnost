@@ -2,7 +2,7 @@
 id: S-0307
 title: Weapon range test
 topic: combat
-revision: 2
+revision: 3
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -257,8 +257,7 @@ and *subject to walls*. In addition:
     0, no bridges, no obstacles or other occupants in the candidate cells, a target other than a
     cell, no close-range property, and no special crushing or deploying approach. The search is
     around the target's reference point, not around the attacker. Its initial radius and candidate
-    points are F4. Outer radii precede inner radii; at one radius the angular preference of F4
-    decides. The chosen destination is the cell of the first qualifying point, not the target
+    points are F4. If qualifying candidates occur at more than one radius, the chosen destination is from the greatest qualifying radius. Among qualifying candidates at that radius, the preference order specified in F4 decides. The chosen destination is the cell of the first qualifying point, not the target
     object itself, and not the point nearest to the attacker among all qualifying points.
 
     Each point is at a cell centre at world height 0. It must pass the range test of claims 1 to
@@ -277,7 +276,8 @@ and *subject to walls*. In addition:
     This claim specifies the search result only. It neither promises that the unit reaches the
     chosen cell nor says that reaching it is necessary before firing. Path computation and
     movement towards a destination are S-0212, S-0207 and S-0208. S-0215 claim 37 owns the trigger,
-    gating, destination retention and renewal, and the buildings and deployed-infantry exceptions.
+    gating, destination retention and renewal, and the building, deployed-infantry and zero-speed
+    actor qualifications (part g).
     In particular, a held destination is not cleared by that step just because the target comes
     in range; the stopping transition belongs to S-0207 and S-0208.
     - Backing: `measurable` (RG10)
@@ -302,8 +302,7 @@ and *subject to walls*. In addition:
     (`quirks.approach_alternative_walk`). An alternative must pass the same range and clear-cell
     tests. It is measured at its cell centre at world height 0. Only the first alternative
     passing both tests is offered to the detour limit below. If none passes, the primary point is
-    skipped. The alternatives of one primary precede the next F4 primary, even if the latter is
-    closer to the attacker.
+    skipped. A qualifying alternative of an earlier-ranked primary is preferred to every candidate of a later-ranked primary, even when the later primary is closer to the attacker.
 
     A clear primary, or the first qualifying alternative, is accepted only when at least one of
     the following holds, with *c* its cell, *t* the cell of the target's reference point and *a*
@@ -421,10 +420,12 @@ weapon fields.
 > u′ = 256 leptons when 0 < u ≤ 256 leptons, and u′ = u otherwise
 > radii = u′, u′ − 256, u′ − 512, …, retaining only radii strictly greater than 204.8 leptons.
 
-ρ′ is also S-0215 F10's adjusted reach. That spec's deploy-to-fire exception replaces it with
-min(ρ′, ρ₃ + 512), where ρ₃ is the attacker's spatial distance to the target in leptons. Claims 15
-and 16 exclude that exception; this equality of adjusted reaches is a cross-reference, not a
-complete deploying search rule.
+ρ′ is S-0215 F10's adjusted reach *r*′. For a deploy-to-fire vehicle standing on a cell where
+its deploy test fails, S-0215 claim 37 f2 replaces it with ρ₃ + 512 leptons when that value is
+not larger than ρ′, where ρ₃ is the attacker's spatial distance to the target in leptons. That
+vehicle also searches when its target is already in range, subject to claim 37's destination
+retention and gating. Claims 15 and 16 exclude that exception; this equality of adjusted reaches
+is a cross-reference, not a complete deploying search rule.
 
 The margins use the nearest double-precision representations of the decimals shown. Let *f* be
 S-0204's direction from the target's reference point *T* to the attacker's reference point.
@@ -594,8 +595,7 @@ leptons).
   range bonus 1 cell (256). Target: an enemy jumpjet infantry hovering at its cruise height *h*
   (read by the recorder) at planar distance *p* chosen so that 1280 < ⌊*r*(*p*² + *h*²)⌋ ≤ 1536.
   Expected: fires; control run with the bonus 0: moves.
-- Run b (garrison): a stock occupiable building with a 2 × 3 foundation (⌊min/2⌋ = 1) and one
-  occupant whose weapon can fire at ground units, occupied-weapon range set to 3 (limit 1024).
+- Run b (garrison): a named test occupiable building with a 2 × 3 foundation supplied by the test fixture (⌊min/2⌋ = 1) and one named test occupant whose weapon is set to fire at ground units, occupied-weapon range set to 3 cells (limit 1024 leptons).
   Targets: a vehicle 3 cells from the foundation centre along a map axis (fires) and one 5 cells
   away (does not fire, although the occupant's own weapon range is set to 8 cells).
 - Run c (garrison, air): as b with an occupant weapon able to fire at aircraft and the building
@@ -723,7 +723,7 @@ along a map axis from the attacker. Keep every F4 candidate cell empty and insid
   S-0215's behaviour delay may still draw in that tick and must be accounted for separately.
 - Falsifier: any other first destination when the setup conditions hold, selection by nearest
   attacker distance instead of the stated preference, or a search-specific random draw. A run in
-  which no approach search is requested tests the still-open trigger, not claim 15.
+  which no approach search is requested tests S-0215 claim 37's trigger and gating, not claim 15.
 The observation must distinguish a cell destination from an object destination; if it cannot, add that distinction to the recorded observations before running this test.
 
 **RG11. Obstructed approach preference and detour limit (claim 16).** Use RG10's map, houses,
@@ -793,6 +793,10 @@ vehicle ten cells away. The observed area contains the pair and all possible app
 - Falsifier: a cell destination or no destination with both properties and a target, an object
   destination under the common search in either control, or a search-specific random draw.
 
+**RG14. Absent elevation section and zero increment (claim 6, Edge cases).** Use named rules test data with the elevation section absent in every layer and a projectile whose subject-to-elevation property is on. Place a floor-bound firer and target on the map and issue an attack that invokes the range test. Record whether the original reports a program error/stops or completes the test. Expected: the original stops with the integer-division-by-zero program error described in Edge cases. Falsified if it completes the range test without that error. Repeat with an explicit zero increment if the section-absence case is not equivalent. This measurement observes the original's failure; it does not validate the safe result of our engine's departure.
+
+**RG15. Signed-32-bit overflow in F2 (claim 6, F2).** Use a named test map with a firer one height level above a floor-bound target, and named rules test data setting *I* = 1 height level, *b* = 200 cells per step, *c* = 200 cells, and weapon range *R*₀ = 100 leptons, with other range adjustments disabled. Put the target at a recorded spatial distance of 45000 leptons; arrange a clear line of fire and an eligible target. The stated F2 gives *k* = 1, *E*₂ = 51200 leptons and a wrapped *σ* of −1673516480 square leptons, so the comparison uses *E*₁ = ⌊*r*(1673516480)⌋ = 40908 leptons and a limit of 41008 leptons. Expected: the target is out of range and the attacker moves before firing. Falsified if it fires within range under these inputs. A control with a cap/increment combination that does not overflow must produce the result predicted by that control's F2 value. Record the input values and first-fire/first-movement outcome.
+
 ## Open questions
 
 - **Q-0072 question 2, remaining coverage.** Claims 15 to 18 do not yet cover cell targets,
@@ -802,13 +806,17 @@ vehicle ten cells away. The observed area contains the pair and all possible app
   Alternative cells outside the usable area are also not covered. These paths need further
   verification, so Q-0072 is not yet in this spec's requests list. Crushing destinations are
   owned by S-0210 claim 11 and S-0215 claim 37 h, not by this search.
-- **Q-0072 question 3, stopping.** S-0215 claim 37 e keeps a held destination when the target
-  comes in range. S-0207 and S-0208 must specify the movement-side stopping event and destination
-  clearing; no arrival-before-firing rule is implied here.
+- **Q-0072 question 3, infantry stopping.** S-0215 claim 37 e keeps a held destination when the
+  target comes in range. S-0207 claim 19 owns the movement-side outcomes for driving, sailing
+  and hovering vehicles. Infantry's stopping event and destination outcome remain for S-0208.
+  No arrival-before-firing rule is implied here.
 - **Q-0072 questions 1, 4 and 5.** S-0215 claim 37 owns the trigger, gating, renewal cadence,
-  buildings and deployed-infantry exceptions. Its low-confidence immobile-type case and
-  in-the-playfield mark remain open there. The range test alone is not the whole firing check:
-  rearming or turning need not prevent it from passing.
+  buildings, deployed-infantry exceptions and zero-speed actor qualifications (part g).
+  Zero type speed alone does not exclude an actor from the approach step or prevent it receiving
+  a search destination; it does not promise actual movement. Those qualifications have that
+  claim's medium confidence and measurement scenario, not a complete immobile-type locomotion
+  contract. Its in-the-playfield mark remains open there. The range test alone is not the whole
+  firing check: rearming or turning need not prevent it from passing.
 
 - The elevation level (Terms) uses a per-cell "carries a bridge deck" mark that is not the same
   mark as the "carries a high bridge" test of claims 7 and 10. Which cells of a bridge carry it

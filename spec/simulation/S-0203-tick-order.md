@@ -2,7 +2,7 @@
 id: S-0203
 title: Tick order
 topic: simulation
-revision: 9
+revision: 10
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -89,7 +89,9 @@ skirmishes only; network games and campaigns are out of scope.
 - **Single-player game.** As in S-0201: a skirmish or a campaign mission. Only skirmishes are
   covered here.
 - **Cycle.** As in S-0201: the unit of real time in which the original runs a game. A cycle that is
-  not frozen takes the player's input and then runs one tick.
+  not frozen processes at most one waiting input event and then runs one tick. S-0213 claim 1
+  owns the input-event limit, its definition, confidence and backing; S-0201 claim 2 owns pacing.
+  A frozen cycle takes no input and runs no tick.
 
 ## Behaviour
 
@@ -349,11 +351,16 @@ skirmishes only; network games and campaigns are out of scope.
      - Confidence: high for the rule; for the exceptions, S-0312's confidence
    - **(b) Buildings.** As a rule, a building whose damage destroys it leaves play like a vehicle,
      at the moment that damage is applied, at the end of its death effects, and that removal is a
-     removal for claim 10. The exception, owned by S-0312 (claim 21): an exploding building, or one
-     destroyed while it is being sold, stays in play after its death effects and leaves later; the
-     structures specs own when. Its leaving then is a removal for claim 10 like any other.
+     removal for claim 10. The exception is owned by S-0312 claim 21: a building whose type has
+     the explodes flag, or one destroyed while it is being sold, stays in play with 0 health after
+     its death effects. It normally leaves in its own next turn, later in the same tick if that
+     turn has not yet come, otherwise in a later tick. S-0312 claim 21 owns the erasure and
+     electromagnetic-pulse exceptions, the sale removing it instead, and the second survivor and
+     smudge round in the removal turn, with `quirks.building_removal_second_round`. A veterancy
+     ability or a weapon's suicide property alone does not cause this deferred removal. Its
+     leaving then is a removal for claim 10 like any other.
      - Backing: `measurable` (scenario O1, variant B, for the rule); for the exception, S-0312's
-       backing (its scenario D14, variant c)
+       backing (its scenario D14, variants c and g)
      - Confidence: high for the rule; for the exception, S-0312's confidence
    - **(c) Infantry.** S-0107, claim 17, decides what a killed infantry unit shows and when it is
      removed. An infantry unit leaves play exactly when it is removed. When claim 17 removes it at
@@ -1150,10 +1157,10 @@ scenarios' timing expectations use the stated index.
     death or escape, and claim 3 here owns open-topped passengers' in-play status. S-0312 claim 1
     must also qualify its statement that death effects share an object's turn: deaths from
     out-of-turn effects share that effect's place in the tick, not a turn (rows 2, 3 and 12 here).
-    Claim 6 rates the general rules of points (a) and (b) high, after a fresh trace: a destroyed
-    building that is neither
-    exploding nor being sold leaves play at the moment of the damage. S-0312 claim 21 rates the
-    same rule low, and its owner may raise it.
+    Claim 6 rates the general rules of points (a) and (b) high, as does current S-0312 claim 21.
+    Revision 10 replaces the earlier deferral to the structures specs with S-0312 claim 21's
+    removal-turn rule, exceptions and second round. Only the type's explodes flag or the sale's
+    behaviour causes that deferred removal, not other ways an object counts as exploding.
   - S-0011, S-0201, S-0202 and S-0213, cited above, are approved specs; where a newer draft exists,
     this revision has also checked that draft.
   - S-0107 (approved), claim 17, is assumed by scenarios O8, O9 and O12: row 8 of its table removes
@@ -1178,9 +1185,7 @@ scenarios' timing expectations use the stated index.
     was right; this spec was the wrong one.
   - S-0202, claim 10, asks that drawing effects run in the original's order. Claim 1's draw order
     and rows 9 to 16 are this spec's side of that requirement.
-  - S-0202, claim 10, places a produced object's creation draw in "the production lines or the
-    processing of orders" of this spec's table. A computer house that starts production does so in
-    its own update, so row 7 belongs in that list too. That is for S-0202's owner; nothing here
-    depends on it.
+  - Current S-0202 claim 10 includes a house update among the places that can start production
+    and take a produced object's creation draw; the earlier cross-spec correction is complete.
   - S-0213's citations of claims 7 and 8 still hold; claim 7 also places the orders after the
     houses.

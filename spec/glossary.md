@@ -2,7 +2,7 @@
 id: glossary
 title: Glossary of shared terms
 topic: rules-import        # cross-cutting; every topic uses these terms
-revision: 14
+revision: 15
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -26,13 +26,6 @@ used by one spec only stays in that spec's **Terms** section. Where a spec gives
 meaning, the spec says so and wins for that spec. Behavioural claims here cover skirmish only.
 Network games and campaigns are out of scope. References to those modes preserve vocabulary,
 not rules for implementing them.
-
-**Cross-spec changes required at hand-off.** S-0411's approved Terms and claim 2 must follow
-S-0407's recheck-based offer membership, not per-tick icon removal. S-0404's approved claim 9
-must likewise tie automatic cancellation orders to removal from the taken-up set. Their current
-batch drafts supply these corrections and must accompany this glossary. S-0407's current draft
-must drop its stale claim 1/Open question 4 request to correct S-0411; the current S-0411 draft
-already makes that correction.
 
 ## Conventions
 
@@ -121,11 +114,11 @@ human-controlled house. This is a rule of our engine, not a claim about the orig
   houses: they keep the original's rules for owners that are not human-controlled (decision of the
   project lead, 2026-10-10; for example S-0208, claims 11 and 15, and S-0107, claims 14 and 15).
 
-The decision was taken on claims of S-0213 and S-0215, and their next revisions apply it there. It is
+The decision was taken on claims of S-0213 and S-0215, and their approved revisions apply it there. It is
 a general rule of our engine, so it holds in every spec. Where a spec gives a rule for
 computer-controlled owners, that rule describes the original, and an AI house follows the rule the
-spec gives for human-controlled owners. The spec's next revision marks such a rule as the
-original's only, except for units of the neutral and special houses, which keep it in our engine
+spec gives for human-controlled owners. Specs that give such a rule mark it as the original's
+only, except for units of the neutral and special houses, which keep it in our engine
 (see *Player houses only* above). In particular an AI house has the house skill level of a human-controlled house:
 0 in a skirmish or network game (see *house skill level*). By default it also uses the *normal
 row* of the difficulty skill block, as a human-controlled house in a skirmish does (see *difficulty
@@ -203,6 +196,9 @@ leaves weeders to a later spec). S-0404 owns the term, the sum and the stored pa
 balance (S-0402, claim 12), and so are a sold building's stored resources (S-0408, claim 10).
 So the stored part is 0, and available credits equal the credit balance (S-0404, claim 4).
 S-0416 uses the term.
+
+**awaiting removal.** The state of a destroyed building kept in play after its death effects,
+until its removal turn. S-0312 owns the term and the removal conditions (Terms, claim 21).
 
 **backing.** How a claim is supported. One of: `measured` (an M-ID records an observation that
 confirms it), `measurable` (a measurement scenario in the spec would confirm or falsify it) or
@@ -310,9 +306,11 @@ Its corner topmost on the screen is its *top corner*, the point (256x, 256y) lep
 (Terms) calls its *cell corner*. See S-0009 and S-0101.
 
 **cell animation.** An animation that the rules data attaches to an overlay type and that starts
-each time an overlay of that type is placed on a cell, map loading included, at a position near
-that cell. Not the same thing as a *terrain animation*. S-0009 owns it (Terms, claim 12); S-0202
-(claim 10) gives its random draws.
+when an overlay of that type is placed normally on a cell, map loading included, at a position
+near that cell. Low-bridge end markers and their direct end-row and piece writes do not start
+cell animations, even when the written types name them (S-0202, claims 10 and 14). Not the same
+thing as a *terrain animation*. S-0009 owns the ordinary placement and position (Terms, claim 12).
+S-0202 gives its random draws and the low-bridge exclusions.
 
 **cell layer.** A cell has a ground layer and, when it carries a high bridge, a bridge-deck layer:
 these are its cell layers. An object on a bridge deck belongs to the deck layer, every other object
@@ -1012,8 +1010,9 @@ to mark a position there. See S-0209 (Terms, claim 1).
 Terms and claims 1 and 12). The set changes only at a recheck. A type can therefore remain offered
 after current conditions change, until a recheck removes it. *Buildable* describes current
 conditions: the type's current tech-tree answer is allowed or at limit, and some factory building
-of the house could make it without the tech-tree rule; a factory building being sold does not count
-(S-0411, Terms; S-0404, Terms; S-0407, claim 1). A type can remain offered while no longer
+of the house could make it without the tech-tree rule; a factory building being sold or queued to
+be sold does not count (S-0411, Terms; S-0407, Terms and claim 1; S-0404 owns *could make*).
+Being sold and queued to be sold have the meanings of S-0407 Terms. A type can remain offered while no longer
 buildable, or become buildable before the next recheck while remaining unoffered. Buildability
 alone does not remove an icon or give cancellation orders (S-0411, claim 2; S-0404, claim 9).
 S-0411 uses the offer for order legality and icon membership, and current conditions for darkening
@@ -1300,6 +1299,11 @@ players. Our engine also permits a skirmish with no person-played house; its end
 **slope.** A cell whose ground is inclined rather than flat. Its slope shape comes from its terrain
 tile (S-0010, claim 6). S-0106 owns the slope shapes and the surface height within the cell (claims
 1 and 2). Slopes affect height within the cell, drawing and movement. See S-0009, S-0010 and S-0106.
+
+**smudge footprint.** The rectangle of cells a smudge type covers, starting at its placement
+cell (the *anchor cell*) and extending towards increasing map *x* and *y*. Its width counts cells
+along *x* and its height counts cells along *y*. S-0312 owns the term and the destruction-smudge
+fit test (Terms, claim 26).
 
 **speed-normalised delay.** A delay that the original converts with the game-speed normalisation
 N(*d*, *s*) of S-0107 (Formulas F3), so that it lasts about the same real time at every game speed

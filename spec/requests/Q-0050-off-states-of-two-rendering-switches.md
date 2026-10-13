@@ -1,9 +1,9 @@
 ---
 id: Q-0050
 title: The off states of two rendering switches (infantry height light, sprite vehicle facings)
-status: open
+status: answered
 related: [S-0102, S-0104]
-answered-by: []
+answered-by: [S-0102, S-0104]
 ---
 
 ## Need

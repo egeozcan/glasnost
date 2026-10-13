@@ -2,7 +2,7 @@
 id: S-0308
 title: Weapon choice (primary or secondary per target, elite weapons, multi-weapon types, deployed, passenger and garrison weapons)
 topic: combat
-revision: 2
+revision: 3
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -33,7 +33,8 @@ S-0214 defines it), *behaviour*, *cell*, *land type*, *bridge*, *departure*, *im
 weapon it would use is chosen. *Health ratio* and *counts as a vehicle* are
 S-0214's, and *veterancy rank* is S-0311's (S-0214 only uses the words). *Deploy kinds* and *current sequence* are S-0107's. *Unload* and the other behaviour names
 are S-0215's. *Garrisoned building* is S-0301's and *open-topped transport* is S-0203's, as the glossary
-gives them; *elite weapon* is S-0311's (claim 6), with the slots here.
+gives them; *elite weapon* is S-0311's (claim 6), with the slots here. *Disc laser weapon* is
+S-0301's term (Terms and claim 10).
 
 - **Weapon slot.** A type holds up to 18 weapon slots, numbered 0 to 17. Each slot holds a weapon or
   nothing. Slot 0 is the *primary* slot and slot 1 the *secondary* slot; "the primary weapon" and
@@ -79,12 +80,15 @@ This spec covers skirmish combat and import. Network games and campaigns are out
 
 ### Weapon slots and elite weapons
 
-1. **Slots come from the type.** Which weapons a type holds in its slots is read from its type
-   section (Import mapping). A type whose turret count is above 0 fills slots 0 to *N* − 1 from its
-   numbered weapon keys, where *N* is its weapon count (supported counts are 0 … 18; claim 16
-   gives the safety departure for larger counts); a type whose turret count is 0 or less fills
-   slot 0 from its primary key and slot 1 from its secondary key, and the elite slots 0 and 1 from
-   the two elite keys. Neither form reads the other's keys. When a rules layer gives a type's
+1. **Slots come from the type.** Which weapons a type holds in its usable slots is read from its
+   type section (Import mapping). A type whose turret count is above 0 has numbered normal and
+   elite weapon fields 1 through *N* take effect, where *N* is its weapon count: each present
+   field may create its named weapon type, and each resulting weapon type reads its section as
+   specified by S-0004, claim 6. In our engine only fields numbered 1 through 18 fill usable slots
+   0 through 17 and their elite slots; fields numbered above 18 have registration effects but no
+   usable slot (claim 16). A missing numbered field creates no weapon type. A type whose turret
+   count is 0 or less fills slot 0 from its primary key and slot 1 from its secondary key, and
+   the elite slots 0 and 1 from the two elite keys. Neither form reads the other's keys. When a rules layer gives a type's
    section and the type's clear-weapons flag is set as that section leaves it (a layer that omits
    the key keeps the value in force), its slots 0 and 1 and its elite slots 0 and 1 are empty after
    that layer, even when the same layer names weapons for them. This holds whatever its turret
@@ -92,8 +96,12 @@ This spec covers skirmish combat and import. Network games and campaigns are out
    (`quirks.clear_weapons_any_turret_count`, Edge cases). With turret count 0 or less and the flag
    set, the four standard weapon keys create no weapon type in that layer (S-0004, claim 13), so a
    weapon named only there does not exist unless something else creates it.
-   - Backing: `measurable` (scenario W1, parts c and d)
-   - Confidence: high (the two forms); medium (the clear-weapons flag on multi-weapon types)
+   - Backing: `measurable` (scenario W1, parts c to f; W11 and S-0004, claim 16, scenario K6,
+     for registration above 18). The absence of registration from suppressed standard fields
+     is `unmeasured` here: firing shows an empty slot, not whether an otherwise unused weapon
+     type was registered (S-0004 claim 13 has the same qualification).
+   - Confidence: high for the two forms and the registration/usable-slot distinction; medium for
+     the clear-weapons flag on multi-weapon types
 
 2. **Elite replacement.** S-0311 (claim 6) owns when an elite weapon is used; this claim restates the
    rule for the slots, and the two agree. While an object's veterancy rank is elite, the weapon in its slot *i* is
@@ -108,23 +116,29 @@ This spec covers skirmish combat and import. Network games and campaigns are out
 3. **The precedence.** The weapon it would use against a target is the slot given by the first row
    of table P (State and ordering) that applies to the firer and the target. Overrides for deployed
    infantry and vehicles (claims 8 and 9) come before the table. No row draws from a random stream,
-   and the choice depends only on the firer, the target and their present state, so asking twice in
-   one tick gives the same answer. The rows say which of the two slots 0 and 1 is used, except rows
+   and the choice depends only on the firer, the target and their present state, so asking twice with
+   unchanged state gives the same answer, even within one tick. A shot or state change between
+   requests can change the answer. The rows say which of the two slots 0 and 1 is used, except rows
    1, 4 and 5, which can give other slots.
    - Backing: `measurable` (scenarios W2 to W8 test the rows: rows 6 to 8 by W2, rows 9 and 11 by
      W6 parts a and b, row 10 by W6 part e, rows 13 and 17 to 20 by W3, row 3 by W7 part b); row 12
      is `unmeasured`: it needs an aircraft in its dive, which no scenario known to us can set up
      with two distinguishable weapons, and which the aircraft specs would have to supply. Rows 14 to
-     16 are tested by S-0304 scenario V2 and W3.
+     16 are tested by S-0304 scenario V2 and W3. Precedence combinations not exercised by these
+     parts are `unmeasured`: the parts test individual rows and selected overlaps, not every
+     possible combination of special abilities. The absence of choice-related random draws is
+     `measurable` through W12. Slot 0 with no target is `unmeasured`: without a target these
+     parts have no shot identifying a slot. Choices hidden by an independent refusal to fire
+     (notably a cloaked water target) are also `unmeasured` unless a shot identifies them.
    - Confidence: high for the order of the rows; medium for rows 6 to 11, which depend on special
      abilities that other specs own; low for row 12
 
-4. **Single-weapon firers use slot 0.** A firer whose secondary slot is empty, or whose secondary
-   weapon has the never-use flag, uses slot 0 against every target, apart from claims 8 and 9 and
+4. **Incomplete weapon pairs use slot 0.** A firer whose primary or secondary slot is empty,
+   or whose secondary weapon has the never-use flag, uses slot 0 against every target, apart from claims 8 and 9 and
    rows 1 and 2 of table P. In particular rows 4 (passengers) and 5 (gattling types) apply only to firers with
    weapons in both slots 0 and 1 and a secondary without the never-use flag
    (`quirks.passenger_weapon_needs_secondary`, Edge cases).
-   - Backing: `measurable` (scenario W7, part b)
+   - Backing: `measurable` (scenario W7, parts b to d)
    - Confidence: high
 
 ### Multi-weapon types
@@ -135,7 +149,7 @@ This spec covers skirmish combat and import. Network games and campaigns are out
    outside 0 … 17 sets it to 0. A charge-turret type ignores every request to change its weapon
    number.
    - Backing: `measurable` (scenario W4, parts a to f for the number; part h for the charge-turret
-     rule)
+     rule; W1 part d for a switching type selecting a higher slot with slots 0 and 1 empty)
    - Confidence: high
 
 6. **Gunner types.** For a vehicle of a gunner type:
@@ -144,15 +158,18 @@ This spec covers skirmish combat and import. Network games and campaigns are out
    - when its last passenger leaves, its weapon number becomes 0,
    - further passengers entering or leaving while at least one remains change nothing.
 
-   So the weapon is chosen by the passenger that entered the empty vehicle, and it stays while any
-   passenger is aboard, even after that passenger has left. One refinement (low confidence): a
+   For a gunner vehicle that is also a switching type, the weapon is therefore chosen by the
+   passenger that entered the empty vehicle, and it stays while any passenger is aboard, even
+   after that passenger has left. Other gunner vehicles still follow table P for slot choice.
+   One refinement (low confidence): a
    first passenger whose temporal weapon (an erasing weapon, glossary *being erased*) is still
    erasing a target when it enters hands that erasure over to the vehicle, which carries it on. If
    the passenger's rearm countdown (S-0301) was still running, the vehicle's rearm countdown
    restarts with the delay of the weapon in the vehicle's slot 7. In this case too, the vehicle's
    weapon number after the entry is the mode index of the passenger's type, as above.
    - Backing: `measurable` (scenario W4, parts a to f for the first-passenger rule; part g for the
-     temporal hand-over)
+     temporal hand-over). Retention after the first passenger alone leaves is `unmeasured`
+     if W4 part d cannot remove that passenger alone: evacuating and refilling does not test it.
    - Confidence: high for the first-passenger rule; low for the temporal hand-over
 
 7. **Gattling types.** A gattling type at gattling stage *s* uses slot 2*s* + 1 against an airborne
@@ -188,7 +205,7 @@ This spec covers skirmish combat and import. Network games and campaigns are out
 10. **Passengers of open-topped transports.** A firer riding inside an open-topped transport, whose
     own type's passenger weapon index is not −1, uses that index (row 4 of table P), subject to
     claim 4. The transport's type plays no part. −1 means "choose normally" (rows 5 onwards).
-    - Backing: `measurable` (scenario W7)
+    - Backing: `measurable` (scenario W7, including part e for the transport's own index)
     - Confidence: high
 
 ### Water and land targets
@@ -199,7 +216,9 @@ This spec covers skirmish combat and import. Network games and campaigns are out
     "no weapon" value. This spec gives no rule that then forbids the shot; a refusal, if the original
     has one for these modes, would come from a rule outside the weapon choice (open question). The modes' tests look at the target's type: its underwater flag, organic flag,
     unnatural flag, its hover speed type, and, for mode 0, its present cloak state.
-    - Backing: `measurable` (scenario W3; scenario W6, parts c and d)
+    - Backing: `measurable` when a shot identifies the slot (scenario W3; scenario W6, parts c
+      and d); `unmeasured` for a choice hidden by a refusal to fire: the refusal alone cannot
+      distinguish slot 0 from a separate prohibition outside this spec.
     - Confidence: high for modes 1, 2, 3, 5, 6 and 7; medium for modes 0 and 4
 
 ### Buildings
@@ -209,16 +228,19 @@ This spec covers skirmish combat and import. Network games and campaigns are out
     there. It is always the upgrade type's ordinary slot *i*: an upgrade's elite slots are never
     used, whatever the building's veterancy rank. Only when no installed upgrade has one do the
     occupant rule (claim 13) and then the building's own slot *i* (with claim 2) apply.
-    - Backing: `measurable` (scenario W9, parts c and d)
+    - Backing: `measurable` for slot 0 (scenario W9, parts c and d); `unmeasured` for higher
+      slots: these parts cannot select a higher building slot through ordinary input.
     - Confidence: medium
 
 13. **Garrisoned buildings fire their occupants' weapons.** A building whose type can be occupied
-    and lets its occupants fire, and that holds at least one occupant, always uses slot 0 (row 2 of
-    table P). The weapon in that slot, and in every other slot that a rule asks about (so the building's mean
+    and lets its occupants fire, and that holds at least one occupant, uses slot 0 when row 2 of
+    table P applies; a switching type instead follows row 1. The weapon in that slot, and in every other slot that a rule asks about (so the building's mean
     weapon damage of claim 15 is that weapon's *d*), unless an upgrade supplies one (claim 12), comes
     from its *current occupant*: the occupant at the building's occupant index. The occupant index starts at
-    0, moves to the next occupant, in the order the building holds them, after each shot that
-    leaves the building (wrapping to 0 after the last), and returns to 0 whenever occupants leave.
+    0 and moves to the next occupant, in the order the building holds them, after each successful
+    non-disc-laser shot (wrapping to 0 after the last). A disc-laser shot does not advance it,
+    so successive such shots use the same occupant. It returns to 0 whenever occupants leave
+    or are killed. A refused firing attempt or void shot does not advance it (S-0301 claim 15).
     The weapon is:
     - for an elite occupant: its type's elite occupying weapon if the type has one, and otherwise
       the weapon in the occupant's own slot 0 (with claim 2),
@@ -227,8 +249,12 @@ This spec covers skirmish combat and import. Network games and campaigns are out
 
     An elite occupant whose type has an occupying weapon but no elite occupying weapon therefore
     fires its own primary, not the occupying weapon (`quirks.elite_occupant_skips_occupy_weapon`).
-    S-0313 (claim 6) uses the same occupant index for the muzzle of the shot.
-    - Backing: `measurable` (scenario W9, parts a and b)
+    S-0313 (claim 6) owns this shared index, called the muzzle index there.
+    - Backing: `measurable` for slot 0 (scenario W9, parts a, b and e; S-0313 P5 part b for the disc-laser
+      exception). Reset on an occupant's death and unchanged index on a refused or void attempt
+      are `unmeasured` here: these parts do not isolate a death without emptying the building,
+      or an unsuccessful launch between distinguishable occupants. Occupant substitution in
+      other slots is `unmeasured`: these garrison parts choose only slot 0 for their shots.
     - Confidence: high for the rotation and the weapon rule; medium for the order of occupants
 
 ### Other uses of the weapons
@@ -273,8 +299,10 @@ This spec covers skirmish combat and import. Network games and campaigns are out
     - **Departure for bad data.** Our engine provides only slots 0 … 17 and their elite slots,
       keeps the registration and section-reading effects of higher-numbered references, and warns
       about the excessive count. No usable firing slot is supplied for those higher references.
-    - Backing: `measurable` (scenario W11, shared with S-0004 K6). The safe slot limit and warning
-      are design rules, not predicted oracle results.
+    - Backing: `measurable` for registration and section-reading effects (scenario W11, shared
+      with S-0004 K6). Registration order is `unmeasured`: these parts expose existence through
+      overlay artwork, not a weapon index or the relative order of several created weapons.
+      The safe slot limit and warning are design rules, not predicted oracle results.
     - Confidence: high for registration without a cutoff; medium for observing it in an original
       game that successfully loads the unsafe test data.
 
@@ -345,7 +373,7 @@ secondary" and "the primary" are the weapons in slots 1 and 0.
 The first row that applies decides, so the order of two rows is observable wherever both can apply
 and they give different slots. Rows that give the same slot may be tested in any order. The
 orderings that change outcomes include:
-- row 1 before every other row (a switching type ignores the target and its own state; in
+- row 1 before every other table row (a switching type ignores target-based choice rules; in
   particular a switching type with an empty secondary still uses its weapon number, claim 5),
 - row 2 before row 3 (a garrisoned building without weapons of its own still fires),
 - row 3 before rows 4 to 20 (claim 4),
@@ -354,8 +382,8 @@ orderings that change outcomes include:
 - row 6 before rows 7 to 20 (an airstrike secondary decides alone: against anything but a
   charge-accepting building it gives 0, where rows 7 to 13 would give 1, as for a locomotor primary
   or an overpowered building, and a zero versus value does not change it),
-- rows 7 to 12 before rows 14 to 20 (they give slot 1 even for a cell target and even when a versus
-  value is zero, where row 14 gives 0 and rows 15 and 16 can give either),
+- rows 7 to 12 before rows 14 to 20 (when applicable they give slot 1 even when its versus
+  value is zero; rows 9, 10 and 12 can also apply to a cell target, where row 14 would give 0),
 - row 13 before row 14 (a cell target with land mode 2 gives 1, not 0),
 - row 14 before rows 15 to 20 (a target without an armour class has no versus value to test),
 - row 15 before row 16 (two zero versus values give slot 0),
@@ -401,8 +429,10 @@ choice tells the two apart. The importer need not model "no weapon".
 
 | Event | Result |
 |---|---|
-| a shot leaves the building | index = (index + 1) mod occupant count |
-| occupants leave (any) | index = 0 |
+| a successful shot leaves the building, other than a disc-laser shot | index = (index + 1) mod occupant count |
+| a disc-laser shot leaves the building | index unchanged |
+| a firing attempt is refused or its shot is void | index unchanged |
+| occupants leave or are killed (any) | index = 0 |
 
 Ordering: none of its own. The choice is made each time a rule asks for it, with the state at that
 moment (for example the gattling stage and the deployed state of the same tick).
@@ -435,10 +465,12 @@ moment (for example the gattling stage and the deployed state of the same tick).
   flag empties slots 0 and 1 (and elite slots 0 and 1) after the numbered keys filled them. Switch
   `quirks.clear_weapons_any_turret_count` (default on = original). Off: the flag acts only on types
   whose turret count is 0 or less.
-- **Weapon count above 18** (claim 1). With a weapon count above 18 the original's result is
-  undefined. **Departure** (bad data): our engine fills only the first 18 usable slots and their
-  elite slots, but higher-numbered references still register weapons and those weapons read
-  sections (claim 16; S-0004 claims 6 and 16). The importer warns about the excessive count.
+- **Weapon count above 18** (claim 1). The original's result for using such a count is undefined.
+  **Departure** (bad data): our engine retains registration effects from every applicable numbered
+  normal and elite weapon field up to the imported weapon count, including fields above 18 and
+  section reads of weapon types they create, but usable weapon slots and their elite slots remain
+  limited to the first 18 (claim 16; S-0004 claims 6 and 16). Missing numbered fields create
+  nothing. The importer warns for a count above 18.
 - **Upgrade weapons win over occupants** (claim 12). A garrisoned building with an installed upgrade
   that supplies slot 0 fires the upgrade's weapon, not its occupants'. No switch proposed; this is a
   consequence of the slot rule.
@@ -449,7 +481,7 @@ moment (for example the gattling stage and the deployed state of the same tick).
 |---|---|---|---|
 | Rules, type section, key `TurretCount` | turret count: above 0 makes a multi-weapon type (claims 1, 5) | integer | held value; engine default 0 |
 | Rules, type section, key `WeaponCount` | *N* of claim 1 | integer | held value; engine default 0 |
-| Rules, type section, numbered keys `Weapon1` … `WeaponN` and `EliteWeapon1` … `EliteWeaponN`, where *N* is `WeaponCount` | weapon registration for positive integer *k* ≤ *N* on a multi-weapon type (claim 16), including *k* above 18; only *k* ≤ 18 fills usable slot *k* − 1 or its elite slot in our engine | creating weapon type reference, 127-byte text limit, trimmed and resolved as S-0004 claim 13 specifies | held slot value for supported slots; engine default nothing; absent references create nothing |
+| Rules, type section, numbered keys `Weapon`*k* and `EliteWeapon`*k* for positive integer *k* | For a multi-weapon type, each present key with *k* ≤ *N* may create its named weapon type; only applicable keys with *k* ≤ 18 fill usable slot *k* − 1 or its elite slot in our engine. Applicable keys with *k* > 18 have registration effects but no usable slot (claims 1 and 16). | creating weapon type reference, 127-byte text limit, trimmed and resolved as S-0004 claim 13 specifies | held slot value for supported slots; engine default nothing; absent references create nothing |
 | Rules, type section, keys `Primary`, `Secondary`, `ElitePrimary`, `EliteSecondary` | slots 0 and 1 and elite slots 0 and 1 of a type with turret count 0 or less (claim 1) | weapon type name | held value; engine default nothing |
 | Rules, type section, key `ClearAllWeapons` | clear-weapons flag (claim 1): when set on a type with turret count 0 or less, its primary, secondary and elite keys create no weapon type in that layer (S-0004, claim 13); on every type, when set as a layer leaves the section, slots 0 and 1 and elite slots 0 and 1 are empty after that layer, even if the layer names weapons for them | boolean | held value; engine default no |
 | Rules, type section, key `IsGattling` | gattling type (claim 7) | boolean | held value; default no |
@@ -479,7 +511,10 @@ moment (for example the gattling stage and the deployed state of the same tick).
 ## Measurement scenarios
 
 All scenarios run under the measurement setup with named test files: a test map whose override
-sections give the test types and weapons named in each scenario. Unless a part says otherwise, the
+sections give the test types and weapons named in each scenario. Director and all other mods
+are off. Use a tiny flat skirmish map, one human observer and one bystander computer player
+kept outside the observed area; a run is void if an unnamed bystander object affects that area.
+Targets and firers named below are the observed area. Unless a part says otherwise, the
 two weapons of a test firer are made distinguishable by giving their warheads 100 % against every
 armour class and their weapons different damage fields, for example 7 and 13, so that the health a
 target loses per hit identifies the weapon. Observations use a recorder that reads health values,
@@ -497,21 +532,30 @@ unless stated: no random draw enters the choice (claim 3), so repeated runs give
 - *Part c:* the same type with turret count 1, weapon count 2, the first numbered weapon key = *C* (damage 5) and
   primary *A*. *Expected:* hits of 5 (slot 0 comes from the numbered key, the primary key is not
   read).
-- *Part d:* the type of part c with weapon count 3 (the third numbered weapon key = *E*, damage 11) and the
-  clear-weapons flag set; switch its weapon number to 0, 1 and 2 (for example through a gunner
-  passenger, W4). *Expected:* no shot with weapon numbers 0 and 1 (slots emptied), hits of 11 with
-  2.
+- *Part d:* the type of part c with weapon count 3, ordinary numbered weapons in slots 0, 1
+  and 2 of damage 5, 13 and 11, and elite numbered weapons in slots 0 and 1 of damage 9 and 17.
+  Set the clear-weapons flag; switch its weapon number to 0, 1 and 2 through gunner passengers
+  (W4), at rookie and elite rank. *Expected:* no shot with weapon numbers 0 and 1 at either rank
+  (ordinary and elite slots emptied), hits of 11 with 2 (no elite replacement there).
+  Control with the flag clear: shots in slots 0 and 1 identify their ordinary or elite weapon.
+  A slot-2 damage other than 11, or any firing through a cleared slot, falsifies this part.
 - *Part e:* the type of part c with turret count 0 and the first numbered weapon key = *C* still set
   (damage 5), primary *A*. *Expected:* hits of 7 (the numbered key is not read).
 - *Falsified if:* part a not 7; part b not 9, or 9 used against the second target; part c 7,
   or part d fires slot 0 or slot 1; part e 5.
+- *Part f (numbered elite fields):* the type of part c, with an elite first numbered weapon of
+  damage 9 and elite primary of damage 13; make the firer elite and attack. *Expected:* hits of
+  9, from the numbered elite slot, not 13. Any other damage falsifies this part.
 
 **W2: zero versus values and the airstrike, locomotor and drain rows (claim 3, rows 6 to 8, 15,
 16).** S-0304 scenario V2 covers rows 15 and 16. For rows 6 to 8:
 - *Part a (row 6):* a ground firer whose secondary has an airstrike warhead; targets: a
-  building whose type accepts charges and is not a refinery, and an enemy vehicle. *Expected:* the
+  building whose type accepts charges and is not both a resource gatherer and a resource destination,
+  and an enemy vehicle. *Expected:* the
   secondary's effect against the building (the airstrike marker or its damage), the primary against
-  the vehicle, also when the primary's versus value against the vehicle is zero.
+  the vehicle. Repeat with the primary's versus value against the vehicle set to zero:
+  *Expected:* no shot, rather than a fallback to the legal secondary. Firing the secondary
+  falsifies the airstrike row's precedence over zero-versus choice.
 - *Part b (row 7):* a firer whose primary has a locomotor warhead and whose secondary is ordinary,
   against an enemy building. *Expected:* the secondary fires.
 - *Part c (row 8):* a firer whose secondary is a draining weapon; target an enemy drainable
@@ -530,33 +574,39 @@ unless stated: no random draw enters the choice (claim 3), so repeated runs give
   With land mode 0 a land target and a force-fire on a land cell, and a force-fire on a terrain
   object, get slot 0 (rows 14 and 20). With land mode 2, a water target follows table N (row 17
   before row 18), not slot 1.
-- *Falsified if:* any target gets the other slot.
+- *Falsified if:* any successful shot uses a different slot from the tables.
+  The absence of a shot is inconclusive where another firing-legality rule could refuse it.
 
 **W4: switching and gunner types (claims 5 and 6).**
 - *Setup:* a gunner vehicle type with turret count 4 and weapon count 4, weapons 1 to 4 with damages
   3, 5, 7 and 11; two infantry types *P* and *Q* with mode indices 2 and 3; the gunner vehicle can
   carry two passengers.
 - *Procedure:* (a) empty vehicle attacks; (b) *P* enters, attack; (c) *Q* enters as second
-  passenger, attack; (d) *P* leaves (unload one, if the unload order allows; otherwise unload both
-  and re-enter *Q* then *P*), attack; (e) all leave, attack; (f) give *P* a mode index of 25 in the
-  test map, enter, attack.
-- *Expected:* hits of 3, 7, 7, 7 (the first passenger's choice stays), 3, 3; in (d) with re-entry
-  *Q* first: 11.
+  passenger, attack; (d) *P* alone leaves, if ordinary input can make it do so, then attack.
+  (e) all leave, attack; (f) give *P* a mode index of 25 in the test map, enter, attack.
+- *Expected:* hits of 3, 7, 7, 7 (the first passenger's choice stays), 3, 3. If part d cannot
+  remove *P* alone, leave that part unmeasured; unloading both and re-entering *Q* then *P*
+  instead gives 11, but confirms only the empty-vehicle entry rule, not retention after *P* leaves.
 - *Part g (temporal hand-over, low confidence):* the gunner vehicle's type is given weapon count 8,
   so that its slot 7 exists (claim 1; slots 4 to 6 may stay empty), and slot 7 holds a weapon with a
   rearm delay of about 300 ticks, and the weapon of mode index 2 has a delay of about 30 ticks.
   Infantry type *T* has an erasing (temporal) primary and mode index 2; it is erasing a stationary
-  enemy vehicle when it is ordered into the empty gunner vehicle. *Expected:* the enemy vehicle stays
+  enemy vehicle when it is ordered into the empty gunner vehicle. Use a long passenger rearm
+  delay and record the countdown at entry: the delay-transfer test applies only when it is still
+  positive then. *Expected:* the enemy vehicle stays
   being erased (the erasure is carried on); the first shot the gunner vehicle fires after the entry
   comes after about 300 ticks, not 30, and then uses slot 2 (mode index 2). *Falsified if:* the first
-  shot comes after about 30 ticks, or the erasure ends when *T* enters. Repeat with *T* not erasing
-  anything: the first shot then follows the delay of slot 2 (about 30 ticks).
+  shot comes after about 30 ticks, or the erasure ends when *T* enters. More precisely, compare
+  the observed countdown restart with the slot-7 delay from S-0301, including its ordinary delay
+  factors, rather than treating the illustrative 300 ticks as an exact result. Repeat with *T*
+  not erasing anything as a control; record its timing without assuming entry itself imposes a
+  slot-2 delay.
 - *Part h (charge-turret rule):* the gunner vehicle of parts a to f with its charge-turret flag set.
   *Expected:* hits of 3 after *P* enters and after *Q* enters (the weapon number stays 0 whatever
   the passengers' mode indices); the same vehicle without the flag gives the results of parts a to f.
   *Falsified if:* any hit other than 3.
-- *Falsified if:* (parts a to f) the weapon follows the latest passenger or the passenger aboard
-  rather than the first one to enter the empty vehicle.
+- *Falsified if:* any completed part a to f differs from the listed damage, including part f
+  not reverting to damage 3.
 
 **W5: gattling types (claim 7).**
 - *Setup:* a gattling vehicle type with turret count 1 and weapon count 4: slot 0 ground (damage 3),
@@ -570,8 +620,9 @@ unless stated: no random draw enters the choice (claim 3), so repeated runs give
   decides whether it fires at all.
   Third variant: slot 0 (damage 3) against both targets at stages 0 and 1, whatever slots 2 and 3
   hold.
-- *Falsified if:* in the second variant slot 3 is used against the airborne target at stage 1, or in
-  the third variant slot 2 or 3 is used at stage 1.
+- *Falsified if:* any observed shot differs from the listed damage for its stage and target,
+  including slot 3 against air at stage 1 in the second variant or slot 2 or 3 at stage 1 in
+  the third. A refused shot alone does not identify its chosen slot.
 
 **W6: special rows and modes 0 and 4 (rows 9 to 12, table N modes 0 and 4).**
 - *Part a (row 9):* a type without the deploy-fire flag (claim 8 would otherwise decide) whose
@@ -591,7 +642,9 @@ unless stated: no random draw enters the choice (claim 3), so repeated runs give
   electric-charge secondary charges the building as in part b, which makes it overpowered; the
   building then attacks the vehicle. *Expected:* hits of 13 while it is overpowered; hits of 7 once
   the state has ended. *Falsified if:* 7 while overpowered, or 13 afterwards.
-- *Falsified if:* any part differs. Row 12 (kamikaze aircraft) has no scenario (claim 3).
+- *Falsified if:* any observed weapon differs from the predicted slot. The absence of a shot in
+  part c's submerged case is inconclusive for slot choice, because whether that shot is allowed remains
+  open. Row 12 (kamikaze aircraft) has no scenario (claim 3).
 
 **W7: passengers of open-topped transports (claims 4 and 10).**
 - *Part a:* an infantry type with two weapons (damages 7 and 13) and passenger weapon index 1,
@@ -599,7 +652,13 @@ unless stated: no random draw enters the choice (claim 3), so repeated runs give
   the normal choice is slot 0. *Expected:* hits of 13.
 - *Part b:* the same with the secondary removed in the test map and passenger weapon index 1.
   *Expected:* hits of 7 (row 3 wins over row 4).
-- *Falsified if:* part a 7 or part b no hit with 7.
+- *Part c:* restore the secondary and set its never-use flag. *Expected:* hits of 7.
+- *Part d:* clear the never-use flag and remove the primary instead. *Expected:* no shot,
+  because slot 0 is chosen and is empty, not hits of 13 from slot 1.
+- *Part e:* repeat part a in a second open-topped transport type with passenger weapon index 0
+  on the transport itself, leaving the passenger unchanged. *Expected:* still hits of 13
+  from the passenger; its index, not the transport's, decides.
+- *Falsified if:* part a or e differs from 13, b or c differs from 7, or d fires the secondary.
 
 **W8: deployed weapons (claims 8 and 9).**
 - *Part a:* an infantry type with the deploy-fire flag, deploy weapon index 1 and two weapons,
@@ -608,7 +667,7 @@ unless stated: no random draw enters the choice (claim 3), so repeated runs give
 - *Part b:* the same unit deployed. *Expected:* hits from slot 1.
 - *Part c:* a vehicle type with the deploy-fire flag and deploy weapon index 0, deployed, against a
   target where table P would give 1. *Expected:* slot 0.
-- *Part d (claim 8, second bullet):* the infantry type of part a with passenger weapon index −1,
+- *Part d (claim 8, passenger rows):* the infantry type of part a with passenger weapon index −1,
   riding in an open-topped transport that is ordered to attack a target against which the primary's
   versus value is 0 % and the secondary's 100 %. *Expected:* slot 0 is chosen, so no hit (the
   primary's zero versus value makes the shot illegal); the same unit without the deploy-fire flag
@@ -633,8 +692,16 @@ unless stated: no random draw enters the choice (claim 3), so repeated runs give
   19). *Expected:* every shot 17 (the first installed wins). Repeat with *U2* installed first:
   every shot 19. With the host building at elite rank (the map's initial veterancy for its owner)
   and *U1* installed: still 17, never 21.
-- *Falsified if:* the elite *E* fires 5 in part a, the order of damages does not cycle as stated, or
-  part d fires the later upgrade or 21.
+- *Part e (disc-laser exception):* no upgrade; two rookie occupants entered in order, *E* then
+  *G*. Give *E* a disc laser occupying weapon with damage 5, and *G* its ordinary damage-11
+  primary. Order the building to attack the stationary enemy vehicle and record at least four
+  successful shots, their damage and their muzzle points (as S-0313 P5). *Expected:* every
+  shot uses *E*, damage 5, and the same muzzle point. Control: replace only *E*'s weapon with
+  the ordinary occupying weapon of part a; damage then alternates 5, 11. Evacuate and refill:
+  the first occupant fires again from index 0.
+- *Falsified if:* any damage in parts a to d differs from their expected sequences, a departure
+  does not restart part a at the first remaining occupant, or part e rotates occupants or muzzles
+  after a disc-laser shot while its ordinary-weapon control alternates.
 
 **W10: mean weapon damage (claim 15).** Through S-0309. A test infantry type with primary damage
 −5 and secondary damage 3 (*M* = trunc(−2 / 2) = −1) is a healer for acquisition: in *guard* next to
@@ -643,6 +710,16 @@ secondary 3 (*M* = 0) it does not. With primary −1 and secondary 2 (*M* = trun
 not retaliate when attacked (S-0309, claim 18), with primary −1 and secondary 4 (*M* = 1) it does.
 - *Falsified if:* the unit with *M* = −1 does not pick the damaged ally, the unit with *M* = 0 does,
   or the retaliation results are reversed.
+- *Additional parts:* repeat the acquisition pair with the negative contribution in the
+  ambient-damage field instead of the damage field (ordinary damage 0): same acquisition result.
+  Repeat using only the primary, with damage −1 then 0: acquisition then no acquisition.
+  For the switching-type case use W4's gunner vehicle with slot 0 positive, slot 2 damage −1
+  and slot 3 damage 0. *P* aboard selects slot 2: the vehicle seeks the damaged ally; *Q*
+  aboard selects slot 3: it does not. For this vehicle test replace the damaged allied infantry
+  with a damaged allied vehicle within 512 leptons, because a vehicle healer searches for vehicles.
+  Keep all other acquisition eligibility conditions equal
+  to the two-weapon control. Any reversed acquisition outcome falsifies the corresponding
+  ambient, single-slot or switching-slot rule.
 
 **W11: registration beyond usable slots (claim 16; S-0004 K6).**
 - *Setup:* named test files: a loose base-rules copy and art copy, tiny skirmish map, one human
@@ -664,6 +741,19 @@ not retaliate when attacked (S-0309, claim 18), with primary −1 and secondary 
   is unsafe. No firing through a nineteenth slot is attempted or predicted.
 - *Our engine:* both count-19 imports create the overlay but provide no nineteenth firing slot,
   and issue the excessive-count warning. This checks the safety departure, not oracle behaviour.
+
+**W12: choice does not draw randomness (claim 3).**
+- *Setup:* W1's two-weapon vehicle, stationary and selected, with its rearm countdown long enough
+  that no shot can occur during the observation; an enemy vehicle and an enemy building in view.
+  Use an ordinary primary and an airstrike secondary so the attack-cursor test asks for different
+  slots on the two targets. The random-state recorder logs both streams with tick numbers.
+- *Procedure:* scripted input alternates hovering over the two targets without clicking, then
+  repeats an equal-length interval hovering over empty ground. Repeat three paired intervals.
+  Record cursor changes and stream advancement; discard intervals with unrelated visible random
+  effects or a shot.
+- *Expected:* the target-dependent cursor checks add no draws beyond the matched ground-hover
+  control. A reproducible increase proportional to the number of checks falsifies the no-draw
+  claim. Unexplained background advancement is inconclusive, not evidence for a choice draw.
 
 ## Open questions
 

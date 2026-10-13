@@ -2,7 +2,7 @@
 id: S-0407
 title: Tech tree (what a house may build: prerequisites and generic groups, tech level, country lists, stolen tech, build limits, captured buildings, secret labs)
 topic: production
-revision: 4
+revision: 5
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -70,7 +70,9 @@ stream*, *game start*, *absent-key default*, *importer warning*, *quirk switch*,
   make it, are judged only at a recheck (claim 12), when the set is worked out again. Between two
   rechecks the offer does not change, even when (a) or (b) stops or starts holding. Whether an
   offered type is at limit is judged from the current counts at every moment (claims 9 and 13): an
-  offered type at limit is shown darkened and cannot be ordered.
+  offered type at limit cannot be ordered to start or queue an item. A build order requesting
+  resume of its held item is exempt from that issue-time limit test (claim 13), and its own icon
+  shows its item state rather than darkening (S-0411 claim 3).
 - **Being sold, queued to be sold.** A building is *being sold* while its current behaviour (S-0215,
   Terms) is *selling*, that is, during its sale (glossary, *sale*). It is *queued to be sold* while
   its queued behaviour (S-0215, Terms) is *selling*, for example after a sell order (S-0213, claim
@@ -102,7 +104,7 @@ stream*, *game start*, *absent-key default*, *importer warning*, *quirk switch*,
   our engine keeps one for every player house (claim 13). It changes only at a recheck of the
   offer (claim 12, the closed list of events that call for one), and what it holds after a recheck is: a type is in the set exactly when claim 1
   (a) and (b) both hold and, in addition, either the type was already in the set before the recheck
-  or the house has a *qualifying factory* (Terms) at the recheck. A type for which (a) or (b)
+  or the house has a *qualifying factory* (Terms) at the recheck. This admission rule assumes space in the type's sidebar tab: S-0004 claim 11 suppresses an otherwise eligible new icon when the tab is full. Whether that suppressed type belongs to the taken-up set for order legality, and when a freed slot admits it, remain open (Open question 5). No cancellation rule is asserted here for a suppressed type. A type for which (a) or (b)
   fails leaves the set (or stays out of it) even when a qualifying factory exists. A type that has left the set is *not* remembered as taken up: when it is allowed again it
   needs a qualifying factory again at the recheck that follows. A type is *taken up* while it is in
   the set. Between two rechecks the set does not change.
@@ -116,7 +118,7 @@ stream*, *game start*, *absent-key default*, *importer warning*, *quirk switch*,
    conditions, judged at the recheck:
    - (a) its tech-tree answer (claims 2 to 10) is allowed or at limit, and
    - (b) the house has a factory building that could make it, with the tech-tree condition, power
-     and docks left out (S-0404, Terms: a factory of its kind, on the map, not being sold, of the
+     and docks left out (S-0404, Terms: a factory of its kind, on the map, not being sold or queued to be sold, of the
      matching naval kind, and whose *type's* owner countries share at least one country with the
      type's owner countries, claim 11), and
    - (c) the taken-up set itself: with a *qualifying factory* as defined in Terms, a recheck leaves
@@ -128,6 +130,9 @@ stream*, *game start*, *absent-key default*, *importer warning*, *quirk switch*,
      | yes | no | yes | yes |
      | yes | no | no | no |
      | no | yes or no | yes or no | no |
+
+     The admission rows assume space in the sidebar tab (S-0004 claim 11). A full tab suppresses
+     a new icon; its offer membership and later admission are not established here (Open question 5).
 
      (Example of the last row: a naval vehicle type whose other conditions are met, while the
      house has a switched-on factory building of the vehicle kind that is not naval and no naval
@@ -142,14 +147,16 @@ stream*, *game start*, *absent-key default*, *importer warning*, *quirk switch*,
    this can be seen: at the start of a sale of the house's only factory building of a kind, (b)
    fails for the types of that kind, yet they stay offered until the building's removal (claim 12,
    event (b)); the build icon also stays until that recheck, rather than disappearing one tick
-   after the sale starts (see Open question 4 for the needed correction to S-0411); and when a
+   after the sale starts (S-0411 claim 2). Also, when a
    refinery-alternative vehicle without the don't-score flag enters a
    transport, a type that needed it for the refinery group (claim 8 (b)) stays offered until the
    next recheck. Whether an offered type is at limit, by contrast, follows the current counts at
-   every moment: a type at limit is offered but a build order for it is refused (claim 13), and its
-   icon is darkened (S-0411). The neutral and special houses build nothing.
-   - Backing: `measurable` (scenarios T1 and T2; the frozen offer by T14 runs 7 and 8)
-   - Confidence: high (a and b); medium (c and the frozen offer: the taken-up set is inferred from
+   every moment: a type at limit is offered but an order to start or queue it is refused (claim 13).
+   A held-item resume is exempt from this issue-time limit test; its own icon shows its item state
+   rather than darkening (S-0411 claims 3 and 4). The neutral and special houses build nothing.
+   - Backing: `measurable` (scenarios T1 and T2; the frozen offer by T14 runs 7 and 8,
+     queued-sale factory exclusion by S-0411 S2's sale extensions)
+   - Confidence: high (a and b, except queued-sale factory exclusion, medium); medium (c and the frozen offer: the taken-up set is inferred from
      when the original's sidebar gains and loses an icon, which it does for the local player only,
      and the original removes an icon only at a recheck; this spec states which types are in the
      set after a recheck, and S-0411 (claim 2) gives the removal of an icon that left the set, and
@@ -290,14 +297,15 @@ stream*, *game start*, *absent-key default*, *importer warning*, *quirk switch*,
     engine. Which house update that is follows from the tick order of S-0203, with these observable
     results:
     - an event of the turn pass (a deploy, a capture, an infiltration, a trigger action) changes the
-      offer in the house update of the same tick; -
-    a placed building changes the offer in the next tick's house update, because place and sell
-      orders are applied after the house updates of their tick (S-0203, claim 7); -
-    a suspension or resumption of event (k) caused by a change of the house's low-power state,
-      which happens inside its house update, is taken up by the recheck of that same house update; -
-    an event that a recheck itself causes (the cancel of an item at the recheck, S-0404 claim 9,
-      as event (g); a superweapon found lost at the recheck, event (k)) is taken up by another
-      recheck in the house's next house update.
+      offer in the house update of the same tick.
+    - a placed building changes the offer in the next tick's house update, because place and sell
+      orders are applied after the house updates of their tick (S-0203, claim 7).
+    - a suspension or resumption of event (k) caused by a change of the house's low-power state,
+      which happens inside its house update, is taken up by the recheck of that same house update.
+    - a cancellation order issued because of a recheck is applied at the end of that tick (S-0404,
+      claim 9). If its application causes an event of this claim, that event is taken up by another
+      recheck in the house's next house update; a superweapon found lost at a recheck (event (k))
+      is likewise taken up by another recheck in the next house update.
 
     A recheck works out the whole taken-up set again from the state at that moment, for every type,
     not only for the types that the triggering event touched. So it also applies every change that
@@ -355,8 +363,8 @@ stream*, *game start*, *absent-key default*, *importer warning*, *quirk switch*,
       state depend on T14 run 6 or 8 showing that the original leaves the offer stale after a
       non-event; if it does not, those runs are void and this claim is revised. `unmeasured`: (i),
       because no such sale is known in the original, so it is a rule of our engine with nothing to
-      observe; and the further recheck caused by a recheck itself (a cancel at the recheck, a
-      superweapon found lost), because seeing it needs a non-event inside the single tick between
+      observe; and the further recheck following an event caused by a recheck (a cancellation
+      applied at the tick boundary, a superweapon found lost), because seeing it needs a non-event inside the single tick between
       the two house updates, which a scenario cannot arrange reliably (the first recheck already
       shows every earlier change).
     - Confidence: high: the timing, and events (a) to (d), (f) and (h). Medium: events (e), (g)
@@ -365,22 +373,30 @@ stream*, *game start*, *absent-key default*, *importer warning*, *quirk switch*,
       since the original's own list may hold more events (Open question 1).
 
 13. **Build orders follow the offer.** In the original the offer is made by the local player's
-    interface: a build order is issued only for an offered type that is not at limit (S-0411), and
+    interface: a build order to start or queue an item is issued only for an offered type that is
+    not at limit; a request to resume its held item is exempt from that issue-time limit test
+    (S-0411 claim 4). In both cases
     the build order itself checks only the factory conditions and the build limit when it is applied
     (S-0404, claim 3). In our engine the offer of claims 1 to 12 is worked out for every player
-    house, AI houses included, and a build order is legal only for a type that is offered to its
-    house (in its taken-up set, claim 1) and that is not at limit (claim 9) when the order is
-    issued; the limit tests made when the order is applied are S-0404 claim 3's and claim 16's. A
+    house, AI houses included. Every build order requires an offered type (in its house's taken-up
+    set, claim 1) when issued. An order to start or queue an item also requires that the type is
+    not at limit (claim 9); an order requesting resume of its held item is exempt from that test,
+    and from the busy building-line test of S-0411 claim 4. Resume remains subject to S-0404
+    claim 3's factory and build-limit application tests. The application tests for starting or
+    queuing are also S-0404 claim 3's and claim 16's. A
     type that is still in the taken-up set although claims 5 to 8 have come to refuse it since the
     last recheck (only through a non-event of claim 12) can therefore be ordered and produced, as
-    in the original (`quirks.stale_offer_orderable`). Items whose type leaves the taken-up set at a
-    recheck are cancelled by S-0404 claim 9, in that house update, for every player house. This
-    follows the AI-house ruling (glossary, *AI house*).
+    in the original (`quirks.stale_offer_orderable`). When a recheck removes a type from the
+    taken-up set, the cancel and cancel-all orders required by S-0404 claim 9 are issued in that
+    house update and applied at the end of the same tick, for every player house. S-0411 claim 13
+    owns their order when several types are removed. This follows the AI-house ruling (glossary,
+    *AI house*).
     For AI designers: in the original, the prerequisite condition (claim 8) and the build limit
     play no part in what a computer-controlled house is offered, and such a house's production is
     never cancelled when a prerequisite is lost.
     - Backing: `measurable` (scenario T11, including the order for a type refused since the last
-      recheck) for the local player's behaviour; the rule for our AI houses is `unmeasured`, a rule
+      recheck; S-0411 S4 b2 for held-item resume at and above the infantry limit; S-0404 P9 for
+      cancellation issue and application timing) for the local player's behaviour; the rule for our AI houses is `unmeasured`, a rule
       of our engine; the sentence on the original's
       computer-controlled houses is `unmeasured` too: a scenario cannot force a bystander computer
       player to try a given type (its choices come from its own build logic, and the glossary
@@ -440,11 +456,13 @@ stream*, *game start*, *absent-key default*, *importer warning*, *quirk switch*,
     dock flag adds its number of docks). The order is refused when *D* is *T* or more (F3). A type
     that is not on the pad list adds neither its objects nor its copies to *D*. So a house can
     queue copies of a dock-bound aircraft type beyond its build limit, while an item of the type is
-    in production (claim 9's exception keeps the type orderable then): the queued copies are
-    produced when their turn comes, because no limit test is made when a queued copy becomes the
-    item (S-0404 claim 3 names the queue-time test as the only limit test for a queued order).
+    in production (claim 9's exception keeps the type orderable then). Acceptance into the queue
+    does not guarantee production: when a queued copy would start, S-0404 claim 10 tests factory
+    eligibility and claim 9's build-limit answer with the production allowance, though it does
+    not repeat this claim's queue-time test or the full tech-tree test. With no other item of
+    that type in production, a copy at its positive limit therefore cannot start.
     - Backing: `measurable` (scenario T12, runs 1 to 6)
-    - Confidence: medium (low for the sentence that the over-limit copies are produced; T12 run 6)
+    - Confidence: medium (queue tests and the application-time limit on a queued start; T12 run 6)
 
 ## Formulas
 
@@ -467,8 +485,9 @@ stream*, *game start*, *absent-key default*, *importer warning*, *quirk switch*,
 > Dock-bound aircraft type: with *D* the sum defined in claim 16 and *T* the total number of docks,
 > refused when *D* ≥ *T*; *L*, *O* and *E* play no part (with
 > `quirks.dock_bound_aircraft_ignores_limit` off the order is refused when the dock test or the
-> *L* test above refuses). Signed 32-bit integers, −*L* as in F2; sums and comparisons only, no
-> rounding.
+> *L* test above refuses). All quantities and intermediate sums are signed 32-bit integers; an
+> integer result outside the signed 32-bit range wraps modulo 2³², as in S-0205 claim 1. −*L* is
+> as in F2; comparisons only, no rounding.
 
 > **F4. Secret lab draw** (claim 14). Lab *k* = 0 … *n* − 1 (*n* ≤ *N*): *r*ₖ = one ranged draw over
 > 0 … *N* − 1 − *k* (S-0202, claim 4, the range rule), secret type = entry *r*ₖ of the concatenated list.
@@ -495,7 +514,7 @@ stream*, *game start*, *absent-key default*, *importer warning*, *quirk switch*,
 | any | Unit released by a factory | ever-built count up (claim 10); recheck needed, claim 12 (f) |
 | any | Spy infiltrates a tech-lab building | stolen-tech flag set (claim 6); recheck needed, claim 12 (h) |
 | Type offered or not offered | Claim 1 (a) or (b) starts or stops holding without an event of claim 12 (the start of a sale, or a non-event (l) to (o)) | the offer of the type is unchanged until the next recheck, whatever event causes it (claims 1 and 12) |
-| Type offered and in production | A recheck removes the type from the taken-up set | S-0404 claim 9 cancels it in that house update |
+| Type offered and in production | A recheck removes the type from the taken-up set | S-0404 claim 9 orders are issued in that house update and applied at the end of that tick |
 
 Observable ordering: a type unlocked by a placed building appears in the house update of the tick
 after the placement order is applied, while the building is still in its construction state.
@@ -836,10 +855,14 @@ of the scenarios.
   released from the factory, a second is started, and a third is queued. Expected: the queued
   copy is refused (*E* = 1 + 1 copy in the line = 2 = |*L*|); with *L* = −3 it is accepted.
   Falsified if: it is accepted with *L* = −2 or refused with *L* = −3.
-- Run 6 (queued copies beyond the limit are produced, claim 16): as run 3 with *T* = 3. Observable:
-  the second copy of *A* after the first is released, and the owned count of *A*. Expected: the second
-  copy is started when its turn comes, is released, and the house owns two *A* with *L* = 1.
-  Falsified if: the queued copy is cancelled or never started.
+- Run 6 (the application-time limit on a queued start, claim 16): as run 3 with *T* = 3. Keep the
+  first *A* owned, no other item of *A* in production, and a factory with a free dock. Observable:
+  the second copy of *A* after the first is released, the queue count and the owned count of *A*.
+  Expected: the second copy is accepted into the queue but does not start after release of the
+  first, because the owned count is 1 = *L* and the production allowance no longer applies.
+  S-0404 claim 10 governs the failed queued start. Falsified if: the second copy starts while
+  these conditions hold. A second game with *L* = 2 is the control: the second copy starts and is
+  released, leaving two owned *A*. Failure of that control makes the run inconclusive.
 
 **T13. Captured prerequisite and override buildings (claims 3 and 15).**
 - Setup: three test types: type 1 needs a test building *X* as a prerequisite; type 2 has a tech
@@ -883,12 +906,18 @@ Backing).
   house update after the entry.
 - Run 7 (the start of a sale as a non-event, seen as a disappearance; claim 1's frozen offer): the
   human house's only barracks *B* is switched on and makes a test infantry type *Z* with no unmet
-  condition; an item of *Z* is in production. *B* is sold. Observable: the icon of *Z* and the
-  item, at every tick from the sell order to the first house update after *B* is removed.
-  Expected: the icon and the item stay during the whole sale; in the first house update after the
-  removal the icon is gone and the item is refunded (S-0404 claim 9). With
-  `quirks.sale_start_no_recheck` off, both happen in the first house update after the sale starts,
-  and likewise in run 2 the icon of *X* then appears in the first house update after the sale starts.
+  condition; an unfinished item of *Z* is in production. Give the test type a build time long
+  enough to remain unfinished through the sale. *B* is sold, with no other recheck event during
+  the sale. Observable: the icon of *Z*, progress, paid credits, refund and cancellation-order
+  issue/application ticks, from the sell order through the first house update after *B* is removed.
+  Expected: the icon stays during the sale and the item continues due steps and payments, absent
+  any independent hold or cancellation (S-0411 claim 14). The item is refunded in the removal
+  tick by S-0404 claim 8's permanent-removal rule. The icon is gone in the first house update
+  after removal; any cancellation orders issued then apply at that tick's end and give no second
+  refund for the already-cancelled item (S-0404 claim 9). With `quirks.sale_start_no_recheck`
+  off, the icon disappears in the first house update after the sale starts and its cancellation
+  orders apply at that tick's end, refunding an item still present then. Likewise in run 2 the
+  icon of *X* appears in the first house update after the sale starts.
 - Run 8 (a departure without stopping to exist, claim 12 (m); claim 1's frozen offer): as run 5,
   after *Y* has appeared; the house also owns a test transport that can carry *V*, and *V* enters
   it. Later a test building is put on the map. Observable: the icon of *Y* at every tick.
@@ -948,8 +977,10 @@ Backing).
   first house update after the destruction.
 - Falsified if: in runs 1 to 5 the icon appears later than the first house update after the event
   (it would then wait for some other event) or never, or in run 2 at the start of the sale; in run 6
-  it appears before the later event; in run 7 the icon is gone, or the item refunded, before the
-  removal of *B*, or the icon is still shown after the first house update after the removal; in
+  it appears before the later event; in run 7 (default switches, no independent interruption)
+  the icon is gone or the item refunded before the removal of *B*, the item is not refunded in
+  the removal tick, the icon is still shown after the first house update after removal, or a
+  second refund occurs at the later cancellation boundary; in
   runs 8 and 14 the icon is gone before the later event, or still shown after the first house
   update that follows it; in runs 9 (first and third games), 11, 12 and 13 the icon of *Y* waits
   for the control event after the candidate event (the event is missing from the original's
@@ -975,12 +1006,8 @@ Backing).
    or another transfer of ownership was not verified; T8 (e) uses two buildings placed one after
    the other. A measurement would capture an older building after a newer one is placed and
    repeat (e).
-4. **Cross-spec correction to confirm at sign-off.** S-0411 claim 2 currently removes icons at a
-   per-tick buildability test, so it predicts removal in the tick after the sell order is applied,
-   while its claim 4, Legality keeps the type offered until the sale's removal recheck. That is not
-   the rule of claims 1 and 12 here: both the icon and the offer remain until a recheck, and the
-   start of a sale alone calls for none. S-0411 claim 2 and its Terms must follow that recheck
-   timing; its claim 4's legal-but-ignored build or resume order during a sale remains consistent
-   with claim 13 here. This is a needed change to S-0411, not an answered timing question.
-   Confirmation remains pending T14 run 7 and S-0411 scenarios S2 and S4 (e3); an icon removed
-   before any recheck event would falsify this spec's prediction.
+4. S-0004 claim 11 suppresses a newly available icon when its tab is full. The admission rules
+   here cover types with space in their tab; they do not establish offer membership, order legality,
+   cancellation or later refill for a suppressed type. S-0004 scenario F4 tests suppression.
+   S-0411 claim 2 leaves later admission unresolved. Those cases need further investigation
+   before a complete capacity-aware taken-up-set rule can be stated.

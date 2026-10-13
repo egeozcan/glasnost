@@ -2,13 +2,13 @@
 id: S-0202
 title: Random streams (generator, seeding, ranged draws, which systems draw from which stream)
 topic: simulation
-revision: 8
+revision: 9
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-13
 measurements: []
-requests: [Q-0018, Q-0046]
+requests: [Q-0018, Q-0046, Q-0101]
 supersedes: []
 ---
 
@@ -297,8 +297,8 @@ addition:
         relative to S-0009's phases and S-0011's tag draws.
       - *Production.* A produced object is created when its production begins, not when it leaves
         the building that produced it. Its creation draw therefore falls in whatever part of the
-        tick starts that production (in S-0203's tick table, the production lines or the
-        processing of orders), not at its entering play. The production specs fix that timing,
+        tick starts that production (in S-0203's tick table, a house update, the production
+        lines or the processing of orders), not at its entering play. The production specs fix that timing,
         including when the next item of a queue begins.
       - *Every other creation* (reinforcements, crates, deploying, paratroopers and similar)
         happens at a time the spec of that feature fixes, and the creation draw comes with it.
@@ -342,8 +342,10 @@ addition:
           bits* form; formula *Bridge piece type*), so completing a bridge takes 3*d* raw values.
           Their stream order is step by step, from the step next to the partner's middle cell on
           the marker's side toward the marker, and within a step in order of increasing *y* or *x*
-          (overlay data 0, 1, 2); this is the numbering *j* of the formula. The pieces do not count as placed overlays: they set off none of the
-          other effects in this list. Each piece's cell is recalculated as the piece appears,
+          (overlay data 0, 1, 2); this is the numbering *j* of the formula. Neither the end-row writes nor the piece writes start a cell animation, even when
+          the type written names one. The end marker's own cell animation is also not started.
+          These writes do not count as placed overlays: they set off none of the other effects
+          in this list (claim 14). Each piece's cell is recalculated as the piece appears,
           though, which can start that cell's tile animation; that animation's creation draws
           then come right after the piece's own raw value.
         - *Cells outside the map.* An end-row cell or a piece cell across the line can lie outside
@@ -462,7 +464,7 @@ addition:
       | The animation is a bouncing type (S-0109, Terms) | Three raw values for starting motion, followed by three ranged draws R(−65535, 65535), each of which may consume more than one raw value (claim 4). What the motion does belongs to the debris and projectile specs. |
       | The animation is created with no loop delay (S-0109, claim 11) | Its start event (S-0109, claim 13) happens immediately. When μ = 0, the start event first produces the middle-event draws (S-0109, claim 14), then the type's resource-chain-reaction effects. The specs of those effects (particles, scorch marks, craters and the chain reaction) own their draws. |
 
-      A chain reaction takes no draw and has no effect when the cell containing the animation's position holds no resource. This does not suppress any preceding middle-event draws. S-0109 claim 14 states the middle-event gates and its scorch-or-crater choice draw, but not all downstream particle and smudge draws. No other draw comes with an animation's creation. A tile animation (S-0010, claim 19) and a cell animation are both created with no loop delay, so each takes the applicable draws at the moment it starts, including during map loading; nothing in loading holds animations back.
+      A chain reaction takes no draw and has no effect when the cell containing the animation's position holds no resource. This does not suppress any preceding middle-event draws. S-0109 claims 14 and 25 state the map-load middle-event gates, sprite-derived μ and particle-before-choice ordering, but not all downstream particle and smudge draws. S-0401 claim 20 gives the resource-chain-reaction draw sequence, including conditional child-animation and detonation effects. No other draw comes with an animation's creation. A tile animation (S-0010, claim 19) and a cell animation are both created with no loop delay, so each takes the applicable draws at the moment it starts, including during map loading; nothing in loading holds animations back.
     - Backing, by part:
 
       | Part | Backing |
@@ -485,7 +487,7 @@ addition:
       | Cell animation position and chain-reaction cell; its creation draws precede the tile-animation draws of the same placement | `measurable` (R8 I, using S-0009 M6e) |
       | Animation creation: a chain reaction on a cell without resource takes no draw | `measurable` (R8 F, variant iii) |
       | Game-start pass: new tile animations take their creation draws in visiting order, after end-of-loading tags and before the first tick; cells that already started one in the second pass take no further creation draws | `measurable` (R10) |
-      | Animation creation: the start-event draws come at once, before any later draw | `measurable` for cell-before-tile ordering (R8 I) and middle-event gates and choice (S-0109 AN23); the complete effect-draw sequence remains `unmeasured` here because particle, smudge and resource effects are not yet specified draw by draw |
+      | Animation creation: the start-event draws come at once, before any later draw | `measurable` for cell-before-tile ordering (R8 I), middle-event gates and choice (S-0109 claims 14 and 25, AN23), and the resource-chain-reaction sequence (S-0401 claim 20, E17); downstream particle and smudge draw counts remain unresolved |
       | The list of systems that draw from the scenario random stream | `unmeasured` (no finite number of runs can confirm a list of every system that draws; each system's draws are backed by the topic spec that states them) |
     - Confidence: high (the creation draw is taken; a produced object is created when its
       production begins; the overlay draw counts and forms); medium (the list of kinds; which
@@ -583,6 +585,44 @@ addition:
     - Backing: `measurable` (scenario R9) for the parts so marked above; the rest `unmeasured`,
       with the reasons given above
     - Confidence: medium
+
+14. **Loading-order refinements (Q-0101).** In a new skirmish, the following relations
+    determine which scenario-stream values later effects receive:
+    - The unused-house cleanup of S-0009 claim 28 follows the second whole-map
+      recalculation of S-0010 claim 12 and precedes the late start-position phase. Taking a
+      removed house's grounded pre-placed objects out of their occupied cells recalculates
+      those cells, including a building's foundation cells. A recalculation can start a missing
+      tile animation under S-0010 claim 19, and its creation draws occur during the cleanup,
+      not during the second pass or the later game-start pass. A cell that already has the
+      tile-animation start recorded since the second pass takes no new creation draws.
+      Removal of an object not occupying a ground cell does not imply a ground-cell
+      recalculation.
+    - The game-start recalculation's tile-animation creation draws follow the starting-unit
+      group's final R(0, 65535), when that draw is taken, the initial crate placement draws
+      of S-0412 claim 10, the secret-lab choices of S-0407 claim 14, and the end-of-loading
+      tag draws. They precede the first tick. The pass occupies the same position when no
+      starting units are placed or the starting-unit step stops early without its final draw.
+      It does not move ahead of crates or secret labs in those cases. Within the pass,
+      creations occur in visiting order and take claim 10's applicable animation draws.
+    - Low-bridge end markers write their end-row and piece types directly: neither those
+      types' cell animations nor the marker type's cell animation start. Thus an end-row
+      cell's write can take tile-animation creation draws from its recalculation, but no
+      cell-animation creation draws. A piece's raw type-choice value precedes its own
+      recalculation's tile-animation draws, then the next piece's raw value. There is no
+      intervening cell-animation draw, even if the written type names a cell animation.
+
+    S-0010 claims 12 and 19 and this spec's revision 8 loading table already fixed the
+    game-start pass after starting units and end-of-loading tags, but not explicitly against
+    secret labs or a skipped starting-unit step. The bridge-piece exclusion in claim 10
+    already excluded piece cell animations; the end-row and marker exclusions are now explicit.
+    S-0009 claim 28 already put cleanup before the late phase but did not place it against
+    the second pass. These refinements do not establish unresolved downstream particle or
+    smudge draw counts. S-0412 claim 14's assertion that secret labs take the last draws
+    before tick 0 needs correction: the game-start tile animations can draw later.
+    - Backing: `measurable` (R10 variants A and B for game-start placement, R11 for cleanup,
+      R12 for low-bridge cell-animation exclusion)
+    - Confidence: high for the relative loading positions and cell-animation exclusion,
+      medium for cleanup's recalculations and their conditional tile-animation draws
 
 ## Formulas
 
@@ -787,16 +827,19 @@ order is the one given. Rows marked "pointer" belong to a spec that does not yet
 | Pre-placed objects | kind by kind as in S-0009 claim 43 and S-0203 claim 3 (vehicles, aircraft, infantry, buildings), each kind in entry order; for each object: its creation draw, then its tag's draws, then its placement's draws. Of the placement draws, a vehicle of a type with either visceroid flag (Import mapping) takes one ranged draw R(0, 29) when it is placed (the rule S-0009 claim 46 states for starting units), and an infantry unit placed while the map loads takes none (its standing position comes from the map, S-0208 claim 5); the other placement draws belong to the placement specs (medium confidence). A building's upgrades are created after that building's tag and take their own creation draws | claim 10; S-0011, claim 34; placement specs (pointer) |
 | Smudges | none found (medium confidence) | — |
 | Second recalculation pass | the creation draws of the tile animations that S-0010's second pass (claim 12) starts; these replace the ones started earlier in loading (S-0010, claim 19). Each takes the animation creation draws of claim 10 | S-0010, claims 12 and 19; claim 10 |
+| Unused-house cleanup | after the second pass: tile-animation creation draws from occupied-ground-cell recalculations caused by removal, only when an animation has not already started since that pass (claim 14) | S-0009 claim 28; S-0010 claim 19; claims 10 and 14 |
 | S-0009 late phase | list 3, late re-assignments | S-0009, claim 20 |
 | Starting units | house by house, as S-0009 claim 46 orders them: each house's base unit and other starting units, each with its type choice, creation draw and placement draws; after the last house, one ranged draw over 0 … 65535 whose value has no effect | S-0009, claims 45 and 46; claim 10 |
-| Later loading steps | crates and similar (pointer) | S-0009 |
+| Initial crates | crate placement draws when the crate setting is on; exact placement counts remain owned by the crate rules | S-0412 claim 10 |
+| Secret labs | the conditional secret-lab choice draws, after initial crates and before end-of-loading tags and the game-start recalculation | S-0407 claim 14; claim 14 |
 | Fence lines | for each fence post on the map that can link to a matching post: the creation draws of the fence sections built between them, and the recompute draws of claim 10 for vein cells the line crosses. Stock data has no fence posts, so this row is empty with stock data (low confidence) | fence rules (pointer); claim 10 |
 | End of loading | the tags created at the end of loading, in registration order | S-0011, claim 34 |
-| Game-start recalculation pass | in visiting order, the creation and immediate start-event draws of each tile animation this pass starts, after starting units and end-of-loading tags and before the first tick. A cell that started one in the second pass starts no second one and takes no further animation-creation draws in this pass | S-0010, claims 12 and 19; S-0011, claim 34; claim 10 |
+| Game-start recalculation pass | in visiting order, the creation and immediate start-event draws of each tile animation this pass starts, after starting units, initial crates, secret labs and end-of-loading tags and before the first tick, even when no starting units were placed. A cell that started one in the second pass starts no second one and takes no further animation-creation draws in this pass | S-0010, claims 12 and 19; S-0011, claim 34; claim 10 |
 
 S-0009 points to this table for the rows between the initial fill and the late phase, and states
-the starting units' draws itself (claim 46). S-0011's table *Load-time draw order* lists no draws
-for the overlays and leaves the vein candidates open; this table gives them. Creating terrain objects,
+the starting units' draws itself (claim 46). S-0011's table *Load-time draw order* cites
+this spec for the overlay and vein-candidate groups. Its cleanup row must also cite claim 14's
+conditional tile-animation draws, and it must include the secret-lab group before remaining tags. Creating terrain objects,
 smudges and tunnels from the map was not found to take draws (medium confidence). Neither S-0009
 nor S-0011 lists the *Fence lines* row; it matters only for data with fence posts. Where each group
 sits is `unmeasured`, apart from what scenario R8 shows (the bridge and vein groups' own draws,
@@ -851,6 +894,10 @@ puts there. The placement rules of claim 10 read these keys:
 |---|---|---|---|---|
 | `IsVeins` | an overlay type's section | boolean | no | the veins flag (Terms) of the vein placement test and the connection pattern |
 | `SmallVisceroid`, `LargeVisceroid` | a vehicle type's section | boolean each | no | either one on: placing a vehicle of the type takes one ranged draw R(0, 29) (map-loading table, pre-placed objects; S-0009 claim 46 for starting units) |
+| `CellAnim` | an overlay type's section | animation-type name, case-insensitive; none and <none> clear it | no animation at type creation; an omitted or empty layered value keeps the previous value | cell animation of ordinary placement, S-0009 claim 12; not started by low-bridge markers or their end-row and piece writes (claim 14) |
+| `RandomRate` | an animation type's art section | two integers | no random rate; −1 preserves that end | creation stage-delay draw, S-0109 claim 3; applies equally to tile animations started by cleanup or the game-start pass |
+| `TileNNAnim`, `TileNNAttachesTo` | theater section named by the tileset's `SetName` | animation-type name and integer sub-tile index; NN is the tile number within its set | no animation, attaches-to −1 (never starts) | tile-animation eligibility for cleanup and game-start recalculations; full mapping and placement fields belong to S-0010 claim 19 and its Import mapping |
+| `TiberiumChainReaction` | an animation type's art section | boolean | no | start-event chain-reaction draws, S-0401 claim 20; no resource means no chain-reaction draws |
 
 The land types and slope shapes that the vein placement test reads come from S-0211 and S-0106. The
 map-generator seed (claim 13) is chosen by the random-map setup screen, not read from a rules key. The
@@ -1164,9 +1211,11 @@ The recorder is part of the measurement setup (the project lead has approved it)
   effects. Skirmish at speed 4, director and mods off except the named test data, 5 runs per
   fixture. Use the read-only random-state recorder to record each creation's incoming and
   outgoing scenario-stream states, initial stage delay and cell, plus the states at starting-unit
-  completion, end-of-loading tag setup and the first tick. Use two isolated instances of the
+  completion (including its final R(0, 65535) when present), initial crate placement,
+  secret-lab choices, end-of-loading tag setup and the first tick. Use two isolated instances of the
   fixture, in known visiting order, to test their draw order. *Expected:* run 1's creations
-  occur after starting units and end-of-loading tags and before the first tick, in visiting
+  occur after starting units, crates, secret-lab choices and end-of-loading tags and before the
+  first tick, in visiting
   order, and each advances the stream by precisely its stage-delay ranged draw; run 2 takes no
   further animation-creation draw in the game-start pass for a cell already served in the second
   pass. *Falsified if* a creation is deferred to the first tick, precedes end-of-loading tags,
@@ -1175,14 +1224,55 @@ The recorder is part of the measurement setup (the project lead has approved it)
   free of resource: the predicted count must remain unchanged. Resource removal or any extra
   raw value falsifies that variant. Record creations removed later separately; the first-tick
   animation count alone cannot establish the load's draw count.
+  Variant A adds one neutral secret lab meeting S-0407 claim 14's draw conditions and turns
+  crates on. Record the lab's choice and the crate placements as well as every animation
+  creation. Expected: both groups finish before the game-start fixture's creation, whose
+  incoming state predicts its rate draw. A fixture creation before either group falsifies
+  claim 14. Variant B repeats with bases off and unit count 0, so no starting units, then
+  with S-0009's early-stop fixture. Expected: the pass still follows crates, secret labs and
+  tags, with no synthetic final starting-unit draw in the early-stop case. A pass before
+  those groups or an unexplained extra final draw falsifies the variant. Five runs each.
+
+- **R11, cleanup recalculation and draw position (claim 14; Q-0101 Q2/Q3).** Use the
+  no-computer-player game of S-0009 M16 variant A, with its named neutral-country override
+  and a neutral grounded unit on an isolated test tile's animation-attaching cell. Repeat
+  with a neutral one-cell building. Use S-0010 G4's named theater test data so this cell
+  has no tile-animation start recorded after the second pass but can start one on removal.
+  Give its animation a non-singleton random-rate range, no bounce and no start-event effects.
+  Speed 4, director and mods off except these named fixtures, five runs each. The read-only
+  recorder logs the end of the second pass, removal, tile-animation creation and beginning
+  of the late phase, with incoming/outgoing stream states and initial delay. Expected:
+  removal follows the second pass and precedes the late phase; creation occurs at removal
+  and advances the stream by exactly the predicted stage-delay ranged draw. In a control
+  whose cell already started its animation in the second pass, removal takes no new
+  animation-creation draw. Falsified by a different phase order, no recalculation on grounded
+  removal, delayed creation or a control recreation. If no stock-derived theater fixture
+  meets the missing-animation condition, that draw-count subtest is inconclusive, not a
+  zero-draw finding; the phase-order and removal-cell observations still test their parts.
+
+- **R12, low-bridge writes do not start cell animations (claim 14; Q-0101 Q4).** Use R8 A's
+  bridge geometry and recorder, speed 4, director and mods off except named test data.
+  Give the end-marker types, their end-row types and all four piece types a cell animation
+  with a non-singleton random-rate pair, no bouncing and no start-event effects. The terrain
+  names no tile animation. Add one ordinary overlay of a separate type naming the same
+  animation as a positive control, outside the bridge and after its later marker in stream
+  order. Five runs. Record all animation creations during loading, not just survivors at
+  the first tick, and bridge piece types. Expected: the bridge still consumes exactly 3*d*
+  consecutive raw values in R8 A's order, creates no cell animation at any marker, end-row
+  or piece site, and the control creates one animation with its predicted rate draw.
+  Falsified by any bridge cell-animation creation or a rate-draw gap in the bridge sequence.
+  Repeat with R8 H's tile-animation fixture: the piece's raw value must precede that tile's
+  creation draws, without a cell-animation rate draw between them. This repeat separates
+  the exclusion from suppression of all animations.
 
 ## Open questions
 
-- Q-0046 is only partially answered here: claim 10 covers the no-resource chain-reaction case,
-  immediate creation timing, cell-animation ordering and the game-start pass. Q1 belongs to
-  S-0009, Q2c to S-0109. For Q2a, resource-bearing chain reactions still need a complete draw
-  sequence from the resource specs. For Q2b, S-0109 claim 14 covers event gates and the choice
-  draw, but particle creation and smudge selection and placement still need effect specs.
+- Q-0046 is answered across specs: claim 10 covers immediate creation timing,
+  cell-animation ordering and the no-resource chain-reaction case. Q1 belongs to S-0009,
+  Q2a's resource-bearing sequence to S-0401 claim 20/E17, and Q2c's sprite-derived μ to
+  S-0109 claim 25. For Q2b, S-0109 claims 14 and 25 cover map-load event gates and the
+  particle-before-choice ordering, but downstream particle creation and smudge selection
+  and placement counts still need effect specs.
   These unresolved effects must not be treated as taking zero draws during map loading.
 - Whether any of the unsynchronised random stream's users that were classified only briefly
   changes game state. In internet games, two draws are taken under a condition on the local

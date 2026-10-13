@@ -2,11 +2,11 @@
 id: S-0206
 title: Turn rates and turning
 topic: movement
-revision: 6
+revision: 7
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-10
+approved-on: 2026-10-13
 measurements: []
 requests: []
 supersedes: []
@@ -61,7 +61,8 @@ number*. From S-0207: *move destination*. From S-0211: *locomotion class* (one o
   How it gets one belongs to the order, behaviour and movement specs.
 - **Locomotor moving the vehicle.** Whether a vehicle's locomotor is currently moving it. For the
   driving locomotor this holds while the locomotor has a move destination (S-0207), or a next point
-  it is driving to other than the vehicle's current position: from a move order until the vehicle
+  it is driving to whose map coordinates (x, y) differ from the vehicle's current map coordinates.
+  Height is ignored in this comparison. This holds from a move order until the vehicle
   has arrived or its move is stopped (S-0207, claim 11), including a turn in place before a step. A
   vehicle standing still with neither, even while its body turns, is not being moved. Exactly when
   those points are set and cleared along a path is S-0207's. S-0207's *move destination* is the
@@ -88,7 +89,7 @@ number*. From S-0207: *move destination*. From S-0211: *locomotion class* (one o
   (Import mapping). How it flies belongs to the combat specs; this spec uses only whether it is 0.
 - **Spinning turret.** The turret of a type whose imported turret-spins flag is set.
 - **Firing check, facing error.** The *firing check* is the test, made each tick for a vehicle with
-  a target, of whether its weapon can fire now; it belongs to S-0301 (the firing cycle, planned).
+  a target, of whether its weapon can fire now; it belongs to S-0301 (the firing cycle).
   A *facing error* is the result of that check which says the weapon is otherwise able to fire
   but is not pointing at the target. Claim 10 states what this spec relies on about when it is given.
 - **Tank bunker.** A building that a vehicle can drive into, which then fires from inside it with
@@ -269,7 +270,7 @@ number*. From S-0207: *move destination*. From S-0211: *locomotion class* (one o
      exact meaning of "last fired" (the tick of the last shot of any weapon)
 
 10. **When the firing check gives a facing error.** The firing check belongs to S-0301 (the firing
-    cycle, planned). This spec relies on four properties of it, which decide when the
+    cycle). This spec relies on four properties of it, which decide when the
     facing-error row of claim 9 can act:
     - (a) A target out of the weapon's range gives a range result, never a facing error.
     - (b) While the turret was turning at the end of the previous tick (as the target rows read
@@ -293,7 +294,8 @@ number*. From S-0207: *move destination*. From S-0211: *locomotion class* (one o
       runs a and g test (b) and (d); scenario R11 tests both tolerances of (c) from both sides, and
       R6 run g the one at exactly 2048)
     - Confidence: medium (these are stated here only because the turret rule depends on them, and
-      S-0301, the firing cycle, planned, will own them)
+      S-0301 (the firing cycle) and S-0310 (turrets and facing for fire) specify the relevant
+      firing-check and aiming behaviour)
 
 11. **Spin speeds.** Because a spinning turret's target facing moves 2048 facing units ahead of it
     every tick, and claim 1 applies, a spinning turret of a vehicle without a target that starts on
@@ -419,14 +421,7 @@ facing (turret facing with the turret flag, body facing without it) and *d* the 
 
 **F5. Start value when several turret rows apply** (claim 9). Integers, facing units. In a tick in
 which *k* ≥ 1 of claim 9's spin row, target row and facing-error row apply, number the applicable
-rows 1 … *k* from the lowest in the table upwards, so that row *k* gives the final target. Let *s*₀
-be the turret's current value in this tick (F1, from the turn in force before the tick) and τ₀ the
-target in force before the tick. Let τᵢ be the target of row *i*; for the spin row it is F2 with
-*f* = *s*ᵢ₋₁. For *i* = 1 … *k*:
-
-> *s*ᵢ = *s*ᵢ₋₁ when τᵢ = τᵢ₋₁ (claim 3: no change),
-> otherwise *s*ᵢ = (τᵢ − βᵢ × Θᵢ) mod 65536, the F1 value at ε = 0 of a turn from ψ₀ = *s*ᵢ₋₁ to
-> ψ₁ = τᵢ (βᵢ and Θᵢ from F1 for that turn), and *s*ᵢ = τᵢ when Θᵢ = 0 or ω ≤ 0.
+rows 1 … *k* from the lowest in the table upwards, so that row *k* gives the final target. Let *s*₀ be the turret's current value in this tick (F1, from the turn in force before the tick) and τ₀ the target in force before the tick. Let τᵢ be the target of row *i*. For the spin row, calculate τᵢ by F2 using the facing left by the preceding applicable row. Consider applicable rows from the lowest in the table to the highest. For each row, compare its target with the target in force immediately before that row. An equal target leaves the facing and turn unchanged. A different target starts a replacement turn from the facing current immediately before that row; when the replacement turn has positive duration, that starting facing is the F1 value at ε = 0, namely (τᵢ − βᵢ × Θᵢ) mod 65536. When Θᵢ = 0 or ω ≤ 0, the facing is τᵢ at once. The target in force after the row is τᵢ. Thus the highest applicable row supplies the final target, while any effective earlier row can leave the facing change specified here. If the final row's target equals the target in force immediately before it, the turn in force then continues unchanged.
 
 The turn towards the final target τₖ starts from *s*ₖ₋₁, unless τₖ = τₖ₋₁, in which case the
 turn in force at that point goes on unchanged. With *k* = 1 this is claims 1 and 3 alone. Each
@@ -498,11 +493,11 @@ so the turret rests at 0.
   Off: every negative value gives ω = 0 (set at once), still with the warning.
 - **`quirks.turret_reaim_after_turn`** (default: on, the original). A vehicle whose turret does not
   spin and was turning at the end of the previous tick does not re-aim it at its target
-  by the target rows (claim 9). With claim 10 (b), a turret with a projectile that does not home therefore first
-  finishes the turn it began, waits one tick, and only then turns towards where the target is now.
-  Off: the target rows apply whether or not the turret was turning, so the turret re-aims at its
-  target every tick. This switch does not change the firing check (S-0301, the firing cycle,
-  planned).
+  by the target rows (claim 9). With claim 10 (b), a turret with a projectile that does not home
+  therefore first finishes the turn it began, waits one tick, and only then turns towards where
+  the target is now. Off: the target rows apply whether or not the turret was turning, so the
+  turret re-aims at its target every tick. This switch does not change the firing check (S-0301,
+  the firing cycle).
 - **`quirks.turret_spin_quantised`** (default: on, the original). A spinning turret turns by the
   quantised steps of claim 11, so turn rates 3 and 4 spin alike and every rate of 5 or more spins at
   2048 facing units per tick. Off: the spin row's target is the facing that F2 reads plus

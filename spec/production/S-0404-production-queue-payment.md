@@ -2,13 +2,13 @@
 id: S-0404
 title: Production queue and payment (production lines, price, pay-as-you-go steps, waiting for money, hold, cancel and refunds, queue limit, completion)
 topic: production
-revision: 2
+revision: 3
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-13
 measurements: []
-requests: []
+requests: [Q-0122]
 supersedes: []
 ---
 
@@ -20,6 +20,13 @@ A house's production lines: the price of an item, how it is paid step by step, w
 hold, cancel and refunds, the queue, completion, and how factory buildings appearing, leaving or
 losing power affect the lines. Step length is S-0403, clicks are S-0411 and the credits display is
 S-0416; skirmish only, network games and campaigns are out of scope.
+
+**Cross-spec changes required at hand-off.** S-0407 claim 13 and its state table must distinguish
+issuing cancellation orders at the recheck from applying them at the tick's end. Its issue-time
+limit rule must except held-item resume, and claim 16 must not promise that queued copies start
+without claim 9's application-time limit test (claim 10 here). S-0411's blocked-exit retry
+predictions must remain open with Q-0120 rather than promising that every blocked exit retains a
+done house item. Its old S-0404 revision-1 timing correction is already satisfied by revision 2.
 
 ## Terms
 
@@ -62,8 +69,11 @@ addition:
   is on the map, is not being sold, its type's owner countries share at least one country with the
   item type's owner countries, it is of the matching kind for vehicles (a naval factory building for
   a naval vehicle, a non-naval one for every other vehicle, infantry or aircraft item) and the
-  tech-tree rules let its house build the type (S-0407). *Could make without the tech-tree rule*
-  is the same with the last condition left out. Each rule below says whether it also needs the
+  build-limit answer with the allowance for an item in production is allowed (S-0407, claim 9).
+  This is not a full tech-tree test: prerequisites, tech level, country restrictions, stolen tech
+  and the superweapon setting are not judged here. *Could make without the tech-tree rule*
+  is the same with that build-limit condition left out too. Thus the latter test judges only the
+  factory conditions, not any part of the tech tree. Each rule below says whether it also needs the
   building to be switched on and, for aircraft, to have a *free dock*: an aircraft factory
   building has a free dock when at least one of its docking places is empty or when no aircraft is
   docked with it at all. Dock occupancy matters only for aircraft items. A factory building *could
@@ -92,10 +102,7 @@ addition:
    wait for one another; each has its own item, progress, balance owed and queue, and each pays for
    its own steps. A line exists from the first build order applied for its kind until it has neither
    an item nor a queued type; the next build order creates it again. Lines take part in the tick as
-   S-0203 (claim 8) states. All lines of all houses are updated in the order in which they were
-   created, a line created again counting as new (so it is updated after every line that existed
-   before it). The order is observable when two lines of one house can each make a step in the same
-   tick but the house can pay for only one of them: the line updated first is paid.
+   S-0203 (claim 8) states. The observable priority among a house's lines is their creation order: when two lines can each make a step in the same tick but the house can pay for only one, the earlier-created line is paid and the other waits for money. A line created again is treated as newer than every line that already existed.
    - Backing: `measurable` (scenario P1)
    - Confidence: high (six lines and their independence); medium (the update order among lines)
 
@@ -130,11 +137,18 @@ addition:
      parts; no effect of the row and general factors; the parts of a building price, as the
      original forms a building type's price); medium (the pad term's rounding)
 
-3. **Starting an item.** A build order for a type is applied only if the house has a factory
-   building that could make it (Terms) and is switched on and, for an aircraft, has a free dock.
-   Otherwise it is ignored, also as a request to queue: for example no aircraft can be ordered, even
-   into the queue, while every switched-on aircraft factory building of the house has all its docking
-   places taken. The order's factory eligibility is tested first: unless a factory building could make the type and is switched on, and, for an aircraft, has a free dock, the order is ignored and cannot add a queued type. For an eligible order, the result depends on the line state:
+3. **Starting an item.** A build order is applied only if the house has a factory building that
+   could make the type without the tech-tree rule (Terms), is switched on and, for an aircraft,
+   has a free dock, and the build-limit answer with the production allowance is allowed
+   (S-0407, claim 9). These conditions are judged when the order is applied, before starting,
+   queuing or resuming anything. The order need not pass a fresh full tech-tree test: offer
+   legality is judged when it is issued (S-0407, claim 13; claim 10 below). A stale prerequisite
+   refusal therefore does not itself prevent a start or resume while the type remains offered.
+   The same application test holds for a build order requesting resume of a held item: exemption
+   from the issue-time limit test does not exempt it from this production allowance. Otherwise
+   the order is ignored, also as a request to queue: for example no aircraft can be ordered,
+   even into the queue, while every switched-on aircraft factory building of the house has all
+   its docking places taken. For an eligible order, the result depends on the line state:
 
    | Line state before the order | Ordered type and result |
    |---|---|
@@ -144,9 +158,10 @@ addition:
    | Any other line state | The type is added at the end of the queue unless the queue already holds the game-wide maximum number of queued types (Constants), in which case the order is refused and the local player hears a refusal sound. A type is also refused when its build limit forbids it at queue time; S-0407 (claim 16) owns that test, including how it counts the item in production, its rule for limits of 0 or below, and the different test for an aircraft type that must return to a dock. |
 
    An aircraft order also fails the factory-eligibility test while every switched-on aircraft factory building of the house has all its docking places taken; it is then ignored even as a request to queue. An automatic hold means there is no switched-on factory building that could make the held item's type. An order for that type is therefore ignored and cannot resume the line until such a building is switched on; claim 8 then lifts the automatic hold by itself. An order for another type of the same line is judged by that other type's factory eligibility and, if eligible, is queued under the table's rule. A line on the forced-start hold of claim 10 likewise cannot be resumed while every factory building that could make its type is switched off. The item's object exists from the start but is not on the map. Its price at the start is the initial balance owed; it has no other effect unless `quirks.refund_at_current_price` is off (Edge cases, *Recorded price*).
-   - Backing: `measurable` (scenario P3, parts a to h, and P7 for the done item)
-   - Confidence: high (start, queue, limit, the free-dock condition for aircraft); medium (the other
-     factory conditions)
+   - Backing: `measurable` (scenario P3, parts a to j, P7 for the done item and S-0411 S4 b2
+     for resume at and above the infantry limit)
+   - Confidence: high (start, queue, limit, the free-dock condition for aircraft, and the
+     build-limit-only application test); medium (the other factory conditions)
 
 4. **Pay as you go.** Each progress step is paid when it is made. When the line's progress goes from *k* − 1 to *k* (*k* = 1 … 54), let *B*ₖ₋₁ be the balance owed before the step. For *k* = 1 … 53, the payment is
 
@@ -231,8 +246,11 @@ addition:
      If no such building exists, the order does nothing and the item stays done, blocking the line.
      When the building releases the unit, the line's next queued type starts at once (claim 3, with the
      start conditions of the forced start in claim 10); with an empty queue the line ceases to exist. When the building's exit is momentarily blocked, the
-     unit stays done and the building retries by itself (the structures specs own exits). When the
-     release fails for any other reason, the item is cancelled with the refund of claim 6. S-0411
+     release can report that the building is busy rather than that the unit has appeared on the
+     map. A blocked exit is not by itself a promise that the house's item stays done and waits:
+     when the building cannot retain the unit, the failed release cancels the item with the refund
+     of claim 6. The conditions for retaining it, and the resulting retry or hand-off to the
+     building, remain open under Q-0120 (Open questions). S-0411
      (claim 9) gives the place order that the interface issues by itself when a unit is done, in
      our engine for every player house; its left click may cancel a done unit instead (S-0411,
      claim 4).
@@ -242,17 +260,21 @@ addition:
      claim 10).
    - Backing: `measurable` (scenario P7)
    - Confidence: high (done at step 54, next queued item starts after the release, buildings wait for
-     placement); medium (the choice of the releasing building, the retry, the refund on a failed
-     release)
+     placement); medium (the choice of the releasing building and the refund on a failed release).
+     The blocked-exit retention and retry rules remain open, not predicted claims
 
 8. **Factory buildings appearing, leaving or losing power.** Whenever one of a house's factory
    buildings of a kind is placed, leaves the map, changes owner, or is switched off or on (S-0405),
    that house's line of the kind is checked at once (for a building that changes owner, the lines of
    both houses; for a vehicle factory building, the naval-vehicle line when the building is naval
-   and the ground-vehicle line otherwise). A line is looked at only by this check, so it is never
+   and the ground-vehicle line otherwise). A line's automatic-hold state is looked at only by this check, so it is never
    put on an automatic hold between two such events. The check judges "could make" (Terms) with
    docks ignored throughout and with the power switch ignored except where switched-on buildings
-   are named. The check removes from the queue every type that no factory building of the house could make. It then treats the current item according to this state table. For this table, “could make” includes the tech-tree rule; docks are ignored throughout the check, and the power switch is ignored except where a switched-on building is expressly required.
+   are named. The check removes from the queue every type that no factory building of the house could make. It then treats the current item according to this state table. Here, as in Terms, “could make” retains only the build-limit answer with the production allowance,
+   not the full tech-tree conditions. Docks are ignored throughout the check, and the power switch
+   is ignored except where a switched-on building is expressly required. A prerequisite loss alone
+   therefore does not make this check cancel an item or remove a queued type; claim 9 supplies the
+   automatic cancellation orders when a recheck removes its offer.
 
    | Item state at the check | Factory condition | Result |
    |---|---|---|
@@ -269,9 +291,9 @@ addition:
    power switch and docks, is cancelled with the refund of claim 6 and the first queued type starts
    as after a cancel (claim 10). This rule looks only at the item, not at the queue, and works in
    addition to the check above.
-   - Backing: `measurable` (scenario P8)
+   - Backing: `measurable` (scenario P8, including run 10 for the build-limit-only test)
    - Confidence: medium (the conditions and the defence-line exception); high (that a player hold is
-     never lifted by the check)
+     never lifted by the check and that the factory check omits the full tech-tree conditions)
 
 9. **Items whose type leaves the taken-up set.** When a type leaves its house's taken-up set at
    a recheck (S-0407, claims 1 and 12), the original's interface removes its build icon and issues,
@@ -304,13 +326,16 @@ addition:
     | Starting or queuing build order for another kind | The type is offered to the house and not at its build limit, under S-0407 (claim 13). An offer can remain stale until the next recheck; `quirks.stale_offer_orderable` and its alternative are owned by S-0407, claim 13. |
     | Build order resuming the held item of the ordered type | The order is exempt from the busy-line and build-limit tests, but not from the offer rule (S-0411, claim 4; S-0407, claim 13). |
     | Place order with a cell | Adjacency and explored ground hold (S-0406, claim 6, with S-0411, claim 10). Applying the order does not judge them again. |
-    A legal build order is then applied or refused by claim 3 (the factory conditions, the queue
-    limit and S-0407's claim 16). This claim only lists the rules; each stays owned by the spec
+
+    A legal build order is then applied or refused by claim 3 (the factory conditions, the
+    build-limit answer with the production allowance, the queue limit and S-0407's claim 16). This claim only lists the rules; each stays owned by the spec
     named. The original applies the building-line case differently (Edge cases); its interface never
     gives it.
     A type taken from the queue to start after a cancel or a release is started even when
     the house's only factory buildings that could make it are switched off or (for aircraft) have no
-    free dock, as long as one could make it; in the original such an item then starts on a player
+    free dock, as long as one could make it. This forced start also tests the build-limit answer
+    with the production allowance (S-0407, claim 9), but not the full tech tree or the queue-time
+    limit of S-0407 claim 16 again. In the original such an item then starts on a player
     hold when the house's available credits are at least *P* ÷ 54 (integer quotient) at the start, and
     running (and waiting for money at its first step) otherwise; being running, it is put on an
     automatic hold only by the next check of claim 8. Our engine reproduces this by default
@@ -333,7 +358,8 @@ addition:
     completion or deletion of the item's object, and no line's own update. The order of the lines
     in claim 1 therefore matters only for money (S-0203, claims 1 and 8 keep the lines' place in the
     tick). The release of a done unit and the placement of a done building are not part of this
-    claim: their draws belong to the structures and placement specs.
+    claim: unit release draws remain open under Q-0120, and building placement draws belong to
+    the placement specs.
     - Backing: `measurable` (scenario P11, with the random-state recorder)
     - Confidence: high (the creation draw at a start, S-0202); medium (that nothing else of the
       lines draws)
@@ -408,10 +434,10 @@ Line states (per line):
 | running, waiting | check of claim 8: some factory building could make the item, none of them is switched on | automatic hold |
 | automatic hold | check of claim 8: a switched-on factory building that could make the item exists | running; next step a full *R* later |
 | player hold, done | check of claim 8: none switched on | no change (no second hold) |
-| any with item | check of claim 8: no factory building of the house could make the item (tech-tree rule included, power and docks ignored, buildings being sold excluded); line of a factory building of buildings: ordinary-building line only | as a cancel (refund *P*′ − *B*) |
+| any with item | check of claim 8: no factory building of the house could make the item (build limit with production allowance included, full tech-tree conditions omitted, power and docks ignored, buildings being sold excluded); line of a factory building of buildings: ordinary-building line only | as a cancel (refund *P*′ − *B*) |
 | any with item | a factory building of its kind removed for good: no other building could make the item without the tech-tree rule (power and docks ignored; defence line included) | as a cancel |
 | done (unit) | place order, release succeeds | next queued starts, or no line |
-| done (unit) | place order, release fails for another reason than a blocked exit | as a cancel |
+| done (unit) | place order, release fails and the building cannot retain the unit | as a cancel; the retention conditions remain open (Q-0120) |
 | done (building) | place order with a valid cell | building placed; no line |
 | player hold (also the forced-start hold), automatic hold | build order for the held type, claim 3's start conditions not met | ignored; the hold stays |
 | done | build order for the item's type | nothing added |
@@ -507,7 +533,9 @@ Ordering consequences:
 | `MaximumQueuedObjects` (rules, `General`) | maximum queued types per line | integer | 5 |
 | `IncomeMult` (rules, country) | income factor *M* in F3 (S-0402, claim 12) | decimal, held as a single | 1.0 |
 | `Cost` (rules, difficulty-row sections; rules, country) | no effect (claim 2) | decimal | — |
-| `BuildLimit` (rules, type) | build limit (S-0407) | integer | — |
+| `BuildLimit` (rules, type) | application and factory-check build limit with production allowance (claims 3, 8 and 10; S-0407 claim 9), plus the separate queue-time test (S-0407 claim 16) | signed 32-bit integer | 2³¹ − 1 |
+| `Owner` (rules, type and factory building type) | owner-country overlap in factory eligibility (Terms); not the house's own country | list of country names | none; no overlap |
+| `Prerequisite`, `TechLevel`, `RequiredHouses`, `ForbiddenHouses`, `RequiresStolenAlliedTech`, `RequiresStolenSovietTech`, `RequiresStolenThirdTech` (rules, type) | full tech-tree conditions for the offer, not retested by claims 3, 8 or 10 | forms and defaults owned by S-0407 Import mapping | S-0407 Import mapping |
 | `FreeUnit` (rules, building type) | the unit type that comes free with the building (claim 2) | type name | none |
 | `PadAircraft` (rules, `General`) | the pad aircraft types (claim 2) | list of type names | empty |
 | `SeparateAircraft` (rules, `General`) | the separate-aircraft flag (claim 2) | boolean | no |
@@ -605,6 +633,20 @@ disturbed, and the part is repeated; the three agreeing results are one observat
 - (h) Naval match. Setup: only a non-naval vehicle factory building; a build order for a naval
   vehicle; then the same with only a naval factory building and a ground vehicle. Expected: both
   orders ignored. Falsified if: either starts or is queued.
+- (i) Stale prerequisite. Setup: reproduce S-0407 T14 run 8's stale refinery-group refusal, with
+  a switched-on factory, a limit that permits the order and no intervening recheck. Use game
+  speed 6 and a read-only order and line-state recorder. Procedure: click the idle offered icon
+  once; in a fresh run start and hold the item before the non-event, then click its icon to
+  resume while the offer is stale. Observable: issue and application ticks, item existence,
+  hold state, progress and queue. Expected: the first order starts an item at its boundary.
+  The second resumes the held item with no extra copy. Falsified if: prerequisite refusal alone
+  prevents either effect. Void a run if an intervening recheck removes the offer.
+- (j) Resume allowance. Use S-0411 S4 b2's held build-limit-1 infantry item, first alone, then
+  with an extra on-map object of the type. Procedure: click the held item's icon once in each
+  state. Observable: build-order issue and application, hold state and queue. Expected: both
+  clicks issue resume requests; the item alone resumes, but with the extra object it stays held
+  and no copy queues. Falsified if: the second order resumes despite the allowance being refused,
+  the first is refused, or either adds a copy. S-0407 claim 9 owns the infantry exactness.
 
 **P4. Payment and waiting for money.**
 - Setup: *P* = 1000 item with *R* = 200 at ample credits; then the same with credits 100 and a test
@@ -668,17 +710,20 @@ disturbed, and the part is repeated; the three agreeing results are one observat
 **P7. Completion and release.**
 - Setup: two vehicle factories, the second acquired later, none marked primary; then the first marked
   primary; a run with the only factory's exit blocked by units; a run with the only factory
-  switched off by the player's power toggle at completion. In the blocked-exit run, while the unit
-  is done and blocked, a build order for the same vehicle type is given.
+  switched off by the player's power toggle at completion. In the blocked-exit run, give a build
+  order for the same vehicle type only if the recorder confirms that the house's item is still done.
 - Observable: which factory releases the unit; tick of release; whether the next queued item starts
   at the release; the item state while blocked; the queue count after the build order.
-- Expected: the later-acquired factory releases without a primary mark, the primary one with it; the
-  next queued item starts in the release tick; blocked exit: the unit stays done and is released by
-  itself when the exit clears, and the build order adds nothing, so the queue count is unchanged.
-  Switched-off only factory: the item stays done until it is switched on and a place order is given
-  (S-0411, claim 4).
-- Falsified if: another factory releases the unit, the next item starts later, the blocked case
-  cancels the item, or the build order for the done item's type is queued.
+- Expected: the later-acquired factory releases without a primary mark, the primary one with it.
+  After a successful clear-exit release the next queued item starts at that boundary. A build
+  order for an item that is still done adds nothing. Switched-off only factory: the item stays
+  done until it is switched on and a place order is given (S-0411, claim 4).
+- Blocked-exit investigation (Q-0120): record whether the item is refunded, remains done or leaves
+  the house's line before the unit appears, and whether clearing the exit needs another click.
+  Record the first on-map position, facing and behaviour, and the random-state recorder's stream
+  position at each tick. These exit outcomes have no prediction in this revision.
+- Falsified if: another factory releases the unit in the clear-exit control, its next item starts
+  later, or a build order for an item recorded as still done adds a queued copy.
 
 **P8. Factory buildings leaving or losing power.**
 - Setup, runs 1 to 6: an infantry item in production with two queued infantry types; the only
@@ -705,6 +750,17 @@ disturbed, and the part is repeated; the three agreeing results are one observat
   items refunded in the tick of the destruction.
 - Falsified if: any of these outcomes differs, in particular if run 5 holds the item, run 6
   refunds the defence before that tick's order boundary, or run 7 lifts the hold.
+- Run 10 (the full tech tree is not part of the factory check): use P3 (i)'s stale
+  refinery-group loss, with an item and a queued type that both need that group, and build limits
+  that permit both. In a tick *n* after the non-event, before another recheck, switch the only
+  factory off by an order. Use game speed 6 and a read-only line and order recorder. Procedure:
+  record the line at the switch-order boundary and through the next house update and automatic
+  cancel boundary. Void if any earlier recheck removes either offer. Observable: hold state,
+  queue, item, credits and cancellation-order ticks. Expected: at the end of *n*, the factory
+  check puts the item on automatic hold without refunding it or removing the queued type merely
+  because their prerequisite fails. The switch calls for an offer recheck in *n* + 1, whose
+  cancellation orders then remove them at the end of *n* + 1 (claim 9). Falsified if: the factory
+  check itself cancels or removes them at the end of *n* on the failed prerequisite alone.
 
 **P9. Items whose type leaves the taken-up set.**
 - Setup: an item whose type needs a test prerequisite building and a queued copy; no factory
@@ -744,19 +800,23 @@ disturbed, and the part is repeated; the three agreeing results are one observat
   step if it cannot pay), and it is resumed by a build order for its type once a dock is free.
 - Falsified if: it is refused, runs while affordable, or is held while unaffordable. A result in
   which every run is running would show the behaviour of `quirks.forced_start_player_hold` off.
-- Setup, part B (the dropped queue head, low confidence): vehicle item A running with two types B
-  and C queued, where B needs a test prerequisite building X that C does not need. X is destroyed
-  by test trigger in tick *n*, and a cancel order for A is given in the cycle of tick *n*, so it is
-  applied before the interface's own orders of claim 9 at the same tick's order boundary (the
-  scripted cancel was issued during input, before the turn pass and the recheck). Run a
-  second time with the cancel order given a few ticks after the interface's cancel orders for B
-  have been applied.
-- Observable: after tick *n*, whether C starts, the queue count and the line's clock.
+- Setup, part B (the dropped queue head, low confidence): vehicle item A running with two types
+  B and C queued. By owner-country overlap, only a separate factory X can make B; another factory
+  can make A and C. Start selling X, then cancel A before X leaves the map and before another
+  factory check or offer recheck removes B. Use game speed 6 and a read-only line-state and order
+  recorder. Void the run if B is no longer queued when the cancel is applied. In a control run
+  cancel A after X's removal and the removal of B from the queue.
+- Observable: at the cancel boundary, whether B or C starts, the remaining queue and item.
 - Expected: in the first run B leaves the queue without starting and C stays queued with the line
-  holding no item and starting nothing (build orders only add to the queue); in the second run B is
+  holding no item and starting nothing (build orders only add to the queue); in the control B is
   already removed and the cancel of A starts C.
-- Falsified if: in the first run C starts, or B starts. If the first run cannot be timed so that the
-  cancel precedes the interface's orders, the rule stays unverified and keeps its low confidence.
+- Falsified if: in the first run C starts, or B starts. If no reachable cancel boundary retains B
+  while X is selling, the scenario is inconclusive and the rule keeps its low confidence.
+- Part C (a stale queued prerequisite). Reproduce P3 (i), but start A and queue B while B's
+  prerequisite holds. Make B's prerequisite fail through the non-event, then cancel A before
+  another recheck. Observable: item and queue at the boundary. Expected: B starts despite the
+  stale prerequisite refusal, provided its factory and application-time limit permit it.
+  Falsified if: that refusal alone drops B or stalls the line. Void if another recheck intervenes.
 
 **P11. Random draws of the lines (claim 11).**
 - Setup: a test map with nothing that moves or animates and with the glossary's bystander computer
@@ -777,5 +837,9 @@ disturbed, and the part is repeated; the three agreeing results are one observat
 
 ## Open questions
 
-1. The exact conditions under which the releasing building retries a blocked exit (claim 7) belong to
-   the structures specs.
+1. Q-0120 remains open: the per-kind release positions, initial facings and behaviours, cells and
+   objects that block each exit, retention or hand-off conditions, retry ticks and release/retry
+   random draws have not been established. Claim 7's factory selection is established, but is not
+   an exit-placement algorithm. S-0213 claim 20 already owns setting the rally point and S-0212
+   claim 25 its nearby-cell search; neither specifies the factory's release. No facing-0,
+   far-foundation-corner placement or per-production-tick retry rule is asserted here.

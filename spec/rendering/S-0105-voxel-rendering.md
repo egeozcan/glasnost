@@ -2,19 +2,24 @@
 id: S-0105
 title: Rendering of voxel models
 topic: rendering
-revision: 7
-sources-class: [decomp, format-doc]
+revision: 8
+sources-class: [decomp, format-doc, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-13
 measurements: []
-requests: [Q-0014]
+requests: [Q-0014, Q-0056]
 supersedes: []
 ---
 
 # S-0105: Rendering of voxel models
 
 ## Summary
+
+**Revision scope.** General equal-depth section ties and general in-bound normal-mode-0 output
+are not fully characterized here. F8 and claim 35 bind only their stated configurations; the
+remaining exact rules are open, not inferred from examples and not declared unspecified.
+This revision replaces the earlier general processing descriptions with these scoped claims.
 
 How a voxel model (a VXL model with its HVA animation) becomes pixels: the fixed viewing
 transform, how many facings each model part can show, how the body, turret and barrel are
@@ -51,26 +56,31 @@ turn per unit), to tell it apart from the coarser facings derived from it.
 - **Draw transform.** The 3×4 matrix that maps a part's model frame into view space for one draw.
 - **View space.** After the view transform: *x* to the screen's right, *y* upward on screen
   (screen rows are *−y*), *z* toward the viewer (larger *z* is nearer).
-- **The voxel buffer.** A 256 × 256 scratch image of palette indices (0 = transparent) into which
-  one part is rasterised before it is copied to the screen.
+- **voxel image** (also called the *voxel buffer* below). The palette-index image produced for
+  a part before placement on screen. Palette index 0 is transparent. Its pixel coordinates wrap
+  with a period of 256 pixels per axis (claims 22 and 24). This is an image-coordinate convention,
+  not a required storage size or layout.
 - **Shade index.** A lighting level 0–31 chosen per voxel normal; it selects one 256-entry row
   of the VPL.
-- **VPL.** The voxel lighting table file: for each shade index and each voxel colour index, the palette index to draw. Claim 38 gives how its content is used; its byte layout is the subject of planned S-0013. A *row* is the 256 entries of one shade index.
+- **VPL.** The voxel lighting table file: for each shade index and each voxel colour index, the palette index to draw. Claim 38 gives how its content is used; its byte layout is given by S-0013. A *row* is the 256 entries of one shade index.
 - **Table trigonometry.** Sines and cosines quantised to 1/8192 of a turn and taken from fixed
   single-precision values instead of exact functions; formula F1. It matters because every
   rotation in this spec uses it.
 - **Pixels per lepton** *ρ*: the conversion from game distance to model units (see Constants and F3).
-- **Image cache.** A per-type store of finished part images, keyed by a combination of the draw
-  inputs (claim 26). It is shared by every object of that type.
+- **Image reuse, image cache.** The reuse of an earlier finished image when the draw inputs
+  belong to the same equivalence class (claim 26). A *key* names that class, not a required
+  data structure. Reuse crosses objects of the same type; no storage organisation is prescribed.
 - **Fresh draw.** A draw that makes a part image or a shadow image from the model, as opposed to
   one that reuses an image from the image cache (claims 26, 31). Only fresh draws give shades to
   normal indices (claim 20), switch the depth-buffered mode (claim 32) and use and clear the
   voxel buffer (claim 34).
-- **Depth plane.** The per-pixel depths (integers 0 … 255) kept beside the voxel buffer and used
-  only in the depth-buffered mode (claim 24).
-- **Clear area.** The part of the voxel buffer and depth plane that a fresh draw clears before it
-  starts: the previous fresh draw's copy rectangle (F6), one pixel wider on the right and one pixel
-  taller at the bottom (claim 34).
+- **voxel depth** (also called the *depth plane* below). The depth associated with a voxel-image
+  pixel when claim 24's depth comparison applies. Its integer range and comparison are specified
+  there. It need not be stored beside the colour image.
+- **Previous-draw clearing, clear area.** Claim 34 specifies which effects of earlier draws cease
+  to affect a fresh image, and where they can remain visible. *Clear area* names the coordinates
+  of that rule, not a memory region. Likewise *colour plane* below means colour-image effects,
+  not a required storage layout.
 - **Recoil cycle, recoil slide.** A building turret's or barrel's slide back and return after a
   shot (claim 27); its recoil slide *λ* is how far back the part currently sits, in model units
   (F7).
@@ -95,8 +105,9 @@ turn per unit), to tell it apart from the coarser facings derived from it.
   transform and of the image-cache key. A body's tilt is *settled* when it is the fixed tilt of the
   cell it stands on and is not changing. While the body moves from one tilt to another, or while its
   locomotor rocks it (pitches or rolls it by 0.005 radians or more), the tilt is not settled.
-- **Type id.** The identifier by which S-0007 claim 16 singles out one vehicle type (claim 12,
-  MS-11). Its meaning, and which type it singles out, are S-0007's.
+- **Special alternative-body type name.** The exact, case-sensitive type name singled out
+  by S-0007 claim 16. It is the glossary's *type name*, not a registration index (claim 12,
+  MS-11). S-0007 owns the name and the file lookup.
 - **Walk-animation counter.** A per-vehicle counter that advances as the vehicle moves; it picks
   the body's HVA frame (claim 16). When it advances belongs to the vehicle specs.
 - **Animation-frame counter.** A per-object counter of the object's current animation frame. It
@@ -244,11 +255,11 @@ turn per unit), to tell it apart from the coarser facings derived from it.
     no spawned aircraft, the original's result is unspecified; our engine draws the main body,
     and the importer warns about the type (Import mapping, *Importer warnings*).
     - **Which alternative body.** It is the one S-0007 claim 16 loads for the type: the body with
-      the no-spawn-alternate suffix or, for the one type id that S-0007 names, the body with the
-      suffix S-0007 gives for that type id. When both files exist, the no-spawn-alternate one is
+      the no-spawn-alternate suffix or, for the exact type name that S-0007 names, the body with
+      the suffix S-0007 gives for that name. When both files exist, the no-spawn-alternate one is
       used.
     - **No option, no alternative body.** Without the alternative-body option no alternative body
-      is ever drawn. A vehicle with the type id S-0007 names but without the option always shows
+      is ever drawn. A vehicle with the type name S-0007 singles out but without the option always shows
       its main body, even when its alternative body has loaded. So for a type without the option,
       S-0007's `quirks.apc_water_body` changes only what is loaded, not what is drawn.
     - **Option without a file.** A turretless vehicle with the option for which no alternative
@@ -313,6 +324,10 @@ turn per unit), to tell it apart from the coarser facings derived from it.
     - Backing: `measurable` (MS-3 and MS-3b for the body, the barrel and *f_b ≠ 0*; MS-3c for
       *f_b = 0* and building turrets). The multi-turret frame is not a claim yet: the original's
       rule has not been determined (open questions), so there is nothing to measure against.
+      The exact mapping from animation-frame counter u to a vehicle turret at f_b = 0 or
+      a building turret is `unmeasured`: MS-3c observes changing frames but does not record u,
+      so it cannot distinguish the precise modulo mapping. The counter's initial zero and
+      attack-only changes are the parts tested there.
     - Confidence: high (barrel frame 0, body frame), medium (turret frame, and the counter
       changing only through attacking)
 
@@ -388,7 +403,9 @@ turn per unit), to tell it apart from the coarser facings derived from it.
     In a well-formed file the runs of every column add up to exactly *Nz* cells, including the
     empty cells above the column's top voxel. Columns that break this are covered by claim 36
     (`quirks.voxel_topdown_column_origin`).
-    - Backing: `measurable` (MS-5)
+    - Backing: `measurable` (MS-5) for overlap priority and direction on the supplied models.
+      The exact farthest-corner tie list is `unmeasured`: MS-5 has no controlled equality of
+      bounding-box corner depths, so it cannot distinguish the listed tie priority.
     - Confidence: high
 
 22. **One pixel per voxel.** Outside the depth-buffered mode (claim 24), each voxel writes
@@ -413,14 +430,17 @@ turn per unit), to tell it apart from the coarser facings derived from it.
       a rectangle that lies inside the voxel buffer.
     - Confidence: high (one pixel per voxel, the wrap), medium (the size from which a part wraps)
 
-23. **Section order.** The sections of one part are drawn in ascending order of their nearest
-    view-space depth (the largest *z* of their transformed bounding box), so the section whose
-    nearest point is farthest is drawn first. Sections with exactly equal nearest depth need not
-    keep file order (`quirks.voxel_section_sort_ties`). Formula F8 defines the exact order, ties included. For example,
-    file order A, B, C with depths 2, 2, 1 draws C, B, A (a stable sort would draw C, A, B), while
-    file order A, B with depths 2, 2 draws A, B. Without the per-type depth option there
-    is no depth test between sections: later sections simply overwrite.
-    - Backing: `measurable` (MS-5 for the depth order; MS-5b for the tie rule)
+23. **Section overlap priority.** Outside depth-buffered mode, the sections of one part have
+    ascending overlap priority by nearest view-space depth (the largest *z* of their transformed
+    bounding box): a section with greater nearest depth covers one with smaller nearest depth
+    wherever their pixels coincide. Sections with exactly equal nearest depth need not retain
+    file order (`quirks.voxel_section_sort_ties`). F8 states the two tie configurations covered
+    here; it does not infer a general tie rule from those examples. There is no depth test
+    between sections, so a farther voxel in the higher-priority section can cover a nearer voxel
+    in the other section.
+    - Backing: `measurable` (MS-5 for distinct depths; MS-5b for the two tie configurations).
+      The overlap result for other equal-depth configurations is left open, not claimed to
+      follow a stable sort or these two examples.
     - Confidence: high
 
 24. **Per-type depth buffering.** A type with the depth-buffer option draws differently in four
@@ -428,7 +448,8 @@ turn per unit), to tell it apart from the coarser facings derived from it.
     - **Section order.** The sections are drawn in exactly the reverse of the claim 23 order
       (ties included), so the section with the nearest point is drawn first. Within a section the
       voxel order of claim 21 is unchanged.
-    - **Depth test.** Every voxel-buffer pixel holds an integer depth 0 … 255 in a depth plane.
+    - **Depth test.** Each voxel-image pixel has an associated comparison depth, an integer
+      from 0 to 255. These values specify which pixels show, not a required storage plane.
       The depth plane is not reset as a whole before each draw: at the start of a draw in this
       mode it is set to 0 over the clear area of claim 34 only, and elsewhere it keeps the depths
       that earlier draws in this mode left there (`quirks.voxel_depth_plane_partial_clear`). A voxel's depth is *⌊pz / 256⌋ mod 256*, with *pz* its z position from
@@ -444,6 +465,8 @@ turn per unit), to tell it apart from the coarser facings derived from it.
       buffer for the last row, where the result is unspecified; our engine drops that pixel).
     - **No carry error.** The 1/256-pixel carry of `quirks.voxel_x_carry_into_y` does not occur.
     - Backing: `measurable` (MS-5, MS-12; the depth-plane clearing: claim 34, MS-18).
+      The column-255 right-pixel wrap is `unmeasured`: MS-12 places no left pixel at that
+      image edge, so it cannot distinguish wrapping into the next row from clipping.
       The right pixel beyond the last buffer row is `unmeasured`: its original result is
       unspecified, so no safe expected image is available. Dropping it is our engine's
       departure, also used by F10 for shadows.
@@ -493,18 +516,15 @@ turn per unit), to tell it apart from the coarser facings derived from it.
       drawn fresh (hovering while it rocks, jumpjet while it rocks, tunnelling while its digging
       pitch changes) are S-0106 claim 13's.
 
-    **Lookups and lifetime.** Each part image (body, turret, barrel) and each shadow image is looked
-    up on its own: a cache miss for one part does not make the others fresh. (A vehicle's body and
-    turret have different keys, so its turret can be reused while its body is drawn fresh. A turret
-    image and its barrel image share a key and are stored in the same draw, so absent a cache
-    emptying both are found or neither is.) A stored image stays in its cache,
-    across drawn frames, until the caches are emptied. The original empties all of them at once
-    (the part, turret, barrel and shadow images of every type) whenever a newly made image does not
-    fit in the fixed amount of memory it sets aside for them, and then stores that image. When that
-    happens depends on how much memory each image takes in the original's own storage, so it is not
-    reproduced: our engine never empties the caches during a game (a departure, with no switch).
-    Whether starting a new game empties them in the original has not been determined; our engine
-    empties them when a game starts.
+    **Independent reuse and lifetime.** Reuse is decided independently for each part and shadow:
+    a fresh body does not require a fresh turret. A turret and its accompanying barrel share the
+    reuse class and become available together, so both are reused or both are fresh unless image
+    reuse has been invalidated. An earlier image can remain visible across drawn frames.
+    The original can invalidate all earlier images together, making later appearances fresh
+    again, but the event that triggers this is not specified here. Our engine never invalidates
+    images during a game and invalidates them at game start (a departure, with no switch).
+    Whether a new game invalidates images in the original remains open. No capacity, allocation
+    scheme or storage lifetime is required.
 
     **What reuse changes on screen.** Because only fresh draws have side effects, every key
     component shows: a draw with a key not yet in the cache is fresh, and a draw with a known key
@@ -518,14 +538,17 @@ turn per unit), to tell it apart from the coarser facings derived from it.
       (claim 32), and the clear area the next fresh draw starts from (claim 34),
     - the depth-buffered look: the key never records whether the depth-buffered mode was on, so
       an image made during a claim 32 window keeps that look when reused,
-    - the absence of all of these under the cache-disable option.
+    - under the cache-disable option, no earlier part image is reused: reuse collisions and
+      retained old appearances disappear, while fresh-draw shade, mode and clearing effects
+      occur on every eligible draw.
     - Backing: `measurable`. MS-17 covers the body facing, the ramp state, the unsettled tilt
       of the driving locomotor and the body facing in the turret key, at both zero and non-zero
       displacement. MS-2 covers
       the turret facing. MS-3b covers the body frame modulo 32, the turret frame modulo 256 and
       the cache-disable option. MS-11 covers the alternative-model state, the selected turret
       index and the collision of `quirks.voxel_cache_alt_turret_frame`. MS-10 covers the barrel, MS-6 the recoil case and MS-9 the depth-buffered
-      look. `unmeasured` in two places. The building turret's frame modulo 256: a building's
+      look. Global image invalidation in the original is `unmeasured`: no scenario here forces
+      such an event or separates it from a new reuse class. `unmeasured` in two further places. The building turret's frame modulo 256: a building's
       animation-frame counter advances only through attacking, by rules other specs own, so no
       scenario here can bring a building turret past frame 255 on demand. The naval locomotor
       case: when a ship's body tilts is S-0106's (claims 6 and 7), but stock data may give a
@@ -601,7 +624,11 @@ turn per unit), to tell it apart from the coarser facings derived from it.
     which the shadow treatment then darkens. The shadow transform is
     *V · S · H(0, shadow section)*, where *S* is the body's shadow transform: the ramp tilt of the
     cell under the unit (S-0106) and the body's 32-step rotation. Height and pitch of the body do not change the footprint's outline.
-    - Backing: `measurable` (MS-8)
+    - Backing: `measurable` (MS-8) for ordinary footprint positions and present-column output.
+      The right-pixel wrap inherited from claim 24 is `unmeasured`: this scenario contains
+      no controlled column-255 footprint pixel. Independence of the outline from body height
+      and rocking is also `unmeasured`: MS-8 has no independently controlled comparison of
+      either input.
     - Confidence: medium (high for the two pixels per column and for present columns without
       voxels)
 
@@ -622,8 +649,8 @@ turn per unit), to tell it apart from the coarser facings derived from it.
     misses the shadow may be skipped for that draw (open questions). That cache-miss skip does
     not apply to the unsettled shadows just described. Until those cache-miss cases are known,
     our engine makes the shadow on every cache miss.
-    - Backing: `measurable` (MS-8) for the shift, scale, cloak and no-shadow conditions,
-      MS-9 for the claim 32 side effect, and MS-18 (b) and its control for shadow images being
+    - Backing: `measurable` (MS-8) for the shift, scale, cloak and no-shadow conditions.
+      MS-9 covers the claim 32 side effect, and MS-18 (b) and its control cover shadow images being
       reused while the key stays the same and drawn fresh under the shadow-cache-disable option.
       `unmeasured` for the unsettled-shadow freshness and its exemption from the cache-miss
       skip: fresh and reused footprints are identical, and the simultaneous fresh parts can
@@ -654,14 +681,25 @@ turn per unit), to tell it apart from the coarser facings derived from it.
     and keep the look (`quirks.depth_mode_leak`). The mode carries over from one drawn frame to the
     next and from one game to the next; only the start of the program sets it off. For example, take a parked depth-option type whose part images are all reused, but whose
     shadow is drawn fresh in every drawn frame because it has the shadow-cache-disable option.
-    From its second drawn frame on, the mode is on for every other fresh draw, whatever the order
-    in which objects are drawn.
+    If no other depth-option part is drawn fresh, from its second drawn frame on the mode
+    is on for every other fresh draw, whatever the order in which objects are drawn.
+    **With `quirks.depth_mode_leak` off (Q-0056).** A shadow never switches the mode on,
+    regardless of its type's depth option. The mode is on only during a fresh draw of a
+    depth-option part, and off between draws, drawn frames and games. Reused images do not
+    change it. Thus no fresh part of a type without the option, and no projectile or debris,
+    uses the depth-buffered mode. Every fresh shadow leaves the depth plane unchanged during
+    ordinary clearing; claim 34's first-fresh-draw initial clear of both planes still applies.
+    Shadow footprint pixels and copy rectangles are unchanged, but later depth-tested parts
+    can differ because the shadow did not clear their retained depths. This off state is our
+    engine's design rule, not a selectable behaviour of the original.
     - Backing: `measurable` (MS-9; its game-change run for the carry-over between games and its
       projectile run for projectiles drawn as voxel models; MS-18 (c) for a shadow of a type
       without the option clearing the depth plane inside a window, and MS-18 (e) for a
       depth-option shadow's own depth clear). Debris using and retaining the mode is
       `unmeasured`: MS-9's projectile run contains no controlled voxel-debris draw, and no
       other scenario here isolates its draw from the parts that could change the mode.
+      The off state is checked by engine-conformance replays of MS-9 and MS-18 (e), not an
+      oracle measurement of the design choice.
     - Confidence: high (medium for projectiles and debris, and for the carry-over between games)
 
 33. **The leak in stock play.** With stock data a window opens only when a depth-option type's
@@ -681,12 +719,14 @@ turn per unit), to tell it apart from the coarser facings derived from it.
 
 ### Buffer clearing and unusual model data
 
-34. **What is cleared between draws.** The voxel buffer and its depth plane are reused from one
-    fresh draw to the next, and across drawn frames and games. The first fresh draw after the
-    program starts clears both completely; after that, the depth plane is never cleared as a
-    whole again, and the colour plane only in the case given below. Every fresh draw (of a voxel part, of a
-    shadow, and of the projectiles and debris drawn as voxel models) is made on a voxel buffer whose
-    *clear area* has been cleared first, so the clear removes only what earlier draws left there: the copy rectangle of the previous fresh draw (F6), widened by one pixel
+34. **Earlier-draw effects on a fresh image.** Earlier colours can reappear in later images,
+    and earlier depths can suppress their voxels at the same image coordinates, across fresh
+    draws, drawn frames and games. The first fresh draw after program start has no earlier
+    effects: its initial colour is transparent and its initial depth is 0 everywhere. After
+    that, with the default partial-clearing quirks enabled, depth is reset only locally and
+    colour is reset locally except for the failed-fit case below. Each fresh draw of a part,
+    shadow, voxel projectile or voxel debris is unaffected by earlier colours within the
+    *clear area*: the previous fresh draw's copy rectangle (F6), widened by one pixel
     column on its right and one pixel row at its bottom. In voxel-buffer pixels, with that
     rectangle's corner *(x₀, y₀)* and size *w × h*, the clear area is columns *x₀ … x₀ + w* and
     rows *y₀ … y₀ + h*, both ends included.
@@ -694,9 +734,10 @@ turn per unit), to tell it apart from the coarser facings derived from it.
       the buffer (*x₀ < 0*, *y₀ < 0*, *x₀ + w > 255* or *y₀ + h > 255*), the whole buffer is set
       to transparent instead.
     - **Depth.** The depth plane is set to 0 over the clear area only, and only if the
-      draw is made with the depth-buffered mode on. Every fresh draw of a part or shadow of a
-      depth-option type is made with it on, and so is every fresh draw inside a claim 32 window
-      (S2). A draw made with the mode
+      draw is made with the depth-buffered mode on. With `quirks.depth_mode_leak` on, every
+      fresh draw of a part or shadow of a depth-option type is made with it on, and so is every
+      fresh draw inside a claim 32 window (S2). With the switch off, only a fresh depth-option
+      part uses it; shadows never do. A draw made with the mode
       off leaves the depth plane as it is after the first fresh draw's full initial clear. This
       initial clear is independent of the mode. When the clear area does not fit in the buffer, what
       this clear does to the depth plane is unspecified (it can reach pixels outside the clear
@@ -740,28 +781,24 @@ turn per unit), to tell it apart from the coarser facings derived from it.
     each voxel's value goes into the voxel buffer as it is, without the VPL (a value of 0 is
     written as transparent and erases what an earlier voxel left at its pixel, as in claim 19). Its column data is read as if each voxel held one value, a colour
     index, and no normal index (`quirks.voxel_mode0_misread`). The importer warns about every
-    section of normal mode 0 (Import mapping, *Importer warnings*). Every column's reading starts afresh at its own
-    column data (at its first value bottom-up, at its last value top-down), however the column
-    before it was read.
-    - **Mode-0 column interpretation.** Each column is interpreted independently from its own
-      column data. In bottom-up order (claim 21), the repeated groups consist of an empty-cell
-      count *e*, a voxel count *n*, *n* values drawn as *n* voxels upward from the cell after the
-      *e* empty cells, and one value that is not used. In top-down order, the same value sequence
-      is read backward: a voxel count *n*, *n* values drawn as *n* voxels downward from the top
-      of the grid (positioned as the shift of `quirks.voxel_topdown_column_origin` gives), one
-      value that is not used, and an empty-cell count *e*. In either direction, reading ends
-      at the first boundary between groups, including the column's start boundary, where the
-      total cells counted so far (empty counts plus voxel counts) are congruent to *Nz* modulo
-      256.
-    - **Standard files.** In a standard file each voxel holds two values (a colour index and a
-      normal index) and each run carries more values than the two counts this reading expects
-      (public model format), so the groups go out of step after the first run of the reading
-      direction. Every value is then taken by the grammar above in turn, as an empty count, a voxel
-      count, a drawn value or an unused value, whatever it held in the standard reading. So the
-      drawn values of the first group are colour indices and normal indices alternating, in the
-      value sequence's order (backward, top-down), and later counts are taken from whichever
-      values come next: colour indices, normal indices or the file's own counts. What is drawn is thus fixed by the column data alone, as long as
-      the column ends within its own column data.
+    section of normal mode 0 (Import mapping, *Importer warnings*). The output of one in-bound
+    column is independent of the data or output of the preceding column.
+    - **Covered output.** Standard column data can show normal indices as palette indices
+      and can use colour or normal values as counts, producing a different picture from the
+      normally lit column. This claim fixes the following discriminating outputs of MS-19,
+      rather than prescribing a column-reading grammar. Grid-cell numbers are integers,
+      counted upward from the section's bottom face.
+
+      | Column supplied by the model | Pose | Output before screen projection |
+      |---|---|---|
+      | Two cells, both voxels with colour X and normal Y | bottom-up | cell 0 has palette index X, cell 1 has palette index Y |
+      | e empty cells, then voxels (colour e, normal Z) and (colour X, normal Y), grid height e + 2 | bottom-up | cell e has palette index e, cell e + 1 has palette index Z |
+      | The same e + 2-cell column | top-down | cell e has palette index X, cell e + 1 has palette index Y |
+
+      MS-19 selects valid, visibly distinguishable indices and *e < 255 − Nz*. The output
+      values are unlit in both poses. This table is not a general specification of every
+      mode-0 malformed stream; the remaining exact output characterization is open. A
+      column's result depends only on its own column data while it stays within that data.
     - **Reading past the column data.** If a column reaches the end of its own column data (or,
       top-down, its start) before it ends, the original reads on into the data that lies beyond,
       and what it draws from there is unspecified (as are the stray voxels of `quirks.voxel_topdown_column_origin`). Our engine, with the
@@ -773,17 +810,21 @@ turn per unit), to tell it apart from the coarser facings derived from it.
       mode-0 section fails in an unspecified way. Our engine uses F5's *e·Δ_z* in every case, and
       draws a mode-0 section with *Nz = 255* like any other. The importer warns about a
       section with either case, since both come from the model file alone.
-    - Backing: `measurable` (MS-19) for the unlit values, the bottom-up and top-down groups, the
-      end of a column and positions within the bound (MS-19 (b) has an empty count of 40, below
-      255 − 42); `unmeasured` for positions at or beyond the bound: there the original's position
+    - Backing: `measurable` (MS-19) for the unlit values and the table's bottom-up and top-down
+      outputs (MS-19 (b) has an empty count of 40, below 255 − 42). Column independence and
+      transparent mode-0 values are `unmeasured`: MS-19 uses one column and no transparent
+      drawn value, so it separates neither cross-column effects nor zero-value erasure.
+      The general position formula within the empty-count bound is `unmeasured`: MS-19
+      checks one nonzero empty count, not a family of counts that discriminates F5 throughout.
+      Positions at or beyond the bound are `unmeasured`: there the original's position
       depends on what earlier draws left behind, which a running game does not let a test
       control, so there is no expected value to compare with. Reading beyond a column's own
       data is also `unmeasured`: the stray result is unspecified, so no safe expected image
       exists; our engine's bounded reading is a departure. The failed preparation at
       *Nz = 255* is also `unmeasured`: the result is unspecified and no safe predicted image
       exists. The safe behaviour of our engine is a departure, not an oracle measurement.
-    - Confidence: high (unlit, one value per voxel, the bottom-up groups and the end of a
-      column), medium (top-down groups, the bound on empty counts)
+    - Confidence: high (unlit values and bottom-up outputs), medium (top-down outputs,
+      column independence and the bound on empty counts)
 
 36. **Malformed columns.** For columns whose runs do not add up to exactly *Nz* cells, the entry for
     `quirks.voxel_topdown_column_origin` gives what the original does: the position shift of a column drawn top-down, the stop at a
@@ -794,16 +835,16 @@ turn per unit), to tell it apart from the coarser facings derived from it.
       heading. It covers the unspecified case below (a column that never reaches *Nz* at a pair
       boundary cannot add up to *Nz*) and also a column such as MS-20's, which stops cleanly at
       a pair boundary but has runs left over.
-    - **Long columns drawn bottom-up.** A column whose own runs first reach a count congruent to
-      *Nz* modulo 256 at a pair boundary after *Nz* + 256 or more cells, with no empty run of *Nz*
-      or more cells, is drawn bottom-up with every voxel at the cell its runs give, including the
-      cells beyond *Nz* − 1. Drawn top-down, the same column is shifted as the entry for
-      `quirks.voxel_topdown_column_origin` gives, with no stray voxels: it starts at cell *Nz* − 1
-      and runs downward through the grid's bottom face, so it is drawn 256*k* cells lower than its
-      runs give, for a column of *Nz* + 256*k* cells. Either way the voxels outside the grid lie
-      beyond a face of the section box. Claim 34 gives what they leave in the voxel buffer.
-    - Backing: `measurable` (MS-20 for the stop at a pair boundary; MS-24 (a) and (e) for a long
-      column drawn bottom-up and top-down, the latter showing the top-down shift); `unmeasured`
+    - **Long malformed columns.** For the 260-cell column in a 4-cell grid of MS-24, bottom-up
+      rendering includes voxels beyond the section grid, at the cell positions described by the
+      column. Top-down rendering shifts that output 256 cells lower in grid coordinates, with
+      no stray voxels in this case (`quirks.voxel_topdown_column_origin`). These voxels lie
+      beyond a face of the section box; claim 34 gives their later pixel consequences. This
+      fixture does not establish the output of every possible long malformed column.
+    - Backing: `measurable` (MS-20 for the four-cell cutoff; MS-24 (a) and (e) for the 260-cell
+      column drawn bottom-up and top-down). The general modulo-256 cutoff and shift rule in
+      the quirk entry are `unmeasured`: these scenarios supply only the four- and 260-cell
+      cases and do not discriminate other prefix totals or shifts. Also `unmeasured`
       for the stray voxels and for the shift of a column that does not end with its own runs. Such
       a column always goes on into a neighbouring column's data, which this spec leaves
       unspecified, so there is no expected value to compare with. What our engine draws instead (it stops at the
@@ -834,12 +875,14 @@ turn per unit), to tell it apart from the coarser facings derived from it.
       reuse during recoil. The frame-key reduction modulo 256 and elevation omitted from this
       barrel-only key are `unmeasured`: MS-21 neither drives the building's animation counter
       past 255 nor independently changes elevation at one fixed key, so it supplies no
-      discriminating expected result for those two key components.
+      discriminating expected result for those two key components. The exact modulo mapping
+      from animation counter u to barrel-only frame is also `unmeasured`: MS-21 records the
+      marker and attacks, not u, and therefore tests only the initial frame and attack-only changes.
     - Confidence: high (pose, frame, no recoil, key), medium (visible placement)
 
 ### The voxel lighting table file
 
-38. **The lighting table file.** The voxel lighting table file is read once, at start-up (claim 19). By role, it holds a row count *R*; *R* rows, each holding one palette index for each voxel colour index; and three parts that have no effect (below): a remap range (a start and an end value), one more value (the *extra value*) and a palette. Where each part lies in the file, and in what form, is the subject of planned S-0013 (the byte layout of the voxel lighting table file). This claim fixes only what the content does. It relies on three facts of order alone, which are needed to say what a truncated file supplies: the rows come after all the other content, they are in shade order, and the entries of a row are in colour-index order.
+38. **The lighting table file.** The voxel lighting table file is read once, at start-up (claim 19). By role, it holds a row count *R*; *R* rows, each holding one palette index for each voxel colour index; and three parts that have no effect (below): a remap range (a start and an end value), one more value (the *extra value*) and a palette. Where each part lies in the file, and in what form, is given by S-0013 (the byte layout of the voxel lighting table file). This claim fixes only what the content does. It relies on three facts of order alone, which are needed to say what a truncated file supplies: the rows come after all the other content, they are in shade order, and the entries of a row are in colour-index order.
     - **What counts.** Row *q*, numbered from 0 in file order, supplies the entries for shade
       *q*: the entry for shade *q* and colour *χ* is entry *χ* of row *q* (claim 19). Only the row
       count *R* and the rows have an effect.
@@ -859,8 +902,8 @@ turn per unit), to tell it apart from the coarser facings derived from it.
       whole row it holds is used, the entries it holds of a row it cuts off are used, and the rest
       reads as zero. The game goes on starting up as if the load had succeeded
       (`quirks.vpl_unloaded_rows_blank`). Anything in the file after row *R* − 1 is ignored.
-    - **Departure: excessive row counts.** The row count *R* is a non-negative integer (planned S-0013). With a complete header and palette, let *B = (256 × R) mod 4294967296* bytes, exact integer arithmetic with a non-negative remainder and no rounding. Let *A* be the number of bytes available after that palette. When *B < 2147483648* bytes and *min(B, A) ≤ 32768* bytes, the original supplies exactly the first *min(B, A)* row bytes, unsupplied entries remain zero. In particular, *R = 16777216* rows requests zero bytes and supplies no entries even if rows follow. When *B ≥ 2147483648* bytes, or more than 32768 requested row bytes are supplied, the result is unspecified and can disturb unrelated game state. The first unsafe count is 8388608 rows, not the first count whose product wraps. Claim 6 of planned S-0013 owns these excessive-count exceptions to the ordinary missing and short-data rule above. Our engine never wraps the product: it uses the available prefix of the first *min(R, 128)* rows, preserves a partial row, fills unsupplied entries with zero and ignores the rest. A count above 128 rows warns (Import mapping, *Importer warnings*). This safe deterministic result is a departure, with no switch.
-    - Backing: `measurable` (MS-22 for the use of the rows, the unused parts and data after the last row; MS-23 for the role of the row count, for short, missing and small tables, in its variant (g) for a safe row count above 128 in a file that holds at most 128 rows, and variant (i) for the file being read once, at start-up). Claim L5 of planned S-0013 covers the safe wrapped zero-byte case. The two unsafe cases (a requested amount of at least 2147483648 bytes, or more than 32768 requested row bytes supplied) are `unmeasured`: their result is unspecified, and testing them could disturb unrelated game state.
+    - **Departure: excessive row counts.** The row count *R* is a non-negative integer (S-0013). With a complete header and palette, let *B = (256 × R) mod 4294967296* bytes, exact integer arithmetic with a non-negative remainder and no rounding. Let *A* be the number of bytes available after that palette. When *B < 2147483648* bytes and *min(B, A) ≤ 32768* bytes, the original supplies exactly the first *min(B, A)* row bytes, unsupplied entries remain zero. In particular, *R = 16777216* rows requests zero bytes and supplies no entries even if rows follow. When *B ≥ 2147483648* bytes, or more than 32768 requested row bytes are supplied, the result is unspecified and can disturb unrelated game state. The first unsafe count is 8388608 rows, not the first count whose product wraps. Claim 6 of S-0013 owns these excessive-count exceptions to the ordinary missing and short-data rule above. Our engine never wraps the product: it uses the available prefix of the first *min(R, 128)* rows, preserves a partial row, fills unsupplied entries with zero and ignores the rest. A count above 128 rows warns (Import mapping, *Importer warnings*). This safe deterministic result is a departure, with no switch.
+    - Backing: `measurable` (MS-22 for the use of the rows, the unused parts and data after the last row; MS-23 for the role of the row count, for short, missing and small tables, in its variant (g) for a safe row count above 128 in a file that holds at most 128 rows, and variant (i) for the file being read once, at start-up). Scenario L5 of S-0013 covers the safe wrapped zero-byte case. The two unsafe cases (a requested amount of at least 2147483648 bytes, or more than 32768 requested row bytes supplied) are `unmeasured`: their result is unspecified, and testing them could disturb unrelated game state.
     - Confidence: high (rows, row count, unused parts), medium (a file that ends part-way through
       a row, a file that ends before row 0, a missing file)
 
@@ -1051,7 +1094,19 @@ tick again sets *λ* to 0. Examples, as the recoil slides of successive ticks:
 The part is drawn shifted by *−λ* model units along the turret's forward axis; the shift is not
 rounded to whole pixels before the transform (the pixel position then follows F5).
 
-**F8. Section order (claim 23).** Let the sections' file order be *π₀*, and let *z(s)* be the nearest view-space depth of section *s* (the greatest *z* of its transformed bounding box). The final order, *π_N*, is defined by the following positional rule for positions *ϑ = 1, …, N*. At position *ϑ*, start with the section then at *ϑ*. Among positions after *ϑ*, form a chain by including each section whose *z* is strictly less than the least *z* among the sections from *ϑ* up to, but not including, its position. The chain is in current positional order. The chain's final member takes position *ϑ*; each earlier member takes the position of the next member. Every section not in the chain keeps its position. If no later section enters the chain, the order at *ϑ* is unchanged. The result is ascending in *z*, but sections with equal *z* need not keep file order. For file order A, B, C with depths 2, 2, 1, the result is C, B, A; for A, B with equal depths, it is A, B. Only the resulting order *π_N* is binding; any means of reaching that same order meets this spec.
+**F8. Section overlap priorities (claim 23).** Nearest depths are single-precision view-space
+values under F0, measured in model units; comparisons are exact comparisons of those values,
+with no tolerance or rounding to integer depths. Among distinct depths, greater depth means
+higher overlap priority. The covered ties are:
+
+| File order | Nearest-depth relation | Overlap priority, lowest to highest |
+|---|---|---|
+| A, B | z(A) = z(B) | A, B |
+| A, B, C | z(A) = z(B) > z(C) | C, B, A |
+
+Thus B covers A in the first case, but A covers B in the second. These are pixel consequences,
+not required sorting steps. Other equal-depth configurations need a further behavioural
+characterization (Open questions). Backing and confidence are those of claim 23.
 
 **F9. Turning at a turn rate (claim 6, Terms).** This is S-0206's turning rule (its claim 1 and F1), stated here for the barrel elevation. All quantities are integers. A facing turns from
 a start facing *ψ₀* toward a target facing *ψ₁* at turn rate *ω* (1 … 127). Let *Δ* be *ψ₁ − ψ₀* taken as the signed
@@ -1110,8 +1165,8 @@ darkens.
 | Forced shade, normals 253–255 | 16 | shade index | Claim 20 |
 | Pixels per lepton *ρ* | 0.16572815467691362 | model units / lepton | Vehicles only |
 | Building turret shift divisor | 8 | leptons per model unit | Integer, truncated |
-| The voxel buffer | 256 × 256 | pixels | Wraps |
-| Buffer centre | 128, 128 | pixels | F5, F6 |
+| voxel-image coordinate period | 256 | pixels per axis | Wrap behaviour, not a storage dimension |
+| voxel-image coordinate origin shift | 128, 128 | pixels | F5, F6 |
 | Rows kept from a lighting table file | 128 | rows | Our engine's limit; a departure for files with more rows (claim 38) |
 | Copy margin | 4 | pixels | Each side |
 | Clear-area extension | 1 | pixel | On the right and at the bottom of the previous copy rectangle (claim 34) |
@@ -1533,7 +1588,7 @@ a direction vector of about unit length; its components are dimensionless.
 Turret and barrel each have their own cycle with their own imported values; both start on the
 same shot.
 
-**S2. Depth-buffered mode (claims 24, 32, 34).** One global on/off state, off at program start
+**S2. Depth-buffered mode (claims 24, 32, 34), with `quirks.depth_mode_leak` on.** One global on/off state, off at program start
 and not reset by a new drawn frame or a new game. Its draw-driven changes follow the table
 below. It decides how every fresh draw of a voxel
 part, and of a projectile or debris drawn as a voxel model, is made, whatever the type, and
@@ -1549,13 +1604,21 @@ whether any fresh draw (shadows included) sets the depth plane to 0 over its cle
 | on | any other fresh draw (a part or shadow of a type without the option, a projectile or debris), or any reused image | stays on |
 | either | a new drawn frame starts, or a new game starts | unchanged |
 
+With `quirks.depth_mode_leak` off, the mode is off between draws and is on only during a
+fresh depth-option part draw. Every shadow uses it off and leaves depth unchanged during
+ordinary clearing. The first fresh draw still clears both planes in full (claim 34).
+
 **Ordering consequences.**
-- Within one part: sections in claim 23 order; within a section, voxels back to front (claim 21).
-  A nearer voxel of an earlier-drawn section can be overwritten by a farther voxel of a later
-  section, because there is no depth test between sections (`quirks.voxel_no_intersection_depth`).
+- Within one part outside depth-buffered mode: claim 23's section overlap priority and
+  claim 21's voxel priority decide which pixels show. A nearer voxel of a lower-priority
+  section can be covered by a farther voxel of a higher-priority section, because there is
+  no depth test between sections (`quirks.voxel_no_intersection_depth`). Claim 24 owns the
+  depth-buffered exception.
 - Between parts of one vehicle: body, then turret and barrel in claim 11 order, so the turret and
   barrel cover the body where they overlap it. Parts never depth-test against each other.
-- The shadow is drawn separately on the ground render layer (S-0102).
+- The shadow belongs to the object's own drawing, in its own render layer and list position,
+  not to a separate ground-layer pass (S-0102, claim 18). The shadow's priority relative to
+  that object's own body is not fixed here.
 
 ## Edge cases and quirks
 
@@ -1641,8 +1704,9 @@ Every switch defaults to the original (YR) behaviour described; "Fixed" gives th
   and its column data is read as one value per voxel. A standard file, where every voxel holds a
   colour index and a normal index, is then misread: normal indices show as colours, and after the
   first run of the reading direction later counts are taken from colour and normal indices, so the
-  section draws as garbage. With the switch on (default), our engine reproduces claim 35 exactly
-  while a column stays within its own column data. Where the original would read past it (claim
+  section can show malformed output. With the switch on (default), the output cases in claim 35 are
+  binding; exact outcomes for other in-bound column data remain open, not inferred from those
+  cases. Where the original would read past the column data (claim
   35, unspecified), our engine stops that column at the end of its own column data, and the
   importer warns (Import mapping). Fixed: read
   each voxel's colour index and normal index, and draw the colour unlit.
@@ -1670,30 +1734,17 @@ Every switch defaults to the original (YR) behaviour described; "Fixed" gives th
   Every later fresh draw (parts, shadows, projectiles and debris, of any type) is then made in the
   depth-buffered mode, until the next fresh draw of a part (body, turret or barrel) of a
   depth-option type ends; that end switches the mode off. The mode is kept across drawn frames and
-  games. **Off state not yet selected (Q-0056).** The following are two proposed alternatives,
-  not two behaviours selectable by the same off state. The project lead must select one
-  (*Questions for the project lead*). In both proposals the mode starts off and is off between
-  fresh draws, including between drawn frames and games. A fresh part of a depth-option type
-  uses the mode on and ends with it off. Reused images do not change the mode. Consequently no
-  fresh part of a type without the option, and no projectile or debris, uses the depth-buffered
-  mode.
-  - *(a) Off after every shadow:* a fresh shadow of a depth-option type uses the mode on, so its
-    clear sets the depth plane to 0 over the clear area, then the mode is off when the shadow
-    finishes. A fresh shadow of a type without the option uses the mode off.
-  - *(b) Never on for shadows:* every fresh shadow uses the mode off, whether or not its type
-    has the depth option. Its ordinary clear leaves the depth plane unchanged.
-
-  These proposals deliberately differ at a depth-option shadow's own clear, not merely after
-  the draw. Neither proposal admits an already-open leak window during normal drawing: that
-  window belongs only to the on state of the switch. The shadow's footprint pixels and its copy
-  rectangle are the same in both proposals (claims 30, 31, 34), but later depth-tested parts can
-  show different pixels because of the depths retained under (b). In both proposals a shadow of
-  a type without the option leaves the depth plane unchanged during ordinary clearing.
+  games. **Fixed (Q-0056):** a shadow never switches the mode on, whether or not its type has
+  the depth option. The mode starts off, is on only during a fresh depth-option part draw,
+  and is off between draws, drawn frames and games. Reused images do not change it. No fresh
+  part of a type without the option, and no projectile or debris, uses the depth-buffered mode.
+  Every fresh shadow's ordinary clear leaves the depth plane unchanged. Its footprint pixels
+  and copy rectangle stay the same (claims 30, 31, 34), but later depth-tested parts can differ
+  because the shadow did not clear their retained depths.
   **Initialisation exception:** the first fresh draw after program start clears both planes
-  completely, even if it is a shadow made with the mode off (claim 34). Thus neither proposal
-  means that a shadow can never clear depth during initialisation. The ordinary depth clear of
-  a depth-option shadow in the original is covered by claim 32 and MS-18 (e). No oracle
-  measurement can select (a) or (b): that selection is a design decision.
+  completely, even if it is a shadow made with the mode off (claim 34). The original shadow
+  clear is tested by MS-18 (e); its off-state replay checks our engine's chosen alternative,
+  not a selectable mode of the oracle.
 - **`quirks.voxel_topdown_column_origin`** (default: on). Claim 36. Malformed columns, whose runs do not add
   up to exactly *Nz* cells (the condition of the importer's warning, claim 36). Three things
   happen in the original:
@@ -1701,11 +1752,12 @@ Every switch defaults to the original (YR) behaviour described; "Fixed" gives th
     top of the grid. A column whose runs cover *Nz − γ* cells is drawn *γ* cells too high (for a
     negative *γ*, a column whose runs are too long, *|γ|* cells too low). Drawn bottom-up, the
     same column is placed correctly.
-  - *Where a column ends.* A column's runs come in pairs, an empty run followed by a voxel run.
-    The column ends at the first pair boundary, its start included, at which the number of
-    cells covered so far is congruent to *Nz* modulo 256. So a column that reaches *Nz* exactly
-    at a pair boundary stops there, even if its own runs go on, and the rest of its runs are
-    not drawn.
+  - *Visible prefix.* Let C₀ = 0 and Cᵣ be the total cells described by the first r complete
+    empty-run/voxel-run pairs in the column. Only the prefix ending at the smallest r with
+    Cᵣ congruent to Nz modulo 256 contributes voxels; later runs contribute none. These are
+    exact integer counts with a non-negative remainder, no rounding. This defines which
+    supplied voxels can show, not an order of parser work. MS-20 tests the prefix ending at
+    C₁ = Nz, and MS-24 the prefix ending at C₂ = Nz + 256. Other totals are unmeasured (claim 36).
   - *Stray voxels.* A column that never hits *Nz* exactly at a pair boundary (a short one, or a
     long one that passes *Nz* inside a run) does not end with its own runs. It continues with
     data that belongs to the neighbouring column (the next column when drawn bottom-up,
@@ -1721,7 +1773,8 @@ Every switch defaults to the original (YR) behaviour described; "Fixed" gives th
   both drawing directions, and draw only cells 0 … *Nz − 1*. Only malformed model files are
   affected.
 - **`quirks.voxel_section_sort_ties`** (default: on). Sections with equal nearest depth are reordered by
-  the exchange rule of claim 23 (F8) rather than kept in file order. Fixed: a stable sort, ascending
+  the overlap priorities of claim 23 (F8) rather than always kept in file order. Only F8's two
+  tie configurations are specified in this revision. Fixed: a stable sort, ascending
   nearest depth with tied sections in file order (file order A, B, C at depths 2, 2, 1 then draws C,
   A, B).
 - **`quirks.voxel_cache_alt_turret_frame`** (default: on). A vehicle turret's cache key, and so
@@ -1750,7 +1803,8 @@ Every switch defaults to the original (YR) behaviour described; "Fixed" gives th
   was. So after a draw made with the mode off, the next depth-buffered draw meets the depths of
   the depth-buffered draw before it outside its own, smaller clear area, and loses the voxels there
   whose depth is not greater than the stored one (claim 24). Fixed: every fresh draw made with the
-  mode on starts by setting all 256 × 256 pixels of the depth plane to 0; draws made with the mode
+  mode on has comparison depth 0 at every image coordinate before its voxels contribute.
+  draws made with the mode
   off still leave it as it is, and the colour plane is cleared as claim 34 gives in both states.
 - **`quirks.alt_body_turret_model`** (default: on). Two cases of the alternative-body option
   without an alternative body to draw (claim 12), both while none of the vehicle's spawned
@@ -1809,8 +1863,8 @@ own name, even when the type's image names a different section.
 | `UseTurretShadow` | Art [image], vehicles | boolean | no | Read, no effect (`quirks.no_turret_shadow`) |
 
 The engine option `quirks.depth_mode_leak` has no rules-file or art-file key. Its default is on.
-Its off state awaits the project-lead choice listed below; the imported per-type depth option
-remains independent of that choice.
+With it off, a shadow never enables depth buffering; only fresh depth-option parts use it
+(claim 32). The imported per-type depth option remains independent of the engine switch.
 
 **Importer warnings.** The importer warns, naming the file and the place in it, in these cases. A
 warning never changes the imported result (glossary, *importer warning*), and the warnings do not
@@ -1835,7 +1889,7 @@ rectangle larger than the voxel buffer (claim 22) and a clear area that does not
 (claim 34). Our engine's result in each is the one the claim gives. This follows the glossary's
 *unspecified* entry, which asks for an importer warning only where the cause is in the data.
 
-The voxel lighting table is the archive file `voxels.vpl`, looked up like other game files (S-0005). Claim 38 gives how its content is used. Its byte layout is not public; it is the subject of planned S-0013 (the byte layout of the voxel lighting table file). The VXL and HVA byte layouts are public; this spec only fixes their interpretation.
+The voxel lighting table is the archive file `voxels.vpl`, looked up like other game files (S-0005). Claim 38 gives how its content is used. Its byte layout is given by S-0013. The VXL and HVA byte layouts are public; this spec only fixes their interpretation.
 
 ## Measurement scenarios
 
@@ -1852,7 +1906,10 @@ used (glossary, *display path* and *measurement setup*).
 
 - **Golden image** means a pixel comparison between the original's screenshot and our engine's
   render of the same scene, built from this spec.
-- **Runs.** Rendering is deterministic, so one run of each scenario is enough. A golden-image
+- **Runs and initial state.** Rendering is deterministic, so one run per variant is enough.
+  Unless a scenario explicitly carries effects between games, each variant starts with a fresh
+  program session, not merely a new game. This provides off depth mode and no earlier images
+  without assuming that the original invalidates images at every game start. A golden-image
   mismatch is repeated once, to rule out a capture error, before it counts.
 - **Per-tick captures** mean captures indexed by the recorder's tick count at game speed 6,
   retaining one image for each tick. Pause only after the observation for still-image inspection,
@@ -2038,11 +2095,12 @@ not contain the one pattern in which F8 and a stable sort differ, so this scenar
   - T2 (order A, B under F8 and under a stable sort alike): those pixels show *Y*'s colour.
   - Both captures match the golden images, which use 1-pixel-wide voxels (a depth-buffered draw,
     claim 24, would make each voxel 2 pixels wide and so widen the silhouette's right edge).
-- *Falsified if:* T1 shows *Y*'s colour where A and B are drawn (a stable sort, order C, A, B),
-  while T2 shows *Y*'s colour.
-- *Invalid run:* if T2 shows *X*'s colour, the sections were not drawn in the file order written,
-  and if the silhouette is one pixel wider than the golden image, the depth-buffered mode was on.
-  Either way, fix the setup and repeat both runs.
+- *Falsified if:* any qualifying A/B overlap pixel shows Y in T1 or X in T2, or differs
+  from its golden image on repetition with the file order and initial mode verified. T1 showing
+  Y with T2 showing Y specifically matches stable priority.
+- *Invalid run:* discard only if inspection establishes incorrect file order, an unwanted
+  depth-option object, or a missing first-drawn-frame capture. A wider silhouette alone is
+  not a setup error: with those controls satisfied, it is a rasterisation falsifier.
 
 **MS-6 Building voxel turret (claims 5, 6, 9, 10, 11, 26, 27; `quirks.recoil_hold_one_skipped`, `quirks.recoil_refire_accumulates`, `quirks.barrel_recoil_layer_reset`).**
 - *Setup:*
@@ -2239,6 +2297,13 @@ the order in which objects are drawn, so its outcome does not depend on S-0102.
     normal look: these images are reused (claim 26).
 - *Control:* the same run with V also given the no-shadow option. Every phase shows the normal
   look.
+- *Off-state engine replay (Q-0056):* replay the main run, projectile run and game-change run
+  on our engine with `quirks.depth_mode_leak` off, from fresh program state and empty caches.
+  Every watcher image in every phase, including revisited facings, and every projectile image
+  has the normal look. The watcher in the new game also has the normal look. Depth-option
+  parts still use the depth look during their own fresh draws; their shadows never open a
+  window. Any depth look in a watcher or projectile falsifies this off-state rule. MS-18 (e)'s
+  off-state replay separately discriminates whether a shadow's own clear changes depth.
 - *Projectile run (claim 32, projectiles and debris).* In phase 3 of the main run, and in phase 3
   of the control, a stock unit whose weapon fires a projectile drawn as a voxel model fires once
   at a target on screen (no depth-option type fires). The projectile is judged like a watcher
@@ -2287,7 +2352,7 @@ the order in which objects are drawn, so its outcome does not depend on S-0102.
     clearly different frames and that looks clearly different from the body,
   - **Missing file.** A second copy of the first spawner's set-up in which the alternative-body
     model is absent (no test model under that name and no stock file of that name),
-  - **Type id.** A test vehicle type whose type id is the one S-0007 claim 16 names, added to the
+  - **Special type name.** A test vehicle type with the exact type name S-0007 claim 16 names, added to the
     vehicle list of the base rules copy (S-0004) with the fields of the first spawner type, so that
     it carries the same spawned aircraft. Its test models are a body and an alternative body under
     the other suffix of S-0007 claim 16, which look clearly different, and no model under the
@@ -2586,7 +2651,9 @@ not depend on the order in which objects are drawn within a drawn frame.
   - **(e) Depth-option shadow clear.** The map places P and D, with D also given the depth
     option. Park both before judging captures, so D's body image is reused and its only fresh
     draw is its shadow. Control: D without the depth option, as in (b). This tests the
-    original's shadow clear, not a proposed off-state policy.
+    original's shadow clear. Also replay this run and its control on our engine with
+    `quirks.depth_mode_leak` off from fresh program state and empty caches. This second
+    comparison is engine conformance, not an oracle measurement of the design choice.
   - **(d) New game.** Game 1: the map places P alone, at body facing 8; capture a few drawn
     frames. Then a new game is started in the same program session. Its map places S alone, and
     a map trigger later creates P at body facing 8. A run in which any other object with a voxel
@@ -2613,6 +2680,9 @@ not depend on the order in which objects are drawn within a drawn frame.
   - (e) From D's third drawn frame on, P shows all its voxels: every fresh shadow of D clears
     depth over P's previous copy rectangle, widened as claim 34 gives. This holds whichever
     object is drawn first. The control shows only the shadow's patch, as in (b).
+    In the off-state engine replay, both runs show only the shadow's patch: every shadow
+    leaves depth unchanged during ordinary clearing, even when D has the depth option.
+    The first fresh draw's full initial clear still occurs; only later captures are judged.
   - (d) In game 1, P shows all its voxels from its second fresh draw on. In game 2, P's first
     image already shows only the patch of S: the depths P left in game 1 are still in the depth
     plane, at the same voxel-buffer positions.
@@ -2629,7 +2699,8 @@ not depend on the order in which objects are drawn within a drawn frame.
     games),
   - (e) P loses voxels outside the shadow's patch while D has the depth option, or the control
     shows all its voxels. The former would contradict enabling the mode before the shadow's
-    own depth clear.
+    own depth clear. In the off-state engine replay, P showing voxels outside the patch
+    from D's third drawn frame on in either run falsifies the chosen alternative.
 
 **MS-19 Normal mode 0 (claim 35; `quirks.voxel_mode0_misread`).**
 - *Test data:* one stock turretless vehicle type gets test models, each with one section of
@@ -2645,26 +2716,24 @@ not depend on the order in which objects are drawn within a drawn frame.
     sequences follow from the public model format. The spec side has checked, from that format,
     that each column ends inside its own column data in every reading named below.
   - *(a)* 1 × 1 × 2 cells: one run of 0 empty cells and two voxels, both with colour index *X*
-    and normal index *Y*. Read in mode 0 bottom-up, the first group covers both cells, so the
-    column ends inside its own data.
+    and normal index *Y*. Its mode-0 output has two cells and stays within its own data.
   - *(b)* 1 × 1 × 42 cells: one run of 40 empty cells and two voxels, the first with colour index
     40 and normal index *Z*, the second with colour index *X* and normal index *Y*. Read in
-    mode 0, the column ends after one group in both directions, and that group draws two voxels,
-    at cells 40 and 41. In a second run, model (b) gets a second HVA that turns the section
+    mode 0, both poses show two voxels at cells 40 and 41, without out-of-column data. In a second run, model (b) gets a second HVA that turns the section
     upside down (half a turn about model x), so that its farthest corner is on its top face and
     it is drawn top-down (claim 21).
 - *Observable:* the pixels of the voxels, at body facings 8 and 24, identified by grid cell on
   the golden image.
-- *Expected:* every capture matches its golden image. The golden images are drawn with claim 35's
-  grammar applied to each column's value sequence, so the following holds whatever that sequence
-  is:
+- *Expected:* every capture matches its golden image, drawn from claim 35's explicit output
+  table and F5, without assuming a general malformed-stream grammar:
   - mode 0: every voxel shows a value of the column data unchanged (unlit), the same at both
     facings,
   - (a), mode 0: two voxels show, and they show two different values, *X* and *Y* (the drawn
     values are the first voxel's colour index and normal index),
   - (b), mode 0: only cells 40 and 41 show voxels (cells *e* and *e* + 1 if another empty count
     *e* is used), in both poses, and the pair of values they show
-    differs between the upright pose (bottom-up) and the upside-down pose (top-down),
+    is palette indices 40 and Z at cells 40 and 41 upright, and X and Y at cells 40 and 41
+    upside down (substitute e for 40 if that variant is used),
   - mode 1, (a) and (b): only VPL-lit colours show (none of *X*, *Y*, *Z* and 40 unchanged), at the
     cells the runs give.
 - *Falsified if:* with mode 0 any voxel shows a VPL-lit colour or a colour that changes with the
@@ -2731,7 +2800,7 @@ not depend on the order in which objects are drawn within a drawn frame.
     direction (drawn fresh, as the fixed behaviour of `quirks.barrel_only_no_recoil` would), or
     in the control it does not follow P's row.
 
-**MS-22 Use of the lighting table file (claim 38).** The parts of the file named below (row count, remap range start and end, extra value, palette, rows) are located as planned S-0013 gives.
+**MS-22 Use of the lighting table file (claim 38).** The parts of the file named below (row count, remap range start and end, extra value, palette, rows) are located as S-0013 gives.
 - *Test data:* the MS-4 stock vehicle on flat ground, drawn with named test copies of the lighting
   table file, each a loose file that overrides the stock one (glossary, *measurement setup*):
   - **(a) Unused parts changed.** The stock file with its remap range start, remap range end and
@@ -2763,7 +2832,7 @@ MS-22.
 - *Setup:* the MS-4 stock vehicle on flat ground, with these variants of the file:
   - (a) the stock file with its row count set to 20, everything else unchanged (so the file is still as long as before),
   - (b) the stock file cut right after the last entry of its row 19 (its 20th row), row count unchanged,
-  - (c) the stock file shortened so that it ends exactly where the first entry of row 0 would begin (planned S-0013 gives that point), so that no entry of any row remains,
+  - (c) the stock file shortened so that it ends exactly where the first entry of row 0 would begin (S-0013 gives that point), so that no entry of any row remains,
   - (d) no file at all,
   - (e) the stock file cut after the entries for colour indices 0–127 of row 19, row count
     unchanged. A second test model, as in MS-15's first-section test (one section of normal mode 2,
@@ -2872,7 +2941,7 @@ area of the screen's next fresh draw.
     unwrapped part of the streak outside A″'s widened rectangle, the wrapped part of the streak, rising
     from the bottom rows of the buffer at the positions F5 gives modulo 256.
   - (d): B's image shows the streak pixels outside A‴'s widened rectangle, as in (a).
-  - (e): the column is drawn from cell 3 downward through the grid's bottom face, 256 cells lower
+  - (e): the column's visible output extends from cell 3 downward through the grid's bottom face, 256 cells lower
     than its runs give (claim 36). Because the section is upside down, that part of the streak
     rises on screen beyond the box face that is at the top in this pose, as in (a). B's image
     shows the streak pixels outside A⁻'s widened rectangle.
@@ -2897,15 +2966,16 @@ area of the screen's next fresh draw.
 - **Shadow vertical placement.** Where an airborne unit's shadow footprint lands vertically (its
   ground point) is decided by the locomotor and is left to S-0102 and S-0106; the one-pixel
   adjustment for airborne units seen in the original is unconfirmed.
-- **Aircraft draw order of body and shadow** follows the same pipeline, but its exact sequence has
-  not been determined.
+- **Own body and shadow priority.** The shadow belongs to its object's layer and list position
+  (S-0102 claim 18). Its priority against its own body is not determined here; S-0102's claim
+  about an aircraft body remaining undarkened is the authority for that observable.
 - **Masked shadows.** A shadow can also be drawn through a per-pixel mask image, but when that
   happens is not yet clear.
 - **Shadow on a cache miss.** When a shadow image is not yet cached, the shadow sometimes appears
   to be skipped for that draw instead of made. In which situations, and whether a shadow can be
   missing for one drawn frame, has not been determined.
-- **Oversized parts.** How a copy rectangle larger than the 256 × 256 voxel buffer (claims 22 and
-  25) reaches the screen, whether clipped or read past the buffer's edge, has not been determined.
+- **Oversized parts.** How a copy rectangle extending outside image coordinates 0–255 on
+  either axis (claims 22 and 25) reaches the screen has not been determined.
   Until it is, the screen image of such a part cannot be predicted. The wrap itself and the
   residue of claim 34 do not depend on it (MS-24).
 - **Turret frame of multi-turret types.** Which HVA frame the turret models of a multi-turret
@@ -2919,34 +2989,30 @@ area of the screen's next fresh draw.
   locomotors other than the driving and naval locomotors also skip the cache while the body's
   tilt is not settled is settled for the hovering, jumpjet and tunnelling locomotors by S-0106
   claim 13; for the flying and rocket locomotors it has not been determined.
-- **Cache lifetime.** Within a game the original empties all image caches together when a new
-  image does not fit in their memory (claim 26); our engine does not reproduce that point. Whether
-  a new game empties them has not been determined (our engine empties them). Both bound how long
-  the artefacts of `quirks.voxel_cache_frame_mod32` and `quirks.barrel_cache_ignores_elevation`
-  persist in the original.
+- **Image invalidation.** What observable event makes all earlier images ineligible for reuse
+  in the original, and whether a new game does so, remain open (claim 26). Our engine retains
+  reuse throughout a game and starts each game without earlier images. Invalidation bounds how
+  long the frame and elevation reuse artefacts persist in the original.
+- **Other section ties.** F8 specifies two discriminating configurations only. A complete
+  characterization of the visible priority of larger equal-depth groups, without prescribing
+  sorting work, remains to be supplied. The two examples are not a complete general tie rule.
+- **Other mode-0 outputs.** Claim 35 supplies explicit output cases, not a general parser for
+  in-bound mode-0 column data. Exact outputs beyond those cases still need a behavioural
+  characterization or a separate formats spec. They are not classified as unspecified: the
+  original is deterministic within a column's own data. Only the out-of-bound cases named in
+  claim 35 are unspecified. No universal reproduction claim is made for the other cases.
 
 ## Questions for the project lead
 
-- **Type id.** Is the type id of claim 12 and MS-11 (Terms) the type name or the registration index
-  of the glossary? If it is the type name, the spec should say "type name".
-- **Cache emptying.** Claim 26 records, as a departure with no switch, that our engine never
-  empties the image caches during a game, while the original empties them all when their memory
-  is full (a point that depends on the original's own storage of images). Is that acceptable?
+- **Image invalidation.** Claim 26 keeps reuse for a whole game in our engine, while the
+  original can invalidate earlier images together at an event not specified here. Is that
+  departure, with no switch, acceptable?
 - **Buffer-edge cases and importer warnings.** The importer warns about the model-file cases of
   claims 12, 35 and 36 (Import mapping, *Importer warnings*) and not about the three pose- or
   size-dependent cases of claims 22, 24 and 34 and F10. Should the importer also warn when a
   model's own size already guarantees an oversized copy rectangle (claim 22)?
-- **Fixed behaviour of three quirk switches.** Each offers two alternatives; which one does the
+- **Fixed behaviour of two quirk switches.** Each offers two alternatives; which one does the
   switch select when turned off?
   - `quirks.voxel_buffer_wrap`: clip, or enlarge the buffer.
   - `quirks.barrel_pivot_frame_mixup`: the turret origin, or an imported pivot (no pivot key is in
     Import mapping yet).
-  - `quirks.depth_mode_leak` (Q-0056): (a) switch the mode off after every shadow, or (b) never
-    switch it on for shadows. The Edge cases entry now states both precisely. They differ only in
-    whether a depth-option type's fresh shadow sets the depth plane to 0 over its clear area (a) or
-    leaves it (b), apart from claim 34's unconditional initial clear. Under (a), the mode is on
-    during fresh parts and shadows of depth-option types; under (b), only during their fresh
-    parts. Under both it is off between draws, so no draw of a type without the option, and no
-    projectile or debris, is ever made in it. Questions 2 and 3 of Q-0056 have these conditional
-    answers, but question 1 remains a project-lead choice. The spec author suggests (b), the
-    simpler rule. Q-0056 is not listed as answered in the front matter until that choice is made.

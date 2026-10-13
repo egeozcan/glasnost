@@ -1,9 +1,9 @@
 ---
 id: Q-0111
 title: The shared state of non-legal cells during a whole-map re-cover or spy-satellite reveal
-status: open
+status: answered
 related: [S-0409]
-answered-by: []
+answered-by: [S-0409]
 ---
 
 ## Need

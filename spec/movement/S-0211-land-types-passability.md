@@ -2,7 +2,7 @@
 id: S-0211
 title: Land types and passability
 topic: movement
-revision: 11
+revision: 12
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -228,9 +228,10 @@ The crusher flag's effect in play is S-0210's (crushing).
    **When it is recomputed.** This list is authoritative for every spec (S-0010 calls the same event
    *terrain recalculation* and cites it). A land recompute of a cell happens on these events, and
    the recompute sees the cell's contents after the change:
-   - map load and game start: the two load milestones and the unconditional game-start
-     recalculation of S-0010 claim 12. The game-start recalculation covers every legal cell after
-     starting-unit placement and before the first tick, whether or not terrain has changed.
+   - map load: every cell, twice (S-0010 claim 12 gives the two passes). At game start, after the
+     skirmish setup has placed its starting units and before the first tick, every legal cell is
+     recomputed once more (S-0010 claim 12), whether or not terrain has changed. Any other whole-map
+     change of the terrain at game start also recomputes every cell.
    - an overlay is placed, removed or changed on the cell: ore grows, spreads or is harvested, a
      wall is built, damaged, sold or destroyed, a bridge is destroyed or repaired, a destroyed building
      leaves rubble, or an animation replaces the overlay.
@@ -263,11 +264,12 @@ The crusher flag's effect in play is S-0210's (crushing).
      | Recompute when an overlay changes but keeps its type (ore growing or being harvested, a wall's damage stage) | `unmeasured`: the land type and the category depend only on the overlay's type and flags (claims 5 and 11), so such a recompute has no visible effect in this spec |
      | Recompute when an animation replaces the overlay | `unmeasured`: which animations put which overlay types in place belongs to the animation specs, and no scenario of this spec sets one up |
      | Recompute when the cell's tile, sub-tile or ground level is changed in play | `measurable` (S-0212 scenario P15 case (k): a collapsed destroyable cliff leaves a passable cell, whose category follows only at a recompute) |
-     | Game-start recalculation | `measurable` (S-0010 claim 12, scenario R1 part D and scenario G4 part C for its terrain and animation outcomes); the exact count of whole-map recalculations is `unmeasured`, because the outcomes do not distinguish extra recalculations once terrain is stable |
+     | Recompute in the game-start pass after starting units are placed | `measurable` through S-0010 claim 12 and scenario R1 parts D2 and E: the surviving cell's land type changes after its next recalculation; the exact number of recalculations beyond the stated pass remains `unmeasured` |
+     | Recompute on any other whole-map change of the terrain at game start | `unmeasured`: which such changes happen belongs to S-0009 and S-0010, and no scenario of this spec separates such a pass from the stated passes |
      | Recompute when a terrain object is removed | `measurable` (scenario L14) |
      | Recompute when a terrain object is put into a cell | `unmeasured`: in a skirmish, terrain objects are known to be put into cells only while the map loads, between the two passes of S-0010 claim 12, and the second pass recomputes every cell anyway, so the placement's own recompute has no separate observable |
      | Recompute when a building is placed or removed | `unmeasured`: a building changes no land type (claim 5 reads only the tile, the overlay and the neighbours' levels) and, as scenario L20 shows for the three kinds of building that can be set up, no category (claim 11), so the recompute has no visible effect in this spec. The method of scenario L23 (a cell whose tile is dropped by the recompute, read by the placement check on that cell) cannot separate it either: while a building covers the cell the check is blocked by occupancy, and once the building is gone its removal has recomputed the cell too, so placement and removal cannot be told apart; and the check needs stock land data that make rough and clear land differ in buildability, which this spec cannot assume |
-     | Recompute when a vehicle moves | `measurable` (S-0010 scenario R1 parts D2 and E: a named test theater file sets the rough-transition start to the tile count, and cell (*x*₀ + 2, *y*₀ + 2) of its 4 × 4 block still holds a stray tile number at the first tick; a vehicle entering or leaving it makes the recompute visible as clear land in the placement check; the category cannot show it, because it never depends on units, claim 11) |
+     | Recompute when a vehicle moves | `measurable` (S-0010 scenario R1, part E, using the surviving cell in part D2's 4 × 4 block: the first unit to enter or leave that cell makes the recompute visible as a change from its stray tile number to the no-tile marker; the category cannot show it, because it never depends on units, claim 11) |
      | Recompute when an infantry unit moves, and when an aircraft lands in a cell or leaves it | `measurable` (scenario L23, parts A and B, by S-0010 scenario R1 part E's method) |
 
    - Confidence: high for rows 1, 4 and 5; medium for rows 2 and 3 (the map's tile numbers and
@@ -706,7 +708,7 @@ The crusher flag's effect in play is S-0210's (crushing).
 
 | State | Event | Result |
 |---|---|---|
-| any cell | map load; overlay placed, changed or removed; terrain changed | land recompute: land type (claims 5 to 8) and passability category from the new land type and contents (claim 11) |
+| any cell | map load; game-start pass after starting-unit placement and before the first tick; overlay placed, changed or removed; terrain changed | land recompute: land type (claims 5 to 8) and passability category from the new land type and contents (claim 11) |
 | any cell | an infantry unit, vehicle, aircraft, building or terrain object put into or taken out of the cell while on the ground | land recompute, seeing the contents after the change (claim 5) |
 | cell holding a terrain object | the terrain object is removed or destroyed | land recompute: rule 4 no longer sees it, so the category is decided without it (claim 11) |
 | cell | infantry or vehicle enters or leaves | land recompute, but the category is unchanged: it does not depend on them (claim 11) |
@@ -1467,24 +1469,23 @@ otherwise.
 
 **L23: recompute when an infantry unit or an aircraft is on the ground in a cell (claim 5; named
 test files).**
-- *Setup:* the data and map of S-0010 scenario R1 part D2: a loose theater data file whose
-  rough-transition key names exactly the first missing tileset number, and a 4 × 4 block of
-  rough cells. Use its buildable-field condition and placement controls. The tested cell is
-  (*x*₀ + 2, *y*₀ + 2), which still holds a stray tile number at the first tick. Part A: an
-  infantry unit of the human house, standing outside the block. Part B: an aircraft of the human
-  house of a type that lands on open ground (the test author picks one), standing outside the
-  block. Each part in a fresh program start.
-- *Procedure:* after loading, the placement check of R1 part D2 on the tested cell. Part A: walk
-  the infantry unit onto that cell and off again. Part B: order the aircraft to land on that
-  cell; once it stands there, order it away again. Then the same placement check.
-- *Observable:* whether the tested cell judges as rough or clear land before and after; in part B
-  also whether the aircraft stood on the ground in that cell (recorder).
-- *Expected:* before: rough land. After: clear land, because putting the unit on the ground in the
-  cell, or taking it out, recomputed the cell, which now holds no tile (S-0010 scenario R1 part E
-  gives the same result for a vehicle).
-- *Falsified if:* the tested cell still judges as rough land after part A, or after part B when
-  the aircraft did stand in that cell. If the aircraft landed elsewhere, part B is inconclusive
-  and is repeated.
+- *Setup:* the data and the map of S-0010 scenario R1 part D2 (a loose copy of the theater data
+  file whose rough-transition key names exactly the first missing tileset number, and the 4 × 4
+  block of rough cells), with the buildability conditions that R1 part D2 states. Use the surviving
+  cell at (*x*₀ + 2, *y*₀ + 2). Part A: an infantry unit of the human house, standing outside the
+  block. Part B: an aircraft of the human house of a type that lands on open ground (the test
+  author picks one), standing outside the block. Each part in a fresh program start.
+- *Procedure:* after loading, use R1 part D2's placement check on the surviving cell. Part A:
+  walk the infantry unit onto the cell and off again. Part B: order the aircraft to land on the
+  cell; once it stands there, order it away again. Then repeat the placement check.
+- *Observable:* whether the surviving cell judges as rough or as clear land before and after,
+  and in part B whether the aircraft stood on the ground in that cell (recorder).
+- *Expected:* before: rough land. After: clear land, because putting the unit on the ground in
+  the cell, or taking it out, recomputed the cell, which now holds the no-tile marker (S-0010
+  scenario R1 part E gives the same result for a vehicle).
+- *Falsified if:* the cell still judges as rough land after part A, or after part B when the
+  aircraft did stand in the cell. If the aircraft landed elsewhere, part B is inconclusive and
+  is repeated.
 
 ## Open questions
 

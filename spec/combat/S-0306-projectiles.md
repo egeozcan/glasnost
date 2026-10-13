@@ -2,13 +2,13 @@
 id: S-0306
 title: Projectiles (launch, flight, homing, scatter, detonation)
 topic: combat
-revision: 4
+revision: 5
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-13
 measurements: []
-requests: [Q-0071, Q-0077, Q-0078, Q-0083]
+requests: [Q-0071, Q-0077, Q-0078, Q-0083, Q-0160]
 supersedes: []
 ---
 
@@ -22,6 +22,7 @@ makes it detonate, where, and which rule wins when several apply in one turn; th
 anti-ground eligibility of a weapon; the line-of-fire walk that cliffs and walls block; and the
 nuclear warhead, whose detonation waits for an animation. The area damage of a detonation is S-0303,
 the range test is S-0307, where the shot starts is S-0313 and when shots are fired is S-0301.
+This spec covers skirmish; network games and campaigns are out of scope.
 
 ## Terms
 
@@ -229,7 +230,7 @@ they are used.
    `quirks.aim_origin_without_target`).
    - **The speed estimate *u*.** *u* is an integer that the lead formula uses as leptons per tick
      without any conversion. For every vehicle target, whatever its locomotor, it is S-0207's
-     progress per tick (F2 there) formed from that vehicle's own state at the moment the shot is
+     speed estimate (claim 18 and F2a there, using F2) formed from that vehicle's own state at the moment the shot is
      aimed: its type speed, its country's vehicle speed factor, its speed bonus factor, the faster
      ability when it applies, and the speed fraction it holds at that moment, with the flag-carrier
      halving. In words (S-0207 F2 gives the formula in its own symbols, which differ from this
@@ -516,16 +517,21 @@ they are used.
     - **Where the two fields are read.** The trailer animation and the spawn delay field are read
       from the art file, in the section named by the image value that the projectile's rules
       section gives in the same layer, before any arctic change to the name used for drawing (so a
-      snow map never selects a suffixed section for them). S-0004 claim 14 gives this selection and
-      its gate: when the projectile's rules section in a layer gives no image value, or an empty
+      snow map never selects a suffixed section for them). S-0007 claim 33 and S-0004 claim 14
+      give this selection and its gate: when the projectile's rules section in a layer gives no image value, or an empty
       one, neither field is read in that layer, and both keep their earlier values (initially no
       trailer and a spawn delay of 3); there is no fallback to the section named by the type's own
-      name. Keys of the same names in the projectile's rules section have no effect.
+      name. Keys of the same names in the projectile's rules section have no effect. In the selected
+      art section, a missing or empty value keeps the earlier field; a reserved no-type name clears
+      the trailer reference (S-0004). The zero-delay departure and importer warning in Edge cases
+      concern this art-supplied delay, including a delay retained from an earlier layer, not any
+      ignored value in rules.
     - Backing: `measurable` (scenario P10; its variant c for the position of the animation, its
       variant b for the raised delay, its variant d for a delay that removals do not lower and
       that a later single vehicle shot resets, its variant e for a raised value of 0 and its
       variant f for the file and section the two fields are read from; S-0004 scenarios K1 to K4
-      for the gate and the arctic case)
+      for the gate and the arctic case; S-0007 A24 for retained settings; P10 variant g for the
+      zero-delay departure and its art source)
     - Confidence: high for the unscaled delay; medium for the scaled delay (the exact count *N*
       and when entries leave it)
 
@@ -921,7 +927,8 @@ The comparison with 200 always uses Δ*z*, also for a building target. The round
 narrowing of the table angle's arguments to single precision are those of the Formulas preamble.
 The conversion of *θ*_c to a pitch facing is S-0204 F6 (claim 12 there) with *θ*_c as its signed
 angle: at an exception index of the table lookup *A*(|*Z*| − *τ*, max(*d*′, 0.05)) the pitch is one
-unit nearer to level than the surrogate gives, larger for *Z* > 0 and smaller for *Z* < 0. The
+unit nearer to level than the surrogate gives: +1 for a positive *θ*_c, −1 for a negative
+*θ*_c, and no correction for zero. The
 correction follows the sign of *θ*_c after the negation, not the sign of the table's argument.
 With `quirks.building_pitch_term` off, *Z* = Δ*z* and *τ* = 20 for every target.
 
@@ -1238,8 +1245,9 @@ that no fix would change.
 | rules, projectile | `DetonationAltitude` | detonation altitude (claim 11) | integer, leptons of world height | 0 |
 | rules, projectile | `Cluster` | cluster count *n*_c (claim 21) | integer | 1 |
 | rules, projectile | `AirburstWeapon` | the weapon of the airburst children (claim 21) | weapon name | none |
-| rules, projectile | `Image` | names the art section that supplies `Trailer` and `SpawnDelay` (claim 16; S-0004 claim 14) | text, cut to 24 bytes, taken afresh in each layer | empty: those two fields are not read in that layer |
-| art, section named by the projectile's rules `Image` of the layer (no arctic suffix) | `Trailer`, `SpawnDelay` | trailer animation and its period (claim 16); the same keys in the rules section have no effect | animation name, integer ticks | keep the value in force; engine defaults none, 3 |
+| rules, projectile | `Image` | names the art section that supplies `Trailer` and `SpawnDelay` (claim 16; S-0007 claim 33, S-0004 claim 14) | text, cut to 24 bytes, taken afresh in each layer | empty: those two fields are not read in that layer |
+| art, section named by the projectile's current non-empty rules `Image` (no arctic suffix) | `Trailer` | trailer animation (claim 16); the rules key has no effect | creating animation reference, cut to 127 bytes (S-0004); reserved no-type name clears | missing or empty keeps the reference in force; initially none; skipped when the current rules image is empty |
+| art, same selected section | `SpawnDelay` | trailer period and source of the zero-delay warning (claim 16, Edge cases); the rules key has no effect | integer ticks (S-0003) | missing or empty keeps the delay in force; initially 3 ticks; skipped when the current rules image is empty |
 | rules, projectile | `Scalable` | scalable flag (claim 16) | boolean | no |
 | art, projectile image | `Voxel` | drawn as a voxel model (claim 6 b) | boolean | no |
 | rules, infantry, vehicle, aircraft or building type | `RadialFireSegments` | *n* (claims 2, 7) | integer | 0 |
@@ -1254,7 +1262,8 @@ that no fix would change.
 | rules, warhead | `Wall` | wall-damaging warhead (S-0307 claim 11) | boolean | no |
 | rules, warhead | `EMEffect` | electromagnetic flag (claim 20 c; S-0303 F5) | boolean | no |
 
-Every key keeps the value in force when a layer omits it (S-0006). The combat-damage section is
+Except for the projectile image, which is taken afresh as its row specifies, each field keeps
+its value in force when a layer omits its key or skips the field's read (S-0006). The combat-damage section is
 written by role. The original also reads a projectile
 elasticity, a shrapnel weapon and count and a few draw-only fields; none of them has an effect this
 spec specifies (Edge cases, Open questions), so they are not imported here.
@@ -1391,7 +1400,8 @@ fire point (S-0313, the fire point's height term in the test file) and check the
 - Runs: 1 per target.
 - Expected: horizontal direction = S-0204 F3 from the fire point to the impact point. The pitch is
   read from the recorded Δ*z*: when |Δ*z*| ≤ 200 the pitch facing is exactly 16383 and *V*_z = 0; when
-  |Δ*z*| > 200 it is trunc((sgn(Δ*z*) × *A*(|Δ*z*| − 20, max(*d*′, 0.05)) − π/2) × *c*₂) (F13). Which
+  |Δ*z*| > 200 it is F13's pitch from the signed angle
+  sgn(Δ*z*) × *A*(|Δ*z*| − 20, max(*d*′, 0.05)), including S-0204 F6's correction. Which
   case applies to each target follows from the recording (a fire point a few leptons above the
   terrain puts a one-level drop under 200 and a two-level drop over it, but the fire point's height
   is read, not assumed). Variant e (drawn as a voxel model): pitch facing 16384 for the higher
@@ -1405,7 +1415,8 @@ fire point (S-0313, the fire point's height term in the test file) and check the
   level-0 ground 5 cells away, so that the recorded |Δ*z*| is about 416 plus the fire point's
   height, well over 200, while *Z* below stays small; the building's art height value *H*_b is
   read from the user's art data. Expected: the pitch facing is
-  trunc((sgn(*Z*) × *A*(|*Z*| − *τ*, max(*d*′, 0.05)) − π/2) × *c*₂) (F13) with *Z* = 200 × *H*_b − the recorded world height of the fire point
+  F13's pitch from sgn(*Z*) × *A*(|*Z*| − *τ*, max(*d*′, 0.05)), including S-0204 F6's
+  correction, with *Z* = 200 × *H*_b − the recorded world height of the fire point
   (*τ* = 20, or 0 when |*Z*| < 20). The run counts only when this pitch differs from the one the
   recorded Δ*z* would give by more than 50 facing units. Falsified if the pitch is the one the
   recorded Δ*z* gives.
@@ -1419,6 +1430,14 @@ fire point (S-0313, the fire point's height term in the test file) and check the
   velocity (S-0204 F3 of its components) equals the aiming facing within 8 facing units. Falsified
   if it lies within 8 facing units of the direction from the fire point to the impact point
   instead.
+
+- Variant h (F13 exception-index control): use S-0204 C4's two straight-shot setups, one for
+  each sign of aim height, alongside P4. Record the first velocity before gravity acts and compare
+  F1 at pitch 417 versus 416 for the positive case, and 32349 versus 32350 for the negative case.
+  The narrowed table arguments must select index 1024. Expected: 417 and 32349 respectively.
+  Matching the uncorrected candidates falsifies F13's correction. C4 supplies the setup,
+  qualification, one valid run per sign and void rules. No arctangent correction is applied
+  to the arcsine-based ballistic conversion of F4.
 
 **P5. Arcing launch (claim 6 a).**
 - Setup: arcing test weapon without the lobber flag; targets at 5 cells on level ground, on ground
@@ -1620,6 +1639,13 @@ fire point (S-0313, the fire point's height term in the test file) and check the
   qualifying turn (as it would if the deep-fall row tested the position before the lift), or a
   turn whose lifted height above the surface is −416 or less ends without a detonation.
 
+- Exception-index control (F12, current and goal pitches): run S-0204 C4's steering variants
+  alongside P9, using only read-only recording. At index 1024 a positive signed elevation angle
+  must give pitch 417, not 416; a negative one must give 32349, not 32350. Record the velocity
+  before and after each qualifying turn and compare the full F12 rebuild, including the current
+  pitch and, in a snapping turn, the goal pitch. Matching the uncorrected velocity instead
+  falsifies the correction. C4 supplies the setup, qualification, run counts and void rules.
+
 **P10. Trailers (claim 16).**
 - Setup: test steering projectile (no gravity, so it flies long) with a trailer animation and
   spawn delay 5, speed field 10 (25 leptons per tick), at a vehicle 12 cells away, so that it flies
@@ -1669,6 +1695,15 @@ fire point (S-0313, the fire point's height term in the test file) and check the
   6; in variant e, the projectiles stop creating trailer animations after the eighth shot (the
   value 0 used as the delay); in variant f, *Y* appears or the period is 7 in f1, any trailer
   appears in f2, or the period is 5 in f3.
+
+- Variant g (Q-0160, zero art delay): an isolated run of the first setup, not scalable, with
+  the selected art section's delay 0 and a non-empty trailer reference, while rules gives delay 5.
+  Record whether the first projectile turn completes. Expected in the original: a divide-by-zero
+  failure at that turn, not trailer ticks at multiples of 5. On our engine: the importer warns,
+  the projectile flies normally, and creates no trailer. Control: art delay 5, ignored rules delay
+  0, with the same trailer. Expected: normal trailer ticks at multiples of 5 and no zero-delay
+  warning on our engine. One run each; remove test files afterwards. A completed original turn
+  in the zero-art-delay run, or a failure in the control, falsifies the art-source failure rule.
 
 **P11. Target loss (claim 17).**
 - Setup: run a: a steering projectile (top speed 25 leptons per tick) at a hovering aircraft that is
@@ -2271,5 +2306,4 @@ Decided under the project lead's delegated sign-off (2026-10-10); recorded on th
 - The flatter-arc launch after a failed solve for *d* + 1 (F4, Edge cases) is accepted as a
   design-choice departure with no switch and no importer warning, as for S-0205 claim 8: launch
   at θ.
-- The glossary's *fire point* entry is the stale side; it is corrected in the glossary's next
-  revision. Claim 5 here governs: only a dropping projectile starts from the firer's own position.
+- The glossary's *fire point* entry agrees with claim 5 here: only a dropping projectile starts from the firer's own position. No glossary correction is required.

@@ -2,7 +2,7 @@
 id: S-0110
 title: Shroud and fog rendering
 topic: rendering
-revision: 5
+revision: 6
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -35,9 +35,8 @@ of S-0101. *Shade row* and the brightness mapping are those of S-0104 (claim 15)
 rendering, *light-alpha value* means a per-screen-pixel integer from 0 to 255, initially 127
 in each drawn frame, modified by cover pieces and light-glow images as specified here.
 A *light-glow image* has S-0104's meaning; claim 6 here owns its battlefield pixel updates.
-This corrects S-0104 revision 10's Terms assertion that only glows produce non-default values
-and claim 15's assertion that the value is 127 unless a glow covers it: a cover can change it
-without any glow. The shade-row formula itself is unchanged. The *repair wrench* is that of
+S-0104's Terms and claim 15 agree with these cover and glow updates and own the shade-row
+formula. A cover can change the value without any glow. The *repair wrench* is that of
 S-0111 (claim 19).
 
 | Term | Meaning |
@@ -45,7 +44,7 @@ S-0111 (claim 19).
 | explored cell | A cell whose shroud the local player has removed. S-0409 owns when a cell becomes explored and when it is covered again. |
 | seen cell | A cell with S-0409's seen state for the local player. With fog on this means not under fog; in skirmish it is bookkeeping only. S-0409 owns its changes. |
 | map neighbours | The eight cells around cell (*x*, *y*), named by glossary map directions: the side neighbours N = (*x*, *y* − 1), E = (*x* + 1, *y*), S = (*x*, *y* + 1), W = (*x* − 1, *y*), and the corner neighbours NW = (*x* − 1, *y* − 1), NE = (*x* + 1, *y* − 1), SE = (*x* + 1, *y* + 1), SW = (*x* − 1, *y* + 1). On the screen N is up-right, E down-right, S down-left, W up-left, NW straight up, NE right, SE straight down and SW left. |
-| covered neighbour | For the shroud: a map neighbour that is not explored. For the fog: a map neighbour that is not seen. A map neighbour that is not a legal cell is covered; for the shroud only, S-0409's shared off-map explored-state quirk is the exception (claim 1). |
+| covered neighbour | For the shroud: a map neighbour that is not explored. For the fog: a map neighbour that is not seen. A map neighbour that is not a legal cell counts as covered for shroud unless the shared explored state of non-legal cells is explored for the local player's house (S-0409, claim 14). It always counts as covered for fog, since a non-legal cell is never seen. |
 | cover piece | An image-frame index from 0 to 46 chosen per cell for one cover. 0 designates an uncovered cell with no covered neighbours (explored for shroud, seen for fog); 15 designates a fully covered state. These are state labels, not promises about the imported artwork: even piece 0 can change pixels under claim 5. |
 | shroud cover, fog cover | The two covers drawn for each cell (claims 1 and 4). |
 | shroud sprite, fog sprite | The two sprites the pieces come from (claim 3; Import mapping gives their file names). |
@@ -64,13 +63,13 @@ S-0111 (claim 19).
    - a cell that is not explored gets piece 15 (fully covered),
    - an explored cell gets the piece of claim 2 for its set of covered neighbours.
 
-   A map neighbour that is not a legal cell (S-0009 claim 1) counts as covered: a cell that is not
-   legal is normally neither explored nor seen. S-0409 claim 14 and
-   `quirks.offmap_cells_shared` own the exception: after the shared off-map state becomes explored,
-   those neighbours count as explored for the shroud piece. Their seen state is unchanged. This
-   applies both inside and outside the range the map size spans, including beside border cells
-   of the map's diamond. The piece
-   depends only on these current states, not on the cell's history: a cell that is covered again
+   A map neighbour that is not a legal cell (S-0009 claim 1) counts as covered unless the shared
+   explored state of non-legal cells is explored for the local player's house (S-0409, claim 14).
+   A non-legal cell is never seen. The shared explored state is an exception to the usual rule
+   that non-legal cells are not explored; it can become explored through the gap-field behaviour
+   of S-0409 claim 14, under its `quirks.offmap_cells_shared` (default original). This applies
+   whether the neighbour's coordinates lie inside or outside the range the map size spans.
+   The piece depends only on the current explored and seen states, not on the cell's history: a cell that is covered again
    after being explored gets piece 15 like a cell that was never explored. The result is the same
    as if the whole battlefield view were redrawn from the current states in every drawn frame; an
    implementation may redraw less, as long as what is shown stays the same (claim 9).
@@ -171,8 +170,8 @@ S-0111 (claim 19).
      (*u* + 1)/2) nor cell (*c*<sub>x</sub> − (*u* − 1)/2, *c*<sub>y</sub> − (*u* − 1)/2) is explored.
 
    A candidate cell whose coordinates both lie in 0 … 511 and that is not a legal cell counts as
-   not explored, except when S-0409's `quirks.offmap_cells_shared` has made the shared off-map
-   state explored (claim 1). A candidate with a coordinate outside 0 … 511 is read as another cell, or as no
+   not explored unless the shared explored state of non-legal cells is explored for the local
+   player's house (S-0409, claim 14; claim 1 here). A candidate with a coordinate outside 0 … 511 is read as another cell, or as no
    cell (Edge cases, `quirks.shroud_point_cell_wrap`). For odd *u* the candidates are adjacent
    along the map south-east diagonal, and either being explored makes the point uncovered. Which
    rules use this test belongs to their own specs; S-0111's repair wrench uses it, and scenarios SH6
@@ -335,11 +334,15 @@ piece of the same cell; a lower cell's shroud piece can replace an upper cell's 
 - **Fog of war changes the shroud sprite** (claim 3). This is intended behaviour, not a quirk: the
   fog sprite is the cover set designed for games with fog of war, and it serves both covers there.
   Our engine does the same and has no switch.
-- **Non-legal neighbours count as covered** (claim 1). Every cell on the border of the map's
-  diamond of legal cells has map neighbours that are not legal, so when it is explored it normally
-  gets edge pieces towards them. Under `quirks.offmap_cells_shared` (owned by S-0409, default on,
-  original behaviour), when the shared off-map state becomes explored those shroud edge pieces
-  disappear. Off: non-legal cells always count as unexplored. Claims 1 and 8 read the same shared
+- **Non-legal neighbours count as covered unless their shared state is explored** (claim 1,
+  S-0409 claim 14). Every cell on the border of the map's diamond of legal cells has map
+  neighbours that are not legal, so when it is explored it gets edge pieces towards them unless
+  their shared explored state is explored for the local player's house. A hostile gap field
+  can make that state explored when it stops while the local player's house has an active spy
+  satellite and no other hostile field covers a non-legal cell. Once explored, the shared state
+  remains explored, including after a whole-map re-cover. This is governed by
+  `quirks.offmap_cells_shared` (owned by S-0409, default on, original behaviour).
+  Off: non-legal cells always count as unexplored. Claims 1 and 8 read the same shared
   state; SH8 part Q2 tests both consequences. Whether those border cells lie inside the local area
   (S-0009), and so can be seen, depends on the map. This is the original's behaviour and our engine
   reproduces it; there is no additional switch beyond S-0409's shared-state switch.
@@ -669,13 +672,13 @@ appears several times; that is harmless, since each check below is made within o
   SH6 and SH8 use flat cells so their centre heights really are whole levels. S-0111 claim 19
   supplies the wrench observable and retains the negative-height extension outside claim 8.
   S-0410 claim 6 and F3 supply radar's initial cell, not the candidate cells of this spec.
-- For battlefield rendering, this revision explicitly corrects the two glow-only assertions of
-  S-0104 revision 10 identified in Terms: claims 5 and 6 here own the writers, while S-0104
-  claim 15 owns the unchanged shade-row formula, including its final cap. This is not an
-  additional lighting channel or a departure from the original. The companion S-0104 revision
-  must replace those assertions and point here before coordinated approval; until then the
-  approved S-0104 wording remains inconsistent, so this draft must not be handed off alone.
-  Claim 6 supplies the battlefield glow update, not an assertion about other displays.
+- Claims 5 and 6 here own battlefield cover and glow updates; S-0104's Terms and claim 15
+  agree and own the shade-row formula, including its final cap. This is not an additional
+  lighting channel or a departure from the original. Claim 6 supplies the battlefield glow
+  update, not an assertion about other displays. Sign-off must retain that agreement.
+- S-0011 claims 26 and 36 apply their trigger reveals to every player house, human or AI,
+  consistently with S-0409 claim 1 and the glossary's AI-house ruling. Rendering here reads
+  only the local player's house's resulting states; it adds no human-only reveal restriction.
 - S-0414's original skirmish ends at the human player's defeat, unlike our engine's play-to-last-side
   departure. No scenario here requires the original to play on after defeat. The fog-on defeat
   rule remains unmeasured and deferred, rather than borrowing our engine's end condition.

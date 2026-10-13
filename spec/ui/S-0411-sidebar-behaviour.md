@@ -2,13 +2,13 @@
 id: S-0411
 title: Sidebar behaviour (build icons, clicks and the orders they give, icon states, queue counts, ready and placement)
 topic: ui
-revision: 5
+revision: 6
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-13
 measurements: []
-requests: []
+requests: [Q-0121, Q-0123]
 supersedes: []
 ---
 
@@ -25,15 +25,20 @@ is S-0407's; tab assignment and icon order are S-0004's (claim 11),
 production rules S-0404's, build times S-0403's and the credits display S-0416's.
 Network games and campaigns are out of scope.
 
-**Cross-spec changes required at hand-off.** Approved S-0404 revision 1 claim 9, P9 and Open question 1 must be revised to follow claim 2's
-recheck timing: destruction during tick *n*'s turn pass gives removal orders in tick *n*, applied
-at its end, not one or two ticks later. S-0404's factory eligibility wording must also distinguish
-its build-limit-only application test from a full current tech-tree test, so that it does not
-contradict S-0407 claim 13's stale-offer production. S-0407 claim 13 and its state/order table must
-distinguish orders issued in the recheck's house update from cancellation at the end of that tick.
-S-0407 revision 3 claim 1 already states that offer membership changes only at a recheck; that
-approved revision has no Open question 4. The glossary's *offered* entry must distinguish current
-buildability from the offer kept between rechecks and must not make icon removal a per-tick test.
+**Cross-spec changes required at hand-off.** S-0404 revision 3 already supplies the application
+and cancellation-timing corrections formerly requested here. Its factory eligibility definition
+must also exclude a building queued to be sold, not only one already being sold (claim 14).
+S-0407 claim 13 and its state table must distinguish issuing cancellation orders at the recheck
+from applying them at the tick's end, and except held-item resume from the issue-time limit test.
+Its claim 16 must retain S-0404 claim 10's application-time limit test on queued starts.
+S-0407's claim 1/Open question 4 and the glossary's hand-off note must drop their obsolete
+request for per-tick-removal corrections: approved S-0411 revision 5 already made them.
+S-0407 T14 run 7 must distinguish the refund on permanent factory removal from the later
+sidebar cancellation boundary, as claim 14 and S2 do here.
+S-0407's taken-up-set definition and claim 1's unconditional admission row must also account
+for S-0004 claim 11's full-tab suppression, rather than equating every otherwise eligible type
+with a shown icon. Whether a suppressed type is offered for order legality and what happens
+when space opens remain unresolved here; no cancellation or refill rule is inferred for it.
 
 ## Terms
 
@@ -49,11 +54,13 @@ last recheck). In addition:
 
 - **Buildable.** A type is *buildable* for a house when its current tech-tree answer is allowed or
   at limit and some factory building of the house could make it without the tech-tree rule
-  (S-0404, Terms; a factory building that is being sold does not count). Unlike *offered*, this
+  (S-0404, Terms; a factory building being sold or queued to be sold does not count).
+  Being sold and queued to be sold have the meanings of S-0407 Terms. Unlike *offered*, this
   describes current conditions, not membership in the taken-up set. A type can remain offered
   and keep its icon after it stops being buildable, until the next recheck of S-0407 (claim 12).
-  Buildability alone does not remove an icon or give cancellation orders. Legality (claim 4) and
-  icon membership (claim 2) follow the offer; darkening (claim 3) follows current conditions.
+  A type can also be buildable before it is offered. Buildability alone does not remove an icon
+  or give cancellation orders. Legality (claim 4) and icon membership (claim 2) follow the offer.
+  Darkening uses the current conditions of claim 3, not the full buildability test.
 - **House update, turn pass.** As S-0203 (claim 8) places them: the *turn pass* is the part of a tick
   in which objects take their turns; each house's own *house update* follows it in the same tick and
   comes before the orders of the tick.
@@ -95,7 +102,10 @@ last recheck). In addition:
    - Confidence: high
 
 2. **Icons appear and disappear.** An icon is added when its type becomes offered to the local
-   player (S-0407, at the recheck of its claim 12; S-0004 claim 11 places it). It is removed only
+   player, except that an item becoming available while its tab is full is not shown (S-0004,
+   claim 11). This spec does not establish whether or when such an item is shown after a slot
+   opens. S-0407 claim 12 owns the recheck timing; S-0004 claim 11 owns capacity and placement.
+   A shown icon is removed only
    when a recheck removes the type from the taken-up set. The removal and its cancellation orders
    occur in the house update containing that recheck: the first house update after a listed event
    of S-0407 claim 12, not a separate check in every tick. The recheck considers every offered
@@ -114,8 +124,9 @@ last recheck). In addition:
    On the removal the sidebar gives a cancel order when the removed type is the item of its line, and
    a cancel-all order for the type when the house has a production line of the type's kind (S-0404,
    claim 9). When it gives both, a recorder logs the cancel order before the cancel-all order. The
-   final state for that type is the same either way: item refunded, every queued copy of the type
-   removed. This does not claim that intermediate starts of other queued types are identical. When the
+   conditions for giving these orders are judged when the recheck removes the icon, not again
+   after an earlier cancellation order has taken effect. Claim 13 fixes the order between types
+   and the intermediate starts it can cause. When the
    tab being shown has no icons left, the sidebar switches to the first tab that has icons.
 
    Separately, S-0404 (claim 8) cancels an item itself when its last factory building leaves the map
@@ -124,11 +135,11 @@ last recheck). In addition:
    The left-click rows that test for a missing factory building (claim 4, rows 1 and 3) are
    therefore reached, for a non-aircraft type, only in the span between the last factory building
    ceasing to be able to make the type and the icon's removal at a recheck. For a sale with no
-   intervening recheck event, this span runs from the sale start to the recheck after the building's
-   removal. In that span the type is no longer buildable, the icon is still shown and a click gives
+   intervening recheck event, this span begins when selling becomes current or queued, whichever
+   happens first, and ends at the recheck after the building's removal (claim 14). In that span the type is no longer buildable, the icon is still shown and a click gives
    the order its row says (claim 4). Scenarios S4 (e), (e2) and (e3) probe reachable click ticks in separate runs.
-   - Backing: `measurable` (scenarios S2 and S4 e to e3; S-0407 scenario T14 run 7) for the
-     local player's behaviour; `unmeasured` for extending automatic orders to every player
+   - Backing: `measurable` (scenarios S2 and S4 e to e3; S-0407 scenario T14 run 7,
+     S-0004 F4 for the full-tab exception) for the local player's behaviour; `unmeasured` for extending automatic orders to every player
      house, a project rule rather than behaviour observable in the original
    - Confidence: high (recheck timing); medium (the removal, its two orders and the click span)
 
@@ -154,7 +165,7 @@ last recheck). In addition:
    - Confidence: medium (the three causes, the stale-refusal case and the lit icon of the line's
      item). No prediction is made for a pending new-build click.
 
-4. **Left click.** A left click on an icon gives at most one order, by the first row that applies:
+4. **Left click.** A left click gives at most one order. The icon's item state determines the response: a qualifying done item is cancelled or placed (or enters placement mode) as described in the done-item rows. Otherwise, a held item is resumed before the busy-line and build-limit cases are considered; a busy building/defence line and a type at its build limit give no order; all remaining cases give the build order shown in the table. The table states the observable conditions and result for each case.
 
    | Icon state | Order given | Notes |
    |---|---|---|
@@ -188,7 +199,8 @@ last recheck). In addition:
    held item from its own icon (row 5) is exempt from the last two tests: it is legal whatever the
    type's build-limit state, and also for a building or defence whose line has that item; its type
    must still be offered. Both kinds stay legal when no switched-on factory building could make the
-   type because the factory is missing, selling or switched off; S-0404 (claim 3) then ignores
+   type because the factory is missing, selling, queued to be sold or switched off.
+   S-0404 (claim 3) then ignores
    the order when it is applied. Exemption from a limit at issue time does not remove the
    build-limit allowance tested with the factory when the order is applied.
 
@@ -285,9 +297,9 @@ last recheck). In addition:
    could release it and its exit is clear, the unit is released at that boundary. If the unit is not released in tick *n* + 1, the sidebar does not repeat the
    order. When no factory building of the house could release the unit (S-0404, Terms, *could release*,
    which includes the switched-on test and, for an aircraft, its fallback), the item stays done
-   until a left click on the icon (claim 4), even after such a building appears. When a building holds the unit but cannot
-   release it yet (for example its exit is blocked), that building's own retry releases it
-   (S-0404, claim 7), with no click. For a building item the sidebar instead plays the construction-complete
+   until a left click on the icon (claim 4), even after such a building appears. A blocked exit
+   does not guarantee that the house's item stays done: the refund, retention, hand-off and retry
+   conditions remain open under S-0404 claim 7 and Q-0120. For a building item the sidebar instead plays the construction-complete
    announcement and makes the tab flash (claim 11). In our engine every player house, AI houses
    included, gets this automatic place order, issued in tick *n* + 1 for an item done in tick *n*,
    as the local player's is (AI-house ruling).
@@ -342,6 +354,54 @@ last recheck). In addition:
     - Backing: `measurable` (scenarios S3, S4, S5, S7 and S8)
     - Confidence: medium
 
+13. **Several offers removed at one recheck (Q-0123).** For types with shown icons, the
+    cancellation orders are given in tab order, first through fourth, irrespective of which tab
+    is displayed. No rule is asserted here for a type whose icon was suppressed by a full tab
+    (claim 2), including whether its loss of availability gives cancellation orders. Within a tab they
+    follow its existing icon order immediately before removal (S-0004 claim 11), including icons
+    outside the visible scrolled portion. For each removed type its cancel order, when claim 2
+    requires one, precedes its cancel-all order, when required. All orders for that type precede
+    those for the next removed type. This is not registration order and not a group of all
+    cancels followed by all cancel-all orders. In our engine the same order applies for every
+    player house, using the icon order that S-0004 would give that house as the local player.
+
+    An automatic cancellation is not a build order. When applied it can start the next queued
+    type under S-0404 claims 6 and 10, even if the same recheck has removed that type's offer.
+    Offer membership is not tested again for such a queued start. Factory eligibility and the
+    application-time build-limit test still apply. With an item of A, no queued A, and one
+    queued B, both losing their offers but keeping eligible factories and limits: if A's icon
+    precedes B's, the orders are cancel A, cancel-all A, cancel-all B. B starts at the first
+    cancellation and is cancelled by the last. If B's icon precedes A's, cancel-all B removes
+    the queued B before cancel A, and no B item starts. The first case takes one creation draw
+    for B (S-0404 claim 11); the second takes none. B makes no progress step between orders at
+    the same boundary. With no price change between those orders, B starts at the current
+    price and is refunded 0 credits: it has paid nothing. A bonus gained before this boundary
+    does not by itself change that result. General cancellation refunds remain S-0404 claim 6's.
+    - Backing: `measurable` (scenario S9) for local-player orders and intermediate starts,
+      `unmeasured` for the every-player extension, a project rule not observable in the original
+    - Confidence: high (tab and icon order, per-type grouping); medium (intermediate starts)
+
+14. **Production during a sale (Q-0121).** The start of selling, and merely queueing a sale,
+    give no sidebar removal or cancellation orders by themselves. With no other recheck event,
+    the existing icon remains until the recheck after the building's removal (claim 2).
+    A running item continues to make due progress steps and payments while its last factory
+    is being sold or queued to be sold, provided money is available and no independent hold,
+    cancellation, completion or factory check intervenes. The sale alone does not put the
+    line on hold. The ordinary step period and payment rules remain S-0403's and S-0404's.
+
+    This does not make the selling factory eligible for a new start, a queue request, resume or
+    release. A factory building being sold or queued to be sold is excluded from those factory
+    tests and from buildability. An intervening recheck can therefore remove the existing icon
+    even before the sale begins or ends, and its cancellation orders apply at that tick's end.
+    Without such an event, an unfinished item whose last factory building is removed is
+    refunded by S-0404 claim 8's permanent-removal rule in the removal tick itself, independently
+    of the sidebar orders. Icon removal is still in the first house update after that removal.
+    Queue clearing and any remaining cancellation follow the applicable factory check and
+    claim 2's orders; an already-refunded item is not refunded a second time.
+    - Backing: `measurable` (scenario S2 sale extensions; S4 e3)
+    - Confidence: high (no sidebar orders at sale start, recheck timing); medium (continued
+      progress, queued-sale factory exclusion and permanent-removal refund)
+
 ## Formulas
 
 - **Clock stage** = progress + 1 (claim 8). Integers: progress is S-0403's integer from 0 to 54, so
@@ -373,7 +433,8 @@ Icon display states (for the icon with the line's item):
 
 Ordering consequences:
 - A click is an input event of S-0213 (claim 1); the order it gives is applied at the end of the tick
-  of the click, so the line first reacts in the next tick.
+  of the click. Immediate starts, holds, cancellations and refunds can already appear in that
+  tick's drawn frame; subsequent progress first becomes possible in the next tick.
 - The automatic place order of a unit done in tick *n* is applied at the end of tick *n* + 1 (claim 9).
 
 ## Edge cases and quirks
@@ -382,8 +443,8 @@ Ordering consequences:
   sidebar sends its automatic place order once, in tick *n* + 1 for an item done in tick *n*
   (claim 9). If no factory building could release the unit at that moment (S-0404, Terms), nothing
   sends the order again: the item stays done until a left click on the icon, even after a building
-  that could release it appears. A building that
-  holds the unit but cannot release it yet retries by itself (S-0404, claim 7). With the switch off,
+  that could release it appears. Blocked-exit retention and retry remain open under S-0404
+  claim 7 and Q-0120. With the switch off,
   the sidebar sends the place order in every tick in which a unit item of a player house is done and
   not yet released, so the unit leaves at the end of the first tick whose order finds a building
   that could release it with an unblocked exit.
@@ -404,8 +465,19 @@ Ordering consequences:
 
 ## Import mapping
 
-None: the sidebar reads no keys of its own. The keys that decide tabs and order are S-0004's, those
-that decide buildability S-0407's, and those of the production rules S-0403's and S-0404's.
+The sidebar reads no keys of its own. These delegated inputs matter to claims 13 and 14:
+
+| Key (file, section) | Concept | Form and absent default |
+|---|---|---|
+| `Prerequisite` (rules, type) | which offers a prerequisite loss removes | list of building names and generic-group words, empty when absent; S-0407 |
+| `Factory` (rules, building type) | factory kind | type kind, none when absent; S-0404 |
+| `Owner` (rules, type and factory type) | country overlap in factory eligibility | country-name list, none when absent; S-0404 |
+| `Naval` (rules, vehicle and factory type) | matching naval kind | boolean, no when absent; S-0404 |
+| `BuildLimit` (rules, type) | whether an intermediate queued start passes its limit test | signed 32-bit integer, 2³¹ − 1 when absent; S-0407 |
+| Sidebar ordering keys (S-0004 Import mapping) | cancellation order within a tab uses its existing icon order, not registration order | forms and absent defaults owned by S-0004; no new ordering key |
+| No data key | sale-start and queued-sale cancellation timing | behaviour of claims 2 and 14, not an imported delay |
+
+Build times and step payments retain S-0403's and S-0404's import mappings.
 
 ## Measurement scenarios
 
@@ -438,7 +510,9 @@ the time the script sent a button event, dates a click.
   queued; the prerequisite destroyed by test trigger; second run: the last factory building of its kind sold.
   Third run: use the named map overrides to make the removed type the only offered type in
   the displayed tab, with icons in at least one other tab.
-- Procedure: record the destruction tick in the first run; in the sale run record both the sale
+- Procedure: before the first run's destruction, create the prerequisite and record the first
+  recheck that offers the test type, with spare room in its tab. Then record the destruction tick.
+  In the sale run record both the sale
   start and the building's removal, with no other event of S-0407 claim 12 between them. Void and
   repeat the sale run if another recheck event occurs during that interval. In the third run
   destroy the prerequisite while showing its tab. Use a recorder in all three runs. Fourth run:
@@ -447,7 +521,8 @@ the time the script sent a button event, dates a click.
   event intervenes or the vehicle does not restore the prerequisite.
 - Observable: the icon, the credits, the tab shown; with a recorder, the orders given and their
   ticks relative to the destruction, sale start and building removal.
-- Expected: first run, the icon disappears and cancellation orders are given in the destruction
+- Expected: first run, the icon first appears at the recheck that offers the type (with spare
+  room in the tab), then disappears and cancellation orders are given in the destruction
   tick's house update. Sale run, the icon remains throughout the sale until the first house update
   after the building's removal, with no removal orders at sale start. The item is refunded and the
   queue cleared; when it was the tab's
@@ -455,12 +530,33 @@ the time the script sent a button event, dates a click.
   cancel order and a cancel-all order, the cancel order first. In the fourth run the icon
   remains throughout the loss and restoration, and the later recheck gives no cancellation
   orders for that type.
-- Falsified if: the icon stays, production continues, the item is not refunded, queued copies
+- Falsified if: the newly offered type lacks its icon despite spare tab capacity, the icon
+  appears before the offer's recheck, or after the predicted removal boundary the icon stays,
+  production continues,
+  the item is not refunded, queued copies
   remain, or, when it was the tab's last icon, the sidebar does not show the first tab with icons,
   or, with a recorder (first run), the cancel order and the cancel-all order are not both logged
   with the cancel order first, or the icon or removal orders change at a tick other than the
   predicted recheck tick, or the fourth run removes the icon or cancels production despite
   restored buildability before the recheck (claim 2).
+
+- Sale extensions (claim 14): use a long sale and a slow, unfinished infantry item, with
+  enough credits, no cost or power changes and no manual hold. Choose the sale's duration and
+  the item's phase so at least two steps fall due before removal and the item cannot complete.
+  Record progress, balance owed and actual credits per tick, separate from the animated credit
+  display, and the permanent-removal refund tick. Expected: due steps and payments continue
+  during the sale, no cancellation at its start, the item refunded in the removal tick by the
+  permanent-removal rule, and the icon removed at the following recheck. Falsified if the sale
+  alone stops steps, refunds before removal or changes the icon before a recheck.
+- Queued-sale run: sell the only factory during an uninterruptible construction state, with
+  an item already running. The recorder must confirm that selling is queued but not current
+  for at least one due step; otherwise the run is inconclusive. Expected: the icon and item
+  remain, that step is paid, and no sidebar cancellation order is issued merely for queueing
+  selling. In a separate run place an unrelated building while selling is still queued.
+  Expected: its recheck removes the icon and issues cancellation orders, applied at that
+  tick's end. Falsified if queueing alone cancels, holds or removes the icon, or the control
+  recheck retains the type despite its only factory being queued to be sold. Void any run
+  with another recheck event or factory check before the intended observation.
 
 **S3. Unavailable icons.**
 - Setup: a building in production; an aircraft factory building with all docks full; a build-limit-1 type
@@ -509,7 +605,8 @@ the time the script sent a button event, dates a click.
   aircraft icon while every dock of the house's aircraft factory buildings has been taken during its
   build. Switch those buildings off at the end of the done tick, before the automatic place order,
   and leave them off through the click so the item remains done; (g) in a fresh run for each modifier key, left-click an idle infantry icon once with that key held; (j) a done unit icon
-  while a factory building holds the unit but its exit is blocked.
+  while its exit is blocked, only if the recorder confirms that the house's item still exists
+  and is done (Q-0120 leaves that retention open).
 - Observable: line state, queue count, credits, sounds played; a recorder logs orders in every
   part, including no-order refusals and the place order of (j). In (e) to (e3) it also dates
   sale start, the click, building removal and icon removal.
@@ -526,8 +623,9 @@ the time the script sent a button event, dates a click.
   click on the shown idle icon, or one build order requesting resume per click on the held item's
   icon; nothing starts, queues or resumes in either run. (f) refund (the done aircraft is cancelled); (g) at most one copy started or
   queued. In (j) the click gives a place order without a cell and does not cancel the item.
-  Each click that starts, queues, resumes, cancels or is refused plays an interface sound
-  (claim 12); the sounds of (d) and (j) are recorded without a prediction.
+  Each click whose order starts, queues, resumes or cancels, and each busy-building-line
+  refusal in (c), plays an interface sound (claim 12). The sounds of (d), (j) and the ignored
+  over-limit resume in (b2) are recorded without a prediction.
 - Falsified if: any outcome differs, a left click with a modifier key gives more than one build order, a resume in
   (b2)'s eligible control is refused or queues a copy, the over-limit held infantry icon gives no
   build order or its order resumes or queues an item, or in (e) or (e2) the item is still done after the building has
@@ -587,12 +685,13 @@ the time the script sent a button event, dates a click.
   The recorder distinguishes release at a boundary from later movement out of the exit.
 - Expected: in the clear-exit control the automatic order is issued in the tick after the done
   tick and releases the unit at that tick's end; in the second run it does not
-  appear after switching on until a left click on the icon; in the third run the unit stays done and
-  is released by the building's own retry once the exit clears (S-0404, claim 7), without a click. In the fourth run the recorder shows a cancel order and the item is refunded (claim 5).
+  appear after switching on until a left click on the icon. The third run records refund,
+  retention, hand-off and the need for another click without a prediction (Q-0120). In the fourth
+  run the recorder shows a cancel order and the item is refunded (claim 5).
   The done item plays an announcement (claim 12).
 - Falsified if: in the first run the automatic order or release boundary differs from the
   prediction, the sidebar re-sends the
-  order by itself in the second run, or the third run needs a click, or the fourth-run right click gives no cancel order or no refund, or the
+  order by itself in the second run, or the fourth-run right click gives no cancel order or no refund, or the
   second-run unit appears after switching on without a click, or no announcement plays when the
   item is done.
 
@@ -621,6 +720,35 @@ the time the script sent a button event, dates a click.
   invalid click, valid placement fails to place or end the mode, the superweapon tab does not
   flash, or the right click leaves placement mode on or fails to cancel and refund the item.
 
+**S9. Cancellation order for several types (claim 13).**
+- Setup: SidebarProbe overrides define infantry A and B with the same prerequisite and eligible
+  factory, generous build limits, unequal tech levels so their icon order is unambiguous and
+  opposite their registration order. A is the unfinished item, with no queued A and one queued
+  B. Neither item can complete during observation. Other lines have unfinished items and
+  queued copies whose types share that prerequisite, spanning the first, second and fourth
+  tabs. Use the common speed and settings above, an order/line recorder and a random-state
+  recorder. Establish a quiet control interval as S-0404 P11 does.
+- Procedure: destroy only the shared prerequisite by a test trigger; do not remove a factory.
+  Record from before the destruction through the application of every automatic order. Repeat
+  with B preceding A in icon order, keeping A as the item and B queued. Repeat with different
+  displayed tabs and scroll positions. In fresh controls gain a cost-bonus building after A
+  starts and B is queued, before the prerequisite loss, so B's current price differs from its
+  unchanged-data initial price. Record all chosen test fields. Each variant runs three times.
+- Observable: issue/application order with type names, each transient item creation/deletion,
+  progress, balance owed, credit changes and scenario-stream position. Per-boundary readings
+  are required: final line state alone cannot distinguish the two intermediate outcomes.
+- Expected: tab order first through fourth and within-tab icon order, complete per-type groups
+  with cancel before cancel-all, unaffected by scrolling or the displayed tab. For the infantry
+  line, A-before-B creates B and cancels it at the same boundary, with one creation draw and
+  no B progress step and a refund of 0 credits. B-before-A creates no B and takes no creation
+  draw for B. Its queued removal changes no credits. The cost-bonus control still refunds
+  0 for transient B because both its start and its cancel use the same current price. Other line starts contribute the draws that S-0404 specifies
+  and are recorded separately. Void a run with an unrelated draw or earlier cancellation.
+- Falsified if: orders follow registration rather than icon order, are separated into all
+  cancels then all cancel-all orders, or any ordering, intermediate start, refund or draw
+  differs despite unchanged factory and limit eligibility. If no transient recording is
+  available, order recordings answer the order part only, not the intermediate-start part.
+
 ## Open questions
 
 1. Whether a right click on the battlefield, or a key, also leaves placement mode without cancelling
@@ -634,6 +762,12 @@ the time the script sent a button event, dates a click.
 6. Which sound, if any, the build-limit click, the darkened-icon click and the click on a lit
    aircraft icon with every dock taken play (claims 4 and 12, S3).
 7. Which look (lit or dark) the tab flash shows in each period (claim 11, S8).
+8. Q-0120: blocked-exit retention, hand-off, refund and retry rules belong to S-0404 and remain
+   open there; S4 j is conditional on a recorded done item and S7's third run makes no exit
+   prediction.
+9. Whether a type suppressed by a full tab is offered for order legality, whether or when a type suppressed by a full tab gains an icon after a slot opens, and whether
+   losing availability while suppressed gives cancellation orders, are not established (claims
+   2 and 13). S-0004 F4 tests suppression, not these later outcomes.
 
 ## Questions for the project lead
 

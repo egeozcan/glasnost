@@ -2,7 +2,7 @@
 id: S-0303
 title: Area damage (spread, falloff, cells scanned, walls, bridges and detonation effects)
 topic: combat
-revision: 5
+revision: 6
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -36,8 +36,8 @@ addition:
   leptons, an integer *damage amount* *D* (the amount the producer passes in, before any armour step of the
   target: S-0302's delivered damage *d*₀ for every hit of the detonation), a warhead *W*, an optional
   *source object* (the object that caused it, for example the firer of a projectile), an optional
-  *source house*, and whether its producer allows resource reduction (claim 17; every producer
-  named in this spec allows it). Projectiles (S-0306, S-0203 claim 5), damaging animations (S-0109 claim 17), death
+  *source house*, and whether its producer allows resource reduction (claim 17; resource-explosion
+  detonations of S-0401 claim 20 forbid it). Projectiles (S-0306, S-0203 claim 5), damaging animations (S-0109 claim 17), death
   weapons and crashes (S-0312), superweapons and some trigger actions (their specs) produce
   detonations; each of those specs says which *P*, *D*, source object and source house it passes.
 - **Spread** *S*. The warhead's spread field, a single-precision decimal number of cells (S-0003).
@@ -219,14 +219,15 @@ addition:
 
 11. **Observable order of hit effects.** The objects present when the detonation begins determine
     its candidate entries. An object that first appears in a scanned cell while hit effects are
-    occurring receives no entry for that detonation (State and ordering). The observable sequence
-    of hit effects is the tracked flying objects of claim 6 in F7 order, followed by scanned
-    cells in T1 order and, within a cell, the listing order of claim 5. A building's eligible
-    foundation-cell entries occur at the corresponding places in that sequence. The damage
-    (S-0302), resulting death effects (S-0312), nested detonations and scenario-random-stream
-    draws associated with one entry take effect before those associated with the next. An earlier
-    entry's death weapon can therefore kill an object before its later entry, which then does
-    nothing to it (claim 9). Damage without death can instead change its remaining health.
+    occurring receives no entry for that detonation (State and ordering). Across conforming
+    implementations, the observable outcomes match the following entry order: tracked flying
+    objects of claim 6 according to F7, then scanned cells according to T1, and objects within
+    each cell according to the listing order of claim 5. A building's eligible foundation-cell
+    entries occupy the corresponding places in that order. For each entry, its damage (S-0302),
+    resulting death effects (S-0312), nested detonations and scenario-random-stream draws are
+    observable before the effects and draws of the next entry. Thus an earlier entry's death
+    weapon can kill an object before its later entry, making that later entry ineffective for
+    the object (claim 9); damage without death can instead change its remaining health.
     - Backing: `measurable` (scenario A11, including variant d for newly placed objects), and
       `unmeasured` for the complete F7 sector and within-sector hit order: A16 tests membership,
       not pairwise hit ordering, and sector-crossing registration order remains unresolved
@@ -263,14 +264,20 @@ addition:
 14. **Friendly damage.** Area damage hits allies and the source house's own objects. The one
     exception is in damage resolution (S-0302 claim 8, the allies row of stage 2): when the warhead's
     affects-allies field is off and the hit carries an attacker, an object whose house is allied with
-    the attacker's house takes no damage from the hit. What a detonation carries is S-0302's claim
-    1: the firing object and its owner unless its killing hit, removal or another loss of the
-    carried attacker described there has occurred since the shot. Being in play is not the test:
-    a killed firer can still exist during its death effects without being carried. When the
-    projectile has lost its attacker, allies are damaged even by such a warhead. This spec adds nothing to the rule and has no switch for it.
-    - Backing: `measurable` (scenario A8)
-    - Confidence: medium (the test is clear; which detonations still carry their source object
-      when the firer is gone is owned by the specs that create them)
+    the attacker's house takes no damage from the hit. What a detonation carries is S-0302 claim 1's
+    source-object and source-house rule for its producer. For a projectile's detonation, the firing
+    object and its owner are carried unless, between the shot and detonation, the firing object
+    was killed, removed from the game by any other means, or started to cloak; in any of those
+    cases neither is carried. A death-weapon detonation carries the dying object and its house even
+    though the object is killed. A firer loaded into a closed transport is believed to remain
+    carried despite being out of play; a firer that starts to cloak is believed to stop being
+    carried. These cases retain the confidence qualifications of S-0302 claim 1. This spec adds
+    nothing to the rule and has no switch for it.
+    - Backing: `measurable` (scenario A8; S-0302 scenarios D17 g2–g5 and D24 b2–b5 for the
+      death sequence, closed transport, death weapon and cloak); `unmeasured` for removal by
+      another means, as S-0302 claim 1: no reproducible producer is identified
+    - Confidence: medium for the killed-firer and death-weapon cases; low for closed loading
+      and starting to cloak, as S-0302 claim 1
 
 15. **Curtain protection nullifies a small detonation.** A small detonation becomes *nullified*
     when it finds a curtain-protected object (under the iron-curtain kind of invulnerability, not
@@ -313,12 +320,16 @@ addition:
 17. **Resource cells.** For every scanned cell, in scan order, a cell loses trunc(*D* / 10)
     resource units (nothing when the result is 0 or less) only if it holds a resource overlay
     whose type has the chain-reaction flag, the warhead has the resource flag, and the detonation
-    producer allows resource reduction. Every producer named in this spec allows it. (Craters
-    remove resources by a rule of their own, S-0109 claim 18.)
-    - Backing: `measurable` (scenario A10, variant d, with a test overlay type), and
-      `unmeasured` for resource permission of every named producer: A10 uses a projectile,
-      not each death, crash, animation, superweapon and trigger producer
-    - Confidence: medium
+    producer allows resource reduction. Resource-explosion detonations produced by an animation's
+    resource chain reaction forbid this reduction (S-0401 claim 20), so neighbouring scanned
+    resource cells lose nothing through this rule and make no spread-offer draws through it.
+    The chain reaction's own emptying of its source cell remains S-0401's rule. Other producers
+    named here allow reduction. Craters remove resources by a rule of their own (S-0109 claim 18).
+    - Backing: `measurable` (scenario A10, variant d, with a test overlay type; S-0401 scenario
+      E17 and A10 variant h for the resource-explosion exception), and `unmeasured` for resource
+      permission of the other producers: A10 uses a projectile, not each death, crash, damaging
+      animation, superweapon and trigger producer
+    - Confidence: high for the resource-explosion exception; medium for the other producers
 
 18. **Bridges.** When the map's destroyable-bridges setting is on and the warhead has the wall
     flag, a detonation whose centre cell is part of a bridge may destroy a section of it. For a high
@@ -428,7 +439,8 @@ addition:
     - Backing: `measurable` (scenario A17)
     - Confidence: high
 
-25. **Animation and debris list items.** In this spec's explosion-animation, splash, barrel-debris,
+25. **Animation and debris list items.** S-0003 claim 19 owns their shared parsing rule. In this
+    spec's explosion-animation, splash, barrel-debris,
     metallic-debris and warhead voxel-debris lists, an item naming no type is omitted, not kept as
     an empty place. The no-type spellings are given in Import mapping. The remaining items retain
     their relative order. Every list length and entry number in claims 19, 21 and 22 and F5 and F6
@@ -438,7 +450,8 @@ addition:
     - Backing: `measurable` (scenario A18)
     - Confidence: high
 
-26. **Debris maxima are decimal-prefix items.** Each non-empty item in the warhead's maxima list
+26. **Debris maxima are decimal-prefix items.** S-0003 claim 20 owns their shared parsing rule.
+    Each non-empty item in the warhead's maxima list
     contributes one signed 32-bit integer: leading whitespace, an optional sign and decimal digits
     are read up to the first non-digit. An item with no readable decimal digits contributes 0
     and keeps its place. Hexadecimal prefix and suffix forms of a scalar integer field do not
@@ -446,7 +459,9 @@ addition:
     S-0003's decimal integer form, including its overflow rule. The types list and maxima list
     are read independently: dropping a no-type item from the types does not drop the corresponding
     maxima item. F6 pairs the first retained type with the first maxima item, and so on.
-    - Backing: `measurable` (scenario A19)
+    - Backing: `measurable` (scenario A19); `unmeasured` for the separate 511-byte value-reader
+      limit: S-0001 claim 3's physical-line limit cuts the value sooner once the key and separator
+      are counted, as S-0003 claim 20 explains
     - Confidence: high
 
 ## Formulas
@@ -535,11 +550,11 @@ lies outside the list (Edge cases).
 
 **F6. Warhead debris** (claim 22). With *X* the warhead's maximum debris count (*X* > 0) and *Y* its minimum debris count, the total number of pieces is *N* = R(*Y*, *X* − 1), one ranged draw whose bounds may come in either order (S-0202 claim 4). All debris is created at the projectile position *Q* (claim 22).
 
-When the warhead lists *m* > 0 retained debris types *t*₀ … *t*ₘ₋₁, with respective maxima *u*₀ … *u*ₘ₋₁, the number of pieces assigned to each type is defined by this recurrence. The initial remainder is ℓ₀ = *N*. For every deal index *j* for which ℓⱼ > 0, let *i* = *j* mod *m*, and let raw*ⱼ* be the next scenario-random-stream value, read as a signed integer. The assignment and remaining count are
+When the warhead lists *m* > 0 retained debris types *t*₀ … *t*ₘ₋₁, with respective maxima *u*₀ … *u*ₘ₋₁, let the initial remainder be ℓ₀ = *N*. For every index *j* with ℓⱼ > 0, the type index is *i*ⱼ = *j* mod *m*, and raw*ⱼ* is the next scenario-random-stream value, read as a signed integer. For that index, the assigned piece count and the next remainder are
 
-> *g*ⱼ = min(|raw*ⱼ*| mod (*u*ᵢ + 1), ℓⱼ), ℓⱼ₊₁ = ℓⱼ − *g*ⱼ.
+> *g*ⱼ = min(|raw*ⱼ*| mod (*u*ᵢⱼ + 1), ℓⱼ), ℓⱼ₊₁ = ℓⱼ − *g*ⱼ.
 
-The deal-indexed assignment *g*ⱼ pieces consists of debris animations of type *t*ᵢ. The remainder operation is the "magnitude first" remainder of S-0202 claim 6. The sequence ends when ℓⱼ = 0; it uses one raw value for each deal up to and including the deal that reduces the remainder to zero. If the remainder never reaches zero, the non-terminating case is described under Edge cases: debris that can never be placed. If the warhead lists no debris types, the detonation creates *N* animations, each selected by entry R(0, *c* − 1) of the game-wide metallic debris list (*c* its length), at *Q* raised by 20 leptons. Arithmetic is exact integer arithmetic; counts are pieces and the position raise is in leptons.
+The *g*ⱼ pieces have type *t*ᵢⱼ. The remainder operation is the "magnitude first" remainder of S-0202 claim 6. The assignments end when a remainder becomes 0; the raw value at the index that produces 0 is included. If no remainder becomes 0, the non-terminating case is described under Edge cases: debris that can never be placed. If the warhead lists no debris types, the detonation creates *N* animations, each selected by entry R(0, *c* − 1) of the game-wide metallic debris list (*c* its length), at *Q* raised by 20 leptons. Arithmetic is exact integer arithmetic; counts are pieces and the position raise is in leptons.
 
 **F7. Flying-object search** (claims 6 and 11). Let *W* and *H* be the map's width and height
 (S-0009) and *B* = *W* + *H* − 1, the largest cell coordinate of the map along either axis. Sector
@@ -650,30 +665,30 @@ A scanned cell outside the map has no contents and takes part in nothing.
 
 ## State and ordering
 
-**Order inside one detonation** (claims 1, 11 and 15 to 20). The following orders are observable
-through the draws on the scenario random stream (the random-state recorder) and through nested
-detonations:
+**Observable state and draws within one detonation** (claims 1, 11 and 15 to 20). The following
+outcomes can be distinguished through the random-state recorder and nested detonations:
 
-- The observable state by the time the first object hit occurs includes the resource reductions
-  and wall hits for every scanned cell (claims 17 and 16). Wall-hit draws (F4), including draws
-  for any neighbour hits they set off (S-0210 F3), precede draws from the first object hit and
-  follow T1 scan order.
+- By the time the first object hit is observable, the resource reductions and wall hits for every
+  scanned cell have already taken effect (claims 17 and 16). The recorded wall-hit draws (F4),
+  including draws for any neighbour hits they set off (S-0210 F3), occur before the first
+  object-hit draw and match T1 scan order.
 - An object that first appears in a scanned cell while this detonation's hit effects are
   occurring receives no hit from this detonation (claim 11).
-- Nested-effect outcomes and recorded draws follow claim 11's entry sequence: the damage
-  resolution, death effects, nested-detonation effects and draws attributable to one entry
-  precede those attributable to the next.
-- A nullified detonation (claim 15) does nothing after its hits: no bridge draw, no exploding
-  overlay, no warhead particle system and no rocking.
-- For a detonation that is not nullified, applicable bridge-test draws (claim 18: one ranged draw
-  for each applicable test, none for the ion-cannon warhead) follow hit-related draws and precede
-  centre-cell exploding-overlay effects. The overlay's nested detonation and percent draws
-  (claim 19) precede creation of the warhead's particle system (claim 20).
-- Rocking (claim 20) is believed to be presentation only and to take no draw. Its place in this
-  order is not specified. The resource-before-object timing above and the post-hit ordering of
-  bridge, overlay and particle effects are `unmeasured` except for the wall-draw ordering tested
-  by A11 variant e: no scenario combines those other effects with an identifiable object-hit
-  draw to distinguish their order. Confidence: medium.
+- For successive entries in claim 11's observable order, the damage resolution, death effects,
+  nested-detonation effects and recorded draws of one entry are observable before those of the
+  next.
+- A nullified detonation (claim 15) has no later bridge draw, exploding-overlay effect, warhead
+  particle system or rocking.
+- For a detonation that is not nullified, the recorded applicable bridge-test draws (claim 18:
+  one ranged draw for each applicable test, none for the ion-cannon warhead) occur after
+  hit-related draws and before centre-cell exploding-overlay effects. The overlay's nested
+  detonation and percent draws (claim 19) occur before creation of the warhead's particle system
+  (claim 20).
+- Rocking (claim 20) is believed to be presentation only and to take no draw; its place among
+  these observable events is not specified. The resource-before-object timing above and the
+  post-hit ordering of bridge, overlay and particle effects are `unmeasured` except for the
+  wall-draw ordering tested by A11 variant e: no scenario combines those other effects with an
+  identifiable object-hit draw to distinguish their order. Confidence: medium.
 
 **Order of a projectile's detonation** (claims 21 to 23, with S-0306 for the rest). The random-state
 recorder sees the draws of a projectile's detonation on the scenario random stream in this order:
@@ -806,9 +821,11 @@ A projectile that is no longer in play after its area damage creates nothing (cl
 
 For `AnimList`, `SplashList`, `BarrelDebris`, `MetallicDebris` and `DebrisTypes`, the
 case-insensitive whole-item spellings `none` and `<none>` are omitted (claim 25). Names otherwise
-follow S-0003's list splitting and type-name matching, including its untrimmed-item quirk. These
+follow S-0003 claims 12 and 19's list splitting and type-name matching, including the
+untrimmed-item quirk. S-0003 claims 19–20 also own missing/empty-key retention, replacement by
+present non-empty values and initially empty lists. These
 name lists have a 127-byte text limit. `DebrisMaximums` has a 511-byte text limit and the same
-comma splitting, but uses claim 26's conversion: `12abc`, `3.9`, `$10`, `10h`, `abc` give
+comma splitting, but uses S-0003 claim 20 and claim 26's conversion: `12abc`, `3.9`, `$10`, `10h`, `abc` give
 12, 3, 0, 10, 0 respectively, each retaining one place. Numeric warnings follow S-0003's decimal
 form, not its scalar hexadecimal forms.
 
@@ -986,6 +1003,14 @@ same-type stage-0 neighbours. Record overlay data and draws before and after one
 Expected: the stage rises by 1, stage-0 orthogonal neighbours get F4's 200-point hits in map
 north, east, south, west order, the isolated wall disappears and a linked penultimate-stage wall
 stays until its next successful hit. Different state or draw outcomes falsify F4.
+*Variant h (resource-explosion permission):* use S-0401 E17's animation chain reaction on a
+resource-filled centre cell, with neighbouring resource cells satisfying d's overlay flags and
+an overridden demolition warhead with the resource flag, positive damage and spread reaching
+those neighbours. Suppress growth, resource spreading and crater effects during the observation.
+Record resource amounts immediately before and after the chain reaction and the scenario stream.
+Expected: the source cell is emptied by the chain reaction, but the neighbours retain their
+amounts and take no spread-offer draws through scanned-cell removal. Any neighbouring removal
+or such draw attributable to that detonation falsifies the permission exception.
 
 **A11. Order of hits and nested detonations (claims 1, 11).** *Setup:* a test warhead with spread
 3 and edge fraction 1.0 fired by a stock vehicle *F*; vehicle *A* in the centre cell, with a test
@@ -1174,14 +1199,15 @@ matches F6 with the parsed maxima, including zero in place for unreadable text. 
 prepended to the types list changes neither of the two retained types' maxima. *Falsified if:*
 any allocation or draw count differs from F6 at the recorded raw values and the predicted parsed
 maxima, including hexadecimal conversion or omission of a retained zero maxima item. *Text-limit variant:* prepend enough
-zero maxima items that a positive maximum falls beyond byte 127 but before byte 511, and give
-matching valid repeated types. Use long runs of zero digits within a few maxima items so that
-the types list still fits its own 127-byte limit. Expected: F6 reaches that positive maximum and finishes.
-A read-only recorder can confirm the full list length before detonation. Repeat with the
-positive maximum starting immediately after byte 511: it must be absent from the imported list.
-A list truncated at 127 bytes, or retaining a token wholly after byte 511, falsifies claim 26's
-import mapping. Do not detonate if the recorder shows only zero maxima, because the original
-would not finish (Edge cases).
+zero maxima items that a positive maximum falls beyond byte 127 but within the value retained
+under S-0001 claim 3's physical-line limit, and give matching valid repeated types. Use long
+runs of zero digits within a few maxima items so that the types list still fits its own
+127-byte limit. Expected: F6 reaches that positive maximum and finishes. A read-only recorder
+can confirm the list length before detonation. Truncation at 127 value bytes falsifies claim
+26's import mapping. The separate 511-byte value-reader limit cannot be reached by file input
+because the physical-line limit also counts the key and separator; it remains unmeasured.
+Do not detonate if the recorder shows only zero maxima, because the original would not finish
+(Edge cases).
 
 ## Open questions
 

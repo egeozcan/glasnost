@@ -42,6 +42,9 @@ pub struct Loaded {
     pub built: Built,
     /// Minimap (width, height, RGBA).
     pub minimap: (u32, u32, Vec<u8>),
+    /// Each cell's (left, right) tile radar colours after loading, when the
+    /// game started (for its radar map).
+    pub tile_colours: std::collections::BTreeMap<glasnost_map::CellXY, ([u8; 3], [u8; 3])>,
     /// Problems that kept parts of the map from being drawn, or the game
     /// from starting.
     pub problems: Vec<String>,
@@ -152,7 +155,7 @@ pub async fn load(
         match (&resolved, tiles) {
             (Err(e), _) => Err(format!("the rules did not resolve: {e}")),
             (Ok(_), None) => Err("no tile catalogue for the simulation".into()),
-            (Ok(r), Some(t)) => live::start(&map, r, t),
+            (Ok(r), Some(t)) => live::start(&map, r, t, options.game),
         }
     } else {
         Err("the game was not started".into())
@@ -161,13 +164,16 @@ pub async fn load(
     let cells = started.as_ref().ok().map(|(w, ..)| w.cells.grid.clone());
     let mut assets = Assets::default();
     let exists = |n: &[u8]| vfs.resolve_bytes(n).is_some();
-    let wanted = build::wanted_files(
+    let mut wanted = build::wanted_files(
         &map,
         cells.as_ref().unwrap_or(&map.cells),
         &import,
         &catalogue,
         &exists,
     );
+    if started.is_ok() && options.game == build::GameMode::Skirmish {
+        wanted.extend(build::game_files(&import));
+    }
     for name in wanted {
         let Ok(text) = std::str::from_utf8(&name) else {
             continue;
@@ -181,7 +187,7 @@ pub async fn load(
         .ok()
         .map(|r| Arc::new(SimRules::new(&r.ruleset, &r.sim_rules_hash)));
     let mut options = options.clone();
-    if started.is_ok() {
+    if started.is_ok() && options.game == build::GameMode::Sandbox {
         // The sandbox game places every owner's objects (S-0009 claim 27 in
         // the viewer's sandbox, glasnost_sim::load::sandbox_setup).
         options.skirmish = false;
@@ -209,6 +215,10 @@ pub async fn load(
         }
     };
     let minimap = build::minimap(&map, &catalogue, &assets);
+    let tile_colours = match (&live, &cells) {
+        (Some(_), Some(c)) => build::tile_radar_colours(c, &catalogue, &assets),
+        _ => Default::default(),
+    };
     Loaded {
         map,
         map_warnings,
@@ -219,6 +229,7 @@ pub async fn load(
         options,
         built,
         minimap,
+        tile_colours,
         problems,
         live,
         rules,

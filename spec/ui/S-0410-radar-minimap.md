@@ -2,13 +2,13 @@
 id: S-0410
 title: Radar and minimap (when radar is available, what the radar map shows and how it is coloured)
 topic: ui
-revision: 5
+revision: 6
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-13
 measurements: []
-requests: []
+requests: [Q-0110, Q-0112]
 supersedes: []
 ---
 
@@ -68,9 +68,10 @@ house as S-0409 defines (Terms); a gap field that is not hostile to *H* is a *fr
   arrival at each of them. Claim 8 orders the objects at one pixel by arrival.
 - **Shown.** An object is *shown* at a radar pixel when it is listed there and passes the draw-time
   tests of claim 7 at that pixel.
-- **Tile radar colour.** The 8-bit triple (channel values 0 to 255) that S-0010 (claim 20, Terms
-  there) gives a tile cell as its colour on the radar map. It is not a *radar colour* in the sense
-  below, which is the colour of a map pixel at display precision.
+- **First tile radar colour, second tile radar colour.** The two 8-bit triples (channel values
+  0 to 255) stored for a tile cell, named by S-0010 (claim 20, Terms there). Only the first
+  supplies the tile's colour here; the second has no effect. Neither is a *radar colour* in the
+  sense below, which is the colour of a map pixel at display precision.
 - **Radar colour.** The colour of a radar map pixel, held at the channel precision of the display
   surface after S-0103's 16-bit step (claim 9 there): 5 bits red, 6 bits green and 5 bits blue when
   the display surface has 5, 6 and 5 bits per channel, and 5 bits each when it has 5 bits in every
@@ -111,7 +112,7 @@ house as S-0409 defines (Terms); a gap field that is not hostile to *H* is a *fr
      electromagnetic lock and is not being erased. If the first qualifying building is locked or
      being erased, *H* has no radar even when a later radar building is fine (Edge cases,
      `quirks.radar_first_building_decides`). A building qualifies when it is a radar building
-     that is switched on, on the map, alive, and not being sold (neither its current nor its queued
+     that is switched on, on the map, and not being sold (neither its current nor its queued
      behaviour is *selling*); "first" is the earliest in the order in which *H* came to own its
      buildings. A qualifying building
      need not be in operation (S-0405, claim 8): the switch is all that is tested, so a radar
@@ -139,7 +140,8 @@ house as S-0409 defines (Terms); a gap field that is not hostile to *H* is a *fr
 
 2. **When availability changes.** A house's radar is re-evaluated against claim 1 in the house's
    next update in the houses' part of the tick (S-0203) after an event that triggers
-   re-evaluation. The known such events are: its power balance changes, it gains, loses or starts
+   re-evaluation. The known such events are: its power balance changes, an accepted power-switch
+   change switches one of its buildings off or on (S-0405 claim 10), it gains, loses or starts
    selling a building, an electromagnetic lock of one of its radar buildings ends, and a radar
    outage of the house starts or ends, and an upgrade is successfully placed on one of its
    buildings (S-0406, claim 12), whether or not the upgrade changes its power balance (the list may
@@ -148,19 +150,18 @@ house as S-0409 defines (Terms); a gap field that is not hostile to *H* is a *fr
    flag is not an event: it is fixed for the game (claim 1). After its defeat (claim 1) a house's
    radar is no longer re-evaluated. The spy satellite rule that S-0409 owns (its claim 15) has
    its own timing there, and nothing about it is a radar matter here.
-   Whether switching a radar building off or on, or the start of an electromagnetic lock, is itself
-   an event is not known (Open questions; scenarios R1 and R2 read the panel only after a known
-   event, and record what happens without one). Until that is settled, our engine treats these
-   three as events too, so the recheck runs in the next house update after each (a choice of this
-   spec, not a statement about the original, low confidence: if the original waits for a later
-   event, claim 2 is revised).
+   Whether the start of an electromagnetic lock is itself an event is not known (Open questions,
+   scenario R2 reads the panel after a known event and records what happens without one). Until
+   that is settled, our engine treats lock start as an event too, so the recheck runs in the next
+   house update (a choice of this spec, not a statement about the original, low confidence: if
+   the original waits for a later event, claim 2 is revised).
    - Backing: `measurable` (scenarios R1 and R2, the recorder logs the tick on which the panel
-     switches; the three uncertain causes are recorded only, not falsifiers). The upgrade-specific
+     switches; the uncertain lock-start cause is recorded only, not a falsifier). The upgrade-specific
      request is `unmeasured` as in S-0406 claim 12: an upgrade can change the answer through power,
      already a listed cause, while with unchanged inputs and radar already matching claim 1 a
      recheck leaves no observable difference
    - Confidence: medium for the listed events and the timing, including upgrade placement; low
-     for the completeness of the list and for the three uncertain causes
+     for the completeness of the list and for lock start
 
 3. **Radar on and off.** When a house's radar becomes available or unavailable, its radar panel
    plays the radar-on or radar-off sound (Import mapping) and its opening or closing animation.
@@ -243,7 +244,10 @@ house as S-0409 defines (Terms); a gap field that is not hostile to *H* is a *fr
    its case below, and *shown* there when it is listed and also passes the draw-time tests below
    (Terms). Common to both cases: it is on the map, it is not inside a
    transport or building, and its type is not invisible. Then:
-   - **Owned by *H*:** it is discovered by *H* (S-0409, Terms). Nothing else is tested, so an own
+   - **Owned by *H*:** it has the discovered-by-*H* mark (S-0409, Terms), distinct from ownership.
+     Ownership alone does not pass this test. Whether entry into the world sets the mark is
+     part of S-0409's discovery-setting rules, not an ownership bypass in the radar test.
+     The discovery-setting rules, including map placement and factory release, belong to S-0409 (Q-0110). Nothing else is tested here, so an own
      object that is discovered stays listed on unshrouded, shrouded or out-of-area ground alike.
      (An object that *H* does not own but that counts as its own for sight, S-0409, claim 1, is not
      covered: the original appears to treat only *H*'s own objects this way; low confidence.)
@@ -270,9 +274,12 @@ house as S-0409 defines (Terms); a gap field that is not hostile to *H* is a *fr
      questions)
 
 8. **Object position, colour and priority.** An object that is not a building lies at the one
-   radar pixel of its stored position (F4); a building lies at a set of radar pixels around the
-   pixel of its stored position that covers its foundation at the current scale (low confidence for
-   the set). An object of *H* outside the radar image, other than a building, is drawn at the
+   radar pixel of its stored position (F4); a building lies at the filled, stepped diamond or
+   parallelogram of F8, based on its foundation rectangle's width and height and the current scale.
+   The set is neither a rectangular screen box nor the F4 pixels of its individual foundation
+   cells. Foundations with the same bounding dimensions have the same radar set even if their
+   occupied cells differ. The zero-size foundation also has a nonempty set, from F8's minimum
+   sizes. Each pixel still passes claim 7's draw-time tests separately. An object of *H* outside the radar image, other than a building, is drawn at the
    nearest pixel on the image's edge; other houses' objects outside the usable area are not shown
    (claim 7). A shown object is drawn in its owner's house colour (the 8-bit triple of the house's colour
    definition, S-0103, converted as Terms *radar colour* says), or in the colour of the house it is
@@ -306,7 +313,7 @@ house as S-0409 defines (Terms); a gap field that is not hostile to *H* is a *fr
      disguise a unit, and a disguise of the human's own object is not a case against *H*, so no
      skirmish setup under the scenarios' control creates it
    - Confidence: high for the arrival order and the single pixel of an object that is not a building; medium for the edge
-     clamp; low for a building's set of pixels and the pixels outside the image, for the same-tick
+     clamp and a building's set of pixels; low for the pixels outside the image, for the same-tick
      results, for the one-tick lag of the drawn pixel, for the neutral colour and for the disguise colour
      (including whether the disguise depends on the viewer, Open questions)
 
@@ -326,8 +333,8 @@ house as S-0409 defines (Terms); a gap field that is not hostile to *H* is a *fr
      with the channel order that table T1 of Edge cases gives for its list position (low
      confidence, Open questions, `quirks.overlay_list_position_rules`); an overlay type without a
      loaded sprite gives (0, 0, 0).
-   - otherwise the cell takes its tile colour: the first of the two tile radar colours of the tile cell
-     that the cell shows (S-0010, claim 20; Terms there; the second has no effect on the radar), taken from the
+   - otherwise the cell takes its tile colour: the first tile radar colour of the tile cell
+     that the cell shows (S-0010, claim 20; the second tile radar colour has no effect on the radar), taken from the
      image variant the cell shows, with each channel *c* turned into
      ⌊trunc(min(*c* · *f*, 255)) / 2⌋ (Formulas F7; *f* is the theater brightness of the
      Constants); the cell takes the fixed dark grey of the Constants, not scaled and not
@@ -436,13 +443,36 @@ within about 10⁻⁶ of an exact half may round the other way in another implem
 spec does not fix those cases (Open questions). The 8-bit channel values then become radar colours
 by Terms, *radar colour*.
 
-**F7. Tile colour of a point** (claim 9). *c* is one channel of the tile cell's tile radar colour
+**F7. Tile colour of a point** (claim 9). *c* is one channel of the tile cell's first tile radar colour
 (Terms), an integer from 0 to 255; *f* is the theater brightness, a single-precision number (Constants).
 
 > *c*′ = ⌊ trunc( min(*c* · *f*, 255) ) / 2 ⌋.
 >
 > The product *c* · *f* is formed in double precision under the round-toward-zero mode of S-0205,
 > trunc drops its fraction, and the division by 2 is integer, with the fraction dropped.
+
+**F8. Building pixel set** (claim 8; Q-0112). Let *A* and *B* be its foundation rectangle's
+integer width and height in cells (S-0108 Import mapping), and (*p*, *q*) the unclamped F4 pixel
+of its stored position. The scale *s* is single precision as in F2. Products and additions below
+are in double precision under S-0205's round-toward-zero mode, followed by truncation toward zero
+into integers. Define the extent for a dimension *d*:
+
+> *E(d)* = trunc(max(*d* · *s* + 0.5, 1)) when *d* = 1,
+> and trunc(max(*d* · *s* + 0.5, 2)) otherwise.
+>
+> *a*ᵦ = *E(A)*, *b*ᵦ = *E(B)*.
+
+For each integer row *r* from 0 through *a*ᵦ + *b*ᵦ − 2, inclusive, the set contains every
+integer pixel (*p* + *i*, *q* + *r*) between these inclusive column limits:
+
+> left(*r*) = −*r* for *r* < *b*ᵦ, and *r* − 2*b*ᵦ + 2 otherwise.
+>
+> right(*r*) = *r* for *r* < *a*ᵦ, and 2*a*ᵦ − *r* − 2 otherwise.
+
+Thus its bounding size is *a*ᵦ + *b*ᵦ − 1 pixels across and down.
+The top pixel is (*p*, *q*), not the centre of this set. At scale 1, a 2 × 2 foundation has row
+widths 1, 3, 1 pixels, while both 3 × 3 foundation forms have row widths 1, 3, 5, 3, 1 pixels.
+Pixels outside the radar image are omitted, never clamped (claim 8).
 
 ## Constants
 
@@ -478,8 +508,9 @@ the transitions that the events of claim 2 cause.
 | no radar | at the recheck, claim 1 is false | no radar stays |
 | any | *H* is defeated (S-0414, claim 5) | radar on in the tick of the defeat (panel opens and the radar-on sound plays if it was closed, claim 3); no recheck afterwards |
 
-A switch-off, a switch-on and an electromagnetic lock starting each cause a recheck in our engine
-(claim 2, a choice until R1 and R2 settle the original's behaviour); a lock ending is a known cause. Rechecks run in the houses' part of the tick (claim 2). The
+An accepted switch-off or switch-on is a confirmed recheck cause. An electromagnetic lock
+starting causes a recheck in our engine only as claim 2's provisional choice until R2 settles
+that behaviour; a lock ending is a known cause. Rechecks run in the houses' part of the tick (claim 2). The
 terrain, shroud and gap colours follow the cells' states at the time of each drawn frame. Objects
 are drawn at their listed pixels (claim 8): a pixel change that happens in a turn shows from the
 next tick's drawn frames on. The order of objects at one pixel is claim 8's.
@@ -544,6 +575,10 @@ next tick's drawn frames on. The order of objects at one pixel is claim 8's.
 | Rules, `[General]`, `RadarCombatFlashTime` | combat flash time (claim 10) | integer, ticks | 21 (engine default) |
 | Rules, `[AudioVisual]`, `RadarOn`, `RadarOff` | radar-on and radar-off sounds (claim 3) | sound name | none |
 | Rules, country section, `MultiplayPassive` | passive country (claim 7) | boolean | no |
+| Art, building image-name section and type-id section, `Foundation` | foundation rectangle dimensions for F8 (claim 8); occupied-cell shape is not used | named value, case-insensitive, text cut to 31 characters; vocabulary and section precedence as S-0108 Import mapping | `1x1`; unrecognised words also give `1x1` |
+
+There is no imported radar-discovery flag. Claim 7 reads the per-house discovery mark produced
+by S-0409, separately from the object's owner, position and sight fields.
 
 ## Measurement scenarios
 
@@ -552,32 +587,28 @@ enemy bystander computer player (scenarios that need an allied or a second one s
 purpose-made map, fog of war off, any game speed; screenshots of the radar
 panel at a fixed screen resolution; a *recorder* for tick numbers. One valid run per case.
 
-- **R1 (claims 1 to 3).** The human player owns a power plant, a stock radar building whose power
-  drain is not 0 (map data), and two spare buildings with no power output, no power drain and no
-  radar flag (map data). A cause that claim 2 does not know to be an event is always followed by a
-  known event, and the panel is read after that event's recheck: the sale of a spare building (it
-  starts selling, a known event). Steps, by scripted input: (a) note the panel at the start; (b)
-  switch the radar building off with the power switch; (b′) start selling the first spare building,
-  (c) switch the radar building on; (c′) start selling the second spare building; (d) build
-  buildings until power is low; (e) sell a power-draining building to restore power; (f) sell the
-  radar building; (g) place and build another radar building (the house gains a building). A
-  second run does (b) and (c) alone, without (b′) and (c′), and records the tick on which the panel
-  changes (recorder): it settles the open question of claim 2 and falsifies nothing. A second map
+- **R1 (claims 1 to 3).** The human player owns a power plant and a stock radar building whose
+  power drain is not 0 (map data). Steps, by scripted input: (a) note the panel at the start,
+  (b) switch the radar building off with the power switch; (c) switch it on; (d) build buildings
+  until power is low; (e) sell a power-draining building to restore power; (f) sell the radar
+  building; (g) place and build another radar building (the house gains a building). No spare
+  building sale or other intervening cause is needed at (b) and (c): accepted switch changes
+  themselves request the recheck. A second map
   starts a radar outage of the human house with a radar-outage trigger action at a known tick and
   ends it at another known tick (a trigger action, because the computer player's firing of a
   weather storm is not under the scenario's control; a repeat with a weather storm fired at the
   human player is qualitative only). A third map has the map's free-radar flag set and no radar
   building. Observable: whether the radar map is shown after each step, the tick on which it
   changes (recorder), the sound played and the panel's animation at each change. Expected: shown
-  at (a), after (c′), at (e), at (g) and with free radar; not shown after (b′), at (d), at (f) and
+  at (a), after (c), at (e), at (g) and with free radar; not shown after (b), at (d), at (f) and
   during the outage; at (g) shown from the first house update after the placement, before the
   build-up ends (a building in build-up counts, claim 1). Each change to shown comes with the
   radar-on sound and the opening animation, and each change to not shown with the radar-off sound
   and the closing animation. Falsified if any of these differs (at (g) in particular: radar only
   once the build-up ends, which revises claim 1's build-up rule, or not at all), or if a change
   has no sound or the other sound. Timing (claim 2): the panel changes on the tick of *H*'s first
-  house update (S-0203) after each known cause (the sale at (b′) and (c′), a power change at (d)
-  and (e), the sale at (f), the placement at (g), the outage's start and end). Falsified if, for
+  house update (S-0203) after each known cause (the accepted switch changes at (b) and (c), a
+  power change at (d) and (e), the sale at (f), the placement at (g), the outage's start and end). Falsified if, for
   one of these causes, the panel changes on another tick.
 - **R2 (claim 1, first building).** Named test data: the human player owns two radar buildings
   (map data, the first placed first), a spare building with no power output, no power drain and no
@@ -737,10 +768,13 @@ panel at a fixed screen resolution; a *recorder* for tick numbers. One valid run
   colourless tile cell the dark grey, none of them halved; the others as the overlay or bridge
   sprite gives. Falsified if one differs, or if a halved value shows for a non-tile case. Part C
   (order of cases): a tree standing on a resource cell, and a tree on a bridge. Expected: the pale
-  yellow in both. Falsified if the resource or bridge colour shows. Part D (variant): a tile with
-  two images of different tile radar colours, shown in each variant by the cell's alternate-image state
-  (S-0010, claim 13). Expected: the colour of the image the cell shows (low confidence), and
-  falsified if the plain image's colour shows for the variant. Part E (positions in the overlay
+  yellow in both. Falsified if the resource or bridge colour shows. Part D (variant): named test
+  files for a tile whose plain image and variant “a” have different first tile radar colours and
+  whose plain-image tile-cell flag has the alternate-image mark clear. Place the tile on cells
+  whose coordinates make the ordinary variant pattern of S-0010 claim 13 select both image 0
+  and image 1; the alternate-image state is clear at map load. Expected: the colour of the image
+  the cell shows (low confidence), and falsified if a cell selecting image 1 shows the plain
+  image's colour. Part E (positions in the overlay
   type list, low confidence): overlay types at the list positions that table T1 of Edge cases names (also listed in Constants). An override section can only add types at the end of the
   list (glossary, *rules layer*), so the types are put at those positions by a loose copy of the
   rules file whose overlay type list places test types there (named test data, glossary
@@ -783,24 +817,38 @@ panel at a fixed screen resolution; a *recorder* for tick numbers. One valid run
   longer observation period, while the remaining hostile sides fight on (S-0414, claim 6), is a
   documented departure, not something this run can measure.
 - **R9 (claim 7, own and not-owned cases; low-confidence tests).** Observable (all parts): whether
-  the object's radar pixel shows its house colour, and on which tick it first does. Part A: an own vehicle not yet
-  discovered by the human player (placed by a trigger at game start in a place the player has not
-  yet seen, S-0409) is not shown; once discovered it is shown, also while it stands in shroud
-  (after the area is covered again) and outside the usable area. Part B: an own vehicle inside a
+  the object's radar pixel shows its house colour, and on which tick it first does. Part A:
+  named test data gives a human-owned vehicle zero sight, no invisibility or insignificance,
+  and places it by a trigger in an isolated, flat, unexplored test cell, with free radar on.
+  No allied or own object can reveal that cell before the test reveal. Record the discovery
+  mark as well as the panel: while the mark is clear the vehicle is not listed, despite being
+  owned; a later reveal for the human house that sets the mark makes it listed from its next
+  start-of-turn evaluation. Re-covering its cell after discovery does not remove its own radar
+  listing. Expected: ownership never substitutes for a clear discovery mark, and a set mark
+  passes this owned-case test regardless of shroud. Falsified if the vehicle is listed with the
+  mark clear, or stops being listed solely when its cell is re-covered. Discovery on map
+  placement or factory release, and selection among objects sharing a cell, are S-0409's
+  Q-0110 parts, not additional radar tests. Part B: an own vehicle inside a
   transport, and a vehicle of a type with the invisible flag, are not shown. Part C: an enemy vehicle
   that is cloaked, one that is underground (the special-abilities specs' states), and
   one that has the radar-invisible veterancy ability, each in explored ground. Expected for C
   (hypothesis, low confidence): none is shown. Falsified if: A or B differ; for C, any is shown
   (that records the original's behaviour and revises claim 7's confidence, not the other parts).
-- **R10 (claim 8, buildings).** An own building and an enemy building of each of two foundation
-  sizes in explored ground, on a large map (scale below 1) and on a small one (scale above 1); an
-  own building at the edge of the usable area, so that part of its pixel set lies outside the image.
-  Observable: the set of radar pixels with the building's colour. Expected (low confidence): a set
-  around the pixel of its top-left cell centre that covers its foundation at the scale. Falsified
-  if: the set lies around the foundation's centre pixel, or the pixel of the top-left cell centre
-  is not in the set. For the edge building: expected, the pixels of the set outside the image are
-  not drawn and none is drawn on the image's edge instead; falsified if the building is drawn on the
-  edge.
+- **R10 (claim 8, buildings; Q-0112).** Named test art gives separated own and enemy buildings
+  foundation rectangles of 1 × 1, 2 × 2, 2 × 3, both 3 × 3 forms, and zero size. Place them on
+  flat, fully explored ground with free radar and no competing radar objects. Use maps whose
+  F2 scales are below 1, exactly 1 and above 1; choose additional maps on either side of a
+  half-integer dimension-times-scale boundary. An own building is also placed near the image
+  edge so that its F8 set is partly outside it. Observable: every radar pixel of each building's
+  house colour, from screenshots after the objects are discovered and their listing is stable.
+  Expected: exactly F8 translated by F4, clipped to the radar image. At scale 1 the 2 × 2 set
+  has rows 1, 3, 1 pixels; both 3 × 3 forms have rows 1, 3, 5, 3, 1, despite differing occupied
+  cells. At scales below 1 a dimension of 1 never shrinks below one, and other dimensions never
+  below two. The zero-size foundation therefore has the same 1, 3, 1 rows as extents two and
+  two. Each boundary follows F8's half-up size rule. Falsified by any missing or additional
+  pixel, by a rectangular box or cell-centre-only pattern, or by differing sets for the two
+  3 × 3 forms. For the edge building, no pixel outside the image is relocated to the edge,
+  a relocated pixel falsifies the no-clamp rule. One valid run per map and foundation case.
 - **R11 (claim 8, edge clamp).** An own aircraft flies out past the usable area's edge; an enemy
   aircraft likewise. Observable: the radar pixel of the aircraft. Expected: the own aircraft is shown
   on the nearest pixel of the image's edge; the enemy one is not shown outside the usable area.
@@ -836,10 +884,10 @@ panel at a fixed screen resolution; a *recorder* for tick numbers. One valid run
   current state.
 - Whether the tile radar colour of a tile cell comes from the image variant the cell shows (claim 9, as
   the evidence so far suggests) rather than the plain image: scenario R6 part D decides; S-0010
-  asks the same question.
-- The events that request a radar recheck (claim 2) were not established in full; in particular whether
-  switching a radar building off or on and the start of an electromagnetic lock request one (our
-  engine assumes they do, claim 2). Scenarios R1 and R2 decide.
+  supplies this rule already in claim 20; R6 part D remains its discriminating measurement.
+- The events that request a radar recheck (claim 2) were not established in full; in particular
+  whether the start of an electromagnetic lock requests one (our engine assumes it does,
+  claim 2). Scenario R2 decides. Accepted power-switch changes are confirmed causes.
 - The radar gap test for "any gap field once *H* has been defeated" (claim 6) and the channel bit
   widths that the radar colours use (Terms, *radar colour*): scenario R4 parts C and D decide.
 - Whether the unusual local areas of claim 4 (leftmost column not 0) are mapped as written: scenario
