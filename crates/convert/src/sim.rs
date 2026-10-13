@@ -256,6 +256,8 @@ const FOUNDATIONS: [(&str, [i32; 2]); 22] = [
     ("6x4", [6, 4]),
     ("0x0", [0, 0]),
 ];
+/// The 8-cell 3 × 3 foundation word (S-0406 claim 2, Import mapping).
+const REFINERY_WORD: &str = "3x3Refinery"; // spec: S-0406 Import mapping (the word 3x3Refinery)
 /// The foundation a word that matches nothing gives (S-0108 Import mapping).
 // spec: S-0108 Import mapping (a word that matches none gives 1x1), S-0003 claim 16
 const FOUNDATION_FALLBACK: [i32; 2] = [1, 1];
@@ -1736,13 +1738,14 @@ impl Builder<'_> {
     /// the image name's art section gives the size; the type id's section
     /// replaces it only with a size other than 1 × 1.
     fn foundation(&mut self, rec: &mut Rec, kind: Kind, index: usize, t: &TypeRec) {
-        let mut held: Option<[i32; 2]> = None;
+        let mut held: Option<([i32; 2], bool)> = None;
         for image in self.images(kind, index, t) {
             if let Some(entry) = self
                 .art_section(&image)
                 .and_then(|s| s.get(b"Foundation").cloned())
             {
-                held = Some(self.foundation_word(&entry.value, entry.line));
+                let size = self.foundation_word(&entry.value, entry.line);
+                held = Some((size, Self::refinery_word(&entry.value)));
             }
             if let Some(entry) = self
                 .art_section(&t.name)
@@ -1751,13 +1754,24 @@ impl Builder<'_> {
                 let size = self.foundation_word(&entry.value, entry.line);
                 // spec: S-0108 Import mapping (the id's section decides only with a size other than 1x1)
                 if size != FOUNDATION_FALLBACK {
-                    held = Some(size);
+                    held = Some((size, Self::refinery_word(&entry.value)));
                 }
             }
         }
-        if let Some([w, h]) = held {
+        if let Some(([w, h], refinery)) = held {
             rec.put("foundation", jsonc::array(vec![int_node(w), int_node(h)]));
+            if refinery {
+                // spec: S-0406 claim 2 and Import mapping (the word 3x3Refinery is the 8-cell 3 × 3 word)
+                rec.put("foundation_refinery", jsonc::boolean(true));
+            }
         }
+    }
+
+    /// Whether a foundation value names the 8-cell 3 × 3 word (S-0406
+    /// Import mapping), compared as S-0108 compares the words.
+    fn refinery_word(v: &[u8]) -> bool {
+        let words: Vec<&str> = FOUNDATIONS.iter().map(|f| f.0).collect();
+        value::named(v, FOUNDATION_MAX, &words).is_some_and(|i| FOUNDATIONS[i].0 == REFINERY_WORD)
     }
 
     fn foundation_word(&mut self, v: &[u8], line: u32) -> [i32; 2] {

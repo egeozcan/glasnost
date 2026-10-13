@@ -120,3 +120,23 @@ fn one_text() {
     assert!(!is_one_text("-1"));
     assert!(!is_one_text("11e-1"));
 }
+
+// spec: S-0108 Import mapping (Buildup, BuildupTime), S-0406 Import mapping (the word 3x3Refinery)
+#[test]
+fn buildup_and_refinery_foundation_are_converted() {
+    let base = "[BuildingTypes]\n0=MILL\n1=PLANT\n2=SHED\n[MILL]\nImage=MILLART\nStrength=5\n[PLANT]\nImage=PLANTART\nStrength=5\n[SHED]\nImage=SHEDART\nStrength=5\n\
+                [General]\nBuildupTime=0.25\n";
+    let art = "[MILLART]\nFoundation=3X3REFINERY\nBuildup=MILLMK\n[PLANTART]\nFoundation=3x3\nBuildup=none\n[SHEDART]\nBuildup=\n";
+    let (s, _) = import(base, art);
+    let b = &s.buildings;
+    assert_eq!(b["MILL"].foundation, Some([3, 3]));
+    assert_eq!(b["MILL"].foundation_refinery, Some(true));
+    assert_eq!(b["PLANT"].foundation_refinery, None);
+    assert_eq!(b["MILL"].econ.buildup, Some(true));
+    assert_eq!(b["PLANT"].econ.buildup, None);
+    assert_eq!(b["SHED"].econ.buildup, None);
+    assert_eq!(
+        s.general.economy.buildup_time.as_ref().map(|d| d.0.as_str()),
+        Some("25e-2")
+    );
+}

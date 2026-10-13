@@ -661,6 +661,14 @@
           "maxItems": 2,
           "minItems": 2
         },
+        "foundation_refinery": {
+          "description": "Art `Foundation` is the 8-cell 3 × 3 word `3x3Refinery`, which lacks\nthe cell (2, 1) (S-0406 claim 2, S-0302 claim 13); absent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
         "gap_generator": {
           "description": "`GapGenerator`.",
           "type": [
@@ -2117,6 +2125,23 @@
             }
           ]
         },
+        "buildup": {
+          "description": "Buildings: whether the type has a build-up sprite, from the art\n`Buildup` name (S-0108 claims 1 and 5, Import mapping; S-0408 claims\n3 and 4); absent: no build-up sprite.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "buildup_frames": {
+          "description": "Buildings: the image-frame count *N_b* of the build-up sprite (S-0108\nclaim 5: *n* = ⌊*N_b* / 2⌋ build-up frames); absent: unknown, which\nthe simulation reads as *n* = 0 (the importer does not count the\nsprite's frames yet).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
         "click_repairable": {
           "description": "Buildings: `ClickRepairable` (S-0408 claim 14); absent: yes.",
           "type": [
@@ -2782,6 +2807,17 @@
           "items": {
             "type": "string"
           }
+        },
+        "buildup_time": {
+          "description": "`[General] BuildupTime`, the build-up time *B* in game minutes, a\ndouble (S-0108 claim 5, F1); absent: the double nearest 0.05.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "c4_warhead": {
           "description": "`[CombatDamage] C4Warhead`, a warhead key (S-0414 claim 5); absent:\nnone.",
