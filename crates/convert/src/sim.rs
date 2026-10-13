@@ -443,6 +443,8 @@ const OVERLAY_FIELDS: &[(&str, &str, Form)] = &[
     ("armor", "Armor", Text),
     // spec: S-0202 Import mapping (IsVeins, the veins flag)
     ("is_veins", "IsVeins", Bool),
+    // spec: S-0009 Import mapping (CellAnim: an animation type name, compared without regard to letter case; none and <none> clear it; an empty value keeps it)
+    ("cell_anim", "CellAnim", Ref(Kind::Animations)),
 ];
 
 /// Terrain-object fields (S-0211 Import mapping).
@@ -662,6 +664,12 @@ pub struct SimQuirks {
     /// later reading of the section lacks the key; off, an absent key always
     /// keeps the held value.
     pub coefficient_zero_replaced: bool,
+    /// `quirks.tree_strength_fixed_at_first_section` (S-0102 claim 23,
+    /// Edge cases): a terrain type that no layer gives a strength takes the
+    /// game-wide tree strength in force when the first layer holding its
+    /// section is read, and keeps it; off, the tree strength in force after
+    /// the last layer.
+    pub tree_strength_fixed_at_first_section: bool,
 }
 
 impl Default for SimQuirks {
@@ -670,19 +678,25 @@ impl Default for SimQuirks {
         Self {
             clear_weapons_any_turret_count: true,
             coefficient_zero_replaced: true,
+            // spec: S-0102 Edge cases (quirks.tree_strength_fixed_at_first_section on by default: the original)
+            tree_strength_fixed_at_first_section: true,
         }
     }
 }
 
 impl SimQuirks {
     /// The switches by name, for the import record.
-    pub fn named(&self) -> [(&'static str, bool); 2] {
+    pub fn named(&self) -> [(&'static str, bool); 3] {
         [
             (
                 "clear_weapons_any_turret_count",
                 self.clear_weapons_any_turret_count,
             ),
             ("coefficient_zero_replaced", self.coefficient_zero_replaced),
+            (
+                "tree_strength_fixed_at_first_section",
+                self.tree_strength_fixed_at_first_section,
+            ),
         ]
     }
 }
@@ -954,6 +968,13 @@ impl Builder<'_> {
             .and_then(|s| s.get(&b"TechLevel"[..]));
         if let Some(v) = fold(tech, Some(0), |v, _| value::integer(v)) {
             rec.put("multiplayer_tech_level", int_node(v));
+        }
+        // spec: S-0009 claim 28 and Import mapping ([Maximums] Players: the maximum player count, from the base rules only, S-0006 claim 2)
+        let players = globals
+            .get(&b"Maximums"[..])
+            .and_then(|s| s.get(&b"Players"[..]));
+        if let Some(v) = fold(players, Some(0), |v, _| value::integer(v)) {
+            rec.put("max_players", int_node(v));
         }
         // spec: S-0112 Import mapping (the gate and wall tower types of [General])
         for (field, key) in [
@@ -1458,10 +1479,18 @@ impl Builder<'_> {
             rec.put("land", jsonc::string(LAND_TYPES[l].0));
         }
         if let Some(arts) = self.i.arts {
-            // spec: S-0009 claim 12 (the overlay type has artwork; cell animations: no spec names their key)
-            let has = arts
-                .get(&(Kind::Overlays, index))
-                .is_some_and(|a| a.sprite.is_some());
+            // spec: S-0009 claim 12 and Import mapping (the overlay type has artwork or a cell animation; the test reads the same CellAnim value)
+            let cell_anim = self
+                .field(
+                    t.keys.get(&b"CellAnim"[..]),
+                    Ref(Kind::Animations),
+                    "CellAnim",
+                )
+                .is_some();
+            let has = cell_anim
+                || arts
+                    .get(&(Kind::Overlays, index))
+                    .is_some_and(|a| a.sprite.is_some());
             rec.put("has_art", jsonc::boolean(has));
         }
     }

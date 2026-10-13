@@ -486,6 +486,11 @@ mod tests {
         let mut have: BTreeSet<&str> = ours.iter().map(|(n, _)| *n).collect();
         have.extend(LayerQuirks::default().named().map(|(n, _)| n));
         have.extend(ArtQuirks::default().named().map(|(n, _)| n));
+        have.extend(
+            glasnost_convert::sim::SimQuirks::default()
+                .named()
+                .map(|(n, _)| n),
+        );
         let sim = glasnost_rules::quirks::Quirks::default();
         have.extend(sim.named().iter().map(|(n, _)| *n));
         // A listed name must not also be a field.

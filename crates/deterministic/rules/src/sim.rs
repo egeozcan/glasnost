@@ -436,6 +436,10 @@ pub struct General {
     /// it: the game's tech level (S-0009 Terms).
     #[serde(default)]
     pub multiplayer_tech_level: Option<i32>,
+    /// `[Maximums] Players` as the base rules alone give it: the maximum
+    /// player count of the unused-house cleanup (S-0009 claim 28).
+    #[serde(default)]
+    pub max_players: Option<i32>,
     /// `GDIGateOne`: the first Allied gate type, a building key (S-0112).
     #[serde(default)]
     pub allied_gate_one: Option<String>,
@@ -1578,6 +1582,10 @@ pub struct OverlayType {
     /// `Explodes` (S-0303 claim 19).
     #[serde(default)]
     pub explodes: Option<bool>,
+    /// `CellAnim`, the overlay type's cell animation (S-0009 claim 12 and
+    /// Import mapping): an animation type key; absent: none.
+    #[serde(default)]
+    pub cell_anim: Option<String>,
 }
 
 /// A terrain-object type's simulation fields.
@@ -1593,7 +1601,9 @@ pub struct TerrainObjectType {
     /// `SpawnsTiberium`, the spawns-resources flag (S-0203 claim 2).
     #[serde(default)]
     pub spawns_tiberium: Option<bool>,
-    /// `Strength` (S-0302 claim 20).
+    /// `Strength` (S-0302 claim 20), with the game-wide tree strength
+    /// already applied by the importer (S-0102 claim 23); absent: unset,
+    /// which a placed object starts with as health −1 (S-0009 claim 42).
     #[serde(default)]
     pub strength: Option<i32>,
     /// `Armor`, the armour class (S-0305).
