@@ -175,10 +175,12 @@ fn place_overlay(w: &mut World, c: CellXY, o: u8) {
 /// starts, with the creation draws of S-0202 claim 10, after the overlay is
 /// in its cell and before that placement's recalculation of the cell (so
 /// before the draws of any tile animation that recalculation starts).
-/// Animation playback (S-0109) is not modelled, so the animation itself,
-/// its position (the cell corner of cell (x + 2, y + 2), claim 12) and its
-/// start event's effects leave no state; the start event's draws are still
-/// open (request Q-0046, questions 2a to 2c).
+/// Animation playback (S-0109) is not modelled, so the animation itself
+/// and its position leave no state: the overlay cell's centre moved by 384
+/// leptons along +x and +y (the top corner of cell (x + 2, y + 2), where its
+/// chain reaction acts), at the surface height of the overlay cell's centre
+/// (S-0202 claim 10, S-0009 claim 12). The start event's draws are those of
+/// `load::anim_creation_draws` (request Q-0046, question 2b, still open).
 fn cell_animation(w: &mut World, o: u8) {
     let Some(name) = w
         .rules()
