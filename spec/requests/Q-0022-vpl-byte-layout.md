@@ -1,9 +1,9 @@
 ---
 id: Q-0022
 title: Byte layout of the voxel lighting table file
-status: open
+status: answered
 related: [S-0105]
-answered-by: []
+answered-by: [S-0013]
 ---
 
 ## Need
