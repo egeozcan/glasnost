@@ -634,13 +634,11 @@ pub fn spy_satellite_active(w: &World, house: HouseId) -> bool {
     hs(w, house).is_some_and(|s| s.spy_sat)
 }
 
-/// Whether the object is discovered by the house (S-0409 Terms): objects of
-/// the house count as discovered by it (placeholder for the contradiction
-/// with S-0410 claim 7, request Q-0110).
+/// Whether the object is discovered by the house (S-0409 Terms, claim 20):
+/// its discovery mark alone; ownership does not count. A house that keeps
+/// no state (neutral, special) is answered yes.
 pub fn discovered(w: &World, house: HouseId, id: ObjectId) -> bool {
-    if w.obj(id).is_some_and(|o| o.owner == Some(house)) {
-        return true;
-    }
+    // spec: S-0409 claim 20 (ownership alone does not set the discovery mark)
     hs(w, house).is_none_or(|s| s.discovered.contains(&id))
 }
 
@@ -751,25 +749,56 @@ fn discover(w: &mut World, h: HouseId, flipped: &BTreeSet<u32>) {
     }
 }
 
-/// The object of a cell nearest the cell's centre (S-0409 Terms). Every
-/// object of the cell's lists competes and ties go to the lower object
-/// number (placeholder, request Q-0110).
+/// The object a reveal selects in a cell (claim 20): among the infantry,
+/// vehicles, aircraft and buildings of the cell's ground layer, the one with
+/// the smallest selection distance (F6). Ties go to the first in the
+/// layer's listing order, which is the claim's placement priority: the
+/// non-buildings most recently placed first, then the buildings in
+/// placement order (S-0209 claim 13).
 fn nearest_in_cell(w: &World, c: CellXY) -> Option<ObjectId> {
-    let centre = Pos::centre(c, 0);
-    let mut ids: Vec<ObjectId> = Vec::new();
-    for l in [crate::world::Layer::Ground, crate::world::Layer::Deck] {
-        ids.extend(w.cells.list(c, l).iter().copied());
-    }
-    ids.sort();
-    ids.dedup();
-    ids.into_iter()
-        .filter_map(|id| w.obj(id).map(|o| (id, o.pos)))
-        .filter(|(_, p)| p.cell() == c)
-        .min_by_key(|(id, p)| {
-            let (dx, dy) = (i64::from(p.x - centre.x), i64::from(p.y - centre.y));
-            (dx * dx + dy * dy, *id)
+    let table = w.rules().quirks.table_root_distance;
+    let mode = w.rules().mode;
+    // spec: S-0409 claim 20 (only the ground layer; objects on the bridge-deck layer are not selected)
+    w.cells
+        .list(c, crate::world::Layer::Ground)
+        .iter()
+        .filter_map(|&id| w.obj(id).map(|o| (id, o)))
+        // spec: S-0409 claim 20 (only infantry, vehicles, aircraft and buildings compete)
+        .filter(|(_, o)| o.kind != Kind::Terrain)
+        .map(|(id, o)| {
+            // spec: S-0409 F6 (a = X mod 256, b = Y mod 256: from the cell's top corner)
+            let a = u64::from(o.pos.x.rem_euclid(256).unsigned_abs());
+            let b = u64::from(o.pos.y.rem_euclid(256).unsigned_abs());
+            // spec: S-0409 F6 (⌊r(a² + b²)⌋, the table root under quirks.table_root_distance)
+            (
+                id,
+                glasnost_num::geom::root_floor(a * a + b * b, table, mode),
+            )
+        })
+        // spec: S-0409 claim 20 (equal distances: the first in placement priority)
+        .fold(None, |best: Option<(ObjectId, u64)>, (id, d)| match best {
+            Some((_, bd)) if bd <= d => best,
+            _ => Some((id, d)),
         })
         .map(|(id, _)| id)
+}
+
+/// Placement discovery (claim 20): an object placed in a cell's ground or
+/// bridge-deck layer is marked discovered by every player house, whatever
+/// its owner, the shroud or the fog; placed outside the usable area, the
+/// mark is cleared when its placement finishes.
+fn placed(w: &mut World, id: ObjectId) {
+    let Some(o) = w.obj(id) else { return };
+    // spec: S-0409 claim 20 (placement outside the usable area clears the mark when the placement finishes)
+    let usable = w.cells.usable(o.pos.cell());
+    // spec: S-0409 claim 20 (every player house, as for the local player, under claim 1)
+    for s in w.econ.shroud.houses.iter_mut().flatten() {
+        if usable {
+            s.discovered.insert(id);
+        } else {
+            s.discovered.remove(&id);
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -862,6 +891,8 @@ fn may_hold(w: &World, id: ObjectId) -> bool {
 /// adds its sight when it is placed, with its one-time area reveal; other
 /// objects add theirs in their own turn.
 pub fn entered_map(w: &mut World, id: ObjectId) {
+    // spec: S-0409 claim 20 (placing an object in a ground or bridge-deck layer marks it discovered)
+    placed(w, id);
     let Some(o) = w.obj(id) else { return };
     if o.kind != Kind::Building {
         return;
@@ -1134,7 +1165,7 @@ fn stop_gap(w: &mut World, id: ObjectId) {
 /// An accepted switch-off ends the building's gap field at once (S-0405
 /// claim 10), without waiting for its next turn.
 pub fn gap_switched_off(w: &mut World, id: ObjectId) {
-    // spec: S-0405 claim 10 (an accepted switch-off also ends its gap field immediately)
+    // spec: S-0405 claim 10 and S-0409 claim 11 (an accepted power-off order stops the field immediately, even while the building stays in operation)
     stop_gap(w, id);
 }
 
@@ -1256,8 +1287,10 @@ fn reapplied(w: &World, h: HouseId) -> Vec<(ObjectId, bool, bool)> {
 }
 
 /// The spy satellite's whole-map reveal (`reveal`) or the whole-map
-/// re-cover of a house (claim 15, S1 rows 7 and 8).
-fn whole_map(w: &mut World, h: HouseId, reveal: bool) {
+/// re-cover of a house (claim 15, S1 rows 7 and 8). `sat`: whether the
+/// spy satellite counts as active while the gap fields are taken back and
+/// restored (claim 21).
+fn whole_map(w: &mut World, h: HouseId, reveal: bool, sat: bool) {
     if reveal && hs(w, h).is_none_or(|s| s.revealed) {
         // spec: S-0409 claim 15 (the reveal happens only when the whole-map-revealed mark is clear)
         return;
@@ -1281,18 +1314,20 @@ fn whole_map(w: &mut World, h: HouseId, reveal: bool) {
             }
         })
     };
-    let sh = shared(w);
-    // Taking back (S1 rows 2 and 5); the shared state of the cells that are not legal is left out of whole-map operations (request Q-0111).
+    // spec: S-0409 claim 21 (the field changes take effect with the satellite inactive on a gain and active on a loss)
+    let now = hs(w, h).is_some_and(|s| s.spy_sat);
+    if let Some(st) = hs_mut(w, h) {
+        st.spy_sat = sat;
+    }
+    // Taking back (S1 rows 2 and 5).
     for &(id, s, g) in &list {
         if s {
             let c = cells_of(w, id, true);
             remove_cells(w, h, &c);
         }
         if g {
-            let c: Vec<u32> = cells_of(w, id, false)
-                .into_iter()
-                .filter(|&i| i != sh)
-                .collect();
+            // spec: S-0409 claim 21 (the shared state of the cells that are not legal takes part, one change per field cell)
+            let c = cells_of(w, id, false);
             if let Some(st) = hs_mut(w, h) {
                 for i in c {
                     st.gap_stop(i as usize);
@@ -1300,6 +1335,7 @@ fn whole_map(w: &mut World, h: HouseId, reveal: bool) {
             }
         }
     }
+    // spec: S-0409 claim 21 (neither whole-map operation directly changes the shared quantities)
     let cells = legal(w);
     let mut flipped = BTreeSet::new();
     if let Some(st) = hs_mut(w, h) {
@@ -1330,16 +1366,17 @@ fn whole_map(w: &mut World, h: HouseId, reveal: bool) {
             add_cells(w, h, &c);
         }
         if g {
-            let c: Vec<u32> = cells_of(w, id, false)
-                .into_iter()
-                .filter(|&i| i != sh)
-                .collect();
+            // spec: S-0409 claim 21 (the shared state takes part in the restore too)
+            let c = cells_of(w, id, false);
             if let Some(st) = hs_mut(w, h) {
                 for i in c {
                     st.gap_start(i as usize);
                 }
             }
         }
+    }
+    if let Some(st) = hs_mut(w, h) {
+        st.spy_sat = now;
     }
     // spec: S-0409 claim 15 (any gap field on the map leaves the mark clear)
     let any_gap = w.objects.values().any(|o| o.econ.sight.gap.is_some());
@@ -1363,7 +1400,7 @@ fn whole_map(w: &mut World, h: HouseId, reveal: bool) {
 pub fn radar_infiltrated(w: &mut World, h: HouseId) {
     // spec: S-0409 claim 15 (radar infiltration re-covers the whole map, unless H has an active spy satellite)
     if !spy_satellite_active(w, h) {
-        whole_map(w, h, false);
+        whole_map(w, h, false, false);
     }
 }
 
@@ -1422,7 +1459,8 @@ pub fn spy_satellite_check(w: &mut World, h: HouseId) {
         s.spy_sat = active;
     }
     // spec: S-0409 claim 15 (the whole map revealed once when it becomes active; re-covered when it stops)
-    whole_map(w, h, active);
+    // spec: S-0409 claim 21 (the fields change with the state before the change: inactive on a gain, active on a loss)
+    whole_map(w, h, active, was);
 }
 
 /// Alliance changes (S-0409 Edge cases, *ally reveal and alliance
