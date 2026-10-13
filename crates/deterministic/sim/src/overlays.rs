@@ -147,6 +147,7 @@ pub fn place_stream(w: &mut World, map: &Map, stream: &[(CellXY, u8, u8)]) {
 /// placement effects (S-0009 claim 12; S-0202 claim 10).
 fn place_overlay(w: &mut World, c: CellXY, o: u8) {
     if let Some(m) = marker(o) {
+        // spec: S-0009 claim 12 and S-0202 claim 14 (a low-bridge end marker, its end-row writes and its piece writes start no cell animation; their recalculations can start tile animations)
         end_marker(w, c, m);
         // spec: S-0202 claim 10 (placing an overlay recalculates its cell)
         recalc_cells(w, &[c]);
