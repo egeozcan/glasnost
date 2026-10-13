@@ -2,11 +2,11 @@
 id: S-0405
 title: Power (output and drain, damaged power plants, low power, blackouts, which buildings stop)
 topic: economy
-revision: 2
+revision: 3
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-11
+approved-on: 2026-10-13
 measurements: []
 requests: []
 supersedes: []
@@ -20,7 +20,7 @@ How much power each building makes and needs, how a house's totals and its power
 formed and when they are worked out again, the blackouts that cut a house's power to nothing, the
 power switch, and what low power changes: which buildings stop working, the units that depend on
 a control centre, and the pointers to the production slowdown and to the radar rule (S-0410), in a
-skirmish; campaign-only behaviour is noted as out of scope.
+skirmish. Campaigns and network games are out of scope.
 
 ## Terms
 
@@ -73,7 +73,7 @@ house's own update in a tick, which comes after the turn pass and before orders 
   wall tower type are S-0406's terms). In this spec the upgrades a
   building *holds* are the upgrade types recorded in its three positions, and only they count in its
   output and drain (claims 1 and 2); an upgrade of a wall tower that S-0406 does not record in one
-  of the three positions adds no output and no drain. An upgrade is lost only by being sold or
+  of the three positions adds no output and no drain. While the host remains in play, an upgrade is lost only by being sold or
   stripped (S-0408, claim 5, which removes the most recently added one first).
 - **Needs-power flag, special-power flag, needs-engineer flag.** Boolean fields of a building type
   (Import mapping). The needs-power flag marks a building that stops working under low power
@@ -82,7 +82,8 @@ house's own update in a tick, which comes after the turn pass and before orders 
 - **In operation.** Whether a building currently works as a powered building: claim 8 gives the test.
   It is derived each time it is asked; it is not the power switch. Rules that ask the question
   (firing, claim 9) read the answer as it stands at that moment; the one-off effects of claim 9 and the
-  count of active control centres follow it only in the building's own turn.
+  count of active control centres follow it in the building's own turn, except for the immediate
+  power-switch effects of claim 10.
 - **Under a pulse.** The state of an object between the start of an electromagnetic pulse that
   disables it and the moment the pulse's time runs out (S-0203, row 14). The combat and superweapon
   specs own when a pulse starts and how long it lasts. It is one state; this spec and the radar rule
@@ -117,7 +118,9 @@ house's own update in a tick, which comes after the turn pass and before orders 
    power plant at 0 health makes none. The extra output of a building that is not absorbing adds
    nothing; nothing in the original adds it. A pulse does not change the output: a power plant
    under a pulse is not in operation (claim 8) but keeps making its full output.
-   - Backing: `measurable` (scenario W1, parts a to d, f and g; scenario W12 for upgrades)
+   - Backing: `measurable` (scenario W1, parts a to d, f and g; W7 for switched-off output,
+     W12 for upgrades); `unmeasured` for output at health 0 before removal (W1 tests health 1,
+     and destruction normally removes the plant before a separate total can be read).
    - Confidence: high (the formula, the switch, no effect of a pulse), medium (upgrades, absorbed
      passengers, the extra output of other buildings, being erased)
 
@@ -126,7 +129,8 @@ house's own update in a tick, which comes after the turn pass and before orders 
    positions*), plus the type's extra drain while the building's super-gap is active (claim 16). Health does not change the
    drain: a damaged building needs as much power as an undamaged one. A pulse does not change it
    either.
-   - Backing: `measurable` (scenario W1, parts e and g; scenario W12 for upgrades)
+   - Backing: `measurable` (scenario W1, parts e, f and g; W7 for switching; W12 for upgrades).
+     The super-gap extra drain is `unmeasured` for claim 16's reason.
    - Confidence: high (base drain, no health scaling, the switch), medium (upgrades, being erased)
 
 3. **Which buildings count.** Every building of the house that is on the map is counted, whatever
@@ -136,8 +140,7 @@ house's own update in a tick, which comes after the turn pass and before orders 
    removed (S-0408). A building off the map (for example one not yet placed) is not counted. A building that
    leaves or enters the map while it exists counts as *removed* or *created on the map* for the
    event list of claim 7; no skirmish case of this is known, so that part has no scenario. In a
-   campaign mission the original also skips some buildings of the player that the player has not yet
-   discovered; campaigns are out of scope.
+   campaign mission, power counting is outside this spec's scope.
    - Backing: `measurable` (scenario W2); `unmeasured` for a building that leaves or enters the map
      while it exists (no way to cause it in a skirmish is known)
    - Confidence: high (on the map), medium (build-up and selling counted), low (leaving or
@@ -183,9 +186,13 @@ house's own update in a tick, which comes after the turn pass and before orders 
      less the replacement ends the running blackout at once, but the house's totals follow in its
      next update. A spy always starts with the game-wide length, so only a superweapon effect (whose
      length can differ) can start a different length during a running blackout.
-   - Backing: `measurable` (scenario W4, parts a, c, d and e); `unmeasured` for the replacement by a
-     length of 0 or less (no skirmish input gives two different lengths in one game: the spy length
-     is game-wide and the superweapon lengths belong to the superweapon specs)
+   - Backing: `measurable` (scenario W4, parts a, c, d and e); `unmeasured` for the live
+     in-operation effect of a length of 1 (W4 records house totals only; no scenario here separates
+     the start from the building's next turn), and for a negative length (W4 tests absence, not a
+     negative value), for a start after the house update (no spy-entry input path is established
+     at that point of a tick), and for replacement by a length of 0 or less (no skirmish setup
+     with two different blackout lengths is established here; the spy length is game-wide and
+     superweapon lengths belong to future superweapon specs).
    - Confidence: medium (the end at *t*₀ + *d* − 1, the restart, the length of 1), low (the exact
      tick of the first house update in which the output counts as 0, the live reading for *d* = 1,
      the replacement by a length of 0 or less)
@@ -213,7 +220,12 @@ house's own update in a tick, which comes after the turn pass and before orders 
    plant took its turn after the damage in tick *n*, or some other event of the list made the house
    due. Otherwise the plant notices the drop in its turn of tick *n* + 1 and the output falls in the
    update of tick *n* + 1.
-   - Backing: `measurable` (scenario W5, parts a to c)
+   - Backing: `measurable` (scenario W5, parts a to c for health and switch timing; W1, W2, W4
+     and W12 for the resulting totals after erasure, passengers, placement, removal, blackout,
+     draining and upgrades); `unmeasured` for owner-change timing and the exact recheck timing
+     after passengers, erasure, draining and upgrades (those scenarios read settled totals, and
+     no tick-level scenario for these causes is specified here), and for super-gap rechecks
+     (no skirmish input path is established, claim 16).
    - Confidence: high (the house update, health changes, live health in the sum), medium (the full
      event list; the lag of at most one tick)
 
@@ -239,13 +251,15 @@ house's own update in a tick, which comes after the turn pass and before orders 
    output and drain are 0, claims 1 and 2). The power condition reads the house's totals as they
    stand (claim 7). Two consequences: a
    building of a type with the needs-power flag but no base drain never stops for low power; and a
-   building with two or more chargers stays in operation under low power and even when switched
-   off. The test is the same for every house; no rule of it depends on whether the owner is human-
+   building with two or more chargers passes the switch and power conditions even under low
+   power or when switched off, but must still pass every other condition. The test is the same for every house; no rule of it depends on whether the owner is human-
    or computer-controlled.
    - Backing: `measurable` (scenario W6, parts a to f and j; scenario W4, part a for the blackout
      row); `unmeasured` for a building being erased staying in operation (its output and drain are 0
      and the erasure has effects of its own on the building, so no observable separates the two
-     states)
+     states); `unmeasured` for the health-0 row (no scenario here keeps a destroyed building
+     available to test its operation separately), and for the distinction between queued and
+     current construction or selling behaviour (W6 tests current behaviour only).
    - Confidence: high (switch, low power, construction and selling behaviours), medium (chargers,
      pulse, blackout, engineer), low (being erased)
 
@@ -280,45 +294,66 @@ house's own update in a tick, which comes after the turn pass and before orders 
    factory off does to production is S-0404's (claim 8). The original's being in operation also
    gates further building functions that the specs of those functions own.
 
-   Firing reads the test whenever it is asked. The one-off effects (the control centre, the gap,
-   the release of controlled and held units, the lights and animations) happen in the building's own
-   turn (S-0203), the first turn in which its in-operation result (which includes the behaviour row
-   of claim 8) differs from the result at its previous turn. So the effects of coming into
-   operation also happen when the build-up ends, and the effects of stopping happen when the sale
-   begins. For example, a building that loses power by the house update of tick *n* releases its
-   controlled units in its turn of tick *n* + 1.
+   Firing reads the test whenever it is asked. The control centre, gap, release of controlled
+   and held units, lights and animations follow the in-operation result in the building's own
+   turn (S-0203), except for the immediate switch effects in claim 10. The first such turn after
+   the result changes applies the new operation state. This also applies when build-up ends or
+   selling begins. These effects can be reconciled on a turn even without an in-operation
+   transition: for example, a charged gap building whose switch-off stopped its field but left
+   it in operation can generate again in its next turn. A building that loses power by the house
+   update of tick *n* releases its controlled units in its turn of tick *n* + 1. The charged-gap
+   switch case is `unmeasured` for claim 10's reason.
    - Backing: `measurable` (scenario W6, parts a, h, i, j and k, which cover firing, the release of a
      controlled unit, the working animation, the effects at the end of the build-up and the gap),
-     `unmeasured` for which answer of T1 applies when the conditions of both its rows hold at once
-     (a building's reply to *illegal* and to *impossible* is not known to differ, so no scenario
-     could tell the answers apart, and S-0301 claim 9 makes the same argument); `unmeasured` for the held
-     unit, the cash-producing type and the sensor types (each needs the observable of the spec that
+     `unmeasured` for T1's distinction between *illegal* and *impossible*, including where both
+     sets of conditions hold (W6 observes firing refusal, not an answer label; no differing
+     building response to these labels is known, and S-0301 claim 9 makes the same argument).
+     `unmeasured` for the held unit, the cash-producing type, the lights and the sensor types (each needs the observable of the spec that
      owns the effect, and those specs' scenarios should add a variant in which the building is
      switched off)
    - Confidence: high (firing under low power, the one-off effects' timing for the animation and the
      controlled unit), medium (T1 where only one of its conditions holds, the gap, the other items),
      low (T1's answer where the conditions of both its rows hold)
 
-10. **The power switch.** A power-off order (S-0213, claim 13) switches a building off only when its
-    type has a base drain above 0 or the needs-power flag; on any other building, such as a power
-    plant that needs no power, it changes nothing. A power-on order switches a building on only
-    when it is not under a pulse. A switched-off building makes no output and needs no drain (claims 1
-    and 2) and is not in operation unless charged (claim 8). Which buildings the player may click in
-    power mode is S-0214's (claim 13).
-    - Backing: `measurable` (scenario W7, parts a to c)
-    - Confidence: high (the drain-or-flag condition), medium (the pulse condition)
+10. **The power switch.** A power order applies only to a live building on the map whose type
+    does not have the firestorm-wall flag (S-0213, claim 13 and its Edge cases define the flag).
+    An applicable power-off order switches an on building off only when its type has a base drain
+    above 0 or the needs-power flag; otherwise it changes nothing. An applicable power-on order
+    switches an off building on only when it is not under a pulse. Repeating an order for the
+    state already set changes nothing. A switched-off building makes no output and needs no drain
+    (claims 1 and 2) and is not in operation unless charged and the other conditions hold (claim 8).
+    Which buildings the player may click in power mode is S-0214's (claim 13).
+
+    An accepted switch-off stops the building's lights and power-dependent working animations
+    immediately, without waiting for its next turn; an accepted switch-on starts them immediately.
+    An accepted switch-off also ends its gap field immediately; switching on lets the field
+    start again in the next building turn that finds it in operation.
+    These switch effects do not wait for the in-operation transition of claim 9 and do not test
+    its other conditions. A later in-operation transition can change them again.
+    - Backing: `measurable` (scenario W7, parts a to d for switching and animations; S-0213
+      scenario O12 for the firestorm-wall exclusion); `unmeasured` for orders to buildings dead
+      or off the map (input cannot target them), an order repeating the existing switch state
+      (input produces the opposite order), a power-off order to a type with neither drain nor
+      needs-power flag (input produces no order for it), and the immediate light effect (W7
+      specifies an animation, not a light-equipped test type), and for the gap's switch-off
+      timing and its restoration while charged (W6 tests a house-power change, not these
+      switch-only cases). S-0409 claim 11 and its ordering text need this switch-effect exception
+      to their operation-only description; it does not change the gap's shape or cell effects.
+    - Confidence: high (the drain-or-flag condition and order eligibility), medium (the pulse
+      condition, immediate lights and animations)
 
 11. **Production under low power.** Low power slows every production line of the house by the
     factor that S-0403 (claim 5) derives from the power fraction *p*. When a house works out its
     power, the step period of each of its lines is worked out again at once (S-0403, claim 8).
-    - Backing: `measurable` (S-0403 scenario B4)
+    - Backing: `measurable` (S-0403 scenarios B4 for slowdown and B7 for re-evaluation)
     - Confidence: high
 
-12. **Radar.** Low power is one input of the radar rule: unless the map grants free radar, a house
-    has radar only when it has full power (claim 4). S-0410 (claim 1) owns the whole rule: the radar
-    outage, free radar, which radar building decides, what makes it qualify, and
-    `quirks.radar_first_building_decides`; S-0410 (claim 2) owns when it is evaluated again. The
-    radar rule does not use the in-operation test of claim 8.
+12. **Radar.** Low power is one input of the radar rule: before a house's defeat, and unless the
+    map grants free radar, radar requires full power (claim 4). S-0410 (claim 1 and Edge cases and
+    quirks) owns the whole rule and `quirks.radar_first_building_decides` (default: the original),
+    including the radar outage, free radar, which radar building decides, what makes it qualify,
+    the switch's alternative, and radar after defeat. S-0410 (claim 2) owns when availability is
+    evaluated again. The radar rule does not use the in-operation test of claim 8.
     - Backing: `measurable` (S-0410 scenario R1)
     - Confidence: high (low power as an input)
 
@@ -336,8 +371,10 @@ house's own update in a tick, which comes after the turn pass and before orders 
     The cell-entry rule reads the vehicle type's powered-unit flag, while enabling and disabling at
     the count's transitions read only the control centre's powered unit; the two need not agree
     (Edge cases).
-    - Backing: `measurable` (scenario W8, parts a to h; part h for the exclusion of vehicles that
-      are off the map at a transition)
+    - Backing: `measurable` (scenario W8, parts a to i; part h for off-map vehicles at disabling).
+      `unmeasured` for off-map vehicles at enabling and for loss or owner-change transitions
+      (W8 tests disabling off-map and switch transitions only; no scenario part covers these
+      other cases).
     - Confidence: medium (the count and its two transitions), low (the cell-entry rule and its
       building exception)
 
@@ -350,7 +387,9 @@ house's own update in a tick, which comes after the turn pass and before orders 
 15. **Superweapon charge.** A superweapon whose rules make it depend on power holds its charge
     while its house has low power, as the house last worked out its power (claim 7), and resumes when
     full power returns. The superweapon specs own the rule.
-    - Backing: `measurable` (scenario W10, parts a and b)
+    - Backing: `unmeasured` (the power-dependence import and applicable superweapon types are
+      not specified here or by an approved superweapon spec; W10 is a conditional proposal until
+      that setup exists).
     - Confidence: low (which superweapons hold and how the remaining time is kept)
 
 16. **The super-gap and its extra drain.** A building whose type's super-gap radius is not 0 (Import
@@ -361,8 +400,9 @@ house's own update in a tick, which comes after the turn pass and before orders 
     operation, ends the super-gap and removes the extra drain, and the house's power is due again
     (claim 7). Whether input can give that deploy behaviour to a building is not established (Open
     questions).
-    - Backing: `measurable` (scenario W11, given a way to deploy; part k of scenario W6 for the gap's
-      stopping)
+    - Backing: `unmeasured` (no skirmish input path to the building's deploy behaviour is
+      established; W11 is a conditional proposal, not backing). W6 part k measures the normal
+      gap stopping, not a deployed super-gap.
     - Confidence: low
 
 17. **All houses alike.** No rule of this spec depends on whether a player house is human- or
@@ -374,9 +414,9 @@ house's own update in a tick, which comes after the turn pass and before orders 
 
 ## Formulas
 
-All results in power units are integers (S-0205, claim 1). Arithmetic results are RZ₅₃ with
-`quirks.chop_rounding` on (the original) and RN₅₃ with it off (S-0205); trunc is S-0205's
-conversion.
+All results in power units are integers (S-0205, claim 1). The formulas display RZ₅₃ for
+`quirks.chop_rounding` on (the original); with it off, replace every RZ₅₃ below by RN₅₃
+(S-0205). Trunc is S-0205's conversion toward zero.
 
 **F1, building output** (claim 1). *P* is the raw output (integer), *H* the building's health at the moment the
 house works out its power (not the health it last noticed, claim 7) and *S* the strength
@@ -425,14 +465,14 @@ precision before it uses it.
 | house power not due | building placed, created on the map, removed, destroyed or changes owner; a building's health changes (damage or repair, noticed in its own turn); building switched on or off; upgrade gained or lost; passenger enters or leaves an absorbing building; draining unit or erasing weapon attaches or lets go; timed blackout starts or ends; super-gap switched on or off (claim 7) | power due |
 | power due | the house's update | *O*, *D* worked out (claims 4, 5); production periods worked out again (claim 11); a change of low-power state starts or ends the charge hold of superweapons that depend on power (claim 15) |
 | full power | worked out with *D* > 0 and *O* < *D* | low power: needs-power buildings with a base drain above 0 and fewer than 2 chargers stop being in operation (claim 8) |
-| low power | worked out with *O* ≥ *D* or *D* = 0 | full power: they are in operation again |
+| low power | worked out with *O* ≥ *D* or *D* = 0 | full power: the power condition no longer prevents operation; claim 8's other conditions still apply |
 | in operation | the building's current behaviour becomes *selling* (sale's first processing) | not in operation at once (claim 8); output and drain unchanged (claim 3) |
 | no blackout | spy enters a building with base output, at tick *t*₀, with *d* > 0 | timed blackout running until the house update of tick *t*₀ + *d* − 1 (claim 6) |
 | no blackout | the same, with *d* ≤ 0 | house due; no blackout runs (claim 6) |
 | not an active control centre | the building's first turn in which it is in operation | active control centre (Terms; claim 13) |
 | active control centre | the building's first turn in which it is not in operation, or its loss | not active (Terms; claim 13) |
-| switched on | power-off order, type with a base drain above 0 or the needs-power flag | switched off; output and drain 0 |
-| switched off | power-on order, no pulse | switched on |
+| switched on | applicable power-off order (live building on the map, type without the firestorm-wall flag), type with a base drain above 0 or the needs-power flag | switched off; building output and drain 0; house totals follow claim 7 |
+| switched off | applicable power-on order (live building on the map, type without the firestorm-wall flag), no pulse | switched on |
 | active control centres 1 | the last one stops | its powered-unit vehicles disabled (claim 13) |
 | active control centres 0 | one comes into operation | its powered-unit vehicles enabled |
 
@@ -477,8 +517,7 @@ of tick *n* that come before the house's update, and stops in tick *n* + 1.
   three (Terms). A fourth or later upgrade therefore adds no output and no drain. This is the
   original's rule, not a quirk, so it has no switch. Any other effect of a fourth or later upgrade
   is S-0406's (Open questions).
-- **Campaign.** The original skips undiscovered buildings of the player in a campaign mission when
-  it sums power (claim 3). Out of scope.
+- **Campaigns and network games.** Out of scope; no counting or timing rule here specifies them.
 
 ## Import mapping
 
@@ -508,7 +547,13 @@ All scenarios run under the measurement setup, in a skirmish on a flat purpose-m
 named test files where a scenario sets fields or defines test types. Power output and drain are
 read from a recorder of the house's power values, or from the sidebar's power meter where it shows
 them; health and credits from a recorder or the interface; ticks with a recorder of the tick
-number. Any game speed.
+number. Any game speed, held fixed within a comparison. Director and unrelated mods are off.
+Only the named test data for the scenario are enabled. One human player owns the test buildings.
+One bystander computer player is kept outside the observed area (the test buildings and all
+units acting on them), under the glossary's void rule. Enemy spies and other acting test units
+are map-placed and execute the stated behaviours; scripted input controls the human player's
+orders. The read-only recorder and scripted-input apparatus never inject orders or write state.
+All numbers assigned to test types below are invented test inputs, not stock rule values.
 
 **Runs.** Each scenario states its number of runs. A part that a tick-level timing decides is run
 many times with the triggering event landing at different points of the tick, which the test map
@@ -531,19 +576,21 @@ switched off the house has full power (W3's second pair).
   infantry passengers inside; in a second run, only a non-absorbing test type with base output 100
   and extra output 30 (both read alone, without the plant of (a)). (e) Damage the consumer to
   health 100 and read *D*.
-  (f) Disable the undamaged plant with a pulse; then, while it is under the pulse, switch a spare
-  consumer off (which makes the house's power due, claim 7) and read *O*.
+  (f) Disable the undamaged plant and consumer with a pulse; then, while both are under the
+  pulse, switch a spare consumer off (which makes the house's power due, claim 7) and read *O*
+  and *D*.
   (g) In one run the undamaged plant, in a second run the undamaged consumer, is locked on by the
   erasing weapon; read *O* (first run) or *D* (second run) while it is locked on, then after the
   weapon lets go.
 - *Runs:* three per part, except (g): three per run kind.
 - *Observable:* *O* and *D* after each step.
 - *Expected:* (a) 120; (b) 79 (trunc of just below 79.92); (c) 0 (trunc of 0.24); (d) 60, and 100
-  for the non-absorbing type; (e) *D* stays 40; (f) *O* stays 120; (g) 0 while locked on, and 120
+  for the non-absorbing type; (e) *D* stays 40; (f) *O* stays 120 and the pulsed consumer's
+  drain stays 40; (g) 0 while locked on, and 120
   (first run) or 40 (second run) after the release.
-- *Falsified if:* (b) 80 (rounding to nearest), (d) 130 for the non-absorbing type, (e) a drain
-  that falls with health, (f) an output of 0, or (g) an output or drain that stays at its full value
-  while the weapon is locked on.
+- *Falsified if:* any recorded output or drain differs from the expected value in its part,
+  including a changed drain after damage, changed output under a pulse, or nonzero output or
+  drain while locked on.
 
 **W2: which buildings count (claim 3).**
 - *Setup:* a test power plant type with a long build-up time and a test consumer, own.
@@ -552,7 +599,8 @@ switched off the house has full power (W3's second pair).
 - *Runs:* three.
 - *Observable:* *O* per tick.
 - *Expected:* its output counts from placement and through the sale, and is gone after removal.
-- *Falsified if:* *O* rises only at the end of the build-up, or falls at the start of the sale.
+- *Falsified if:* output is absent during build-up or sale, or remains after the removal's
+  next house update.
 
 **W3: low power and the power fraction (claim 4).**
 - *Setup:* test plants and test consumers giving (*O*, *D*) = (100, 100), (99, 100), (50, 100) and
@@ -561,10 +609,12 @@ switched off the house has full power (W3's second pair).
 - *Procedure:* an enemy unit stands in the defence's range; in every run one item is produced.
 - *Runs:* three per pair.
 - *Observable:* whether the defence fires; the build time of the item (S-0403 scenario B4).
+  Also record the power fraction as a double with the read-only recorder, without narrowing it.
 - *Expected:* the defence fires at (100, 100) and not at the three others; the build time is the
-  full-power time at (100, 100), (100, 0) and (0, 0).
-- *Falsified if:* the defence stops at (100, 100) or fires at (99, 100), or production is slowed
-  with no drain.
+  full-power time at (100, 100), (100, 0) and (0, 0). The recorded fractions are respectively
+  1, RZ₅₃(99 / 100), 0.5, 0, 1 and 1, formed as F3 specifies.
+- *Falsified if:* firing, the recorded fraction or production time differs from its expected result; for the
+  low-power pairs, the production time must match S-0403 scenario B4's computed period.
 
 **W4: blackouts (claims 5, 6 and 8).**
 - *Setup:* own house with two test plants (base output 100 each), a consumer (drain 100) and the
@@ -575,18 +625,21 @@ switched off the house has full power (W3's second pair).
   draining unit attaches to one plant, and later lets go. (c) In a third run a second spy enters
   the other plant 100 ticks after the first. (d) With the spy blackout length 1, a spy enters a
   plant. (e) With the spy blackout length absent, a spy enters a plant.
-- *Runs:* (a) and (c) twenty each, with the entry landing at different points of the tick (so that
-  the entry falls both before and after the house's update); (b), (d) and (e) three each.
-- *Observable:* the ticks during which the house has low power (the defence does not fire, and the
-  recorder's *O* is 0); in (a) also whether C's working animation stops while the blackout runs.
-- *Expected:* (a) low power from *t*₀ or *t*₀ + 1 to *t*₀ + 298, full power again at *t*₀ + 299
-  (±1), in every run fewer than 300 ticks of low power, and C's animation stops during the
-  blackout; (b) *O* is 0 while the unit is attached, and
-  200 again after it lets go; (c) the blackout ends near *t*₀ + 399; (d) and (e) no tick of low
-  power.
-- *Falsified if:* (a) the blackout lasts 300 ticks or more, or *O* stays 100 (only the entered
-  plant lost), or C keeps its animation, (b) *O* is 100 while attached, (c) the blackout ends near
-  *t*₀ + 599 (lengths add), (d) any tick of low power in any run, (e) any tick of low power.
+- *Runs:* (a) and (c) twenty each, varying walking distance and recording the entry tick.
+  Parts (b), (d) and (e): three each. Do not assume these inputs can cause an entry after the house
+  update; that case remains unmeasured.
+- *Observable:* end-of-tick *O* and *D*, and shot ticks separately (shots in a tick read the
+  previous house totals). In (a), also C's working animation. A C-type building without the
+  special-power flag provides the animation control in a separate run.
+- *Expected:* (a) end-of-tick *O* is 0 from *t*₀ or *t*₀ + 1 through *t*₀ + 298, and is 200
+  again at *t*₀ + 299; fewer than 300 house updates publish output 0. C's animation stops
+  during the blackout, but the unflagged control's does not. (b) *O* is 0 after the attachment's
+  recheck, and 200 again after the release's recheck. *D* stays at its pre-blackout value in
+  both (a) and (b). (c) Output returns at *t*₀ + 399, not *t*₀ + 599. (d) and (e) No house
+  update publishes output 0.
+- *Falsified if:* any recorded total, restoration tick or animation result differs from its
+  expected result. In particular, an output of 100 during (a) or (b) would mean only one plant
+  lost output; any zero-output house update in (d) or (e) falsifies the short-length rule.
 
 **W5: when power is worked out (claim 7).**
 - *Setup:* own defence with the needs-power flag and a weapon that is ready to fire (target in
@@ -600,12 +653,16 @@ switched off the house has full power (W3's second pair).
   switch the spare consumer off with a power order at tick *n* − 1 (which makes the house due in
   the update of tick *n*).
 - *Runs:* (a) twenty, with the hit landing at different points of the tick; (b) ten; (c) twenty.
-- *Observable:* the ticks of the defence's shots.
-- *Expected:* (a) the last shot is at tick *n* or *n* + 1, never later; (b) the first shot after
-  the order is at tick *n* + 2; (c) in every repeat the last shot is at tick *n* or earlier.
-- *Falsified if:* (a) a shot at tick *n* + 2 or later, (b) a shot at tick *n* + 1 or none at
-  tick *n* + 2 or *n* + 3, (c) a shot at tick *n* + 1 in any repeat (the sum would then read the
-  last-noticed health instead of the live health).
+- *Observable:* end-of-tick *O* and *D*, the defence's shot ticks and its readiness to fire.
+  Timing of the totals is decisive even when rearming conceals the first restored shot.
+- *Expected:* (a) output falls in the update of *n* or *n* + 1, never later; no shot at
+  *n* + 2 or later. (b) Totals remain low-power at the end of *n*, become full-power in the
+  update of *n* + 1. No shot occurs before *n* + 2; it fires at *n* + 2 if ready then,
+  otherwise on the first later tick when all firing conditions allow it. (c) Output falls in
+  the update of *n* in every repeat; no shot at *n* + 1.
+- *Falsified if:* any recorded total changes outside these updates, or a shot occurs outside
+  the expected firing interval. In (c), unchanged output at the end of *n* would mean that
+  the forced recheck did not read live health.
 
 **W6: the in-operation test (claims 8 and 9).**
 - *Setup:* a named test file defines these types:
@@ -647,28 +704,46 @@ switched off the house has full power (W3's second pair).
   (c) A fires; (d) A does not fire while under the pulse and fires again after it ends; (e) C stops
   its animation, D keeps it; (f) E fires only after the engineer is inside; (g) progress advances,
   more slowly; (h) the vehicle returns to its owner's control 1 tick after the tick in which the
-  recorder first reads low power (±1 tick); (i) the animation stops at the tick of the sale's first
+  recorder first reads low power; (i) the animation stops at the tick of the sale's first
   processing (S-0408 claim 6) and the building then stays on the map, sprite unchanged, until the
   harvester has left; (j) the X vehicle is disabled during the build-up and enabled again in the
   tick after the build-up ends (the building's first turn in operation); the second A does not fire
   during its build-up and does after it; (k) the gap hides cells at full power and stops hiding
   them one tick after the house's low-power update.
-- *Falsified if:* any part gives the opposite result.
+- *Falsified if:* any state, animation or firing result differs from the expectation, or any
+  timed result is outside its stated tick interval.
 
 **W7: switching power (claim 10).**
-- *Setup:* own consumer (drain 40), a needs-power test type with no drain, and a plant with no drain
-  and no flag; a named test file gives each the power-mode flag. A pulse weapon.
-- *Procedure:* (a) a power-off order to each (by scripted input where the cursor allows, or through
-  the order path of a test map's trigger where it does not). (b) Switch the consumer off, hit it
-  with the pulse, give a power-on order while it is under the pulse, and read *D* and its function
-  during the pulse. (c) Read *D* and its function after the pulse has ended.
-- *Runs:* three per part.
-- *Observable:* *D*, *O* and whether each building's function stops.
-- *Expected:* (a) the consumer's drain leaves *D* and its function stops; the needs-power type
-  without drain switches off; the plant's output stays; (b) *D* stays without the consumer's drain
-  and the function stays stopped; (c) still switched off: *D* is still without the drain.
-- *Falsified if:* the plant switches off, or the consumer's drain stays in (a); or in (c) the
-  consumer's drain returns (the power-on order was accepted under the pulse).
+- *Setup:* own consumer (drain 40) and needs-power test type with output 10 and no drain.
+  A named test file
+  gives each the power-mode flag and a power-dependent working animation. A plant maintains
+  full power throughout. A pulse weapon. Part (d) uses two additional consumer variants with
+  the firestorm-wall flag: one map-placed switched on, the other map-placed switched off.
+- *Procedure:* (a) click each test consumer in power mode to switch it off, record the tick *n*
+  when its switch changes, then click again to switch it on. (b) Switch the consumer off, hit
+  it with the pulse and click it in power mode while under the pulse. (c) Wait for the pulse
+  to end without another click; read *D*, then click to switch on. (d) Click the two
+  firestorm-wall variants in power mode and read their switch state and drain after the next
+  house update. Use normal scripted input only, not a trigger that might follow a different
+  application rule.
+- *Runs:* three per part, except (a): twenty with tick-level recording.
+- *Observable:* switch state, *O*, *D* and whether the working animation is running or paused,
+  sampled by the recorder after orders each tick. Also record its displayed image frame,
+  comparing with a control run in which no click occurs. The pause state can change after
+  the animation already advanced in its turn that tick; the displayed image alone does not
+  distinguish that from pausing in the next turn.
+- *Expected:* (a) both test buildings switch off; the drain of 40 leaves *D* and the output
+  of 10 leaves *O* at the next house update. Both animations are paused by the end of tick *n*,
+  not first at their next turn.
+  Clicking again switches them on, restores their contributions at the next house update,
+  and makes their animation running in that order's tick. (b) The switch stays
+  off, the consumer contributes no drain, and its animation remains stopped. (c) It still
+  contributes no drain until the new click after the pulse; that click switches it on and
+  restores its drain at the next house update. (d) Neither variant changes its switch state
+  or drain contribution.
+- *Falsified if:* any switch, output, drain or animation result differs from the stated expectation,
+  in particular, a firestorm-wall variant changing state falsifies the exclusion, and an
+  animation changing only on the next turn falsifies the immediate switch effect.
 
 **W8: control centres (claim 13).**
 - *Setup:* a named test file defines these types. Control-centre type K with the needs-power flag,
@@ -694,6 +769,7 @@ switched off the house has full power (W3's second pair).
     absent or switched off), load the X' vehicle, enabled, into the transport; switch that centre
     off while the vehicle is inside; then unload it onto a cell with no building and give it
     orders.
+  - (i) continue (c) by switching K2 off too, then switch K on again with K2 still off.
 - *Runs:* three per part.
 - *Observable:* whether the vehicles move and obey orders.
 - *Expected:* (a) both X vehicles stop and refuse orders; (b) both work again; (c) the X vehicles
@@ -701,11 +777,13 @@ switched off the house has full power (W3's second pair).
   the depot's cell and is disabled on the first cell without a building after it; (f) the X'
   vehicle is disabled and enabled like X in (a) and (b); (g) the Z vehicle stays disabled; (h) the
   X' vehicle obeys orders after it is unloaded (it was off the map at the transition, and the
-  cell-entry rule does not apply to it because its type lacks the powered-unit flag).
+  cell-entry rule does not apply to it because its type lacks the powered-unit flag). (i) On
+  the count's 1-to-0 transition only Y is disabled; X keeps working. Bringing K back enables
+  X only, so Y stays disabled until K2 itself causes a later 0-to-1 transition.
 - *Falsified if:* (a) or (b) differ, or in (c) the X vehicles stop, or in (d) the Z vehicle keeps
   working, or in (e) it is disabled on the depot's cell or stays enabled afterwards, or in (f) the
   X' vehicle is unaffected, or in (g) the Z vehicle works again, or in (h) the X' vehicle is
-  disabled after it is unloaded.
+  disabled after it is unloaded, or in (i) either vehicle type differs from the expected state.
 
 **W9: spy satellite (claim 14).**
 - *Setup:* a named test file gives a test type with the spy satellite flag (S-0409) the needs-power
@@ -718,8 +796,9 @@ switched off the house has full power (W3's second pair).
 - *Expected:* the map stays revealed in every part.
 - *Falsified if:* the shroud returns in any part.
 
-**W10: superweapon charge (claim 15).**
-- *Setup:* a superweapon test type that the superweapon specs name as power-dependent, own and
+**W10: superweapon charge (claim 15; conditional proposal).**
+- *Setup:* once a superweapon spec supplies the power-dependence import: a named test file
+  defines a superweapon test type that it names as power-dependent, own and
   charging, and in a second variant a test type with that dependence off; plants and a spare
   consumer.
 - *Procedure:* (a) bring the house to low power for 600 ticks, then back to full power. (b) The same
@@ -728,8 +807,8 @@ switched off the house has full power (W3's second pair).
 - *Observable:* the tick at which the superweapon becomes ready.
 - *Expected:* (a) it becomes ready 600 ticks (±2) later than in the control run; (b) it becomes
   ready on the control run's tick.
-- *Falsified if:* (a) it becomes ready on the same tick as in the control run, or later by less than
-  598 ticks; (b) it is delayed.
+- *Falsified if:* (a) its delay relative to the control is outside 598 to 602 ticks; (b) its
+  readiness tick differs from the control.
 
 **W11: super-gap (claim 16).**
 - *Setup:* only if input or a test map can give the deploy behaviour to a building: a gap test type
@@ -738,20 +817,27 @@ switched off the house has full power (W3's second pair).
 - *Runs:* three.
 - *Observable:* *D* after each deploy.
 - *Expected:* *D* rises by 20 after the first and falls back after the second.
-- *Falsified if:* *D* does not change while the super-gap is active.
+- *Falsified if:* either recorded drain differs from the expected drain. This proposal becomes
+  usable backing only once the input path in Setup is demonstrated.
 
 **W12: upgrades (claims 1 and 2).**
 - *Setup:* a named test file defines these types. A test plant P of base output 100, strength 500,
   upgrade count 3; upgrade types for P with output 10, output 20 and drain 5; a wall tower test type
   WT (named as the game-wide wall tower type in the test file) of base output 50, upgrade count 4,
   four upgrade types for WT with outputs 10, 20, 30 and 40.
-- *Procedure:* (a) add the three upgrade types to P one at a time (S-0406 claim 12 gives how), reading *O*
-  and *D* after each. (b) Add the four upgrade types to WT one at a time, reading *O* after each.
+- *Procedure:* (a) add the three upgrade types to P one at a time (S-0406 claim 12 gives how),
+  reading *O* and *D* after each. (b) Add the four upgrade types to WT one at a time, reading *O*
+  after each. (c) In a fresh run, give P all three upgrades and damage it to health 333.
+  (d) In a fresh full-health run, give P all three upgrades and sell its upgrades one at a time,
+  reading the settled totals after each sale. (e) In a fresh run, give the output-10 upgrade
+  a level field of 3 and add it to unupgraded P; the lower positions stay empty (S-0406).
 - *Runs:* three per part.
-- *Observable:* *O* and *D* after each addition.
+- *Observable:* *O* and *D* after each addition, damage or upgrade sale.
 - *Expected:* (a) *O* 110, then 130; *D* 5 after the third, *O* still 130. (b) *O* 60, 80, 110 and
-  110 again after the fourth.
-- *Falsified if:* (a) the sums differ from these; (b) *O* rises after the fourth (to 150), or falls.
+  110 again after the fourth. (c) *O* 86 and *D* 5: health scales all raw output, not drain.
+  (d) *D* 0 with *O* 130 after the first sale, then *O* 110 and 100 after the next two.
+  (e) *O* 110 and *D* 0 despite the empty lower positions.
+- *Falsified if:* any sum differs from the expected value in its part.
 
 ## Open questions
 
