@@ -2345,6 +2345,15 @@
           "format": "int32",
           "default": null
         },
+        "max_players": {
+          "description": "`[Maximums] Players` as the base rules alone give it: the maximum\nplayer count of the unused-house cleanup (S-0009 claim 28).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
         "maximum_cheer_rate": {
           "description": "`MaximumCheerRate`, ticks (S-0213 claim 19).",
           "type": [
