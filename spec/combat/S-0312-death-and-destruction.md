@@ -2,7 +2,7 @@
 id: S-0312
 title: Death and destruction (death weapons, debris, passengers, crews, survivors, sinking, crashing and building remains)
 topic: combat
-revision: 4
+revision: 5
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -88,8 +88,10 @@ claim 19) and *curtain protection* are used as defined there. In addition:
 ### When death happens
 
 1. **Death effects come at once, in a fixed order.** All death effects of an object happen at the
-   moment of its killing hit, inside damage resolution, and so inside the turn of whatever produced
-   the damage (S-0203 claim 5, S-0303 claim 1), before the next hit of the same detonation. The table in State and ordering gives the observable precedence of the death effects and the order in which their random draws affect the scenario random stream. For example, a passenger killed by an exploding object is already dead when the death-weapon detonation's damage is dealt. A death weapon or bomb completes its detonation before the death proceeds to effects that follow it in the table. When the
+   moment of its killing hit, inside damage resolution, before the next hit of the same detonation
+   (S-0303 claim 1). When the damage is produced during an object's turn, the death effects happen
+   within that turn; when the damage is produced outside an object's turn, the death effects happen
+   at that effect's place in the tick (S-0203 claims 1 and 5). The table in State and ordering gives the observable precedence of the death effects and the order in which their random draws affect the scenario random stream. For example, a passenger killed by an exploding object is already dead when the death-weapon detonation's damage is dealt. A death weapon or bomb completes its detonation before the death proceeds to effects that follow it in the table. When the
    object leaves play is S-0203's claim 6; this spec adds when buildings, sinking vehicles and
    crashing objects leave (claims 10, 15, 16 and 21).
    - Backing: `measurable` (scenario D1)
@@ -118,9 +120,14 @@ claim 19) and *curtain protection* are used as defined there. In addition:
    credits).
 
    *End of the countdown.* The countdown does not remove the building by itself. On the building's
-   first turn at or after the end, S-0302 claim 16 delivers a hit of the building's whole health
-   with the demolition warhead, ignoring defences, with its attacker, credit and exceptions (capture,
-   sale, temporary invulnerability, the bridge repair hut) as S-0302 gives them. When that hit
+   first eligible turn at or after the end, S-0302 claim 16 delivers a hit of the building's whole
+   current health with the demolition warhead, ignoring defences. Normally that hit has no attacker
+   and no attacking house: the initial hit's attacker is not remembered for expiry. A separately
+   remembered charge planter can be its attacker. S-0302 owns its credit, the erasure and
+   electromagnetic-pulse postponements, cancellation by temporary invulnerability, survival when
+   the demolition warhead stops the hit or delays death again, and the bridge repair hut exception.
+   Capture and starting a sale do not cancel the countdown, but removal before expiry leaves no
+   later hit or death effects (S-0302 claim 16; Q-0081 parts 1 and 2). When that hit
    destroys the building, every death effect of this spec follows at once, in that turn, with its
    normal order and draws (claims 4 to 7 and 17 to 24), exactly as for a building destroyed by any
    other hit. Because the hit ignores defences, the building then counts as having no crew (F5): it
@@ -252,7 +259,9 @@ claim 19) and *curtain protection* are used as defined there. In addition:
     joins instead. Which of these our engine applies depends on the owner (claim 25): a player
     house's passenger gets no further order, a neutral or special house's passenger is put on
     *hunt*, and the team join never applies.
-    This refines S-0203 claim 6e, which takes every passenger with a destroyed object.
+    This refines S-0203 claim 6(e): S-0312 decides whether passengers of a destroyed vehicle die
+    or get out, while S-0203 claim 3 determines whether passengers of an open-topped transport are
+    in play.
     - Backing: `measurable` (scenario D9; variant e for the orders); `unmeasured` for the team join
       (the original's team system is outside our scope and has no counterpart in our engine, so
       nothing of ours depends on it, and no test map is planned for it)
@@ -447,23 +456,26 @@ claim 19) and *curtain protection* are used as defined there. In addition:
       target acquisition (S-0309 claim 12, row *exists*).
     - It keeps occupying its foundation cells, with whatever claim 20 has not yet placed: its
       rubble and crate are not placed yet.
-    - It takes its turns (S-0203). In its turn the general part of a building's turn comes first
-      (its behaviour, for example the sale's progress, S-0408). Then, when it is still in play,
-      still has 0 health, and is neither being erased nor under an electromagnetic-pulse effect
-      (the same exceptions as S-0302 claim 16's expiry), it is removed. On an eligible removal turn, the building ceases to occupy its foundation cells. It then has a second round of claim 18 and claim 19(g). The survivor count *C* is worked out afresh by F5, so it is 0 when the killing damage ignored defences, which left the building without crew. The cells are taken in claim 18's order with the survivor-chance, survivor and smudge-step outcomes and all their draws, as in claim 19(g). Absorbed passengers have already come out or died, so none come out now. Because the building has left its cells, the smudge steps of this round are not refused by the building (claim 19(g)). Any passengers still inside die. The building then leaves play, and claim 20's rubble and crate are placed.
-      Quirk `quirks.building_removal_second_round` (Edge cases) covers (b).
+    - It takes its turns (S-0203), but its behaviour is not processed while its health is 0
+      (S-0215 claim 2). In particular a sale cannot advance, release further sale survivors or
+      complete its refund after this death. When the building is still in play with 0 health,
+      and is neither being erased nor under an electromagnetic-pulse effect, its own turn removes
+      it after the general part of that turn. On an eligible removal turn, the building ceases to occupy its foundation cells. It then has a second round of claim 18 and claim 19(g). The survivor count *C* is worked out afresh by F5, so it is 0 when the killing damage ignored defences, which left the building without crew. The cells are taken in claim 18's order with the survivor-chance, survivor and smudge-step outcomes and all their draws, as in claim 19(g). Absorbed passengers have already come out or died, so none come out now. Because the building has left its cells, the smudge steps of this round are not refused by the building (claim 19(g)). Any passengers still inside die. The building then leaves play, and claim 20's rubble and crate are placed.
+      Quirk `quirks.building_removal_second_round` (Edge cases) covers this second round.
     - So a building of an exploding type normally stays in play until its own next turn, which comes later in
       the same tick when its turn has not yet come in that tick's turn pass, and otherwise in the
       next tick. While it is under an electromagnetic-pulse effect, or being erased, the removal
-      waits for a later turn. A building being sold whose sale removes it in the general part of
-      that turn leaves by the sale (S-0408) and takes none of (a) to (d).
+      waits for a later turn. This is the same for a building destroyed while being sold,
+      whatever stage the sale had reached. Sale survivors released before the killing hit are
+      unaffected; after it there are only the destruction's survivor rounds, not the sale's.
+      It pays no sale refund (S-0408 claim 6). A sale that already removed a still-living building
+      before a pending delayed-kill expiry instead leaves no death at all (claim 3).
     Whether a building awaiting removal can still be selected by a player is not known (Open
     questions). This refines S-0203 claim 6b.
     - Backing: `measurable` (scenario D14, variants c and g)
-    - Confidence: high for the immediate removal of other buildings; medium for the removal at the
-      next turn, its order and the second round of an exploding building; low for a building
-      destroyed while being sold (the interplay with the sale's own progress is not traced) and for
-      the electromagnetic-pulse and erasure exceptions
+    - Confidence: high for immediate removal, the next eligible own-turn removal of exploding
+      and selling buildings, occupancy until removal, the second round, the erasure and
+      electromagnetic-pulse exceptions, and the stopped sale; selection remains open
 
 22. **Spilled resources.** In the original a building's holdings of each resource type are
     fractional amounts (single-precision floating point), and the building spills for as long as the
@@ -589,16 +601,20 @@ claim 19) and *curtain protection* are used as defined there. In addition:
 
 28. **Item handling of this spec's lists.** The explosion list, the destruction-animation list, the
     debris animations, the voxel debris types and the destruction particle-system list of a type,
-    and the game-wide metallic debris list, read their items as S-0303 claim 25 gives for its
-    animation and debris lists: an item naming no type (Import mapping) is left out and holds no
-    place, the other items keep their order, and every list length and entry number in claims 9,
-    16 and 19 and F1 is taken after those omissions. A type's debris maxima list reads its items as
-    S-0303 claim 26 gives for a warhead's maxima: decimal-prefix integers, an unreadable item holding
-    its place with 0, independently of the types list, so F1 pairs the first kept debris type with
-    the first maxima item. A name-list key absent from a layer, or given with an empty value, keeps
+    and the game-wide metallic debris list omit an item naming no type (Import mapping): it holds
+    no place, the other items keep their order, and every list length and entry number in claims
+    9, 16 and 19 and F1 is taken after those omissions. S-0003 claim 19 owns this shared syntax
+    for animation and voxel-animation lists; the destruction particle-system list has the same
+    omission and splitting rules. A type's debris maxima list follows S-0003 claim 20:
+    decimal-prefix signed 32-bit integers, an unreadable item holding its place with 0,
+    independently of the types list, so F1 pairs the first kept debris type with the first maxima
+    item. S-0303 claims 25 and 26 use the same rules for detonation lists. A name-list key absent from a layer, or given with an empty value, keeps
     the list in force (S-0003, S-0006); a value whose items all name no type replaces the list with
-    an empty one.
-    - Backing: `measurable` (scenario D19)
+    an empty one. Name-list text is limited to 127 bytes; maxima-list text to 511 bytes, with
+    the physical-line limit of S-0001 applying first. Whitespace within an item follows S-0003
+    claim 12 and `quirks.list_items_untrimmed`.
+    - Backing: `measurable` (scenario D19); `unmeasured` for the separate 511-byte reader limit,
+      which file input cannot reach after S-0001's shorter physical-line limit
     - Confidence: high
 
 ## Formulas
@@ -833,7 +849,7 @@ ticks later. Unit: ticks.
 | User data | Feeds | Form | Absent |
 |---|---|---|---|
 | rules, type section, `MaxDebris`, `MinDebris` | *X*, *Y* (F1) | integer | 0, 0 |
-| rules, type section, `DebrisTypes`, `DebrisMaximums` | voxel debris types and maxima (F1) | voxel-animation list (items as claim 28), integer list (items as claim 28) | empty |
+| rules, type section, `DebrisTypes`, `DebrisMaximums` | voxel debris types and maxima (F1) | voxel-animation list, 127-byte text limit (S-0003 claim 19); decimal-prefix integer list, 511-byte reader limit (S-0003 claim 20); independently paired as claim 28 | empty |
 | rules, type section, `DebrisAnims` | debris animations (F1) | animation-name list (items as claim 28) | empty |
 | rules, type section, `Explodes` | explodes flag (exploding object) | boolean | no |
 | rules, type section, `VeteranAbilities`, `EliteAbilities` | exploding veterancy ability (S-0311) | ability list | none |
@@ -856,7 +872,7 @@ ticks later. Unit: ticks.
 | rules, building type section, `UnitAbsorb`, `InfantryAbsorb` | absorbs units or infantry (claim 24) | boolean | no |
 | rules, building type section, `LeaveRubble` | leaves rubble (claim 20) | boolean | no |
 | rules, building type section, `CrateBeneath`, `CrateBeneathIsMoney` | crate beneath (claim 20) | boolean | no |
-| rules, type section, `DestroyParticleSystems`, `DestroySmokeOffset` | destruction particle systems and their displacement (claim 19 f) | particle-system list (items as claim 28), three integers in leptons | empty, 0, 0, 0 |
+| rules, type section, `DestroyParticleSystems`, `DestroySmokeOffset` | destruction particle systems and their displacement (claim 19 f) | comma-separated particle-system name list, 127-byte text limit, no-type items omitted (claim 28); three integers in leptons | empty, 0, 0, 0 |
 | rules, the combat-damage section, `DeathWeapon` | game-wide death weapon (claim 6) | weapon name | none |
 | rules, the combat-damage section, `C4Warhead` | demolition warhead (claims 16, 17) | warhead name | none |
 | rules, the general section, `CrewEscape` | crew escape chance (claim 13) | decimal (S-0003's decimal form, read in single precision and held as a double) | initially 0.5; a missing key keeps the value in force (claim 27) |
@@ -1045,7 +1061,8 @@ tick from the killing hit, killed (i) by an object whose turn comes before the b
 turn pass and (ii) by one whose turn comes after it. *Expected of c:* after its death effects the
 building is still in play with 0 health and its foundation cells still occupied, no rubble yet; it
 leaves play, and its rubble appears, in the tick of the kill in (i) and in the next tick in (ii).
-A second variant uses a building killed while its sale is in progress (low confidence, claim 21).
+Repeat c with a building killed while its sale is in progress; the same removal and occupancy
+results are expected.
 Variant d:
 barrels placed on the four sides of an exploding 1 × 1 test building catch fire 4 to 6 ticks
 later, and with a 3 × 3 exploding test building, only barrels to its north and west (next to the top-left cell)
@@ -1064,7 +1081,16 @@ removal turn, so some destructions release 2 survivors; smudges inside the found
 at the removal turn; each run's raw-value count matches the replay with the second round. With
 `quirks.building_removal_second_round` off our engine releases at most 1. *Falsified if:* no
 destruction releases 2 survivors over the 300 runs, or a survivor appears in a tick between the
-kill and the removal turn.
+kill and the removal turn. Variant h (the sale and postponement): kill a crewless selling test
+building (i) before its release processing, (ii) during build-down, and (iii) just before the
+processing that would pay its refund. Record its health, presence, foundation occupancy, house
+credits, released units and random-stream state across the killing hit and every turn until
+removal. Repeat with an electromagnetic-pulse effect that lasts beyond the kill, and separately
+with the building being erased. *Expected of h:* no sale refund or further sale releases after
+health reaches 0; the same occupied-foundation awaiting-removal state as c, and the second round
+of g when crew is enabled. Pulse or erasure postpones removal until the first eligible own turn.
+There is no second round during the wait. A refund, further sale release, early foundation
+vacancy, second round during the wait, or removal before the first eligible own turn falsifies h.
 *Falsified if:* a smudge appears on a cell other than the centre of the position cell while
 *C* = 0, the 3 × 3 building leaves no smudge or the 1 × 1 building leaves one, the share of scorch
 marks lies more than 3 standard errors from one half, an explosion animation lies more than 64
@@ -1126,7 +1152,12 @@ maximum debris count giving at least one piece, and, in a second type, a destruc
 given as an empty value after a base layer that gave one entry, and in a third type, one given as
 `none` after such a base layer. *Observable:* which animations appear at death. *Expected:* X always
 appears as the explosion (a one-entry list); Y is every debris animation; the second type keeps the
-base layer's destruction animation; the third shows none. The maxima items follow S-0303's
+base layer's destruction animation; the third shows none. Repeat the no-type omission forms with voxel debris types and with eligible destruction
+particle-system types on a building, using one remaining named type in each list: every created
+piece or system must have that type. Test a maxima list `2,,abc,3` with three named voxel types:
+it pairs them with 2, 0 and 3; compare the recorder's draws and pieces with F1. Repeat with an
+omitted no-type item before the first voxel type to check that omission does not remove a maxima
+slot. The additional decimal-prefix and wrapping cases follow S-0003 scenario V15 and S-0303
 scenario A19, whose rule claim 28 shares. *Falsified if:* a death shows no explosion where X is
 due, a debris piece other than Y appears, the second type shows no destruction animation, or the
 third shows one.
@@ -1146,11 +1177,11 @@ third shows one.
 - Which events set and clear a building's charge planter (claims 18 and 24).
 - Which situations of play are contacts of a building at the moment of its destruction (claim 17),
   beyond factory exits and docking.
-- Whether a player can still select a building that awaits removal (claim 21). Its stay normally
+- Q-0081 parts 3 and 4, selection only: whether a player can still select a building that awaits
+  removal (claim 21). The general selection test has no health exclusion, but that alone does not
+  establish that a battlefield click can still find the destroyed building. Its stay normally
   lasts less than one tick, so it matters only for a selection made in that window or while an
   electromagnetic-pulse effect delays the removal.
-- How the sale's own progress interacts with a building destroyed while being sold (claim 21):
-  whether the sale can still complete and remove it before its removal turn.
 - Whether jumpjet types and other crashable vehicles crash by the same rules as aircraft (claim 16).
 - Whether the state that suppresses survivors (claim 18, "the owner's game is not over") is set by
   the defeat of S-0414 itself or only by the destruction of all the defeated house's objects that
