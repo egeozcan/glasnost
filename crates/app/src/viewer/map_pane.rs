@@ -196,7 +196,11 @@ impl MapPane {
             match &loaded.live {
                 Some(l) => format!(
                     ", {} game with {} houses",
-                    if l.setup.sandbox { "sandbox" } else { "skirmish" },
+                    if l.setup.sandbox {
+                        "sandbox"
+                    } else {
+                        "skirmish"
+                    },
                     l.world.houses.len()
                 ),
                 None => ", no game".into(),

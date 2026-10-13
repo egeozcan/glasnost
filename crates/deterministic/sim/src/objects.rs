@@ -598,7 +598,7 @@ pub fn place_map_objects(w: &mut World, map: &Map, sandbox: bool) {
             }
             if kind == Kind::Building {
                 if !fields.switched_on() {
-                    // spec: S-0405 Terms (a building is switched on when created in play, unless the map places it switched off, S-0009)
+                    // spec: S-0009 claim 40, S-0405 Terms and claim 10 (switched-on field 0: the building starts switched off; whether claim 10's type conditions apply is interim, request Q-0180)
                     if let Some(o) = w.obj_mut(id) {
                         o.econ.building.switched_off = true;
                     }

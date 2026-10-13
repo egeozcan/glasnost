@@ -370,6 +370,63 @@ struct Flags {
     voxel: bool,
 }
 
+/// A building's, infantry's, vehicle's or aircraft's image name walked
+/// read by read (claims 1, 2, 4, 9 and 10): the image key replaces the
+/// name, the flags come from the art section of the name before this
+/// read's suffix, and on snow an A is appended where the arctic flag turns
+/// on, never with the voxel flag. The art lookup and the importer's
+/// art-file references (S-0004 claim 14, claim 33) share it, so both
+/// select the same section at each read.
+pub(crate) struct ImageWalk {
+    /// The image name in force after the last step.
+    pub(crate) image: Vec<u8>,
+    flags: Flags,
+    arctic_prev: bool,
+    mobile: bool,
+    snow: bool,
+    on_turning_on: bool,
+}
+
+impl ImageWalk {
+    /// The walk before a type's first read: the image name is the type
+    /// name (claim 1).
+    pub(crate) fn new(t: &TypeRec, kind: Kind, snow: bool, q: &ArtQuirks) -> Self {
+        ImageWalk {
+            image: t.name.clone(),
+            flags: Flags::default(),
+            arctic_prev: false,
+            mobile: matches!(kind, Kind::Infantry | Kind::Vehicles | Kind::Aircraft),
+            snow,
+            on_turning_on: q.arctic_suffix_on_flag_turning_on,
+        }
+    }
+
+    /// The type read of layer `r`.
+    pub(crate) fn step(&mut self, art: &Document, t: &TypeRec, r: usize) {
+        // spec: S-0007 claim 1 (the image key replaces the image name; a missing key keeps it)
+        if let Some(v) = given_at(t, "Image", r) {
+            self.image = text(v, IMAGE_MAX).to_vec();
+        }
+        // spec: S-0007 claims 2 and 9 (flags from the art section of the name before this read's suffix)
+        let pre = art.section(&self.image);
+        let f = &mut self.flags;
+        f.theater = section_bool(pre, "Theater").unwrap_or(f.theater);
+        f.new_theater = section_bool(pre, "NewTheater").unwrap_or(f.new_theater);
+        if self.mobile {
+            // spec: S-0007 claim 4 (the voxel flag, for infantry, vehicles and aircraft)
+            f.voxel = section_bool(pre, "Voxel").unwrap_or(f.voxel);
+        }
+        let arctic = bool_as_of(t, "AlternateArcticArt", r, false);
+        // spec: S-0007 claims 9 and 10 (the A is appended where the flag turns on, on snow, never with the voxel flag)
+        if self.on_turning_on && self.snow && arctic && !self.arctic_prev && !f.voxel {
+            let mut s = self.image.clone();
+            s.push(b'A');
+            self.image = text(&s, IMAGE_MAX).to_vec();
+        }
+        self.arctic_prev = arctic;
+    }
+}
+
 fn object(ctx: &mut Ctx, kind: Kind, t: &TypeRec) -> TypeArt {
     let mut a = TypeArt {
         image: t.name.clone(),
@@ -384,34 +441,17 @@ fn object(ctx: &mut Ctx, kind: Kind, t: &TypeRec) -> TypeArt {
     let buildable = mobile || kind == Kind::Buildings;
     let snow = ctx.theater == Theater::Snow;
     let ext = ctx.ext();
+    let mut walk = ImageWalk::new(t, kind, snow, &ctx.q);
     let mut flags = Flags::default();
-    let mut arctic_prev = false;
     let mut buildup: Option<Vec<u8>> = None;
     let mut secondary_names: BTreeMap<&str, (Vec<u8>, Vec<u8>)> = BTreeMap::new();
     let mut icon_set = false;
     let last = *t.reads.last().unwrap_or(&0);
     for &r in &t.reads {
-        // spec: S-0007 claim 1 (the image key replaces the image name; a missing key keeps it)
-        if let Some(v) = given_at(t, "Image", r) {
-            a.image = text(v, IMAGE_MAX).to_vec();
-        }
-        // spec: S-0007 claims 2 and 9 (flags from the art section of the name before this read's suffix)
-        let pre = ctx.art.section(&a.image);
-        flags.theater = section_bool(pre, "Theater").unwrap_or(flags.theater);
-        flags.new_theater = section_bool(pre, "NewTheater").unwrap_or(flags.new_theater);
-        if mobile {
-            // spec: S-0007 claim 4 (the voxel flag, for infantry, vehicles and aircraft)
-            flags.voxel = section_bool(pre, "Voxel").unwrap_or(flags.voxel);
-        }
-        let arctic = bool_as_of(t, "AlternateArcticArt", r, false);
-        // spec: S-0007 claims 9 and 10 (the A is appended where the flag turns on, on snow, never with the voxel flag)
-        if ctx.q.arctic_suffix_on_flag_turning_on && snow && arctic && !arctic_prev && !flags.voxel
-        {
-            let mut s = a.image.clone();
-            s.push(b'A');
-            a.image = text(&s, IMAGE_MAX).to_vec();
-        }
-        arctic_prev = arctic;
+        // spec: S-0007 claims 1, 2, 4, 9 and 10 (the image name and flags of this read)
+        walk.step(ctx.art, t, r);
+        a.image.clone_from(&walk.image);
+        flags = walk.flags;
         let sec = ctx.art.section(&a.image);
         let image = a.image.clone();
         match kind {

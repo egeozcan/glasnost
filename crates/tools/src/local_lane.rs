@@ -370,8 +370,8 @@ async fn rules_import(vfs: &mut Vfs, report: &mut Report) {
     report.count("importer warnings", import.warnings.len() as u64);
     for (label, text) in [
         (
-            "importer warnings: endless creation stopped (Q-0083)",
-            "Q-0083",
+            "importer warnings: endless creation stopped (S-0004 claim 15)",
+            "S-0004 claim 15, a departure",
         ),
         (
             "importer warnings: list items with whitespace (S-0003 claim 12)",

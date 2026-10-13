@@ -1352,8 +1352,8 @@ fn building_rules(
         naval,
         name: name.to_owned(),
         strength: bt.strength.unwrap_or(0),
-        // spec: S-0108 Import mapping (Foundation absent: 1x1)
-        foundation: (f[0].max(1), f[1].max(1)),
+        // spec: S-0108 Import mapping (Foundation absent: 1x1; the zero-size word is 0 × 0), S-0406 claim 2 and S-0009 claim 38 (a zero-size building has no foundation cells)
+        foundation: (f[0].max(0), f[1].max(0)),
         turret: bt.turret.unwrap_or(false),
         turn_rate: turn_rate(bt.rot.unwrap_or(0), q.turn_rate_negative_wrap),
         gate: bt.gate.unwrap_or(false),
@@ -1443,6 +1443,21 @@ mod tests {
         assert_eq!(turn_rate(-200, true), 56);
         assert_eq!(turn_rate(-5, true), 0);
         assert_eq!(turn_rate(-200, false), 0);
+    }
+
+    // spec: S-0003 claim 7 (the red and yellow ratios: the single conversion widened exactly without `%`; with `%` the double product, not narrowed)
+    #[test]
+    fn health_ratio_precision() {
+        let rz = Rounding::TowardZero;
+        let ratio = |s: &str| {
+            let d = Some(glasnost_rules::sim::Decimal(s.to_owned()));
+            glasnost_num::decimal::exact_decimal(dec(&d, rz).unwrap())
+        };
+        assert_eq!(ratio("6e-1"), "0.60000002384185791015625");
+        assert_eq!(
+            ratio("10%"),
+            "0.09999999999999999167332731531132594682276248931884765625"
+        );
     }
 
     // spec: S-0215 F1 (0.06 gives 53, 0.05 gives 45, the default gives 14)
