@@ -1,9 +1,9 @@
 ---
 id: Q-0150
 title: The order in which a defeated house's objects take their hits, and which objects take one
-status: open
+status: answered
 related: [S-0414, S-0312, S-0404]
-answered-by: []
+answered-by: [S-0414]
 ---
 
 ## Need
