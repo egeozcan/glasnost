@@ -215,7 +215,7 @@ pub fn retaliate(w: &mut World, actor: ObjectId, attacker: ObjectId) {
         && w.obj(y).is_some_and(|x| x.kind != Kind::Terrain)
     {
         // spec: S-0309 claim 25 part h (the neutral and special houses: only when the attacker's threat sum, d in cells as in a range search, is at least the present target's, compared exactly)
-        let sum = |x| threat_sum(w, actor, x, SearchKind::Range);
+        let sum = |x| threat_sum(w, actor, x, false);
         if let (Some(sx), Some(sy)) = (sum(attacker), sum(y))
             && !sx.ge(sy)
         {
@@ -737,8 +737,10 @@ fn v_of(w: &World, x: ObjectId, y: ObjectId) -> F64 {
 
 /// The threat sum of a candidate (S-0309 Terms, F4): the argument of conv
 /// in F4, before conversion and before the modifiers of claim 14.
+/// `ground_pass`: the candidate is considered in the ground-layer pass of
+/// the map-wide search, whose distance is in leptons.
 // spec: S-0309 F4 (cells of 256 leptons)
-fn threat_sum(w: &World, a: ObjectId, t: ObjectId, kind: SearchKind) -> Option<F64> {
+fn threat_sum(w: &World, a: ObjectId, t: ObjectId, ground_pass: bool) -> Option<F64> {
     let r = w.rules();
     let mode = r.mode;
     let ao = w.obj(a)?;
@@ -771,12 +773,8 @@ fn threat_sum(w: &World, a: ObjectId, t: ObjectId, kind: SearchKind) -> Option<F
     // spec: S-0309 F4 (k = trunc(range / 256), or trunc(g / 256) without a weapon)
     let k = wp.map_or(g / 256, |x| r.combat.weapon(x).range / 256);
     let rh = rho3(w, a, t);
-    // spec: S-0309 F4 (d in cells; in leptons for ground-layer objects of the map-wide search, quirks.hunt_distance_in_leptons)
-    // A landed aircraft of the map-wide search's second pass keeps d in cells (request Q-0079).
-    let dd = if kind == SearchKind::MapWide
-        && to.kind != Kind::Aircraft
-        && r.quirks.hunt_distance_in_leptons
-    {
+    // spec: S-0309 F4 and claim 7 (d in cells; in leptons in the ground-layer pass of the map-wide search, a landed aircraft considered in that pass included, quirks.hunt_distance_in_leptons)
+    let dd = if ground_pass && r.quirks.hunt_distance_in_leptons {
         rh
     } else {
         rh / 256
@@ -796,14 +794,14 @@ fn threat_sum(w: &World, a: ObjectId, t: ObjectId, kind: SearchKind) -> Option<F
 /// The threat score of a candidate (S-0309 claims 13 and 14, F4 to F6,
 /// F9); `None` rejects it (a score of exactly 0).
 // spec: S-0309 F5 and F6 (N = trunc(L / 256))
-fn score(w: &World, a: ObjectId, t: ObjectId, kind: SearchKind) -> Option<i32> {
+fn score(w: &World, a: ObjectId, t: ObjectId, ground_pass: bool) -> Option<i32> {
     let r = w.rules();
     let mode = r.mode;
     let ao = w.obj(a)?;
     let to = w.obj(t)?;
     let tc = type_combat(w, a)?;
     let s = crate::combat::damage::strength(w, t);
-    let mut sc = threat_sum(w, a, t, kind)?.to_i32_common();
+    let mut sc = threat_sum(w, a, t, ground_pass)?.to_i32_common();
     // spec: S-0309 F5 (normal mode: halved at expected health ≤ 0, doubled at ≤ trunc(S / 2))
     if tc.scan_mode == crate::combat::data::ScanMode::Normal {
         let x = to.combat.expected_health;
@@ -946,7 +944,7 @@ pub fn search(
         for pass in 0..2 {
             for &x in &ids {
                 let Some(o) = w.obj(x) else { continue };
-                // spec: S-0309 claim 7 (the second pass considers every infantry unit, vehicle, aircraft and building of the ground render layer; no object leaves the ground layer in our engine, so landed aircraft are among them)
+                // spec: S-0309 claim 7 (the second pass considers every infantry unit, vehicle, aircraft and building of the ground render layer; no object leaves the ground layer in our engine, so landed aircraft are among them, considered again after the first pass with their own tests and score)
                 if pass == 0 && (o.kind != Kind::Aircraft || !c.aircraft) {
                     continue;
                 }
@@ -961,7 +959,7 @@ pub fn search(
                 }
                 // spec: S-0309 claim 7 (the zone test applies to the ground-layer objects of the second pass)
                 if candidate(w, a, x, c, 0, kind, pass == 1)
-                    && let Some(s) = score(w, a, x, kind)
+                    && let Some(s) = score(w, a, x, pass == 1)
                 {
                     cands.push((x, s));
                 }
@@ -1007,7 +1005,7 @@ pub fn search(
                             || friendly_exception(w, a);
                         if tested
                             && candidate(w, a, x, c, big_r, kind, kind == SearchKind::Area)
-                            && let Some(s) = score(w, a, x, kind)
+                            && let Some(s) = score(w, a, x, false)
                         {
                             cands.push((x, s));
                         }

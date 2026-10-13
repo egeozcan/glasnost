@@ -544,7 +544,7 @@ fn weapon_slots_and_clear_weapons() {
     assert!(warned(&w, "Cart WeaponCount 20 is above 18"));
 }
 
-/// spec: S-0309 Import mapping and Edge cases (`quirks.coefficient_zero_replaced` on and off; the default as it stands when the type is read; the warnings)
+/// spec: S-0309 claim 26, Import mapping and Edge cases (each coefficient starts at 0; `quirks.coefficient_zero_replaced` on and off; the default as it stands when the type is read; the warnings)
 #[test]
 fn threat_coefficients() {
     let base = "[VehicleTypes]\n1=Cart\n2=Tank\n3=Jeep\n\

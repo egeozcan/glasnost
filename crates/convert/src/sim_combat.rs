@@ -1340,7 +1340,7 @@ impl Builder<'_> {
                 |x| x.gt(COEFFICIENT_WARN) || x.lt(-COEFFICIENT_WARN),
                 |v| format!("{name} {k} {v} is above 10^6 in magnitude: threat scores can wrap (S-0309 Edge cases)"),
             );
-            // spec: Q-0061 (placeholder: the held coefficient before any layer gives the key is 0)
+            // spec: S-0309 claim 26 (each of a newly registered type's coefficients starts at double-precision 0)
             let mut held = "0".to_owned();
             for &r in &t.reads {
                 let given = state.and_then(|s| {

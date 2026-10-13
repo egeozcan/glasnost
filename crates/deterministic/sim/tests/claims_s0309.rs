@@ -2521,3 +2521,44 @@ fn neutral_engineer_passes_a_passive_building_that_needs_an_engineer() {
         );
     }
 }
+
+// ---------------------------------------------------------------------------
+// Revision 3: landed aircraft in both passes of the map-wide search.
+
+/// A hunter (CART, c_st = 1, c_d = 1, k = 5) and a landed aircraft 7 cells
+/// away whose special threat makes the lepton-distance sum exactly 0 and
+/// the cell-distance sum negative (counting as 1), as in `lepton_hunt`.
+fn landed_hunt(anti_air: bool, quirk: bool) -> Option<ObjectId> {
+    let mut r = base();
+    special_weapons(&mut r);
+    coefficients(&mut r, "CART", ["0", "0", "1", "0", "1"]);
+    special(&mut r, "T0", "-101787");
+    plane(&mut r);
+    if anti_air {
+        r.sim.vehicles.get_mut("CART").unwrap().secondary = Some("Flak".into());
+    }
+    r.globals.quirks.hunt_distance_in_leptons = quirk;
+    let mut w = game(&r);
+    let a = veh(&mut w, "CART", 0, 0, 0);
+    assert_eq!(acquire::classes(&w, a).aircraft, anti_air);
+    put(&mut w, Kind::Aircraft, "PLANE", 1, 7, 0);
+    acquire::search(&mut w, a, SearchKind::MapWide, SearchContext::Hunt)
+}
+
+// spec: S-0309 claim 7 and F4 (without the aircraft class a landed aircraft is considered in the ground-layer pass only, with distance in leptons; scenario A11 part h)
+#[test]
+fn claim7_landed_aircraft_in_the_ground_pass_uses_leptons() {
+    assert_eq!(
+        landed_hunt(false, true),
+        None,
+        "the lepton sum is exactly 0"
+    );
+    // quirks.hunt_distance_in_leptons off: cells, a negative sum counting as 1.
+    assert!(landed_hunt(false, false).is_some());
+}
+
+// spec: S-0309 claim 7 and F4 (with the aircraft class a landed aircraft is considered in both passes, each with its own score: the aircraft pass in cells supplies it although the ground pass rejects it; scenario A11 part i)
+#[test]
+fn claim7_landed_aircraft_in_both_passes() {
+    assert!(landed_hunt(true, true).is_some());
+}
