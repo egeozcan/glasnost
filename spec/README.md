@@ -27,7 +27,6 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | ID | Title | Topic | Rev | Status | Measurements |
 |---|---|---|---|---|---|
 | [S-0001](rules-import/S-0001-ini-lexical-rules.md) | INI lexical rules | rules-import | 3 | approved | — |
-| [S-0108](rendering/S-0108-building-sprites.md) | Building sprites | rendering | 3 | approved | — |
 | [S-0002](rules-import/S-0002-ini-duplicates.md) | INI duplicates and name resolution | rules-import | 6 | approved | — |
 | [S-0005](rules-import/S-0005-data-file-precedence.md) | Data file precedence (loose files, archive mount order, name lookup) | rules-import | 4 | approved | — |
 | [S-0111](rendering/S-0111-in-game-overlays.md) | In-game overlays (health bars, pips, selection marks, insignia) | rendering | 6 | approved | — |
@@ -96,3 +95,4 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0203](simulation/S-0203-tick-order.md) | Tick order | simulation | 11 | approved | — |
 | [S-0208](infantry/S-0208-infantry-movement.md) | Infantry movement (standing positions, walking step and speed, crawling, scatter destinations) | infantry | 15 | approved | — |
 | [S-0211](movement/S-0211-land-types-passability.md) | Land types and passability | movement | 13 | approved | — |
+| [S-0108](rendering/S-0108-building-sprites.md) | Building sprites | rendering | 4 | approved | — |
