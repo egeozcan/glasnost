@@ -508,6 +508,20 @@ fn row_six_airstrike_secondary_against_charge_building() {
     assert_eq!(slot(&w, f, t), 0, "a building that does not accept charges");
 }
 
+// spec: S-0308 table P row 6 (revision 3: a charge building that is both a resource gatherer and a resource destination gives 0; either flag alone does not)
+#[test]
+fn row_six_airstrike_skips_gatherer_destination() {
+    let mut r = rules();
+    firer_mut(&mut r).secondary = Some("S13".into());
+    for (g, d, want) in [(true, true, 0), (true, false, 1), (false, true, 1)] {
+        let hut = r.sim.buildings.get_mut("HUT").expect("HUT");
+        hut.econ.resource_gatherer = Some(g);
+        hut.econ.resource_destination = Some(d);
+        let (w, f, t) = duel(&r, Kind::Building, "HUT", 1);
+        assert_eq!(slot(&w, f, t), want, "gatherer {g}, destination {d}");
+    }
+}
+
 // spec: S-0308 table P row 6 and Edge cases (the airstrike row is final: a zero primary versus value does not give 1)
 #[test]
 fn row_six_airstrike_row_is_final() {

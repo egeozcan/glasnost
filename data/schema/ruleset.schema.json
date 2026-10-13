@@ -2548,7 +2548,7 @@
           "default": null
         },
         "resource_destination": {
-          "description": "Units: `ResourceDestination` (S-0402 claim 14); absent: no.",
+          "description": "Units and buildings: `ResourceDestination` (S-0402 claim 14; S-0308\ntable P row 6); absent: no.",
           "type": [
             "boolean",
             "null"
@@ -2556,7 +2556,7 @@
           "default": null
         },
         "resource_gatherer": {
-          "description": "Units: `ResourceGatherer` (S-0402 claim 14; S-0414 Terms; S-0415\nclaim 4); absent: no.",
+          "description": "Units and buildings: `ResourceGatherer` (S-0402 claim 14; S-0414\nTerms; S-0415 claim 4; S-0308 table P row 6); absent: no.",
           "type": [
             "boolean",
             "null"

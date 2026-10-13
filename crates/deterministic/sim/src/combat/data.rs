@@ -574,6 +574,9 @@ pub struct BuildingCombat {
     pub defense: bool,
     /// Can be demolished (the charges flag; S-0302 claim 7).
     pub can_c4: bool,
+    /// Both a resource gatherer and a resource destination (S-0308 table P
+    /// row 6: no airstrike target).
+    pub gatherer_destination: bool,
     /// Eligible for delayed kills.
     pub delay_kill: bool,
     /// Leaves rubble.

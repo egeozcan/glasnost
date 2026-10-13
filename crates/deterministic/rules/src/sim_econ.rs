@@ -75,11 +75,12 @@ pub struct EconFields {
     /// Terms); absent: empty.
     #[serde(default)]
     pub dock: Option<Vec<String>>,
-    /// Units: `ResourceGatherer` (S-0402 claim 14; S-0414 Terms; S-0415
-    /// claim 4); absent: no.
+    /// Units and buildings: `ResourceGatherer` (S-0402 claim 14; S-0414
+    /// Terms; S-0415 claim 4; S-0308 table P row 6); absent: no.
     #[serde(default)]
     pub resource_gatherer: Option<bool>,
-    /// Units: `ResourceDestination` (S-0402 claim 14); absent: no.
+    /// Units and buildings: `ResourceDestination` (S-0402 claim 14; S-0308
+    /// table P row 6); absent: no.
     #[serde(default)]
     pub resource_destination: Option<bool>,
     /// Units: `Enslaves`, the slave type (S-0402 claim 14); absent: none.

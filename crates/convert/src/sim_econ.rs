@@ -106,6 +106,9 @@ const BUILDING_ECON: &[Row] = &[
     ("refinery", "Refinery", Bool, "S-0402"),
     ("ore_purifier", "OrePurifier", Bool, "S-0402"),
     ("dock_unload", "DockUnload", Bool, "S-0402"),
+    // S-0308 table P row 6: a building that is both is no airstrike target.
+    ("resource_gatherer", "ResourceGatherer", Bool, "S-0308"),
+    ("resource_destination", "ResourceDestination", Bool, "S-0308"),
     ("factory_plant", "FactoryPlant", Bool, "S-0404"),
     ("infantry_cost_bonus", "InfantryCostBonus", Dec, "S-0404"),
     ("units_cost_bonus", "UnitsCostBonus", Dec, "S-0404"),

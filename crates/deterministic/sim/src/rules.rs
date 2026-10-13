@@ -1310,6 +1310,8 @@ fn building_rules(
         defense: b(bt.defense),
         // spec: S-0302 Constants (can-be-demolished flag absent: yes)
         can_c4: bt.can_c4.unwrap_or(true),
+        // spec: S-0308 Import mapping (ResourceGatherer and ResourceDestination absent: no)
+        gatherer_destination: b(bt.econ.resource_gatherer) && b(bt.econ.resource_destination),
         delay_kill: b(bt.eligible_for_delay_kill),
         leave_rubble: b(bt.leave_rubble),
         helipad: b(bt.helipad),
