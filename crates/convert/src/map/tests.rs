@@ -107,7 +107,7 @@ fn decode_with(text: &str, quirks: MapQuirks) -> Decoded {
     )
 }
 
-/// spec: S-0012 claim 9, Formulas F3 (partial terrain values, quirks.partial_terrain_values)
+/// spec: S-0012 claim 9, Formulas F3 (partial terrain values, the first record included, quirks.partial_terrain_values)
 #[test]
 fn s0012_partial_terrain_values() {
     let full = record_bytes(&[rec(1, 10, 0x0304_0506, 3), rec(2, 10, 0x0102, 4)]);
@@ -132,6 +132,20 @@ fn s0012_partial_terrain_values() {
         // switch off: a partial tile number is the preset 65535
         let c = at(&decode_with(&m.text(), off), 2, 10);
         assert_eq!(c.tile, 65535, "k = {k} off");
+    }
+    // S-0012 revision 2: the first record's partial tile number also takes F3
+    // when its complete coordinate pair selects a legal cell.
+    for (k, want) in [(1usize, 65280 + 0x06), (2, 0x0506), (3, 0x04_0506)] {
+        let m = MapText {
+            ini: ini.clone(),
+            terrain: Some(full[..4 + k].to_vec()),
+            ..Default::default()
+        };
+        let d = decode_text(&m.text());
+        assert_eq!(at(&d, 1, 10).tile, want, "first record, k = {k}");
+        assert!(d.warnings.iter().any(|w| w.text.contains("partway")));
+        let c = at(&decode_with(&m.text(), off), 1, 10);
+        assert_eq!(c.tile, 65535, "first record, k = {k} off");
     }
     // A partial coordinate pair after a record: three bytes select (2, 10) with tile 65535.
     let m = MapText {
