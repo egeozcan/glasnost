@@ -2,11 +2,11 @@
 id: S-0006
 title: Rules layering
 topic: rules-import
-revision: 8
+revision: 9
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-10
+approved-on: 2026-10-13
 measurements: []
 requests: [Q-0006, Q-0007]
 supersedes: []
@@ -50,7 +50,7 @@ Shared terms used here are defined in the glossary: *base rules*, *colour-adjust
 
    An empty layer (a game-mode layer as above, or a language rules file with no section) changes no rules value, but it is still an applied layer: every animation that is not first created after that layer's animation reading gets one type read in it, from the art file (Terms; claim 8). So under stock data an animation that the base rules' animation list names has three type reads in every multiplayer or skirmish game, whether or not the mode's file can be resolved, and two in a campaign mission (base rules and map). The mission-named file adds none that counts in the mission (claim 14). A valid language rules file, or one with no section, adds one. The consequence of the count belongs to S-0007 (claim 2).
 
-   Where two layers give the same key, the later one in this list wins (claims 3 to 5 give the exact rule), as if each layer had been processed completely before the next. Type data and game-wide data start differently:
+   Where more than one applicable layer gives the same key, the value from the highest-precedence layer is the value held after layering (claims 3 to 5 give the exact rule). Type data and game-wide data start differently:
    - Every type registry except the tiberiums' starts each game empty, so it holds only the types created for this game (S-0004, claims 1 and 3); tiberiums carry over (claim 10).
    - Game-wide sections are not cleared. Each game-wide key starts the game with the value the previous game of the session left (the engine default in the session's first game), as changed by the mission-named file in a campaign mission (claim 14), and keeps it unless a layer of this game gives the key (claim 10). The exceptions restored at every game start are listed in claim 10.
 
@@ -83,7 +83,7 @@ Shared terms used here are defined in the glossary: *base rules*, *colour-adjust
 
    A key written with an empty value (`key=`, or only spaces or a comment after the `=`) is absent: it creates no entry (S-0001, claim 11), so in a layer it keeps the held value exactly as a missing key does, and it never resets the held value to the key's reset value or engine default. In the same way a section whose every line is of that kind, or that has no lines, does not exist in that layer (S-0001, claim 12), so claim 5's resets do not apply to it either, and a type that reads that layer finds no section there (claim 7).
 
-   Claim 5 lists the exceptions: keys that reset on override, and values that are truncated when re-read.
+   Claim 5 lists the exceptions: keys that reset on override, values that are truncated when re-read, and an unset terrain type strength that takes the game-wide tree strength. The terrain strength's −1 is not a "not given" value: it requests that fill rather than keeping the held strength.
 
    Some numeric keys have a "not given" value: written explicitly, it keeps the held value. For every key below except the voxel animation's two angular velocities, that is exactly what an absent key does. Those two also reset when absent (claim 5), and for them the "not given" value still keeps the held value. These are all of them:
 
@@ -102,7 +102,7 @@ Shared terms used here are defined in the glossary: *base rules*, *colour-adjust
    - Backing: `measurable` (scenario A)
    - Confidence: high
 
-5. **Exceptions to keeping the held value.** There are three kinds: keys that reset to a fixed reset value, keys that reset to another key's value, and values that are truncated when re-read.
+5. **Exceptions to keeping the held value.** There are four kinds: keys that reset to a fixed reset value, keys that reset to another key's value, values that are truncated when re-read, and an unset terrain type strength that is filled from a game-wide value.
 
    **Keys that reset on override.** In the following places, if a layer contains the section but omits the key, the value goes back to the reset value listed. It does not keep the held value. A reset value is not the key's engine default (Terms); where the two differ, the paragraph on the switch below says which one applies.
 
@@ -143,6 +143,8 @@ Shared terms used here are defined in the glossary: *base rules*, *colour-adjust
 
    **A reset rule outside the rules sections.** One more reset on override belongs to the standing-order processing: a behaviour's anti-air rate is set to its rate as it stands after the layer when a layer contains the behaviour's section and gives no anti-air rate, or gives 0. S-0215, claim 21, owns this rule and its quirk switch, `quirks.anti_air_rate_layer_reset`; it is not part of `quirks.override_resets_keys`.
 
+   **Unset terrain strength takes the game-wide tree strength.** A terrain type begins with strength −1 health points, meaning unset. When a layer contains its section, a strength that is −1 after the layer's integer value has been read becomes the game-wide tree strength in force in that layer, including a value that the same layer gives. Explicit −1 therefore replaces an earlier strength with the current game-wide tree strength, rather than keeping the earlier strength. An omitted key triggers the fill only while the held strength is −1; otherwise it keeps the held strength. An absent section triggers no fill. These are integer health-point values, copied exactly with no rounding. S-0102, claim 23, owns the rule and `quirks.tree_strength_fixed_at_first_section` (default on = this behaviour; off = a type with no explicit strength uses the final layered game-wide tree strength). It is not part of `quirks.override_resets_keys`.
+
    **Keys that reset to another key's value.** In every layer that has a section for a type with barrel recoil values (S-0105 draws them for buildings), each of its four barrel recoil values (travel, compress, hold and recover) that the layer omits is set to the turret's corresponding value as it stands after that layer, replacing any barrel value an earlier layer gave. S-0105, claim 27, owns this rule, its consequences and its quirk switch, `quirks.barrel_recoil_layer_reset`.
 
    **Values truncated when re-read.** A building type's light intensity and its three light tints, and the three extra-light values of the audio-visual settings, are held in thousandths. When a layer contains the section but omits such a key, the held value is not kept: it becomes the value that a written value equal to its whole part would give (S-0104, claim 12), the whole part being the held value in whole units, truncated toward zero. For a held value of *t* thousandths, with *k* = trunc(*t* / 1000), the new value *t*′ is 1000 × *k* for the extra-light values; for the building values it is 1000 × *k* when *k* ≥ 0 and 1000 × *k* + 1 when *k* < 0 (Formulas). This is not a reset to a fixed default. A whole extra-light value, and a whole building value that is not negative, is unchanged. A negative building value loses up to a whole unit at every such layer: a written intensity of −3.0 is held as −2999 thousandths, and a later layer that restates the building without the key makes it −1999. For building types it can happen only in a layer after the one that created the type. For the audio-visual settings, which are game-wide, it happens in every layer that contains that section and omits the key, including the base rules of a later game when they omit it, since the held value then comes from the previous game (claim 10). S-0104, claims 12 and 13, owns these values and their quirk switch, `quirks.reread_truncates_light_values`.
@@ -153,6 +155,7 @@ Shared terms used here are defined in the glossary: *base rules*, *colour-adjust
      - `unmeasured`: the difficulty armour multiplier. S-0302 (claim 3 and its scenario D19, part b) shows that no damage rule uses it, so no scenario can tell a reset value from a kept one; the reset is recorded only because the original does it.
      - `unmeasured`: the difficulty ground-speed, air-speed, cost and build-time multipliers, the repair and build delays, build slowdown, destroys walls and content scan, and the land-type buildable row. No effect of these values in play has been identified, so no scenario can yet tell a reset value from a kept one. The specs that would use them own that question (open question 7).
      - Which difficulty row a house takes is not decided here. In our engine every house, human or AI, takes the normal row by default (S-0301 and S-0302, claim 3; the glossary's *difficulty skill block*), so for the factors it uses a reset of the normal section matters in every game, and a reset of the easy or difficult section matters only to the optional per-player handicap setting. The original's choice of row by difficulty is set-up behaviour recorded in those claims.
+     - The terrain-strength fill is `measurable` by S-0102, scenario D27 (iv) and (v), with high confidence (claim 23).
      - The barrel and light parts are measured by the scenarios of S-0105 and S-0104, except the negative building light value, which scenario P measures.
    - Confidence: high that every row of the table resets as listed. Medium for the visible consequence of the parent-country reset, because it depends on where the parent country is used. Medium that the empty-named particle type reads a later layer's section with the empty name: this follows from the general rules of claim 7 and S-0001, claim 6, and was not checked for this type on its own. The barrel and light parts carry the confidence their own specs give; the +1 for a negative building light value was checked separately here, with high confidence. Medium for the visible consequences given for the power-up and voxel-animation rows, which depend on the crate and voxel-animation specs.
 
@@ -172,7 +175,7 @@ Shared terms used here are defined in the glossary: *base rules*, *colour-adjust
    - Backing: `measurable` (scenario F)
    - Confidence: high
 
-9. **Derived values follow the final layered values.** Values that the engine computes from rules values, such as a weapon's effective projectile speed, depend only on the final layered values. Computing them after every layer and computing them once after the last layer give the same result, and the claim is stated so that an implementation may do either.
+9. **Derived values follow the final layered values.** Apart from the layer-dependent fills and re-read exceptions of claim 5, an observable value computed from rules values, such as a weapon's effective projectile speed, depends only on the final layered values. Its observable result is the same whether it is computed during layering or after all applicable layers have supplied their values.
    - Backing: `measurable` (scenario K)
    - Confidence: medium
 
@@ -257,7 +260,7 @@ Shared terms used here are defined in the glossary: *base rules*, *colour-adjust
     - **Game-wide values.** Each game-wide key it gives takes its value. The base rules, a valid language rules file and the map then apply as usual, so the mission-named file's value is in force in the mission only where none of them gives the key, and it carries into later games of the session like any game-wide value (claim 10). The values that claim 10 restores at every game start (the colour-adjustment table, the maximum number of players, and the reset keys of the difficulty, land-type and power-up sections while the base rules contain those sections) never keep its values.
     - **Tiberiums.** Its tiberium list and tiberium sections act as in any layer (S-0004, claim 10), and the result survives the rebuild: a tiberium it adds stays for the rest of the session, and a key it sets that no later layer gives stays in force. With `quirks.persist_tiberium_overrides` off the rebuild deletes the tiberiums like any other kind, so every tiberium change of the mission-named file is lost, and the importer warns about a mission-named file that holds a tiberium list or a tiberium section, as it does for other type data; its game-wide values still carry over. In the session's first game every entry of its tiberium list creates a tiberium, and these tiberiums take the lowest indices, ahead of any that the mission's layers create; the base rules' tiberium list then uses them by index, whatever names they carry (S-0004, claim 10).
     - **Other types.** Every change it makes to any other type kind (its type lists, its type sections, and types that its game-wide keys create by reference) is lost: the rebuild deletes those types. The new sides of the next bullet are the one exception. None of the rest has any effect in the mission, and it gives no animation a type read that counts in the mission (claim 1).
-    - **Sides.** No side of the previous game reaches the mission, but a side that the file's side list or a country's side field creates is not removed at this game start (S-0004, claim 1): it stays for the mission and comes before the base rules' sides in side order (S-0004, claim 9). Such a side's member list can name only the previous game's countries, which the rebuild deletes; in the original those entries stay in the list, and what they denote in the mission is *unspecified*. This is a *departure*: our engine empties the member list of every side at the rebuild, so that only the side lists and country side fields of this game's layers fill it, as S-0004, claim 9, gives. This is bad data that stock data never has; the importer warns about every mission-named file that has a side list or a country section.
+    - **Sides.** No side of the previous game reaches the mission. A side that the mission-named file's side list or a country's side field creates remains at this game start, comes before the base rules' sides in side order, and stays for the mission (S-0004, claim 9). This is an exception to S-0004, claim 1's general statement that sides are emptied at every game start; S-0004 claim 1 must be revised to state the campaign mission exception. Such a side's member list can name only the previous game's countries, which the rebuild deletes; in the original those entries stay in the list, and what they denote in the mission is *unspecified*. This is a *departure*: our engine empties the member list of every side at the rebuild, so that only the side lists and country side fields of this game's layers fill it, as S-0004, claim 9, gives. This is bad data that stock data never has; the importer warns about every mission-named file that has a side list or a country section.
 
     The importer also warns about every mission-named file that holds a type list other than the tiberium list and the side list, or a type section other than a tiberium's, since in the original none of it takes effect. For the tiberium list and sections, and for the side list, the importer warns as the bullets above give.
 
@@ -277,25 +280,22 @@ The layered value *v* of a key *k* in a section *s*, after layers *L₁ … Lₙ
 >
 > A key written with its "not given" value (claim 3) does not count as given.
 >
-> Exception (claim 5), for a key *k* that resets on override. Write *V*(*m*) for the layered value of *k* in *s* after layers *L₁ … Lₘ*, so that *v* = *V*(*n*) and *V*(0) = *v₀*. For *m* ≥ 1:
+> **Reset-on-override keys.** For a reset-on-override key, a layer that has no section for the key's section leaves the held value unchanged. In a layer that has the section, an ordinary value replaces the held value, and the key's “not given” value keeps the held value. If the section is present and the key is absent, the key takes its reset value. For barrel recoil, that reset value is the turret's corresponding value after the same layer (S-0105, claim 27). Light values truncated on re-read follow the light formula below instead.
 >
-> - *V*(*m*) = *v₀* if none of *L₁ … Lₘ* contains section *s*.
+> | Section in this layer | Key in this layer | Result |
+> |---|---|---|
+> | absent | any | held value |
+> | present | ordinary value | given value |
+> | present | “not given” value | held value |
+> | present | absent | reset value |
 >
-> Otherwise let *j* ≤ *m* be the largest index for which *Lⱼ* contains *s*, and:
->
-> - *V*(*m*) = *V*(*j* − 1) if *Lⱼ* writes *k* with its "not given" value (claim 3),
-> - *V*(*m*) = the value of *k* in *Lⱼ* if *Lⱼ* has any other entry for *k*,
-> - *V*(*m*) = *rⱼ* if *Lⱼ* has no entry for *k*.
->
-> Here *rⱼ* is the reset value of claim 5. For the barrel recoil values, *rⱼ* is the turret's value after *Lⱼ* (S-0105, claim 27). The light values truncated on re-read follow the light formula below instead.
->
-> The engine default is also what *v₀* means for a reset key when `quirks.override_resets_keys` is off: the formula above for ordinary keys applies, and *rⱼ* is never used (claim 5).
+> With `quirks.override_resets_keys` off, an absent key in a present section keeps the held value instead of taking its reset value. The held value at the start of layering is the value specified for *v₀* above. The switch does not change the “not given” rule or the separate barrel-recoil and light-value rules.
 >
 > With `quirks.persist_tiberium_overrides` off, every tiberium is rebuilt from the layers at each game start: *v₀* for a tiberium key is the engine default of *k* in every game, whatever earlier games left; a tiberium first named by this game's layers is created in this game, the tiberiums of earlier games are deleted, and so are the tiberiums that only an earlier game's layers or a mission-named file added. The mission-named file does not enter *v₀* of a tiberium either (claim 14). The indices of the tiberiums then follow S-0004, claim 10, as in a session's first game.
 >
 > With `quirks.persist_global_overrides` off, the value that the previous game left is replaced by the engine default for every game-wide key, so *v₀* is the engine default, or in a campaign mission the value after the mission-named file has been applied to it. With `quirks.mission_rules_before_reset` off, the mission-named file does not enter *v₀*; it is one of the layers *L₁ … Lₙ*, after the language rules file (claim 14).
 
-For a type section, the layers considered are only those in which the type reads its section (claim 7). For a tiberium, only the layers whose tiberium list has an entry for it count (S-0004, claim 10). The colour-adjustment table follows claims 2 and 12 instead of this formula, and so does the maximum number of players (base rules only).
+For a type section, the layers considered are only those in which the type reads its section (claim 7). For a tiberium, only the layers whose tiberium list has an entry for it count (S-0004, claim 10). The colour-adjustment table follows claims 2 and 12 instead of this formula, and so does the maximum number of players (base rules only). Terrain type strength follows claim 5's unset-strength fill instead: after any layer containing its section, a resulting integer strength of −1 health points becomes that layer's game-wide tree strength. This exact copy uses no arithmetic or rounding.
 
 Layering selects values. Its only arithmetic is the truncation of the light values in claim 5, where *t* is the held value in thousandths, an integer, and *k* = trunc(*t* / 1000) is an integer division rounding toward zero:
 
@@ -311,8 +311,8 @@ In the original both values are computed in double-precision floating point and 
 | land-type sections | 12 | sections | claim 5; named in the Import mapping |
 | difficulty levels | 3 | levels | claim 5 |
 | difficulty multiplier reset | 1.0 | ratio (factor) | floating point in the original |
-| difficulty repair delay reset | 0.02 | game minutes (unit unconfirmed) | floating point; how the value is used belongs to the repair and AI specs (open question 7) |
-| difficulty build delay reset | 0.03 | game minutes (unit unconfirmed) | floating point; how the value is used belongs to the production and AI specs (open question 7) |
+| difficulty repair delay reset | 0.02 | unconfirmed | Floating point; the unit and use are unresolved (open question 7; repair and AI specs) |
+| difficulty build delay reset | 0.03 | unconfirmed | Floating point; the unit and use are unresolved (open question 7; production and AI specs) |
 | land movement multiplier reset | 1.0 (100 %) | ratio (factor) | floating point |
 | warhead modifier reset | 1.0 (100 %) | ratio (factor) | floating point |
 | colour-adjustment table size | 16 | entries | claim 2 |
@@ -325,7 +325,7 @@ In the original both values are computed in double-precision floating point and 
 | voxel-animation angular velocity engine defaults before any reading | 0 (minimum), 10 (maximum) | the unit in which the key is written | claim 5; not the reset value, which is −1 |
 | voxel-animation angular velocity conversion factor | 0.01745277777777778 | stored value per written unit | the original multiplies a written value by this fixed factor when it reads it (a product of two floating-point numbers in the original, in double precision, and the number domain of the stored value and the rounding of the product are not established, see open question 10). This spec depends on the conversion only through the comparison with 0, which is made on the written value before the conversion, and the reset to −1, which is a value in the written unit. Everything else about the conversion and the use of the stored value belongs to the voxel-animation spec that is still to be written, which must also state the product's rounding (S-0205). The reset and the defaults above are in the written unit; their stored values are this factor times −1, 0 and 10 |
 | crate effects in the power-up section | 19 | effects | claim 5 |
-| crate effect weight reset | 0 | weight | claim 5 |
+| crate effect weight reset | 0 | unconfirmed | The power-up field's weight unit is not established here (claim 5) |
 | mode-list sections (mode kinds) | 6 | sections | claim 13 |
 | items per mode-list entry | 4 needed, 5 read | items | claim 13 |
 
@@ -339,6 +339,7 @@ In the original both values are computed in double-precision floating point and 
 | key given with its "not given" value (claim 3), section present, any key | layer applied | held value kept |
 | key absent, section present, reset-on-override key | layer applied | value set to its reset value (a fixed value, or the turret's value for a barrel value) |
 | key absent, section present, light value of claim 5 | layer applied | held value cut to a whole unit as claim 5 gives |
+| terrain type section present, strength is −1 after reading the layer's value | layer applied | strength becomes the game-wide tree strength in force in that layer, including any value that layer gives (claim 5; S-0102, claim 23) |
 | section absent | layer applied | everything in it kept |
 | any | program starts | the mode list is read and every listed mode's file contents are fixed for the session as they are then (claims 11 and 13) |
 | campaign mission, mission-named file exists | game starts | the file acts like a layer of the previous game: its game-wide values and tiberium changes take effect where no rules layer of the mission gives the key, apart from the values claim 10 restores at every game start, and carry over to later games; its new sides stay and come before the base rules' sides; its other type changes have no effect (claim 14, `quirks.mission_rules_before_reset`) |
@@ -359,6 +360,7 @@ Observable ordering:
 - `quirks.bad_language_rules_skips_mode`: claim 12.
 - A language rules file that fails its check at program start: the original refuses to start; our engine starts without it and warns, a *departure* without a switch; see claim 12.
 - `quirks.barrel_recoil_layer_reset` and `quirks.reread_truncates_light_values`: owned by S-0105 and S-0104 (claim 5).
+- `quirks.tree_strength_fixed_at_first_section`: owned by S-0102, claim 23; the unset-strength fill of claim 5 is separate from "not given" values and from `quirks.override_resets_keys`.
 - A colour-adjustment section with more than 16 entries: the original overwrites other rules values with the extra entries, with an *unspecified* result; our engine ignores the extra entries and the importer warns, a *departure* (claim 2).
 - A game-wide type reference left over from an earlier game or from a mission-named file: the original keeps a reference to a deleted type, with an *unspecified* result; our engine matches it by name against the new game's types and the importer warns about the keys that can cause it, a *departure* (claim 10).
 - A negative building light value loses up to a whole unit at every later layer that restates the building without that key (claim 5); S-0104 owns the switch.
@@ -401,6 +403,7 @@ Keys and sections named in this spec:
 | "not given" keys (claim 3) | `PitchAngle` and the roll-angle key, whose name is `PitchAngle` with `Pitch` replaced by `Roll`, letter case as shown (−1 each), in a building, vehicle, aircraft or infantry section; `RechargeTime` (0) in a superweapon's section; `MinAngularVelocity`, `MaxAngularVelocity` (0) in a voxel animation's section; `Rate` (−1) and both numbers of `RandomRate` (−1 each) in an animation's section of `ARTMD.INI`. No key of a game-wide section has one |
 | voxel-animation keys that reset (claim 5) | `MinAngularVelocity`, `MaxAngularVelocity` (−1 when absent); `ShareBodyData`, `ShareTurretData`, `ShareBarrelData`, read as flags with absent = no, and the voxel animation shares another model's data when at least one of them is yes |
 | barrel recoil values that reset to the turret's (S-0105, claim 27) | `BarrelTravel`, `BarrelCompressFrames`, `BarrelHoldFrames`, `BarrelRecoverFrames`, reset to `TurretTravel`, `TurretCompressFrames`, `TurretHoldFrames`, `TurretRecoverFrames` |
+| terrain strength and its game-wide fill (S-0102, claim 23) | `Strength` in a terrain type's section: integer health points, initially −1 (unset). When its section is read and the resulting strength is −1, it takes `[General]` `TreeStrength` as then held, an integer in health points. The latter's absent-key default and persistence are in S-0102, claim 23 |
 | building light values truncated on re-read (S-0104, claim 12) | `LightIntensity`, `LightRedTint`, `LightGreenTint`, `LightBlueTint` in a building type's section |
 | extra-light values truncated on re-read (S-0104, claims 12 and 13) | `ExtraUnitLight`, `ExtraInfantryLight`, `ExtraAircraftLight` in `[AudioVisual]` |
 | mode-list sections, one per mode kind, in reading order (claim 13) | `[Battle]`, `[ManBattle]`, `[Siege]`, `[Unholy]`, `[FreeForAll]`, `[Cooperative]` in `MPModesMD.INI` |
