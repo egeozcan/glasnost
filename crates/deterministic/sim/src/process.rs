@@ -74,7 +74,7 @@ pub fn ready(w: &World, id: ObjectId) -> bool {
 }
 
 /// The standard delay D = D_r + U(0, 2) (S-0215 F2), the draw last.
-fn standard_delay(w: &mut World, id: ObjectId) -> i32 {
+pub(crate) fn standard_delay(w: &mut World, id: ObjectId) -> i32 {
     let dr = rate_delay(w, id);
     let half = w.rules().quirks.ranged_draw_half_span;
     // spec: S-0215 F2 and F0 (D = D_r + U(0, 2), wrapping 32-bit)
@@ -510,6 +510,16 @@ fn process(w: &mut World, id: ObjectId) -> i32 {
         (Some(Behaviour::AreaGuard), Kind::Infantry | Kind::Vehicle) => process_area_guard(w, id),
         (Some(Behaviour::Hunt), Kind::Infantry | Kind::Vehicle) => process_hunt(w, id),
         (Some(Behaviour::Unload), Kind::Infantry) => process_unload_infantry(w, id),
+        // spec: S-0402 State and ordering (a harvester's harvest, enter and unload)
+        (Some(Behaviour::Harvest), Kind::Vehicle) if crate::econ::harvest::is_harvester(w, id) => {
+            crate::econ::harvest::process_harvest(w, id)
+        }
+        (Some(Behaviour::Enter), Kind::Vehicle) if crate::econ::harvest::is_harvester(w, id) => {
+            crate::econ::harvest::process_enter(w, id)
+        }
+        (Some(Behaviour::Unload), Kind::Vehicle) if crate::econ::harvest::is_harvester(w, id) => {
+            crate::econ::harvest::process_unload(w, id)
+        }
         (
             Some(Behaviour::Guard | Behaviour::Sticky | Behaviour::AreaGuard | Behaviour::Attack),
             Kind::Building,

@@ -60,6 +60,8 @@ pub struct HouseEcon {
     /// Game-setup values of this house (S-0412): team, handicap, difficulty
     /// index.
     pub setup: setup::HouseSetupState,
+    /// The harvest record of this house (S-0402 claim 13).
+    pub harvest: harvest::HouseHarvest,
 }
 
 /// An object's economy state (M5a), one field per topic.
@@ -115,6 +117,10 @@ pub struct EconRules {
     pub production: production::Rules,
     /// The tech tree (S-0407).
     pub tech: tech::Rules,
+    /// Ore and gems (S-0401).
+    pub resource: resource::Rules,
+    /// The harvest cycle (S-0402).
+    pub harvest: harvest::Rules,
 }
 
 impl EconRules {
@@ -126,6 +132,8 @@ impl EconRules {
             radar: radar::Rules::new(r, mode),
             production: production::Rules::new(r, mode),
             tech: tech::Rules::new(r, mode),
+            resource: resource::Rules::new(r, mode),
+            harvest: harvest::Rules::new(r, mode),
         }
     }
 }

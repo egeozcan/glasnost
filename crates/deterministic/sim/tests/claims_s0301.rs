@@ -914,7 +914,11 @@ fn claim_10_starting_ammunition() {
     // Above the maximum: used as it stands; switch off: capped.
     assert_eq!(start(3, Some(5), true), 5);
     assert_eq!(start(3, Some(5), false), 3);
-    assert_eq!(start(-1, Some(5), false), 5, "no cap for a negative maximum");
+    assert_eq!(
+        start(-1, Some(5), false),
+        5,
+        "no cap for a negative maximum"
+    );
 }
 
 // spec: S-0301 claim 10 (a disc laser shot uses no round)

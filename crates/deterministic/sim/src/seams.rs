@@ -13,9 +13,9 @@ use crate::world::{HouseId, ObjectId, World};
 /// Whether the wake-up rule of S-0402 claim 14 holds for a slave master
 /// (S-0215 claim 24, vehicle table row 1; claim 26, row 1). Slave masters
 /// and their slaves are not modelled before M5a, so it never holds.
-pub fn slave_wake_rule_holds(_w: &World, _master: ObjectId) -> bool {
-    // spec: S-0402 claim 14 (the wake-up rule; a seam until the harvest cycle exists)
-    false
+pub fn slave_wake_rule_holds(w: &World, master: ObjectId) -> bool {
+    // spec: S-0402 claim 14 (the wake-up rule, crate::econ::harvest::wake_rule; it needs the group at rest, and no slave group exists yet)
+    crate::econ::harvest::slave_wake_rule_holds(w, master)
 }
 
 /// Whether a slave master's slave group is at rest (S-0402 claim 14), for
@@ -41,9 +41,9 @@ pub fn is_harvesting_slave(_w: &World, _id: ObjectId) -> bool {
 
 /// Whether a slave master (S-0215 claim 15 row 11). No vehicle is one
 /// before M5a.
-pub fn is_slave_master(_w: &World, _id: ObjectId) -> bool {
-    // spec: S-0402 claim 14 (slave masters; a seam until the harvest cycle exists)
-    false
+pub fn is_slave_master(w: &World, id: ObjectId) -> bool {
+    // spec: S-0402 claim 14 and Terms (a slave miner: gatherer, destination and an enslaves field)
+    crate::econ::harvest::is_slave_miner(w, id)
 }
 
 /// The guard rules of S-0402 that queue *harvest* again for a harvester in
@@ -51,9 +51,9 @@ pub fn is_slave_master(_w: &World, _id: ObjectId) -> bool {
 /// for a chrono miner), for S-0215 claim 24's vehicle table row 2. Returns
 /// whether such a rule applied (it queues *harvest* itself); the processing
 /// then ends with 1 tick. None applies before M5a.
-pub fn harvester_guard_rule(_w: &mut World, _id: ObjectId) -> bool {
-    // spec: S-0402 claims 13 and 17 (the guard rules that queue harvest again; a seam until the harvest cycle exists)
-    false
+pub fn harvester_guard_rule(w: &mut World, id: ObjectId) -> bool {
+    // spec: S-0402 claims 13 and 17 (the guard rules that queue harvest again)
+    crate::econ::harvest::guard_rule(w, id)
 }
 
 /// Whether a house is short of power (S-0215 Terms), for the SAM power row

@@ -305,8 +305,8 @@ pub fn detonate(w: &mut World, det: Detonation) -> DetonationResult {
             && (!ov.tiberium || h.tiberium)
             && det.damage / 10 > 0
         {
-            // spec: S-0303 claim 17 (resource reduction by trunc(D / 10); how a cell loses resource belongs to the economy specs)
-            w.note("S-0303 claim 17: resource reduction waits for the economy topic (M5)");
+            // spec: S-0303 claim 17 (resource reduction by trunc(D / 10)); spec: S-0401 claim 16 (a) (taken by claim 3's rule)
+            crate::econ::resource::take_bales(w, c, det.damage / 10);
         }
         if let Some(ov) = &ov
             && ov.wall

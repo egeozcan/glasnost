@@ -966,7 +966,6 @@ pub fn part(w: &mut World) {
     }
 }
 
-
 /// Applies a build order (S-0404 claim 3).
 pub fn build(w: &mut World, house: HouseId, t: TypeRef) {
     let Some(lk) = line_kind(w, t) else { return };
