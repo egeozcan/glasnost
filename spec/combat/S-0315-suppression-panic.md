@@ -2,7 +2,7 @@
 id: S-0315
 title: Suppression and panic (infantry fear, prone and panic in combat; parasite suppression)
 topic: combat
-revision: 5
+revision: 6
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -21,7 +21,8 @@ state and the panic sequence that fear selects change in combat. Most of the rul
 other specs, which this spec cites by claim; it owns the complete list of fear triggers, the one
 trigger no other spec covers (a fraidycat that runs out of ammunition), the summary of effects, and
 the separate *suppression* of parasites: damage or healing done to a unit that carries a parasite
-can make the parasite die when it leaves.
+can make the parasite die when it leaves. This spec covers skirmish only; network games and
+campaigns are out of scope.
 
 ## Terms
 
@@ -125,12 +126,14 @@ Shared terms used here are defined in the glossary: *infantry*, *vehicle*, *hous
    - a prone unit of a human-controlled owner asks (not forced) for *get-up* only when
      a non-empty destination is reassigned that is already its current destination, unless
      its type is a fraidycat or a cyborg (S-0107, claim 15). The same cell or the same object
-     counts; occupying the destination cell alone does not. A first or different destination,
+     counts; different objects occupying the same cell do not, and occupying the destination
+     cell alone does not. A first or different destination,
      clearing a destination, and merely queuing a waypoint do not trigger this request.
      It happens at destination assignment, whether by an applied order or later by a
      behaviour, not at the start of locomotion. No order family guarantees it: move,
      attack-move, attack pursuit, area guard, scatter, enter and capture all use the same
-     rule when they assign a destination; S-0107 claim 15 gives the Q-0087 order table.
+     rule when they assign a destination; S-0107 claim 15 gives the Q-0087 order table,
+     and S-0213 claim 21 distinguishes assignment at order application from later approach.
      The request can be refused by S-0107 claim 6 and is not saved or retried by movement.
      If accepted, prone protection and prone firing end when *get-up* starts, not when its
      image frames finish. Thus a first move can begin crawling, rather than getting up
@@ -351,9 +354,10 @@ weapon and an ammunition limit of 2, in *guard* beside an enemy test vehicle in 
 fires on its own (claim 2 does not depend on the owner). The test vehicle cannot hurt it.
 - *Part a (fear):* *Observable:* after the second shot, whether the unit walks with the *panic*
   sequence and scatters (it has no ammunition left, so it cannot fire again). The recorder also
-  reads the behaviour slots on every tick. *Expected:* the first two right after the second shot
-  (not after a later refused attempt); the *panic* sequence ends about 100 ticks later (300 → 199)
-  and the scattering after about 250 ticks (300 − 50); the slots show *guard* current and nothing
+  reads the behaviour slots on every tick. *Expected:* immediately after the second shot (not after
+  a later refused attempt), the unit walks with the *panic* sequence and scatters; the *panic*
+  sequence ends about 100 ticks later (300 → 199) and the scattering after about 250 ticks
+  (300 − 50); the slots show *guard* current and nothing
   queued throughout (the unit is in *guard*, so no behaviour is queued). Control: the same type with
   no ammunition limit never panics without being hurt.
 - *Part b (fearless):* the same with a fearless fraidycat type, and again with a fraidycat that
