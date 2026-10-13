@@ -2,13 +2,13 @@
 id: S-0103
 title: Palettes and house colour
 topic: rendering
-revision: 3
+revision: 4
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-09
+approved-on: 2026-10-13
 measurements: []
-requests: [Q-0001, Q-0003]
+requests: []
 supersedes: []
 ---
 
@@ -22,7 +22,7 @@ This spec covers how the palette files become palettes, how a colour definition 
 
 Glossary terms used here include *palette*, *theater*, *house*, *house colour*, *local player*, *rules layer*, *base rules*, *map layer*, *override section*, *lobby*, *measurement setup* and *quirk switch*.
 
-- **Palette file.** 768 bytes: 256 entries × 3 components (red, green, blue), each component meant to be a 6-bit value (0–63).
+- **Palette file.** Supplies 256 ordered colours, each with red, green and blue components represented by byte values intended to range from 0 to 63.
 - **Unit palette.** The theater's palette for units, infantry, aircraft and buildings. House-colour palettes are built from it.
 - **Tile palette.** The theater's palette for terrain tiles.
 - **Theater palette.** The theater's general-purpose palette. No drawn object in this spec takes its colours from it (Open questions).
@@ -37,7 +37,7 @@ Glossary terms used here include *palette*, *theater*, *house*, *house colour*, 
 - **Hi-colour pixel.** A 16-bit packed RGB value in the display surface's pixel layout.
 - **Lobby colour slot.** The colour a player picks in the skirmish lobby, numbered 0–7 in the order the lobby lists the eight colours.
 - **Vein animation.** An animation whose art marks it as a vein animation (Import mapping).
-- **Terrain animation.** An animation that the game creates as part of a cell's terrain when the map's terrain is set up, rather than one created by an object or an event.
+- **Terrain animation.** An animation that the game creates as part of a cell's terrain when the map's terrain is set up or when the cell is recalculated, rather than one created by an object or an event.
 - **Object's own animation.** An animation that belongs to one object and shows part of that object: an animation a building plays as part of itself, the animation of a unit deploying or undeploying, and the parachute that carries an object down, unless that object is a projectile (claim 8).
 - **Projectile.** What a weapon launches, from launch until it detonates. The combat specs own its rules. Here it matters only because a projectile can come down by parachute (claim 8).
 - **Test lighting.** S-0104's neutral test lighting, with every value it changes set by the test map itself: the map's lighting values, and the three extra-light fields set to 0 in the test map's override section for the game-wide visual settings. Under it objects and tiles are drawn at brightness 1000 (row 26 of a 53-row shade table, S-0104).
