@@ -287,7 +287,9 @@ impl Rules {
         };
         // spec: S-0004 claim 11 (infantry: the third tab; vehicles and aircraft: the fourth)
         let infantry_t = units(&infantry, &s.infantry, 2);
+        // spec: S-0004 claim 11 (vehicles: the fourth tab)
         let vehicles_t = units(&vehicles, &s.vehicles, 3);
+        // spec: S-0004 claim 11 (aircraft: the fourth tab)
         let aircraft_t = units(&aircraft, &s.aircraft, 3);
         let buildings_t = buildings
             .iter()
