@@ -377,6 +377,11 @@ fn state(w: &mut World, id: ObjectId) -> Option<&mut HarvestState> {
     Some(s)
 }
 
+/// A copy of a harvester's harvest state (the default when it has none).
+pub fn state_of(w: &World, id: ObjectId) -> HarvestState {
+    st(w, id)
+}
+
 fn st(w: &World, id: ObjectId) -> HarvestState {
     w.obj(id)
         .and_then(|o| o.econ.harvest.clone())
@@ -616,10 +621,18 @@ pub fn leaving_map(w: &mut World, id: ObjectId) {
 fn distance_sq(w: &World, a: ObjectId, b: ObjectId) -> i64 {
     let pa = w.reference_point(a);
     let pb = w.reference_point(b);
-    let dx = i64::from(pa.x) - i64::from(pb.x);
-    let dy = i64::from(pa.y) - i64::from(pb.y);
+    squared_distance(
+        i64::from(pa.x) - i64::from(pb.x),
+        i64::from(pa.y) - i64::from(pb.y),
+        w.rules().quirks.refinery_distance_wraps,
+    )
+}
+
+/// *dx*² + *dy*² of S-0402 claim 8 and F5: a signed 32-bit integer that
+/// wraps when `wraps` (`quirks.refinery_distance_wraps`), else exact.
+pub fn squared_distance(dx: i64, dy: i64, wraps: bool) -> i64 {
     let exact = dx * dx + dy * dy;
-    if w.rules().quirks.refinery_distance_wraps {
+    if wraps {
         // spec: S-0402 F5 (dx² + dy² as a signed 32-bit integer that wraps; quirks.refinery_distance_wraps)
         i64::from(exact as i32)
     } else {
