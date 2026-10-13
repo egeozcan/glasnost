@@ -1080,3 +1080,31 @@ fn claim_18_balloon_hover_vertical() {
         assert_eq!(balloon_hover_approach(&s.w, s.a), want);
     }
 }
+
+// spec: S-0307 claim 15 and S-0215 claim 37 (f) (an actor that keeps a target out of range and has no destination searches, and the cell found becomes its destination with the target kept)
+#[test]
+fn claim_15_approach_step_moves_towards_the_target() {
+    let r = base("5");
+    let mut s = approach_setup(&r);
+    s.w.obj_mut(s.a).unwrap().beh.current = Some(glasnost_sim::rules::Behaviour::Attack);
+    glasnost_sim::approach::step(&mut s.w, s.a);
+    let o = s.w.obj(s.a).unwrap();
+    assert_eq!(o.dest, Some(Target::Cell(cell_of(6, 0))));
+    assert_eq!(o.target, Some(Target::Object(s.t)));
+}
+
+// spec: S-0307 claim 18 and S-0215 claim 37 (h) (the balloon-hover vehicle takes the target object as its destination, even with a destination held and without searching)
+#[test]
+fn claim_18_approach_step_takes_the_target() {
+    let mut r = base("5");
+    r.sim.vehicles.get_mut("CART").unwrap().balloon_hover = Some(true);
+    line(&mut r).vertical = Some(true);
+    let mut s = approach_setup(&r);
+    let o = s.w.obj_mut(s.a).unwrap();
+    o.beh.current = Some(glasnost_sim::rules::Behaviour::Attack);
+    o.dest = Some(Target::Cell(cell_of(1, 1)));
+    glasnost_sim::approach::step(&mut s.w, s.a);
+    let o = s.w.obj(s.a).unwrap();
+    assert_eq!(o.dest, Some(Target::Object(s.t)));
+    assert_eq!(o.target, Some(Target::Object(s.t)));
+}
