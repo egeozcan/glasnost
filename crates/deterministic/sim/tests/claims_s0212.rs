@@ -1806,6 +1806,19 @@ fn a_deck_is_read_through_its_link() {
         regions::reach_read(&w, cell(4, -2), z, true),
         regions::reach_read(&w, cell(3, -2), z, true)
     );
+    // spec: S-0212 claim 25 (in deck mode a bridge cell's reach region is read for its deck: a move order onto the deck collects the deck cell itself)
+    let order = |w: &World| {
+        path::nearby(
+            w,
+            cell(3, 0),
+            path::NearbyUse::MoveOrder {
+                unit: car,
+                on_object: false,
+                free_no_move: false,
+            },
+        )
+    };
+    assert_eq!(order(&w), Some(cell(3, 0)));
     assert_ne!(
         compute_to(&mut w, car, cell(3, 0), Mode::Fresh),
         Search::GateFailed

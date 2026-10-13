@@ -1254,8 +1254,9 @@ fn qualifies(
         // spec: S-0212 claim 25 (winged: only the area, height and further tests apply)
         return true;
     }
+    // spec: S-0212 claim 25 (the cell lies in the user's reach region; a bridge cell read for its deck in deck mode, for its ground otherwise)
     if let Some(rr) = reach_ref
-        && regions::reach_in(w, c, zone) != rr
+        && regions::reach_read(w, c, zone, deck_mode) != rr
     {
         return false;
     }
