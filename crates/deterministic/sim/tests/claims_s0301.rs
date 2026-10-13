@@ -272,7 +272,7 @@ fn claim_2_full_delay_is_rate_plus_one_draw() {
     }
 }
 
-// spec: S-0301 claim 3 and F2 (h = RZ₅₃(ℓ × κ), the normal row's factor times the country's, for every house)
+// spec: S-0301 claim 3 and F2 (h = RZ₅₃(ℓ × κ), the normal row's factor times the country's, for every player house)
 #[test]
 fn claim_3_house_factor_is_row_times_country() {
     let mut r = base();
@@ -302,6 +302,35 @@ fn claim_3_house_factor_is_row_times_country() {
             .rof_factor
             .eq_num(row.mul(dec("0.7", m), m))
     );
+}
+
+// spec: S-0301 claim 3 and F2 (h = 1.0 exactly for the neutral and special houses, whatever the rows and their countries' factors hold; S-0412 claim 5)
+#[test]
+fn claim_3_non_player_houses_have_factor_one() {
+    let mut r = base();
+    for (row, v) in [("easy", "2"), ("normal", "1.5"), ("difficult", "0.5")] {
+        r.sim.difficulty.insert(
+            row.into(),
+            DifficultyRow {
+                rof: Some(d(v)),
+                ..Default::default()
+            },
+        );
+    }
+    r.sim.countries.get_mut("Alphaland").unwrap().rof = Some(d("1.5"));
+    r.sim.countries.get_mut("Betaland").unwrap().rof = Some(d("0.5"));
+    let w = testkit::game_with_non_players(&r, N, 7);
+    let m = mode(&w);
+    // The player house of the same country: the row times the country.
+    assert!(
+        w.houses[0]
+            .combat
+            .rof_factor
+            .eq_num(dec("1.5", m).mul(dec("1.5", m), m))
+    );
+    for h in [2, 3] {
+        assert!(w.houses[h].combat.rof_factor.eq_num(int(1, m)), "house {h}");
+    }
 }
 
 // spec: S-0301 F1 (the full delay takes h: D₁ = trunc(RZ₅₃(RZ₅₃(R × h) + u)))

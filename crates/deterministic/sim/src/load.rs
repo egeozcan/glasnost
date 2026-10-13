@@ -185,13 +185,13 @@ pub fn new_game(
             country,
             allies: Vec::new(),
             human: h.human,
-            // spec: S-0009 claim 40 and S-0209 claim 11 (every house of our engine keeps skill level 0: human-controlled, AI, neutral and special houses alike)
+            // spec: S-0412 claim 3 and S-0209 claim 11 (every house of our engine keeps skill level 0: human-controlled, AI, neutral and special houses alike; glossary *house skill level*)
             skill: 0,
             start: None,
             role: h.role,
             credits: 0,
             pending: Vec::new(),
-            combat: crate::combat::fire::house_combat(&rules, country, setup.houses.len()),
+            combat: crate::combat::fire::house_combat(&rules, country, h.role, setup.houses.len()),
         });
     }
     for (i, h) in houses.iter_mut().enumerate() {
