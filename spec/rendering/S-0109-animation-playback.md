@@ -2,11 +2,11 @@
 id: S-0109
 title: Animation playback
 topic: rendering
-revision: 8
+revision: 9
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-13
+approved-on: 2026-10-14
 measurements: []
 requests: [Q-0046]
 supersedes: []
@@ -55,7 +55,7 @@ as in S-0007, *turn pass* and *update order* as in S-0203.
 | reversed | An animation is reversed while its current type has the reverse flag or its creator asked for reverse play. The test is made against the current type, so it can change when the animation switches to a follow-up type, claim 15. The step σ is separate state. |
 | shadow type | A type with the shadow flag: the second half of its sprite holds the shadows of the first half (claim 10). |
 | bouncing type | A type with the bouncer flag or the meteor flag. Such an animation follows its own motion, and its landing ends it (the specs of projectiles and debris own both). Until then its stage plays by claims 5 to 16 like any other animation's, but its advances produce no middle event (claim 14) and no damage by claim 17. The middle event that the start event produces when μ = 0 (claim 13) still happens. |
-| trigger-played animation | An animation created by a trigger action that plays an animation at a waypoint marker, including the action that shows the drop-zone animation (the trigger specs own both actions). It has no start sound, no chain reaction and no damage (claims 13 and 17). |
+| trigger-played animation | An animation created by a trigger action that plays an animation at a waypoint marker, including the action that shows the drop-zone animation (S-0011 claim 36). Its creation start event has the usual effects, including start sound and resource chain reaction when enabled. Later start events have neither sound nor chain reaction, and it delivers no damage (claims 13 and 17). |
 | erasing weapon | A weapon that removes its target over time instead of damaging it (the temporal weapon of the combat specs, which own it). |
 | owner | The object an animation is attached to, if any (claim 22). |
 | translucency code | 0, 1, 2 or 3: opaque, 25 %, 50 % or 75 % translucent drawing (claim 20). Two codes combine to the larger of the two, except that 1 and 2 combine to 3. |
@@ -257,9 +257,12 @@ as in S-0007, *turn pass* and *update order* as in S-0203.
     or detonation. When resource remains, the reaction removes all of it. So an
     animation plays its start sound once for each type it plays as: at creation (or at the end of
     the loop delay its creator gave), and at each follow-up switch. One with random loop delays also
-    plays it at every pass that follows a delay *D* > 0. A trigger-played animation has no start
-    sound and no chain reaction (and delivers no damage, claim 17), but its middle events happen as
-    for any other animation.
+    plays it at every pass that follows a delay *D* > 0. A trigger-played animation has no loop
+    delay at creation (S-0011 claim 36), so its creation start event plays the start sound and
+    produces the resource chain reaction when enabled, just as for any other animation. Its later
+    start events, at loop-delay ends or follow-up switches, have no start sound and no chain
+    reaction. It delivers no damage (claim 17), but its middle events, including the immediate
+    one when μ = 0, happen as for any other animation.
     - Backing: `measurable` (scenarios AN9, AN10, AN21, and S-0401 E17 for the immediate
       middle event preceding the chain reaction)
     - Confidence: high for event timing and the middle-before-reaction order; the reaction's
@@ -832,8 +835,9 @@ The importer warns, so that a mod author learns of each quirk, for:
 
 **Common setup.** The glossary's *measurement setup*. Animations are played on open flat ground of a
 tiny purpose-made map by a trigger action that plays an animation at a waypoint marker (the trigger
-specs own its form), or by the object that normally creates them. Trigger-played animations have no
-start sound and no damage (claims 13 and 17), so scenarios that observe either use another creator:
+specs own its form), or by the object that normally creates them. Trigger-played animations have a
+creation start sound but no later start sounds and no damage (claims 13 and 17), so scenarios that
+observe repeated sounds or damage use another creator:
 the explosion animation of one stock weapon, fired by a unit. Such scenarios assume the weapon's
 explosion is created with a repeat factor of 1, no loop delay and no reverse play; a pilot run with
 the unchanged animation (its pass count and first image frame) checks that. Because rules layers
@@ -949,10 +953,11 @@ building that can cloak), it sets them in the test map's override section, which
   - Runs: 20 animations per run.
   - Expected: every gap is max(3, *D* + 1) with *D* from 30 to 60, the loop start image frame is
     shown during the gap, and the sound plays at creation and after each of the two gaps (three
-    times per animation). The trigger-played run shows the same gaps and image frames and no start
-    sound.
+    times per animation). The trigger-played run shows the same gaps and image frames, with the
+    sound at creation only and none after either gap.
   - Falsified if: a gap lies outside 31 … 61, the animation vanishes during a gap, the weapon run's
-    sound plays once per animation, or the trigger-played run plays the sound.
+    sound plays once per animation, or the trigger-played run has no creation sound or plays a
+    sound after a gap.
 - **AN10 (claims 13, 14).** A test type with the scorch flag (no crater flag), rate 300, on a sprite
   with *N* ≥ 4, played by a trigger action, once with start 0 (M1) and once with start ⌊*N*/2⌋ + 1
   (M2).
@@ -1094,17 +1099,17 @@ building that can cloak), it sets them in the test map's override section, which
     advance. A pilot run checks that a 2-point delivery of the game-wide warhead damages the tree.
     If it does not, the scenario is inconclusive.
 - **AN21 (claim 13, chain reaction).** The test copy of the art database gives the explosion
-  animation of one stock weapon the chain-reaction flag (no crater or scorch flag). A unit fires the
-  weapon at a cell holding resource; a second run plays the same animation by a trigger action on
-  another cell holding resource; a control run fires the weapon with its unchanged explosion
-  animation.
+  animation of one stock weapon the chain-reaction flag (no crater or scorch flag). A unit fires
+  the weapon at a cell holding resource; a second run plays the same animation by a trigger action
+  on another cell holding resource; a control run fires the weapon with its unchanged explosion
+  animation. This tests the creation start event, not the later events suppressed in a
+  trigger-played animation.
   - Observable: the amount of resource in the target cell per tick, read by the recorder.
   - Runs: one each.
-  - Expected: in the first run the cell holds no resource from the tick the explosion animation is
-    created (its start event, claim 13). The trigger-played run and the control leave the cell's
-    resource unchanged.
-  - Falsified if: resource remains in the cell after the first run's explosion, or the trigger-played
-    run or the control removes it.
+  - Expected: in both test runs the cell holds no resource from the tick the animation is created
+    (its creation start event, claim 13). The control leaves the cell's resource unchanged.
+  - Falsified if: resource remains in either test cell immediately after animation creation, or
+    the control removes it.
 - **AN22 (claim 20, cloaked buildings).** A skirmish on a test map whose override section makes a
   stock building type that has slot animations able to cloak. The test copy of the art database gives
   its slot animations three test types: K1 with neither the translucent flag nor a translucency field,

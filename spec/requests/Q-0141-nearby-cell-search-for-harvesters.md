@@ -1,9 +1,9 @@
 ---
 id: Q-0141
 title: The nearby-cell search around a queueing cell and off a refinery
-status: open
+status: answered
 related: [S-0402, S-0212]
-answered-by: []
+answered-by: [S-0402]
 ---
 
 ## Need

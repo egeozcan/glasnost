@@ -27,7 +27,7 @@ use glasnost_map::objects::{HealthKind, ListKind, facing_from_value, starting_he
 use glasnost_map::{CellGrid, CellXY, Map, NO_OVERLAY};
 use glasnost_num::F64;
 use glasnost_num::geom::n_step;
-use glasnost_render::compose::{DIAMOND_WIDTH, DepthTest, Paint, Profile, row565};
+use glasnost_render::compose::{DIAMOND_WIDTH, DepthTest, Paint, Profile, Shade, row565};
 
 use glasnost_render::light::{self, DetailLevel, LightQuirks, LightSource, TileTable};
 use glasnost_render::overlay::{
@@ -193,7 +193,6 @@ mod notes {
     pub const RUBBLE: &str = "rubble overlays outside a rubble cell draw nothing (S-0112 claim 5); rubble cells arise only in play";
     pub const SMUDGE_CLIP: &str = "a smudge is painted whole once per covered cell, not clipped to that cell (S-0102 claim 25): it differs only where covered cells differ in level or light";
     pub const TERRAIN_STRENGTH: &str = "the rules did not resolve: a terrain object type without a strength key is drawn with image frame 0 (its strength from the game-wide tree strength, S-0102 claim 23, needs the typed rules)";
-    pub const ANIMATED_TERRAIN_SHADOW: &str = "Q-0051: an animated terrain object's shadow is drawn right after its body in the object pass (provisional)";
     pub const ORE_MINE_STAGE: &str = "an ore mine's animation (S-0401 claim 15) is not played: it shows image frame 0, its stage at placement (S-0102 claim 23)";
     pub const VOXEL_SHADOW_POINT: &str = "voxel shadows are placed at the object's ground point (the locomotor's shadow point has no spec)";
     pub const NO_SLOT_ANIMS: &str = "building slot animations (S-0108) need animation playback (S-0109), which is not implemented yet: not drawn";
@@ -656,7 +655,7 @@ impl Builder<'_> {
         self.p.lights = Lights { side, cells };
     }
 
-    fn tile_row(&mut self, table: TileTable, brightness: i32) -> usize {
+    fn tile_row(&mut self, table: TileTable, brightness: i32) -> Shade {
         let (base, n) = match self.p.rows.tiles.get(&table) {
             Some(r) => *r,
             None => {
@@ -670,10 +669,11 @@ impl Builder<'_> {
                 (base, t.len())
             }
         };
-        base + light::brightness_row(brightness, n, light::DEFAULT_LIGHT_ALPHA)
+        // spec: S-0104 claim 15, S-0110 claim 5 (each pixel takes the row of its light-alpha value)
+        Shade::new(base, n, brightness)
     }
 
-    fn house_row(&mut self, hsv: [u8; 3], brightness: i32) -> usize {
+    fn house_row(&mut self, hsv: [u8; 3], brightness: i32) -> Shade {
         let (base, n) = match self.p.rows.houses.get(&hsv) {
             Some(r) => *r,
             None => {
@@ -688,7 +688,8 @@ impl Builder<'_> {
                 (base, t.len())
             }
         };
-        base + light::brightness_row(brightness, n, light::DEFAULT_LIGHT_ALPHA)
+        // spec: S-0104 claim 15, S-0110 claim 5 (each pixel takes the row of its light-alpha value)
+        Shade::new(base, n, brightness)
     }
 
     /// The colour definition an owner shows (S-0103 claim 10), and whether
@@ -980,18 +981,18 @@ impl Builder<'_> {
                 });
             };
             // spec: S-0010 claim 22 (every pixel of the diamond is painted, index 0 included)
-            push(img, dep, left, top, Paint::Diamond(row));
+            push(img, dep, left, top, Paint::LitDiamond(row));
             if let Some((ei, ed, dx, dy)) = extra {
                 // spec: S-0010 claim 23 (the extra image at the diamond box's corner plus the position difference;
                 // index 0 transparent; drawn right after its own cell's diamond)
-                push(ei, ed, left + dx, top + dy, Paint::Row(row));
+                push(ei, ed, left + dx, top + dy, Paint::Lit(row));
             }
         }
     }
 
     /// The shade row of an untinted start-up table (S-0112 Terms, claim 2;
     /// S-0104 claim 6): the resource table, or the mine table.
-    fn startup_row(&mut self, mine: bool, brightness: i32) -> usize {
+    fn startup_row(&mut self, mine: bool, brightness: i32) -> Shade {
         let q = OverlayQuirks::default();
         let (base, n) = match self.p.rows.startup.get(&mine) {
             Some(r) => *r,
@@ -1013,7 +1014,8 @@ impl Builder<'_> {
                 (base, t.len())
             }
         };
-        base + light::brightness_row(brightness, n, light::DEFAULT_LIGHT_ALPHA)
+        // spec: S-0104 claim 15, S-0110 claim 5 (each pixel takes the row of its light-alpha value)
+        Shade::new(base, n, brightness)
     }
 
     /// Each tiberium's image run, in tiberium list order, from the image
@@ -1185,7 +1187,7 @@ impl Builder<'_> {
                         bias,
                         companion: None,
                     },
-                    Paint::Row(row),
+                    Paint::Lit(row),
                     Group::Overlays,
                     false,
                     Some(object),
@@ -1318,7 +1320,7 @@ impl Builder<'_> {
                             bias: 0,
                             companion: None,
                         },
-                        Paint::Row(row),
+                        Paint::Lit(row),
                         Group::Smudges,
                         false,
                         Some(object),
@@ -1412,7 +1414,6 @@ impl Builder<'_> {
             };
             // spec: S-0102 claim 10 (cell pass: writers; object pass: readers)
             let test = if animated {
-                self.note(notes::ANIMATED_TERRAIN_SHADOW);
                 DepthTest::Reader
             } else {
                 DepthTest::Writer
@@ -1439,14 +1440,14 @@ impl Builder<'_> {
                     bias: -lz - 12,
                     companion: None,
                 },
-                Paint::Row(row),
+                Paint::Lit(row),
                 Group::TerrainObjects,
-                // provisional (Q-0051): an animated object's body and shadow order
-                animated,
+                false,
                 Some(object),
             ));
             // spec: S-0102 claims 13 and 23 (its shadow: body frame + ⌊N/2⌋, −L(z) − 3, flat);
-            // provisional for an animated object (Q-0051): drawn right after its body
+            // claim 30 (an animated object's body ranks before its own shadow, in one group with
+            // nothing between them; the same for an ore mine)
             if frame + frames / 2 < frames {
                 items.extend(self.place_sprite(
                     &sprite,
@@ -1460,7 +1461,7 @@ impl Builder<'_> {
                     },
                     Paint::Shadow,
                     Group::Shadows,
-                    animated,
+                    false,
                     Some(object),
                 ));
             }
@@ -1720,7 +1721,7 @@ impl Builder<'_> {
                 bias: -lz - 2 + normal_z,
                 companion: None,
             },
-            Paint::Row(row),
+            Paint::Lit(row),
             Group::Buildings,
             true,
             Some(object),
@@ -1763,7 +1764,7 @@ impl Builder<'_> {
                     bias: -lz - 3,
                     companion: None,
                 },
-                Paint::Row(row),
+                Paint::Lit(row),
                 Group::Bibs,
                 true,
                 Some(object),
@@ -1889,7 +1890,7 @@ impl Builder<'_> {
                     part,
                     at,
                     bias,
-                    Paint::Row(row),
+                    Paint::Lit(row),
                     Group::Buildings,
                     object,
                 ));
@@ -2130,7 +2131,7 @@ impl Builder<'_> {
     /// S-0102 claims 13, 20 and 28): the shadow right after the body, both
     /// centred on the draw point. Units in the viewer stand on the ground
     /// (height above the surface 0).
-    fn infantry_items(&mut self, m: &Mobile, point: (i32, i32), u: i32, row: usize) -> Vec<Item> {
+    fn infantry_items(&mut self, m: &Mobile, point: (i32, i32), u: i32, row: Shade) -> Vec<Item> {
         let Some(sprite) = self
             .import
             .arts
@@ -2157,7 +2158,7 @@ impl Builder<'_> {
                 bias: u - 12,
                 companion: None,
             },
-            Paint::Row(row),
+            Paint::Lit(row),
             Group::Infantry,
             false,
             Some(m.object),
@@ -2192,7 +2193,7 @@ impl Builder<'_> {
     /// A vehicle's or aircraft's items: voxel parts (S-0105), or for a
     /// vehicle a sprite (S-0102 claims 21 and 22). An aircraft whose art is
     /// not a voxel model shows no body (claim 21).
-    fn vehicle_items(&mut self, m: &Mobile, point: (i32, i32), u: i32, row: usize) -> Vec<Item> {
+    fn vehicle_items(&mut self, m: &Mobile, point: (i32, i32), u: i32, row: Shade) -> Vec<Item> {
         let Some(art) = self.import.arts.get(&(m.kind, m.idx)).cloned() else {
             return Vec::new();
         };
@@ -2220,7 +2221,7 @@ impl Builder<'_> {
         sprite: &[u8],
         point: (i32, i32),
         u: i32,
-        row: usize,
+        row: Shade,
     ) -> Vec<Item> {
         let (k, i) = (m.kind, m.idx);
         let n = self.sprite_frames(sprite).unwrap_or(0);
@@ -2299,7 +2300,7 @@ impl Builder<'_> {
                     bias: u - 2,
                     companion: None,
                 },
-                Paint::Row(row),
+                Paint::Lit(row),
                 Group::Vehicles,
                 false,
                 Some(m.object),
@@ -2461,7 +2462,7 @@ impl Builder<'_> {
         art: &glasnost_convert::art::TypeArt,
         point: (i32, i32),
         u: i32,
-        row: usize,
+        row: Shade,
         group: Group,
     ) -> Vec<Item> {
         let q = VoxelQuirks::default();
@@ -2497,7 +2498,8 @@ impl Builder<'_> {
             let key = voxel::shadow_key(voxel::RAMP_FLAT, body_raw);
             if let Some(part) = self.cached_part(kind, idx, key, |b| {
                 let body = b.voxel_model(&file)?;
-                // spec: S-0105 claim 32 (a depth-option type's fresh shadow switches the mode on)
+                // spec: S-0105 claim 32 (quirks.depth_mode_leak: a depth-option type's fresh shadow
+                // switches the mode on; off, it never does)
                 b.p.canvas.draw_shadow(
                     &body,
                     section,
@@ -2508,7 +2510,8 @@ impl Builder<'_> {
                     &q,
                 )
             }) {
-                // spec: S-0102 claim 18 (the voxel shadow: bias U, upright, a reader, in the object's own drawing)
+                // spec: S-0102 claim 18 (the voxel shadow: bias U, upright, a reader, in the object's own drawing);
+                // before the body, which covers it: interim for a vehicle (Q-0213)
                 items.push(Self::part_item(
                     part,
                     point,
@@ -2541,7 +2544,7 @@ impl Builder<'_> {
                 part,
                 point,
                 u,
-                Paint::Row(row),
+                Paint::Lit(row),
                 group,
                 object,
             ));
@@ -2592,7 +2595,7 @@ impl Builder<'_> {
                         part,
                         point,
                         u,
-                        Paint::Row(row),
+                        Paint::Lit(row),
                         group,
                         object,
                     ));

@@ -2,13 +2,13 @@
 id: S-0309
 title: Target acquisition (automatic searches, candidate tests, threat score, retaliation, target switching)
 topic: combat
-revision: 4
+revision: 5
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-13
+approved-on: 2026-10-14
 measurements: []
-requests: [Q-0061, Q-0079]
+requests: [Q-0061, Q-0079, Q-0162]
 supersedes: []
 ---
 
@@ -371,9 +371,7 @@ this spec:
 
 ### Where a search looks, and in which order
 
-7. **The map-wide search.** It considers, in this order, every aircraft on the map when it looks
-   for aircraft, and then every infantry unit, vehicle, aircraft and building whose render layer
-   (S-0102) is the ground layer. In both passes it considers the objects that are not allied with
+7. **The map-wide search.** The aircraft pass comprises every aircraft on the map when the search looks for aircraft; the ground-layer pass comprises every infantry unit, vehicle, aircraft and building whose render layer (S-0102) is the ground layer. On equal scores, an aircraft-pass candidate precedes a ground-layer-pass candidate. In both passes it considers the objects that are not allied with
    the searcher; for a searcher whose type attacks friendlies, that is berserk or that is a
    passenger of a mind-controlled open-topped transport it considers every object (the
    permanent-berserk mark does not widen it), and for a healer for acquisition only allied ones, whatever friendly-row exception it has
@@ -420,17 +418,13 @@ this spec:
      ring count from weapon ranges, including the air range bonus, the switching type and the
      underwater exception of F1; scenario A6, part k, for the engineer exception in an attack-move search; scenario A15, part e,
      run 4, for the engineer exception in the per-tick search of an engineer of the neutral
-     house), except the
-     open-topped shortest range of F1, which is `unmeasured` here because it belongs to S-0307
-     (Open questions) and is only used here
+     house). The open-topped shortest range of F1 is owned by S-0307 claim 13 and inherits
+     its backing; F1 reads the passengers' current weapons (Terms)
    - Confidence: high (guard range and weapon-range cases); medium (the garrison and patrol cases,
      the air range bonus, the switching type, the underwater exception and the engineer
      exception)
 
-9. **Scan order: airborne objects, then rings outward, with early stops.** When a range or area
-   search looks for aircraft, it considers, ahead of every cell in the scan order, the *tracked flying objects* (S-0303, Terms) that
-   the flying-object search of S-0303 (claim 6 and F7) finds around the centre cell with search
-   radius max(*n*, 1) cells. This is the same search, under the same switch
+9. **Scan order: airborne objects, then rings outward, with early stops.** When a range or area search looks for aircraft, its airborne candidates are the *tracked flying objects* (S-0303, Terms) that the flying-object search of S-0303 (claim 6 and F7) finds around the centre cell with search radius max(*n*, 1) cells. On equal scores, an airborne candidate precedes a candidate from a cell. This is the same search, under the same switch
    `quirks.flying_search_sectors`, that area damage uses. It reads whole sectors: the sector of the
    centre cell, the runs of sectors along the four map axes and the diagonal groups of S-0303's F7. So it can
    miss a tracked flying object that is within the search's reach but lies in another sector, and it
@@ -439,14 +433,8 @@ this spec:
    only those that are on the map and not in the ground render layer are looked at, each once, with
    no one-object-per-cell rule (claim 10), and objects allied with the searcher only when its type
    attacks friendlies, it is berserk or it is a passenger of a mind-controlled open-topped
-   transport. They are considered in S-0303's F7 order: the centre sector, the
-   east, north, south and west runs, then the four diagonal groups, and within a sector in the
-   order in which the objects were registered there; an object stays registered while it is
-   airborne, from lift-off (S-0303). With `quirks.flying_search_sectors` off the objects looked at
-   are every tracked flying object, once each, in registration order.
-   Except in a range search that looks for aircraft and nothing else, the search also looks at the
-   cells of the rings around the centre cell, from ring 0 outwards to at most ring *n* − 1, with the
-   legal cells of each ring in the order of F2. For *n* = 0 no ring is looked at, whatever the
+   transport. Equal-score airborne candidates are resolved by S-0303's F7 order: the centre sector, the east, north, south and west runs, then the four diagonal groups, and within a sector by the order in which the objects were registered there; an object stays registered while it is airborne, from lift-off (S-0303). With `quirks.flying_search_sectors` off, equal-score candidates are resolved by registration order among all tracked flying objects, each considered once.
+   Except in a range search that looks for aircraft and nothing else, cell candidates are drawn from legal cells in rings around the centre cell, from ring 0 through at most ring *n* − 1. Equal-score cell candidates are resolved by ring order and then by the F2 order of legal cells within a ring. For *n* = 0 no ring is looked at, whatever the
    airborne objects hold. For *n* ≥ 1, let *r*₁ = trunc(*n* / 4) and *r*₂ = trunc(*n* / 2), and let
    *K*(*r*) be the candidates among the airborne objects together with those in rings 0 … *r*. The
    last ring looked at, ℓ, is the smaller of *r*₁ and *r*₂ for which *K* is not empty, or *n* − 1
@@ -579,11 +567,11 @@ this spec:
     - Backing: `measurable` (weak-target preference: scenario A8, part a, for the doubling and
       part g for the halving at 0 or less; mode *strong*: A8, part b; suppression: scenario A10,
       main part, for the halving per building cell, part b for the count per cell of a building
-      with several cells; the composition: A7, part h). `unmeasured` for the use of the weapon
-      of the weapon number by a multi-weapon type: what weapon number such an object holds at the
-      moment of a search depends on its own firing history (S-0308), for example the stage of a
-      gattling type, which changes with its firing, and no setup known here holds a
-      chosen weapon number at a search without also giving the object a target
+      with several cells, part c for a switching type's weapon number and part d for the distinction
+      between a gattling type's current weapon and the weapon it would use against a candidate,
+      and the composition: A7, part h). Suppression does not choose a gattling weapon against each
+      candidate: its current weapon is the same weapon-number slot for all candidates of that
+      search, even when S-0308 claim 7 would choose different firing slots
     - Confidence: high (weak-target preference); medium (suppression)
 
 15. **Expected remaining health.** An object's expected remaining health starts equal to its health.
@@ -740,12 +728,13 @@ this spec:
     These searches are not limited by claims 2 and 3, and the targets they find are not
     opportunity targets.
 
-    *(b) At the start of each of its ticks* (S-0215, claim 11, the per-tick start) the attack move is
-    resumed when the object is engaged (and then it is no longer engaged), and also when it is not
-    engaged and its current behaviour is *guard*. (A fall-back to rest does not by itself put an
-    object with the memory into *guard*: row 1 of the tables of S-0215, claims 14 and 15, changes
-    nothing for it. How such an object comes to be in *guard* is S-0215's and S-0213's.) Resuming
-    the attack move has this effect:
+    *(b) On a fall-back to rest*, among the common effects of S-0215 claim 13, the memory is
+    refreshed at most once per actor per tick. If the object is engaged, or its current behaviour
+    is *guard*, the attack move is resumed as the table below gives. Otherwise the memory is
+    removed, including its destination, target and engaged mark. This refresh is not part of
+    the per-tick start of S-0215 claim 11. The infantry or vehicle rest table of S-0215 claims
+    14 and 15 judges the state after the refresh: its row 1 applies only if the memory survives.
+    Resuming the attack move ends the engaged mark and has this effect:
 
     | Memory holds | Result |
     |---|---|
@@ -753,21 +742,41 @@ this spec:
     | only a target | *attack* is queued with an immediate start, and the memory's target becomes the object's target |
     | neither | the memory is removed; nothing else happens |
 
-    *(c) The engaged mark ends* in three ways: the attack move is resumed (part b), a new attack-move
-    order is applied (S-0213, claim 6), or the memory is removed (resumption with neither a
-    destination nor a target removes it). A search that finds nothing never ends it, and
-    nothing else sets it. Because (b) ends the mark at the start of the next tick, a timer expiry
-    finds an object engaged only if that start did not run for it. The engaged rows of the table
-    are therefore reached rarely, perhaps never (low confidence, Open questions).
-    - Backing: `measurable` (scenario A6: part d for the search of part (a) in the not-engaged
-      row, part g for parts (b) and (c) and, in its run 2, for the rows of a memory that holds a
-      target only; part k uses an attack-move search to show F1's engineer exception; part l for
-      the targets of these searches not being opportunity targets).
-      `unmeasured` for the two engaged rows of a memory with a destination: part (c) says they are
-      reached rarely if ever, and no setup is known that reaches them; part g shows whether they
-      are reached at all
-    - Confidence: medium for part (a); low for parts (b) and (c), whose effect on what the unit does (does it
-      stop, or keep walking and fire) is the point of scenario A6, part g
+    *(c) The engaged mark ends* when the attack move is resumed (part b), a new attack-move
+    order is applied (S-0213, claim 6), or the memory is removed. A search that finds nothing
+    never ends it, and nothing else sets it. An engagement therefore survives later tick starts:
+    while the held target remains within reach, a targeting-timer expiry leaves it engaged,
+    makes no search and does not restart the targeting timer. When the target is no longer
+    within reach, the engaged rows of part (a) can search again. Ending an engagement through
+    a fall-back resumes the remembered destination or target rather than forgetting it.
+
+    *(d) Arrival and loss of the remembered target (Q-0162).* Reaching a destination does not
+    itself remove the remembered destination. In the uncontested case, the object arrives in
+    *move*, has no current destination, is not moving, has nothing queued and is not engaged.
+    Its next *move* processing falls back to rest and chooses an integer delay of 1 tick
+    (S-0215 claim 22). Part (b) removes its memory during that fall-back, so the ordinary rest
+    rules apply: the object queues *guard* or *area guard* as S-0215 claims 14 and 15 decide,
+    without an immediate start. It does not remain indefinitely in *move* with the memory,
+    and does not repeat that arrival delay every tick indefinitely. If another fall-back already
+    used the common effects on the same tick, the refresh waits for a later fall-back.
+
+    When the object remembered only a target, removal of that target changes the memory to a
+    destination: the cell of the target's last position. The remembered target is cleared, but
+    the memory and its engaged mark are kept. A fall-back while engaged resumes *move* to
+    that cell by part (b). Arrival there without a further engagement ends the memory as above.
+    If the actor is not engaged and falls back while still in *attack*, part (b) removes the
+    memory instead of resuming it. A destroyed object that still exists is not yet a removed
+    target for this rule (S-0312 and S-0203 own removal). No separate attack-move arrival
+    timeout or search-radius extension exists in these cases: an enemy beyond the later resting
+    object's search area does not by itself cause a new advance.
+    - Backing: `measurable` (scenario A6: part d for the not-engaged destination search,
+      part g for engaged searches and resumption, including its run 2 with a remembered target,
+      part k for F1's engineer exception, part l for targets not being opportunity targets,
+      part n for arrival, memory removal and the 1-tick delay, and part o for conversion of a
+      removed target to its last cell and the subsequent fall-back and arrival). The once-per-tick
+      limit inherits S-0215 claim 13's backing.
+    - Confidence: high for the refresh context and removal when neither engaged nor in *guard*,
+      medium for the searches, resumption, arrival consequences and removed-target conversion
 
 24. **Redirected targets.** Setting a target redirects it in three cases:
 
@@ -846,14 +855,7 @@ this spec:
       that every other row of table C lets through, except the rows "capture", "engineer",
       "storage", "bridge layers", "healer" and "score": an object that one of those six rows
       rejects has still taken the draw, and an object that any other row rejects takes none (row
-      "harmless building" never applies to these houses, part f). When one search tests several
-      objects whose disguises blink, each of them takes its own draw, in the order in which the
-      search considers the objects (claims 9 and 10; for the map-wide search, claim 7's order,
-      which is partly open: Open questions), and an object beyond the point where the
-      search ends takes none. So in a range search with *n* of at least 8 (its first early stop
-      comes after ring 2 or later), with one blinking disguised object in ring 1 and one in ring 2, the
-      first draw after the timer draw decides the object in ring 1 and the second draw the object
-      in ring 2.
+      "harmless building" never applies to these houses, part f). When one search tests several objects whose disguises blink, each qualifying object takes its own draw. Draw assignments follow the search's candidate order (claims 9 and 10; for the map-wide search, claim 7's order, which is partly open: Open questions), and an object beyond the point where the search ends takes none. Consequently, in a range search with *n* of at least 8 (its first early stop comes after ring 2 or later), with one blinking disguised object in ring 1 and one in ring 2, the first draw after the timer draw decides the object in ring 1 and the second draw the object in ring 2.
     - *(h) Retaliation (claim 18).* The charges and artillery conditions of claim 18 do not apply.
       Instead an object of these houses does not retaliate while it is draining an object with a
       draining weapon, and, when its target is an infantry unit, vehicle, aircraft or building, it
@@ -960,8 +962,9 @@ difference of two points, with no building reduction (S-0204, claim 6, does not 
 >
 > garrisoned building: *n* = trunc(min(*W*, *H*) / 2) + 1 + *o* (replaces the above)
 
-*g* is the type's guard range, *w*ᵢ the range of the weapon in slot *i* (S-0307; for an open-topped
-transport the original uses the shortest of its own and its passengers' ranges), *w* the range of
+*g* is the type's guard range, *w*ᵢ the firer's weapon range of S-0307 claim 13 for slot *i*
+(for an open-topped transport, the shortest of its own range and the range fields of its passengers'
+current weapons, skipping passengers without one), *w* the range of
 the weapon of its weapon number for a switching type, else max(*w*₀, *w*₁) (a type that is
 underwater, organic and self-healing uses *g* instead), *b* the type's air range bonus, *W* × *H* the
 building's foundation and *o* the game-wide occupant range bonus in cells. The max(*w*₀, *w*₁)
@@ -1177,9 +1180,7 @@ between the wall target *W*, the best candidate and no target.
 - Candidates found earlier in the scan win ties (claim 17); an early stop (claim 9) can end a search
   before an outer candidate with a higher score is reached.
 - A pick lowers the target's expected remaining health at once (claim 4), so of two searchers that
-  search in the same tick, the one that searches second sees the lowered value. The picks of one
-  tick are therefore those of searches made one at a time, in the order in which the objects are
-  processed (S-0203), each seeing the expected remaining health left by the picks before it.
+  search in the same tick, the one that searches second sees the lowered value. For two searches in the same tick, the later-processed search (S-0203) sees the expected remaining health after the earlier search's pick has reduced it; consequently, in modes *strong* and *normal*, the picks can differ from the result of scoring both searches against tick-start health values.
   Scoring every searcher against the values at the start of the tick gives different picks in
   modes *strong* and *normal*.
 
@@ -1349,7 +1350,8 @@ between the wall target *W*, the best candidate and no target.
 | Rules, type section, key `AirstrikeTeam` | claim 24 (a type with an airstrike team above 0 can call airstrikes) | integer | default 0 |
 | Rules, the combat-damage section (S-0006), key `PlayerReturnFire` | S-0215, claim 18 | boolean | as S-0215 gives |
 | Rules, type section, keys `Strength`, `Cost` | *S*<sub>T</sub> (F5); *S* and, through the type's cost of S-0314 claim 5, *C* (F8) | integer | as the type specs give |
-| Rules, `[General]`, keys `NormalTargetingDelay`, `GuardAreaTargetingDelay` | targeting timer (S-0215, F6) | integer ticks | S-0215 |
+| Rules, `[General]`, keys `NormalTargetingDelay`, `GuardAreaTargetingDelay` | targeting timer (S-0215, F6), including claim 23's searches; neither is an arrival timeout | integer ticks | S-0215 |
+| No data key | claim 23's arrival delay, memory refresh and removed-target conversion | fixed behaviour and integer 1-tick processing delay; no imported setting | not applicable |
 | Rules, `[General]`, key `DisabledDisguiseDetectionPercent` | the disguise-detection list (claim 25, part g) | comma-separated list; each item is read as a plain decimal integer (optional sign and digits, reading stops at the first other byte); the items are in the order of the difficulty rows (easy, normal, difficult), and our engine reads the second | held value. A list without a second item is not covered (the original's result is then undefined): the importer warns, and our engine then lets no disguised target through by the draw (a departure) |
 | Rules, difficulty row sections (S-0302, claim 3), key `DestroyWalls` | the destroy-walls flag (claim 25, part i) | boolean | yes |
 | Rules, country section, key `MultiplayPassive` | multiplayer-passive house (Terms; table C; claim 25, part j) | boolean | default no |
@@ -1415,9 +1417,9 @@ set in the test map's override sections.
 - *Part i (garrison, claim 8, F1):* a 3 × 3 building with the occupant range bonus set to 5 cells
   and an occupant with a weapon of range 4 cells; targets alone in separate runs at 6, 9 and 10
   cells from the building's centre. *Expected:* with *n* = 1 + 1 + 5 = 7 rings, the target at 6 cells
-  is attacked when the occupant's reach covers it; the targets at 9 and 10 cells are never
-  attacked. The outcome at 6 cells decides whether the reach is the weapon range alone or
-  includes the bonus (Open questions).
+  is attacked (S-0307 claim 4 replaces the occupant weapon's range by 6 cells); the targets at
+  9 and 10 cells are never attacked. *Falsified if:* the target at 6 cells is not picked in a
+  qualifying search or either farther target is picked.
 - *Part j (passive acquisition, claim 2):* an occupiable building of the human house with no
   occupants and an armed type; an enemy in range. *Expected:* it never fires by itself; with an
   occupant inside, it fires. *Falsified if:* the empty building fires, or the occupied one does
@@ -1637,19 +1639,20 @@ set in the test map's override sections.
   moved out of range afterwards, or the other firer switches to *Y*. (If the recorder shows
   no search while a firer is disabled, the *impossible* cases are not decided.)
 - *Part g (attack-move, claim 23):* an attack-move order on a cell 20 cells away, through an enemy
-  standing 6 cells from the route and within weapon range, recording the unit's position and target
-  every tick. *Expected under the claim:* the unit has the enemy as its target when its targeting
-  timer first runs out, and from the next tick it is moving to the destination again. *Falsified
-  if:* the unit stays in *attack* until the enemy is dead (then (b) of claim 23 is wrong, and the
-  engaged rows apply). Run 2, with a memory that holds a target only: an attack-move order on an
-  enemy *X* 20 cells away, with a second enemy *Y* standing 6 cells from the route and within
-  weapon range, at a point of the route from which *X* is beyond both the unit's search radius
-  and its reach. *Expected under the claim:* at the first timer expiry while *Y* is within the
-  search, the recorder shows *Y* as the unit's target, and from the next tick *X* again (part (b)
-  resumes the attack move on *X*). In a run without *Y*, the recorder shows *X* as the target at
-  every tick (each search finds nothing, so the target becomes *X* again within the same tick).
-  *Falsified if:* in run 2 the unit never has *Y* as its target, or keeps *Y* until *Y* is dead,
-  or, without *Y*, *X* ever stops being its target while *X* lives.
+  standing 6 cells from the route and within weapon range. Record position, target, current and
+  queued behaviour, memory, engaged mark and targeting timer every tick. *Expected:* after the
+  first successful search the unit stays engaged across tick starts and attacks the stationary
+  enemy; timer expiries while it is within reach take no search draw. When the enemy is removed
+  and attack processing falls back, it resumes the remembered destination and ends the engaged
+  mark, rather than resuming on the tick immediately after acquisition. Run 2, with a memory
+  holding only a target: order an attack move on enemy *X* 20 cells away, with a second enemy
+  *Y* 6 cells from the route and within weapon range, where *X* is beyond the search radius and
+  reach. *Expected:* a search picks *Y* and the engagement survives tick starts; on the later
+  fall-back it resumes *X*, provided *X* still exists. A run without *Y* keeps *X* while it lives:
+  an unsuccessful search restores *X* within the same tick. A third run moves the engaged target
+  beyond reach and leaves another candidate within the search: the next expiry searches again
+  and picks that candidate. *Falsified if:* an ordinary next-tick start ends the engagement,
+  in-range expiries take search draws, or a qualifying fall-back fails to resume the memory.
 - *Part h (redirects, claim 24):* order a unit to attack itself (its target becomes its own cell),
   order a unit to attack a target that dies in the same tick (the unit ends with no target); order
   an infantry unit to attack another that is in a death sequence (no target). Sinking target: an
@@ -1698,11 +1701,12 @@ set in the test map's override sections.
   next to the route within the firer's weapon range, and no other object is within the firer's
   search radius along the route. Target recorder and random-state recorder. When the recorder
   first shows *Y* as the firer's target, *Y* is ordered away, out of the firer's reach and search
-  radius. *Expected under the claim:* at the next targeting-timer draws the firer keeps *Y* as its
-  target (a target of an attack-move search is not an opportunity target, so the not-engaged row
-  of claim 23 (a) keeps it) and turns to follow it. *Falsified if:* the firer has no target after
-  the first timer draw that falls while *Y* is beyond its reach, as it would if *Y* were an
-  opportunity target dropped by claim 4.
+  radius. Also record the opportunity-target and engaged marks. *Expected:* the acquisition
+  sets the engaged mark but not the opportunity-target mark. While engaged, the next timer
+  expiry beyond reach runs a search as for an object with no target, irrespective of the absent
+  opportunity-target mark. With no candidate it is left targetless, then its fall-back resumes
+  the remembered destination. *Falsified if:* the search marks *Y* as an opportunity target,
+  or the engaged out-of-reach case keeps *Y* without searching.
 - *Part m (an opportunity target that becomes illegal, claim 19):* a human-owned vehicle firer
   whose weapons are anti-ground only and whose type has the attack-friendlies flag (test map), in
   *guard*; an aircraft *X* of the firer's own house landed on open ground within range (so the
@@ -1714,6 +1718,40 @@ set in the test map's override sections.
   against an aircraft in the air) and *Y* is picked in the same search. The part decides only if
   *X* is in the air and within the firer's range at that search. *Falsified if:* the firer keeps
   *X* while *X* is in the air within its range, or has no target after that search.
+- *Part n (uncontested arrival, Q-0162 questions 1 to 3):* a tiny flat skirmish map, one
+  human-owned ordinary armed infantry unit and one ordinary armed vehicle, tested separately,
+  plus one bystander computer player kept away. Stock types, director and mods off, game speed
+  6, no routes, guard spot, contact, deployment or enemy within the traversed search area.
+  Script an attack move to an empty cell. Record position, movement, current destination,
+  target, memory, engaged mark, current and queued behaviour, processing timer and targeting
+  timer every tick, from the order to 300 ticks after arrival. *Expected:* the memory survives
+  travel; the first ordinary arrival fall-back while not engaged and in *move* removes it,
+  and that processing chooses 1 tick. It queues the resting behaviour of S-0215 claims 14 and
+  15, which becomes current at a later permitted start, rather than an indefinite sequence of
+  1-tick *move* processings with memory. Record the imported rest fields to predict which
+  resting behaviour. Repeat with an enemy beyond both the weapon reach and the resulting
+  resting search area, weaponless to prevent retaliation: it does not prompt a new advance.
+  *Falsified if:* the memory disappears during ordinary travel without a fall-back, survives
+  that qualifying arrival fall-back, or the actor remains in *move* with it for the whole
+  300-tick observation. A run with another fall-back on the arrival tick is recorded separately
+  for the once-per-tick qualification, not counted as the first-fall-back test.
+- *Part o (remembered target removed, Q-0162 question 4):* the same map and recording, with
+  a weaponless enemy vehicle *X* as the attack-move target, outside weapon reach. A separate
+  human unit destroys *X* before the attack mover arrives. Choose a target type removed at
+  once on destruction (S-0312), and record its final position before removal. *Expected:*
+  removal changes the remembered target to the cell of that final position, without itself
+  removing the memory or changing the engaged mark. Run 1 removes *X* before an intervening
+  successful automatic search: the attack mover is not engaged, and a fall-back in *attack*
+  clears the converted memory by part (b); ordinary rest rules decide its behaviour. Run 2
+  first lets the mover acquire a second enemy *Y* within reach, then removes *X* while the
+  mover is engaged on *Y*. After *Y* is also removed, the engagement's fall-back resumes a
+  move to *X*'s last cell. With no further targets, arrival clears the memory as part n gives,
+  with a 1-tick arrival-processing delay, not an indefinite arrival loop. Keep the two
+  removal cells distinct and farther apart than the search radius so the destination is
+  distinguishable. *Falsified if:* removal alone erases the memory or engages the actor,
+  the converted destination is not *X*'s last cell, or a qualifying non-engaged fall-back
+  in *attack* preserves it. Repeat each run three times; a run without the specified engaged
+  state at removal does not decide that case.
 - *Falsified if:* any part differs.
 
 **A7: threat preference and distributed fire (claims 13, 17, 20).**
@@ -1923,6 +1961,29 @@ set in the test map's override sections.
   both. *Expected:* *Y* is picked: *X* has *m* = 4 (score divided by 16) and *Y* has *m* = 2
   (divided by 4). If a building were counted once, whatever its size, *X* would have *m* = 1 and
   be picked. *Falsified if:* *X* is picked.
+- *Part c (switching weapon number):* repeat the main part with a gunner switching vehicle
+  whose numbered slots 0 and 2 differ only in the suppress flag: slot 0 off, slot 2 on.
+  Give its first passenger mode index 2 before either target is within range, then move the
+  vehicle into the setup with opportunity fire off. Record its weapon number and first target.
+  *Expected:* number 2 and *Y* picked; with the passenger absent, number 0 and *X* picked.
+  *Falsified if:* a qualifying number-2 search picks *X*, or the number-0 control picks *Y*.
+- *Part d (gattling current weapon is not candidate-specific):* named test map data gives a
+  gattling vehicle a positive turret count and two populated stage-0 slots, both able to hit
+  ground and air, with identical versus values and damage. Its slot 0 lacks suppression and
+  slot 1 has it. The vehicle has weapon number 0, stage 0, no passenger and no earlier firing.
+  All threat coefficients and the enemy-house bonus are explicitly 0, target-health scan mode
+  *none*, guard range 8 cells and fire-suppression distance 3 cells. Enemy *X* is a hovering
+  aircraft in a tracked sector reached by the search, over cell (4, 0); enemy *Y* is a vehicle
+  in ring 1. Both have no weapon. A human-owned weaponless 1 × 1 building at (5, 0) suppresses
+  only *X*; no other building lies within 2 cells of either. Introduce both targets before the
+  vehicle's first search and record its weapon number, stage and first target before a shot.
+  *Expected:* *X* wins the equal-score tie, since the current slot 0 has no suppress flag,
+  although the firing weapon chosen against *X* is slot 1. Control: exchange the two suppress
+  flags without changing anything else. *Expected:* *Y*, because current slot 0 now suppresses
+  *X*. Candidate-specific suppression predicts the opposite pair. *Falsified if:* either
+  qualifying pick differs; a search after firing or a stage or number change does not decide.
+  Parts c and d use game speed 6, director and mods off except named test-map overrides,
+  the common bystander void rule, and three fresh runs per setting.
 
 **A11: map-wide search (claims 1, 7, 11, 22).**
 - *Part a:* a unit ordered to hunt on a map with targets far away: it moves towards a target out of
@@ -2294,9 +2355,9 @@ different health ratios; for distance use different distances.
 - The airborne order of claim 9 is S-0303's F7 order. What the registration order inside one sector
   is for objects that lift off in the same tick belongs to S-0303 (claim 6 and its F7); it decides
   only ties between airborne candidates (scenario A4, part d).
-- Whether, and for how long, an attack-moving object stays in *attack* once it has found a target
-  (claim 23, scenario A6, part g), and what removes the attack-move memory when the destination is
-  reached.
+- The corrected fall-back refresh and arrival rules of claim 23 (Q-0162) still need the oracle
+  runs of scenario A6, parts g, n and o. They no longer leave arrival or the refresh context
+  unspecified.
 - Whether the skirmish set-up makes houses enemies of each other in a way that gives each an anger
   of 1 before any damage (claim 16); scenario A9, part b, records it, and the set-up specs own it.
 - Whether any rule besides damage and alliance changes alters a house's anger (claim 16): not
@@ -2319,9 +2380,10 @@ different health ratios; for distance use different distances.
   backing); the engineer and storage rows of table C rest on one reading each, and scenario A2,
   parts c, g and i, test them.
 - Which other behaviours run searches (claim 1, last paragraph), with which kinds and centres.
-- What "the reach of the weapon" means for an occupied building and for an open-topped transport
-  belongs to S-0307 (range), which should state the open-topped shortest-range rule used in F1.
-  Scenario A1, part i, decides whether the occupant range bonus counts in the reach.
+- S-0307 claims 4 and 13 now own the garrison range replacement and open-topped shortest range
+  used here. Claim 13 currently says passengers' primary weapons, whereas F1 here uses their
+  current weapons (Terms), including a multi-weapon passenger's weapon-number slot. S-0307
+  needs that clarification in the same hand-off.
 - The order of the ground-layer objects among themselves in the map-wide search (claim 7): which
   of them it considers first. Claim 17 breaks equal scores of a map-wide search by this order,
   which is an internal order of the original that this spec does not establish.

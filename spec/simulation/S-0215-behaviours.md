@@ -2,13 +2,13 @@
 id: S-0215
 title: Behaviours (standing orders) and their processing
 topic: simulation
-revision: 15
+revision: 16
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-13
+approved-on: 2026-10-14
 measurements: []
-requests: [Q-0019, Q-0020, Q-0030, Q-0072]
+requests: [Q-0019, Q-0020, Q-0030, Q-0072, Q-0161]
 supersedes: []
 ---
 
@@ -61,8 +61,11 @@ destination left to S-0207 claim 16. It answers request Q-0030, where within a g
 door reaches rest, in claim 35 (d) and scenario B28 case g. Q-0072 is answered in part:
 claim 37 gives the approach triggers, destination retention and renewal, and the building and
 deployed-infantry exceptions. S-0307 claims 15 to 18 give covered searches and failure outcomes.
-S-0207 claim 19 gives driving, sailing and hovering outcomes after coming in range. Infantry
-stopping and exceptional searches remain open, so this is not a complete answer to the request.
+S-0207 claim 19 gives driving, sailing and hovering outcomes after coming in range. S-0208 claims 16 and 17 give the ordinary walker's stopping and destination outcomes.
+Exceptional searches remain open, so this is not a complete answer to Q-0072. Q-0161 is
+answered in full by claim 37 a2: the per-tick approach follows processing and the per-tick
+search, rechecks its conditions independently of a processing's approach, and can drop a
+newly acquired target on that same tick.
 
 **Queueing wording.** Throughout this spec, "queues *b*" without further words means a queue
 request (claim 7) *without* an immediate start. A rule that asks for the readiness-dependent
@@ -1905,6 +1908,19 @@ apply in our engine to the actors of every player house.
       passenger of an open-topped transport, takes the approach step in every behaviour; if it
       still has no destination afterwards and its target is out of range (part b), it drops the
       target. Aircraft, and buildings, never take the approach step (part g).
+
+      (a2) **Place in the tick (Q-0161).** The per-tick rule above judges the target,
+      destination and current behaviour left after the per-tick start, any processing on that
+      tick, and the per-tick search of claim 33. It follows that search, not precedes it.
+      On a tick without processing its place is unchanged: after the per-tick start and
+      the per-tick search opportunity. If no search runs, it still judges the state then held.
+      There is no one-approach-per-tick limit: a processing's approach does not suppress
+      this rule. It takes a second approach step on the same tick if its conditions still
+      hold then. If the processing left a destination, or no target, it does not take that
+      second step. Thus a target found by the per-tick search can receive an approach
+      destination, or be dropped, on that very tick, before any later behaviour processing
+      acts on it. The final out-of-range drop applies only if no destination remains after
+      this step; finding a target does not protect it from this rule.
     - (b) **In range.** "In range" in this claim is the range test of S-0307 (claims 1 to 12) from
       the actor's current position, with the source point the firing check uses (S-0307 claim 8)
       and with the weapon chosen for the target (S-0308). It is not the whole firing check: an
@@ -2004,14 +2020,24 @@ apply in our engine to the actors of every player house.
       sailing and hovering vehicles, S-0207 claim 19 owns the subsequent movement: driving
       and sailing continue to their destination, while hovering discards stored steps at step
       points and can wait for a path retry, without ending the approach for good. Firing during
-      that movement remains subject to the firing check (S-0301, S-0310). Infantry's stopping
-      transition remains an open question for S-0208; no immediate stop or destination clear
-      for infantry is implied here.
+      that movement remains subject to the firing check (S-0301, S-0310). S-0208 claims 16
+      and 17 own infantry stopping: an ordinary walker in *attack*, *area guard*, *hunt* or
+      *rescue* clears its destination and keeps its target on the first arrival tick at which
+      a mobile target passes that claim's range test. Normally that test measures to the
+      target's cell centre, not its own reference point; open-topped types have the separate
+      test stated there. Non-mobile targets cause no early stop. This arrival rule does not
+      change the approach step's retention rule of part e.
     - Backing: `measurable` (scenario B32: case a for the cadence and the in-range rule, case b
       for the kept destination and its renewal, case c for the can-approach property in
       *attack* and *area guard*, case c2 for *hunt* with a human-controlled owner, case d for
-      the per-tick rule with an unreachable target, case e for deployed infantry, case f for zero-speed types; B16 case e for buildings).
-      Part i's vehicle outcomes have S-0207 claim 19's backing and confidence. These parts are `unmeasured`: the magnetic-beam case of part c (the beam's
+      the per-tick rule with an unreachable target, case e for deployed infantry, case f for zero-speed types,
+      case g for part a2's order on processing and non-processing ticks and same-tick loss
+      of a newly found target; B16 case e for buildings).
+      Part a2's repeated in-range step is `unmeasured`: with no destination and an in-range
+      target, both steps leave the same state and take no search draw, so no observable
+      distinguishes two such steps from one. Its independent eligibility and same-tick
+      destination or target outcomes are measurable by B32 g.
+      Part i's movement outcomes have S-0207 claim 19's and S-0208 claims 16 and 17's backing and confidence. These parts are `unmeasured`: the magnetic-beam case of part c (the beam's
       rules belong to the combat topic, which no spec states); the draining case of part d (the
       draining link belongs to the structures and combat topics); the *sticky* and *any other*
       rows of part d (an actor in those behaviours takes the step only by the per-tick case of
@@ -2021,7 +2047,8 @@ apply in our engine to the actors of every player house.
       (no setup here has an attacker outside the usable area in range of its target); part f2,
       whose cell test is S-0301's; the computer-controlled rows of parts d and g.
     - Confidence: high (parts a, b, c, d, e and the outcomes of part f); medium (the per-tick rule of
-      part a, the in-the-playfield mark, part f2, part g's deployed infantry and zero-speed types)
+      part a, the in-the-playfield mark, part f2, part g's deployed infantry and zero-speed types).
+      High for part a2's ordering and independent eligibility.
 
 ## Formulas
 
@@ -2334,6 +2361,10 @@ adds none of its own:
   (claim 33, part a),
 - a target that the per-tick search finds on a tick is first acted on by the processing of a later
   tick, and is not removed by the drop rule of the same tick (claim 33, part c),
+- a target found by the per-tick search can still be approached or dropped by the later
+  per-tick approach on that same tick; the approach judges the state after processing and
+  search, on processing and non-processing ticks alike, and is not suppressed merely because
+  processing already took an approach step (claim 37 a2),
 - whether the per-tick search runs is decided by the current behaviour as that tick's processing
   leaves it (claim 33, part b),
 - every draw that the actor's processing takes on a tick comes before the draws of its per-tick
@@ -2452,6 +2483,13 @@ orders).
   ends when that queued behaviour starts. Scenario B7 (h, l) observes the original's side.
 
 ## Import mapping
+
+Q-0161 adds no imported timing setting. Claim 37 a2's placement and independent eligibility
+are fixed rules, not behaviour-rate or targeting-delay fields.
+
+| Data input | Concept | Parse form and absent-key result |
+|---|---|---|
+| none | per-tick approach placement and repeated-step eligibility (claim 37 a2) | not configurable through data; fixed as stated in that claim |
 
 **Behaviour property sections.** Each behaviour's properties come from a game-wide section of the
 rules data named after the behaviour. Section names are looked up exactly as S-0001 says (with
@@ -3657,7 +3695,28 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   ordinary driving or walking locomotor. Falsified by exclusion from the step solely because
   speed is zero, or a different destination with identical positions, tick and search conditions.
   A run is void if the target is not assigned or *attack* is not current at the processing.
-  Runs: three per case and attacker kind (vehicle, infantry; only infantry for e).
+  (g) Q-0161: same-tick acquisition and approach. Use the shore and unreachable enemy hover
+  vehicle of (d), stationary 8 cells away. A named test file gives the attacker a guard
+  range of 10 cells, weapon range of 5 cells, the can-approach property *no*, and a long
+  *guard* processing delay. Put the attacker in *guard* with no target or destination.
+  Record the processing and targeting timers, target and destination every tick, plus the
+  scenario random state, with the read-only recorder. Make a control run with the enemy
+  on reachable ground at the same distance: its acquisition must be confirmed there, or
+  the pair is void. In the shore run, record search ticks both with and without a
+  behaviour processing, repeating with different recorded seeds until both occur.
+  Expected: on either kind of search tick the targeting timer restarts, but the unreachable
+  target is absent by the end of that tick and no destination is held. The reachable
+  control keeps the acquired target. This distinguishes approach after search from approach
+  before it, independently of the processing timer. Falsified by the unreachable target
+  surviving its acquisition tick in the stated conditions. As a further control, issue an
+  *attack* order against a reachable distant target: a destination supplied by processing
+  remains held and does not trigger this later no-destination rule. For the two-step
+  in-range case, repeat (d) with the unreachable target stationary in range across a known
+  attack processing tick: expected target kept and no destination, but these end states
+  alone cannot count the two unchanged-state steps (claim 37 a2, backing).
+  Tool: read-only recorder and scripted input of the measurement setup. Director and mods
+  off apart from the named test data. Runs: three valid search ticks of each kind in case g,
+  and three per other case and attacker kind (vehicle, infantry; only infantry for e).
 
 ## Open questions
 
@@ -3714,10 +3773,6 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   search, no idle action). The two differ in the draws and the targeting-timer restart of that
   first processing; scenario B10 (g) checks only the guard spot afterwards.
 
-- **Q-0072, question 3 (infantry stopping).** The approach step never clears a held destination
-  because the target came in range (claim 37 e). S-0207 claim 19 resolves the driving, ship and
-  hovering locomotors; it does not support a target drop merely because a vehicle's move ends
-  out of range. The corresponding infantry stopping and destination outcome remain for S-0208.
 - **Q-0072, question 2 (exceptional searches).** S-0307 claims 15 to 18 cover open and
   obstructed level ground, specified failures and balloon-hover destinations, not every search.
   In particular the nearby-cell search centre after non-empty candidate failure is not yet

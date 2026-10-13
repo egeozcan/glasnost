@@ -2,11 +2,11 @@
 id: S-0006
 title: Rules layering
 topic: rules-import
-revision: 9
+revision: 10
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-13
+approved-on: 2026-10-14
 measurements: []
 requests: [Q-0006, Q-0007]
 supersedes: []
@@ -51,7 +51,7 @@ Shared terms used here are defined in the glossary: *base rules*, *colour-adjust
    An empty layer (a game-mode layer as above, or a language rules file with no section) changes no rules value, but it is still an applied layer: every animation that is not first created after that layer's animation reading gets one type read in it, from the art file (Terms; claim 8). So under stock data an animation that the base rules' animation list names has three type reads in every multiplayer or skirmish game, whether or not the mode's file can be resolved, and two in a campaign mission (base rules and map). The mission-named file adds none that counts in the mission (claim 14). A valid language rules file, or one with no section, adds one. The consequence of the count belongs to S-0007 (claim 2).
 
    Where more than one applicable layer gives the same key, the value from the highest-precedence layer is the value held after layering (claims 3 to 5 give the exact rule). Type data and game-wide data start differently:
-   - Every type registry except the tiberiums' starts each game empty, so it holds only the types created for this game (S-0004, claims 1 and 3); tiberiums carry over (claim 10).
+   - Every type registry except the tiberiums' starts each skirmish empty, so it holds only the types created for this game (S-0004, claims 1 and 3); tiberiums carry over (claim 10). The original's deferred campaign exception is sides newly created by the mission-named file: they remain ahead of the base rules' sides for that mission (claim 14; S-0004, claims 1 and 9). No side of the previous game survives. This exception records original context only; campaigns and network games are out of scope for the skirmish milestone.
    - Game-wide sections are not cleared. Each game-wide key starts the game with the value the previous game of the session left (the engine default in the session's first game), as changed by the mission-named file in a campaign mission (claim 14), and keeps it unless a layer of this game gives the key (claim 10). The exceptions restored at every game start are listed in claim 10.
 
    The players' houses (countries, colours, starting credits and so on) reflect the final values of all layers: overrides of country properties made by a game-mode file or a map apply to them.
@@ -81,7 +81,7 @@ Shared terms used here are defined in the glossary: *base rules*, *colour-adjust
    - in a type section, the value an earlier layer of this game gave, or the engine default of its kind if none did; for a tiberium, if none did, the value the previous game of the session left (claim 10), as changed by the mission-named file in a campaign mission (claim 14), and the engine default only for a tiberium first created in this game, as changed by the mission-named file where claim 14 applies,
    - in a game-wide section, the value an earlier layer of this game gave, or else the value the previous game of the session left (claim 10), as changed by the mission-named file in a campaign mission (claim 14). It is the engine default only until a layer of the session, or a mission-named file, first sets the key (claim 10).
 
-   A key written with an empty value (`key=`, or only spaces or a comment after the `=`) is absent: it creates no entry (S-0001, claim 11), so in a layer it keeps the held value exactly as a missing key does, and it never resets the held value to the key's reset value or engine default. In the same way a section whose every line is of that kind, or that has no lines, does not exist in that layer (S-0001, claim 12), so claim 5's resets do not apply to it either, and a type that reads that layer finds no section there (claim 7).
+   An entry with no value after its separator, or with only spaces or a comment as its value, is absent: it creates no entry (S-0001, claim 11). In a layer it therefore keeps the held value exactly as a missing key does; it never resets the held value to the key's reset value or engine default. A section whose entries are all absent in this way, or that has no entries, does not exist in that layer (S-0001, claim 12). Claim 5's resets therefore do not apply to it, and a type that reads that layer finds no section there (claim 7).
 
    Claim 5 lists the exceptions: keys that reset on override, values that are truncated when re-read, and an unset terrain type strength that takes the game-wide tree strength. The terrain strength's −1 is not a "not given" value: it requests that fill rather than keeping the held strength.
 
@@ -260,7 +260,7 @@ Shared terms used here are defined in the glossary: *base rules*, *colour-adjust
     - **Game-wide values.** Each game-wide key it gives takes its value. The base rules, a valid language rules file and the map then apply as usual, so the mission-named file's value is in force in the mission only where none of them gives the key, and it carries into later games of the session like any game-wide value (claim 10). The values that claim 10 restores at every game start (the colour-adjustment table, the maximum number of players, and the reset keys of the difficulty, land-type and power-up sections while the base rules contain those sections) never keep its values.
     - **Tiberiums.** Its tiberium list and tiberium sections act as in any layer (S-0004, claim 10), and the result survives the rebuild: a tiberium it adds stays for the rest of the session, and a key it sets that no later layer gives stays in force. With `quirks.persist_tiberium_overrides` off the rebuild deletes the tiberiums like any other kind, so every tiberium change of the mission-named file is lost, and the importer warns about a mission-named file that holds a tiberium list or a tiberium section, as it does for other type data; its game-wide values still carry over. In the session's first game every entry of its tiberium list creates a tiberium, and these tiberiums take the lowest indices, ahead of any that the mission's layers create; the base rules' tiberium list then uses them by index, whatever names they carry (S-0004, claim 10).
     - **Other types.** Every change it makes to any other type kind (its type lists, its type sections, and types that its game-wide keys create by reference) is lost: the rebuild deletes those types. The new sides of the next bullet are the one exception. None of the rest has any effect in the mission, and it gives no animation a type read that counts in the mission (claim 1).
-    - **Sides.** No side of the previous game reaches the mission. A side that the mission-named file's side list or a country's side field creates remains at this game start, comes before the base rules' sides in side order, and stays for the mission (S-0004, claim 9). This is an exception to S-0004, claim 1's general statement that sides are emptied at every game start; S-0004 claim 1 must be revised to state the campaign mission exception. Such a side's member list can name only the previous game's countries, which the rebuild deletes; in the original those entries stay in the list, and what they denote in the mission is *unspecified*. This is a *departure*: our engine empties the member list of every side at the rebuild, so that only the side lists and country side fields of this game's layers fill it, as S-0004, claim 9, gives. This is bad data that stock data never has; the importer warns about every mission-named file that has a side list or a country section.
+    - **Sides.** No side of the previous game reaches the mission. A side that the mission-named file's side list or a country's side field creates remains at this game start, comes before the base rules' sides in side order, and stays for the mission (S-0004, claim 9). This is the deferred campaign exception recorded in S-0004, claims 1 and 9, and in claim 1 above. Such a side's member list can name only the previous game's countries, which the rebuild deletes; in the original those entries stay in the list, and what they denote in the mission is *unspecified*. This is a *departure*: our engine empties the member list of every side at the rebuild, so that only the side lists and country side fields of this game's layers fill it, as S-0004, claim 9, gives. This is bad data that stock data never has; the importer warns about every mission-named file that has a side list or a country section.
 
     The importer also warns about every mission-named file that holds a type list other than the tiberium list and the side list, or a type section other than a tiberium's, since in the original none of it takes effect. For the tiberium list and sections, and for the side list, the importer warns as the bullets above give.
 
@@ -311,8 +311,8 @@ In the original both values are computed in double-precision floating point and 
 | land-type sections | 12 | sections | claim 5; named in the Import mapping |
 | difficulty levels | 3 | levels | claim 5 |
 | difficulty multiplier reset | 1.0 | ratio (factor) | floating point in the original |
-| difficulty repair delay reset | 0.02 | unconfirmed | Floating point; the unit and use are unresolved (open question 7; repair and AI specs) |
-| difficulty build delay reset | 0.03 | unconfirmed | Floating point; the unit and use are unresolved (open question 7; production and AI specs) |
+| difficulty repair delay reset | 0.02 | unresolved; approval blocked | Floating point. The unit and use are unresolved (open question 7; repair and AI specs); 0.02 remains the stated reset value, but is not yet a fully specified engine constant. |
+| difficulty build delay reset | 0.03 | unresolved; approval blocked | Floating point. The unit and use are unresolved (open question 7; production and AI specs); 0.03 remains the stated reset value, but is not yet a fully specified engine constant. |
 | land movement multiplier reset | 1.0 (100 %) | ratio (factor) | floating point |
 | warhead modifier reset | 1.0 (100 %) | ratio (factor) | floating point |
 | colour-adjustment table size | 16 | entries | claim 2 |
@@ -325,7 +325,7 @@ In the original both values are computed in double-precision floating point and 
 | voxel-animation angular velocity engine defaults before any reading | 0 (minimum), 10 (maximum) | the unit in which the key is written | claim 5; not the reset value, which is −1 |
 | voxel-animation angular velocity conversion factor | 0.01745277777777778 | stored value per written unit | the original multiplies a written value by this fixed factor when it reads it (a product of two floating-point numbers in the original, in double precision, and the number domain of the stored value and the rounding of the product are not established, see open question 10). This spec depends on the conversion only through the comparison with 0, which is made on the written value before the conversion, and the reset to −1, which is a value in the written unit. Everything else about the conversion and the use of the stored value belongs to the voxel-animation spec that is still to be written, which must also state the product's rounding (S-0205). The reset and the defaults above are in the written unit; their stored values are this factor times −1, 0 and 10 |
 | crate effects in the power-up section | 19 | effects | claim 5 |
-| crate effect weight reset | 0 | unconfirmed | The power-up field's weight unit is not established here (claim 5) |
+| crate effect weight reset | 0 | unresolved; approval blocked | The power-up field's weight unit is not established here (claim 5); 0 remains the stated reset value, but is not yet a fully specified engine constant. |
 | mode-list sections (mode kinds) | 6 | sections | claim 13 |
 | items per mode-list entry | 4 needed, 5 read | items | claim 13 |
 

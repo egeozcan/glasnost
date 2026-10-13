@@ -858,19 +858,26 @@ pub fn pack_565(rows: &[[Rgb8; PALETTE_LEN]]) -> Vec<[u16; PALETTE_LEN]> {
 /// `rows` rows and light-alpha `alpha` (S-0104 claim 15, Formulas
 /// "Brightness to row"). [`DEFAULT_LIGHT_ALPHA`] gives 1000 → row 26 of
 /// 53.
-///
-/// The range of light-alpha values is open (S-0104 Open questions); a
-/// negative product is not covered by the spec and gives row 0 here.
 pub fn brightness_row(b: i32, rows: usize, alpha: i32) -> usize {
+    alpha_row(alpha, brightness_rho(b), rows)
+}
+
+/// ρ of a brightness `b` ‰ (S-0104 claim 15): min(254, ⌊max(b, 0)·261 / 2048⌋).
+pub fn brightness_rho(b: i32) -> i32 {
+    // spec: S-0104 claim 15, Constants (row mapping: ρ = min(254, ⌊max(b, 0)·261 / 2048⌋))
+    (i64::from(b.max(0)) * 261 / 2048).min(254) as i32
+}
+
+/// The shade row for light-alpha `alpha` (0 … 255, S-0104 Terms) and ρ
+/// `rho` with a table of `rows` rows (S-0104 claim 15).
+pub fn alpha_row(alpha: i32, rho: i32, rows: usize) -> usize {
     if rows == 0 {
         return 0;
     }
     let span = rows as i64 - 1;
-    // spec: S-0104 claim 15, Constants (row mapping: ρ = min(254, ⌊max(b, 0)·261 / 2048⌋))
-    let rho = (i64::from(b.max(0)) * 261 / 2048).min(254);
     // spec: S-0104 claim 15, Constants (row = min(N − 1, ⌊a·ρ·(N − 1) / 32258⌋))
-    let row = (i64::from(alpha) * rho * span / 32258).min(span);
-    // Not from the spec: a negative light-alpha (open range) is held at row 0.
+    let row = (i64::from(alpha) * i64::from(rho) * span / 32258).min(span);
+    // spec: S-0104 Terms (light-alpha lies in 0 … 255 and ρ ≥ 0, so the row is never negative)
     row.max(0) as usize
 }
 
@@ -1922,6 +1929,18 @@ mod tests {
         assert_eq!(brightness_row(2000, 27, a), 26);
         // A brighter light-alpha is capped at the last row.
         assert_eq!(brightness_row(2000, 53, 255), 52);
+    }
+
+    /// spec: S-0104 claim 15 (the light-alpha after the covers picks the row; whatever a, b ≤ 0
+    /// gives row 0); S-0110 F1 (shroud value 0 gives row 0)
+    #[test]
+    fn rows_follow_the_light_alpha() {
+        assert_eq!(brightness_row(1000, 53, 0), 0);
+        assert_eq!(brightness_row(1000, 53, 64), 13);
+        assert_eq!(brightness_row(1000, 53, 255), 52);
+        assert_eq!(brightness_row(0, 53, 255), 0);
+        assert_eq!(brightness_row(-10, 53, 200), 0);
+        assert_eq!(alpha_row(127, brightness_rho(1000), 53), 26);
     }
 
     /// spec: S-0104 claim 13, Formulas "Object brightness"

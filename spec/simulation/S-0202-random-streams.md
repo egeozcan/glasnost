@@ -2,11 +2,11 @@
 id: S-0202
 title: Random streams (generator, seeding, ranged draws, which systems draw from which stream)
 topic: simulation
-revision: 9
+revision: 10
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-13
+approved-on: 2026-10-14
 measurements: []
 requests: [Q-0018, Q-0046, Q-0101]
 supersedes: []
@@ -838,8 +838,8 @@ order is the one given. Rows marked "pointer" belong to a spec that does not yet
 
 S-0009 points to this table for the rows between the initial fill and the late phase, and states
 the starting units' draws itself (claim 46). S-0011's table *Load-time draw order* cites
-this spec for the overlay and vein-candidate groups. Its cleanup row must also cite claim 14's
-conditional tile-animation draws, and it must include the secret-lab group before remaining tags. Creating terrain objects,
+this spec for the overlay and vein-candidate groups, claim 14's conditional cleanup
+tile-animation draws, and the secret-lab group before remaining tags. Creating terrain objects,
 smudges and tunnels from the map was not found to take draws (medium confidence). Neither S-0009
 nor S-0011 lists the *Fence lines* row; it matters only for data with fence posts. Where each group
 sits is `unmeasured`, apart from what scenario R8 shows (the bridge and vein groups' own draws,

@@ -1,9 +1,9 @@
 ---
 id: Q-0151
 title: Where the defeat test sits in a house update, which tick is the last, and whether removed houses are contenders
-status: open
+status: answered
 related: [S-0414, S-0203, S-0405, S-0410, S-0407, S-0009]
-answered-by: []
+answered-by: [S-0414]
 ---
 
 ## Need

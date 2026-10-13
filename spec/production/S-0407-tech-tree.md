@@ -2,11 +2,11 @@
 id: S-0407
 title: Tech tree (what a house may build: prerequisites and generic groups, tech level, country lists, stolen tech, build limits, captured buildings, secret labs)
 topic: production
-revision: 5
+revision: 6
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-13
+approved-on: 2026-10-14
 measurements: []
 requests: []
 supersedes: []
@@ -104,7 +104,7 @@ stream*, *game start*, *absent-key default*, *importer warning*, *quirk switch*,
   our engine keeps one for every player house (claim 13). It changes only at a recheck of the
   offer (claim 12, the closed list of events that call for one), and what it holds after a recheck is: a type is in the set exactly when claim 1
   (a) and (b) both hold and, in addition, either the type was already in the set before the recheck
-  or the house has a *qualifying factory* (Terms) at the recheck. This admission rule assumes space in the type's sidebar tab: S-0004 claim 11 suppresses an otherwise eligible new icon when the tab is full. Whether that suppressed type belongs to the taken-up set for order legality, and when a freed slot admits it, remain open (Open question 5). No cancellation rule is asserted here for a suppressed type. A type for which (a) or (b)
+  or the house has a *qualifying factory* (Terms) at the recheck. This admission rule assumes space in the type's sidebar tab: S-0004 claim 11 suppresses an otherwise eligible new icon when the tab is full. Whether that suppressed type belongs to the taken-up set for order legality, and when a freed slot admits it, remain open (Open question 4). No cancellation rule is asserted here for a suppressed type. A type for which (a) or (b)
   fails leaves the set (or stays out of it) even when a qualifying factory exists. A type that has left the set is *not* remembered as taken up: when it is allowed again it
   needs a qualifying factory again at the recheck that follows. A type is *taken up* while it is in
   the set. Between two rechecks the set does not change.
@@ -132,7 +132,7 @@ stream*, *game start*, *absent-key default*, *importer warning*, *quirk switch*,
      | no | yes or no | yes or no | no |
 
      The admission rows assume space in the sidebar tab (S-0004 claim 11). A full tab suppresses
-     a new icon; its offer membership and later admission are not established here (Open question 5).
+     a new icon; its offer membership and later admission are not established here (Open question 4).
 
      (Example of the last row: a naval vehicle type whose other conditions are met, while the
      house has a switched-on factory building of the vehicle kind that is not naval and no naval
@@ -278,7 +278,12 @@ stream*, *game start*, *absent-key default*, *importer warning*, *quirk switch*,
     refuses whatever the count, claim 9)
     (`quirks.placed_buildings_not_ever_built`). Objects that come from starting units, crates, deploying
     (S-0415), packing up, capture or triggers never raise it.
-    - Backing: `measurable` (scenario T10, parts b, c, g and h)
+    Release itself is governed by S-0404 claims 7 and 13: an aircraft appears at a free dock,
+    otherwise a non-dock-bound type enters from the local area's edge with one ranged draw,
+    a dock-bound type without a free dock is cancelled with a refund. A cancelled release
+    raises no ever-built count. Queue acceptance (claim 16) guarantees neither a later start
+    nor a release.
+    - Backing: `measurable` (scenario T10, parts b, c, g and h; S-0404 P12 for aircraft release)
     - Confidence: medium
 
 ### Queueing, orders and countries
@@ -420,12 +425,7 @@ stream*, *game start*, *absent-key default*, *importer warning*, *quirk switch*,
     | *n* = 0, *N* = 0 or *n* > *N* | none | its fixed secret type if it has one; none from the lists |
     | 1 ≤ *n* ≤ *N* | one ranged draw *r*ₖ over 0 … *N* − 1 − *k* for every lab, a lab with a fixed secret type included (F4) | its fixed secret type if it has one; otherwise entry *r*ₖ of the concatenated list, counted from 0 |
 
-    On the random-state recorder the labs' draws come after the draws taken while the starting units
-    are placed. Because the range shrinks but the entry is taken by position, two labs can get the
-    same type and the last entries can never be drawn by later labs
-    (`quirks.secret_lab_pick_by_position`). The range of the last draw is 0 … 0 when *N* − *k* = 1, and
-    a ranged draw over a single value consumes no raw value (S-0202 claim 4), so that draw leaves the
-    stream state unchanged.
+    On the random-state recorder the labs' draws come after the draws taken while the starting units are placed. After the secret-lab choices, the game-start recalculation takes tile-animation creation draws in visiting order, before tick 0 (S-0202 claim 14). S-0412 claim 14 owns the broader game-start draw order and must be revised in the same hand-off to remove its conflicting statement that secret-lab draws are the last draws before tick 0. Because the range shrinks but the entry is taken by position, two labs can get the same type and the last entries can never be drawn by later labs (`quirks.secret_lab_pick_by_position`). The range of the last draw is 0 … 0 when *N* − *k* = 1, and a ranged draw over a single value consumes no raw value (S-0202 claim 4), so that draw leaves the stream state unchanged.
     - Backing: `measurable` (scenario T9, with the random-state recorder of the measurement setup)
     - Confidence: medium
 
@@ -587,7 +587,7 @@ after the placement order is applied, while the building is still in its constru
 | `Type` (rules, superweapon) | superweapon kind; only the missile kind matters here (claim 12 (j)); its word waits for the allowed-key list and the superweapon specs | word | none (no kind, so no event) |
 | `BuildLimit` (rules, type) | build limit *L* (claims 9, 10, 16) | integer | 2³¹ − 1 |
 | `Owner` (rules, type) | owner countries (claims 1 and 11) | list of country names | none (never offered) |
-| `Factory` (rules, building type) | factory kind (claim 1) | type kind | none |
+| `Factory` (rules, building type) | factory kind (claim 1) | named vocabulary, S-0003 claim 21 and Import mapping row C19 | no factory initially; missing or empty keeps the value in force |
 | `Naval` (rules, type) | naval kind (claim 1) | boolean | no |
 | `DontScore` (rules, type) | don't-score flag (Terms, claims 8 and 9) | boolean | no |
 | `Insignificant` (rules, type) | insignificant flag (Terms) | boolean | no |

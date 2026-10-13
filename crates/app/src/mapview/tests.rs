@@ -376,7 +376,8 @@ fn overlay_shadow_depth_and_rank() {
 }
 
 /// spec: S-0102 claims 13 and 27, S-0112 claims 1 and 8 (a deck cell's shadow takes the cell's
-/// level alone: 60 depth units farther than the deck's own pixels)
+/// level alone: 60 depth units farther than the deck's own pixels); S-0102 claims 15 and 24 (the
+/// deck's draw point is claim 24's, with no extra lift for its 4 levels)
 #[test]
 fn deck_overlay_shadow_skips_the_deck_levels() {
     // Overlay types 0 … 24, the deck at bridge position 24 (S-0112 claim 1).
@@ -403,6 +404,11 @@ fn deck_overlay_shadow_skips_the_deck_levels() {
     // Body: −2 − 15 × (1 + 4); shadow: −2 − 15 × 1.
     assert_eq!(bias(body), (Profile::Flat, -77));
     assert_eq!(bias(shadow), (Profile::Flat, -17));
+    // Draw point: cell (5, 9)'s top corner (−120, 210), + 15 to the centre, − 15 for level 1,
+    // s = −16 for a deck cell with data 0; the 10 × 10 canvas centred there, the frame at (4, 4).
+    let (px, py) = (-120, 210 + 15 - 15 - 16);
+    assert_eq!((body.x, body.y), (px - 5 + 4, py - 5 + 4));
+    assert_eq!((shadow.x, shadow.y), (body.x, body.y));
 }
 
 /// A 1 × 1 tile file whose diamond holds `value`, with an optional extra
@@ -491,7 +497,7 @@ fn tile_at(b: &Built, x: i32, y: i32) -> Vec<Item> {
         .items
         .iter()
         .filter(|i| i.group == Group::Tiles)
-        .filter(|i| matches!(i.paint, Paint::Diamond(_)))
+        .filter(|i| matches!(i.paint, Paint::LitDiamond(_)))
         .filter(|i| i.x == 30 * (x - y) - 30 && i.y == 15 * (x + y))
         .copied()
         .collect()
@@ -634,10 +640,10 @@ fn claim_23_extra_image() {
     let extra = b.scene.items[i + 1];
     assert_eq!((extra.x, extra.y), (30 * (6 - 9) - 30 - 10, 15 * 15 - 30));
     // Same row as its diamond; index 0 transparent in the extra image.
-    let Paint::Diamond(row) = b.scene.items[i].paint else {
+    let Paint::LitDiamond(row) = b.scene.items[i].paint else {
         panic!("diamond paint");
     };
-    assert_eq!(extra.paint, Paint::Row(row));
+    assert_eq!(extra.paint, Paint::Lit(row));
 }
 
 /// spec: S-0010 claim 24 (a stray tile number paints position 0 of the clear tile)
@@ -854,7 +860,8 @@ fn voxel_canvas_carries_over_between_games() {
 
 /// spec: S-0102 claims 10, 13, 16 and 23 (an animated terrain object is drawn in the object pass
 /// as a reader, with image frame 0, its stage at placement, whatever its health; its sort key is
-/// X + Y of its cell's centre), S-0009 claim 43 (terrain objects enter the drawing order first)
+/// X + Y of its cell's centre), claim 30 (its body ranks right before its own shadow), S-0009
+/// claim 43 (terrain objects enter the drawing order first)
 #[test]
 fn animated_terrain_object_in_the_object_pass() {
     let rules = format!(
@@ -898,8 +905,8 @@ fn animated_terrain_object_in_the_object_pass() {
     assert_eq!(b.scene.images[shadow.image as usize].pixels()[0], 3);
     assert_eq!(bias(body), (Profile::Upright, -12));
     assert_eq!(bias(shadow), (Profile::Flat, -3));
-    // Provisional only for the order of body and shadow (Q-0051).
-    assert!(body.provisional && shadow.provisional);
+    // S-0102 claim 30: the body, then its own shadow, with nothing between them.
+    assert!(!body.provisional && !shadow.provisional);
     assert_eq!(at(shadow), at(body) + 1);
     // Same key as the vehicle on its cell: the terrain object entered first, so it is drawn first.
     let vehicle = items_of(&b, "vehicle");

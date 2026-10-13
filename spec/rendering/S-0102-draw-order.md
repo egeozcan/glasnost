@@ -2,11 +2,11 @@
 id: S-0102
 title: Draw order, render layers, depth compositing, sprite placement and shadow pixels
 topic: rendering
-revision: 6
+revision: 7
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-13
+approved-on: 2026-10-14
 measurements: []
 requests: [Q-0011, Q-0015, Q-0021, Q-0023, Q-0050, Q-0051]
 supersedes: []
@@ -1173,10 +1173,7 @@ building's key. Between two units, the one later in the list is drawn on top whe
 
 ## Edge cases and quirks
 
-- **`quirks.ground_layer_single_pass_sort`** (default: on). The ground layer gets one adjacent-swap
-  pass per tick (claim 6). Alternative: fully sort the ground layer every tick (stable, by key).
-  With the quirk on, fast units moving up the screen can be drawn over units they have already passed
-  behind for a few ticks.
+- **`quirks.ground_layer_single_pass_sort`** (default: on). For every switch in this section with a stated default, that default is the original YR behaviour; an alternative explicitly identified as our engine's alternative is not behaviour of the original. The ground layer gets one adjacent-swap pass per tick (claim 6). Alternative: fully sort the ground layer every tick (stable, by key). With the quirk on, fast units moving up the screen can be drawn over units they have already passed behind for a few ticks.
 - **`quirks.unsorted_upper_layers`** (default: on). Underground, surface, air and top layers keep
   insertion order (claim 7). Alternative: sort them like the ground layer. With the quirk on,
   overlapping aircraft are ordered by take-off time, not by screen position.

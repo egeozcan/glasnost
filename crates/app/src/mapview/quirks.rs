@@ -133,9 +133,9 @@ pub fn sprite_vehicle_facing_part(facings: i32, body: u16, q: &ViewQuirks) -> i3
             0
         };
     }
-    // spec: S-0102 Edge cases (quirks.sprite_vehicle_eight_facings_only off: a power of two n from 2
-    // to 256 gives the n-step facing (S-0204 F4) of the body facing turned clockwise by 8192
-    // facing units; any other count gives 0)
+    // spec: S-0102 claim 29, Edge cases (quirks.sprite_vehicle_eight_facings_only off: a power of
+    // two n from 2 to 256 gives d = ⌊((f + 8192) mod 65536)·n/65536 + ½⌋ mod n, the n-step facing
+    // (S-0204 F4) of the body facing turned clockwise by 8192 facing units; any other count gives 0)
     match u32::try_from(facings) {
         Ok(n) if (2..=256).contains(&n) && n.is_power_of_two() => {
             n_step(body.wrapping_add(8192), n) as i32
@@ -265,10 +265,6 @@ pub const NOT_IMPLEMENTED: &[(&str, &str)] = &[
         "S-0105 claim 10: the on state is drawn; which off state the switch selects is a question for the lead in S-0105",
     ),
     (
-        "depth_mode_leak",
-        "S-0105 claim 32: the on state is drawn (render::voxel::VoxelCanvas); which off state the switch selects is asked in Q-0056",
-    ),
-    (
         "no_turret_shadow",
         "S-0105 claim 29: turrets and barrels cast no shadow, as with the switch on; the off state's shadow is not specified",
     ),
@@ -379,11 +375,6 @@ pub const NOT_IMPLEMENTED: &[(&str, &str)] = &[
         "anim_translucency_levels",
         "S-0109: animation playback is not implemented",
     ),
-    // S-0110
-    (
-        "shroud_on_flat_grid",
-        "S-0110: shroud and fog are not drawn",
-    ),
     // S-0111
     (
         "building_resource_pips_hidden",
@@ -416,7 +407,7 @@ mod tests {
         }
     }
 
-    /// spec: S-0102 claim 22, Edge cases (quirks.sprite_vehicle_eight_facings_only)
+    /// spec: S-0102 claims 22 and 29, Edge cases (quirks.sprite_vehicle_eight_facings_only; D37)
     #[test]
     fn sprite_vehicle_facing_switch() {
         let on = ViewQuirks::default();
@@ -444,6 +435,19 @@ mod tests {
         // Off, n = 16: (f₁₆ + 2) mod 16.
         assert_eq!(sprite_vehicle_facing_part(16, EAST, &off), 6);
         assert_eq!(sprite_vehicle_facing_part(16, 65535, &off), 2);
+        // Off, the boundary checks of D37 (S-0102 claim 29).
+        for (n, f, d) in [
+            (2, 8191, 0),
+            (2, 8192, 1),
+            (2, 40959, 1),
+            (2, 40960, 0),
+            (4, 65535, 0),
+            (4, 0, 1),
+            (4, 16383, 1),
+            (4, 16384, 2),
+        ] {
+            assert_eq!(sprite_vehicle_facing_part(n, f, &off), d, "n {n}, f {f}");
+        }
         // Off, a count that is not a power of two from 2 to 256: 0.
         assert_eq!(sprite_vehicle_facing_part(3, EAST, &off), 0);
         assert_eq!(sprite_vehicle_facing_part(1, EAST, &off), 0);
@@ -522,6 +526,7 @@ mod tests {
         use glasnost_render::light::LightQuirks;
         use glasnost_render::overlay::OverlayQuirks;
         use glasnost_render::palette::PaletteQuirks;
+        use glasnost_render::shroud::ShroudQuirks;
         use glasnost_render::voxel::{RecoilQuirks, VoxelQuirks};
 
         // The switches of the renderer and the map viewer.
@@ -534,6 +539,7 @@ mod tests {
             RecoilQuirks::default().named().to_vec(),
             OverlayQuirks::default().named().to_vec(),
             PaletteQuirks::default().named().to_vec(),
+            ShroudQuirks::default().named().to_vec(),
         ]
         .concat();
         assert!(

@@ -2,11 +2,11 @@
 id: S-0011
 title: Map triggers (multiplayer subset)
 topic: triggers
-revision: 6
+revision: 7
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-13
+approved-on: 2026-10-14
 measurements: []
 requests: []
 supersedes: []
@@ -22,13 +22,12 @@ tables I3 and I4), including the order in which the scenario random stream is dr
 This revision covers skirmish only; network games and campaigns are out of scope. Codes outside
 the subset are parsed, and their meaning is left to a later revision.
 
-**Changes required at hand-off.** S-0109's Terms, claim 13 and scenarios AN9/AN21 must distinguish
-the creation start event from later start events of a trigger-played animation (claim 36 here).
-S-0202 must replace its stale statement that this spec leaves overlay and vein draws open.
+**Hand-off checks.** Creation-time sound and resource-reaction effects of trigger-played
+animations remain unresolved (claim 36 and T21); this revision does not require reversing
+S-0109's approved rule. Resolve the discrepancy before handing off this claim.
 S-0302 must drop its now-satisfied request to extend the survivor cases and warning of claim 27.
-S-0409 must replace its stale statement that claims 26 and 36 cover humans only with their
-all-player-house scope. S-0003 claim 14 must explicitly exclude the owner-country and exact
-trigger-event type-name rules of claims 5 and 21. These companion corrections must be checked together at sign-off.
+S-0003 claim 14's exceptions and S-0409's all-player-house scope already agree in their current
+drafts. The remaining companion corrections must be checked together at sign-off.
 
 ## Terms
 
@@ -101,7 +100,7 @@ engine does instead (claims 26 and 36). The terms below are specific to this spe
 - **Team definition.** A map-defined group that the original's team system builds and runs.
   The team system is outside this spec (a pointer only).
 - **End of loading.** The point in loading a game after the starting units are placed (S-0009, its
-  table "Start position resolution") and after starting crates, but before the game-start terrain
+  table "Start position resolution") and after starting crates and secret-lab choices, but before the game-start terrain
   recalculation pass of S-0010 claim 12 and before the first tick. At this point claim 34 creates
   the remaining tags, claim 6 decides which tags are polled and claim 35 assigns tags to houses.
   The name denotes this tag set-up point, not completion of every row in *Load-time draw order*
@@ -109,8 +108,8 @@ engine does instead (claims 26 and 36). The terms below are specific to this spe
   The whole of loading, the game-start pass included, happens while the tick counter is 0.
 - **Elapsed-time event.** An event with the elapsed-time code (claim 13); with the random-delay
   event it is one of the two timer events.
-- **Trigger-played animation.** As defined in S-0109: an animation that claim 36 creates. This spec
-  says from when the mark applies; S-0109 says what it changes.
+- **Trigger-played animation.** An animation that claim 36 creates, using S-0109's vocabulary.
+  Later playback is governed by S-0109; creation-time start effects are unresolved here.
 
 ## Behaviour
 
@@ -194,7 +193,7 @@ engine does instead (claims 26 and 36). The terms below are specific to this spe
 ### Polling, evaluation and firing
 
 6. **Polled tags are raised once per tick.** Once per tick, at the start of that tick's game logic,
-   The observable results of a tick's poll follow tag registration order: when an earlier-registered
+   every polled tag receives one poll. The observable results of a tick's poll follow tag registration order: when an earlier-registered
    tag's actions change state that a later-registered tag evaluates, that later evaluation observes
    the changed state. For the events of this subset, polling a tag has the effect of a single raise of it in which
    no code-matched event is judged true: condition events, the any-event code, empty event lists
@@ -493,8 +492,8 @@ engine does instead (claims 26 and 36). The terms below are specific to this spe
     ignored: armour, the warhead's percentages and temporary invulnerability do not reduce it, so the
     object is normally destroyed. Protections that depend on the warhead's kind still apply: a type
     immune to radiation, psychic or poison damage takes no damage from a warhead of that kind,
-    and a warhead that makes its target go berserk takes no health. The immune bridge-repair-hut
-    rule can also stop the hit. A building that is eligible for a delayed kill remains alive at
+    and a warhead that makes its target go berserk takes no health. General immunity to all damage
+    does not stop this ignoring-defences hit, except for an immune bridge repair hut (S-0302 claim 8). A building that is eligible for a delayed kill remains alive at
     1 health when the demolition warhead causes delayed kills. An airborne infantry unit hit by
     a demolition warhead of infantry-death kind 9 has its delivered amount reset to 0 and the
     hit is stopped by the zero-amount rule. These additional cases are the damage-resolution
@@ -502,17 +501,19 @@ engine does instead (claims 26 and 36). The terms below are specific to this spe
     reference of S-0302 claim 17. The rules' demolition warhead (Import mapping) is named as the
     damage's warhead. Its kind matters for the protections above as well as for how the destruction
     looks and what it leaves (S-0312, a pointer only).
-    If such an object survives the damage, the action never completes in the original: from that tick
+    If an object survives the damage, the action never completes in the original: from that tick
     on the game stops responding, the tick counter stops advancing, and neither the trigger's later
     actions nor any later tick happen. Our engine
     damages each such object once per firing and goes on, so a survivor stays (a departure: the
     original's result is a hang), and the importer warns when a trigger-kill setup can leave an
-    object alive under one of these protections. For a trigger fired from a cell, the original
+    object alive under any of the survivor rules above. For a trigger fired from a cell, the original
     also acts on the cell, which is not established here (Open questions).
     - Backing: `measurable` (scenario T9, including the armour variant and variants C and D for
-      warhead-kind survivors; S-0302 scenario D16 parts d2, d3 and d4 for the immune hut,
+      radiation-kind and berserk survivors; S-0302 scenario D16 parts d2, d3 and d4 for the immune hut,
       delayed-kill building and airborne infantry survivors and the resulting hangs). The cell
-      effect is `unmeasured`: T9 raises no tag from a cell and no expected cell outcome is known
+      effect is `unmeasured`: T9 raises no tag from a cell and no expected cell outcome is known.
+      Psychic-kind and poison-kind survivors and bypass of temporary invulnerability are
+      `unmeasured` here: T9 varies radiation, berserk and armour, not those protections
     - Confidence: medium (the hang has not been observed)
 
 28. **Explosion at a waypoint.** The action's number slot is a weapon's registration index (S-0004)
@@ -604,10 +605,15 @@ engine does instead (claims 26 and 36). The terms below are specific to this spe
     then the draws of its tag if the tag is created there, then the draws of placing the object on
     the map (S-0202's map-loading table owns the established placement draws; others remain open). An object whose house or type is not found is not created and creates no tag. The table *Load-time draw order* (State and ordering)
     puts these draws together with the draws that S-0009, S-0010, S-0109 and S-0202 assign to
-    loading, in one stream order. Every one of them happens before the first tick.
-    - Backing: `measurable` (scenario T23): the random-state recorder reads the stream state before
+    loading, in one stream order. Cleanup can take conditional tile-animation draws (S-0202
+    claim 14), and secret-lab choices (S-0407 claim 14) precede the remaining-tag arming draws.
+    The game-start pass stays after those groups even when no starting units are placed or their
+    setup stops early. Every one of these draws happens before the first tick.
+    - Backing: `measurable` (scenario T23, including variant D for cleanup and secret labs): the random-state recorder reads the stream state before
       the first tick and the draws between the groups the table lists. The boundary of the claim,
       the first terrain recalculation pass, is a group the table lists
+    - An object with an unresolved house or type creating neither an object nor a tag is
+      `unmeasured`: T23 uses valid object entries and does not test rejected entries.
     - Confidence: medium (high for the order of the groups the table lists; whether other draws
       happen while a map loads is not established)
 
@@ -648,13 +654,11 @@ engine does instead (claims 26 and 36). The terms below are specific to this spe
     the cell carries a high bridge. In the terms of S-0109, the animation has no loop delay, a
     repeat factor of 1 and no reversed play, and is attached to no owner. How it plays, and the
     draws its creation takes, belong to S-0109 (a pointer only).
-    - **The trigger-played mark.** The animation is a trigger-played animation (Terms) in
-      everything except what happens at its creation. Because it has no loop delay, its first start
-      event (S-0109 claim 13) happens at its creation and is not under the mark: like any other
-      animation's, it plays the type's start sound and starts the type's resource chain reaction.
-      Everything after its creation is under the mark: later start events (a follow-up switch, a
-      pass after a loop delay), the damage over time of S-0109 claim 17 and the sounds that S-0109
-      ties to the mark. What exactly the mark suppresses is S-0109's.
+    - **Trigger-played animation behaviour.** The animation delivers no damage. Later start
+      events have no start sound or resource chain reaction; middle events remain governed by
+      S-0109 claims 13 and 14 and occur when due. Whether the creation start event also suppresses
+      sound and resource chain reaction is unresolved in this revision. S-0109's approved rule
+      suppresses them; T21 tests that hypothesis. This revision makes no contrary requirement.
     - **Drop-zone reveal.** Creating an animation of the drop-zone type, by this action or
       otherwise, reveals the area of radius *r* quo 256 cells (truncated toward zero) around the
       animation's position for the local player, where *r* is the rules' drop-zone radius in leptons
@@ -668,13 +672,15 @@ engine does instead (claims 26 and 36). The terms below are specific to this spe
       the original, which does not reject it. Our engine gives such an action no effect, and the importer
       warns (a departure). Without a drop-zone animation type in the rules, the drop-zone action is
       not covered here.
-    - Backing: `measurable` (scenario T21 for creation, location, radius and the first start
-      event; later marked events inherit S-0109's backing, subject to the companion correction
-      named in Summary). The creator's repeat factor, direction and owner attachment are
+    - Backing: `measurable` (scenario T21 for creation, location and radius).
+      Damage suppression, later playback and middle-event behaviour inherit S-0109's backing.
+      Creation-time sound and resource-reaction suppression are `unmeasured`: T21 is proposed,
+      not run, and the conflicting hypotheses remain unresolved. The creator's repeat factor, direction and owner attachment are
       `unmeasured`: T21 does not vary loop/reversal settings or test an owner-specific effect. That the drop-zone reveal takes place whether or not
       the whole map is already revealed is `unmeasured`, for the reason given under claim 26
-    - Confidence: high for the point, the creation and the timing of the mark; medium for the
-      drop-zone reveal and its radius, and for the point on a sloped cell
+    - Confidence: high for the point, creation and damage suppression; low for creation-time
+      start-effect suppression; medium for the drop-zone reveal and its radius, and for the
+      point on a sloped cell
 
 ## Formulas
 
@@ -697,7 +703,8 @@ revision's import coverage.
 > when the signed 32-bit wrapped difference *t* − *s* ≥ *D*. Unit: ticks.
 
 > **F4. Game time reached.** *v* ≤ *t* quo 15, with *t* ≥ 0 the tick number and quo the integer quotient
-> truncated toward zero. For *v* ≥ 1 this is *t* ≥ 15*v*. Unit: trigger time units.
+> truncated toward zero. For *v* ≥ 1 this is *t* ≥ 15*v* when that comparison's product is
+> interpreted as an exact mathematical integer, not a wrapped timer length. Unit: trigger time units.
 
 > **F5. Letters of a waypoint parameter.** A waypoint parameter is read from its first two characters
 > *c*₁ and *c*₂; further characters are ignored. Here “letter” means an ASCII letter A … Z or a … z.
@@ -803,10 +810,11 @@ name are not established either. Nothing else in the table fixes an order of int
 | Pre-placed objects: the vehicle entries, then aircraft, then infantry, then buildings, each in entry order | per object: its creation draw (S-0202 claim 10); then, if its tag is created there, claim 14's draws for that tag's instances; then the draws of placing it (not established). A building's upgrades are created after the building's tag and take their own creation draws | S-0202; this spec, claim 34 |
 | Smudges | not established | no spec yet |
 | Second terrain recalculation pass | as the first pass, for the tile animations it starts, replacing the earlier loading animations | S-0010, claims 12 and 19; S-0202, claim 10; S-0109 |
-| Unused-house cleanup | none known | S-0009, claim 28 |
+| Unused-house cleanup | conditional tile-animation creation and immediate start-event draws from recalculations of occupied ground cells caused by removing objects, including building foundation cells. A cell that already started a tile animation since the second pass takes no new creation draws | S-0009, claim 28; S-0010, claim 19; S-0202, claims 10 and 14 |
 | Late phase | list 3's random entries; the re-assignment draws | S-0009, claims 20, 28 and 29 |
 | Starting units | the draws of type choice, creation and placement that S-0009 claims 45 and 46 list, in their order, including the raw draw after all houses' starting units | S-0009, claims 45 and 46; S-0202 |
 | Starting crates, when crates are on | the draws of placing them (not established) | crate rules, no spec yet |
+| Secret labs | the conditional secret-type choice draws of S-0407 claim 14, in lab creation order | S-0407, claim 14; S-0202, claim 14 |
 | End of loading: remaining tag set-up (Terms) | claim 14's draws for every tag created there, in registration order, and for each tag its instances in chain order | this spec, claim 34 |
 | Game-start terrain recalculation pass, in S-0009's visiting order | as the first pass, for the tile animations it starts. A cell that already started one in the second pass starts no second animation, so takes no further animation-creation draws in this pass | S-0010, claims 12 and 19; S-0202, claim 10; S-0109 |
 
@@ -1407,7 +1415,7 @@ under-attack notifications are not tested by T20.
 
 **Scenario T21 (claim 36).** *Setup:* named test data as in S-0109's common setup: a test
 expansion archive whose art database copy adds an animation type R with a resource chain reaction
-and a start sound, and no damage. A polled trigger (elapsed time 1) plays R at a waypoint marker
+and a start sound, no damage, no particles, and neither scorch nor crater effects. A polled trigger (elapsed time 1) plays R at a waypoint marker
 whose cell holds resource, and a second polled trigger (elapsed time 2) uses the drop-zone action at
 a waypoint marker in shroud, far from both players' units. A third trigger plays R at a waypoint
 marker on a high bridge. A fourth plays R at a waypoint marker on an edge-slope cell (S-0106), next
@@ -1415,13 +1423,18 @@ to a flat cell of the same height level whose own marker gets R from a fifth tri
 reads the cell's resource); whether R's start sound is heard in tick 15 (by ear); the shroud around
 the second marker after tick 30 (screenshot), against the stock drop-zone radius read from the rules, and
 the third animation's drawn height; the drawn heights of the fourth and fifth animations
-(screenshot). *Expected:* the resource is gone from the first cell after tick
-15, and the start sound is heard; a disc of *r* quo 256 cells around the second marker is revealed
+(screenshot). *Procedure:* let the polled triggers fire without moving units into the observed
+cells. Confirm the sound is audible in a separate ordinary-animation control, and that resource
+remains in a control cell without R. *Expected under S-0109's approved suppression hypothesis:*
+the resource remains in the first cell after tick 15, and the start sound is not heard; a disc of *r* quo 256 cells around the second marker is revealed
 to the human player; the third animation is drawn at the bridge's height; the fourth is drawn half
 a height level (the terrain height lift of S-0101 claim 4, halved) higher than the fifth, as the
-centre height of an edge slope (S-0106 claim 2) gives. *Falsified if:* the resource stays, the sound
-is not heard, the reveal is missing or has another radius, the third animation is drawn on the
-ground below the bridge, or the fourth and fifth are drawn at the same height.
+centre height of an edge slope (S-0106 claim 2) gives. *Falsified if:* the resource is removed,
+the start sound is heard, the reveal is missing or has another radius, the third animation is drawn
+on the ground below the bridge, or the fourth and fifth are drawn at the same height.
+Resource removal or an audible start sound would support the competing creation-time-effects
+hypothesis and require reconciliation with S-0109 before specifying that behaviour. Audio failure
+in the control, or unrelated resource removal, makes that part inconclusive.
 
 **Scenario T22 (claim 5).** *Setup:* the common setup, with T20's repeating trigger R1 (only event
 any-event, counting) as the first and only trigger of its tag, in variants of R1's owner-country
@@ -1433,7 +1446,7 @@ the list. (f) A bare `none`, with the human playing the first country of the lis
 over ticks 0 … 40. *Expected:* (a) to (d): one firing in every tick and two in ticks 0, 8, 16, 24, 32
 and 40, as T20 gives for an owner country that is played. (e): one firing in every tick and no
 second firing. (f): the original's result is unspecified (claim 5), so no firing count is expected,
-and the variant only checks that `none` does not act like `<none>`: a second firing in the ticks that are multiples of 8 falsifies the claim.
+and the variant is exploratory only: no result confirms or falsifies the unspecified case.
 *Falsified if:* (a) to (d) show no second firing in the ticks that are multiples of 8, or (e) shows
 one.
 
@@ -1475,6 +1488,16 @@ objects' creation and tag draws. A cell animation's creation and immediate start
 precede its placement's tile-animation draws. Counts and values are S-0202 claim 10's, not
 additional draws of this spec. *Falsified if:* a group lies on the other side of a tag-arming
 group, the cell-animation/tile-animation order is reversed, or a count or value differs from R8.
+Variant D: retain D and E's remaining-tag timers and use S-0202 R11's cleanup fixtures and
+R10 variants A and B's secret-lab and skipped-starting-unit fixtures, separately. Keep those
+scenarios' settings, observed areas, run counts and recorder requirements. *Observable:* the
+stream positions of cleanup animation draws, lab choices, D/E arming and game-start animation
+draws. *Expected:* cleanup's eligible animation draws follow the second pass and precede late
+start-position draws, with none for a cell that already started an animation since the second
+pass. Lab choices follow initial crates and precede D/E arming, which precedes game-start
+animation draws, even with absent or prematurely stopped starting-unit placement. All these
+draws precede tick 0. *Falsified if:* any group has a different relative position, or cleanup
+creates a duplicate animation for a cell already marked as started since the second pass.
 
 **Scenario T24 (input-compatibility rules).** Common setup and recorder. One run per case,
 using named test maps removed afterwards.
@@ -1507,8 +1530,9 @@ using named test maps removed afterwards.
   Undefined cell-tag definitions are tested by T4 run 4.
 - *D, malformed entries:* run a valid control map, then one separate map for each of: a trigger
   key that is a no-definition marker, a trigger ending before its link field, a tag ending before
-  its first-trigger field, a negative event count, a count greater than the complete events,
-  an event missing its value, an action missing its seventh item, and a linked-trigger cycle.
+  its first-trigger field, a negative event count, a negative action count, an event count greater than the complete events,
+  an action count greater than the complete actions, an event missing its value, an action missing
+  its seventh item, and a linked-trigger cycle.
   *Observable:* whether tick 0 is reached and whether loading reports a program error or ceases
   responding. *Expected:* the control reaches tick 0; no malformed case reaches tick 0.
   A cycle is expected to stay in loading without progress. Record a 60-second timeout as
@@ -1522,8 +1546,9 @@ using named test maps removed afterwards.
 
 ## Open questions
 
-The S-0109 correction is a required companion change in Summary, not an unresolved behaviour
-question; T21 is its discriminating measurement.
+- **Creation-time start effects** (claim 36). Whether a trigger-played animation suppresses
+  its creation start sound and resource chain reaction, as S-0109 states, or only suppresses
+  later start effects. T21 distinguishes the hypotheses; neither result has been measured here.
 - **Lobby control for the computer difficulty.** Whether the stock skirmish lobby sets
   the session computer difficulty (claim 4), from which control, and whether the value restored at a
   later game start replaces a lobby choice.

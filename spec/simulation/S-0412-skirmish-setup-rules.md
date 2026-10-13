@@ -2,11 +2,11 @@
 id: S-0412
 title: Skirmish setup rules (setup values, starting credits, random lobby choices, handicap, alliances at game start, superweapon and crate settings)
 topic: simulation
-revision: 3
+revision: 4
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-13
+approved-on: 2026-10-14
 measurements: []
 requests: [Q-0045]
 supersedes: []
@@ -478,15 +478,19 @@ S-0413 claim 6). In addition:
     skirmish game mode; what other modes add at game start, such as a whole-map reveal, is outside
     this spec (claim 13 is the exception), and this claim fixes no order between those additions
     and the items below, except that all of it is over before tick 0.
-    - **Draws.** The draws that game start takes from the scenario random stream fall into three
-      groups, in this order: the draws of the starting units (S-0009 claims 45 and 46 for standard
-      skirmish mode); the draws
-      of the crates, when the crate setting is on, each crate taking its own draws (claim 10; crate
-      rules, no spec yet); and the secret-lab draws, one ranged draw per secret lab when the
-      conditions of S-0407 claim 14 hold. The secret-lab draws are the last draws of game start:
-      no draw follows them before tick 0. The all-base-units family retains this group order,
-      but its starting-unit group's draws follow claim 13, not the standard mode's base-unit
-      draw sequence. Scenario K9 part a tests the group order in both families.
+    - **Draws.** These groups of scenario-stream draws occur in this order: the starting-unit
+      draws (S-0009 claims 45 and 46 for standard skirmish mode); the initial crate draws,
+      when the crate setting is on, each crate taking its own draws (claim 10; crate rules,
+      no spec yet); the secret-lab draws, one ranged draw per secret lab when the conditions
+      of S-0407 claim 14 hold; the end-of-loading tag draws (S-0011 claim 34); and the
+      game-start tile-animation creation draws described by S-0202 claim 14. The last group
+      draws only when that pass starts an animation. Thus secret-lab choices are not the last
+      loading draws. The game-start recalculation follows crates, secret labs and tags even
+      when no starting units were placed or their placement stopped early. This claim fixes
+      these relative positions, not an exhaustive last-draw boundary for loading.
+      The all-base-units family retains this group order, but its starting-unit group's draws
+      follow claim 13, not the standard mode's base-unit draw sequence. Scenario K9 part a
+      tests the group order in both families; S-0202 R10 tests the later animation draws.
     - **Removed houses.** A house that the unused-house cleanup (S-0009 claim 28) removes takes no
       draw for starting units and receives no starting units (K9 part d). It also gets no
       left-over budget, none of the extra credits of claim 3, none of the alliances of claim 8 and
@@ -513,7 +517,9 @@ S-0413 claim 6). In addition:
     its loading order); this claim states no order for it, and the only fact of this spec that
     depends on it is that the balances and indexes of claims 2 and 5 exist before game start.
     - Backing: `measurable` (scenario K9 part a, with the random-state recorder of the measurement
-      setup, for the draw groups and their order; K9 part d for the cleanup before the starting
+      setup, for the starting-unit, crate and lab draw groups and their order; S-0202 R10,
+      including variants A and B, for the later tag and tile-animation ordering and the
+      no-unit and early-stop cases; K9 part d for the cleanup before the starting
       units; the balances through K9 parts b and c). The unobservable orders named above are not
       measurable and are not claimed.
     - Confidence: high for the draw groups and their order and for the balances; medium for the
@@ -579,7 +585,9 @@ resolution").
 | Game start, after the starting units | crates placed when the crate setting is on; the second group of draws | claim 10 |
 | Game start, not ordered against other houses | the extra credits of claim 3 for each house that gets them, computed on a balance that includes the house's own left-over budget (claim 14) | claim 3; claim 14 |
 | Game start, before tick 0, after the cleanup | the alliances of claim 8 and the wall-owner flag rewrites, in no observable order | claim 8; S-0413 claim 6; claim 14 |
-| Game start, the last draws | secret labs get their types, one scenario-stream draw per lab: the last draws of game start (the alliances and flag rewrites above are not ordered against them) | S-0407 claim 14; claim 14 |
+| Game start, after initial crates | secret labs get their types, one ranged scenario-stream draw per lab when the draw conditions hold (the alliances and flag rewrites above are not ordered against them) | S-0407 claim 14; claim 14 |
+| End of loading, after secret labs | remaining tags take their creation draws | S-0011 claim 34; S-0202 claim 14 |
+| Game-start recalculation, after end-of-loading tags | tile animations started by the pass take their creation draws in visiting order, before tick 0; this is not a claim that no later loading draw exists | S-0010 claims 12 and 19; S-0202 claim 14 |
 | Tick 0 | first tick; no defeat test in tick 0 (S-0414 claim 1) | S-0414 |
 
 ## Edge cases and quirks
@@ -845,15 +853,24 @@ setup.
   three crates), two secret labs on the map and a test rules file whose secret lists hold three
   entries in total; the human and one bystander computer player; a unit-count setting above 0 so that the
   starting units take draws; the special country left passive. Observable: the recorded draws from
-  the game's seeding to tick 0, grouped into the starting-unit placement, the crates and the labs
-  (the groups are told apart by a run with the crate setting off, one run with no labs, and one run
-  with unit count 0, the difference in draw count in each run identifying the group). Expected: the
-  draws of the labs are the last of the sequence, after those of the crates, which are after those
-  of the starting units. Falsified if a lab draw is followed by any other draw before tick 0, or if
-  the groups are in another order. Repeat this part in the all-base-units family with the
-  test base-unit list of K8: its starting-unit group follows claim 13 and can take different
-  draws, but the three groups must retain the same order. A different group order falsifies
-  claim 14 for that family.
+  the game's seeding to tick 0, with stream-state checkpoints around starting-unit placement,
+  initial crates and lab assignment. Controls turn crates off, omit labs, or set unit count 0.
+  Identify each group's count from its own checkpoints, not a whole-load count difference:
+  later conditional animation draws can also change when earlier groups change. Expected: the
+  starting-unit draws precede initial crate draws, which precede lab draws. Falsified if these
+  three groups occur in another order; a later tag or animation draw is not a falsifier.
+  Repeat this part in the all-base-units family with the test base-unit list of K8: its
+  starting-unit group follows claim 13 and can take different draws, but these three groups
+  must retain the same order. A different group order falsifies claim 14 for that family.
+  Use game speed 2, director and mods off, and record five runs of each variant without
+  giving orders before tick 0. For the later groups, also run S-0202 R10 and its variants A
+  and B, using that scenario's named theater fixtures and recorder checkpoints. Record the
+  lab choices, tag-creation draws, and tile animations' cells and initial stage delays.
+  Expected: the game-start tile-animation draws follow labs and end-of-loading tags, in
+  visiting order, before tick 0; this ordering also holds with no starting units and with
+  early-stop placement. Falsified by a tile-animation creation in an earlier group or
+  deferred to tick 0, a reversed visiting order, or a creation draw count different from
+  S-0202's animation-creation rule. No last-draw assertion is tested.
 - *Part b (extra credits of computer player houses, claim 3).* Setup: a test rules file (a loose
   copy of the base rules, placed before the program starts, as K1 run 2 and K3 use one) whose
   extra-credit percentage list is 7, 30, 55, whose minimum unit count is 0 and whose credits slider

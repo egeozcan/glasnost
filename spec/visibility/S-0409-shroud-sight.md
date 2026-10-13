@@ -2,11 +2,11 @@
 id: S-0409
 title: Shroud and sight (explored and seen cells, sight radius and shape, height blocking, gap generators, re-covering, reveal on fire)
 topic: visibility
-revision: 4
+revision: 5
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-13
+approved-on: 2026-10-14
 measurements: []
 requests: [Q-0110, Q-0111]
 supersedes: []
@@ -170,15 +170,15 @@ height lift *L(z)* is S-0101's (Formulas F2). In addition:
 
 5. **Sight centre.** A sight or area reveal from the world point (*X*, *Y*, *Z*) is centred on the
    cell (trunc(*X*′ / 256), trunc(*Y*′ / 256)) with *X*′ = *X* − 256·*k*, *Y*′ = *Y* − 256·*k* and
-   *k* = trunc(*L*(*Z*) / 30) (Formulas F2). That is, the point is moved down the screen onto the
+   *k* = trunc(*L*(*Z*) / 30) (Formulas F2). That is, for positive height the point is shifted towards map north-west onto the
    height-0 grid, as S-0110 (claim 8) does for its point test, with the lift counted in whole steps
    of 30 pixels. The point of an object is its position: for a building the centre of the
    top-left cell of its foundation, not the centre of its foundation (Edge cases,
    `quirks.building_sight_top_left`). When the sight centre is not a legal cell, the sight or
    reveal reveals nothing at all (Edge cases, `quirks.sight_centre_off_map`).
    - Backing: `measurable` (scenario V5; part D for the off-map case)
-   - Confidence: high for the formula (trunc, not floor, in both coordinates: for a negative *X*′
-     the cell is 0, and the point is then off the map anyway); medium for the off-map case
+   - Confidence: high for the formula; medium for the off-map case. Truncation, not floor,
+     applies in both coordinates: −256 < *X*′ < 0 gives coordinate 0; such a centre is not legal
 
 6. **Sight shape.** For a radius *r* from 1 to 10, the sight covers the legal cells (*cx* + *dx*,
    *cy* + *dy*) around the sight centre (*cx*, *cy*) with |*dy*| ≤ *r* and |*dx*| ≤ *w*ᵣ(|*dy*|),
@@ -226,10 +226,13 @@ height lift *L(z)* is S-0101's (Formulas F2). In addition:
    country is passive (claim 2). All of this happens in
    the object's own turn, except the placement of a building, which happens when the building is
    placed (S-0203).
-   - Backing: `measurable` (scenario V7: part A arrival, part B the 15-tick period and the restart
-     after a short stop, part E reveal-to-all, part F a change of owner; leaving the map by death
-     in scenario V8 part B2); `unmeasured` for entering a transport or a building and for the
-     flying and jumping events: the removal shows only through a pending mark inside a hostile
+   - Backing: `measurable` (scenario V7: part A arrival, part B the sustained-flight 15-tick
+     period, part E reveal-to-all, part F a change of owner; leaving the map by death
+     in scenario V8 part B2); `unmeasured` for distinct factory-release and unloading sight
+     events (the listed scenarios do not isolate these from other sights), and for the
+     short-stop timer rule independently of take-off or landing refreshes (V7 B's restart
+     run may include those other refreshes). Also `unmeasured` for entering a transport or
+     a building and for the flying and jumping events: the removal shows only through a pending mark inside a hostile
      field, where the transport's own sight covers the same cells, and the jumping locomotor's
      events belong to its own spec
    - Confidence: high for entering the map, arrival in a cell, the 15-tick period and leaving the
@@ -292,7 +295,9 @@ height lift *L(z)* is S-0101's (Formulas F2). In addition:
     unexplored and unseen; without a hostile field nothing happens. A plain reveal of a cell whose
     count is above 0 also marks it pending, so it lasts only until the next sweep (claim 16).
     - Backing: `measurable` for explored-state transitions (V8 for sights and fields, V10
-      for plain reveals, V14 for area reveals, V13 B and B2 for re-cover). Seen-state transitions
+      for plain reveals, V14 for area reveals, V13 B and B2 for re-cover). Cancellation of a
+      pending mark by sight arrival over an already explored, surrounded cell is tested by
+      V13 B2's repeat without satellite loss. Seen-state transitions
       are `unmeasured` directly because fog is off; V13 A tests their proposed indirect rim effect.
     - Confidence: high for the transitions of S1 rows 1 to 4 and 6; medium for rows 5, 7, 8 and 10
     - The one-off count after row 5 with a spy satellite (State and ordering) and the interleaving
@@ -416,7 +421,10 @@ height lift *L(z)* is S-0101's (Formulas F2). In addition:
       does not isolate these conditions), for new-mark outcomes with several sights or
       generators, and for mark survival after a
       reveal: V13 tests re-cover, not reveal, and no scenario here isolates the required pending
-      cell under sight before satellite activation. Immediate seen-state changes and the
+      cell under sight before satellite activation. Clearing a pre-existing mark specifically
+      by a second re-applied sight is also `unmeasured`: V13 B2's second sight clears it before
+      the whole-map operation, so B2 tests the final explored result but cannot isolate that
+      clearing event. Immediate seen-state changes and the
       whole-map-revealed mark are also `unmeasured` as state in their own right: fog is off
       and the mark alone is not drawn; the explored consequences are the scenario targets. The
       defeat clause is `measurable` (V9 parts F and F2), as is the satellite test after defeat
@@ -474,7 +482,11 @@ height lift *L(z)* is S-0101's (Formulas F2). In addition:
     the observer level of the point. It explores and sees the cells and adds no lasting sight
     (S1 row 6). Outside hostile gap fields the cells stay explored. A cell inside a gap field
     hostile to the house is marked pending and re-covered at the next sweep, unless a sight of
-    that house covers it. Which houses it is made for is the ordering spec's.
+    that house covers it. Which houses it is made for is the ordering spec's. In the original, S-0011 claims
+    26 and 36 reveal only for the local player. Our engine applies those reveals to every
+    player house, human or AI, observers included, as their documented departure under claim 1.
+    Claim 26 skips houses whose whole-map-revealed mark is set, whereas claim 36 does not.
+    The all-player-house scope is a design rule, not an observation of the original
     - Backing: `measurable` (scenario V14 for the expiry inside a hostile field and the permanence
       outside; the area and the centre are S-0011's scenarios T16 and T21, which observe the disc
       and its centre but not the expiry)
@@ -536,8 +548,8 @@ height lift *L(z)* is S-0101's (Formulas F2). In addition:
       skirmish start, with no condition); low for the fog-on rule (timing and which cells become
       unseen)
 
-20. **Discovery in a skirmish (Q-0110).** Ownership alone does not set the discovery mark at
-    creation. However, placing an object in a cell's ground or bridge-deck layer marks that
+20. **Discovery in a skirmish (Q-0110).** A newly created infantry, vehicle, aircraft or building
+    starts with its discovery mark clear; ownership alone does not set it. However, placing an object in a cell's ground or bridge-deck layer marks that
     object discovered by *H*, regardless of ownership, shroud or fog. In the original this is
     the local player's house; our engine applies the same rule to every player house under
     claim 1. Thus an own vehicle placed by a map or trigger in unexplored usable ground is
@@ -558,7 +570,10 @@ height lift *L(z)* is S-0101's (Formulas F2). In addition:
     in that cell layer; any non-building precedes a tied building, and tied buildings favour
     the earliest placement in that layer. These are placement priorities, not object-number
     priorities. This selection never removes another object's existing discovery mark.
-    - Backing: `measurable` for placement discovery (V17, also the corrected S-0410 R9 part A).
+    - Backing: `measurable` for usable-ground vehicle placement discovery (V17, also the
+      corrected S-0410 R9 part A). Placement discovery for infantry, aircraft, buildings,
+      bridge-deck placements and outside-area clearing is `unmeasured` here: V17 tests only
+      vehicles on usable ground, and no listed part isolates those other kinds or locations.
       The unset mark before map placement is `unmeasured` independently: an off-map newly
       created object is not listed on radar, so its mark cannot be distinguished there.
       The reveal-selection geometry, eligible kinds and tie priority are `unmeasured`: ordinary
@@ -590,7 +605,9 @@ height lift *L(z)* is S-0101's (Formulas F2). In addition:
     reset that exploration.
     - Backing: `measurable` for the final explored-state consequences (V18); `unmeasured` for
       the satellite state during removal considered separately, since no drawn frame separates
-      the whole-map operation from its final field restoration
+      the whole-map operation from its final field restoration, and for the exact shared counts
+      and their negative-count outcomes: V18 isolates exploration from an untouched state,
+      not separately observable counts or a setup that makes the shared count negative
     - Confidence: high for participation and the satellite-state timing; medium for the derived
       shared-state consequences, pending measurement
 
@@ -730,8 +747,11 @@ No rule depends on the order in which the cells of one sight are processed.
 
 ## Edge cases and quirks
 
+Entries labelled fixed rules below are not optional corrections. Only entries naming a
+`quirks.<name>` setting offer an alternative, always with original behaviour as the default.
+
 - **`quirks.gap_radius_wrap`** (default on, the original). A gap radius field value is read
-  reduced modulo 256 into −128 … 127 (128 reads as −128, 200 as −56, 260 as 4),
+  reduced modulo 256 into −128 … 127 cells (128 reads as −128, 200 as −56, 260 as 4),
   so a gap generator type with a radius from 128 to 255 has a field that covers nothing
   (claim 11). Off: the radius is used as given, with no wrap. The importer warns in either case
   when the value lies outside −128 … 127. Distinct from `quirks.sight_bonus_wrap`, which wraps
@@ -767,18 +787,16 @@ No rule depends on the order in which the cells of one sight are processed.
   reveals of cells never covered by a sight of *H* are undone by the next re-cover sweep, so the
   attacker's area is shown for 1 to 120 ticks, depending on the tick number. Off: the reveal on
   fire behaves like an area reveal (S1 row 6, area reveal) and is permanent outside hostile gap fields.
-  inside them it follows claim 17.
-- **Spy satellite, power and pulses.** The spy satellite tests only that its first qualifying
-  building is not being erased. Low power of the house does not switch it off, and neither does an
-  electromagnetic pulse or lock on the building: in the original the satellite does not depend on
-  power or on the lock.
-  No switch: the rule is stated as one plain behaviour with no alternative worth offering, and
-  S-0405's in-operation test deliberately does not apply to the satellite. If the project lead
-  wants a satellite that needs power, that is a new policy (not asked here: AI and human houses
-  alike keep the original's rule).
-- **Passive countries.** Objects of the neutral and special houses whose countries are marked
-  passive reveal nothing, by claim 2. This depends on the imported country flag, not the house's
-  role alone, and needs no switch.
+  Inside them it follows claim 17.
+- **Fixed spy-satellite rule (not an optional quirk).** Claim 15 deliberately does not use
+  S-0405's in-operation test: low power and electromagnetic locks do not stop the satellite.
+  This is ordinary compatibility behaviour with no switch or alternative; it is not classified
+  as a defect to correct. Backing: `measurable` (V9 C2 and C3); confidence: medium.
+- **Fixed passive-country rule (not an optional quirk).** Objects whose owners' countries are
+  marked passive reveal nothing, by claim 2, including neutral and special houses with that
+  flag. This is imported game behaviour, not a defect or an ownership-role exception; it has
+  no switch or alternative. Backing: `measurable` (V3 and V7 E); confidence: high for the
+  passive flag, medium for precedence over reveal-to-all
 - **Ally reveal and alliance changes.** When two houses ally or stop being allied, the new
   alliance takes effect for buildings and gap fields on that tick: for the houses concerned, the
   re-applied sights (claim 15) and the gap fields count as taken back under the old alliance (S1
@@ -804,8 +822,8 @@ No rule depends on the order in which the cells of one sight are processed.
   mark under exactly one re-applied sight is explored by it with the mark kept, so the next
   re-cover sweep makes the cell unexplored although a sight of *H* covers it; it becomes explored
   again only when a sight is next added over it. A cell under two or more re-applied sights loses
-  its mark. After a reveal the marks under a re-applied sight are cleared again (with the
-  exception of claim 15) and the other marks remain. A mark held before needs a cell that was
+  its mark. After a reveal, marks under at least two re-applied sights are cleared; without a sight
+  they remain. Survival under exactly one sight is not established (claim 15). A mark held before needs a cell that was
   pending at that moment (a sight left it inside a hostile gap field, or a reveal on fire touched
   it, less than 120 ticks before). Off: the re-cover and the reveal clear every pending mark of
   the house once the sights and fields have come back, so neither the earlier marks nor the
@@ -822,10 +840,12 @@ No rule depends on the order in which the cells of one sight are processed.
   start-of-play case finds any unit already on the map was not established (Open questions). Off:
   no uncounted sight is applied; the start of play and the tunnel exit rely on the sights of claim
   8, and regrowth re-applies the sights as counted sights.
-- **No wrap for sights.** Unlike S-0110's point test and gap fields (claim 14), a sight or area
-  reveal never reaches a cell across the 512-cell coordinate range: every cell of a sight must be a
-  legal cell, and no cell outside 0 … 511 is legal. Measurable by scenario V8, part D2 (falsified if
-  the sight explores a cell at the opposite end of the map).
+- **Fixed sight-boundary rule (not an optional quirk).** Unlike S-0110's point test and gap
+  fields (claim 14), a sight or area reveal never reaches a cell across the 512-cell coordinate
+  range: every covered cell must be legal, and no cell outside 0 … 511 is legal. This is
+  ordinary boundary behaviour, not a defect to correct, and has no switch or alternative.
+  Backing: `measurable` (V8 D2, falsified if the sight explores a cell at the opposite end of
+  the map); confidence: high
 - **`quirks.offmap_cells_shared`** (default on, low confidence). In the original every cell that
   is not legal has the same explored state for *H*: a change to that state at one non-legal cell
   is a change at all of them. A gap field whose cells include non-legal cells changes that common
@@ -900,7 +920,9 @@ war off, any game speed. Explored cells are read from screenshots (S-0110 claims
 shroud sprite of S-0110's scenarios may be used so that each cell's state can be read from its own
 diamond). Tick numbers come from a *recorder* that reads the number of ticks run. The test map's
 override section gives the test types their fields (named test data). One valid run per case
-unless stated. Each scenario's observed area is the set of cells it reads, together with its test
+unless stated. Unless a part explicitly leaves its outcome open, any difference between its
+recorded explored-cell set or timing and its stated expectation falsifies that part's hypothesis.
+Each scenario's observed area is the set of cells it reads, together with its test
 objects; the bystander's void rule applies, except to the bystander objects a scenario names (its
 gap generators, attackers, spy team and allied units). "Computer ally" and "computer enemy" below
 mean an allied and an enemy bystander computer player.
@@ -920,7 +942,8 @@ mean an allied and an enemy bystander computer player.
 - **V3 (claim 2).** The human player, one allied bystander computer player (same lobby team) and one enemy
   one. The map places units of the ally in every run, far from the human's, so no run depends on
   starting units (a passive country may get none). A neutral-house vehicle is placed by the map
-  far from everyone. Runs, each set by a named test copy of the rules: (1) ally reveal on; (2) ally
+  far from everyone; the named test rules explicitly mark its country passive. Runs, each
+  set by a named test copy of the rules: (1) ally reveal on; (2) ally
   reveal off; (3) ally reveal on and the computer ally's country marked passive for multiplayer.
   Expected: in (1) the ally's units' surroundings are explored for the human player; in (2) and (3)
   they are not; the neutral vehicle's surroundings are explored in none of the runs. Falsified if:
@@ -978,10 +1001,13 @@ mean an allied and an enemy bystander computer player.
 - **V7 (claims 8 to 10).** Part A: a human vehicle drives a straight route of 10 cells; capture every
   drawn frame. Observable: the tick on which each new cell enters the explored area. Expected: new
   cells appear on the tick of each arrival in a cell (and on the first tick of motion and every 15
-  ticks thereafter). Part B: a human aircraft flies across unexplored ground; expected: explored
-  area grows in steps 15 ticks apart. A second run of part B: the aircraft is ordered to stop (a
+  ticks thereafter). Part B: a human aircraft flies across unexplored ground; sample only sustained flight,
+  outside take-off and landing, and use a sufficiently long route for three periodic refreshes.
+  Expected: explored area grows in steps 15 ticks apart. A second run of part B: the aircraft is ordered to stop (a
   hover or a landing) and 5 ticks later to move again; expected: the next growth comes 15 ticks
-  after the previous one, not 5 ticks after the restart. Part C: a map places a human unit outside the local area and
+  after the previous periodic refresh, not 5 ticks after the restart, provided the stop and
+  restart introduce no separate locomotor refresh. If take-off or landing refreshes intervene,
+  record the result but do not use that run to confirm or falsify the short-stop timer rule. Part C: a map places a human unit outside the local area and
   orders it in (scripted input); expected: nothing is explored around it before it enters the
   usable area. Part D: the units leave; expected: the explored cells stay explored. Part E (named test data):
   a computer-owned test building type with the reveal-to-all flag and a large sight field, placed by
@@ -1012,8 +1038,10 @@ mean an allied and an enemy bystander computer player.
   spy satellite and a named test rules file lengthening the end delay to 900 ticks (S-0414
   claim 8). During that delay a map trigger creates the enemy's powered generator. Expected:
   no cell changes when the generator powers on. Part G (named test data): gap generator types whose radius
-  field is 200 and 260. Expected under `quirks.gap_radius_wrap`: the 200 generator covers no cell, and
-  the 260 generator covers the cells of F4 for radius 4. Part H (the shared state of the non-legal cells,
+  field is 200 and 260, plus two controls with fields 0 and −1, each in a fresh run.
+  Expected under `quirks.gap_radius_wrap`: the 200 and −1 generators cover no cell, the
+  260 generator covers the cells of F4 for radius 4, and the 0 generator covers only its centre.
+  Falsified if either control covers a different set. Part H (the shared state of the non-legal cells,
   `quirks.offmap_cells_shared`; low confidence): the human player owns an active spy satellite
   and a power plant, the whole map is explored, and the border cells of the map's diamond show the
   edge pieces of S-0110 claim 1 towards their non-legal neighbours (S-0110's border sub-test). The
@@ -1139,17 +1167,30 @@ mean an allied and an enemy bystander computer player.
   covers the whole area the unit saw at the start. Expected under the quirk (if the start-of-play
   uncounted sight reached the unit): the rim cells of its start shape stay explored while the inner
   cells become unexplored. Without the quirk (or if no unit existed when the local area was set):
-  the whole field becomes unexplored. The run decides the open question. Part B: a human unit
-  leaves a hostile gap field (its cells become pending), walks on until its sight covers none of
-  those cells. Before the next multiple of 120, a second human unit first brings exactly one
-  sight over those already pending cells and stops; this explores them without clearing their
-  mark (S1 row 1). The human player then loses its spy satellite (whole-map re-cover), still
-  before that sweep, with no other sight of the player covering the sampled cells. Expected: those cells become unexplored at the next
-  multiple of 120 and stay unexplored while the second unit stands still. Part B2: as part B, with
-  a third human unit that reaches and stops with the same cells in its sight before the
-  re-cover (two re-applied sights over them). Expected: the cells stay explored at the next multiple of 120. Part C (the place of the sweep): as part B, but the second human unit is made to arrive in
-  one of those cells on a tick whose number is a multiple of 120 (the recorder's tick log lets the
-  harness repeat with different delays until one run coincides). Expected: the cell is explored
+  the whole field becomes unexplored. Either of those results decides the open question
+  rather than by itself falsifying a settled start-of-play rule. The proposed rim effect is
+  falsified if the surviving explored cells form neither the predicted rim nor the empty set,
+  after excluding other sights and reveals. Part B: the human player has an active satellite. A human unit
+  leaves a hostile gap field, making sampled cells pending, then walks until its sight covers
+  none of them. Before the next multiple of 120, a map trigger creates a second powered enemy
+  gap generator covering those cells; they must visibly become unexplored. A second human
+  unit then brings exactly one sight over them and stops: because they were unexplored on
+  arrival, S1 row 1 restores exploration without clearing their pending mark. Destroy the
+  satellite before that sweep, with no other human sight over the sampled cells. Void and
+  repeat if a sweep intervenes, either generator stops, or the cells were still explored
+  immediately before the second unit's arrival. Expected: the cells become unexplored at
+  the next multiple of 120 and stay unexplored while the second unit stands still.
+  Part B2: as part B, with a third human unit that reaches and stops with the same cells in
+  its sight before the re-cover (two re-applied sights). Expected: the cells stay explored at
+  the next multiple of 120. Repeat without destroying the satellite to isolate cancellation
+  by ordinary sight arrival, with neither sight refreshed before the sweep: expected, the
+  cells remain explored. B2 is not an isolated test of the second re-applied sight clearing
+  an existing mark: the third unit already clears that mark on arrival before re-cover.
+  That particular mark-clearing event is independently unmeasured.
+  Part C (the place of the sweep): no satellite or whole-map operation. A human unit leaves
+  sampled cells inside one running hostile field, making them pending. A second human unit
+  arrives over a sampled cell on the next tick whose number is a multiple of 120 (the
+  recorder's tick log lets the harness repeat with different delays until one run coincides). Expected: the cell is explored
   after that tick and still explored after the next multiple of 120 while the unit stands
   still: the earlier sweep cleared the pending mark before the sight arrived. Part D (creation-order prediction, claim 15; low confidence): the human player owns an
   active spy satellite building and a unit standing still, with the unit's cells inside the field
@@ -1164,8 +1205,9 @@ mean an allied and an enemy bystander computer player.
   immediately hide those cells. Exclude the satellite building's sight and all other sights. Falsified if:
   both runs agree or show the opposite outcomes: either falsifies the proposed creation-order
   relation, without identifying an internal processing sequence. Parts B, B2 and C are falsified if: part B's cells stay explored, or part B2's cells become
-  unexplored (the second sight does not clear the mark: the rule of claim 15 and S1 row 7 is wrong,
-  and a mark survives under any number of re-applied sights), or in part C
+  unexplored (the predicted two-sight final state is wrong, but B2 alone cannot establish
+  whether the mark was cleared before or during re-cover), or
+  if B2's repeat without satellite loss becomes unexplored, or in part C
   the cell is unexplored right after the coincident tick (the sweep ran after the turn pass),
   or it becomes unexplored at the following sweep despite no intervening sight or gap change.
 - **V14 (claim 17).** A map trigger (S-0011 subset) reveals around a waypoint inside an area that a
@@ -1247,6 +1289,13 @@ mean an allied and an enemy bystander computer player.
 
 ## Questions for the project lead
 
-None. Whether trigger reveals also apply to AI houses is settled by the AI-house ruling
-(glossary *AI house*). The current S-0011 draft's claims 26 and 36 already include every
-player house under that ruling.
+None. The template requires switches for optional corrections, not for every fixed rule
+listed under edge cases. The passive-country rule, sight boundaries and power-independent
+satellite behaviour are fixed compatibility rules, not optional quirks; their classification
+above changes no behaviour or quirk default.
+
+Trigger reveals in the original are local-player-only. Approved S-0011 claims 26 and 36
+separately state our engine's all-player-house departure; claim 17 here now makes that
+attribution explicit. S-0110's current draft carries the non-legal-cell exception and its
+claim-21 persistence qualification. Confirm these agreements together at hand-off; no
+human-only trigger reveal in our engine or ownership-only discovery rule is intended.

@@ -2,11 +2,11 @@
 id: S-0112
 title: Overlay and terrain object drawing
 topic: rendering
-revision: 8
+revision: 9
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-13
+approved-on: 2026-10-14
 measurements: []
 requests: [Q-0012, Q-0021]
 supersedes: []
@@ -73,10 +73,10 @@ and *quirk switch*.
   ⌊*N*/2⌋ − 1 by convention and shadow image frames follow them, but the rules below are stated for
   any image frame index.
 - **Start-up resource table.** A shade table of 53 rows built by S-0104's untinted rule (claim 6,
-  Formulas "Untinted table") from the **temperate theater palette** (file `TEMPERAT.PAL`, ×4 by
+  Formulas "Untinted table") from the **temperate theater palette** (×4 by
   S-0103 claim 1), read once when the program starts.
 - **Start-up mine table.** A shade table of 53 rows built by the same untinted rule from the **snow
-  unit palette** (file `UNITSNO.PAL`, ×4 by S-0103 claim 1), read once when the program starts. It
+  unit palette** (×4 by S-0103 claim 1), read once when the program starts. It
   is built from the file's own colours, multiplied by 4 once, so it is never built from the palette
   multiplied by 4 twice that S-0103 describes for a missing unit palette file (S-0103 Edge cases).
   What it is built from when the snow unit palette file itself is missing at program start is an
@@ -128,10 +128,10 @@ and *quirk switch*.
    | 8 | any other overlay | the cell's tile shade table | the cell's scaled ground level | the cell's overlay type | the overlay data value |
 
    Consequences:
-   - **Ore, gems and veins never take colour.** The start-up resource table is untinted (S-0104
+   - **Outside deck and marker cells, ore, gems and veins never take colour.** The start-up resource table is untinted (S-0104
      claim 6). Map tint, coloured light sources and global effects never change their colours.
-     Ore and gems also ignore the cell's light level: their brightness is always 1000, so they use
-     row 26 wherever the light-alpha value is the default (S-0104 claim 15), and row 26 reproduces
+     Ore and gems ignore the cell's light level: their brightness is always 1000, so they use
+     row 26 when the light-alpha value is at its default (S-0104 claim 15), and row 26 reproduces
      the palette exactly, without the −1 of S-0104 claim 7. Shroud cover pieces and light-glow
      images can change their shade row through the per-pixel light-alpha value, despite their
      fixed brightness. S-0110 claims 5 and 6 own those updates: cover pieces act before glows,
@@ -146,6 +146,10 @@ and *quirk switch*.
      (S-0104 claim 3): bridge decks, crates, rubble, and every overlay of row 8, for example a
      fence, track, rock or decoration whose type has none of the four flags. This answers S-0104's
      open question on overlays and tile tints.
+     **Cross-spec change required at handoff:** S-0103 claim 8, its confidence statement and its
+     open questions must delegate the established ore and gem palette to this spec's start-up
+     resource table, rather than leave it unresolved. Its statement must respect this table's
+     deck-cell precedence and the shroud/glow shade-row changes above. The approved S-0103 claim 8 and its open questions still leave the ore and gem overlay palette unresolved. Update S-0103 in the same handoff as this spec, then check that the two agree.
    - Rows 3 and 5 depend on the type's flags and list position only, never on the theater.
    - **Deck cells.** The original makes a cell a deck cell only when it places in that cell an
      overlay type at one of the bridge list positions 24, 25, 237 and 238 (the positions of S-0009
@@ -174,6 +178,8 @@ and *quirk switch*.
      and 7, part C for row 4 over row 7, part D for row 3 over row 5, part E for row 4 over row 5,
      part F for row 5 over row 7, parts G and H for rows 3 and 4 over row 6, and parts I and J for
      row 6 over row 7.)
+     `unmeasured` for ignoring a crate's non-zero data value: OV9 cannot establish whether crate
+     placement resets it, so only the observed frame-0 result is measurable with that scenario.
      `unmeasured` for row 5 over row 6: a type with the crate flag is never placed by a skirmish
      map (S-0009 claim 12), so vein cells of a vein type given the crate flag could come only from
      vein growth during play, which is not covered here.
@@ -197,9 +203,13 @@ and *quirk switch*.
 
 2. **The start-up tables never change during a session.** The start-up resource table and the
    start-up mine table are built once, when the program starts. Loading a theater or starting
-   another game does not rebuild them from any other palette. So ore, gems and veins show the colours
-   of the temperate theater palette in every theater, and ore-spawning terrain objects show the
+   another game does not rebuild them from any other palette. So outside deck and marker cells,
+   ore, gems and veins show the colours of the temperate theater palette in every theater, and
+   ore-spawning terrain objects show the
    colours of the snow unit palette in every theater (`quirks.resource_palettes_from_start`).
+   Fixed tables do not imply fixed shade rows: shroud cover pieces and light-glow images can
+   change ore and gem rows through light-alpha (claim 1; S-0110 claims 5 and 6).
+   Fog remains outside skirmish scope.
    - Backing: `measurable` (OV1)
    - Confidence: high
 
@@ -274,8 +284,10 @@ and *quirk switch*.
    *d*, except that for *d* = 0 and *d* = 9 it is *d* + *T*(*x* mod 4, *y* mod 4), with the
    engine table *T* of Constants. Neighbouring deck pieces of the same data value therefore
    cycle through four consecutive image frames in a fixed 4 × 4 pattern.
-   - Backing: `measurable` (OV7, part E for the data value 9 and the values that do not vary; OV17
+   - Backing: `measurable` (OV7, part E for the data value 9 and a sampled value that does not vary; OV17
      for which cells are deck cells)
+     `unmeasured` for every remaining data value other than 0 and 9: OV7 part E samples one,
+     and no scenario here tests the exhaustive assertion over all other values.
    - Confidence: medium
 
 7. **Wall connection bits.** A wall overlay's image frame is its overlay data value (claim 1,
@@ -426,6 +438,8 @@ and *quirk switch*.
      for row 2 in a deck cell, OV15 part I for row 1 over row 2 and part J for row 1 over rows 4
      and 5). `unmeasured` for row 3, and so for row 1's precedence over it, since row 3 cannot
      arise in play (claim 5).
+     `unmeasured` for a crate's shadow ignoring a non-zero data value: OV9 cannot establish
+     whether crate placement resets it; its measurable part tests the resulting shadow frame.
      `unmeasured` for the depth of a crate's shadow: crates cannot be placed on a skirmish map
      (S-0009 claim 12) and appear only in play, so no layout puts one beside a chosen shadow.
    - Confidence: high for the general row and the stored-type sprite, and for the depth of the
@@ -537,8 +551,8 @@ leave rubble, and the other cells with the rubble overlay, draw no shadow.
 | overlay shadow depth bias | −2 − 15 × *ℓ*<sub>s</sub> | depth units | every overlay kind, flat profile, writes depth; *ℓ*<sub>s</sub> without a deck's 4 levels (claim 8; S-0102 claim 13) |
 | ore and gem brightness | 1000 | ‰ | row 26 of 53 when light-alpha is 127, S-0104 |
 | start-up table rows | 53 | rows | untinted, S-0104 claim 6 |
-| start-up resource palette file | `TEMPERAT.PAL` | file name | read once per session |
-| start-up mine palette file | `UNITSNO.PAL` | file name | read once per session |
+| start-up resource palette | temperate theater palette | palette role | read once per session |
+| start-up mine palette | snow unit palette | palette role | read once per session |
 | tiberium image runs | see the table below | overlay list positions | engine constants (claim 4) |
 
 Deck variation table *T*(*x* mod 4, *y* mod 4), in image frames (claim 6):
@@ -550,8 +564,8 @@ Deck variation table *T*(*x* mod 4, *y* mod 4), in image frames (claim 6):
 | 2 | 2 | 3 | 0 | 1 |
 | 3 | 1 | 0 | 3 | 2 |
 
-Image runs of a tiberium by image number *v* (Import mapping). These are positions built into the
-original, not stock data:
+Image runs of a tiberium by image number *v* (an integer image-number value, unit: image number,
+Import mapping). These are positions built into the original, not stock data:
 
 | Image number *v* | *P* | *F* | *S* |
 |---|---|---|---|
@@ -561,10 +575,14 @@ original, not stock data:
 | any other value except −1 (0 and 1 included) | 102 | 12 | 8 |
 | −1, or the key absent | nothing is set: the run stays as it was, and a tiberium never given another value has none (claims 10 and 12) | | |
 
+*P* is an integer overlay list position; *F* and *S* are integer counts of overlay types in the
+flat and sloped runs respectively.
+
 ## State and ordering
 
-- Claims 1 to 9 hold in every drawn frame. Apart from the connection bits of claim 7, nothing in
-  this spec changes game state. The runs of claim 10 are rules state, set when rules layers are
+- The drawing rules of claims 1 to 9 hold in every drawn frame; drawing itself changes no game
+  state. Claim 7 also specifies events that change connection bits and cause wall hits, whose
+  damage outcomes belong to S-0303. The runs of claim 10 are rules state, set when rules layers are
   read (S-0006).
 - A change of light (S-0104 claim 9) shows on the next drawing of the cell for every row that
   reads a light level. Ore and gems never change with the cell's light level, but shroud cover
@@ -675,7 +693,16 @@ fog setting. Pixel colours are
 read from screenshots at 800 × 600 in the 5-6-5 layout and compared with the expected palette
 entries after S-0103's 16-bit packing (claim 9). "Sprite frame *f*" means the picture of image frame
 *f* of the named sprite, rendered offline from the stock file with the expected palette for
-comparison.
+comparison. Use one bystander computer player separated from the observed area, which contains
+all named test cells and objects; the glossary's bystander void rule applies. Director and
+unrelated mods are off, and named test files are removed afterwards. Tick-labelled lossless
+screen capture and scripted input are the recording tools; any needed harness extension is
+proposed to the user, not assumed installed.
+
+In every scenario, any distinguishable mismatch with a stated expected sprite, image frame,
+colour, presence or event tick falsifies that part, not only the examples listed under
+“Falsified if”. An ambiguous match, a missing required subject, or a failed setup is
+inconclusive, never evidence for the claim.
 
 - **OV1, start-up tables in every theater (claims 1 to 3).** Two sessions, one run each (the main session and variant B). Three maps, snow, urban and desert,
   played one after another in one session, after a first game on a temperate map. Each holds a flat
@@ -714,6 +741,16 @@ comparison.
     the plain terrain object, the deck or a crate fails to darken, to turn red or to take the storm
     tint as the terrain beside it does, or shows a house colour. The crate part is inconclusive if
     no crate appears on screen in a run.
+  - *Additional light-source run:* neutral test lighting with red building lights covering each
+    subject's cell (named test map buildings, as in OV11). One run. Their bodies and glows must
+    not overlap sampled pixels. Sample crates only if they appear within a light's radius.
+    *Expected:* ore keeps its neutral-run pixels. Veins and the ore-spawning object keep their
+    untinted-table hue, although their brightness follows the light. Walls keep their house-colour
+    hue while their brightness changes. The fence-like overlay, plain terrain object, bridge deck
+    and sampled crates take the same red cell tint as terrain beside them.
+    *Falsified if:* ore changes, veins, the ore-spawning object or walls acquire the red tint,
+    or any of the tile-table subjects fails to acquire it. The crate part is inconclusive if
+    no crate appears within a light's radius.
 - **OV3, ore picture by position (claims 4 and 8).** One run per part. Every overlay cell of this and the next
   scenarios is a legal cell (S-0009 claim 12). *Observable:* in every part, which sprite frame each
   cell shows as its body and as its shadow, matched against offline renders. Part A: on a map at least 40 × 40,
@@ -937,7 +974,8 @@ comparison.
   - *Falsified if:* the rubble shows a house colour, ignores the tint, or is drawn in more than one
     cell; a rubble shadow has another image frame or sprite than stated; the third building casts a
     shadow; or a foundation cell other than the top-left one shows a shadow.
-- **OV9, crates and other overlays (claims 1 and 8, rows 6 and 8).** One run. A skirmish with
+- **OV9, crates and other overlays (claims 1 and 8, rows 6 and 8).** Three runs, one at each
+  detail level (low, medium and high, selected in the settings file before game start). A skirmish with
   crates on, on a map whose overlay data stream gives every cell data value 5; and a row of
   overlays of a type without any of the four flags at data values 0 to 3.
   - *Observable:* the body and shadow sprite frames of every crate that appears and of the row,
@@ -1002,8 +1040,8 @@ comparison.
   as above with data value *e*. *Expected:* the game plays on, the cell shows no body, and its
   shadow (sprite frame *e* + ⌊*N*/2⌋) is drawn as usual. *Falsified if* the game stops or the
   shadow is missing.
-- **OV13, image numbers and the kept sloped run (claim 10).** One run per part; part B's run is one session of two
-  games. Each part starts with a fresh program start. A map's override section changes a tiberium only with a tiberium list entry keyed with that
+- **OV13, image numbers and the kept sloped run (claim 10).** Part A: one run. Part B: one
+  session of two games. Part C: one test run and one control run. Each part starts with a fresh program start. A map's override section changes a tiberium only with a tiberium list entry keyed with that
   tiberium's existing index (S-0004 claim 10).
   - *Observable:* the body each test cell shows, matched against offline renders, and whether the
     game stops.
@@ -1112,8 +1150,12 @@ comparison.
   game without the overlay that casts the shadow (value *v* per channel); a part is not measurable
   if its overlay's sprite has no shadow image frames or the shadow does not reach the pixels named.
   Every part puts a tree (a terrain object placed by the map) so that its shadow overlaps the
-  overlay shadow on bare ground.
-  - *Part A (wall).* A wall overlay (the local player's, placed by the map). *Expected:* ⌊*v*/4⌋ in the
+  overlay shadow on bare ground. One test run and one control run per kind and level, repeated
+  at detail low, medium and high (selected in the settings file before game start): 36 runs total
+  for three kinds, two height levels, three detail levels and their controls. Record matching
+  screenshots once the named objects are present and stationary; destroy the rubble-producing
+  building with scripted input before that capture.
+  - *Part A (wall).* A wall overlay placed by the map's overlay list, with no owner. *Expected:* ⌊*v*/4⌋ in the
     overlap, as in D35 (a): the tree's shadow darkens it a second time. With the −15 of an
     upright body the overlay shadow would be farther than the tree's and the overlap would be ⌊*v*/2⌋.
   - *Part B (veinhole marker).* A veinhole as in OV10 part A with loose marker sprites whose shadow

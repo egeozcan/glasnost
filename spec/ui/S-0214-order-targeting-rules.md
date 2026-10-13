@@ -2,13 +2,13 @@
 id: S-0214
 title: Order targeting rules (what a click means for each kind of object, and group orders)
 topic: ui
-revision: 13
+revision: 14
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-12
+approved-on: 2026-10-14
 measurements: []
-requests: []
+requests: [Q-0081]
 supersedes: []
 ---
 
@@ -168,8 +168,9 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
 - **Free mover.** An actor that is in the air, is an aircraft, is of an underground type or is
   a jumpjet infantry type. For a click on a cell, a jumpjet infantry type counts only while no
   ion storm is active. For a click on an object it counts always.
-- **Can be selected.** An object that a click may put into the selection. Units and buildings
-  can, unless something excludes them; a building whose type is invisible in the game is believed
+- **Can be selected.** An object that a click may put into the selection. Its type's selection
+  flag must permit selection. Zero health alone does not exclude a building still in play
+  (claim 16). Units and buildings can, unless something excludes them; a building whose type is invisible in the game is believed
   not to be selectable (low). Whether a unit that is below the surface, or one that is cloaked, can
   be selected is not identified (low; Open questions). Rows G2, G10, claim 3 and claim 12 all ask this one question.
 - **Passive neutral house.** A house whose type carries the passive flag (Import mapping). Its
@@ -205,9 +206,14 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
 - **Monster of a veinhole (veinhole monster).** A stationary map object of the original's veinhole kind. Only its effect
   on the target of an attack order (table M) is used here.
 - **Balloon-hovering type.** An infantry type with the balloon-hover flag (Import mapping).
+- **Factory-marked building.** A building whose imported factory category is anything other
+  than no factory, including a recognised non-producing category (S-0003 claim 21). This term
+  concerns clicks only, not eligibility to serve a production line. Rows B3 and B5 and the
+  building *deploy* row of table M use this wider category test (claim 17).
 - **Rally-capable building.** A factory of infantry or vehicles, a cloning building or a repair
   depot. Nothing else is rally-capable: a tank bunker is not, and an aircraft factory is only when
-  its type is also a repair depot.
+  its type is also a repair depot. A recognised non-producing factory category neither grants
+  this ability by itself nor cancels the independent cloning or repair-depot ability (claim 17).
 - **Veterancy rank, veterancy ability.** As the glossary defines them; S-0311 owns both. An
   object's veterancy rank is rookie, veteran or elite, derived from its experience (S-0311, Terms
   and claim 1), and elite is the top rank. How rank is earned, and which ranks grant which
@@ -262,9 +268,7 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
    included. So the split between *select* and *nothing* in rows G2, G9 and G10 changes only the
    cursor that the representative shows. A click does the same under both. For example, a tank that
    is being erased and is alone clicks an enemy tank: the action is *nothing*, no order is made, and
-   the enemy tank becomes the selection. While route mode is held (S-0213, claim 16), a command click adds route points instead
-   of creating orders, and is refused when the route-holder limit would be passed (the limit and
-   its refusal are S-0213's, claim 16).
+   the enemy tank becomes the selection. While route mode is held (S-0213, claim 16), a command click adds route points instead of creating orders. The click is refused when the route-holder limit would be passed or when a selected object cannot take part in a route; either refusal adds no route point (S-0213, claim 16).
    - Backing: `measurable` (Scenario T2, whose tower and power-plant steps give the *nothing*
      cases, Scenario T9 part A for an actor that is being erased, and S-0213's Scenario O8 for the
      refusal at the route-holder limit)
@@ -514,6 +518,38 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
     - Backing: `measurable` (Scenario T6) for the berserk case, and Scenario T9 part C for the
       melee-linked case, with scripted clicks while the link holds.
     - Confidence: medium (low for the melee-linked case, whose cause is low)
+
+16. **Selecting a destroyed building awaiting removal (Q-0081 parts 3 and 4).** A building
+    awaiting removal under S-0312 claim 21 can still be selected by a battlefield click if it
+    otherwise permits selection: zero health is not a selection exclusion. This holds both for
+    a destroyed building of an exploding type and for one destroyed while being sold. With an
+    empty selection and no sidebar targeting mode, a click on an own visible, selectable
+    building that is not being erased selects it during that interval. Its occupied foundation
+    can still supply the clicked object even when the destruction has removed its visible
+    animations. Selection does not restore health, postpone removal or restart a sale.
+    Being erased remains a selection exclusion; postponing removal that way does not make
+    the building selectable. This claim does not promise selection for an invisible type or
+    a type whose selection flag is off.
+
+    S-0302 claim 16 already answers Q-0081 parts 1 and 2 (countdown expiry, its hit and credit,
+    capture, sale and removal before expiry). S-0312 claims 3 and 21 already answer the death
+    effects, removal timing, further hits, acquisition eligibility, turns, occupancy, draws,
+    rubble and crates in parts 3 and 4. Those remain their rules, not selection rules here.
+    - Backing: `measurable` (Scenario T12; S-0302 D13 and S-0312 D14 for the cited rules)
+    - Confidence: high for zero health not excluding selection and the occupied-foundation
+      click; medium for obtaining a click during the short interval in stock play
+
+17. **Factory categories do not replace the other click abilities.** S-0003 claim 21 and
+    Import mapping C19 own the imported category vocabulary. A recognised category that
+    produces none of the four production kinds still counts as factory-marked for rows B3
+    and B5 and for issuing a primary order from *deploy* in table M. It does not count as an
+    infantry, vehicle or aircraft factory in rows that name those kinds specifically. In
+    particular, a non-producing category alone does not make a building rally-capable, but
+    a building of that category that is also a repair depot or a cloning building remains
+    rally-capable. Not being a producer therefore does not imply that clicks do nothing.
+    S-0213 claim 13 owns what the primary order does when applied.
+    - Backing: `measurable` (Scenario T13)
+    - Confidence: high
 
 ## Formulas
 
@@ -815,15 +851,15 @@ rows: low.
 | AC11 | Otherwise | *g* |
 
 **Table B: building on an object** (claim 8). The first matching row gives the final action. All
-rows: low.
+rows: low, except the factory-category tests clarified by claim 17 (high).
 
 | Row | Building and target | Final action |
 |---|---|---|
 | B1 | The actor's type, or the target's type if the target is a building, is invisible in the game | nothing |
 | B2 | *g* is toggle select | toggle select |
-| B3 | *g* is deploy; the building is a factory that is already its house's primary factory | nothing |
+| B3 | *g* is deploy; the building is factory-marked and already marked primary | nothing |
 | B4 | *g* is deploy; a gap generator | deploy if its radius is already boosted (a state of the gap generator that this spec does not define, low; Open questions), or its house's spare power exceeds the extra power drain of its type (low; how the drain is derived from the type's field is not settled, Import mapping and Open questions); else nothing |
-| B5 | *g* is deploy; an absorbing building holding units it has absorbed, a building with garrison occupants, or a factory | deploy |
+| B5 | *g* is deploy; an absorbing building holding units it has absorbed, a building with garrison occupants, or a factory-marked building | deploy |
 | B6 | *g* is deploy | nothing |
 | B7 | *g* is attack; it has a weapon in its first slot, and that weapon's projectile cannot hit ground targets, or the building's type is a pulse cannon (it uses its own targeting), or the building is being sold | nothing |
 | B8 | *g* is attack; the target's type is immune to damage | no-move |
@@ -978,7 +1014,7 @@ Part 3, buildings (low):
 | Action | Order |
 |---|---|
 | attack | behaviour *attack*, target the object or cell |
-| deploy | a primary order (S-0213, claim 13) if the building is a factory; and a behaviour order *unload* for each of these that holds: it is a gap generator; it is an absorbing building; it has garrison occupants |
+| deploy | a primary order (S-0213, claim 13) if the building is factory-marked; and a behaviour order *unload* for each of these that holds: it is a gap generator; it is an absorbing building; it has garrison occupants |
 | detonate | a detonate order (S-0213, claim 11) |
 | move, on an object | for a factory of infantry, vehicles or aircraft, a guard-spot order (S-0213, claim 20) chosen around the object's cell; for any other building, a guard-spot order naming the object |
 | move or harvest, on a cell | for a rally-capable building or one that undeploys into a vehicle, a guard-spot order (S-0213, claim 20) chosen around the cell; for one that undeploys into a vehicle, also a sell order (S-0213, claim 12), with which it packs up |
@@ -1121,7 +1157,7 @@ Ordering consequences:
 | Building type `Grinding` | recycling building (rows I5, I26, value *n* of table V) | boolean (S-0003) | no |
 | Building type `UnitRepair` | repair depot (row AC10; rally-capable) | boolean (S-0003) | no |
 | Building type `Bunker` | tank bunker (Terms: *movable*, *deploy readiness*; rows I17, VD4, VD5; not rally-capable) | boolean (S-0003) | no |
-| Building type `Factory` | factory and the kind it builds (rows B3, B5, B9 to B12, table M; rally-capable) | type kind name | none |
+| Building type `Factory` | imported category (claim 17): factory-marked for rows B3, B5 and table M's deploy row; only the corresponding producing kinds for rows B9 to B12 and the kind-specific rally rules | named value, S-0003 claim 21 and Import mapping row C19, including recognised non-producing categories | no factory; missing or empty in a later layer keeps the value in force |
 | Building type `WeaponsFactory` | vehicle factory (row AC2) | boolean (S-0003) | no |
 | Building type `ConstructionYard` | construction yard (Terms, *movable*; deploy readiness) | boolean (S-0003) | no |
 | Building type `InvisibleInGame` | invisible in the game (rows B1, BC1, I16, I18) | boolean (S-0003) | no |
@@ -1147,6 +1183,8 @@ Ordering consequences:
 | Vehicle type `Harvester` | harvester (row VC2) | boolean (S-0003) | no |
 | Vehicle type `Weeder` | eats weeds (row VC2) | boolean (S-0003) | no |
 | Vehicle and building types, `ResourceGatherer` and `ResourceDestination` | gathers and processes resources itself: both set (rows VC2, BC2); a resource-gathering vehicle: the first (row GC9) | boolean (S-0003) | no (both keys) |
+| Building type `Explodes` | the exploding-type case that awaits removal in claim 16; destruction and the sale case are S-0312 claim 21's | boolean (S-0003) | no |
+| Object type `Selectable` | type permits selection (Terms, claim 16); destruction does not clear this type property | boolean (S-0003) | yes |
 | Object type `Immune` | immune target (rows I27, V6, AC5, AC9, B8) | boolean (S-0003) | no |
 | Object type `LegalTarget` | legal target (claim 6 (a), attackable cell) | boolean (S-0003) | yes |
 | Object type `Bombable` | accepts bombs (row I19) | boolean (S-0003) | yes |
@@ -1628,6 +1666,43 @@ special house's building shows anything other than what the control shows (an en
 allied building gets enter, no-repair or repair building, not capture), which would mean that the
 alliance of the special house with the actor's house, and not the reverse, decides. If the map cannot give the special house a capturable building, the
 record says so and the side stays `unmeasured` (Open questions).
+
+**Scenario T12: selection after destruction (claim 16, Q-0081 parts 3 and 4).**
+- Setup: the usual stock-data skirmish map and bystander isolation, director and mods off,
+  speed index 6, one own
+  visible selectable building of an exploding type, one own visible selectable sellable
+  building, and an enemy attacker in the observed area. Use scripted input and a read-only
+  recorder of health, presence in play, selection and foundation occupancy per tick. Keep
+  other units off the clicked foundation cells. Arrange a killing hit after the building's
+  own turn, verified by the recorder, so that it remains until the next input opportunity.
+- Procedure: clear the selection and click the exploding building's foundation while the
+  recorder logs it as still in play with zero health. Repeat in a separate run after starting
+  a sale of the second building and killing it during the sale. In each run include a control
+  click before the killing hit and a click after removal. Record the selection immediately
+  after input, before the removal turn, not just at the end of that tick. Try once per case
+  with the same fixed seed; repeat with adjusted attack timing if no click fell in the interval.
+- Observable: which object the click selects, its health and presence at the click, and the
+  removal tick compared with an otherwise identical run without the click.
+- Expected: the living control and the awaiting-removal click select the building; its health
+  remains zero in the latter case, its removal is not delayed, and the post-removal click
+  cannot select it. The selling variant pays no refund and does not resume selling (S-0312).
+  Refusal of selection while the building is present, visible, selectable and not being
+  erased falsifies the claim. A run with no click inside the interval is inconclusive, not
+  evidence of refusal. Tool: scripted input and read-only recorder under the measurement setup.
+
+**Scenario T13: non-producing factory categories (claim 17).** Use the usual isolated test map,
+stock executable, speed index 6, director and unrelated mods off, and named test data as in
+T10 and S-0003 V16. The test data gives
+an own visible selectable building a recognised non-producing factory category from S-0003
+C19, no weapon, no passengers and no other deployment ability. Select it alone and click it
+on itself before it is marked primary: expected *deploy* and a recorded primary order, not
+production eligibility. In separate runs give that same category a repair-depot flag, a
+cloning flag, or neither, and click an empty visible reachable cell. Expected: *move* and a
+guard-spot order in the first two runs, no order in the third. Record cursor, issued orders
+and imported category, not the availability of production as a proxy for the click. Falsified
+by absence of the primary order, loss of the guard-spot order in either independently
+rally-capable variant, or a rally order from the category alone. Tool: scripted input and the
+read-only order recorder. These named-data variants are not stock-data measurements.
 
 **Coverage of table M.** Each case gives its order in these steps. *Move*, *no-move*: Scenarios T2, T7
 and T10 (lines I9, I27 and V6, self). *Attack-move to a place* and *attack-move on a target*: T3.

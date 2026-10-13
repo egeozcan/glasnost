@@ -2,11 +2,11 @@
 id: S-0201
 title: Game speed and tick rate
 topic: simulation
-revision: 8
+revision: 9
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-13
+approved-on: 2026-10-14
 measurements: []
 requests: []
 supersedes: []
@@ -22,9 +22,7 @@ no tick runs (lost focus, the options menu, a freeze) or the player cannot give 
 ticks run (the first ticks of a game, a chrono flash). It owns exception 2 of glossary claim G3,
 the game-speed dependence of a chrono flash that overlaps a freeze, and that exception's part of the
 shared switch `quirks.speed_normalised_delays`; what happens inside one tick is S-0203.
-This revision covers skirmishes only. Network games and campaigns are out of scope; the retained
-campaign passages record earlier findings for a future campaign spec, not requirements for this
-revision's implementation or measurement.
+This revision covers skirmishes only. Network games and campaigns are out of scope. Campaign material retained below records earlier findings for a future campaign spec; it is historical context only, is not a claim of this revision, and is not a requirement or measurement for this revision.
 
 ## Terms
 
@@ -106,6 +104,9 @@ revision's implementation or measurement.
    next cycle begins as soon as the wait ends. With a host that keeps up, cycles therefore end on
    16 ms boundaries and the mean tick rate is *R*(*s*) = 62.5 / *s* ticks per second (Formulas F1,
    Constants). This is not 60 / *s*: the pacing unit is 16 ms, not 1/60 s.
+   The input work processes at most one waiting input event in an unfrozen cycle, as defined in
+   Terms, *Cycle*. S-0213 claim 1 owns that limit, with medium confidence and backing
+   `measurable` (its scenario O9); this claim owns the pacing rule only.
    - Backing: `measurable` (scenario T1, part B)
    - Confidence: high for the rule and the 16 ms unit; medium for the measured rate on a given
      host, which also depends on how finely the host's millisecond clock and its sleep resolve
@@ -177,9 +178,9 @@ revision's implementation or measurement.
    mission sets it aside (claim 12). It shows only in the speed control of an options menu that is
    offered outside a mission, after a campaign mission or at the start of a session.
    - Backing: `measurable` (scenario T2, parts A, B and E) for the lobby's starting position and the
-     replacement; `measurable` (scenario T2, part D) for the absent-key value 3, which is
-     observable only if such an options menu can be opened, otherwise the part is inconclusive and
-     this value stays untested
+     replacement; historical finding only for the absent-key value 3, not measured or measurable
+     as a claim of this revision (the earlier proposed measurement is retained in T2, part D,
+     as historical context only); this value stays untested
    - Confidence: medium for the lobby's initial value (it is traced; whether the original keeps the
      index in range when the saved value lies outside 0 to 6 is not); low for the absent-key
      value 3, which no game in the scope of this spec uses
@@ -279,17 +280,7 @@ revision's implementation or measurement.
     - **Repeated action.** If the action runs again while the chrono flash is running, it starts
       over from its first step with the new *D*. With *D* of 0 or below the action does nothing,
       not even to a chrono flash already running.
-    - **Radar movies in the original.** In a campaign mission, the plain radar-movie action and the
-      freezing radar-movie action (Import mapping) each give the sidebar's radar panel a movie to
-      play. The panel plays these movies one at a time, in the order in which their actions ran, so
-      a movie starts only once every movie given before it has ended. While the earliest-given
-      movie that has not yet ended is one given by the freezing action, the game is under an
-      untimed freeze, which ends when that movie ends, and a chrono flash in force takes one step in
-      each of its frozen cycles as well. A movie given by the plain action freezes nothing. A
-      parameter value outside the game's movie list gives no movie, and in a skirmish both actions
-      do nothing. A movie ends when its playback ends, in real time, so in the original the
-      freeze's length depends on the host (compare claim 10, at a host that does not keep up). Which
-      movie a value names and how it is drawn are presentation, not covered by this revision.
+    - **Radar movies in the original.** *Skirmish rule:* in a skirmish both actions do nothing. *Historical campaign finding (out of scope; retained for a future campaign spec only, not a claim or measurement of this revision):* in a campaign mission, the plain radar-movie action and the freezing radar-movie action (Import mapping) each give the sidebar's radar panel a movie to play. The panel plays these movies one at a time, in the order in which their actions ran, so a movie starts only once every movie given before it has ended. While the earliest-given movie that has not yet ended is one given by the freezing action, the game is under an untimed freeze, which ends when that movie ends, and a chrono flash in force takes one step in each of its frozen cycles as well. A movie given by the plain action freezes nothing. A parameter value outside the game's movie list gives no movie. A movie ends when its playback ends, in real time, so in the original the freeze's length depends on the host (compare claim 10, at a host that does not keep up). Which movie a value names and how it is drawn are presentation, not covered by this revision.
     - **Radar movies in our engine (departure).** The number of frozen cycles of a freezing movie
       must not depend on real time, so our engine counts a movie's length in cycles. Each movie has
       a playing time *T*, an integer number of milliseconds, a property of the movie's own data (the
@@ -308,21 +299,17 @@ revision's implementation or measurement.
       timed freezes counted in cycles as in claim 10. With the switch off, a chrono flash steps in
       a frozen cycle only while its own freeze is in force (Edge cases and quirks; F4).
     - Backing: `measurable` (scenario T6, parts B, G, H and I) for the chrono flash, including the
-      game-speed dependence (part G); `measurable` (scenario T6, parts J, L and M) for the radar
-      movies in the original, which state only what the original does (the freeze during a
-      freezing movie, nothing in a skirmish, no movie for a value outside the list); `unmeasured`
+      game-speed dependence (part G); `measurable` (scenario T6, part L) for the radar movies'
+      skirmish behaviour (both actions do nothing); historical finding only for the campaign
+      radar-movie observations, not measured or measurable as claims of this revision (the earlier
+      proposed measurements are retained in T6, parts J and M, as historical context only); `unmeasured`
       for our engine's movie timeline, a decision of our engine as in claim 4
     - Confidence: medium for the chrono flash's step counts and the game-speed dependence; low for
       the radar movies
 
-12. **Campaign missions.** During a campaign mission the game speed is index 2, whatever the
-    player has set, and the options menu does not offer the speed control. The player's own
-    setting is put aside when the mission starts and restored when it ends. The speed-normalised
-    delays of glossary claim G3, and the frozen cycles of claim 10, therefore use index 2 in a
-    campaign mission. The original lifts this only through a developer start-up option, which is not
-    one of our engine's inputs, so our engine always runs campaign missions at index 2.
-    - Backing: `measurable` (scenario T2, part C)
-    - Confidence: high
+12. **Campaign missions (historical finding; out of scope).** The following records an earlier finding for a future campaign spec; it is not a behavioural claim or implementation requirement of this skirmish-only revision. During a campaign mission the game speed is index 2, whatever the player has set, and the options menu does not offer the speed control. The player's own setting is put aside when the mission starts and restored when it ends. The speed-normalised delays of glossary claim G3, and the frozen cycles of claim 10, therefore use index 2 in a campaign mission. The original lifts this only through a developer start-up option, which is not one of our engine's inputs, so our engine always runs campaign missions at index 2.
+    - Backing: historical finding only; not measured or measurable as a claim of this revision (the earlier proposed measurement is retained in T2, parts C and D, as historical context only)
+    - Confidence: high for the recorded finding; it is outside this revision's scope
 
 13. **Network games (out of scope).** This spec covers single-player games only: a skirmish or a
     campaign mission. Network games are out of scope; a future multiplayer spec owns them,
@@ -641,17 +628,10 @@ whether the vehicle's destination changes.
   position (index 6); B2: at the middle position (index 3); in both, the count matches that index
   by T1. *Falsified if:* either control starts at the second-fastest position (the general key) or
   at any position other than the expected one.
-- *Part C (campaign):* the general game-speed key set to 6, then in a second run to 0; start the
-  first mission of a campaign. During the mission open the options menu once and close it.
-  *Expected:* both runs within 1 % of 9375 (index 2); the options menu shows no speed control; after
-  the mission the options menu shows the player's setting again. *Falsified if:* either run differs
-  from 9375 by more than 1 %, or the menu offers the speed control during the mission, or after the
-  mission the options menu does not show the player's setting.
-- *Part D (absent general key, claim 7):* the general game-speed key removed from the settings
-  file, and a campaign mission started as in part C. After the mission, open the options menu where
-  it offers the speed control. *Expected:* the control stands at the middle position (index 3). If
-  the control cannot be reached outside a game, the part is inconclusive and the absent-key value
-  stays untested. *Falsified if:* the control stands at another position.
+- *Historical campaign observations (out of scope; not measurement scenarios or falsification tests for this revision).* The following earlier proposed procedures and expected observations are retained for a future campaign spec only. They do not support a claim of this revision.
+  - *Part C (campaign):* the general game-speed key set to 6, then in a second run to 0; start the first mission of a campaign. During the mission open the options menu once and close it.
+    *Expected:* both runs within 1 % of 9375 (index 2); the options menu shows no speed control; after the mission the options menu shows the player's setting again. *Falsified if:* either run differs from 9375 by more than 1 %, or the menu offers the speed control during the mission, or after the mission the options menu does not show the player's setting.
+  - *Part D (absent general key, claim 7):* the general game-speed key removed from the settings file, and a campaign mission started as in part C. After the mission, open the options menu where it offers the speed control. *Expected:* the control stands at the middle position (index 3). If the control cannot be reached outside a game, the part is inconclusive and the absent-key value stays untested. *Falsified if:* the control stands at another position.
 - *Part E (claim 7, the replacement outlasts the skirmish):* as part A (general key 6, skirmish key
   1). Play the skirmish for at least 10 s and leave it, then, without leaving the program, open the
   options menu where it offers the speed control. *Expected:* the control stands at position 5, that
@@ -761,22 +741,8 @@ whether the vehicle's destination changes.
   with *D* = 10, index 6. *Expected:* the tick number stands at 54 (steps 1 to 54 in ticks 0 to
   53), and no order is accepted at any time, during the 60 s observed after the hold as well.
   *Falsified if:* an order is accepted at any time, in particular from tick 4.
-- *Part J (claim 11, radar movies):* a named test copy of a campaign mission map with two
-  added one-time triggers whose only event is an elapsed time: elapsed time 20 with the plain
-  radar-movie action and elapsed time 40 (tick 600) with the freezing radar-movie action (Import
-  mapping), both with parameter value 0, the first entry of the movie list. A second test copy adds
-  the chrono-flash action (*D* = 30) to the trigger of the freezing radar-movie action.
-  *Observable:* in addition to the common ones, whether the radar panel shows a movie, and from when
-  to when. *Expected:* while the first movie plays the tick number goes on
-  growing. Once the second movie starts, the tick number stands still for as long as it plays and
-  runs again once it ends; how soon after tick 600 the movie starts, and how long it plays, are the original's and are not
-  what our engine's timeline of claim 11 reproduces (it fixes them by *T*), so only the hold's
-  coincidence with the movie is judged. With the chrono flash, its own freeze begins earlier
-  than tick 674 by the number of frozen cycles of the movie's hold that fell before its step 74, or
-  merges with the movie's hold when that hold lasts long enough (F4, with *F* the frozen cycles of
-  the movie's hold). *Falsified if:* the tick number stands still during the first movie, or runs
-  on during the second; or, with the chrono flash, its own freeze begins at 674 although the
-  movie's hold had frozen cycles before it.
+- *Historical campaign observation (out of scope; not a measurement scenario or falsification test for this revision).* The following earlier proposed procedure and expected observations are retained for a future campaign spec only; they do not support a claim of this revision. *Part J (claim 11, radar movies):* a named test copy of a campaign mission map with two added one-time triggers whose only event is an elapsed time: elapsed time 20 with the plain radar-movie action and elapsed time 40 (tick 600) with the freezing radar-movie action (Import mapping), both with parameter value 0, the first entry of the movie list. A second test copy adds the chrono-flash action (*D* = 30) to the trigger of the freezing radar-movie action.
+  *Observable:* in addition to the common ones, whether the radar panel shows a movie, and from when to when. *Expected:* while the first movie plays the tick number goes on growing. Once the second movie starts, the tick number stands still for as long as it plays and runs again once it ends; how soon after tick 600 the movie starts, and how long it plays, are the original's and are not what our engine's timeline of claim 11 reproduces (it fixes them by *T*), so only the hold's coincidence with the movie is judged. With the chrono flash, its own freeze begins earlier than tick 674 by the number of frozen cycles of the movie's hold that fell before its step 74, or merges with the movie's hold when that hold lasts long enough (F4, with *F* the frozen cycles of the movie's hold). *Falsified if:* the tick number stands still during the first movie, or runs on during the second; or, with the chrono flash, its own freeze begins at 674 although the movie's hold had frozen cycles before it.
 
 - *Part K (claim 10, orders already blocked):* two one-time triggers: elapsed time 20 with the
   chrono-flash action (*D* = 30) and elapsed time 21 (tick 315) with the pause action, *N* = 1,
@@ -791,10 +757,7 @@ whether the vehicle's destination changes.
   *Expected:* the radar panel shows no movie and the tick number stands still at no value for
   longer than one cycle in the 60 s after tick 300. *Falsified if:* the tick number stands still
   for more than 0.5 s, or a movie plays. The same with the plain action must show no movie.
-- *Part M (claim 11, a value outside the movie list):* the named test copy of a campaign
-  mission map of part J, with the freezing radar-movie action given the parameter value −1 in one
-  run and 99999 in a second. *Expected:* no movie plays and the tick number stands still at no value
-  for longer than one cycle. *Falsified if:* a movie plays, or the game holds for more than 0.5 s.
+- *Historical campaign observation (out of scope; not a measurement scenario or falsification test for this revision).* The following earlier proposed procedure and expected observations are retained for a future campaign spec only; they do not support a claim of this revision. *Part M (claim 11, a value outside the movie list):* the named test copy of a campaign mission map of part J, with the freezing radar-movie action given the parameter value −1 in one run and 99999 in a second. *Expected:* no movie plays and the tick number stands still at no value for longer than one cycle. *Falsified if:* a movie plays, or the game holds for more than 0.5 s.
 
 **Scenario T7: no orders in the first ticks (claim 14).**
 - *Setup:* a purpose-made skirmish map with one human vehicle in the open, index 6, and a recorder
@@ -855,6 +818,12 @@ whether the vehicle's destination changes.
 
 ## Questions for the project lead
 
+- **Cycle wording, for hand-off.** Terms, *Cycle*, and claim 2 incorporate S-0213 claim 1's
+  limit of at most one input event per unfrozen cycle. S-0213 owns the limit and its scenario O9.
+  Claim 2 here owns pacing. Confirm this wording together with the S-0213 revision handed off,
+  including its citation to this spec's Terms rather than to claim 2 for input timing. Check the
+  compatible definitions and claims in the latest same-batch revisions at sign-off, not against
+  an earlier batch's revision list.
 - **Trigger actions outside S-0011's subset, for sign-off.** This spec states the parameter
   reading of the win action, the two radar-movie actions, the pause action and the chrono-flash
   action (Import mapping, with their type codes), which S-0011 parses but leaves outside its subset.

@@ -2,11 +2,11 @@
 id: S-0203
 title: Tick order
 topic: simulation
-revision: 10
+revision: 11
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-13
+approved-on: 2026-10-14
 measurements: []
 requests: [Q-0018]
 supersedes: []
@@ -85,7 +85,7 @@ skirmishes only; network games and campaigns are out of scope.
   are used as in S-0011, which defines *tag*, *raise* and the trigger time unit of 15 ticks in its
   Terms, and the *counter* in its common measurement setup. The *chrono-flash* action is as in
   S-0201, scenario T6.
-- **Infantry-death kind, *die-1* entry.** As in S-0107, claim 17.
+- **First infantry death-sequence entry.** The entry S-0107, claim 17, selects for an infantry death of kind 1.
 - **Single-player game.** As in S-0201: a skirmish or a campaign mission. Only skirmishes are
   covered here.
 - **Cycle.** As in S-0201: the unit of real time in which the original runs a game. A cycle that is
@@ -355,8 +355,9 @@ skirmishes only; network games and campaigns are out of scope.
      the explodes flag, or one destroyed while it is being sold, stays in play with 0 health after
      its death effects. It normally leaves in its own next turn, later in the same tick if that
      turn has not yet come, otherwise in a later tick. S-0312 claim 21 owns the erasure and
-     electromagnetic-pulse exceptions, the sale removing it instead, and the second survivor and
-     smudge round in the removal turn, with `quirks.building_removal_second_round`. A veterancy
+     electromagnetic-pulse exceptions and the second survivor and smudge round in the removal
+     turn, with `quirks.building_removal_second_round`. A sale does not advance or complete once
+     the building has 0 health; its removal follows S-0312 claim 21, not sale completion. A veterancy
      ability or a weapon's suicide property alone does not cause this deferred removal. Its
      leaving then is a removal for claim 10 like any other.
      - Backing: `measurable` (scenario O1, variant B, for the rule); for the exception, S-0312's
@@ -827,7 +828,7 @@ scenarios' timing expectations use the stated index.
     infantry units stand next to W1.
   - *Variants d and e.* Three firers. W1 is a human test infantry unit of a type that is not marked
     "not human" (as in S-0107), is not a cyborg or jumpjet type, has no death animations of its own,
-    and has a *die-1* entry with image frames (S-0107, claim 17, which turns a death request down
+    and has image frames in the first infantry death-sequence entry (S-0107, claim 17, which turns a death request down
     when the entry has none). W1 stands on the ground, on a land cell that is not water. F1's second
     test weapon does 100 % against W1's armour class, with damage above W1's health, so the first
     volley destroys W1. Its warhead's infantry-death
@@ -1151,12 +1152,11 @@ scenarios' timing expectations use the stated index.
     states the general rule and points to S-0312 for the exceptions, which S-0312 owns. Scenario
     O8 gives W1 the crash flag in variants b and c, so that its passengers die with it as the
     scenario needs, and adds variant f, in which they get out. S-0312's sentence "This refines
-    S-0203 claim 6b" remains valid. Its claim-12 description of claim 6e as taking every passenger
-    with a destroyed object describes older wording; S-0312's owner must update that
-    cross-reference in this review round to say that claim 6e refers to S-0312 for passenger
-    death or escape, and claim 3 here owns open-topped passengers' in-play status. S-0312 claim 1
-    must also qualify its statement that death effects share an object's turn: deaths from
-    out-of-turn effects share that effect's place in the tick, not a turn (rows 2, 3 and 12 here).
+    S-0203 claim 6b" remains valid. Current S-0312 claims 1 and 12 contain the previously requested
+    corrections: out-of-turn deaths share the effect's place in the tick, and claim 6(e) refers
+    there for passenger death or escape while claim 3 here owns open-topped passengers' in-play
+    status. Revision 11 removes the obsolete sale-completion alternative for a building with
+    0 health: S-0312 claim 21 owns its removal, including a building destroyed during a sale.
     Claim 6 rates the general rules of points (a) and (b) high, as does current S-0312 claim 21.
     Revision 10 replaces the earlier deferral to the structures specs with S-0312 claim 21's
     removal-turn rule, exceptions and second round. Only the type's explodes flag or the sale's
@@ -1164,8 +1164,8 @@ scenarios' timing expectations use the stated index.
   - S-0011, S-0201, S-0202 and S-0213, cited above, are approved specs; where a newer draft exists,
     this revision has also checked that draft.
   - S-0107 (approved), claim 17, is assumed by scenarios O8, O9 and O12: row 8 of its table removes
-    a killed unit at once, infantry-death kind 1 reaches *die-1* through row 5, and a death request
-    is turned down when the *die-1* entry has no image frames, which is why the test infantry type
+    a killed unit at once, infantry-death kind 1 selects the first death sequence through row 5, and a death request
+    is turned down when that entry has no image frames, which is why the test infantry type
     needs frames there.
   - The trigger words used in claims 1 and 8 and scenarios O6 and O7 come from S-0011.
     *Tag* and *raise* are defined in its Terms, and so is the trigger time unit of 15 ticks behind
