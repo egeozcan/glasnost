@@ -970,10 +970,10 @@ pub fn part(w: &mut World) {
 /// Applies a build order (S-0404 claim 3).
 pub fn build(w: &mut World, house: HouseId, t: TypeRef) {
     let Some(lk) = line_kind(w, t) else { return };
-    // spec: S-0404 claim 3 (applied only with a switched-on factory that could make it and, for an aircraft, a free dock)
+    // spec: S-0404 claim 3 (applied only with a switched-on factory that could make it and, for an aircraft, a free dock; S-0407 claim 13: only the factory conditions and the build limit are tested, Q-0122)
     let ok = !factories(w, house, |b| {
         switched_on(b)
-            && tech::could_make(w, b, t, true)
+            && tech::could_make_limit_only(w, b, t)
             && (t.kind != Kind::Aircraft || dock_free(w, b.id))
     })
     .is_empty();

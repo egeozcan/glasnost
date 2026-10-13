@@ -100,7 +100,7 @@ pub fn click(w: &World, house: HouseId, t: TypeRef, button: Click, shift: bool) 
                 // spec: S-0411 claim 4 row 6 (a building or defence whose line has an item: refused)
                 return ClickOutcome::Refused;
             }
-            if tech::answer(w, house, t) == Answer::AtLimit {
+            if tech::at_limit(w, house, t) {
                 // spec: S-0411 claim 4 row 7 (at its build limit: no order)
                 return ClickOutcome::Nothing;
             }
@@ -148,7 +148,7 @@ pub fn legal(w: &World, house: HouseId, order: &Order) -> bool {
                 return true;
             }
             // spec: S-0407 claim 13 (not at limit when issued)
-            if answer == Answer::AtLimit {
+            if tech::at_limit(w, house, what) {
                 return false;
             }
             // spec: S-0411 claim 6 (a building or defence line with an item takes no starting or queuing build order)
@@ -165,33 +165,20 @@ pub fn legal(w: &World, house: HouseId, order: &Order) -> bool {
     }
 }
 
-/// S-0411 claim 2 with S-0404 claim 9, at the house update of every player
-/// house: an icon whose type is no longer buildable is removed, and a cancel
-/// order (when it is its line's item) and a cancel-all order (when the
-/// house has a line of its kind) are issued. Types in production or queued
-/// count as icons too, so that no item outlives its buildability.
-pub fn remove_unbuildable(w: &mut World, house: HouseId) {
+/// S-0411 claim 2 with S-0404 claim 9, in the house update of a recheck of
+/// every player house (`crate::econ::tech::house_update`): for each type the
+/// recheck removed from the taken-up set (its icon goes with it), a cancel
+/// order when it is its line's item, then a cancel-all order when the house
+/// has a line of its kind. The orders are applied at the tick's order
+/// boundary (S-0203 claim 7). The types are taken in set order (kind, then
+/// registration index); no spec orders the removals of several types, and
+/// the final state does not depend on it.
+pub fn removal_orders(w: &mut World, house: HouseId, removed: &[TypeRef]) {
+    // spec: S-0404 claim 9 (for every player house; the non-player houses never build)
     if !production::player(w, house) {
         return;
     }
-    let mut types: Vec<TypeRef> = w.houses[usize::from(house.0)]
-        .econ
-        .tech
-        .icons
-        .iter()
-        .copied()
-        .collect();
-    for l in w.econ.lines.lines.iter().filter(|l| l.house == house) {
-        types.extend(l.item.as_ref().map(|i| i.t));
-        types.extend(l.queue.iter().copied());
-    }
-    types.sort();
-    types.dedup();
-    for t in types {
-        if tech::buildable(w, house, t) {
-            continue;
-        }
-        w.houses[usize::from(house.0)].econ.tech.icons.remove(&t);
+    for &t in removed {
         let line = production::line_of(w, house, t);
         let item = line.is_some_and(|l| l.item.as_ref().is_some_and(|i| i.t == t));
         let exists = line.is_some();
@@ -279,20 +266,23 @@ pub fn darkened(w: &World, house: HouseId, t: TypeRef) -> bool {
     if icon_item(w, house, t).is_some() {
         return false;
     }
+    // spec: S-0411 claim 3 (no switched-on factory building could make the type with the full tech-tree condition left out, the build-limit test retained)
     let switched_on = w.objects.values().any(|b| {
-        b.owner == Some(house) && !b.econ.building.switched_off && tech::could_make(w, b, t, true)
+        b.owner == Some(house)
+            && !b.econ.building.switched_off
+            && tech::could_make_limit_only(w, b, t)
     });
     // spec: S-0411 claim 3 (the three causes of a darkened icon)
     (is_building_line(w, t) && line_has_item(w, house, t))
         || !switched_on
-        || tech::answer(w, house, t) == Answer::AtLimit
+        || tech::at_limit(w, house, t)
 }
 
-/// The house's icons (claim 2): the types offered at a recheck and not
-/// removed since.
+/// The house's icons (claim 2): its taken-up set, the types offered at the
+/// last recheck (S-0407 Terms).
 pub fn icons(w: &World, house: HouseId) -> Vec<TypeRef> {
     w.houses
         .get(usize::from(house.0))
-        .map(|h| h.econ.tech.icons.iter().copied().collect())
+        .map(|h| h.econ.tech.taken_up.iter().copied().collect())
         .unwrap_or_default()
 }

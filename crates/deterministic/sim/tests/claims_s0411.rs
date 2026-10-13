@@ -51,9 +51,7 @@ fn claim_1_tabs_and_lines() {
     assert!(item(&w, 0, tank).is_some() && item(&w, 0, boat).is_some());
 }
 
-// spec: S-0411 claim 2 (a type no longer buildable: the icon goes, a cancel order then a cancel-all order are given)
-#[test]
-fn claim_2_removal_orders() {
+fn preq_rules() -> Ruleset {
     let mut r = ruleset();
     r.registries
         .get_mut("buildings")
@@ -61,7 +59,14 @@ fn claim_2_removal_orders() {
         .push("PREQ".into());
     r.sim.buildings.insert("PREQ".into(), plain(100));
     r.sim.vehicles.get_mut("TANK").unwrap().econ.prerequisite = Some(vec!["PREQ".into()]);
-    let mut w = game(&r);
+    r
+}
+
+// spec: S-0411 claim 2 (a recheck removes the type from the taken-up set: the icon goes, a cancel order then a cancel-all order are given in that house update)
+// spec: S-0404 claim 9 (the orders for every player house, issued in the house update of the recheck)
+#[test]
+fn claim_2_removal_orders() {
+    let mut w = game(&preq_rules());
     building(&mut w, "WARFACT", 0, 0, 0);
     let p = building(&mut w, "PREQ", 0, 6, 6);
     ready(&mut w);
@@ -71,8 +76,10 @@ fn claim_2_removal_orders() {
     assert!(issue(&mut w, 0, Order::Build { what: tank }));
     assert!(issue(&mut w, 0, Order::Build { what: tank }));
     step(&mut w);
+    // The prerequisite leaves the map (as in a turn pass): a recheck event.
     objects::remove(&mut w, p);
-    sidebar::remove_unbuildable(&mut w, H);
+    assert!(w.houses[0].econ.tech.recheck_due);
+    glasnost_sim::econ::tech::house_update(&mut w, H);
     assert_eq!(
         w.houses[0].pending,
         vec![
@@ -86,17 +93,10 @@ fn claim_2_removal_orders() {
     assert_eq!(credits(&w, 0), 1_000_000);
 }
 
-// spec: S-0411 claim 2 (for a loss in the turn pass of tick n the orders are given in tick n and applied at its end)
+// spec: S-0411 claim 2 (a destruction in the turn pass of tick n: recheck, removal and orders in tick n, applied at its end)
 #[test]
 fn claim_2_same_tick() {
-    let mut r = ruleset();
-    r.registries
-        .get_mut("buildings")
-        .unwrap()
-        .push("PREQ".into());
-    r.sim.buildings.insert("PREQ".into(), plain(100));
-    r.sim.vehicles.get_mut("TANK").unwrap().econ.prerequisite = Some(vec!["PREQ".into()]);
-    let mut w = game(&r);
+    let mut w = game(&preq_rules());
     building(&mut w, "WARFACT", 0, 0, 0);
     let p = building(&mut w, "PREQ", 0, 6, 6);
     ready(&mut w);
@@ -107,6 +107,66 @@ fn claim_2_same_tick() {
     // Removed between ticks, as by the turn pass of the next tick.
     objects::remove(&mut w, p);
     step(&mut w);
+    assert!(line(&w, 0, tank).is_none());
+    assert!(!sidebar::icons(&w, H).contains(&tank));
+}
+
+// spec: S-0411 claim 2 (the start of a sale alone removes no icon and gives no orders; the icon goes at the first house update after the building's removal)
+// spec: S-0407 claim 12 and quirks.sale_start_no_recheck (T14 run 7: the start of a sale is no event)
+#[test]
+fn claim_2_sale_keeps_icon() {
+    let (mut w, f, _) = base(&ruleset());
+    let tank = t(&w, Kind::Vehicle, "TANK");
+    assert!(issue(&mut w, 0, Order::Build { what: tank }));
+    step(&mut w);
+    // The sale of the only vehicle factory starts (its behaviour becomes
+    // selling, S-0407 Terms): the type is no longer buildable.
+    w.obj_mut(f).unwrap().beh.current = Some(glasnost_sim::rules::Behaviour::Selling);
+    assert!(!glasnost_sim::econ::tech::buildable(&w, H, tank));
+    let progress = item(&w, 0, tank).unwrap().progress;
+    for _ in 0..40 {
+        step(&mut w);
+        assert!(w.houses[0].pending.is_empty());
+    }
+    // The icon stays through the sale, and nothing cancels the item.
+    assert!(sidebar::icons(&w, H).contains(&tank));
+    assert!(item(&w, 0, tank).unwrap().progress > progress);
+    // In the span the click table still gives the order of its row
+    // (claim 4): a right click holds the running item.
+    assert_eq!(
+        click(&w, tank, Click::Right, false),
+        order(Order::Hold { what: tank })
+    );
+    // The sale's removal: the icon goes at the next house update.
+    objects::remove(&mut w, f);
+    step(&mut w);
+    assert!(!sidebar::icons(&w, H).contains(&tank));
+    assert!(line(&w, 0, tank).is_none());
+}
+
+// spec: S-0411 claim 2 (a type that stops being buildable without a recheck event keeps its icon; a later recheck event removes it)
+#[test]
+fn claim_2_stale_until_recheck() {
+    let mut w = game(&preq_rules());
+    building(&mut w, "WARFACT", 0, 0, 0);
+    let p = building(&mut w, "PREQ", 0, 6, 6);
+    ready(&mut w);
+    set_credits(&mut w, 0, 1_000_000);
+    let tank = t(&w, Kind::Vehicle, "TANK");
+    assert!(issue(&mut w, 0, Order::Build { what: tank }));
+    step(&mut w);
+    // The prerequisite goes without any event of S-0407 claim 12 (taken
+    // out of the object table directly).
+    w.objects.remove(&p);
+    for _ in 0..10 {
+        step(&mut w);
+    }
+    assert!(sidebar::icons(&w, H).contains(&tank));
+    assert!(item(&w, 0, tank).is_some());
+    // An unrelated building placed: event (a), the recheck shows the change.
+    building(&mut w, "HUT", 0, -6, 6);
+    step(&mut w);
+    assert!(!sidebar::icons(&w, H).contains(&tank));
     assert!(line(&w, 0, tank).is_none());
 }
 
@@ -238,6 +298,85 @@ fn claim_4_6_legality() {
             cell: Some(testkit_cell())
         }
     ));
+}
+
+// spec: S-0411 claim 3 (S3 third run: a stale prerequisite refusal alone does not darken an icon, and its build order starts an item)
+// spec: S-0407 claim 13 and quirks.stale_offer_orderable (a stale offer can be ordered and produced; Q-0122)
+#[test]
+fn claim_3_stale_refusal_lit() {
+    let mut r = ruleset();
+    r.sim.general.economy.prerequisite_proc_alternate = Some("JEEP".into());
+    r.sim.infantry.get_mut("GRUNT").unwrap().econ.prerequisite = Some(vec!["PROC".into()]);
+    let mut w = game(&r);
+    building(&mut w, "BARRACKS", 0, -6, 0);
+    let v = glasnost_sim::testkit::spawn(
+        &mut w,
+        Kind::Vehicle,
+        "JEEP",
+        0,
+        glasnost_sim::testkit::mid(SIZE, 4, 4),
+        0,
+    );
+    ready(&mut w);
+    set_credits(&mut w, 0, 100_000);
+    let grunt = t(&w, Kind::Infantry, "GRUNT");
+    assert!(sidebar::icons(&w, H).contains(&grunt));
+    // The vehicle's end is no recheck event (S-0407 claim 12 (o)).
+    objects::remove(&mut w, v);
+    step(&mut w);
+    assert_eq!(
+        glasnost_sim::econ::tech::answer(&w, H, grunt),
+        glasnost_sim::econ::tech::Answer::Refused
+    );
+    assert!(!sidebar::darkened(&w, H, grunt));
+    assert_eq!(
+        click(&w, grunt, Click::Left, false),
+        order(Order::Build { what: grunt })
+    );
+    assert!(issue(&mut w, 0, Order::Build { what: grunt }));
+    step(&mut w);
+    assert!(item(&w, 0, grunt).is_some());
+}
+
+// spec: S-0411 claim 4 Legality (S4 b2: the resume click of a held item at its limit is legal; the application-time limit allowance decides)
+// spec: S-0407 claim 9 (the infantry exception holds only at O = L)
+#[test]
+fn claim_4_resume_at_limit() {
+    for extra in [false, true] {
+        let mut r = ruleset();
+        r.sim.infantry.get_mut("GRUNT").unwrap().econ.build_limit = Some(1);
+        let mut w = game(&r);
+        building(&mut w, "BARRACKS", 0, -6, 0);
+        ready(&mut w);
+        set_credits(&mut w, 0, 100_000);
+        let grunt = t(&w, Kind::Infantry, "GRUNT");
+        assert!(issue(&mut w, 0, Order::Build { what: grunt }));
+        step(&mut w);
+        assert!(issue(&mut w, 0, Order::Hold { what: grunt }));
+        step(&mut w);
+        if extra {
+            // An extra infantry of the type on the map: O = 2 > L.
+            glasnost_sim::testkit::spawn(
+                &mut w,
+                Kind::Infantry,
+                "GRUNT",
+                0,
+                glasnost_sim::testkit::mid(SIZE, 4, 4),
+                0,
+            );
+        }
+        assert_eq!(
+            click(&w, grunt, Click::Left, false),
+            order(Order::Build { what: grunt })
+        );
+        assert!(issue(&mut w, 0, Order::Build { what: grunt }));
+        step(&mut w);
+        let i = item(&w, 0, grunt).unwrap();
+        // Without the extra object the item resumes; with it, it stays held
+        // and nothing queues.
+        assert_eq!(i.hold == glasnost_sim::econ::production::Hold::None, !extra);
+        assert!(line(&w, 0, grunt).unwrap().queue.is_empty());
+    }
 }
 
 fn testkit_cell() -> glasnost_map::CellXY {

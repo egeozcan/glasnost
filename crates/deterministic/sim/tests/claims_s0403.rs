@@ -207,6 +207,36 @@ fn claim_5_low_power() {
     assert_eq!(at(F64::ZERO, 6000), 10800);
 }
 
+// spec: S-0403 claims 5 and 8 (in the game the power fraction is S-0405's: a house at half power builds at f = 0.5; a later working-out restores R)
+// spec: S-0405 claims 4, 7 and 11 (low power D > 0 and O < D; F3 p = O / D; the lines' periods worked out again after each working-out)
+#[test]
+fn claim_5_game_power() {
+    let mut r = ruleset();
+    for (n, power) in [("DRAIN", -40), ("GEN", 20), ("GEN2", 20)] {
+        r.registries.get_mut("buildings").unwrap().push(n.into());
+        let mut b = plain(100);
+        b.econ.power = Some(power);
+        r.sim.buildings.insert(n.into(), b);
+    }
+    let mut w = game(&r);
+    building(&mut w, "WARFACT", 0, 0, 0);
+    building(&mut w, "DRAIN", 0, 6, 6);
+    building(&mut w, "GEN", 0, -6, 6);
+    ready(&mut w);
+    set_credits(&mut w, 0, 100_000);
+    assert!(glasnost_sim::econ::power::low_power(&w, HouseId(0)));
+    let tank = t(&w, Kind::Vehicle, "TANK");
+    assert!(issue(&mut w, 0, Order::Build { what: tank }));
+    step(&mut w);
+    // p = 20 / 40 = 0.5: f = 0.5, T = 1800, R = 33 (S-0403 Formulas example).
+    assert_eq!(item(&w, 0, tank).unwrap().period, 33);
+    // A second generator: full power at the next working-out, R = 16.
+    building(&mut w, "GEN2", 0, -6, -6);
+    step(&mut w);
+    assert!(!glasnost_sim::econ::power::low_power(&w, HouseId(0)));
+    assert_eq!(item(&w, 0, tank).unwrap().period, 16);
+}
+
 // spec: S-0403 claim 5 (pₛ narrowed to a single with RZ₂₄: B4 part c, R = 205 not 204)
 #[test]
 fn claim_5_narrowing() {

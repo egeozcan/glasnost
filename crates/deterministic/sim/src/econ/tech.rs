@@ -17,7 +17,9 @@ use crate::world::{HouseId, HouseRole, Object, ObjectId, World};
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct HouseTech {
     /// The taken-up set (S-0407 Terms, claim 1 (c)): the types offered to
-    /// the house, as of its last recheck.
+    /// the house, as of its last recheck. It is also the set of the house's
+    /// build icons (S-0407 Terms, S-0411 claim 2); for a house other than
+    /// the local player no icon is drawn.
     pub taken_up: BTreeSet<TypeRef>,
     /// A recheck is due at the house's next house update (S-0407 claim 12).
     pub recheck_due: bool,
@@ -25,10 +27,6 @@ pub struct HouseTech {
     pub stolen: [bool; 3], // spec: S-0407 Terms (three stolen-tech flags)
     /// Ever-built counts by type (S-0407 Terms, claim 10).
     pub ever_built: BTreeMap<TypeRef, i32>,
-    /// The types whose build icon the house's strip holds (S-0411 claims 2
-    /// and 3); for a house other than the local player no icon is drawn,
-    /// but the set decides the automatic cancels of S-0411 claim 2 alike.
-    pub icons: BTreeSet<TypeRef>,
 }
 
 /// One of the six generic groups (S-0407 Terms, Import mapping).
@@ -760,14 +758,18 @@ pub fn recheck_due(w: &mut World, house: HouseId) {
 }
 
 /// The recheck (S-0407 claims 1 and 12): the whole taken-up set worked out
-/// again from the state at this moment.
-pub fn recheck(w: &mut World, house: HouseId) {
+/// again from the state at this moment. Returns the types that left the set,
+/// in set order, for the removal orders of S-0404 claim 9 and S-0411 claim 2.
+pub fn recheck(w: &mut World, house: HouseId) -> Vec<TypeRef> {
     let Some(h) = w.houses.get(usize::from(house.0)) else {
-        return;
+        return Vec::new();
     };
     if h.role != HouseRole::Player {
         // spec: S-0407 claim 1 (the neutral and special houses build nothing)
-        return;
+        if let Some(h) = w.houses.get_mut(usize::from(house.0)) {
+            h.econ.tech.recheck_due = false;
+        }
+        return Vec::new();
     }
     let before = h.econ.tech.taken_up.clone();
     let mut after = BTreeSet::new();
@@ -782,11 +784,12 @@ pub fn recheck(w: &mut World, house: HouseId) {
             after.insert(t);
         }
     }
+    // spec: S-0411 claim 2 (an icon is added when its type becomes offered and removed only when a recheck removes it from the taken-up set)
+    let removed: Vec<TypeRef> = before.difference(&after).copied().collect();
     let hh = &mut w.houses[usize::from(house.0)].econ.tech;
     hh.recheck_due = false;
-    // spec: S-0411 claim 2 (an icon is added when its type becomes offered, at the recheck)
-    hh.icons.extend(after.iter().copied());
     hh.taken_up = after;
+    removed
 }
 
 /// Whether a type is offered to a house (S-0407 claim 1).
@@ -798,19 +801,47 @@ pub fn offered(w: &World, house: HouseId, t: TypeRef) -> bool {
 
 /// Buildable (S-0411 Terms): the tech-tree answer is allowed or at limit
 /// and some factory building of the house could make the type without the
-/// tech-tree rule (one being sold does not count).
+/// tech-tree rule (one being sold does not count). It describes current
+/// conditions only: no icon is removed and no order given by it (S-0411
+/// claim 2).
 pub fn buildable(w: &World, house: HouseId, t: TypeRef) -> bool {
     answer(w, house, t) != Answer::Refused && factory_condition(w, house, t)
 }
 
+/// Whether an offered type is at limit for a house (S-0407 Terms, *offered*:
+/// judged from the current counts at every moment, claims 9 and 13): its
+/// build-limit answer, with the allowance for an item in production. A type
+/// whose other conditions have come to refuse it since the last recheck is
+/// still judged by its limit alone (S-0407 claim 13, S-0411 claim 4).
+pub fn at_limit(w: &World, house: HouseId, t: TypeRef) -> bool {
+    // spec: S-0407 claims 9 and 13 (at limit: the build-limit answer from the current counts)
+    limit_answer(w, house, t, true) == Answer::AtLimit
+}
+
+/// Whether a factory building could make `t` when a build order is applied
+/// or for an icon's darkening (S-0407 claim 13, S-0411 claims 3 and 4):
+/// could make without the tech-tree rule, with the build-limit test kept,
+/// including its allowance for an item in production (S-0407 claim 9).
+/// Interim rule of request Q-0122: S-0404 claim 3's wording names the full
+/// tech-tree condition.
+pub fn could_make_limit_only(w: &World, b: &Object, t: TypeRef) -> bool {
+    // spec: S-0407 claim 13 (the build order checks only the factory conditions and the build limit when applied) and S-0411 claim 3 (the build-limit test retained); Q-0122
+    could_make(w, b, t, false)
+        && b.owner
+            .is_some_and(|h| limit_answer(w, h, t, true) == Answer::Allowed)
+}
+
 /// The house's part of the house update for the tech tree (S-0407 claim 12):
-/// a recheck when one is due.
+/// a recheck when one is due, and, for the types it removes from the
+/// taken-up set, the removal orders (S-0404 claim 9, S-0411 claim 2).
 pub fn house_update(w: &mut World, house: HouseId) {
     if w.houses
         .get(usize::from(house.0))
         .is_some_and(|h| h.econ.tech.recheck_due)
     {
-        recheck(w, house);
+        let removed = recheck(w, house);
+        // spec: S-0404 claim 9 and S-0411 claim 2 (the orders are issued in the house update of the recheck)
+        crate::econ::sidebar::removal_orders(w, house, &removed);
     }
 }
 

@@ -552,6 +552,13 @@ fn claim_13_orders_follow_offer() {
         step(&mut w);
         assert!(offered(&w, miner));
         assert_eq!(issue(&mut w, 0, Order::Build { what: miner }), stale);
+        // The stale order is produced: applying it tests only the factory
+        // conditions and the build limit (claim 13; Q-0122).
+        step(&mut w);
+        assert_eq!(
+            glasnost_sim::econ::production::line_of(&w, H, miner).is_some(),
+            stale
+        );
     }
 }
 

@@ -860,7 +860,7 @@ fn claim_8_removed_for_good() {
     assert_eq!(credits(&w, 0), 1_000_000);
 }
 
-// spec: S-0404 claim 9 (P9: a prerequisite lost: the cancel and cancel-all orders refund the item and clear the queue)
+// spec: S-0404 claim 9 (P9 (a): a prerequisite destroyed in the turn pass of tick n: both orders issued and applied in tick n; the item refunded, the queued copy removed)
 #[test]
 fn claim_9_unbuildable() {
     let mut r = ruleset();
@@ -879,6 +879,81 @@ fn claim_9_unbuildable() {
         step(&mut w);
     }
     objects::remove(&mut w, p);
+    step(&mut w);
+    assert!(line(&w, 0, grunt).is_none());
+    assert_eq!(credits(&w, 0), 1_000_000);
+}
+
+// spec: S-0404 claim 9 (P9 (b): a loss through a building switched off by an order applied at the end of tick n: the recheck and both orders in tick n + 1, applied at its end)
+// spec: S-0407 claim 8 (c) (a switched-off building no longer meets an upgrade prerequisite)
+#[test]
+fn claim_9_switch_off_next_tick() {
+    let mut r = ruleset();
+    let mut up = plain(100);
+    up.econ.powers_up_building = Some("HUT".into());
+    add_building(&mut r, "UPG", up);
+    r.sim.infantry.get_mut("GRUNT").unwrap().econ.prerequisite = Some(vec!["UPG".into()]);
+    let mut w = game(&r);
+    building(&mut w, "BARRACKS", 0, 0, 0);
+    let hut = building(&mut w, "HUT", 0, 6, 6);
+    let upg = t(&w, Kind::Building, "UPG").index;
+    w.obj_mut(hut).unwrap().econ.building.upgrades.push(upg);
+    glasnost_sim::econ::tech::recheck_due(&mut w, HouseId(0));
+    ready(&mut w);
+    rich(&mut w);
+    let grunt = t(&w, Kind::Infantry, "GRUNT");
+    assert!(issue(&mut w, 0, Order::Build { what: grunt }));
+    issue(&mut w, 0, Order::Build { what: grunt });
+    for _ in 0..30 {
+        step(&mut w);
+    }
+    let paid = 1_000_000 - credits(&w, 0);
+    assert!(paid > 0);
+    // Switched off at the order boundary of tick n (the end of the last step).
+    switch(&mut w, hut, false);
+    assert!(w.houses[0].pending.is_empty());
+    // Tick n + 1: the recheck in its house update issues the orders, which
+    // are applied at its end; the item is refunded, the copy removed.
+    step(&mut w);
+    assert!(line(&w, 0, grunt).is_none());
+    assert_eq!(credits(&w, 0), 1_000_000);
+}
+
+// spec: S-0404 claim 9 (P9 (c): a condition that fails without a recheck event gives no orders; production goes on until a later recheck removes the type)
+// spec: S-0407 claim 12 (o) and quirks.unit_changes_no_recheck (a unit that stops existing while not at limit is no event)
+#[test]
+fn claim_9_stale_until_recheck() {
+    let mut r = ruleset();
+    r.sim.general.economy.prerequisite_proc_alternate = Some("JEEP".into());
+    r.sim.infantry.get_mut("GRUNT").unwrap().econ.prerequisite = Some(vec!["PROC".into()]);
+    let mut w = game(&r);
+    building(&mut w, "BARRACKS", 0, 0, 0);
+    let jeep = t(&w, Kind::Vehicle, "JEEP");
+    let v = glasnost_sim::testkit::spawn(
+        &mut w,
+        Kind::Vehicle,
+        "JEEP",
+        0,
+        glasnost_sim::testkit::mid(SIZE, 4, 4),
+        0,
+    );
+    let _ = jeep;
+    ready(&mut w);
+    rich(&mut w);
+    let grunt = t(&w, Kind::Infantry, "GRUNT");
+    assert!(issue(&mut w, 0, Order::Build { what: grunt }));
+    step(&mut w);
+    // The refinery-alternative vehicle stops existing: no event.
+    objects::remove(&mut w, v);
+    w.objects.remove(&v);
+    for _ in 0..20 {
+        step(&mut w);
+        assert!(w.houses[0].pending.is_empty());
+    }
+    assert!(item(&w, 0, grunt).is_some_and(|i| i.progress > 0));
+    // An unrelated building placed: its recheck removes the type, and the
+    // orders refund the item.
+    building(&mut w, "HUT", 0, -6, 6);
     step(&mut w);
     assert!(line(&w, 0, grunt).is_none());
     assert_eq!(credits(&w, 0), 1_000_000);
