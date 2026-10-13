@@ -212,6 +212,7 @@ pub fn setup(seed: u32) -> GameSetup {
                 human: true,
                 start: None,
                 role: HouseRole::Player,
+                ai: false,
             },
             HouseSetup {
                 name: "Beta".into(),
@@ -219,6 +220,7 @@ pub fn setup(seed: u32) -> GameSetup {
                 human: true,
                 start: None,
                 role: HouseRole::Player,
+                ai: false,
             },
         ],
         alliances: Vec::new(),
@@ -513,6 +515,29 @@ pub fn empty_map(size: i32) -> Map {
 pub fn game_with(ruleset: &Ruleset, size: i32, seed: u32) -> World {
     let rules = Arc::new(SimRules::new(ruleset, "synthetic-test"));
     crate::load::new_game(rules, &empty_map(size), catalogue(), &setup(seed))
+        .expect("synthetic test game loads")
+}
+
+/// A new sandbox game like [`game_with`], with two more houses that are
+/// not player houses: house 2 is the neutral house and house 3 the special
+/// house (S-0009 claim 19), neither human-controlled, of the countries
+/// Alphaland and Betaland.
+pub fn game_with_non_players(ruleset: &Ruleset, size: i32, seed: u32) -> World {
+    let rules = Arc::new(SimRules::new(ruleset, "synthetic-test"));
+    let mut s = setup(seed);
+    for (name, country, role) in [
+        ("Neutral", "Alphaland", HouseRole::Neutral),
+        ("Special", "Betaland", HouseRole::Special),
+    ] {
+        s.houses.push(HouseSetup {
+            name: name.into(),
+            country: country.into(),
+            human: false,
+            start: None,
+            role,
+        });
+    }
+    crate::load::new_game(rules, &empty_map(size), catalogue(), &s)
         .expect("synthetic test game loads")
 }
 

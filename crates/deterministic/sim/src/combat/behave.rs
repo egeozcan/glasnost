@@ -286,13 +286,18 @@ pub fn building_process(w: &mut World, id: ObjectId) -> i32 {
         let slot = choose_slot(w, id, Some(t));
         let mut answer = check(w, id, Some(t), slot, true);
         if answer == Answer::NotFacing && b.turret && b.building.voxel_turret {
-            // spec: S-0215 claim 32 and F8 (turret snap: v = 0 or ε ≤ b, b = |256 w₈|)
             let v = b.raw.rot.unwrap_or(0);
-            let w8 = i32::from(v.rem_euclid(256) as u8 as i8);
-            let bound = (256 * w8).abs();
+            let (zero, bound) = if rules.quirks.turret_snap_bound_wraps {
+                // spec: S-0215 claim 32 and F8 (turret snap: v = 0 or ε ≤ b, b = |256 w₈|, w₈ the field modulo 256)
+                let w8 = i32::from(v.rem_euclid(256) as u8 as i8);
+                (v == 0, (256 * w8).abs())
+            } else {
+                // spec: S-0215 Edge cases (quirks.turret_snap_bound_wraps off: b = 256 × ω, the snap when ω = 0 or ε ≤ b)
+                (b.turn_rate == 0, 256 * b.turn_rate)
+            };
             let d = dir(w, building_aim_point(w, id), t);
             let eps = delta(o.turret.value(tick), d).abs();
-            if v == 0 || eps <= bound {
+            if zero || eps <= bound {
                 let keeps = rules.quirks.set_facing_keeps_target;
                 if let Some(ob) = w.obj_mut(id) {
                     ob.turret.set(d, tick, keeps);
@@ -385,8 +390,11 @@ fn sam_attack(w: &mut World, id: ObjectId) -> i32 {
     if stage != 0 && stage != 1 {
         return aa_delay(w, id);
     }
-    // The power row needs the power topic (M5).
     if stage == 0 {
+        // spec: S-0215 claim 32 (aiming: the type needs power, drains power, and the owner is short of power: nothing, 1 tick)
+        if crate::seams::sam_held_by_low_power(w, id) {
+            return 1;
+        }
         if !suitable {
             if let Some(ob) = w.obj_mut(id) {
                 ob.target = None;

@@ -1,8 +1,10 @@
-//! Healing and repair in combat (S-0314): self-healing objects and the
-//! house-wide self-healing of infantry and vehicles. Repair depots,
-//! hospitals and building repair need docking, entering and the repair
-//! order's money rules (structures and economy topics); healers' shots are
-//! hits (S-0302).
+//! Healing and repair in combat (S-0314): self-healing objects, the
+//! house-wide self-healing of infantry and vehicles, and the repair step
+//! with its size and cost (claims 3 to 5, 8, F2). What asks for a step
+//! (repair depots, hospitals, the repair order of a building) needs
+//! docking, entering and the structures and economy topics and is not
+//! wired up; money goes through [`crate::seams`]. Healers' shots are hits
+//! (S-0302).
 
 use crate::combat::data::Ability;
 use crate::combat::veterancy::{has_ability, type_combat};
@@ -94,4 +96,141 @@ pub fn building_counts(w: &mut World, id: ObjectId, owner: Option<HouseId>, add:
             *tot = tot.wrapping_sub(*c).max(0);
         }
     }
+}
+
+/// The outcome of a repair step (S-0314 claim 3).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StepOutcome {
+    /// The object was at full health; nothing changed.
+    NotNeeded,
+    /// The paying house could not pay; nothing changed.
+    CannotPay,
+    /// Paid; health rose by the step size and is still below the strength.
+    MoreNeeded,
+    /// Paid; health is the strength.
+    Done,
+}
+
+/// The step size of an object (S-0314 claim 4): the game-wide infantry
+/// repair step for infantry, the game-wide repair step for every other
+/// object, at least 1.
+pub fn step_size(w: &World, id: ObjectId) -> i32 {
+    let g = &w.rules().combat.general;
+    let infantry = w.obj(id).is_some_and(|o| o.kind == Kind::Infantry);
+    // spec: S-0314 claim 4 (infantry: the infantry repair step; others: the repair step; a size below 1 counts as 1)
+    let s = if infantry {
+        g.i_repair_step
+    } else {
+        g.repair_step
+    };
+    s.max(1)
+}
+
+/// The step cost of F2 (S-0314 claim 5) for cost `c`, strength `s`, the
+/// game-wide repair step `rs` and repair percentage `p`, with our engine's
+/// departure for a step below 1 or a strength below the step (S-0314 F2,
+/// Edge cases).
+pub fn f2_step_cost(
+    c: i32,
+    s: i32,
+    rs: i32,
+    p: glasnost_num::F64,
+    mode: glasnost_num::Rounding,
+) -> i32 {
+    // spec: S-0314 F2 and Edge cases (our engine: R′ = max(1, R), q = max(1, S ÷ R′))
+    let r = rs.max(1);
+    let q = (s / r).max(1);
+    // spec: S-0314 F2 (c = C ÷ q truncated toward zero; step cost = max(1, trunc(RZ₅₃(c × p))))
+    let cq = c / q;
+    let v = glasnost_num::F64::from_i64(i64::from(cq), mode)
+        .mul(p, mode)
+        .to_i32_common();
+    v.max(1)
+}
+
+/// The step cost of an object (S-0314 claim 5): 0 for infantry, else F2
+/// on the type's cost field without house or country factors; for a
+/// building type the adjusted cost of S-0408 claim 2, which is M5a's
+/// (`None` until then).
+pub fn step_cost(w: &World, id: ObjectId) -> Option<i32> {
+    let o = w.obj(id)?;
+    let r = w.rules();
+    let g = &r.combat.general;
+    let cost = match o.kind {
+        // spec: S-0314 claim 5 (an infantry unit's step costs 0)
+        Kind::Infantry => return Some(0),
+        // spec: S-0314 claim 5 (a building type: the adjusted cost of S-0408 claim 2)
+        Kind::Building => crate::seams::building_adjusted_cost(w, o.type_index)?,
+        Kind::Terrain => return None,
+        // spec: S-0314 claim 5 (the type's cost field, no house or country cost factor)
+        _ => r.unit(o.kind, o.type_index)?.cost,
+    };
+    let s = crate::combat::damage::strength(w, id);
+    Some(f2_step_cost(
+        cost,
+        s,
+        g.repair_step,
+        g.repair_percent,
+        r.mode,
+    ))
+}
+
+/// One repair step on an object (S-0314 claim 3), paid by its owner, the
+/// paying house. `None` when the step cost is not known (a building before
+/// M5a) or the object has no owner.
+pub fn repair_step(w: &mut World, id: ObjectId) -> Option<StepOutcome> {
+    let o = w.obj(id)?;
+    let house = o.owner?;
+    let h = o.health;
+    let s = crate::combat::damage::strength(w, id);
+    // spec: S-0314 claim 3 (the first matching row: full health reports not needed, before the money test)
+    if h >= s {
+        return Some(StepOutcome::NotNeeded);
+    }
+    let cost = step_cost(w, id)?;
+    // spec: S-0314 claim 3 (the paying house's available credits below the step cost: cannot pay; a cost of 0 is never refused)
+    if cost > 0 && crate::seams::available_credits(w, house) < cost {
+        return Some(StepOutcome::CannotPay);
+    }
+    let size = step_size(w, id);
+    crate::seams::pay(w, house, cost);
+    // spec: S-0314 claim 3 (health plus the step size below the strength: more needed; otherwise health becomes the strength: done)
+    let (health, out) = if i64::from(h) + i64::from(size) < i64::from(s) {
+        (h + size, StepOutcome::MoreNeeded)
+    } else {
+        (s, StepOutcome::Done)
+    };
+    if let Some(ob) = w.obj_mut(id) {
+        ob.health = health;
+    }
+    Some(out)
+}
+
+/// One step of a building's repair (S-0314 claim 8), paid by its owner:
+/// returns whether repair stays on, or `None` when the step cost is not
+/// known (the adjusted cost of S-0408 is M5a's). There is no full-health
+/// test: a building at full health pays one step and repair turns off.
+pub fn building_repair_step(w: &mut World, id: ObjectId) -> Option<bool> {
+    let o = w.obj(id)?;
+    let house = o.owner?;
+    let h = o.health;
+    let s = crate::combat::damage::strength(w, id);
+    let cost = step_cost(w, id)?;
+    // spec: S-0314 claim 8 (available credits below the step cost: nothing paid, health unchanged, repair turns off)
+    if crate::seams::available_credits(w, house) < cost {
+        return Some(false);
+    }
+    // spec: S-0314 claim 8 and Edge cases (the game-wide repair step as it stands; our engine raises a value below 1 to 1)
+    let step = w.rules().combat.general.repair_step.max(1);
+    crate::seams::pay(w, house, cost);
+    // spec: S-0314 claim 8 (health plus the step below the strength: it rises and repair stays on; otherwise health becomes the strength and repair turns off)
+    let (health, on) = if i64::from(h) + i64::from(step) < i64::from(s) {
+        (h + step, true)
+    } else {
+        (s, false)
+    };
+    if let Some(ob) = w.obj_mut(id) {
+        ob.health = health;
+    }
+    Some(on)
 }

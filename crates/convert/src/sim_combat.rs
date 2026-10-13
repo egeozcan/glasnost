@@ -178,10 +178,15 @@ const OVERLAY_COMBAT: &[Row] = &[
 ];
 
 /// Combat fields of terrain-object types.
-const TERRAIN_COMBAT: &[Row] = &[
-    ("strength", "Strength", Int, "S-0302"),
-    ("immune", "Immune", Bool, "S-0302"),
-];
+const TERRAIN_COMBAT: &[Row] = &[("immune", "Immune", Bool, "S-0302")];
+
+/// The game-wide tree strength's absent-key default (S-0102 claim 23 and
+/// Import mapping).
+const TREE_STRENGTH_DEFAULT: i32 = 25; // spec: S-0102 Constants (game-wide tree strength default 25)
+
+/// The strength value that unsets a terrain type's strength (S-0102 claim
+/// 23).
+const UNSET_STRENGTH: i32 = -1; // spec: S-0102 claim 23 (writing −1 unsets the strength)
 
 /// Combat fields of weapons.
 const WEAPON_COMBAT: &[Row] = &[
@@ -625,13 +630,13 @@ const CREWS: [(&str, &str); 5] = [
     ("engineer", "Engineer"),
 ];
 
-/// The side crew types and the survivor divisor of each side (S-0312 F4,
-/// F5).
-// spec: S-0312 F4 and F5 (the three side crews and their survivor divisors)
-const SIDE_CREWS: [(&str, &str); 3] = [
-    ("AlliedCrew", "AlliedSurvivorDivisor"),
-    ("SovietCrew", "SovietSurvivorDivisor"),
-    ("ThirdCrew", "ThirdSurvivorDivisor"),
+/// The side crew types, the survivor divisor of each side and the
+/// divisor's engine default (S-0312 F4, F5, Import mapping).
+// spec: S-0312 F4, F5 and Import mapping (the three side crews, their survivor divisors, absent: 200, 100 and 300)
+const SIDE_CREWS: [(&str, &str, i32); 3] = [
+    ("AlliedCrew", "AlliedSurvivorDivisor", 200),
+    ("SovietCrew", "SovietSurvivorDivisor", 100),
+    ("ThirdCrew", "ThirdSurvivorDivisor", 300),
 ];
 
 /// The five threat coefficients of a type and the matching game-wide
@@ -967,6 +972,12 @@ pub fn converted_keys() -> Vec<(&'static str, String, &'static str)> {
     let s = |k: &[&str]| k.iter().map(|k| (*k).to_owned()).collect::<Vec<_>>();
     keyed(&TYPES, &s(&["Armor"]), "S-0305");
     keyed(&["terrain_objects", "overlays"], &s(&["Armor"]), "S-0305");
+    keyed(
+        &["terrain_objects"],
+        &s(&["Strength"]),
+        "S-0102, S-0009, S-0302",
+    );
+    keyed(&["global:General"], &s(&["TreeStrength"]), "S-0102, S-0009");
     let mut weapons = s(&[
         "Primary",
         "Secondary",
@@ -1694,9 +1705,62 @@ impl Builder<'_> {
     /// Terrain-object combat fields.
     pub(super) fn terrain_combat(&mut self, rec: &mut Rec, t: &TypeRec) {
         self.cfields(rec, t, Kind::TerrainObjects, TERRAIN_COMBAT);
+        if let Some(v) = self.terrain_strength(t) {
+            rec.put("strength", int_node(v));
+        }
         if let Some(word) = self.armour(Kind::TerrainObjects, t) {
             rec.put("armor", jsonc::string(word));
         }
+    }
+
+    /// A terrain type's strength (S-0102 claim 23, S-0009 claim 42): unset
+    /// until a layer gives it; after each layer that reads the type's
+    /// section, a strength still unset takes `[General] TreeStrength` as it
+    /// stands in that layer (25 when no layer gives it), and −1 unsets it
+    /// again. With `quirks.tree_strength_fixed_at_first_section` off, a type
+    /// left unset by its own key takes the tree strength in force after the
+    /// last layer. `None`: unset (no layer read the section), which the
+    /// simulation reads as −1.
+    fn terrain_strength(&mut self, t: &TypeRec) -> Option<i32> {
+        let state = key(t, "Strength");
+        let tree = self.global(GENERAL, "TreeStrength");
+        let tree_at = |upto: Option<usize>| {
+            // spec: S-0102 Import mapping (TreeStrength absent: 25)
+            fold(tree.as_ref(), upto, |v, _| value::integer(v)).unwrap_or(TREE_STRENGTH_DEFAULT)
+        };
+        let unset = |v: Option<i32>| v.filter(|&x| x != UNSET_STRENGTH);
+        if t.reads.is_empty() {
+            // spec: S-0102 claim 23 (a type whose section no layer holds keeps its strength unset)
+            return None;
+        }
+        if !self.i.sim_quirks.tree_strength_fixed_at_first_section {
+            // spec: S-0102 Edge cases (switch off: the tree strength in force after the last layer)
+            let own = unset(fold(state, None, |v, _| value::integer(v)));
+            return Some(own.unwrap_or_else(|| tree_at(None)));
+        }
+        let mut held: Option<i32> = None;
+        for &r in &t.reads {
+            for e in state.into_iter().flat_map(|s| &s.history) {
+                if e.layer != r {
+                    continue;
+                }
+                match &e.what {
+                    // spec: S-0003 claims 3 and 8 (an unreadable integer keeps the value in force); S-0102 claim 23 (−1 unsets)
+                    What::Set(v) => {
+                        if let Some(x) = value::integer(v) {
+                            held = unset(Some(x));
+                        }
+                    }
+                    What::Reset => held = None,
+                    _ => {}
+                }
+            }
+            if held.is_none() {
+                // spec: S-0102 claim 23 (after a layer holding the section, an unset strength takes the tree strength as it stands then)
+                held = Some(tree_at(Some(r)));
+            }
+        }
+        held
     }
 
     /// Weapon combat fields and their warnings.
@@ -2106,12 +2170,12 @@ impl Builder<'_> {
             },
             |v| format!("[General] RepairRate {v} gives a building repair period below one tick or negative: our engine uses at least 1 tick (S-0314 Edge cases)"),
         );
-        for (crew, divisor) in SIDE_CREWS {
+        for (crew, divisor, absent) in SIDE_CREWS {
             let d = self.global(GENERAL, divisor);
             let c = self.global(GENERAL, crew);
             let found =
                 text_of(c.as_ref()).is_some_and(|n| self.find_rec(Kind::Infantry, &n).is_some());
-            if int_of(d.as_ref()).unwrap_or(0) > 0 && !found {
+            if int_of(d.as_ref()).unwrap_or(absent) > 0 && !found {
                 // spec: S-0312 Edge cases (a missing crew type for a side with a survivor divisor above 0: no survivor, a departure)
                 self.warn_at(c.as_ref().or(d.as_ref()), format!(
                     "[General] {crew} names no infantry type while {divisor} is above 0: our engine releases no survivor there (S-0312 F4, a departure)"

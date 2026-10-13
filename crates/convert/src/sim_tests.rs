@@ -486,6 +486,92 @@ fn overlay_art_flag() {
     assert_eq!(parsed.overlays["Ghost"].has_art, Some(false));
 }
 
+/// spec: S-0009 claim 12 and Import mapping (CellAnim: the overlay type's
+/// cell animation, an animation type name compared without regard to letter
+/// case; none and <none> clear it, an empty value keeps it; the "artwork or
+/// cell animation" test reads the same value)
+#[test]
+fn overlay_cell_animation() {
+    let base = "[OverlayTypes]\n1=Glow\n2=Fade\n3=Keep\n4=Plain\n[Animations]\n1=Spark\n\
+                [Glow]\nCellAnim=SPARK\n[Fade]\nCellAnim=Spark\n[Keep]\nCellAnim=Spark\n";
+    let map = "[Fade]\nCellAnim=<NONE>\n[Keep]\nCellAnim=\n";
+    let (s, _) = sim(base, map, "");
+    let o = &s.overlays;
+    assert_eq!(o["Glow"].cell_anim.as_deref(), Some("Spark"));
+    assert!(o.get("Fade").is_none_or(|p| p.cell_anim.is_none()));
+    assert_eq!(o["Keep"].cell_anim.as_deref(), Some("Spark"));
+    assert!(o.get("Plain").is_none_or(|p| p.cell_anim.is_none()));
+
+    // The art test: a type without artwork but with a cell animation counts as drawn.
+    let base = "[OverlayTypes]\n1=Ghost\n2=Bare\n[Ghost]\nCellAnim=Spark\n[Bare]\nCellAnim=none\n";
+    let layers = [crate::layers::Layer {
+        role: crate::layers::Role::Base,
+        file: "rules.ini".into(),
+        doc: Document::parse(base.as_bytes(), Default::default(), &mut Vec::new()),
+    }];
+    let art = Document::empty(Default::default());
+    let outcome = crate::layers::apply(
+        &layers,
+        &art,
+        "art.ini",
+        Default::default(),
+        &LayerQuirks::default(),
+    );
+    let arts = BTreeMap::from([
+        ((Kind::Overlays, 0), TypeArt::default()),
+        ((Kind::Overlays, 1), TypeArt::default()),
+    ]);
+    let (node, _) = build(SimInputs {
+        outcome: &outcome,
+        art: &art,
+        arts: Some(&arts),
+        quirks: &LayerQuirks::default(),
+        art_quirks: &ArtQuirks::default(),
+        ini_quirks: &Default::default(),
+        sim_quirks: &SimQuirks::default(),
+    });
+    let parsed: SimData = glasnost_rules::de::from_node(&node).unwrap();
+    assert_eq!(parsed.overlays["Ghost"].has_art, Some(true));
+    assert_eq!(parsed.overlays["Bare"].has_art, Some(false));
+}
+
+/// spec: S-0102 claim 23 and S-0009 claim 42 (a terrain type's strength:
+/// unset until a layer gives it; after each layer holding its section an
+/// unset strength takes the game-wide tree strength as it stands then, 25
+/// when absent; −1 unsets it; quirks.tree_strength_fixed_at_first_section)
+#[test]
+fn terrain_strength_and_tree_strength() {
+    let base = "[General]\nTreeStrength=40\n[TerrainTypes]\n0=Oak\n1=Elm\n2=Ash\n3=Yew\n\
+                [Oak]\nX=1\n[Elm]\nStrength=7\n[Ash]\nX=1\n[Yew]\nStrength=9\n";
+    let map = "[General]\nTreeStrength=1\n[Ash]\nStrength=-1\n[Yew]\nStrength=-1\n";
+    let (s, _) = sim(base, map, "");
+    let t = &s.terrain_objects;
+    // Oak took the base layer's tree strength and keeps it (the map changes only the tree strength).
+    assert_eq!(t["Oak"].strength, Some(40));
+    assert_eq!(t["Elm"].strength, Some(7));
+    // −1 unsets: the map layer sets it again to its own tree strength.
+    assert_eq!(t["Ash"].strength, Some(1));
+    assert_eq!(t["Yew"].strength, Some(1));
+
+    // Absent game-wide key: 25.
+    let (s, _) = sim("[TerrainTypes]\n0=Oak\n[Oak]\nX=1\n", "", "");
+    assert_eq!(s.terrain_objects["Oak"].strength, Some(25));
+
+    // Switch off: an unset type takes the tree strength in force after the last layer.
+    let options = ImportOptions {
+        sim: SimQuirks {
+            tree_strength_fixed_at_first_section: false,
+            ..SimQuirks::default()
+        },
+        ..ImportOptions::default()
+    };
+    let (s, _) = sim_with(base, map, "", &options);
+    let t = &s.terrain_objects;
+    assert_eq!(t["Oak"].strength, Some(1));
+    assert_eq!(t["Elm"].strength, Some(7));
+    assert_eq!(t["Ash"].strength, Some(1));
+}
+
 /// spec: S-0003 claim 12 (lists), S-0107 Import mapping (art fields), S-0107 claim 22
 #[test]
 fn infantry_art_and_lists() {
@@ -603,6 +689,7 @@ fn every_record_kind_resolves() {
             Form::Bool => format!("{k}=yes\n"),
             Form::Dec => format!("{k}=0.5\n"),
             Form::Text | Form::Ref(_) | Form::Refs(_) => format!("{k}=Name{k}\n"),
+            Form::Texts => format!("{k}=A{k},B{k}\n"),
             Form::Ints => format!("{k}=1,2\n"),
         })
         .collect();
@@ -614,6 +701,7 @@ fn every_record_kind_resolves() {
                 Form::Bool => format!("{k}=no\n"),
                 Form::Dec => format!("{k}=25%\n"),
                 Form::Text | Form::Ref(_) | Form::Refs(_) => format!("{k}=T{k}\n"),
+                Form::Texts => format!("{k}=A{k},B{k}\n"),
                 Form::Ints => format!("{k}=3,4\n"),
             });
         }
@@ -727,6 +815,73 @@ fn guard_stray_absent_warns() {
     assert!(warned(&w, "GuardModeStray is given by no rules layer"));
     let (_, w) = sim("[General]\nGuardModeStray=2\n", "", "");
     assert!(!warned(&w, "GuardModeStray"));
+}
+
+/// spec: S-0215 Import mapping (AIAutoDeployFrameDelay: a list of integers in ticks, one per difficulty index); S-0215 claim 31 and Edge cases (the importer warns for fewer than 3 entries)
+#[test]
+fn auto_deploy_delay_list() {
+    let (s, w) = sim(
+        "[General]
+AIAutoDeployFrameDelay=300,40,5
+",
+        "",
+        "",
+    );
+    assert_eq!(s.general.ai_auto_deploy_frame_delay, Some(vec![300, 40, 5]));
+    assert!(!warned(&w, "AIAutoDeployFrameDelay"));
+    let (s, w) = sim(
+        "[General]
+AIAutoDeployFrameDelay=300,40,5
+",
+        "[General]
+AIAutoDeployFrameDelay=70
+",
+        "",
+    );
+    assert_eq!(s.general.ai_auto_deploy_frame_delay, Some(vec![70]));
+    assert!(warned(
+        &w,
+        "AIAutoDeployFrameDelay has fewer than 3 entries"
+    ));
+}
+
+/// spec: S-0214 Import mapping (VoiceSelect: the selection responses, a list of sound names kept in the listed order, no entry dropped or reordered; absent: empty)
+#[test]
+fn voice_select_keeps_every_entry() {
+    let base = "[InfantryTypes]\n1=Walker\n2=Mute\n[BuildingTypes]\n1=Hut\n\
+                [Walker]\nVoiceSelect=Hi,none,Yo\n[Mute]\nStrength=5\n[Hut]\nVoiceSelect=Hum\n";
+    let (s, _) = sim(base, "", "");
+    assert_eq!(
+        s.infantry["Walker"].voice_select,
+        Some(vec!["Hi".to_string(), "none".to_string(), "Yo".to_string()])
+    );
+    assert_eq!(s.infantry["Mute"].voice_select, None);
+    assert_eq!(
+        s.buildings["Hut"].voice_select,
+        Some(vec!["Hum".to_string()])
+    );
+}
+
+/// spec: S-0215 Edge cases (the importer warns for a turreted building type whose turn-rate field is outside 0 to 127, quirks.turret_snap_bound_wraps)
+#[test]
+fn turret_snap_bound_warning() {
+    let base = "[BuildingTypes]
+1=Tower
+2=Post
+3=Wall
+                [Tower]
+Turret=yes
+ROT=200
+[Post]
+Turret=yes
+ROT=127
+[Wall]
+ROT=300
+";
+    let (_, w) = sim(base, "", "");
+    assert!(warned(&w, "Tower ROT 200 is outside 0 to 127"));
+    assert!(!warned(&w, "Post ROT"));
+    assert!(!warned(&w, "Wall ROT"));
 }
 
 /// spec: S-0214 Import mapping (Teleporter); S-0215 Import mapping (DeployTime and GateCloseDelay, game minutes)

@@ -272,7 +272,7 @@ fn claim_2_full_delay_is_rate_plus_one_draw() {
     }
 }
 
-// spec: S-0301 claim 3 and F2 (h = RZ₅₃(ℓ × κ), the normal row's factor times the country's, for every house)
+// spec: S-0301 claim 3 and F2 (h = RZ₅₃(ℓ × κ), the normal row's factor times the country's, for every player house)
 #[test]
 fn claim_3_house_factor_is_row_times_country() {
     let mut r = base();
@@ -302,6 +302,35 @@ fn claim_3_house_factor_is_row_times_country() {
             .rof_factor
             .eq_num(row.mul(dec("0.7", m), m))
     );
+}
+
+// spec: S-0301 claim 3 and F2 (h = 1.0 exactly for the neutral and special houses, whatever the rows and their countries' factors hold; S-0412 claim 5)
+#[test]
+fn claim_3_non_player_houses_have_factor_one() {
+    let mut r = base();
+    for (row, v) in [("easy", "2"), ("normal", "1.5"), ("difficult", "0.5")] {
+        r.sim.difficulty.insert(
+            row.into(),
+            DifficultyRow {
+                rof: Some(d(v)),
+                ..Default::default()
+            },
+        );
+    }
+    r.sim.countries.get_mut("Alphaland").unwrap().rof = Some(d("1.5"));
+    r.sim.countries.get_mut("Betaland").unwrap().rof = Some(d("0.5"));
+    let w = testkit::game_with_non_players(&r, N, 7);
+    let m = mode(&w);
+    // The player house of the same country: the row times the country.
+    assert!(
+        w.houses[0]
+            .combat
+            .rof_factor
+            .eq_num(dec("1.5", m).mul(dec("1.5", m), m))
+    );
+    for h in [2, 3] {
+        assert!(w.houses[h].combat.rof_factor.eq_num(int(1, m)), "house {h}");
+    }
 }
 
 // spec: S-0301 F1 (the full delay takes h: D₁ = trunc(RZ₅₃(RZ₅₃(R × h) + u)))
@@ -1630,6 +1659,34 @@ fn s0215_claim_32_voxel_turret_snap() {
         let want = if snaps { 1 } else { 2 };
         assert_eq!(behave::building_process(&mut w, t), want, "from {from}");
         assert_eq!(w.obj(t).unwrap().last_fired == w.tick, snaps);
+    }
+}
+
+// spec: S-0215 Edge cases and F8 (quirks.turret_snap_bound_wraps: on, the bound reads the field modulo 256, so 200 gives 14 336 and 256 gives 0; off, b = 256 × ω with ω = 127 for both, so 32 512)
+#[test]
+fn s0215_quirk_turret_snap_bound_wraps_both_settings() {
+    for (field, off, on_snaps, off_snaps) in [
+        (200, 10_000, true, true),
+        (200, 20_000, false, true),
+        (256, 1000, false, true),
+        (100, 20_000, true, true),
+        (100, 26_000, false, false),
+    ] {
+        for wraps in [true, false] {
+            let mut r = turret_tower(field, true);
+            r.globals.quirks.turret_snap_bound_wraps = wraps;
+            let (mut w, t, b) = tower_duel(&r);
+            attack(&mut w, t);
+            let from = dir(&w, t, b).wrapping_sub(off);
+            turret_at(&mut w, t, from);
+            let snaps = if wraps { on_snaps } else { off_snaps };
+            let want = if snaps { 1 } else { 2 };
+            assert_eq!(
+                behave::building_process(&mut w, t),
+                want,
+                "field {field}, error {off}, wraps {wraps}"
+            );
+        }
     }
 }
 

@@ -217,8 +217,10 @@ fn unit_or_building(w: &World, id: ObjectId) -> bool {
     kind(w, id).is_some_and(|k| k != Kind::Terrain)
 }
 
-/// Allied with the actor: the houses are allied or the same (S-0214
-/// Terms). A target without a house is an enemy.
+/// Allied with the actor (S-0214 Terms, *Allied, enemy*): judged from the
+/// actor's side, with the one-way alliance: the actor's house allies the
+/// target's house (a house allies itself). A target without a house is an
+/// enemy.
 fn allied(w: &World, actor: ObjectId, target: ObjectId) -> bool {
     let a = w.obj(actor).and_then(|o| o.owner);
     let t = w.obj(target).and_then(|o| o.owner);
@@ -1480,6 +1482,26 @@ pub fn click(
 pub fn selection_response(raw: u32, responses: u32) -> Option<u32> {
     // spec: S-0214 F5 (i = x mod n, unsigned remainder; none for n = 0)
     raw.checked_rem(responses)
+}
+
+/// The number n of selection responses of an object's type (S-0214 Terms,
+/// *selection response*, and F5): the count of the type's list, every
+/// entry counted; 0 when it has none.
+pub fn selection_responses(w: &World, id: ObjectId) -> u32 {
+    let Some(o) = w.obj(id) else { return 0 };
+    let r = w.rules();
+    // spec: S-0214 Import mapping (VoiceSelect: n is the count of the list; absent: empty, no response)
+    let list = match o.kind {
+        Kind::Building => r
+            .buildings
+            .get(o.type_index as usize)
+            .and_then(|b| b.raw.voice_select.as_ref()),
+        Kind::Terrain => None,
+        _ => r
+            .unit(o.kind, o.type_index)
+            .and_then(|u| u.raw.voice_select.as_ref()),
+    };
+    list.map_or(0, |l| l.len() as u32)
 }
 
 /// The move destination of claim 11. No cell or object is shrouded before

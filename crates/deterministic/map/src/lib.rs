@@ -13,6 +13,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
+pub mod bridges;
 pub mod geometry;
 pub mod objects;
 pub mod terrain;

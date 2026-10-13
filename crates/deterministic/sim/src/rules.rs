@@ -291,6 +291,8 @@ pub struct OverlayRules {
     pub chain_reaction: bool,
     /// Explodes flag (S-0303 claim 19).
     pub explodes: bool,
+    /// The cell animation's type name (S-0009 claim 12), if any.
+    pub cell_anim: Option<String>,
 }
 
 /// A terrain-object type's resolved fields.
@@ -302,7 +304,7 @@ pub struct TerrainRules {
     pub occupation: (i32, i32),
     /// The spawns-resources flag (S-0203 claim 2).
     pub spawns_resources: bool,
-    /// Strength (S-0302 claim 20).
+    /// Strength (S-0302 claim 20; S-0102 claim 23): −1 when unset.
     pub strength: i32,
     /// Armour class index (S-0305).
     pub armour: usize,
@@ -426,6 +428,11 @@ pub struct GeneralRules {
     pub guard_stray: Option<i32>,
     /// Scatter threshold of the house skill level.
     pub iq_scatter: i32,
+    /// The auto-deploy delay A of S-0215 claim 31 for difficulty index 1,
+    /// ticks: the list's second entry, the only one our engine reads (the
+    /// neutral and special houses have index 1); `None` when the list has no
+    /// second entry.
+    pub auto_deploy_delay: Option<i32>,
     /// The rules' lobby game-speed index (S-0201 claim 7).
     pub lobby_game_speed: u8,
     /// The engineer-capture health ratio c (S-0214 row I7), single
@@ -655,6 +662,9 @@ pub struct SimRules {
     pub base_units: Vec<u32>,
     /// The game's tech level (S-0009 Terms).
     pub game_tech_level: i32,
+    /// The maximum player count of the unused-house cleanup (S-0009 claim
+    /// 28).
+    pub max_players: i32,
     /// The gate and wall tower types (S-0112 claim 7).
     pub gates: GateTypes,
     /// Animation types by registration index.
@@ -790,6 +800,11 @@ impl SimRules {
             }),
             // spec: S-0209 Import mapping ([IQ] Scatter absent: 3)
             iq_scatter: g.iq_scatter.unwrap_or(3),
+            // spec: S-0215 claim 31 and Import mapping (AIAutoDeployFrameDelay: the entry for difficulty index 1; no second entry, or no list: none, and the row does not apply)
+            auto_deploy_delay: g
+                .ai_auto_deploy_frame_delay
+                .as_ref()
+                .and_then(|l| l.get(1).copied()),
             // spec: S-0201 Constants (rules lobby game speed absent: index 6; claim 7 covers 0 to 6)
             lobby_game_speed: g.lobby_game_speed.map_or(6, |v| v.clamp(0, 6) as u8),
             // spec: S-0214 Import mapping (EngineerCaptureLevel: stored in single precision; absent 1.0)
@@ -941,8 +956,8 @@ impl SimRules {
                     ),
                     // spec: S-0203 Import mapping (SpawnsTiberium absent: no)
                     spawns_resources: t.spawns_tiberium.unwrap_or(false),
-                    // spec: S-0302 Import mapping (Strength absent: 0)
-                    strength: t.strength.unwrap_or(0),
+                    // spec: S-0102 claim 23 and S-0009 claim 42 (a terrain type's strength left unset, which the importer writes as absent: health −1)
+                    strength: t.strength.unwrap_or(-1),
                     // spec: S-0305 claim 2 (a type no layer has given the field: class none)
                     armour: t.armor.unwrap_or_default().index(),
                     immune: t.immune.unwrap_or(false),
@@ -1009,6 +1024,8 @@ impl SimRules {
             base_units,
             // spec: S-0009 Terms and Import mapping (the game's tech level: the base rules' value, 10 when they omit it)
             game_tech_level: g.multiplayer_tech_level.unwrap_or(10),
+            // spec: S-0009 Constants and Import mapping (maximum player count when the base rules omit it: 8)
+            max_players: g.max_players.unwrap_or(8),
             gates,
             land,
             behaviours,
@@ -1363,6 +1380,8 @@ fn overlay_rules(name: &str, o: rs::OverlayType) -> OverlayRules {
         },
         chain_reaction: o.chain_reaction.unwrap_or(false),
         explodes: o.explodes.unwrap_or(false),
+        // spec: S-0009 Import mapping (CellAnim absent: no cell animation)
+        cell_anim: o.cell_anim,
     }
 }
 

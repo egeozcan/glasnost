@@ -86,6 +86,65 @@ fn rows_i10_i11_healing_actor() {
     assert_eq!(act(&w, walker, ClickOn::Object(enemy)), Action::Attack);
 }
 
+// spec: S-0214 claim 5 (the attack-move gesture also turns the actions part 1 of table M treats as attack, here heal, into attack-move on a target; scenario T3)
+#[test]
+fn claim_5_attack_move_gesture_on_a_heal() {
+    let r = healing_walker();
+    let mut w = game(&r);
+    let medic = spawn(&mut w, Kind::Infantry, "WALKER", 0, mid(SIZE, 0, 0), 0);
+    let friend = spawn(&mut w, Kind::Infantry, "WALKER", 0, mid(SIZE, 2, 0), 0);
+    w.obj_mut(friend).unwrap().health -= 10;
+    assert_eq!(act(&w, medic, ClickOn::Object(friend)), Action::Heal);
+    let gesture = Modifiers {
+        attack_move_mode: true,
+        ..Default::default()
+    };
+    let res = targeting::click(&w, ALPHA, &[medic], ClickOn::Object(friend), gesture);
+    assert_eq!(
+        res.orders,
+        vec![Order::Behaviour {
+            actor: medic,
+            behaviour: Behaviour::Attack,
+            attack_move: true,
+            target: Some(Target::Object(friend)),
+            dest: None,
+        }]
+    );
+}
+
+// spec: S-0214 Terms (Allied, enemy: judged from the actor's side with the one-way alliance; whether the target's house allies the actor's is not asked)
+#[test]
+fn terms_allied_is_judged_from_the_actor_side() {
+    let r = testkit::combat_ruleset();
+    let mut w = game(&r);
+    // House 1 allies house 0; house 0 does not ally house 1.
+    w.houses[1].allies.push(ALPHA);
+    w.houses[1].allies.sort();
+    let a = spawn(&mut w, Kind::Vehicle, "CART", 0, mid(SIZE, 0, 0), 0);
+    let b = spawn(&mut w, Kind::Vehicle, "CART", 1, mid(SIZE, 3, 0), 0);
+    // House 0's actor: house 1's cart is an enemy.
+    assert_eq!(act(&w, a, ClickOn::Object(b)), Action::Attack);
+    // House 1's actor: house 0's cart is allied, so no attack without force-fire.
+    let beta = HouseId(1);
+    let from_b = targeting::action(&w, beta, b, ClickOn::Object(a), Modifiers::default());
+    assert_ne!(from_b, Action::Attack);
+}
+
+// spec: S-0214 Terms (selection response) and Import mapping (VoiceSelect: n is the count of the list, every entry kept; absent: none); F5 (no value taken for n = 0)
+#[test]
+fn f5_selection_response_count() {
+    let mut r = testkit::combat_ruleset();
+    r.sim.infantry.get_mut("WALKER").unwrap().voice_select =
+        Some(vec!["Hi".into(), "none".into(), "Yo".into()]);
+    let mut w = game(&r);
+    let walker = spawn(&mut w, Kind::Infantry, "WALKER", 0, mid(SIZE, 0, 0), 0);
+    let cart = spawn(&mut w, Kind::Vehicle, "CART", 0, mid(SIZE, 2, 0), 0);
+    assert_eq!(targeting::selection_responses(&w, walker), 3);
+    assert_eq!(targeting::selection_responses(&w, cart), 0);
+    assert_eq!(targeting::selection_response(7, 3), Some(1));
+    assert_eq!(targeting::selection_response(7, 0), None);
+}
+
 // spec: S-0214 Part 2 (idle: area guard on the actor itself if its first weapon heals, else guard)
 #[test]
 fn idle_order_area_guards_when_the_first_weapon_heals() {

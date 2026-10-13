@@ -12,7 +12,9 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use glasnost_convert::Import;
 use glasnost_convert::kinds::Kind;
-use glasnost_convert::theater::{Catalogue, TheaterQuirks, variant_image, variant_pattern};
+use glasnost_convert::theater::{
+    Catalogue, TheaterQuirks, alternate_image_mark, variant_image, variant_pattern,
+};
 use glasnost_fmt::hva::Hva;
 use glasnost_fmt::image::IndexedImage;
 use glasnost_fmt::shp::Shp;
@@ -173,7 +175,7 @@ mod notes {
         "Q-0021: an overlay shadow's depth bias is taken as its overlay's, flat (provisional)";
     pub const RUBBLE: &str = "rubble overlays outside a rubble cell draw nothing (S-0112 claim 5); rubble cells arise only in play";
     pub const SMUDGE_CLIP: &str = "a smudge is painted whole once per covered cell, not clipped to that cell (S-0102 claim 25): it differs only where covered cells differ in level or light";
-    pub const TERRAIN_STRENGTH: &str = "Q-0023: a terrain object type without a strength key is drawn with image frame 0 (provisional)";
+    pub const TERRAIN_STRENGTH: &str = "the rules did not resolve: a terrain object type without a strength key is drawn with image frame 0 (its strength from the game-wide tree strength, S-0102 claim 23, needs the typed rules)";
     pub const ANIMATED_TERRAIN: &str =
         "Q-0023: animated terrain objects show image frame 0 (provisional)";
     pub const VOXEL_SHADOW_POINT: &str = "voxel shadows are placed at the object's ground point (the locomotor's shadow point has no spec)";
@@ -413,6 +415,9 @@ struct TileFile {
     width: i32,
     height: i32,
     cells: Vec<Option<TileImages>>,
+    /// Each tile cell's flag value (0 for an empty cell), row by row
+    /// (S-0010 Import mapping).
+    flags: Vec<u32>,
 }
 
 struct Builder<'a> {
@@ -754,10 +759,16 @@ impl Builder<'_> {
                     (img, dep, dia.x, dia.y, extra)
                 }));
             }
+            let flags = tmp
+                .tiles
+                .iter()
+                .map(|t| t.as_ref().map_or(0, |t| t.flags))
+                .collect();
             Some(TileFile {
                 width: tmp.cells_x as i32,
                 height: tmp.cells_y as i32,
                 cells,
+                flags,
             })
         });
         self.p.tile_files.insert(key, decoded.clone());
@@ -818,9 +829,12 @@ impl Builder<'_> {
                     shown = Some((t, s, f));
                 }
             }
+            // spec: S-0010 claim 13 (a no-tile cell shows the clear tile by the pattern; no mark is read for it)
+            let mut read_mark = shown.is_some();
             let (_, s, f) = match shown {
                 Some(x) => x,
                 None => {
+                    read_mark = false;
                     let clear = self.catalogue.clear_base;
                     if !(0..count).contains(&clear) {
                         self.drop_object(
@@ -837,6 +851,12 @@ impl Builder<'_> {
                 self.drop_object("cell drawn blank: no file holds its tile image");
                 continue;
             };
+            // spec: S-0010 claim 13 (the mark of the plain image's tile cell at index t mod (w × h), from the plain image's file only; none where it has no tile cell there)
+            let marked = read_mark
+                && plain
+                    .flags
+                    .get(s.rem_euclid((plain.width * plain.height).max(1)) as usize)
+                    .is_some_and(|&fl| alternate_image_mark(fl));
             // spec: S-0010 claim 13 (the image is chosen with the plain image's size)
             let v = variant_image(
                 (c.x, c.y),
@@ -845,6 +865,7 @@ impl Builder<'_> {
                 f.variants.len(),
                 &p8,
                 q.variant_origin_mismatch,
+                marked,
             );
             let file = if v == 0 {
                 f.plain.clone()
@@ -1300,9 +1321,16 @@ impl Builder<'_> {
             };
             let frames = self.sprite_frames(&sprite).unwrap_or(0);
             // spec: S-0102 claim 23 (frame 0 while its health, its type's strength at the start, is 2 or more; 1 below)
-            let strength =
-                rule(self.import, Kind::TerrainObjects, i, b"Strength").and_then(value::integer);
-            if strength.is_none() {
+            // spec: S-0009 claim 42 (the starting health is the type's strength with the game-wide tree strength applied; unset: −1)
+            // (The typed rules list the terrain types in the import's registration order.)
+            let typed = self
+                .rules
+                .and_then(|r| r.terrain.get(i))
+                .map(|tr| tr.strength);
+            let strength = typed.or_else(|| {
+                rule(self.import, Kind::TerrainObjects, i, b"Strength").and_then(value::integer)
+            });
+            if typed.is_none() && strength.is_none() {
                 self.note(notes::TERRAIN_STRENGTH);
             }
             let frame = usize::from(strength.is_some_and(|s| s < 2));
