@@ -1,9 +1,9 @@
 ---
 id: Q-0075
 title: The precision of the red ratio and S-0302's rounding example
-status: open
+status: answered
 related: [S-0302, S-0003]
-answered-by: []
+answered-by: [S-0003]
 ---
 
 ## Need
