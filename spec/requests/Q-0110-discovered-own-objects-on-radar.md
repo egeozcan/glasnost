@@ -3,7 +3,7 @@ id: Q-0110
 title: Whether a house's own objects count as discovered by it (radar listing), and which object of a cell is marked
 status: answered
 related: [S-0409, S-0410]
-answered-by: [S-0409]
+answered-by: [S-0409, S-0410]
 ---
 
 ## Need
