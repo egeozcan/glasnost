@@ -204,6 +204,18 @@ mod tests {
         assert_eq!(bytes[784 + 256 * 3 + 10], 13);
     }
 
+    /// spec: S-0013 claim 2 (256 three-byte colour entries, each component one whole byte, kept as stored)
+    #[test]
+    fn palette_components_are_whole_bytes() {
+        let mut bytes = synthetic_table(1).write();
+        bytes[16..19].copy_from_slice(&[64, 200, 255]);
+        bytes[16 + 3 * 255 + 2] = 128;
+        let t = Vpl::parse(&bytes).unwrap();
+        assert_eq!(t.palette.colors[0], [64, 200, 255]);
+        assert_eq!(t.palette.colors[255][2], 128);
+        assert_eq!(t.write(), bytes);
+    }
+
     /// spec: S-0013 claim 1 (the row count is the value at positions 8–11, whatever the others hold)
     #[test]
     fn row_count_is_the_third_value() {
