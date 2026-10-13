@@ -139,8 +139,9 @@ fn tile_anim_due(w: &mut World, cat: &TileCatalogue, c: CellXY) -> Option<String
 /// three raw values and three ranged draws over −65535 … 65535. A start
 /// event's chain reaction on a cell holding no resource takes no draw
 /// (S-0202 claim 10); one on a resource cell (S-0401 claim 20, the economy
-/// topic's seam) and the middle event's effects (request Q-0046 question
-/// 2b) are not taken. An animation type the rules do not list has no fields
+/// topic's seam) and the middle event's particles and smudges (S-0109
+/// claim 14 gives their gates, no approved spec their draws: request
+/// Q-0182) are not taken. An animation type the rules do not list has no fields
 /// (S-0004 claim 3) and takes no draw.
 pub fn anim_creation_draws(w: &mut World, name: &str) {
     let rules = w.rules_arc();
@@ -165,7 +166,7 @@ pub fn anim_creation_draws(w: &mut World, name: &str) {
     }
     if a.start_effects {
         // spec: S-0202 claim 10 (a chain reaction on a cell without resource takes no draw and has no effect)
-        w.note("S-0109 claim 13: an animation's start-event draws (a chain reaction on a resource cell, middle-event effects) are not taken (request Q-0046)");
+        w.note("S-0109 claim 13: an animation's start-event draws (a chain reaction on a resource cell, S-0401 claim 20; middle-event particles and smudges, request Q-0182) are not taken");
     }
 }
 
