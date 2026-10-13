@@ -2,11 +2,11 @@
 id: S-0307
 title: Weapon range test
 topic: combat
-revision: 1
+revision: 2
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-10
+approved-on: 2026-10-13
 measurements: []
 requests: []
 supersedes: []
@@ -21,7 +21,12 @@ test*: the weapon's range field, changed by bonuses and replacements and by heig
 the table-root distance between a source point and a measured point, with refusals for bridges and
 for a blocked line of fire. The spec also defines the *firer's weapon range* (claim 13), which other
 rules read and which differs from the range test's own range for open-topped transports. How
-projectiles fly once fired is S-0306.
+projectiles fly once fired is S-0306. Claim 15 adds the verified open-ground part of choosing an
+approach destination for an attacking infantry unit or vehicle. This is not yet a complete answer
+to Q-0072: claims 16 to 18 add obstructed level-ground searches, failure outcomes and a special
+object destination. S-0215 claim 37 owns the trigger, gating and destination renewal. Stopping and
+some exceptional searches remain open below.
+Skirmish is covered; campaigns and network games are out of scope.
 
 ## Terms
 
@@ -50,6 +55,16 @@ and *subject to walls*. In addition:
   elevation bonus of claim 6.
 - **Cell rangefinding.** A weapon property (Import mapping). It moves the source point to the
   firer's cell (claim 8 a).
+- **Close-range property.** A boolean type field (Import mapping). Claims 15 and 16 cover only
+  types without this property; the approach rules for types with it remain open.
+- **Hunter-seeker property, balloon-hover property.** Boolean type fields (Import mapping), read
+  only for the exceptional destinations of claims 17 and 18. This spec does not define their
+  special abilities or locomotion.
+- **Vertical projectile.** A projectile with the vertical-flight flag of S-0306 (claim 11),
+  imported as in Import mapping.
+- **Approach-position search.** Choosing a firing destination after S-0215 claim 37 has decided
+  to search. It is distinct from the nearby-cell search of S-0212 claim 25 and from computing a
+  path to the destination. *Approach destinations* means S-0215's held list of destinations.
 - **Wall-damaging warhead.** A warhead with the wall-damage property (Import mapping). It is the only
   property of a warhead that this spec reads (claim 11).
 - **Open-topped transport.** A transport type whose passengers fire from inside it. Its passengers
@@ -57,7 +72,8 @@ and *subject to walls*. In addition:
 - **Garrisoned building.** As in S-0301 (Terms): an occupiable building that may fire while
   occupied and has at least one occupant.
 - **Firer's weapon range** ρ(*A*, *i*). The reach that other rules (flak scatter, S-0306 claim 4, and
-  the scan and guard reach of S-0309) read for firer *A*'s weapon in slot *i* (claim 13). It is not
+  the scan and guard reach of S-0309, and the approach radius of claim 15) read for firer *A*'s
+  weapon in slot *i* (claim 13). It is not
   the range test's *R*.
 - **Elevation step count** *k*. trunc(Δ*h* / *I*) (integer division) for the elevation-level
   difference Δ*h* ≥ 0 between the firer's cell and the target's cell and the game-wide elevation
@@ -196,7 +212,10 @@ and *subject to walls*. In addition:
 
 12. **Who uses the range test.** The firing check uses it with the source point of claim 8.
     Movement rules that look for a position from which to fire use the same comparison with the
-    candidate position as source point, without the substitutions of claim 8. The target-scan and
+    candidate position as source point, without the substitutions of claim 8.
+    Claims 15 and 16 specify covered cases of choosing such a candidate. S-0215 claim 37 uses
+    the firing-check source point for the decision whether to search at all, not these candidate
+    source points. The target-scan and
     order rules that measure distance in other ways are owned by their specs (S-0309, S-0214).
     - Backing: `unmeasured` (an inventory of rules; each user measures its own rule)
     - Confidence: medium
@@ -210,14 +229,15 @@ and *subject to walls*. In addition:
     weapons of *A*'s current passengers; a passenger with no primary weapon is skipped, and a
     transport without passengers uses its own value. The result is read by the rules that scale
     with the firer's reach: the flak scatter of S-0306 (claim 4, its *R*_W) and the reach used by
-    the target-scan and guard rules of S-0309 (its F1). The range test of claims 1 to 11 does
+    the target-scan and guard rules of S-0309 (its F1), and the approach step and search
+    (S-0215 F10 and F4 below). The range test of claims 1 to 11 does
     **not** use it: it uses the weapon's own range field, so an open-topped transport whose
     passengers have short weapons still passes the range test at its own weapon's range, while
     those other rules see the shorter value. The passengers' own range tests use their own weapons
     and the bonus of claim 5.
     - Backing: `measurable` (scenario RG9 for the range test's non-use; the scatter and scan
       consequences through S-0306 scenario P3 and S-0309's scenarios)
-    - Confidence: high for the rule as read from the original; medium that no other rule reads it
+    - Confidence: high for the rule; medium for completeness of its listed users
 
 ### Degenerate questions
 
@@ -228,6 +248,115 @@ and *subject to walls*. In addition:
     - Backing: `unmeasured` (no scenario of this spec can ask the question without a target or
       without a weapon)
     - Confidence: medium
+
+### Approach destinations
+
+15. **Open-ground approach-position choice (Q-0072, question 2, partial).** Consider a ground
+    infantry unit or vehicle for which an approach-position search is requested, with no existing
+    destination or approach destinations. The case covered here has flat terrain at world height
+    0, no bridges, no obstacles or other occupants in the candidate cells, a target other than a
+    cell, no close-range property, and no special crushing or deploying approach. The search is
+    around the target's reference point, not around the attacker. Its initial radius and candidate
+    points are F4. Outer radii precede inner radii; at one radius the angular preference of F4
+    decides. The chosen destination is the cell of the first qualifying point, not the target
+    object itself, and not the point nearest to the attacker among all qualifying points.
+
+    Each point is at a cell centre at world height 0. It must pass the range test of claims 1 to
+    11 with that point as source and with the weapon chosen for this target (S-0308). Thus the
+    radius uses the firer's weapon range of claim 13, whereas acceptance uses the full range test:
+    these are separate tests. A point outside the usable area never qualifies. The cell must also
+    be clear for the unit's locomotion class and movement zone and in its current reach region
+    (S-0211 and S-0212). In these ground/no-bridge cases, a **clear cell** is enterable by class
+    for that class and zone (S-0211 claim 10), has an occupancy record empty as a whole (S-0209),
+    and belongs to that region. This is not the actor's neighbouring-cell entry outcome: the
+    approach test does not accept a moving blocker or an enemy obstacle as a clear cell.
+    On the covered open ground, the coarse route-length estimate is the
+    Chebyshev distance in cells and introduces no further rejection. No random draw selects
+    between candidates in this covered case.
+
+    This claim specifies the search result only. It neither promises that the unit reaches the
+    chosen cell nor says that reaching it is necessary before firing. Path computation and
+    movement towards a destination are S-0212, S-0207 and S-0208. S-0215 claim 37 owns the trigger,
+    gating, destination retention and renewal, and the buildings and deployed-infantry exceptions.
+    In particular, a held destination is not cleared by that step just because the target comes
+    in range; the stopping transition belongs to S-0207 and S-0208.
+    - Backing: `measurable` (RG10)
+    - Confidence: high for radius, angular order and the separation of the two range tests,
+      medium for the covered-case qualification as a whole
+
+16. **Obstructed level-ground choice (Q-0072 question 2, partial).** Claim 15 also applies with
+    obstacles or occupants, with these additions. This claim covers ordinary ground infantry and
+    vehicles on flat height-0 terrain without bridges, cell targets, close-range types or special
+    crushing, deploying or balloon-hover approaches. All primary and alternative cells in this
+    claim are legal and inside the usable area.
+
+    A primary point is a point of F4. A primary point that fails the range test is skipped; one
+    whose cell is not clear is skipped for infantry. For a vehicle, a primary point that passes
+    the range test but whose cell is not clear instead offers alternative cell centres at these
+    displacements from that primary cell, in this preference order (integer cells):
+
+    > (0, −1), (1, −2), (2, −2), (3, −1), (3, 0), (2, 1), (1, 1), (0, 0).
+
+    These are not the eight neighbours of the primary cell: the search reaches three cells in
+    the positive map-x direction and revisits the primary cell last
+    (`quirks.approach_alternative_walk`). An alternative must pass the same range and clear-cell
+    tests. It is measured at its cell centre at world height 0. Only the first alternative
+    passing both tests is offered to the detour limit below. If none passes, the primary point is
+    skipped. The alternatives of one primary precede the next F4 primary, even if the latter is
+    closer to the attacker.
+
+    A clear primary, or the first qualifying alternative, is accepted only when at least one of
+    the following holds, with *c* its cell, *t* the cell of the target's reference point and *a*
+    the attacker's cell:
+
+    > E(*c*, *t*) ≤ C(*c*, *t*) + 8 cells, or E(*a*, *c*) ≤ C(*a*, *c*) + 8 cells.
+
+    E is the coarse route-length estimate of S-0212 claim 24 and F8 for this attacker, using the
+    ground layer at both ends. C(*p*, *q*) = max(|*p*.x − *q*.x|, |*p*.y − *q*.y|), an exact
+    integer cell distance; the addition is integer, without rounding. A failed estimate never
+    satisfies its inequality. If the detour limit refuses the first locally
+    qualifying alternative, later alternatives of that primary are not considered: the next
+    F4 primary has preference. No random draw chooses a primary or alternative. If every primary
+    fails, claim 17 applies.
+    - Backing: `measurable` (RG11)
+    - Confidence: high for the alternative displacements and preference; medium for the detour
+      limit and the qualification as a whole
+
+17. **When no approach position is found (Q-0072 question 2, partial).** A failed
+    approach-position search has these outcomes, when it is allowed to change the actor's
+    destination:
+
+    | Actor | Destination and target |
+    |---|---|
+    | its type has the hunter-seeker property, or it is vehicle-thief infantry | destination becomes the target object itself, and the target is kept |
+    | any other actor | target is dropped; destination becomes the cell returned by a nearby-cell search, or is cleared if that search finds no cell |
+
+    There is no unconditional fallback to the target object or its cell for an ordinary actor.
+    The nearby-cell result need not be a position from which the weapon can fire, since the
+    target has been dropped. The ability of a hunter-seeker or vehicle thief to enter or attack
+    the object is outside this claim.
+
+    **Empty-radius case.** When the radii of F4 are empty, the nearby-cell search is centred on
+    the cell of the target's reference point. For an ordinary ground infantry unit or vehicle
+    on terrain without bridges, it is S-0212 claim 25 with the actor's locomotion class, its own
+    movement zone, its current ground reach region, deck mode off, the height condition on, no
+    further test and no reference cell. Bridge cells are excluded. The choice is therefore the
+    tick-number choice of that claim, not the cell nearest the attacker, and takes no random
+    draw. When there were candidates, the centre of the failure search is not specified here
+    (Open questions).
+    - Backing: `measurable` (RG12)
+    - Confidence: high for keeping or dropping the target and the object-destination exceptions,
+      medium for the empty-radius search parameters
+
+18. **Balloon-hover vehicle with a vertical projectile (Q-0072 question 2).** When a vehicle with
+    the balloon-hover property takes the approach step and the weapon chosen for its target has
+    a vertical projectile, its destination becomes the target object itself, and the target is
+    kept. It does not search for a firing cell, even when it already has a destination or the
+    target is already in range. The weapon and its projectile must both exist. This replaces
+    the common approach step of S-0215 claim 37, subject to that claim's earlier crushing
+    exception. It takes no random draw. Without either property this exception does not apply.
+    - Backing: `measurable` (RG13)
+    - Confidence: high
 
 ## Formulas
 
@@ -281,10 +410,57 @@ sum never does either. From |*t*| = 148 a large height difference can push it ov
 with *L* from F1 and *g* the projectile's gravity (S-0306 Terms: the game-wide gravity, halved for a
 floater projectile).
 
+**F4. Open-ground approach candidates** (claim 15). Let ρ be claim 13's range for the weapon slot
+chosen for the target, and let β be the building lengthening of claim 9, or 0 for a non-building.
+All radii and coordinates are integers in leptons. The margins are executable constants, not
+weapon fields.
+
+> ρ′ = ρ − 128 when ρ ≥ 512 leptons, and ρ′ = ρ otherwise
+> u = max(0, trunc(RZ₅₃(ρ′ + β − a)))
+> a = 281.6 leptons for infantry, 179.2 leptons for vehicles
+> u′ = 256 leptons when 0 < u ≤ 256 leptons, and u′ = u otherwise
+> radii = u′, u′ − 256, u′ − 512, …, retaining only radii strictly greater than 204.8 leptons.
+
+ρ′ is also S-0215 F10's adjusted reach. That spec's deploy-to-fire exception replaces it with
+min(ρ′, ρ₃ + 512), where ρ₃ is the attacker's spatial distance to the target in leptons. Claims 15
+and 16 exclude that exception; this equality of adjusted reaches is a cross-reference, not a
+complete deploying search rule.
+
+The margins use the nearest double-precision representations of the decimals shown. Let *f* be
+S-0204's direction from the target's reference point *T* to the attacker's reference point.
+The bearing number *b* is S-0204's 256-step facing of *f*, a whole number from 0 to 255. At each
+radius the bearing differences, in 1/256-turn units, have this preference order:
+
+> 0, +1, −1, +2, −2, +3, −3, +4, −4, +5, −5, +6, −6, +8, −8,
+> +16, −16, +24, −24, +32, −32, +48, −48, +64, −64.
+
+For each difference δ, *p* is the signed representative of 256(*b* + δ) modulo 65536, in
+[−32768, 32767]. With *c* = −0.00009587672516830327 radians per facing unit, held in double
+precision, and the table trigonometry of S-0105 F1:
+
+> θ = RZ₅₃((*p* − 16383) × *c*)
+> x = trunc(RZ₅₃(T.x + RZ₅₃(cosₜ(θ) × radius)))
+> y = trunc(RZ₅₃(T.y − RZ₅₃(sinₜ(θ) × radius)))
+> candidate cell = (trunc(x / 256), trunc(y / 256))
+> candidate point = (256 × cell.x + 128, 256 × cell.y + 128, 0).
+
+The products and sums in the position formula use double precision in round-toward-zero mode.
+Integer conversions truncate toward zero. Repeated candidate cells are not removed from the
+preference order. The integer radius arithmetic uses *w* as above. This claim covers valid
+map coordinates and radii without wrap; malformed-data outcomes of this search are still open.
+
 ## Constants
 
 | Name (ours) | Value | Unit | Notes |
 |---|---|---|---|
+| Approach large-range cut | 512 | leptons | F4, inclusive |
+| Approach large-range reduction | 128 | leptons | F4 |
+| Approach infantry margin | 281.6 | leptons | F4, nearest double representation |
+| Approach vehicle margin | 179.2 | leptons | F4, nearest double representation |
+| Approach inner-radius cut | 204.8 | leptons | F4, strict lower bound |
+| Approach radius spacing | 256 | leptons | F4 |
+| Approach detour allowance | 8 | cells | Claim 16 |
+| Hunter-seeker, balloon-hover, vehicle-thief, vertical-flight defaults | no | boolean | Claims 17 and 18 |
 | Range field scale | 256 | leptons per cell | Claim 1 |
 | "Keep previous value" sentinel | −1 | cells (field value) | Claim 1 |
 | Unlimited-range sentinel | −512 | leptons (field −2) | Claim 2 |
@@ -321,6 +497,12 @@ The rows exclude one another, so exactly one applies to each question.
 
 ## Edge cases and quirks
 
+- **`quirks.approach_alternative_walk`** (default on, the original). A vehicle's obstructed
+  primary approach cell offers the displaced cells of claim 16, rather than its eight neighbours.
+  Off: the alternatives are the eight neighbours of the primary cell, in step-direction order
+  0 to 7, with the same range, clear-cell and detour tests. This changes destination choice only.
+  It does not change F4's primary preference or the infantry search.
+
 - **`quirks.garrison_range_drops_air_bonus`** (default on, the original). A garrisoned building's
   range replaces the weapon range together with its air bonus, so the air bonus is lost (claim 4).
   Off: the air bonus is added to the garrison range.
@@ -337,14 +519,8 @@ The rows exclude one another, so exactly one applies to each question.
   the elevation section is missing) the original stops with a program error, an integer division
   by zero (S-0205, claim 3), whenever the range test is asked for two floor-bound objects with a
   projectile subject to elevation, whatever their height difference, Δ*h* = 0 included. Our engine takes *E*₁ = *E*₂ = 0 when *I* = 0, and the importer warns when a
-  projectile subject to elevation exists while *I* = 0. A negative *I* is not zeroed: it gives the
-  original's integer division, truncating toward zero (*k* = trunc(Δ*h* / *I*) ≤ 0, so *E*₂ is
-  zero or negative and *E*₁ the table root of F2's hypotenuse), and is reproduced, with the same
-  warning.
-- **Negative elevation cap (bad data, reproduced).** The cap applies even when Δ*h* = 0 (*k* = 0,
-  *f* = 0), so a cap *c* < 0 gives *E*₂ = 256 × trunc(*c*) < 0 and *E*₁ = ⌊*r*(*E*₂²)⌋, which is |*E*₂|
-  while |trunc(*c*)| ≤ 127 (S-0204 claim 5), for every pair of floor-bound objects with a
-  subject-to-elevation projectile, including a firer on lower ground. The importer warns.
+  projectile subject to elevation exists while *I* = 0. A negative *I* is not zeroed: it gives the original's integer division, truncating toward zero (*k* = trunc(Δ*h* / *I*) ≤ 0). *E*₂ and *E*₁ then follow F2, including the configured increment bonus *b*, cap *c* and wrap; their signs are not fixed for arbitrary imported values. This behaviour is reproduced, with the same warning.
+- **Negative elevation cap (bad data, reproduced).** The cap applies even when Δ*h* = 0 (*k* = 0 and *f* = 0), so *f*′ = *c* for *c* < 0. The resulting values are still calculated by F2, including its signed-32-bit wrap: *t* is obtained by the stated saturation rule, *E*₂ = *w*(256*t*), *σ* = *w*(*E*₂² + (104 Δ*h*)²), and *E*₁ = ⌊*r*(|*σ*|)⌋. When the intermediate products do not wrap and |trunc(*c*)| ≤ 127, *E*₂ = 256 × trunc(*c*) and, at Δ*h* = 0, *E*₁ = |*E*₂| (S-0204 claim 5). This applies to every pair of floor-bound objects with a subject-to-elevation projectile, including a firer on lower ground. The importer warns.
 - **Negative range fields**, other than the −1 sentinel, whose *R*₀ is not −512, give a negative
   *R*₀ (a field slightly beyond −2, such as −2.001, still truncates to −512 and is unlimited). F1
   and claim 9 apply to it unchanged, so the target is out of range unless the other terms of the
@@ -361,10 +537,17 @@ The rows exclude one another, so exactly one applies to each question.
 
 | File, section | Key | Concept | Form | Absent |
 |---|---|---|---|---|
-| rules, weapon section | `Range` | weapon range *R*₀ (claims 1, 2) | lepton form of claim 1 | 0 |
+| rules, weapon section | `Range` | weapon range *R*₀ (claims 1, 2); also the approach radius through ρ in claims 13 and 15 | lepton form of claim 1 | 0 |
 | rules, weapon section | `MinimumRange` | minimum range *m* | lepton form of claim 1 | 0 |
+| rules, section of an infantry or vehicle type | `CloseRange` | close-range property, excluded from claims 15 and 16 | boolean (S-0003) | no |
+| rules, infantry or vehicle type section | `SpeedType` | locomotion class for approach-cell qualification and the failure nearby search | name, as S-0211 Import mapping | S-0211 claim 3: infantry foot; vehicle track when its crusher flag is yes, otherwise wheel |
+| rules, infantry or vehicle type section | `MovementZone` | own movement zone and reach region for claims 15 to 17 | name, as S-0211 claim 12 and Import mapping | normal |
 | rules, weapon section | `CellRangefinding` | cell rangefinding property (claim 8) | boolean (S-0003) | no |
-| rules, weapon section | `Projectile` | the projectile type whose properties claims 6 and 9 to 11 use | type name | — |
+| rules, weapon section | `Projectile` | the projectile type whose properties claims 6, 9 to 11 and 18 use | type name | — |
+| rules, section of an infantry or vehicle type | `HunterSeeker` | hunter-seeker property (claim 17) | boolean (S-0003) | no |
+| rules, infantry type section | `VehicleThief` | vehicle-thief flag (claim 17; glossary) | boolean | no |
+| rules, vehicle type section | `BalloonHover` | balloon-hover property (claim 18) | boolean | no |
+| rules, projectile section | `Vertical` | vertical-flight flag (claim 18; S-0306 claim 11) | boolean | no |
 | rules, section of an infantry, vehicle, aircraft or building type | `AirRangeBonus` | air bonus *a* (claim 3) | lepton form of claim 1 | 0 |
 | rules, projectile section | `SubjectToElevation` | subject to elevation (claim 6) | boolean | no |
 | rules, warhead section | `Wall` | wall-damaging warhead (claim 11) | boolean | no |
@@ -518,13 +701,120 @@ attacked by the transport itself.
 - Falsified if: the loaded transport moves first (the range test would then use the shortest
   range).
 
+**RG10. Open-ground approach destination (claim 15, Q-0072 question 2).** Use a tiny flat
+level-0 map, game speed index 2, one human house's attacker and one unarmed enemy target. Include
+one bystander computer player kept outside the observed strip; the glossary's void rule applies.
+Director and mods are off. Use named test data to give one ordinary ground infantry type and one
+ordinary turreted vehicle type a weapon with range 5 cells, zero minimum range, no elevation,
+cliff or wall properties, and no close-range property. The target is on a cell centre ten cells
+along a map axis from the attacker. Keep every F4 candidate cell empty and inside the usable area.
+
+- Procedure: issue an attack order, then record the first non-empty destination, the selected
+  weapon slot, reference points, tick number, and scenario random state each tick. Repeat on
+  eight compass bearings, one run per bearing and attacker kind. Repeat with a larger-foundation
+  building target, and with a named test open-topped vehicle whose passenger weapon has a shorter
+  range than the vehicle's own weapon. Distinguish passenger shots from vehicle shots.
+- Expected: recorded destination is the first cell satisfying F4 and claim 15, using the recorded
+  positions and selected weapon. With no passenger and a non-building target, the first shell
+  radius is 870 leptons for infantry and 972 leptons for the vehicle. Subsequent shells, if needed,
+  are 256 leptons closer to the target. The building adds β before the margin; the loaded
+  transport uses the shorter ρ for the shell radius but its own weapon for the acceptance test.
+  The destination is a cell, not the target object. The search itself takes no scenario draw.
+  S-0215's behaviour delay may still draw in that tick and must be accounted for separately.
+- Falsifier: any other first destination when the setup conditions hold, selection by nearest
+  attacker distance instead of the stated preference, or a search-specific random draw. A run in
+  which no approach search is requested tests the still-open trigger, not claim 15.
+The observation must distinguish a cell destination from an object destination; if it cannot, add that distinction to the recorded observations before running this test.
+
+**RG11. Obstructed approach preference and detour limit (claim 16).** Use RG10's map, houses,
+speed and named test data. The observed area includes every F4 primary and alternative and the
+paths between attacker, candidate and target. The recorder reads the first destination, reference
+points, tick, selected weapon, occupancy and random state. The attacker is neither a crusher nor a
+special approach type. Place immobile blockers on selected cells, leaving all candidate cells
+legal and inside the usable area.
+- Run a: block the first primary and leave its first alternative clear and in range. Order the
+  vehicle to attack. Expected: that alternative is its first destination. Repeat with infantry:
+  expected, it skips the blocked primary and uses the next qualifying F4 primary, not the vehicle's
+  alternative.
+- Run b: block the first primary and the first three displaced cells, leaving the fourth clear,
+  in range and passing the detour limit. Expected: the vehicle chooses displacement (3, −1), not
+  a member of the primary's immediate neighbour ring. Repeat with each of the seven first
+  displaced cells blocked in turn so that the first clear alternative has a different preference
+  position. Evaluate repeated primary cells from F4 without removing them.
+- Run c: a purpose-made wall maze with an accepted-range clear primary whose estimate to the
+  target exceeds its Chebyshev distance by more than 8, but whose estimate from the attacker does
+  not. Expected: accepted. Repeat with both estimates exceeding their respective distances by
+  more than 8: rejected in favour of the next qualifying primary. Repeat with the first clear
+  alternative failing both limits and a later alternative passing them: expected, that later
+  alternative of the same primary is not chosen. A maze whose recorded terrain does not give
+  these inequalities under S-0212 F8 is not a valid run of c.
+- Runs: one per setup and attacker kind. Expected: the selected cell agrees with claim 16,
+  without a search-specific random draw. Account separately for S-0215's processing-delay draw.
+  Falsified by a different preference, an infantry alternative, acceptance when both estimates
+  fail, or an additional search draw. Path length travelled afterwards is not this test's
+  observable.
+
+**RG12. Failed search and empty radius (claim 17).** Use RG10's flat map, houses and speed, with
+all test cells well inside the usable area and no bridges. The named test file gives an ordinary
+infantry type a weapon range of 1 cell, and an ordinary vehicle type a weapon range of 0, with
+zero minimum range and no close-range, special crushing, deploying or balloon-hover property.
+Each attacks an unarmed enemy vehicle ten cells away. These values make F4's radii empty. Keep the
+target cell occupied and its eight neighbouring cells empty, enterable and in the attacker's reach
+region. The observed area is those cells and the attacker's approach strip.
+- Procedure: issue an attack order and record, on the tick the approach step first runs, the target,
+  destination kind and cell, tick number and random state. One run per attacker kind. Repeat the
+  infantry run with the vehicle-thief flag, and each run with the hunter-seeker property, using
+  named test data removed after the run. Record the step before any subsequent movement or
+  target acquisition obscures its result.
+- Expected for ordinary types: target cleared, destination the nearby-cell result centred on
+  the target cell, with the eight adjacent cells in S-0212 claim 25's scan order and the current
+  tick selecting position *N* mod 8. Not the cell nearest the attacker unless that is the same
+  result. No search-specific random draw. For a vehicle thief or hunter-seeker: target kept,
+  destination the target object, not a cell. Repeat the ordinary runs with every cell in the
+  nearby search's maximum radius blocked or outside the attacker's reach region: expected,
+  target and destination both cleared.
+- Falsifier: ordinary target retained, ordinary destination forced to the target object or its
+  occupied cell, a different cell from the nearby rule, an object-destination exception losing
+  its target, or a failure leaving a destination when no nearby cell qualifies.
+
+**RG13. Vertical balloon-hover destination (claim 18).** Use RG10's map, houses and speed. The
+named test file gives one ordinary non-crushing vehicle the balloon-hover property and a weapon
+with a vertical projectile, no minimum range and range 5 cells. Its target is an unarmed enemy
+vehicle ten cells away. The observed area contains the pair and all possible approach cells.
+- Procedure: attack the target and record target, destination kind and identity, reference points,
+  selected weapon and projectile flags each tick through two approach processings. Repeat with
+  the target initially two cells away (in range). Then repeat both distances with the balloon-hover
+  property off, and with only the vertical-flight flag off. One run per setup. A further run
+  moves the target into range after the first step while the attacker still has a destination.
+- Expected: with both properties the destination is the target object in all three situations,
+  not a firing cell, and the target is kept; this exception takes no random draw. With either
+  property off, it does not apply: at ten cells the common search of claim 15 applies, and at two
+  cells an ordinary in-playfield actor without a destination gets none (S-0215 claim 37 f).
+- Falsifier: a cell destination or no destination with both properties and a target, an object
+  destination under the common search in either control, or a search-specific random draw.
+
 ## Open questions
+
+- **Q-0072 question 2, remaining coverage.** Claims 15 to 18 do not yet cover cell targets,
+  close-range types and their infantry standing-position choice, raised terrain or bridges,
+  jumpjet searches, or the deploying search beyond S-0215's adjusted reach. The exact failure-search
+  centre after candidates have been tried is open: it must not be assumed to be the target's cell.
+  Alternative cells outside the usable area are also not covered. These paths need further
+  verification, so Q-0072 is not yet in this spec's requests list. Crushing destinations are
+  owned by S-0210 claim 11 and S-0215 claim 37 h, not by this search.
+- **Q-0072 question 3, stopping.** S-0215 claim 37 e keeps a held destination when the target
+  comes in range. S-0207 and S-0208 must specify the movement-side stopping event and destination
+  clearing; no arrival-before-firing rule is implied here.
+- **Q-0072 questions 1, 4 and 5.** S-0215 claim 37 owns the trigger, gating, renewal cadence,
+  buildings and deployed-infantry exceptions. Its low-confidence immobile-type case and
+  in-the-playfield mark remain open there. The range test alone is not the whole firing check:
+  rearming or turning need not prevent it from passing.
 
 - The elevation level (Terms) uses a per-cell "carries a bridge deck" mark that is not the same
   mark as the "carries a high bridge" test of claims 7 and 10. Which cells of a bridge carry it
   (every deck cell, or only some, such as the cells that also lift the deck in drawing) is not
   known; RG3 run d with the attacker on different cells along the bridge would show it.
-- Whether any rule besides the flak scatter and the scan and guard reach reads the firer's weapon
-  range of claim 13 (no other rule that reads it is known).
+- Whether any rule besides the flak scatter, scan and guard reach and the approach step reads the
+  firer's weapon range of claim 13.
 - Whether any rule besides the firing check and the approach-position search calls the range test
   (claim 12).

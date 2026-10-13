@@ -1,9 +1,9 @@
 ---
 id: Q-0078
 title: Which position the flight rows test after a cruise lift, and the height of a vertical projectile's deck detonation
-status: open
+status: answered
 related: [S-0306]
-answered-by: []
+answered-by: [S-0306]
 ---
 
 ## Need

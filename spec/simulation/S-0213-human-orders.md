@@ -2,13 +2,13 @@
 id: S-0213
 title: Human orders (the order set, when orders apply, and what each order changes)
 topic: simulation
-revision: 7
+revision: 8
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-12
+approved-on: 2026-10-13
 measurements: []
-requests: []
+requests: [Q-0072, Q-0087]
 supersedes: []
 ---
 
@@ -171,17 +171,9 @@ Terms).
    - Quirk: `quirks.pending_order_limit` (default: the original's limit of 128). With the switch
      off, no house's pending list has a limit.
 
-3. **Order of application within a tick.** The orders that one house issued in one tick have the
-   result they would have if its orders that are not behaviour orders were applied one at a time
-   in issue order, followed by its behaviour orders one at a time in issue order. So a stop given
-   after a move order to the same actor in the same tick leaves the move in force. In the original
-   a person's input cannot produce that case, because each tick's orders come from one input
-   event (claim 1); it arises through our engine's AI houses, whose orders use the same rule. The
-   orders of different houses in one tick have the result they would have if each house's orders
-   were applied in turn, in the order in which the houses were created (S-0009 owns that order).
-   In the original this order between houses has no consequence that we know of, because each
-   house's orders act only on its own objects and on its own house state; our engine fixes it so
-   that the result is deterministic, not as a claim about the original.
+3. **Order of application within a tick.** For one house, non-behaviour orders have issue-order precedence among themselves, and behaviour orders have issue-order precedence among themselves. When a non-behaviour order and a behaviour order conflict for the same actor in one tick, the resulting state is the one produced by the behaviour order, regardless of which was issued later. Thus a stop issued after a move to the same actor in that tick leaves the move in force. A person's input in the original cannot produce that conflict, because each tick's orders come from one input event (claim 1); it can arise through our engine's AI houses, whose orders follow the same precedence rule.
+
+   If orders from different houses in one tick affect the same state, the resulting state in our engine is the one given by resolving the houses in their creation order (S-0009 owns that order). In the original this order between houses has no consequence that we know of, because each house's orders act only on its own objects and on its own house state; our engine fixes the outcome for determinism, not as a claim about the original.
    - **Which houses' orders are applied.** In the original only the orders of human-controlled
      houses are applied, and an order issued in the name of a computer-controlled house is dropped
      silently. The original's computer houses never issue orders: its computer player changes its
@@ -286,15 +278,12 @@ Terms).
      each sum divided by the number of members and truncated toward zero (integers). The *leader* is
      the member whose distance to the centre is smallest; among equal distances the member latest in
      the run wins. The leader keeps the common cell.
-   - **Order of placement.** The result is that of placing the other members one at a time, in
-     order of increasing distance from the leader, ties in run order. This order decides which
-     cells count as *taken* when a member is placed.
-   - **Placement.** Each member, in that order, gets a cell from its *look*: the cells met along
+   - **Destination priority.** For deciding which look cells count as *taken*, members nearer to the leader have priority; equal distances are resolved by run order. A cell assigned to a higher-priority member counts as taken when determining the destinations of lower-priority members. The leader keeps the common cell.
+   - **Placement.** Each member's destination is determined from its *look*: the cells met along
      the line that starts at the centre of the common cell and runs in the direction from the
      leader's cell to the member's own cell, in steps of one cell length, up to a limit of a few
-     steps (Formulas, *look line*). Each cell of
-     the look belongs to the first class of this table that fits it, judged when the member is
-     placed.
+     steps (Formulas, *look line*). Each cell of a member's look belongs to the first class of this
+     table that fits it, judged using the higher-priority members' assigned cells as *taken*.
 
      | Class | Cell of the look |
      |---|---|
@@ -644,6 +633,50 @@ Terms).
       the clicked cell; low for the movement zone used per kind of building and for the choice
       among qualifying cells
 
+21. **Destination assignment, not an order name, governs prone get-up (Q-0087).**
+    S-0107 claim 15 owns the rule: an eligible prone infantry unit asks, not forced, for
+    *get-up* only when assigned the same non-empty destination it already has. Eligibility
+    requires a human-controlled owner (including our AI houses), a type that is neither a
+    fraidycat nor a cyborg, and a sequence that permits the request. A first destination,
+    a different destination and clearing a destination make no such request. Equality means
+    the same cell or the same object, not different objects occupying the same cell.
+    The following are the destination assignments made by the orders of this spec.
+
+    | Order | Assignment at application, after its checks pass |
+    |---|---|
+    | Plain move | The order's destination, after any group spreading of claim 7 |
+    | Attack-move with a destination | The same assignment as plain move after claim 6's translation |
+    | Area guard to a mobile actor | The order's target as destination and guard spot, even when it is the actor's own cell (table T3, part e) |
+    | Enter or capture | The order's destination, normally the object to enter or capture (table T3, part f; S-0214 table M). A duplicate enter ignored by table T3 part a makes no assignment |
+    | Ordinary attack on an object | Target becomes the object, destination becomes nothing (table T3, part f). Being out of range does not make the order itself assign a chase destination |
+    | Stop or deploy | Destination becomes nothing (claims 8 and 10); this cannot request destination-driven get-up |
+    | Scatter | Claim 9 sends a request, not a move order. Only a destination assignment made by an accepted request is subject to the equality rule (S-0208 claims 11 to 13) |
+    | Queued move or route point | Recording a future point is not destination assignment. When following it assigns a destination, S-0107's same rule applies; route following is distinct from a plain behaviour order (claims 16 and 17; S-0215 claims 13 and 14) |
+
+    A qualifying reassignment at order application requests get-up at that boundary, before
+    any movement in the next tick (claim 1), not at locomotor start. Merely moving to the cell
+    the unit occupies does not qualify when it had no destination; repeating that cell while
+    it is still its destination does. A refused sequence request is not saved until movement
+    starts. Later destination assignments during behaviour processing or movement can request
+    get-up on a later tick; S-0215 and the movement specs own when those assignments occur.
+    No order-family whitelist is imported.
+
+    **Attack order versus approach (Q-0072).** For an ordinary armed infantry unit or vehicle,
+    an attack order with an object target and no destination leaves that target and an empty
+    destination at the order boundary. This does not mean the actor remains stationary:
+    S-0215 claim 37 owns the subsequent approach step's trigger, gating and destination
+    renewal; S-0307 claim 15 owns the approach-position search within its stated scope.
+    Stopping belongs to S-0207 and S-0208 and remains open where those specs do not state it.
+    None of those is an additional effect of the order here. Buildings likewise receive
+    the target without a movement destination and never take that approach step
+    (S-0215 claims 32 and 37 g). Special infantry actions that use entering,
+    capture or sabotage are not this ordinary-attack case (S-0214 table M).
+    - Backing: `measurable` (Scenario O17, Scenario O3 for the attack-order references, and
+      S-0107 Scenario M4 for equality, type exceptions and sequence refusal). Later approach
+      and route scheduling are claims of their owning specs, not new timing claims here.
+    - Confidence: high for destination equality and the assignments of table T3; medium for
+      their observable timing through input and for route following, as in claims 1 and 16
+
 ## Formulas
 
 > cheer passes the rate limit ⇔ *t* > *L* + *R*. *t* is the current tick, *L* the last accepted
@@ -713,7 +746,7 @@ from claim 17. Every row that carries an actor also ends the actor's planned rou
 | Place | building type, cell | (production specs) | A finished building is placed |
 | Build, hold, cancel, cancel all | type | (production specs) | Production started, held or cancelled |
 | Fire superweapon | superweapon, cell | (superweapon specs) | The superweapon fires at the cell |
-| Alliance | other house | both multiplayer alliance flags on (S-0414, claim 14); towards a house not yet allied, the conditions of S-0414 (claim 12); towards an allied house, the condition of S-0414 (claim 13) | The issuer allies the other house one way, or the alliance ends in both directions (S-0414, claims 12 and 13) |
+| Alliance | other house B | both multiplayer alliance flags on (S-0414, claim 14); when issuer A does not yet ally B: B is not A, B's country is not of the civilian side, A is undefeated, and the last-enemy test of S-0414 claim 12 passes (with exactly one enemy contender, A can ally nobody); when A already allies B: neither house is passive (S-0414, claim 13) | The issuer allies the other house one way, or the alliance ends in both directions (S-0414, claims 12 and 13) |
 | Surrender | none | issuing house undefeated and with no result pending (S-0414, claim 11) | The issuer's objects are destroyed in its next house update, and the house is defeated when its defeat test then fails, which may be later or never (S-0414, claims 5 and 11); the game ends only through S-0414 claim 6 (play to the last side; a defeated person keeps watching); legal for every player house, human or AI |
 | Game speed | speed index | none | Game speed changed; network games only (claim 14; S-0201, claims 8 and 13) |
 | Cheer | none | none | All of the issuer's infantry cheer |
@@ -761,6 +794,11 @@ applies. "The resulting behaviour" is the order's behaviour, or for an attack-mo
 | (g) | As (f), and the actor is a mobile actor | It also forgets its guard spot and its queued destinations |
 | (h) | The actor controls slave units (a slave-miner harvester, which works with its slaves) and the resulting behaviour is not *attack* | Its slaves are sent back to guard it |
 
+Destination assignments in table T3 parts (e) and (f), including assignments that repeat the
+current destination, use claim 21 and S-0107 claim 15. They must not be interpreted as an
+unconditional get-up effect of a move behaviour. Scatter and route following use the same rule
+only when they actually assign a destination.
+
 **Ordering consequences.**
 - Two orders of the same kind for the same actor issued in the same tick both take effect, with
   the result of applying them in issue order: the later one wins wherever both change the same
@@ -773,6 +811,10 @@ applies. "The resulting behaviour" is the order's behaviour, or for an attack-mo
 
 ## Edge cases and quirks
 
+- **Repeated-destination get-up** (claim 21): S-0107 claim 15 owns
+  `quirks.prone_get_up_repeated_destination`, default original. With it off, every non-empty
+  destination assignment requests get-up for an otherwise eligible prone unit, not only a
+  reassignment of the same destination. This applies across order families, not just move.
 - **Partial group orders** (claim 2): `quirks.pending_order_limit`.
 - **Detonation in the planter's name** (claim 11): `quirks.detonate_in_planter_name`.
 - **Detonating a bomb that an AI house planted** (claim 11). The original drops the order, because
@@ -820,6 +862,9 @@ applies. "The resulting behaviour" is the order's behaviour, or for an attack-mo
 | Building type sections, `UnitRepair` | repair depot: rally-capable (Terms, claim 20); the stock case of a building under a sold vehicle (claim 12) | boolean (S-0003) | no |
 | Building type sections, `Cloning` | cloning building: rally-capable (Terms, claim 20) | boolean (S-0003) | no |
 | Infantry, vehicle and aircraft type sections, `OpenTopped` | open-topped transport in table T3, part (f), and claim 8 | boolean (S-0003) | no |
+| Infantry type sections, `Fraidycat`, `Cyborg` | type exclusions from destination-driven get-up (claim 21; S-0107 claim 15 owns the full rule) | booleans (S-0003) | no for each |
+| Infantry type section, `Sequence`; its art sequence section, `Up` | sequence table and get-up entry used by claim 21 | section name; sequence entry as S-0107 Import mapping defines | no table; a missing entry has zero image frames and refuses a direct get-up request |
+| No data key | order-to-destination assignments of claim 21, and the distinction between attack-order application and later approach | fixed behaviour, not a parsed list of movement orders | no imported order whitelist or chase destination |
 
 The defaults in the Absent column are the values the original gives a field when the type (or the rules data) is created. They are engine constants (absent-key defaults), not values from stock data (confidence: medium). Each rules layer that omits a key keeps the value already in force (S-0006).
 
@@ -1240,7 +1285,50 @@ game's normal input only, as a player would, and never writes into the game.
   without both A and C did not bracket the tick of the change, is inconclusive, and is repeated
   with the aim moved.
 
+**Scenario O17: orders and repeated destinations (claim 21, Q-0087 and Q-0072).**
+- *Setup:* stock data, director and mods off, game speed 6, on the flat skirmish map of
+  the preamble. Use a human-owned ordinary crawling infantry unit whose type is neither a
+  fraidycat nor a cyborg, and cause it to become prone by a nonlethal enemy hit. Place two
+  open destination cells A and B well away, an enterable friendly transport, a capturable
+  building and an enemy target beyond weapon range. Keep the observed area free of all
+  bystander objects except these named ones. Use fresh prone states for each part and void
+  attempts in which fear-driven get-up occurs before the tested assignment.
+- *Procedure:* in separate attempts give a first move to A, repeat A while it is still the
+  current destination, and change A to B. Repeat with attack-move to A. Give area guard
+  on a cell, repeat while that cell is still the destination, and use the guard key on the
+  occupied cell. Give enter and capture orders with suitable stock infantry, repeat them,
+  and distinguish a duplicate enter ignored during contact. From fresh prone rest, scatter,
+  commit a one-point route and attack the distant enemy, each in a separate attempt.
+  Include a plain move to the occupied cell from no destination. Three valid attempts per
+  case; scripted input may aim repeats from recorder samples, without writing game state.
+- *Observable:* per tick, destination identity, target, current sequence, prone state and
+  position; mark the first sample with each applied order's new references. Separate later
+  destination changes during approach or route following from the order boundary.
+- *Expected:* first or different assignments, an empty assignment and a move to the occupied
+  cell from no destination make no destination-driven get-up request. An eligible repeat of
+  the current non-empty destination can start get-up at the boundary, before movement. This
+  holds for move, translated attack-move, area guard and enter or capture alike, except that
+  an ignored duplicate enter assigns nothing. First scatter normally assigns a new cell and
+  does not qualify. A recorded future route point alone does not qualify. The ordinary
+  attack order leaves target the enemy and destination empty at its boundary; a later chase
+  assignment is judged separately by the same equality rule, with its timing outside this
+  spec. S-0107 M4 supplies the controls for refusal and fear-driven get-up.
+- *Falsified if:* an otherwise eligible first, changed or cleared assignment directly starts
+  get-up, or a qualifying repeated assignment fails despite an available, interruptible
+  sequence. Get-up caused by a later assignment does not falsify boundary timing. An ordinary
+  attack order assigning a chase destination at its own boundary falsifies the distinction
+  from later approach; this test records no expected approach radius or stopping rule.
+
 ## Open questions
+
+- Q-0072: claim 21 answers the order-application contribution in full. S-0215 claim 37 now
+  supplies the approach trigger, gating, renewal and building/deployed-infantry rules
+  (questions 1, 4 and 5); its immobile-type case remains low confidence. S-0307 claim 15
+  supplies question 2's open-ground search, with the remaining search paths still open in
+  that spec. Question 3's stopping event and destination changes belong to S-0207 and
+  S-0208: the approach step itself never clears a held destination merely because the
+  target came in range (S-0215 claim 37 e). No owned part of Q-0087 remains open. The
+  requests list records this spec's contributions, not closure of the cross-spec Q-0072.
 
 - A stop or deploy order is ignored while the actor is in one further state that has not been
   identified. It is probably a unit travelling underground or through a tunnel, whose position

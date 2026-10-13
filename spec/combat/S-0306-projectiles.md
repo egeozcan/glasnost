@@ -2,13 +2,13 @@
 id: S-0306
 title: Projectiles (launch, flight, homing, scatter, detonation)
 topic: combat
-revision: 3
+revision: 4
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-10
+approved-on: 2026-10-13
 measurements: []
-requests: []
+requests: [Q-0071, Q-0077, Q-0078, Q-0083]
 supersedes: []
 ---
 
@@ -136,7 +136,10 @@ has the trigger action that raises one). From S-0307: *airborne*, *elevation lev
   values from 16384 to 32767 point down, and negative values lie past the vertical, pointing
   backwards. There are 32767 units per half turn. The opposite map, from an angle θ to a pitch
   facing, is trunc((θ − π/2) × *c*₂) wherever this spec turns an angle into a pitch facing (F4,
-  F12, F13). Since *c*₂ is very nearly −32767/π, before the truncation it gives (up to the
+  F12, F13). Where that angle is a table angle *A* (F12 and F13), the conversion is S-0204's pitch
+  from a signed table angle (claim 12 and F6 there): at one of the 50 exception indices of S-0204
+  F3 the pitch comes out one unit nearer to level (16383) than the surrogate gives. F4's angle
+  comes from the table arccosine (F8), not from *A*, so it takes no such correction. Since *c*₂ is very nearly −32767/π, before the truncation it gives (up to the
   roundings) 16383.5 − θ × 32767/π, half a unit above the exact inverse of θ(*p*),
   16383 − θ × 32767/π. So exactly 45° up is the pitch facing 8191.25 under
   θ(*p*), while the angle-to-facing map gives 8191.75 and truncates it to 8191: claim 6 a uses 8191,
@@ -154,7 +157,7 @@ Symbols: ρ is the turn-rate field, *σ* the scatter radius (claim 4), *κ* the 
 *c*ₖ the closing step, *t* the steering turn step (claim 13), *ε* the pitch step (F12), *m* the
 missile turn variation, δ the signed facing difference and *ν*, *ν*′ the snap distances (F9). *r*
 is only the table square root, *A* only the table angle, and *h*, *h*′ only heights above the
-surface (T1). *u* is the target vehicle's speed (claim 3, F6). Other letters are defined where
+surface (T1). *u* is the target vehicle's speed estimate (claim 3, F6). Other letters are defined where
 they are used.
 
 ## Behaviour
@@ -204,8 +207,8 @@ they are used.
 
 3. **Aim point and lead.** The launch direction, elevation and scatter are computed towards the
    aim point: the reference point of the *firer's* target, without a building's aim shift. When
-   the firer's target is a vehicle whose locomotor is moving, the aim point leads it: with *u* the
-   vehicle's current speed (leptons per tick, integer), *D*₃ the spatial distance from firer to
+   the firer's target is a vehicle whose locomotor is moving it (S-0206, Terms: *locomotor moving
+   the vehicle*), the aim point leads it: with *u* the vehicle's speed estimate (below), *D*₃ the spatial distance from firer to
    target and *w* the shot speed that claim 1 would give the firer's *lead weapon* at distance
    *D*₃, the aim point is moved *ℓ* = trunc(*D*₃ / (0.9 *w*) × *u*) leptons along the vehicle's body
    facing (F6). Here *w* = *v*(*D*₃, *g*) for a lead weapon whose projectile has ρ = 0 (*g*_f for a
@@ -224,6 +227,23 @@ they are used.
    led, whoever the firer is. The stored target point of claim 9 is not led.
    A firer with no current target aims at world position (0, 0, 0) (quirk
    `quirks.aim_origin_without_target`).
+   - **The speed estimate *u*.** *u* is an integer that the lead formula uses as leptons per tick
+     without any conversion. For every vehicle target, whatever its locomotor, it is S-0207's
+     progress per tick (F2 there) formed from that vehicle's own state at the moment the shot is
+     aimed: its type speed, its country's vehicle speed factor, its speed bonus factor, the faster
+     ability when it applies, and the speed fraction it holds at that moment, with the flag-carrier
+     halving. In words (S-0207 F2 gives the formula in its own symbols, which differ from this
+     spec's): the type speed times the country factor times the speed bonus factor, truncated; that
+     integer times the faster-ability factor, truncated, only when the ability applies; that integer
+     times the speed fraction, truncated; and for a flag carrier half of the result, truncated. The
+     products are double precision rounded toward zero, as in S-0207. Aiming reads
+     this value and changes nothing: it makes no speed-fraction update and earns no progress. It is
+     not the distance the vehicle covered in the last tick, and it is not converted from progress
+     units to leptons. For a vehicle on the driving locomotor S-0207 (claim 18) gives the
+     consequences: a turn in place or a wait between tracks, while the locomotor still moves the
+     vehicle, leads by the fraction still held (non-zero after a track, zero before the first track
+     from rest or after a stop that zeroes it). For a vehicle on another locomotor the speed fraction
+     and the moving test are those of the spec that owns that locomotor.
    - (a) **Redirected shot targets.** A weapon with the area-fire flag makes the shot target the
      cell the firer stands in (its centre, at the terrain height there); a spray-attack firer
      makes it the cell of S-0313 claim 9. The shot speed (claim 1), the stored target point and the
@@ -233,12 +253,15 @@ they are used.
      elevation, scatter and lead of claims 3 to 7 all work towards that cell.
    - Backing: `measurable` (scenario P2, run c for an aircraft target, run d for *w* = 0, run e
      for a lead weapon other than the weapon fired, run f for a switching type, run g for a
-     gattling type; P17 for case a, spray attack and area fire; P27 for the aim without a
-     target). The empty lead-weapon slot is `unmeasured`: such a firer is not *armed* in S-0214's
+     gattling type, runs h and i for the speed estimate at two speed fractions; S-0207 scenario
+     D20 for the estimate itself; P17 for case a, spray attack and area fire; P27 for the aim
+     without a target). The flag-carrier halving is `unmeasured` here as in S-0207 (no skirmish
+     setup is known that makes a vehicle carry a flag). The empty lead-weapon slot is `unmeasured`: such a firer is not *armed* in S-0214's
      sense (its test is the same slot), so it cannot be ordered to attack, and no case is
      established in which it fires anyway (automatic targeting by a deploy-fire firer, S-0309,
      would be the only candidate).
-   - Confidence: medium (the lead weapon; the redirected case (a); the aim without a target)
+   - Confidence: medium (the lead weapon; the redirected case (a); the aim without a target),
+     high for the speed estimate *u*
 
 4. **Scatter of inaccurate arcing projectiles.** Only a projectile that is both arcing and
    inaccurate scatters at launch. The impact point is the aim point moved by a radius *σ* in a
@@ -306,7 +329,7 @@ they are used.
      rules turn it (claim 15).
    - Backing: `measurable` (scenario P5, runs a to c for case (a), run f for the arcing flag on a
      steering type, run d for the void shot and run
-     e for the height-based lob test; P37 for zero planar distance; P4 for cases (b) and (c), its
+     e for the height-based lob test; P37 for zero planar distance; S-0204 scenario C4 for the exception index 1024 of F13; P4 for cases (b) and (c), its
      variant f for the building term; P8 runs a and d and P9 run h for case (d))
    - Confidence: high in case (a) except the height-based lob test and zero planar distance
      (medium); medium in cases (b) and (c) and (d)
@@ -371,10 +394,13 @@ they are used.
     *P* + trunc(*V*) (the rescaled *V*). It detonates when its world height exceeds the
     projectile type's detonation altitude (an absolute world height, default 0), when its height
     above the surface at the start of the turn is negative, or when it crosses a bridge deck
-    height (T1). It gains height only when launched upwards (claim 6). One fired level
+    height (T1); in every one of these cases the outcome of T2 is its new position with no change
+    of height (unlike a straight or arcing projectile, it is not moved to the deck height and not
+    dropped 20 leptons), and claim 20 then applies as for every projectile. It gains height only when launched upwards (claim 6). One fired level
     from below its detonation altitude therefore never reaches it: it detonates by another row of
     T1 (for example the proximity row) or is removed when it leaves the legal map.
-    - Backing: `measurable` (scenario P8; run e for the detonation by a negative height)
+    - Backing: `measurable` (scenario P8; run e for the detonation by a negative height; P33
+      runs c and e for the deck crossings)
     - Confidence: medium
 
 12. **Steering speed.** A steering projectile's speed |*V*| changes each turn towards its top speed
@@ -445,8 +471,11 @@ they are used.
       min(trunc(*D* / 256), 5) otherwise, *D* being the *spatial* distance *d*₃ from *P*′ to the
       target point (so *n* is 5 only from 5 cells away, spatially). With *e* = the world height of
       *P*′ minus the cruising altitude: it is lifted 18 leptons when *e* < −20 and lowered 18 when
-      *e* > 20 (a direct change of position; the steering distance of Terms is measured at *P*′, before
-      this lift),
+      *e* > 20 (a direct change of position; the steering distance of Terms, the distance *D* and
+      the cell ahead are measured at *P*′ before this lift; everything after the steering turn uses
+      the lifted position as the projectile's new position *P*′: every row of T1, the closing step
+      *c*ₖ, the bridge-deck test and the detonation point of T2, and the position the projectile
+      keeps when no row applies),
       and the goal pitch is 8192 (45° up) when *e* < −52, 18432 (about 11° down) when *e* > 52,
       else 16384, with step trunc(*t*/2) of the signed 16-bit *t*,
     - a level projectile with a target keeps its pitch and gets no cruise lift; its velocity is
@@ -463,7 +492,9 @@ they are used.
     F11 then gives it a horizontal length of 100, and the rebuilt velocity has a length of about
     100 and a vertical component of about 100 × sin_t(θ(*p*′)), so the projectile moves again in
     the next turn.
-    - Backing: `measurable` (scenario P9, recorder of projectile positions; run d for the pitch
+    - Backing: `measurable` (scenario P9, recorder of projectile positions; run q for the rows
+      that see the lifted position; S-0204 scenario C4 for the pitch conversion of F12 at the
+      exception index 1024; run d for the pitch
       during course lock; runs k to o for the very high, airburst, level, aircraft-target and
       high-bridge cases; run j for the cruise mode of a negative step; run i for the length
       kept by the rebuild)
@@ -482,9 +513,19 @@ they are used.
     its projectiles and stays until the next such shot; removals do not lower it. The effective
     spawn delay is therefore 0 only when the spawn delay field is 0 and the raised value, if any,
     is 0 too (Edge cases).
+    - **Where the two fields are read.** The trailer animation and the spawn delay field are read
+      from the art file, in the section named by the image value that the projectile's rules
+      section gives in the same layer, before any arctic change to the name used for drawing (so a
+      snow map never selects a suffixed section for them). S-0004 claim 14 gives this selection and
+      its gate: when the projectile's rules section in a layer gives no image value, or an empty
+      one, neither field is read in that layer, and both keep their earlier values (initially no
+      trailer and a spawn delay of 3); there is no fallback to the section named by the type's own
+      name. Keys of the same names in the projectile's rules section have no effect.
     - Backing: `measurable` (scenario P10; its variant c for the position of the animation, its
       variant b for the raised delay, its variant d for a delay that removals do not lower and
-      that a later single vehicle shot resets, and its variant e for a raised value of 0)
+      that a later single vehicle shot resets, its variant e for a raised value of 0 and its
+      variant f for the file and section the two fields are read from; S-0004 scenarios K1 to K4
+      for the gate and the arctic case)
     - Confidence: high for the unscaled delay; medium for the scaled delay (the exact count *N*
       and when entries leave it)
 
@@ -833,7 +874,11 @@ so the horizontal speed is kept and the vertical component is unchanged.
 facing of a velocity is *p*(*V*) = trunc((*A*(*V*_z, *H*) − π/2) × *c*₂) (the table angle and *c*₂ of
 S-0204, *H* = *r*(RZ₅₃(*V*ₓ² + *V*ᵧ²)), the arguments narrowed to single precision, the result a
 16-bit value). It inverts θ(*p*) of Terms only up to half a unit before the truncation (Terms,
-*pitch facing*).
+*pitch facing*). This conversion is S-0204 F6 (claim 12 there), with the elevation angle *A*(*V*_z,
+*H*) as its signed angle: at an exception index of S-0204 F3 the result is one unit larger than the
+surrogate's for a positive angle (pointing up) and one unit smaller for a negative angle (pointing
+down), and exact at every other index. The same holds for every pitch facing *p*(·) of this
+formula, the current pitch *p*_c = *p*(*V*) and the goal pitch *p*(*W*) alike.
 
 The velocity *V* that the pitch turn works on is, for a projectile with a target, its velocity
 after this turn's heading change (F11, with its substitution for a zero horizontal part), and for
@@ -874,6 +919,10 @@ when *Z* is negative (the first argument itself is never negated), and
 
 The comparison with 200 always uses Δ*z*, also for a building target. The rounding and the
 narrowing of the table angle's arguments to single precision are those of the Formulas preamble.
+The conversion of *θ*_c to a pitch facing is S-0204 F6 (claim 12 there) with *θ*_c as its signed
+angle: at an exception index of the table lookup *A*(|*Z*| − *τ*, max(*d*′, 0.05)) the pitch is one
+unit nearer to level than the surrogate gives, larger for *Z* > 0 and smaller for *Z* < 0. The
+correction follows the sign of *θ*_c after the negation, not the sign of the table's argument.
 With `quirks.building_pitch_term` off, *Z* = Δ*z* and *τ* = 20 for every target.
 
 ## Constants
@@ -941,7 +990,9 @@ With `quirks.building_pitch_term` off, *Z* = Δ*z* and *τ* = 20 for every targe
 ## State and ordering
 
 **T1. Detonation conditions** (claim 19). *P* is the projectile's position at the start of its
-turn and *P*′ its new position. Two heights above the surface are used: *h*, that of *P*, the
+turn and *P*′ its new position; for a steering projectile *P*′ includes the cruise lift of
+claim 15 in every row (only the steering distance itself is measured before that lift). Two
+heights above the surface are used: *h*, that of *P*, the
 height at the start of the turn, which a row uses even when it otherwise tests *P*′; and *h*′,
 that of *P*′. A row that says "detonate" makes the projectile detonate in that turn; T2 resolves
 what happens when several rows apply. Straight and arcing projectiles share every row marked
@@ -954,7 +1005,7 @@ what happens when several rows apply. Straight and arcing projectiles share ever
 | straight, arcing | the cells of *P*′ and *K* hold the same building and *h* < 208 | detonate; "reached" | medium |
 | not steering | the infantry, vehicle, aircraft or building nearest to *P*′ in its cell is at *d*₃ < 128 leptons from *P*′ and is neither the firer nor allied with the firer's house (with no firer, any object counts) | detonate; the position moves onto that object unless inaccurate | medium |
 | not steering | speed \|*V*\| (after this turn's change of the velocity) < 10 and *h* < 10 | detonate | high |
-| vertical | world height of *P*′ above the detonation altitude, or *h* < 0, or *P*′ crosses a bridge deck height | detonate | medium |
+| vertical | world height of *P*′ above the detonation altitude, or *h* < 0, or *P*′ crosses the bridge deck height of a high-bridge cell (old or new cell; deck height = terrain height of the cell of *P*′ + 416): going up when *P* is below the deck height and *P*′ at or above it, going down when *P* is at or above it and *P*′ below it | detonate; the outcome is *P*′ with no change of height (no move to the deck height, no 20-lepton drop), then claim 20 as always | medium |
 | steering | half its speed (\|*V*\| after this turn's heading and pitch changes) ≥ its steering distance (Terms; without a target trunc(\|*V*\|), so only a speed below 1) | detonate; the position moves to the target point when *h* > 0, not airburst and a target exists (its target point is not the world origin, Terms) | medium |
 | steering | *h* ≤ 0 | detonate | high |
 | steering | no target (or a target point at the world origin, Terms) and *h* ≥ missile safety altitude | detonate | high |
@@ -1005,15 +1056,15 @@ For a projectile that is not steering:
 | one of the two "reached" rows (straight, arcing), whatever other rows apply | detonation at *P*′, with the vertical change of the first row when that row also applies. The proximity row and leaving the map have no effect |
 | the proximity row, and no "reached" row | detonation at the other object's position in all three coordinates; for an inaccurate projectile at *P*′ instead, with the vertical change of the first row when that row also applies. Leaving the map has no effect |
 | *P*′ outside the legal map, and neither a "reached" row nor the proximity row | removal without detonation, at *P*, whatever other rows apply, a ground hit, a deck crossing or a building hit included |
-| none of the three cases above, and any of: the first row, the speed row, a vertical row, the line-of-fire, deep-fall, flak, level or anti-air row, an arrival or passed-by row | detonation at *P*′, with the vertical change of the first row when that row applies |
+| none of the three cases above, and any of: the first row, the speed row, a vertical row, the line-of-fire, deep-fall, flak, level or anti-air row, an arrival or passed-by row | detonation at *P*′, with the vertical change of the first row when that row applies (the first row is for straight and arcing projectiles only, so a vertical projectile, a deck crossing included, detonates at its own new height) |
 
 For a steering projectile:
 
 | Rows of T1 that apply in the turn | Outcome |
 |---|---|
 | the steering-distance row, while *h* > 0, the projectile is not airburst and it has a target | detonation at the target point |
-| the bridge-crossing row (by T1 it applies only when none of the steering-distance, *h* ≤ 0, safety-altitude and closing-average rows does) | detonation at *P*′ with z at the deck height |
-| any other row or set of rows | detonation at *P*′ |
+| the bridge-crossing row (by T1 it applies only when none of the steering-distance, *h* ≤ 0, safety-altitude and closing-average rows does) | detonation at *P*′ (after the cruise lift) with z at the deck height |
+| any other row or set of rows | detonation at *P*′, after the cruise lift of claim 15 when one applied in that turn |
 
 No row of this spec removes a steering projectile for leaving the map (whether another part of
 the game does is an open question).
@@ -1187,7 +1238,8 @@ that no fix would change.
 | rules, projectile | `DetonationAltitude` | detonation altitude (claim 11) | integer, leptons of world height | 0 |
 | rules, projectile | `Cluster` | cluster count *n*_c (claim 21) | integer | 1 |
 | rules, projectile | `AirburstWeapon` | the weapon of the airburst children (claim 21) | weapon name | none |
-| rules, projectile | `Trailer`, `SpawnDelay` | trailer animation and its period (claim 16) | animation name, integer ticks | none, 3 |
+| rules, projectile | `Image` | names the art section that supplies `Trailer` and `SpawnDelay` (claim 16; S-0004 claim 14) | text, cut to 24 bytes, taken afresh in each layer | empty: those two fields are not read in that layer |
+| art, section named by the projectile's rules `Image` of the layer (no arctic suffix) | `Trailer`, `SpawnDelay` | trailer animation and its period (claim 16); the same keys in the rules section have no effect | animation name, integer ticks | keep the value in force; engine defaults none, 3 |
 | rules, projectile | `Scalable` | scalable flag (claim 16) | boolean | no |
 | art, projectile image | `Voxel` | drawn as a voxel model (claim 6 b) | boolean | no |
 | rules, infantry, vehicle, aircraft or building type | `RadialFireSegments` | *n* (claims 2, 7) | integer | 0 |
@@ -1264,10 +1316,17 @@ fire point (S-0313, the fire point's height term in the test file) and check the
   (gattling type): a test gattling vehicle type as in S-0308 scenario W5 (turret count 1, weapon
   count 4), with *W*₀ in slot 0 and *W*₁ in slot 2, attacking the target until sustained fire has
   raised its gattling stage to 1, so that it fires *W*₁ from slot 2 (S-0308 claim 7); only the
-  shots of *W*₁ are evaluated.
+  shots of *W*₁ are evaluated. Runs h and i (the speed estimate *u*): the vehicle target of the
+  first run, a test vehicle type on the driving locomotor whose house's country has its vehicle
+  speed factor set to 1 by the test file, not veteran, without a speed bonus, and the recorder also
+  reading its speed fraction, its type speed and its position in every tick. Run h: shots
+  while it drives straight along the road at its full fraction (1). Run i: shots while it
+  accelerates from rest along the road, at recorded fractions from about 0.3 to 0.7.
 - Observable: the launch direction (first velocity) and the target's position and body facing in
-  the tick of the shot; in runs e to g also which weapon fired (the projectile type recorded).
-- Runs: 3 per target; 3 shots of *W*₁ each for runs e to g.
+  the tick of the shot; in runs e to g also which weapon fired (the projectile type recorded); in
+  runs h and i also the target's speed fraction in the tick of the shot and its displacement over
+  the tick before.
+- Runs: 3 per target; 3 shots of *W*₁ each for runs e to g; 5 shots each for runs h and i.
 - Expected: the launch direction equals S-0204 F3 from the fire point to the target point moved by
   ℓ of F6 along the body facing (ℓ computed from the recorded *D*₃, *u* and the lead weapon's
   *v*(*D*₃, 10)); for the infantry and the aircraft (run c), to the target point itself. Run d:
@@ -1279,12 +1338,17 @@ fire point (S-0313, the fire point's height term in the test file) and check the
   *w* = 25. Run g: as run e, led with *w* = 25 of *W*₀ in slot 0 (the gattling's weapon number
   stays 0). (At about 6 cells *v*(*D*₃, 10) is about 135, so the two leads differ by a factor of
   about 5 and their directions by far more than 8 facing units whenever *u* is a few leptons per
-  tick.)
+  tick.) Runs h and i: the shot is led by ℓ of F6 with *u* = trunc(type speed × fraction), the integer of
+  S-0207 F2 for the recorded type speed and the fraction held in the tick of the shot (the country
+  factor 1, no bonus, no faster ability), not with the recorded displacement of the tick before
+  (which, being measured in leptons along the track, generally differs from that integer).
 - Falsified if: the vehicle shot points at the unled target point (more than 8 facing units from
   the led direction), or the infantry or aircraft shot is led; in run d, the launch direction is
   more than 8 facing units from the direction to the unled target point; in run e or g, it is
   more than 8 facing units from the direction led with 25; in run f, it is more than 8 facing
-  units from the direction led with *W*₁'s *v*(*D*₃, 10). (The other lead of each run, and the
+  units from the direction led with *W*₁'s *v*(*D*₃, 10); in run h or i, it is more than 8 facing
+  units from the direction led with *u* = trunc(type speed × fraction) (the named alternative being
+  the lead computed from the recorded displacement of the tick before). (The other lead of each run, and the
   unled direction, are the alternatives these falsifiers rule out.) A run in which *W*₁ never
   fires does not count.
 
@@ -1472,7 +1536,18 @@ fire point (S-0313, the fire point's height term in the test file) and check the
   projectile made anti-air and the target an enemy aircraft hovering 15 cells away at a recorded
   height; o, the
   flight path passes over a high bridge, along the bridge, at least 8 cells from the target. Run p
-  (negative course lock): as run a with course lock duration −1.
+  (negative course lock): as run a with course lock duration −1. Run q (the lifted position, claim
+  15 and T1): as run a, not subject to cliffs or walls, from low ground at a target on a plateau 9
+  height levels higher (10 if no turn qualifies), so that a projectile cruising at about 5 height
+  levels meets the edge some 416 leptons below the plateau surface, whose cliff edge lies across the flight path more than 6 cells from the
+  target, repeated with speed fields 20 to 40 so that turns end at many points past the edge. A
+  *qualifying turn* is one whose unlifted new position *P* + trunc(*V*) (the recorded
+  start-of-turn position plus trunc of the velocity after the turn's speed change and before its
+  heading and pitch changes, claim 14; at top speed in practice the velocity recorded at the start
+  of that turn, as in (g)) lies over the plateau at a
+  height above the surface from −433 to −416 leptons, in which the cruise lift of claim 15 raises it
+  by 18 and whose start-of-turn height is positive. The runs continue until at least 3 turns
+  qualify.
 - Observable: the firer's position and the fire point in the tick of the shot and the
   projectile's first position; speed, horizontal heading, pitch and height per tick; the recorded spatial distance
   *D* to the target; the position at the start of each turn.
@@ -1525,7 +1600,9 @@ fire point (S-0313, the fire point's height term in the test file) and check the
   run a (5 × 104 leptons), so the projectile rises by about 416 leptons before the bridge and
   comes down after it.
   (p) the heading never changes, the speed grows by the acceleration 3 each turn (not by 1 in
-  even ticks), and the closing-average row never detonates it.
+  even ticks), and the closing-average row never detonates it. (q) in every qualifying turn (run q)
+  the projectile does not detonate in that turn; it detonates in the next turn (by the *h* ≤ 0 row,
+  its start-of-turn height then being negative).
 - Falsified if: (a) the first position is the firer's position rather than the fire point, a
   heading change exceeds *t*, or the cruising altitude differs from the stated
   one by more than 52 leptons, (b) its heading changes during the lock, or the first heading change comes one turn after the
@@ -1538,13 +1615,17 @@ fire point (S-0313, the fire point's height term in the test file) and check the
   second turn, (j) its pitch in the first turns stays within 2000 facing units of the line to
   the target (direct mode for a negative step), (k) or (l) the cruise height is 5 height levels,
   (k) it cruises within 6 cells, (l) it turns straight at the target within 3 cells, (m) its pitch
-  changes or it is lifted by 18 leptons, (n) it cruises, (o) the height ignores the bridge, or
-  (p) the heading turns or the speed grows by 1 on even ticks only.
+  changes or it is lifted by 18 leptons, (n) it cruises, (o) the height ignores the bridge,
+  (p) the heading turns or the speed grows by 1 on even ticks only, or (q) it detonates in a
+  qualifying turn (as it would if the deep-fall row tested the position before the lift), or a
+  turn whose lifted height above the surface is −416 or less ends without a detonation.
 
 **P10. Trailers (claim 16).**
 - Setup: test steering projectile (no gravity, so it flies long) with a trailer animation and
   spawn delay 5, speed field 10 (25 leptons per tick), at a vehicle 12 cells away, so that it flies
-  at least 30 ticks.
+  at least 30 ticks. In this scenario the trailer animation and the spawn delay are set in a loose
+  art copy, in an art section whose name the projectile's rules section gives as its image value
+  (claim 16); every variant does the same unless it says otherwise.
 - Observable: the ticks in which trailer animations appear.
 - Runs: 1.
 - Expected: exactly the ticks of flight whose tick number is a multiple of 5.
@@ -1573,12 +1654,21 @@ fire point (S-0313, the fire point's height term in the test file) and check the
   for *N* up to 7 and 0 for the eighth shot (*N* = 8), so the type uses its field, −1, throughout.
   Every tick number is a multiple of −1. Expected: every projectile of the type creates a trailer
   animation in every turn, before and after the eighth shot.
+- Variant f (file and section of the two fields; claim 16): three runs of the first run's setup,
+  with the art section named by the image value holding the trailer animation *X* and spawn delay
+  5. Run f1: the projectile's rules section also gives a different trailer animation *Y* and spawn
+  delay 7. Run f2: no image value in the rules section (and none in any earlier layer for this test
+  type), while an art section named after the type itself holds *X* and spawn delay 5. Run f3: as
+  the first run, with the art spawn delay changed to 7 and a rules spawn delay of 5 added.
+  Expected: f1, animations of *X* only, in ticks that are multiples of 5; f2, no trailer animation
+  at all; f3, trailer ticks at multiples of 7.
 - Falsified if: the pattern starts from the launch tick instead, or variant b keeps a period of 5,
   or in variant c an animation stands at the end-of-turn position, or the detonation's draws come
   before the trailer's; in variant d, the infantry's projectile has a period of 5 (removals
   lowered the delay, or the infantry shot reset it), or the last vehicle shot keeps a period of
   6; in variant e, the projectiles stop creating trailer animations after the eighth shot (the
-  value 0 used as the delay).
+  value 0 used as the delay); in variant f, *Y* appears or the period is 7 in f1, any trailer
+  appears in f2, or the period is 5 in f3.
 
 **P11. Target loss (claim 17).**
 - Setup: run a: a steering projectile (top speed 25 leptons per tick) at a hovering aircraft that is
@@ -2019,13 +2109,23 @@ fire point (S-0313, the fire point's height term in the test file) and check the
 - Setup: a map with a high bridge. Run a: an arcing projectile lobbed over the bridge so that it
   crosses the deck height downward; run b: a straight projectile fired from below the deck at a
   target above it (crossing upward); run c: a vertical projectile launched upward through the
-  deck; run d: a steering projectile that meets the deck.
+  deck; run d: a steering projectile that meets the deck; run e: a vertical projectile launched
+  downward through the deck from a firer standing on it (or above it), at a target below. In runs c
+  and e the vertical projectile has no target object within 128 leptons of its path and a
+  detonation altitude, set by the test file, above every height it reaches in the run (above the
+  fire point in run e), so that only the deck row can detonate it in that turn, and
+  its speed is chosen so that the turn of the crossing ends at least 30 leptons beyond the deck
+  height.
 - Observable: the position per tick, the detonation point.
 - Runs: 1 each.
 - Expected: detonation in the turn in which the new position first lies on the other side of the
-  deck height than the old one; the detonation height is the deck height for the upward crossings
-  (b, c) and for the steering projectile (d), and 20 leptons below it for the downward crossing (a).
-- Falsified if: it passes through the deck, or the height differs from these.
+  deck height than the old one; the detonation height is the deck height for the upward crossing of
+  the straight projectile (b) and for the steering projectile (d), and 20 leptons below it for the
+  downward crossing (a). For the vertical projectile (c, e) the detonation height is its own new
+  height in that turn (claim 11, T1), at least 30 leptons above the deck height in run c and at
+  least 30 below it in run e.
+- Falsified if: it passes through the deck, or the height differs from these by more than 1 lepton,
+  in particular, in run c or e, a detonation at the deck height or 20 leptons below it.
 
 **P34. Flak row (T1).**
 - Setup: as P24 (steering test projectile along a plain at a target on a plateau 6 levels high), with
@@ -2155,6 +2255,9 @@ fire point (S-0313, the fire point's height term in the test file) and check the
   is S-0104's.
 - Which cells of a bridge carry the "bridge deck" mark used by the elevation level in the cliff
   test of claim 22 (see S-0307, Open questions).
+- The moving test and the speed fraction of a vehicle target on a locomotor other than the driving
+  one (claim 3, the speed estimate *u*) belong to the specs of those locomotors, which do not yet
+  define them; the formula of *u* itself is the same for every vehicle.
 - Whether a steering projectile whose new position lies outside the legal map is removed by
   some other part of the game: T1 and T2 say it is not removed by the rows of this spec, which was
   not checked beyond them.

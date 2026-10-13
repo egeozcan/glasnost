@@ -2,13 +2,13 @@
 id: S-0312
 title: Death and destruction (death weapons, debris, passengers, crews, survivors, sinking, crashing and building remains)
 topic: combat
-revision: 3
+revision: 4
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-12
+approved-on: 2026-10-13
 measurements: []
-requests: []
+requests: [Q-0060, Q-0061, Q-0070]
 supersedes: []
 ---
 
@@ -20,8 +20,9 @@ What happens when damage kills an infantry unit, vehicle, aircraft or building: 
 put off (crippled cyborgs, delayed building deaths), the effects every kind shares (debris, the
 death weapon of exploding types, the deaths of their passengers, an attached bomb), and the effects
 of each kind (vehicle explosions, sinking, passengers getting out, crews escaping, aircraft
-crashing, building explosions, spilled resources, survivors, rubble and crates), with their random
-draws in observable order. Infantry death sequences and corpses are S-0107's (claim 17); when a
+crashing, building explosions, spilled resources, survivors, smudges, rubble and crates), with
+their random draws in observable order, when a destroyed building leaves play, and the defaults
+and list items of the game-wide values these rules read. Infantry death sequences and corpses are S-0107's (claim 17); when a
 killed object leaves the turn order is S-0203's (claim 6); the damage itself is S-0302's and S-0303's.
 
 ## Terms
@@ -72,8 +73,15 @@ claim 19) and *curtain protection* are used as defined there. In addition:
   (Formulas F2).
 - **Rubble overlay.** The overlay type that a destroyed building can leave on its foundation cells
   (claim 20).
-- **Crater, scorch mark.** The two kinds of smudge a destruction can leave. The terrain and smudge
-  specs own which smudge type of each kind appears and the draws that choice takes.
+- **Crater, scorch mark.** The two kinds of smudge a destruction can leave. A smudge type belongs to
+  a kind through its crater flag or its scorch flag (Import mapping); a type with both flags belongs
+  to both kinds. Claim 26 gives which smudge type of a kind appears and the draws that choice
+  takes. The terrain and smudge specs own how a smudge looks and what later changes it.
+- **Smudge footprint.** The rectangle of cells a smudge type covers: its width in cells along map
+  *x* and its height in cells along map *y*, starting at the cell where it is placed (the *anchor
+  cell*) and growing towards increasing *x* and *y*.
+- **Awaiting removal.** The state of a destroyed building that claim 21 keeps in play after its
+  death effects, until its removal turn.
 
 ## Behaviour
 
@@ -81,9 +89,7 @@ claim 19) and *curtain protection* are used as defined there. In addition:
 
 1. **Death effects come at once, in a fixed order.** All death effects of an object happen at the
    moment of its killing hit, inside damage resolution, and so inside the turn of whatever produced
-   the damage (S-0203 claim 5, S-0303 claim 1), before the next hit of the same detonation. They come
-   in the order of the table in State and ordering, which also fixes the order of their random draws.
-   A death weapon or bomb that a death sets off runs to its end in the middle of that order. When the
+   the damage (S-0203 claim 5, S-0303 claim 1), before the next hit of the same detonation. The table in State and ordering gives the observable precedence of the death effects and the order in which their random draws affect the scenario random stream. For example, a passenger killed by an exploding object is already dead when the death-weapon detonation's damage is dealt. A death weapon or bomb completes its detonation before the death proceeds to effects that follow it in the table. When the
    object leaves play is S-0203's claim 6; this spec adds when buildings, sinking vehicles and
    crashing objects leave (claims 10, 15, 16 and 21).
    - Backing: `measurable` (scenario D1)
@@ -93,8 +99,7 @@ claim 19) and *curtain protection* are used as defined there. In addition:
 2. **Cyborgs are crippled before they die.** S-0302 (claim 15) owns this rule; it is restated here
    because it replaces the death effects. When a hit that does not ignore defences would bring an
    infantry unit of a cyborg type to health 0 or less, and the unit is not prone at that moment, it
-   does not die: the game-wide infantry-explosion animation appears at its position, its health
-   becomes max(1, trunc(*H* × 0.25)) where *H* is its type's strength, and it is made to go prone and
+   does not die: the game-wide infantry-explosion animation appears at its position, its health becomes the greater of 1 health point and the integer obtained by truncating one quarter of *H* toward zero, where *H* is its type's strength, and it is made to go prone and
    crawl (S-0107). A prone cyborg (crippled before, or prone for any other reason), or one hit with
    damage that ignores defences, dies normally and takes the death effects below (S-0107 claim 17
    gives its death sequence).
@@ -104,17 +109,30 @@ claim 19) and *curtain protection* are used as defined there. In addition:
 3. **Delayed building deaths.** S-0302 (claim 16, F7, `quirks.delay_kill_whole_cell_spread` and
    `quirks.delay_kill_credited_again`) owns this rule, including its defaults and confidences; F6
    below is the same countdown, restated because it replaces the death effects, and S-0302 wins
-   wherever the two differ. When a hit of a warhead with the
-   delay-kill flag kills a building
+   wherever the two differ. When a hit of a warhead with the delay-kill flag kills a building
    whose type is eligible for delayed death, the building does not die: it keeps 1 health point and
-   its destruction is timed instead, *T* ticks later (Formulas F6), unless a delay is already
-   running with at most *T* ticks left, which is then kept. When the delay ends it is destroyed
-   (structures specs). A building killed by any other warhead dies at once. The kill is credited
-   to the attacker already at the moment of the delayed-death hit, as S-0302 claim 16 gives it
-   (score and experience belong to their specs, and S-0302 says what a repeated hit credits).
-   - Backing: `measurable` (scenario D3)
-   - Confidence: high (the formula and the kept delay); medium (the credit at the moment of the
-     hit, as S-0302 claim 16 rates it); low (what happens at the end of the delay)
+   a countdown of *T* ticks starts (Formulas F6), unless a countdown is already running with at most
+   *T* ticks left, which is then kept. A building killed by any other warhead dies at once. The kill
+   is credited to the attacker already at the moment of the delayed-death hit, as S-0302 claim 16
+   gives it (score and experience belong to their specs, and S-0302 says what a repeated hit
+   credits).
+
+   *End of the countdown.* The countdown does not remove the building by itself. On the building's
+   first turn at or after the end, S-0302 claim 16 delivers a hit of the building's whole health
+   with the demolition warhead, ignoring defences, with its attacker, credit and exceptions (capture,
+   sale, temporary invulnerability, the bridge repair hut) as S-0302 gives them. When that hit
+   destroys the building, every death effect of this spec follows at once, in that turn, with its
+   normal order and draws (claims 4 to 7 and 17 to 24), exactly as for a building destroyed by any
+   other hit. Because the hit ignores defences, the building then counts as having no crew (F5): it
+   releases no survivors and takes no per-cell smudge steps (claim 18 and claim 19 (g)), and its
+   absorbed passengers die instead of coming out (claim 24). Its contacts (claim 17), its debris,
+   its death weapon when it is exploding, its smudge of claim 19 (a), its explosions and its rubble
+   are unaffected. A building that is exploding or being sold then awaits removal as claim 21 gives.
+   - Backing: `measurable` (scenario D3; the expiry itself through S-0302's scenario D13, parts e
+     to h)
+   - Confidence: high (the formula and the kept countdown; the death effects at the expiry hit and
+     the absence of survivors); medium (the credit at the moment of the hit, as S-0302 claim 16 rates
+     it)
 
 ### Effects every kind shares
 
@@ -358,13 +376,15 @@ claim 19) and *curtain protection* are used as defined there. In addition:
     - (a) leaves a smudge at the centre of the cell of its position, when its foundation is at least
       2 × 2: first one discarded ranged draw over 0 to *W* − 2 when *W* > 2 and one over 0 to *H* − 2
       when *H* > 2 (*W* × *H* its foundation), then a percent draw: below 50 a scorch mark, otherwise
-      a crater, then the draws of the smudge choice (terrain and smudge specs),
+      a crater, then the smudge choice of claim 26 for that kind at that cell, in its form that
+      prefers large smudges and ignores buildings,
     - (b) for each foundation cell, when its type has an explosion list: an explosion animation at
       the nearby point N(cell centre, 64, *b*) at the world height of the building's position,
       with a starting
       delay of a ranged draw over 0 to 3 ticks, and its type picked by one list pick; the draws come
       in the order nearby point's raw value, delay, list pick,
-    - (c) for an exploding building: animations of fire on exploding overlays (claim 23),
+    - (c) for a building whose type has the explodes flag: animations of fire on exploding
+      overlays (claim 23),
     - (d) spills the resources it stores (claim 22),
     - (e) shows one entry of its destruction-animation list (one list pick),
     - (f) creates one particle system from its type's destruction particle-system list, when the
@@ -374,23 +394,34 @@ claim 19) and *curtain protection* are used as defined there. In addition:
       the end of the list (*r* = 0 picks the last eligible entry), placed at its position moved by
       its type's destruction smoke displacement,
     - (g) releases its absorbed passengers (claim 24), then its survivors (claim 18). When *C* = 0
-      (claim 18) nothing more happens in this item. Otherwise the foundation cells that claim 18
-      takes (in its cell order, starting after the cells the absorbed passengers used) are handled
-      one after another, and each such cell takes the draws of the rows below in the order of the
-      rows, before the next cell takes any. Every such cell has the smudge step, whether or not
-      survivors remain to release and whatever its survivor rows did.
+      (claim 18) nothing more happens in this item. Otherwise, for each foundation cell in claim 18's cell order, starting after the cells used by absorbed passengers, the applicable survivor and smudge outcomes have the draws shown in the table below. For each cell, those draws precede the draws applicable to the next cell. Every such cell has the smudge outcome whether or not survivors remain to release and regardless of which survivor outcomes apply.
+
+      During these steps the destroyed building is still in its foundation cells (it leaves them
+      only when it leaves play, claim 21). Two consequences follow. The clear-for-movement test of
+      the smudge step ignores buildings, vehicles and infantry in the foundation cell, so the dying
+      building does not fail it; the cell's land type and walls still decide it (S-0211). The plain
+      form of claim 26 refuses every smudge type whose footprint touches a cell holding a building,
+      the dying building included, so a nearby point that lands in one of the building's own
+      foundation cells leaves no smudge and takes no draw for a smudge type. A nearby point 128
+      leptons from a cell centre stays in that cell, except a point exactly on the cell's east or
+      south edge, which belongs to the next cell (F2 truncates). So in a destruction the smudge
+      steps leave a smudge only in the rare case of a point on the outer east or south edge of the
+      foundation; every other smudge step takes its percent draw and its nearby point's raw value
+      and nothing more. Claim 21's second round, which comes after the building has left its
+      cells, is not limited in this way.
 
       | Row | Taken when | Draws | Effect |
       |---|---|---|---|
       | survivor chance | as claim 18 (*Chance*) gives | one ranged draw R(0, *g*) | a result of 1 releases a survivor |
       | survivor | the chance row released a survivor | its type, creation and health draws, as claim 18 gives them | one survivor, when it can be placed |
-      | smudge step | the foundation cell itself (not the cell of the nearby point) is clear for movement | one percent draw, then the raw value of the nearby point N(cell centre, 128, *b*), then the smudge choice's own draws (terrain and smudge specs) | a scorch mark when the percent draw is below 50, otherwise a crater, in the cell of the nearby point |
+      | smudge step | the foundation cell itself (not the cell of the nearby point) is clear for movement | one percent draw, then the raw value of the nearby point N(cell centre, 128, *b*), then the draws of claim 26's smudge choice in its plain form | a scorch mark when the percent draw is below 50, otherwise a crater, at the cell of the nearby point, when claim 26 finds a smudge type that fits there |
 
     - (h) kills any passengers still inside it.
     - Backing: `measurable` (scenario D14; the draw order through the random-state recorder, which
       gives the number of raw values taken, and through the statistics of the effects)
-    - Confidence: medium (the list and the draws); high for the order of the draws within a cell
-      and for the cell the smudge step tests; low for the eligibility in item f
+    - Confidence: medium (the list and the draws, and the building still being in its cells during
+      the smudge steps); high for the order of the draws within a cell and for the cell the smudge
+      step tests; low for the eligibility in item f
 
 20. **Rubble and crates beneath.** When a destroyed building's type leaves rubble and has a rubble
     image (a separate rubble building image, or a sprite with more than 7 image frames), each of its
@@ -405,12 +436,34 @@ claim 19) and *curtain protection* are used as defined there. In addition:
     - Confidence: medium (the rubble condition and the crate cell); low (the kind of a crate that is
       not money)
 
-21. **When a destroyed building leaves play.** A destroyed building that is neither exploding nor
-    being sold leaves play at the end of its death effects, together with its rubble and crate of
-    claim 20. An exploding building, or one destroyed while being sold, stays in play after its
-    death effects and leaves later (the structures specs own when). This refines S-0203 claim 6b.
-    - Backing: `measurable` (scenario D14, variant c)
-    - Confidence: low
+21. **When a destroyed building leaves play.** Here only the type's explodes flag counts (a
+    veterancy ability or a weapon's suicide flag, which make an object exploding elsewhere in this
+    spec, do not). A destroyed building whose type lacks the explodes flag and whose current
+    behaviour is not the sale's at the moment of its destruction leaves play at the end of its
+    death effects, together with its rubble and crate of claim 20, in the same moment. A building
+    whose type has the explodes flag, or whose current behaviour is the sale's when it is
+    destroyed, instead awaits removal (Terms) after its death effects, with 0 health:
+    - It cannot be hit (S-0303 claim 9 skips an object with 0 health) and it is no candidate for
+      target acquisition (S-0309 claim 12, row *exists*).
+    - It keeps occupying its foundation cells, with whatever claim 20 has not yet placed: its
+      rubble and crate are not placed yet.
+    - It takes its turns (S-0203). In its turn the general part of a building's turn comes first
+      (its behaviour, for example the sale's progress, S-0408). Then, when it is still in play,
+      still has 0 health, and is neither being erased nor under an electromagnetic-pulse effect
+      (the same exceptions as S-0302 claim 16's expiry), it is removed. On an eligible removal turn, the building ceases to occupy its foundation cells. It then has a second round of claim 18 and claim 19(g). The survivor count *C* is worked out afresh by F5, so it is 0 when the killing damage ignored defences, which left the building without crew. The cells are taken in claim 18's order with the survivor-chance, survivor and smudge-step outcomes and all their draws, as in claim 19(g). Absorbed passengers have already come out or died, so none come out now. Because the building has left its cells, the smudge steps of this round are not refused by the building (claim 19(g)). Any passengers still inside die. The building then leaves play, and claim 20's rubble and crate are placed.
+      Quirk `quirks.building_removal_second_round` (Edge cases) covers (b).
+    - So a building of an exploding type normally stays in play until its own next turn, which comes later in
+      the same tick when its turn has not yet come in that tick's turn pass, and otherwise in the
+      next tick. While it is under an electromagnetic-pulse effect, or being erased, the removal
+      waits for a later turn. A building being sold whose sale removes it in the general part of
+      that turn leaves by the sale (S-0408) and takes none of (a) to (d).
+    Whether a building awaiting removal can still be selected by a player is not known (Open
+    questions). This refines S-0203 claim 6b.
+    - Backing: `measurable` (scenario D14, variants c and g)
+    - Confidence: high for the immediate removal of other buildings; medium for the removal at the
+      next turn, its order and the second round of an exploding building; low for a building
+      destroyed while being sold (the interplay with the sale's own progress is not traced) and for
+      the electromagnetic-pulse and erasure exceptions
 
 22. **Spilled resources.** In the original a building's holdings of each resource type are
     fractional amounts (single-precision floating point), and the building spills for as long as the
@@ -432,9 +485,10 @@ claim 19) and *curtain protection* are used as defined there. In addition:
       be shown)
     - Confidence: medium for whole units; low for fractions
 
-23. **Exploding buildings set off barrels.** An exploding building probes four points, each one
-    cell away from the building's position (the centre of its top-left foundation cell) towards map
-    north, east, south and west, in that order. On each probe whose cell holds an exploding overlay
+23. **Exploding buildings set off barrels.** A destroyed building whose type has the explodes flag
+    (here, as in claim 21, a veterancy ability or a weapon's suicide flag does not count) probes four
+    points, each one cell away from the building's position (the centre of its top-left foundation
+    cell) towards map north, east, south and west, in that order. On each probe whose cell holds an exploding overlay
     (S-0303 claim 19) it starts an animation of a fixed type (Import mapping) at the probe's point,
     at the same height above the terrain as the building's position, with a starting delay of 4 to
     6 ticks (a ranged draw over 1 to 3, plus 3). What the animation then does to the barrel is the
@@ -488,6 +542,64 @@ claim 19) and *curtain protection* are used as defined there. In addition:
       decision on AI houses, so no original shows it) and for the team join
     - Confidence: high for the table; low for the neutral and special houses' passengers, since the
       team system that the original prefers for them is out of scope
+
+### Smudge choice
+
+26. **Which smudge type a destruction leaves.** Claim 19 (a) and the smudge steps of claim 19 (g)
+    choose a smudge type of a given kind (crater or scorch mark) for an anchor cell (the cell of the
+    point they give) as follows.
+    - *No smudge at one cell.* When the anchor cell is the map cell with both coordinates 0, nothing
+      is placed and no draw is taken.
+    - *Fit.* A smudge type of the kind fits at the anchor cell when the anchor cell lies on the map
+      and every cell of its footprint (Terms) is flat (no slope), holds no overlay and no smudge, and
+      has a tile whose tileset has the morphable flag (S-0010 claim 15). In the *plain form*
+      (claim 19 (g)) a footprint cell that holds a building also refuses the type; the *large form*
+      (claim 19 (a)) does not test for buildings. Only the anchor cell is tested for lying on the
+      map (Edge cases, *Smudge footprints beyond the map edge*).
+    - *Candidates.* The fitting types of the kind, in registration order (S-0004). In the large form,
+      when at least one fitting type is wider than one cell and taller than one cell, the candidates
+      are only those types; otherwise they are all fitting types. In the plain form they are all
+      fitting types.
+    - *Choice.* With *n* candidates, one ranged draw R(0, *n* − 1) gives the position of the chosen
+      type in the candidate list. So *n* = 1 takes no raw value (S-0202 claim 4), and *n* = 0
+      places nothing and takes no draw.
+    - *Placing.* The chosen type is placed with the anchor cell as its top-left cell. Placing it takes
+      no draw.
+
+    The choice depends on the theater only through the tiles' tilesets and their morphable flag,
+    and on the cells' state (slopes, overlays, smudges already there, and in the plain form
+    buildings). A smudge already in a footprint cell refuses the type, so a second destruction at
+    the same place leaves no smudge where the first one did. These are the only draws a smudge
+    choice takes.
+    - Backing: `measurable` (scenario D17; the draw count through the random-state recorder)
+    - Confidence: high for the candidates, the preference and the draw; medium for the absence of
+      draws in placing; low for footprints beyond the map edge
+
+### Game-wide values and lists
+
+27. **Defaults of the crew, survivor and sinking values.** At a fresh program start the crew escape
+    chance of claim 13 is 0.5, the sinking weight of claim 10 is 3.0, and the survivor divisors of F5
+    are 200 for side 0, 100 for side 1 and 300 for side 2. Omitting any of these fields from a rules
+    layer keeps the value in force, including a value left by an earlier game of the same session
+    (S-0006). An omission never disables the rule that uses the value: crews still escape by the
+    chance, vessels still sink by the weight, and survivors are still counted with the divisor (a
+    divisor of 0, given explicitly, is what gives *C* = 0, F5).
+    - Backing: `measurable` (scenario D18)
+    - Confidence: high
+
+28. **Item handling of this spec's lists.** The explosion list, the destruction-animation list, the
+    debris animations, the voxel debris types and the destruction particle-system list of a type,
+    and the game-wide metallic debris list, read their items as S-0303 claim 25 gives for its
+    animation and debris lists: an item naming no type (Import mapping) is left out and holds no
+    place, the other items keep their order, and every list length and entry number in claims 9,
+    16 and 19 and F1 is taken after those omissions. A type's debris maxima list reads its items as
+    S-0303 claim 26 gives for a warhead's maxima: decimal-prefix integers, an unreadable item holding
+    its place with 0, independently of the types list, so F1 pairs the first kept debris type with
+    the first maxima item. A name-list key absent from a layer, or given with an empty value, keeps
+    the list in force (S-0003, S-0006); a value whose items all name no type replaces the list with
+    an empty one.
+    - Backing: `measurable` (scenario D19)
+    - Confidence: high
 
 ## Formulas
 
@@ -606,14 +718,17 @@ ticks later. Unit: ticks.
 | Direction scale *κ* | −π / 32767 | radians per facing unit (double) | F2 |
 | Directions of the nearby point | 256 | directions | F2 |
 | Map cell coordinate limit for the nearby point | 0 to 511 | cells | F2 |
+| Large-smudge preference | wider than 1 and taller than 1 | cells of a smudge footprint | claim 26, large form |
+| Cell that never receives a destruction smudge | both coordinates 0 | map cell | claim 26 |
+| Crew escape chance at a fresh start | 0.5 | chance (decimal) | claim 27 |
+| Sinking weight at a fresh start | 3.0 | weight units of the type's weight field | claim 27 |
+| Survivor divisors at a fresh start | 200, 100, 300 | credits per survivor, for sides 0, 1, 2 | claim 27 |
 
 ## State and ordering
 
-**Order of death effects.** All in the moment of the killing hit. Draws are from the scenario random
-stream unless noted. The sounds a death plays draw from the unsynchronised random stream and reach no
-game state.
+**Observable precedence of death effects.** All effects occur in the moment of the killing hit, except where a row states that an object remains in play or an effect occurs on a later turn. The table records which outcomes and random-stream draws precede others; it does not prescribe an implementation's internal work order. Draws are from the scenario random stream unless noted. The sounds a death plays draw from the unsynchronised random stream and reach no game state.
 
-| Step | Kind | Effect | Draws |
+| Precedence | Kind | Effect | Draws |
 |---|---|---|---|
 | 0 | infantry | cyborg crippling replaces death (claim 2) | none |
 | 0 | building | delayed death replaces death (claim 3) | none |
@@ -629,7 +744,8 @@ game state.
 | 4 | aircraft | explosion animation, then crash or leaving play (claim 16) | list pick, crash: three |
 | 4 | building | contacts (claim 17), garrison out | the contacts' deaths |
 | 5 | building | claim 19 (a) to (h), with claim 23 inside (c), claim 22 inside (d), and claims 24 and 18 inside (g); claim 18's cells start after the cells claim 24 used | as listed |
-| 6 | building | rubble and crate, leaving play (claims 20, 21) | the crate's |
+| 6 | building | rubble and crate, leaving play (claims 20, 21); for a type with the explodes flag or a building being sold, awaiting removal instead | the crate's (when it leaves now) |
+| later turn | building awaiting removal | after the general part of its own turn: leaves its cells, second round of claims 18 and 19 (g), passengers die, leaves play, rubble and crate (claim 21) | the second round's, then the crate's |
 
 | State | Event | Result |
 |---|---|---|
@@ -639,7 +755,10 @@ game state.
 | crashing | reaches the ground, was alive | destroyed by its remaining health, detonation |
 | alive cyborg infantry, not prone | lethal hit that does not ignore defences | crippled, health max(1, trunc(25 % of strength)) |
 | prone cyborg | lethal hit | dies (S-0107 claim 17) |
-| alive eligible building | lethal hit of a delay-kill warhead | 1 health point, destruction after *T* ticks |
+| alive eligible building | lethal hit of a delay-kill warhead | 1 health point, countdown of *T* ticks (claim 3) |
+| building in a countdown | its turn at or after the end of the countdown | S-0302 claim 16's expiry hit; if it destroys the building, the death effects with no crew (claim 3) |
+| alive building, type with the explodes flag or behaviour the sale's | killing hit | death effects, then awaiting removal with 0 health (claim 21) |
+| awaiting removal | its own turn, still in play, not erased, no pulse effect | second round, leaves play with rubble and crate (claim 21) |
 
 ## Edge cases and quirks
 
@@ -693,6 +812,16 @@ game state.
   itself. Off: the east probe is the cell next to the foundation's east edge in the top row and the
   south probe the cell next to its south edge in the left column, each with the animation at that
   cell's point; the north and west probes are unchanged. A 1 × 1 foundation is the same either way.
+- **`quirks.building_removal_second_round`** (default: on, the original). A building that awaits
+  removal (claim 21) takes a second round of survivors and smudge steps when it is removed, so it
+  can release up to twice the survivor count *C* in total, and it takes that round's draws. Off: it
+  takes no second round; it leaves its cells, its remaining passengers die, and it leaves play with
+  its rubble and crate, taking no draws but the crate's. Turning it off changes every later draw.
+- **Smudge footprints beyond the map edge** (no switch). Claim 26 tests only the anchor cell for
+  lying on the map. A footprint cell beyond the map edge is tested in the original as a placeholder
+  cell that holds nothing and has the first tile type of the theater, so it is believed to pass
+  when that tile type's tileset has the morphable flag. Our engine does the same. This can matter
+  only for a smudge larger than one cell anchored on the last row or column of the map.
 - **Departure: absorbed passengers beyond the last cell** (no switch). With more absorbed passengers
   than foundation cells, the original goes on past the last foundation cell and places the rest at
   unspecified positions. Our engine treats each
@@ -704,8 +833,8 @@ game state.
 | User data | Feeds | Form | Absent |
 |---|---|---|---|
 | rules, type section, `MaxDebris`, `MinDebris` | *X*, *Y* (F1) | integer | 0, 0 |
-| rules, type section, `DebrisTypes`, `DebrisMaximums` | voxel debris types and maxima (F1) | voxel-animation list, integer list | empty |
-| rules, type section, `DebrisAnims` | debris animations (F1) | animation-name list | empty |
+| rules, type section, `DebrisTypes`, `DebrisMaximums` | voxel debris types and maxima (F1) | voxel-animation list (items as claim 28), integer list (items as claim 28) | empty |
+| rules, type section, `DebrisAnims` | debris animations (F1) | animation-name list (items as claim 28) | empty |
 | rules, type section, `Explodes` | explodes flag (exploding object) | boolean | no |
 | rules, type section, `VeteranAbilities`, `EliteAbilities` | exploding veterancy ability (S-0311) | ability list | none |
 | rules, weapon section, `Suicide` | suicide flag (exploding object) | boolean | no |
@@ -713,8 +842,8 @@ game state.
 | rules, type section, `DeathWeaponDamageModifier` | death-weapon damage factor *φ* (F3) | decimal (single) | 1.0 |
 | rules, weapon section, `Damage`, `Warhead`, `Bright` | *w*, warhead and brightness of the death weapon | integer, warhead name, boolean | weapon specs |
 | rules, type section, `Strength` | *H* (claim 2, F3) | integer | type specs |
-| rules, type section, `Explosion` | explosion list (claims 9, 16, 19) | animation-name list | empty |
-| rules, type section, `DestroyAnim` | destruction-animation list (claims 9, 19) | animation-name list | empty |
+| rules, type section, `Explosion` | explosion list (claims 9, 16, 19) | animation-name list (items as claim 28) | empty |
+| rules, type section, `DestroyAnim` | destruction-animation list (claims 9, 19) | animation-name list (items as claim 28) | empty |
 | rules, infantry type section, `Cyborg` | cyborg type (claim 2) | boolean | no |
 | rules, warhead section, `CausesDelayKill`, `DelayKillFrames`, `DelayKillAtMax` | delay-kill flag, *F*, *A* (F6) | boolean, integer, decimal (held as a single) | no; 5 ticks; 1.0 (as S-0302 Import mapping, which owns them) |
 | rules, building type section, `EligibleForDelayKill` | eligible for delayed death (claim 3) | boolean | no |
@@ -727,15 +856,19 @@ game state.
 | rules, building type section, `UnitAbsorb`, `InfantryAbsorb` | absorbs units or infantry (claim 24) | boolean | no |
 | rules, building type section, `LeaveRubble` | leaves rubble (claim 20) | boolean | no |
 | rules, building type section, `CrateBeneath`, `CrateBeneathIsMoney` | crate beneath (claim 20) | boolean | no |
-| rules, type section, `DestroyParticleSystems`, `DestroySmokeOffset` | destruction particle systems and their displacement (claim 19 f) | particle-system list, three integers in leptons | empty, 0, 0, 0 |
+| rules, type section, `DestroyParticleSystems`, `DestroySmokeOffset` | destruction particle systems and their displacement (claim 19 f) | particle-system list (items as claim 28), three integers in leptons | empty, 0, 0, 0 |
 | rules, the combat-damage section, `DeathWeapon` | game-wide death weapon (claim 6) | weapon name | none |
 | rules, the combat-damage section, `C4Warhead` | demolition warhead (claims 16, 17) | warhead name | none |
-| rules, the general section, `CrewEscape` | crew escape chance (claim 13) | decimal (double) | owned by the rules specs |
+| rules, the general section, `CrewEscape` | crew escape chance (claim 13) | decimal (S-0003's decimal form, read in single precision and held as a double) | initially 0.5; a missing key keeps the value in force (claim 27) |
 | rules, the general section, `AlliedCrew`, `SovietCrew`, `ThirdCrew`, `Technician`, `Engineer` | crew types (F4, claim 18) | infantry name | none |
-| rules, the general section, `AlliedSurvivorDivisor`, `SovietSurvivorDivisor`, `ThirdSurvivorDivisor` | *q* (F5), for owners of side 0, 1 and 2 | integer | 200, 100 and 300 (engine constants) |
+| rules, the general section, `AlliedSurvivorDivisor`, `SovietSurvivorDivisor`, `ThirdSurvivorDivisor` | *q* (F5), for owners of side 0, 1 and 2 | integer | initially 200, 100 and 300; a missing key keeps the value in force (claim 27) |
 | the inputs of *K* (F5): the type's cost, free-unit, refund-override and pad-aircraft fields, the country and cost-bonus factors, the refund percentage | *K* (F5) | S-0408's Import mapping | S-0408's |
-| rules, the general section, `ShipSinkingWeight` | sinking weight (claim 10) | decimal | rules specs |
-| rules, the general section, `MetallicDebris` | metallic debris list (F1) | animation-name list | empty |
+| rules, the general section, `ShipSinkingWeight` | sinking weight (claim 10) | decimal (S-0003's decimal form, read in single precision and held as a double) | initially 3.0; a missing key keeps the value in force (claim 27) |
+| rules, the general section, `MetallicDebris` | metallic debris list (F1) | animation-name list (items as claim 28) | empty |
+| rules, smudge type section, `Crater`, `Burn` | the smudge type is of the crater kind, of the scorch-mark kind (claim 26) | boolean, boolean | no, no |
+| rules, smudge type section, `Width`, `Height` | the smudge footprint (claim 26) | integer, integer, in cells | 1, 1 |
+| theater tileset section, `Morphable` | the morphable flag of a tile's tileset (claim 26) | as S-0010's Import mapping | as S-0010's |
+| the no-type spellings of a list item | an item that claim 28 leaves out | `none` or `<none>`, compared ignoring letter case, as S-0303's Import mapping gives them | |
 | rules, the general section, `InfantryExplode`, `Wake` | cyborg crippling animation (claim 2), wake animation (claim 11) | animation name | none |
 | map, building entry | building has no crew (F5) | map flag (map specs) | crew present |
 | the animation type named `FIRE3`, a name built into the original rather than read from a key | barrel fire animation (claim 23) | animation type name | when no animation type has that name the original takes an entry from outside the animation type list (bad data): our engine creates no animation and the importer warns |
@@ -758,7 +891,7 @@ with random draws are statistical, as stated.
 
 *Observed areas* (glossary, *bystander computer player*, void rule). The bystander's start position
 is the one farthest from the test objects. A scenario's observed area is the cells within 10 of its
-test objects for D1 to D10 and D13 to D16, with these exceptions: D11 observes the aircraft's flight
+test objects for D1 to D10 and D13 to D19, with these exceptions: D11 observes the aircraft's flight
 path and the cells within 10 of its target and of its impact point; D12 observes the building, its
 exit cells and the vehicle's route. A run is void when an object of the bystander that the scenario
 does not name enters that area or acts on a test object, or when the bystander is defeated
@@ -784,10 +917,14 @@ cyborg of variant c survives.
 warhead with the delay-kill flag, tick count 5, edge factor 7 and spread 2; lethal damage at
 epicentre distances 0 and 256. *Observable:* the building's health after the hit and the tick of its
 destruction. *Expected:* the building keeps 1 health and is destroyed 5 ticks later at distance 0,
-and trunc(5 + 30 × 256 / 512) = 20 ticks later at 256. Variant b: a lethal hit at 256 and, 3 ticks
+and trunc(5 + 30 × 256 / 512) = 20 ticks later at 256 (each on its first turn at or after that
+tick, claim 3). Variant b: a lethal hit at 256 and, 3 ticks
 later, a second one at 0: the building is destroyed 5 ticks after the second hit (the shorter new
-delay replaces the 17 ticks left); in the reverse order the first delay of 5 is kept. *Falsified
-if:* it dies at once or the delays differ.
+delay replaces the 17 ticks left); in the reverse order the first delay of 5 is kept. Variant c (the end of the countdown): a crewed test building type made
+eligible, whose refund gives *C* ≥ 1 and which has an explosion list, killed at distance 0 by the
+same warhead. *Expected of c:* at the end of the countdown the building is destroyed with its
+explosion animations but releases no survivors, over 50 runs. The tick and the credit of the expiry hit are S-0302's scenario D13, parts e to h. *Falsified
+if:* it dies at once, the delays differ, or a building of variant c releases a survivor.
 
 **D4. Death debris (claim 4).** *Setup:* a test vehicle type with minimum debris 1, maximum debris 4
 and no debris types; 200 kills. *Observable:* the number of debris pieces per kill. *Expected:* 1 to
@@ -902,17 +1039,32 @@ per foundation cell within 64 leptons of the cell centres; for the 3 × 3 buildi
 per destruction (claim 19 (a)), at the centre of the cell of its position, and none at all for the
 1 × 1 building, with scorch marks and craters about half each over the 200 destructions (claim 19
 (a): below 50 a scorch mark). Variant b: a building type that leaves rubble leaves the rubble
-overlay on every foundation cell; a type with a money crate beneath leaves a money crate. Variant c:
-an exploding test building stays in play for at least one tick after its death effects. Variant d:
+overlay on every foundation cell; a type with a money crate beneath leaves a money crate. Variant c
+(claim 21): a test building type with the explodes flag and rubble, with an object recorder each
+tick from the killing hit, killed (i) by an object whose turn comes before the building's in the
+turn pass and (ii) by one whose turn comes after it. *Expected of c:* after its death effects the
+building is still in play with 0 health and its foundation cells still occupied, no rubble yet; it
+leaves play, and its rubble appears, in the tick of the kill in (i) and in the next tick in (ii).
+A second variant uses a building killed while its sale is in progress (low confidence, claim 21).
+Variant d:
 barrels placed on the four sides of an exploding 1 × 1 test building catch fire 4 to 6 ticks
 later, and with a 3 × 3 exploding test building, only barrels to its north and west (next to the top-left cell)
 do, and none to its east or south. Variant e (claims 18 and 19 (g), with the recorder): the same
 test building destroyed (i) with its crewed flag off and (ii) with it on and *C* ≥ 1. *Expected:*
 each run's raw-value count equals the count the claims predict by replay from the recorded start
 state. In (i) it contains no smudge-step draws at all. In (ii) it contains a smudge step for every
-foundation cell, including the cells after *C* survivors have been released, and each smudge goes
-to the cell of its nearby point. Variant f: a test building type with a destruction particle-system
+clear foundation cell, including the cells after *C* survivors have been released; a step whose
+nearby point lies inside the foundation takes no smudge-type draw and leaves no smudge, and a smudge
+that a step does leave lies at the cell of its nearby point. Variant f: a test building type with a destruction particle-system
 list: a particle system appears at the position displaced by the type's smoke displacement.
+Variant g (claim 21, the second round): a crewed 3 × 3 test building type with the explodes flag
+whose refund gives *C* = 1, destroyed 300 times, with the recorder running from the killing hit
+until it leaves play. *Expected of g:* survivors appear at two moments, at the kill and at the
+removal turn, so some destructions release 2 survivors; smudges inside the foundation appear only
+at the removal turn; each run's raw-value count matches the replay with the second round. With
+`quirks.building_removal_second_round` off our engine releases at most 1. *Falsified if:* no
+destruction releases 2 survivors over the 300 runs, or a survivor appears in a tick between the
+kill and the removal turn.
 *Falsified if:* a smudge appears on a cell other than the centre of the position cell while
 *C* = 0, the 3 × 3 building leaves no smudge or the 1 × 1 building leaves one, the share of scorch
 marks lies more than 3 standard errors from one half, an explosion animation lies more than 64
@@ -938,6 +1090,47 @@ and smudges, appear only on the cells after the first three. Variant c: the same
 the computer player, and by the neutral house: the passengers hunt. *Falsified if:* fewer appear while cells are free,
 survivors or smudges appear on the first three cells, or a passenger of variant c does not hunt.
 
+**D17. Smudge choice (claim 26).** *Setup:* named test files that replace the smudge type list
+with test types: two scorch-mark types of footprint 1 × 1, one scorch-mark type of footprint 3 × 3,
+and one crater type of footprint 1 × 1. A crewless test building of foundation 2 × 2 with an empty
+explosion list stands on flat clear ground of a morphable tileset, so its position cell is the
+anchor and the 3 × 3 footprint reaches one row and one column beyond the foundation. The
+random-state recorder runs. Parts: (a) 200 destructions. (b) The same with the 3 × 3 scorch type
+removed. (c) As (a) with a sloped cell or an overlay in the row or column of the 3 × 3 footprint
+outside the foundation. (d) As (a) with the percent draw replayed to a crater. (e) The building
+placed on a tileset without the morphable flag. *Observable:* the smudge type left at the building's
+position per destruction, and the number of raw values taken between claim 19 (a)'s percent draw
+and the next known draw. *Expected:* (a) every scorch mark is the 3 × 3 type (the large form
+prefers it) and the type choice takes no raw value; (b) the two 1 × 1 types appear about half each,
+with one raw value for the choice; (c) the 3 × 3 type no longer fits, so the 1 × 1 types appear as
+in (b); (d) the crater appears and its choice takes no raw value; (e) no smudge and no raw value
+for the choice. *Falsified if:* a 1 × 1 scorch type appears in (a), the shares in (b) lie more than
+3 standard errors from one half, a smudge appears in (e), or a raw-value count differs from the
+replay.
+
+**D18. Defaults of the crew, survivor and sinking values (claim 27).** *Setup:* named test files
+that omit the crew escape chance, the sinking weight and the three survivor divisors from every
+layer, started on a freshly launched game. Parts: (a) a stock crewed vehicle with no passenger
+capacity killed 500 times; (b) test naval types of weight 2.9 and 3.0 killed on water; (c) a crewed
+test building of a side-0 owner whose refund is 1000 credits, destroyed 100 times, and the same for
+side-1 and side-2 owners. A second run of each part follows an earlier game of the same session
+whose files gave other values. *Observable:* the share of kills with a crew; whether each vessel
+sinks; the largest survivor count per destruction. *Expected:* (a) a share within 3 standard errors
+of one half; (b) the vessel of weight 3.0 sinks and the one of 2.9 does not; (c) at most 5, 5 and 3
+survivors (1000 / 200, 1000 / 100 capped at 5, 1000 / 300 truncated); in the second runs, the earlier
+game's values. *Falsified if:* any of these differs.
+
+**D19. List items (claim 28).** *Setup:* named test files giving a test vehicle type an explosion
+list `none,X` (X a test animation) and a debris-animation list `<none>,Y` with a minimum and
+maximum debris count giving at least one piece, and, in a second type, a destruction-animation list
+given as an empty value after a base layer that gave one entry, and in a third type, one given as
+`none` after such a base layer. *Observable:* which animations appear at death. *Expected:* X always
+appears as the explosion (a one-entry list); Y is every debris animation; the second type keeps the
+base layer's destruction animation; the third shows none. The maxima items follow S-0303's
+scenario A19, whose rule claim 28 shares. *Falsified if:* a death shows no explosion where X is
+due, a debris piece other than Y appears, the second type shows no destruction animation, or the
+third shows one.
+
 ## Open questions
 
 - The unplaced default position of a death weapon's projectile (claim 6): believed to be the map
@@ -953,7 +1146,11 @@ survivors or smudges appear on the first three cells, or a passenger of variant 
 - Which events set and clear a building's charge planter (claims 18 and 24).
 - Which situations of play are contacts of a building at the moment of its destruction (claim 17),
   beyond factory exits and docking.
-- When an exploding building, or one destroyed while being sold, leaves play (claim 21).
+- Whether a player can still select a building that awaits removal (claim 21). Its stay normally
+  lasts less than one tick, so it matters only for a selection made in that window or while an
+  electromagnetic-pulse effect delays the removal.
+- How the sale's own progress interacts with a building destroyed while being sold (claim 21):
+  whether the sale can still complete and remove it before its removal turn.
 - Whether jumpjet types and other crashable vehicles crash by the same rules as aircraft (claim 16).
 - Whether the state that suppresses survivors (claim 18, "the owner's game is not over") is set by
   the defeat of S-0414 itself or only by the destruction of all the defeated house's objects that
