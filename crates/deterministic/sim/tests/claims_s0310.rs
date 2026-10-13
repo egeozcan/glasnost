@@ -620,12 +620,7 @@ fn claim_8_walking_infantry_is_moving() {
     let mut seen = false;
     for _ in 0..40 {
         testkit::run(&mut w, 1);
-        let walking = w
-            .obj(a)
-            .unwrap()
-            .walk
-            .as_ref()
-            .is_some_and(|s| s.target.is_some());
+        let walking = w.obj(a).unwrap().walk.as_ref().is_some_and(|s| s.fraction); // spec: S-0310 Terms (the speed fraction is 1 from a walking step, not from the choice of a walking target)
         if walking {
             // Every other reason absent: the countdown over, the walk the only one left.
             w.obj_mut(a).unwrap().combat.rearm_until = i32::MIN;
