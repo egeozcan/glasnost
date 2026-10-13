@@ -1117,7 +1117,10 @@ fn list_items_untrimmed_switch() {
 fn ability_lists_follow_list_items_untrimmed() {
     let base = "[InfantryTypes]\n1=Walker\n[Walker]\nVeteranAbilities=firepower ,sight,bogus\n";
     let (s, w) = direct(&[base], "", &[], &[], IniQuirks::default());
-    assert_eq!(s.infantry["Walker"].veteran_abilities, ["FIREPOWER ", "SIGHT", "BOGUS"]);
+    assert_eq!(
+        s.infantry["Walker"].veteran_abilities,
+        ["FIREPOWER ", "SIGHT", "BOGUS"]
+    );
     assert!(warned(&w, "VeteranAbilities: a list item with whitespace"));
     assert!(warned(&w, "\"firepower \" names no ability"));
     assert!(warned(&w, "\"bogus\" names no ability"));
@@ -1126,7 +1129,10 @@ fn ability_lists_follow_list_items_untrimmed() {
         ..IniQuirks::default()
     };
     let (s, w) = direct(&[base], "", &[], &[], off);
-    assert_eq!(s.infantry["Walker"].veteran_abilities, ["FIREPOWER", "SIGHT", "BOGUS"]);
+    assert_eq!(
+        s.infantry["Walker"].veteran_abilities,
+        ["FIREPOWER", "SIGHT", "BOGUS"]
+    );
     assert!(!warned(&w, "a list item with whitespace"));
     assert!(!warned(&w, "\"firepower\" names no ability"));
     assert!(warned(&w, "\"bogus\" names no ability"));

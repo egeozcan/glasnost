@@ -1523,9 +1523,15 @@ fn s0311_claim_9_delayed_kill_experience() {
     for _ in 0..120 {
         glasnost_sim::tick::step(&mut w);
     }
-    assert!(w.obj(b).is_none_or(|o| o.health <= 0), "the countdown expired");
+    assert!(
+        w.obj(b).is_none_or(|o| o.health <= 0),
+        "the countdown expired"
+    );
     assert_eq!(exp(&w), e2, "no experience at expiry");
-    assert_eq!(w.houses[0].combat.kills, 2, "no attacking-house kill at expiry");
+    assert_eq!(
+        w.houses[0].combat.kills, 2,
+        "no attacking-house kill at expiry"
+    );
 }
 
 // spec: S-0302 Edge cases (quirks.delay_kill_credited_again off: credited once, the countdown still shortened)
