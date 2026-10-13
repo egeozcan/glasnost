@@ -510,6 +510,18 @@ fn process(w: &mut World, id: ObjectId) -> i32 {
         (Some(Behaviour::AreaGuard), Kind::Infantry | Kind::Vehicle) => process_area_guard(w, id),
         (Some(Behaviour::Hunt), Kind::Infantry | Kind::Vehicle) => process_hunt(w, id),
         (Some(Behaviour::Unload), Kind::Infantry) => process_unload_infantry(w, id),
+        // spec: S-0402 State and ordering (a harvester's harvest, enter and unload)
+        (Some(Behaviour::Harvest), Kind::Vehicle) if crate::econ::harvest::is_harvester(w, id) => {
+            crate::econ::harvest::process_harvest(w, id)
+        }
+        (Some(Behaviour::Enter), Kind::Vehicle) if crate::econ::harvest::is_harvester(w, id) => {
+            crate::econ::harvest::process_enter(w, id)
+        }
+        (Some(Behaviour::Unload), Kind::Vehicle)
+            if crate::econ::harvest::unload_is_harvesting(w, id) =>
+        {
+            crate::econ::harvest::process_unload(w, id)
+        }
         // spec: S-0415 claim 1 (unload of a vehicle: ranks 1 to 3 are other topics' rules, rank 4 deploys; the standard delay of S-0215 claim 6)
         (Some(Behaviour::Unload), Kind::Vehicle)
             if crate::econ::deploy::process_unload(w, id).is_some() =>

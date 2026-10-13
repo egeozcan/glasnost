@@ -312,6 +312,15 @@ pub struct TerrainRules {
     pub armour: usize,
     /// Immune (S-0302 claim 20).
     pub immune: bool,
+    /// The animated flag of an ore mine (S-0401 claim 15).
+    pub animated: bool,
+    /// The animation rate *R* of an ore mine, ticks (S-0401 claim 15).
+    pub animation_rate: i32,
+    /// The animation probability *p* of an ore mine, a single widened to
+    /// double (S-0401 F8).
+    pub animation_probability: F64,
+    /// The image frame count *N* of the type's sprite (S-0401 claim 15).
+    pub image_frames: i32,
 }
 
 /// One behaviour's properties (S-0215 claims 6, 16 to 21).
@@ -971,6 +980,17 @@ impl SimRules {
                     // spec: S-0305 claim 2 (a type no layer has given the field: class none)
                     armour: t.armor.unwrap_or_default().index(),
                     immune: t.immune.unwrap_or(false),
+                    // spec: S-0401 Import mapping (IsAnimated absent: no)
+                    animated: t.is_animated.unwrap_or(false),
+                    // spec: S-0401 Import mapping (AnimationRate absent: 0)
+                    animation_rate: t.animation_rate.unwrap_or(0),
+                    // spec: S-0401 Import mapping and F8 (AnimationProbability, a single; absent: 0)
+                    animation_probability: t
+                        .animation_probability
+                        .as_ref()
+                        .map_or(F64::ZERO, |d| d.single_value(mode)),
+                    // spec: S-0401 claim 15 (N, the sprite's image frames; absent: the schema's provisional rule, no frames, so the mine never makes resource)
+                    image_frames: t.image_frames.unwrap_or(0),
                 }
             })
             .collect();

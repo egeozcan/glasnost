@@ -427,6 +427,8 @@ pub fn new_game(
         }
     }
     crate::regions::rebuild(&mut w);
+    // spec: S-0401 claims 4 and 13 (the map growth switch, and the game-start rebuilding of the lists, which takes no draw and sees only terrain objects)
+    crate::econ::resource::game_start(&mut w, map.basic.tiberium_growth.unwrap_or(true));
     if !setup.sandbox {
         // spec: S-0412 claim 14 (the rest of game start after the starting units, the secret-lab draws last, all before tick 0)
         crate::econ::setup::start_game(&mut w);

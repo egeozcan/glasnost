@@ -54,6 +54,8 @@ pub fn leaving_map(w: &mut World, id: ObjectId, for_good: bool) {
     crate::econ::victory::leaving_map(w, id);
     crate::econ::power::leaving_map(w, id);
     crate::econ::shroud::leaving_map(w, id, for_good);
+    crate::econ::resource::removed(w, id);
+    crate::econ::harvest::leaving_map(w, id);
     if kind == Kind::Building
         && let Some(h) = owner
     {
@@ -154,6 +156,8 @@ pub fn turn(w: &mut World, id: ObjectId, moved: bool) {
             crate::econ::sell::building_turn(w, id);
         }
         Kind::Vehicle => crate::econ::power::vehicle_turn(w, id),
+        // spec: S-0401 claim 15 (an ore mine draws and spreads in its own turn)
+        Kind::Terrain => crate::econ::resource::mine_turn(w, id),
         _ => {}
     }
     crate::econ::shroud::object_turn(w, id, moved);
