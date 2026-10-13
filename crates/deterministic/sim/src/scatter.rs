@@ -146,9 +146,12 @@ pub fn request(w: &mut World, id: ObjectId, req: ScatterRequest) -> bool {
     if let Some(c) = dest {
         // spec: S-0208 claim 12 (the unit then moves there as under a move order)
         if let Some(ob) = w.obj_mut(id) {
+            let before = ob.dest;
             ob.dest = Some(Target::Cell(c));
             ob.path.steps.clear();
             ob.beh.queue(Some(Behaviour::Move));
+            // spec: S-0107 claim 15 (an accepted scatter that assigns a destination: the destination-driven get-up)
+            crate::infantry::destination_assigned(w, id, before);
         }
     }
     true

@@ -249,9 +249,9 @@ fn claim_3_sellable() {
     w.obj_mut(hut)
         .unwrap()
         .beh
-        .force(Behaviour::Construction, t);
+        .force(Behaviour::Construction, t, true);
     assert!(!sell::sellable(&w, hut));
-    w.obj_mut(hut).unwrap().beh.force(Behaviour::Guard, t);
+    w.obj_mut(hut).unwrap().beh.force(Behaviour::Guard, t, true);
     w.obj_mut(hut).unwrap().econ.construction.building_up = true;
     assert!(!sell::sellable(&w, hut));
 }

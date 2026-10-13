@@ -32,7 +32,7 @@ fn engaged_with_a_destination_resumes_the_move() {
     let o = w.obj_mut(a).unwrap();
     o.attack_move = Some(AttackMoveMemory::Dest(c));
     o.combat.engaged = true;
-    o.beh.force(Behaviour::Attack, t);
+    o.beh.force(Behaviour::Attack, t, true);
     testkit::run(&mut w, 1);
     let o = w.obj(a).unwrap();
     assert!(!o.combat.engaged);
@@ -62,7 +62,7 @@ fn not_engaged_outside_guard_is_not_resumed() {
     let t = w.tick;
     let o = w.obj_mut(a).unwrap();
     o.attack_move = Some(AttackMoveMemory::Dest(c));
-    o.beh.force(Behaviour::Stop, t);
+    o.beh.force(Behaviour::Stop, t, true);
     testkit::run(&mut w, 1);
     let o = w.obj(a).unwrap();
     assert_ne!(o.beh.current, Some(Behaviour::Move));

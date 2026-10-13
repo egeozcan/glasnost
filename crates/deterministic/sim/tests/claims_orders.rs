@@ -368,7 +368,7 @@ fn s0215_area_guard_threshold() {
         w.houses[0].skill = skill;
         let cart = of(&w, 0, Kind::Vehicle, 0)[0];
         let t = w.tick;
-        w.obj_mut(cart).unwrap().beh.force(Behaviour::Move, t);
+        w.obj_mut(cart).unwrap().beh.force(Behaviour::Move, t, true);
         process::fall_back(&mut w, cart, false);
         assert_eq!(w.obj(cart).unwrap().beh.queued, Some(rest), "skill {skill}");
     }
@@ -395,7 +395,7 @@ fn rest_of(r: &glasnost_rules::schema::Ruleset, kind: Kind, neutral: bool) -> Op
     let id = of(&w, 1, kind, 0)[0];
     let t = w.tick;
     let o = w.obj_mut(id).unwrap();
-    o.beh.force(Behaviour::Move, t);
+    o.beh.force(Behaviour::Move, t, true);
     o.beh.queued = None;
     o.dest = None;
     o.target = None;
@@ -446,7 +446,7 @@ fn s0215_claim_15_non_player_harvester_harvests_anywhere() {
         let id = of(&w, 0, Kind::Vehicle, 0)[0];
         let t = w.tick;
         let o = w.obj_mut(id).unwrap();
-        o.beh.force(Behaviour::Move, t);
+        o.beh.force(Behaviour::Move, t, true);
         o.beh.queued = None;
         o.dest = None;
         process::fall_back(&mut w, id, false);
@@ -514,7 +514,7 @@ fn s0215_no_rule_450() {
     let mut w = ready(1);
     let id = of(&w, 0, Kind::Vehicle, 1)[0];
     let t = w.tick;
-    w.obj_mut(id).unwrap().beh.force(Behaviour::Sleep, t);
+    w.obj_mut(id).unwrap().beh.force(Behaviour::Sleep, t, true);
     let taken = w.rng.taken();
     process::turn(&mut w, id);
     assert_eq!(w.obj(id).unwrap().beh.last, Some((t, 450)));
@@ -527,7 +527,10 @@ fn s0215_queued_move_sleeps() {
     let mut w = ready(1);
     let id = of(&w, 0, Kind::Vehicle, 1)[0];
     let t = w.tick;
-    w.obj_mut(id).unwrap().beh.force(Behaviour::QueuedMove, t);
+    w.obj_mut(id)
+        .unwrap()
+        .beh
+        .force(Behaviour::QueuedMove, t, true);
     process::turn(&mut w, id);
     assert_eq!(w.obj(id).unwrap().beh.last, Some((t, 450)));
 }
@@ -540,7 +543,7 @@ fn s0215_standard_delay() {
     // The unarmed crusher rests in guard; a vehicle's guard attempts no idle action.
     let id = of(&w, 0, Kind::Vehicle, 1)[0];
     let t = w.tick;
-    w.obj_mut(id).unwrap().beh.force(Behaviour::Guard, t);
+    w.obj_mut(id).unwrap().beh.force(Behaviour::Guard, t, true);
     let taken = w.rng.taken();
     process::turn(&mut w, id);
     let (_, d) = w.obj(id).unwrap().beh.last.unwrap();
@@ -596,13 +599,16 @@ fn s0215_move_and_attack_fall_back() {
     let mut w = ready(1);
     let id = of(&w, 0, Kind::Vehicle, 1)[0];
     let t = w.tick;
-    w.obj_mut(id).unwrap().beh.force(Behaviour::Move, t);
+    w.obj_mut(id).unwrap().beh.force(Behaviour::Move, t, true);
     process::turn(&mut w, id);
     let b = &w.obj(id).unwrap().beh;
     assert_eq!(b.last, Some((t, 1)));
     assert_eq!(b.queued, Some(Behaviour::Guard));
     let cart = of(&w, 0, Kind::Vehicle, 0)[0];
-    w.obj_mut(cart).unwrap().beh.force(Behaviour::Attack, t);
+    w.obj_mut(cart)
+        .unwrap()
+        .beh
+        .force(Behaviour::Attack, t, true);
     process::turn(&mut w, cart);
     assert_eq!(w.obj(cart).unwrap().beh.queued, Some(Behaviour::AreaGuard));
 }
@@ -616,7 +622,7 @@ fn s0215_area_guard() {
     {
         let o = w.obj_mut(cart).unwrap();
         o.guard_spot = None;
-        o.beh.force(Behaviour::AreaGuard, t);
+        o.beh.force(Behaviour::AreaGuard, t, true);
     }
     process::turn(&mut w, cart);
     let o = w.obj(cart).unwrap();
@@ -647,13 +653,16 @@ fn s0215_zombie_keeps_its_behaviour() {
     .unwrap();
     let id = of(&w, 0, Kind::Vehicle, 0)[0];
     let t = w.tick;
-    w.obj_mut(id).unwrap().beh.force(Behaviour::Sleep, t);
+    w.obj_mut(id).unwrap().beh.force(Behaviour::Sleep, t, true);
     process::fall_back(&mut w, id, false);
     assert_eq!(w.obj(id).unwrap().beh.queued, None);
     assert_eq!(w.obj(id).unwrap().beh.current, Some(Behaviour::Sleep));
     // The unarmed crusher in the same behaviour: row 7 comes first.
     let crusher = of(&w, 0, Kind::Vehicle, 1)[0];
-    w.obj_mut(crusher).unwrap().beh.force(Behaviour::Sleep, t);
+    w.obj_mut(crusher)
+        .unwrap()
+        .beh
+        .force(Behaviour::Sleep, t, true);
     process::fall_back(&mut w, crusher, false);
     assert_eq!(w.obj(crusher).unwrap().beh.queued, Some(Behaviour::Guard));
     assert_eq!(w.obj(crusher).unwrap().beh.current, Some(Behaviour::Sleep));
@@ -840,7 +849,7 @@ fn s0215_sticky() {
     let mut w = ready(1);
     let id = of(&w, 0, Kind::Vehicle, 1)[0];
     let t = w.tick;
-    w.obj_mut(id).unwrap().beh.force(Behaviour::Sticky, t);
+    w.obj_mut(id).unwrap().beh.force(Behaviour::Sticky, t, true);
     assert!(!process::ready(&w, id));
     orders::issue(&mut w, ALPHA, mv(id, testkit::cell(0, 9)));
     for _ in 0..20 {
@@ -944,7 +953,7 @@ fn auto_deploy_tick(list: Option<Vec<i32>>, neutral: bool) -> Option<(i32, i32, 
     let inf = of(&w, 1, Kind::Infantry, 0)[0];
     let s = w.tick;
     let o = w.obj_mut(inf).unwrap();
-    o.beh.force(Behaviour::Guard, s);
+    o.beh.force(Behaviour::Guard, s, true);
     o.guard_spot = None;
     o.dest = None;
     for _ in 0..300 {
@@ -1225,14 +1234,14 @@ fn s0215_open_without_a_gate() {
         .unwrap()
         .id;
     let t = w.tick;
-    w.obj_mut(hut).unwrap().beh.force(Behaviour::Open, t);
+    w.obj_mut(hut).unwrap().beh.force(Behaviour::Open, t, true);
     let taken = w.rng.taken();
     process::turn(&mut w, hut);
     let b = &w.obj(hut).unwrap().beh;
     assert_eq!((b.last, b.queued), (Some((t, 1)), Some(Behaviour::Guard)));
     assert_eq!(w.rng.taken(), taken);
     let cart = of(&w, 0, Kind::Vehicle, 0)[0];
-    w.obj_mut(cart).unwrap().beh.force(Behaviour::Open, t);
+    w.obj_mut(cart).unwrap().beh.force(Behaviour::Open, t, true);
     process::turn(&mut w, cart);
     assert_eq!(w.obj(cart).unwrap().beh.last, Some((t, 450)));
 }

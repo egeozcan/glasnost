@@ -163,6 +163,8 @@ pub fn fall_back(w: &mut World, id: ObjectId, placement: bool) {
                     ob.beh.queue(Some(Behaviour::Move));
                     ob.guard_spot = None;
                 }
+                // spec: S-0107 claim 15 (a destination assigned: the destination-driven get-up)
+                crate::infantry::destination_assigned(w, id, o.dest);
             }
         }
     }
@@ -218,6 +220,8 @@ fn fall_back_infantry(w: &mut World, id: ObjectId) {
             let first = ob.queued_dests.remove(0);
             ob.dest = Some(first);
             dest = Some(first);
+            // spec: S-0107 claim 15 (a queued destination assigned: the destination-driven get-up)
+            crate::infantry::destination_assigned(w, id, None);
         }
     }
     // spec: S-0215 claim 14 row 4 (a destination: move, or the current sabotage or capture again)
@@ -372,6 +376,7 @@ fn fall_back_vehicle(w: &mut World, id: ObjectId, placement: bool) {
 
 /// One actor's behaviour part of its turn (S-0215 claims 2, 3, 11 and 33).
 pub fn turn(w: &mut World, id: ObjectId) {
+    let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
     let t = w.tick;
     let Some(o) = w.obj(id) else { return };
     let kind = o.kind;
@@ -391,7 +396,7 @@ pub fn turn(w: &mut World, id: ObjectId) {
             fall_back(w, id, false);
         }
         if let Some(ob) = w.obj_mut(id)
-            && ob.beh.start_next(t)
+            && ob.beh.start_next(t, stale)
             && kind == Kind::Building
         {
             // spec: S-0215 claim 11 (each successful per-tick start of a building clears its ready mark)
@@ -449,6 +454,7 @@ pub fn turn(w: &mut World, id: ObjectId) {
 /// claim 23 (b)): when engaged (which it then no longer is), or not engaged
 /// and in *guard*.
 fn resume_attack_move(w: &mut World, id: ObjectId) {
+    let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
     let t = w.tick;
     let Some(ob) = w.obj_mut(id) else { return };
     let Some(mem) = ob.attack_move else { return };
@@ -461,12 +467,15 @@ fn resume_attack_move(w: &mut World, id: ObjectId) {
     match mem {
         AttackMoveMemory::Dest(d) => {
             // spec: S-0309 claim 23 (b) (a destination: move queued with an immediate start, the memory's destination the object's)
-            ob.beh.queue_and_start_at_once(Behaviour::Move, t);
+            let before = ob.dest;
+            ob.beh.queue_and_start_at_once(Behaviour::Move, t, stale);
             ob.dest = Some(d);
+            // spec: S-0107 claim 15 (a destination assigned: the destination-driven get-up)
+            crate::infantry::destination_assigned(w, id, before);
         }
         AttackMoveMemory::Target(x) => {
             // spec: S-0309 claim 23 (b) (only a target: attack queued with an immediate start, the memory's target the object's)
-            ob.beh.queue_and_start_at_once(Behaviour::Attack, t);
+            ob.beh.queue_and_start_at_once(Behaviour::Attack, t, stale);
             ob.target = Some(x);
         }
     }
@@ -474,10 +483,11 @@ fn resume_attack_move(w: &mut World, id: ObjectId) {
 
 /// A building's second per-tick start (S-0215 claim 11).
 fn second_start(w: &mut World, id: ObjectId) {
+    let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
     let t = w.tick;
     if let Some(ob) = w.obj_mut(id)
         && ob.beh.ready_mark
-        && ob.beh.start_next(t)
+        && ob.beh.start_next(t, stale)
     {
         // spec: S-0215 claim 11 (the second start, after the processing; it clears the mark when it succeeds)
         ob.beh.ready_mark = false;
@@ -666,6 +676,7 @@ fn auto_deploy(w: &mut World, id: ObjectId) -> Option<i32> {
 
 /// Unload for infantry (S-0215 claim 30).
 fn process_unload_infantry(w: &mut World, id: ObjectId) -> i32 {
+    let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
     let t = w.tick;
     let Some(o) = w.obj(id).cloned() else {
         return NO_RULE_DELAY;
@@ -699,7 +710,7 @@ fn process_unload_infantry(w: &mut World, id: ObjectId) -> i32 {
     };
     if let Some(ob) = w.obj_mut(id) {
         // spec: S-0215 claim 30 (in every case it forces guard and clears its destination)
-        ob.beh.force(Behaviour::Guard, t);
+        ob.beh.force(Behaviour::Guard, t, stale);
         ob.dest = None;
     }
     d
@@ -810,6 +821,7 @@ fn process_guard(w: &mut World, id: ObjectId) -> i32 {
 
 /// Hunt (S-0215 claim 27).
 fn process_hunt(w: &mut World, id: ObjectId) -> i32 {
+    let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
     let t = w.tick;
     let r = w.rules_arc();
     let Some(o) = w.obj(id).cloned() else {
@@ -847,16 +859,22 @@ fn process_hunt(w: &mut World, id: ObjectId) -> i32 {
             if o.kind == Kind::Infantry && ((u.engineer && !charges) || u.vehicle_thief) {
                 // spec: S-0215 claim 27 (an engineer or vehicle thief: the target as destination, capture queued with an immediate start if ready)
                 if let Some(ob) = w.obj_mut(id) {
+                    let before = ob.dest;
                     ob.dest = Some(tg);
                     ob.beh
-                        .queue_and_start(Some(Behaviour::Capture), ready_now, t);
+                        .queue_and_start(Some(Behaviour::Capture), ready_now, t, stale);
+                    // spec: S-0107 claim 15 (a destination assigned: the destination-driven get-up)
+                    crate::infantry::destination_assigned(w, id, before);
                 }
             } else if o.kind == Kind::Infantry && charges && building {
                 // spec: S-0215 claim 27 (explosive charges against a building: sabotage)
                 if let Some(ob) = w.obj_mut(id) {
+                    let before = ob.dest;
                     ob.dest = Some(tg);
                     ob.beh
-                        .queue_and_start(Some(Behaviour::Sabotage), ready_now, t);
+                        .queue_and_start(Some(Behaviour::Sabotage), ready_now, t, stale);
+                    // spec: S-0107 claim 15 (a destination assigned: the destination-driven get-up)
+                    crate::infantry::destination_assigned(w, id, before);
                 }
             } else if o.kind == Kind::Infantry
                 && let Some(ob) = w.obj_mut(id)
@@ -879,6 +897,7 @@ fn process_hunt(w: &mut World, id: ObjectId) -> i32 {
 
 /// Area guard (S-0215 claim 26).
 fn process_area_guard(w: &mut World, id: ObjectId) -> i32 {
+    let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
     let t = w.tick;
     let r = w.rules_arc();
     let Some(o) = w.obj(id).cloned() else {
@@ -896,7 +915,7 @@ fn process_area_guard(w: &mut World, id: ObjectId) -> i32 {
     if o.kind == Kind::Vehicle && u.harvester {
         // spec: S-0215 claim 26 row 4 (a harvester: harvest at once; 1 + U(1, 10))
         if let Some(ob) = w.obj_mut(id) {
-            ob.beh.queue_and_start_at_once(Behaviour::Harvest, t);
+            ob.beh.queue_and_start_at_once(Behaviour::Harvest, t, stale);
         }
         return 1i32.wrapping_add(w.rng.ranged(1, 10, half)); // spec: S-0215 claim 26 row 4 (1 + U(1, 10))
     }
@@ -952,6 +971,8 @@ fn process_area_guard(w: &mut World, id: ObjectId) -> i32 {
                 ob.target = None;
                 ob.combat.burst = 0;
                 ob.dest = Some(gs);
+                // spec: S-0107 claim 15 (a destination assigned: the destination-driven get-up; the leash holds only without one)
+                crate::infantry::destination_assigned(w, id, None);
             }
         }
         if (holds || o.target.is_none()) && may {
@@ -1050,6 +1071,7 @@ pub fn closed_friendly_gate(w: &World, mover: ObjectId, c: CellXY) -> Option<Obj
 /// rules call this when the outcome arises for a unit's move, never while
 /// only asking for an outcome (S-0214 claim 2: asking changes nothing).
 pub fn gate_met(w: &mut World, gate: ObjectId) {
+    let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
     let t = w.tick;
     if !is_gate(w, gate) {
         return;
@@ -1062,7 +1084,7 @@ pub fn gate_met(w: &mut World, gate: ObjectId) {
     }
     // spec: S-0215 claim 35 (b) (drops any queued behaviour; open current at once, a behaviour start)
     o.beh.queued = None;
-    o.beh.force(Behaviour::Open, t);
+    o.beh.force(Behaviour::Open, t, stale);
 }
 
 /// The door motion at every turn of the gate (S-0215 claim 35 (d)): a

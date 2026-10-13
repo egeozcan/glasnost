@@ -184,11 +184,13 @@ fn mark_killed(w: &mut World, id: ObjectId) {
         if ob.target != Some(Target::Object(id)) {
             continue;
         }
+        let mut restored = None;
         if ob.beh.suspended.is_some() {
             // spec: S-0215 claim 10 (the target is destroyed: the revert comes at the killing hit)
             if let Some((t, d)) = ob.beh.revert() {
                 ob.target = t;
                 if ob.kind.is_mobile() {
+                    restored = Some(ob.dest);
                     ob.dest = d;
                 }
             }
@@ -199,6 +201,10 @@ fn mark_killed(w: &mut World, id: ObjectId) {
             ob.target = None;
         }
         ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
+        if let Some(before) = restored {
+            // spec: S-0107 claim 15 (a destination brought back is assigned: the destination-driven get-up)
+            crate::infantry::destination_assigned(w, x, before);
+        }
     }
     w.effects.push(Effect::Killed { id, pos: o.pos });
 }
@@ -402,6 +408,7 @@ fn place_survivor(
     at: Pos,
     crew: bool,
 ) {
+    let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
     let rules = w.rules_arc();
     let half = rules.quirks.ranged_draw_half_span;
     let id = crate::objects::create(w, Kind::Infantry, ty, owner);
@@ -447,7 +454,7 @@ fn place_survivor(
             (true, false) => crate::rules::Behaviour::Move,
             (false, _) => crate::rules::Behaviour::Hunt,
         };
-        ob.beh.force(b, tick);
+        ob.beh.force(b, tick, stale);
     }
 }
 

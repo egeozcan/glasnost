@@ -232,6 +232,7 @@ fn target_ok(w: &World, t: Option<Target>) -> bool {
 }
 
 fn apply_other(w: &mut World, house: HouseId, o: &Order) {
+    let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
     match *o {
         Order::Stop { actor } => {
             // spec: S-0213 claim 8 (live and on the map; tethering, construction and tunnels do not arise yet)
@@ -269,7 +270,7 @@ fn apply_other(w: &mut World, house: HouseId, o: &Order) {
                     && matches!(ob.beh.current, Some(Behaviour::Harvest | Behaviour::Return))
                 {
                     // spec: S-0213 claim 8 (a harvester in harvest or return gets guard at once)
-                    ob.beh.queue_and_start_at_once(Behaviour::Guard, t);
+                    ob.beh.queue_and_start_at_once(Behaviour::Guard, t, stale);
                 }
             }
         }
@@ -502,29 +503,8 @@ fn apply_behaviour(w: &mut World, o: &Order, dest_override: Option<Target>) {
         m.path.steps.clear();
         m.path.retry_at = 0;
     }
-    if b == Behaviour::Move {
-        prone_get_up(w, actor);
-    }
-}
-
-/// A prone infantry unit of a human-controlled owner asks (not forced) for
-/// get-up when it is given a movement order, unless its type is a fraidycat
-/// or a cyborg (S-0107 claim 15). Which orders are movement orders is
-/// Q-0087; a behaviour order that results in *move* is taken as one.
-fn prone_get_up(w: &mut World, actor: ObjectId) {
-    let Some(o) = w.obj(actor) else { return };
-    if o.kind != Kind::Infantry || !o.infantry.as_ref().is_some_and(|i| i.prone) {
-        return;
-    }
-    let human = o.owner.is_some_and(|h| w.houses[usize::from(h.0)].human);
-    let exempt = w
-        .rules()
-        .unit(o.kind, o.type_index)
-        .is_some_and(|u| u.fraidycat || u.cyborg);
-    // spec: S-0107 claim 15 (a human-controlled owner's prone unit asks for get-up on a movement order, unless a fraidycat or a cyborg)
-    if human && !exempt {
-        crate::infantry::request(w, actor, crate::infantry::Seq::GetUp, false);
-    }
+    // spec: S-0213 claim 21 (the destination assignment of the applied order decides the prone get-up, S-0107 claim 15)
+    crate::infantry::destination_assigned(w, actor, ob.dest);
 }
 
 /// Group destinations (S-0213 claim 7). Returns, per behaviour order, the

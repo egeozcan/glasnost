@@ -36,7 +36,7 @@ fn field(x: i32, y: i32, d: u8) -> Vec<(CellXY, u8, u8)> {
 
 fn harvest_now(w: &mut World, h: ObjectId) {
     let t = w.tick;
-    w.obj_mut(h).unwrap().beh.force(Behaviour::Harvest, t);
+    w.obj_mut(h).unwrap().beh.force(Behaviour::Harvest, t, true);
 }
 
 /// Runs tick by tick until `f` holds, returning the tick count after the
@@ -482,7 +482,10 @@ fn claim_10_acceptance() {
     assert_eq!(harvest::choose_refinery(&mut w, b, true), None);
     w.obj_mut(refn).unwrap().econ.building.switched_off = false;
     let t = w.tick;
-    w.obj_mut(refn).unwrap().beh.force(Behaviour::Selling, t);
+    w.obj_mut(refn)
+        .unwrap()
+        .beh
+        .force(Behaviour::Selling, t, true);
     assert_eq!(harvest::choose_refinery(&mut w, b, true), None);
 }
 
@@ -499,7 +502,7 @@ fn docked(w: &mut World, load: Vec<i32>, facing: u16) -> (ObjectId, ObjectId) {
     });
     w.obj_mut(refn).unwrap().econ.dock = Some(DockState { holders: vec![h] });
     let t = w.tick;
-    w.obj_mut(h).unwrap().beh.force(Behaviour::Unload, t);
+    w.obj_mut(h).unwrap().beh.force(Behaviour::Unload, t, true);
     (refn, h)
 }
 

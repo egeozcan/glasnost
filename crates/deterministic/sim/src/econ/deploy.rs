@@ -182,13 +182,14 @@ pub fn process_unload(w: &mut World, id: ObjectId) -> Option<()> {
 /// One processing of *unload* by a deploying vehicle (S-0415 claims 2 to
 /// 6).
 fn attempt(w: &mut World, id: ObjectId, b: u32) {
+    let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
     let Some(o) = w.obj(id).cloned() else { return };
     let st = o.econ.deploy.clone();
     let tick = w.tick;
     if st.abandoned {
         // spec: S-0415 claim 5 (after an abandoned turn: no attempt; the queued behaviour becomes current, else unload stays)
         if let Some(ob) = w.obj_mut(id) {
-            ob.beh.start_next(tick);
+            ob.beh.start_next(tick, stale);
         }
         return;
     }
@@ -212,7 +213,7 @@ fn attempt(w: &mut World, id: ObjectId, b: u32) {
             if o.beh.queued.is_some_and(|q| q != Behaviour::Unload)
                 && let Some(ob) = w.obj_mut(id)
             {
-                ob.beh.start_next(tick);
+                ob.beh.start_next(tick, stale);
             }
             return;
         }
@@ -388,6 +389,7 @@ fn retarget(w: &mut World, old: ObjectId, new: ObjectId, yard: bool) {
 /// the return cell and the building is removed, or the house receives the
 /// sale refund when the vehicle cannot be put on the map.
 pub fn pack_up(w: &mut World, id: ObjectId) {
+    let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
     let Some(o) = w.obj(id).cloned() else { return };
     let Some(house) = o.owner else { return };
     let Some(v) = undeploys_into(w, o.type_index) else {
@@ -411,9 +413,9 @@ pub fn pack_up(w: &mut World, id: ObjectId) {
             if let Some(spot) = o.guard_spot {
                 // spec: S-0415 claim 10 (a guard spot: the vehicle's destination, with move)
                 ob.dest = Some(spot);
-                ob.beh.force(Behaviour::Move, tick);
+                ob.beh.force(Behaviour::Move, tick, stale);
             } else {
-                ob.beh.force(Behaviour::Guard, tick);
+                ob.beh.force(Behaviour::Guard, tick, stale);
             }
         }
         // spec: S-0415 claim 10 (the centre of the return cell, facing D × 256)
@@ -459,6 +461,7 @@ pub const CONSTRUCTION_DELAY: i32 = 1;
 /// the tick its build-up is reported finished, and the building goes to
 /// *guard*. Returns the delay.
 pub fn process_construction(w: &mut World, id: ObjectId) -> i32 {
+    let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
     let Some(o) = w.obj(id) else {
         return CONSTRUCTION_DELAY;
     };
@@ -471,7 +474,7 @@ pub fn process_construction(w: &mut World, id: ObjectId) -> i32 {
     if let Some(ob) = w.obj_mut(id) {
         ob.econ.construction.building_up = false;
         // Request Q-0130: the behaviour that follows the construction is not stated; guard, as a pre-placed building's (S-0009 claim 40).
-        ob.beh.force(Behaviour::Guard, tick);
+        ob.beh.force(Behaviour::Guard, tick, stale);
     }
     CONSTRUCTION_DELAY
 }

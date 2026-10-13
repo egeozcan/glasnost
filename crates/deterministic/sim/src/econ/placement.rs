@@ -687,9 +687,10 @@ pub fn put_on_map_facing(
 /// Starts a building's construction state (S-0108 claim 5): its behaviour
 /// becomes *construction* (S-0406 claim 1, S-0415 claim 6).
 pub fn begin_construction(w: &mut World, id: ObjectId) {
+    let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
     let t = w.tick;
     if let Some(o) = w.obj_mut(id) {
-        o.beh.force(Behaviour::Construction, t);
+        o.beh.force(Behaviour::Construction, t, stale);
         o.econ.construction.building_up = true;
     }
 }

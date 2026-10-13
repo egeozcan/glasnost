@@ -994,6 +994,7 @@ fn queueing_cell(w: &mut World, id: ObjectId, refinery: ObjectId) -> Option<Cell
 /// refinery it holds contact with and, there and at rest, queues *unload*
 /// with an immediate start.
 pub fn process_enter(w: &mut World, id: ObjectId) -> i32 {
+    let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
     let t = w.tick;
     let Some(o) = w.obj(id).cloned() else {
         return 1;
@@ -1023,7 +1024,7 @@ pub fn process_enter(w: &mut World, id: ObjectId) -> i32 {
     if here == dc && !crate::occupancy::in_progress(w, id) {
         if let Some(ob) = w.obj_mut(id) {
             ob.dest = None;
-            ob.beh.queue_and_start_at_once(Behaviour::Unload, t);
+            ob.beh.queue_and_start_at_once(Behaviour::Unload, t, stale);
         }
         return 1;
     }
@@ -1054,6 +1055,7 @@ fn west_building(w: &World, id: ObjectId) -> Option<ObjectId> {
 
 /// The processing of *unload* for a harvester (S-0402 claim 11).
 pub fn process_unload(w: &mut World, id: ObjectId) -> i32 {
+    let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
     let t = w.tick;
     let zs = zero_stalls(w);
     let Some(o) = w.obj(id).cloned() else {
@@ -1078,7 +1080,7 @@ pub fn process_unload(w: &mut World, id: ObjectId) -> i32 {
             // Provisional (request Q-0142): S-0215 claim 15 queues nothing while unload is current; the harvester is given guard.
             w.note("S-0402 claim 11: an unload without contact falls back to guard (provisional, request Q-0142)");
             if let Some(ob) = w.obj_mut(id) {
-                ob.beh.force(Behaviour::Guard, t);
+                ob.beh.force(Behaviour::Guard, t, stale);
             }
         }
         return 1;
@@ -1111,7 +1113,7 @@ pub fn process_unload(w: &mut World, id: ObjectId) -> i32 {
             // spec: S-0402 claim 11 (unloading, no building in the neighbouring cell: breaks off contact, harvest with an immediate start)
             break_contact(w, id);
             if let Some(ob) = w.obj_mut(id) {
-                ob.beh.queue_and_start_at_once(Behaviour::Harvest, t);
+                ob.beh.queue_and_start_at_once(Behaviour::Harvest, t, stale);
             }
             return 1;
         }
@@ -1148,6 +1150,7 @@ pub fn process_unload(w: &mut World, id: ObjectId) -> i32 {
 /// The finishing row of claim 11: queues *harvest*, breaks off contact and
 /// starts the queued behaviour.
 fn finish(w: &mut World, id: ObjectId) -> i32 {
+    let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
     let t = w.tick;
     // spec: S-0402 claim 11 (finishing, otherwise: queues harvest, breaks off contact, starts the queued behaviour)
     if let Some(ob) = w.obj_mut(id) {
@@ -1155,7 +1158,7 @@ fn finish(w: &mut World, id: ObjectId) -> i32 {
     }
     break_contact(w, id);
     if let Some(ob) = w.obj_mut(id) {
-        ob.beh.start_next(t);
+        ob.beh.start_next(t, stale);
     }
     1
 }

@@ -198,7 +198,7 @@ fn claim_1_factory_being_sold_cannot_make() {
     let mut w = game(&r);
     let y = put(&mut w, "YARD", 0, c(-6, -6));
     let t = w.tick;
-    w.obj_mut(y).unwrap().beh.force(Behaviour::Selling, t);
+    w.obj_mut(y).unwrap().beh.force(Behaviour::Selling, t, true);
     assert!(!place(&mut w, "HUT", c(0, 0)));
 }
 

@@ -104,7 +104,7 @@ fn guard_area_ability_only_at_its_rank() {
             veteran(&mut w, id);
         }
         let t = w.tick;
-        w.obj_mut(id).unwrap().beh.force(Behaviour::Stop, t);
+        w.obj_mut(id).unwrap().beh.force(Behaviour::Stop, t, true);
         process::fall_back(&mut w, id, false);
         let o = w.obj(id).unwrap();
         assert!(

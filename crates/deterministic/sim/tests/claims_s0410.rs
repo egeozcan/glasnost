@@ -66,7 +66,10 @@ fn claim_1_availability() {
     assert!(radar::available(&w, A));
     // A radar building in build-up counts (the switch is all that is tested).
     let t = w.tick;
-    w.obj_mut(d).unwrap().beh.force(Behaviour::Construction, t);
+    w.obj_mut(d)
+        .unwrap()
+        .beh
+        .force(Behaviour::Construction, t, true);
     radar::mark_due(&mut w, A);
     step(&mut w);
     assert!(radar::available(&w, A));

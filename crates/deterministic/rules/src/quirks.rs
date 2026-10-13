@@ -149,6 +149,10 @@ pub struct Quirks {
     // spec: S-0107 claim 16
     #[serde(default = "on")]
     pub fraidycat_fear_ignores_fearless: bool,
+    /// A prone unit asks for get-up only when its current non-empty destination is assigned again; off: every non-empty destination assignment asks.
+    // spec: S-0107 claim 15; S-0213 claim 21
+    #[serde(default = "on")]
+    pub prone_get_up_repeated_destination: bool,
     /// The falling air death has the generic completion follow-up.
     // spec: S-0107 claim 21
     #[serde(default = "on")]
@@ -395,6 +399,10 @@ pub struct Quirks {
     // spec: S-0215 Edge cases and F8
     #[serde(default = "on")]
     pub turret_snap_bound_wraps: bool,
+    /// Start-next and force leave the suspended behaviour and the put-aside target and destination in place, so a late revert can bring them back; off: an effective start-next or force empties them.
+    // spec: S-0215 claims 8 to 10 and Edge cases
+    #[serde(default = "on")]
+    pub stale_suspended_revert: bool,
     /// Disarm bomb gives its attack order only to an actor able to fire; off: it needs only that the actor is movable.
     // spec: S-0214 Edge cases
     #[serde(default = "on")]
@@ -986,6 +994,7 @@ impl Default for Quirks {
             fire_frame_by_stance: true,
             prone_attack_state_persists: true,
             fraidycat_fear_ignores_fearless: true,
+            prone_get_up_repeated_destination: true,
             air_death_fall_generic_follow_up: true,
             first_comment_only: true,
             two_sound_cues: true,
@@ -1047,6 +1056,7 @@ impl Default for Quirks {
             deck_side_step_ground_level: true,
             gate_reverse_snaps: true,
             turret_snap_bound_wraps: true,
+            stale_suspended_revert: true,
             disarm_bomb_needs_weapon: true,
             berserk_carrier_tote: true,
             building_cell_attack_no_weapon: true,
@@ -1254,6 +1264,10 @@ impl Quirks {
                 self.fraidycat_fear_ignores_fearless,
             ),
             (
+                "prone_get_up_repeated_destination",
+                self.prone_get_up_repeated_destination,
+            ),
+            (
                 "air_death_fall_generic_follow_up",
                 self.air_death_fall_generic_follow_up,
             ),
@@ -1398,6 +1412,7 @@ impl Quirks {
             ),
             ("gate_reverse_snaps", self.gate_reverse_snaps),
             ("turret_snap_bound_wraps", self.turret_snap_bound_wraps),
+            ("stale_suspended_revert", self.stale_suspended_revert),
             ("disarm_bomb_needs_weapon", self.disarm_bomb_needs_weapon),
             ("berserk_carrier_tote", self.berserk_carrier_tote),
             (
