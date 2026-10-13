@@ -373,3 +373,66 @@ fn overlapping_writer_shadows() {
         }
     }
 }
+
+/// spec: S-0104 claim 15, S-0110 claim 5 (each pixel of a shaded drawing takes the row its
+/// light-alpha value gives)
+///
+/// The same scene with every item shaded through the three-row table and a
+/// light-alpha gradient over the view draws the same on the GPU as on the
+/// CPU, and twice: a second view of the same size reuses the texture.
+#[test]
+fn gpu_light_alpha_matches_cpu() {
+    use glasnost_render::compose::Shade;
+    let Some((device, queue)) = device() else {
+        return;
+    };
+    let mut s = scene();
+    for (k, item) in s.items.iter_mut().enumerate() {
+        let shade = Shade::new(0, 3, [400, 1000, 2000][k % 3]);
+        item.paint = match item.paint {
+            Paint::Diamond(_) => Paint::LitDiamond(shade),
+            Paint::Row(_) => Paint::Lit(shade),
+            p => p,
+        };
+    }
+    let mut r = MapRenderer::new(&device, &queue, &s, glasnost_render::map_gpu::COLOR_FORMAT)
+        .expect("scene uploads");
+    let size = (128u32, 72u32);
+    for (origin, step) in [((0, 0), 1usize), ((-7, 13), 3)] {
+        let view = View {
+            origin,
+            size,
+            reference: Frame::reset_reference(origin.1),
+        };
+        let alpha: Vec<u8> = (0..(size.0 * size.1) as usize)
+            .map(|i| ((i * step) % 256) as u8)
+            .collect();
+        let filter = Filter::default();
+        let q = ComposeQuirks::default();
+        let cpu = s
+            .compose_lit(&view, &filter, &q, Some(alpha.clone()))
+            .to_rgba();
+        let (color, depth) = targets(&device, size, glasnost_render::map_gpu::COLOR_FORMAT);
+        let mut encoder = device.create_command_encoder(&Default::default());
+        r.render_lit(
+            &device,
+            &queue,
+            &mut encoder,
+            &color.create_view(&Default::default()),
+            &depth.create_view(&Default::default()),
+            &s,
+            &view,
+            &filter,
+            &q,
+            Some(&alpha),
+        );
+        queue.submit([encoder.finish()]);
+        let gpu = read_texture(&device, &queue, &color, size.0, size.1);
+        let differing = cpu
+            .chunks(4)
+            .zip(gpu.chunks(4))
+            .filter(|(a, b)| a[..3] != b[..3])
+            .count();
+        assert_eq!(differing, 0, "view at {origin:?}");
+    }
+}

@@ -491,7 +491,7 @@ fn tile_at(b: &Built, x: i32, y: i32) -> Vec<Item> {
         .items
         .iter()
         .filter(|i| i.group == Group::Tiles)
-        .filter(|i| matches!(i.paint, Paint::Diamond(_)))
+        .filter(|i| matches!(i.paint, Paint::LitDiamond(_)))
         .filter(|i| i.x == 30 * (x - y) - 30 && i.y == 15 * (x + y))
         .copied()
         .collect()
@@ -634,10 +634,10 @@ fn claim_23_extra_image() {
     let extra = b.scene.items[i + 1];
     assert_eq!((extra.x, extra.y), (30 * (6 - 9) - 30 - 10, 15 * 15 - 30));
     // Same row as its diamond; index 0 transparent in the extra image.
-    let Paint::Diamond(row) = b.scene.items[i].paint else {
+    let Paint::LitDiamond(row) = b.scene.items[i].paint else {
         panic!("diamond paint");
     };
-    assert_eq!(extra.paint, Paint::Row(row));
+    assert_eq!(extra.paint, Paint::Lit(row));
 }
 
 /// spec: S-0010 claim 24 (a stray tile number paints position 0 of the clear tile)

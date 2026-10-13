@@ -208,9 +208,25 @@ impl Scene {
 
     /// Composites the scene for `view` on the CPU.
     pub fn compose(&self, view: &View, filter: &Filter, quirks: &ComposeQuirks) -> Frame {
+        self.compose_lit(view, filter, quirks, None)
+    }
+
+    /// Composites the scene for `view` on the CPU with the light-alpha
+    /// values `alpha` of the view's pixels (S-0110 claims 5 and 6; `None`:
+    /// 127 everywhere).
+    pub fn compose_lit(
+        &self,
+        view: &View,
+        filter: &Filter,
+        quirks: &ComposeQuirks,
+        alpha: Option<Vec<u8>>,
+    ) -> Frame {
         let (ox, oy) = view.origin;
         let (w, h) = view.size;
         let mut frame = Frame::new(w, h, oy, view.reference);
+        if let Some(a) = alpha {
+            frame.set_light_alpha(a);
+        }
         for item in &self.items {
             if !filter.shows(item) {
                 continue;
