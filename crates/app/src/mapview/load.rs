@@ -20,6 +20,7 @@ use glasnost_vfs::Vfs;
 use glasnost_vfs::theater::Theater;
 
 use super::build::{self, Assets, Built, Inputs, Options};
+use super::cover::{self, CoverSprites};
 use super::live::{self, Live};
 
 /// A loaded map.
@@ -54,6 +55,8 @@ pub struct Loaded {
     pub rules: Option<Arc<SimRules>>,
     /// The cells after loading, when the game was set up.
     pub cells: Option<glasnost_map::CellGrid>,
+    /// The shroud and fog sprites of a skirmish game (S-0110 claim 3).
+    pub covers: CoverSprites,
     /// The voxel buffer the scene's fresh voxel draws left, when no live
     /// game holds it (S-0105 claim 34, S2).
     canvas: VoxelCanvas,
@@ -171,8 +174,11 @@ pub async fn load(
         &catalogue,
         &exists,
     );
-    if started.is_ok() && options.game == build::GameMode::Skirmish {
+    let skirmish = started.is_ok() && options.game == build::GameMode::Skirmish;
+    if skirmish {
         wanted.extend(build::game_files(&import));
+        wanted.insert(cover::SHROUD_FILE.to_vec());
+        wanted.insert(cover::FOG_FILE.to_vec());
     }
     for name in wanted {
         let Ok(text) = std::str::from_utf8(&name) else {
@@ -214,6 +220,13 @@ pub async fn load(
             None
         }
     };
+    let covers = if skirmish {
+        let (c, warnings) = CoverSprites::load(&assets);
+        problems.extend(warnings);
+        c
+    } else {
+        CoverSprites::default()
+    };
     let tile_colours = build::tile_radar_colours(&built.shown_tiles, &assets);
     let minimap = build::minimap(&map, &tile_colours);
     Loaded {
@@ -232,5 +245,6 @@ pub async fn load(
         rules,
         cells,
         canvas,
+        covers,
     }
 }
