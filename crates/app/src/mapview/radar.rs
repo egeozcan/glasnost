@@ -46,13 +46,9 @@ pub struct Radar {
 }
 
 impl Radar {
-    /// The radar of a game, from each cell's (left, right) tile radar
-    /// colours; `None` when the map has no usable cell.
-    pub fn new(
-        w: &World,
-        theater: Theater,
-        tile_colours: &BTreeMap<CellXY, (Rgb, Rgb)>,
-    ) -> Option<Self> {
+    /// The radar of a game, from each cell's tile radar colour (S-0010
+    /// claim 20); `None` when the map has no usable cell.
+    pub fn new(w: &World, theater: Theater, tile_colours: &BTreeMap<CellXY, Rgb>) -> Option<Self> {
         let grid = minimap::grid(w)?;
         let img = minimap::image(&grid);
         let snow = theater == Theater::Snow;
@@ -64,7 +60,7 @@ impl Radar {
             }
             // spec: S-0410 claim 9 (the tile case: the first tile radar colour of the tile cell)
             let colour = minimap::point_colour(PointSource::Tile {
-                colour: tile_colours.get(&c).map(|p| p.0),
+                colour: tile_colours.get(&c).copied(),
                 snow,
             });
             for (u, v) in minimap::cell_points(grid.a, grid.b, grid.lw, c) {

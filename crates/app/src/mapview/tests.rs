@@ -575,6 +575,50 @@ fn claim_13_alternate_image_mark() {
     }
 }
 
+/// `tmp_tile` with the tile cell's two radar colours set to `left` and
+/// `right`.
+fn tmp_tile_radar(value: u8, left: [u8; 3], right: [u8; 3]) -> Vec<u8> {
+    let bytes = tmp_tile(value, None);
+    let tmp = glasnost_fmt::tmp::Tmp::parse(&bytes).expect("tile file");
+    let mut header = tmp.tiles[0].expect("tile cell");
+    header.radar_left = left;
+    header.radar_right = right;
+    TmpWriter {
+        cells_x: 1,
+        cells_y: 1,
+        tile_width: 60,
+        tile_height: 30,
+        tiles: vec![Some(WriteTile {
+            header,
+            diamond: vec![value; 900],
+            depth: None,
+            extra: None,
+        })],
+    }
+    .write()
+}
+
+/// spec: S-0010 claim 20 (the first tile radar colour, from the image variant the cell shows; the
+/// second colour has no effect), S-0010 claim 13 (the variant by P4)
+#[test]
+fn claim_20_radar_colour_of_the_shown_variant() {
+    let cells = [(6, 9, 0), (7, 9, 0), (8, 9, 0), (6, 10, 0), (7, 10, 0)];
+    let files = |a: &mut Assets| {
+        a.insert(b"clr01.tem", tmp_tile_radar(7, [10, 20, 30], [1, 1, 1]));
+        a.insert(b"clr01a.tem", tmp_tile_radar(8, [40, 50, 60], [2, 2, 2]));
+    };
+    let b = build_tiles(&cells, files);
+    let mut assets = Assets::default();
+    files(&mut assets);
+    let colours = super::build::tile_radar_colours(&b.shown_tiles, &assets);
+    for &(x, y, _) in &cells {
+        let p = glasnost_convert::theater::P4[(y % 4) as usize][(x % 4) as usize] % 2;
+        let want = if p == 0 { [10, 20, 30] } else { [40, 50, 60] };
+        let c = glasnost_map::CellXY::new(i32::from(x), i32::from(y));
+        assert_eq!(colours.get(&c), Some(&want), "cell ({x}, {y})");
+    }
+}
+
 /// spec: S-0010 claim 23 (the extra image at the box corner plus the position difference, after its diamond)
 #[test]
 fn claim_23_extra_image() {

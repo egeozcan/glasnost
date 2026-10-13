@@ -151,6 +151,9 @@ pub struct Built {
     /// With a live simulation: the static objects' ground-layer entries
     /// (building voxel parts), not merged into the items.
     pub ground: Vec<GroundEntry>,
+    /// Each drawn cell's shown tile image: its file and the tile cell's
+    /// index there (S-0010 claims 13 and 24), for the tile radar colour.
+    pub shown_tiles: BTreeMap<CellXY, (Vec<u8>, usize)>,
 }
 
 /// The fixed house names of S-0009 Import mapping (claim 27).
@@ -922,13 +925,15 @@ impl Builder<'_> {
             } else {
                 f.variants.get(v - 1).cloned()
             };
-            let Some(image) = file.and_then(|n| self.tile_file(&n)) else {
+            let Some((image, name)) = file.and_then(|n| Some((self.tile_file(&n)?, n))) else {
                 self.drop_object("cell drawn blank: its tile file is missing or unreadable");
                 continue;
             };
             // spec: S-0010 claim 24 (index t mod N_s of the shown image, counted with its empty positions)
             let n_s = (image.width * image.height).max(1);
             let index = s.rem_euclid(n_s) as usize;
+            // spec: S-0010 claim 20 (the radar's tile colour comes from the image variant the cell shows)
+            self.built.shown_tiles.insert(c, (upper(&name), index));
             let cell_images = match image.cells.get(index).copied().flatten() {
                 Some(i) => i,
                 // spec: S-0010 claim 24 (quirks.variant_cell_missing: an empty position paints nothing)
@@ -2858,10 +2863,11 @@ pub struct LiveBuilding {
     pub object: u32,
 }
 
-/// A greyscale-free minimap: each cell as two pixels with its tile's radar
-/// colours (the tile file's own data), cells outside the usable area of
-/// S-0009 claim 4 dimmed. Size 2W × 2H. Our own viewer design.
-pub fn minimap(map: &Map, catalogue: &Catalogue, assets: &Assets) -> (u32, u32, Vec<u8>) {
+/// A greyscale-free minimap: each cell as two pixels with its tile radar
+/// colour (`colours`, from [`tile_radar_colours`]), cells outside the
+/// usable area of S-0009 claim 4 dimmed. Size 2W × 2H. Our own viewer
+/// design.
+pub fn minimap(map: &Map, colours: &BTreeMap<CellXY, [u8; 3]>) -> (u32, u32, Vec<u8>) {
     let f = map.footprint;
     // Cells exist only at coordinates 0 … 511 (S-0009 claim 2), so a legal
     // cell's d and s fit a minimap of at most 1024 × 1024 pixels.
@@ -2870,16 +2876,16 @@ pub fn minimap(map: &Map, catalogue: &Catalogue, assets: &Assets) -> (u32, u32, 
         f.height.clamp(0, 512) as u32 * 2,
     );
     let mut px = vec![0u8; (w * h * 4) as usize];
-    let colours = tile_radar_colours(&map.cells, catalogue, assets);
     for (c, cell) in map.cells.iter() {
-        let ((l, r), usable) = (
-            colours.get(&c).copied().unwrap_or(([0, 0, 0], [0, 0, 0])),
+        let (colour, usable) = (
+            colours.get(&c).copied().unwrap_or([0, 0, 0]),
             // spec: S-0009 claim 5a (the height-aware test limits the minimap; slopes need the theater spec)
             f.is_usable(c, i32::from(cell.level), false),
         );
         let x = c.d() + i64::from(f.width.min(512)) - 1;
         let y = c.s() - i64::from(f.width) - 1;
-        for (dx, col) in [(0, l), (1, r)] {
+        // spec: S-0010 claim 20 (the two stored colours do not give the cell's two points different colours)
+        for (dx, col) in [(0, colour), (1, colour)] {
             let (px_x, px_y) = (x + dx, y);
             if px_x < 0 || px_y < 0 || px_x >= i64::from(w) || px_y >= i64::from(h) {
                 continue;
@@ -2892,32 +2898,24 @@ pub fn minimap(map: &Map, catalogue: &Catalogue, assets: &Assets) -> (u32, u32, 
     (w, h, px)
 }
 
-/// Each cell's two tile radar colours (left, right) from its tile file's
-/// own data, for the cells whose tile file and sub-tile were found.
+/// Each drawn cell's tile radar colour: the first tile radar colour of the
+/// tile cell its shown image holds (S-0010 claim 20; the second colour has
+/// no effect on the radar), for the cells whose tile file was found.
 pub fn tile_radar_colours(
-    cells: &glasnost_map::CellGrid,
-    catalogue: &Catalogue,
+    shown: &BTreeMap<CellXY, (Vec<u8>, usize)>,
     assets: &Assets,
-) -> BTreeMap<CellXY, ([u8; 3], [u8; 3])> {
-    let mut radar: BTreeMap<Vec<u8>, Option<Tmp>> = BTreeMap::new();
+) -> BTreeMap<CellXY, [u8; 3]> {
+    let mut files: BTreeMap<&[u8], Option<Tmp>> = BTreeMap::new();
     let mut out = BTreeMap::new();
-    for (c, cell) in cells.iter() {
-        let colours = catalogue.art_tile(cell.tile).and_then(|t| {
-            // spec: S-0010 claim 3 (the theater's suffix, else the fallback suffixes)
-            let file = upper(&catalogue.find_image(t, 0, &|n| assets.get(n).is_some())?);
-            let tmp = radar
-                .entry(file.clone())
-                .or_insert_with(|| assets.get(&file).and_then(|b| Tmp::parse(b).ok()))
-                .as_ref()?;
-            let tile = tmp
-                .tiles
-                .get(usize::from(cell.sub_tile))
-                .copied()
-                .flatten()?;
-            Some((tile.radar_left, tile.radar_right))
-        });
-        if let Some(v) = colours {
-            out.insert(c, v);
+    for (&c, (file, index)) in shown {
+        let tmp = files
+            .entry(file.as_slice())
+            .or_insert_with(|| assets.get(file).and_then(|b| Tmp::parse(b).ok()));
+        if let Some(tile) = tmp
+            .as_ref()
+            .and_then(|t| t.tiles.get(*index).copied().flatten())
+        {
+            out.insert(c, tile.radar_left);
         }
     }
     out
