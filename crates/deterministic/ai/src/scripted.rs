@@ -72,12 +72,19 @@ const GAP: i32 = 2; // nocite: tuning of our own opponent
 const SPIRAL_RINGS: i32 = 12; // nocite: tuning of our own opponent
 
 /// What a type is for in the plan.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Role {
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Role {
+    /// A construction yard (a factory of buildings).
+    Yard,
+    /// A power plant.
     Power,
+    /// A refinery.
     Refinery,
+    /// A factory of infantry or vehicles.
     Factory(FactoryKind),
+    /// A harvester.
     Harvester,
+    /// An armed ground unit.
     Army,
 }
 
@@ -85,7 +92,7 @@ enum Role {
 const FACTORIES: [FactoryKind; 2] = [FactoryKind::Infantry, FactoryKind::Vehicle]; // nocite: the script's own build order, not game behaviour
 
 /// Every building, vehicle and infantry type.
-fn all_types(w: &World) -> Vec<TypeRef> {
+pub fn all_types(w: &World) -> Vec<TypeRef> {
     let r = w.rules();
     let n = |k: Kind| match k {
         Kind::Building => r.buildings.len(),
@@ -110,6 +117,15 @@ fn name_of(w: &World, t: TypeRef) -> &str {
     .unwrap_or("")
 }
 
+/// The role type `t` plays in the plan, if any (the first that fits).
+pub fn role_of(w: &World, t: TypeRef) -> Option<Role> {
+    let roles = [Role::Yard, Role::Power, Role::Refinery]
+        .into_iter()
+        .chain(FACTORIES.map(Role::Factory))
+        .chain([Role::Harvester, Role::Army]);
+    roles.into_iter().find(|&r| plays(w, t, r))
+}
+
 /// Whether type `t` plays `role`.
 fn plays(w: &World, t: TypeRef, role: Role) -> bool {
     let r = w.rules();
@@ -122,6 +138,7 @@ fn plays(w: &World, t: TypeRef, role: Role) -> bool {
                 Role::Power => b.factory.is_none() && b.raw.econ.power.unwrap_or(0) > 0,
                 Role::Refinery => b.raw.econ.refinery == Some(true),
                 Role::Factory(k) => b.factory == Some(k) && !b.naval,
+                Role::Yard => b.factory == Some(FactoryKind::Building),
                 _ => false,
             }
         }
@@ -225,7 +242,7 @@ impl Script {
         let list = match role {
             Role::Power => &n.power,
             Role::Refinery => &n.refinery,
-            Role::Factory(_) => &n.factories,
+            Role::Yard | Role::Factory(_) => &n.factories,
             Role::Harvester => &n.harvester,
             Role::Army => &n.army,
         };
