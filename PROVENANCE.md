@@ -41,7 +41,7 @@ A spec describes **what the game does**, not how the original program is built. 
 
 ### Forbidden
 
-- Addresses, offsets, vtable slots, struct layouts, field order or sizes.
+- Addresses, offsets, vtable slots, struct layouts, field order or sizes of the program or its memory. A formats spec may give the byte layout of a game data file (order of values, widths, byte order, compression) in its own words, for interoperability.
 - Class, function, field or enum names from the executable, YRpp, Ares or Phobos.
 - Pseudo-code, C-like syntax, or step lists that follow one function's control flow.
 - Decompiler output, or quotes from it, even "for context".

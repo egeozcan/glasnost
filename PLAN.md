@@ -94,7 +94,7 @@ Decompiler raw notes never leave `~/glasnost-spec-dirty`. Personal machine detai
 - for every claim: a confidence level; a backing of `measured` (M-id), `measurable` or `unmeasured`; a proposed measurement scenario for each `measurable` claim.
 
 **Never write:**
-- addresses, offsets, vtable slots, struct layouts, field order or sizes;
+- addresses, offsets, vtable slots, struct layouts, field order or sizes of the program or its memory (a formats spec may give a game data file's byte layout in its own words, for interoperability);
 - class, function, field or enum names from the binary, YRpp, Ares or Phobos;
 - pseudo-code, C-like syntax, or step lists that mirror one function's control flow;
 - decompiler output or quotes of it;
