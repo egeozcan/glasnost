@@ -804,7 +804,7 @@ fn nearest_object(w: &World, id: ObjectId, c: CellXY) -> Option<ObjectId> {
             continue;
         }
         let dist = nearest_distance(w, ob.pos.x, ob.pos.y);
-        // spec: S-0207 claim 15 and F8 (the smallest dₙ, compared as integers; ties to the one listed first)
+        // spec: S-0207 claim 15 and F8 (the smallest dₙ, compared as integers; ties to the one listed first, in S-0209 claim 13's listing order)
         if best.is_none_or(|(b, _)| dist < b) {
             best = Some((dist, x));
         }
