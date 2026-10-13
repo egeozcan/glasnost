@@ -220,7 +220,6 @@ Every quirk switch of the implemented specs has a field in `ini::Quirks` (includ
 | `convert::art` | a building secondary sprite dropped by a later read's art section is left undetermined (a note, no file); no art for projectiles, particles and voxel animations | Q-0008 |
 | `app::mapview::build` | an animated terrain object's shadow is drawn right after its body in the object pass (S-0102 claims 10, 13 and 23 give no order) | Q-0051 |
 | `convert::sim::combat` | a type's threat coefficient starts at 0 before any layer gives it; `BuildCat` is a named value compared with `Combat`; `none` items are left out of name lists; an unreadable integer-list item is 0 | Q-0061 |
-| `fmt::vpl` | four little-endian 32-bit header values, a palette, rows of 256; the row count is the first header value that fits the length exactly, else the largest the file ends inside; rows it does not supply read as zero (S-0105 claim 38) | Q-0022 |
 
 ## Map viewer (M2)
 
@@ -283,7 +282,7 @@ Provisional rules of combat, each tied to a request:
 
 | Where | Interim rule | Request |
 |---|---|---|
-| `combat::fire::initial_ammo`, `combat::data` | a new object's ammunition is its type's initial-ammunition field as it stands (absent: unlimited; S-0301 claim 10 leaves how it is set to the production specs); crew escape, sinking weight, bridge strength and ammunition-crate damage absent from every layer are "not given", and the rules that need them do not take effect | Q-0060 |
+| `combat::data` | crew escape, sinking weight, bridge strength and ammunition-crate damage absent from every layer are "not given", and the rules that need them do not take effect | Q-0060 |
 | `convert::sim` | a type's threat coefficient, the defence category word and the `none` items of name lists are imported as the request's workaround says | Q-0061 |
 | `combat::death::building_death` | the smudge choice of a destroyed building takes no draw and places no smudge | Q-0070 |
 | `combat::projectile::lead` | a moving vehicle's speed *u* is 0, so no shot is led | Q-0071 |

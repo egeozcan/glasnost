@@ -4,6 +4,7 @@
 
 pub mod build;
 pub mod combat;
+pub mod credits;
 pub mod find;
 pub mod live;
 #[cfg(test)]

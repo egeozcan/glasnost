@@ -690,7 +690,7 @@ fn every_record_kind_resolves() {
             Form::Dec => format!("{k}=0.5\n"),
             Form::Text | Form::Ref(_) | Form::Refs(_) => format!("{k}=Name{k}\n"),
             Form::Texts => format!("{k}=A{k},B{k}\n"),
-            Form::Ints => format!("{k}=1,2\n"),
+            Form::Ints | Form::Maxima => format!("{k}=1,2\n"),
         })
         .collect();
     let section = |name: &str, table: &[(&str, &str, Form)]| -> String {
@@ -702,7 +702,7 @@ fn every_record_kind_resolves() {
                 Form::Dec => format!("{k}=25%\n"),
                 Form::Text | Form::Ref(_) | Form::Refs(_) => format!("{k}=T{k}\n"),
                 Form::Texts => format!("{k}=A{k},B{k}\n"),
-                Form::Ints => format!("{k}=3,4\n"),
+                Form::Ints | Form::Maxima => format!("{k}=3,4\n"),
             });
         }
         s

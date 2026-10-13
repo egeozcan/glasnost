@@ -185,11 +185,11 @@ mod notes {
         "a damaged gate's body frame needs its gate-stage count (S-0108 claim 2): drawn undamaged";
     pub const UPGRADES: &str = "upgrades a map entry places (S-0009 claim 40) are not drawn: the building upgrade slots of S-0108 need animation playback";
     pub const AIRCRAFT_AIR: &str = "an aircraft on a cell outside the usable area is drawn landed: its flight height has no spec (S-0009 claim 38)";
-    pub const VPL: &str =
-        "Q-0022: voxels are lit through the lighting table read by a provisional byte layout";
-    pub const NO_VPL: &str = "no voxel lighting table, or one whose layout was not recognised (Q-0022): every row reads as zero, so every voxel writes a transparent pixel (S-0105 claims 19 and 38)";
+    pub const NO_VPL: &str = "no voxel lighting table, or one shorter than its header and palette (S-0013 claim 4): every row reads as zero, so every voxel writes a transparent pixel (S-0105 claims 19 and 38)";
     pub const VPL_REJECTED: &str = "the voxel lighting table is missing or short and quirks.vpl_unloaded_rows_blank is off: the importer rejects it (S-0105 claim 38)";
-    pub const SHORT_VPL: &str = "the voxel lighting table ends before its last row, or has more than 128 rows: missing rows read as zero (S-0105 claim 38)";
+    pub const SHORT_VPL: &str = "the voxel lighting table ends before its last row, or has more than 128 rows: missing rows read as zero (S-0105 claim 38, S-0013 claims 4 and 6)";
+    pub const FEW_VPL_ROWS: &str = "the voxel lighting table declares fewer than 32 rows: the undeclared rows read as zero (S-0013 Import mapping)";
+    pub const TRAILING_VPL: &str = "the voxel lighting table has bytes after its declared rows: they are ignored (S-0013 claim 5)";
     pub const WATER_FILL: &str = "water-fill variants are drawn by the game load (S-0009 claim 6, S-0202): without a game the base water tile is drawn";
 }
 
@@ -2291,7 +2291,7 @@ impl Builder<'_> {
     }
 
     /// The voxel lighting table (S-0105 claims 19 and 38; its byte layout
-    /// is provisional, Q-0022). A missing or unrecognised file gives the
+    /// is S-0013's). A missing or too short file gives the
     /// empty table, whose rows all read as zero (claim 38,
     /// `quirks.vpl_unloaded_rows_blank`).
     fn vpl(&mut self) -> Option<Vpl> {
@@ -2304,7 +2304,14 @@ impl Builder<'_> {
         let blank = VoxelQuirks::default().vpl_unloaded_rows_blank;
         let v = match v {
             Some(v) => {
-                self.note(notes::VPL);
+                if v.stated_rows < glasnost_fmt::vpl::USUAL_ROWS {
+                    // spec: S-0013 Import mapping (R below 32: undeclared rows zero, warned)
+                    self.note(notes::FEW_VPL_ROWS);
+                }
+                if v.trailing {
+                    // spec: S-0013 claim 5 (trailing bytes warned, ignored)
+                    self.note(notes::TRAILING_VPL);
+                }
                 if v.short {
                     self.note(if blank {
                         notes::SHORT_VPL
@@ -2362,8 +2369,7 @@ impl Builder<'_> {
             },
             paint,
             group,
-            // provisional (Q-0022: the lighting table's byte layout)
-            provisional: true,
+            provisional: false,
             object: Some(object),
         }
     }

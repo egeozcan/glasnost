@@ -19,6 +19,8 @@ pub const TYPE_LIST_TEXT_LIMIT: usize = 31; // spec: S-0003 Constants
 /// Number of armour classes, *k* of the armour-modifier list (S-0003
 /// Constants, `armour_class_count`).
 pub const ARMOUR_CLASS_COUNT: usize = 11; // spec: S-0003 Constants
+/// The text limit of a debris maxima list (S-0003 claim 20).
+pub const DEBRIS_MAXIMA_TEXT_LIMIT: usize = 511; // spec: S-0003 Constants (debris-maxima text limit)
 
 /// A text field (S-0003 claim 1): the first `limit` bytes, with trailing
 /// whitespace of the cut text removed (no trimming defect).
@@ -323,6 +325,18 @@ pub fn list(stored: &[u8], limit: usize) -> Vec<&[u8]> {
         .collect()
 }
 
+/// A debris maxima list (S-0003 claim 20): each non-empty item of the
+/// list, cut at 511 bytes, gives one decimal integer prefix (claims 3 and
+/// 4: no hexadecimal forms; an item with no digits gives 0 and keeps its
+/// place); empty items take no place.
+pub fn decimal_prefix_list(stored: &[u8]) -> Vec<i32> {
+    // spec: S-0003 claim 20 (decimal prefixes only, 511-byte limit, empty items skipped)
+    list(stored, DEBRIS_MAXIMA_TEXT_LIMIT)
+        .into_iter()
+        .map(decimal_integer)
+        .collect()
+}
+
 /// A fixed-count percentage list (S-0003 claim 13), such as a warhead's
 /// armour modifiers. Returns `k` doubles and what claim 13 asks the
 /// importer to warn about: missing items (our engine fills them with 1.0;
@@ -463,6 +477,22 @@ mod tests {
         assert_eq!(list(b",,A,,B, C,", 127), [&b"A"[..], b"B", b" C"]);
         let long = format!("{}GAPOWR", ",".repeat(124));
         assert_eq!(list(long.as_bytes(), 127), [&b"GAP"[..]]);
+    }
+
+    /// spec: S-0003 claim 20 (scenario V15: decimal prefixes only; an item without digits gives 0 and keeps its place; empty items take none; 511-byte limit)
+    #[test]
+    fn claim_20_debris_maxima_lists() {
+        assert_eq!(decimal_prefix_list(b"2,,abc,3"), [2, 0, 3]);
+        assert_eq!(decimal_prefix_list(b"2,,3"), [2, 3]);
+        assert_eq!(decimal_prefix_list(b"$10,3"), [0, 3]);
+        assert_eq!(decimal_prefix_list(b"10h,3"), [10, 3]);
+        assert_eq!(decimal_prefix_list(b"0x10,3"), [0, 3]);
+        assert_eq!(decimal_prefix_list(b"none,3"), [0, 3]);
+        assert_eq!(decimal_prefix_list(b"-4,4294967297"), [-4, 1]);
+        // 513 bytes: the cut at 511 keeps "7" and drops ",8".
+        let long = format!("{}7,8", "1,".repeat(255));
+        let read = decimal_prefix_list(long.as_bytes());
+        assert_eq!((read.len(), read[255]), (256, 7));
     }
 
     /// spec: S-0003 claim 2 (scenario V2)

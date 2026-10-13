@@ -8,22 +8,35 @@ use crate::combat::state::HouseCombat;
 use crate::rules::{Kind, SimRules};
 use crate::world::{ObjectId, Target, World};
 
-/// A new object's ammunition: its type's initial ammunition (S-0301 claim
-/// 10). How it relates to the maximum A belongs to the production specs;
-/// request Q-0060 asks it, and meanwhile the initial field is used as it
-/// stands (−1: unlimited).
+/// A new object's ammunition a₀ (S-0301 claim 10, Formula F6): the
+/// maximum A when the initial field J is −1, otherwise J.
 pub fn initial_ammo(r: &SimRules, kind: Kind, type_index: u32) -> i32 {
-    match kind {
+    let (max, initial) = match kind {
         Kind::Building => r
             .buildings
             .get(type_index as usize)
-            .map_or(-1, |b| b.combat.initial_ammo),
-        Kind::Terrain => -1,
-        // spec: S-0301 claim 10 (a firer starts with its type's initial ammunition)
+            .map_or((-1, -1), |b| (b.combat.ammo, b.combat.initial_ammo)),
+        Kind::Terrain => (-1, -1),
         _ => r
             .unit(kind, type_index)
-            .map_or(-1, |u| u.combat.initial_ammo),
+            .map_or((-1, -1), |u| (u.combat.ammo, u.combat.initial_ammo)),
+    };
+    starting_ammo(max, initial, r.quirks.initial_ammo_above_capacity)
+}
+
+/// Formula F6 of S-0301: a₀ = A when J = −1, otherwise J; with `above`
+/// off (`quirks.initial_ammo_above_capacity`), a J above a nonnegative A is
+/// capped at A.
+pub fn starting_ammo(max: i32, initial: i32, above: bool) -> i32 {
+    // spec: S-0301 claim 10, Formulas F6 (a₀ = A when J = −1, otherwise J)
+    if initial == -1 {
+        return max;
     }
+    // spec: S-0301 Edge cases (quirks.initial_ammo_above_capacity off: capped at a nonnegative A)
+    if !above && max >= 0 {
+        return initial.min(max);
+    }
+    initial
 }
 
 /// A house's combat factors, fixed when the houses are set up: every

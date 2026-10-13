@@ -5855,6 +5855,11 @@
           "type": "boolean",
           "default": true
         },
+        "initial_ammo_above_capacity": {
+          "description": "An explicit initial ammunition above a nonnegative maximum is used as\nit stands; off: capped at the maximum.",
+          "type": "boolean",
+          "default": true
+        },
         "last_bale_lost": {
           "description": "The last bale taken from a cell yields nothing.",
           "type": "boolean",
