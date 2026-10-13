@@ -1,9 +1,9 @@
 ---
 id: Q-0145
 title: When and where a building's free unit appears
-status: open
+status: answered
 related: [S-0402, S-0404, S-0406, S-0408, S-0215]
-answered-by: []
+answered-by: [S-0402]
 ---
 
 ## Need

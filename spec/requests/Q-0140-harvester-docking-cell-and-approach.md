@@ -1,9 +1,9 @@
 ---
 id: Q-0140
 title: Where a harvester docks at a refinery and how it gets there
-status: open
+status: answered
 related: [S-0402, S-0207, S-0212, S-0215]
-answered-by: []
+answered-by: [S-0402]
 ---
 
 ## Need
