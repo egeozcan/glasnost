@@ -2,7 +2,7 @@
 id: S-0401
 title: Ore and gems (resource cells, bales and value, growth, spread, ore mines)
 topic: economy
-revision: 3
+revision: 4
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -138,14 +138,7 @@ claim 4), which can take more than one raw draw. In addition:
    - Confidence: high for the skirmish values and for the effect of the grows setting on the
      period; medium for the map growth switch's effect on the lists at game start
 
-5. **Emptying a cell.** When a resource cell is emptied (claim 3, or any other removal named in
-   claim 16 that removes all its resource), its overlay is removed and its stage set to 0; its land
-   type is worked out again (S-0211, claim 5), it is unmarked in the spread list of every tiberium,
-   and each of its eight neighbours that is a legal cell and not marked in the spread list of the
-   emptied cell's tiberium is offered to that list (claim 8), in step-direction order 0 to 7, which
-   is the order of the offers' draws and, among equal keys, of their entries (claim 14). A
-   neighbour of another tiberium is offered to the emptied cell's tiberium's list all the same, and
-   it then spreads, when that list is updated, as a cell of its own tiberium (claim 9).
+5. **Emptying a cell.** After a cell is emptied, its overlay is absent, its stage is 0, its land type is recalculated (S-0211, claim 5), and it is unmarked in every tiberium's spread list. Consider its eight neighbours in step-direction order 0 through 7. Each legal neighbour not already marked in the emptied cell's tiberium's spread list is offered to that list. The offer outcomes, their draws, and the resulting order among equal keys follow that direction order (claim 14). A neighbour of another tiberium is still offered to the emptied cell's tiberium's list; if it later spreads, the new resource is of its own tiberium (claim 9).
    `quirks.spread_offer_by_emptied_type` (default: the original). With the switch off, each
    neighbour is offered to the spread list of its own tiberium.
    - Backing: `measurable` (scenario E5 for new resource growing back into emptied cells, E16 for
@@ -238,7 +231,7 @@ claim 4), which can take more than one raw draw. In addition:
 
 9. **Spread update.** A spread update of a tiberium with *n* entries in its spread list takes one
    raw draw and works out *m* (Formulas F6): *m* is between 1 and 25 and grows with *n* × *s*. It
-   then takes entries one after another until it has made *m* attempts or the list is empty. Judge an entry using *c*, the number of its cell's eight neighbours that are germinable (claim 10) when it is taken, before its spread step. When *c* is 0, unmark the cell, discard the entry without adding another one, and count no attempt. When *c* is 1, count one attempt and try the spread step whether or not the cell can still spread; do not add another entry, and leave the cell marked. When *c* is 2 or more, count one attempt and try the spread step whether or not the cell can still spread; add the cell again, marked, with key 0, ahead of every entry with a positive key.
+   then takes entries one after another until it has made *m* attempts or the list is empty. For a selected entry, let *c* be the number of its cell's eight germinable neighbours at selection, before any spread step. If *c* = 0, the cell becomes unmarked, the entry is discarded, and no attempt is used. If *c* = 1, one attempt is used and a spread step is tried; no replacement entry is made and the cell remains marked. If *c* ≥ 2, one attempt is used and a spread step is tried; the cell remains marked and can be selected again ahead of positive-key entries, subject to the equal-key ordering rule. In both attempted cases, the attempt is used even if the cell fails the spread conditions. With `quirks.spread_attempts_count_failures` off, a selected cell that fails those conditions is instead unmarked and discarded without using an attempt. With `quirks.spread_mark_kept_on_last_neighbour` off, a cell discarded with one germinable neighbour is unmarked.
 
    Because a cell put back with key 0 goes ahead of every entry with a positive key and, among key-0
    entries, behind those added earlier (claim 14), it is taken again in the same update when no
@@ -505,7 +498,9 @@ claim 4), which can take more than one raw draw. In addition:
     neighbour offers that add spread entries occur in step-direction order 0 to 7, before the
     debris trial. There is no growth-list draw for the emptied cell (claim 18).
     With *L* the length of *T*'s resource-debris animation list:
-    - *L* = 0: no debris draw and no debris animation.
+    - *L* = 0: no debris trial, selection or debris-animation creation, hence no draws for
+      any of those. Emptying still makes its eligible neighbour offers, and the detonation
+      still occurs. Thus an empty debris list does not imply zero total chain-reaction draws.
     - *L* > 0: one raw scenario-stream draw *r* tests whether |*r*| mod 3 = 0. The arithmetic
       is signed 32-bit integer arithmetic, with remainder after division truncated toward zero,
       as in F2 and S-0202's `quirks.random_magnitude_overflow`. For *r* = −2³¹ the remainder
@@ -524,10 +519,7 @@ claim 4), which can take more than one raw draw. In addition:
     scanned-cell resource removal of S-0303 claim 17, so it makes no neighbour spread-offer
     draws through that rule. S-0303 owns its other effects and conditional draws. There is
     no separate chance draw for that detonation and no projectile explosion-animation selection
-    (S-0303 claim 21 belongs to projectiles). Therefore the total chain-reaction draw sequence
-    is the emptying's spread-offer draws, then the optional debris trial, optional selection
-    and selected animation's creation draws, then the detonation's draws. It is not a fixed
-    raw-draw count: ranged rejection and downstream effects can add draws.
+    (S-0303 claim 21 belongs to projectiles). In observable scenario-stream order, any draws for eligible neighbour offers precede the optional debris trial; a passing trial is followed by a selection draw only when the debris list has more than one entry, then by any draws caused by creating and starting the selected debris animation; applicable detonation draws follow. This is not a fixed raw-draw count: ranged rejection and downstream effects can add draws. A failed debris trial skips selection and debris-animation creation, not the later detonation. Suppression for a trigger-played animation skips the whole chain reaction, including its emptying, neighbour offers, debris trial and detonation, with zero draws from the reaction itself. This specifies observable stream order, not an internal call structure.
     - Backing: `measurable` (scenario E17)
     - Confidence: high for the no-resource gate and direct draw conditions; medium for the
       complete composed sequence during map loading until E17 is run
@@ -911,13 +903,18 @@ cell and take exactly one raw debris trial. A trial with |*r*| mod 3 ≠ 0 creat
 passing C trial creates the sole debris animation, with no raw selection draw; D takes the
 ranged selection before its debris creation draws. Debris starts 10 leptons above the source.
 *Falsified if:* A advances the stream beyond the animation's independent creation draws, B takes
-a debris trial, or C or D deviates from those conditions or ordering.
+a debris trial, or C or D deviates from those conditions or ordering. A trigger-played control
+with the same animation over resource must leave that resource unchanged and take no reaction
+draws, even with a nonempty debris list.
 
 *Variants:* repeat during play using a weapon explosion animation with the same settings,
 subtracting its projectile and explosion-selection draws. Enable spreading on unmarked eligible
 neighbours in this variant: their claim-5 entry draws must precede the debris trial. Restore a
 nonzero resource-explosion damage and put a wall in its scanned cells: its S-0303 wall draws
-must follow debris creation. Finally use μ = 0 and a crater-only animation over a stage-0
+must follow debris creation. Repeat this nonzero-damage variant with an empty debris list
+and with a failed debris trial: the detonation and its applicable draws must still occur,
+following any emptying draws in the empty-list case and following the trial in the failed-trial
+case. Finally use μ = 0 and a crater-only animation over a stage-0
 resource cell: the middle event empties the cell and the later chain reaction has no debris trial
 or detonation. Repeat the load cases with an overlay cell animation whose position, rather than
 its overlay cell, is over the test resource (S-0009 M6e). Any differing gate or draw order
