@@ -1,9 +1,9 @@
 ---
 id: Q-0056
 title: The off state of the depth-mode leak switch
-status: open
+status: answered
 related: [S-0105]
-answered-by: []
+answered-by: [S-0105]
 ---
 
 ## Need
