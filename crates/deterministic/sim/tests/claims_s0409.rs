@@ -275,7 +275,11 @@ fn claims_2_8_whose_sight() {
     spawn(&mut w, Kind::Building, "BEACON", 0, 10, 0);
     assert!(shroud::explored(&w, B, c(10, 0)));
     let mut r = rules();
-    r.sim.countries.get_mut("Alphaland").unwrap().multiplay_passive = Some(true);
+    r.sim
+        .countries
+        .get_mut("Alphaland")
+        .unwrap()
+        .multiplay_passive = Some(true);
     let mut w = game(&r);
     spawn(&mut w, Kind::Building, "BEACON", 0, 0, 0);
     assert!(!shroud::explored(&w, A, c(0, 0)));
@@ -357,7 +361,12 @@ fn claims_12_13_pending_and_sweep() {
 fn claim_11_gap_radius_wrap() {
     for (field, covers) in [(200, false), (260, true)] {
         let mut r = rules();
-        r.sim.buildings.get_mut("GAP").unwrap().econ.gap_radius_in_cells = Some(field);
+        r.sim
+            .buildings
+            .get_mut("GAP")
+            .unwrap()
+            .econ
+            .gap_radius_in_cells = Some(field);
         let mut w = game(&r);
         spawn(&mut w, Kind::Building, "TOWER", 0, 0, 0);
         let t = spawn(&mut w, Kind::Building, "TOWER", 0, 0, 0);
@@ -368,10 +377,7 @@ fn claim_11_gap_radius_wrap() {
         step(&mut w);
         // The tower's sight holds (0, 0); cell (4, 0) is explored with no sight by the second tower's area reveal.
         let _ = covers;
-        assert_eq!(
-            w.objects.values().any(|o| o.econ.sight.gap.is_some()),
-            true
-        );
+        assert_eq!(w.objects.values().any(|o| o.econ.sight.gap.is_some()), true);
         let cells = w
             .objects
             .values()
@@ -414,7 +420,10 @@ fn claim_15_satellite_and_gap() {
     step(&mut w);
     assert!(shroud::explored(&w, A, c(-5, 5)));
     assert!(!shroud::explored(&w, A, c(8, 8)));
-    assert!(!shroud::whole_map_revealed(&w, A), "any gap field leaves the mark clear");
+    assert!(
+        !shroud::whole_map_revealed(&w, A),
+        "any gap field leaves the mark clear"
+    );
 }
 
 // spec: S-0409 claim 15 (the defeat reveal: explored, not seen, mark set; pending marks kept, quirks.defeat_reveal_keeps_pending)
@@ -510,7 +519,10 @@ fn claim_18_regrowth() {
     for _ in 0..300 {
         step(&mut w);
     }
-    assert!(shroud::explored(&w, A, c(0, 0)), "sight-explored cells do not regrow");
+    assert!(
+        shroud::explored(&w, A, c(0, 0)),
+        "sight-explored cells do not regrow"
+    );
 }
 
 // spec: S-0409 claim 19 (fog of war is off in a skirmish: the seen state changes nothing that is drawn; no fog rule runs)

@@ -80,7 +80,10 @@ impl Rules {
         let period = rate.mul(F64::from_i64(900, mode), mode).to_i32_common();
         Self {
             // spec: S-0409 Import mapping (LeptonsPerSightIncrease absent: 50; Edge cases: 0 is bad data, 50 is used)
-            leptons_per_sight: g.leptons_per_sight_increase.filter(|&p| p != 0).unwrap_or(50),
+            leptons_per_sight: g
+                .leptons_per_sight_increase
+                .filter(|&p| p != 0)
+                .unwrap_or(50),
             // spec: S-0409 Import mapping (RevealByHeight absent: yes)
             reveal_by_height: g.reveal_by_height.unwrap_or(true),
             // spec: S-0409 Import mapping (AllyReveal absent: yes)
@@ -208,7 +211,7 @@ pub fn height_lift(z: i32, mode: Rounding) -> i32 {
 fn centre(w: &World, p: Pos) -> (CellXY, CellXY) {
     // spec: S-0409 F2 (k = trunc(L(Z) / 30); centre = (trunc((X − 256k) / 256), trunc((Y − 256k) / 256)))
     let k = height_lift(p.z, w.rules().mode) / 30;
-    let c = CellXY::new((p.x - 256 * k) / 256, (p.y - 256 * k) / 256);
+    let c = CellXY::new((p.x - 256 * k) / 256, (p.y - 256 * k) / 256); // spec: S-0409 F2 (256 leptons per cell)
     (c, p.cell())
 }
 
@@ -268,7 +271,7 @@ pub fn step_towards_centre(dx: i32, dy: i32, quirk: bool) -> (i32, i32) {
     // spec: S-0409 T2 (the step direction nearest in angle to (−dx, −dy): diagonal when minor/major > tan 22.5°)
     let (ax, ay) = (dx.abs(), dy.abs());
     let (minor, major) = (ax.min(ay), ax.max(ay));
-    let diagonal = (minor + major) * (minor + major) > 2 * major * major;
+    let diagonal = (minor + major) * (minor + major) > 2 * major * major; // spec: S-0409 T2 (diagonal when (minor + major)² > 2·major², tan 22.5° = √2 − 1)
     let (sx, sy) = (-dx.signum(), -dy.signum());
     if diagonal {
         (sx, sy)
@@ -289,7 +292,7 @@ pub fn sight_radius(w: &World, id: ObjectId) -> Option<i32> {
     let p = r.econ.shroud.leptons_per_sight;
     // spec: S-0409 F1 (q = trunc(Z / P); b = 10q)
     let q = o.pos.z / p;
-    let b = q.saturating_mul(10);
+    let b = q.saturating_mul(10); // spec: S-0409 F1 (b = 10 · q)
     // spec: S-0409 F1 (b′ = b reduced modulo 256 into −128 … 127, quirks.sight_bonus_wrap)
     let b = if r.quirks.sight_bonus_wrap {
         i32::from(b as i8)
@@ -433,7 +436,7 @@ fn gap_cells(w: &World, centre: CellXY, field: i32) -> Vec<u32> {
                 }
                 // spec: S-0409 claim 14 ((x, y) is read as (x mod 512, y + ⌊x / 512⌋))
                 y += x.div_euclid(512);
-                x = x.rem_euclid(512);
+                x = x.rem_euclid(512); // spec: S-0409 claim 14 (x mod 512)
             }
             if !(0..=max).contains(&y) {
                 continue;
@@ -644,7 +647,7 @@ pub fn discovered(w: &World, house: HouseId, id: ObjectId) -> bool {
 /// `quirks.shroud_point_cell_wrap`).
 pub fn point_shrouded(w: &World, house: HouseId, p: Pos) -> bool {
     let u = p.z.max(0) / LEVEL; // spec: S-0110 claim 8 (u = ⌊Z / 104⌋, Z ≥ 0)
-    let (cx, cy) = (p.x / 256, p.y / 256);
+    let (cx, cy) = (p.x / 256, p.y / 256); // spec: S-0110 claim 8 (trunc(X / 256), trunc(Y / 256))
     let cand = |n: i32| candidate_explored(w, house, cx - n, cy - n);
     // spec: S-0110 claim 8 (even u: one candidate; odd u: shrouded when neither of two is explored)
     if u % 2 == 0 {
@@ -663,7 +666,7 @@ fn candidate_explored(w: &World, house: HouseId, mut x: i32, mut y: i32) -> bool
         }
         // spec: S-0110 Edge cases ((x mod 512, y + ⌊x / 512⌋) when that row lies in 0 … 511)
         y += x.div_euclid(512);
-        x = x.rem_euclid(512);
+        x = x.rem_euclid(512); // spec: S-0110 Edge cases (x mod 512)
     }
     if !(0..=max).contains(&y) {
         return false;
@@ -819,7 +822,8 @@ fn add_sight(w: &mut World, id: ObjectId) {
     let Some(o) = w.obj(id) else { return };
     let (owner, cell) = (o.owner, o.pos.cell());
     let houses = sight_houses(w, id);
-    let cells = sight_radius(w, id).map_or_else(Vec::new, |r| sight_cells(w, sight_point(w, id), r));
+    let cells =
+        sight_radius(w, id).map_or_else(Vec::new, |r| sight_cells(w, sight_point(w, id), r));
     for &h in &houses {
         add_cells(w, h, &cells);
     }
@@ -1162,11 +1166,7 @@ pub fn start(w: &mut World) {
 
 /// The legal cells' dense indices.
 fn legal(w: &World) -> Vec<u32> {
-    w.cells
-        .grid
-        .iter()
-        .filter_map(|(c, _)| idx(w, c))
-        .collect()
+    w.cells.grid.iter().filter_map(|(c, _)| idx(w, c)).collect()
 }
 
 /// S1 row 10: the explored-only whole-map reveal (claim 3; defeat,
@@ -1257,9 +1257,17 @@ fn whole_map(w: &mut World, h: HouseId, reveal: bool) {
     let cells_of = |w: &World, id: ObjectId, sight: bool| -> Vec<u32> {
         w.obj(id).map_or_else(Vec::new, |o| {
             if sight {
-                o.econ.sight.sight.as_ref().map_or_else(Vec::new, |a| a.cells.clone())
+                o.econ
+                    .sight
+                    .sight
+                    .as_ref()
+                    .map_or_else(Vec::new, |a| a.cells.clone())
             } else {
-                o.econ.sight.gap.as_ref().map_or_else(Vec::new, |g| g.cells.clone())
+                o.econ
+                    .sight
+                    .gap
+                    .as_ref()
+                    .map_or_else(Vec::new, |g| g.cells.clone())
             }
         })
     };
@@ -1271,7 +1279,10 @@ fn whole_map(w: &mut World, h: HouseId, reveal: bool) {
             remove_cells(w, h, &c);
         }
         if g {
-            let c: Vec<u32> = cells_of(w, id, false).into_iter().filter(|&i| i != sh).collect();
+            let c: Vec<u32> = cells_of(w, id, false)
+                .into_iter()
+                .filter(|&i| i != sh)
+                .collect();
             if let Some(st) = hs_mut(w, h) {
                 for i in c {
                     st.gap_stop(i as usize);
@@ -1309,7 +1320,10 @@ fn whole_map(w: &mut World, h: HouseId, reveal: bool) {
             add_cells(w, h, &c);
         }
         if g {
-            let c: Vec<u32> = cells_of(w, id, false).into_iter().filter(|&i| i != sh).collect();
+            let c: Vec<u32> = cells_of(w, id, false)
+                .into_iter()
+                .filter(|&i| i != sh)
+                .collect();
             if let Some(st) = hs_mut(w, h) {
                 for i in c {
                     st.gap_start(i as usize);
@@ -1482,7 +1496,11 @@ pub fn regrowth(w: &mut World) {
             .objects
             .values()
             .filter(|o| {
-                o.econ.sight.sight.as_ref().is_some_and(|a| a.houses.contains(&h))
+                o.econ
+                    .sight
+                    .sight
+                    .as_ref()
+                    .is_some_and(|a| a.houses.contains(&h))
                     && (o.owner == Some(h) || o.kind == Kind::Building)
             })
             .map(|o| o.id)
@@ -1512,8 +1530,11 @@ fn uncounted_sight(w: &mut World, h: HouseId, cells: &[u32]) {
             let c = cell_of(w, i);
             // spec: S-0409 S1 row 9 (only when the cell is not yet explored, seen and surrounded with all neighbours seen)
             let full = hs(w, h).is_some_and(|s| {
-                s.has(i as usize, EXPLORED) && s.has(i as usize, SEEN) && s.has(i as usize, SURROUNDED)
-            }) && (-1..=1).all(|dy| (-1..=1).all(|dx| seen(w, h, CellXY::new(c.x + dx, c.y + dy))));
+                s.has(i as usize, EXPLORED)
+                    && s.has(i as usize, SEEN)
+                    && s.has(i as usize, SURROUNDED)
+            }) && (-1..=1)
+                .all(|dy| (-1..=1).all(|dx| seen(w, h, CellXY::new(c.x + dx, c.y + dy))));
             !full
         })
         .collect();

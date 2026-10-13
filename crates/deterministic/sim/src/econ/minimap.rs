@@ -16,7 +16,7 @@ use crate::rules::{Kind, nearest_double};
 use crate::world::{HouseId, ObjectId, Pos, World};
 
 /// An 8-bit triple (S-0410 Terms): red, green, blue, 0 to 255 each.
-pub type Rgb = [u8; 3];
+pub type Rgb = [u8; 3]; // spec: S-0410 Terms (an 8-bit triple: red, green, blue)
 
 // spec: S-0410 Constants (radar map 140 × 108 pixels)
 const MAP_W: i32 = 140;
@@ -44,10 +44,11 @@ pub fn cell_points(a: i32, b: i32, lw: i32, c: CellXY) -> Vec<(i32, i32)> {
     // spec: S-0410 F1 (u = x − y + a, v = x + y − b; points (u, v) and (u + 1, v))
     let u = c.x - c.y + a;
     let v = c.x + c.y - b;
+    let last = 2 * lw - 1; // spec: S-0410 F1 (the last column 2·Lw − 1)
     if u == -1 {
         // spec: S-0410 F1 (a cell with u = −1 covers only (0, v))
         vec![(0, v)]
-    } else if u == 2 * lw - 1 {
+    } else if u == last {
         // spec: S-0410 F1 (a cell with u = 2·Lw − 1 covers only (u, v))
         vec![(u, v)]
     } else {
@@ -70,7 +71,7 @@ pub fn grid(w: &World) -> Option<Grid> {
     let b = usable.iter().map(|c| c.x + c.y).min()?;
     // spec: S-0410 F1 (a = Wₘ − 2·Lx − 1)
     let a = fp.width - 2 * fp.local[0] - 1;
-    let lw = fp.local[2];
+    let lw = fp.local[2]; // spec: S-0009 Terms (the local area (Lx, Ly, Lw, Lh): Lw is the third number)
     let mut wcols = 0;
     let mut n = 0;
     for &c in &usable {
@@ -134,7 +135,7 @@ pub fn image(g: &Grid) -> Image {
         height,
         // spec: S-0410 F2 (top-left at (trunc((140 − width) / 2), trunc((108 − height) / 2)))
         left: (MAP_W - width) / 2,
-        top: (MAP_H - height) / 2,
+        top: (MAP_H - height) / 2, // spec: S-0410 F2 (the image centred)
     }
 }
 
@@ -149,10 +150,11 @@ pub fn cell_at_pixel(g: &Grid, img: &Image, p: i32, q: i32, shift: bool) -> Cell
         let (u, v) = (pu.to_i32_common(), qv.to_i32_common());
         let sum = v + g.b;
         let mut diff = u - g.a;
-        if (diff - sum).rem_euclid(2) != 0 {
+        let odd = (diff - sum).rem_euclid(2) != 0; // spec: S-0410 Edge cases (x − y has the parity of x + y)
+        if odd {
             diff -= 1;
         }
-        return CellXY::new((sum + diff) / 2, (sum - diff) / 2);
+        return CellXY::new((sum + diff) / 2, (sum - diff) / 2); // spec: S-0410 Edge cases (the cell (x, y) from x + y and x − y)
     }
     // spec: S-0410 F3 (u′ = p / s − a, v′ = q / s + b; cell = (trunc((u′ + v′) × 0.5 + 0.5), trunc((v′ − u′) × 0.5 + 0.5)))
     let u1 = pu.sub(d(i64::from(g.a)), RZ);
@@ -172,9 +174,9 @@ pub fn object_pixel(g: &Grid, img: &Image, x: i32, y: i32, clamp: bool) -> (i32,
         .mul(s, RZ)
         .div(d(256), RZ)
         .to_i32_common();
-    let qv = d(i64::from(x) + i64::from(y) - 256 * i64::from(g.b))
+    let qv = d(i64::from(x) + i64::from(y) - 256 * i64::from(g.b)) // spec: S-0410 F4 (256 leptons per cell)
         .mul(s, RZ)
-        .div(d(256), RZ)
+        .div(d(256), RZ) // spec: S-0410 F4 (divided by 256)
         .to_i32_common();
     if clamp {
         // spec: S-0410 F4 (the own object's pixel clamped to the image)
@@ -213,7 +215,7 @@ pub fn tile_colour(c: Option<Rgb>, snow: bool) -> Rgb {
     c.map(|ch| {
         // spec: S-0410 F7 (c′ = ⌊trunc(min(c · f, 255)) / 2⌋)
         let prod = d(i64::from(ch)).mul(f, RZ).min(d(255));
-        (prod.to_i32_common() / 2) as u8
+        (prod.to_i32_common() / 2) as u8 // spec: S-0410 F7 (the division by 2 is integer)
     })
 }
 
@@ -253,7 +255,12 @@ pub fn point_colour(src: PointSource) -> Rgb {
 /// Which image frame of an overlay's sprite colours its cell, and whether
 /// green and blue are exchanged (claim 9, table T1 of Edge cases); `None`:
 /// the cell counts as having no overlay.
-pub fn overlay_rule(position: u32, resource: bool, cell_frame: u32, quirk: bool) -> Option<(u32, bool)> {
+pub fn overlay_rule(
+    position: u32,
+    resource: bool,
+    cell_frame: u32,
+    quirk: bool,
+) -> Option<(u32, bool)> {
     if !quirk {
         // spec: S-0410 Edge cases (quirks.overlay_list_position_rules off: the cell's own frame, as stored)
         return Some((cell_frame, false));
@@ -277,7 +284,7 @@ pub fn overlay_rule(position: u32, resource: bool, cell_frame: u32, quirk: bool)
 
 /// Exchanges the green and blue channels (claim 9, T1).
 pub fn swap_green_blue(c: Rgb) -> Rgb {
-    [c[0], c[2], c[1]]
+    [c[0], c[2], c[1]] // spec: S-0410 T1 (green and blue exchanged)
 }
 
 /// The terrain picture (claim 5, F6): the area-weighted mean of the point
@@ -305,7 +312,7 @@ pub fn terrain_picture(g: &Grid, img: &Image, points: &[Rgb]) -> Vec<Rgb> {
         for p in 0..img.width {
             let u0 = single(d(i64::from(p)).div(s, RZ));
             let u1 = single(u0.add(gx, RZ));
-            let mut sum = [F64::ZERO; 3];
+            let mut sum = [F64::ZERO; 3]; // spec: S-0410 Terms (three channels)
             let (j0, j1) = (u0.to_i32_common().max(0), u1.to_i32_common().min(wc - 1));
             let (i0, i1) = (v0.to_i32_common().max(0), v1.to_i32_common().min(n - 1));
             for i in i0..=i1 {
@@ -327,7 +334,9 @@ pub fn terrain_picture(g: &Grid, img: &Image, points: &[Rgb]) -> Vec<Rgb> {
             }
             let half = nearest_double("0.5");
             // spec: S-0410 F6 (channel = min(255, trunc(mean + 0.5)))
-            out.push(sum.map(|sk| sk.div(area, RZ).add(half, RZ).to_i32_common().clamp(0, 255) as u8));
+            out.push(
+                sum.map(|sk| sk.div(area, RZ).add(half, RZ).to_i32_common().clamp(0, 255) as u8),
+            );
         }
     }
     out
@@ -336,10 +345,10 @@ pub fn terrain_picture(g: &Grid, img: &Image, points: &[Rgb]) -> Vec<Rgb> {
 /// The bits per channel of the display surface (S-0410 Terms, *radar
 /// colour*): 5, 6 and 5, or 5 in every channel.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Bits(pub [u8; 3]);
+pub struct Bits(pub [u8; 3]); // spec: S-0410 Terms (bits per channel of the three channels)
 
 /// A radar colour: channel values at the display's bit widths.
-pub type RadarColour = [u16; 3];
+pub type RadarColour = [u16; 3]; // spec: S-0410 Terms (three channels at the display precision)
 
 /// An 8-bit triple at the display's precision (S-0410 Terms): the low bits
 /// of each channel dropped.
@@ -399,14 +408,19 @@ pub fn cell_in_friendly_gap(w: &World, h: HouseId, c: CellXY) -> bool {
     in_friendly_gap(w, h, c, &friendly_gap_cells(w, h))
 }
 
-fn in_friendly_gap(w: &World, h: HouseId, c: CellXY, cells: &std::collections::BTreeSet<u32>) -> bool {
+fn in_friendly_gap(
+    w: &World,
+    h: HouseId,
+    c: CellXY,
+    cells: &std::collections::BTreeSet<u32>,
+) -> bool {
     let _ = h;
     if !w.cells.usable(c) {
         return false;
     }
     let p = ground_centre(w, c);
     let z = p.z.max(0) / 104; // spec: S-0110 claim 8 (whole height levels, 104 leptons each)
-    let (cx, cy) = (p.x / 256, p.y / 256);
+    let (cx, cy) = (p.x / 256, p.y / 256); // spec: S-0110 claim 8 (cell = trunc(X / 256), trunc(Y / 256))
     let inside = |n: i32| {
         w.cells
             .idx(CellXY::new(cx - n, cy - n))
@@ -420,7 +434,11 @@ fn in_friendly_gap(w: &World, h: HouseId, c: CellXY, cells: &std::collections::B
     }
 }
 
-fn type_flag(w: &World, id: ObjectId, f: impl Fn(&glasnost_rules::sim_econ::EconFields) -> Option<bool>) -> bool {
+fn type_flag(
+    w: &World,
+    id: ObjectId,
+    f: impl Fn(&glasnost_rules::sim_econ::EconFields) -> Option<bool>,
+) -> bool {
     let Some(o) = w.obj(id) else { return false };
     let r = w.rules();
     // spec: S-0410 Import mapping (RadarInvisible, Insignificant, Invisible, RadarVisible absent: no)
@@ -477,7 +495,11 @@ pub fn listed(w: &World, h: HouseId, id: ObjectId, g: &Grid, img: &Image) -> Vec
             return Vec::new();
         }
         // The radar-invisible veterancy ability, cloaking and being underground (claim 7) need their topics (seams).
-        if crate::combat::veterancy::has_ability(w, id, crate::combat::data::Ability::RadarInvisible) {
+        if crate::combat::veterancy::has_ability(
+            w,
+            id,
+            crate::combat::data::Ability::RadarInvisible,
+        ) {
             return Vec::new();
         }
     }
@@ -501,7 +523,14 @@ pub fn listed(w: &World, h: HouseId, id: ObjectId, g: &Grid, img: &Image) -> Vec
 }
 
 /// The draw-time tests of claim 7 for a listed object at a pixel.
-pub fn shown(w: &World, h: HouseId, id: ObjectId, pixel: (i32, i32), g: &Grid, img: &Image) -> bool {
+pub fn shown(
+    w: &World,
+    h: HouseId,
+    id: ObjectId,
+    pixel: (i32, i32),
+    g: &Grid,
+    img: &Image,
+) -> bool {
     let Some(o) = w.obj(id) else { return false };
     let shift = w.rules().quirks.radar_pixel_cell_shift;
     // spec: S-0410 claim 7 (not owned by H: the cell shown at its pixel is not shrouded)
@@ -516,7 +545,10 @@ pub fn shown(w: &World, h: HouseId, id: ObjectId, pixel: (i32, i32), g: &Grid, i
     if insignificant(w, id) && !type_flag(w, id, |e| e.radar_visible) {
         let active_owner = o.owner.is_some_and(|ow| {
             let c = w.houses[usize::from(ow.0)].country;
-            w.rules().countries.get(c as usize).is_some_and(|x| !x.passive)
+            w.rules()
+                .countries
+                .get(c as usize)
+                .is_some_and(|x| !x.passive)
         });
         if !active_owner {
             return false;
@@ -540,7 +572,12 @@ impl Arrivals {
     pub fn observe(&mut self, w: &World, h: HouseId, g: &Grid, img: &Image) {
         let mut now = BTreeMap::new();
         for &id in w.objects.keys() {
-            let place = w.update.order.iter().position(|&x| x == id).unwrap_or(usize::MAX);
+            let place = w
+                .update
+                .order
+                .iter()
+                .position(|&x| x == id)
+                .unwrap_or(usize::MAX);
             for px in listed(w, h, id, g, img) {
                 // spec: S-0410 Terms (an object that stays listed at one pixel keeps its arrival; arrivals ordered by tick, then by turn order)
                 let arr = self.at.get(&(id, px)).copied().unwrap_or((w.tick, place));
@@ -553,7 +590,14 @@ impl Arrivals {
     /// The object whose colour a pixel shows (claim 8): the shown house's
     /// own objects first, latest arrival first; then the others, earliest
     /// arrival first; the first that passes the draw-time tests.
-    pub fn winner(&self, w: &World, h: HouseId, pixel: (i32, i32), g: &Grid, img: &Image) -> Option<ObjectId> {
+    pub fn winner(
+        &self,
+        w: &World,
+        h: HouseId,
+        pixel: (i32, i32),
+        g: &Grid,
+        img: &Image,
+    ) -> Option<ObjectId> {
         let mut own = Vec::new();
         let mut other = Vec::new();
         for (&(id, px), &arr) in &self.at {
@@ -596,7 +640,14 @@ pub struct View<'a> {
 
 /// The radar colour of every pixel of the image (claim 6), row-major; the
 /// terrain picture comes from [`terrain_picture`].
-pub fn compose(w: &World, view: &View, arrivals: &Arrivals, g: &Grid, img: &Image, terrain: &[Rgb]) -> Vec<RadarColour> {
+pub fn compose(
+    w: &World,
+    view: &View,
+    arrivals: &Arrivals,
+    g: &Grid,
+    img: &Image,
+    terrain: &[Rgb],
+) -> Vec<RadarColour> {
     let h = view.house;
     let shift = w.rules().quirks.radar_pixel_cell_shift;
     let gaps = friendly_gap_cells(w, h);
@@ -616,7 +667,10 @@ pub fn compose(w: &World, view: &View, arrivals: &Arrivals, g: &Grid, img: &Imag
                 let mut rc = radar_colour(c, view.bits);
                 let t_left = (view.flash)(id);
                 // spec: S-0410 claim 10 (only objects of the shown house flash)
-                if o.is_some_and(|o| o.owner == Some(h)) && t_left >= 1 && flash_inverted(t_left, view.flash_frame_time) {
+                if o.is_some_and(|o| o.owner == Some(h))
+                    && t_left >= 1
+                    && flash_inverted(t_left, view.flash_frame_time)
+                {
                     rc = inverted(rc, view.bits);
                 }
                 out.push(rc);

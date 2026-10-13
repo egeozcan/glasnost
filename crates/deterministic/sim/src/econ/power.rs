@@ -71,7 +71,11 @@ pub struct Rules {
 /// Splits a signed power field into (output, drain) (S-0405 Terms).
 fn split(v: i32) -> (i32, i32) {
     // spec: S-0405 Terms (a value of 0 or more is the output; a negative value v gives a drain of −v)
-    if v >= 0 { (v, 0) } else { (0, v.saturating_neg()) }
+    if v >= 0 {
+        (v, 0)
+    } else {
+        (0, v.saturating_neg())
+    }
 }
 
 impl Rules {

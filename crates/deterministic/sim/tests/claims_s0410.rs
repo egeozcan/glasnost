@@ -30,7 +30,10 @@ fn rules() -> Ruleset {
     let mut r = testkit::ruleset();
     r.registries.insert(
         "buildings".into(),
-        ["PLANT", "DISH", "CONS"].iter().map(|s| s.to_string()).collect(),
+        ["PLANT", "DISH", "CONS"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect(),
     );
     r.sim.buildings.insert("PLANT".into(), bt(100, false));
     r.sim.buildings.insert("DISH".into(), bt(-20, true));
@@ -95,7 +98,8 @@ fn claim_1_free_radar_and_outage() {
     let mut map = testkit::empty_map(SIZE);
     map.basic.free_radar = true;
     let rules = std::sync::Arc::new(glasnost_sim::rules::SimRules::new(&r, "t"));
-    let mut w = glasnost_sim::load::new_game(rules, &map, testkit::catalogue(), &testkit::setup(1)).unwrap();
+    let mut w = glasnost_sim::load::new_game(rules, &map, testkit::catalogue(), &testkit::setup(1))
+        .unwrap();
     step(&mut w);
     assert!(radar::available(&w, A));
     radar::start_outage(&mut w, A, 10);
@@ -127,7 +131,11 @@ fn claim_2_recheck_timing() {
     let d = put(&mut w, "DISH", 2);
     step(&mut w);
     assert!(radar::available(&w, A));
-    assert!(glasnost_sim::orders::issue(&mut w, A, Order::PowerOff { actor: d }));
+    assert!(glasnost_sim::orders::issue(
+        &mut w,
+        A,
+        Order::PowerOff { actor: d }
+    ));
     step(&mut w);
     assert!(radar::available(&w, A));
     step(&mut w);
@@ -157,9 +165,18 @@ fn grid_of(w: &World) -> Grid {
 // spec: S-0410 claim 4 and F1 (two radar points per cell, clipped at the columns −1 and 2·Lw − 1)
 #[test]
 fn claim_4_radar_points() {
-    assert_eq!(minimap::cell_points(5, 10, 8, CellXY::new(6, 6)), vec![(5, 2), (6, 2)]);
-    assert_eq!(minimap::cell_points(-1, 0, 8, CellXY::new(3, 3)), vec![(0, 6)]);
-    assert_eq!(minimap::cell_points(15, 0, 8, CellXY::new(3, 3)), vec![(15, 6)]);
+    assert_eq!(
+        minimap::cell_points(5, 10, 8, CellXY::new(6, 6)),
+        vec![(5, 2), (6, 2)]
+    );
+    assert_eq!(
+        minimap::cell_points(-1, 0, 8, CellXY::new(3, 3)),
+        vec![(0, 6)]
+    );
+    assert_eq!(
+        minimap::cell_points(15, 0, 8, CellXY::new(3, 3)),
+        vec![(15, 6)]
+    );
     let w = game(&rules());
     let g = grid_of(&w);
     assert!(g.w > 0 && g.n > 0);
@@ -168,11 +185,23 @@ fn claim_4_radar_points() {
 // spec: S-0410 claim 5 and F2 (the scale 140 / W, or 108 / N when N × 140 / W ≥ 108; the image centred)
 #[test]
 fn claim_5_scale_and_size() {
-    let wide = Grid { a: 0, b: 0, w: 70, n: 20, lw: 35 };
+    let wide = Grid {
+        a: 0,
+        b: 0,
+        w: 70,
+        n: 20,
+        lw: 35,
+    };
     let img = minimap::image(&wide);
     assert_eq!((img.width, img.height), (140, 40));
     assert_eq!((img.left, img.top), (0, 34));
-    let tall = Grid { a: 0, b: 0, w: 70, n: 108, lw: 35 };
+    let tall = Grid {
+        a: 0,
+        b: 0,
+        w: 70,
+        n: 108,
+        lw: 35,
+    };
     let img = minimap::image(&tall);
     assert_eq!((img.width, img.height), (70, 108));
     assert_eq!((img.left, img.top), (35, 0));
@@ -181,20 +210,35 @@ fn claim_5_scale_and_size() {
 // spec: S-0410 claim 6 and F3 (the cell shown at a pixel; at scale 1 the right-hand point of (x, y) shows (x + 1, y), quirks.radar_pixel_cell_shift)
 #[test]
 fn claim_6_cell_at_pixel() {
-    let g = Grid { a: 9, b: 4, w: 140, n: 108, lw: 70 };
+    let g = Grid {
+        a: 9,
+        b: 4,
+        w: 140,
+        n: 108,
+        lw: 70,
+    };
     let img = minimap::image(&Grid { w: 140, n: 50, ..g });
     let cell = CellXY::new(5, 3);
     let pts = minimap::cell_points(g.a, g.b, g.lw, cell);
     let (u0, v) = pts[0];
     assert_eq!(minimap::cell_at_pixel(&g, &img, u0, v, true), cell);
-    assert_eq!(minimap::cell_at_pixel(&g, &img, u0 + 1, v, true), CellXY::new(6, 3));
+    assert_eq!(
+        minimap::cell_at_pixel(&g, &img, u0 + 1, v, true),
+        CellXY::new(6, 3)
+    );
     assert_eq!(minimap::cell_at_pixel(&g, &img, u0 + 1, v, false), cell);
 }
 
 // spec: S-0410 claim 8 and F4 (an object at the centre of cell (x, y) lies on point row v + 1; an own object is clamped to the image)
 #[test]
 fn claim_8_object_pixel() {
-    let g = Grid { a: 9, b: 4, w: 140, n: 50, lw: 70 };
+    let g = Grid {
+        a: 9,
+        b: 4,
+        w: 140,
+        n: 50,
+        lw: 70,
+    };
     let img = minimap::image(&g);
     let cell = CellXY::new(5, 3);
     let (u, v) = minimap::cell_points(g.a, g.b, g.lw, cell)[0];
@@ -209,20 +253,38 @@ fn claim_10_flash_phase() {
     let f = 7;
     let got: Vec<bool> = (1..=21).map(|t| minimap::flash_inverted(t, f)).collect();
     assert!(!got[0] && !got[6] && got[7] && got[13] && !got[14]);
-    assert_eq!(minimap::flash_inverted(9, -7), minimap::flash_inverted(9, 7));
+    assert_eq!(
+        minimap::flash_inverted(9, -7),
+        minimap::flash_inverted(9, 7)
+    );
     assert!(!minimap::flash_inverted(9, 0));
 }
 
 // spec: S-0410 claim 9 and F7 (tile colour ⌊trunc(min(c · f, 255)) / 2⌋, f 0.8 in snow; fixed colours of the other cases, not halved)
 #[test]
 fn claim_9_point_colours() {
-    assert_eq!(minimap::tile_colour(Some([200, 101, 0]), false), [100, 50, 0]);
+    assert_eq!(
+        minimap::tile_colour(Some([200, 101, 0]), false),
+        [100, 50, 0]
+    );
     // 200 × 0.8 (single precision, rounded toward zero) = 160.000…: trunc 160, half 80.
-    assert_eq!(minimap::tile_colour(Some([200, 255, 10]), true), [80, 102, 4]);
+    assert_eq!(
+        minimap::tile_colour(Some([200, 255, 10]), true),
+        [80, 102, 4]
+    );
     assert_eq!(minimap::tile_colour(None, false), [60, 60, 60]);
-    assert_eq!(minimap::point_colour(PointSource::TerrainObject), [200, 200, 160]);
-    assert_eq!(minimap::point_colour(PointSource::ResourceWithoutSprite), [170, 170, 130]);
-    assert_eq!(minimap::point_colour(PointSource::Bridge([1, 2, 3])), [1, 2, 3]);
+    assert_eq!(
+        minimap::point_colour(PointSource::TerrainObject),
+        [200, 200, 160]
+    );
+    assert_eq!(
+        minimap::point_colour(PointSource::ResourceWithoutSprite),
+        [170, 170, 130]
+    );
+    assert_eq!(
+        minimap::point_colour(PointSource::Bridge([1, 2, 3])),
+        [1, 2, 3]
+    );
 }
 
 // spec: S-0410 claim 9 and T1 (overlay colours by list position, quirks.overlay_list_position_rules)
@@ -232,7 +294,10 @@ fn claim_9_overlay_positions() {
     assert_eq!(minimap::overlay_rule(80, false, 4, true), Some((1, false)));
     assert_eq!(minimap::overlay_rule(80, true, 4, true), Some((4, false)));
     assert_eq!(minimap::overlay_rule(130, false, 4, true), Some((4, true)));
-    assert_eq!(minimap::overlay_rule(239, false, 4, false), Some((4, false)));
+    assert_eq!(
+        minimap::overlay_rule(239, false, 4, false),
+        Some((4, false))
+    );
     assert_eq!(minimap::swap_green_blue([1, 2, 3]), [1, 3, 2]);
 }
 
@@ -240,11 +305,23 @@ fn claim_9_overlay_positions() {
 #[test]
 fn claim_5_terrain_mean() {
     // W = 210 points, scale 2/3: each pixel spans 1.5 points.
-    let g = Grid { a: 0, b: 0, w: 210, n: 2, lw: 105 };
+    let g = Grid {
+        a: 0,
+        b: 0,
+        w: 210,
+        n: 2,
+        lw: 105,
+    };
     let img = minimap::image(&g);
     assert_eq!(img.width, 140);
     let points: Vec<[u8; 3]> = (0..2 * 210)
-        .map(|i| if (i % 210) % 2 == 0 { [0, 0, 0] } else { [90, 90, 90] })
+        .map(|i| {
+            if (i % 210) % 2 == 0 {
+                [0, 0, 0]
+            } else {
+                [90, 90, 90]
+            }
+        })
         .collect();
     let pic = minimap::terrain_picture(&g, &img, &points);
     // Pixel 0 covers point 0 fully (black) and half of point 1 (90): 45 / 1.5 = 30.
@@ -268,7 +345,14 @@ fn radar_colour_conversion() {
 fn claims_6_7_8_listing_and_compose() {
     let mut w = game(&rules());
     let d = put(&mut w, "PLANT", 0);
-    let enemy = testkit::spawn(&mut w, Kind::Vehicle, "CART", 1, testkit::mid(SIZE, 8, 8), 0);
+    let enemy = testkit::spawn(
+        &mut w,
+        Kind::Vehicle,
+        "CART",
+        1,
+        testkit::mid(SIZE, 8, 8),
+        0,
+    );
     step(&mut w);
     let g = grid_of(&w);
     let img = minimap::image(&g);

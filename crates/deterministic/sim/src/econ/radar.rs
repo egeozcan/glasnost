@@ -25,7 +25,13 @@ impl Rules {
             radar: reg
                 .iter()
                 // spec: S-0410 Import mapping (Radar absent: no)
-                .map(|n| r.sim.buildings.get(n).and_then(|b| b.econ.radar).unwrap_or(false))
+                .map(|n| {
+                    r.sim
+                        .buildings
+                        .get(n)
+                        .and_then(|b| b.econ.radar)
+                        .unwrap_or(false)
+                })
                 .collect(),
         }
     }

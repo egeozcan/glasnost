@@ -32,8 +32,8 @@ fn building(strength: i32, power: i32) -> BuildingType {
 fn rules() -> Ruleset {
     let mut r = testkit::ruleset();
     let names = [
-        "PLANT", "CONS", "DEF", "NODRAIN", "SPECIAL", "ENG", "ABS", "XTRA", "UP10", "UP20",
-        "UPD5", "CENTRE", "CENTRE2", "GAPPER", "SMALL", "WALLY",
+        "PLANT", "CONS", "DEF", "NODRAIN", "SPECIAL", "ENG", "ABS", "XTRA", "UP10", "UP20", "UPD5",
+        "CENTRE", "CENTRE2", "GAPPER", "SMALL", "WALLY",
     ];
     r.registries.insert(
         "buildings".into(),
@@ -111,7 +111,14 @@ fn game(r: &Ruleset) -> World {
 }
 
 fn put(w: &mut World, name: &str, house: u8, dx: i32, dy: i32) -> ObjectId {
-    testkit::spawn(w, Kind::Building, name, house, testkit::mid(SIZE, dx, dy), 0)
+    testkit::spawn(
+        w,
+        Kind::Building,
+        name,
+        house,
+        testkit::mid(SIZE, dx, dy),
+        0,
+    )
 }
 
 fn step(w: &mut World) {
@@ -213,7 +220,8 @@ fn claim_4_low_power_and_fraction() {
     let _s = put(&mut w, "SMALL", 0, 2, 0);
     step(&mut w);
     assert!(power::low_power(&w, A));
-    let want = glasnost_num::F64::from_i64(30, mode).div(glasnost_num::F64::from_i64(40, mode), mode);
+    let want =
+        glasnost_num::F64::from_i64(30, mode).div(glasnost_num::F64::from_i64(40, mode), mode);
     assert!(power::fraction(&w, A).eq_num(want));
     let _p = put(&mut w, "PLANT", 0, 4, 0);
     step(&mut w);
@@ -369,7 +377,10 @@ fn claim_8_in_operation_rows() {
     assert!(power::in_operation(&w, def));
     w.obj_mut(def).unwrap().beh.force(Behaviour::Selling, t);
     assert!(!power::in_operation(&w, def));
-    w.obj_mut(def).unwrap().beh.force(Behaviour::Construction, t);
+    w.obj_mut(def)
+        .unwrap()
+        .beh
+        .force(Behaviour::Construction, t);
     assert!(!power::in_operation(&w, def));
     // Health 0 is not alive.
     w.obj_mut(nd).unwrap().health = 0;
@@ -382,12 +393,18 @@ fn claim_9_firing_answers() {
     let mut r = rules();
     let mut pulse = building(500, 0);
     pulse.emp_cannon = Some(true);
-    r.registries.get_mut("buildings").unwrap().push("PULSE".into());
+    r.registries
+        .get_mut("buildings")
+        .unwrap()
+        .push("PULSE".into());
     r.sim.buildings.insert("PULSE".into(), pulse);
     let mut occ = building(500, 0);
     occ.can_be_occupied = Some(true);
     occ.can_occupy_fire = Some(true);
-    r.registries.get_mut("buildings").unwrap().push("OCC".into());
+    r.registries
+        .get_mut("buildings")
+        .unwrap()
+        .push("OCC".into());
     r.sim.buildings.insert("OCC".into(), occ);
     let mut w = game(&r);
     let def = put(&mut w, "DEF", 0, 0, 0);
@@ -399,7 +416,10 @@ fn claim_9_firing_answers() {
     // An occupiable building without occupants (a seam: no occupants yet) is illegal.
     assert_eq!(power::firing_answer(&w, oc), Some(Answer::Illegal));
     let t = w.tick;
-    w.obj_mut(def).unwrap().beh.force(Behaviour::Construction, t);
+    w.obj_mut(def)
+        .unwrap()
+        .beh
+        .force(Behaviour::Construction, t);
     assert_eq!(power::firing_answer(&w, def), Some(Answer::Illegal));
     w.obj_mut(pc).unwrap().beh.force(Behaviour::Selling, t);
     assert_eq!(power::firing_answer(&w, pc), Some(Answer::Impossible));
@@ -424,7 +444,10 @@ fn claim_9_one_off_effects_in_own_turn() {
     step(&mut w);
     assert!(power::low_power(&w, A));
     assert!(!power::in_operation(&w, c));
-    assert!(w.obj(c).unwrap().econ.building.centre, "still active until its next turn");
+    assert!(
+        w.obj(c).unwrap().econ.building.centre,
+        "still active until its next turn"
+    );
     step(&mut w);
     assert!(!w.obj(c).unwrap().econ.building.centre);
 }
@@ -456,8 +479,22 @@ fn claim_13_control_centres() {
     put(&mut w, "PLANT", 0, 0, 0);
     let k = put(&mut w, "CENTRE", 0, 2, 0);
     let k2 = put(&mut w, "CENTRE2", 0, 4, 0);
-    let d1 = testkit::spawn(&mut w, Kind::Vehicle, "DRONE", 0, testkit::mid(SIZE, -4, 4), 0);
-    let d2 = testkit::spawn(&mut w, Kind::Vehicle, "DRONE2", 0, testkit::mid(SIZE, -4, 6), 0);
+    let d1 = testkit::spawn(
+        &mut w,
+        Kind::Vehicle,
+        "DRONE",
+        0,
+        testkit::mid(SIZE, -4, 4),
+        0,
+    );
+    let d2 = testkit::spawn(
+        &mut w,
+        Kind::Vehicle,
+        "DRONE2",
+        0,
+        testkit::mid(SIZE, -4, 6),
+        0,
+    );
     for _ in 0..3 {
         step(&mut w);
     }
@@ -494,7 +531,14 @@ fn claim_13_per_type_count() {
     put(&mut w, "PLANT", 0, 0, 0);
     let k = put(&mut w, "CENTRE", 0, 2, 0);
     let _k2 = put(&mut w, "CENTRE2", 0, 4, 0);
-    let d1 = testkit::spawn(&mut w, Kind::Vehicle, "DRONE", 0, testkit::mid(SIZE, -4, 4), 0);
+    let d1 = testkit::spawn(
+        &mut w,
+        Kind::Vehicle,
+        "DRONE",
+        0,
+        testkit::mid(SIZE, -4, 4),
+        0,
+    );
     for _ in 0..3 {
         step(&mut w);
     }
@@ -509,7 +553,14 @@ fn claim_13_per_type_count() {
 #[test]
 fn claim_13_cell_entry_rule() {
     let mut w = game(&rules());
-    let d1 = testkit::spawn(&mut w, Kind::Vehicle, "DRONE", 0, testkit::mid(SIZE, 0, 0), 0);
+    let d1 = testkit::spawn(
+        &mut w,
+        Kind::Vehicle,
+        "DRONE",
+        0,
+        testkit::mid(SIZE, 0, 0),
+        0,
+    );
     step(&mut w);
     assert!(!power::unit_disabled(&w, d1));
     order(
@@ -571,4 +622,19 @@ fn switched_off_building_makes_nothing() {
     power::make_due(&mut w, A);
     step(&mut w);
     assert_eq!(power::totals(&w, A), (0, 0));
+}
+
+// spec: S-0215 claim 32 and Terms (the SAM power row: needs power, drains power, owner short of power, S-0405 claim 4)
+#[test]
+fn sam_power_row_reads_low_power() {
+    let mut w = game(&rules());
+    let d = put(&mut w, "DEF", 0, 0, 0);
+    let nd = put(&mut w, "NODRAIN", 0, 2, 0);
+    step(&mut w);
+    assert!(glasnost_sim::seams::short_of_power(&w, A));
+    assert!(glasnost_sim::seams::sam_held_by_low_power(&w, d));
+    assert!(!glasnost_sim::seams::sam_held_by_low_power(&w, nd));
+    put(&mut w, "PLANT", 0, 4, 0);
+    step(&mut w);
+    assert!(!glasnost_sim::seams::sam_held_by_low_power(&w, d));
 }
