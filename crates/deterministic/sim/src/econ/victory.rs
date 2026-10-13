@@ -627,7 +627,7 @@ fn destroy_all(w: &mut World, h: HouseId) {
     let warhead = w.rules().combat.general.c4_warhead;
     let skip_quirk = w.rules().quirks.defeat_cancellation_skip;
     let mut place: Option<ObjectId> = None;
-    let mut skip = 0usize;
+    let mut skip: usize = 0;
     loop {
         // spec: S-0414 claim 15 (creation order across all four kinds; object numbers are given in creation order)
         let next = w
