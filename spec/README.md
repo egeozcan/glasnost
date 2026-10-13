@@ -51,7 +51,6 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0214](ui/S-0214-order-targeting-rules.md) | Order targeting rules (what a click means for each kind of object, and group orders) | ui | 13 | approved | — |
 | [S-0314](combat/S-0314-healing-repair.md) | Healing and repair in combat (healers, self-healing, house-wide healing, repair depot, hospital, building repair) | combat | 4 | approved | — |
 | [S-0003](rules-import/S-0003-ini-value-forms.md) | INI value forms | rules-import | 9 | approved | — |
-| [S-0004](rules-import/S-0004-type-registration-order.md) | Type registration order | rules-import | 8 | approved | — |
 | [S-0006](rules-import/S-0006-rules-layering.md) | Rules layering | rules-import | 9 | approved | — |
 | [S-0009](formats/S-0009-map-file-semantics.md) | Map file semantics (geometry, terrain streams, waypoint markers, start positions, preview) | formats | 13 | approved | — |
 | [S-0010](formats/S-0010-theater-tileset-semantics.md) | Theater data, tilesets and the terrain values of a cell | formats | 11 | approved | — |
@@ -96,3 +95,4 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0213](simulation/S-0213-human-orders.md) | Human orders (the order set, when orders apply, and what each order changes) | simulation | 8 | approved | — |
 | [S-0307](combat/S-0307-range.md) | Weapon range test | combat | 2 | approved | — |
 | [S-0007](rules-import/S-0007-art-lookup.md) | Art lookup (image indirection, sprite or voxel, companion files, theater substitution) | rules-import | 8 | approved | — |
+| [S-0004](rules-import/S-0004-type-registration-order.md) | Type registration order | rules-import | 9 | approved | — |
