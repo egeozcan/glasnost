@@ -223,7 +223,6 @@ Every quirk switch of the implemented specs has a field in `ini::Quirks` (includ
 | `convert::layers`, `convert::sim` | land-type resets (S-0211 claim 2) are applied in `sim.land_types` only; `ini_globals` keeps per-key layering | Q-0007 |
 | `convert::art` | a building secondary sprite dropped by a later read's art section is left undetermined (a note, no file); no art for projectiles, particles and voxel animations | Q-0008 |
 | `app::mapview::build` | a vehicle drawn as a sprite is taken to be in its standing pose (S-0102 claim 22) | Q-0021 |
-| `app::mapview::build` | an overlay shadow takes its overlay's depth bias, flat (S-0112 claim 8 draws it; S-0102 claim 13 gives no bias for it) | Q-0021 |
 | `app::mapview::build` | a terrain object type without a strength key is drawn with image frame 0; animated terrain objects show frame 0 (S-0102 claim 23) | Q-0023 |
 | `convert::theater::variant_image` | the alternate-image mark of a tile cell (S-0010 claim 13) is not read: every cell uses the variant pattern | Q-0055 |
 | `convert::sim::combat` | a type's threat coefficient starts at 0 before any layer gives it; `BuildCat` is a named value compared with `Combat`; `none` items are left out of name lists; an unreadable integer-list item is 0 | Q-0061 |

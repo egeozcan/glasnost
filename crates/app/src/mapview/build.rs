@@ -169,8 +169,6 @@ mod notes {
     pub const STANDING_POSE: &str =
         "Q-0021: a vehicle drawn as a sprite is taken to be in its standing pose (provisional)";
     pub const TILES_UNLOADED: &str = "no game was set up: tiles are drawn as the map stores them, before the load's terrain recalculation and smoothing (S-0010 claim 12)";
-    pub const OVERLAY_SHADOW_DEPTH: &str =
-        "Q-0021: an overlay shadow's depth bias is taken as its overlay's, flat (provisional)";
     pub const RUBBLE: &str = "rubble overlays outside a rubble cell draw nothing (S-0112 claim 5); rubble cells arise only in play";
     pub const SMUDGE_CLIP: &str = "a smudge is painted whole once per covered cell, not clipped to that cell (S-0102 claim 25): it differs only where covered cells differ in level or light";
     pub const TERRAIN_STRENGTH: &str = "Q-0023: a terrain object type without a strength key is drawn with image frame 0 (provisional)";
@@ -989,6 +987,7 @@ impl Builder<'_> {
         let runs = self.tiberium_runs();
         let (local_hsv, _) = self.owner_colour(HUMAN);
         let mut beyond = 0usize;
+        let mut shadows = Vec::new();
         for (c, cell) in cells {
             let o = cell.overlay;
             if o == NO_OVERLAY {
@@ -1149,6 +1148,11 @@ impl Builder<'_> {
                     (s, f + n / 2)
                 })
             };
+            // spec: S-0102 claim 13 (an overlay's shadow: −2 − 15 × ℓ_s with ℓ_s the cell's level alone,
+            // never the deck's 4 levels nor the upright −15; flat; writes), S-0112 claim 8
+            // (every overlay kind); S-0102 Edge cases (quirks.overlay_lift_exact_levels covers overlay shadows)
+            let shadow_bias = -2
+                - overlay_depth_lift(level, &ViewQuirks::default(), &ProjectionQuirks::default());
             if let Some((sprite, frame)) = shadow
                 && self.sprite_frames(&sprite).is_some_and(|n| frame < n)
                 && let Some(item) = self.place_sprite(
@@ -1156,22 +1160,23 @@ impl Builder<'_> {
                     frame,
                     (p.0 + shadow_offset.0, p.1 + shadow_offset.1),
                     DepthTest::Writer,
-                    // provisional (Q-0021): an overlay shadow's depth bias is the overlay's own, flat
                     ItemDepth::Profile {
                         profile: Profile::Flat,
-                        bias,
+                        bias: shadow_bias,
                         companion: None,
                     },
                     Paint::Shadow,
                     Group::Shadows,
-                    true,
+                    false,
                     Some(object),
                 )
             {
-                self.built.scene.items.push(item);
-                self.note(notes::OVERLAY_SHADOW_DEPTH);
+                shadows.push(item);
             }
         }
+        // spec: S-0102 claim 16 rank 3 (every overlay of the repainted area ranks before every overlay
+        // shadow of that area)
+        self.built.scene.items.extend(shadows);
         if beyond > 0 {
             *self
                 .built
