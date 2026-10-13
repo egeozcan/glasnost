@@ -1445,6 +1445,21 @@ mod tests {
         assert_eq!(turn_rate(-200, false), 0);
     }
 
+    // spec: S-0003 claim 7 (the red and yellow ratios: the single conversion widened exactly without `%`; with `%` the double product, not narrowed)
+    #[test]
+    fn health_ratio_precision() {
+        let rz = Rounding::TowardZero;
+        let ratio = |s: &str| {
+            let d = Some(glasnost_rules::sim::Decimal(s.to_owned()));
+            glasnost_num::decimal::exact_decimal(dec(&d, rz).unwrap())
+        };
+        assert_eq!(ratio("6e-1"), "0.60000002384185791015625");
+        assert_eq!(
+            ratio("10%"),
+            "0.09999999999999999167332731531132594682276248931884765625"
+        );
+    }
+
     // spec: S-0215 F1 (0.06 gives 53, 0.05 gives 45, the default gives 14)
     #[test]
     fn rate_delays() {
