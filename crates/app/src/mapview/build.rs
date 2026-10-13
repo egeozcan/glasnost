@@ -43,6 +43,7 @@ use glasnost_sim::rules::{Kind as SimKind, SimRules};
 
 use super::quirks::{
     ViewQuirks, cliff_factor, drawn_body_frame, occupiable_hurt, overlay_depth_lift,
+    sprite_vehicle_facing_part,
 };
 
 /// File bytes read for a scene, by upper-case name.
@@ -166,8 +167,7 @@ pub const VPL_FILE: &[u8] = b"voxels.vpl"; // spec: S-0105 Import mapping
 /// The notes a scene can carry: gaps in the specs (with their request) and
 /// parts our viewer does not draw yet.
 mod notes {
-    pub const STANDING_POSE: &str =
-        "Q-0021: a vehicle drawn as a sprite is taken to be in its standing pose (provisional)";
+    pub const LIVE_SPRITE_VEHICLE: &str = "vehicles drawn as sprites keep no walk counter in the live game: a moving one is drawn with its standing frame, not the moving row (S-0102 claim 22)";
     pub const TILES_UNLOADED: &str = "no game was set up: tiles are drawn as the map stores them, before the load's terrain recalculation and smoothing (S-0010 claim 12)";
     pub const RUBBLE: &str = "rubble overlays outside a rubble cell draw nothing (S-0112 claim 5); rubble cells arise only in play";
     pub const SMUDGE_CLIP: &str = "a smudge is painted whole once per covered cell, not clipped to that cell (S-0102 claim 25): it differs only where covered cells differ in level or light";
@@ -424,6 +424,8 @@ struct Builder<'a> {
     options: &'a Options,
     p: Painter,
     built: Built,
+    /// Whether the builder draws the live game's objects ([`Painter::mobiles`]).
+    live: bool,
 }
 
 /// A decoded tile cell: diamond image, its depth data and template
@@ -510,6 +512,7 @@ pub fn build_parts_with(
         options: inputs.options,
         p: Painter::new(art, canvas),
         built: Built::default(),
+        live: false,
     };
     b.light_cells();
     b.tiles();
@@ -2155,17 +2158,13 @@ impl Builder<'_> {
         } else {
             walk_start
         };
-        // spec: S-0102 claim 22 (facing part: (f₈ + 1) mod 8 with 8 facings, else 0;
-        // quirks.sprite_vehicle_eight_facings_only)
-        let d = if facings == 8 {
-            (n_step(m.body, 8) as i32 + 1) % 8
-        } else {
-            0
-        };
+        // spec: S-0102 claim 22 (facing part; quirks.sprite_vehicle_eight_facings_only)
+        let d = sprite_vehicle_facing_part(facings, m.body, &ViewQuirks::default());
         // spec: S-0102 Import mapping (IdleRate absent: 0)
         let idle_rate = rule_int(self.import, k, i, b"IdleRate", 0);
-        // spec: S-0102 claim 22 (frame table: no tick has run, so the walk counter w is 0, nothing fires
-        // or dies; the standing-pose state is taken as on, Q-0021)
+        // spec: S-0102 claim 22 (frame table: the walk counter w is 0 and nothing fires or dies; the
+        // standing-pose state is on from creation until a movement step starts and again once it
+        // ends, so the row d never applies to a vehicle that is not part-way through a step)
         let frame = if idle_rate != 0 {
             walk_start + d * walk_frames
         } else if standing_frames > 0 {
@@ -2173,7 +2172,9 @@ impl Builder<'_> {
         } else {
             walk_start + d * walk_frames
         };
-        self.note(notes::STANDING_POSE);
+        if self.live {
+            self.note(notes::LIVE_SPRITE_VEHICLE);
+        }
         let Ok(frame) = usize::try_from(frame) else {
             return Vec::new();
         };
@@ -2217,7 +2218,7 @@ impl Builder<'_> {
                 },
                 Paint::Row(row),
                 Group::Vehicles,
-                true,
+                false,
                 Some(m.object),
             )
         };
@@ -2665,6 +2666,7 @@ impl Painter {
                 scene: std::mem::take(scene),
                 ..Default::default()
             },
+            live: true,
         };
         let entries = mobiles.iter().map(|m| b.mobile(m)).collect();
         *self = b.p;
