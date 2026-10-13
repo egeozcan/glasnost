@@ -28,6 +28,24 @@ pub fn switch(w: &mut World, actor: ObjectId, on: bool) {
     let _ = (w, actor, on);
 }
 
+/// The house's power fraction *p* (S-0405 Terms and F3), a double from 0
+/// to 1, as of its last working-out (claim 7); S-0403 claim 5 reads it.
+/// A stub until S-0405 is implemented: full power.
+pub fn power_fraction(w: &World, house: HouseId) -> glasnost_num::F64 {
+    let _ = house;
+    glasnost_num::F64::from_i64(1, w.rules().mode)
+}
+
+/// Works out the house's power in its house update when an event has made
+/// it due (S-0405 claim 7); returns whether it did, so that the house
+/// update can refresh the step periods of its lines (S-0403 claim 8,
+/// `crate::econ::production::on_power_reevaluated`). A stub until S-0405 is
+/// implemented: never due.
+pub fn work_out_if_due(w: &mut World, house: HouseId) -> bool {
+    let _ = (w, house);
+    false
+}
+
 /// Whether the house has low power (S-0405 claim 4).
 pub fn low_power(w: &World, house: HouseId) -> bool {
     let _ = (w, house);

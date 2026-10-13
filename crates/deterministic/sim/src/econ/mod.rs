@@ -79,6 +79,8 @@ pub struct ObjectEcon {
     pub sight: shroud::ObjectSight,
     /// Counts this object is in (S-0414 claim 4, S-0407 claim 9).
     pub counted: victory::Counted,
+    /// A secret lab's secret type (S-0407 claims 4 and 14).
+    pub secret: Option<TypeRef>,
 }
 
 /// The world's economy state (M5a), one field per topic.
@@ -101,12 +103,19 @@ pub struct WorldEcon {
 /// ([`crate::rules::SimRules`] holds them). Each topic owns its part and the
 /// absent-key defaults its spec gives.
 #[derive(Clone, Debug, Default)]
-pub struct EconRules {}
+pub struct EconRules {
+    /// Build time, price and lines (S-0403, S-0404).
+    pub production: production::Rules,
+    /// The tech tree (S-0407).
+    pub tech: tech::Rules,
+}
 
 impl EconRules {
     /// The typed rules of a resolved ruleset.
     pub fn new(r: &glasnost_rules::schema::Ruleset, mode: glasnost_num::Rounding) -> Self {
-        let _ = (r, mode);
-        Self {}
+        Self {
+            production: production::Rules::new(r, mode),
+            tech: tech::Rules::new(r, mode),
+        }
     }
 }

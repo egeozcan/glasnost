@@ -1,0 +1,1018 @@
+//! Claim tests for S-0404 (production queue and payment) on synthetic data:
+//! invented costs, factors and types, no stock numbers.
+
+mod econ_common;
+
+use econ_common::*;
+use glasnost_rules::schema::Ruleset;
+use glasnost_sim::econ::TypeRef;
+use glasnost_sim::econ::production::{self, Hold, LineKind, payment};
+use glasnost_sim::objects;
+use glasnost_sim::orders::Order;
+use glasnost_sim::rules::Kind;
+use glasnost_sim::world::HouseId;
+
+fn add_building(r: &mut Ruleset, n: &str, b: glasnost_rules::sim::BuildingType) {
+    r.registries.get_mut("buildings").unwrap().push(n.into());
+    r.sim.buildings.insert(n.into(), b);
+}
+
+/// A building type that grants a vehicle cost bonus.
+fn bonus_plant(units: &str) -> glasnost_rules::sim::BuildingType {
+    let mut b = plain(100);
+    b.econ.factory_plant = Some(true);
+    b.econ.units_cost_bonus = dec(units);
+    b
+}
+
+fn rich(w: &mut glasnost_sim::world::World) {
+    set_credits(w, 0, 1_000_000);
+}
+
+// spec: S-0404 claim 1 (six independent lines; P1)
+#[test]
+fn claim_1_six_lines() {
+    let mut w = game(&ruleset());
+    for (n, dx) in [
+        ("BARRACKS", -9),
+        ("WARFACT", -6),
+        ("NAVYARD", -3),
+        ("AIRPAD", 0),
+        ("CONYARD", 3),
+    ] {
+        building(&mut w, n, 0, dx, 0);
+    }
+    ready(&mut w);
+    rich(&mut w);
+    let types = [
+        t(&w, Kind::Infantry, "GRUNT"),
+        t(&w, Kind::Vehicle, "TANK"),
+        t(&w, Kind::Vehicle, "BOAT"),
+        t(&w, Kind::Aircraft, "PLANE"),
+        t(&w, Kind::Building, "HUT"),
+        t(&w, Kind::Building, "TOWER"),
+    ];
+    for ty in types {
+        assert!(issue(&mut w, 0, Order::Build { what: ty }));
+    }
+    step(&mut w);
+    assert_eq!(w.econ.lines.lines.len(), 6);
+    let kinds: Vec<LineKind> = w.econ.lines.lines.iter().map(|l| l.kind).collect();
+    assert_eq!(
+        kinds,
+        vec![
+            LineKind::Infantry,
+            LineKind::Ground,
+            LineKind::Naval,
+            LineKind::Aircraft,
+            LineKind::Building,
+            LineKind::Defence
+        ]
+    );
+    for _ in 0..40 {
+        step(&mut w);
+    }
+    for ty in types {
+        assert!(item(&w, 0, ty).unwrap().progress >= 2);
+    }
+}
+
+// spec: S-0404 claim 1 (lines updated in creation order: the earlier line is paid when only one step can be; P1 part B)
+#[test]
+fn claim_1_update_order() {
+    for first_vehicle in [false, true] {
+        let mut w = game(&ruleset());
+        building(&mut w, "BARRACKS", 0, -4, 0);
+        building(&mut w, "WARFACT", 0, 2, 0);
+        ready(&mut w);
+        let grunt = t(&w, Kind::Infantry, "GRUNT");
+        let tank = t(&w, Kind::Vehicle, "TANK");
+        let order = if first_vehicle {
+            [tank, grunt]
+        } else {
+            [grunt, tank]
+        };
+        for ty in order {
+            assert!(issue(&mut w, 0, Order::Build { what: ty }));
+        }
+        // Equal cost and factors: equal R; the first steps pay 18 each.
+        set_credits(&mut w, 0, 18);
+        step(&mut w);
+        for _ in 0..16 {
+            step(&mut w);
+        }
+        let paid_first = item(&w, 0, order[0]).unwrap().progress;
+        let paid_second = item(&w, 0, order[1]).unwrap().progress;
+        assert_eq!(
+            (paid_first, paid_second),
+            (1, 0),
+            "vehicle first: {first_vehicle}"
+        );
+        assert!(item(&w, 0, order[1]).unwrap().waiting);
+    }
+}
+
+// spec: S-0404 claim 1 (a line ceases with neither item nor queue; created again it counts as new, after the others)
+#[test]
+fn claim_1_recreated_line() {
+    let mut w = game(&ruleset());
+    building(&mut w, "BARRACKS", 0, -4, 0);
+    building(&mut w, "WARFACT", 0, 2, 0);
+    ready(&mut w);
+    rich(&mut w);
+    let grunt = t(&w, Kind::Infantry, "GRUNT");
+    let tank = t(&w, Kind::Vehicle, "TANK");
+    assert!(issue(&mut w, 0, Order::Build { what: grunt }));
+    assert!(issue(&mut w, 0, Order::Build { what: tank }));
+    step(&mut w);
+    assert!(issue(&mut w, 0, Order::Cancel { what: grunt }));
+    step(&mut w);
+    assert!(line(&w, 0, grunt).is_none());
+    assert!(issue(&mut w, 0, Order::Build { what: grunt }));
+    step(&mut w);
+    let kinds: Vec<LineKind> = w.econ.lines.lines.iter().map(|l| l.kind).collect();
+    assert_eq!(kinds, vec![LineKind::Ground, LineKind::Infantry]);
+}
+
+// spec: S-0404 claim 2 (P2 part A: the bonus product narrowed with RZ₂₄, total 319)
+#[test]
+fn claim_2_bonus_rounding() {
+    let mut r = ruleset();
+    add_building(&mut r, "FPLANT", bonus_plant("0.8"));
+    let mut w = game(&r);
+    building(&mut w, "FPLANT", 0, 0, 0);
+    building(&mut w, "FPLANT", 0, 2, 0);
+    let jeep = t(&w, Kind::Vehicle, "JEEP");
+    assert_eq!(production::price(&w, HouseId(0), jeep), 319);
+    // The other house owns no bonus building.
+    assert_eq!(production::price(&w, HouseId(1), jeep), 500);
+}
+
+// spec: S-0404 claim 2 (P2 part B: country factor and bonuses; F1)
+#[test]
+fn claim_2_factors() {
+    let mut r = ruleset();
+    add_building(&mut r, "FPLANT", bonus_plant("0.9"));
+    r.sim.vehicles.get_mut("TANK").unwrap().cost = Some(1001);
+    r.sim
+        .countries
+        .get_mut("Alphaland")
+        .unwrap()
+        .econ
+        .cost_units_mult = dec("0.8");
+    let mut w = game(&r);
+    building(&mut w, "FPLANT", 0, 0, 0);
+    building(&mut w, "FPLANT", 0, 2, 0);
+    assert_eq!(
+        production::price(&w, HouseId(0), t(&w, Kind::Vehicle, "TANK")),
+        648
+    );
+}
+
+fn pad_rules(dock_cost: i32, pad_costs: (i32, i32)) -> Ruleset {
+    let mut r = ruleset();
+    add_building(&mut r, "DOCK", plain(dock_cost));
+    for (n, c) in [("PADA", pad_costs.0), ("PADB", pad_costs.1)] {
+        r.registries.get_mut("aircraft").unwrap().push(n.into());
+        let mut a = r.sim.aircraft["PLANE"].clone();
+        a.cost = Some(c);
+        a.econ.dock = Some(vec!["DOCK".into()]);
+        r.sim.aircraft.insert(n.into(), a);
+    }
+    r.sim.general.economy.pad_aircraft = Some(vec!["PADA".into(), "PADB".into()]);
+    r.sim
+        .countries
+        .get_mut("Alphaland")
+        .unwrap()
+        .econ
+        .cost_aircraft_mult = dec("0.5");
+    r
+}
+
+// spec: S-0404 claim 2 (the pad term: own part with C′, plus (P₁ + P₂) ÷ 2; P2 building part)
+#[test]
+fn claim_2_pad_term() {
+    let w = game(&pad_rules(3000, (1000, 1002)));
+    let dock = t(&w, Kind::Building, "DOCK");
+    assert_eq!(
+        glasnost_sim::econ::sell::adjusted_cost(&w, dock.index),
+        1999
+    );
+    assert_eq!(production::price(&w, HouseId(0), dock), 2499);
+}
+
+// spec: S-0404 Edge cases (negative own part: the price is the sum of the parts, no lower limit; the first step pays B < 0)
+#[test]
+fn claim_2_negative_own_part() {
+    let w = game(&pad_rules(100, (1000, 1000)));
+    let dock = t(&w, Kind::Building, "DOCK");
+    assert_eq!(production::price(&w, HouseId(0), dock), -400);
+    assert_eq!(payment(1, -400), -400);
+    assert_eq!(payment(2, 0), 0);
+}
+
+// spec: S-0404 claim 2 (a free unit: own part with C′ plus the free unit's price at its kind's factors; P2 free unit part)
+#[test]
+fn claim_2_free_unit() {
+    let mut r = ruleset();
+    let mut b = plain(3000);
+    b.econ.free_unit = Some("FREEV".into());
+    add_building(&mut r, "GIFTED", b);
+    r.registries
+        .get_mut("vehicles")
+        .unwrap()
+        .push("FREEV".into());
+    r.sim.vehicles.insert("FREEV".into(), wheel(800));
+    r.sim
+        .countries
+        .get_mut("Alphaland")
+        .unwrap()
+        .econ
+        .cost_units_mult = dec("0.5");
+    let w = game(&r);
+    assert_eq!(
+        production::price(&w, HouseId(0), t(&w, Kind::Building, "GIFTED")),
+        2600
+    );
+}
+
+// spec: S-0404 claim 3 (P3 (a): an item starts at 0 credits and waits; five queued, then refusals)
+#[test]
+fn claim_3_start_and_queue() {
+    let mut w = game(&ruleset());
+    building(&mut w, "WARFACT", 0, 0, 0);
+    ready(&mut w);
+    set_credits(&mut w, 0, 0);
+    let tank = t(&w, Kind::Vehicle, "TANK");
+    assert!(issue(&mut w, 0, Order::Build { what: tank }));
+    step(&mut w);
+    assert_eq!(item(&w, 0, tank).unwrap().owed, 1000);
+    for _ in 0..17 {
+        step(&mut w);
+    }
+    let i = item(&w, 0, tank).unwrap();
+    assert_eq!(i.progress, 0);
+    assert!(i.waiting);
+    for _ in 0..7 {
+        issue(&mut w, 0, Order::Build { what: tank });
+    }
+    step(&mut w);
+    assert_eq!(line(&w, 0, tank).unwrap().queue.len(), 5);
+}
+
+// spec: S-0404 claim 3 (P3 (b): a build-limit-1 type ordered twice: the second refused by the queue-time limit)
+#[test]
+fn claim_3_build_limit() {
+    let mut r = ruleset();
+    r.sim.vehicles.get_mut("TANK").unwrap().econ.build_limit = Some(1);
+    let mut w = game(&r);
+    building(&mut w, "WARFACT", 0, 0, 0);
+    ready(&mut w);
+    rich(&mut w);
+    let tank = t(&w, Kind::Vehicle, "TANK");
+    assert!(issue(&mut w, 0, Order::Build { what: tank }));
+    step(&mut w);
+    issue(&mut w, 0, Order::Build { what: tank });
+    step(&mut w);
+    assert!(line(&w, 0, tank).unwrap().queue.is_empty());
+}
+
+// spec: S-0404 claim 3 (P3 (e): a queue limit of 0 refuses every queued type)
+#[test]
+fn claim_3_queue_limit_zero() {
+    let mut r = ruleset();
+    r.sim.general.economy.maximum_queued_objects = Some(0);
+    let mut w = game(&r);
+    building(&mut w, "WARFACT", 0, 0, 0);
+    ready(&mut w);
+    rich(&mut w);
+    let tank = t(&w, Kind::Vehicle, "TANK");
+    assert!(issue(&mut w, 0, Order::Build { what: tank }));
+    step(&mut w);
+    issue(&mut w, 0, Order::Build { what: tank });
+    step(&mut w);
+    assert!(item(&w, 0, tank).is_some());
+    assert!(line(&w, 0, tank).unwrap().queue.is_empty());
+}
+
+// spec: S-0404 claim 3 (P3 (f), (g), (h): a switched-off only factory, owner countries and the naval match)
+#[test]
+fn claim_3_factory_conditions() {
+    let mut r = ruleset();
+    let mut barr = factory("infantry");
+    barr.owner = Some(vec!["Alphaland".into()]);
+    add_building(&mut r, "BARR_A", barr);
+    let mut grunt_b = foot(100);
+    grunt_b.owner = Some(vec!["Betaland".into()]);
+    r.registries
+        .get_mut("infantry")
+        .unwrap()
+        .push("GRUNTB".into());
+    r.sim.infantry.insert("GRUNTB".into(), grunt_b);
+    let mut w = game(&r);
+    let b = building(&mut w, "BARRACKS", 0, -6, 0);
+    building(&mut w, "BARR_A", 1, -6, 6);
+    building(&mut w, "WARFACT", 0, 0, 0);
+    building(&mut w, "NAVYARD", 1, 6, 0);
+    ready(&mut w);
+    rich(&mut w);
+    set_credits(&mut w, 1, 100_000);
+    let grunt = t(&w, Kind::Infantry, "GRUNT");
+    switch(&mut w, b, false);
+    force(&mut w, 0, Order::Build { what: grunt });
+    // (g): house 1's only infantry factory shares no owner country with GRUNTB.
+    let ty = t(&w, Kind::Infantry, "GRUNTB");
+    force(&mut w, 1, Order::Build { what: ty });
+    // (h): a naval vehicle with only a ground factory, and the reverse.
+    let ty = t(&w, Kind::Vehicle, "BOAT");
+    force(&mut w, 0, Order::Build { what: ty });
+    let ty = t(&w, Kind::Vehicle, "TANK");
+    force(&mut w, 1, Order::Build { what: ty });
+    step(&mut w);
+    assert!(w.econ.lines.lines.is_empty());
+}
+
+// spec: S-0404 claim 3 (a done item of the ordered type: nothing added; a player-held item of the ordered type: resumed)
+#[test]
+fn claim_3_done_and_held() {
+    let mut r = ruleset();
+    r.sim.vehicles.get_mut("TANK").unwrap().cost = Some(50);
+    let mut w = game(&r);
+    let f = building(&mut w, "WARFACT", 0, 0, 0);
+    ready(&mut w);
+    rich(&mut w);
+    let tank = t(&w, Kind::Vehicle, "TANK");
+    assert!(issue(&mut w, 0, Order::Build { what: tank }));
+    step(&mut w);
+    assert!(issue(&mut w, 0, Order::Hold { what: tank }));
+    step(&mut w);
+    assert_eq!(item(&w, 0, tank).unwrap().hold, Hold::Player);
+    assert!(issue(&mut w, 0, Order::Build { what: tank }));
+    step(&mut w);
+    let i = item(&w, 0, tank).unwrap();
+    assert_eq!(i.hold, Hold::None);
+    assert!(line(&w, 0, tank).unwrap().queue.is_empty());
+    run_to_done(&mut w, 0, tank, 200).expect("done");
+    switch(&mut w, f, false);
+    force(&mut w, 0, Order::Build { what: tank });
+    step(&mut w);
+    step(&mut w);
+    assert!(item(&w, 0, tank).unwrap().done());
+    assert!(line(&w, 0, tank).unwrap().queue.is_empty());
+}
+
+// spec: S-0404 claim 4 (F2: P = 1000 pays 18 at steps 1 to 7, 19 at 8 to 53, 0 at 54; the worked payments)
+#[test]
+fn claim_4_payments() {
+    let seq = |p: i32| {
+        let mut b = p;
+        (1..=54)
+            .map(|k| {
+                let x = payment(k, b);
+                b -= x;
+                x
+            })
+            .collect::<Vec<_>>()
+    };
+    let s = seq(1000);
+    assert!(s[..7].iter().all(|&x| x == 18));
+    assert!(s[7..53].iter().all(|&x| x == 19));
+    assert_eq!(s[53], 0);
+    assert_eq!(s.iter().sum::<i32>(), 1000);
+    let s = seq(100);
+    assert!(s[..6].iter().all(|&x| x == 1) && s[6..53].iter().all(|&x| x == 2));
+    let s = seq(10);
+    assert!(s[..43].iter().all(|&x| x == 0) && s[43..53].iter().all(|&x| x == 1));
+}
+
+// spec: S-0404 claim 4 (P4: payments in the game, refusal without partial payment, the retry every R at the same phase)
+#[test]
+fn claim_4_waiting_for_money() {
+    let mut w = game(&ruleset());
+    building(&mut w, "WARFACT", 0, 0, 0);
+    ready(&mut w);
+    set_credits(&mut w, 0, 100);
+    let tank = t(&w, Kind::Vehicle, "TANK");
+    assert!(issue(&mut w, 0, Order::Build { what: tank }));
+    step(&mut w);
+    let first = item(&w, 0, tank).unwrap().due;
+    while w.tick <= first + 16 * 5 {
+        step(&mut w);
+    }
+    // Five steps of 18 paid, the sixth refused: 10 credits left.
+    assert_eq!(item(&w, 0, tank).unwrap().progress, 5);
+    assert_eq!(credits(&w, 0), 10);
+    assert!(item(&w, 0, tank).unwrap().waiting);
+    // A gift between retries: the next retry, at the original phase, is made.
+    for _ in 0..5 {
+        step(&mut w);
+    }
+    set_credits(&mut w, 0, 60);
+    let retry = item(&w, 0, tank).unwrap().due;
+    assert_eq!((retry - first) % 16, 0);
+    while w.tick <= retry {
+        step(&mut w);
+    }
+    assert_eq!(item(&w, 0, tank).unwrap().progress, 6);
+    assert_eq!(credits(&w, 0), 42);
+}
+
+// spec: S-0404 claim 4 (P4 part C: zero-payment steps at 0 credits; exactly P credits completes with 0 left)
+#[test]
+fn claim_4_cheap_and_exact() {
+    let mut r = ruleset();
+    r.sim.vehicles.get_mut("JEEP").unwrap().cost = Some(10);
+    let mut w = game(&r);
+    building(&mut w, "WARFACT", 0, 0, 0);
+    ready(&mut w);
+    set_credits(&mut w, 0, 0);
+    let jeep = t(&w, Kind::Vehicle, "JEEP");
+    assert!(issue(&mut w, 0, Order::Build { what: jeep }));
+    for _ in 0..200 {
+        step(&mut w);
+    }
+    assert_eq!(item(&w, 0, jeep).unwrap().progress, 43);
+    assert!(item(&w, 0, jeep).unwrap().waiting);
+    // Exactly P.
+    let mut w = game(&ruleset());
+    building(&mut w, "WARFACT", 0, 0, 0);
+    ready(&mut w);
+    set_credits(&mut w, 0, 1000);
+    let tank = t(&w, Kind::Vehicle, "TANK");
+    assert!(issue(&mut w, 0, Order::Build { what: tank }));
+    step(&mut w);
+    run_to_done(&mut w, 0, tank, 2000).expect("done");
+    assert_eq!(credits(&w, 0), 0);
+}
+
+// spec: S-0404 claim 5 (P5: no steps or payments while held, nothing refunded; hold to a held line or a done item does nothing)
+#[test]
+fn claim_5_hold() {
+    let mut w = game(&ruleset());
+    building(&mut w, "WARFACT", 0, 0, 0);
+    ready(&mut w);
+    rich(&mut w);
+    let tank = t(&w, Kind::Vehicle, "TANK");
+    assert!(issue(&mut w, 0, Order::Build { what: tank }));
+    step(&mut w);
+    for _ in 0..40 {
+        step(&mut w);
+    }
+    assert!(issue(&mut w, 0, Order::Hold { what: tank }));
+    step(&mut w);
+    let (p, c) = (item(&w, 0, tank).unwrap().progress, credits(&w, 0));
+    assert!(issue(&mut w, 0, Order::Hold { what: tank }));
+    for _ in 0..100 {
+        step(&mut w);
+    }
+    let i = item(&w, 0, tank).unwrap();
+    assert_eq!((i.progress, credits(&w, 0), i.hold), (p, c, Hold::Player));
+}
+
+// spec: S-0404 claim 5 (P5 part B: a step due in the tick of the hold order is made first)
+#[test]
+fn claim_5_hold_in_step_tick() {
+    let mut w = game(&ruleset());
+    building(&mut w, "WARFACT", 0, 0, 0);
+    ready(&mut w);
+    rich(&mut w);
+    let tank = t(&w, Kind::Vehicle, "TANK");
+    assert!(issue(&mut w, 0, Order::Build { what: tank }));
+    step(&mut w);
+    let due = item(&w, 0, tank).unwrap().due;
+    while w.tick < due {
+        step(&mut w);
+    }
+    assert!(issue(&mut w, 0, Order::Hold { what: tank }));
+    step(&mut w);
+    let i = item(&w, 0, tank).unwrap();
+    assert_eq!((i.progress, i.hold), (1, Hold::Player));
+}
+
+fn started(r: &Ruleset) -> (glasnost_sim::world::World, TypeRef) {
+    let mut w = game(r);
+    building(&mut w, "WARFACT", 0, 0, 0);
+    ready(&mut w);
+    rich(&mut w);
+    let tank = t(&w, Kind::Vehicle, "TANK");
+    assert!(issue(&mut w, 0, Order::Build { what: tank }));
+    step(&mut w);
+    (w, tank)
+}
+
+fn run_progress(w: &mut glasnost_sim::world::World, ty: TypeRef, p: i32) {
+    while item(w, 0, ty).unwrap().progress < p {
+        step(w);
+    }
+}
+
+// spec: S-0404 claim 6 (P6 (a): a cancel with an unchanged price refunds what was paid)
+#[test]
+fn claim_6_refund() {
+    let (mut w, tank) = started(&ruleset());
+    let c0 = credits(&w, 0);
+    run_progress(&mut w, tank, 20);
+    assert!(credits(&w, 0) < c0);
+    assert!(issue(&mut w, 0, Order::Cancel { what: tank }));
+    step(&mut w);
+    assert_eq!(credits(&w, 0), c0);
+    assert!(line(&w, 0, tank).is_none());
+}
+
+// spec: S-0404 claim 6 (P6 (b), (c), (h): queued copies first; cancel-all removes all and the item; an unrelated cancel does nothing)
+#[test]
+fn claim_6_queue_and_all() {
+    let (mut w, tank) = started(&ruleset());
+    let jeep = t(&w, Kind::Vehicle, "JEEP");
+    issue(&mut w, 0, Order::Build { what: tank });
+    issue(&mut w, 0, Order::Build { what: tank });
+    issue(&mut w, 0, Order::Build { what: jeep });
+    step(&mut w);
+    assert_eq!(line(&w, 0, tank).unwrap().queue.len(), 3);
+    issue(&mut w, 0, Order::Cancel { what: tank });
+    step(&mut w);
+    let l = line(&w, 0, tank).unwrap();
+    assert_eq!(l.queue, vec![tank, jeep]);
+    assert_eq!(l.item.unwrap().t, tank);
+    // (h): a cancel for a type neither queued nor the item.
+    let boat = t(&w, Kind::Vehicle, "BOAT");
+    force(&mut w, 0, Order::Cancel { what: boat });
+    step(&mut w);
+    assert_eq!(line(&w, 0, tank).unwrap().queue, vec![tank, jeep]);
+    // (c): cancel-all: the queued copy and the item go, the next other type starts.
+    run_progress(&mut w, tank, 3);
+    let c0 = credits(&w, 0);
+    issue(&mut w, 0, Order::CancelAll { what: tank });
+    step(&mut w);
+    let l = line(&w, 0, tank).unwrap();
+    assert!(l.queue.is_empty());
+    assert_eq!(l.item.unwrap().t, jeep);
+    assert!(credits(&w, 0) > c0);
+}
+
+// spec: S-0404 claim 6 and quirks.refund_at_current_price (P6 (d): refund P′ − B = 500; off: the 300 paid)
+#[test]
+fn claim_6_current_price() {
+    for quirk in [true, false] {
+        let mut r = ruleset();
+        r.globals.quirks.refund_at_current_price = quirk;
+        add_building(&mut r, "FPLANT", bonus_plant("0.8"));
+        let mut w = game(&r);
+        building(&mut w, "WARFACT", 0, 0, 0);
+        let plant = building(&mut w, "FPLANT", 0, 5, 5);
+        ready(&mut w);
+        rich(&mut w);
+        let tank = t(&w, Kind::Vehicle, "TANK");
+        assert!(issue(&mut w, 0, Order::Build { what: tank }));
+        step(&mut w);
+        assert_eq!(item(&w, 0, tank).unwrap().owed, 800);
+        run_progress(&mut w, tank, 20);
+        let i = item(&w, 0, tank).unwrap();
+        let paid = 800 - i.owed;
+        objects::remove(&mut w, plant);
+        let c0 = credits(&w, 0);
+        assert!(issue(&mut w, 0, Order::Cancel { what: tank }));
+        step(&mut w);
+        let refund = credits(&w, 0) - c0;
+        if quirk {
+            assert_eq!(refund, 1000 - i.owed);
+        } else {
+            assert_eq!(refund, paid);
+        }
+    }
+}
+
+// spec: S-0404 claim 6 (P6 (g): a negative refund takes credits below 0; every step, even one paying 0, is then refused)
+#[test]
+fn claim_6_negative_refund() {
+    let mut r = ruleset();
+    add_building(&mut r, "FPLANT", bonus_plant("0.5"));
+    r.sim.infantry.get_mut("GRUNT").unwrap().cost = Some(10);
+    // A slow item whose early steps pay 0 (T = 900, R = 16).
+    r.sim
+        .infantry
+        .get_mut("GRUNT")
+        .unwrap()
+        .econ
+        .build_time_multiplier = dec("100");
+    let mut w = game(&r);
+    building(&mut w, "WARFACT", 0, 0, 0);
+    building(&mut w, "BARRACKS", 0, -6, 0);
+    ready(&mut w);
+    set_credits(&mut w, 0, 473);
+    let tank = t(&w, Kind::Vehicle, "TANK");
+    let grunt = t(&w, Kind::Infantry, "GRUNT");
+    assert!(issue(&mut w, 0, Order::Build { what: tank }));
+    assert!(issue(&mut w, 0, Order::Build { what: grunt }));
+    step(&mut w);
+    run_progress(&mut w, tank, 20);
+    building(&mut w, "FPLANT", 0, 5, 5);
+    let owed = item(&w, 0, tank).unwrap().owed;
+    let c0 = credits(&w, 0);
+    assert!(issue(&mut w, 0, Order::Cancel { what: tank }));
+    step(&mut w);
+    assert_eq!(credits(&w, 0), c0 + 500 - owed);
+    assert!(credits(&w, 0) < 0);
+    let p = item(&w, 0, grunt).unwrap().progress;
+    for _ in 0..40 {
+        step(&mut w);
+    }
+    assert_eq!(item(&w, 0, grunt).unwrap().progress, p);
+    set_credits(&mut w, 0, 0);
+    for _ in 0..20 {
+        step(&mut w);
+    }
+    assert!(item(&w, 0, grunt).unwrap().progress > p);
+}
+
+// spec: S-0404 claim 7 (P7: the later-acquired factory releases without a primary mark, the primary one with it)
+#[test]
+fn claim_7_releasing_building() {
+    let mut w = game(&ruleset());
+    let a = building(&mut w, "WARFACT", 0, -6, 0);
+    let b = building(&mut w, "WARFACT", 0, 4, 0);
+    let tank = t(&w, Kind::Vehicle, "TANK");
+    assert_eq!(
+        production::releasing_building(&w, HouseId(0), tank),
+        Some(b)
+    );
+    w.obj_mut(a).unwrap().econ.building.primary = true;
+    assert_eq!(
+        production::releasing_building(&w, HouseId(0), tank),
+        Some(a)
+    );
+    switch(&mut w, a, false);
+    assert_eq!(
+        production::releasing_building(&w, HouseId(0), tank),
+        Some(b)
+    );
+}
+
+// spec: S-0404 claim 7 (the unit leaves; the next queued type starts in the release tick)
+#[test]
+fn claim_7_release_and_next() {
+    let mut r = ruleset();
+    r.sim.vehicles.get_mut("JEEP").unwrap().cost = Some(50);
+    let mut w = game(&r);
+    building(&mut w, "WARFACT", 0, 0, 0);
+    ready(&mut w);
+    rich(&mut w);
+    let jeep = t(&w, Kind::Vehicle, "JEEP");
+    let tank = t(&w, Kind::Vehicle, "TANK");
+    assert!(issue(&mut w, 0, Order::Build { what: jeep }));
+    assert!(issue(&mut w, 0, Order::Build { what: tank }));
+    step(&mut w);
+    let obj = item(&w, 0, jeep).unwrap().object;
+    let done = run_to_done(&mut w, 0, jeep, 200).expect("done");
+    while w.tick <= done + 1 {
+        step(&mut w);
+    }
+    assert!(w.obj(obj).unwrap().on_map);
+    let i = item(&w, 0, tank).unwrap();
+    assert_eq!(i.progress, 0);
+    assert_eq!(i.due, done + 1 + i.period);
+}
+
+// spec: S-0404 claim 7 (no releasing building: the place order does nothing and the item stays done)
+#[test]
+fn claim_7_no_release() {
+    let mut r = ruleset();
+    r.sim.vehicles.get_mut("JEEP").unwrap().cost = Some(50);
+    let mut w = game(&r);
+    let f = building(&mut w, "WARFACT", 0, 0, 0);
+    ready(&mut w);
+    rich(&mut w);
+    let jeep = t(&w, Kind::Vehicle, "JEEP");
+    assert!(issue(&mut w, 0, Order::Build { what: jeep }));
+    let done = run_to_done(&mut w, 0, jeep, 200).expect("done");
+    // The only factory switched off before the automatic place order of tick done + 1.
+    assert_eq!(w.tick, done + 1);
+    switch(&mut w, f, false);
+    for _ in 0..5 {
+        step(&mut w);
+    }
+    let i = item(&w, 0, jeep).unwrap();
+    assert!(i.done());
+    assert!(!w.obj(i.object).unwrap().on_map);
+}
+
+// spec: S-0404 claim 7 (a done building waits for a place order with a cell; S-0406 places it: a seam until S-0406)
+#[test]
+fn claim_7_building_waits() {
+    let mut r = ruleset();
+    r.sim.buildings.get_mut("HUT").unwrap().cost = Some(50);
+    let mut w = game(&r);
+    building(&mut w, "CONYARD", 0, 0, 0);
+    ready(&mut w);
+    rich(&mut w);
+    let hut = t(&w, Kind::Building, "HUT");
+    assert!(issue(&mut w, 0, Order::Build { what: hut }));
+    run_to_done(&mut w, 0, hut, 200).expect("done");
+    for _ in 0..5 {
+        step(&mut w);
+    }
+    assert!(item(&w, 0, hut).unwrap().done());
+    assert_eq!(
+        production::item_object(&w, HouseId(0), hut),
+        Some(item(&w, 0, hut).unwrap().object)
+    );
+}
+
+fn barracks_game(
+    r: &Ruleset,
+) -> (
+    glasnost_sim::world::World,
+    glasnost_sim::world::ObjectId,
+    TypeRef,
+) {
+    let mut w = game(r);
+    let b = building(&mut w, "BARRACKS", 0, 0, 0);
+    ready(&mut w);
+    rich(&mut w);
+    let grunt = t(&w, Kind::Infantry, "GRUNT");
+    assert!(issue(&mut w, 0, Order::Build { what: grunt }));
+    issue(&mut w, 0, Order::Build { what: grunt });
+    issue(&mut w, 0, Order::Build { what: grunt });
+    step(&mut w);
+    for _ in 0..30 {
+        step(&mut w);
+    }
+    (w, b, grunt)
+}
+
+// spec: S-0404 claim 8 (P8 runs 1 and 2: the only factory leaves: refunded, queue cleared; with a second factory: unchanged)
+#[test]
+fn claim_8_factory_leaves() {
+    let (mut w, b, grunt) = barracks_game(&ruleset());
+    let c = credits(&w, 0);
+    objects::remove(&mut w, b);
+    assert!(line(&w, 0, grunt).is_none());
+    assert_eq!(credits(&w, 0), 1_000_000);
+    assert!(credits(&w, 0) > c);
+    let (mut w, b, grunt) = barracks_game(&ruleset());
+    building(&mut w, "BARRACKS", 0, 6, 6);
+    objects::remove(&mut w, b);
+    let l = line(&w, 0, grunt).unwrap();
+    assert_eq!(l.queue.len(), 2);
+    assert!(l.item.unwrap().running());
+}
+
+// spec: S-0404 claim 8 (P8 run 3: switched off, an automatic hold; switched on, lifted with a full step period)
+#[test]
+fn claim_8_automatic_hold() {
+    let (mut w, b, grunt) = barracks_game(&ruleset());
+    switch(&mut w, b, false);
+    assert_eq!(item(&w, 0, grunt).unwrap().hold, Hold::Auto);
+    let p = item(&w, 0, grunt).unwrap().progress;
+    for _ in 0..50 {
+        step(&mut w);
+    }
+    assert_eq!(item(&w, 0, grunt).unwrap().progress, p);
+    switch(&mut w, b, true);
+    let i = item(&w, 0, grunt).unwrap();
+    assert_eq!(i.hold, Hold::None);
+    assert_eq!(i.due, w.tick + i.period);
+    // A build order is ignored while the line is on an automatic hold (no switched-on factory).
+    switch(&mut w, b, false);
+    force(&mut w, 0, Order::Build { what: grunt });
+    step(&mut w);
+    assert_eq!(item(&w, 0, grunt).unwrap().hold, Hold::Auto);
+}
+
+// spec: S-0404 claim 8 (P8 run 7: a player hold is never lifted by the check)
+#[test]
+fn claim_8_player_hold_kept() {
+    let (mut w, b, grunt) = barracks_game(&ruleset());
+    assert!(issue(&mut w, 0, Order::Hold { what: grunt }));
+    step(&mut w);
+    switch(&mut w, b, false);
+    assert_eq!(item(&w, 0, grunt).unwrap().hold, Hold::Player);
+    switch(&mut w, b, true);
+    assert_eq!(item(&w, 0, grunt).unwrap().hold, Hold::Player);
+}
+
+// spec: S-0404 claim 8 (P8 run 8: a queued type only the leaving factory could make leaves the queue; the item continues)
+#[test]
+fn claim_8_queue_rule() {
+    let mut r = ruleset();
+    let mut ba = factory("infantry");
+    ba.owner = Some(vec!["Alphaland".into()]);
+    add_building(&mut r, "BARR_A", ba);
+    r.sim.infantry.get_mut("MEDIC").unwrap().owner = Some(vec!["Betaland".into()]);
+    let mut w = game(&r);
+    let b = building(&mut w, "BARRACKS", 0, 0, 0);
+    building(&mut w, "BARR_A", 0, 6, 6);
+    ready(&mut w);
+    rich(&mut w);
+    let grunt = t(&w, Kind::Infantry, "GRUNT");
+    let medic = t(&w, Kind::Infantry, "MEDIC");
+    assert!(issue(&mut w, 0, Order::Build { what: grunt }));
+    assert!(issue(&mut w, 0, Order::Build { what: medic }));
+    step(&mut w);
+    assert_eq!(line(&w, 0, grunt).unwrap().queue, vec![medic]);
+    objects::remove(&mut w, b);
+    let l = line(&w, 0, grunt).unwrap();
+    assert!(l.queue.is_empty());
+    assert_eq!(l.item.unwrap().t, grunt);
+}
+
+fn building_lines(
+    r: &Ruleset,
+) -> (
+    glasnost_sim::world::World,
+    glasnost_sim::world::ObjectId,
+    TypeRef,
+    TypeRef,
+) {
+    let mut w = game(r);
+    let c = building(&mut w, "CONYARD", 0, 0, 0);
+    ready(&mut w);
+    rich(&mut w);
+    let hut = t(&w, Kind::Building, "HUT");
+    let tower = t(&w, Kind::Building, "TOWER");
+    assert!(issue(&mut w, 0, Order::Build { what: hut }));
+    assert!(issue(&mut w, 0, Order::Build { what: tower }));
+    step(&mut w);
+    (w, c, hut, tower)
+}
+
+// spec: S-0404 claim 8 and quirks.defence_line_partial_factory_check (the check covers only the ordinary-building line)
+#[test]
+fn claim_8_defence_line() {
+    let (mut w, c, hut, tower) = building_lines(&ruleset());
+    switch(&mut w, c, false);
+    assert_eq!(item(&w, 0, hut).unwrap().hold, Hold::Auto);
+    assert_eq!(item(&w, 0, tower).unwrap().hold, Hold::None);
+    let mut r = ruleset();
+    r.globals.quirks.defence_line_partial_factory_check = false;
+    let (mut w, c, _, tower) = building_lines(&r);
+    switch(&mut w, c, false);
+    assert_eq!(item(&w, 0, tower).unwrap().hold, Hold::Auto);
+}
+
+// spec: S-0404 claim 8 (P8 run 9: a factory of buildings removed for good cancels the defence line too)
+#[test]
+fn claim_8_removed_for_good() {
+    let (mut w, c, hut, tower) = building_lines(&ruleset());
+    objects::remove(&mut w, c);
+    assert!(line(&w, 0, hut).is_none());
+    assert!(line(&w, 0, tower).is_none());
+    assert_eq!(credits(&w, 0), 1_000_000);
+}
+
+// spec: S-0404 claim 9 (P9: a prerequisite lost: the cancel and cancel-all orders refund the item and clear the queue)
+#[test]
+fn claim_9_unbuildable() {
+    let mut r = ruleset();
+    add_building(&mut r, "PREQ", plain(100));
+    r.sim.infantry.get_mut("GRUNT").unwrap().econ.prerequisite = Some(vec!["PREQ".into()]);
+    let mut w = game(&r);
+    building(&mut w, "BARRACKS", 0, 0, 0);
+    let p = building(&mut w, "PREQ", 0, 6, 6);
+    ready(&mut w);
+    rich(&mut w);
+    let grunt = t(&w, Kind::Infantry, "GRUNT");
+    assert!(issue(&mut w, 0, Order::Build { what: grunt }));
+    issue(&mut w, 0, Order::Build { what: grunt });
+    step(&mut w);
+    for _ in 0..40 {
+        step(&mut w);
+    }
+    objects::remove(&mut w, p);
+    step(&mut w);
+    assert!(line(&w, 0, grunt).is_none());
+    assert_eq!(credits(&w, 0), 1_000_000);
+}
+
+// spec: S-0404 claim 10 (a build order for a building or defence is not legal while that line has an item; a held one resumes)
+#[test]
+fn claim_10_legality() {
+    let (mut w, _, hut, _) = building_lines(&ruleset());
+    let plant = t(&w, Kind::Building, "PLANT");
+    assert!(!issue(&mut w, 0, Order::Build { what: plant }));
+    assert!(!issue(&mut w, 0, Order::Build { what: hut }));
+    assert!(issue(&mut w, 0, Order::Hold { what: hut }));
+    step(&mut w);
+    assert!(!issue(&mut w, 0, Order::Build { what: plant }));
+    assert!(issue(&mut w, 0, Order::Build { what: hut }));
+    // A type not offered (no factory of its kind): not legal.
+    let boat = t(&w, Kind::Vehicle, "BOAT");
+    assert!(!issue(&mut w, 0, Order::Build { what: boat }));
+}
+
+// spec: S-0404 claim 10 and quirks.forced_start_player_hold (P10 part A: a forced start is held when A ≥ P ÷ 54, running otherwise)
+#[test]
+fn claim_10_forced_start() {
+    for (quirk, money, held) in [(true, 18, true), (true, 17, false), (false, 1000, false)] {
+        let mut r = ruleset();
+        r.globals.quirks.forced_start_player_hold = quirk;
+        let mut w = game(&r);
+        let f = building(&mut w, "WARFACT", 0, 0, 0);
+        ready(&mut w);
+        rich(&mut w);
+        let tank = t(&w, Kind::Vehicle, "TANK");
+        let jeep = t(&w, Kind::Vehicle, "JEEP");
+        assert!(issue(&mut w, 0, Order::Build { what: jeep }));
+        assert!(issue(&mut w, 0, Order::Build { what: tank }));
+        step(&mut w);
+        switch(&mut w, f, false);
+        // JEEP's price 500: P ÷ 54 = 9; TANK's price 1000: 18.
+        let owed = item(&w, 0, jeep).unwrap().owed;
+        set_credits(&mut w, 0, money - 500 + owed);
+        production::cancel(&mut w, HouseId(0), jeep, false);
+        let i = item(&w, 0, tank).unwrap();
+        let want = if held { Hold::Player } else { Hold::None };
+        assert_eq!(i.hold, want, "quirk {quirk}, money {money}");
+    }
+}
+
+// spec: S-0404 Edge cases (quirks.unstartable_queue_head_stalls: a head that cannot start is dropped and nothing starts; off: the next that can starts)
+#[test]
+fn claim_10_dropped_head() {
+    for quirk in [true, false] {
+        let mut r = ruleset();
+        r.globals.quirks.unstartable_queue_head_stalls = quirk;
+        add_building(&mut r, "PREQ", plain(100));
+        r.sim.vehicles.get_mut("JEEP").unwrap().econ.prerequisite = Some(vec!["PREQ".into()]);
+        r.registries.get_mut("vehicles").unwrap().push("VAN".into());
+        r.sim.vehicles.insert("VAN".into(), wheel(300));
+        let mut w = game(&r);
+        building(&mut w, "WARFACT", 0, 0, 0);
+        let p = building(&mut w, "PREQ", 0, 6, 6);
+        ready(&mut w);
+        rich(&mut w);
+        let tank = t(&w, Kind::Vehicle, "TANK");
+        let jeep = t(&w, Kind::Vehicle, "JEEP");
+        let van = t(&w, Kind::Vehicle, "VAN");
+        assert!(issue(&mut w, 0, Order::Build { what: tank }));
+        assert!(issue(&mut w, 0, Order::Build { what: jeep }));
+        assert!(issue(&mut w, 0, Order::Build { what: van }));
+        step(&mut w);
+        objects::remove(&mut w, p);
+        production::cancel(&mut w, HouseId(0), tank, false);
+        let l = line(&w, 0, tank).unwrap();
+        if quirk {
+            assert!(l.item.is_none());
+            assert_eq!(l.queue, vec![van]);
+        } else {
+            assert_eq!(l.item.unwrap().t, van);
+            assert!(l.queue.is_empty());
+        }
+    }
+}
+
+// spec: S-0404 claim 11 (one creation draw per item started; none at steps, holds, resumes, refunds or completion)
+#[test]
+fn claim_11_draws() {
+    let mut r = ruleset();
+    r.sim.vehicles.get_mut("JEEP").unwrap().cost = Some(50);
+    // A control game without orders, run in step: the draws of the lines are the difference.
+    let mk = || {
+        let mut w = game(&r);
+        building(&mut w, "WARFACT", 0, 0, 0);
+        ready(&mut w);
+        set_credits(&mut w, 0, 1_000_000);
+        w
+    };
+    let mut w = mk();
+    let mut control = mk();
+    let tank = t(&w, Kind::Vehicle, "TANK");
+    let jeep = t(&w, Kind::Vehicle, "JEEP");
+    let mut tick_draws = |w: &mut glasnost_sim::world::World| {
+        let (a, c) = (w.rng.taken(), control.rng.taken());
+        step(w);
+        step(&mut control);
+        (w.rng.taken() - a) as i64 - (control.rng.taken() - c) as i64
+    };
+    assert_eq!(tick_draws(&mut w), 0);
+    assert!(issue(&mut w, 0, Order::Build { what: tank }));
+    assert_eq!(tick_draws(&mut w), 1);
+    assert!(issue(&mut w, 0, Order::Build { what: jeep }));
+    assert_eq!(tick_draws(&mut w), 0);
+    for _ in 0..40 {
+        assert_eq!(tick_draws(&mut w), 0);
+    }
+    assert!(issue(&mut w, 0, Order::Hold { what: tank }));
+    assert_eq!(tick_draws(&mut w), 0);
+    assert!(issue(&mut w, 0, Order::Build { what: tank }));
+    assert_eq!(tick_draws(&mut w), 0);
+    // A cancel with a refund starts the queued type: one draw.
+    assert!(issue(&mut w, 0, Order::Cancel { what: tank }));
+    assert_eq!(tick_draws(&mut w), 1);
+    // A cancel with an empty queue: none.
+    assert!(issue(&mut w, 0, Order::Cancel { what: jeep }));
+    assert_eq!(tick_draws(&mut w), 0);
+}
+
+// spec: S-0404 claim 12 (an AI house produces only through orders)
+#[test]
+fn claim_12_no_orders_no_production() {
+    let mut w = game(&ruleset());
+    building(&mut w, "BARRACKS", 1, 0, 0);
+    w.houses[1].human = false;
+    set_credits(&mut w, 1, 100_000);
+    for _ in 0..100 {
+        step(&mut w);
+    }
+    assert!(w.econ.lines.lines.is_empty());
+}

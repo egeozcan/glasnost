@@ -14,5 +14,14 @@ pub fn part(w: &mut World) {
 
 /// One house's update.
 fn house_update(w: &mut World, h: HouseId) {
-    let _ = (w, h);
+    // spec: S-0405 claim 7 and S-0403 claim 8 (power worked out when due; every line of the house then works out its step period)
+    if super::power::work_out_if_due(w, h) {
+        super::production::on_power_reevaluated(w, h);
+    }
+    // spec: S-0411 claim 2 (the removal of icons and its orders, at the house update)
+    super::sidebar::remove_unbuildable(w, h);
+    // spec: S-0407 claim 12 (a recheck in the first house update after an event)
+    super::tech::house_update(w, h);
+    // spec: S-0411 claim 9 (the automatic release order)
+    super::sidebar::release_orders(w, h);
 }

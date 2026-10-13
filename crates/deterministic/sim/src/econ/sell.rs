@@ -23,3 +23,25 @@ pub fn sell_wall(w: &mut World, house: HouseId, cell: CellXY) {
 pub fn repair(w: &mut World, actor: ObjectId) {
     let _ = (w, actor);
 }
+
+/// A building type's adjusted cost *C*′ (S-0408 claim 2, F2), which the
+/// price of S-0404 claim 2 uses. Owned by S-0408's topic.
+pub fn adjusted_cost(w: &World, b: u32) -> i32 {
+    use crate::econ::production as p;
+    let cost = |t: Option<crate::econ::TypeRef>| t.map_or(0, |t| p::cost_field(w, t));
+    // spec: S-0408 F2 (d = trunc((C₀ + C₁) / 2) when the pad deduction applies; a missing entry counts 0)
+    let d = if p::pad_term_applies(w, b) {
+        (cost(p::pad(w, 0)) + cost(p::pad(w, 1))) / 2
+    } else {
+        0
+    };
+    let k = cost(Some(crate::econ::TypeRef {
+        kind: crate::rules::Kind::Building,
+        index: b,
+    }));
+    match p::free_unit(w, b) {
+        // spec: S-0408 F2 (C = max(0, K − d − F) with a free unit, K − d without one)
+        Some(f) => (k - d - cost(Some(f))).max(0),
+        None => k - d,
+    }
+}

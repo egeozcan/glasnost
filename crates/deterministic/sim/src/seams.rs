@@ -80,22 +80,16 @@ pub fn sam_held_by_low_power(w: &World, building: ObjectId) -> bool {
     needs && o.owner.is_some_and(|h| short_of_power(w, h))
 }
 
-/// A house's available credits (glossary; S-0404 claim 4). In a skirmish
-/// nothing puts resources into a house's own storage, so they equal the
-/// credit balance (S-0314 Terms, *money of a house*); storage is M5a's.
+/// A house's available credits (glossary; S-0404 claim 4), from the
+/// production topic.
 pub fn available_credits(w: &World, house: HouseId) -> i32 {
-    // spec: S-0404 claim 4 and S-0314 Terms (available credits equal the credit balance in a skirmish)
-    w.houses.get(usize::from(house.0)).map_or(0, |h| h.credits)
+    crate::econ::production::available_credits(w, house)
 }
 
-/// A house pays `amount` credits (S-0314 claims 3 and 8). The payment rules
-/// of S-0404 (storage first, the credit display) are M5a's; until then the
-/// balance drops by the amount.
+/// A house pays `amount` credits (S-0314 claims 3 and 8; S-0404 claim 4),
+/// through the production topic.
 pub fn pay(w: &mut World, house: HouseId, amount: i32) {
-    if let Some(h) = w.houses.get_mut(usize::from(house.0)) {
-        // spec: S-0404 claim 4 and S-0314 claim 3 (the paying house's credits drop by the step cost)
-        h.credits = h.credits.wrapping_sub(amount);
-    }
+    crate::econ::production::pay(w, house, amount);
 }
 
 /// A building type's adjusted cost (S-0408 claim 2, F2), for the step

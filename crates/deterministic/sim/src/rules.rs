@@ -217,7 +217,9 @@ pub struct BuildingRules {
 
 /// The kind of object a factory building makes (S-0403 Terms, *factory
 /// building of a kind*).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub enum FactoryKind {
     /// Infantry.
     Infantry,

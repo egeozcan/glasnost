@@ -303,6 +303,17 @@ Provisional rules of combat, each tied to a request:
 | `combat::damage`, `combat::death` | a building's delayed-kill countdown ends without effect; an exploding building, or one destroyed while being sold, leaves play at once | Q-0081 |
 | `orders::prone_get_up` | a behaviour order resulting in *move* is the movement order that makes a prone unit get up, when the order is applied | Q-0087 |
 
+## Simulation (M5a: economy and base building)
+
+- **Production, tech tree and the sidebar's rules (S-0403, S-0404, S-0407, S-0411).** `econ::production` holds every house's lines in creation order (`World::econ.lines`), the build time F1 to F7 (`build_time_of`, `period_of`, refreshed by `on_power_reevaluated`, which S-0405's house update calls), the price with cost bonuses, pad term and free unit (the adjusted cost is `econ::sell::adjusted_cost`, S-0408's), available credits and payment (`available_credits`, `pay`, behind `seams::available_credits` and `seams::pay`), pay-as-you-go steps in tick row 6, holds, cancels and refunds, the queue, the release of done units (primary, else last acquired) and the factory checks of S-0404 claim 8 (called from `econ::events`). An item's object is created at the start (the creation draw of S-0404 claim 11) and stays off the map until it is released or placed. `econ::tech` gives the tech-tree answer (override, secret type, tech level, country lists with the index wrap, stolen tech, superweapon setting, prerequisites with groups and upgrades, build limits), the present, owned and ever-built counts, the taken-up set and its rechecks at the house update, the queue-time limit and `assign_secret_labs` for S-0412's game start. `econ::sidebar` has the click tables of S-0411 claims 4 and 5 as pure functions (`click`), the icon states, the legality of production orders (`legal`, which `orders::issue` applies to every house), and, at every player house's update, the automatic cancels of S-0411 claim 2 and the automatic release order of claim 9. Seams: free docks (every aircraft factory has one until M6), the superweapon setting (`setup::superweapons_allowed`), don't-score vehicle entries (`victory::unscored_vehicle_entries`), building placement (`placement::place_building`, `place_legal`), the power fraction (`power::power_fraction`, `work_out_if_due`), vehicle-thief take-overs and infiltration (`tech::infiltrated`, for the special-abilities specs). Ledgers: `docs/m5-claims/S-0403.md`, `S-0404.md`, `S-0407.md`, `S-0411.md`.
+
+Provisional rules of M5a, each tied to a request:
+
+| Where | Interim rule | Request |
+|---|---|---|
+| `econ::production::exit_cell` | a released unit is put at once, facing 0, in the cell the nearby-cell search (S-0212 claim 25, scatter use) finds around the cell beyond the factory's far foundation corner; none found counts as a blocked exit, retried in the production part of every tick | Q-0120 |
+| `econ::sidebar::remove_unbuildable` | S-0411 claim 2 as written: a factory being sold no longer counts, so the icons and items of its kind go at the first house update after the sale starts | Q-0121 |
+
 ## Tests
 
 ```sh

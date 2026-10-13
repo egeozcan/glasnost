@@ -6,11 +6,11 @@ use glasnost_num::F64;
 use glasnost_num::geom::{root_floor, table_root};
 use serde::{Deserialize, Serialize};
 
+use crate::econ::TypeRef;
 use crate::occupancy::{self, Outcome};
 use crate::regions::{self, Reach};
 use crate::rules::{Behaviour, Kind};
 use crate::scatter::{self, ScatterRequest};
-use crate::econ::TypeRef;
 use crate::world::{AttackMoveMemory, HouseId, Layer, ObjectId, Pos, Target, World};
 
 /// An order (S-0213 table T1). House orders of other topics (production,
@@ -164,6 +164,10 @@ pub const PENDING_LIMIT: usize = 128;
 pub fn issue(w: &mut World, house: HouseId, order: Order) -> bool {
     // spec: S-0213 claim 1 (an order block refuses input)
     if w.tick <= w.orders_blocked_through {
+        return false;
+    }
+    // spec: S-0213 claim 3 and S-0404 claim 10 (a production order is judged when it is issued)
+    if !crate::econ::sidebar::legal(w, house, &order) {
         return false;
     }
     let limit = w.rules().quirks.pending_order_limit;
