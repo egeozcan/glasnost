@@ -736,7 +736,8 @@ fn answer_with(w: &World, house: HouseId, t: TypeRef, production_exception: bool
 /// asks that). S-0404's own *could make* is `could_make_limit_only`.
 pub fn could_make(w: &World, b: &Object, t: TypeRef, tech: bool) -> bool {
     let r = w.rules();
-    if b.kind != Kind::Building || !b.on_map || being_sold(b) {
+    // spec: S-0404 Terms (a factory building on the map, neither being sold nor queued to be sold, S-0407 Terms)
+    if b.kind != Kind::Building || !b.on_map || being_sold(b) || queued_to_be_sold(b) {
         return false;
     }
     let Some(br) = r.buildings.get(b.type_index as usize) else {
@@ -775,10 +776,10 @@ pub fn could_make(w: &World, b: &Object, t: TypeRef, tech: bool) -> bool {
 /// (b): tech-tree condition, power and docks left out; not being sold or
 /// queued to be sold).
 fn factory_condition(w: &World, house: HouseId, t: TypeRef) -> bool {
-    // spec: S-0407 claim 1 (b) (a factory not being sold or queued to be sold)
+    // spec: S-0407 claim 1 (b) (a factory not being sold or queued to be sold: S-0404's could make)
     w.objects
         .values()
-        .any(|b| b.owner == Some(house) && could_make(w, b, t, false) && !queued_to_be_sold(b))
+        .any(|b| b.owner == Some(house) && could_make(w, b, t, false))
 }
 
 /// A qualifying factory for a type (S-0407 Terms): a factory building of
@@ -1030,11 +1031,11 @@ pub fn could_make_limit_only(w: &World, b: &Object, t: TypeRef) -> bool {
 }
 
 /// Whether a factory building may serve a new start, a queue request, a
-/// resume or a release (S-0411 claim 14): it could make `t` (S-0404 Terms)
-/// and is not queued to be sold either.
+/// resume or a release (S-0411 claim 14): it could make `t` (S-0404 Terms,
+/// which already leaves out a building queued to be sold).
 pub fn could_start(w: &World, b: &Object, t: TypeRef) -> bool {
-    // spec: S-0411 claim 14 (a factory queued to be sold is excluded from new starts, queue requests, resumes and releases; request Q-0190)
-    could_make_limit_only(w, b, t) && !queued_to_be_sold(b)
+    // spec: S-0411 claim 14 (a factory queued to be sold is excluded from new starts, queue requests, resumes and releases) and S-0404 Terms
+    could_make_limit_only(w, b, t)
 }
 
 /// The house's part of the house update for the tech tree (S-0407 claim 12):

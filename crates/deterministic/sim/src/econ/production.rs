@@ -1155,9 +1155,7 @@ pub fn place(w: &mut World, house: HouseId, t: TypeRef, cell: Option<CellXY>) {
 /// marked primary, else the last the house acquired.
 pub fn releasing_building(w: &World, house: HouseId, t: TypeRef) -> Option<ObjectId> {
     // spec: S-0404 Terms (could release: switched on, could make without the tech-tree rule) and S-0411 claim 14 (not a factory queued to be sold)
-    let base = |b: &Object| {
-        switched_on(b) && tech::could_make(w, b, t, false) && !tech::queued_to_be_sold(b)
-    };
+    let base = |b: &Object| switched_on(b) && tech::could_make(w, b, t, false);
     let mut cands = factories(w, house, |b| {
         base(b) && (t.kind != Kind::Aircraft || dock_free(w, b.id))
     });
@@ -1260,8 +1258,7 @@ pub fn check_line(w: &mut World, house: HouseId, lk: LineKind, exclude: Option<O
     };
     let can = |w: &World, t: TypeRef, on: bool| {
         !factories(w, house, |b| {
-            // spec: S-0404 claim 8 (could make: the build-limit answer with the production allowance, not the full tech tree)
-            // Q-0190 (interim: a factory building queued to be sold still counts)
+            // spec: S-0404 claim 8 (could make: the build-limit answer with the production allowance, not the full tech-tree; a factory building being sold or queued to be sold counts in no test, Terms)
             Some(b.id) != exclude && (!on || switched_on(b)) && tech::could_make_limit_only(w, b, t)
         })
         .is_empty()
@@ -1341,7 +1338,7 @@ pub fn factory_removed(w: &mut World, house: HouseId, b: ObjectId) {
         if l.house == house
             && l.kind.factory_kind() == kind
             && let Some(t) = l.item.as_ref().map(|i| i.t)
-            // Q-0190 (interim: a factory building queued to be sold still counts)
+            // spec: S-0404 claim 8 and Terms (a factory building being sold or queued to be sold counts in no test)
             && factories(w, house, |x| x.id != b && tech::could_make(w, x, t, false)).is_empty()
         {
             // spec: S-0404 claim 8 (removed for good: no other factory could make the item: cancelled as after a cancel)

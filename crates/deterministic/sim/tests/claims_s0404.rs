@@ -860,6 +860,34 @@ fn claim_8_removed_for_good() {
     assert_eq!(credits(&w, 0), 1_000_000);
 }
 
+// spec: S-0404 claim 8 and Terms (P8 run 11: a factory building queued to be sold counts in no test; the start of the sale is no event, so the item keeps stepping and paying; a check run by another event judges without it and cancels with the refund)
+#[test]
+fn claim_8_factory_being_sold() {
+    let (mut w, b, grunt) = barracks_game(&ruleset());
+    w.obj_mut(b)
+        .unwrap()
+        .beh
+        .queue(Some(glasnost_sim::rules::Behaviour::Selling));
+    let p = item(&w, 0, grunt).unwrap().progress;
+    let c = credits(&w, 0);
+    for _ in 0..20 {
+        step(&mut w);
+    }
+    assert!(w.obj(b).is_some_and(|o| o.on_map));
+    assert!(
+        item(&w, 0, grunt).unwrap().progress > p,
+        "it keeps stepping"
+    );
+    assert!(credits(&w, 0) < c, "and paying");
+    w.obj_mut(b)
+        .unwrap()
+        .beh
+        .queue(Some(glasnost_sim::rules::Behaviour::Selling));
+    production::check_line(&mut w, HouseId(0), LineKind::Infantry, None);
+    assert!(line(&w, 0, grunt).is_none());
+    assert_eq!(credits(&w, 0), 1_000_000);
+}
+
 // spec: S-0404 claim 9 (P9 (a): a prerequisite destroyed in the turn pass of tick n: both orders issued and applied in tick n; the item refunded, the queued copy removed)
 #[test]
 fn claim_9_unbuildable() {
