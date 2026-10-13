@@ -2,13 +2,13 @@
 id: S-0309
 title: Target acquisition (automatic searches, candidate tests, threat score, retaliation, target switching)
 topic: combat
-revision: 2
+revision: 3
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-10
+approved-on: 2026-10-13
 measurements: []
-requests: []
+requests: [Q-0061, Q-0079]
 supersedes: []
 ---
 
@@ -388,10 +388,17 @@ this spec:
    the ground layer, such as a hovering unit with jumpjet movement (air or top layer, S-0102
    claim 3), is never found by a map-wide search, whatever the searcher's weapons can hit
    (`quirks.hunt_ground_layer_only`, Edge cases). The
-   order of the two passes decides only ties (claim 17).
+   A landed aircraft in the ground render layer is considered in both passes when the search
+   looks for aircraft: it is not removed from the second pass after being considered in the first.
+   Each consideration has its own candidate tests and score. The aircraft pass has no connected-region
+   test and uses distance in cells for F4; the ground-layer pass has the connected-region test
+   above and uses distance in leptons. Either score can win, and the same object can supply both.
+   Without the aircraft search class, the first pass does not run, but a search for vehicles
+   still accepts a landed aircraft in the second pass (claim 5), with distance in leptons.
+   The order of the two passes decides ties (claim 17), not which distance unit an aircraft uses.
    - Backing: `measurable` (scenario A11: part a for the absent distance limit, part b for the
      zone test, part f for the ground-layer restriction, part g for the aircraft pass coming
-     first; scenario A12, parts d and e, for a healer's second pass; scenario A15, part e, run 3,
+     first, parts h and i for landed aircraft in both passes and their distance units; scenario A12, parts d and e, for a healer's second pass; scenario A15, part e, run 3,
      for the allied objects an engineer of the neutral house considers). The objects considered by a
      searcher whose type attacks friendlies, that is berserk or that is such a passenger follow
      table C's rows "friendly" and "controller's allies", whose scenarios are named there
@@ -932,6 +939,17 @@ this spec:
     - Confidence: medium for parts a, b, e, f, g and i; low for parts c, d, h and j, for the
       opportunity mark of a wall target, and for the row used by parts g and i
 
+26. **Initial threat coefficients and layers.** Each of a newly registered type's five threat
+    coefficients starts at double-precision 0, independently of the game-wide defaults. Whenever
+    a layer reads that type's section, an absent coefficient keeps its held value, except that
+    with `quirks.coefficient_zero_replaced` on, a held 0 takes the matching game-wide default as
+    it stands at that reading. A nonzero value copied this way is not updated just because a
+    later layer changes the game-wide default. With the switch off, a coefficient never supplied
+    by any layer stays 0. A type section that is not read in a layer changes no coefficient
+    (S-0006 owns when sections are read).
+    - Backing: `measurable` (scenario A16)
+    - Confidence: high
+
 ## Formulas
 
 Notation: trunc is truncation toward zero (S-0205, claims 2 and 7). ρ₃(*P*, *Q*) and ρ₂(*P*, *Q*)
@@ -1008,9 +1026,10 @@ own-effectiveness, target-effectiveness, special-threat, strength and distance c
 seven are held in double precision as imported, Import mapping),
 *h*<sub>T</sub> = health / strength field of *T* (S-0214's health ratio, a double quotient),
 *k* = trunc(range field of the weapon *A* would use against *T*, in leptons (S-0307, claim 1, with
-no bonus or replacement) / 256), or trunc(*g* / 256) when there is no such weapon (cells); *d* = trunc(ρ₃(*A*, *T*) / 256) cells in range and area searches and for
-aircraft in the map-wide search, but *d* = ρ₃(*A*, *T*) in *leptons* for the ground-layer objects
-of the map-wide search (`quirks.hunt_distance_in_leptons`). *e* is an integer converted exactly to a
+no bonus or replacement) / 256), or trunc(*g* / 256) when there is no such weapon (cells).
+*d* = trunc(ρ₃(*A*, *T*) / 256) cells in range and area searches and in the aircraft pass of
+the map-wide search, but *d* = ρ₃(*A*, *T*) in *leptons* in the ground-layer pass of the
+map-wide search, including a landed aircraft considered in that pass (`quirks.hunt_distance_in_leptons`). *e* is an integer converted exactly to a
 double. conv is the common conversion of S-0205, claim 7 (truncation toward zero, wrap modulo 2³²,
 0 for magnitudes of 2⁶³ or more).
 
@@ -1085,7 +1104,7 @@ truncated toward zero (Notation above), so the difference is an integer.
 | Engineer chosen-building distance | 3840 | leptons | Claim 25, part c; the chosen building must be closer than this |
 | Disguise draw range | 0 … 99 | random draw value (no unit) | Claim 25, part g; one ranged draw per test |
 | Passive-acquire and retaliate flags absent-key default | yes | boolean (no unit) | Import mapping |
-| Coefficient absent-key default | the game-wide default coefficient | coefficient (no unit) | Import mapping |
+| Initial type coefficient | 0 | coefficient (no unit) | claim 26; absent-key replacement is separate |
 | Coefficient warning threshold | 10⁶ | coefficient magnitude (no unit) | Edge cases, *Out-of-range scores*; one of our constants, not the original's: the importer warns above it |
 
 ## State and ordering
@@ -1225,8 +1244,8 @@ between the wall target *W*, the best candidate and no target.
   never considered by a map-wide search. Switch `quirks.hunt_ground_layer_only` (default on =
   original). Off: the second pass also considers the infantry units, vehicles and buildings of
   every other render layer, with the zone test of claim 7 on the cell they are over, and scores
-  them as the ground-layer objects of that pass (F4); aircraft are still considered only in the
-  first pass, and table C decides as for any other object (so the firing check rejects a hovering
+  them as the ground-layer objects of that pass (F4); aircraft keep their original eligibility
+  in both passes (claim 7), and table C decides as for any other object (so the firing check rejects a hovering
   object for a weapon that cannot hit it).
 - **Unused permanent-berserk mark** (Terms). The original has the mark and honours it in claim 10
   (any object is selected, but an allied one is not tested, so it hides the rest of its cell) and
@@ -1238,7 +1257,8 @@ between the wall target *W*, the best candidate and no target.
   meant for less capable players. The original selects it only for a house created without a
   country, which does not happen, so it never takes effect. Our engine imports and ignores it, and
   the importer gives no warning.
-- **Coefficient given as 0.** A coefficient key that is absent from a layer keeps the held value,
+- **Coefficient given as 0.** Each type coefficient starts at 0 (claim 26), so the replacement
+  below also applies to the first reading without the key. A coefficient key that is absent from a layer keeps the held value,
   except that a held value of 0 is replaced by the matching game-wide default coefficient (as it
   stands when the type is read). The default is copied in the double precision in which it is
   held, not narrowed (Import mapping). So a coefficient written as 0 holds only until a later layer
@@ -1314,7 +1334,7 @@ between the wall target *W*, the best candidate and no target.
 | Rules, type section, key `NoAutoFire` | claim 5 | boolean | default no |
 | Rules, type section, key `VHPScan` | target-health scan mode: `None`, `Normal`, `Strong` (claim 14) | word | held value; default none |
 | Rules, type section, key `SpecialThreatValue` | *s*<sub>T</sub> (F4) | decimal, held in double precision: the double of S-0003 claims 6 and 7, never narrowed to single | held value; default 0 |
-| Rules, type section, keys `MyEffectivenessCoefficient`, `TargetEffectivenessCoefficient`, `TargetSpecialThreatCoefficient`, `TargetStrengthCoefficient`, `TargetDistanceCoefficient` | *c*<sub>me</sub>, *c*<sub>te</sub>, *c*<sub>st</sub>, *c*<sub>sg</sub>, *c*<sub>d</sub> (F4) | decimal, held in double precision: the double of S-0003 claims 6 and 7, never narrowed to single | held value, but a held value of 0 is replaced by the matching game-wide default, copied without narrowing (Edge cases) |
+| Rules, type section, keys `MyEffectivenessCoefficient`, `TargetEffectivenessCoefficient`, `TargetSpecialThreatCoefficient`, `TargetStrengthCoefficient`, `TargetDistanceCoefficient` | *c*<sub>me</sub>, *c*<sub>te</sub>, *c*<sub>st</sub>, *c*<sub>sg</sub>, *c*<sub>d</sub> (F4) | decimal, held in double precision: the double of S-0003 claims 6 and 7, never narrowed to single | starts at double-precision 0 before any layer; thereafter held value, but with `quirks.coefficient_zero_replaced` on a held 0 is replaced by the matching game-wide default at this section reading, copied without narrowing; off always keeps the held value (claim 26) |
 | Rules, `[General]`, keys `MyEffectivenessCoefficientDefault`, `TargetEffectivenessCoefficientDefault`, `TargetSpecialThreatCoefficientDefault`, `TargetStrengthCoefficientDefault`, `TargetDistanceCoefficientDefault` | the game-wide default coefficients | decimal, held in double precision: the double of S-0003 claims 6 and 7, never narrowed to single | held value; engine default 0 |
 | Rules, `[General]`, keys `DumbMyEffectivenessCoefficient`, `DumbTargetEffectivenessCoefficient`, `DumbTargetSpecialThreatCoefficient`, `DumbTargetStrengthCoefficient`, `DumbTargetDistanceCoefficient` | unused (Edge cases) | decimal | — |
 | Rules, `[General]`, key `EnemyHouseThreatBonus` | *B* (F4) | decimal, held in double precision: the double of S-0003 claims 6 and 7, never narrowed to single | held value; engine default 0 |
@@ -1943,8 +1963,26 @@ set in the test map's override sections.
   special threat value: an aircraft landed on open ground and a vehicle. *Expected:* the aircraft
   is picked in every run (equal scores, and the aircraft pass comes first). *Falsified if:* the
   vehicle is picked in any run.
+- *Part h (landed aircraft, second-pass distance):* use the common measurement setup on
+  flat connected ground. A hunting vehicle has an anti-ground weapon without anti-air capability,
+  and two enemies outside its weapon reach: a landed aircraft on open ground and a vehicle.
+  Set test coefficients and the targets' special threat values so that F4 gives the vehicle
+  a score strictly between the aircraft's hypothetical cell-distance score and its lepton-distance
+  score; use a positive distance coefficient. All other score terms and modifiers are controlled,
+  and both targets pass table C. Record the first chosen target before either moves.
+  *Expected:* the aircraft wins, using leptons in the second pass, even without an aircraft class.
+  Repeat with an anti-air-capable weapon as well: the aircraft still wins because its larger
+  second-pass score competes after its smaller first-pass score. *Falsified if:* the vehicle wins
+  either run, or the ground-only hunter finds no aircraft when it is the sole target.
+- *Part i (landed aircraft, first pass retained):* repeat part h with a negative distance
+  coefficient and test threat values giving the vehicle a score strictly between the aircraft's
+  two positive scores. *Expected:* the anti-air hunter picks the aircraft by its cell-distance
+  first-pass score, while the ground-only hunter picks the vehicle by its lepton-distance score.
+  *Falsified if:* either pick differs. Together h and i distinguish two-pass scoring from either
+  a single-pass rule or a rule using cells in both passes. Repeat both with the aircraft on a pad,
+  recording its render layer and connected region to exclude layer or zone confounds.
 - *Falsified if:* part b picks the unreachable target, part a does not move, part c differs as it
-  says, part d picks the island enemy, part e does not, or parts f and g differ as they say.
+  says, part d picks the island enemy, part e does not, or parts f to i differ as they say.
 
 **A12: healers (claim 6).** A healing infantry type next to two damaged allied infantry and one
 damaged allied vehicle: it heals the infantry only, the more damaged first when the strength
@@ -2215,6 +2253,34 @@ claims give for a human-controlled owner. Target recorder in every part.
 Every sub-rule that has no scenario part above is marked `unmeasured`, with its reason, in its
 claim's backing.
 
+
+**A16: initial and layered coefficients (claim 26; Q-0061).** Use the common measurement
+setup, a flat map, one human hunter and two stationary enemy vehicles, outside firing reach,
+with the target recorder. Start each run in a fresh session. Named test rules remove the chosen
+type coefficient from every layer and set its game-wide default nonzero in base rules. The
+searcher's type section exists in base rules. Choose candidate properties so F4 predicts different
+first targets with that coefficient equal to 0, the base default, and a distinct map default.
+Repeat separately for each of the five coefficients, holding the other terms fixed. For the
+own-effectiveness term use different armour classes; for target-effectiveness use different
+candidate weapons; for special-threat use different special threat values; for strength use
+different health ratios; for distance use different distances.
+- *Run 1:* no later default change. *Expected:* the pick follows the base default, not 0.
+- *Run 2:* the map changes only the game-wide default and contains the type section without its
+  coefficient. *Expected:* the pick still follows the nonzero base default, not the map default.
+- *Run 3:* base default 0, map default nonzero, with that same type section present in the map.
+  *Expected:* the pick follows the map default. Control: omit the map's type section altogether
+  and ensure no intermediate layer supplies it; the pick follows 0.
+- *Run 4:* explicitly give the type coefficient 0 in base rules, with a nonzero base default,
+  and include its section without that coefficient in the map. *Expected:* the later reading
+  replaces 0 by the default then in force. Control: omit that later section and ensure no other
+  intermediate section reads it; the pick follows 0.
+- *Observable/tool:* record the first chosen target with the read-only recorder, using scripted
+  hunt orders, game speed 2, director and mods off except the named test files. Keep bystander
+  activity away from the test area under the common void rule. *Falsified if:* any valid run's
+  first target differs from F4 with the coefficient stated above. On our engine repeat with
+  `quirks.coefficient_zero_replaced` off: runs 1 to 4 all retain 0 unless a layer explicitly
+  supplies a nonzero type coefficient. This off-setting check is a test of our chosen alternative,
+  not a measurement of the original.
 
 ## Open questions
 
