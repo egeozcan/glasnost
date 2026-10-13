@@ -1034,6 +1034,45 @@ fn claim_28_unused_house_cleanup() {
     assert!(!w.houses[1].removed && w.houses[2].removed);
 }
 
+/// spec: S-0009 claim 28 and S-0202 claim 14 (the cleanup runs after the second pass; removing a
+/// ground occupant recalculates its cell, and a cell whose tile animation started in the second
+/// pass takes no new creation draw)
+#[test]
+fn claim_28_cleanup_recalculation_after_the_second_pass() {
+    use glasnost_map::terrain::TileAnim;
+    use glasnost_rules::sim::AnimationType;
+    let with_anim = |removed_on_anim: bool| {
+        let mut s = cleanup_scene();
+        s.register("animations", "SPARK");
+        // A random delay: one ranged draw per creation.
+        s.ruleset.sim.animations.insert(
+            "SPARK".into(),
+            AnimationType {
+                random_rate: Some([2, 1]),
+                ..Default::default()
+            },
+        );
+        s.catalogue.tiles[1].anim = Some(TileAnim {
+            name: "SPARK".into(),
+            attaches_to: 0,
+        });
+        s.set_cell(cell(-6, 0), 1, 0);
+        if !removed_on_anim {
+            // The removed house's vehicle elsewhere, the kept house's on the animation's cell.
+            s.map.objects.units[0].placed.cell = cell(-6, 4);
+            s.map.objects.units[1].placed.cell = cell(-6, 0);
+        }
+        load(&s).expect("loads")
+    };
+    let on = with_anim(true);
+    let off = with_anim(false);
+    assert!(on.houses[1].removed && off.houses[1].removed);
+    let i = on.cells.idx(cell(-6, 0)).unwrap();
+    assert!(on.cells.anim_started[i], "started in the second pass");
+    // The removal's recalculation of the started cell took no draw.
+    assert_eq!(on.rng, off.rng);
+}
+
 /// spec: S-0010 claim 12 and claim 19 (the game-start pass after the starting units: a cell that has
 /// started no tile animation since the second pass starts that of the tile the second pass left, with
 /// its creation draws; at most one per cell)

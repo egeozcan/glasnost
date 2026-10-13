@@ -372,8 +372,11 @@ pub struct AnimRules {
     pub random_delay: (i32, i32),
     /// A bouncing type: the bouncer or the meteor flag (S-0109 Terms).
     pub bouncing: bool,
-    /// Its start event can take draws that no approved spec states: a
-    /// resource chain reaction or a middle-event effect (request Q-0046).
+    /// Its start event can take draws that are not taken yet: a resource
+    /// chain reaction (S-0401 claim 20, the economy topic's seam) or the
+    /// middle event's particles and smudges (S-0109 claim 14, request
+    /// Q-0182). The importer carries no image-frame counts, so μ (S-0109
+    /// claim 25) is not known and every type with one of the effects counts.
     pub start_effects: bool,
 }
 

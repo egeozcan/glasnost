@@ -73,6 +73,11 @@ pub struct Inputs {
     /// Top-level file names that differ only in letter case (S-0005 Edge
     /// cases).
     pub case_clashes: Vec<(String, String)>,
+    /// The game-mode file's name: the one named in the options, or the
+    /// one the mode list gives (S-0006 claim 13).
+    pub mode_name: Option<String>,
+    /// Warnings about the mode list (S-0006 claim 13, Bad data).
+    pub mode_warnings: Vec<crate::layers::Warning>,
 }
 
 /// Reads one file through the game's search order.
@@ -90,8 +95,8 @@ pub async fn read(vfs: &Vfs, name: &str) -> Option<InputFile> {
     })
 }
 
-/// Reads the inputs of an import. `mode` names the game-mode file
-/// (Q-0006: the mode list is not read).
+/// Reads the inputs of an import. `mode` names the game-mode file (the
+/// one the options name, or the one the mode list gives).
 pub async fn read_inputs(
     vfs: &Vfs,
     mode: Option<&str>,

@@ -74,7 +74,7 @@ impl Emitter<'_> {
         let detail = match &e.what {
             What::Set(v) => format!("set {:?}", show(v)),
             What::NotGiven(v) => format!("{:?} counts as not given; the held value stays (S-0006 claim 3)", show(v)),
-            What::Reset => "the layer has the section but not the key: reset to the engine default (S-0006 claim 5)".into(),
+            What::Reset => "the layer has the section but not the key: reset to its reset value (S-0006 claim 5)".into(),
             What::FromTurret(v) => format!(
                 "the layer has the section but not the key: takes the turret's value {} (S-0105 claim 27)",
                 v.as_ref().map_or_else(|| "(none: the engine default)".to_owned(), |v| format!("{:?}", show(v)))
