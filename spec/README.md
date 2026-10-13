@@ -33,7 +33,6 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0002](rules-import/S-0002-ini-duplicates.md) | INI duplicates and name resolution | rules-import | 6 | approved | — |
 | [S-0005](rules-import/S-0005-data-file-precedence.md) | Data file precedence (loose files, archive mount order, name lookup) | rules-import | 4 | approved | — |
 | [S-0106](rendering/S-0106-voxel-tilt-slopes.md) | Slope shapes, terrain surface height and voxel tilt on slopes | rendering | 3 | approved | — |
-| [S-0110](rendering/S-0110-shroud-rendering.md) | Shroud and fog rendering | rendering | 4 | approved | — |
 | [S-0111](rendering/S-0111-in-game-overlays.md) | In-game overlays (health bars, pips, selection marks, insignia) | rendering | 6 | approved | — |
 | [S-0201](simulation/S-0201-game-speed-tick-rate.md) | Game speed and tick rate | simulation | 7 | approved | — |
 | [S-0204](simulation/S-0204-coordinates-distance-facing.md) | Coordinates, distance and facing | simulation | 5 | approved | — |
@@ -96,3 +95,4 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0105](rendering/S-0105-voxel-rendering.md) | Rendering of voxel models | rendering | 7 | approved | — |
 | [S-0107](rendering/S-0107-infantry-sprite-sequences.md) | Infantry sprite sequences | rendering | 6 | approved | — |
 | [S-0109](rendering/S-0109-animation-playback.md) | Animation playback | rendering | 7 | approved | — |
+| [S-0110](rendering/S-0110-shroud-rendering.md) | Shroud and fog rendering | rendering | 5 | approved | — |
