@@ -2,7 +2,7 @@
 id: S-0007
 title: Art lookup (image indirection, sprite or voxel, companion files, theater substitution)
 topic: rules-import
-revision: 7
+revision: 8
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -277,11 +277,14 @@ rules*, *engine constant*, *game*, *game-mode file*, *local player*, *loose file
 
     Name lengths and later reads:
     - The art section's own image key and the eight names other than the build-up name are cut to
-      63 bytes. The image key is read afresh at every type read from the art section as it is
-      then: when that art section does not set it, that read uses the image name, whatever an
-      earlier read's art section had set.
-    - The build-up name is cut to **15** bytes. A type read whose art section does not set it,
-      or sets it empty, keeps the build-up name of the earlier read.
+      63 bytes. These are byte limits, not decoded-character limits. S-0108's Import mapping
+      currently describes related building-sprite name limits as characters; those descriptions
+      must be changed to bytes in the same review round. The image key is read afresh at every type
+      read from the art section as it is then: when that art section does not set it, that read uses
+      the image name, whatever an earlier read's art section had set.
+    - The build-up name is cut to **15** bytes, not decoded characters; the corresponding S-0108
+      Import mapping limit must be changed to bytes in the same review round. A type read whose art
+      section does not set it, or sets it empty, keeps the build-up name of the earlier read.
     - **The eight other sprites at a later type read** (deploying, roof-deploying, door,
       under-door, under-roof-door, rubble, special overlay, bib). Each is decided on its own, by the
       art section of that type read:
@@ -543,8 +546,10 @@ rules*, *engine constant*, *game*, *game-mode file*, *local player*, *loose file
 
 27. **Projectile art.** Let I be a projectile's non-empty image name (claim 26). Its art section is
     the one named by I. Its trailer animation and trailer delay use this section before any arctic
-    change to the drawing name (claim 33; S-0004 claim 14). The theater flag, the new-theater flag,
-    the voxel flag and the line-trail settings follow claim 2 and the exception in claim 9.
+    change to the drawing name (claim 33; S-0004 claim 14). Thus selecting an arctic voxel model
+    does not select the suffixed art section's trailer animation or delay: the trail still uses
+    the unsuffixed section's settings. The theater flag, the new-theater flag, the voxel flag and
+    the line-trail settings follow claim 2 and the exception in claim 9.
     - **Without the voxel flag:** the sprite is the one claims 5 to 8 give an infantry sprite (found
       and subst as defined under Formulas): found(I ‖
       .E) with the theater flag, found(subst(I ‖ .shp)) with the new-theater flag, found(I ‖ .shp)
@@ -625,7 +630,10 @@ rules*, *engine constant*, *game*, *game-mode file*, *local player*, *loose file
     - Backing: `measurable` (A22) for the own model, the shared part, the share priorities (A22
       parts d and e) and a later read that shares again; `unmeasured` for a later read that drops
       the share flags, because the original's result there is unspecified and a measurement would
-      record chance, not a rule.
+      record chance, not a rule. A22 part e also measures which kind wins when a share-source name
+      matches more than one kind. S-0004 claim 13 currently says that this priority is unmeasured
+      because no observable in that spec distinguishes it; that rationale must be revised to
+      acknowledge S-0007's A22 part e in the same review round.
     - Confidence: high (the file name, the share order and priority), medium (no motion file, the
       afresh share keys)
 
