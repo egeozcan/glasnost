@@ -1502,6 +1502,32 @@ fn delay_kill_credited_again_on() {
     assert_eq!(w.houses[0].combat.kills, 3);
 }
 
+// spec: S-0311 claim 9 (revision 2: each lethal hit during a delayed-kill countdown gives its recipient another kill value; ordinary expiry carries no attacker, so nobody gains experience or a kill count then)
+#[test]
+fn s0311_claim_9_delayed_kill_experience() {
+    let (mut w, b, a) = delay_world("2", |r| {
+        r.sim.vehicles.get_mut("BOX").unwrap().cost = Some(1000);
+        r.sim.buildings.get_mut("DEPOT").unwrap().cost = Some(500);
+        r.sim.general.veteran_ratio = Some(dec("4"));
+    });
+    let slow = wh(&w, "SLOW");
+    let exp = |w: &World| w.obj(a).unwrap().combat.experience;
+    let e0 = exp(&w);
+    apply!(w, b, by_at(a, 5000, slow, 0));
+    let e1 = exp(&w);
+    assert_ne!(e1, e0, "the first lethal hit gives experience");
+    apply!(w, b, by_at(a, 50, slow, 0));
+    let e2 = exp(&w);
+    assert_ne!(e2, e1, "a further lethal hit gives it again");
+    assert_eq!(w.houses[0].combat.kills, 2);
+    for _ in 0..120 {
+        glasnost_sim::tick::step(&mut w);
+    }
+    assert!(w.obj(b).is_none_or(|o| o.health <= 0), "the countdown expired");
+    assert_eq!(exp(&w), e2, "no experience at expiry");
+    assert_eq!(w.houses[0].combat.kills, 2, "no attacking-house kill at expiry");
+}
+
 // spec: S-0302 Edge cases (quirks.delay_kill_credited_again off: credited once, the countdown still shortened)
 #[test]
 fn delay_kill_credited_again_off() {

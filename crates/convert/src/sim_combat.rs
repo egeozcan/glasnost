@@ -1601,14 +1601,21 @@ impl Builder<'_> {
         self.each_int(key(t, "SuppressionThreshold"), |x| x < 0, |v| {
             format!("{name} SuppressionThreshold {v} is below 0: every non-negative hit suppresses the parasite (S-0315 claim 6)")
         });
+        let untrimmed = self.i.ini_quirks.list_items_untrimmed;
         for k in ["VeteranAbilities", "EliteAbilities"] {
             for (v, layer, line) in sets(key(t, k)) {
-                for item in value::list(&v, value::COMMON_TEXT_LIMIT) {
+                for item in value::name_items(&v, value::COMMON_TEXT_LIMIT, untrimmed) {
+                    if untrimmed && value::edge_whitespace(item) {
+                        // spec: S-0311 Edge cases (quirks.list_items_untrimmed on: the importer warns for surrounding whitespace)
+                        self.warn(layer, line, format!(
+                            "{name} {k}: a list item with whitespace at its start or end names a different type (S-0003 claim 12, quirks.list_items_untrimmed)"
+                        ));
+                    }
                     if !ABILITIES
                         .iter()
                         .any(|a| item.eq_ignore_ascii_case(a.as_bytes()))
                     {
-                        // spec: S-0311 Edge cases (items are not trimmed; the importer warns for every item that names no ability)
+                        // spec: S-0311 Edge cases (the importer warns for each non-empty item that matches no ability, in either setting of quirks.list_items_untrimmed)
                         self.warn(layer, line, format!(
                             "{name} {k}: {:?} names no ability and is ignored (S-0311 Import mapping)",
                             show(item)

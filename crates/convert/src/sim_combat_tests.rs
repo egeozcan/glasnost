@@ -1111,3 +1111,23 @@ fn list_items_untrimmed_switch() {
     );
     assert!(!warned(&w, "quirks.list_items_untrimmed"));
 }
+
+/// spec: S-0311 Import mapping and Edge cases (revision 2: quirks.list_items_untrimmed on, `firepower ` names no ability and both warnings are given; off, it is trimmed and matches; an unknown non-empty item warns in either setting)
+#[test]
+fn ability_lists_follow_list_items_untrimmed() {
+    let base = "[InfantryTypes]\n1=Walker\n[Walker]\nVeteranAbilities=firepower ,sight,bogus\n";
+    let (s, w) = direct(&[base], "", &[], &[], IniQuirks::default());
+    assert_eq!(s.infantry["Walker"].veteran_abilities, ["FIREPOWER ", "SIGHT", "BOGUS"]);
+    assert!(warned(&w, "VeteranAbilities: a list item with whitespace"));
+    assert!(warned(&w, "\"firepower \" names no ability"));
+    assert!(warned(&w, "\"bogus\" names no ability"));
+    let off = IniQuirks {
+        list_items_untrimmed: false,
+        ..IniQuirks::default()
+    };
+    let (s, w) = direct(&[base], "", &[], &[], off);
+    assert_eq!(s.infantry["Walker"].veteran_abilities, ["FIREPOWER", "SIGHT", "BOGUS"]);
+    assert!(!warned(&w, "a list item with whitespace"));
+    assert!(!warned(&w, "\"firepower\" names no ability"));
+    assert!(warned(&w, "\"bogus\" names no ability"));
+}
