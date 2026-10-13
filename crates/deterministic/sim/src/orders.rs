@@ -10,6 +10,7 @@ use crate::occupancy::{self, Outcome};
 use crate::regions::{self, Reach};
 use crate::rules::{Behaviour, Kind};
 use crate::scatter::{self, ScatterRequest};
+use crate::econ::TypeRef;
 use crate::world::{AttackMoveMemory, HouseId, Layer, ObjectId, Pos, Target, World};
 
 /// An order (S-0213 table T1). House orders of other topics (production,
@@ -55,6 +56,72 @@ pub enum Order {
     /// Cheer: all of the issuing house's infantry cheer (S-0213 table T1,
     /// a house order with no actor).
     Cheer,
+    /// Build: start or queue an item of a type (S-0213 claim 14, S-0404
+    /// claim 3).
+    Build {
+        /// The type.
+        what: TypeRef,
+    },
+    /// Hold the line of a type (S-0404 claim 5).
+    Hold {
+        /// The type.
+        what: TypeRef,
+    },
+    /// Cancel one item or queued copy of a type (S-0404 claim 6).
+    Cancel {
+        /// The type.
+        what: TypeRef,
+    },
+    /// Cancel every item and queued copy of a type (S-0404 claim 6).
+    CancelAll {
+        /// The type.
+        what: TypeRef,
+    },
+    /// Place a done item (S-0404 claim 7): a building at a cell (S-0406),
+    /// a unit without one (its release).
+    Place {
+        /// The type.
+        what: TypeRef,
+        /// The cell a building's placement names.
+        cell: Option<CellXY>,
+    },
+    /// Sell (S-0213 claim 12).
+    Sell {
+        /// The actor.
+        actor: ObjectId,
+    },
+    /// Sell the wall in a cell (S-0213 claim 12, S-0408 claim 12).
+    SellWall {
+        /// The cell.
+        cell: CellXY,
+    },
+    /// Repair switch (S-0213 claim 13).
+    Repair {
+        /// The actor.
+        actor: ObjectId,
+    },
+    /// Power off (S-0213 claim 13, S-0405 claim 10).
+    PowerOff {
+        /// The actor.
+        actor: ObjectId,
+    },
+    /// Power on (S-0213 claim 13, S-0405 claim 10).
+    PowerOn {
+        /// The actor.
+        actor: ObjectId,
+    },
+    /// Primary factory switch (S-0213 claim 13).
+    Primary {
+        /// The actor.
+        actor: ObjectId,
+    },
+    /// Surrender (S-0414 claim 11).
+    Surrender,
+    /// The alliance order towards a house (S-0414 claims 12 to 14).
+    Alliance {
+        /// The other house.
+        house: HouseId,
+    },
 }
 
 impl Order {
@@ -65,8 +132,21 @@ impl Order {
             | Order::Stop { actor }
             | Order::Scatter { actor }
             | Order::Deploy { actor }
-            | Order::GuardSpot { actor, .. } => Some(actor),
-            Order::Cheer => None,
+            | Order::GuardSpot { actor, .. }
+            | Order::Sell { actor }
+            | Order::Repair { actor }
+            | Order::PowerOff { actor }
+            | Order::PowerOn { actor }
+            | Order::Primary { actor } => Some(actor),
+            Order::Cheer
+            | Order::Build { .. }
+            | Order::Hold { .. }
+            | Order::Cancel { .. }
+            | Order::CancelAll { .. }
+            | Order::Place { .. }
+            | Order::SellWall { .. }
+            | Order::Surrender
+            | Order::Alliance { .. } => None,
         }
     }
 }
@@ -240,7 +320,67 @@ fn apply_other(w: &mut World, house: HouseId, o: &Order) {
                 crate::infantry::request(w, id, crate::infantry::Seq::Cheer, false);
             }
         }
+        Order::Build { what } => crate::econ::production::build(w, house, what),
+        Order::Hold { what } => crate::econ::production::hold(w, house, what),
+        Order::Cancel { what } => crate::econ::production::cancel(w, house, what, false),
+        Order::CancelAll { what } => crate::econ::production::cancel(w, house, what, true),
+        Order::Place { what, cell } => crate::econ::production::place(w, house, what, cell),
+        Order::Sell { actor } => crate::econ::sell::sell(w, house, actor),
+        Order::SellWall { cell } => crate::econ::sell::sell_wall(w, house, cell),
+        Order::Repair { actor } => crate::econ::sell::repair(w, actor),
+        Order::PowerOff { actor } => crate::econ::power::switch(w, actor, false),
+        Order::PowerOn { actor } => crate::econ::power::switch(w, actor, true),
+        Order::Primary { actor } => primary(w, actor),
+        Order::Surrender => crate::econ::victory::surrender(w, house),
+        Order::Alliance { house: other } => crate::econ::victory::alliance(w, house, other),
         Order::Behaviour { .. } => {}
+    }
+}
+
+/// The primary order (S-0213 claim 13): a live factory building, on the map
+/// or not, toggles its primary mark; becoming primary takes the mark from
+/// every other building of its house on the map that is a factory of the
+/// same kind and of the same naval or land kind. No owner check (claim 15).
+fn primary(w: &mut World, actor: ObjectId) {
+    let Some(o) = w.obj(actor) else { return };
+    if o.kind != Kind::Building || o.health <= 0 {
+        return;
+    }
+    let r = w.rules_arc();
+    let Some(factory) = r.buildings[o.type_index as usize].factory else {
+        // spec: S-0213 claim 13 (a building whose type is not a factory is not changed)
+        return;
+    };
+    let naval = r.buildings[o.type_index as usize].naval;
+    let owner = o.owner;
+    if o.econ.building.primary {
+        // spec: S-0213 claim 13 (already primary: it stops being primary)
+        if let Some(ob) = w.obj_mut(actor) {
+            ob.econ.building.primary = false;
+        }
+        return;
+    }
+    // spec: S-0213 claim 13 (every other on-map factory of the same kind and naval kind of the house stops being primary)
+    let others: Vec<ObjectId> = w
+        .objects
+        .values()
+        .filter(|b| {
+            b.id != actor
+                && b.kind == Kind::Building
+                && b.on_map
+                && b.owner == owner
+                && r.buildings[b.type_index as usize].factory == Some(factory)
+                && r.buildings[b.type_index as usize].naval == naval
+        })
+        .map(|b| b.id)
+        .collect();
+    for b in others {
+        if let Some(ob) = w.obj_mut(b) {
+            ob.econ.building.primary = false;
+        }
+    }
+    if let Some(ob) = w.obj_mut(actor) {
+        ob.econ.building.primary = true;
     }
 }
 

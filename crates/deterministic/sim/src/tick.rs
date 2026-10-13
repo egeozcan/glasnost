@@ -1,10 +1,11 @@
 //! The tick pipeline (S-0203): the parts of a tick in their fixed places.
 //!
-//! The parts that M3 has no topic for yet (map triggers, planted bombs, the
-//! weather storm, chrono flashes, resource growth, diving aircraft, teams,
-//! disc lasers, radiation, pulses, blast rings, crates, production lines and
-//! houses) are empty seams in their places of S-0203 claim 1, so that their
-//! draws land where the original takes them once they are written.
+//! The parts that have no topic yet (map triggers, planted bombs, the
+//! weather storm, chrono flashes, diving aircraft, teams, disc lasers,
+//! radiation, pulses, blast rings and crates) are empty seams in their places
+//! of S-0203 claim 1, so that their draws land where the original takes them
+//! once they are written. Resource growth (row 9), the production lines (row
+//! 6) and the houses (row 7) run the M5a topics (`crate::econ`).
 
 use crate::rules::{Kind, Locomotor};
 use crate::world::{ObjectId, World};
@@ -13,10 +14,17 @@ use crate::{drive, infantry, occupancy, orders, process, turret, walk};
 /// Runs one tick (S-0203 claim 1, the draw order of its rows).
 pub fn step(w: &mut World) {
     // spec: S-0203 claim 1 (draw order: row 1, 9, 2, 10, 11, 12, 3, 13, 14, then the turn pass, row 5)
-    // Rows 1, 9, 2, 10, 11, 12, 3, 13 and 14 (and row 4) have no topic in M3: empty seams.
+    // Row 1 (map triggers) has no topic yet: an empty seam.
+    // spec: S-0203 row 9 (growth and spread of resources, S-0401)
+    crate::econ::resource::part(w);
+    // Rows 2, 10, 11, 12, 3, 13 and 14 (and row 4) have no topic yet: empty seams.
     turn_pass(w);
     // spec: S-0203 claim 1 (after the turn pass: rows 15, 16, 6, 7, then the orders, row 8)
-    // Rows 15, 16, 6 and 7: empty seams.
+    // Rows 15 and 16 (blast rings, crate respawns): empty seams.
+    // spec: S-0203 claim 8 and row 6 (the production lines see the whole turn pass)
+    crate::econ::production::part(w);
+    // spec: S-0203 claim 8 and row 7 (the houses, in house order, after the production lines)
+    crate::econ::houses::part(w);
     // spec: S-0203 claim 7 and S-0213 claim 1 (orders take effect after the turn pass)
     orders::apply_pending(w);
     // spec: S-0203 claim 1 (after the last part the tick number grows by 1)

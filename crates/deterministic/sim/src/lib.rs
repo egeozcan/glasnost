@@ -20,6 +20,7 @@ pub mod consts;
 pub mod corridor;
 pub mod crush;
 pub mod drive;
+pub mod econ;
 pub mod infantry;
 pub mod load;
 pub mod objects;

@@ -314,6 +314,7 @@ pub fn skirmish_setup(map: &glasnost_map::Map, rules: &SimRules, seed: u32) -> G
         sandbox: false,
         unit_count: SMOKE_UNIT_COUNT,
         bases: true,
+        skirmish: Default::default(),
     }
 }
 

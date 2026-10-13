@@ -225,6 +225,7 @@ pub fn setup(seed: u32) -> GameSetup {
         sandbox: true,
         unit_count: 0,
         bases: false,
+        skirmish: Default::default(),
     }
 }
 

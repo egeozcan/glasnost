@@ -208,6 +208,50 @@ pub struct BuildingRules {
     pub combat: crate::combat::data::TypeCombat,
     /// Building-only combat fields (M4).
     pub building: crate::combat::data::BuildingCombat,
+    /// The kind of object it makes, for a factory building (S-0403 Terms).
+    pub factory: Option<FactoryKind>,
+    /// The naval flag (S-0403 Terms: a naval factory building of vehicles;
+    /// S-0406 claim 3 d).
+    pub naval: bool,
+}
+
+/// The kind of object a factory building makes (S-0403 Terms, *factory
+/// building of a kind*).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize)]
+pub enum FactoryKind {
+    /// Infantry.
+    Infantry,
+    /// Vehicles.
+    Vehicle,
+    /// Aircraft.
+    Aircraft,
+    /// Buildings.
+    Building,
+}
+
+impl FactoryKind {
+    /// The kind of our format's factory word (`infantry`, `vehicle`,
+    /// `aircraft`, `building`). The importer writes none of them yet: the
+    /// original's words are asked in Q-0100.
+    pub fn from_word(w: &str) -> Option<Self> {
+        Some(match w {
+            "infantry" => Self::Infantry,
+            "vehicle" => Self::Vehicle,
+            "aircraft" => Self::Aircraft,
+            "building" => Self::Building,
+            _ => return None,
+        })
+    }
+
+    /// The object kind it makes.
+    pub fn kind(self) -> Kind {
+        match self {
+            Self::Infantry => Kind::Infantry,
+            Self::Vehicle => Kind::Vehicle,
+            Self::Aircraft => Kind::Aircraft,
+            Self::Building => Kind::Building,
+        }
+    }
 }
 
 /// An overlay type's resolved fields.
@@ -619,6 +663,9 @@ pub struct SimRules {
     pub hash: String,
     /// The combat rules (M4).
     pub combat: crate::combat::data::CombatRules,
+    /// The rules of the M5a topics (economy, production, structures,
+    /// visibility, setup).
+    pub econ: crate::econ::EconRules,
 }
 
 fn dec(d: &Option<Decimal>, mode: Rounding) -> Option<F64> {
@@ -951,7 +998,9 @@ impl SimRules {
             &country_names,
             mode,
         );
+        let econ = crate::econ::EconRules::new(r, mode);
         Self {
+            econ,
             combat,
             quirks,
             mode,
@@ -1244,7 +1293,12 @@ fn building_rules(
         unit_repair: b(bt.unit_repair),
         capturable: b(bt.capturable),
     };
+    // spec: S-0403 Terms and Import mapping (Factory: the kind of object named; absent: none), S-0403 Import mapping (Naval absent: no)
+    let factory = bt.factory.as_deref().and_then(FactoryKind::from_word);
+    let naval = bt.naval.unwrap_or(false);
     BuildingRules {
+        factory,
+        naval,
         name: name.to_owned(),
         strength: bt.strength.unwrap_or(0),
         // spec: S-0108 Import mapping (Foundation absent: 1x1)

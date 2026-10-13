@@ -169,6 +169,7 @@ impl Scene {
             sandbox: true,
             unit_count: 0,
             bases: false,
+            skirmish: Default::default(),
         };
         Scene {
             ruleset: r,
