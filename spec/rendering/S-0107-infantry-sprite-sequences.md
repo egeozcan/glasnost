@@ -2,13 +2,13 @@
 id: S-0107
 title: Infantry sprite sequences
 topic: rendering
-revision: 5
+revision: 6
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-10
+approved-on: 2026-10-13
 measurements: []
-requests: []
+requests: [Q-0087]
 supersedes: []
 ---
 
@@ -118,7 +118,7 @@ used by this spec only:
 - **Fraidycat:** an infantry type flag (Import mapping) for civilians who run away instead of
   lying down: it never asks for *go-prone* and scatters when frightened.
 - **Cyborg:** an infantry type flag (Import mapping). A prone cyborg, and any cyborg killed by
-  damage that ignores defences, dies without a death sequence (claim 17), and a prone cyborg whose owner is human-controlled does not get up when ordered to move (claim 15).
+  damage that ignores defences, dies without a death sequence (claim 17), and a prone cyborg whose owner is human-controlled makes no destination-driven get-up request (claim 15).
 - **Fearless:** an infantry type flag (Import mapping). Its units never lose fear over time, and
   damage raises their fear only in the fraidycat case of claim 16. A unit with the fearless
   veterancy ability is treated the same way when damage raises fear, but its fear still decays.
@@ -453,25 +453,57 @@ used by this spec only:
     51 ticks after the tick of the hit, not 50 (scenario M6(a) tests the *get-up* time).
 
     *go-prone* is turned down for a type that cannot crawl (claim 6), so such types never lie down.
-    Walking with a fear level above 199 shows *panic* (claim 7). A prone unit whose owner is
-    human-controlled asks (not forced) for *get-up* when it is given a movement order, unless its
-    type is a fraidycat or a cyborg. A prone unit of a computer-controlled owner keeps crawling.
+    Walking with a fear level above 199 shows *panic* (claim 7).
+
+    **Destination-driven get-up (Q-0087).** A prone unit whose owner is human-controlled,
+    whose type is neither a fraidycat nor a cyborg, asks (not forced) for *get-up* when a
+    non-empty destination is assigned to it **that is already its current destination**.
+    Assigning a different destination, assigning the first destination to a unit with none,
+    and clearing a destination do not make this request
+    (`quirks.prone_get_up_repeated_destination`). Equality means the same cell or the same
+    object, not merely two objects in the same cell. The request is subject to claim 6:
+    a missing *get-up* entry or a non-interruptible current sequence can refuse it. It is
+    not saved for later, and neither starting to crawl nor entering a new cell retries it.
+    No fear threshold is tested by this destination rule.
+
+    The name of the order does not decide this rule. The following table gives its application
+    to the orders Q-0087 asks about. S-0213 owns how an applied order assigns destinations,
+    and S-0215 and the movement specs own subsequent destination changes.
+
+    | Order or event | Destination-driven get-up |
+    |---|---|
+    | Plain move | At application only when the non-empty destination assigned is already current |
+    | Attack-move with a destination | Same as plain move, after S-0213's translation |
+    | Attack on an out-of-reach target | Being out of reach does not itself request get-up. Assigning or reassigning a chase destination uses the same equality rule, whether at order application or later |
+    | Area guard | Assigning the guard spot as destination uses the same equality rule |
+    | Queued move or waypoint | Merely recording a future waypoint does not count. When it becomes the assigned destination, the same equality rule applies |
+    | Scatter | Only an accepted scatter that assigns a destination can count, and only if that destination is already current. The usual first scatter from rest assigns a new destination and does not count |
+    | Enter or capture | Assigning a destination uses the same equality rule. Setting only a target does not count |
+    | Move to the cell occupied by the unit | Occupying that cell is not the equality test. With no current destination it does not count; reassigning that cell while it is already the current destination does |
+
+    The request happens at destination assignment, not when the locomotor starts moving.
+    When an applied order reassigns the current destination, it can start *get-up* at that
+    order boundary (S-0213 claim 1), before the next tick's movement. Later reassignment
+    by a behaviour can start it on a later tick. Once *get-up* starts the unit is no longer
+    prone (Terms), although its non-interruptible get-up image frames still play to completion.
+    An owner that is not human-controlled makes no destination-driven get-up request.
 
     **Owners that are not human-controlled.** The table and the get-up rule above give the original's
     rule for each owner kind. In our engine an AI house counts as human-controlled (glossary *AI
     house*, decision of the project lead, 2026-10-09), so its units follow the human-controlled
-    wording: the lie-down rule waits for them to be at rest, and a move order makes a prone one
-    get up. The neutral house and the special house keep the original's rule for owners that are
+    wording: the lie-down rule waits for them to be at rest, and reassigning their current
+    non-empty destination makes a prone one ask for *get-up*. The neutral house and the special house keep the original's rule for owners that are
     not human-controlled (decision of the project lead, 2026-10-10): their units lie down whether
     or not they are moving, and a prone one keeps crawling when it is ordered to move.
-    - Backing: `measurable` (scenario M6, with M4 for the get-up on a move order of a
-      human-controlled owner and M6(g) for the lie-down timing of a human-controlled owner),
+    - Backing: `measurable` (scenario M6, with M4 for destination-driven get-up, its order
+      cases, equality test and timing, and M6(g) for the lie-down timing of a human-controlled owner),
       and `unmeasured` (the half of the get-up rule that makes a prone unit of an owner that is
       not human-controlled keep crawling on a move order, and the fraidycat exception of the same
       rule: a move order for such a unit comes only from the original's computer-player scripts,
       which no scenario can drive, and a fraidycat never lies down in stock play, so those two
       parts stand on the original's rule as read)
-    - Confidence: high (medium for those two parts)
+    - Confidence: high (including the repeated-destination test; medium for those two
+      unmeasured parts and for later assignment timing, which the cited owning specs determine)
 
 16. **How damage raises fear.** When a living infantry unit takes damage and survives it, its new
     fear level is given by this table. A unit is *fearless* here when its type is fearless or it
@@ -906,6 +938,13 @@ completion tick, also when the follow-up replaces that kind on the same tick.
   has the fearless veterancy ability (claim 16). Because a fearless type never loses fear, such a
   unit then panics and scatters for the rest of its life. Off: a fearless fraidycat keeps its fear
   level unchanged, like any other fearless unit.
+- **`quirks.prone_get_up_repeated_destination`** (default: on, claim 15). A destination-driven
+  get-up request requires reassigning the current non-empty destination. A first or different
+  destination can therefore make a prone soldier crawl instead of getting up. Off: every
+  non-empty destination assignment requests get-up for an otherwise eligible unit, whether
+  first, different or repeated. Clearing a destination still makes no request, and the owner,
+  type exceptions and sequence refusal rules are unchanged. No request is tied to physical
+  movement starting.
 - **`quirks.cow_idle`** (default: on). The hard-coded cow type is singled out in two ways when it
   idles (claim 14): it takes the second draw *e*, and *e* < 5 gives the outcome of *r* = 8; and on
   the outcome of *r* = 8 it scatters after the facing change, whether or not it is a fraidycat. So
@@ -1029,6 +1068,16 @@ by S-0007; "the type's art section" below means that section. Kind names map to 
   released (claim 11). Absent: 0.
 - **`Crawls`** (boolean, the type's art section): can crawl, which *go-prone* requires.
   Absent: true (the engine default for infantry).
+- **Destination-driven get-up inputs (claim 15, Q-0087).** There is no imported list of orders
+  that cause get-up and no imported destination-equality flag: these are engine rules.
+  The existing mappings give all data inputs:
+
+  | Key and section | Form | Absent-key default | Destination-driven get-up use |
+  |---|---|---|---|
+  | `Up`, sequence section named by `Sequence` | sequence entry as above | start 0, count 0, multiplier 0, no direction or cues | requested get-up kind; count 0 refuses the request |
+  | `Fraidycat`, infantry rules section | boolean | false | true excludes the unit |
+  | `Cyborg`, infantry rules section | boolean | false | true excludes the unit |
+
 - **Rules keys.** The table gives each rules key this spec uses, its form and its absent-key
   default. The default is the value the field has before any rules data is read. As S-0003 says,
   when rules are layered (S-0006) an absent key keeps the value an earlier layer gave instead.
@@ -1080,9 +1129,7 @@ by S-0007; "the type's art section" below means that section. Kind names map to 
   "Infantry type" means the infantry type's own section in the rules file. "Any unit type" and
   "any object type" mean the same section, through keys that other kinds of type also have; their
   other uses belong to other specs. `Cyborg` also selects the cyborg death case of claim 17.
-- **Hard-coded identifiers:** the "cow" of claim 14 is the infantry type whose identifier is `COW`,
-  compared case-insensitively. The generic airborne-infantry shadow is the sprite file
-  `INFSHDW.SHP`.
+- **Hard-coded identifiers:** Claim 14 singles out the cow infantry type by a case-insensitive comparison of its type identifier. Claim 19 uses the generic infantry-shadow sprite for an airborne infantry unit.
 
 ## Measurement scenarios
 
@@ -1144,12 +1191,43 @@ whose …") means any stock type with that property; the property is a precondit
   in mid-idle. The recorder reads tick numbers (common setup), so speed 0 can be added as a fourth
   run with the expected idle delay 5; it is optional. Runs: one per game speed.
 - **M4 (claims 6, 15).**
-  - (a) Order a soldier of the human player that is lying down to move. Expected: *get-up* plays to
-    the end (it is not interruptible) before any *walk* image frame appears. Falsified if the walk
-    starts mid-get-up. Runs: three.
-  - (b) The cyborg exception. Order a crippled (prone) cyborg of the human player to move.
-    Expected: it never plays *get-up* (it keeps crawling, or shows *prone* if its *crawl* entry
-    has no image frames). Falsified by any *get-up* image frame. Runs: three.
+  - (a) Destination equality and timing (Q-0087). On a flat skirmish test map, game speed 6,
+    place a soldier of the human player that can crawl and has get-up image frames, and a
+    weak known attacker beyond retaliation reach. One bystander computer player stays far
+    away. Director and mods are off. Hit the soldier once, then remove the attacker by a map
+    trigger. Wait until *prone* plays, but give the test orders before fear falls below 50.
+    From a fresh prone state with no destination, issue a move to a distant clear cell A,
+    then, while the unit still crawls toward A, reissue the move to A. In separate fresh
+    runs, replace the second order by a move to B, and issue a first move to the soldier's
+    own occupied cell. Use scripted input and a read-only recorder to log ticks, current
+    destinations, sequence image frames and positions around application boundaries.
+    Expected: no destination-driven get-up on the first move, on the change to B, or on
+    the first move to the occupied cell; the repeat to A requests get-up at application,
+    not at the first displacement. It plays to completion before a walk image frame.
+    Record any later destination reassignments separately: they, not locomotor start,
+    can cause a later get-up. Falsified by a get-up on a first or different assignment
+    while fear remains at least 50, by no get-up on an eligible repeat to A, or by walk
+    replacing get-up before completion. Runs: three per case.
+  - (c) Order families. Repeat (a) from fresh prone states with attack-move to a cell,
+    attack on an out-of-reach target, area guard, route-mode destinations, scatter, enter a
+    transport and capture a building. Use stock types legally capable of each order and
+    stock data, game speed 6, director and mods off. Record the destination before and
+    after each assignment, its tick and the sequence, including later chase and waypoint
+    assignments. For each family test a first destination and, where input permits it,
+    a repeat of the same destination while still prone. Expected: get-up only at a
+    repeated non-empty destination assignment while eligible, never just from queuing a
+    waypoint, acquiring an out-of-reach target or beginning physical movement. A same-cell
+    move qualifies only if that cell is already the destination. Refused orders or
+    rejected scatters make no request. Falsified by a get-up that fails the equality
+    test, or by an eligible repeat with no get-up. Runs: three per legal variant.
+    This records actual assignment timing, rather than assuming all orders assign at
+    application. No new recorder or harness is installed or changed by this proposal.
+  - (b) The cyborg exception. Order a crippled (prone) cyborg of the human player to a
+    distant cell A, then reissue the order to A while A is still its destination. Record
+    destination identity and image frames as in (a). Expected: neither assignment requests
+    *get-up* (it keeps crawling, or shows *prone* if its *crawl* entry has no image frames).
+    The repeat is essential: an ordinary soldier also makes no get-up request on a first
+    assignment. Falsified by a destination-driven *get-up* on the repeat. Runs: three.
 - **M5 (claims 2, 7, 10).**
   - (a) Move an amphibious-destroyer soldier from land onto beach, then water, then
   back. Expected: *swim* image frames on beach and water, *tread* when stopped there, and the enter-water
