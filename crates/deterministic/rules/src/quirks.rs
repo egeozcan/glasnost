@@ -238,7 +238,7 @@ pub struct Quirks {
     #[serde(default = "on")]
     pub restricted_deck_overlay_indices: bool,
     /// An unset role's range still counts tile numbers from its unset start.
-    // spec: S-0010 claim 5; S-0211 claim 13
+    // spec: S-0010 claim 5; S-0406 claim 3 (d) (the naval range, formerly S-0211 claim 13)
     #[serde(default = "on")]
     pub unset_role_range: bool,
     /// A role naming the first missing tileset starts at the tile count.
