@@ -1,9 +1,9 @@
 ---
 id: Q-0161
 title: Where in an actor's tick the per-tick approach step of an unreachable target runs
-status: open
+status: answered
 related: [S-0215, S-0203, S-0309]
-answered-by: []
+answered-by: [S-0215]
 ---
 
 ## Need

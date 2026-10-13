@@ -2,11 +2,11 @@
 id: S-0408
 title: Selling and building repair (refund, what a sale releases, selling vehicles and walls, which buildings can be sold or repaired)
 topic: economy
-revision: 4
+revision: 5
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-13
+approved-on: 2026-10-14
 measurements: []
 requests: []
 supersedes: []

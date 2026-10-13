@@ -2,11 +2,11 @@
 id: S-0207
 title: Ground vehicle movement (drive locomotor)
 topic: movement
-revision: 8
+revision: 9
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-13
+approved-on: 2026-10-14
 measurements: []
 requests: [Q-0019, Q-0020, Q-0035, Q-0040, Q-0071, Q-0072]
 supersedes: []
@@ -65,6 +65,8 @@ is *on a bridge deck* (glossary *bridge deck*) is set by claim 5 here.
     this spec's subject,
   - and claim 1 is a rule of the type's speed field, which holds for the speed field of an
     infantry type too (S-0208 uses it).
+
+  - claim 19 and scenario D21 cover vehicles with driving, ship and hovering locomotors.
 
   All other claims cover drive vehicles only. An infantry or aircraft type can also name the
   driving locomotor (claim 14), but how an object of such a type moves is outside this spec (Open
@@ -560,7 +562,7 @@ is *on a bridge deck* (glossary *bridge deck*) is set by claim 5 here.
     | friendly obstacle, enemy obstacle | it discards its stored path and makes a fresh search at once, whatever its path retry timer shows (S-0212 owns the search and the timer). When the search finds a path, the repeated check follows on the same tick | it waits in every case. It takes as its target, and attacks by an override of its behaviour (S-0215 claim 10): the first object listed in the cell (S-0209 claim 13) when its house is not allied with that object (a terrain object is never allied), or, when no object is listed and the cell holds a wall, the wall, whatever its owner. When its house is allied with the first listed object, or when no object is listed and the cell holds no wall, it attacks nothing. The override gives no destination (below) |
     | stationary friendly | as for an obstacle: it discards its stored path, makes a fresh search at once, and makes the repeated check on the same tick | when the give-up test (F7) holds, it gives up the move (Terms). Otherwise it sends a scatter request with no threat point, forced and move-anywhere, to every object listed in the cell layer it drives on (below), and waits. Which of them receive it is S-0209 claim 11; what a vehicle among them does is claim 16, what an infantry unit does is S-0208 claim 11 |
     | cloaked blocker | the cloaked objects in the cell become visible to its house, as in S-0209 claim 9 (the visibility specs own for how long). It discards its stored path. The fresh search that follows (S-0212 claims 20 and 21) is made on the same tick only when its path retry timer has run out, and then the repeated check follows | the cloaked objects become visible to its house again, and it gives up the move |
-    | blocked | S-0212 claim 22 (Open questions) | it gives up the move |
+    | blocked | it discards its stored path and makes a fresh search at once, whatever its path retry timer shows (S-0212 claim 22). When the search finds a path, the repeated check follows on the same tick | it gives up the move |
 
     *The override of an obstacle's repeated check.* The override that makes the vehicle attack
     the first listed object or the wall gives it the behaviour *attack*, that object or the wall's
@@ -661,7 +663,7 @@ is *on a bridge deck* (glossary *bridge deck*) is set by claim 5 here.
     cell of a new path does.
     - Backing: `measurable` (scenario D17: part a for the request, part b for giving up, part c for
       a friend that refuses, part d for an enemy obstacle, part d2 for the wall target, part d3
-      for *blocked* (a qualifying run tells S-0212 claim 22 from the reading in the Open questions), part e for the gate before turning,
+      for the immediate fresh search after *blocked*, even with a running retry timer, part e for the gate before turning,
       part f for a cloaked blocker, part g for the second cell (its runs 1 to 4 for the T5 rows
       *stationary friendly*, *moving blocker*, *enemy obstacle* and *cloaked blocker*, run 5 for
       *closed friendly gate*, run 6 for *blocked*, run 7 for the search of T5's obstacle row and
@@ -848,23 +850,34 @@ is *on a bridge deck* (glossary *bridge deck*) is set by claim 5 here.
     is the range test of S-0215 claim 37 b, from the vehicle's current position, with the weapon
     chosen for the target. The *stored path* and its *steps* are S-0212's (claim 20), and the
     *retry delay* *R* is S-0212's (claim 21 and F3).
-    - (a) **No stopping event for the driving and ship locomotors.** A driving or sailing vehicle
-      never stops, and never loses its destination or any stored step, because its target has come
-      in range. It goes on along its path to its destination and stops there under the ordinary
-      arrival rules, as on any move. Its destination is removed only by those rules or by another
-      rule that removes a destination (for example a new order, or the renewal of S-0215 claim
-      37 e, which applies only while the target is out of range). No answer of the firing check
-      stops it either, with one exception: a vehicle whose type has the deploy-to-fire flag
+    - (a) **Arrival-time stop for the driving and ship locomotors.** At a track target, a driving
+      or sailing vehicle clears its destination and discards all remaining path steps when:
+      - its target is an infantry unit, vehicle or aircraft, not a building, cell, overlay or
+        terrain object,
+      - its current behaviour, or its queued behaviour when no current one exists, is *attack*,
+        *area guard*, *hunt* or *rescue* (the last is an out-of-scope team behaviour),
+      - it has no approach destinations (S-0215 Terms), and
+      - the arrival range test passes. For a type that is not open-topped, this is S-0307's
+        weapon range test with the weapon selected by S-0308, from S-0307 claim 8's source
+        point to the target's cell centre at terrain surface height, as for a cell target
+        (S-0307 claim 7), not to the target's own reference point. For an open-topped type,
+        it is instead trunc(*r*(Δ*x*² + Δ*y*² + Δ*z*²)) < ρ, measured between the target's and
+        vehicle's reference points, with *r* and its floating-point domain and rounding as
+        in F5 and ρ the actor's weapon range of S-0307 claim 13, both integers in leptons.
+
+      The vehicle keeps its target and stops at that track target, without beginning a further
+      track. A two-cell curve finishes at its target, not at its intermediate cell. Coming into
+      range between track targets does not stop it between them. This stop does not wait for a
+      behaviour processing. If any condition fails, range alone does not clear its destination:
+      it continues under the ordinary movement rules. Whether and when it fires on the way
+      belongs to the combat specs (S-0301, S-0310). Separately, a vehicle whose type has the
+      deploy-to-fire flag
       deploys, instead of firing, once the firing check answers *can fire* or *not facing*, and
       gets *must deploy* where its cell does not allow it (S-0310 claim 9 and its table of
-      replies); deploying ends its move as the deploy specs say. Whether and when any other
-      vehicle fires on the way belongs to the combat specs (S-0301, S-0310). **Original only:** a
+      replies); deploying ends its move as the deploy specs say. **Original only:** a
       vehicle of a computer-controlled owner whose type deploys into a building with the
       tick-tank property also deploys on those answers when its target is a vehicle and its cell
-      allows it; in our engine no player house is computer-controlled (S-0215 Terms). Because the approach position of S-0307 is a cell from which the range test passes,
-      an approach towards a target that stands still normally ends with the target in range; a
-      target that comes in range earlier (for example by moving towards the vehicle) does not
-      shorten the move.
+      allows it; in our engine no player house is computer-controlled (S-0215 Terms).
     - (b) **No drop of the target at the end of a move.** A vehicle of this claim whose move ends
       with its target out of range keeps its target (no rule of the movement side drops it). What it does next is its behaviour's (S-0215
       claim 37: the approach step at the next processing, or the per-tick rule of part a there
@@ -874,15 +887,13 @@ is *on a bridge deck* (glossary *bridge deck*) is set by claim 5 here.
       search for a path removes the destination of a vehicle with the driving, ship or hovering
       locomotor, also within 1 cell of the destination (in the original, the give-up rule for
       computer-controlled owners gives a new destination instead, which sets the vehicle moving
-      again). For the driving locomotor this is S-0212 claim 23; for the ship and hovering
-      locomotors it is this claim's own reading, because the third row of S-0212 claim 23
-      currently says that locomotors other than the driving one keep the destination (Open
-      questions). No rule is specified for the drop.
+      again). For all three locomotors this is S-0212 claim 23. No rule is specified for the drop.
     - (c) **Hovering locomotor: the stored path is discarded at each step point while in range.**
       Whenever a hovering vehicle that is moving and has at least one stored step chooses its next
       step (when it starts a move, and each time it reaches the point it was heading for, the
       centre of its next cell), and its target is in range, all its stored steps are discarded.
-      Its destination is kept. Exception: when its destination is a vehicle or an infantry unit,
+      This discard alone keeps its destination; part d gives the subsequent arrival-time stop.
+      Exception: when its destination is a vehicle or an infantry unit,
       the hovering locomotor first makes the same chase cut as the driving locomotor (S-0212
       claim 20: the stored path is cut to its first ⌊*D* / 256⌋ steps, with *D* as there); when
       that cut is made (⌊*D* / 256⌋ < 24), the range is not tested at that step.
@@ -893,24 +904,34 @@ is *on a bridge deck* (glossary *bridge deck*) is set by claim 5 here.
       found a path or not.
       - If *R* has already run out, the search is made in the same tick and a found path lets the
         vehicle take its next step at once: the discarded path has no visible effect.
-      - If *R* is still running, the vehicle stays at the point it has reached, and makes the
-        search on the first tick on which *R* has run out; then it takes its next step.
-      - At the next point the same happens again while the target stays in range.
+      - If no next step is chosen at the end of this transition, the hovering vehicle applies
+        the arrival-time stop of part a, with the same target, behaviour, empty approach-list
+        and arrival-range conditions. When those hold, it clears its destination and stops
+        there, keeping its target. In particular, a still-running *R* leaves no next step and
+        therefore triggers this stop when those conditions hold. It does not wait for *R* to
+        expire in that case.
+      - When the arrival-time stop does not apply, for example against a building, a running
+        *R* instead leaves the vehicle waiting with its destination kept. It searches on the
+        first tick on which *R* has run out, and resumes when a next step is chosen. At the
+        next point the same path-discard and delay rules apply while the target stays in range.
 
-      So a hovering vehicle never stops for good because its target is in range: it reaches its
-      destination, waiting at each point for what is left of *R* counted from its previous search.
-      When crossing one step takes at least *R* ticks, there is no visible wait. A search that
-      fails has the outcomes of S-0212 claim 23.
-    - (e) **The destination.** In no case of this claim is a destination removed because the
-      target is in range. This agrees with S-0215 claim 37 e, which keeps a held destination at
-      every processing while the target is in range.
-    - Backing: `measurable` (scenario D21: runs 1 and 2 for part a, runs 3 and 3c for parts c and
-      d, and every run for part e). Part b is `unmeasured`: under our rules the state in which the
-      original's drop would act does not arise, so there is nothing to observe. Part c's chase
-      exception is `unmeasured` (D21 says why).
-    - Confidence: medium (parts a, b and e: every rule that reads the range test was examined, and
-      none of them stops a driving or sailing vehicle or removes its destination; parts c and d:
-      read, not observed); low for the exact tick of the search after a wait in part d
+      A hovering vehicle that chooses a next step on the same transition does not apply the
+      arrival-time stop there. Thus with an expired *R* and a successful search it can continue
+      towards an in-range mobile target; when a subsequent transition leaves no next step,
+      part a's conditions decide the stop. A search that fails has S-0212 claim 23's outcomes.
+    - (e) **Movement versus approach processing.** S-0215 claim 37 e keeps a held destination
+      at its processing while the target is in range. That rule governs only the approach
+      step, not the arrival-time clearing in parts a and d. The two range tests also differ:
+      the ordinary arrival-time test measures to the target cell centre, while the approach
+      step measures to the target's own reference point. S-0208 claim 17 gives the same
+      arrival-time conditions for an ordinary walker, whose walk ends on that arrival tick.
+    - Backing: `measurable` (scenario D21: runs 1 and 2 and their controls for part a, runs 3,
+      3c and 4 for parts c and d, and every run for part e). Part b is `unmeasured`: under our
+      rules the state in which the original's drop would act does not arise, so there is nothing
+      to observe. Part c's chase exception is `unmeasured` (D21 says why).
+    - Confidence: medium for the arrival-time stop, its conditions and the hover distinction
+      between choosing a next step and having none; medium for parts b, c and e (read, not
+      observed); low for the exact tick of the search after a retained-destination wait in part d
 
 ## Formulas
 
@@ -1029,73 +1050,300 @@ the cell's centre. Unit: leptons.
 | Range of the target draw of a threat-point scatter | 1 to 4 (accepts on 1) | draw value | Claim 16 |
 | Range of the direction draw of a threat-point scatter | 0 to 2, minus 1 | step directions | Claim 16 |
 
-**T1 Track point lists.** Each point is (*x*, *y*, *f*): displacement from the track target in
-leptons along the map axes (*y* grows towards map south), and facing in 1/256 turn. The lists are in
-driving order, and each track ends at (0, 0), its target, which is not listed. The point *numbers*
-used for the chain, entry and release points count from 0. The release point is a point inside the
-curve's first cell (the cell its current step enters) at which that cell's occupancy record
-(glossary) stops showing a vehicle present, although the vehicle is still in the cell (S-0209
-claim 1). Some points break the regular pattern,
-for example (−129, 129) in curve B and the facings 66 then 64 in curve D. The first point of curve
-F, (−512, 256, 32), is the track's own start (the centre of the cell the vehicle starts from), where
-every other curve's first point lies one increment along the track: on curve F the first point
-bought costs 7 progress units like any other (F3's 399 includes it) and moves the vehicle 0
-leptons. All of these are part of the original data and are kept.
+**T1 Track point tables.** Each table row gives a point in driving order. The index starts at 0. The columns *x* and *y* are the point's displacement from the track target in leptons along the map axes (*y* grows towards map south); *f* is its facing in 1/256 turn. The target itself, (0, 0), is not listed. Point numbers used for chain, entry and release points count from 0. A release point lies inside the curve's first cell (the cell its current step enters) and is the point at which that cell's occupancy record (glossary) stops showing a vehicle present, although the vehicle is still in the cell (S-0209 claim 1). The values include irregular points, including (−129, 129) in curve B and facings 66 then 64 in curve D. Curve F's point 0, (−512, 256, 32), is the track's own start (the centre of the cell the vehicle starts from); every other curve's first point lies one increment along the track. Curve F's point 0 still costs 7 progress units to pass and moves the vehicle 0 leptons; F3's cost of 399 includes it. All listed values are part of the original data and are kept.
 
-- **Curve A** (straight, towards map north; 23 points; no chain point): (0, 245, 0), (0, 234, 0),
-  (0, 223, 0), (0, 212, 0), (0, 201, 0), (0, 190, 0), (0, 179, 0), (0, 168, 0), (0, 157, 0),
-  (0, 146, 0), (0, 135, 0), (0, 124, 0), (0, 113, 0), (0, 102, 0), (0, 91, 0), (0, 80, 0),
-  (0, 69, 0), (0, 58, 0), (0, 47, 0), (0, 36, 0), (0, 25, 0), (0, 14, 0), (0, 3, 0).
-- **Curve B** (diagonal, towards map north-east; 31 points; no chain point): (−248, 248, 32),
-  (−240, 240, 32), (−232, 232, 32), (−224, 224, 32), (−216, 216, 32), (−208, 208, 32),
-  (−200, 200, 32), (−192, 192, 32), (−184, 184, 32), (−176, 176, 32), (−168, 168, 32),
-  (−160, 160, 32), (−152, 152, 32), (−144, 144, 32), (−136, 136, 32), (−129, 129, 32),
-  (−120, 120, 32), (−112, 112, 32), (−104, 104, 32), (−96, 96, 32), (−88, 88, 32), (−80, 80, 32),
-  (−72, 72, 32), (−64, 64, 32), (−56, 56, 32), (−48, 48, 32), (−40, 40, 32), (−32, 32, 32),
-  (−24, 24, 32), (−16, 16, 32), (−8, 8, 32).
-- **Curve C** (N then NE; 54 points; chain point 37, entry point 12, release point 22):
-  (−256, 501, 0), (−256, 490, 0), (−256, 479, 0), (−256, 468, 0), (−256, 457, 0), (−256, 446, 0),
-  (−256, 435, 0), (−256, 424, 0), (−256, 413, 0), (−256, 402, 0), (−256, 391, 0), (−256, 383, 0),
-  (−256, 373, 0), (−256, 363, 0), (−254, 352, 1), (−252, 341, 3), (−250, 332, 4), (−248, 321, 5),
-  (−245, 311, 7), (−241, 302, 8), (−237, 292, 9), (−233, 282, 11), (−229, 272, 12),
-  (−225, 263, 13), (−220, 252, 15), (−216, 243, 16), (−212, 236, 17), (−206, 224, 19),
-  (−202, 215, 20), (−195, 207, 21), (−190, 198, 23), (−183, 186, 24), (−179, 176, 25),
-  (−168, 168, 27), (−160, 160, 28), (−152, 152, 29), (−144, 144, 31), (−136, 136, 32),
-  (−129, 129, 32), (−120, 120, 32), (−112, 112, 32), (−104, 104, 32), (−96, 96, 32), (−88, 88, 32),
-  (−80, 80, 32), (−72, 72, 32), (−64, 64, 32), (−56, 56, 32), (−48, 48, 32), (−40, 40, 32),
-  (−32, 32, 32), (−24, 24, 32), (−16, 16, 32), (−8, 8, 32).
-- **Curve D** (N then E; 38 points; chain point 26, entry point 11, release point 19):
-  (−256, 245, 0), (−256, 235, 0), (−256, 224, 0), (−256, 213, 0), (−255, 203, 0), (−253, 192, 0),
-  (−251, 181, 1), (−249, 171, 1), (−246, 160, 2), (−243, 149, 3), (−240, 139, 4), (−236, 127, 5),
-  (−232, 117, 8), (−228, 109, 12), (−222, 99, 16), (−219, 90, 20), (−213, 82, 23), (−206, 72, 27),
-  (−201, 64, 32), (−195, 56, 36), (−186, 48, 39), (−177, 43, 43), (−168, 36, 47), (−160, 32, 51),
-  (−147, 27, 54), (−135, 23, 57), (−126, 20, 60), (−113, 17, 62), (−104, 13, 63), (−94, 9, 64),
-  (−84, 6, 64), (−75, 4, 66), (−64, 3, 64), (−53, 2, 64), (−43, 1, 64), (−32, 0, 64),
-  (−21, 0, 64), (−11, 0, 64).
-- **Curve E** (NE then SE; 61 points; chain point 45, entry point 15, release point 31):
-  (−504, −8, 32), (−496, −16, 32), (−488, −24, 32), (−480, −32, 32), (−472, −40, 32),
-  (−464, −48, 32), (−456, −56, 32), (−448, −64, 32), (−440, −72, 32), (−432, −80, 32),
-  (−424, −88, 32), (−416, −96, 32), (−408, −104, 32), (−400, −112, 32), (−392, −120, 32),
-  (−385, −127, 32), (−376, −136, 32), (−368, −143, 32), (−361, −150, 32), (−353, −158, 32),
-  (−344, −166, 32), (−336, −173, 35), (−329, −181, 38), (−322, −188, 41), (−316, −194, 44),
-  (−306, −199, 47), (−296, −204, 50), (−288, −208, 53), (−277, −211, 56), (−267, −212, 59),
-  (−256, −213, 62), (−245, −212, 66), (−235, −211, 69), (−225, −208, 72), (−216, −204, 75),
-  (−208, −199, 78), (−198, −194, 81), (−188, −188, 84), (−181, −181, 87), (−176, −173, 90),
-  (−168, −166, 93), (−160, −158, 96), (−152, −150, 96), (−144, −143, 96), (−136, −136, 96),
-  (−129, −129, 96), (−120, −120, 96), (−112, −112, 96), (−104, −104, 96), (−96, −96, 96),
-  (−88, −88, 96), (−80, −80, 96), (−72, −72, 96), (−64, −64, 96), (−56, −56, 96), (−48, −48, 96),
-  (−40, −40, 96), (−32, −32, 96), (−24, −24, 96), (−16, −16, 96), (−8, −8, 96).
-- **Curve F** (NE then E; 56 points; chain point 44, entry point 16, release point 27):
-  (−512, 256, 32), (−504, 248, 32), (−496, 240, 32), (−488, 232, 32), (−480, 224, 32),
-  (−472, 216, 32), (−464, 208, 32), (−456, 200, 32), (−448, 192, 32), (−440, 184, 32),
-  (−432, 176, 32), (−424, 168, 32), (−416, 160, 32), (−408, 152, 32), (−400, 144, 32),
-  (−392, 136, 32), (−385, 129, 32), (−376, 120, 32), (−368, 112, 32), (−360, 104, 32),
-  (−352, 96, 32), (−344, 88, 32), (−338, 85, 32), (−328, 78, 35), (−320, 72, 37), (−311, 66, 40),
-  (−302, 59, 43), (−294, 55, 45), (−285, 50, 48), (−277, 43, 51), (−267, 38, 53), (−258, 34, 56),
-  (−248, 28, 59), (−238, 25, 61), (−229, 21, 64), (−218, 17, 64), (−208, 14, 64), (−199, 11, 64),
-  (−189, 9, 64), (−178, 7, 64), (−169, 5, 64), (−158, 3, 64), (−147, 1, 64), (−137, 0, 64),
-  (−129, 0, 64), (−117, 0, 64), (−107, 0, 64), (−96, 0, 64), (−85, 0, 64), (−75, 0, 64),
-  (−64, 0, 64), (−53, 0, 64), (−43, 0, 64), (−32, 0, 64), (−21, 0, 64), (−11, 0, 64).
+**Curve A** (straight, towards map north; 23 points; no chain point).
+
+| Point | *x* (leptons) | *y* (leptons) | *f* (1/256 turn) |
+|---:|---:|---:|---:|
+| 0 | 0 | 245 | 0 |
+| 1 | 0 | 234 | 0 |
+| 2 | 0 | 223 | 0 |
+| 3 | 0 | 212 | 0 |
+| 4 | 0 | 201 | 0 |
+| 5 | 0 | 190 | 0 |
+| 6 | 0 | 179 | 0 |
+| 7 | 0 | 168 | 0 |
+| 8 | 0 | 157 | 0 |
+| 9 | 0 | 146 | 0 |
+| 10 | 0 | 135 | 0 |
+| 11 | 0 | 124 | 0 |
+| 12 | 0 | 113 | 0 |
+| 13 | 0 | 102 | 0 |
+| 14 | 0 | 91 | 0 |
+| 15 | 0 | 80 | 0 |
+| 16 | 0 | 69 | 0 |
+| 17 | 0 | 58 | 0 |
+| 18 | 0 | 47 | 0 |
+| 19 | 0 | 36 | 0 |
+| 20 | 0 | 25 | 0 |
+| 21 | 0 | 14 | 0 |
+| 22 | 0 | 3 | 0 |
+
+**Curve B** (diagonal, towards map north-east; 31 points; no chain point).
+
+| Point | *x* (leptons) | *y* (leptons) | *f* (1/256 turn) |
+|---:|---:|---:|---:|
+| 0 | −248 | 248 | 32 |
+| 1 | −240 | 240 | 32 |
+| 2 | −232 | 232 | 32 |
+| 3 | −224 | 224 | 32 |
+| 4 | −216 | 216 | 32 |
+| 5 | −208 | 208 | 32 |
+| 6 | −200 | 200 | 32 |
+| 7 | −192 | 192 | 32 |
+| 8 | −184 | 184 | 32 |
+| 9 | −176 | 176 | 32 |
+| 10 | −168 | 168 | 32 |
+| 11 | −160 | 160 | 32 |
+| 12 | −152 | 152 | 32 |
+| 13 | −144 | 144 | 32 |
+| 14 | −136 | 136 | 32 |
+| 15 | −129 | 129 | 32 |
+| 16 | −120 | 120 | 32 |
+| 17 | −112 | 112 | 32 |
+| 18 | −104 | 104 | 32 |
+| 19 | −96 | 96 | 32 |
+| 20 | −88 | 88 | 32 |
+| 21 | −80 | 80 | 32 |
+| 22 | −72 | 72 | 32 |
+| 23 | −64 | 64 | 32 |
+| 24 | −56 | 56 | 32 |
+| 25 | −48 | 48 | 32 |
+| 26 | −40 | 40 | 32 |
+| 27 | −32 | 32 | 32 |
+| 28 | −24 | 24 | 32 |
+| 29 | −16 | 16 | 32 |
+| 30 | −8 | 8 | 32 |
+
+**Curve C** (N then NE; 54 points; chain point 37, entry point 12, release point 22).
+
+| Point | *x* (leptons) | *y* (leptons) | *f* (1/256 turn) |
+|---:|---:|---:|---:|
+| 0 | −256 | 501 | 0 |
+| 1 | −256 | 490 | 0 |
+| 2 | −256 | 479 | 0 |
+| 3 | −256 | 468 | 0 |
+| 4 | −256 | 457 | 0 |
+| 5 | −256 | 446 | 0 |
+| 6 | −256 | 435 | 0 |
+| 7 | −256 | 424 | 0 |
+| 8 | −256 | 413 | 0 |
+| 9 | −256 | 402 | 0 |
+| 10 | −256 | 391 | 0 |
+| 11 | −256 | 383 | 0 |
+| 12 | −256 | 373 | 0 |
+| 13 | −256 | 363 | 0 |
+| 14 | −254 | 352 | 1 |
+| 15 | −252 | 341 | 3 |
+| 16 | −250 | 332 | 4 |
+| 17 | −248 | 321 | 5 |
+| 18 | −245 | 311 | 7 |
+| 19 | −241 | 302 | 8 |
+| 20 | −237 | 292 | 9 |
+| 21 | −233 | 282 | 11 |
+| 22 | −229 | 272 | 12 |
+| 23 | −225 | 263 | 13 |
+| 24 | −220 | 252 | 15 |
+| 25 | −216 | 243 | 16 |
+| 26 | −212 | 236 | 17 |
+| 27 | −206 | 224 | 19 |
+| 28 | −202 | 215 | 20 |
+| 29 | −195 | 207 | 21 |
+| 30 | −190 | 198 | 23 |
+| 31 | −183 | 186 | 24 |
+| 32 | −179 | 176 | 25 |
+| 33 | −168 | 168 | 27 |
+| 34 | −160 | 160 | 28 |
+| 35 | −152 | 152 | 29 |
+| 36 | −144 | 144 | 31 |
+| 37 | −136 | 136 | 32 |
+| 38 | −129 | 129 | 32 |
+| 39 | −120 | 120 | 32 |
+| 40 | −112 | 112 | 32 |
+| 41 | −104 | 104 | 32 |
+| 42 | −96 | 96 | 32 |
+| 43 | −88 | 88 | 32 |
+| 44 | −80 | 80 | 32 |
+| 45 | −72 | 72 | 32 |
+| 46 | −64 | 64 | 32 |
+| 47 | −56 | 56 | 32 |
+| 48 | −48 | 48 | 32 |
+| 49 | −40 | 40 | 32 |
+| 50 | −32 | 32 | 32 |
+| 51 | −24 | 24 | 32 |
+| 52 | −16 | 16 | 32 |
+| 53 | −8 | 8 | 32 |
+
+**Curve D** (N then E; 38 points; chain point 26, entry point 11, release point 19).
+
+| Point | *x* (leptons) | *y* (leptons) | *f* (1/256 turn) |
+|---:|---:|---:|---:|
+| 0 | −256 | 245 | 0 |
+| 1 | −256 | 235 | 0 |
+| 2 | −256 | 224 | 0 |
+| 3 | −256 | 213 | 0 |
+| 4 | −255 | 203 | 0 |
+| 5 | −253 | 192 | 0 |
+| 6 | −251 | 181 | 1 |
+| 7 | −249 | 171 | 1 |
+| 8 | −246 | 160 | 2 |
+| 9 | −243 | 149 | 3 |
+| 10 | −240 | 139 | 4 |
+| 11 | −236 | 127 | 5 |
+| 12 | −232 | 117 | 8 |
+| 13 | −228 | 109 | 12 |
+| 14 | −222 | 99 | 16 |
+| 15 | −219 | 90 | 20 |
+| 16 | −213 | 82 | 23 |
+| 17 | −206 | 72 | 27 |
+| 18 | −201 | 64 | 32 |
+| 19 | −195 | 56 | 36 |
+| 20 | −186 | 48 | 39 |
+| 21 | −177 | 43 | 43 |
+| 22 | −168 | 36 | 47 |
+| 23 | −160 | 32 | 51 |
+| 24 | −147 | 27 | 54 |
+| 25 | −135 | 23 | 57 |
+| 26 | −126 | 20 | 60 |
+| 27 | −113 | 17 | 62 |
+| 28 | −104 | 13 | 63 |
+| 29 | −94 | 9 | 64 |
+| 30 | −84 | 6 | 64 |
+| 31 | −75 | 4 | 66 |
+| 32 | −64 | 3 | 64 |
+| 33 | −53 | 2 | 64 |
+| 34 | −43 | 1 | 64 |
+| 35 | −32 | 0 | 64 |
+| 36 | −21 | 0 | 64 |
+| 37 | −11 | 0 | 64 |
+
+**Curve E** (NE then SE; 61 points; chain point 45, entry point 15, release point 31).
+
+| Point | *x* (leptons) | *y* (leptons) | *f* (1/256 turn) |
+|---:|---:|---:|---:|
+| 0 | −504 | −8 | 32 |
+| 1 | −496 | −16 | 32 |
+| 2 | −488 | −24 | 32 |
+| 3 | −480 | −32 | 32 |
+| 4 | −472 | −40 | 32 |
+| 5 | −464 | −48 | 32 |
+| 6 | −456 | −56 | 32 |
+| 7 | −448 | −64 | 32 |
+| 8 | −440 | −72 | 32 |
+| 9 | −432 | −80 | 32 |
+| 10 | −424 | −88 | 32 |
+| 11 | −416 | −96 | 32 |
+| 12 | −408 | −104 | 32 |
+| 13 | −400 | −112 | 32 |
+| 14 | −392 | −120 | 32 |
+| 15 | −385 | −127 | 32 |
+| 16 | −376 | −136 | 32 |
+| 17 | −368 | −143 | 32 |
+| 18 | −361 | −150 | 32 |
+| 19 | −353 | −158 | 32 |
+| 20 | −344 | −166 | 32 |
+| 21 | −336 | −173 | 35 |
+| 22 | −329 | −181 | 38 |
+| 23 | −322 | −188 | 41 |
+| 24 | −316 | −194 | 44 |
+| 25 | −306 | −199 | 47 |
+| 26 | −296 | −204 | 50 |
+| 27 | −288 | −208 | 53 |
+| 28 | −277 | −211 | 56 |
+| 29 | −267 | −212 | 59 |
+| 30 | −256 | −213 | 62 |
+| 31 | −245 | −212 | 66 |
+| 32 | −235 | −211 | 69 |
+| 33 | −225 | −208 | 72 |
+| 34 | −216 | −204 | 75 |
+| 35 | −208 | −199 | 78 |
+| 36 | −198 | −194 | 81 |
+| 37 | −188 | −188 | 84 |
+| 38 | −181 | −181 | 87 |
+| 39 | −176 | −173 | 90 |
+| 40 | −168 | −166 | 93 |
+| 41 | −160 | −158 | 96 |
+| 42 | −152 | −150 | 96 |
+| 43 | −144 | −143 | 96 |
+| 44 | −136 | −136 | 96 |
+| 45 | −129 | −129 | 96 |
+| 46 | −120 | −120 | 96 |
+| 47 | −112 | −112 | 96 |
+| 48 | −104 | −104 | 96 |
+| 49 | −96 | −96 | 96 |
+| 50 | −88 | −88 | 96 |
+| 51 | −80 | −80 | 96 |
+| 52 | −72 | −72 | 96 |
+| 53 | −64 | −64 | 96 |
+| 54 | −56 | −56 | 96 |
+| 55 | −48 | −48 | 96 |
+| 56 | −40 | −40 | 96 |
+| 57 | −32 | −32 | 96 |
+| 58 | −24 | −24 | 96 |
+| 59 | −16 | −16 | 96 |
+| 60 | −8 | −8 | 96 |
+
+**Curve F** (NE then E; 56 points; chain point 44, entry point 16, release point 27).
+
+| Point | *x* (leptons) | *y* (leptons) | *f* (1/256 turn) |
+|---:|---:|---:|---:|
+| 0 | −512 | 256 | 32 |
+| 1 | −504 | 248 | 32 |
+| 2 | −496 | 240 | 32 |
+| 3 | −488 | 232 | 32 |
+| 4 | −480 | 224 | 32 |
+| 5 | −472 | 216 | 32 |
+| 6 | −464 | 208 | 32 |
+| 7 | −456 | 200 | 32 |
+| 8 | −448 | 192 | 32 |
+| 9 | −440 | 184 | 32 |
+| 10 | −432 | 176 | 32 |
+| 11 | −424 | 168 | 32 |
+| 12 | −416 | 160 | 32 |
+| 13 | −408 | 152 | 32 |
+| 14 | −400 | 144 | 32 |
+| 15 | −392 | 136 | 32 |
+| 16 | −385 | 129 | 32 |
+| 17 | −376 | 120 | 32 |
+| 18 | −368 | 112 | 32 |
+| 19 | −360 | 104 | 32 |
+| 20 | −352 | 96 | 32 |
+| 21 | −344 | 88 | 32 |
+| 22 | −338 | 85 | 32 |
+| 23 | −328 | 78 | 35 |
+| 24 | −320 | 72 | 37 |
+| 25 | −311 | 66 | 40 |
+| 26 | −302 | 59 | 43 |
+| 27 | −294 | 55 | 45 |
+| 28 | −285 | 50 | 48 |
+| 29 | −277 | 43 | 51 |
+| 30 | −267 | 38 | 53 |
+| 31 | −258 | 34 | 56 |
+| 32 | −248 | 28 | 59 |
+| 33 | −238 | 25 | 61 |
+| 34 | −229 | 21 | 64 |
+| 35 | −218 | 17 | 64 |
+| 36 | −208 | 14 | 64 |
+| 37 | −199 | 11 | 64 |
+| 38 | −189 | 9 | 64 |
+| 39 | −178 | 7 | 64 |
+| 40 | −169 | 5 | 64 |
+| 41 | −158 | 3 | 64 |
+| 42 | −147 | 1 | 64 |
+| 43 | −137 | 0 | 64 |
+| 44 | −129 | 0 | 64 |
+| 45 | −117 | 0 | 64 |
+| 46 | −107 | 0 | 64 |
+| 47 | −96 | 0 | 64 |
+| 48 | −85 | 0 | 64 |
+| 49 | −75 | 0 | 64 |
+| 50 | −64 | 0 | 64 |
+| 51 | −53 | 0 | 64 |
+| 52 | −43 | 0 | 64 |
+| 53 | −32 | 0 | 64 |
+| 54 | −21 | 0 | 64 |
+| 55 | −11 | 0 | 64 |
 
 **T2 Track for each pair of steps.** A curve of T1 is used as listed or transformed. The transforms
 are applied to every point in the order given:
@@ -1155,9 +1403,12 @@ of the first group.
 | no track, move to make | facing differs from the current step | turn in place, *A* = 0 (claim 6) |
 | on a track | track target reached, no step left | at rest, *ρ* = 0 (claim 11) |
 | on a track | move stopped | target fraction becomes min(*ρ*ₜ, *F*₀.₃), destination cleared, finish the current track (claim 11) |
+| driving or sailing, track target reached | mobile target passes the arrival range test, qualifying behaviour, no approach destinations | destination cleared, remaining steps discarded, target kept, stop there (claim 19 a) |
+| hovering, step transition leaves no next step | the same arrival-time stop conditions hold | destination cleared, target kept, stop instead of retaining a destination through the retry wait (claim 19 d) |
+| hovering, step transition leaves no next step | arrival-time stop conditions fail, retry timer still runs | wait with destination kept until a search can choose the next step (claim 19 d) |
 | no track, step ahead, allied closed gate in the next cell | any tick | tells the gate to open and waits, without turning (claim 15) |
 | no track, facing the step | first check: friendly obstacle, enemy obstacle, stationary friendly | discards the stored path and searches at once; repeated check on the same tick when the search finds a path (claim 15, T4) |
-| no track, facing the step | first check: blocked | as S-0212 claim 22 gives (claim 15, T4; Open questions) |
+| no track, facing the step | first check: blocked | discards the stored path and searches on this tick regardless of the retry timer; a found path gets a repeated check on this tick (claim 15, T4; S-0212 claim 22) |
 | no track, facing the step | first check: cloaked blocker | reveals the cloaked objects, discards the stored path; searches on the same tick only if the path retry timer has run out |
 | holding a path found on this tick | repeated check: friendly or enemy obstacle | attacks the first listed object if not allied (a wall if nothing is listed) by an override that gives no destination, so its move destination is put aside until the override is reverted; waits |
 | no track, facing the step, first cell clear, curve chosen | second cell: friendly or enemy obstacle | discards the stored path; when the path retry timer has run out, searches on that tick, looks at the new first cell and makes a step check of the same kind, which can begin only a straight or diagonal track (claim 15, T5) |
@@ -1689,13 +1940,12 @@ cell before *X*.
   otherwise refuses a path through *X*. Record path-search ticks and the retry timer. The
   discriminating run qualifies only if *M* still has the stored step into *X* at arrival and
   the retry timer is running; otherwise the timing comparison is inconclusive.
-  *Expected under S-0212 claim 22, which T4 cites:* at the end of *M*'s arrival tick *M* has no stored path and
-  keeps its destination, and its next search comes only after the retry delay (S-0212 claim 21).
-  *Under the reading in the Open questions:* *M* searches at once on its arrival tick.
+  *Expected:* *M* discards its stored path and searches at once on its arrival tick,
+  regardless of the running retry timer (S-0212 claim 22).
   A failed search follows S-0212 claim 23; a found path is checked again on that tick, with
   its actual new first cell deciding the result. It need not give *blocked* again.
-  *Falsified (for T4 as written) if:* a qualifying run records a search on the arrival tick,
-  before the retry delay expires; that result supports the reading and goes to S-0212.
+  *Falsified if:* a qualifying run waits for the retry delay before searching, or a found
+  path gets no repeated check on that tick although *M* faces its new first step.
 - (e) *X* holds a closed gate of the human player. The corridor turns by 1/4 turn at the cell before
   *X*, so that *M* arrives there facing another way. *Expected:* the gate starts to open on *M*'s
   arrival tick, before *M*'s facing starts to change. *Falsified if:* *M* turns before the gate
@@ -1916,8 +2166,10 @@ cell before *X*.
   input controls every one. The attacker *A* stands at one end of the first lane; the target *U*,
   of an unarmed stock type with the same locomotor, at the far end of the second lane. A
   read-only recorder logs each tick *A*'s position, destination, number of stored steps and
-  target, the tick of each path search *A* makes, and *U*'s position. Whether the range test
-  passes is computed afterwards from the recorded positions by S-0307.
+  target, current and queued behaviour, approach destinations, the tick of each path search
+  *A* makes, and *U*'s position. Log track completion for driving and sailing and step
+  transitions with and without a chosen next step for hovering. Compute both the approach
+  range test and claim 19 a's arrival range test from the recorded positions.
 - *Procedure:* scripted input orders *A* to attack *U* (forced attack on an own unit). Once *A*
   has a destination, scripted input orders *U* to the cell of the second lane next to *A*'s
   starting cell, so that *U* comes in range while *A* still has several cells to go.
@@ -1928,20 +2180,42 @@ cell before *X*.
     setting the path-retry delay field to 0.1 game minutes (invented), so that *R* = 90 ticks.
   - Run 3c (control): as run 3, with *U* never ordered to move and placed so that it is out of
     range until *A* reaches its destination.
+  - Run 4 (hover wait control): as run 3 but targeting a stationary building, with a named
+    test-map trigger giving *A* a distant cell destination while retaining that target and
+    *attack*. A qualifying run has the target in range, stored steps, a running retry timer
+    and a destination several cells away. If no such run occurs in ten attempts, this control
+    is inconclusive. The building does not satisfy the mobile-target stop condition.
+  - Controls for runs 1 and 2: use a stationary building target and a retained distant cell
+    destination as in run 4; separately, repeat with a mobile target under *attack move*.
+    Qualify only while the recorded target, behaviour and destination remain as specified.
+  - Boundary controls for runs 1 and 2: put an infantry target near its cell's edge. Arrange
+    an approach where the target reference point is in range at a track target but its cell
+    centre is not, then reverse those two results. Also repeat using a named test override
+    making the attacker open-topped and choose distances on either side of its strict
+    three-dimensional range threshold. Log the relevant range and reference points.
 - *Expected:*
-  - Runs 1 and 2: from the first tick on which the range test passes until *A* arrives at its
-    destination, *A* keeps its destination and target, its stored steps are not emptied, and its
-    position keeps changing; it stops only at its destination (claim 19 a and e).
-  - Run 3: at the first point *A* reaches after the range test passes, its stored steps drop to
-    0 while its destination stays. *A* then stands at that point until 90 ticks after its
-    previous search, searches, and takes the next step; this repeats at each point while *U* is
-    in range, until *A* arrives at its destination (claim 19 c, d and e). Run 3c shows no such
-    waits.
-- *Falsified if:* in run 1 or 2, *A*'s destination is removed or *A* stops for 10 ticks or more
-  before its destination while *U* is in range; in run 3, *A* keeps stored steps after reaching a
-  point with *U* in range, stops for good before its destination, searches before *R* has run
-  out, or shows no wait although crossing a step takes it fewer than 90 ticks.
-- *Runs:* 3 each. The chase exception of claim 19 c is `unmeasured`: in our rules no order gives
+  - Runs 1 and 2: with no approach destinations, *A* loses its destination and remaining
+    steps at the first track target where the arrival range test passes. It keeps *U* as
+    target and begins no further track, even if its old destination is several cells away.
+    No stop occurs between track targets. Building and *attack move* controls do not get
+    this early stop. Boundary controls follow the cell-centre result, not the target-point
+    result; the open-topped controls instead follow the strict three-dimensional test.
+  - Run 3: at a step transition while *U* is in range under the approach test, the stored
+    path is discarded. If *R* still runs, no next step is chosen; with claim 19 a's conditions
+    satisfied, *A* clears its destination and stops there on that tick, keeping its target.
+    If *R* has expired and a successful search chooses a next step, *A* continues on that
+    transition instead. Run 3c has no range-driven path discard before reaching its destination.
+  - Run 4: because the target is not mobile, the arrival-time stop does not apply. After
+    discarding its path, *A* waits with its destination until 90 ticks after the previous
+    search, searches and resumes. These waits repeat while the target stays in range.
+- *Falsified if:* a qualifying driving or sailing run continues beyond a track target that
+  satisfies the stop conditions, stops between track targets because of range, loses its
+  target at this stop, or applies the stop to a building or *attack move* control. The
+  boundary controls falsify the claim if they follow the wrong measured point or comparison.
+  A qualifying hover run falsifies part d if its transition with no next step retains the
+  destination despite satisfying the stop conditions, or clears it in run 4 because of range
+  alone. A run 4 search before the retry delay expires falsifies the waiting rule.
+- *Runs:* 3 each, including controls. The chase exception of claim 19 c is `unmeasured`: in our rules no order gives
   a hovering vehicle a vehicle or infantry unit as destination together with a target in range
   except the target-object destinations of S-0215 claim 37 h and S-0307, whose setups are those
   specs'.
@@ -1962,12 +2236,6 @@ cell before *X*.
 - Whether a game started with the capture-the-flag option on places flags that a vehicle can carry
   (scenario D15 checks this as its precondition).
 - The reactions to a curve's second cell (claim 15, T5) were read at low confidence.
-- For the outcome *blocked* at a first check, S-0212 claim 22 says that the stored path is cleared
-  and a fresh search follows after the path retry delay. A reading of the original for this request
-  points instead to the reaction to an obstacle: the path is discarded and a fresh search is made
-  at once, followed by the repeated check (low confidence). This conflicts with the approved wording
-  of S-0212 claim 22; the two specs must be reconciled in the same revision round if the latter
-  reading is confirmed. Scenario D17 part d3 tells the two apart.
 - Whether a value of the locomotor field with further characters after the closing brace counts as
   a class identifier (claim 14) was not checked. The answer may depend on how the host system
   turns the text into an identifier, rather than on the game itself. Our importer treats such a
@@ -2004,10 +2272,6 @@ cell before *X*.
 - How a vehicle that the map places on a high-bridge cell, or that leaves a building onto one,
   starts on or off the bridge deck (claim 5 covers only the changes made while it drives). The
   specs of map placement (S-0009) and of the structures own this.
-- S-0212 claim 23, third row, says that when a search fails within 1 cell of the destination,
-  locomotors other than the driving one keep the destination. Claim 19 b reads that the ship and
-  hovering locomotors lose it too, as the driving one does; the two specs must agree, and the
-  change is reported for S-0212.
 - The hovering locomotor's fresh search after a wait (claim 19 d) is read as being retried on every
   tick until *R* has run out; scenario D21 run 3 records the search ticks.
 - Whether a vehicle at rest keeps its leftover budget on every way of arriving (claim 3). Scenario

@@ -2,11 +2,11 @@
 id: S-0213
 title: Human orders (the order set, when orders apply, and what each order changes)
 topic: simulation
-revision: 9
+revision: 10
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-13
+approved-on: 2026-10-14
 measurements: []
 requests: [Q-0072, Q-0087]
 supersedes: []
@@ -109,9 +109,9 @@ Terms).
   objects of its kind, when the house has several such factories (production specs).
 - **Rally-capable building.** As S-0214 (Terms) defines it: a factory of infantry or vehicles, a
   cloning building or a repair depot.
-- **Cycle, order block.** As S-0201 (Terms) defines them: a cycle is the stretch of real time in
-  which the game takes the player's input once and runs one tick; during an order block the game
-  accepts no orders from the player.
+- **Cycle, order block.** As S-0201 (Terms) defines them: an unfrozen cycle takes at most one
+  waiting input event and runs one tick; a frozen cycle takes no input and runs no tick. During
+  an order block the game accepts no orders from the player.
 - **Construction yard.** In this spec, a building whose type has the construction-yard flag
   (Import mapping), the sense of S-0214 and S-0415 (Terms), not S-0215's.
 - **Vehicle-like building, packs up.** A building whose type undeploys into a vehicle *packs up*
@@ -126,8 +126,8 @@ Terms).
    object can act on an order is therefore the tick after the one in which the order was issued.
    All orders issued in the same tick are applied together, in the order of claim 3.
    - **Which tick an input belongs to.** In a single-player game the player's input is taken once
-     per cycle, before that cycle's tick (S-0201, *cycle*, claim 2), and not while the game waits
-     between ticks. Each cycle takes at most one input event from the player's waiting inputs, in
+     per unfrozen cycle, before that cycle's tick (S-0201, Terms, *Cycle*), and not while the game waits
+     between ticks. Each unfrozen cycle takes at most one input event from the player's waiting inputs, in
      the order they were made; an input event is a key or mouse button going down or coming back
      up. An input made during the wait after tick *N* is therefore issued in tick *N* + 1 if no
      earlier input is still waiting, and several inputs made during one wait are taken one per
@@ -484,13 +484,16 @@ Terms).
       conditions under which it changes nothing (a power-off order on a building whose type has
       neither a base drain above 0 nor the needs-power flag; a power-on order while a pulse
       disables the building), belong to S-0405 (claim 10).
-    - The *primary* order needs a live building, which may be off the map, whose type is a
-      factory. It is a switch: if the building is already its house's primary factory, it stops
-      being primary; otherwise it becomes primary, and every other building of the same house
-      that is on the map, is a factory of the same kind and has the same water-or-land kind of type
-      (naval or not) stops being primary. A building whose type is not a factory is not changed.
-      Input creates the order only when the player clicks a selected factory building of the
-      player's on itself (the deploy click of S-0214, row G5) and that factory is not already
+    - The *primary* order needs a live building, which may be off the map, whose imported
+      factory-category field is not the no-factory value. This test includes the four producing
+      kinds and other recognised categories of S-0003 claim 21; it is not a production-line
+      eligibility test. It is a switch: if the building already has the primary designation, it
+      loses it; otherwise it gains it, and every other building of the same house that is on
+      the map, has exactly the same imported category and has the same water-or-land kind of type
+      (naval or not) loses its designation. A building with the no-factory value is not changed.
+      A recognised non-producing category grants no production line even when designated primary.
+      Input creates the order only when the player clicks such a selected building of the
+      player's on itself (the deploy click of S-0214, row G5) and that building is not already
       primary: a click on a factory that is already primary gives no action (S-0214, row B3). So the
       switching-off case arises only when a second primary order for the same factory is issued
       before the first is applied: a person's input cannot do that (claim 1), but an AI house can,
@@ -500,7 +503,8 @@ Terms).
     None of these checks the owner of the building when it is applied (see claim 15). What
     repairing, powering and the primary factory change belongs to the economy and production specs.
     - Backing: `measurable` (Scenario O6, step 3, for repair; Scenario O12 for power, the
-      firestorm-wall flag and making a factory primary). "Off the map" for repair and primary, and
+      firestorm-wall flag and making a factory primary; part b tests producing versus
+      non-producing categories). "Off the map" for repair and primary, and
       the switching off of a primary factory, are `unmeasured`: input cannot click a building that
       is off the map, and creates no primary order for a factory that is already primary.
     - Confidence: medium
@@ -667,8 +671,11 @@ Terms).
     an attack order with an object target and no destination leaves that target and an empty
     destination at the order boundary. This does not mean the actor remains stationary:
     S-0215 claim 37 owns the subsequent approach step's trigger, gating and destination
-    renewal; S-0307 claim 15 owns the approach-position search within its stated scope.
-    Stopping belongs to S-0207 and S-0208 and remains open where those specs do not state it.
+    renewal, including its medium-confidence zero-speed qualifications in part g; those
+    qualifications do not promise displacement. S-0307 claims 15 to 18 own the covered
+    approach-position searches, failure outcomes and vertical balloon-hover exception.
+    S-0207 claim 19 owns the driving, sailing and hovering vehicle outcomes once in range.
+    S-0208 claims 16 and 17 own walk completion and the conditional infantry stop on arrival.
     None of those is an additional effect of the order here. Buildings likewise receive
     the target without a movement destination and never take that approach step
     (S-0215 claims 32 and 37 g). Special infantry actions that use entering,
@@ -721,7 +728,7 @@ quantities.
 | Initial last-cheer tick | −100 | ticks | Claim 19 |
 | Route-holder limit per house | 128 | objects | Claim 16 |
 | Order delay | 1 | ticks | Claim 1: issued in tick *N*, first acted on in tick *N* + 1 |
-| Input events taken per cycle | 1 | events | Claim 1 |
+| Input events taken per unfrozen cycle | at most 1 | events | Claim 1; frozen cycles take none |
 | Smallest spread group | 2 | orders | Claim 7 |
 | Largest level difference of a spread cell | 2 | levels | Claim 7: fewer than 3 levels from the common cell |
 | Steps of a spread look (our engine, interim) | 6 | steps of one cell length | Claim 7, design choice |
@@ -744,7 +751,7 @@ from claim 17. Every row that carries an actor also ends the actor's planned rou
 | Sell wall | cell | (economy specs) | The wall in the cell is sold |
 | Repair | actor | actor live (it may be off the map) | Repair switched on or off (claim 13) |
 | Power off, power on | actor (a building) | live and on the map; no firestorm-wall flag | Building switched off or on (claim 13), under the further conditions of S-0405 (claim 10) |
-| Primary | actor (a building) | live (it may be off the map); its type is a factory | Primary factory switched (claim 13) |
+| Primary | actor (a building) | live (it may be off the map); imported factory category not the no-factory value, including recognised non-producing categories | Primary designation switched (claim 13) |
 | Place | building type, cell | (production specs) | A finished building is placed |
 | Build, hold, cancel, cancel all | type | (production specs) | Production started, held or cancelled |
 | Fire superweapon | superweapon, cell | (superweapon specs) | The superweapon fires at the cell |
@@ -839,14 +846,15 @@ only when they actually assign a destination.
   engine keeps that, for every house alike; ownership is kept by the input rules that every house's
   orders pass when issued (claim 3). An object whose owner changes between issue and application
   still gets the order, as in the original. No switch is proposed.
-- **The click marker.** When a selection is ordered to move, the original shows a marker
-  animation at the clicked cell. In a skirmish game it is created as an ordinary animation
-  object, and only for the local player's own clicks. Our engine treats it as drawing only: it
-  never takes part in game state and never draws from the scenario random stream. This is a
-  departure, confirmed by the project lead. Because the original creates the marker only on the
-  machine of the player who clicked, any effect it had on game state would already have split
-  the original's own network games, so drawing only is consistent with the original. The
-  glossary allows nothing that depends on the local player to reach game state.
+- **The click marker.** When a selection's click action is *move* (not *no-move*, which can
+  also produce a move order; S-0214, claim 14), the original shows a marker animation at the
+  clicked cell. In a skirmish game it is created as an ordinary animation object, and only for
+  the local player's own clicks. Our engine treats it as drawing only: it never takes part in
+  game state and never draws from the scenario random stream. This is a departure, confirmed by
+  the project lead. Because the original creates the marker only on the machine of the player
+  who clicked, any effect it had on game state would already have split the original's own
+  network games, so drawing only is consistent with the original. The glossary allows nothing
+  that depends on the local player to reach game state.
 
 ## Import mapping
 
@@ -857,7 +865,7 @@ only when they actually assign a destination.
 | Building type sections, `WeaponsFactory` | vehicle-factory cell of claim 10 | boolean (S-0003) | no |
 | Building type sections, `DockUnload` | the unloading kind of building of table T3, part (b) | boolean (S-0003) | no |
 | Building type sections, `FirestormWall` | firestorm-wall flag of claim 13 | boolean (S-0003) | no |
-| Building type sections, `Factory` | the factory kind of claims 13 and 20 (which kind of object it builds) | type-kind name (S-0003) | not a factory |
+| Building type sections, `Factory` | imported category: claim 13 tests any category except no-factory; claim 20's kind-specific tests use only the corresponding producing kinds | named value, S-0003 claim 21 and Import mapping row C19; other recognised categories are not aliases for producing kinds | no factory; missing or empty in a later layer keeps the value in force |
 | Building type sections, `Naval` | the naval kind of factory in claims 13 and 20 | boolean (S-0003) | no |
 | Building type sections, `UndeploysInto` | building that undeploys into a vehicle, which packs up when sold (claims 12 and 20) | vehicle type name (S-0003) | none |
 | Building type sections, `ConstructionYard` | construction yard (claims 12 and 20) | boolean (S-0003) | no |
@@ -1175,6 +1183,18 @@ game's normal input only, as a player would, and never writes into the game.
   *B* primary and *A* not, then still *B* primary; (3) no change.
 - *Falsified if:* (1) the state does not switch; (2) *A* stays primary after *B* is made primary,
   or *B* stops being primary at the third click; (3) the flagged building is switched off.
+- *Part (b), imported categories:* named test rules give two otherwise selectable buildings
+  the same recognised non-producing category from S-0003 Import mapping row C19, and a
+  third the corresponding producing kind. Keep all three non-naval. At game speed 6,
+  select and self-click each non-producing building in turn, then the producing building.
+  Repeat three times from a fresh start. Record the primary designation after each click
+  and whether any production line becomes available. Expected: the two non-producing
+  buildings gain the designation in turn, the second clears the first, and designating the
+  producing building does not clear the second because the categories differ. Neither
+  non-producing category grants a production line. A no-factory control cannot gain the
+  designation. A refusal to designate either recognised non-producing category, clearing
+  across different categories, or production enabled solely by such a category falsifies
+  the relevant claim. This part tests category recognition separately from production.
 
 **Scenario O13: checks when the order is applied (claims 4 and 17).**
 - *Setup:* (a) an armed vehicle *V* of the player's, selected, moving towards a far cell *D*; an
@@ -1323,14 +1343,17 @@ game's normal input only, as a player would, and never writes into the game.
 
 ## Open questions
 
-- Q-0072: claim 21 answers the order-application contribution in full. S-0215 claim 37 now
+- Q-0072: claim 21 answers the order-application contribution in full. S-0215 claim 37
   supplies the approach trigger, gating, renewal and building/deployed-infantry rules
-  (questions 1, 4 and 5); its immobile-type case remains low confidence. S-0307 claim 15
-  supplies question 2's open-ground search, with the remaining search paths still open in
-  that spec. Question 3's stopping event and destination changes belong to S-0207 and
-  S-0208: the approach step itself never clears a held destination merely because the
-  target came in range (S-0215 claim 37 e). No owned part of Q-0087 remains open. The
-  requests list records this spec's contributions, not closure of the cross-spec Q-0072.
+  (questions 1, 4 and 5); part g's zero-speed qualifications are medium confidence and
+  do not specify a complete locomotor contract. S-0307 claims 15 to 18 supply question 2's
+  covered open-ground and obstructed searches, failure outcomes and vertical balloon-hover
+  exception; search cases outside their stated scopes remain open there. Question 3's
+  infantry part is answered by S-0208 claims 16 and 17. Its driving, sailing and hovering
+  vehicle part is S-0207 claim 19. The approach step itself never clears a held destination
+  merely because the target came in range (S-0215 claim 37 e); that does not override the
+  movement-side rules. No owned part of Q-0087 remains open. The requests list records
+  this spec's contributions, not closure of the cross-spec Q-0072.
 
 - A stop or deploy order is ignored while the actor is in one further state that has not been
   identified. It is probably a unit travelling underground or through a tunnel, whose position
@@ -1368,18 +1391,11 @@ scripted input, the click marker). Revision 7 defers the surrender, alliance and
 table T1 to S-0414 (claims 11 to 14) and S-0405 (claim 10); the game-end decision of 2026-10-11
 (play to the last side) is S-0414's. Items for the lead to route at sign-off:
 
-- **Cited specs of the same batch,** as they stand in it: S-0003 (revision 7), S-0006 (revision
-  6), S-0009 (revision 6), S-0011 (revision 4), S-0107 (revision 4), S-0201 (revision 6), S-0203
-  (revision 7), S-0204 (revision 5), S-0205 (revision 4), S-0208 (revision 7), S-0209 (revision
-  13), S-0211 (revision 7), S-0212 (revision 13), S-0214 (revision 6) and S-0215 (revision 9), and
-  the batch's glossary (revision 7). The
-  terms that appear first in that glossary revision (*AI house*, *team member*, *contact*,
-  *tether link*, and the scripted-input allowance of *measurement setup*) are given in this spec's
-  Terms and scenario preamble, citing S-0208, S-0215 and the lead's decision, so the spec does not
-  depend on them. Glossary revision 7 no longer lists S-0201, S-0204 or S-0205 as planned; the
-  approved glossary (revision 4) still does.
-- **S-0201 owner:** claim 2 (the cycle) should state, as claim 1 here does, that a cycle takes at most
-  one input event, so that a click and a key press are never issued in the same tick (owner
-  S-0201).
+- **Cited specs:** pointers refer to the current approved specs and their latest working
+  drafts in this correction round, under the glossary's convention. Confirm the versions
+  handed off together, particularly the Q-0072 movement and approach pointers of claim 21.
+- **Input timing confirmation:** S-0201 Terms, *Cycle*, already cites claim 1 here for
+  the at-most-one-input-event limit in an unfrozen cycle; its claim 2 owns pacing.
+  No additional S-0201 change is required.
 - **Check at sign-off:** S-0208, Terms and claim 11, define the scatter request's threat point, *forced*,
   *move anywhere* and *effectively forced* that claim 9 uses.

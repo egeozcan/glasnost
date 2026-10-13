@@ -2,11 +2,11 @@
 id: S-0403
 title: Build time (progress steps, base time from cost, country and type factors, low power, several factories, walls)
 topic: production
-revision: 1
+revision: 2
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-11
+approved-on: 2026-10-14
 measurements: []
 requests: []
 supersedes: []
@@ -46,7 +46,9 @@ addition:
   moment. The step period is derived from it (claim 1).
 - **Factory building of a kind.** A building whose type's factory field names the kind of object it
   makes: infantry, vehicles, aircraft or buildings. A factory building of vehicles is *naval* when its
-  own type's naval flag is set. Which factory building releases a finished unit is S-0404's (claim 7).
+  own type's naval flag is set. S-0003 claim 21 and Import mapping row C19 own the factory
+  vocabulary, text limit and fallback. Which factory building releases a finished unit is S-0404's
+  (claim 7).
 - **Power fraction** *p*. As S-0405 defines it (its Terms and F3). S-0405 owns output, drain and the
   fraction; this spec only narrows it to single precision (claim 5).
 - **Power re-evaluation.** The moment a house works out its power output and drain again. In the
@@ -284,7 +286,7 @@ from the step that starts after tick *t* at the earliest, never the step that fa
 | `BuildTimeMultiplier` (rules, type) | type multiplier *m* | decimal, held as a single | 1.0 |
 | `BuildCat` (rules, building type) | the combat category makes the type a defence | category name | not combat |
 | `Naval` (rules, vehicle type; rules, building type) | naval item; naval factory building | boolean | no |
-| `Factory` (rules, building type) | factory building of a kind (the kind of object named) | type kind | none |
+| `Factory` (rules, building type) | factory building of a kind | named value: producing vocabulary, 31-byte text limit, whole-text ASCII-insensitive comparison and fallback as S-0003 claim 21 and Import mapping row C19; not a registered-type reference | initially no factory; missing or empty retains the value in force; unmatched non-empty text gives no factory, with an importer warning |
 | `LowPowerPenaltyModifier` (rules, `General`) | *q* | decimal, held as a single | 1.0 |
 | `MinLowPowerProductionSpeed`, `MaxLowPowerProductionSpeed` (rules, `General`) | *f*ₘᵢₙ, *f*ₘₐₓ | decimal, held as a single | 0.5; single nearest 0.9 |
 | `MultipleFactory` (rules, `General`) | *g* | decimal, held as a single | 1.0 |

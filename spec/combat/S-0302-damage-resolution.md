@@ -2,11 +2,11 @@
 id: S-0302
 title: Damage resolution (shot damage, defences, versus values, rounding, healing, health thresholds)
 topic: combat
-revision: 12
+revision: 13
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-13
+approved-on: 2026-10-14
 measurements: []
 requests: [Q-0061, Q-0075, Q-0081]
 supersedes: []
@@ -173,14 +173,6 @@ Shared terms used here are defined in the glossary: *armour class*, *warhead*, *
    as it is, and its house. A new shot fired by a building during the countdown of a delayed kill
    carries it normally.
 
-   **Coordinated correction required in S-0303 claim 14.** Its approved revision 4 and current
-   draft say that carrying the firer depends on whether it is still in play at detonation.
-   That is not this rule: a killed infantry firer can still be in play but is no longer carried,
-   while a living firer loaded into a closed transport is believed to remain carried despite
-   leaving play. Starting to cloak is also believed to end carrying. S-0303 must replace its
-   in-play criterion with this claim's rule, retaining the confidence qualifications and the
-   death-weapon exception. D17 g2–g5 and D24 b2–b5 distinguish the cases; these are proposed
-   tests, not completed measurements. The two revisions must be checked together before hand-off.
    - Backing: `measurable` (detonations, every scenario below; what a detonation carries, scenarios
      D13, D17 and D24 including the firer loaded into a transport, the infantry firer with a death
      sequence, the death weapon and, in D24 part b5, the cloaking firer; the wave's attacker through
@@ -499,10 +491,8 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
    building that the demolition warhead puts into a delayed kill (claim 16), if that warhead
    causes delayed kills, and from an airborne infantry unit hit by a demolition warhead of
    infantry-death kind 9 (claim 17). S-0011's departure for the survivor (damage it once per
-   firing and go on) applies to every survivor, but its statement that survivors need a demolition
-   warhead of an immunity kind, and its importer warning, name only that case: they have to be
-   extended to the three further cases above by a revision of S-0011 (Questions for the project
-   lead). The zero-amount row stops a trigger kill only in the airborne case just named: every other
+   firing and go on) and its importer warning cover all these survivor cases. The zero-amount
+   row stops a trigger kill only in the airborne case just named: every other
    target has health at the trigger kill, so the amount is above 0. The self-damage
    row cannot stop a trigger kill (it needs an attacker), and the two no-health rows do not apply to
    it (S-0011 acts on present objects only, *No-health targets* in claim 8).
@@ -1828,13 +1818,3 @@ stated per destroyed vehicle, and the runs need not give equal values.
   markers that the table gives is for their owning specs to confirm; whether a sonic
   wave stops carrying its firing object in the cases where a projectile's detonation does (claim
   1) is not traced.
-
-## Questions for the project lead
-
-- **A revision of S-0011 for the survivors of the trigger kill (claim 9).** Claim 9 finds three
-  more cases than S-0011 (claim 27) names in which an object survives the trigger kill and the
-  original hangs: the immune bridge repair hut, a building put into a delayed kill, and an infantry
-  unit in the air hit by a warhead of infantry-death kind 9. S-0011's statement that survivors need
-  a demolition warhead of an immunity kind, and its importer warning, name only the first
-  cause, the warhead kinds (a demolition warhead that is also a berserk warhead is among them).
-  May the S-0011 owner be asked to extend both?

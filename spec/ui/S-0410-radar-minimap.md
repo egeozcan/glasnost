@@ -2,11 +2,11 @@
 id: S-0410
 title: Radar and minimap (when radar is available, what the radar map shows and how it is coloured)
 topic: ui
-revision: 6
+revision: 7
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-13
+approved-on: 2026-10-14
 measurements: []
 requests: [Q-0110, Q-0112]
 supersedes: []
@@ -264,7 +264,9 @@ house as S-0409 defines (Terms); a gap field that is not hostile to *H* is a *fr
      country is not passive for multiplayer (so insignificant objects of the neutral and special
      houses, and ownerless ones, are hidden).
    - Backing: `measurable` (scenarios R5 parts A to C, E and G, R6 part B, R9); the ownerless
-     insignificant object is `unmeasured` (R5 part D, no skirmish setup creates it)
+     insignificant object is `unmeasured` (R5 part D, no skirmish setup creates it). The own-object
+     discovery predicate with a clear mark is `unmeasured` independently: ordinary skirmish cell
+     placement already sets the mark (S-0409 claim 20), so R9 A cannot isolate that condition
    - Confidence: medium for the restriction to radar objects (the evidence so far shows only the
      four radar-object kinds ever listed, and no other kind); high for the type flags, the
      passive-country rule (both exceptions to "insignificant", R5 part G), the shroud test at the
@@ -819,16 +821,19 @@ panel at a fixed screen resolution; a *recorder* for tick numbers. One valid run
 - **R9 (claim 7, own and not-owned cases; low-confidence tests).** Observable (all parts): whether
   the object's radar pixel shows its house colour, and on which tick it first does. Part A:
   named test data gives a human-owned vehicle zero sight, no invisibility or insignificance,
-  and places it by a trigger in an isolated, flat, unexplored test cell, with free radar on.
-  No allied or own object can reveal that cell before the test reveal. Record the discovery
-  mark as well as the panel: while the mark is clear the vehicle is not listed, despite being
-  owned; a later reveal for the human house that sets the mark makes it listed from its next
-  start-of-turn evaluation. Re-covering its cell after discovery does not remove its own radar
-  listing. Expected: ownership never substitutes for a clear discovery mark, and a set mark
-  passes this owned-case test regardless of shroud. Falsified if the vehicle is listed with the
-  mark clear, or stops being listed solely when its cell is re-covered. Discovery on map
-  placement or factory release, and selection among objects sharing a cell, are S-0409's
-  Q-0110 parts, not additional radar tests. Part B: an own vehicle inside a
+  and places it by a trigger in an isolated, flat, unexplored usable test cell, with free radar on.
+  No allied or own object can reveal that cell before the observation. Record the discovery
+  mark as well as the panel. Expected: placement sets the mark (S-0409 claim 20), and the vehicle
+  is listed from its next start-of-turn evaluation while its cell remains unexplored; no scout
+  or later reveal is needed. A repeat with map placement, and another with factory release,
+  likewise need no scout to set the mark. In a further run, reveal and then re-cover the
+  trigger-placed vehicle's cell: its own radar listing remains. Falsified if the mark stays
+  clear after placement finishes in usable ground, the vehicle waits for a reveal before
+  being listed, or re-covering alone removes its listing. This tests a set mark regardless
+  of shroud, not an ownership bypass: the separate clear-mark predicate of claim 7 cannot be
+  isolated here because cell placement already sets the mark. Discovery on placement or
+  factory release, and selection among objects sharing a cell, belong to S-0409 claim 20,
+  not additional radar tests. Part B: an own vehicle inside a
   transport, and a vehicle of a type with the invisible flag, are not shown. Part C: an enemy vehicle
   that is cloaked, one that is underground (the special-abilities specs' states), and
   one that has the radar-invisible veterancy ability, each in explored ground. Expected for C

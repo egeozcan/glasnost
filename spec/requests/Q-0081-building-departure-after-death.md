@@ -1,9 +1,9 @@
 ---
 id: Q-0081
 title: When a building leaves play after a delayed death or after it explodes
-status: open
+status: answered
 related: [S-0302, S-0312]
-answered-by: []
+answered-by: [S-0214]
 ---
 
 ## Need

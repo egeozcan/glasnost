@@ -2,13 +2,13 @@
 id: S-0414
 title: Victory and defeat (the defeat tests of the normal and short game, what defeat does, when the game ends, the end delay, surrender and alliance orders)
 topic: simulation
-revision: 2
+revision: 3
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-13
+approved-on: 2026-10-14
 measurements: []
-requests: []
+requests: [Q-0150, Q-0151]
 supersedes: []
 ---
 
@@ -36,8 +36,9 @@ the *base-unit list*), S-0412's terms *alliance*, *allied*, *mutually allied*, *
 
 - **Defeated house.** A house that the defeat of claim 5 has struck. A house stays defeated for
   the rest of the game. A house that is not defeated is *undefeated*.
-- **Contender.** An undefeated house that is not passive. Only contenders are tested (claim 1) and
-  counted (claims 6 and 12).
+- **Contender.** An undefeated house still in the game that is not passive. Only contenders are tested
+  (claim 1) and counted (claims 6 and 12). A house removed by unused-house cleanup (S-0009 claim 28)
+  is no house of the game, not an empty contender.
 - **Observer's house set aside.** In our engine an observer's house (S-0009 claim 22) is never
   tested (claim 1) and is left out wherever this spec counts or pairs contenders (claims 6 and 12,
   Formulas *K*), although it stays an undefeated contender by the definition above. The original
@@ -74,19 +75,24 @@ the *base-unit list*), S-0412's terms *alliance*, *allied*, *mutually allied*, *
 - **End delay.** The number of ticks between the end of the game and the moment it is over (claim
   8).
 - **Result.** Win or loss, one per player house, fixed at the end of the game (claim 7) and
-  changed only by claim 9. A result is *pending* from the end of the game until the game is over.
+  changed only by claim 9. A result is *pending* from the end of the game until its commitment
+  in the final tick (claim 16), and then *committed*: later defeats cannot change it.
 
 ## Behaviour
 
 ### The defeat test
 
 1. **When houses are tested.** In a skirmish every contender is tested once per tick, during its own
-   house update, in every tick except the first (tick number 0). A defeated house is never tested
+   house update, in every tick except the first (tick number 0). A house removed by unused-house
+   cleanup is never tested, counted as an enemy or contender, or given a result: S-0009 claim 28
+   already removes the house itself, not merely its objects. Claim 16 fixes the test's observable
+   place within the house update. A defeated house is never tested
    again, and a passive house is never tested at all: passive houses can be neither defeated nor
    counted. In our engine an observer's house is never tested either, so it is never defeated
    (Terms, *observer's house set aside*; Edge cases, *Observers*). The test is claim 2 when the short-game setting is
    on and claim 3 when it is off.
-   - Backing: `measurable` (scenario V2 for tick 0 and the per-tick test; V3 for passive houses),
+   - Backing: `measurable` (scenario V2 for tick 0 and the per-tick test, V3 for passive houses,
+     V13 for cleanup-removed houses),
      while the observer's house is a rule of our engine and `unmeasured` (the original tests it, so no
      run of the original can show our rule; V10 records what the original does)
    - Confidence: high
@@ -184,8 +190,11 @@ the *base-unit list*), S-0412's terms *alliance*, *allied*, *mutually allied*, *
 ### What defeat does
 
 5. **Defeat.** A house that fails its test is defeated at once, in the same house update:
-   - **Its objects are destroyed.** Every infantry unit, vehicle, aircraft and building that the
-     house owns takes a single hit. Its amount is the object's current health and its warhead is the
+   - **Its objects are destroyed.** Every infantry unit, vehicle, aircraft and building attributed
+     to the house by the ownership conditions below is offered a single hit, except for claim 15's
+     cancellation-skip quirk, including objects
+     off the map (passengers, occupants, production items and finished items awaiting placement).
+     Claim 15 fixes the order and how intervening deaths or cancellations affect this set. Its amount is the object's current health and its warhead is the
      demolition warhead (S-0303, Import mapping); it is damage that ignores defences, it carries the
      no-escape marker, and it has no attacker and no attacking house (S-0302, S-0312). So passengers
      do not escape. An object that is
@@ -287,11 +296,16 @@ the *base-unit list*), S-0412's terms *alliance*, *allied*, *mutually allied*, *
    - Confidence: high for the local player's result
 
 8. **The end delay.** After the end of the game, play goes on until the game is over in tick
-   *t* + max(*D*, 1), with *t* the tick of the end (Formulas), so at least one more tick runs. During those ticks every rule of play applies as usual: houses are still tested
-   and can still be defeated. In the original the program additionally waits, in real time, for
+   *t* + max(*D*, 1), with *t* the tick of the end (Formulas), so at least one more tick runs.
+   This final tick runs all its simulation parts, including every house update and the application
+   of orders. No next tick runs. Houses are still tested and can still be defeated, including in
+   the final tick. However, the result and expiry are committed before that tick's defeat tests:
+   a defeat reported by those tests cannot change the committed result or restart the delay
+   (claim 16). Thus 'during the end delay' in claim 9 excludes defeats tested in this final tick,
+   even when the killing hit occurred earlier in that tick. In the original the program additionally waits, in real time, for
    the result announcement to finish before showing the result screen; that wait is presentation
    only, takes no tick, and our engine does not reproduce it.
-   - Backing: `measurable` (scenario V6, including part e for the minimum and the zero-result
+   - Backing: `measurable` (scenarios V12 part c and V6, including part e for the minimum and the zero-result
      extreme). Wrapped end-delay values between the integer and 64-bit bounds are `unmeasured`
      here: V6 does not isolate their delay outcomes; the general conversion rule is backed by
      S-0205 claim 7 and its scenarios
@@ -433,6 +447,71 @@ the *base-unit list*), S-0412's terms *alliance*, *allied*, *mutually allied*, *
     - Confidence: high for the two flags, the cleared mark and the start alliances; medium for the
       interface details
 
+### Destruction order and the final tick
+
+15. **Order and scope of the destruction hits (Q-0150).** The defeat and surrender hits of claim 5
+    follow creation order across all four object kinds together, subject to the cancellation
+    exception below, not kind order and not order of
+    entering the map. Boarding, leaving a transport and changing owner do not change an object's
+    place. Production start is the object's creation (S-0404 claim 11), not its eventual release.
+    Off-map status does not exclude an object. An earlier object's death effects complete before
+    the next destruction hit, so its death draws precede that next object's death draws (S-0312
+    claim 1). The sweep takes no random draws of its own.
+
+    Eligibility follows the state at the object's place in this order, not a snapshot taken before
+    the first hit. A passenger that has already died with an earlier-hit carrier does not die
+    again or add another set of death draws. A production object deleted by an earlier factory
+    loss and cancellation is no longer available for a hit. Conversely, an object created by
+    an earlier death effect is later in creation order and is included when claim 5's ownership
+    conditions hold. Creation order also decides which death effect can change control or
+    cancel production before a later object's hit. Objects still present after their hit are
+    not hit repeatedly merely because their removal is delayed. The amount is their health at
+    the moment of the offered hit; an already dead object gains no second death from a zero hit.
+    This does not replace the passenger, cancellation or death rules of S-0312 and S-0404.
+
+    **Cancellation exception.** Under `quirks.defeat_cancellation_skip` (default original), a
+    hit's effects that immediately delete k objects at or before that hit's place in the combined
+    creation order skip max(k − 1, 0) of the remaining objects directly after it. Count all four
+    kinds and all owners, including objects that would not qualify for a destruction hit.
+    Here deletion means that the object ceases to exist immediately, as on production
+    cancellation, not merely that it leaves the map or awaits delayed removal after death.
+    This can leave a later eligible object without its destruction hit. The count and formula
+    are non-negative integers, with exact arithmetic and no rounding. With the switch off,
+    no eligible object loses its destruction hit through such deletion. Ordinary single-object
+    deletion skips none; surviving objects otherwise keep creation order.
+    - Backing: `measurable` (V11 for cross-kind order, re-entry, off-map passengers and production
+      items, V11 part d for the cancellation exception; S-0312 claim 1 for completion of each
+      death's effects). Inclusion of newly created
+      eligible objects is `unmeasured` here: no isolated defeat setup that creates such an object
+      without a nested trigger destruction or cancellation masking its later hit is identified
+    - Confidence: high for creation order, no off-map exclusion and no repeated hit solely due to
+      delayed removal; medium for changes to eligibility and cancellation skips during the sweep
+
+16. **Consequences within a house update and at expiry (Q-0151).** Power totals and the ordinary
+    radar recheck of a house update do not yet see that update's surrender or defeat destruction.
+    A power change made due by that destruction is taken up in the next house update, not this
+    one. The forced radar-on effect at defeat remains immediate (claim 5, S-0410 claim 1),
+    overriding ordinary availability without waiting for that later recheck. The defeat test
+    already sees the surrender destruction of the same update. The tech-tree recheck and its
+    sidebar cancellation orders, when due, see both kinds of destruction in that same update
+    (S-0407 claim 12, S-0411 claim 2). This says nothing about an object kept on the map after
+    death: each topic still uses its own counting conditions.
+
+    At the final tick of claim 8, the pending result becomes committed before surrender
+    destruction and defeat testing. The remainder of the tick still runs, so a house can be
+    marked defeated in that tick while keeping its committed win, and orders applied after the
+    houses can still change objects. Such a defeat neither changes that win nor buys extra ticks,
+    even with `quirks.defeat_during_end_delay` on. A defeat tested one tick earlier changes the
+    pending win and restarts the delay as claim 9 says. In the original this commitment is in
+    the local player's house update, before its own defeat test; the local player's house is
+    first in skirmish house order. Our per-house results and games without a person-played house
+    use the same cutoff for all results: the start of the houses' part of the final tick. This
+    extension is a design rule, not a claim that the original stores other houses' results.
+    - Backing: `measurable` (V12); the common commitment for non-local houses and a game without
+      a person-played house is `unmeasured`, since the original has no such result state
+    - Confidence: high for the relative places of destruction, power, radar and tech-tree work,
+      medium for the boundary result, pending V12's discriminating run
+
 ## Formulas
 
 **End delay** (claim 8). With *d* the end-delay field in game minutes (a double, Import mapping), let *x* be the product *d* × 900, rounded toward zero to double precision according to S-0205 and `quirks.chop_rounding`. The integer delay *D*, in ticks, is *x* truncated toward zero to a whole number. The factor 900 is the glossary's conversion from game minutes to ticks. The conversion to a whole number follows S-0205, claim 7: a product of 2³¹ or more wraps (from a field of about 2.39 million game minutes up, *D* no longer follows the field, and whenever the wrapped *D* is 0 or negative the delay is the shortest one of the next formula), and a product of 2⁶³ or more gives 0. Example: at the absent-key default *d* = 0.03 the exact product of the stored double and 900 lies just below 27, so *D* = 26 with the switch on (the original) and 27 with it off.
@@ -473,7 +552,8 @@ included), is empty (claim 6, departure); our engine does not.
 | undefeated | surrender order applied, no result pending | undefeated, marked to die | none until its next house update |
 | undefeated, marked to die | its next house update | undefeated | all its objects destroyed (claim 5); the test of the same update already sees this, so the house can be defeated in that tick |
 | defeated | — | defeated | never tested again |
-| any | end of the game | same | result fixed (claim 7); end delay starts |
+| any | end of the game | same | pending result set (claim 7); end delay starts |
+| any with a pending result | houses' part of the final tick starts | same, result committed | later defeat tests cannot change the result or expiry (claims 8 and 16); all remaining simulation parts still run |
 | undefeated with a win | defeated during the end delay | defeated | result becomes a loss (claim 9); the end delay restarts when the house is person-played (both with `quirks.defeat_during_end_delay` on) |
 
 **Observable ordering.**
@@ -483,6 +563,10 @@ included), is empty (claim 6, departure); our engine does not.
 - A defeat's end test sees every house later in house order as it stands before that house's own
   test in the same tick, so a house that fails later in the tick still counts as a contender when
   an earlier defeat ends the game (claim 10, V7).
+- Power and ordinary radar work do not see the surrender destruction of their own house update,
+  but its due tech-tree recheck does see it (claim 16, V12).
+- The final tick runs fully, but its defeat tests are too late to change the committed outcome
+  (claims 8 and 16, V12 part c).
 - A surrender order applied in tick *t* destroys objects in tick *t* + 1, since orders take effect
   after every house update of their tick (S-0203 claim 7). Its mark is set in tick *t*, but no
   surrender destruction occurs then. This delay does not apply to alliance orders.
@@ -512,7 +596,8 @@ included), is empty (claim 6, departure); our engine does not.
 - **`quirks.defeat_during_end_delay`** (claim 9). Original: the local player's house, defeated
   with a win pending, turns it into a loss and restarts the end delay. In our engine the same
   holds for the person-played house; any other player house defeated in the delay loses and
-  leaves the delay alone. Off: results and delay fixed at the end of the game.
+  leaves the delay alone. Off: results and delay fixed at the end of the game. A defeat tested
+  in the final tick cannot change the committed outcome with either setting (claim 16).
 - **Short game with the bases setting off** (S-0412 claim 11). Bases off removes the starting
   base unit, not the short-game test's other ways to survive: a contender with a counted building
   or an eligible base-unit vehicle supplied by the map or among its budget units still passes
@@ -551,7 +636,7 @@ included), is empty (claim 6, departure); our engine does not.
     the lead decision of 2026-10-11 (claim 6)
 - **Making peace with the last enemy** is refused (claim 12), so an alliance can never be what ends
   the game.
-- **Items in production** (claims 2 and 4). A building in production, or finished and waiting to
+- **Items in production** (claims 2, 4 and 15). A building in production, or finished and waiting to
   be placed, is a counted building in both tests, and a base-unit vehicle in production counts in
   the short-game test, because starting an item creates its object (S-0404 claim 11). No switch:
   it is how the original keeps its counts. How long such an item lives once the factory
@@ -561,6 +646,10 @@ included), is empty (claim 6, departure); our engine does not.
   exception is S-0404's `quirks.defence_line_partial_factory_check`: after the capture (a change
   of owner, not a removal for good) of the last factory building of buildings, a defence item
   goes on and keeps the house alive (variant g of V1).
+- **`quirks.defeat_cancellation_skip`** (claim 15). Original: immediate deletions caused by one
+  destruction hit can skip later objects, with the exact count in claim 15. Off: deletion costs
+  no remaining eligible object its destruction hit. Backing: `measurable` (V11 part d).
+  Confidence: medium.
 - **Mind-controlled objects of a defeated house** (claim 5) pass to the first house of the
   civilian side when their control ends. No switch.
 
@@ -581,6 +670,10 @@ included), is empty (claim 6, departure); our engine does not.
 | `[MultiplayerDialogSettings]` `AllyChangeAllowed` | ally-change-allowed flag (claim 14) | boolean | yes |
 | building type, `Foundation` | one-cell foundation (Terms; S-0108) | foundation name | as S-0108 |
 | country section, `MultiplayPassive` | passive house (claim 1; S-0009) | boolean | as S-0009 |
+
+The creation-order destruction and the house-update cutoff of claims 15 and 16 use no INI
+settings; the cancellation exception is controlled only by its quirk switch. Their warhead and end-delay field use the existing rows above. Cleanup and
+its maximum-player-count input remain owned by S-0009 claim 28 and its Import mapping.
 
 The civilian side of claim 12 is the side named Civilian; the original finds it by that fixed
 name, so the name is an engine constant, not stock data.
@@ -809,6 +902,73 @@ defeat message is shown for the observer's house (claim 5). A game that runs on 
 falsifies the reading. If the lobby offers no way to start a skirmish with an
 observer, that is recorded as "no observer in a skirmish" and is not a falsification; the Edge
 case's description of the original then concerns no game that can be played.
+
+**V11: creation order and off-map hits (claim 15).** Setup: small test map, normal game, named
+map overrides defining two vehicle and two building types with distinct debris draw ranges, with
+other random death effects disabled. Keep an enemy bystander away. Create the human's objects
+in a recorded interleaving of kinds through production and placement, at separated cells so
+deaths cannot damage one another. Procedure: surrender. Tool and observable: read-only health,
+death-message and scenario-stream recorder, plus scripted input. Repeat for three recorded seeds
+with discriminating draws. Expected: draw allocation matches creation order across kinds and
+there is no extra draw from the sweep. Any kind-grouped or map-entry allocation falsifies this.
+- *Part b, re-entry and passengers.* Produce infantry P before transport T, then board P into T.
+  Make a later infantry Q. Record P's health during surrender. Expected: P receives its hit while
+  off the map before T's hit, not only at T's death; boarding does not put P after Q. Reverse
+  creation order in a control: T's passenger-death rules may kill P before P's place, without
+  a second death or extra set of draws. Repeat with an absorbing building instead of T.
+  Garrison occupants have the same inclusion, with their death consequences owned by S-0312.
+  Survival until the later carrier death in the first run, or a second death in the control,
+  falsifies the rule. The recorder must sample within the destruction interval: an end-of-tick
+  disappearance alone cannot distinguish these cases.
+- *Part c, production.* Start and hold infantry item P. Build a replacement infantry factory
+  after P's start, then sell the original factory without cancelling P. Surrender while P is
+  still held. Expected: P's health receives the killing hit before the replacement factory dies.
+  Repeat with a finished building awaiting placement and a replacement factory created after
+  its production start. Unchanged item health until factory-loss cancellation falsifies off-map
+  inclusion. Mere disappearance confirms nothing: cancellation would also delete the object.
+  A run where an earlier factory loss cancelled the item is void.
+- *Part d, multiple earlier cancellations.* Hold one ordinary-building item and one defence
+  item. Deploy a replacement factory of buildings after both items were started, then sell
+  the old factory without cancelling either. Create two test infantry units after the new
+  factory. Surrender and record immediate item deletions, the infantry health and creation
+  order. Expected if the factory's death immediately deletes both earlier items: the first
+  following object in combined creation order is skipped and can survive, while the second
+  eligible one is hit. Control with only one earlier item: neither is skipped. If another
+  object occupies the intervening place, the skipped place belongs to it instead. A run
+  without the two immediate deletions is inconclusive, not confirmation. No skip despite
+  those confirmed deletions, or a different number of skipped places, falsifies the formula.
+
+**V12: house-update timing and the final tick (claims 8 and 16).** Use the common setup and named
+map overrides. Tool: read-only recorder of power totals, radar availability, build icons, object
+health, defeat messages and order destinations, with scripted input. Repeat each deterministic
+variant once; void unintended computer attacks or defeats.
+- *Parts a and b.* Normal game. Human owns a power plant, radar building, production buildings
+  and a not-scored vehicle that entered the map; its stale count keeps the house undefeated
+  after surrender. Use no nominal survivors. Wait for pending rechecks and surrender in tick
+  n − 1. Expected in n: objects receive hits, no defeat, power totals and ordinary radar still
+  show pre-destruction values, but the due tech-tree recheck removes offers whose factories or
+  prerequisites actually left the map. In n + 1 power and radar reflect the losses. Record
+  actual removal so lingering buildings cannot masquerade as stale totals. Same-update power
+  or ordinary radar changes, or a due tech-tree change postponed to n + 1, falsify the ordering.
+  Control with an ordinary vehicle instead: at defeat radar is forced on in n, not postponed.
+- *Part c, boundary.* Human and A allied against B. Use V6's test 90-tick end delay. Defeat B
+  at t. A timed map action removes the human's last counted object at e = t + 90 before houses
+  update; A survives. Expected: defeat message at e, a win on the result screen, no restart,
+  last tick e. Control with removal at e − 1: a loss and fresh delay ending at e − 1 + 90.
+  A loss or restart in the e run falsifies the cutoff. For full-tick execution use a separate
+  run with the human surviving: scripted input queues a move order in e. Expected: its unit's
+  destination changes in e although no e + 1 runs. Failure to apply it falsifies full-tick
+  execution. These tests distinguish commitment from stopping simulation at the tick's start.
+
+**V13: cleanup-removed houses (claim 1).** Use S-0009 M16's setup with no computer slots, the
+neutral country non-passive and the special country passive. Confirm the neutral house itself
+was removed, not merely emptied. Tool and observable: read-only house-state recorder and defeat
+messages through tick 1. Expected: no update, defeat, result or contender/enemy membership for
+that removed house. A test counting it or a defeat message naming it falsifies this. Repeat with
+cleanup prevented as in S-0009 M16 part G: only a surviving non-passive house can be a contender.
+A lobby unable to start the no-computer setup makes this run unavailable, not a defeat-test
+result. S-0009 claim 28 already answers removal of the house itself; this scenario checks its
+victory-rule consequence. Run each available deterministic variant once.
 
 ## Open questions
 

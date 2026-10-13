@@ -100,7 +100,7 @@ fn main() -> ExitCode {
                 std::path::Path::new(&dir),
                 2,
                 &only,
-                arg(&args, 1, 40_000),
+                arg(&args, 1, 120_000),
                 arg(&args, 2, 7),
             ) {
                 Ok(report) => {

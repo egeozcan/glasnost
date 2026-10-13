@@ -2,11 +2,11 @@
 id: glossary
 title: Glossary of shared terms
 topic: rules-import        # cross-cutting; every topic uses these terms
-revision: 15
+revision: 16
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-13
+approved-on: 2026-10-14
 measurements: []
 requests: []
 supersedes: []
@@ -211,6 +211,9 @@ random-state recorder of the measurement setup.
 owns how many bales a resource cell holds and what each is worth (Terms, claim 2); S-0402 counts a
 harvester's *load* in bales.
 
+**barracks door kind.** One of three building-type flags that give an infantry factory a door
+cell tried first as its *exit cell*. S-0404 owns the term and the door-cell rules (Terms, claim 13).
+
 **base rules.** The expansion's main rules file: at every game start, the lowest of the rules layers
 (see *rules layer*). It restores every key it gives. A game-wide key it does not give is not reset by it (see *rules
 database*). See S-0004 and S-0006.
@@ -335,6 +338,9 @@ falls in a frozen cycle, so it is in force in the ticks up to its freeze and in 
 **claim.** One numbered, observable and testable statement in a spec's Behaviour section. Every claim
 carries a backing and a confidence.
 
+**cloning building.** A building whose type has the cloning flag. S-0404 owns the term and the
+copies of released infantry (Terms, claim 14); S-0213 and S-0214 use it for rally-capable buildings.
+
 **colour-adjustment table.** A table of 16 positions, each holding a tint colour with a red, a green
 and a blue component. The rules data fills it, and the game combines a position's colour with an
 object's pixels to tint it, for example a building under the invulnerability effect. A position that
@@ -429,7 +435,9 @@ claim 6); S-0303 gives the detonation.
 Formulas F1); S-0303 (claim 22) throws them from a warhead.
 
 **defeated, undefeated, contender.** A house is *defeated* once the defeat of S-0414 (claim 5) has
-struck it, and *undefeated* otherwise. A *contender* is an undefeated house that is not passive.
+struck it, and *undefeated* otherwise. A *contender* is an undefeated house still in the game
+that is not passive. A house removed by unused-house cleanup is absent, not an empty contender
+(S-0009, claim 28; S-0414, Terms and claim 1).
 S-0414 owns the terms (Terms, claims 1 to 10); S-0409 and S-0410 use *defeated*.
 
 **defence, ordinary building.** A building type is a *defence* when its build category field is
@@ -549,6 +557,11 @@ it. See S-0001.
 order of increasing severity, *clear*, *cloaked blocker*, *moving blocker*, *closed friendly gate*,
 *friendly obstacle*, *enemy obstacle*, *stationary friendly* and *blocked*. See S-0209 (Terms,
 claim 4); S-0212 (claim 27) gives the rows it relies on for a vehicle mover.
+
+**exit cell, exit displacement.** In production, an *exit cell* is the cell a released unit
+leaves its factory building towards. An *exit displacement* is a building type's displacement of
+the point where a released unit appears, in leptons. S-0404 owns these terms and the release rules
+(Terms, claim 13). An exit cell in another context, such as a tunnel, keeps that context's meaning.
 
 **expected damage.** The damage that the original estimates, when an object fires at another, for
 target choice. S-0302 owns how it is computed (claim 18); S-0309 uses it for its *expected
@@ -676,9 +689,12 @@ values (Import mapping), and no claim here covers them. The game-speed normalisa
   quirks).
 
 **game start.** The moment a new game (a skirmish, a network game or a campaign mission) begins
-loading. The rules layers are applied at every game start, and every type registry except the
-tiberiums' is rebuilt then (S-0004, claim 1; S-0006, claims 1 and 10). Specs write "game start", not "scenario start" ("scenario" would
-clash with *measurement scenario*).
+loading. The rules layers are applied at every game start. In a skirmish every type registry
+except the tiberiums' starts empty (S-0004, claim 1; S-0006, claims 1 and 10). S-0006 claim 14
+records a deferred campaign exception: sides newly created by the mission-named file remain ahead
+of the base rules' sides for that mission, but no side of the previous game survives. This is
+context only, not a campaign implementation rule. Specs write "game start", not "scenario start"
+("scenario" would clash with *measurement scenario*).
 
 **game-wide section.** A rules section that is neither a type's own section nor a type list: the
 general settings, the combat-damage settings, the AI settings, the difficulty sections, the land-type
@@ -1190,8 +1206,12 @@ layers (see *rules layer*: the base rules, the language rules file if a valid on
 game-mode file in a skirmish or network game unless the language rules file fails its check at a
 later game start (see *language rules file*), and the map layer, from lowest to highest) take effect on the rules state already
 there. In a campaign mission the mission-named file changes that state too, below every layer of
-the mission, but it is not a rules layer and most of its changes are lost (S-0006, claim 14). Every type registry except the
-tiberiums' starts each game empty, so type sections hold only what this game's layers gave.
+the mission, but it is not a rules layer and most of its changes are lost (S-0006, claim 14).
+Every type registry except the tiberiums' starts each skirmish empty, so its other type sections
+hold only what this game's layers gave. The deferred campaign exception is the sides newly
+created by the mission-named file: they remain ahead of the base rules' sides for that mission,
+but no side of the previous game survives (S-0006, claim 14). This exception preserves context
+only; campaigns remain out of scope.
 Game-wide sections are not cleared at a game start, apart from the resets S-0006 lists (for
 example, the colour-adjustment table depends only on this game's layers, as the table in S-0006
 claim 2 gives, never on earlier games). So a game-wide key that the base

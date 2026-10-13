@@ -2,11 +2,11 @@
 id: S-0211
 title: Land types and passability
 topic: movement
-revision: 12
+revision: 13
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-13
+approved-on: 2026-10-14
 measurements: []
 requests: [Q-0018, Q-0020]
 supersedes: []
@@ -264,7 +264,7 @@ The crusher flag's effect in play is S-0210's (crushing).
      | Recompute when an overlay changes but keeps its type (ore growing or being harvested, a wall's damage stage) | `unmeasured`: the land type and the category depend only on the overlay's type and flags (claims 5 and 11), so such a recompute has no visible effect in this spec |
      | Recompute when an animation replaces the overlay | `unmeasured`: which animations put which overlay types in place belongs to the animation specs, and no scenario of this spec sets one up |
      | Recompute when the cell's tile, sub-tile or ground level is changed in play | `measurable` (S-0212 scenario P15 case (k): a collapsed destroyable cliff leaves a passable cell, whose category follows only at a recompute) |
-     | Recompute in the game-start pass after starting units are placed | `measurable` through S-0010 claim 12 and scenario R1 parts D2 and E: the surviving cell's land type changes after its next recalculation; the exact number of recalculations beyond the stated pass remains `unmeasured` |
+     | Recompute in the game-start pass after starting units are placed | `measurable` (S-0010 claim 12, scenario R1 part D2 for the surviving cell's land-type outcome and scenario G4 part C for animation outcomes); the exact count of whole-map recalculations is `unmeasured`, because the outcomes do not distinguish extra recalculations once terrain is stable |
      | Recompute on any other whole-map change of the terrain at game start | `unmeasured`: which such changes happen belongs to S-0009 and S-0010, and no scenario of this spec separates such a pass from the stated passes |
      | Recompute when a terrain object is removed | `measurable` (scenario L14) |
      | Recompute when a terrain object is put into a cell | `unmeasured`: in a skirmish, terrain objects are known to be put into cells only while the map loads, between the two passes of S-0010 claim 12, and the second pass recomputes every cell anyway, so the placement's own recompute has no separate observable |

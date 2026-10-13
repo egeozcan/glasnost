@@ -1,9 +1,9 @@
 ---
 id: Q-0162
 title: What happens to an attack-move memory when its destination is reached
-status: open
+status: answered
 related: [S-0309, S-0215, S-0213]
-answered-by: []
+answered-by: [S-0309]
 ---
 
 ## Need

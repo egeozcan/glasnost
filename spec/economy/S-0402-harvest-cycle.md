@@ -2,13 +2,13 @@
 id: S-0402
 title: Harvest cycle (loading, field and refinery choice, docking, unloading, income, slave and chrono miners)
 topic: economy
-revision: 5
+revision: 6
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-13
+approved-on: 2026-10-14
 measurements: []
-requests: []
+requests: [Q-0140, Q-0141, Q-0142, Q-0143, Q-0144, Q-0145]
 supersedes: []
 ---
 
@@ -49,8 +49,9 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
   the first set, the dock-type buildings.
 - **Capacity *C*.** A harvester type's storage field: the number of bales it can carry, an integer.
 - **Load.** The bales a harvester carries, held as one amount per tiberium. Amounts are whole
-  numbers of bales. The *total* is the sum of the amounts; the harvester is *full* when the total
-  equals *C*.
+  numbers of bales. The *total* is the sum of the amounts. For *C* ≥ 1, the harvester is *full*
+  when the total equals *C*. For *C* = 0, it is treated as not full while seeking and at a load
+  step, and as full in the check after a failed load step; it never carries a bale (Edge cases).
 - **Harvest phase.** The part of the *harvest* behaviour a harvester is in: *seeking*, *loading*,
   *returning*, *requesting* or *idle* (claim 3). A harvester enters *harvest* in the seeking phase.
 - **Remembered cell.** A cell a harvester keeps so that it can drive back to its field after
@@ -59,12 +60,17 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
   (S-0003 lepton form): the field divided by 256, truncated toward zero. The *long scan* and *short
   scan* ranges come from the resource scan fields (Import mapping).
 - **Ring search** (claim 4). The search for a field cell around a harvester.
-- **Docking cell.** For a harvester in contact with a refinery and unloading, the harvester's own
-  cell; the refinery must occupy the neighbouring cell in step direction 6 (map west) of it.
+- **Top-left cell.** The cell of a building's position: the top-left cell of its foundation, the
+  one with the smallest *x* and *y*; not the reference point, which is the foundation's centre.
+- **Dock-unload refinery.** A refinery whose type has the dock-unload flag (Import mapping). Only
+  such a refinery directs a harvester to its docking cell (claim 10).
+- **Docking cell.** For a dock-unload refinery with top-left cell (*x*₀, *y*₀), the cell
+  (*x*₀ + 3, *y*₀ + 1), whatever the size of its foundation; the art does not move it (claim 10).
+  A harvester unloads standing on it, and claim 11 looks for the refinery in the neighbouring cell
+  in step direction 6 (map west) of the harvester's cell.
 - **Queueing cell.** A cell near a refinery where a harvester that has not reserved it waits: the
-  cell of the refinery's position (the top-left cell of its foundation, the one with the smallest
-  *x* and *y*; not the reference point, which is the foundation's centre) moved by the queueing
-  shift of the refinery's art (Import mapping), or the nearest free cell around that.
+  refinery's top-left cell moved by the queueing shift of the refinery's art (Import mapping).
+  The harvester drives to the result of a nearby-cell search around it (claim 9).
 - **Dock slots.** The number of harvesters that a refinery can hold in contact at once: the
   number of docks of its art, at least 1 (Import mapping).
 - **Load step period *L*.** The rules' harvester load-rate field, in ticks.
@@ -77,14 +83,21 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
 - **Pacing period.** A whole number of ticks, possibly 0 or negative, that sets when the step
   counter rises (claim 5, Formulas F6).
 - **Holding order.** The order of a house's buildings in which the harvest rules take them (claim 8):
-  a building joins the end of its owner's holding order when it comes into existence for that
-  owner, and leaves it when the building ceases to exist; the buildings that remain keep their
-  relative order. A building that is produced (S-0404) comes into existence either when its
-  production starts or when it is placed; which of the two counts is not determined (Open
-  questions), and the scenarios place each building before the next one's production starts. The order of the buildings a skirmish creates at its start is S-0412's.
-  A building that changes owner (capture) joins the end of the new owner's order in our engine, and
-  the original's behaviour for that is not measured. Everything a harvester can observe of the
-  holding order is claim 8's tie rule and its primary-building rule.
+  a building joins the end of its owner's holding order when it is put on the map for that owner,
+  and leaves it when it ceases to exist; the buildings that remain keep their relative order. A
+  produced building (S-0404) joins when it is placed, not when its production starts. The same
+  holds for a building that a deploying vehicle creates and for a building that the map pre-places,
+  so the buildings that exist at the start of a skirmish join in the order in which the set-up puts
+  them on the map (S-0009 for pre-placed buildings, S-0412 for the start). A building that changes
+  owner (capture) leaves its old owner's order at that moment and joins the end of its new owner's
+  order. Everything a harvester can observe of the holding order is claim 8's tie rule and its
+  primary-building rule.
+- **Free unit.** S-0408's term (Terms): the vehicle type that a building type's free-unit field
+  names. Claim 18 says when one is created.
+- **Grand opening.** S-0108's term (claim 11): the moment a building first completes, at the end of
+  its build-up.
+- **Start price.** The price of a produced item at the moment its production starts (S-0404,
+  claim 2), which the original records on the produced object; claim 18 reads it.
 - **Docking, payment and unloading animations.** Three animations of the building in the
   neighbouring cell (claim 11): the *docking animation* (the building's pre-production animation,
   played when unloading starts), the *payment animation* (its special animation, played at a
@@ -130,18 +143,20 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
    - Confidence: high for the three behaviours; low for *return* not being used
 
 3. **Harvest phases.** Within *harvest* a harvester moves through the phases of the table in
-   **State and ordering**. In outline:
-   - **seeking:** a full harvester goes on to *returning*. One that is not full and has a
-     remembered cell drives to that cell and forgets it, and one that is not full and has a
-     destination stays seeking. In every other case (not full, no remembered cell, no destination)
-     it runs the ring search (claim 4) with the long scan range from its own cell, and the result
-     decides: its own cell, it starts *loading*; another cell, it drives there and stays seeking,
-     and nothing, it goes *idle*.
-   - **loading:** load steps (claim 5) until it is full or its cell is exhausted (claims 6 and 7).
-   - **returning:** it chooses a refinery and reserves it, or drives towards one (claims 8 and 9).
-   - **requesting:** it has reserved a refinery; at its next processing it queues *enter* (claim 10).
-   - **idle:** at its next processing it steps off the cell of a refinery-flag building if it stands
-     on one, and queues *guard* (claim 13).
+   **State and ordering**. The phase outcomes are:
+
+   | Phase | Condition | Observable result |
+   |---|---|---|
+   | Seeking | Full, except for the *C* = 0 treatment in Terms | Changes to *returning*. |
+   | Seeking | Not full and has a remembered cell | Drives to that cell and forgets it. |
+   | Seeking | Not full, no remembered cell and has a destination | Remains seeking. |
+   | Seeking | Not full, no remembered cell or destination; long-range ring search finds its own cell | Starts *loading*. |
+   | Seeking | Not full, no remembered cell or destination; search finds another cell | Drives to that cell and remains seeking. |
+   | Seeking | Not full, no remembered cell or destination; search finds nothing | Goes *idle*. |
+   | Loading | — | Takes load steps under claim 5 until full or the cell is exhausted; claims 6 and 7 give the resulting transitions. |
+   | Returning | — | Chooses and reserves a refinery, or drives towards one, under claims 8 and 9. |
+   | Requesting | Next processing | Queues *enter* under claim 10. |
+   | Idle | Next processing | Steps off a refinery-flag building's cell if standing on one, then queues *guard* under claim 13. |
 
    In every phase, a harvester whose owner owns no building of any of its dock types queues *guard*
    at its processing, and nothing else of its phase happens (claim 13). The processing interval is 1 tick in *loading*, after
@@ -229,8 +244,12 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
 ### Refineries
 
 8. **Choosing a refinery.** A harvester chooses among the buildings its owner owns that are of one
-   of its dock types, are on the map, are connected to it by its movement zone (S-0212), and accept
-   it (claim 10). It takes the nearest candidate. The distance is measured as the square of the 2-D
+   of its dock types, are on the map, are connected to it by its movement zone, and accept
+   it (claim 10). *Connected* means that two cells lie in the same reach region (S-0212, claim 4)
+   for the movement zone of the harvester's type, read for the deck when the harvester is on a
+   bridge deck: the cell of the harvester's heading point (S-0212, Terms; its own position when it
+   is not moving) and the cell of the refinery's reference point. A harvester whose heading-point
+   cell lies outside the usable area counts as connected to every refinery. It takes the nearest candidate. The distance is measured as the square of the 2-D
    distance between the two reference points, an integer of leptons squared, *dx*² + *dy*², computed
    as a signed 32-bit integer that wraps (Formulas F5, `quirks.refinery_distance_wraps`; Edge
    cases). A primary building can override the nearest rule. The choice is made at two levels by
@@ -248,12 +267,12 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
    building only if it is one itself, also when the type has a primary building and a nearer
    candidate after it is the type's best (scenario H4 part i). In the normal choice a refinery whose dock slots are all held by
    other harvesters does not accept; in the *waiting choice* (claim 9) slots are not looked at.
-   - Backing: `measurable` (scenario H4 parts a, c and i; part e for the wrap, `unmeasured` if the
-     original cannot load a map that large); `unmeasured` for the holding order of a building that
-     changes owner and of the buildings a skirmish creates at its start, whose orders are other
-     specs' (Terms)
-   - Confidence: high for nearest-first and the slot test; medium for the two-level rule and the
-     primary-building rule; low for the holding order (Terms) and the tie order that rests on it
+   - Backing: `measurable` (scenario H4 parts a, c and i; part c's production-order run and part j
+     for the holding order of produced and captured buildings; part e for the wrap, `unmeasured` if
+     the original cannot load a map that large; part k for the connectivity cells)
+   - Confidence: high for nearest-first and the slot test; medium for the two-level rule, the
+     primary-building rule, the holding order (Terms) and the tie order that rests on it, and for
+     the connectivity cells; low for the usable-area exception
 
 9. **Reserving, or driving to the queue.** In the *returning* phase, while the harvester has no
    destination, it makes the normal choice (claim 8). If there is a choice within the too-far
@@ -266,18 +285,31 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
    - none: it stays and tries again at its next processing,
    - an ordinary harvester at most 768 leptons (3 cells, equality included, by the same 3-D
      distance) from that refinery stays where it is and tries again at its next processing,
-   - otherwise it drives to the refinery's queueing cell, or the nearest free cell around it, and
-     tries again when it arrives; with no such cell, it drives towards the refinery itself.
+   - otherwise it drives to the cell that a nearby-cell search around the queueing cell gives, and
+     tries again when it arrives; when the search gives no cell, its destination becomes the
+     refinery building itself, as for a move onto that building.
+
+   The search is S-0212's nearby-cell search (claim 25) with these settings: the centre is the
+   queueing cell; the locomotion class is *wheel* and the movement zone *normal*, whatever the
+   harvester's own; no reach region; never in deck mode; no height condition; no further test; and
+   the reference cell is the refinery's top-left cell (without the queueing shift). So the result
+   is the preferred collected cell nearest the top-left cell, the first collected on equal distance,
+   and the queueing cell itself is used when it qualifies (it is ring 0). "Free" therefore means
+   S-0212's qualification: inside the usable area, enterable by class for *wheel* with *normal*,
+   and an occupancy record that is empty as a whole; it is not the entry outcome *clear*. With the
+   default shift (0, 0) the queueing cell is a foundation cell of the refinery itself, which never
+   qualifies, so the result comes from ring 1 or beyond: on open level ground, the cell
+   (*x*₀, *y*₀ − 1) above the top-left cell.
 
    A chrono miner always moves in the last case, even at 768 leptons or less (it teleports,
    claim 17).
    While a harvester is driving in this phase it does not re-choose, except a chrono miner (claim
-   17). The phase takes no draws other than the standard delay's.
-   - Backing: `measurable` (scenario H4 parts a, b and f, and H8 part f for the chrono miner), and
-     `unmeasured` for the case that no free cell exists around the queueing cell (the extent of
-     the nearby-cell search is not determined, so no setup can be known to fill it)
-   - Confidence: high for the too-far test and the queueing cell; medium for the 768-lepton wait
-     and for the equality at both limits
+   17). The phase takes no draws other than the standard delay's; the search takes none.
+   - Backing: `measurable` (scenario H4 parts a, b and f, H8 part f for the chrono miner, and H11
+     parts a to c for the search settings and the fallback to the refinery)
+   - Confidence: high for the too-far test and the queueing cell; medium for the 768-lepton wait,
+     for the equality at both limits and for the search settings; low for the fallback to the
+     refinery building
 
 10. **Contact and docking.** A refinery accepts a harvester (agrees to contact, and counts as
     accepting in claim 8) only when it is not in its construction state, is not being sold, has a
@@ -287,14 +319,35 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     specs'. A refinery whose art gives no dock count has one dock slot, so one
     harvester at a time holds contact with it and the others queue. The house's power level does
     not matter. In *requesting* the harvester
-    queues *enter*, and in *enter* it drives to the refinery's dock and backs into the docking cell,
-    where it holds contact (a tether link, glossary) with the refinery while it unloads. The details
-    of the approach (the exact path, when the tether starts) are not specified here (Open
-    questions); the observable result is the docking cell and the facing of claim 11.
+    queues *enter*. Each processing of *enter* is followed by the next after the standard delay of
+    *enter* (S-0215, claim 6: one draw per processing). At each processing the harvester, in contact
+    with a dock-unload refinery, asks to dock, and the result is the first matching row:
+
+    | # | Situation at a processing of *enter* | Result |
+    |---|---|---|
+    | 1 | the refinery refuses (it does when it is switched off) and the harvester is not tethered | the harvester breaks off contact and falls back to rest (S-0215, claim 15) |
+    | 2 | it does not stand on the docking cell | its destination is set to the docking cell, again at each such processing (an ordinary move: S-0212 finds the path, and the harvester drives forwards) |
+    | 3 | it stands on the docking cell, and its body facing is not exactly 16384 (map east) | it and the refinery become tethered (glossary, *tether link*), and it turns its body on the spot towards 16384 |
+    | 4 | it stands on the docking cell, facing exactly 16384, and not moving | it and the refinery are tethered (as in row 3), and the refinery queues *unload* on it, without an immediate start, unless the refinery is being sold; *unload* becomes current by S-0215's start rules (claim 11) |
+    | 5 | otherwise (on the docking cell, facing 16384, still moving) | tethered as in row 3; nothing else |
+
+    A tethered harvester whose refinery refuses (row 1's refusal while tethered) keeps its contact
+    and goes on to the other rows.
+
+    So there is no backing in: the harvester arrives with whatever facing its path gives, and the
+    turn of row 3 happens on the docking cell. The turn of row 3 aims at exactly 16384, so row 4
+    holds at the first processing after the turn has ended; claim 11's facing range then holds at
+    once. A refinery that is not a dock-unload refinery agrees to contact but never directs the
+    harvester: the harvester stays in *enter*, processed at every standard delay, until something
+    else ends it (Edge cases). While the harvester drives, a tethered harvester in *enter* that
+    finishes entering a cell whose neighbour in step direction 0 holds its refinery also asks for
+    *unload* as in row 4; when the refinery refuses, the harvester scatters (S-0208, claim 13).
     - Backing: `measurable` (scenario H4 parts a and d for one-at-a-time, the power switch and
       low power, part g for the construction state and for being sold, part h for being erased,
-      H1 for the docking cell)
-    - Confidence: medium; low for being erased and for the details of the approach
+      H10 for the docking cell, the approach, the turn, the delays and the start of *unload*)
+    - Confidence: medium; high for the docking cell at (3, 1) from the top-left cell; low
+      for being erased, for the refinery that is not a dock-unload refinery and for the second
+      route through a finished cell
 
 11. **Unloading.** A harvester counts as facing map east when its facing *f* (glossary) satisfies
     16256 ≤ *f* ≤ 16511. "The neighbouring cell" is the cell in step direction 6 (map west) of the
@@ -304,7 +357,7 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
 
     | Situation at a processing of *unload* | Result | Next processing |
     |---|---|---|
-    | Not in contact with anything | stops, clears its destination and falls back to rest | as its resting behaviour |
+    | Not in contact with anything | falls back to rest (S-0215, claim 15, which queues nothing while *unload* is current); leaves the unloading state; stops if it is moving; then starts its queued behaviour by a start-next if it has one and is ready to change (S-0215, claim 11) | 1 tick |
     | In contact, not unloading, not facing map east | turns its body towards map east | 5 ticks |
     | In contact, not unloading, facing map east | starts unloading: step counter set to 0 and a pacing period of 1 tick started now; the building in the neighbouring cell, if any, plays its docking animation | standard delay of *unload* (S-0215, claim 6, one draw) |
     | Unloading, not finishing, and no building stands in the neighbouring cell | breaks off contact and queues *harvest* with an immediate start | — |
@@ -312,7 +365,8 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     | Unloading, not finishing, a building there, counter ≥ 900 × *D*, load not empty | the building plays its payment animation unless that is already playing; the harvester is paid (claim 12) for the tiberium it holds with the lowest registration index, the whole amount at once; counter set to 0 (its period is not restarted) | 1 tick |
     | Unloading, not finishing, a building there, counter ≥ 900 × *D*, load empty | becomes *finishing*; the building's payment animation, if playing, is stopped, and a refinery-flag building in the neighbouring cell plays its unloading animation; the counter is left as it is | 1 tick |
     | Finishing, and the building in the neighbouring cell is a refinery-flag building that is still playing its unloading animation | nothing | 1 tick |
-    | Finishing, otherwise | queues *harvest*, breaks off contact and starts the queued behaviour | — |
+    | Finishing, with a destination and a queued behaviour other than *harvest* | leaves the unloading state; stops if moving; starts the queued behaviour if it is ready to change; contact is kept | standard delay of the behaviour then current (one draw) |
+    | Finishing, otherwise | leaves the unloading state; queues *harvest* without an immediate start; if it is ready to change, breaks off contact and starts the queued behaviour | standard delay of the behaviour then current (one draw) |
 
     While the harvester unloads, the step counter follows the schedule of claim 5 (Formulas F6)
     with a period of 1 tick. Unloading starts the period at its processing in tick *u*₀, so the
@@ -332,15 +386,50 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     building's unloading animation (none when the building has no such animation data, so the
     harvester leaves in the tick after it became *finishing*). The docking and payment animations
     never delay the harvester. Back in *harvest*, the harvester starts seeking and drives to its
-    remembered cell (claim 3). An order given while it unloads can end unloading earlier by a route
-    not determined here (Open questions).
-    - Backing: `measurable` (scenario H1; its variant e for the three animations)
+    remembered cell (claim 3).
+
+    *Unloading state.* From the start row until it leaves (the rows above, or a scatter), the
+    harvester is in the unloading state, and a vehicle in that state is not ready to change (S-0215,
+    claim 11, the "letting out" transition), so no queued behaviour starts by S-0215's per-tick start.
+
+    *Refinery sold while unloading.* At the first processing of a sale of the refinery, the refinery
+    tells every unit docked with it to leave (S-0408, claim 6). A harvester in the unloading state leaves it at
+    once, scatters (S-0208, claim 13), queues *harvest* and starts it if it is ready to change
+    (it now is), keeping the part of its load that has not been paid; the sale then breaks off the
+    contact. A harvester still in *enter* at that moment (tethered on or towards the docking cell)
+    queues *guard* instead and scatters.
+
+    *Contact lost otherwise while unloading.* When the refinery leaves play without a sale (it is
+    destroyed, for example) or otherwise breaks off contact with no run-away, the next processing
+    takes the first row. With nothing queued, the fall-back queues nothing (*unload* is current)
+    and nothing starts, so the harvester stays in *unload*, keeps its load and is processed every
+    tick, taking the first row each time, until an order or another rule queues a behaviour
+    (`quirks.unload_without_contact_stalls`, Edge cases). Such a loss of contact queues nothing on
+    the harvester. This holds for every owner.
+
+    *Order while unloading.* An order (a destination and a queued behaviour) given to a harvester
+    that unloads at a dock-unload refinery breaks off its contact and its tether at once (S-0213,
+    table T3, part b), so the refinery's dock slot is free in the same tick: another harvester may
+    take contact with it from then on. The ordered behaviour does not start then, because the
+    harvester is not ready to change. At the harvester's next processing of *unload*, which comes
+    when the delay of its previous processing ends (1 tick while it is paid), the first row applies:
+    the fall-back's row for a vehicle with a destination keeps the destination and queues nothing,
+    the harvester leaves the unloading state and stops, and the ordered behaviour becomes current at
+    once. The harvester keeps the part of its load that has not been paid; it is not paid for it
+    later unless it unloads again. The original also has a route by which an order ends unloading
+    while contact is kept (the harvester then becomes *finishing* with its load kept, and the row
+    for a destination and a queued behaviour applies), but orders of S-0213 never reach it, since
+    only a dock-unload refinery queues *unload* and an order breaks off that contact first.
+    - Backing: `measurable` (scenario H1; its variant e for the three animations; H12 for the sale,
+      contact lost while unloading, an order while unloading and the free dock slot)
     - Confidence: high for the payment per tiberium and the dump threshold; medium for the exact
       tick of each payment and the 1-tick intervals, for the extra interval before *finishing* and
       for the one-tick difference of the first payment; medium for the unloading animation being
       the one the harvester waits for and the other two not delaying it; low for the damaged forms
       and for which building types play the docking animation (this claim says any building in the
-      neighbouring cell)
+      neighbouring cell); medium for the stall after contact is lost, for the order's route and for
+      the delays of the two *finishing* rows; medium for the sale's run-away and the *guard* of a
+      harvester still in *enter*; low for the route with contact kept
 
 12. **What the house gains, and when.** Each payment for an amount *a* of tiberium *T* (value per
     bale *V*) adds to the balance of the refinery's owner:
@@ -354,46 +443,53 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     claim 8; its scenario O7 part A observes this, and it is not repeated here). The purifier count
     *n*<sub>p</sub> is that of the refinery's owner. In the original, a refinery owner that is not
     human-controlled also counts, in *n*<sub>p</sub>, a number of virtual purifiers taken from the
-    rules' list at the position of its difficulty row. When the list is missing, or has no entry at
+    rules' list at the position that its difficulty index selects. When the list is missing, or has no entry at
     that position, the original's result is undefined; our engine counts 0 virtual purifiers then
     (departure, importer warning). In our engine that rule never holds for an
     AI house (glossary, *AI house*); it does hold for the neutral house and the special house, which
-    keep the original's rules; which list position those two houses use is not determined (Open
-    questions). **Original only (note for AI designers):** the original's computer player
+    keep the original's rules. Those two houses have difficulty index 1 (S-0412, Terms) in every
+    skirmish (S-0412, claim 5), so they
+    take the list's second entry, whatever the lobby's computer difficulty; no difficulty row is
+    applied to them. **Original only (note for AI designers):** the original's computer player
     earns that extra bonus; our AI can only match it by owning purifiers.
     - Backing: `measurable` (scenario H6; part c for the virtual purifiers of the original's
-      computer player, part e for the absence of a cap); `unmeasured` for the missing-list
-      departure, whose original result is undefined
+      computer player, part f for those of the neutral house, part e for the absence of a cap),
+      `unmeasured` for the missing-list departure, whose original result is undefined
     - Confidence: high for the formulas and the absence of a cap; medium for when a purifier starts
-      to count; low for the list position of the neutral and special houses
+      to count and for the list position of the neutral and special houses (it rests on S-0412
+      claim 5's index, which is medium there)
 
 ### Exhausted fields, lost refineries and rest
 
 13. **No field, no refinery.** A harvester in *harvest* whose owner owns no building of any of its
     dock types queues *guard* (with a 1-tick processing interval). A harvester that finds no
     acceptable cell within the long scan range, has no destination and no remembered cell goes
-    *idle*: 105 ticks later, it moves off the cell of any refinery-flag building it stands on (to a
-    free cell nearby) and queues *guard*. In *guard*, a harvester of a human-controlled owner stays where it is: it
-    does not go back to harvesting by itself (the chrono miner's exception is claim 17); in our
-    engine this holds for AI houses too. **Original only (note for AI designers):** in the original
-    a harvester of a computer-controlled house (in our engine the neutral and special houses keep
-    this rule) in *guard* queues *harvest* again at each processing
-    (1-tick interval) while its owner owns a refinery of its dock types, unless its owner has
-    recorded that a harvester found no field. That *no-field record* belongs to the house: the
-    original sets it when any harvester of the house goes idle for lack of a field, whoever the
-    owner is (it matters only to the computer-controlled rule), and does not clear it again for the
-    rest of the game, so once one harvester has found no field, no harvester of that house resumes
-    by itself, even when new resources appear; our AI gets the resuming behaviour by ordering idle
-    harvesters to harvest. Where this
-    claim's guard rule queues *harvest* it ends the processing with a 1-tick interval and nothing
-    else of the processing applies: it is a case of row 2 of S-0215 claim 24's vehicle table (the
-    cases that end the processing). When the computer-controlled rule does not apply (no refinery
-    of its dock types, or the no-field record is set) or the owner is human-controlled, this claim
-    ends nothing and the processing goes on to the general rules of S-0215 claim 24. The only
-    additive case, row 3, is the weeder's (Edge cases).
-    - Backing: `measurable` (scenario H5; its parts C and D for the no-field record)
-    - Confidence: high for the guard results; medium for the 105-tick idle interval and for the
-      record never being cleared
+    *idle*: 105 ticks later, it moves off the cell of any refinery-flag building (or weed-flag
+    building, Import mapping) it stands on and queues *guard*. Its destination is the result of
+    S-0212's nearby-cell search with these settings: the centre is the cell of that building's
+    reference point; the locomotion class is the harvester's own, *winged* counted as *track*; the
+    movement zone is its type's own; the reach region is that of the centre cell for that zone,
+    read for the deck when the harvester is on a bridge deck; deck mode when the harvester is on a
+    bridge deck; no height condition; no further test; no reference cell, so the result is the
+    preferred cell at position (*N* mod *n*) of S-0212 claim 25. What a search with no result does
+    here is not determined (Open questions). In *guard*, the outcomes are:
+
+    | Owner/rule condition | Outcome of this claim's guard rule |
+    |---|---|
+    | Human-controlled owner (including an AI house in our engine) | Remains where it is and does not resume harvesting by itself; the chrono-miner exception is claim 17. |
+    | Computer-controlled owner in the original; owner has a dock-type refinery; its no-field record is unset | Queues *harvest* at each processing, with a 1-tick interval; this ends the processing as row 2 of S-0215 claim 24. |
+    | Computer-controlled owner in the original; no dock-type refinery, or its no-field record is set | This claim ends nothing; processing continues under the general rules of S-0215 claim 24. |
+    | Weeder | The only additive case, row 3 of S-0215 claim 24, belongs to the later weeder revision (Edge cases). |
+
+    The no-field record belongs to the house. In the original it is set when any harvester of that
+    house goes idle for lack of a field, regardless of owner, and is never cleared during the game.
+    Once set, no harvester of that computer-controlled house resumes by itself, even if resources
+    later appear. Our AI gets the resuming behaviour by ordering idle harvesters to harvest. In our
+    engine, the neutral and special houses retain the original computer-controlled rule.
+    - Backing: `measurable` (scenario H5; its parts C and D for the no-field record; H11 part d for
+      the step-off search)
+    - Confidence: high for the guard results; medium for the 105-tick idle interval, for the
+      record never being cleared and for the step-off search settings
 
 ### Variants
 
@@ -401,17 +497,19 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     acts as their refinery, whether it is a vehicle or deployed as a building.
     - **Wake-up rule** (owned here for S-0215: claim 24's vehicle row 1, the slave miner in *guard*,
       and claim 26's row 1, in *area guard*; both use the same rule). At a processing of *guard* or
-      *area guard*, a slave miner wakes its slaves (sends them out to work) when all of these hold:
-      - *k* + *s*<sub>m</sub> < *t*, where *k* is the kick delay (the rules' slave-miner kick field,
-        ticks), *s*<sub>m</sub> the tick at which the miner's current behaviour started and *t* the
-        tick number,
-      - its slave group is at rest (no slave has been sent out since the group last came back
-        together),
-      - and one of: the miner's owner is computer-controlled (in our engine this never holds for
-        a player house; it can hold for the neutral and special houses); the miner's cell has land type *tiberium*; or *k* + *s*<sub>g</sub>
-        < *t*, where *s*<sub>g</sub> is the tick at which the group last came to rest (its value before any slave has
-        gone out is not determined, Open questions), and the ring
-        search from the miner with the slave-miner short scan range finds a cell.
+      *area guard*, the slaves wake exactly when
+
+      > (*k* + *s*<sub>m</sub> < *t*) AND group-at-rest AND
+      > (owner-is-computer-controlled OR miner-cell-is-*tiberium* OR
+      > ((*k* + *s*<sub>g</sub> < *t*) AND short-scan-finds-a-cell)).
+
+      Here *k* is the kick delay in ticks, *s*<sub>m</sub> is the current behaviour's start tick,
+      *s*<sub>g</sub> is the group's last-rest tick, and *t* is the tick number. “Group at rest”
+      means no slave has been sent out since the group last came together. The original's
+      computer-controlled condition does not apply to player houses in our engine; it may apply
+      to the neutral and special houses. The initial value of *s*<sub>g</sub>, before any slave has
+      gone out, is undetermined (Open questions). The short-scan test is the ring search from the
+      miner with the slave-miner short scan range.
 
       The sums are signed 32-bit integers that wrap around (Formulas F5): with a very large kick
       delay, such as the absent-key default 2147483647, any start tick of 1 or more makes the sum
@@ -487,6 +585,59 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
       `unmeasured` if no run reaches it)
     - Confidence: medium; high for dropping a destination when seeking; low for the "full and
       still moving" trigger
+
+### A building's free unit
+
+18. **When and where a free unit appears.** A building whose type has a free unit (Terms) gets
+    one at its grand opening (Terms), so at the end of its build-up, in the building's own turn. It
+    gets none:
+    - when it is captured (a capture is not a grand opening, and a building has one grand opening
+      at most),
+    - when the map pre-places it (it has no grand opening, S-0009 claim 40; also when the original
+      reaches that step during the set-up, the free unit is skipped then),
+    - when its owner is a player house, the building was produced, and its start price (Terms) is
+      not 0 and not above the adjusted cost of its type (S-0408, claim 2, *C*), both integers in
+      credits. A building that was not produced has no start price, and this condition does not
+      apply to it. The price of a building type with a free unit includes the price of the free unit
+      (S-0404, claim 2: *P* = own part + pad term + *P*ₑ, the own part being formed from *C*), so
+      with neutral factors the start price is above *C* by *P*ₑ and the unit appears. The
+      condition withholds it only when the house's factors or cost bonuses bring the whole price
+      down to *C* or below, for example a vehicle cost factor so low that *P*ₑ is 0. In the original the
+      condition applies only to a human-controlled owner; in our engine it applies to every player
+      house, AI houses included (glossary, *AI house*), and never to the neutral and special houses.
+
+    A building that a deploying vehicle creates goes through its build-up and gets its free unit at
+    the grand opening, with no start price.
+
+    The free unit is a new vehicle of the free unit's type, owned by the building's owner. It is put
+    on the map at the first of these places that accepts it:
+    1. the centre of the cell next to the cell of the building's reference point in step direction 4
+       (map south), with body facing 49152 (map west),
+    2. the cell given by S-0212's nearby-cell search with the settings below and the further
+       condition that the cell holds no overlay of any kind (glossary, *overlay*: resources included), with body facing 40960 (map
+       south-west),
+    3. the cell given by the same search without the overlay condition, facing 40960.
+
+    The settings of both searches: the centre is the building's top-left cell (Terms); the
+    locomotion class is *wheel*, whatever the free unit's own; the movement zone is that of the free
+    unit's type; the reach region is that of the centre cell for that zone, read for the ground,
+    never in deck mode; the height condition applies; no further test; bridge cells never qualify,
+    and the reference cell is the top-left cell, so the result is the nearest preferred cell to it.
+    A place accepts the unit when the unit's entry outcome for that cell is *clear* (S-0209); a
+    search with no result offers no place. When no place accepts it, the unit is removed again and
+    the owner receives the refund of S-0408 claim 1 for the free unit's type with the refund
+    percentage taken as 1 (that is, the amount *P*, or the refund-override form, of that claim).
+
+    A free unit that is placed queues *harvest* with an immediate start, whatever its type, so it
+    starts the harvest cycle at once (S-0215 claim 15's placement fall-back is not involved).
+    Creating it takes the object creation draw (S-0202, claim 10); the placement and the searches
+    take none, except the draws that putting a unit of that type on the map takes in general (none
+    for a harvester). The building's other grand-opening effects (its slot animations, S-0108 claim
+    11, and any aircraft its type comes with) are other specs'.
+    - Backing: `measurable` (scenario H13, parts a to f)
+    - Confidence: high for the timing at the grand opening, for no unit after a capture and for the
+      first place and its facing; medium for the two searches, the refund, the start of *harvest*
+      and the start-price condition; medium for the pre-placed building (S-0009's)
 
 ## Formulas
 
@@ -577,6 +728,14 @@ For unloading, see F2.
 | Processing interval while unloading, except at the start and when the building is missing | 1 | ticks | claim 11 |
 | Facing counted as map east | 16256 to 16511 | facing units | claim 11 |
 | Docked refinery position | step direction 6 (map west) of the docking cell | step direction | Terms, claim 11 |
+| Docking cell, counted from the refinery's top-left cell | (3, 1) | cells | Terms, claim 10; independent of the foundation size and the art |
+| Facing aimed at on the docking cell | 16384 (exactly) | facing units | claim 10 |
+| Processing interval of *enter* | the standard delay of *enter* | ticks | claim 10; one draw per processing |
+| Processing interval of *unload* without contact | 1 | ticks | claim 11 |
+| Free unit's first place | the cell in step direction 4 (map south) of the cell of the building's reference point | step direction | claim 18 |
+| Free unit's facing at the first place, and at a searched place | 49152 (map west), 40960 (map south-west) | facing units | claim 18 |
+| Queueing-cell search: locomotion class and movement zone | *wheel*, *normal* | — | claim 9 |
+| Free-unit search: locomotion class | *wheel* | — | claim 18 |
 | Wait distance near a refinery | 768 | leptons | claim 9 |
 | Leptons per cell for the too-far fields and scan ranges | 256 | leptons | claims 4, 9 |
 | Held tiberiums in a load | 4 | tiberiums | claim 15; the original's limit. Our engine holds every tiberium (claim 15, departure) |
@@ -609,17 +768,26 @@ For unloading, see F2.
 | requesting | — | queues *enter* | 1 tick |
 | idle | — | moves off the cell of a refinery-flag building; queues *guard* | standard delay |
 
-**Unloading** (claim 11, which has the full table): not in contact → rest; turning → every 5 ticks,
+**Docking** (claim 10, which has the full table): at each processing of *enter*, one standard
+delay apart: refused and not tethered → break off contact, rest; not on the docking cell →
+destination set to it; on it, facing not exactly 16384 → tethered, turn on the spot; on it, facing
+16384, not moving → tethered, *unload* queued (it starts by S-0215's start rules).
+
+**Unloading** (claim 11, which has the full table): not in contact → rest (nothing queued while
+*unload* is current), stop, start a queued behaviour if any, every tick; turning → every 5 ticks,
 facing east → counter and period start, docking animation, then a standard delay; afterwards a
 processing in every tick: pay one tiberium (payment animation) when the counter allows; empty and
 the counter allows → *finishing* (unloading animation); *finishing* and the building's unloading
-animation ended → queue *harvest*, break off contact.
+animation ended → queue *harvest*, break off contact, start it, then a standard delay. An order
+breaks off contact at once (S-0213); the next processing takes the first row and starts the order.
 
 **Ordering.** Load steps, unloading payments and slave deliveries all happen in the harvester's
 (or slave's) turn, in the turn pass (S-0203, row 5); a payment in tick *n* is seen by production in
 tick *n* (S-0203, claim 8). A harvester takes no draws of its own except the standard delays and
-those of the behaviours it falls back to. A bale taken from a cell changes the cell at once (S-0401),
-so two harvesters loading in the same tick see each other's effect in update order.
+those of the behaviours it falls back to. A bale taken from a cell changes the cell at once (S-0401).
+When two harvesters load from the same cell during one tick, the later turn observes the cell
+after the earlier turn's take, as required by S-0203's update order. This spec does not otherwise
+select which harvester takes the earlier turn.
 
 ## Edge cases and quirks
 
@@ -656,13 +824,25 @@ so two harvesters loading in the same tick see each other's effect in update ord
   storage, a slower step, no money); they are left to a later revision. S-0215 claim 24's row 3 (additive, with no delay of its own; in the original it is the weeder's
   rule in *guard*) belongs to that revision. Claims 13 and 17 add nothing of row 3: their guard
   rules are row 2 cases.
+- **Unload without contact stalls** (claim 11). A harvester whose refinery breaks off contact while
+  it unloads without a sale (the refinery is destroyed, for example), and that has nothing queued, stays in *unload*
+  for good, processed every tick, until an order gives it a behaviour.
+  `quirks.unload_without_contact_stalls` (default: the original). With the switch off, the first
+  row of claim 11 falls back to rest as if *unload* were not current, so the harvester queues what
+  S-0215 claim 15 gives it (row 4: *harvest*, or *guard* for a human-controlled harvester off its
+  resource's land type) and starts it at once. No importer warning: no data is involved.
+- **A refinery that is not a dock-unload refinery** (claim 10). It agrees to contact but never
+  directs the harvester to a docking cell, so the harvester stays in *enter* and never unloads,
+  until an order or another rule ends it. Our engine does the same (no switch; the importer warns
+  when a building type in a harvester's dock list lacks the dock-unload flag). Confidence low.
 - **Harvester truce.** Out of scope: the original's lobby has a harvester-truce setting (harvesters
   immune to damage), but its skirmish start writes it off in every skirmish (S-0412, claim 1), so
   harvesters take damage normally and nothing in this spec depends on it.
 - `quirks.table_root_distance` (S-0204) covers the too-far and wait distances of claim 9.
 - `quirks.chop_rounding` (S-0205) covers F3.
-- `quirks.slave_kick_delay_wraps` (claim 14), `quirks.refinery_distance_wraps` (claim 8) and
-  `quirks.zero_load_period_stalls` (claim 5) are this spec's own switches.
+- `quirks.slave_kick_delay_wraps` (claim 14), `quirks.refinery_distance_wraps` (claim 8),
+  `quirks.zero_load_period_stalls` (claim 5) and `quirks.unload_without_contact_stalls` (claim 11)
+  are this spec's own switches.
 
 ## Import mapping
 
@@ -685,16 +865,18 @@ so two harvesters loading in the same tick see each other's effect in update ord
 | Rules, `[General]`, `SlaveMinerLongScan`, `SlaveMinerScanCorrection` | the miner's own movement (not specified, claim 14) | lepton form | 20480 and 768 leptons |
 | Rules, `[General]`, `SlaveMinerKickFrameDelay` | kick delay *k* of the wake-up rule (claim 14) | integer, ticks | 2147483647, which wraps (claim 14, F5) |
 | Rules, `[General]`, `PurifierBonus` | purifier bonus *b* (claim 12) | decimal, single | the single nearest 0.25 |
-| Rules, `[General]`, `AIVirtualPurifiers` | virtual purifiers per difficulty, original only (claim 12) | list of integers | empty list (original: undefined result; engine: 0 virtual purifiers, departure, importer warning; claim 12) |
+| Rules, `[General]`, `AIVirtualPurifiers` | virtual purifiers per difficulty index, original only, and for the neutral and special houses (entry 2, claim 12) | list of integers | empty list (original: undefined result; engine: 0 virtual purifiers, departure, importer warning; claim 12) |
 | Rules, building type section, `OrePurifier` | ore-purifier flag (Terms) | boolean | no |
 | Rules, building type section, `Refinery` | refinery flag: the refinery-flag building rules of claims 3, 11, 13 and 17 (the idle step-off, the unloading animation and the harvester's wait for it, the chrono miner's guard rule) | boolean | no |
-| Rules, building type section, `DockUnload` | docking by backing in (claim 10; not determined in full) | boolean | no |
+| Rules, building type section, `DockUnload` | dock-unload refinery (Terms, claim 10): the refinery directs a harvester to its docking cell | boolean | no |
+| Rules, building type section, `Weeder` | weed-flag building: the idle step-off of claim 13 (and the weeders' docking, Edge cases) | boolean | no |
+| Rules, building type section, `FreeUnit` | free unit (Terms, claim 18; S-0408 owns the field's cost uses) | vehicle type name | none |
 | Rules, country section, `IncomeMult` | income factor *M* (claim 12) | decimal, single | 1.0 |
-| Art, building section, `QueueingCell` | queueing shift (Terms, claim 9) | two integers *x*, *y*, cells | 0, 0 |
+| Art, building section, `QueueingCell` | queueing shift (Terms, claim 9); it does not move the docking cell (claim 10) | two integers *x*, *y*, cells | 0, 0 |
 | Art, building section, `NumberOfDocks` | dock slots (Terms, claim 10) | integer; values below 1 give 1 | 1 |
 | Art, building section, `PreProductionAnim`, `PreProductionAnimDamaged`, `SpecialAnim`, `SpecialAnimDamaged`, `ProductionAnim`, `ProductionAnimDamaged` | docking animation, payment animation and unloading animation, with their damaged forms (Terms, claim 11) | animation type name | none |
 | Rules, `[AudioVisual]`, `ConditionYellow` | the yellow health threshold that selects the damaged forms (Terms; owned by S-0003, claim C9) | percentage (S-0003) | S-0003 |
-| Rules, `[Unload]`, `[Harvest]` behaviour sections (S-0215) | rates of the standard delays of *unload* and *harvest* | owned by S-0215 | S-0215 |
+| Rules, `[Unload]`, `[Harvest]`, `[Enter]` behaviour sections (S-0215) | rates of the standard delays of *unload*, *harvest* and *enter* | owned by S-0215 | S-0215 |
 
 The absent-key defaults of the engine-wide rules fields are the executable's own constants. For the
 per-type fields (slave counts and delays, queueing shift, dock count, income factor, harvest rate),
@@ -822,7 +1004,7 @@ and spread fractions 0).
 - *Part c (primary building, ties and the holding order).*
   - *Setup:* too-far field 50. The refinery type is also made a factory type in the test data.
     Each refinery is produced and placed before the next one's production starts, so the holding
-    order (Terms) is the placing order by either reading of "comes into existence". Refineries
+    order (Terms) is the placing order. Refineries
     A (near) and B (farther), both free; the primary order (S-0213, claim 13) is given to B. Two
     runs differ only in the placing order: (i) A first, then B; (ii) B first, then A.
   - *Expected:* (i) the harvester docks at B (B is later than A in the holding order and primary,
@@ -834,6 +1016,12 @@ and spread fractions 0).
   - *Tie setup:* two refineries at exactly equal distance, neither primary, placed in turn: (i) X
     first then Y; (ii) Y first then X. *Tie expected:* in both runs the one placed first. *Tie
     falsified if:* the one placed second.
+  - *Production-order run:* two refinery test types, R1 of line kind building and R2 a copy whose
+    test data makes it a *defence* (S-0403's line kinds), so that both can be in production at
+    once; both are dock types of the harvester. R1's production is started first and R2's second.
+    When both are ready, R2 is placed first and R1 second, at exactly equal distances, neither
+    primary. *Expected:* the harvester docks at R2 (placement decides). *Falsified if:* it docks at
+    R1 (production start would decide).
   - *Order after a removal:* three refineries W, X, Y placed in that order, X and Y at equal
     distance and W anywhere that does not decide the choice (farther than both), W then sold:
     expected, the harvester docks at X (the others keep their relative order). Then X is sold and
@@ -880,7 +1068,18 @@ and spread fractions 0).
     types, it replaces X.
   - *Falsified if:* in run 1 it docks at C (one flat list with one last primary building would
     choose C) or at Q; in run 2 it docks at X or C.
-- *Runs:* 3 for a, 2 for each of b to i.
+- *Part j (capture and the holding order).* The human house owns refineries X (placed first) and
+  Y at exactly equal distances from its harvester, neither primary. A refinery Z of the bystander,
+  at the same distance as X and Y, is captured by an engineer of the human house (Z joins at the
+  end). Then X is sold. *Expected:* before the sale the harvester docks at X; after it, at Y (Z
+  comes after Y). Repeat with Z captured before Y is placed: after X's sale it docks at Z.
+  *Falsified if:* the docking refinery after the sale is the other one in either run.
+- *Part k (connectivity cells).* A refinery R on an island that a ground vehicle cannot reach
+  (water around it, so its reference-point cell is in another reach region for the harvester's
+  movement zone) and a reachable refinery S farther away. *Expected:* the harvester never chooses
+  R, even when R is nearer; when the water is replaced by a land bridge, it chooses R. *Falsified
+  if:* it chooses R while cut off, or ignores R when connected.
+- *Runs:* 3 for a, 2 for each of b to k.
 
 **H5. No field, no refinery (claims 3, 13).**
 - *Part A:* a harvester whose field is exhausted with no other resource within the long scan range.
@@ -939,7 +1138,16 @@ and spread fractions 0).
   unload raises the balance by exactly 100000, with and without the storage building, up to a
   balance of 320000 (below 2³¹). *Falsified if:* any payment is cut, delayed or refused for lack
   of storage.
-- *Runs:* 3 for each of a and b, 1 for each of c, d and e.
+- *Part f (virtual purifiers of the neutral house):* the map pre-places a refinery and a harvester
+  owned by the neutral house next to an ore field (the harvester harvests by itself under claim
+  13's computer-controlled rule), no purifier; the virtual-purifier list of the test data is
+  1, 2, 4 (three distinct entries), bonus 0.25, a load of 8 ore bales, value per bale 30, the
+  neutral country's income factor 1.0; the lobby's computer difficulty is varied over its three
+  entries in three runs. *Observable:* the neutral house's balance per tick (recorder).
+  *Expected:* in every run a main payment of 240 and a bonus payment for *x* = 2 × 0.25 × 8 = 4
+  bales, 120 (the second entry). *Falsified if:* a bonus of 60 or 240 (the first or third entry),
+  no bonus, or a bonus that follows the lobby setting.
+- *Runs:* 3 for each of a and b, 1 for each of c, d and e, 1 per lobby setting for f.
 
 **H7. Slave miner (claim 14).**
 - *Setup:* a slave miner of a human house with 3 slaves of capacity 2 and harvest rate 40, kick
@@ -1012,10 +1220,95 @@ are in. *Falsified if:* a stopped harvester is not in *guard* one tick later or 
 by itself (human owner), or if *return* appears in any run (then claim 2's low-confidence part
 is wrong). *Runs:* 3.
 
+**H10. Docking (claim 10).**
+- *Setup:* a human house with one refinery and one harvester on open level ground, no other units.
+  The harvester is given a full load by an ore field next to it. Two runs per refinery art: the
+  stock refinery, and a test refinery type with the same art except a larger foundation (one
+  more cell in each direction). A further run with the test data's refinery having the dock-unload
+  flag off.
+- *Observable:* per tick, from the tick the harvester goes *requesting* to its first payment: its
+  cell, its body facing, whether its locomotor moves, its behaviour, and the tick of each
+  processing of *enter* (recorder).
+- *Expected:* the harvester drives forwards to the cell (*x*₀ + 3, *y*₀ + 1) from the refinery's
+  top-left cell, for both foundation sizes; on that cell it turns on the spot until its facing is
+  exactly 16384; *unload* becomes current after the first processing of *enter* that sees it on the
+  cell, facing 16384 and not moving; the processings of *enter* are spaced by values the standard
+  delay of *enter* allows (S-0215, claim 6). The run without the dock-unload flag: the harvester stays
+  in *enter* for 3000 ticks and is never paid. Repeat from several approach sides (the harvester
+  starting north, south, east and west of the refinery): the arrival facing varies, the final facing
+  does not, and the harvester never reverses onto the cell.
+- *Falsified if:* another docking cell, a cell that depends on the foundation size, a reversing
+  approach, *unload* before the turn has ended, or a final facing other than 16384; in the last run,
+  a payment.
+- *Runs:* 2 per approach side and foundation size, 1 without the flag.
+
+**H11. The queueing search and the step-off (claims 9, 13).**
+- *Setup:* a human house with one refinery (default queueing shift) and two harvesters, so one
+  holds the dock slot and the other is in *returning* more than 3 cells away and waits (claim 9).
+- *Observable:* the cell the waiting harvester drives to, and for part d the cell an idle
+  harvester steps off to and the tick of that step.
+- *Expected:* part a: on open level ground, the cell (*x*₀, *y*₀ − 1). Part b: walls (not units)
+  are placed on that cell, then on each further cell the harvester picks in turn, run by run; each
+  pick is the qualifying cell nearest the refinery's top-left cell in S-0212's ring order, wherever
+  the harvester came from, and a cell held by an infantry unit is not picked (the occupancy record
+  must be empty). Part c: every cell the search could reach is blocked (walls in a large square
+  around the refinery, leaving the harvester's own path): the harvester drives towards the refinery
+  building itself. Part d: a harvester standing on its refinery's cell with no field on the map goes
+  *idle*, and 105 ticks later moves to one of the cells around the refinery; over runs started at
+  different ticks, the chosen cell varies with the tick as (*N* mod *n*) of S-0212 claim 25 predicts
+  for the count *n* of preferred cells.
+- *Falsified if:* part a gives another cell; part b picks a cell that is not the nearest qualifying
+  one to the top-left cell, or an occupied cell; part c leaves the harvester standing; part d always
+  picks the same cell across start ticks, or a cell the prediction rules out.
+- *Runs:* 1 per blocking step in b, 2 for each of a and c, 5 start ticks for d.
+
+**H12. Contact lost and orders while unloading (claim 11).**
+- *Setup:* a human house with one refinery and two full harvesters, the second waiting at the
+  queueing cell; the test data's dump rate is slow enough that unloading lasts several payments.
+- *Observable:* per tick, each harvester's behaviour, contact, load, position, and the house's
+  balance.
+- *Expected:* part a: the refinery is destroyed (test data: a weapon that kills it in one shot)
+  after the first payment: the first harvester stays in *unload* with the rest of its load, does
+  not move and is not paid, for 3000 ticks; a move order breaks contact at once, and at its next
+  processing of *unload* the harvester leaves the unloading state and stops. Part a2: the
+  refinery is sold after the first payment instead: the harvester is in *harvest* one tick after
+  the sale's first processing, with the unpaid rest of its load, and drives off (to another
+  refinery of the house when there is one, part a2 having a second refinery). Part a3: sold while a
+  harvester is in *enter* on the docking cell, still turning: it is in *guard* soon after and does
+  not dock. Part b (no sale): the first harvester is given a move order in the tick after its first
+  payment: the second harvester takes contact with the refinery from the next of its own
+  processings on (the slot was freed in the order's tick); the first harvester starts moving at its
+  next processing of *unload* (1 tick later) and keeps its unpaid load; ordered back to harvest, it
+  docks again and is paid for that load.
+- *Falsified if:* in part a, the first harvester leaves *unload* without an order, or is paid; in
+  part a2, it stays in *unload* or loses its load; in part a3, it unloads at the sold refinery; in
+  part b, the second harvester cannot take contact until the first has driven off, or the first
+  harvester loses its unpaid load or is paid for it before it docks again.
+- *Runs:* 2 for each part.
+
+**H13. Free unit (claim 18).**
+- *Setup:* a human house with a construction yard and credits, on open level ground; the
+  refinery's free unit is the harvester. The recorder logs the tick of the refinery's grand opening,
+  the tick, cell and body facing of the free unit when it appears, its first behaviour, and the
+  balance per tick.
+- *Expected:* part a: the harvester appears in the tick of the grand opening on the cell in step
+  direction 4 (map south) of the refinery's reference-point cell, facing 49152, and is in *harvest*
+  one tick later. Part b: that cell is blocked by a wall: the harvester appears facing 40960 on the
+  cell without overlay nearest the refinery's top-left cell in S-0212's ring order. Part c: the cell of
+  part a and every cell near the refinery except ore cells are blocked by walls: the harvester appears on the nearest
+  ore cell, facing 40960. Part d: every cell is blocked (the refinery placed on a tiny enclosed
+  area): no harvester appears and the balance rises by *P* of S-0408 claim 1 for the harvester's
+  type in that tick. Part e: a refinery captured by an engineer, and a refinery the map pre-places:
+  no harvester appears. Part f: the test data gives the house's country a vehicle cost factor of
+  0 and a building cost factor of 1, so the refinery's price at its production start is its
+  adjusted cost *C* (S-0404 claim 2, with *P*ₑ = 0; *C* above 0): no harvester appears. With the
+  vehicle cost factor at 1 the price is *C* + *P*ₑ and it appears.
+- *Falsified if:* another tick, cell or facing; a harvester in part d, e or the first run of f; no
+  refund or another amount in part d.
+- *Runs:* 1 for each part and run.
+
 ## Open questions
 
-- The approach and backing-in of docking (claim 10): its path, when the tether starts, and what the
-  dock-unload flag changes.
 - Whether *return* is ever given to a harvester in a skirmish (claim 2); scenario H9 logs it.
 - The slave miner's own movement: when and where it deploys and undeploys (claim 14), and the value
   of the group's rest tick before any slave has gone out (claim 14; scenario H7's main run gives it
@@ -1027,20 +1320,17 @@ is wrong). *Runs:* 3.
 - What else the building does at each payment besides playing its payment animation (claim 11).
   No observable effect is known, and scenario H1 would show one as a difference in its balance or
   timing runs.
-- Whether a produced building joins its owner's holding order when its production starts or when
-  it is placed, and the holding order after a capture and for the buildings a skirmish creates at
-  its start (Terms, claim 8). The two readings differ only when buildings are produced out of
-  order; scenario H4 part c places them one at a time.
-- An order given while a harvester unloads (a destination plus a queued behaviour) ends unloading
-  by a route that is not determined (claim 11); the original appears to treat it like an empty load
-  at the next processing (the harvester becomes *finishing* with its load kept), which no scenario
-  here checks.
-- Which virtual-purifier list position the neutral and special houses use (claim 12).
 - Weeders and the harvester truce are out of scope (Edge cases).
-- The exact extent of the nearby-cell search around the queueing cell (claim 9).
+- What an idle harvester does when the step-off search has no result (claim 13).
+- The second route to *unload* through a finished cell next to the refinery (claim 10): when it can
+  occur in a skirmish; confidence low.
+- What a refinery that is not a dock-unload refinery does with a harvester in contact (claim 10,
+  Edge cases); confidence low.
+- That a pre-placed building gets no free unit rests on S-0009 claim 40 (claim 18).
 
 ## Questions for the project lead
 
-None. The three quirk switches of this spec (`quirks.refinery_distance_wraps`,
-`quirks.slave_kick_delay_wraps` and `quirks.zero_load_period_stalls`, each default original) follow
-the project's quirk convention.
+None. The four quirk switches of this spec (`quirks.refinery_distance_wraps`,
+`quirks.slave_kick_delay_wraps`, `quirks.zero_load_period_stalls` and
+`quirks.unload_without_contact_stalls`, each default original) follow the project's quirk
+convention.

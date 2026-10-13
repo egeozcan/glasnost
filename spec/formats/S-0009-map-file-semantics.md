@@ -2,11 +2,11 @@
 id: S-0009
 title: Map file semantics (geometry, terrain streams, waypoint markers, start positions, preview)
 topic: formats
-revision: 14
+revision: 15
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-13
+approved-on: 2026-10-14
 measurements: []
 requests: [Q-0010, Q-0016, Q-0018, Q-0023, Q-0045, Q-0046]
 supersedes: []
@@ -36,7 +36,13 @@ S-0412's revision in the same hand-off.
 **Cross-spec clarification required.** S-0012 claim 9 must limit its earlier-record
 prerequisite to partial coordinates: partial tile numbers after complete first-record
 coordinates also follow F3 (claim 7 below). Its R2 should include that first-record control,
-and its historical revision-12 hand-off request should acknowledge the approved revision 13.
+and its historical revision-12 hand-off request should acknowledge the approved revision 14.
+
+**Joint hand-off checks.** Claim 29 and the header-pair Import mapping agree with S-0003
+claim 9: unread components are unspecified in the original, with deterministic completion
+only in our engine. S-0412 claim 14 and its ordering table must allow the game-start
+tile-animation draws of S-0202 claim 14 after secret-lab choices; those choices are not
+necessarily the last draws before tick 0.
 
 ## Terms
 
@@ -127,8 +133,9 @@ Terms used as defined in the shared glossary: *cell*, *lepton*, *height level*, 
 - **Crate type.** An overlay type that the rules data marks as a crate: an object that gives a
   random bonus to the unit that picks it up.
 - **Cell animation.** An animation that the rules data attaches to an overlay type (Import
-  mapping) and that starts each time an overlay of that type is placed on a cell, at a position
-  near that cell (claim 12). An overlay type with a cell animation counts as displayable even when
+  mapping) and that starts each time an overlay of that type is placed normally on a cell, at a position
+  near that cell (claim 12). Low-bridge end markers and their direct end-row and piece writes
+  do not start cell animations (S-0202 claim 14). An overlay type with a cell animation counts as displayable even when
   it has no artwork of its own (claim 12).
 - **Cell corner.** The point of a cell with the smallest x and y, at (256·x, 256·y) leptons: the
   cell's top corner on the screen. A point's *place within its cell* is (X mod 256, Y mod 256),
@@ -255,15 +262,15 @@ Terms used as defined in the shared glossary: *cell*, *lepton*, *height level*, 
      with. The limit follows from the supported coordinate range.)
    - Confidence: medium
 
-3. **Visiting order.** The *visiting order* is an order of the legal cells: by screen row from top
-   to bottom (increasing s, starting at s = W + 1), and within one screen row by increasing x (left
-   to right on screen). Its first cell is (1, W). The rules of this spec that take the legal cells
-   one after another use this order, and it is observable through them: the initial fill takes its draws
-   cell by cell in this order (claim 6), and the vein rebuild takes its seeds in the reverse order
-   (claim 14). On every map with W ≥ 2 the order contains every legal cell exactly once. Edge case:
+3. **Visiting order.** The *visiting sequence* is ordered by screen row from top to bottom
+   (increasing s, starting at s = W + 1), and within one screen row by increasing x (left to right
+   on screen). Its first cell is (1, W). The rules of this spec that take cells one after another
+   use this sequence, and it is observable through them: the initial fill takes its draws cell by
+   cell in this sequence (claim 6), and the vein rebuild takes its seeds in reverse sequence
+   (claim 14). On every map with W ≥ 2 the sequence contains every legal cell exactly once. Edge case:
    on a map with W = 1 the legal cells are (k, k) for k = 1 … H, one per odd-numbered screen row,
-   and the rows in between hold no cell. There the visiting order contains only (1, 1); the cells
-   (2, 2) … (H, H) are not in it, so the rules that use the order leave them out (quirk
+   and the rows in between hold no cell. There the visiting sequence contains only (1, 1); the cells
+   (2, 2) … (H, H) are not in it, so the rules that use the sequence leave them out (quirk
    `quirks.narrow_map_partial_pass`).
    - Backing: `measurable` (scenario M2's visiting-order sub-test and scenario M2b, through the
      fill pattern)
@@ -475,8 +482,13 @@ Terms used as defined in the shared glossary: *cell*, *lepton*, *height level*, 
     at list indices 24, 25, 237 and 238, creation leaves the cell's own overlay data value as it
     was before the overlay was created.
     **Cell animations.** Each time an overlay whose type has a cell animation (Terms; Import
-    mapping) is placed on a cell (x, y), while the map loads and in play alike, one animation of
-    that type starts:
+    mapping) is placed normally on a cell (x, y), while the map loads and in play alike, one animation of
+    that type starts. Low-bridge end markers, their end-row writes and their bridge-piece writes
+    start no cell animation, even when the marker or written type names one (S-0202 claim 14).
+    Their cell recalculations can still start tile animations: an end-row write takes any
+    such tile-animation draws without cell-animation draws, and a piece's raw type-choice value
+    precedes its recalculation's tile-animation draws and the next piece's raw value. For
+    ordinary placement, the cell animation is as follows:
     - **Where.** At the world position (256·x + 512, 256·y + 512, *z*) leptons: the cell's centre
       moved by 384 leptons along +x and by 384 along +y, which is the cell corner (Terms) of cell
       (x + 2, y + 2). On the screen that is the overlay cell's own column, one and a half cell
@@ -499,7 +511,8 @@ Terms used as defined in the shared glossary: *cell*, *lepton*, *height level*, 
     - Backing: `measurable` (scenarios M6, including its short-stream save, and M6c; scenario M6d
       for the slope condition; scenario M6e for the cell animation's position, its start event,
       the chain reaction's cell, and (part D) its draws coming before those of the tile animation
-      of the same placement; S-0202's scenario R8, part F, for the creation draws themselves)
+      of the same placement; S-0202's scenario R8, part F, for the creation draws themselves,
+      and R12 for the low-bridge exclusion and its tile-animation draw order)
     The list-index-178 slope exception is `unmeasured` here: M6d does not place that type
     on a cell already recalculated to a slope above 4. The cell animation's elevated z,
     repeat factor, reverse request and start event with μ = 0 are `unmeasured` here: M6e
@@ -508,7 +521,7 @@ Terms used as defined in the shared glossary: *cell*, *lepton*, *height level*, 
     claims keep M6e's backing.
     - Confidence: high (the crate exclusion and the four data-preserving indices are medium until
       measured; medium for the slope condition and its exception; medium for the cell animation's
-      position and creation)
+      position and creation; high for the low-bridge cell-animation exclusion)
 
 13. **Overlay data stream.** Same size and order. Every legal cell's overlay data value (0 … 255) is
     set from its value in the stream, whether or not the cell has an overlay. When the map has an overlay data
@@ -822,8 +835,9 @@ Terms used as defined in the shared glossary: *cell*, *lepton*, *height level*, 
 
 28. **Unused-house cleanup.** If the game has no computer players and fewer human slots (observers
     included) than the rules' maximum player count (Import mapping: an integer taken from the base
-    rules only, S-0006 claim 2, and 8 when they omit it), a cleanup runs once all map objects are placed,
-    before the late phase of claim 20. (One special game mode skips it; it is not identified here,
+    rules only, S-0006 claim 2, and 8 when they omit it), a cleanup runs after all map objects are placed
+    and after the second whole-map terrain recalculation (S-0010 claim 12), before the late
+    phase of claim 20. (One special game mode skips it; it is not identified here,
     see Open questions.) In our engine the computer players are the AI houses (glossary, *AI
     house*) that fill the lobby's computer slots, so the cleanup runs only in a game with no AI
     house. A game whose players are all AI houses, which the decision of the project lead of
@@ -833,7 +847,13 @@ Terms used as defined in the shared glossary: *cell*, *lepton*, *height level*, 
     before it in house order (claim 19) was not removed (quirk `quirks.cleanup_skips_next_house`).
     In a run of eligible houses that are next to each other in house order, the first, third, fifth and so on
     are removed and the others are kept. With a removed house go:
-    - **its pre-placed objects.**
+    - **its pre-placed objects.** Removing a ground occupant recalculates each cell it occupied,
+      including a building's foundation cells. Under S-0010 claim 19 a missing tile animation
+      may start at that removal, taking S-0202 claim 10's applicable creation and immediate
+      start-event draws during the cleanup, before the late phase (S-0202 claim 14).
+      A cell with a tile-animation start already recorded since the second pass starts no
+      new one and takes no new creation draws. Removing an object that occupies no ground
+      cell does not imply a ground-cell recalculation.
     - **its triggers:** the trigger instances (S-0011, Terms) whose trigger definition's owner
       country is the house's country and that exist at that moment, which are those of tags created
       by cell tags and by pre-placed objects. A tag created at the end of loading (S-0011, claim
@@ -877,12 +897,16 @@ Terms used as defined in the shared glossary: *cell*, *lepton*, *height level*, 
       The removal condition without computer players, alternating removals, trigger removal,
       special-house starting units and the maximum-player-count boundary are `unmeasured`
       here: M16's older discriminating variants require network games, now deferred, and no
-      equivalent in-scope setup is established. That AI houses count as computer players
+      equivalent in-scope setup is established. Cleanup's position after the second pass,
+      removal-cell recalculations and conditional tile-animation draws are likewise
+      `unmeasured` here: S-0202 R11 reuses M16 variant A's deferred network setup,
+      not an established no-computer-player skirmish fixture. That AI houses count as computer players
       is our engine's reading of the condition (design), not an oracle observation.
     - Confidence: high that a removed house is gone with its objects and that the house after a
       removed one is kept; medium for the condition; low for the trigger removal (including that tags created
       at the end of loading escape it), the use of the map's override, the late-phase position and
-      its starting units
+      its starting units; high for cleanup after the second pass and before the late phase,
+      medium for removal-cell recalculations and their conditional tile-animation draws
 
 ### Skirmish start positions: header pairs as start marks
 
@@ -895,7 +919,13 @@ Terms used as defined in the shared glossary: *cell*, *lepton*, *height level*, 
     (an *applied pair*) sets the marks of positions 2(i − 9) and 2(i − 9) + 1: its first number
     becomes the mark of the first position and its second number the mark of the second. A pair in
     that range that is absent, and every pair numbered above N_h (which is not read, claim 25),
-    leaves those two marks as they are. The pairs are applied twice, with these consequences:
+    leaves those two marks as they are. A missing or empty pair keeps the whole pair's value
+    in force. In a present nonempty pair, any component that cannot be read is unspecified in
+    the original, not the component in force (S-0003 claim 9). Our engine keeps every readable
+    component and supplies each unread one from the matching component of the value in force,
+    with an importer warning: a departure. For pairs 9 to 16 those fallback components are
+    the two marks at that phase, so early- and late-phase completion can differ.
+    The pairs are applied twice, with these consequences:
     - **Early phase.** When chosen positions are given, each position's mark is, in order of
       precedence: the house number of the player who chose it, whatever a header pair says,
       otherwise the number its applied pair gives, otherwise −1. A non-passive house that
@@ -928,15 +958,17 @@ Terms used as defined in the shared glossary: *cell*, *lepton*, *height level*, 
     positions before the late phase, so both players are assigned anew there: the first by a
     random-position draw, the second by the farthest-sum rule.
 
-    Three cases are unspecified in the original: a house that holds a position numbered N or above,
+    Three further cases are unspecified in the original: a house that holds a position numbered N or above,
     header pairs from the seventeenth on (read only when N_h ≥ 17), and a house that needs a position by the farthest-sum
     rule when every position below N is already taken (marks can cause this). In the first two cases
     our engine ignores the mark or pair concerned. In the third, the house gets no start position
     and no starting units. These are departures, and the importer warns in all three cases.
     - Backing: `measurable` (scenario M13b: variants A to D for the marks and which pairs are read,
       variant E for the references and for the highest-numbered position a house holds, variant F
-      for a mark that names no house)
-    - Confidence: medium (low for the references)
+      for a mark that names no house). Unread-component results in the original are
+      `unmeasured`: unrelated internal state gives no reproducible value to predict.
+      M13b variant G checks our engine's deterministic completion and warnings only.
+    - Confidence: medium (low for the references; high for the unread-component departure)
 
 ### Further rules for map entries
 
@@ -1917,7 +1949,7 @@ can see.
 | Preview size and stream | map selection screen only | preview image | — |
 | Map list name, digest, minimum and maximum players, game modes, official flag | map selection screen only | listing | — |
 
-**Start position resolution.** The rows are the five points of loading at which start positions
+**Start position resolution.** The rows are the points of loading at which start positions
 and base cells are decided, or which take draws between those decisions, in the order in which
 they occur. For each point the table gives what is already in force there, what is decided there, and the draws it takes from the scenario random
 stream. Every draw of a row comes after the draws of the rows above it, and within a row the draws
@@ -1929,8 +1961,10 @@ reproduce the draw order and the consequences that claims 20, 28, 29 and 33 stat
 | Early phase (claim 20) | this map's size, header block, local area and waypoint markers; the houses, in the order of claim 19; the country data of claim 33 (the data in force before this game's rules layering, with the base rules' extra read over it); every legal cell a blank cell | the marks of the applied header pairs (claim 29); players who chose a position get that entry of list 1, and a chosen position's mark is its chooser's house number whatever a header pair says; houses on "random" get positions by claim 19 against the cells of list 2 | list 1's random entries; list 2's random entries; the random-position draws of claims 19 and 22, in house order |
 | Initial fill (claim 6) | the early phase's decisions | the fill of every visited cell | one per visited cell, for a water fill only |
 | Map content (claims 7 to 14, 27, 31 and 34 to 43) | the fill | the cell tags, the terrain, the overlay, the vein rebuild, the terrain objects, the pre-placed objects and the smudges | the draws that S-0202 (random streams, its table "Draws during map loading") lists between the initial fill and the late phase, in its order. Among them, in this relative order: the tags created by cell tags (S-0011, map triggers, claim 34); the overlay placement draws of claim 12 and the tile animations of the first terrain recalculation pass (S-0010, claim 12); the vein pattern draws of claim 14; then the draws of the pre-placed objects: all vehicles' draws, then all aircraft's, then all infantry's, then all structures', and within one kind in entry order; and last the tile animations of the second terrain recalculation pass. Every pre-placed object that is created takes one creation draw (S-0202 claim 10), and it comes before the draws of that object's tag (S-0011 claim 34) and of its placement. An object that claim 27 drops takes no draw. An object that is created but cannot be placed does not appear in the game, yet its creation draw has been taken |
-| Late phase (claim 20) | the terrain, the overlay and every pre-placed object; this game's full rules layering with the map's overrides (claim 33); the unused-house cleanup of claim 28, already applied when its condition holds | the marks of the applied header pairs, applied again (claim 29); every player keeps its position index, and its base cell is that index's entry in list 3, which is built on the real terrain; a non-passive house without a position (its position was overwritten by a mark, or it was passive in the early phase, claim 28) is assigned anew by claim 19 against list 3; a house that the cleanup removed takes no part (claim 28) | list 3's random entries; the re-assignment draws of claims 28 and 29 |
-| Starting units | every base cell | each house's base unit and budget units, placed around its base cell (claims 45 and 46) | house by house, in house order (claim 19), the draws of claim 46: the base unit's creation draw, the draws of its placement search (only when its direct placement fails) and any visceroid draw, then for each unit bought its type draw, creation draw, placement search draws and any visceroid draw; then, after the last house, one ranged draw over 0 … 65535 (one raw value) whose value has no effect (not taken when the step stops early, claim 45). Later loading steps (crates, the end-of-loading tags of S-0011 claim 34) draw after these |
+| Unused-house cleanup (claim 28), when its condition holds | the second terrain recalculation pass is complete | eligible houses and their pre-placed objects and existing triggers are removed | conditional tile-animation creation and immediate start-event draws from removal-cell recalculations, before the late phase (S-0202 claims 10 and 14) |
+| Late phase (claim 20) | the terrain, the overlay and every surviving pre-placed object; this game's full rules layering with the map's overrides (claim 33); the unused-house cleanup of claim 28, already applied when its condition holds | the marks of the applied header pairs, applied again (claim 29); every player keeps its position index, and its base cell is that index's entry in list 3, which is built on the real terrain; a non-passive house without a position (its position was overwritten by a mark, or it was passive in the early phase, claim 28) is assigned anew by claim 19 against list 3; a house that the cleanup removed takes no part (claim 28) | list 3's random entries; the re-assignment draws of claims 28 and 29 |
+| Starting units | every base cell | each house's base unit and budget units, placed around its base cell (claims 45 and 46) | house by house, in house order (claim 19), the draws of claim 46: the base unit's creation draw, the draws of its placement search (only when its direct placement fails) and any visceroid draw, then for each unit bought its type draw, creation draw, placement search draws and any visceroid draw; then, after the last house, one ranged draw over 0 … 65535 (one raw value) whose value has no effect (not taken when the step stops early, claim 45). Later loading steps draw after these: initial crates, conditional secret-lab choices, end-of-loading tags, then the game-start tile animations (S-0202 claim 14). This order holds when the starting-unit step stops early or places no units |
+| Game-start terrain recalculation | initial crates, secret-lab choices and end-of-loading tags are complete | every legal cell is recalculated before tick 0, even when no starting units were placed | in visiting order, the applicable creation and immediate start-event draws of missing tile animations (S-0010 claims 12 and 19; S-0202 claims 10 and 14). A cell whose start was recorded since the second pass takes no new creation draws |
 
 ## Edge cases and quirks
 
@@ -2195,7 +2229,7 @@ the original's absent-key behaviour.
 | [Header] NumberStartingPoints | preview marker count N_h | integer | −1 (no markers) |
 | [Header] StartX, StartY | marker origin X0, Y0 | integer | −1 |
 | [Header] Width, Height | marker extent Wh, Hh | integer | −1. An explicit 0 makes the original crash when markers are drawn; our engine then draws no markers and an importer warns (Edge cases) |
-| [Header] Waypoint1 … WaypointN | marker pairs (xi, yi), read for i = 1 … N_h only (N = N_h, the marker count); pairs 9 … min(N_h, 16) are start position marks (claim 29) | two integers, by S-0003 claim 9 (a component that cannot be read takes the value in force, and the importer warns) | pairs 1 … 8: (0,0). Pairs 9 … 16: the marks stay as they are. Pairs above N_h: not read |
+| [Header] Waypoint1 … WaypointN | marker pairs (xi, yi), read for i = 1 … N_h only (N = N_h, the marker count); pairs 9 … min(N_h, 16) are start position marks (claim 29) | two integers, by S-0003 claim 9. An unread component is unspecified in the original; our engine uses the matching component of the value in force and the importer warns | pairs 1 … 8: (0,0). Pairs 9 … 16: the marks stay as they are. Pairs above N_h: not read |
 | [Header] NumCoopHumanStartSpots | read; no skirmish effect established, so it has no unit here | integer | 4 |
 | [Preview] Size | preview width = third number, height = fourth | four integers | (0,0,0,0) (quirk); an empty value is the same as absent |
 | [PreviewPack] | preview pixels (claim 24) | encoded block | no preview |
@@ -2232,7 +2266,7 @@ Keys from other files that this spec relies on (theater file and rules file):
 | theater file [General] WaterSet | tileset whose first tile is the water base tile (claim 6); ignored for theater 5 | integer tileset number | none: water base tile −1 |
 | theater file [TileSetNNNN] TilesInSet, LastTilesInSet | actual tile count C and authored tile count A of a tileset (Formulas, tile translation) | integer | A absent: no translation pair for that tileset |
 | rules overlay type: Crate | crate type (claim 12) | boolean | not a crate type |
-| rules overlay type: CellAnim | the overlay type's cell animation (claims 12 and its *Cell animations* part; Terms). The importer's "has artwork or a cell animation" test of claim 12 reads this same value. The name is compared without regard to letter case; a name that is not yet an animation type creates one (S-0004 claim 13 and its Import mapping). The values <none> and none (any letter case) mean no cell animation and clear a value an earlier layer gave | animation type name (string) | none when the type is created; a layer that omits the key or gives it an empty value keeps the value in force (S-0006 claim 3) |
+| rules overlay type: CellAnim | the overlay type's cell animation (claims 12 and its *Cell animations* part; Terms). The importer's "has artwork or a cell animation" test of claim 12 reads this same value. Low-bridge markers and their direct end-row and piece writes do not start it (S-0202 claim 14). The name is compared without regard to letter case; a name that is not yet an animation type creates one (S-0004 claim 13 and its Import mapping). The values <none> and none (any letter case) mean no cell animation and clear a value an earlier layer gave | animation type name (string) | none when the type is created; a layer that omits the key or gives it an empty value keeps the value in force (S-0006 claim 3) |
 | rules terrain type: Strength | the terrain type's strength, and so a map-placed terrain object's starting health (claim 42); how it is read and filled is S-0102's (claim 23) | integer, health points | unset; filled from the game-wide tree strength (S-0102 claim 23) |
 | rules [General] TreeStrength | the game-wide tree strength that a terrain type without a strength takes (claim 42; S-0102 claim 23) | integer, health points | 25 (S-0102) |
 | rules country: MultiplayPassive | passive house (claims 19, 28) | boolean | false when the country is created; when a later read or rules layer omits the key, the value already in force is kept (S-0006 claim 3) |
@@ -2821,6 +2855,16 @@ that the stream can be computed by S-0202 and compared with what the game shows 
   gives a reveal, or starts the players differently from its expectation. *Inconclusive if* the
   reveal trigger fails in a control map where "player at position A" is the human's own fixed
   position 0 (N_h = 8, 1 run): the trigger is then at fault.
+  - Variant G, deterministic completion (our engine only): use variant B with pair 9's
+    nonempty value giving only −1. In the early phase its unread second component uses the
+    mark in force, −1 before chosen positions are assigned. In the late phase it uses the
+    mark left by the early phase, house number 1. Thus only house 0 needs re-assignment
+    in the late phase. Record the marks, base cells, draw trace and importer warning in one
+    run, then compare with a complete-pair control computed from the marks at each phase.
+    Also test a value with no readable first component: both marks stay in force at each
+    read and a warning appears. A mismatch with these per-phase expectations or a missing
+    warning falsifies our engine's departure. These runs predict no original result for
+    unread components.
 - **M14, skirmish read set (claims 26, 27).** A map with start waypoint markers 0, 1 and 2 and
   3 players on fixed positions 0, 1 and 2: 1 human and 2 computers with different colours. The map
   has a per-house section giving the player's country extra credits, and pre-placed units owned by

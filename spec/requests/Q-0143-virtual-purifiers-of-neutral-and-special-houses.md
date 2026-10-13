@@ -1,9 +1,9 @@
 ---
 id: Q-0143
 title: Which virtual-purifier list position the neutral and special houses use
-status: open
+status: answered
 related: [S-0402, S-0412, S-0009]
-answered-by: []
+answered-by: [S-0402]
 ---
 
 ## Need

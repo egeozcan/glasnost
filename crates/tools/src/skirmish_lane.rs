@@ -61,6 +61,11 @@ struct Game {
     credits: [i32; PLAYERS],
     /// Per player house: types it could build at the end, by role.
     buildable: [BTreeMap<Role, usize>; PLAYERS],
+    /// Per player house: credits gained over the game.
+    income: [i64; PLAYERS],
+    /// Per player house: harvester ticks by current behaviour and harvest
+    /// phase.
+    harvest_ticks: [BTreeMap<String, u32>; PLAYERS],
     /// Shots and kills of the game (S-0301, S-0312).
     shots: usize,
     killed: usize,
@@ -253,6 +258,8 @@ fn play(
     let mut seen: [BTreeMap<Role, BTreeSet<u32>>; PLAYERS] = Default::default();
     let mut last = [i32::MAX; PLAYERS];
     let paid = &mut g.paid;
+    let income = &mut g.income;
+    let harvest_ticks = &mut g.harvest_ticks;
     let (mut shots, mut killed, mut drained) = (0usize, 0usize, 0usize);
     let t = Instant::now();
     let world = run
@@ -272,6 +279,17 @@ fn play(
                 let c = w.houses[h].credits;
                 if c > last[h] {
                     paid[h] += 1;
+                    income[h] += i64::from(c - last[h]);
+                }
+                for o in w
+                    .objects
+                    .values()
+                    .filter(|o| o.on_map && o.health > 0 && o.owner == Some(HouseId(h as u8)))
+                {
+                    if let Some(hs) = &o.econ.harvest {
+                        let key = format!("{:?}/{:?}", o.beh.current, hs.phase);
+                        *harvest_ticks[h].entry(key).or_default() += 1;
+                    }
                 }
                 last[h] = c;
             }
@@ -394,6 +412,17 @@ fn report(mount_ms: u128, looked: usize, games: &[Game], max_ticks: i32, seed: u
                 g.paid[h],
                 g.credits[h],
                 can.join(", ")
+            );
+        }
+        for h in 0..PLAYERS {
+            let mut ticks: Vec<_> = g.harvest_ticks[h].iter().collect();
+            ticks.sort_by_key(|(_, n)| std::cmp::Reverse(**n));
+            let ticks: Vec<String> = ticks.iter().map(|(k, n)| format!("{k} {n}")).collect();
+            let _ = writeln!(
+                s,
+                "  house {h} income {}; harvester ticks by behaviour/phase: {}",
+                g.income[h],
+                ticks.join(", ")
             );
         }
         let _ = writeln!(s, "  combat: {} shots, {} killed", g.shots, g.killed);

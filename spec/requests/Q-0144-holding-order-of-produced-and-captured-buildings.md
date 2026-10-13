@@ -1,9 +1,9 @@
 ---
 id: Q-0144
 title: When a building joins its owner's holding order
-status: open
+status: answered
 related: [S-0402, S-0404, S-0406, S-0412]
-answered-by: []
+answered-by: [S-0402]
 ---
 
 ## Need

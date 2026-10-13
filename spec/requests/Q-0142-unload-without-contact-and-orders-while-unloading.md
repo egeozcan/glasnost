@@ -1,9 +1,9 @@
 ---
 id: Q-0142
 title: A harvester's unload without contact, and orders given while it unloads
-status: open
+status: answered
 related: [S-0402, S-0215, S-0213]
-answered-by: []
+answered-by: [S-0402]
 ---
 
 ## Need
