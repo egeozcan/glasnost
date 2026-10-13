@@ -101,6 +101,7 @@ pub fn catalogue() -> Arc<TileCatalogue> {
         })],
         variants: 0,
         anim: None,
+        no_burrowing: false,
     };
     Arc::new(TileCatalogue {
         tiles: (0..=4).map(tile).collect(),

@@ -390,8 +390,8 @@ pub fn new_game(
     // spec: S-0010 claim 12 (the game-start pass: every legal cell once more, in the visiting order, after the starting units and before the first tick; its tile animations by claim 19). Its place after the final draw is interim (request Q-0101).
     recalc_cells(&mut w, &order);
 
-    // spec: S-0010 claim 25 (the bridge spans, right after the game-start pass; low spans give their bands the bridge-body mark)
-    mark_bridge_bodies(&mut w);
+    // spec: S-0010 claim 25 (once at game start, before the first tick: the bridge spans, S-0212's bridge links, and the bridge-body marks of low spans)
+    crate::bridges::find_spans(&mut w, &order);
 
     // Passability categories (S-0211 claim 11) after loading.
     let all: Vec<CellXY> = w.cells.grid.iter().map(|(c, _)| c).collect();
@@ -461,22 +461,6 @@ pub fn cleanup(w: &mut World, setup: &GameSetup) {
     }
     if w.houses.iter().any(|h| h.removed) {
         w.note("S-0009 claim 28: a removed house's triggers are not removed (map triggers are not implemented, S-0011)");
-    }
-}
-
-/// Finds the map's bridge spans and gives the bands of the low ones the
-/// bridge-body mark (S-0010 claim 25), from the tiles and the high-bridge
-/// marking as they stand.
-pub fn mark_bridge_bodies(w: &mut World) {
-    let cat = w.catalogue_arc();
-    let cells = &w.cells;
-    let deck = |c: CellXY| cells.idx(c).is_some_and(|i| cells.deck[i]);
-    let spans = glasnost_map::bridges::find_spans(&cells.grid, &cat.roles, deck);
-    let marks = glasnost_map::bridges::body_cells(&cells.grid, &spans, deck);
-    for c in marks {
-        if let Some(i) = w.cells.idx(c) {
-            w.cells.bridge_body[i] = true;
-        }
     }
 }
 

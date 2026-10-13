@@ -55,6 +55,10 @@ pub enum Reach {
     None,
     /// A reach region.
     Region(u32),
+    /// A bridge cell read for its deck with no bridge link found (S-0212
+    /// claim 4): the same as every other such deck, different from
+    /// everything else.
+    LoneDeck,
 }
 
 /// A union-find over dense indices, the smaller label winning.
@@ -171,6 +175,16 @@ pub fn rebuild(w: &mut World) {
             }
         }
     }
+    // spec: S-0212 claim 3 (an enabled link makes the regions of its two end cells adjacent)
+    for l in w.cells.links.iter().filter(|l| l.enabled) {
+        let (Some(i), Some(j)) = (w.cells.idx(l.first), w.cells.idx(l.second)) else {
+            continue;
+        };
+        let (ri, rj) = (region[i], region[j]);
+        if ri != u32::MAX && rj != u32::MAX && ri != rj {
+            adj.push((ri.min(rj), ri.max(rj)));
+        }
+    }
     adj.sort_unstable();
     adj.dedup();
     let mut reach = vec![[u32::MAX; 13]; nr]; // spec: S-0212 claim 4 (a reach region per movement zone)
@@ -240,10 +254,36 @@ pub fn reach_in(w: &World, c: CellXY, z: MovementZone) -> Reach {
     }
 }
 
+/// Where a cell lies for a zone (S-0212 claim 4), a bridge cell read for its
+/// deck when `deck`: through the first bridge link, in creation order, that
+/// the cell lies within 1 cell of. Every other read is [`reach_in`]'s.
+pub fn reach_read(w: &World, c: CellXY, z: MovementZone, deck: bool) -> Reach {
+    if !deck || !w.cells.is_bridge(c) {
+        return reach_in(w, c, z);
+    }
+    // spec: S-0212 claim 4 (the first bridge link, in creation order, that the bridge cell lies within 1 cell of)
+    match crate::bridges::link_within(w, c, 1) {
+        // spec: S-0212 claim 4 (no link found: a reach region of its own, shared by every such deck)
+        None => Reach::LoneDeck,
+        // spec: S-0212 claim 4 (found, enabled: that of the link's first end)
+        Some(l) if l.enabled => reach_in(w, l.first, z),
+        Some(l) => {
+            // spec: S-0212 claim 4 (found, not enabled: the first cell off the bridge east or south decides between the second and the first end)
+            let y = crate::bridges::first_off_bridge(w, c, l.along_x);
+            if y.is_some_and(|y| crate::bridges::end_condition(w, y)) {
+                reach_in(w, l.second, z)
+            } else {
+                reach_in(w, l.first, z)
+            }
+        }
+    }
+}
+
 /// Whether two cells lie in the same connected region of a movement zone
 /// (S-0212 claim 4), the cell layers given for the deck rule of S-0309
-/// claim 7 (regions are labelled per cell; a deck is compared by its
-/// cell's region, as the path search does, request Q-0042).
+/// claim 7. S-0212 claim 4 reads a deck through a link only where its
+/// claims 6, 14 and 25 say so; every other read, this one included, takes
+/// the cell's own reach region.
 pub fn same_region(
     w: &World,
     z: MovementZone,

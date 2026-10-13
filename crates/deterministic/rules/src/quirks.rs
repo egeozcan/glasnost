@@ -238,7 +238,7 @@ pub struct Quirks {
     #[serde(default = "on")]
     pub restricted_deck_overlay_indices: bool,
     /// An unset role's range still counts tile numbers from its unset start.
-    // spec: S-0010 claim 5; S-0211 claim 13
+    // spec: S-0010 claim 5; S-0406 claim 3 (d) (the naval range, formerly S-0211 claim 13)
     #[serde(default = "on")]
     pub unset_role_range: bool,
     /// A role naming the first missing tileset starts at the tile count.
@@ -379,6 +379,14 @@ pub struct Quirks {
     // spec: S-0207 claim 15, Edge cases
     #[serde(default = "on")]
     pub drive_giveup_ignores_contact: bool,
+    /// The nearest object of the look at a new path's first cell is measured from the cell's top corner; off: from its centre.
+    // spec: S-0207 claim 15, F8, Edge cases
+    #[serde(default = "on")]
+    pub drive_nearest_from_top_corner: bool,
+    /// A step from a bridge deck is judged by the ground level under the deck, so a side step of 1 level lands on ground 3 or 5 levels below; off: such a step onto a cell that is not a bridge cell is refused.
+    // spec: S-0212 claim 10, Edge cases
+    #[serde(default = "on")]
+    pub deck_side_step_ground_level: bool,
     /// A gate door that reverses from closing to opening is at rest open at the gate's next update; off: the reopening takes as long as the closing had run.
     // spec: S-0215 claim 35
     #[serde(default = "on")]
@@ -1030,6 +1038,8 @@ impl Default for Quirks {
             observer_position_handoff: true,
             cleanup_skips_next_house: true,
             drive_giveup_ignores_contact: true,
+            drive_nearest_from_top_corner: true,
+            deck_side_step_ground_level: true,
             gate_reverse_snaps: true,
             turret_snap_bound_wraps: true,
             disarm_bomb_needs_weapon: true,
@@ -1371,6 +1381,14 @@ impl Quirks {
             (
                 "drive_giveup_ignores_contact",
                 self.drive_giveup_ignores_contact,
+            ),
+            (
+                "drive_nearest_from_top_corner",
+                self.drive_nearest_from_top_corner,
+            ),
+            (
+                "deck_side_step_ground_level",
+                self.deck_side_step_ground_level,
             ),
             ("gate_reverse_snaps", self.gate_reverse_snaps),
             ("turret_snap_bound_wraps", self.turret_snap_bound_wraps),

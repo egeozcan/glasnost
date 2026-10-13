@@ -5,8 +5,9 @@
 //! every locomotion class has multiplier 0 there (category *blocked*).
 //!
 //! Not tested here because the simulation does not implement them yet:
-//! follower cars (claim 26), links and tunnel steps in the search, and the
-//! coarse end cells of bridge cells (requests Q-0042 and Q-0043).
+//! follower cars (claim 26), tunnels and their links and steps, and the
+//! changes of bridge links in play (claim 3's table: no bridge is destroyed
+//! or repaired before the bridge specs).
 
 mod common;
 
@@ -1420,7 +1421,63 @@ fn further_test_is_the_burrowing_test() {
     );
 }
 
+// spec: S-0212 claim 25 (the no-move rows ask for the further test only for a subterranean unit below the ground surface; every candidate, the centre included, must pass, whatever the clicked cell gives)
+#[test]
+fn no_move_further_test_for_a_unit_underground() {
+    let mut s = scene();
+    s.vehicle(
+        "TESTMOLE",
+        UnitType {
+            movement_zone: Some(MovementZone::Subterranean),
+            ..unit_type(WHEEL, 40, 6)
+        },
+    );
+    // The clicked cell is a slope: it qualifies, but fails the burrowing test.
+    s.set_cell(cell(6, 0), slope_tile(1), 0);
+    s.place_unit(0, "TESTMOLE", cell(0, 0), 64);
+    let mut w = s.build();
+    regions::ensure(&mut w);
+    let id = vehicles(&w)[0];
+    // On the surface: no further test, the clicked cell itself.
+    assert_eq!(order_search(&w, id, false, true), Some(cell(6, 0)));
+    // Below the ground surface: the slope fails, a flat ring-1 cell is taken.
+    w.obj_mut(id).unwrap().pos.z = -1;
+    let c = order_search(&w, id, false, true).expect("a cell");
+    assert_eq!(chebyshev(c, cell(6, 0)), 1);
+    assert!(path::burrow_ok(&w, c));
+    // The move row (not a free mover's no-move) never asks for it.
+    assert_eq!(
+        chebyshev(order_search(&w, id, false, false).unwrap(), cell(6, 0)),
+        0
+    );
+}
+
+// spec: S-0010 claim 17 (a tile of a tileset without the allow-burrowing flag refuses; a tile number outside the theater's tiles passes the tileset condition)
+#[test]
+fn allow_burrowing_flag_of_the_tileset() {
+    let mut s = scene();
+    let n = s.catalogue.tiles.len() as i32;
+    let mut t = s.catalogue.tiles[0].clone();
+    t.no_burrowing = true;
+    s.catalogue.tiles.push(t);
+    s.set_cell(cell(2, 0), n, 0);
+    s.set_cell(cell(3, 0), 0, 0);
+    let w = s.build();
+    assert!(!path::burrow_ok(&w, cell(2, 0)));
+    assert!(path::burrow_ok(&w, cell(3, 0)));
+}
+
 // ------------------------------------------------------------- bridge decks
+
+/// Makes `c` a bridge cell along cell x, with the deck-entry mark when
+/// `entry` (S-0212 Terms), as a high-bridge overlay would.
+fn lay_deck(w: &mut World, c: CellXY, entry: bool) {
+    let i = w.cells.idx(c).unwrap();
+    w.cells.deck[i] = true;
+    w.cells.deck_entry[i] = entry;
+    w.cells.bridge_axis[i] = glasnost_sim::cells::Axis::X;
+    w.regions.dirty = true;
+}
 
 /// Plateau at height level 4 everywhere but a pit at level 0 under
 /// x = 3 … 5, y = −1 … 1; with `deck`, the pit's middle row carries a
@@ -1435,8 +1492,7 @@ fn bridge_scene(deck: bool) -> (World, ObjectId) {
     let mut w = s.build();
     if deck {
         for x in 3..=5 {
-            let i = w.cells.idx(cell(x, 0)).unwrap();
-            w.cells.deck[i] = true;
+            lay_deck(&mut w, cell(x, 0), true);
         }
     }
     regions::ensure(&mut w);
@@ -1444,7 +1500,7 @@ fn bridge_scene(deck: bool) -> (World, ObjectId) {
     (w, car)
 }
 
-// spec: S-0212 claim 10 (a difference of 4 levels only between a bridge deck and the ground at a bridge's end)
+// spec: S-0212 claim 10 (Δ = −4 onto a marked deck, Δ = 0 along marked deck cells, Δ = +4 off a deck; 4 levels from ground otherwise blocked)
 // spec: S-0212 claim 7 (a step onto a bridge cell from a pair more than 1 level higher is on its deck; the destination of a bridge cell is its deck)
 #[test]
 fn bridge_deck_steps() {
@@ -1498,6 +1554,344 @@ fn a_vehicle_drives_across_a_deck() {
     assert!(n < 600, "the car never crossed");
     assert!(on_deck, "the car crossed on the deck");
     assert_eq!(w.obj(car).unwrap().layer, Layer::Ground);
+}
+
+// spec: S-0212 claim 10 (the table: a deck pair is judged by its ground level; deck to deck at Δ = 0 needs the mark, onto a deck at Δ = −4 needs the mark, off a deck at Δ = +4 needs nothing, a deck never steps onto the ground under it)
+#[test]
+fn deck_steps_and_the_deck_entry_mark() {
+    let (mut w, car) = bridge_scene(true);
+    // The pit's row y + 1 carries a deck without the deck-entry mark.
+    for x in 3..=5 {
+        lay_deck(&mut w, cell(x, 1), false);
+    }
+    regions::ensure(&mut w);
+    let out = |a: CellXY, b: CellXY, r: i32| path::step_outcome(&w, car, a, b, r);
+    // Deck to deck with the mark (Δ = 0), and not onto the unmarked row.
+    assert_eq!(out(cell(4, 0), cell(5, 0), 4), Outcome::Clear);
+    assert_eq!(out(cell(4, 0), cell(4, 1), 4), Outcome::Blocked);
+    // Onto the unmarked row from the plateau at deck level (Δ = −4): refused.
+    assert_eq!(out(cell(4, 2), cell(4, 1), 4), Outcome::Blocked);
+    // Onto the marked row from the plateau: allowed; off a deck sideways onto
+    // the plateau (Δ = +4): allowed.
+    assert_eq!(
+        out(cell(4, -2), cell(4, -1), 4),
+        Outcome::Blocked,
+        "no deck at y − 1"
+    );
+    assert_eq!(out(cell(2, -1), cell(3, 0), 4), Outcome::Clear);
+    assert_eq!(out(cell(3, 0), cell(2, -1), 4), Outcome::Clear);
+    // From a deck pair onto the ground under the deck of a neighbour that is
+    // not a bridge cell: refused (Δ = 0 from a deck pair).
+    assert_eq!(out(cell(4, 0), cell(4, -1), 4), Outcome::Blocked);
+    // Under the deck the steps are those between ground cells.
+    assert_eq!(out(cell(4, 0), cell(4, 1), 0), Outcome::Clear);
+    assert_eq!(out(cell(4, 0), cell(4, -1), 0), Outcome::Clear);
+}
+
+// spec: S-0212 claim 10 (Δ = ±1 from a deck pair: the slope rule on the ground levels; onto a cell that is not a bridge cell it lands on that cell's ground)
+// spec: S-0212 Edge cases (`quirks.deck_side_step_ground_level` off: such a step onto a cell that is not a bridge cell is refused; onto another deck it is allowed either way)
+#[test]
+fn deck_side_step_onto_ground_one_level_away() {
+    for on in [true, false] {
+        let mut s = scene();
+        s.ruleset.globals.quirks.deck_side_step_ground_level = on;
+        // A sloped bridge cell at level 0 with a flat cell at level 1 beside
+        // it, and a flat bridge cell at level 1 beyond that.
+        s.set_cell(cell(0, 0), slope_tile(1), 0);
+        s.set_cell(cell(1, 0), 0, 1);
+        s.set_cell(cell(0, 1), 0, 1);
+        s.place_unit(0, CAR, cell(-5, 0), 64);
+        let mut w = s.build();
+        lay_deck(&mut w, cell(0, 0), true);
+        lay_deck(&mut w, cell(0, 1), true);
+        regions::ensure(&mut w);
+        let car = vehicles(&w)[0];
+        let out = |b: CellXY| path::step_outcome(&w, car, cell(0, 0), b, 4);
+        let expect = if on { Outcome::Clear } else { Outcome::Blocked };
+        assert_eq!(
+            out(cell(1, 0)),
+            expect,
+            "onto ground 3 levels below, switch {on}"
+        );
+        assert_eq!(
+            out(cell(0, 1)),
+            Outcome::Clear,
+            "onto another deck, switch {on}"
+        );
+    }
+}
+
+// spec: S-0212 claim 7 (the start pair: on the deck for a unit on a bridge deck that is not an aircraft; a train at deck height on a bridge cell starts on the deck)
+#[test]
+fn start_pair_of_a_train_at_deck_height() {
+    use glasnost_sim::world::Layer;
+    let mut s = scene();
+    s.vehicle(
+        "TESTTRAIN",
+        UnitType {
+            is_train: Some(true),
+            ..unit_type(WHEEL, 40, 6)
+        },
+    );
+    s.place_unit(0, "TESTTRAIN", cell(0, 0), 64);
+    s.place_unit(0, CAR, cell(3, 0), 64);
+    let mut w = s.build();
+    lay_deck(&mut w, cell(0, 0), true);
+    lay_deck(&mut w, cell(3, 0), true);
+    regions::ensure(&mut w);
+    let train = objects_of(&w, Kind::Vehicle)
+        .into_iter()
+        .find(|&v| w.obj(v).unwrap().pos.cell() == cell(0, 0))
+        .unwrap();
+    let car = objects_of(&w, Kind::Vehicle)
+        .into_iter()
+        .find(|&v| v != train)
+        .unwrap();
+    // On the ground at ground height: the ground pair.
+    assert_eq!(path::start_pair(&w, train, cell(0, 0)), (Layer::Ground, 0));
+    // At deck height (z = 416, height level 4), not marked as on the deck:
+    // |4 − 0| > 2, so the start pair is raised to the deck.
+    w.obj_mut(train).unwrap().pos.z = 416;
+    assert_eq!(path::start_pair(&w, train, cell(0, 0)), (Layer::Deck, 4));
+    // At 2 levels (z = 208): within 2, the ground pair.
+    w.obj_mut(train).unwrap().pos.z = 208;
+    assert_eq!(path::start_pair(&w, train, cell(0, 0)), (Layer::Ground, 0));
+    // An ordinary vehicle at deck height that is not on the deck: ground.
+    w.obj_mut(car).unwrap().pos.z = 416;
+    assert_eq!(path::start_pair(&w, car, cell(3, 0)), (Layer::Ground, 0));
+    w.obj_mut(car).unwrap().layer = Layer::Deck;
+    assert_eq!(path::start_pair(&w, car, cell(3, 0)), (Layer::Deck, 4));
+}
+
+// ------------------------------------------------------------- bridge links
+
+/// First tile number of the bridge role in [`river`]'s catalogue.
+const BRIDGE_ROLE: i32 = 42;
+
+/// A rock river over the columns x = 1 … 5 (all rows) between two banks,
+/// and a bridge span from A = (0, 0) to B = (6, 0): both hold tile 6 of the
+/// bridge role (S-0010 table B: start and end sub-tile 4, running east). A
+/// high-bridge overlay of index 24 stands in each river cell of row 0 but
+/// those in `gaps` (S-0211 claim 15: each marks rows 1, 0, −1 and −2 of its
+/// column). A car stands on bank A at (−2, 0).
+fn river(gaps: &[i32]) -> (World, ObjectId) {
+    let mut s = scene();
+    for i in 0..=24 {
+        let name = format!("OV{i}");
+        s.register("overlays", &name);
+        s.ruleset.sim.overlays.insert(
+            name,
+            glasnost_rules::sim::OverlayType {
+                has_art: Some(true),
+                ..Default::default()
+            },
+        );
+    }
+    // 16 bridge tiles of 3 × 2 clear cells.
+    assert_eq!(s.catalogue.tiles.len() as i32, BRIDGE_ROLE);
+    for _ in 0..16 {
+        s.catalogue.tiles.push(glasnost_map::terrain::TileInfo {
+            width: 3,
+            height: 2,
+            has_image: true,
+            cells: vec![
+                Some(glasnost_map::terrain::TileCell {
+                    terrain_code: 0,
+                    slope: 0,
+                });
+                6
+            ],
+            ..Default::default()
+        });
+    }
+    s.catalogue.roles.bridge = BRIDGE_ROLE;
+    for c in all_cells(&s) {
+        if (cell(1, 0).x..=cell(5, 0).x).contains(&c.x) {
+            rock(&mut s, c, 0);
+        }
+    }
+    for x in [0, 6] {
+        s.set_cell(cell(x, 0), BRIDGE_ROLE + 6, 0);
+        s.cell_mut(cell(x, 0)).sub_tile = 4;
+    }
+    for x in 1..=5 {
+        if !gaps.contains(&x) {
+            s.cell_mut(cell(x, 0)).overlay = 24;
+        }
+    }
+    s.place_unit(0, CAR, cell(-2, 0), 64);
+    let mut w = s.build();
+    regions::ensure(&mut w);
+    let car = vehicles(&w)[0];
+    (w, car)
+}
+
+// spec: S-0010 claim 25 (a span from a start cell to the far end by table B; high when every between cell outside the roles' ranges is a high-bridge cell)
+// spec: S-0212 claim 3 (one link per span, enabled when high; an enabled link makes the regions of its two end cells adjacent)
+#[test]
+fn a_high_span_is_an_enabled_link_joining_the_banks() {
+    let (w, _) = river(&[]);
+    assert_eq!(
+        w.cells.links,
+        vec![glasnost_sim::cells::BridgeLink {
+            first: cell(0, 0),
+            second: cell(6, 0),
+            along_x: true,
+            enabled: true,
+        }]
+    );
+    let z = MovementZone::Normal;
+    assert!(matches!(
+        regions::reach_in(&w, cell(0, 0), z),
+        Reach::Region(_)
+    ));
+    assert_eq!(
+        regions::reach_in(&w, cell(-3, 5), z),
+        regions::reach_in(&w, cell(9, -5), z),
+        "the link joins the two banks"
+    );
+    // A high span sets no bridge-body mark.
+    assert!(w.cells.bridge_body.iter().all(|&b| !b));
+}
+
+// spec: S-0010 claim 25 (a low span: its band of four cells across each between cell that is not a high-bridge cell carries the bridge-body mark and, S-0212 Terms, the span's axis)
+// spec: S-0212 claim 3 (a low span's link is not enabled: the banks stay apart)
+// spec: S-0010 claim 17 (the bridge-body mark refuses burrowing)
+#[test]
+fn a_low_span_marks_its_band_and_stays_disabled() {
+    use glasnost_sim::cells::Axis;
+    let (w, _) = river(&[3]);
+    assert_eq!(w.cells.links.len(), 1);
+    assert!(!w.cells.links[0].enabled);
+    let z = MovementZone::Normal;
+    assert_ne!(
+        regions::reach_in(&w, cell(-3, 5), z),
+        regions::reach_in(&w, cell(9, -5), z)
+    );
+    let body = |c: CellXY| w.cells.bridge_body[w.cells.idx(c).unwrap()];
+    for y in [1, 0, -1, -2] {
+        assert!(body(cell(3, y)), "band cell (3, {y})");
+        assert_eq!(w.cells.axis(cell(3, y)), Axis::X);
+    }
+    assert!(!body(cell(3, 2)) && !body(cell(3, -3)));
+    assert!(!body(cell(2, 0)), "a high-bridge cell sets no band");
+    assert!(!body(cell(0, 0)) && !body(cell(6, 0)), "the end cells");
+    assert!(
+        !path::burrow_ok(&w, cell(3, 1)),
+        "the mark refuses burrowing"
+    );
+    assert!(path::burrow_ok(&w, cell(3, 2)));
+}
+
+// spec: S-0212 claim 4 (a bridge cell read for its deck: through the first link within 1 cell; enabled: the first end's reach region; none found: a reach region of its own)
+// spec: S-0212 claim 6 (the destination read for its deck when it is a bridge cell: an order onto a deck over the river passes the gate)
+#[test]
+fn a_deck_is_read_through_its_link() {
+    let z = MovementZone::Normal;
+    let (mut w, car) = river(&[]);
+    let bank = regions::reach_in(&w, cell(0, 0), z);
+    assert_eq!(regions::reach_read(&w, cell(3, 0), z, true), bank);
+    assert_eq!(regions::reach_read(&w, cell(3, 1), z, true), bank);
+    assert_eq!(
+        regions::reach_in(&w, cell(3, 0), z),
+        Reach::None,
+        "its ground"
+    );
+    // Row −2 lies 2 cells to the side of the link: no link within 1.
+    assert_eq!(
+        regions::reach_read(&w, cell(3, -2), z, true),
+        Reach::LoneDeck
+    );
+    assert_eq!(
+        regions::reach_read(&w, cell(4, -2), z, true),
+        regions::reach_read(&w, cell(3, -2), z, true)
+    );
+    // spec: S-0212 claim 25 (in deck mode a bridge cell's reach region is read for its deck: a move order onto the deck collects the deck cell itself)
+    let order = |w: &World| {
+        path::nearby(
+            w,
+            cell(3, 0),
+            path::NearbyUse::MoveOrder {
+                unit: car,
+                on_object: false,
+                free_no_move: false,
+            },
+        )
+    };
+    assert_eq!(order(&w), Some(cell(3, 0)));
+    assert_ne!(
+        compute_to(&mut w, car, cell(3, 0), Mode::Fresh),
+        Search::GateFailed
+    );
+    assert_eq!(
+        compute_to(&mut w, car, cell(3, -2), Mode::Fresh),
+        Search::GateFailed
+    );
+    // A link that is not enabled: the first cell off the bridge going east
+    // (the gap at x = 3) is no bridge end, so the first end's region.
+    let (w, _) = river(&[3]);
+    assert_eq!(
+        regions::reach_read(&w, cell(2, 0), z, true),
+        regions::reach_in(&w, cell(0, 0), z)
+    );
+    // From x = 4 the first cell off the bridge is B, a bridge end: the
+    // second end's region.
+    assert_eq!(
+        regions::reach_read(&w, cell(4, 0), z, true),
+        regions::reach_in(&w, cell(6, 0), z)
+    );
+}
+
+// spec: S-0212 claim 13b (coarse end cells of a bridge cell: the lane cells; enabled: the nearer, the second end's on equal distances; not enabled: by the first cell off the bridge going east)
+#[test]
+fn coarse_end_cells_of_bridge_cells() {
+    let (w, _) = river(&[]);
+    assert_eq!(path::coarse_end(&w, cell(2, 0), true), cell(0, 0));
+    assert_eq!(path::coarse_end(&w, cell(3, 0), true), cell(6, 0), "a tie");
+    assert_eq!(
+        path::coarse_end(&w, cell(4, 1), true),
+        cell(6, 1),
+        "the lane"
+    );
+    assert_eq!(path::coarse_end(&w, cell(2, -1), true), cell(0, -1));
+    // Not on the deck, or not a bridge cell: the cell itself.
+    assert_eq!(path::coarse_end(&w, cell(2, 0), false), cell(2, 0));
+    assert_eq!(path::coarse_end(&w, cell(-2, 0), true), cell(-2, 0));
+    let (w, _) = river(&[3]);
+    assert_eq!(path::coarse_end(&w, cell(2, 0), true), cell(0, 0));
+    assert_eq!(path::coarse_end(&w, cell(4, 0), true), cell(6, 0));
+    // In row 1 the first cell off the bridge east, (6, 1), holds no bridge
+    // tile: the first end's lane cell.
+    assert_eq!(path::coarse_end(&w, cell(5, 1), true), cell(0, 1));
+}
+
+// spec: S-0212 F8 (both cells bridge cells of one bridge, the first link within 3 cells the same: E is their Chebyshev distance)
+// spec: S-0212 claim 24 (E = max(Chebyshev distance, 2n − 2 + legs))
+#[test]
+fn coarse_estimate_on_one_bridge_is_the_chebyshev_distance() {
+    let (w, _) = river(&[]);
+    let z = MovementZone::Normal;
+    assert_eq!(
+        path::coarse_estimate(&w, z, cell(2, 0), cell(5, 1)),
+        Some(3)
+    );
+    // Away from bridges, at least the Chebyshev distance.
+    let e = path::coarse_estimate(&w, z, cell(-10, 4), cell(-2, 4)).unwrap();
+    assert!(e >= 8, "{e}");
+}
+
+// spec: S-0212 claim 13 (the corridor exemption: an aircraft in a neighbour gives it, as a vehicle does)
+#[test]
+fn an_aircraft_gives_the_corridor_exemption() {
+    let mut s = scene();
+    s.aircraft(
+        "TESTJET",
+        unit_type(glasnost_rules::sim::LocomotionClass::Winged, 40, 6),
+    );
+    s.place_aircraft(0, "TESTJET", cell(4, 4), 0);
+    let w = s.build();
+    assert!(corridor::exempt(&w, cell(5, 5)));
+    assert!(!corridor::exempt(&w, cell(8, 8)));
 }
 
 // ------------------------------------------------------------- the corridor

@@ -1,7 +1,8 @@
 //! Claim tests for land types and passability (S-0211), on synthetic data.
 //!
 //! Not covered here because the simulation does not implement them yet:
-//! building placement (the buildable flag and the naval range are read into
+//! building placement (owned by S-0406 claim 3 since S-0211 revision 10; the
+//! buildable flag and the naval range are read into
 //! the rules but nothing places buildings), the events that destroy or
 //! repair a bridge, laser-fence states and a house's firestorm.
 //! Name parsing of land types, zones and locomotion classes, the misspelling
@@ -736,6 +737,7 @@ fn block_tile(w: u8, h: u8, code: u8) -> TileInfo {
             .collect(),
         variants: 0,
         anim: None,
+        no_burrowing: false,
     }
 }
 

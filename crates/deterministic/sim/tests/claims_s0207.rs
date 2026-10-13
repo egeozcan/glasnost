@@ -1234,6 +1234,236 @@ fn first_cell_of_a_new_path_acts_before_turning() {
     }
 }
 
+// spec: S-0207 F8 (dₙ from the cell's top corner: top 90, centre 181, right and left 202, bottom 271)
+// spec: S-0207 Edge cases (`quirks.drive_nearest_from_top_corner` off: from the centre, the centre nearest and the outer positions alike)
+#[test]
+fn nearest_object_distance_from_the_top_corner() {
+    use glasnost_sim::cells::position;
+    for on in [true, false] {
+        let mut s = scene(car(WHEEL, 10, false), 0);
+        s.ruleset.globals.quirks.drive_nearest_from_top_corner = on;
+        let w = s.build();
+        let at = |p: u8| {
+            let (u, v) = glasnost_sim::walk::standing_point(p);
+            // spec: S-0207 F8 (u = x mod 256, w = y mod 256: the cell does not matter)
+            glasnost_sim::drive::nearest_distance(&w, 256 * 41 + u, 256 * 37 + v)
+        };
+        let got = [
+            at(position::TOP),
+            at(position::CENTRE),
+            at(position::RIGHT),
+            at(position::LEFT),
+            at(position::BOTTOM),
+        ];
+        if on {
+            assert_eq!(got, [90, 181, 202, 202, 271]);
+        } else {
+            assert_eq!(got[1], 0, "the centre is nearest");
+            assert!(got[0] == got[2] && got[2] == got[3] && got[3] == got[4]);
+        }
+    }
+}
+
+/// The corridor with a crushing mover of house 0 at (0, 0) facing map east
+/// (1/4 turn away from X = (0, −1)), X holding `others` (house, type,
+/// standing position; position 0 places a vehicle at the centre). Orders
+/// the mover far up the corridor. Returns the world, the mover and the
+/// objects in X.
+fn nearest_scene(others: &[(u8, &str, i32)]) -> (World, ObjectId, Vec<ObjectId>) {
+    nearest_scene_q(others, true)
+}
+
+/// [`nearest_scene`] with `quirks.drive_nearest_from_top_corner` set to `top_corner`.
+fn nearest_scene_q(
+    others: &[(u8, &str, i32)],
+    top_corner: bool,
+) -> (World, ObjectId, Vec<ObjectId>) {
+    let mut s = corridor();
+    s.ruleset.globals.quirks.drive_nearest_from_top_corner = top_corner;
+    let mut crusher = car(WHEEL, 30, false);
+    crusher.crusher = Some(true);
+    s.vehicle("CRUSHER", crusher);
+    let mut grunt = unit_type(glasnost_rules::sim::LocomotionClass::Foot, 4, 8);
+    grunt.crushable = Some(true);
+    s.infantry("GRUNT", grunt);
+    s.place_unit(0, "CRUSHER", cell(0, 0), 64);
+    for &(h, ty, sub) in others {
+        if ty == "IDLER" {
+            s.place_unit(h, ty, cell(0, -1), 0);
+        } else {
+            s.place_infantry(h, ty, cell(0, -1), sub);
+        }
+    }
+    let mut w = s.build();
+    let m = object_in(&w, cell(0, 0)).expect("mover");
+    let inx = w
+        .cells
+        .list(cell(0, -1), glasnost_sim::world::Layer::Ground)
+        .to_vec();
+    open_orders(&mut w);
+    order_move(&mut w, m, cell(0, -10));
+    (w, m, inx)
+}
+
+/// Runs until the mover's request reaches X (an object there gets a
+/// destination); returns whether that happened no later than the
+/// tick on which the mover's turn in place towards X began, that is before
+/// its facing first changed.
+fn request_before_turning(w: &mut World, m: ObjectId, inx: &[ObjectId]) -> bool {
+    let mut turn_began = None;
+    for _ in 0..60 {
+        tick::step(w);
+        let t = w.tick - 1;
+        if turn_began.is_none() {
+            turn_began = w
+                .obj(m)
+                .and_then(|o| o.drive.as_ref())
+                .and_then(|d| d.turn)
+                .map(|x| x.0);
+        }
+        let sent = inx
+            .iter()
+            .any(|&x| w.obj(x).is_some_and(|o| o.dest.is_some()));
+        if sent {
+            return turn_began.is_none_or(|t0| t <= t0);
+        }
+    }
+    panic!("no request was sent");
+}
+
+// spec: S-0207 claim 15 (the look at a new path's first cell: the nearest object by F8 decides; an enemy at the top position is nearer than a friend at the centre, so nothing happens until the vehicle faces the cell)
+// spec: S-0207 F8 (top position 90 against the centre's 181; bottom 271)
+#[test]
+fn nearest_object_decides_the_look_at_the_first_cell() {
+    // Run 1: the enemy infantry at the top position is nearest: no request
+    // until the mover has turned to face X (then T4 sends it).
+    let (mut w, m, inx) = nearest_scene(&[(0, "IDLER", 0), (1, "GRUNT", 1)]);
+    assert!(
+        !request_before_turning(&mut w, m, &inx),
+        "the top position's enemy is the nearest object"
+    );
+    // Run 2: the enemy at the bottom position: the friend at the centre is
+    // nearest, and the look sends the request before the turn.
+    let (mut w, m, inx) = nearest_scene(&[(0, "IDLER", 0), (1, "GRUNT", 4)]);
+    assert!(request_before_turning(&mut w, m, &inx));
+    // spec: S-0207 Edge cases (`quirks.drive_nearest_from_top_corner` off: measured from the centre, the friend at the centre wins in run 1 too)
+    let (mut w, m, inx) = nearest_scene_q(&[(0, "IDLER", 0), (1, "GRUNT", 1)], false);
+    assert!(request_before_turning(&mut w, m, &inx));
+}
+
+// spec: S-0207 claim 15 (a tie of dₙ goes to the object listed first, S-0209 claim 13)
+#[test]
+fn nearest_object_tie_goes_to_the_first_listed() {
+    // A friend and an enemy at the right and left positions (202 each).
+    for first_friend in [true, false] {
+        // The one placed last is listed first.
+        let others: [(u8, &str, i32); 2] = if first_friend {
+            [(1, "GRUNT", 3), (0, "GRUNT", 2)]
+        } else {
+            [(0, "GRUNT", 2), (1, "GRUNT", 3)]
+        };
+        let (mut w, m, inx) = nearest_scene(&others);
+        let friendly = w.obj(inx[0]).and_then(|o| o.owner) == Some(HouseId(0));
+        assert_eq!(friendly, first_friend, "listing order as placed");
+        assert_eq!(
+            request_before_turning(&mut w, m, &inx),
+            first_friend,
+            "friend listed first: {first_friend}"
+        );
+    }
+}
+/// The corridor forked after X = (0, −1): (0, −2) is rock, and two branches
+/// leave X, through (−1, −2) to the north-west and through (1, −2) and
+/// (1, −3) to the north-east, back into the corridor at (0, −3) and
+/// (0, −4).
+fn fork() -> Scene {
+    let mut s = corridor();
+    // spec: S-0211 claim 5 (terrain code 15: rock)
+    s.set_cell(cell(0, -2), code_tile(15), 0);
+    for c in [cell(-1, -2), cell(1, -2), cell(1, -3)] {
+        s.set_cell(c, 0, 0);
+    }
+    s
+}
+
+// spec: S-0207 claim 15 table T5 (obstacle in a curve's second cell: the path is discarded; with the retry timer run out, the search on that tick, the look, and a step check of the same kind that begins only the straight or diagonal track)
+#[test]
+fn after_a_curve_s_obstacle_the_new_path_begins_straight() {
+    let mut s = fork();
+    // An armed mover (so the enemy gives an obstacle, not blocked) facing map east, so it turns before its first step check.
+    s.place_unit(0, "ARMED", cell(0, 0), 64);
+    s.place_unit(1, "IDLER", cell(-1, -2), 0);
+    let mut w = s.build();
+    let m = object_in(&w, cell(0, 0)).expect("m");
+    let e = object_in(&w, cell(-1, -2)).expect("e");
+    open_orders(&mut w);
+    order_move(&mut w, m, cell(0, -10));
+    tick::step(&mut w);
+    // While it turns, its stored path is made to curve into the enemy's
+    // cell: N into X, then NW (a 1/8 turn, a two-cell curve).
+    {
+        let o = w.obj_mut(m).expect("m");
+        assert!(o.drive.as_ref().is_some_and(|d| d.track.is_none()));
+        o.path.steps = vec![N, 7, 1, N, N, N, N, N, N, N];
+        o.path.retry_at = 0;
+    }
+    let mut began = None;
+    for _ in 0..40 {
+        tick::step(&mut w);
+        let o = w.obj(m).expect("m");
+        if let Some(t) = o.drive.as_ref().and_then(|d| d.track.as_ref()) {
+            began = Some((t.d, t.e, t.target_cell, o.path.steps.first().copied()));
+            break;
+        }
+    }
+    let (d, e_step, target, next) = began.expect("a track begins");
+    assert_eq!(d, N);
+    assert_eq!(
+        e_step, None,
+        "on the tick of the search the track is straight, not a curve"
+    );
+    assert_eq!(target, cell(0, -1));
+    assert_eq!(next, Some(1), "the new path takes the north-east branch");
+    assert_eq!(w.obj(e).expect("e").pos.cell(), cell(-1, -2));
+}
+
+// spec: S-0207 claim 15 (the override of an obstacle's repeated check gives no destination; reverted, the move destination is restored and the vehicle drives on)
+#[test]
+fn obstacle_override_puts_the_destination_aside() {
+    let mut s = corridor();
+    let (mut w, m, e) = blocked_scene(&mut s, "ARMED", "IDLER", 1, cell(0, -10));
+    until_blocked(&mut w, m, e);
+    let mo = w.obj(m).expect("m");
+    assert_eq!(mo.target, Some(glasnost_sim::world::Target::Object(e)));
+    assert_eq!(mo.dest, None, "the override gives no destination");
+    assert_eq!(
+        mo.beh.aside.map(|a| a.1),
+        Some(Some(glasnost_sim::world::Target::Cell(cell(0, -10)))),
+        "the move destination is put aside"
+    );
+    // While the override lasts, no destination and no second override.
+    let aside = mo.beh.aside;
+    for _ in 0..5 {
+        tick::step(&mut w);
+        let mo = w.obj(m).expect("m");
+        if mo.target.is_none() {
+            break;
+        }
+        assert_eq!(mo.dest, None);
+        assert_eq!(mo.beh.aside, aside);
+    }
+    // Reverted: the destination put aside is the vehicle's again.
+    let restored = w.obj_mut(m).expect("m").beh.revert();
+    let (t, d) = restored.expect("an override to revert");
+    let mo = w.obj_mut(m).expect("m");
+    mo.target = t;
+    mo.dest = d;
+    assert_eq!(
+        mo.dest,
+        Some(glasnost_sim::world::Target::Cell(cell(0, -10)))
+    );
+}
+
 // ---------------------------------------------------------------------------
 // Engine defaults of the speed-fraction fields
 
@@ -1287,12 +1517,14 @@ fn acceleration_defaults_are_doubles() {
 // Getting onto and off a bridge deck (claim 5)
 
 /// A high bridge along map north over ground at level 0: the vehicle's
-/// column x = 0 has land at level 4 at y = 0 and y = −5 and the four
-/// high-bridge cells y = −1 … −4 (an overlay of index 24 at y = −2, S-0211
-/// claim 15) at level 0 between them.
+/// column x = 0 has land at level 4 at y = 1, 0, −5 and −6 and the four
+/// high-bridge cells y = −1 … −4 at level 0 between them, laid by overlays
+/// of index 25 in each of those cells (S-0211 claim 15: each marks x − 2 …
+/// x + 1 of its row; S-0212 Terms: the bridge axis along cell y, the
+/// deck-entry mark on x − 1 … x + 1).
 fn bridge_scene() -> Scene {
     let mut s = Scene::new();
-    for i in 0..=24 {
+    for i in 0..=25 {
         let name = format!("OV{i}");
         s.register("overlays", &name);
         s.ruleset.sim.overlays.insert(
@@ -1306,33 +1538,23 @@ fn bridge_scene() -> Scene {
     for y in [0, 1, -5, -6] {
         s.set_cell(cell(0, y), 0, 4);
     }
-    s.cell_mut(cell(0, -2)).overlay = 24;
+    for y in -4..=-1 {
+        s.cell_mut(cell(0, y)).overlay = 25;
+    }
     s
 }
 
-// spec: S-0207 claim 5 (world height H + 416 on the deck, kept between high-bridge cells; off the deck into a cell that is not a high-bridge cell)
-// (Getting onto a deck from land 4 levels higher needs S-0212 claim 10's step between a deck and a
-// bridge end, which the pathfinder does not take yet.)
+// spec: S-0207 claim 5 (onto the deck from land 4 levels higher, world height H + 416 on the deck, kept between high-bridge cells; off the deck into a cell that is not a high-bridge cell)
+// spec: S-0212 claim 10 (steps of 4 levels onto a marked deck and off it; deck to deck along marked cells)
 #[test]
 fn driving_along_and_off_a_bridge_deck() {
     use glasnost_sim::world::Layer;
     let mut s = bridge_scene();
-    // The far end at the deck's ground level, so the vehicle can drive off.
-    for y in [-5, -6] {
-        s.set_cell(cell(0, y), 0, 0);
-    }
     s.vehicle("TESTCAR", car(WHEEL, 30, false));
-    s.place_unit(0, "TESTCAR", cell(0, -1), 0);
-    let (mut w, id) = start(&s, &[N; 4]);
-    // Put the vehicle on the deck, as a vehicle that has driven onto it.
-    let c0 = cell(0, -1);
-    w.cells.leave(c0, Layer::Ground, id);
-    w.cells.enter(c0, Layer::Deck, id, false);
-    let ob = w.obj_mut(id).expect("v");
-    ob.layer = Layer::Deck;
-    ob.pos.z = 416;
+    s.place_unit(0, "TESTCAR", cell(0, 0), 0);
+    let (mut w, id) = start(&s, &[N; 5]);
     let mut seen_deck = 0;
-    for _ in 0..200 {
+    for _ in 0..300 {
         tick::step(&mut w);
         let o = w.obj(id).expect("v");
         let y = o.pos.cell().y - 40;
@@ -1342,7 +1564,6 @@ fn driving_along_and_off_a_bridge_deck() {
             seen_deck += 1;
         } else {
             assert_eq!(o.layer, Layer::Ground, "off the deck at y = {y}");
-            assert_eq!(o.pos.z, 0);
         }
         if y == -5 && o.drive.as_ref().is_some_and(|d| d.track.is_none()) {
             break;

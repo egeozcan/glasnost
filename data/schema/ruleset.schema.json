@@ -5535,6 +5535,11 @@
           "type": "boolean",
           "default": true
         },
+        "deck_side_step_ground_level": {
+          "description": "A step from a bridge deck is judged by the ground level under the deck, so a side step of 1 level lands on ground 3 or 5 levels below; off: such a step onto a cell that is not a bridge cell is refused.",
+          "type": "boolean",
+          "default": true
+        },
         "defeat_during_end_delay": {
           "description": "A house defeated during the end delay loses (the person-played house's win turns into a loss and restarts the delay).",
           "type": "boolean",
@@ -5617,6 +5622,11 @@
         },
         "drive_giveup_ignores_contact": {
           "description": "A driving vehicle's give-up test at a step check ignores contact.",
+          "type": "boolean",
+          "default": true
+        },
+        "drive_nearest_from_top_corner": {
+          "description": "The nearest object of the look at a new path's first cell is measured from the cell's top corner; off: from its centre.",
           "type": "boolean",
           "default": true
         },

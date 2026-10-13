@@ -406,23 +406,8 @@ fn begin_track(w: &mut World, id: ObjectId, u: &UnitRules) -> bool {
         wait(w, id);
         return false;
     }
-    let want = facing_of(d);
-    if o.body.value(t) != want {
-        // A turn in place towards another facing (the path changed) is replaced.
-        if !o.drive.as_ref().is_some_and(|x| x.turning_in_place) || o.body.target != want {
-            let mut body = o.body;
-            body.turn_to(want, t, u.turn_rate);
-            let dur = body.duration;
-            if let Some(ob) = w.obj_mut(id) {
-                ob.body = body;
-                if let Some(dd) = ob.drive.as_mut() {
-                    dd.turning_in_place = true;
-                    dd.turn = Some((t, dur));
-                    // spec: S-0207 claim 3 (the budget is set to 0 in every tick of a turn in place)
-                    dd.budget = 0;
-                }
-            }
-        }
+    if o.body.value(t) != facing_of(d) {
+        turn_in_place(w, id, u, d);
         return false;
     }
     if let Some((t0, dur)) = o.drive.as_ref().and_then(|x| x.turn)
@@ -439,13 +424,38 @@ fn begin_track(w: &mut World, id: ObjectId, u: &UnitRules) -> bool {
             dd.turn = None;
         }
     }
-    step_check(w, id, u, false)
+    step_check(w, id, u, false, false)
+}
+
+/// A turn in place towards the facing of step `d` (S-0207 claim 6). A turn
+/// in place towards another facing (the path changed) is replaced.
+fn turn_in_place(w: &mut World, id: ObjectId, u: &UnitRules, d: u8) {
+    let t = w.tick;
+    let Some(o) = w.obj(id) else { return };
+    let want = facing_of(d);
+    if o.drive.as_ref().is_some_and(|x| x.turning_in_place) && o.body.target == want {
+        return;
+    }
+    let mut body = o.body;
+    body.turn_to(want, t, u.turn_rate);
+    let dur = body.duration;
+    if let Some(ob) = w.obj_mut(id) {
+        ob.body = body;
+        if let Some(dd) = ob.drive.as_mut() {
+            dd.turning_in_place = true;
+            dd.turn = Some((t, dur));
+            // spec: S-0207 claim 3 (the budget is set to 0 in every tick of a turn in place)
+            dd.budget = 0;
+        }
+    }
 }
 
 /// The step check (S-0207 claim 15, tables T4 and T5): a first check, or
 /// the repeated check that follows a search made at once. Begins the track
-/// when the check lets it; returns whether it did.
-fn step_check(w: &mut World, id: ObjectId, u: &UnitRules, repeated: bool) -> bool {
+/// when the check lets it; returns whether it did. With `no_curve` the
+/// check cannot begin a two-cell curve (the step check after the search of
+/// T5's obstacle row).
+fn step_check(w: &mut World, id: ObjectId, u: &UnitRules, repeated: bool, no_curve: bool) -> bool {
     let t = w.tick;
     let r = w.rules_arc();
     let Some(o) = w.obj(id).cloned() else {
@@ -524,7 +534,8 @@ fn step_check(w: &mut World, id: ObjectId, u: &UnitRules, repeated: bool) -> boo
     let e = o.path.steps.get(1).copied();
     let second = neighbour(first, e.unwrap_or(d));
     let crush = crush_mode(w, id, u, first, second);
-    let mut use_e = if crush { None } else { e };
+    // spec: S-0207 claim 15 (after the search of T5's obstacle row the step check cannot begin a two-cell curve)
+    let mut use_e = if crush || no_curve { None } else { e };
     let (_, two) = tracks::track(d, use_e);
     if two {
         // spec: S-0207 claim 15 table T5 (the second cell of a curve, checked after the first gave clear)
@@ -546,9 +557,19 @@ fn step_check(w: &mut World, id: ObjectId, u: &UnitRules, repeated: bool) -> boo
                 // spec: S-0207 table T5 (obstacle: discard the path; a fresh search once the retry timer has run out)
                 discard_path(w, id);
                 wait(w, id);
-                if t >= o.path.retry_at {
-                    // Q-0035: no step check follows this search on the same tick (interim).
-                    fresh_search(w, id, u);
+                if t >= o.path.retry_at && fresh_search(w, id, u) == Search::Found {
+                    // spec: S-0207 claim 15 (after T5's obstacle row: the look at the new first cell, then, facing the new first step, a step check of the same kind that begins only a straight or diagonal track; not facing it, it turns and makes no step check)
+                    let Some(nd) = w.obj(id).and_then(|x| x.path.steps.first().copied()) else {
+                        return false;
+                    };
+                    if w.obj(id).is_none_or(|x| x.dest.is_none()) {
+                        return false;
+                    }
+                    if w.obj(id).is_some_and(|x| x.body.value(t) != facing_of(nd)) {
+                        turn_in_place(w, id, u, nd);
+                        return false;
+                    }
+                    return step_check(w, id, u, repeated, true);
                 }
                 return false;
             }
@@ -691,7 +712,7 @@ fn search_and_recheck(w: &mut World, id: ObjectId, u: &UnitRules) -> bool {
     if o.body.value(t) != facing_of(d) || o.dest.is_none() {
         return false;
     }
-    step_check(w, id, u, true)
+    step_check(w, id, u, true, false)
 }
 
 /// A fresh search (S-0212 claim 20) and, when it finds a path, the look at
@@ -737,16 +758,15 @@ fn first_cell_look(w: &mut World, id: ObjectId, u: &UnitRules) {
     }
 }
 
-/// The object nearest the centre of `c`, looked for in the deck layer when
-/// the vehicle's world height is more than 208 leptons above the surface
-/// height at that centre, otherwise in the ground layer (S-0207 claim 15).
-/// Which objects take part, how the distance is measured and how ties are
-/// broken are not stated (request Q-0040). Interim: every listed object but
-/// the vehicle itself, by S-0204's distance from its position to the
-/// centre at the surface height, ties to the object listed first.
+/// The nearest object of the look at a new path's first cell `c` (S-0207
+/// claim 15, F8), looked for in the deck layer when the vehicle's world
+/// height is more than 208 leptons above the surface height at the cell's
+/// centre, otherwise in the ground layer. Only infantry units, vehicles,
+/// aircraft and buildings take part; each one's distance dₙ is measured
+/// along the map from the top corner of the cell holding its position;
+/// the smallest dₙ wins, ties to the object listed first.
 fn nearest_object(w: &World, id: ObjectId, c: CellXY) -> Option<ObjectId> {
     let o = w.obj(id)?;
-    let r = w.rules();
     let cx = 256 * c.x + 128; // spec: S-0204 claim 3 (a cell centre: (256x + 128, 256y + 128))
     let cy = 256 * c.y + 128; // spec: S-0204 claim 3 (a cell centre)
     let h = w.surface_at(cx, cy);
@@ -758,24 +778,38 @@ fn nearest_object(w: &World, id: ObjectId, c: CellXY) -> Option<ObjectId> {
     };
     let mut best: Option<(u64, ObjectId)> = None;
     for &x in w.cells.list(c, layer) {
-        if x == id {
+        let Some(ob) = w.obj(x) else { continue };
+        // spec: S-0207 claim 15 (only infantry units, vehicles, aircraft and buildings take part; the vehicle itself is not left out)
+        if !matches!(
+            ob.kind,
+            Kind::Infantry | Kind::Vehicle | Kind::Aircraft | Kind::Building
+        ) {
             continue;
         }
-        let Some(ob) = w.obj(x) else { continue };
-        let dx = i64::from(ob.pos.x - cx);
-        let dy = i64::from(ob.pos.y - cy);
-        let dz = i64::from(ob.pos.z - h);
-        // spec: S-0204 claim 5 (the distance with the table square root; measure and ties: Q-0040)
-        let dist = root_floor(
-            (dx * dx + dy * dy + dz * dz) as u64,
-            r.quirks.table_root_distance,
-            r.mode,
-        );
+        let dist = nearest_distance(w, ob.pos.x, ob.pos.y);
+        // spec: S-0207 claim 15 and F8 (the smallest dₙ, compared as integers; ties to the one listed first)
         if best.is_none_or(|(b, _)| dist < b) {
             best = Some((dist, x));
         }
     }
     best.map(|b| b.1)
+}
+
+/// The distance dₙ of S-0207 F8 for an object at (`x`, `y`) in leptons:
+/// ⌊r(u² + w²)⌋ with u = x mod 256 and w = y mod 256 (from 0 to 255), the
+/// position within the cell holding it measured from that cell's top
+/// corner; heights play no part.
+pub fn nearest_distance(w: &World, x: i32, y: i32) -> u64 {
+    let r = w.rules();
+    // spec: S-0207 F8 (u = x mod 256, w = y mod 256, each the residue from 0 to 255)
+    let (mut u, mut v) = (i64::from(x.rem_euclid(256)), i64::from(y.rem_euclid(256)));
+    if !r.quirks.drive_nearest_from_top_corner {
+        // spec: S-0207 F8 (`quirks.drive_nearest_from_top_corner` off: (x mod 256) − 128 and (y mod 256) − 128, from the centre)
+        u -= 128; // spec: S-0207 F8 (switch off: (x mod 256) − 128)
+        v -= 128; // spec: S-0207 F8 (switch off: (y mod 256) − 128)
+    }
+    // spec: S-0207 F8 (dₙ = ⌊r(n)⌋ with S-0204's table square root; `quirks.table_root_distance` off: ⌊√n⌋)
+    root_floor((u * u + v * v) as u64, r.quirks.table_root_distance, r.mode)
 }
 
 /// The give-up test of S-0207 F7; `contact` adds the condition that the
@@ -892,7 +926,7 @@ fn attack_obstacle(w: &mut World, id: ObjectId, c: CellXY) {
         ) {
             ob.beh.aside = Some((ob.target, ob.dest));
             ob.target = Some(target);
-            // Q-0035: the override's destination is not stated; interim none.
+            // spec: S-0207 claim 15 (the override gives no destination: the move destination is put aside until the override is reverted)
             ob.dest = None;
             ob.path.steps.clear();
         }

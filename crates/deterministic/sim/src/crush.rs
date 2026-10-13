@@ -250,7 +250,7 @@ pub fn assign_wall_owners(w: &mut World) {
         // spec: S-0210 claim 14 (a) (the wall cell's centre at the terrain surface height there, S-0106)
         let cz = w.surface_at(cx, cy);
         let mut best: Option<(u64, ObjectId, crate::world::HouseId)> = None;
-        // Q-0036: claim 14 states no distance limit, scenario K12 implies one; none here.
+        // spec: S-0210 claim 14 (a) (no distance limit: every qualifying building on the map takes part)
         for &(id, h, p) in &buildings {
             let dx = i64::from(p.x - cx);
             let dy = i64::from(p.y - cy);
