@@ -2,11 +2,11 @@
 id: S-0307
 title: Weapon range test
 topic: combat
-revision: 3
+revision: 4
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-13
+approved-on: 2026-10-14
 measurements: []
 requests: []
 supersedes: []
@@ -24,8 +24,10 @@ rules read and which differs from the range test's own range for open-topped tra
 projectiles fly once fired is S-0306. Claim 15 adds the verified open-ground part of choosing an
 approach destination for an attacking infantry unit or vehicle. This is not yet a complete answer
 to Q-0072: claims 16 to 18 add obstructed level-ground searches, failure outcomes and a special
-object destination. S-0215 claim 37 owns the trigger, gating and destination renewal. Stopping and
-some exceptional searches remain open below.
+object destination. S-0215 claim 37 owns the trigger, gating and destination renewal.
+S-0207 claim 19 owns the resolved vehicle movement outcomes; S-0208 claims 16 and 17 own ordinary
+walking infantry's stopping and destination outcomes. Exceptional searches and jumpjet stopping
+remain open below.
 Skirmish is covered; campaigns and network games are out of scope.
 
 ## Terms
@@ -215,8 +217,13 @@ and *subject to walls*. In addition:
     candidate position as source point, without the substitutions of claim 8.
     Claims 15 and 16 specify covered cases of choosing such a candidate. S-0215 claim 37 uses
     the firing-check source point for the decision whether to search at all, not these candidate
-    source points. The target-scan and
-    order rules that measure distance in other ways are owned by their specs (S-0309, S-0214).
+    source points. S-0208 claim 17's ordinary walker stop instead uses claim 8's source point and
+    the weapon chosen against the target by S-0308, but tests the target's cell as the measured
+    target, not the target object. For an open-topped type that stop uses the separate strict
+    three-dimensional distance comparison against claim 13's ρ, as specified there.
+    The movement outcomes are S-0208 claims 16 and 17 and S-0207 claim 19, not this inventory.
+    The target-scan and order rules that measure distance in other ways are owned by their specs
+    (S-0309, S-0214).
     - Backing: `unmeasured` (an inventory of rules; each user measures its own rule)
     - Confidence: medium
 
@@ -279,7 +286,8 @@ and *subject to walls*. In addition:
     gating, destination retention and renewal, and the building, deployed-infantry and zero-speed
     actor qualifications (part g).
     In particular, a held destination is not cleared by that step just because the target comes
-    in range; the stopping transition belongs to S-0207 and S-0208.
+    in range; the movement outcomes belong to S-0207 claim 19 for driving, sailing and hovering
+    vehicles, and to S-0208 claims 16 and 17 for ordinary walking infantry.
     - Backing: `measurable` (RG10)
     - Confidence: high for radius, angular order and the separation of the two range tests,
       medium for the covered-case qualification as a whole
@@ -806,10 +814,11 @@ vehicle ten cells away. The observed area contains the pair and all possible app
   Alternative cells outside the usable area are also not covered. These paths need further
   verification, so Q-0072 is not yet in this spec's requests list. Crushing destinations are
   owned by S-0210 claim 11 and S-0215 claim 37 h, not by this search.
-- **Q-0072 question 3, infantry stopping.** S-0215 claim 37 e keeps a held destination when the
-  target comes in range. S-0207 claim 19 owns the movement-side outcomes for driving, sailing
-  and hovering vehicles. Infantry's stopping event and destination outcome remain for S-0208.
-  No arrival-before-firing rule is implied here.
+- **Q-0072 question 3, remaining stopping coverage.** S-0215 claim 37 e's approach-step retention
+  does not itself decide when movement ends. S-0207 claim 19 resolves driving, sailing and
+  hovering vehicle outcomes; S-0208 claims 16 and 17 resolve ordinary walking infantry's stop
+  and destination outcome (scenario W10 there). The arrival and stop rules for jumpjet infantry remain
+  open in S-0208. No general arrival-before-firing rule is implied here.
 - **Q-0072 questions 1, 4 and 5.** S-0215 claim 37 owns the trigger, gating, renewal cadence,
   buildings, deployed-infantry exceptions and zero-speed actor qualifications (part g).
   Zero type speed alone does not exclude an actor from the approach step or prevent it receiving
@@ -822,7 +831,7 @@ vehicle ten cells away. The observed area contains the pair and all possible app
   mark as the "carries a high bridge" test of claims 7 and 10. Which cells of a bridge carry it
   (every deck cell, or only some, such as the cells that also lift the deck in drawing) is not
   known; RG3 run d with the attacker on different cells along the bridge would show it.
-- Whether any rule besides the flak scatter, scan and guard reach and the approach step reads the
-  firer's weapon range of claim 13.
-- Whether any rule besides the firing check and the approach-position search calls the range test
-  (claim 12).
+- Whether any rule besides the flak scatter, scan and guard reach, the approach step and the
+  open-topped infantry stop of S-0208 claim 17 reads the firer's weapon range of claim 13.
+- Whether any rule besides the firing check, the approach-position search and the movement
+  users named in claim 12 calls the range test.
