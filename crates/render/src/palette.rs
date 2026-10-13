@@ -194,7 +194,8 @@ impl PaletteState {
     /// Reads the start-up resource table's palette, the temperate theater
     /// palette file × 4, once at program start (S-0112 Terms, claim 2).
     pub fn set_startup_resource(&mut self, temperate: Option<&Palette6>) {
-        // spec: S-0112 Terms (start-up resource table: TEMPERAT.PAL × 4 by S-0103 claim 1)
+        // spec: S-0112 Terms (start-up resource table: the temperate theater palette × 4 by
+        // S-0103 claim 1)
         self.resource = temperate
             .map(|f| palette_from_file(f, &self.quirks))
             .unwrap_or_default();
