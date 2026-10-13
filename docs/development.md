@@ -283,7 +283,7 @@ Provisional rules of combat, each tied to a request:
 
 | Where | Interim rule | Request |
 |---|---|---|
-| `combat::fire::initial_ammo`, `combat::data` | a new object's ammunition is its type's initial-ammunition field as it stands (absent: unlimited; S-0301 claim 10 leaves how it is set to the production specs); crew escape, sinking weight, bridge strength and ammunition-crate damage absent from every layer are "not given", and the rules that need them do not take effect | Q-0060 |
+| `combat::data` | crew escape, sinking weight, bridge strength and ammunition-crate damage absent from every layer are "not given", and the rules that need them do not take effect | Q-0060 |
 | `convert::sim` | a type's threat coefficient, the defence category word and the `none` items of name lists are imported as the request's workaround says | Q-0061 |
 | `combat::death::building_death` | the smudge choice of a destroyed building takes no draw and places no smudge | Q-0070 |
 | `combat::projectile::lead` | a moving vehicle's speed *u* is 0, so no shot is led | Q-0071 |
