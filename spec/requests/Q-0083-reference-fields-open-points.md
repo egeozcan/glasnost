@@ -3,7 +3,7 @@ id: Q-0083
 title: Open points of the reference fields that create types (art-file fields, endless creation, numbered weapons above 18)
 status: answered
 related: [S-0004, S-0306, S-0007, S-0308]
-answered-by: [S-0306]
+answered-by: [S-0306, S-0004, S-0007, S-0308]
 ---
 
 ## Need

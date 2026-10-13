@@ -3,7 +3,7 @@ id: Q-0087
 title: Which orders count as a movement order for a prone unit's get-up
 status: answered
 related: [S-0107, S-0213, S-0315]
-answered-by: [S-0213]
+answered-by: [S-0213, S-0107, S-0315]
 ---
 
 ## Need
