@@ -412,6 +412,18 @@ fn warhead_fields_and_warnings() {
     assert_eq!(texts(&h.debris_types), ["Bit", "Bob"]);
     assert_eq!(h.debris_maximums, Some(vec![0, 0]));
     assert_eq!((h.airstrike, h.is_locomotor), (Some(false), Some(true)));
+    // spec: S-0003 claims 19 and 20 (scenarios V14 and V15)
+    let lists = "[Warheads]\n1=Pow\n[Pow]\nAnimList=none,Pop,<NONE>,,Bang,Pop\nDebrisTypes=Bit\nDebrisMaximums=2,,abc,$10,10h\n";
+    let (s, _) = direct(&[lists], "", &[], &[], IniQuirks::default());
+    let h = &s.warheads["Pow"];
+    assert_eq!(texts(&h.anim_list), ["Pop", "Bang", "Pop"]);
+    assert_eq!(h.debris_maximums, Some(vec![2, 0, 0, 10]));
+    // A list of no-type items alone replaces the held list with an empty one; an empty value keeps it.
+    let over = "[Pow]\nAnimList=none,<none>\nDebrisTypes=\n";
+    let (s, _) = direct(&[lists, over], "", &[], &[], IniQuirks::default());
+    let h = &s.warheads["Pow"];
+    assert!(texts(&h.anim_list).is_empty());
+    assert_eq!(texts(&h.debris_types), ["Bit"]);
     for text in [
         "Fizz CellSpread 12 is outside 0 to 11",
         "Hush causes delayed kills with a spread below one cell",
@@ -607,7 +619,7 @@ fn every_combat_key_resolves() {
                 Form::Dec => format!("{k}={dec}\n"),
                 Form::Text | Form::Ref(_) => format!("{k}=N{k}\n"),
                 Form::Refs(_) | Form::Texts => format!("{k}=A{k},B{k}\n"),
-                Form::Ints => format!("{k}=1,2\n"),
+                Form::Ints | Form::Maxima => format!("{k}=1,2\n"),
             })
             .collect()
     }
