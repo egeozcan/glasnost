@@ -2,13 +2,13 @@
 id: S-0207
 title: Ground vehicle movement (drive locomotor)
 topic: movement
-revision: 7
+revision: 8
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-13
 measurements: []
-requests: [Q-0019, Q-0020, Q-0035, Q-0040, Q-0071]
+requests: [Q-0019, Q-0020, Q-0035, Q-0040, Q-0071, Q-0072]
 supersedes: []
 ---
 
@@ -21,8 +21,10 @@ progress along fixed cell-to-cell tracks (straight, diagonal and two-cell curves
 between track points, and what it does when the cell of its next step may not be entered. It also
 states which locomotor a mobile type has (claim 14) and how every vehicle, whatever its locomotor,
 answers a scatter request (claim 16), while where a vehicle may go (S-0211), which steps it takes
-(S-0212), how fast it turns (S-0206) and every other locomotor are left to other specs. Claim 18 also defines the speed estimate supplied by a driving target for a shot's lead, including
-turning and waiting. This spec covers skirmish. Network games and campaigns are out of scope.
+(S-0212), how fast it turns (S-0206) and every other locomotor (apart from claims 16 and 19) are
+left to other specs. Claim 18 also defines the speed estimate supplied by a driving target for a shot's lead, including
+turning and waiting. Claim 19 states when a vehicle with the driving, ship or hovering locomotor
+that approaches a target stops once the target is in range, and what happens to its destination. This spec covers skirmish. Network games and campaigns are out of scope.
 
 ## Terms
 
@@ -837,6 +839,79 @@ is *on a bridge deck* (glossary *bridge deck*) is set by claim 5 here.
       carry a flag (D15's precondition remains open).
     - Confidence: high for the estimate and rounding; medium for its use during a wait
 
+### Approaching a target (driving, ship and hovering locomotors)
+
+19. **What an approaching vehicle does once its target is in range (Q-0072, question 3).** This
+    claim holds for a vehicle whose locomotor (claim 14) is the driving, the ship or the hovering
+    locomotor and that has both a target and a destination, for example the destination given by
+    the approach step of S-0215 claim 37 or by S-0307's search for an approach position. "In range"
+    is the range test of S-0215 claim 37 b, from the vehicle's current position, with the weapon
+    chosen for the target. The *stored path* and its *steps* are S-0212's (claim 20), and the
+    *retry delay* *R* is S-0212's (claim 21 and F3).
+    - (a) **No stopping event for the driving and ship locomotors.** A driving or sailing vehicle
+      never stops, and never loses its destination or any stored step, because its target has come
+      in range. It goes on along its path to its destination and stops there under the ordinary
+      arrival rules, as on any move. Its destination is removed only by those rules or by another
+      rule that removes a destination (for example a new order, or the renewal of S-0215 claim
+      37 e, which applies only while the target is out of range). No answer of the firing check
+      stops it either, with one exception: a vehicle whose type has the deploy-to-fire flag
+      deploys, instead of firing, once the firing check answers *can fire* or *not facing*, and
+      gets *must deploy* where its cell does not allow it (S-0310 claim 9 and its table of
+      replies); deploying ends its move as the deploy specs say. Whether and when any other
+      vehicle fires on the way belongs to the combat specs (S-0301, S-0310). **Original only:** a
+      vehicle of a computer-controlled owner whose type deploys into a building with the
+      tick-tank property also deploys on those answers when its target is a vehicle and its cell
+      allows it; in our engine no player house is computer-controlled (S-0215 Terms). Because the approach position of S-0307 is a cell from which the range test passes,
+      an approach towards a target that stands still normally ends with the target in range; a
+      target that comes in range earlier (for example by moving towards the vehicle) does not
+      shorten the move.
+    - (b) **No drop of the target at the end of a move.** A vehicle of this claim whose move ends
+      with its target out of range keeps its target (no rule of the movement side drops it). What it does next is its behaviour's (S-0215
+      claim 37: the approach step at the next processing, or the per-tick rule of part a there
+      for a vehicle without a destination). The original also contains a rule that drops the target
+      of such a vehicle, but only for a vehicle that stands still while keeping a destination right
+      after a failed search for a path. That state does not arise for these locomotors: a failed
+      search for a path removes the destination of a vehicle with the driving, ship or hovering
+      locomotor, also within 1 cell of the destination (in the original, the give-up rule for
+      computer-controlled owners gives a new destination instead, which sets the vehicle moving
+      again). For the driving locomotor this is S-0212 claim 23; for the ship and hovering
+      locomotors it is this claim's own reading, because the third row of S-0212 claim 23
+      currently says that locomotors other than the driving one keep the destination (Open
+      questions). No rule is specified for the drop.
+    - (c) **Hovering locomotor: the stored path is discarded at each step point while in range.**
+      Whenever a hovering vehicle that is moving and has at least one stored step chooses its next
+      step (when it starts a move, and each time it reaches the point it was heading for, the
+      centre of its next cell), and its target is in range, all its stored steps are discarded.
+      Its destination is kept. Exception: when its destination is a vehicle or an infantry unit,
+      the hovering locomotor first makes the same chase cut as the driving locomotor (S-0212
+      claim 20: the stored path is cut to its first ⌊*D* / 256⌋ steps, with *D* as there); when
+      that cut is made (⌊*D* / 256⌋ < 24), the range is not tested at that step.
+    - (d) **Hovering locomotor: what follows the discarded path.** With no stored steps left and
+      not yet arrived, the vehicle makes a fresh search for a path to the same destination
+      (S-0212 claim 20), but only once the retry delay *R*, counted from the last search the vehicle
+      made, has run out. For the hovering locomotor every such fresh search starts *R*, whether it
+      found a path or not.
+      - If *R* has already run out, the search is made in the same tick and a found path lets the
+        vehicle take its next step at once: the discarded path has no visible effect.
+      - If *R* is still running, the vehicle stays at the point it has reached, and makes the
+        search on the first tick on which *R* has run out; then it takes its next step.
+      - At the next point the same happens again while the target stays in range.
+
+      So a hovering vehicle never stops for good because its target is in range: it reaches its
+      destination, waiting at each point for what is left of *R* counted from its previous search.
+      When crossing one step takes at least *R* ticks, there is no visible wait. A search that
+      fails has the outcomes of S-0212 claim 23.
+    - (e) **The destination.** In no case of this claim is a destination removed because the
+      target is in range. This agrees with S-0215 claim 37 e, which keeps a held destination at
+      every processing while the target is in range.
+    - Backing: `measurable` (scenario D21: runs 1 and 2 for part a, runs 3 and 3c for parts c and
+      d, and every run for part e). Part b is `unmeasured`: under our rules the state in which the
+      original's drop would act does not arise, so there is nothing to observe. Part c's chase
+      exception is `unmeasured` (D21 says why).
+    - Confidence: medium (parts a, b and e: every rule that reads the range test was examined, and
+      none of them stops a driving or sailing vehicle or removes its destination; parts c and d:
+      read, not observed); low for the exact tick of the search after a wait in part d
+
 ## Formulas
 
 Every floating-point operation in this spec, in the claims (the speed-fraction updates of claim 10
@@ -1202,6 +1277,9 @@ imported lead fields. No key supplies a progress-to-lepton conversion or a waiti
 
 No other speed field of a country or of a difficulty level enters the formulas of this spec
 (Open questions).
+
+Claim 19 has no key of its own: the range test's fields are S-0307's, and the path-retry delay
+field (`[AI]`, key `PathDelay`) that sets *R* is imported as S-0212 says.
 
 No key feeds the destination of the override of claim 15 or the choice of the nearest object in
 the look at the first cell of a new path (F8): both are engine rules. The close-enough distance
@@ -1829,6 +1907,45 @@ cell before *X*.
   because the target is turning or waiting despite a nonzero held fraction.
 - The scenario records launches and fractions without changing the oracle.
 
+**D21: an approaching vehicle once its target is in range (claim 19; Q-0072).**
+- *Setup:* a tiny flat skirmish map, stock rules, director off and mods off, any game speed. Two
+  straight lanes of clear ground 25 cells long and 2 cells apart (for run 2, two lanes of open
+  water). A named test file, removed after the run, gives the attacker's type a weapon with an
+  invented range field of 5 cells and damage 1, a turret, and gives the target's type an invented
+  strength large enough to survive the run. All units belong to the human player, so scripted
+  input controls every one. The attacker *A* stands at one end of the first lane; the target *U*,
+  of an unarmed stock type with the same locomotor, at the far end of the second lane. A
+  read-only recorder logs each tick *A*'s position, destination, number of stored steps and
+  target, the tick of each path search *A* makes, and *U*'s position. Whether the range test
+  passes is computed afterwards from the recorded positions by S-0307.
+- *Procedure:* scripted input orders *A* to attack *U* (forced attack on an own unit). Once *A*
+  has a destination, scripted input orders *U* to the cell of the second lane next to *A*'s
+  starting cell, so that *U* comes in range while *A* still has several cells to go.
+  - Run 1: *A* and *U* of stock types with the driving locomotor, *A*'s type without the
+    deploy-to-fire flag.
+  - Run 2: *A* and *U* of stock types with the ship locomotor.
+  - Run 3: *A* and *U* of stock types with the hovering locomotor, with the test file also
+    setting the path-retry delay field to 0.1 game minutes (invented), so that *R* = 90 ticks.
+  - Run 3c (control): as run 3, with *U* never ordered to move and placed so that it is out of
+    range until *A* reaches its destination.
+- *Expected:*
+  - Runs 1 and 2: from the first tick on which the range test passes until *A* arrives at its
+    destination, *A* keeps its destination and target, its stored steps are not emptied, and its
+    position keeps changing; it stops only at its destination (claim 19 a and e).
+  - Run 3: at the first point *A* reaches after the range test passes, its stored steps drop to
+    0 while its destination stays. *A* then stands at that point until 90 ticks after its
+    previous search, searches, and takes the next step; this repeats at each point while *U* is
+    in range, until *A* arrives at its destination (claim 19 c, d and e). Run 3c shows no such
+    waits.
+- *Falsified if:* in run 1 or 2, *A*'s destination is removed or *A* stops for 10 ticks or more
+  before its destination while *U* is in range; in run 3, *A* keeps stored steps after reaching a
+  point with *U* in range, stops for good before its destination, searches before *R* has run
+  out, or shows no wait although crossing a step takes it fewer than 90 ticks.
+- *Runs:* 3 each. The chase exception of claim 19 c is `unmeasured`: in our rules no order gives
+  a hovering vehicle a vehicle or infantry unit as destination together with a target in range
+  except the target-object destinations of S-0215 claim 37 h and S-0307, whose setups are those
+  specs'.
+
 ## Open questions
 
 - Whether any speed field of a country or of a difficulty level other than the country's vehicle
@@ -1887,6 +2004,12 @@ cell before *X*.
 - How a vehicle that the map places on a high-bridge cell, or that leaves a building onto one,
   starts on or off the bridge deck (claim 5 covers only the changes made while it drives). The
   specs of map placement (S-0009) and of the structures own this.
+- S-0212 claim 23, third row, says that when a search fails within 1 cell of the destination,
+  locomotors other than the driving one keep the destination. Claim 19 b reads that the ship and
+  hovering locomotors lose it too, as the driving one does; the two specs must agree, and the
+  change is reported for S-0212.
+- The hovering locomotor's fresh search after a wait (claim 19 d) is read as being retried on every
+  tick until *R* has run out; scenario D21 run 3 records the search ticks.
 - Whether a vehicle at rest keeps its leftover budget on every way of arriving (claim 3). Scenario
   D8 part b tests the end of an ordinary move only.
 - Whether interpolation (claim 4) can move a vehicle into a cell that it has not yet claimed under
