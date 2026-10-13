@@ -2,11 +2,11 @@
 id: S-0401
 title: Ore and gems (resource cells, bales and value, growth, spread, ore mines)
 topic: economy
-revision: 4
+revision: 5
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-13
+approved-on: 2026-10-14
 measurements: []
 requests: [Q-0046]
 supersedes: []
@@ -519,7 +519,20 @@ claim 4), which can take more than one raw draw. In addition:
     scanned-cell resource removal of S-0303 claim 17, so it makes no neighbour spread-offer
     draws through that rule. S-0303 owns its other effects and conditional draws. There is
     no separate chance draw for that detonation and no projectile explosion-animation selection
-    (S-0303 claim 21 belongs to projectiles). In observable scenario-stream order, any draws for eligible neighbour offers precede the optional debris trial; a passing trial is followed by a selection draw only when the debris list has more than one entry, then by any draws caused by creating and starting the selected debris animation; applicable detonation draws follow. This is not a fixed raw-draw count: ranged rejection and downstream effects can add draws. A failed debris trial skips selection and debris-animation creation, not the later detonation. Suppression for a trigger-played animation skips the whole chain reaction, including its emptying, neighbour offers, debris trial and detonation, with zero draws from the reaction itself. This specifies observable stream order, not an internal call structure.
+    (S-0303 claim 21 belongs to projectiles).
+
+    After the detonation's effects, the cell containing the source animation's position
+    undergoes a terrain recalculation (S-0010 claims 8 and 19; S-0211 claim 5), even when
+    the detonation changes no terrain. Its land type and slope reflect the contents then
+    present. Any tile animation newly started by this recalculation takes its creation and
+    immediate start-event draws after the detonation's applicable draws. A cell that has
+    already started a tile animation since the second load pass starts no second one under
+    S-0010 claim 19's once-only rule, so this recalculation adds no animation-creation draws
+    there. This post-detonation recalculation is absent when the reaction is suppressed or
+    finds no resource. It is separate from the recalculation caused by emptying the cell
+    before the debris trial (claim 5).
+
+    In observable scenario-stream order, any draws for eligible neighbour offers precede the optional debris trial; a passing trial is followed by a selection draw only when the debris list has more than one entry, then by any draws caused by creating and starting the selected debris animation; applicable detonation draws follow, then any tile-animation draws from the post-detonation recalculation. This is not a fixed raw-draw count: ranged rejection and downstream effects can add draws. A failed debris trial skips selection and debris-animation creation, not the later detonation. Suppression for a trigger-played animation skips the whole chain reaction, including its emptying, neighbour offers, debris trial, detonation and post-detonation recalculation, with zero draws from the reaction itself. This specifies observable stream order, not an internal call structure.
     - Backing: `measurable` (scenario E17)
     - Confidence: high for the no-resource gate and direct draw conditions; medium for the
       complete composed sequence during map loading until E17 is run
@@ -896,7 +909,9 @@ random-state recorder during map loading and a cell-content recorder at the firs
 *Procedure:* create that tile animation over (A) an empty cell, (B) a resource cell whose
 resource-debris list is empty, (C) the same resource cell with a singleton debris list, and
 (D) a two-entry list. Debris types have μ > 0 and no immediate effects. Account separately for
-each animation's stage-delay draw (S-0202). Repeat C and D until both passing and failing trials
+each animation's stage-delay draw (S-0202). The base cases use target tiles that
+name no animation, so neither the emptying nor the post-detonation recalculation adds
+tile-animation draws. Repeat C and D until both passing and failing trials
 occur, at least 10 of each. *Expected:* A takes no chain-reaction draws or detonation and leaves
 the cell empty; B empties its cell and takes no direct chain-reaction draw; C and D empty the
 cell and take exactly one raw debris trial. A trial with |*r*| mod 3 ≠ 0 creates nothing. A
@@ -919,6 +934,23 @@ resource cell: the middle event empties the cell and the later chain reaction ha
 or detonation. Repeat the load cases with an overlay cell animation whose position, rather than
 its overlay cell, is over the test resource (S-0009 M6e). Any differing gate or draw order
 falsifies claim 20; unrelated middle-event draws are accounted for by their owning specs.
+
+*Post-detonation terrain variant:* use named theater test data and a resource overlay whose
+land type makes its cell the overlay case of S-0010 claim 8. Before removal its tile A names
+no animation and remains unsmoothed. Choose the transition settings and neighbours so that
+emptying recalculates the cell from tile A to tile B under S-0010 claim 10. Tile B names a
+non-bouncing animation with μ > 0, a non-singleton random-rate range and no immediate effects.
+Its attaches-to value matches the target's sub-tile. Use a displaced source animation in a
+separate cell so that creating it does not recalculate the target first. Keep the target
+clear of grounded objects and use a detonation that changes no tile. Record tile, land type,
+animation starts and stream state through the reaction during loading. Expected: emptying
+leaves tile B but no tile animation (that recalculation began with A); after the detonation,
+B's animation starts and takes its stage-delay draw after all applicable detonation draws.
+The land type then reflects B rather than A. Repeat with a tile animation already started
+on the target since the second load pass: the post-detonation recalculation takes no further
+animation-creation draw. Include empty-debris and failed-trial cases, which still recalculate,
+and the no-resource and trigger-played controls, which do not. A missing or premature start,
+a duplicate start despite the once-only rule, or a different stream order falsifies the claim.
 
 ## Open questions
 
