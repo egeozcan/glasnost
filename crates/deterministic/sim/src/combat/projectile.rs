@@ -1481,6 +1481,12 @@ pub fn projectile_detonation(
 ) -> DetonationResult {
     let rules = w.rules_arc();
     let half = rules.quirks.ranged_draw_half_span;
+    // spec: S-0303 claim 14 and S-0302 claim 1 (a firer removed from the game by any means since the shot: neither attacker nor attacking house is carried; a loaded firer, which stays carried, is a seam: transports)
+    let (attacker, house) = if attacker.is_some_and(|a| w.obj(a).is_none()) {
+        (None, None)
+    } else {
+        (attacker, house)
+    };
     let warhead = rules.combat.weapon(weapon).warhead;
     let Some(h) = warhead else {
         // spec: S-0303 Edge cases (a projectile without a warhead does nothing, a departure)
