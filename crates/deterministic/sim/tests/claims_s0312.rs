@@ -1395,3 +1395,98 @@ fn claim_8_infantry_debris_then_sequence() {
     assert_eq!(anims(&w).len(), 2);
     assert_eq!(seq_of(&w, id), Some(Seq::Die1));
 }
+
+// ---------------------------------------------------------------- claim 21 (revision 4)
+
+/// HUT with the explodes flag as given, destroyed by a lethal hit; returns
+/// the world and the building.
+fn awaiting(explodes: bool, second_round: bool) -> (World, ObjectId) {
+    let mut r = rules();
+    r.globals.quirks.building_removal_second_round = second_round;
+    r.sim.buildings.get_mut("HUT").unwrap().combat.explodes = Some(explodes);
+    let mut w = game(&r);
+    let id = spawn(&mut w, Kind::Building, "HUT", 0, 0, 0);
+    assert_eq!(kill(&mut w, id), HitResult::NowDead);
+    (w, id)
+}
+
+// spec: S-0312 claim 21 (a building whose type has the explodes flag awaits removal after its death effects: in play with 0 health, still in its cells, and cannot be hit; in its own next turn it is removed)
+#[test]
+fn claim_21_exploding_building_awaits_removal() {
+    let (mut w, id) = awaiting(true, true);
+    let o = w.obj(id).expect("still in play");
+    assert_eq!(o.health, 0);
+    assert!(o.combat.killed);
+    let cell = o.pos.cell();
+    assert!(
+        w.cells
+            .occ(cell, glasnost_sim::world::Layer::Ground)
+            .is_some_and(|c| c.buildings > 0)
+    );
+    assert_eq!(kill(&mut w, id), HitResult::Unaffected);
+    glasnost_sim::tick::step(&mut w);
+    assert!(w.obj(id).is_none());
+    assert!(
+        w.cells
+            .occ(cell, glasnost_sim::world::Layer::Ground)
+            .is_some_and(|c| c.buildings == 0)
+    );
+}
+
+// spec: S-0312 claim 21 (only the type's explodes flag counts: a building without it, not being sold, leaves play at once)
+#[test]
+fn claim_21_other_buildings_leave_at_once() {
+    let (w, id) = awaiting(false, true);
+    assert!(w.obj(id).is_none());
+}
+
+// spec: S-0312 claim 21 (a building whose behaviour is the sale's at its destruction awaits removal too)
+#[test]
+fn claim_21_selling_building_awaits_removal() {
+    let r = rules();
+    let mut w = game(&r);
+    let id = spawn(&mut w, Kind::Building, "HUT", 0, 0, 0);
+    w.obj_mut(id).unwrap().beh.current = Some(Behaviour::Selling);
+    assert_eq!(kill(&mut w, id), HitResult::NowDead);
+    assert_eq!(w.obj(id).map(|o| o.health), Some(0));
+}
+
+/// The random stream and the building after the removal turn.
+fn removal_round(second_round: bool) -> (Rng, bool) {
+    let (mut w, id) = awaiting(true, second_round);
+    glasnost_sim::tick::step(&mut w);
+    (w.rng.clone(), w.obj(id).is_some())
+}
+
+// spec: S-0312 claim 21 and Edge cases (quirks.building_removal_second_round on: the removal takes a second round of claims 18 and 19 (g), with C afresh by F5; C = 0 in our engine until sides exist, so the round takes no draw and the building leaves play in that turn)
+#[test]
+fn quirk_building_removal_second_round_on() {
+    let (rng, present) = removal_round(true);
+    assert!(!present);
+    assert_eq!(rng, removal_round(false).0);
+}
+
+// spec: S-0312 Edge cases (quirks.building_removal_second_round off: no second round; it leaves its cells and leaves play in its removal turn)
+#[test]
+fn quirk_building_removal_second_round_off() {
+    let (_, present) = removal_round(false);
+    assert!(!present);
+}
+
+// spec: S-0312 claim 3 and S-0302 claim 16 (the expiry hit destroys the building in its turn with every death effect; an exploding building then awaits removal until its own next turn)
+#[test]
+fn claim_3_expiry_then_awaiting_removal() {
+    let mut r = delay_rules();
+    r.sim.buildings.get_mut("HUT").unwrap().combat.explodes = Some(true);
+    r.sim.general.c4_warhead = Some("W1".into());
+    let mut w = game(&r);
+    let id = spawn(&mut w, Kind::Building, "HUT", 0, 0, 0);
+    let t = w.tick;
+    damage::apply(&mut w, id, delay_hit(&r, 0));
+    testkit::run(&mut w, 6);
+    // Expired in the turn of tick t + 5: 0 health, still in play.
+    assert_eq!(w.tick, t + 6);
+    assert_eq!(w.obj(id).map(|o| o.health), Some(0));
+    glasnost_sim::tick::step(&mut w);
+    assert!(w.obj(id).is_none());
+}

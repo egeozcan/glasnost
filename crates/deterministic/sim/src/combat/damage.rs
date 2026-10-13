@@ -660,6 +660,13 @@ fn killing_hit(
             });
             ob.combat.killed = true;
         }
+        // spec: S-0302 claims 1 and 16 (killed at the delayed-kill hit: projectiles it fired before carry neither attacker nor attacking house)
+        for p in w.projectiles.values_mut() {
+            if p.attacker == Some(id) {
+                p.attacker = None;
+                p.house = None;
+            }
+        }
         // spec: S-0302 claim 16 (the kill is credited at the hit; again at a later hit with quirks.delay_kill_credited_again)
         if !again || rules.quirks.delay_kill_credited_again {
             credit(w, id, hit);
@@ -674,6 +681,57 @@ fn killing_hit(
     let _ = tc;
     crate::combat::death::kill(w, id, hit);
     HitResult::NowDead
+}
+
+/// Whether a killed object is dead and no longer takes part as a living
+/// one: killed (S-0302 Terms) with no health left. A building in a
+/// delayed-kill countdown is killed but keeps its health (S-0302 claim 16:
+/// it does not die yet, stays in play, can be hit, healed and fires); an
+/// infantry unit in its death sequence and a building awaiting removal
+/// (S-0312 claim 21) have 0 health.
+pub fn dead(o: &crate::world::Object) -> bool {
+    o.combat.killed && o.health <= 0
+}
+
+/// The expiry of a building's delayed-kill countdown (S-0302 claim 16,
+/// Q-0081 parts 1 and 2; S-0312 claim 3), in the building's own turn.
+pub fn delay_kill_expiry_turn(w: &mut World, id: ObjectId) {
+    let now = w.tick;
+    let Some(o) = w.obj(id).cloned() else { return };
+    let Some(until) = o.combat.delay_kill_until else {
+        return;
+    };
+    // spec: S-0302 claim 16 (the building's first turn at or after t + K)
+    if now.wrapping_sub(until) < 0 {
+        return;
+    }
+    // spec: S-0302 claim 16 (only while it is still alive and in play; being erased and an electromagnetic pulse also wait, but neither is modelled)
+    if o.health <= 0 || !o.on_map {
+        return;
+    }
+    let rules = w.rules_arc();
+    let hut = o.kind == Kind::Building
+        && rules.buildings[o.type_index as usize]
+            .building
+            .bridge_repair_hut;
+    if hut {
+        // spec: S-0302 claim 16 (a bridge repair hut clears the countdown and the recorded planter, with no expiry hit; its bridge-repair action is the structures specs' seam)
+        if let Some(ob) = w.obj_mut(id) {
+            ob.combat.delay_kill_until = None;
+        }
+        return;
+    }
+    // spec: S-0302 claim 16 and claim 1's table (whole current health, distance 0, the demolition warhead, ignoring defences, no no-escape marker, no attacking house; the attacker is a recorded charge planter, and none is ever recorded in our engine)
+    let hit = Hit {
+        amount: o.health,
+        warhead: rules.combat.general.c4_warhead,
+        distance: 0,
+        attacker: None,
+        house: None,
+        ignore_defences: true,
+        no_escape: false,
+    };
+    apply(w, id, hit);
 }
 
 /// The delayed-kill countdown K of S-0302 F7.

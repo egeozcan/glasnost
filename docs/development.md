@@ -290,7 +290,7 @@ Provisional rules of combat, each tied to a request:
 | `combat::projectile` | F12's pitch facing takes S-0204's table exceptions and F13's does not | Q-0077 |
 | `combat::projectile` | the rows of T1 test the position before the cruise lift; a vertical projectile crossing a deck detonates at its new height | Q-0078 |
 | `combat::acquire` | a landed aircraft counts in the map-wide search's second pass and is scored with its distance in cells | Q-0079 |
-| `combat::damage`, `combat::death` | a building's delayed-kill countdown ends without effect; an exploding building, or one destroyed while being sold, leaves play at once | Q-0081 |
+| `tick::object_turn`, `combat::damage::delay_kill_expiry_turn` | a building's delayed-kill expiry hit comes at the end of its turn, after the general part (healing, behaviour, the delayed shot, the economy events), where S-0312 claim 21 puts a removal | Q-0170 |
 | `orders::prone_get_up` | a behaviour order resulting in *move* is the movement order that makes a prone unit get up, when the order is applied | Q-0087 |
 
 ## Simulation (M5a: economy and base building)

@@ -23,7 +23,8 @@ pub(crate) fn multiple(t: i32, p: i32) -> bool {
 pub fn turn(w: &mut World, id: ObjectId) {
     let t = w.tick;
     let Some(o) = w.obj(id).cloned() else { return };
-    if o.combat.killed {
+    // spec: S-0302 claim 16 (a building in a delayed-kill countdown is healed as claim 11 gives)
+    if crate::combat::damage::dead(&o) {
         return;
     }
     let rules = w.rules_arc();

@@ -526,7 +526,7 @@ fn candidate(
     let Some(ao) = w.obj(a) else { return false };
     let Some(to) = w.obj(t) else { return false };
     // spec: S-0309 table C (exists, self)
-    if t == a || to.health <= 0 || !to.on_map || to.combat.killed {
+    if t == a || to.health <= 0 || !to.on_map || crate::combat::damage::dead(to) {
         return false;
     }
     let ttc = type_combat(w, t);
@@ -1150,7 +1150,7 @@ pub fn redirect(w: &World, a: ObjectId, t: Target) -> Option<Target> {
             )
         });
     // spec: S-0309 claim 24 (a dead or sinking object, or an infantry unit whose current sequence is a death kind of S-0107: die 1 to 5, wet die 1 and 2, the three air-death kinds: no target)
-    if o.combat.killed || o.health <= 0 || dying {
+    if crate::combat::damage::dead(o) || o.health <= 0 || dying {
         return None;
     }
     Some(t)
@@ -1210,7 +1210,10 @@ fn opportunity_gate(w: &World, a: ObjectId) -> bool {
 pub fn per_tick(w: &mut World, a: ObjectId) {
     let tick = w.tick;
     let Some(o) = w.obj(a).cloned() else { return };
-    if o.combat.killed || o.health <= 0 || matches!(o.kind, Kind::Aircraft | Kind::Terrain) {
+    if crate::combat::damage::dead(&o)
+        || o.health <= 0
+        || matches!(o.kind, Kind::Aircraft | Kind::Terrain)
+    {
         return;
     }
     // spec: S-0215 claim 33 (an actor whose targeting timer has run out)
