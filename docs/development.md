@@ -322,6 +322,7 @@ Provisional rules of M5a, each tied to a request:
 | free units (no code) | no free unit is created; a harvester given the placement fall-back starts *harvest* | Q-0145 |
 | `econ::victory::destroy_all` | a defeated or surrendering house's objects on the map are hit one after another in object number order; objects off the map are not hit (production items go through S-0404 claim 8) | Q-0150 |
 | `econ::houses::house_update`, `econ::victory::outcome`, `econ::victory::contender` | the surrender's destruction and the defeat test come first in the house update, before power, radar and the tech tree; tick *t* + max(*D*, 1) runs in full and its defeats count under S-0414 claim 9, and the game is over once it has run; a house removed by the unused-house cleanup is no contender and gets no result | Q-0151 |
+| `convert::sim_econ` (factory field) | the building key `Factory` is left unconverted with a warning, so no imported building is a factory building: on an install, nothing can be produced and the local lane's scripted skirmish stops after the MCVs deploy; hand-written rulesets use our words `infantry`, `vehicle`, `aircraft` and `building` | Q-0100 |
 
 ## Tests
 
