@@ -1001,7 +1001,7 @@ fn combat_coverage() {
     assert_eq!(row("weapons", "ROF"), (Field, "S-0301".into()));
 }
 
-/// spec: S-0302 Import mapping and claim 5 (BuildCat: the first 31 bytes, trimmed, a whole word ignoring A–Z case; only Combat makes a defence building; an unknown nonempty word is not one, not the held value; missing or empty keeps the held category)
+/// spec: S-0004 claim 11 and S-0302 Import mapping and claim 5 (the sidebar tab and the defence factor share the category; BuildCat: the first 31 bytes, trimmed, a whole word ignoring A–Z case; only Combat makes a defence building; an unknown nonempty word is not one, not the held value; missing or empty keeps the held category)
 #[test]
 fn build_category_word() {
     let defence = |base: &str, mode: &str| {
@@ -1136,4 +1136,19 @@ fn ability_lists_follow_list_items_untrimmed() {
     assert!(!warned(&w, "a list item with whitespace"));
     assert!(!warned(&w, "\"firepower\" names no ability"));
     assert!(warned(&w, "\"bogus\" names no ability"));
+}
+
+/// spec: S-0003 claim 19 and Import mapping row C18, S-0312 Import mapping (DestroyParticleSystems: a particle-system name list; `none` and `<none>` take no place)
+#[test]
+fn destroy_particle_systems_omit_no_type_items() {
+    let base = "[VehicleTypes]\n1=Cart\n[ParticleSystems]\n1=Smog\n\
+                [Cart]\nDestroyParticleSystems=none,Smog,<NONE>,Glow,Smog\n";
+    let (s, _, _) = import(base, "", "", "", &ImportOptions::default());
+    assert_eq!(
+        s.vehicles["Cart"]
+            .combat
+            .destroy_particle_systems
+            .as_deref(),
+        Some(&["Smog".to_owned(), "Glow".to_owned(), "Smog".to_owned()][..])
+    );
 }

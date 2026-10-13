@@ -87,6 +87,12 @@ pub(super) const COMBAT_FIELDS: &[Row] = &[
         Refs(Kind::Animations),
         "S-0312",
     ),
+    (
+        "destroy_particle_systems",
+        "DestroyParticleSystems",
+        Refs(Kind::ParticleSystems),
+        "S-0003, S-0312",
+    ),
     ("trainable", "Trainable", Bool, "S-0311"),
     ("dont_score", "DontScore", Bool, "S-0311"),
     ("self_healing", "SelfHealing", Bool, "S-0314"),
@@ -1637,6 +1643,7 @@ impl Builder<'_> {
             rec.put("combat", combat.node());
         }
         self.cfields(rec, t, kind, BUILDING_COMBAT);
+        // spec: S-0004 claim 11 (the sidebar tab's build category uses this same rule)
         // spec: S-0302 Import mapping (BuildCat: the first 31 bytes, surrounding whitespace trimmed, a whole word compared ignoring A–Z case; a defence building only for Combat, any other nonempty word, unknown ones included, is not; missing or empty keeps the held category, initially not a defence)
         if let Some(d) = fold(key(t, "BuildCat"), None, |v, _| {
             let word = value::text(v, BUILD_CAT_LIMIT).trim_ascii();

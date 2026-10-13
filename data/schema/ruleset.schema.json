@@ -1249,6 +1249,17 @@
             "type": "string"
           }
         },
+        "destroy_particle_systems": {
+          "description": "`DestroyParticleSystems`, particle-system names, `none` and\n`<none>` omitted (S-0312 claim 19 f; S-0003 claim 19, row C18).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "string"
+          }
+        },
         "detect_disguise": {
           "description": "`DetectDisguise` (S-0309 table C).",
           "type": [

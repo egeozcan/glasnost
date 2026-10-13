@@ -245,7 +245,6 @@ const NAMED: &[(&str, &[&str])] = &[
             "Bright",
             "CrateBeneath",
             "CrateBeneathIsMoney",
-            "DestroyParticleSystems",
             "DestroySmokeOffset",
             "Wake",
         ],
