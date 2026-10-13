@@ -325,6 +325,35 @@ pub fn facing_of_angle(theta: F64, index: Option<u32>, x_positive: bool, mode: R
     phi
 }
 
+/// A pitch facing from a signed table angle (S-0204 claim 12, F6): the
+/// surrogate conversion of F3, trunc(trunc₅₃(trunc₅₃(α − c₁) × c₂)), plus
+/// the correction *e*: at one of F3's exception indices, +1 for a positive
+/// angle and −1 for a negative one (both nearer to level, 16383), 0 for a
+/// zero angle; 0 at every other index, with no index or one beyond 4096.
+/// The result is not reduced modulo 65536 (the caller narrows it).
+// spec: S-0204 F6 (the correction follows the sign of the angle supplied, not of the table argument)
+pub fn pitch_of_angle(alpha: F64, index: Option<u32>, mode: Rounding) -> i64 {
+    let k = dir_const();
+    // spec: S-0204 F6 (p_s = trunc(trunc₅₃(trunc₅₃(α_s − c₁) × c₂)))
+    let ps = alpha
+        .sub(k.c1, mode)
+        .mul(k.c2, mode)
+        .trunc_i128()
+        .unwrap_or(0) as i64;
+    let exception = index.is_some_and(|i| i <= 4096 && ATAN_EXCEPTIONS.contains(&(i as u16)));
+    // spec: S-0204 F6 (e = 1 for a positive angle, −1 for a negative one, 0 for zero, at an exception index)
+    let e = if !exception {
+        0
+    } else if alpha.gt(F64::ZERO) {
+        1
+    } else if alpha.lt(F64::ZERO) {
+        -1
+    } else {
+        0
+    };
+    ps + e
+}
+
 /// The direction facing of a real displacement (X, Y up), S-0204 F3.
 // spec: S-0204 F3 (the facing modulo 65536)
 pub fn direction_real(x: F64, y: F64, mode: Rounding) -> Facing {
@@ -524,5 +553,25 @@ mod tests {
         assert_eq!(n_step(1024, 32), 1);
         assert_eq!(n_step(127, 256), 0);
         assert_eq!(n_step(128, 256), 1);
+    }
+
+    // spec: S-0204 claim 12 and F6 (index 1024: 417 for a positive angle, 32349 for a negative one; e = 0 off the exception list)
+    #[test]
+    fn pitch_from_signed_table_angle_claim_12() {
+        let a = F32(ATAN[1024]).to_f64();
+        assert_eq!(pitch_of_angle(a, Some(1024), RZ).rem_euclid(65536), 417);
+        assert_eq!(
+            pitch_of_angle(a.negated(), Some(1024), RZ).rem_euclid(65536),
+            32349
+        );
+        assert_eq!(pitch_of_angle(a, None, RZ).rem_euclid(65536), 416);
+        assert_eq!(
+            pitch_of_angle(a.negated(), None, RZ).rem_euclid(65536),
+            32350
+        );
+        assert_eq!(
+            pitch_of_angle(F64::ZERO, Some(1024), RZ),
+            pitch_of_angle(F64::ZERO, None, RZ)
+        );
     }
 }

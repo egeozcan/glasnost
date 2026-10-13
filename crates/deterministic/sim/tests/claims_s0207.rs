@@ -1652,3 +1652,47 @@ fn vehicle_scatter_refused_in_unload() {
     o.beh.queued = Some(Behaviour::Unload);
     assert!(vehicle_request(&mut w, id, reqs[0]));
 }
+
+// ---------------------------------------------------------------------------
+// Speed estimate for lead
+
+// spec: S-0207 claim 18 (the estimate is F2 at the fraction held now, 0 from rest; reading it updates no fraction)
+// spec: S-0207 F2a
+#[test]
+fn speed_estimate_for_lead_is_f2_at_the_held_fraction() {
+    // The scene of claim 2's test: s = 21 per moving tick at ρ = 0.9.
+    let mut s = scene(car(WHEEL, 10, false), 0);
+    s.ruleset
+        .sim
+        .countries
+        .get_mut("Alphaland")
+        .expect("country")
+        .speed_units_mult = dec("0.99");
+    set_land(&mut s, LandType::Clear, "0.9", "0.9");
+    let (mut w, id) = start(&s, &[N; 8]);
+    assert_eq!(glasnost_sim::drive::speed_estimate(&w, id), 0, "from rest");
+    let first = first_moving_tick(&mut w, id);
+    assert_eq!(glasnost_sim::drive::speed_estimate(&w, id), 21);
+    assert_eq!(glasnost_sim::drive::speed_estimate(&w, id), 21);
+    assert_eq!(snap(&w, id).rho, first.rho, "no fraction update");
+}
+
+// spec: S-0207 claim 18 (a turn in place between tracks keeps the held fraction, so the estimate stays nonzero while the position does not change)
+#[test]
+fn speed_estimate_nonzero_while_turning_in_place() {
+    let s = scene(car(WHEEL, 30, true), 0);
+    let path = [N, N, N, SE, SE, SE, SE];
+    let (mut w, id) = start(&s, &path);
+    let mut sn = first_moving_tick(&mut w, id);
+    let mut guard = 0;
+    while sn.track.is_some() {
+        sn = step(&mut w, id);
+        guard += 1;
+        assert!(guard < 200);
+    }
+    assert!(sn.rho.gt(F64::ZERO));
+    let next = step(&mut w, id);
+    assert!(next.track.is_none(), "still turning");
+    assert_eq!(next.pos, sn.pos);
+    assert!(glasnost_sim::drive::speed_estimate(&w, id) > 0);
+}

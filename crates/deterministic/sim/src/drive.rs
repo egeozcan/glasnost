@@ -313,6 +313,23 @@ fn progress(w: &World, id: ObjectId, u: &UnitRules) -> i32 {
         .to_i32_common()
 }
 
+/// The speed estimate of a vehicle for the lead of S-0306 claim 3 and F6
+/// (S-0207 claim 18, F2a): F2 with the speed fraction the vehicle holds now,
+/// read without updating the fraction or earning progress. The integer is
+/// taken as leptons per tick by the lead, with no conversion. A vehicle with
+/// no driving state holds no fraction here, so its estimate is 0 (the
+/// fraction of another locomotor is not defined yet, S-0306 Open questions).
+/// No object carries a flag in this simulation, so the flag-carrier halving
+/// of F2 never applies.
+// spec: S-0207 claim 18 and F2a; S-0306 claim 3 (the speed estimate u)
+pub fn speed_estimate(w: &World, id: ObjectId) -> i32 {
+    let Some(o) = w.obj(id) else { return 0 };
+    let Some(u) = w.rules().unit(o.kind, o.type_index) else {
+        return 0;
+    };
+    progress(w, id, u)
+}
+
 fn cell_of(x: i32, y: i32) -> CellXY {
     Pos::new(x, y, 0).cell()
 }
