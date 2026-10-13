@@ -1,15 +1,13 @@
 //! Map decoding (S-0009): a map file read as an INI document becomes a
 //! [`glasnost_map::Map`].
 //!
-//! The byte encodings of the map packs are outside S-0009 (its Questions
-//! for the project lead). The block framing and codecs are those of
-//! `glasnost_fmt::mappack` (OpenRA and XCC, GPL-3.0-or-later): LZO1X for
-//! `IsoMapPack5` and, following XCC's `misc/map_ts_encoder.cpp` (Copyright
-//! (C) Olaf van der Spek), for `PreviewPack`; LCW for the two overlay
-//! packs. A terrain record is read as the six values of S-0009 claim 7 in
-//! that order: x and y as 16-bit, the tile number as a 32-bit signed value,
-//! then the sub-tile, the height level and the ice-growth flag as single
-//! bytes (the layout `fmt::mappack::IsoTile` documents).
+//! The map blocks' text, chunk framing, compressed encodings and terrain
+//! records are S-0012's: the text is joined and decoded group by group
+//! (`glasnost_fmt::mappack::decode_text_groups`), the chunks expanded with
+//! the valid-prefix rule (`unpack_prefix`), the codecs those of
+//! `glasnost_fmt` (LZO1X for `IsoMapPack5` and `PreviewPack`, LCW for the
+//! two overlay packs; OpenRA and XCC, GPL-3.0-or-later). A terrain record is
+//! S-0012 claim 6's eleven bytes.
 //!
 //! The object lists are split and read as S-0009 claims 34 to 36, 40 and 42
 //! say; the state each object starts in is the simulation's and the
@@ -17,7 +15,7 @@
 
 use std::collections::BTreeMap;
 
-use glasnost_fmt::mappack::{PackCodec, decode_base64, unpack};
+use glasnost_fmt::mappack::{PackCodec, decode_text_groups, unpack_prefix};
 use glasnost_ini::Document;
 use glasnost_ini::binfloat::{self, Binary, Format};
 use glasnost_ini::value::{self, Decimal, DecimalField};
@@ -60,6 +58,16 @@ pub struct MapQuirks {
     /// `quirks.preview_markers_from_header` (claim 25). Not consulted yet:
     /// our engine draws no preview markers.
     pub preview_markers_from_header: bool,
+    /// `quirks.map_pack_line_limit` (S-0012 claim 1): each packed entry's
+    /// value is cut to 127 characters; off: the full value.
+    pub map_pack_line_limit: bool,
+    /// `quirks.map_base64_groups` (S-0012 claim 2): nonstandard complete
+    /// groups are read as the original reads them; off: the block is absent.
+    pub map_base64_groups: bool,
+    /// `quirks.partial_terrain_values` (S-0012 claim 9, S-0009 claim 7):
+    /// partial terrain values replace low-order bytes; off: incomplete
+    /// multi-byte values are absent.
+    pub partial_terrain_values: bool,
 }
 
 impl Default for MapQuirks {
@@ -75,6 +83,10 @@ impl Default for MapQuirks {
             header_pairs_as_start_marks: true,
             lobby_counts_zero_waypoint: true,
             preview_markers_from_header: true,
+            // spec: S-0012 Edge cases and quirks (every switch defaults to the original)
+            map_pack_line_limit: true,
+            map_base64_groups: true,
+            partial_terrain_values: true,
         }
     }
 }
@@ -133,7 +145,9 @@ const PREVIEW_PAIRS: i32 = 8; // spec: S-0009 claim 25 (markers drawn only when 
 
 /// Byte widths of the six terrain-record values (module docs; encoding
 /// outside S-0009).
-const RECORD_FIELDS: [usize; 6] = [2, 2, 4, 1, 1, 1]; // nocite: byte layout from fmt::mappack (OpenRA, XCC)
+const RECORD_FIELDS: [usize; 6] = [2, 2, 4, 1, 1, 1]; // spec: S-0012 claim 6 (record layout)
+/// Characters of a packed entry's value that are read.
+const PACK_LINE_LIMIT: usize = 127; // spec: S-0012 Constants (packed-entry reader limit)
 
 /// Decodes `doc` as a map.
 pub fn decode(doc: &Document, ctx: &DecodeContext<'_>) -> Decoded {
@@ -330,25 +344,91 @@ impl Decoder<'_> {
         draws
     }
 
+    /// A map block's expanded bytes (S-0012 claims 1 to 5, 9 and 10):
+    /// `None` when the block has no packed bytes (absent, empty, or its text
+    /// rejected), otherwise the bytes of its valid chunks.
     fn pack(&mut self, name: &[u8], codec: PackCodec) -> Option<Vec<u8>> {
         let section = self.doc.section(name)?;
         let line = Some(section.line());
-        let values = section.entries().iter().map(|e| e.value.as_slice());
-        let joined: Vec<&str> = values.filter_map(|v| std::str::from_utf8(v).ok()).collect();
-        let bytes = match decode_base64(joined) {
-            Ok(b) => b,
-            Err(e) => {
-                self.warn(line, format!("[{}]: {e}; the block is ignored", show(name)));
+        let q = self.ctx.quirks;
+        let mut text = Vec::new();
+        let mut cut = false;
+        // spec: S-0012 claim 1 (entries in enumeration order, each value by name resolution)
+        for e in section.entries() {
+            let v = section.get(&e.key).map_or(e.value.as_slice(), |w| w.value.as_slice());
+            // spec: S-0012 claim 1 (quirks.map_pack_line_limit: the first 127 characters, trimmed)
+            let v = if q.map_pack_line_limit {
+                cut |= v.len() > PACK_LINE_LIMIT;
+                value::text(v, PACK_LINE_LIMIT)
+            } else {
+                v.trim_ascii_end()
+            };
+            text.extend_from_slice(v.trim_ascii());
+        }
+        if cut {
+            // spec: S-0012 Edge cases (quirks.map_pack_line_limit: warn when characters are lost)
+            self.warn(
+                line,
+                format!(
+                    "[{}]: an entry is longer than {PACK_LINE_LIMIT} characters; the rest is not read (S-0012 claim 1, quirks.map_pack_line_limit)",
+                    show(name)
+                ),
+            );
+        }
+        let decoded = decode_text_groups(&text);
+        if let Some(g) = decoded.first_nonstandard {
+            if !q.map_base64_groups {
+                // spec: S-0012 claim 2 (quirks.map_base64_groups off: the block is absent, with a warning)
+                self.warn(
+                    line,
+                    format!(
+                        "[{}]: base-64 group {} is not standard; the block is ignored (S-0012 claim 2)",
+                        show(name),
+                        g + 1
+                    ),
+                );
                 return None;
             }
-        };
-        match unpack(&bytes, codec, usize::MAX) {
-            Ok(b) => Some(b),
-            Err(e) => {
-                self.warn(line, format!("[{}]: {e}; the block is ignored", show(name)));
-                None
-            }
+            // spec: S-0012 claim 2 (nonstandard complete groups read as the original does, with a warning)
+            self.warn(
+                line,
+                format!(
+                    "[{}]: {} base-64 groups are not standard, the first is group {} (S-0012 claim 2, quirks.map_base64_groups)",
+                    show(name),
+                    decoded.nonstandard,
+                    g + 1
+                ),
+            );
         }
+        if decoded.short_tail > 0 {
+            // spec: S-0012 claim 2 (a final group shorter than four characters is discarded, with a warning)
+            self.warn(
+                line,
+                format!(
+                    "[{}]: the text ends with {} characters short of a group; they are not read (S-0012 claim 2)",
+                    show(name),
+                    decoded.short_tail
+                ),
+            );
+        }
+        // spec: S-0012 Edge cases (a block yielding no packed bytes has no content to apply)
+        if decoded.bytes.is_empty() {
+            return None;
+        }
+        let (bytes, problem) = unpack_prefix(&decoded.bytes, codec);
+        if let Some(p) = problem {
+            // spec: S-0012 claims 9 and 10 (keep the earlier chunks, stop the block, warn naming block and chunk)
+            self.warn(
+                line,
+                format!(
+                    "[{}]: chunk {}: {}; the block stops there (S-0012 claims 9 and 10)",
+                    show(name),
+                    p.chunk + 1,
+                    p.what
+                ),
+            );
+        }
+        Some(bytes)
     }
 
     /// The terrain stream (S-0009 claims 7 and 8).
@@ -357,39 +437,82 @@ impl Decoder<'_> {
             return;
         };
         let line = self.doc.section(b"IsoMapPack5").map(|s| s.line());
+        let partial_values = self.ctx.quirks.partial_terrain_values;
+        if data.len() < 4 {
+            // spec: S-0012 claim 9, S-0009 claim 7 (fewer than four bytes for the first coordinate
+            // pair: no record from the block, with a warning; no switch)
+            self.warn(
+                line,
+                "the terrain block has fewer than four bytes for its first coordinate pair; no terrain record is read (S-0012 claim 9)",
+            );
+            return;
+        }
         let mut pos = 0usize;
         let mut terminated = false;
         let mut negative_tile = false;
         let mut negative_level = false;
         let mut alias_warned = false;
+        let mut partial_warned = false;
         loop {
-            // Read up to six values; `None` once the data runs out.
-            let mut vals = [None::<i64>; 6];
-            let mut partial = false;
-            for (i, width) in RECORD_FIELDS.iter().enumerate() {
-                let Some(bytes) = data.get(pos..pos + width) else {
-                    partial = pos < data.len();
-                    pos = data.len();
-                    break;
-                };
-                pos += width;
-                vals[i] = Some(match width {
-                    1 => i64::from(bytes[0]),
-                    2 => i64::from(u16::from_le_bytes([bytes[0], bytes[1]])),
-                    _ => i64::from(i32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]])),
-                });
-            }
-            if partial {
-                // spec: S-0009 claim 7 (part of a value: our engine treats it as not present, and warns)
-                self.warn(
-                    line,
-                    "the terrain stream ends partway through a value; that value is treated as not present (S-0009 claim 7)",
-                );
-            }
-            let (Some(x), Some(y)) = (vals[0], vals[1]) else {
-                // spec: S-0009 claim 7 (nothing, or x only: no cell changes)
+            if pos >= data.len() {
+                // spec: S-0012 claim 9 (ending between records: as an end marker, with a warning below)
                 break;
-            };
+            }
+            // Read up to six values, each the bytes available of its width.
+            let mut vals = [None::<i64>; 6];
+            let mut partial = None;
+            for (i, width) in RECORD_FIELDS.iter().enumerate() {
+                let have = (data.len() - pos).min(*width);
+                if have == 0 {
+                    break;
+                }
+                let bytes = &data[pos..pos + have];
+                pos += have;
+                if have < *width {
+                    partial = Some(i);
+                }
+                vals[i] = Some(match (i, have == *width) {
+                    // spec: S-0012 claim 6, Formulas F2 (x and y signed 16-bit, the tile number signed
+                    // 32-bit, little-endian)
+                    (0 | 1, true) => i64::from(i16::from_le_bytes([bytes[0], bytes[1]])),
+                    (2, true) => i64::from(i32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]])),
+                    // spec: S-0012 claim 6 (sub-tile and ice flag unsigned, the level a signed byte)
+                    (_, true) => i64::from(bytes[0]),
+                    // spec: S-0012 claim 9 (a partial coordinate: the available low-order bytes of 0)
+                    (0 | 1, false) => i64::from(bytes[0]),
+                    // spec: S-0012 Formulas F3 (T = B + 256ᵏ·⌊65535 / 256ᵏ⌋, then signed)
+                    (_, false) => {
+                        let k = bytes.len() as u32;
+                        let b = bytes.iter().rev().fold(0u32, |a, &v| a << 8 | u32::from(v));
+                        let scale = 256u32.pow(k);
+                        i64::from((b + scale * (65535 / scale)) as i32)
+                    }
+                });
+                if have < *width {
+                    break;
+                }
+            }
+            // The pair: a partial x gives y 0; a partial y keeps its low byte.
+            if let Some(i) = partial {
+                if !partial_warned {
+                    partial_warned = true;
+                    // spec: S-0012 claim 9 (partial terrain values: the importer warns)
+                    self.warn(
+                        line,
+                        "the terrain stream ends partway through a value (S-0012 claim 9, quirks.partial_terrain_values)",
+                    );
+                }
+                if !partial_values {
+                    // spec: S-0012 claim 9 (switch off: a partial coordinate pair ends the stream,
+                    // a partial tile number is the preset 65535)
+                    if i < 2 {
+                        break;
+                    }
+                    vals[2] = None;
+                }
+            }
+            let x = vals[0].unwrap_or(0);
+            let y = vals[1].unwrap_or(0);
             let named = CellXY::new(x as i32, y as i32);
             // spec: S-0009 claim 7 (a record naming (0, 0) ends the stream)
             if named == CellXY::new(0, 0) {
@@ -398,7 +521,7 @@ impl Decoder<'_> {
             }
             // spec: S-0009 claim 7 (the record acts on its selected cell)
             let selected = selected_cell(named, self.ctx.quirks.cell_index_alias);
-            if named.x > MAX_STREAM_COORDINATE && !alias_warned {
+            if !(0..=MAX_STREAM_COORDINATE).contains(&named.x) && !alias_warned {
                 alias_warned = true;
                 // spec: S-0009 Edge cases (quirks.cell_index_alias: the importer warns either way)
                 self.warn(
@@ -471,13 +594,14 @@ impl Decoder<'_> {
         let data = self.pack(b"OverlayDataPack", PackCodec::Lcw);
         for (name, stream) in [("OverlayPack", &types), ("OverlayDataPack", &data)] {
             if let Some(s) = stream
-                && s.len() < n
+                && s.len() != n
             {
-                // spec: S-0009 claims 12 and 13 (a short stream: the importer warns)
+                // spec: S-0009 claims 12 and 13, S-0012 claim 7 (a short or overlong array: the importer
+                // warns; bytes beyond 262144 have no effect)
                 self.warn(
                     None,
                     format!(
-                        "[{name}] holds {} of {n} values (S-0009 claims 12 and 13)",
+                        "[{name}] holds {} bytes for {n} positions (S-0012 claim 7)",
                         s.len()
                     ),
                 );
@@ -656,13 +780,19 @@ impl Decoder<'_> {
             [0; 4],
             self.ctx.quirks.absent_rect_is_zero,
         );
-        let (Ok(width), Ok(height)) = (u32::try_from(size[2]), u32::try_from(size[3])) else {
-            return None;
-        };
-        if width == 0 || height == 0 {
+        let bytes = i64::from(size[2]) * i64::from(size[3]) * 3;
+        if size[2] <= 0 || size[3] <= 0 || bytes > i64::from(i32::MAX) {
+            if self.doc.section(b"PreviewPack").is_some() {
+                // spec: S-0012 Edge cases (invalid preview dimensions: no embedded preview, with a warning)
+                self.warn(
+                    self.line_of(b"Preview", b"Size"),
+                    "the preview size is not positive or too large; no preview is shown (S-0012 Edge cases)",
+                );
+            }
             return None;
         }
-        let n = usize::try_from(u64::from(width) * u64::from(height) * 3).ok()?;
+        let (width, height) = (size[2] as u32, size[3] as u32);
+        let n = bytes as usize;
         // A bound of our own: no preview larger than the decoded-data limit.
         if n > glasnost_fmt::limits::MAX_DECOMPRESSED {
             self.warn(
@@ -682,6 +812,12 @@ impl Decoder<'_> {
             self.warn(
                 self.doc.section(b"PreviewPack").map(|s| s.line()),
                 "the preview stream ends before the last pixel; the rest is black (S-0009 claim 24)",
+            );
+        } else if data.len() > n {
+            // spec: S-0012 claim 8 (an overlong preview is ignored beyond its required bytes, with a warning)
+            self.warn(
+                self.doc.section(b"PreviewPack").map(|s| s.line()),
+                "the preview stream is longer than its pixels need; the rest is not read (S-0012 claim 8)",
             );
         }
         Some(Preview { width, height, rgb })
