@@ -22,4 +22,8 @@ fn house_update(w: &mut World, h: HouseId) {
         crate::econ::radar::mark_due(w, h);
     }
     crate::econ::radar::house_update(w, h);
+    // spec: S-0407 claim 12 (a recheck in the first house update after an event; S-0404 claim 9 and S-0411 claim 2: the removal orders in that house update)
+    super::tech::house_update(w, h);
+    // spec: S-0411 claim 9 (the automatic release order)
+    super::sidebar::release_orders(w, h);
 }

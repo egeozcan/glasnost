@@ -943,6 +943,11 @@ pub struct Quirks {
     // spec: S-0415 claim 9
     #[serde(default = "on")]
     pub packup_sound_on_sale: bool,
+    /// An explicit initial ammunition above a nonnegative maximum is used as
+    /// it stands; off: capped at the maximum.
+    // spec: S-0301 claim 10, Formulas F6
+    #[serde(default = "on")]
+    pub initial_ammo_above_capacity: bool,
 }
 
 impl Default for Quirks {
@@ -1179,6 +1184,7 @@ impl Default for Quirks {
             deploy_refuses_own_walls: true,
             failed_packup_keeps_vehicle: true,
             packup_sound_on_sale: true,
+            initial_ammo_above_capacity: true,
         }
     }
 }
@@ -1727,6 +1733,10 @@ impl Quirks {
                 self.failed_packup_keeps_vehicle,
             ),
             ("packup_sound_on_sale", self.packup_sound_on_sale),
+            (
+                "initial_ammo_above_capacity",
+                self.initial_ammo_above_capacity,
+            ),
         ]
     }
 
@@ -1831,6 +1841,26 @@ pub const EXTERNAL_QUIRKS: &[(&str, &str)] = &[
         "importer (convert::sim::SimQuirks), S-0309 Edge cases",
     ),
     (
+        "theater_five_forced_unset_roles",
+        "importer (convert::theater::TheaterQuirks), S-0010 claim 4",
+    ),
+    (
+        "map_pack_line_limit",
+        "importer (convert::map::MapQuirks), S-0012 claim 1",
+    ),
+    (
+        "map_base64_groups",
+        "importer (convert::map::MapQuirks), S-0012 claim 2",
+    ),
+    (
+        "partial_terrain_values",
+        "importer (convert::map::MapQuirks), S-0012 claim 9 and S-0009 claim 7",
+    ),
+    (
+        "tree_strength_fixed_at_first_section",
+        "importer (convert::sim::SimQuirks), S-0102 claim 23 and S-0006 claim 5",
+    ),
+    (
         "percent_list_integer_prefix",
         "importer (ini::Quirks), S-0003 claim 13",
     ),
@@ -1877,7 +1907,7 @@ mod tests {
         // the importer's are listed below; likewise S-0006's (importer) and S-0107's (simulation,
         // apart from two importer switches).
         for (dir, prefixes) in [
-            ("formats", &["S-0009", "S-0010"][..]),
+            ("formats", &["S-0009", "S-0010", "S-0012"][..]),
             ("rules-import", &["S-0006"][..]),
             ("rendering", &["S-0107"][..]),
         ] {

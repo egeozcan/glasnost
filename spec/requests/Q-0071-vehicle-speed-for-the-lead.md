@@ -1,9 +1,9 @@
 ---
 id: Q-0071
 title: The target vehicle's "current speed" in the lead of a shot
-status: open
+status: answered
 related: [S-0306, S-0207]
-answered-by: []
+answered-by: [S-0306, S-0207]
 ---
 
 ## Need

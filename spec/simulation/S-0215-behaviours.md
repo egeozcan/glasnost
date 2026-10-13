@@ -2,13 +2,13 @@
 id: S-0215
 title: Behaviours (standing orders) and their processing
 topic: simulation
-revision: 13
+revision: 14
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-12
+approved-on: 2026-10-13
 measurements: []
-requests: [Q-0030]
+requests: [Q-0019, Q-0020, Q-0030]
 supersedes: []
 ---
 
@@ -21,7 +21,9 @@ guard, hunt, move or attack, and this spec covers how behaviours are held, queue
 forced, overridden and reverted, when and with which random delay an object processes its
 behaviour, which resting behaviour it falls back to, and the per-behaviour properties that the
 rules data can set. It also gives what the general-purpose behaviours and a gate's *open* behaviour
-do at each processing, the area-guard threshold's engine default (the guard stray distance has
+do at each processing, the approach step by which an attacking infantry unit or vehicle decides
+whether to keep, renew or take a destination towards its target (claim 37, answering the behaviour
+side of Q-0072; the approach position itself is S-0307's), the area-guard threshold's engine default (the guard stray distance has
 none in the original, and our engine's replacement is a documented departure), and pointers to the topics
 that own the other behaviours (harvesting, structures, superweapons, team scripts).
 
@@ -38,13 +40,13 @@ defines them. *Turn* and *turn pass* are used as S-0203 (tick order) defines the
 Other specs cited: S-0001, S-0003, S-0006, S-0007, S-0009, S-0105, S-0107, S-0202 (random
 streams), S-0203 (tick order), S-0204 (coordinates, distance and facing), S-0205 (number domains),
 S-0206 (turn rates), S-0207 (ground vehicle movement), S-0208 (infantry movement), S-0209
-(occupancy and crowding), S-0213 (human orders), S-0214 (order targeting rules), S-0301 (the
-firing cycle), S-0309 (target acquisition), S-0312 (death and destruction), S-0402 (harvest cycle)
-and S-0412 (skirmish setup rules). All of them except S-0412 are approved. S-0412 is not approved:
-it is a draft of the same batch as this revision, signed off together with it, and this spec cites
-its Terms, its claims 3, 4 and 5 and its scenario K10 (the house skill level and the difficulty
-index of each house at game start, claim 5 for the index of the neutral and special houses) as
-that draft states them.
+(occupancy and crowding), S-0210 (crushing), S-0212 (pathfinding), S-0213 (human orders), S-0214
+(order targeting rules), S-0301 (the firing cycle), S-0307 (weapon range test), S-0308 (weapon
+choice), S-0309 (target acquisition), S-0312 (death and destruction), S-0402 (harvest cycle) and
+S-0412 (skirmish setup rules). All cited specs are approved; S-0412 is approved at revision 2.
+This spec cites S-0412's Terms, its claims 3, 4 and 5 and its scenario K10 (the house skill level
+and the difficulty index of each house at game start, claim 5 for the index of the neutral and
+special houses) as that approved revision states them.
 
 **Requests.** This spec answers request Q-0020 in two of its parts: the engine default of the
 area-guard threshold (claim 36 a) and the gate's *open* behaviour, which decides when a gate is
@@ -123,7 +125,8 @@ Terms used by this spec:
 - **Current, queued and suspended behaviour:** three slots each actor holds. Each holds one
   behaviour or *none* (claim 1). The current behaviour is the one the actor carries out. The queued
   behaviour waits to become current. The suspended behaviour is the one an override put aside and a
-  revert brings back (claim 10).
+  revert brings back (claim 10). An override is **in effect** while a behaviour is suspended
+  (claim 10).
 - **Processing:** one run of the current behaviour's rule for an actor (claims 2 to 5 and 22 to 33).
   A processing ends by choosing the **processing delay**: the number of ticks until the actor's next
   processing.
@@ -194,9 +197,17 @@ Terms used by this spec:
   advance by orders. When it falls back to rest with no destination and a non-empty list, it takes
   the first entry as its destination (claims 14 and 15). The order specs own how the list is filled.
 - **Approach destinations:** a second list of destinations, separate from the queued destinations,
-  that a vehicle's own target-approach rule (movement specs) sets up while the vehicle approaches a
-  target. Giving the vehicle a new destination empties it. Infantry and aircraft never have entries.
-  Its only use here is in the common fall-back effects (claim 13).
+  that a vehicle's own target approach sets up while the vehicle approaches a target (which parts
+  of the approach fill it is not established; Open questions). Giving the vehicle a new destination
+  empties it. Infantry and aircraft never have entries. This spec uses it in the common fall-back
+  effects (claim 13) and in the approach step (claim 37, part e).
+- **Approach step:** what an infantry unit or vehicle does about a target it holds, at the moments
+  claim 37 lists: it checks whether the target is in range, and may keep, drop or renew its
+  destination, take a new one, or drop the target (claim 37). Choosing the approach position is
+  S-0307's (claim 15).
+- **In the playfield:** a mark of each object that is set once the object has entered the usable
+  area (glossary, *usable area*). An object that drives or flies in from outside it, for example
+  one arriving at the map edge, does not have the mark until it has entered.
 - **Scatter request, threat point, forced, move anywhere, tether link:** as S-0208 defines them
   (Terms). A rule of this spec that sends a scatter request always states its threat point (or
   that it has none) and both options.
@@ -544,8 +555,8 @@ Terms used by this spec:
 
 8. **Start-next.** If a behaviour is queued, it becomes current, the queue becomes empty, and the
    behaviour start of claim 3 happens: the timer expires now, the start tick becomes the current
-   tick, and the progress count becomes 0. The suspended behaviour is not touched. If nothing is
-   queued, nothing happens.
+   tick, and the progress count becomes 0. The suspended behaviour is not touched
+   (`quirks.stale_suspended_revert`). If nothing is queued, nothing happens.
    - Backing: `measurable` (scenario B3)
    - Confidence: high
 
@@ -554,7 +565,7 @@ Terms used by this spec:
    queue becomes empty and the behaviour start of claim 3 happens. Unlike queueing and overriding,
    force is not refused while the current behaviour is *selling*: a forced behaviour replaces
    *selling* (no stock rule is known to force a behaviour on a selling building). The suspended
-   behaviour is not touched.
+   behaviour is not touched (`quirks.stale_suspended_revert`).
 
    Rules that force a behaviour include the guard reset (Terms), which the original applies to an
    actor taken over by mind control, to an actor that is deactivated or reactivated, to an actor
@@ -584,7 +595,11 @@ Terms used by this spec:
     A revert does nothing unless a behaviour is suspended. If one is, it becomes current, the
     suspended slot becomes empty, and the target and destination put aside by the override come
     back. Neither an override nor a revert restarts the processing timer (claim 3), the start tick or
-    the progress count. A start-next or a force leaves the suspended slot as it is.
+    the progress count. A start-next or a force leaves the suspended slot as it is
+    (`quirks.stale_suspended_revert`). An override is **in effect** exactly while a behaviour is
+    suspended, however long ago the override was made and whatever has started since; so an
+    override that no revert has ended stays in effect across later starts, forces and orders, and
+    the revert causes below then apply to whatever object is the actor's target at that time.
 
     The original overrides when an actor retaliates against an attacker (claim 18; the override is
     to *attack* with the attacker as target and no destination). If an override is in effect, the
@@ -610,12 +625,18 @@ Terms used by this spec:
     actor's target again, and after a revert by an owner change the actor has no target. What the
     actor then does with such a target belongs to the target-acquisition specs. Clearing the target by
     any other rule (the leash of claim 26, an order) does not revert. Other users of override and
-    revert (team logic, some movement situations) are outside this spec.
+    revert are outside this spec: team logic, and some movement situations, among them S-0207
+    claim 15, where a driving vehicle's repeated step check against an obstacle overrides to
+    *attack*, with no destination, against the first object listed in the blocking cell when its
+    house is not allied with that object, or against the wall when no object is listed and the
+    cell holds a wall (with an allied first object, or with no object and no wall, there is no
+    override).
     - Backing: `measurable` (scenario B7: case b for the revert at the killing hit of an attacker
       that leaves play at once, case i for one that stays in play after the killing hit, case j
       for a target that goes off the map and for the target brought back, case k for an owner
       change, and case h for a target
-      cleared by an order, which does not revert). These parts are `unmeasured`:
+      cleared by an order, which does not revert; cases h and l for the suspended slot kept across
+      a start-next and for a later revert caused by another target). These parts are `unmeasured`:
       - the cloak and underground cause and its two exceptions, because when an object starts to
         cloak, when an underground object goes underground and what a sensor covers belong to the
         visibility and movement topics, which no spec states, so no setup here can make a target
@@ -624,9 +645,18 @@ Terms used by this spec:
         locked onto a target at the moment that target changes owner, and whether the lock
         survives the owner change belongs to the combat topic, which no spec states,
       - a removal that follows neither a killing hit nor going off the map, because every removal
-        that a setup here can make comes after one of those, which has already caused the revert.
-    - Confidence: high (the slot rules, the target replacement, and the revert at the killing hit
-      and on going off the map); medium (the owner change, the cloak and underground cause and
+        that a setup here can make comes after one of those, which has already caused the revert,
+      - the suspended slot kept across a force, because the only force that a setup here can give
+        an actor during an override is the guard reset of a mind-control takeover (claim 9), and
+        a takeover also changes the actor's owner and clears its target, which the combat topic
+        (mind control) owns, so the slot after a takeover does not isolate the force. The other
+        forces of claim 9 do not reach an overridden actor in a setup here: those of claims 23,
+        27 and 30 come from processings of behaviours other than the *attack* an override puts
+        in place, and the slaves' guard reset needs harvesting slaves of the human-controlled
+        house, which do not retaliate in *harvest* (claim 18).
+    - Confidence: high (the slot rules, the target replacement, the revert at the killing hit
+      and on going off the map, and an override staying in effect until a revert, so that a later
+      target's causes revert it); medium (the owner change, the cloak and underground cause and
       their exceptions, the target brought back, and the list of users)
 
 11. **Ready to change, and the per-tick start.** On each tick on which its update runs, an infantry
@@ -730,7 +760,7 @@ Terms used by this spec:
     that the result goes through the queue like any other ordered behaviour.
 
     Every such order also forgets the target and destination that an override put aside (claim 10),
-    but leaves the suspended slot as it is. For a mobile actor it clears the guard spot and the queued
+    but leaves the suspended slot as it is (`quirks.stale_suspended_revert`). For a mobile actor it clears the guard spot and the queued
     destinations, except an area-guard order, which takes its object or cell as both the guard spot
     and the destination and clears the target.
 
@@ -1130,7 +1160,7 @@ apply in our engine to the actors of every player house.
     |---|---|---|
     | hover-attack cell | the actor's type is a hover-attack type and its height above the surface is 0, with or without a target | it takes a nearby cell as its destination |
     | charge-target check | the actor is aiming at a charge target | it looks for a real threat within its weapon range and, if it finds one, makes it the target instead |
-    | approach | the actor has a target | it approaches and engages the target (the combat and movement specs own how) |
+    | approach | the actor has a target | it takes the approach step of claim 37 (engaging the target is the combat specs') |
     | fall-back | the actor has no target | it falls back to rest |
 
     "Has a target" and "has no target" are judged on the target the actor has once the
@@ -1331,7 +1361,7 @@ apply in our engine to the actors of every player house.
     | holds | any | no | drops any target, takes the guard spot as its destination, and attempts its idle action |
     | does not hold | none | yes | searches |
     | does not hold | none | no | attempts its idle action |
-    | does not hold | present | any | approaches and engages its target |
+    | does not hold | present | any | takes the approach step of claim 37 and engages its target |
 
     A search that finds a target ends the processing with a delay of 1 tick; a search that finds
     nothing is followed by an attempt at the idle action. So an actor that the leash pulls back can
@@ -1377,8 +1407,8 @@ apply in our engine to the actors of every player house.
       target as destination and queues *capture*; an infantry unit with explosive charges whose
       target is a building takes it as destination and queues *sabotage*; in both cases with an
       immediate start if ready, which the processing's own delay then overrides (claim 3c). Any
-      other infantry unit clears its destination and approaches the target; other kinds approach the
-      target,
+      other infantry unit clears its destination and takes the approach step of claim 37; other
+      kinds take that step,
     - without a target (or with the stupid-hunt flag): **original only:** in a campaign game, an
       actor of a computer-controlled owner moves towards a cell its house picks for attack, if the house has
       one: it queues *move* there with an immediate start, and a slave master also gives its
@@ -1855,6 +1885,124 @@ apply in our engine to the actors of every player house.
       a design rule and needs no backing
     - Confidence: high
 
+### Approaching the target
+
+37. **The approach step (Q-0072, questions 1, 4 and 5, and the behaviour side of question 3).**
+    - (a) **When it is taken.** An infantry unit or vehicle takes the approach step at every
+      processing of *attack* in which it has a target after the charge-target check (claim 23,
+      row *approach*), so at the cadence of that processing's delay (claim 23 and F3), not on
+      every tick. The *area guard* and *hunt* processings take it too where claims 26 and 27 say
+      the actor approaches its target (the *guard* processing does not). Separately, on every tick, an infantry unit or
+      vehicle that has a target and no destination, is not a team member, and either cannot reach
+      its target's cell (the target's cell is not in the actor's reach region for its movement
+      zone, S-0212 Terms; an actor whose type has no movement zone reaches every cell) or is a
+      passenger of an open-topped transport, takes the approach step in every behaviour; if it
+      still has no destination afterwards and its target is out of range (part b), it drops the
+      target. Aircraft, and buildings, never take the approach step (part g).
+    - (b) **In range.** "In range" in this claim is the range test of S-0307 (claims 1 to 12) from
+      the actor's current position, with the source point the firing check uses (S-0307 claim 8)
+      and with the weapon chosen for the target (S-0308). It is not the whole firing check: an
+      actor whose weapon is rearming, which is still turning to face the target, or to which the
+      firing check gives any answer other than one that comes from that range test, is in range
+      for this claim if the range test passes. A blocked line of fire or a bridge counts only as
+      far as S-0307's range test refuses it.
+    - (c) **Nothing to do.** The step does nothing when the actor has no target, or when its
+      target is the object that holds the actor with a magnetic beam (the object moving it by a
+      beam).
+    - (d) **Whether the actor keeps its target.** A target in range is never dropped by the
+      approach step. A target out of range is kept or dropped as the table says. Here an actor
+      *may approach* when its type has the can-approach property (Import mapping) and it is not
+      draining another object (for example a power-draining vehicle linked to a building), not
+      sitting in a bunker and not a passenger of an open-topped transport. All three exclusions
+      apply whatever the property says. The table reads the actor's current behaviour, whichever
+      processing or per-tick rule took the step.
+
+      | Current behaviour | May approach | Owner | Target out of range |
+      |---|---|---|---|
+      | *sticky* | either | any | dropped, with the destination |
+      | *attack* | either | any | kept |
+      | *area guard* | yes | any | kept |
+      | *area guard* | no | human-controlled | kept |
+      | *area guard* | no | computer-controlled | dropped, with the destination |
+      | *hunt* | yes | any | kept |
+      | *hunt* | no | computer-controlled | kept (**original only**, below) |
+      | *hunt* | no | human-controlled | dropped, with the destination |
+      | any other | yes | any | kept |
+      | any other | no | any | dropped, with the destination |
+
+      **Original only:** in our engine no player house is computer-controlled, so an actor of a
+      player house in *hunt* that may not approach always drops its target here; the neutral and
+      special houses keep the original's rule (Terms). Dropping clears the target and the
+      destination at once, and nothing else of the step happens; what the actor does next is its
+      behaviour's processing (for example the fall-back of claim 23 at its next *attack*
+      processing). An actor that keeps its target goes on to parts e and f in the same step.
+    - (e) **An existing destination is kept unless the target has moved too far from it.** For an
+      actor that holds a destination and kept its target:
+
+      | Can-recalculate property | Target | 3-D distance from target to destination | Destination |
+      |---|---|---|---|
+      | yes | out of range | more than the renewal threshold of F10 | cleared, and part f applies in the same step |
+      | yes | out of range | at most that threshold | kept |
+      | yes | in range | any | kept |
+      | no | either | any | kept |
+
+      The can-recalculate property is described in words in the Import mapping. A kept
+      destination ends the step for an actor that is not in the air (S-0307's airborne test):
+      nothing else happens in this step, **also when the target is in range**. The approach step
+      never clears a destination because the target came in range; stopping is the movement
+      specs' (part h). An actor in the air that keeps its destination is treated by part f as if
+      it had none. So a target that moves is followed by renewing the destination only at
+      processings of the behaviour (part a), and only once it is more than the threshold away
+      from the destination; the per-tick case of part a never renews a destination, because it
+      applies only to an actor without one.
+    - (f) **No destination.** For an actor that kept its target and has no destination (none to
+      start with, or cleared by part e), or that is in the air:
+
+      | Situation | Outcome |
+      |---|---|
+      | the target is in range, the actor is in the playfield (Terms), and the actor is not the deploy-to-fire vehicle of part f2 | the step ends with no destination |
+      | not the case above, and the actor is a vehicle with at least one approach destination (Terms) | it takes the first approach destination as its destination, that entry leaves the list, and the step ends |
+      | neither of the cases above | the actor searches for an approach position; the search, its result and what happens when it finds none are S-0307's (claim 15 and its open questions) |
+
+      (f2) **Deploy-to-fire vehicle.** A vehicle whose type deploys to fire (S-0301), standing on
+      a cell where its deploy test fails (S-0301, the must-deploy answer), searches as in the
+      last row above even when the target is in range, and its *r*′ of F10 is replaced by
+      ρ₃ + 512 leptons whenever ρ₃ + 512 ≤ *r*′, where ρ₃ is its 3-D distance to the target
+      (F4). The same *r*′ also sets its renewal threshold in part e.
+    - (g) **Actors that do not approach.** A building never takes the approach step: what a
+      building does with a target out of range is claim 32. An aircraft's approach belongs to
+      the aircraft specs. A deployed infantry unit (its current sequence one of the deploy kinds)
+      of a human-controlled owner takes no approach step at all while deployed: it does not move
+      towards a target out of range (claim 23, third infantry row, and the infantry deploy
+      specs). **Original only:** a deployed infantry unit of a computer-controlled owner whose
+      type fires when deployed undeploys when its target is out of range (our AI can order an
+      undeploy). A unit whose type cannot move has no movement zone that takes it anywhere; the
+      step may still give it a destination, which the movement specs then cannot follow (no
+      claim is made here about such data).
+    - (h) **Special vehicle approaches.** Before the parts above, a vehicle may take its target
+      object itself as destination instead, and then nothing else of the step happens: the
+      crushing approaches of S-0210 claim 11 (its attack-target variant for the original's
+      computer-controlled houses, which is the original's only, and its omni-crusher variant), and
+      a balloon-hover type whose weapon chosen for the target has a vertical projectile (S-0307
+      owns the latter with the search). When an approaching actor stops once its target is in
+      range is not specified here: it belongs to the movement specs (S-0207, S-0208; Open
+      questions).
+    - Backing: `measurable` (scenario B32: case a for the cadence and the in-range rule, case b
+      for the kept destination and its renewal, case c for the can-approach property in
+      *attack* and *area guard*, case c2 for *hunt* with a human-controlled owner, case d for
+      the per-tick rule with an unreachable target, case e for deployed infantry). These parts are `unmeasured`: the magnetic-beam case of part c (the beam's
+      rules belong to the combat topic, which no spec states); the draining case of part d (the
+      draining link belongs to the structures and combat topics); the *sticky* and *any other*
+      rows of part d (an actor in those behaviours takes the step only by the per-tick case of
+      part a, whose own drop of a target out of range for an actor without a destination gives
+      the same observable result for every row that drops, and for the rows that keep the target
+      the outcome is S-0307's search); the in-the-playfield exception
+      (no setup here has an attacker outside the usable area in range of its target); part f2,
+      whose cell test is S-0301's; the computer-controlled rows of parts d and g.
+    - Confidence: high (parts a, b, c, d, e and the outcomes of part f); medium (the per-tick rule of
+      part a, the in-the-playfield mark, part f2, part g's deployed infantry); low (part g's
+      immobile types)
+
 ## Formulas
 
 Notation: RZ₅₃(*z*) is *z* rounded toward zero to a double, as in S-0003 (the original's
@@ -1984,6 +2132,23 @@ and wrapped by *w* of F1, or 0 when the product is too large for that conversion
 0). No stock gate comes near the wrap. A negative result behaves as 0 (the door is at rest at its first
 update; the countdown has run out at once).
 
+**F10. Approach radius and renewal threshold** (claim 37). Let ρ be the firer's weapon range of
+S-0307 claim 13 for the weapon chosen for the target, in leptons (integer). Then
+
+> *r*′ = ρ − 128 if ρ ≥ 512, and *r*′ = ρ otherwise
+>
+> *r*′ = min(*r*′, ρ₃ + 512) for the deploy-to-fire vehicle of claim 37 f2 (ρ₃ its 3-D distance to the target, F4)
+>
+> the destination is cleared when ρ₃(target, destination) > *m* × *r*′
+
+where ρ₃(target, destination) is F4's 3-D distance between the target's reference point and the
+destination's reference point (the centre of a cell destination, or the object's reference point),
+*m* is the approach reset multiplier (integer, Import mapping), and *m* × *r*′ is a signed 32-bit
+integer product (reduced modulo 2³² into the signed range when it overflows, which only bad data
+reaches). The comparison is strict. *r*′ is the ρ′ of S-0307's F4, so for the vehicle of claim 37
+f2 the replaced value also starts that search (before S-0307 adds the building lengthening, which
+the renewal threshold never includes).
+
 ## Constants
 
 | Name (ours) | Value | Unit | Notes |
@@ -1993,6 +2158,10 @@ update; the countdown has run out at once).
 | Rate absent-key default | double nearest 0.016 | game minutes | Every behaviour; gives *D*<sub>r</sub> = 14 |
 | Anti-air rate absent-key default | the rate | game minutes | Claim 21 |
 | Flag absent-key defaults | no-threat no, paralysed no, recruitable yes, retaliate yes, scatter yes, zombie no | dimensionless (yes/no) | Every behaviour |
+| Approach range cut and reduction | 512 (inclusive), 128 | leptons | F10; the same values as S-0307 F4 |
+| Deploy-to-fire approach margin | 512 | leptons | F10, claim 37 f2 |
+| Approach reset multiplier absent-key default | 1 | dimensionless (integer) | F10 |
+| Can-approach and can-recalculate absent-key defaults | yes, yes | dimensionless (yes/no) | Claim 37 d and e |
 | Standard draw range | 0 to 2 | ticks | F2 |
 | Area-guard draw range | 1 to 5 | ticks | Claim 26 |
 | Area-guard harvester draw range | 1 to 10 | ticks | Claim 26; plus 1 |
@@ -2105,13 +2274,13 @@ behaviour. For each event, the first row that matches applies (as in claim 7).
 | queue *b* | *b* is none | nothing |
 | queue *b* | *b* is C, and Q is none or *b* | nothing |
 | queue *b* | any other case (*b* differs from C, or Q holds a behaviour other than *b*) | *b* becomes Q, replacing any queued behaviour |
-| start-next | Q ≠ none | the behaviour in Q becomes C and Q becomes none; timer expired now; start tick now; progress count 0 |
+| start-next | Q ≠ none | the behaviour in Q becomes C and Q becomes none; S unchanged (`quirks.stale_suspended_revert`); timer expired now; start tick now; progress count 0 |
 | start-next | Q = none | nothing |
 | force *b* | C is *wait* and *b* is *guard* | nothing |
-| force *b* | otherwise (C *selling* included) | *b* becomes C and Q becomes none; timer expired now; start tick now; progress count 0 |
+| force *b* | otherwise (C *selling* included) | *b* becomes C and Q becomes none; S unchanged (`quirks.stale_suspended_revert`); timer expired now; start tick now; progress count 0 |
 | override *b* | C is *selling*, or C is *wait* and *b* is *guard* | no slot change; target and destination still put aside and replaced (`quirks.refused_override_retargets`) |
 | override *b* | otherwise | S becomes the queued behaviour if Q ≠ none, else the behaviour that was current; *b* becomes C; Q unchanged; target and destination put aside and replaced |
-| revert | S ≠ none | the behaviour in S becomes C and S becomes none; target and destination restored |
+| revert | S ≠ none | the behaviour in S becomes C and S becomes none; the put-aside target and destination restored (none, after a behaviour order since the override, claim 12) |
 | revert | S = none | nothing |
 
 The queue rows show the slots only. When the request asks for an immediate start, a start-next
@@ -2240,6 +2409,27 @@ orders).
   engine uses the area-guard leash of F5, as for any other guard spot, and the importer warns
   (documented departure by the project lead's delegated decision of 2026-10-10, no switch, since
   the original's value cannot be reproduced). Stock data always gives the key.
+- **A late revert can bring back an old behaviour** (claims 8 to 10 and 12). A start-next, a force
+  and a behaviour order all leave the suspended slot as it is, and an override stays in effect
+  while a behaviour is suspended (claim 10). So an override that none of claim 10's causes has
+  ended (for example a retaliation interrupted by a move order) keeps its suspended behaviour, and
+  a later revert, caused by whatever object is then the actor's target, makes that behaviour
+  current again, possibly long after the override. That revert brings back the target and
+  destination still put aside: after a behaviour order there are none (claim 12), so the actor
+  then has no target and, if mobile, no destination. Example: a vehicle in *guard* retaliates, is
+  ordered to move, and is then ordered to attack another enemy; at the killing hit on that enemy
+  *guard* becomes current by a revert, not by the fall-back of claim 23. Had the vehicle taken an
+  opportunity target during its move (S-0309), the killing hit on that target would stop it short
+  of its destination. Proposed switch `quirks.stale_suspended_revert` (default on = original).
+  With it off, every start-next that makes a queued behaviour current and every force that takes
+  effect, whatever makes it (a per-tick start, an immediate start asked for by a queue request or
+  made by a processing, a guard reset or any other force), also empties the suspended slot and
+  forgets the put-aside target and destination, so a later revert finds nothing suspended and
+  does nothing. A start-next with nothing queued and a refused force (claims 8 and 9) still do
+  nothing. An override and a revert with no
+  start-next or force between them behave as with the switch on. With the switch off and
+  `quirks.override_suspends_queued` on, an override made while a behaviour is queued therefore
+  ends when that queued behaviour starts. Scenario B7 (h, l) observes the original's side.
 
 ## Import mapping
 
@@ -2316,6 +2506,10 @@ absent key keeps the value the earlier layers left).
 | `GateStages` | the building's image section in the art data (S-0007) | the gate's drawn stage count (claim 35, d): drawing only, read by no rule of this spec | integer, stages; absent keeps the held value; engine default 9 stages; owned by the rendering topic |
 | `StupidHunt` | type section | claim 27 | boolean |
 | `HoverAttack` | type section | claims 23 and 24 | boolean |
+| `ApproachTargetResetMultiplier` | `[General]` | *m* of F10 (claim 37 e) | integer; absent keeps the held value; engine default 1 |
+| `CanApproachTarget` | type section | the can-approach property (claim 37 d) | boolean; absent keeps the held value; engine default yes |
+| a type boolean whose key is not yet on the allowed-key list (Questions for the project lead) | type section | the can-recalculate property (claim 37 e) | boolean; absent keeps the held value; engine default yes |
+| `DeployToFire` | vehicle type section | the deploy-to-fire vehicle of claim 37 f2 (owned by S-0301) | boolean |
 | `CloseRange` | infantry type section | F3 | boolean |
 | `DistributedFire` | type section | claim 24 | boolean |
 | `OpportunityFire` | type section | claim 33 (passive search while moving) | boolean |
@@ -2590,7 +2784,7 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   by a behaviour queued for the infantry unit or the armed vehicle, by *move* not staying current,
   or by no *guard* queued for the unarmed vehicle; in C by nothing queued. Runs: three per run and
   unit.
-- **B7 (claims 10, 18).** (a) A human-controlled armed vehicle in *move* (long route) is fired at by
+- **B7 (claims 8, 10, 12, 18).** (a) A human-controlled armed vehicle in *move* (long route) is fired at by
   an enemy within its weapon range; expected: no retaliation, *move* continues. (b) The same vehicle
   in *guard*, fired at by an enemy land vehicle that neither sinks nor crashes; expected: an
   override to *attack* (the suspended slot shows *guard*), and a revert to *guard* on the tick of
@@ -2656,7 +2850,23 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
     (*guard* current, suspended slot empty) on the tick on which the attacker's owner changes.
     Falsified by the override still in effect on a later tick while the attacker belongs to the
     human-controlled house. A run in which the attacker is destroyed before the takeover is
-    invalid. Runs: three per case.
+    invalid.
+    (l) Later revert by another target: repeat (h); the attacker of (b) may go on firing, since a
+    human-controlled vehicle in *move* or *attack* does not retaliate (claim 18), so its fire
+    changes no slot. A run in which the vehicle is destroyed before the killing hit on C is
+    invalid; make up to ten attempts to get three valid runs. A test map also places an unarmed enemy vehicle C that the
+    vehicle's weapon needs several hits to kill. Once *move* is current (the suspended slot still
+    shows *guard*, as in (h)), scripted input orders the vehicle to attack C. The recorder also
+    reads C's health and the vehicle's target and destination. Expected: *attack* becomes current
+    through the queue with *guard* still suspended; on the tick on which C's health reaches 0,
+    *guard* is current, the suspended slot is empty and the vehicle has no target and no
+    destination. Falsified by an empty suspended slot at any tick between the move order and the
+    killing hit on C (with the switch off it is empty from the start-next that makes *move*
+    current), by *guard* still suspended after the tick of the killing hit, or by *attack* still
+    current on that tick (with no revert, *guard* would come only at a later *attack* processing,
+    claim 23). A run in which the vehicle's own processing of *attack* falls on the tick of the
+    killing hit is still decided by the suspended slot, which only a revert empties.
+    Runs: three per case.
 - **B8 (claims 21, 32).** Named test file: rules that give *guard* an anti-air rate different from
   its rate (for example rate 0.07, anti-air rate 0.2). Record the processing intervals of an armed
   building without targets. Expected: 180, 181 or 182; an armed vehicle in *guard* at the same time
@@ -3360,6 +3570,61 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   (no wake anyway), by a delay of 48 to 50 at a processing of (b) (row 1 not ending the
   processing), or by a delay of 45 at the first processing of (a) (a row-1 outcome without the
   kick sum having passed). Runs: five, each of 6000 ticks.
+- **B32 (claim 37, F10: the approach step).** Common setup: a tiny flat map at height 0 with open
+  clear ground, game speed index 2, one human-controlled house and one bystander computer player
+  kept outside the observed area. A named test file sets the rate of *attack* to 0.07
+  (*D*<sub>r</sub> = 63), the approach reset multiplier to 1, and gives one ordinary ground vehicle
+  type and one ordinary infantry type a weapon of range 5 cells (1280 leptons, so *r*′ = 1152) with
+  no minimum range and no close-range property. These are invented test values, set whatever the
+  stock data gives. The recorder logs, each tick, the attacker's behaviour, target, destination
+  (whether a cell or an object, and which), position, and processing ticks; and the target's
+  position.
+  (a) An unarmed enemy vehicle stands still 10 cells from the attacker; the attacker gets an attack
+  order. Then the same with the target 3 cells away, and again 3 cells away with the attacker's
+  weapon rearming at the order. Expected: in the first run the first destination appears on an
+  attack processing tick and changes only on processing ticks; in the other two runs the attacker
+  never gets a destination and does not move. Falsified by a destination set on a tick that is not
+  a processing tick of *attack* (other than by the order itself), or by any destination in the
+  in-range runs.
+  (b) The target is an enemy vehicle under a scripted move order that drives it straight away from
+  the attacker at a steady speed, starting 7 cells away. Expected: after the first destination,
+  each new destination appears on the first attack processing tick at which the 3-D distance from
+  the target's reference point to the held destination's reference point is above 1152 leptons,
+  never earlier. A second run gives the attacker's type the can-recalculate property *no*:
+  the first destination is then never replaced while it is held. A third run stops the target 2
+  cells beyond the destination: the attacker's destination is not cleared at any attack processing
+  while it is held, even after the range test passes (when the attacker stops belongs to the
+  movement specs). Renewals are expected only while the target is out of range of the attacker.
+  Falsified by a renewal at or below the threshold, a renewal on a tick that is not a processing
+  tick, or a destination cleared by an attack processing because the target came
+  in range.
+  (c) As (a), first run, with the attacker's type given the can-approach property *no*. Expected:
+  the attacker still approaches (the *attack* exception of claim 37 d). Then the guard key command
+  (S-0213 claim 18) puts it in *area guard* and an enemy vehicle drives into its sight but out of
+  its range: it approaches as well (human-controlled owner), and so does the same attacker with
+  the property *yes*. Falsified by an attacker that keeps its target without moving, or drops it.
+  (c2) *Hunt* with a human-controlled owner. The named test file also gives the attacker's type a
+  sight of 10 cells (an invented test value) and no stupid-hunt flag. A test map places the attacker of the
+  human-controlled house in *hunt*, with an unarmed enemy vehicle standing 8 cells away. In a first
+  run the attacker's type has the can-approach property *yes*: expected, it gets a destination on
+  a *hunt* processing tick and approaches. In a second run the property is *no*: expected, it
+  never moves and never holds a destination, and it holds no target at the end of any *hunt*
+  processing tick. Falsified by no approach in the first run, or by movement, a destination or a
+  target kept to the end of a processing tick in the second. A pair of runs in which the first
+  run shows no approach is invalid for the second (the search did not find the enemy).
+  (d) The same named test file also gives *attack* a rate of 2 game minutes (*D*<sub>r</sub> =
+  1800), so that attack processings are far apart. The attacker vehicle stands on a shore; the
+  target is an enemy hover vehicle on the water 3 cells away, in range, and the water beyond it is
+  wider than 10 cells. The attacker gets an attack order; after its first processing the target
+  drives straight out over the water under a scripted move order. Expected: the attacker drops
+  its target within one tick of the first tick on which the target is out of range (the target's
+  water cell is never in the attacker's reach region), not at an attack processing tick.
+  Falsified by a target held until the next attack processing tick.
+  (e) An infantry unit of a type that deploys and fires when deployed, deployed, gets an attack
+  order on an enemy 10 cells away. Expected: it neither moves nor gets a destination while
+  deployed. Falsified by a destination or movement while its sequence is a deploy kind. A run in
+  which the order does not leave *attack* current with the enemy as target is invalid.
+  Runs: three per case and attacker kind (vehicle, infantry; only infantry for e).
 
 ## Open questions
 
@@ -3416,24 +3681,35 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   search, no idle action). The two differ in the draws and the targeting-timer restart of that
   first processing; scenario B10 (g) checks only the guard spot afterwards.
 
+- **Q-0072, question 3 (stopping).** The approach step never clears a held destination because
+  the target came in range (claim 37 e), so an approaching actor stops by the movement rules. For
+  hover locomotion the original cuts the path at its next step once the target is in range; for
+  ground vehicles and infantry the rule that stops them is not traced, and a driving vehicle whose
+  movement ends with its target out of range drops the target. S-0207 and S-0208 own these.
+- Which parts of the approach fill a vehicle's approach destinations (Terms; claim 37 f).
+- The in-the-playfield mark (Terms; claim 37 f): which objects other than ones arriving from
+  outside the usable area lack it.
+- The *sticky* and *any other* rows of claim 37 d cannot be told apart by observation from the
+  per-tick drop of claim 37 a, the only way an actor in those behaviours reaches the step, so they
+  stay unmeasured; the *attack*, *area guard* and human-controlled *hunt* rows are backed by
+  scenario B32 (c and c2).
+
 ## Questions for the project lead
 
-- Stale suspended behaviour (claims 10 and 12): start-next and force leave the suspended slot
-  alone, and claim 10's revert causes look only at whether an override is in effect. So a revert
-  long after the override (for example at the killing hit on an opportunity target taken during a
-  move ordered after a retaliation) brings back the behaviour that was current before the
-  retaliation, with no target and no destination. This follows from claims 10 and 12, but no
-  scenario here tests it. Should it get a quirk switch, for example
-  `quirks.stale_suspended_revert` (default on = the original), whose off behaviour empties the
-  suspended slot at every start-next and force, so that a later revert does nothing?
 - Claim 31, a too-short auto-deploy delay list for the neutral and special houses: the spec
   states our engine's result (importer warning, the row does not apply). Confirm it, or choose
   another deterministic result.
 - `quirks.turret_snap_bound_wraps` (Edge cases and quirks, F8): keep it as a switch of this spec,
   or leave the field's domain to a revision of S-0206?
 
+- The can-recalculate property of claim 37 e is read from a type key that the allowed-key list
+  does not yet hold (it is on the deny list). Add it to the allowed-key list so the Import mapping
+  can name it, or keep the property described in words only?
+
 Decided and applied: claim 36 (b), Q-0020 (delegated sign-off, 2026-10-10: area-guard leash and
 importer warning). `quirks.named_deploy_area_fire` (default on). The SAM building's unchecked
 secondary shot is owned here (claim 32). Claim 32's out-of-stage rule has no switch. The neutral
 and special houses keep the original's rules (2026-10-10). Every house uses the normal difficulty
-row (2026-10-10). Game end in skirmish (2026-10-11): no rule of this spec depends on it.
+row (2026-10-10). Game end in skirmish (2026-10-11): no rule of this spec depends on it. The neutral and special
+houses' house skill level is 0 in a skirmish (S-0412 claim 3, scenario K10), answering the former
+open question on it.

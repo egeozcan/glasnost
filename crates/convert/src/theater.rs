@@ -74,6 +74,10 @@ pub struct TheaterQuirks {
     /// variant has no tile cell at its index paints nothing. Off: it paints
     /// the plain image's tile cell.
     pub variant_cell_missing: bool,
+    /// `quirks.theater_five_forced_unset_roles` (S-0010 claim 4): the theater
+    /// with index 5 forces seven roles unset. Off: they use their declared
+    /// values.
+    pub theater_five_forced_unset_roles: bool,
 }
 
 impl Default for TheaterQuirks {
@@ -83,6 +87,7 @@ impl Default for TheaterQuirks {
             role_one_past_end: true,
             variant_origin_mismatch: true,
             variant_cell_missing: true,
+            theater_five_forced_unset_roles: true,
         }
     }
 }
@@ -378,8 +383,9 @@ impl Catalogue {
             green_transition: start("ClearToGreenLat", UNSET),
             pave_transition: start("ClearToPaveLat", UNSET),
         };
-        if theater == FORCED_UNSET_THEATER {
-            // spec: S-0010 claim 4 (theater 5: bridge, cliff, shore, water, water bridge and wooden bridge are unset;
+        if theater == FORCED_UNSET_THEATER && quirks.theater_five_forced_unset_roles {
+            // spec: S-0010 claim 4 (quirks.theater_five_forced_unset_roles: theater 5's bridge, cliff, shore,
+            // water, water bridge and wooden bridge roles are unset;
             // the water cliff role has no start in `Roles`)
             for r in [
                 &mut roles.bridge,
@@ -783,6 +789,12 @@ mod tests {
         assert_eq!(c.file_of(4), Some(b"bb02.TEM".to_vec()));
         // spec: S-0010 claim 4 (theater 5: the water role is forced unset)
         assert_eq!(Catalogue::read(&d, Theater::Lunar).water_base, -1);
+        // spec: S-0010 claim 4 (quirks.theater_five_forced_unset_roles off: the declared value)
+        let off = TheaterQuirks {
+            theater_five_forced_unset_roles: false,
+            ..TheaterQuirks::default()
+        };
+        assert_eq!(Catalogue::read_with(&d, Theater::Lunar, &off).water_base, 5);
         let none = Catalogue::read(
             &doc("[TileSet0000]\nFileName=aa\nTilesInSet=1\n"),
             Theater::Snow,

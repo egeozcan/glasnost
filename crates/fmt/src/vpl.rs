@@ -1,41 +1,36 @@
 //! Voxel lighting table (VPL): for each shade index and each voxel colour
 //! index, the palette index to draw (S-0105 claims 19 and 38).
 //!
-//! S-0105 claim 38 fixes how the content is used: a row count *R*, a remap
-//! range, one more value and a palette, none of which but *R* has an
-//! effect, then *R* rows of 256 entries; rows the file does not supply read
-//! as zero (a file that ends part-way through a row supplies that row's
-//! first entries), and only the first 128 rows are kept. Where each part
-//! lies in the file is "the format's own"; no format source this project
-//! may read gives it, so the layout stays provisional (Q-0022):
-//!
-//! - a header of four little-endian `u32` values,
-//! - a 768-byte palette (kept as stored, never used for drawing),
-//! - rows of 256 bytes,
-//!
-//! with the row count taken as the first header value for which the length
-//! is exactly `16 + 768 + 256 · R`, or else the largest for which the file
-//! ends before its last row (every row the file supplies is then kept; the
-//! rows after it read as zero whichever value is the count). A file shorter than header and palette, or one
-//! no header value fits, is rejected; the caller then uses
-//! [`Vpl::empty`], whose rows all read as zero (claim 38).
+//! The file layout is S-0013's: a header of four little-endian `u32`
+//! values (remap-range start, remap-range end, row count *R*, an extra
+//! value), a 768-byte palette (kept as stored, never used for drawing),
+//! then rows of 256 bytes from position 784. Our engine keeps at most the
+//! first 128 rows; the supplied row bytes are the first
+//! min(L − 784, 256 · min(R, 128)) bytes after the palette, a partial row
+//! included, and every unsupplied entry is zero. A file shorter than header
+//! and palette supplies no rows: [`Vpl::parse`] rejects it and the caller
+//! uses [`Vpl::empty`] (S-0013 claim 4, S-0105 claim 38).
 
 use crate::bytes::{PutLe, Reader};
 use crate::error::{Error, Result};
 use crate::fixture::FixtureWriter;
 use crate::pal::{PAL_LEN, Palette6};
 
-/// Header length: four `u32` values (provisional, Q-0022).
-pub const HEADER_LEN: usize = 16;
+/// Header length: four `u32` values.
+pub const HEADER_LEN: usize = 16; // spec: S-0013 Constants (header extent)
 /// Entries per row: one per voxel colour index (S-0105 claim 19).
 pub const ROW_LEN: usize = 256; // spec: S-0105 Import mapping (each row has 256 entries)
 /// Rows kept from a table (S-0105 claim 38, Constants: our engine's limit).
-pub const MAX_ROWS: usize = 128; // spec: S-0105 Constants (rows kept from a lighting table file)
+pub const MAX_ROWS: usize = 128; // spec: S-0013 Constants (retained row limit), S-0105 Constants
+/// Header values below this row count leave rows undeclared (an importer
+/// warning, S-0013 Import mapping).
+pub const USUAL_ROWS: usize = 32; // spec: S-0013 Import mapping (R below 32 warns)
 
-/// A parsed voxel lighting table. Provisional layout (Q-0022).
+/// A parsed voxel lighting table (S-0013).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Vpl {
-    /// The four header values as read. One of them is the row count.
+    /// The four header values as read; the third is the row count (S-0013
+    /// claim 1).
     pub header: [u32; 4],
     /// The palette the file carries, as stored (no effect, S-0105 claim
     /// 38).
@@ -49,6 +44,9 @@ pub struct Vpl {
     /// The file ends before the last of its rows (an importer warning,
     /// S-0105 claim 38).
     pub short: bool,
+    /// Bytes follow the last declared row (ignored, with an importer
+    /// warning; S-0013 claim 5).
+    pub trailing: bool,
 }
 
 impl Vpl {
@@ -61,11 +59,14 @@ impl Vpl {
             rows: Vec::new(),
             stated_rows: 0,
             short: false,
+            trailing: false,
         }
     }
 
-    /// Parses a VPL file (provisional layout, Q-0022).
+    /// Parses a VPL file (S-0013). A file shorter than its header and
+    /// palette is an error: it supplies no rows (claim 4).
     pub fn parse(data: &[u8]) -> Result<Self> {
+        // spec: S-0013 claim 4 (fewer than 784 bytes: no row entries)
         let body = data
             .len()
             .checked_sub(HEADER_LEN + PAL_LEN)
@@ -73,52 +74,44 @@ impl Vpl {
                 needed: (HEADER_LEN + PAL_LEN) as u64,
             })?;
         let mut r = Reader::new(data);
+        // spec: S-0013 claim 1 (four unsigned 32-bit little-endian values)
         let header = [r.u32()?, r.u32()?, r.u32()?, r.u32()?];
-        let rows_of = |h: u32| usize::try_from(h).ok();
-        // provisional (Q-0022): the first header value whose row count fits the length exactly,
-        // else the largest for which the file ends before its last row
-        let n = header
-            .iter()
-            .filter_map(|&h| rows_of(h))
-            .find(|&h| h.checked_mul(ROW_LEN) == Some(body))
-            .or_else(|| {
-                header
-                    .iter()
-                    .filter_map(|&h| rows_of(h))
-                    .filter(|&h| h.checked_mul(ROW_LEN).is_none_or(|l| l > body))
-                    .max()
-            })
-            .ok_or(Error::Invalid(
-                "VPL header gives no row count that fits the length",
-            ))?;
+        // spec: S-0013 claim 1 (the row count is always positions 8–11)
+        let declared = u64::from(header[2]);
+        // spec: S-0013 claim 2 (positions 16–783: the palette, as stored)
         let palette = Palette6::parse(r.bytes(PAL_LEN)?)?;
         let rest = &data[HEADER_LEN + PAL_LEN..];
-        // spec: S-0105 claim 38 (the first 128 rows; bytes after the last row are ignored)
-        let kept = n.min(MAX_ROWS);
-        let mut rows = Vec::with_capacity(kept.min(rest.len() / ROW_LEN + 1));
-        for chunk in rest.chunks(ROW_LEN).take(kept) {
-            // spec: S-0105 claim 38 (a row the file ends inside: its supplied entries, the rest zero)
+        // spec: S-0013 Formulas (supplied row bytes min(L − 784, 256 · min(R, 128)), never wrapped)
+        let kept = declared.min(MAX_ROWS as u64) as usize;
+        let supplied = body.min(kept * ROW_LEN);
+        let mut rows = Vec::with_capacity(kept.min(supplied / ROW_LEN + 1));
+        // spec: S-0013 claim 3 (row q at 784 + 256q), claim 4 (a partial row supplies its own entries)
+        for chunk in rest[..supplied].chunks(ROW_LEN) {
             let mut row = [0u8; ROW_LEN];
             row[..chunk.len()].copy_from_slice(chunk);
             rows.push(row);
         }
+        let exact = declared * ROW_LEN as u64;
         Ok(Self {
             header,
             palette,
             rows,
-            stated_rows: n,
-            short: n.saturating_mul(ROW_LEN) > body,
+            stated_rows: usize::try_from(declared).unwrap_or(usize::MAX),
+            // spec: S-0013 Import mapping (the short-content comparison uses exact 256R)
+            short: exact > body as u64,
+            // spec: S-0013 claim 5 (bytes after the declared rows have no effect)
+            trailing: (body as u64) > exact,
         })
     }
 
     /// The first header value, as read: taken as the start of the remap range;
-    /// S-0105 claim 38: no effect on drawing (provisional position, Q-0022).
+    /// S-0013 claim 1, S-0105 claim 38: no effect on drawing.
     pub fn remap_start(&self) -> u32 {
         self.header[0]
     }
 
     /// The second header value, as read: taken as the end of the remap range;
-    /// S-0105 claim 38: no effect on drawing (provisional position, Q-0022).
+    /// S-0013 claim 1, S-0105 claim 38: no effect on drawing.
     pub fn remap_end(&self) -> u32 {
         self.header[1]
     }
@@ -132,9 +125,8 @@ impl Vpl {
             .map_or(0, |row| row[usize::from(colour)])
     }
 
-    /// Serialises the table in the provisional layout (Q-0022). The header
-    /// is written as stored; it should hold the row count somewhere for the
-    /// result to parse.
+    /// Serialises the table in S-0013's layout. The header is written as
+    /// stored; its third value should be the row count.
     pub fn write(&self) -> Vec<u8> {
         let mut out = Vec::with_capacity(HEADER_LEN + PAL_LEN + self.rows.len() * ROW_LEN);
         for &h in &self.header {
@@ -149,9 +141,8 @@ impl Vpl {
 }
 
 /// A synthetic table of `rows` shade rows with invented content: row `q`
-/// maps colour `χ` to `(χ + q) mod 256`, keeping 0 at 0. The row count goes
-/// in the third header value, an invented choice: the parser accepts it in
-/// any of the four (Q-0022).
+/// maps colour `χ` to `(χ + q) mod 256`, keeping 0 at 0. The row count is
+/// the third header value (S-0013 claim 1).
 pub fn synthetic_table(rows: usize) -> Vpl {
     let mut out = Vec::with_capacity(rows);
     for q in 0..rows {
@@ -167,6 +158,7 @@ pub fn synthetic_table(rows: usize) -> Vpl {
         rows: out,
         stated_rows: rows,
         short: false,
+        trailing: false,
     }
 }
 
@@ -196,7 +188,7 @@ pub fn fixture_writers() -> Vec<Box<dyn FixtureWriter>> {
 mod tests {
     use super::*;
 
-    /// Q-0022 (provisional layout round trip); S-0105 claim 38 (row q gives shade q)
+    /// spec: S-0013 claims 1 to 3 (layout round trip); S-0105 claim 38 (row q gives shade q)
     #[test]
     fn round_trip() {
         let t = synthetic_table(32);
@@ -208,9 +200,22 @@ mod tests {
         assert_eq!((back.remap_start(), back.remap_end()), (16, 31));
         assert_eq!(back.get(3, 10), 13);
         assert_eq!(back.get(31, 0), 0);
+        // spec: S-0013 claim 3 (entry (q, χ) at 784 + 256q + χ)
+        assert_eq!(bytes[784 + 256 * 3 + 10], 13);
     }
 
-    /// spec: S-0105 claim 38 (rows the file does not supply read as zero)
+    /// spec: S-0013 claim 1 (the row count is the value at positions 8–11, whatever the others hold)
+    #[test]
+    fn row_count_is_the_third_value() {
+        let mut t = synthetic_table(5);
+        t.header = [5, 6, 3, 5];
+        let v = Vpl::parse(&t.write()).unwrap();
+        assert_eq!((v.stated_rows, v.rows.len()), (3, 3));
+        assert!(v.trailing);
+        assert_eq!(v.get(3, 10), 0, "rows past R are not supplied");
+    }
+
+    /// spec: S-0105 claim 38, S-0013 claim 4 (rows the file does not supply read as zero)
     #[test]
     fn missing_rows_read_zero() {
         let t = synthetic_table(4);
@@ -220,22 +225,36 @@ mod tests {
         assert_eq!(Vpl::empty().get(0, 77), 0);
     }
 
-    /// spec: S-0105 claim 38 (a file that ends part-way through a row: its supplied entries, the rest zero)
+    /// spec: S-0013 claim 4 (a file that ends part-way through a row: its supplied entries, the rest zero)
     #[test]
     fn short_file() {
         let mut bytes = synthetic_table(4).write();
         bytes.truncate(16 + 768 + 2 * 256 + 20);
         let v = Vpl::parse(&bytes).unwrap();
         assert!(v.short);
-        // The row count is ambiguous in a short file; the supplied rows are kept either way.
-        assert_eq!(v.stated_rows, 31);
+        assert_eq!(v.stated_rows, 4);
         assert_eq!(v.rows.len(), 3);
         assert_eq!(v.get(2, 19), 21);
         assert_eq!(v.get(2, 20), 0);
         assert_eq!(v.get(3, 10), 0);
+        // spec: S-0013 claim 4 (shorter than header and palette, or ending at 784: no rows)
+        assert!(Vpl::parse(&bytes[..783]).is_err());
+        assert!(Vpl::parse(&bytes[..10]).is_err());
+        assert!(Vpl::parse(&bytes[..784]).unwrap().rows.is_empty());
     }
 
-    /// spec: S-0105 claim 38 (only the first 128 rows are kept; a departure)
+    /// spec: S-0013 claim 5 (bytes after the declared rows have no effect)
+    #[test]
+    fn long_file() {
+        let mut t = synthetic_table(4);
+        t.header[2] = 2;
+        let v = Vpl::parse(&t.write()).unwrap();
+        assert_eq!(v.rows.len(), 2);
+        assert!(v.trailing && !v.short);
+        assert_eq!(v.get(2, 10), 0);
+    }
+
+    /// spec: S-0013 claim 6, S-0105 claim 38 (at most the first 128 rows, never a wrapped length)
     #[test]
     fn at_most_128_rows() {
         let t = synthetic_table(130);
@@ -243,26 +262,12 @@ mod tests {
         assert_eq!(v.stated_rows, 130);
         assert_eq!(v.rows.len(), MAX_ROWS);
         assert_eq!(v.get(129, 5), 0);
-    }
-
-    /// Q-0022 (the row count may sit in any header value)
-    #[test]
-    fn row_count_in_any_header_value() {
-        for slot in 0..4 {
-            let mut t = synthetic_table(5);
-            t.header = [99, 98, 97, 96];
-            t.header[slot] = 5;
-            assert_eq!(Vpl::parse(&t.write()), Ok(t));
-        }
-    }
-
-    /// Q-0022 (rejects files no header value fits)
-    #[test]
-    fn rejects_mismatches() {
-        let mut t = synthetic_table(4);
-        t.header = [1, 2, 3, 0];
-        assert!(Vpl::parse(&t.write()).is_err());
-        assert!(Vpl::parse(&[0; 100]).is_err());
+        // 16777216 rows: our engine never wraps 256R to 0; the 128 available rows are kept
+        let mut t = synthetic_table(130);
+        t.header[2] = 16_777_216;
+        let v = Vpl::parse(&t.write()).unwrap();
+        assert_eq!(v.rows.len(), MAX_ROWS);
+        assert!(v.short);
     }
 
     #[test]

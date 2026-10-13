@@ -119,6 +119,161 @@ pub fn unpack(data: &[u8], codec: PackCodec, max_out: usize) -> Result<Vec<u8>> 
     Ok(out)
 }
 
+/// The value of a base-64 digit character (S-0012 claim 2): `A`–`Z` 0–25,
+/// `a`–`z` 26–51, `0`–`9` 52–61, `+` 62, `/` 63.
+pub fn base64_digit(c: u8) -> Option<u8> {
+    // spec: S-0012 claim 2 (the alphabet, in increasing digit value; no `-` and `_` alphabet)
+    match c {
+        b'A'..=b'Z' => Some(c - b'A'),
+        b'a'..=b'z' => Some(c - b'a' + 26),
+        b'0'..=b'9' => Some(c - b'0' + 52),
+        b'+' => Some(62),
+        b'/' => Some(63),
+        _ => None,
+    }
+}
+
+/// Packed bytes decoded from a map block's joined text (S-0012 claim 2).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct TextBytes {
+    /// The bytes of the complete four-character groups.
+    pub bytes: Vec<u8>,
+    /// Index (from 0) of the first nonstandard complete group, if any.
+    pub first_nonstandard: Option<usize>,
+    /// Number of nonstandard complete groups.
+    pub nonstandard: usize,
+    /// Characters of a final group shorter than four, discarded.
+    pub short_tail: usize,
+}
+
+/// Decodes joined base-64 text group by group, as the original does
+/// (S-0012 claim 2 and Formulas F1): each complete group of four
+/// *characters* collects digits until its end or an `=`, skipping other
+/// characters outside the alphabet, and emits one byte for zero to two
+/// digits, two for three and three for four. A final group shorter than
+/// four characters is discarded (our engine's rule).
+pub fn decode_text_groups(text: &[u8]) -> TextBytes {
+    let mut out = TextBytes::default();
+    let groups = text.chunks_exact(4);
+    out.short_tail = groups.remainder().len();
+    let count = text.len() / 4;
+    for (gi, group) in groups.enumerate() {
+        let mut digits = [0u8; 4];
+        let mut n = 0usize;
+        for &c in group {
+            if c == b'=' {
+                // spec: S-0012 claim 2 (`=` ends that group's interpretation)
+                break;
+            }
+            // spec: S-0012 claim 2 (characters outside the alphabet other than `=` are skipped)
+            if let Some(d) = base64_digit(c) {
+                digits[n] = d;
+                n += 1;
+            }
+        }
+        // spec: S-0012 Formulas F1 (V = 262144·d₀ + 4096·d₁ + 64·d₂ + d₃, unfilled places 0)
+        let v = (u32::from(digits[0]) << 18)
+            | (u32::from(digits[1]) << 12)
+            | (u32::from(digits[2]) << 6)
+            | u32::from(digits[3]);
+        let b = [(v >> 16) as u8, (v >> 8) as u8, v as u8];
+        // spec: S-0012 claim 2 (one byte for zero, one or two digits; two for three; three for four)
+        let emit = match n {
+            0..=2 => 1,
+            3 => 2,
+            _ => 3,
+        };
+        out.bytes.extend_from_slice(&b[..emit]);
+        // spec: S-0012 claim 2 (a standard group: four digits, or a final group of two digits and
+        // `==` or three digits and `=`)
+        let all_digits = group.iter().all(|&c| base64_digit(c).is_some());
+        let last = gi + 1 == count;
+        let padded = |k: usize| {
+            group[..k].iter().all(|&c| base64_digit(c).is_some())
+                && group[k..].iter().all(|&c| c == b'=')
+        };
+        let standard = all_digits || (last && (padded(2) || padded(3)));
+        if !standard {
+            out.nonstandard += 1;
+            out.first_nonstandard.get_or_insert(gi);
+        }
+    }
+    out
+}
+
+/// Why a map block's chunk was not used (S-0012 claims 9 and 10).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ChunkProblem {
+    /// Index of the chunk, from 0.
+    pub chunk: usize,
+    /// What was wrong.
+    pub what: &'static str,
+}
+
+/// Largest expanded chunk our engine supports (S-0012 claim 10).
+pub const MAX_CHUNK: usize = 8192; // spec: S-0012 claim 10 (supported chunks have 1 … 8192 expanded bytes)
+
+/// Expands a map block's packed bytes chunk by chunk (S-0012 claims 3 to
+/// 5, 9 and 10). Returns the bytes of the complete, valid chunks before the
+/// first problem, and that problem: the block stops at an incomplete or
+/// rejected chunk, keeping the earlier chunks' bytes.
+pub fn unpack_prefix(data: &[u8], codec: PackCodec) -> (Vec<u8>, Option<ChunkProblem>) {
+    let mut out = Vec::new();
+    let mut pos = 0usize;
+    let mut chunk = 0usize;
+    let fail = |chunk, what| Some(ChunkProblem { chunk, what });
+    while pos < data.len() {
+        // spec: S-0012 claim 3 (C at positions 0 and 1, U at 2 and 3, unsigned 16-bit little-endian)
+        let Some(h) = data.get(pos..pos + 4) else {
+            // spec: S-0012 claim 9 (a chunk header of fewer than four bytes: none of that chunk)
+            return (out, fail(chunk, "short chunk header"));
+        };
+        let packed = usize::from(u16::from_le_bytes([h[0], h[1]]));
+        let size = usize::from(u16::from_le_bytes([h[2], h[3]]));
+        // spec: S-0012 claim 3 (the next chunk starts 4 + C bytes after this chunk's start)
+        let Some(block) = data.get(pos + 4..pos + 4 + packed) else {
+            // spec: S-0012 claim 9 (fewer than C compressed bytes: none of that chunk)
+            return (out, fail(chunk, "short compressed content"));
+        };
+        // spec: S-0012 claim 10 (supported chunks: 1 … 8192 expanded bytes, at least one compressed byte)
+        if packed == 0 || size == 0 || size > MAX_CHUNK {
+            return (out, fail(chunk, "unsupported chunk size"));
+        }
+        if out.len().saturating_add(size) > MAX_DECOMPRESSED {
+            return (out, fail(chunk, "over our decoding limit"));
+        }
+        // spec: S-0012 claim 3 (each chunk starts with empty copy history)
+        let decoded = match codec {
+            PackCodec::Lzo => lzo::decompress(block, size),
+            PackCodec::Lcw => lcw::decompress(block, size),
+        };
+        // spec: S-0012 claim 10 (missing or early end marker, unavailable input or copy source,
+        // or an expansion length other than U: the chunk is rejected)
+        let decoded = match decoded {
+            Ok(d) if d.len() == size => d,
+            Ok(_) => return (out, fail(chunk, "expansion shorter than its stated length")),
+            Err(Error::Truncated { .. }) => {
+                return (
+                    out,
+                    fail(
+                        chunk,
+                        "compressed content without an end marker or cut short",
+                    ),
+                );
+            }
+            Err(Error::TooLarge(_)) => {
+                return (out, fail(chunk, "expansion longer than its stated length"));
+            }
+            Err(Error::Invalid(m)) => return (out, fail(chunk, m)),
+            Err(_) => return (out, fail(chunk, "invalid compressed content")),
+        };
+        out.extend_from_slice(&decoded);
+        pos += 4 + packed;
+        chunk += 1;
+    }
+    (out, None)
+}
+
 /// Compresses `data` into the block framing [`unpack`] reads, splitting it
 /// into blocks of `block_size` bytes (clamped to `1..=`[`MAX_BLOCK`]).
 /// Empty input gives no blocks.
@@ -442,6 +597,103 @@ mod tests {
         for n in 1..packed.len() {
             assert!(unpack(&packed[..n], PackCodec::Lzo, 1000).is_err(), "{n}");
         }
+    }
+
+    #[test]
+    fn s0012_claim_2_text_groups() {
+        // spec: S-0012 claim 2 (standard groups, and the padded final group)
+        let t = decode_text_groups(b"YWJjZA==");
+        assert_eq!(
+            (t.bytes.as_slice(), t.nonstandard, t.short_tail),
+            (&b"abcd"[..], 0, 0)
+        );
+        assert_eq!(decode_text_groups(b"YWJjZGU=").bytes, b"abcde");
+        // a group crossing a line boundary is joined text (claim 1): no separator
+        assert_eq!(decode_text_groups(b"YWJjZGVm").bytes, b"abcdef");
+        // characters outside the alphabet are skipped inside their group
+        let t = decode_text_groups(b"Y*Jj");
+        // digits Y, J, j: three digits, two bytes; nonstandard
+        assert_eq!(
+            t.bytes,
+            [
+                ((24u32 << 18 | 9 << 12 | 35 << 6) >> 16) as u8,
+                ((24u32 << 18 | 9 << 12 | 35 << 6) >> 8) as u8
+            ]
+        );
+        assert_eq!((t.nonstandard, t.first_nonstandard), (1, Some(0)));
+        // `=` ends only its group; interpretation resumes with the next group
+        let t = decode_text_groups(b"YQ==YWJj");
+        assert_eq!(t.bytes, b"aabc");
+        assert_eq!(
+            t.first_nonstandard,
+            Some(0),
+            "a padded group that is not final"
+        );
+        // zero digits emit one byte 0; two digits emit ⌊(64·d₀ + d₁) / 16⌋
+        assert_eq!(decode_text_groups(b"====").bytes, [0]);
+        assert_eq!(
+            decode_text_groups(b"YW=x").bytes,
+            [((64 * 24 + 22) / 16) as u8]
+        );
+        // no `-` and `_` alphabet
+        assert_eq!(decode_text_groups(b"-_AB").bytes, [0]);
+        // a short final group is discarded; earlier groups stay
+        let t = decode_text_groups(b"YWJjZA");
+        assert_eq!((t.bytes.as_slice(), t.short_tail), (&b"abc"[..], 2));
+    }
+
+    #[test]
+    fn s0012_claims_3_9_10_chunk_prefix() {
+        let data = sample_data(3, 20_000);
+        let packed = pack(&data, PackCodec::Lzo, MAX_BLOCK);
+        // spec: S-0012 claim 3 (chunks concatenate; a shorter last chunk is normal)
+        assert_eq!(unpack_prefix(&packed, PackCodec::Lzo), (data.clone(), None));
+        let first = 4 + usize::from(u16::from_le_bytes([packed[0], packed[1]]));
+        // spec: S-0012 claim 9 (a short header or short content keeps the earlier chunks)
+        for cut in [first + 3, first + 10] {
+            let (out, p) = unpack_prefix(&packed[..cut], PackCodec::Lzo);
+            assert_eq!(out, &data[..MAX_BLOCK]);
+            assert_eq!(p.map(|p| p.chunk), Some(1));
+        }
+        // spec: S-0012 claim 10 (an expansion length other than U rejects the chunk)
+        let mut wrong = packed.clone();
+        wrong[first + 2] ^= 1;
+        let (out, p) = unpack_prefix(&wrong, PackCodec::Lzo);
+        assert_eq!((out.len(), p.map(|p| p.chunk)), (MAX_BLOCK, Some(1)));
+        // spec: S-0012 claim 10 (an end marker before the end of the compressed content)
+        let mut early = pack(b"xyz", PackCodec::Lcw, MAX_BLOCK);
+        early.push(0x80);
+        early[0] += 1;
+        assert_eq!(
+            unpack_prefix(&early, PackCodec::Lcw).1.map(|p| p.chunk),
+            Some(0)
+        );
+        // spec: S-0012 claim 10 (empty chunks and chunks above 8192 bytes are unsupported)
+        let (out, p) = unpack_prefix(&[0, 0, 0, 0], PackCodec::Lcw);
+        assert_eq!(
+            (out.len(), p.map(|p| p.what)),
+            (0, Some("unsupported chunk size"))
+        );
+        let big = [1, 0, 0x01, 0x20, 0x80];
+        assert_eq!(
+            unpack_prefix(&big, PackCodec::Lcw).1.map(|p| p.what),
+            Some("unsupported chunk size")
+        );
+        // spec: S-0012 claim 10 (a copy before the chunk's first byte rejects it: no shared history)
+        let two = [
+            &pack(b"abc", PackCodec::Lcw, 3)[..],
+            &[3, 0, 3, 0, 0x00, 0x03, 0x80],
+        ]
+        .concat();
+        let (out, p) = unpack_prefix(&two, PackCodec::Lcw);
+        assert_eq!((out.as_slice(), p.map(|p| p.chunk)), (&b"abc"[..], Some(1)));
+    }
+
+    #[test]
+    fn s0012_table_l_zero_length_runs() {
+        // spec: S-0012 Formulas, table L (a zero-length run or absolute copy needs no source byte)
+        let s = [0xFE, 0, 0, 7, 0xFF, 0, 0, 5, 0, 0x81, b'q', 0x80];
+        assert_eq!(lcw::decompress(&s, 10).unwrap(), b"q");
     }
 
     #[test]

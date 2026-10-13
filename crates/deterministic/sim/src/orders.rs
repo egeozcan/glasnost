@@ -166,6 +166,10 @@ pub fn issue(w: &mut World, house: HouseId, order: Order) -> bool {
     if w.tick <= w.orders_blocked_through {
         return false;
     }
+    // spec: S-0213 claim 3 and S-0404 claim 10 (a production order is judged when it is issued)
+    if !crate::econ::sidebar::legal(w, house, &order) {
+        return false;
+    }
     let limit = w.rules().quirks.pending_order_limit;
     let Some(h) = w.houses.get_mut(usize::from(house.0)) else {
         return false;

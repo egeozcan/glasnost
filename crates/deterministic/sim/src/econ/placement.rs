@@ -33,10 +33,6 @@ pub struct Rules {
     /// The refund percentage *r*, a double, narrowed when used (S-0408
     /// claim 1).
     pub refund_percent: F64,
-    /// The pad aircraft (S-0408 claim 2), as written.
-    pub pad_aircraft: Vec<String>,
-    /// The separate-aircraft setting (S-0408 claim 2).
-    pub separate_aircraft: bool,
 }
 
 impl Rules {
@@ -58,10 +54,6 @@ impl Rules {
                 .refund_percent
                 .as_ref()
                 .map_or_else(|| crate::rules::nearest_double("0.5"), |d| d.value(mode)),
-            // spec: S-0408 Import mapping (PadAircraft absent: empty)
-            pad_aircraft: g.pad_aircraft.clone().unwrap_or_default(),
-            // spec: S-0404 Import mapping via S-0408 claim 2 (SeparateAircraft absent: no)
-            separate_aircraft: g.separate_aircraft.unwrap_or(false),
         }
     }
 }
@@ -601,12 +593,15 @@ pub fn factory_could_make(w: &World, house: HouseId, t: u32) -> bool {
     })
 }
 
-/// The building object a place order places: the done item's object.
-/// Seam: production lines (S-0404) are not on this branch, so a new
-/// building object of the type is created here (with its creation draw);
-/// with S-0404 this becomes `crate::econ::production::item_object`.
+/// The building object a place order places: the done item's object
+/// (S-0404 claim 7), which the placement puts on the map without creating
+/// one. A caller with no done item of the type (a direct engine call, as in
+/// the claim tests; no order reaches here without one, since S-0404 claim 7
+/// asks for the done item first) gets a new object with its creation draw.
 fn item_object(w: &mut World, house: HouseId, t: TypeRef) -> ObjectId {
-    crate::objects::create(w, Kind::Building, t.index, Some(house))
+    crate::econ::production::item_object(w, house, t)
+        .filter(|&id| w.obj(id).is_some())
+        .unwrap_or_else(|| crate::objects::create(w, Kind::Building, t.index, Some(house)))
 }
 
 /// Applies the placement of a done building (S-0406 claims 1, 3, 8 to

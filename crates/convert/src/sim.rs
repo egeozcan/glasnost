@@ -282,12 +282,14 @@ enum Form {
     Refs(Kind),
     /// A list of integers (S-0003 claims 3 and 12).
     Ints,
+    /// A debris maxima list (S-0003 claim 20): decimal integer prefixes.
+    Maxima,
     /// A list of names that are not type names (S-0003 claims 1 and 12),
     /// each item as [`Form::Text`] gives it, kept in order with none left
     /// out.
     Texts,
 }
-use Form::{Bool, Dec, Int, Ints, Ref, Refs, Text, Texts};
+use Form::{Bool, Dec, Int, Ints, Maxima, Ref, Refs, Text, Texts};
 
 /// Rules fields shared by infantry, vehicle and aircraft types: our field
 /// name, the INI key (the field docs of `glasnost_rules::sim::UnitType`).
@@ -826,7 +828,7 @@ impl Builder<'_> {
             Ref(kind) => fold(state, None, |v, _| Some(self.ref_name(kind, v)))
                 .flatten()
                 .map(jsonc::string),
-            // spec: S-0003 claims 12 and 14 (a list of type names; a given list replaces the held one; none items left out: placeholder, Q-0061)
+            // spec: S-0003 claims 12, 14 and 19 (a list of type names; a given list replaces the held one; none and <none> items take no place, so a list of only those is empty)
             Refs(kind) => fold(state, None, |v, _| {
                 Some(
                     value::list(v, value::COMMON_TEXT_LIMIT)
@@ -843,6 +845,16 @@ impl Builder<'_> {
                     value::list(v, value::COMMON_TEXT_LIMIT)
                         .into_iter()
                         .map(|item| int_node(value::integer(item).unwrap_or(0)))
+                        .collect::<Vec<_>>(),
+                )
+            })
+            .map(jsonc::array),
+            // spec: S-0003 claim 20 (debris maxima: decimal prefixes, 511-byte limit; a given list replaces the held one)
+            Maxima => fold(state, None, |v, _| {
+                Some(
+                    value::decimal_prefix_list(v)
+                        .into_iter()
+                        .map(int_node)
                         .collect::<Vec<_>>(),
                 )
             })

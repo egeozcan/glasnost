@@ -65,7 +65,7 @@ pub(super) const COMBAT_FIELDS: &[Row] = &[
         Refs(Kind::VoxelAnimations),
         "S-0312",
     ),
-    ("debris_maximums", "DebrisMaximums", Ints, "S-0312"),
+    ("debris_maximums", "DebrisMaximums", Maxima, "S-0312"),
     (
         "debris_anims",
         "DebrisAnims",
@@ -291,7 +291,7 @@ const WARHEAD_COMBAT: &[Row] = &[
         Refs(Kind::VoxelAnimations),
         "S-0303",
     ),
-    ("debris_maximums", "DebrisMaximums", Ints, "S-0303"),
+    ("debris_maximums", "DebrisMaximums", Maxima, "S-0303"),
     ("airstrike", "Airstrike", Bool, "S-0308"),
     ("is_locomotor", "IsLocomotor", Bool, "S-0308"),
 ];
@@ -1288,13 +1288,9 @@ impl Builder<'_> {
             return;
         }
         let types = list_of(key(t, "DebrisTypes")).unwrap_or_default();
+        // spec: S-0003 claim 20 (the maxima list: decimal prefixes)
         let maxima = fold(key(t, "DebrisMaximums"), None, |v, _| {
-            Some(
-                value::list(v, value::COMMON_TEXT_LIMIT)
-                    .into_iter()
-                    .map(|i| value::integer(i).unwrap_or(0))
-                    .collect::<Vec<_>>(),
-            )
+            Some(value::decimal_prefix_list(v))
         })
         .unwrap_or_default();
         let metallic = self.global(GENERAL, "MetallicDebris");

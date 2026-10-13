@@ -10,6 +10,20 @@ pub struct HouseResult {}
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Counted {}
 
+/// The present count of a don't-score vehicle type for a house (S-0414
+/// claim 4, `quirks.unscored_vehicle_stays_counted`; S-0407 Terms reads
+/// it): the times a vehicle of the type has entered the map as the house's
+/// since game start, or 0 with the switch off. A stub until S-0414's counts
+/// are implemented: 0.
+pub fn unscored_vehicle_entries(
+    w: &crate::world::World,
+    house: crate::world::HouseId,
+    vehicle: u32,
+) -> i32 {
+    let _ = (w, house, vehicle);
+    0
+}
+
 /// The end of the game (S-0414 claims 6 to 10).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GameEnd {}

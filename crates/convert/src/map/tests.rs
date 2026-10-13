@@ -83,7 +83,7 @@ fn cut_off_records() {
         .get(CellXY::new(1, 10))
         .unwrap();
     assert_eq!((c.tile, c.level), (5, 1));
-    // Part of the tile number: treated as not present, and warned.
+    // Part of the tile number: S-0012 Formulas F3 (two bytes: B), and warned.
     let m = MapText {
         ini,
         terrain: Some(full[..6].to_vec()),
@@ -91,9 +91,185 @@ fn cut_off_records() {
     };
     let d = decode_text(&m.text());
     let c = d.map.cells.get(CellXY::new(1, 10)).unwrap();
-    assert_eq!(c.tile, NO_TILE);
+    assert_eq!(c.tile, 5);
     assert!(d.warnings.iter().any(|w| w.text.contains("partway")));
     assert!(d.warnings.iter().any(|w| w.text.contains("(0, 0)")));
+}
+
+fn decode_with(text: &str, quirks: MapQuirks) -> Decoded {
+    let doc = Document::parse(text.as_bytes(), Quirks::default(), &mut Vec::new());
+    decode(
+        &doc,
+        &DecodeContext {
+            quirks,
+            ..Default::default()
+        },
+    )
+}
+
+/// spec: S-0012 claim 9, Formulas F3 (partial terrain values, quirks.partial_terrain_values)
+#[test]
+fn s0012_partial_terrain_values() {
+    let full = record_bytes(&[rec(1, 10, 0x0304_0506, 3), rec(2, 10, 0x0102, 4)]);
+    let ini = base_map("Level=1\n");
+    let at = |d: &Decoded, x, y| *d.map.cells.get(CellXY::new(x, y)).unwrap();
+    let off = MapQuirks {
+        partial_terrain_values: false,
+        ..MapQuirks::default()
+    };
+    // k available tile bytes of the second record: F3's T, translated (no catalogue: kept).
+    for (k, want) in [(0usize, 65535), (1, 65280 + 0x02), (2, 0x0102), (3, 0x0102)] {
+        let m = MapText {
+            ini: ini.clone(),
+            terrain: Some(full[..11 + 4 + k].to_vec()),
+            ..Default::default()
+        };
+        let d = decode_text(&m.text());
+        let c = at(&d, 2, 10);
+        assert_eq!((c.tile, c.level), (want, 1), "k = {k}");
+        // the complete first record stays in force
+        assert_eq!(at(&d, 1, 10).tile, 0x0304_0506);
+        // switch off: a partial tile number is the preset 65535
+        let c = at(&decode_with(&m.text(), off), 2, 10);
+        assert_eq!(c.tile, 65535, "k = {k} off");
+    }
+    // A partial coordinate pair after a record: three bytes select (2, 10) with tile 65535.
+    let m = MapText {
+        ini: ini.clone(),
+        terrain: Some(full[..11 + 3].to_vec()),
+        ..Default::default()
+    };
+    let d = decode_text(&m.text());
+    assert_eq!(at(&d, 2, 10).tile, NO_TILE);
+    assert!(
+        d.warnings
+            .iter()
+            .any(|w| w.text.contains("partial_terrain_values"))
+    );
+    // Switch off: the partial pair ends the stream, the cell keeps the fill.
+    let d = decode_with(&m.text(), off);
+    assert_ne!(at(&d, 2, 10).tile, NO_TILE);
+    // One or two coordinate bytes leave y = 0: (2, 0) is not touched as (2, 10).
+    let m = MapText {
+        ini: ini.clone(),
+        terrain: Some(full[..11 + 2].to_vec()),
+        ..Default::default()
+    };
+    assert_ne!(at(&decode_text(&m.text()), 2, 10).tile, NO_TILE);
+    // Missing one-byte values keep the values in force: sub-tile present, level missing.
+    let m = MapText {
+        ini: ini.clone(),
+        terrain: Some(full[..11 + 9].to_vec()),
+        ..Default::default()
+    };
+    let c = at(&decode_text(&m.text()), 2, 10);
+    assert_eq!((c.tile, c.level), (0x0102, 1));
+    // Fewer than four bytes for the very first pair: no record from the block, warned.
+    let m = MapText {
+        ini,
+        terrain: Some(full[..3].to_vec()),
+        ..Default::default()
+    };
+    let d = decode_text(&m.text());
+    assert!(
+        d.warnings
+            .iter()
+            .any(|w| w.text.contains("first coordinate pair"))
+    );
+    assert_ne!(at(&d, 1, 10).tile, NO_TILE);
+}
+
+/// The text of a terrain block written as `lines` (one entry each, keys 1, 2, …).
+fn terrain_text(lines: &[String]) -> String {
+    let mut s = base_map("Level=1\n");
+    s += "[IsoMapPack5]\n";
+    for (i, l) in lines.iter().enumerate() {
+        s += &format!("{}={l}\n", i + 1);
+    }
+    s
+}
+
+fn terrain_b64(records: &[Record]) -> String {
+    glasnost_fmt::mappack::encode_base64_lines(
+        &glasnost_fmt::mappack::pack(&record_bytes(records), PackCodec::Lzo, 0x2000),
+        0,
+    )
+    .concat()
+}
+
+/// spec: S-0012 claim 1 (enumeration order, 127-character limit, quirks.map_pack_line_limit)
+#[test]
+fn s0012_claim_1_joining() {
+    let text = terrain_b64(&[rec(1, 10, 5, 3), rec(0, 0, 0, 0)]);
+    // Keys are labels: reversed numbering in the same order reads the same.
+    let (a, b) = text.split_at(8);
+    let mut s = base_map("Level=1\n");
+    s += &format!("[IsoMapPack5]\n9={a}\n3={b}\n");
+    let d = decode_text(&s);
+    assert_eq!(d.map.cells.get(CellXY::new(1, 10)).unwrap().tile, 5);
+    // One entry of more than 127 characters: the rest is cut (default), read in full (switch off).
+    let recs: Vec<Record> = (1..=12)
+        .map(|x| rec(x, 10, i32::from(x) * 7919 + 13, (x * 3) as u8))
+        .collect();
+    let long = terrain_b64(&recs);
+    assert!(long.len() > 127, "{}", long.len());
+    let s = terrain_text(&[long.clone()]);
+    let d = decode_text(&s);
+    assert!(
+        d.warnings
+            .iter()
+            .any(|w| w.text.contains("map_pack_line_limit"))
+    );
+    let off = MapQuirks {
+        map_pack_line_limit: false,
+        ..MapQuirks::default()
+    };
+    let d = decode_with(&s, off);
+    assert_eq!(
+        d.map.cells.get(CellXY::new(12, 10)).unwrap().tile,
+        12 * 7919 + 13
+    );
+}
+
+/// spec: S-0012 claim 2 (nonstandard groups, quirks.map_base64_groups)
+#[test]
+fn s0012_claim_2_nonstandard_groups() {
+    let text = terrain_b64(&[rec(1, 10, 5, 3), rec(0, 0, 0, 0)]);
+    // A stray character inside the first group: the group is read without it, and warned.
+    let mut odd = text.clone();
+    odd.insert(2, '*');
+    let s = terrain_text(&[odd]);
+    let d = decode_text(&s);
+    assert!(
+        d.warnings
+            .iter()
+            .any(|w| w.text.contains("map_base64_groups"))
+    );
+    // Switch off: the block is absent; the fill remains.
+    let off = MapQuirks {
+        map_base64_groups: false,
+        ..MapQuirks::default()
+    };
+    let d = decode_with(&s, off);
+    assert!(
+        d.warnings
+            .iter()
+            .any(|w| w.text.contains("the block is ignored"))
+    );
+    assert_ne!(d.map.cells.get(CellXY::new(1, 10)).unwrap().tile, 5);
+}
+
+/// spec: S-0012 claims 9 and 10 (a bad chunk keeps the earlier chunks' bytes)
+#[test]
+fn s0012_chunk_prefix() {
+    // Two chunks: the first holds the record for (1, 10), the second is cut short.
+    let first = record_bytes(&[rec(1, 10, 5, 3)]);
+    let mut packed = glasnost_fmt::mappack::pack(&first, PackCodec::Lzo, 0x2000);
+    packed.extend_from_slice(&[9, 0, 11, 0, 1]);
+    let text = glasnost_fmt::mappack::encode_base64_lines(&packed, 0).concat();
+    let d = decode_text(&terrain_text(&[text]));
+    assert_eq!(d.map.cells.get(CellXY::new(1, 10)).unwrap().tile, 5);
+    assert!(d.warnings.iter().any(|w| w.text.contains("chunk 2")));
 }
 
 /// spec: S-0009 claim 7 (negative height level), claim 6 (level modulo 256)

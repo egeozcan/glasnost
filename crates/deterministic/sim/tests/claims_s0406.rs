@@ -590,3 +590,64 @@ fn claim_12_upgrade_legality() {
     assert!(placement::place_legal(&w, A, tr(&w, "UPG"), c(0, 0)));
     assert!(!placement::place_legal(&w, B, tr(&w, "UPG"), c(0, 0)));
 }
+
+mod econ_common;
+
+// spec: S-0406 claim 1 (a place order on a done item puts the item's object on the map in its construction state; the line ends, S-0404 claim 7)
+// spec: S-0406 claim 1 (a failed placement leaves the item done)
+#[test]
+fn claim_1_place_order_through_production() {
+    use econ_common as e;
+    let mut r = e::ruleset();
+    r.sim.land_types.insert(
+        LandType::Clear,
+        LandRow {
+            buildable: Some(true),
+            ..Default::default()
+        },
+    );
+    r.sim.buildings.get_mut("PLANT").unwrap().cost = Some(50);
+    let mut w = e::game(&r);
+    e::building(&mut w, "CONYARD", 0, -6, 0);
+    e::ready(&mut w);
+    e::set_credits(&mut w, 0, 1_000_000);
+    let p = Pos::centre(testkit::mid(e::SIZE, 0, 0), 0);
+    glasnost_sim::econ::shroud::area_reveal(&mut w, A, p, 10);
+    let plant = e::t(&w, Kind::Building, "PLANT");
+    assert!(e::issue(
+        &mut w,
+        0,
+        glasnost_sim::orders::Order::Build { what: plant }
+    ));
+    e::run_to_done(&mut w, 0, plant, 400).expect("done");
+    let obj = e::item(&w, 0, plant).unwrap().object;
+    // A cell under the yard fails the cell test: the item stays done.
+    e::force(
+        &mut w,
+        0,
+        glasnost_sim::orders::Order::Place {
+            what: plant,
+            cell: Some(testkit::mid(e::SIZE, -6, 0)),
+        },
+    );
+    e::step(&mut w);
+    assert!(e::item(&w, 0, plant).is_some_and(|i| i.done_tick.is_some()));
+    let at = testkit::mid(e::SIZE, -3, 0);
+    assert!(placement::place_legal(&w, A, plant, at));
+    let objects = w.objects.len();
+    assert!(e::issue(
+        &mut w,
+        0,
+        glasnost_sim::orders::Order::Place {
+            what: plant,
+            cell: Some(at),
+        }
+    ));
+    e::step(&mut w);
+    assert_eq!(w.objects.len(), objects, "the item's object, no new one");
+    let o = w.obj(obj).unwrap();
+    assert!(o.on_map);
+    assert_eq!(o.pos.cell(), at);
+    assert_eq!(o.beh.current, Some(Behaviour::Construction));
+    assert!(e::line(&w, 0, plant).is_none());
+}

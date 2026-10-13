@@ -9,7 +9,7 @@
 //!
 //! | Opcode | Meaning |
 //! |---|---|
-//! | first byte 18..=255 | copy `byte − 17` literals; state = that count (4+ if ≥ 4) |
+//! | first byte 18..=255 | copy `byte − 17` literals; state 4 whatever the count (S-0012 claim 4) |
 //! | `0000LLLL`, state 0 | copy `L + 3` literals; `L = 0` adds `15 + 255·zeros + next nonzero byte`; state 4 |
 //! | `0000DDSS H`, state 1–3 | copy 2 bytes from distance `1 + D + 4H` |
 //! | `0000DDSS H`, state 4 | copy 3 bytes from distance `2049 + D + 4H` |
@@ -116,7 +116,8 @@ fn decode(input: &[u8], max_out: usize, trace: &mut impl FnMut(Op)) -> Result<(V
         r.skip(1)?;
         let n = first - 17;
         push_literals(&mut out, r.bytes(usize::from(n))?, cap)?;
-        state = n.min(4);
+        // spec: S-0012 claim 4 (even an initial run of one to three literals leaves the post-literal context)
+        state = 4;
         trace(Op::FirstLiterals);
     }
 
@@ -382,22 +383,39 @@ mod tests {
     }
 
     #[test]
-    fn short_first_run_and_near_matches() {
+    fn short_first_run_is_post_literal() {
+        // spec: S-0012 claim 4 (an initial run of one to three literals leaves the post-literal
+        // context: a control below 16 names a three-byte copy from 2049 + ⌊t / 4⌋ + 4·q, which
+        // has no history here, not a two-byte copy from distance 1)
+        let s = [0x12, b'x', 0x02, 0x00, 0x11, 0x00, 0x00];
+        assert!(matches!(decompress(&s, 100), Err(Error::Invalid(_))));
+    }
+
+    #[test]
+    fn near_matches_after_trailing_literals() {
         let s = [
-            0x12, b'x', // first byte 18: 1 literal, state 1 -> "x"
-            0x02, 0x00, // state 1, 0000DDSS: D=0 H=0 -> 2 bytes from distance 1 -> "xxx"; S=2
-            b'y', b'z', // the 2 S literals -> "xxxyz"
+            0x15, b'a', b'b', b'c', b'd', // first byte 21: 4 literals -> "abcd"
+            0x41, 0x00, // M2: 3 bytes from distance 1 -> "abcdddd"; S=1
+            b'x', // -> "abcddddx"; state 1
+            0x02, 0x00, // state 1, 0000DDSS: D=0 H=0 -> 2 bytes from distance 1 -> "xx"; S=2
+            b'y', b'z', // -> "abcddddxxxyz"
             0x0F, 0x00, // state 2: D=3 H=0 -> distance 4, copies "xx"; S=3
-            b'1', b'2', b'3', // -> "xxxyzxx123"
+            b'1', b'2', b'3', // -> "abcddddxxxyzxx123"
             0x05, 0x01, // state 3: D=1 H=1 -> distance 1+1+4=6, copies "zx"; S=1
-            b'q', // -> "xxxyzxx123zxq"; state 1
+            b'q', // -> "...zxq"; state 1
             0x00, 0x00, // state 1: D=0 H=0 -> distance 1, copies "qq"; S=0
             0x11, 0x00, 0x00,
         ];
-        assert_eq!(decompress(&s, 100).unwrap(), b"xxxyzxx123zxqqq");
+        assert_eq!(decompress(&s, 100).unwrap(), b"abcddddxxxyzxx123zxqqq");
         assert_eq!(
             ops(&s),
-            BTreeSet::from([Op::FirstLiterals, Op::Near2, Op::TrailingLiterals, Op::End])
+            BTreeSet::from([
+                Op::FirstLiterals,
+                Op::M2Short,
+                Op::Near2,
+                Op::TrailingLiterals,
+                Op::End
+            ])
         );
         assert_prefixes_fail(&s);
     }

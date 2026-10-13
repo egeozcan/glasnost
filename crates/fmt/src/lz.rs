@@ -39,6 +39,10 @@ pub(crate) fn push_fill(out: &mut Vec<u8>, byte: u8, len: usize, cap: usize) -> 
 /// the source may overlap the bytes being written (a short repeating
 /// pattern). `src` must lie before the current output position.
 pub(crate) fn copy_from(out: &mut Vec<u8>, src: usize, len: usize, cap: usize) -> Result<()> {
+    // spec: S-0012 Formulas, table L (a zero-length copy emits nothing and needs no source byte)
+    if len == 0 {
+        return Ok(());
+    }
     if src >= out.len() {
         return Err(Error::Invalid(
             "back-reference at or past the current output position",

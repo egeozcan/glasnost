@@ -38,28 +38,6 @@ pub enum Stage {
 // ---------------------------------------------------------------------------
 // The refund (claims 1 and 2).
 
-/// The country cost factor *a* and the cost-bonus product *b* of S-0404
-/// claim 2 for `house` and type `t`, singles widened to doubles. Seam: the
-/// production topic (S-0404) owns them; until it is here both are 1.0.
-fn cost_factors(w: &World, house: HouseId, t: TypeRef) -> (F64, F64) {
-    let _ = (house, t);
-    let one = F64::from_i64(1, w.rules().mode);
-    (one, one)
-}
-
-/// The cost field of a type (S-0404 Import mapping: absent 0).
-fn cost_field(w: &World, t: TypeRef) -> i32 {
-    let r = w.rules();
-    match t.kind {
-        Kind::Building => r
-            .buildings
-            .get(t.index as usize)
-            // spec: S-0404 Import mapping (Cost absent: 0)
-            .map_or(0, |b| b.raw.cost.unwrap_or(0)),
-        k => r.unit(k, t.index).map_or(0, |u| u.cost),
-    }
-}
-
 /// The refund override *v* of a type (S-0408 Constants: absent 0).
 fn refund_override(w: &World, t: TypeRef) -> i32 {
     let r = w.rules();
@@ -74,63 +52,12 @@ fn refund_override(w: &World, t: TypeRef) -> i32 {
     v.unwrap_or(0)
 }
 
-/// The adjusted cost of building type `b` (S-0408 claim 2, F2).
-pub fn adjusted_cost(w: &World, b: u32) -> i32 {
-    let r = w.rules();
-    let k = cost_field(
-        w,
-        TypeRef {
-            kind: Kind::Building,
-            index: b,
-        },
-    );
-    let pr = &r.econ.placement;
-    let name = r.buildings.get(b as usize).map(|x| x.name.as_str());
-    // spec: S-0408 claim 2 (the pad-aircraft deduction: the separate-aircraft setting off and the first dock of the first pad aircraft)
-    let first = pr
-        .pad_aircraft
-        .first()
-        .and_then(|n| r.index_of(Kind::Aircraft, n))
-        .and_then(|i| r.unit(Kind::Aircraft, i))
-        .and_then(|u| u.raw.econ.dock.as_ref())
-        .and_then(|d| d.first().cloned());
-    let d = if !pr.separate_aircraft
-        && first.is_some()
-        && first.as_deref().map(str::to_ascii_lowercase) == name.map(str::to_ascii_lowercase)
-    {
-        let pad_cost = |k: usize| {
-            pr.pad_aircraft
-                .get(k)
-                .and_then(|n| r.index_of(Kind::Aircraft, n))
-                .and_then(|i| r.unit(Kind::Aircraft, i))
-                // spec: S-0408 Edge cases (a missing pad-aircraft entry counts as cost 0, departure)
-                .map_or(0, |u| u.cost)
-        };
-        // spec: S-0408 F2 (d = trunc((C₀ + C₁) / 2), toward zero)
-        (pad_cost(0) + pad_cost(1)) / 2
-    } else {
-        0
-    };
-    let free = r
-        .buildings
-        .get(b as usize)
-        .and_then(|x| x.raw.econ.free_unit.as_deref())
-        .and_then(|n| r.index_of(Kind::Vehicle, n))
-        .and_then(|i| r.unit(Kind::Vehicle, i))
-        .map(|u| u.cost);
-    match free {
-        // spec: S-0408 F2 (C = max(0, K − d − F) for a type with a free unit)
-        Some(f) => (k - d - f).max(0),
-        // spec: S-0408 F2 (C = K − d without one; it can be negative)
-        None => k - d,
-    }
-}
-
 /// The refund a house receives for an object of type `t` (S-0408 claim 1,
 /// F1).
 pub fn refund(w: &World, house: HouseId, t: TypeRef) -> i32 {
     let mode = w.rules().mode;
-    let (a, b) = cost_factors(w, house, t);
+    // spec: S-0408 claim 1 (a and b of S-0404 claim 2 as they stand now)
+    let (a, b) = crate::econ::production::cost_factors(w, house, t);
     let v = refund_override(w, t);
     if v != 0 {
         // spec: S-0408 F1 (v ≠ 0: trunc(RZ₅₃(v × a)))
@@ -140,7 +67,7 @@ pub fn refund(w: &World, house: HouseId, t: TypeRef) -> i32 {
     }
     let c = match t.kind {
         Kind::Building => adjusted_cost(w, t.index),
-        _ => cost_field(w, t),
+        _ => crate::econ::production::cost_field(w, t),
     };
     // spec: S-0408 F1 (P = trunc(RZ₅₃(RZ₅₃(C × b) × a)))
     let p = F64::from_i64(i64::from(c), mode)
@@ -631,4 +558,26 @@ fn sell_upgrade(w: &mut World, id: ObjectId, u: u32) {
     // spec: S-0408 claim 5 (the house works out its power again, S-0405 claim 7)
     crate::econ::power::make_due(w, house);
     crate::econ::radar::mark_due(w, house);
+}
+
+/// A building type's adjusted cost *C*′ (S-0408 claim 2, F2), which the
+/// price of S-0404 claim 2 uses. Owned by S-0408's topic.
+pub fn adjusted_cost(w: &World, b: u32) -> i32 {
+    use crate::econ::production as p;
+    let cost = |t: Option<crate::econ::TypeRef>| t.map_or(0, |t| p::cost_field(w, t));
+    // spec: S-0408 F2 (d = trunc((C₀ + C₁) / 2) when the pad deduction applies; a missing entry counts 0)
+    let d = if p::pad_term_applies(w, b) {
+        (cost(p::pad(w, 0)) + cost(p::pad(w, 1))) / 2
+    } else {
+        0
+    };
+    let k = cost(Some(crate::econ::TypeRef {
+        kind: crate::rules::Kind::Building,
+        index: b,
+    }));
+    match p::free_unit(w, b) {
+        // spec: S-0408 F2 (C = max(0, K − d − F) with a free unit, K − d without one)
+        Some(f) => (k - d - cost(Some(f))).max(0),
+        None => k - d,
+    }
 }

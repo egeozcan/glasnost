@@ -894,6 +894,33 @@ fn claim_10_rounds_are_used() {
     assert_eq!(w.obj(a).unwrap().combat.ammo, -1);
 }
 
+// spec: S-0301 claim 10, Formulas F6 (a₀ = A when J = −1, otherwise J; quirks.initial_ammo_above_capacity)
+#[test]
+fn claim_10_starting_ammunition() {
+    let start = |ammo: i32, initial: Option<i32>, above: bool| {
+        let mut r = base();
+        r.globals.quirks.initial_ammo_above_capacity = above;
+        let cart = r.sim.vehicles.get_mut("CART").unwrap();
+        cart.combat.ammo = Some(ammo);
+        cart.combat.initial_ammo = initial;
+        let (w, a, _) = duel(&r);
+        w.obj(a).unwrap().combat.ammo
+    };
+    // An absent initial field fills a finite magazine, including 0 for a maximum of 0.
+    assert_eq!(start(3, None, true), 3);
+    assert_eq!(start(0, None, true), 0);
+    // An explicit 0 starts empty, even with an unlimited maximum.
+    assert_eq!(start(-1, Some(0), true), 0);
+    // Above the maximum: used as it stands; switch off: capped.
+    assert_eq!(start(3, Some(5), true), 5);
+    assert_eq!(start(3, Some(5), false), 3);
+    assert_eq!(
+        start(-1, Some(5), false),
+        5,
+        "no cap for a negative maximum"
+    );
+}
+
 // spec: S-0301 claim 10 (a disc laser shot uses no round)
 #[test]
 fn claim_10_disc_laser_uses_no_round() {

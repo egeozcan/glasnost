@@ -78,46 +78,30 @@ pub fn sam_held_by_low_power(w: &World, building: ObjectId) -> bool {
     t.needs_power && t.drain > 0 && o.owner.is_some_and(|h| short_of_power(w, h))
 }
 
-/// A house's available credits (glossary; S-0404 claim 4). In a skirmish
-/// nothing puts resources into a house's own storage, so they equal the
-/// credit balance (S-0314 Terms, *money of a house*); storage is M5a's.
+/// A house's available credits (glossary; S-0404 claim 4), from the
+/// production topic.
 pub fn available_credits(w: &World, house: HouseId) -> i32 {
-    // spec: S-0404 claim 4 and S-0314 Terms (available credits equal the credit balance in a skirmish)
-    w.houses.get(usize::from(house.0)).map_or(0, |h| h.credits)
+    crate::econ::production::available_credits(w, house)
 }
 
-/// A house pays `amount` credits (S-0314 claims 3 and 8). The payment rules
-/// of S-0404 (storage first, the credit display) are M5a's; until then the
-/// balance drops by the amount.
+/// A house pays `amount` credits (S-0314 claims 3 and 8; S-0404 claim 4),
+/// through the production topic.
 pub fn pay(w: &mut World, house: HouseId, amount: i32) {
-    if let Some(h) = w.houses.get_mut(usize::from(house.0)) {
-        // spec: S-0404 claim 4 and S-0314 claim 3 (the paying house's credits drop by the step cost)
-        h.credits = h.credits.wrapping_sub(amount);
-    }
+    crate::econ::production::pay(w, house, amount);
 }
 
 /// A building type's adjusted cost (S-0408 claim 2, F2), for the step
-/// cost of S-0314 claim 5, with the deductions for a free unit and pad
-/// aircraft.
+/// cost of S-0314 claim 5: `crate::econ::sell::adjusted_cost`.
 pub fn building_adjusted_cost(w: &World, building_type: u32) -> Option<i32> {
-    // spec: S-0408 claim 2 (the adjusted cost of a building type)
+    // spec: S-0408 claim 2 (the same adjusted cost is the type's cost in S-0314's step cost)
     Some(crate::econ::sell::adjusted_cost(w, building_type))
 }
 
 /// A building's refund for its owner (S-0408 claim 1, F1), the *K* of
-/// S-0312 F5. `None` for a building without an owner.
-pub fn building_refund(w: &World, building: ObjectId) -> Option<i32> {
-    let o = w.obj(building)?;
-    let house = o.owner?;
-    // spec: S-0408 claim 1 and F1 (the refund for the building's owner)
-    Some(crate::econ::sell::refund(
-        w,
-        house,
-        crate::econ::TypeRef {
-            kind: o.kind,
-            index: o.type_index,
-        },
-    ))
+/// S-0312 F5. `None` until M5a.
+pub fn building_refund(_w: &World, _building: ObjectId) -> Option<i32> {
+    // spec: S-0408 claim 1 and F1 (the refund; a seam until selling exists)
+    None
 }
 
 /// Whether a house's game is over, the state S-0414's defeat puts it in
