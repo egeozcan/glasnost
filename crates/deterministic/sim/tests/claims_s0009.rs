@@ -344,6 +344,8 @@ fn starting_scene() -> Scene {
     s.map.waypoints.insert(1, (52, 40));
     s.setup.unit_count = 2;
     s.setup.bases = true;
+    // spec: S-0412 claim 2 (a credits setting of 0, so the balance is the left-over budget alone)
+    s.setup.skirmish.credits = Some(0);
     s
 }
 

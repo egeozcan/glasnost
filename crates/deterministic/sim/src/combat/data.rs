@@ -765,6 +765,11 @@ pub struct CombatGeneral {
     pub row_firepower: F64,
     /// The normal row's destroy-walls flag.
     pub row_destroy_walls: bool,
+    /// The rate-of-fire factors ℓ of the easy, normal and difficult rows,
+    /// for the handicap (S-0412 claim 5).
+    pub rows_rof: [F64; 3], // spec: S-0412 claim 5 (the three rows: easy, normal, difficult)
+    /// The firepower factors φᵣ of the easy, normal and difficult rows.
+    pub rows_firepower: [F64; 3], // spec: S-0412 claim 5 (the three rows: easy, normal, difficult)
 }
 
 /// The combat rules of one game.
@@ -1385,6 +1390,13 @@ pub fn combat_rules(
         row_firepower: dec(&row.firepower, mode).unwrap_or(one),
         // spec: S-0309 Import mapping (DestroyWalls absent: yes)
         row_destroy_walls: row.destroy_walls.unwrap_or(true),
+        // spec: S-0412 claim 5 (the handicap's rows by our names easy, normal, difficult); S-0301 and S-0302 Import mapping (absent: 1.0)
+        rows_rof: ["easy", "normal", "difficult"].map(|n| {
+            dec(&s.difficulty.get(n).cloned().unwrap_or_default().rof, mode).unwrap_or(one)
+        }),
+        rows_firepower: ["easy", "normal", "difficult"].map(|n| {
+            dec(&s.difficulty.get(n).cloned().unwrap_or_default().firepower, mode).unwrap_or(one)
+        }),
     };
     let countries = country_names
         .iter()

@@ -248,6 +248,10 @@ pub fn give(w: &mut World, bases: &[Option<CellXY>], setup: &GameSetup) {
         if passive(w, h) {
             continue;
         }
+        // spec: S-0009 claim 22 and S-0414 Edge cases (an observer's house takes no starting units)
+        if w.houses[h].econ.setup.observer {
+            continue;
+        }
         let owner = HouseId(h as u8);
         let country = w.houses[h].country;
         // spec: S-0009 Terms (a player's house has the game's tech level; the neutral and special houses 1)

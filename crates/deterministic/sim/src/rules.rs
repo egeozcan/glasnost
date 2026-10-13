@@ -342,6 +342,8 @@ pub struct CountryRules {
     pub speed_units: F64,
     /// k꜀ for infantry (single held as double).
     pub speed_infantry: F64,
+    /// κ for aircraft (single held as double; S-0413 claim 3).
+    pub speed_aircraft: F64,
     /// Passive.
     pub passive: bool,
     /// The wall-owner flag (S-0210 claim 14).
@@ -879,6 +881,12 @@ impl SimRules {
                     speed_units: c.speed_units_mult.map_or(one, |d| d.single_value(mode)),
                     // spec: S-0208 Import mapping (SpeedInfantryMult absent: 1.0, single precision)
                     speed_infantry: c.speed_infantry_mult.map_or(one, |d| d.single_value(mode)),
+                    // spec: S-0413 Import mapping (SpeedAircraftMult absent: 1.0, single precision)
+                    speed_aircraft: c
+                        .econ
+                        .speed_aircraft_mult
+                        .clone()
+                        .map_or(one, |d| d.single_value(mode)),
                     // spec: S-0009 Import mapping (MultiplayPassive absent: false)
                     passive: c.multiplay_passive.unwrap_or(false),
                     // spec: S-0210 Constants (wall-owner flag absent: yes)

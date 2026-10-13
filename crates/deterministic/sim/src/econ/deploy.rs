@@ -65,10 +65,10 @@ fn facing_of(d: i32) -> Facing {
     (d.wrapping_mul(256)).rem_euclid(65536) as Facing
 }
 
-/// Whether the redeploy setting is on (S-0415 Terms; S-0412 owns the lobby
-/// setting, which is a seam until S-0412: the rules' default).
+/// Whether the redeploy setting is on (S-0415 Terms; the setup value of
+/// S-0412 claim 1, defaulting to the rules' default).
 pub fn redeploys(w: &World) -> bool {
-    w.rules().econ.placement.mcv_redeploys
+    crate::econ::setup::redeploy(w)
 }
 
 /// Mind-controlled (the mind-control specs own it). Seam: nothing is.

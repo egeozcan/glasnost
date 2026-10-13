@@ -341,6 +341,20 @@ pub struct CountryEcon {
     /// absent: the definition at position 0.
     #[serde(default)]
     pub color: Option<String>,
+    /// `ParentCountry`, no effect on play (S-0413 claim 4); absent: the
+    /// country's own name.
+    #[serde(default)]
+    pub parent_country: Option<String>,
+    /// `Prefix`, no effect on play (S-0413 claim 4); absent: the character A.
+    #[serde(default)]
+    pub prefix: Option<String>,
+    /// `Suffix`, no effect on play (S-0413 claim 4); absent: empty.
+    #[serde(default)]
+    pub suffix: Option<String>,
+    /// `SmartAI`, the smart-computer flag, no effect on play (S-0413 claim
+    /// 4); absent: off.
+    #[serde(default)]
+    pub smart_ai: Option<bool>,
 }
 
 /// A tiberium (S-0401 Import mapping), keyed by its section name; the
@@ -534,6 +548,11 @@ pub struct EconGeneral {
     /// by difficulty index (S-0412 claim 3); absent: no entries.
     #[serde(default)]
     pub multiplayer_aicm: Option<Vec<i32>>,
+    /// `[General] AIHateDelays`, the original's computer-player timer list
+    /// by difficulty index (S-0412 claim 3, the original only; no effect in
+    /// our engine); absent: no entries.
+    #[serde(default)]
+    pub ai_hate_delays: Option<Vec<i32>>,
     /// `[AI] BuildTech`, the tech-lab list, building type keys (S-0407
     /// claims 6 and 7); absent: empty.
     #[serde(default)]

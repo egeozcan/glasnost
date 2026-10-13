@@ -459,10 +459,10 @@ pub fn cell_test(w: &World, t: u32, top_left: CellXY, test: &Test) -> bool {
     cells.iter().all(|&c| cell_passes(w, t, &p, c, test, false))
 }
 
-/// Whether the build-off-ally option is on (S-0406 claim 4; S-0412 owns
-/// the lobby setting, which is a seam until S-0412: the rules' default).
+/// Whether the build-off-ally option is on (S-0406 claim 4; the setup
+/// value of S-0412 claim 1, defaulting to the rules' default).
 pub fn build_off_ally(w: &World) -> bool {
-    w.rules().econ.placement.build_off_ally
+    crate::econ::setup::build_off_ally(w)
 }
 
 /// The adjacency condition (S-0406 claim 4, F1).
