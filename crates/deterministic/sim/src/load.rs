@@ -1,11 +1,11 @@
-//! Loading a map into a new game (S-0009 claims 6, 12 to 14, 17 to 20, 27,
-//! 33 and 45 to 46; S-0010 claim 12; S-0202 claims 8 and 10 and its table
+//! Loading a map into a new game (S-0009 claims 6, 12 to 14, 17 to 20, 27, 28,
+//! 33 and 45 to 46; S-0010 claims 12 and 25; S-0202 claims 8 and 10 and its table
 //! "Draws during map loading"; S-0009 claims 34 to 43 for the pre-placed
 //! objects).
 //!
 //! The groups of draws run in the table's order. The groups that belong to
-//! specs not implemented here (the tags of S-0011 claim 34, the animation
-//! creation draws of S-0202 claim 10) take no draw and are recorded in the
+//! specs not implemented here (the tags of S-0011 claim 34, the start-event
+//! draws of animations, S-0109 claim 13) take no draw and are recorded in the
 //! world's notes when a map reaches them.
 
 use std::sync::Arc;
@@ -163,9 +163,10 @@ pub fn anim_creation_draws(w: &mut World, name: &str) {
 /// of start positions, the initial fill, the overlay type stream and its
 /// placement effects, the overlay data stream, the first terrain
 /// recalculation pass, the vein rebuild, the map's objects, the second
-/// pass, the late phase, the owners of the map's walls and the starting
-/// units, with their draws in the order of S-0202's table "Draws during
-/// map loading".
+/// pass, the unused-house cleanup, the late phase, the owners of the map's
+/// walls, the starting units, the game-start pass (S-0010 claim 12) and the
+/// bridge spans (S-0010 claim 25), with their draws in the order of
+/// S-0202's table "Draws during map loading".
 pub fn new_game(
     rules: Arc<SimRules>,
     map: &Map,
@@ -189,6 +190,7 @@ pub fn new_game(
             skill: 0,
             start: None,
             role: h.role,
+            removed: false,
             credits: 0,
             pending: Vec::new(),
             combat: crate::combat::fire::house_combat(&rules, country, h.role, setup.houses.len()),
@@ -356,17 +358,14 @@ pub fn new_game(
     // Late phase: list 3 and the late assignments (S-0009 claims 20, 28 and 29).
     let mut bases: Vec<Option<CellXY>> = vec![None; w.houses.len()];
     if !setup.sandbox {
-        if (0..w.houses.len())
-            .any(|h| w.houses[h].role != HouseRole::Player && !late_passive(&w, h))
-        {
-            // S-0009 claim 28 (the unused-house cleanup, which can reach only these houses) is not implemented.
-            w.note("S-0009 claim 28: the unused-house cleanup is not implemented (request Q-0045 asks its condition in our engine)");
-        }
+        // The unused-house cleanup, once all map objects are placed and before the late phase (S-0009 claim 28; its place after the second pass is interim, request Q-0101).
+        cleanup(&mut w, setup);
         let list3 = starts::build_list(&mut w, map, players)?;
         let n = list3.len();
         let mut order = Vec::new();
         for (h, hs) in setup.houses.iter().enumerate() {
-            if late_passive(&w, h) {
+            // spec: S-0009 claim 28 (a removed house takes no position in the late phase)
+            if late_passive(&w, h) || w.houses[h].removed {
                 continue;
             }
             if !q.double_start_resolution {
@@ -396,6 +395,12 @@ pub fn new_game(
         starting::give(&mut w, &bases, setup);
     }
 
+    // spec: S-0010 claim 12 (the game-start pass: every legal cell once more, in the visiting order, after the starting units and before the first tick; its tile animations by claim 19). Its place after the final draw is interim (request Q-0101).
+    recalc_cells(&mut w, &order);
+
+    // spec: S-0010 claim 25 (the bridge spans, right after the game-start pass; low spans give their bands the bridge-body mark)
+    mark_bridge_bodies(&mut w);
+
     // Passability categories (S-0211 claim 11) after loading.
     let all: Vec<CellXY> = w.cells.grid.iter().map(|(c, _)| c).collect();
     for c in all {
@@ -406,6 +411,81 @@ pub fn new_game(
     }
     crate::regions::rebuild(&mut w);
     Ok(w)
+}
+
+/// The unused-house cleanup (S-0009 claim 28). It runs when the game has
+/// no computer player, which in our engine means no AI house (S-0412 claim
+/// 12), and fewer human slots than the rules' maximum player count. It
+/// removes, with their pre-placed objects, the eligible houses (neither
+/// human-controlled nor passive in the country data in force) whose
+/// predecessor in house order it did not remove
+/// (`quirks.cleanup_skips_next_house`; off, every eligible house). The
+/// removed house's triggers are not removed: map triggers are not
+/// implemented (S-0011).
+pub fn cleanup(w: &mut World, setup: &GameSetup) {
+    let rules = w.rules_arc();
+    // spec: S-0009 claim 28 and S-0412 claim 12 (AI houses take the computer slots: one stops the cleanup)
+    if setup.houses.iter().any(|h| h.ai) {
+        return;
+    }
+    // spec: S-0009 claim 28 (human slots, observers included; our engine has no observers)
+    let human_slots = setup
+        .houses
+        .iter()
+        .filter(|h| h.role == HouseRole::Player && h.human)
+        .count();
+    // spec: S-0009 claim 28 (strictly fewer human slots than the maximum player count)
+    if i64::try_from(human_slots).unwrap_or(i64::MAX) >= i64::from(rules.max_players) {
+        return;
+    }
+    let mut prev_removed = false;
+    for h in 0..w.houses.len() {
+        let passive = rules
+            .countries
+            .get(w.houses[h].country as usize)
+            .is_none_or(|c| c.passive);
+        // spec: S-0009 claim 28 (eligible: neither human-controlled nor passive, by the country data after every rules layer)
+        let eligible = !w.houses[h].human && !passive;
+        // spec: S-0009 claim 28 (quirks.cleanup_skips_next_house: the house after a removed one is kept)
+        let remove = eligible && !(prev_removed && rules.quirks.cleanup_skips_next_house);
+        prev_removed = remove;
+        if !remove {
+            continue;
+        }
+        let owner = Some(HouseId(h as u8));
+        let ids: Vec<_> = w
+            .objects
+            .values()
+            .filter(|o| o.owner == owner)
+            .map(|o| o.id)
+            .collect();
+        // spec: S-0009 claim 28 (its pre-placed objects go with it)
+        for id in ids {
+            objects::remove(w, id);
+        }
+        let house = &mut w.houses[h];
+        house.removed = true;
+        house.start = None;
+    }
+    if w.houses.iter().any(|h| h.removed) {
+        w.note("S-0009 claim 28: a removed house's triggers are not removed (map triggers are not implemented, S-0011)");
+    }
+}
+
+/// Finds the map's bridge spans and gives the bands of the low ones the
+/// bridge-body mark (S-0010 claim 25), from the tiles and the high-bridge
+/// marking as they stand.
+pub fn mark_bridge_bodies(w: &mut World) {
+    let cat = w.catalogue_arc();
+    let cells = &w.cells;
+    let deck = |c: CellXY| cells.idx(c).is_some_and(|i| cells.deck[i]);
+    let spans = glasnost_map::bridges::find_spans(&cells.grid, &cat.roles, deck);
+    let marks = glasnost_map::bridges::body_cells(&cells.grid, &spans, deck);
+    for c in marks {
+        if let Some(i) = w.cells.idx(c) {
+            w.cells.bridge_body[i] = true;
+        }
+    }
 }
 
 /// The fill's base tiles (S-0009 claim 6): with `quirks.stale_fill_tiles`
@@ -503,6 +583,7 @@ pub fn sandbox_setup(map: &Map, rules: &SimRules, seed: u32) -> (GameSetup, Vec<
                 human: role == HouseRole::Player,
                 start: None,
                 role,
+                ai: false,
             }
         })
         .collect();
