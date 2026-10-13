@@ -384,10 +384,6 @@ pub const NOT_IMPLEMENTED: &[(&str, &str)] = &[
         "shroud_on_flat_grid",
         "S-0110: shroud and fog are not drawn",
     ),
-    (
-        "shroud_point_cell_wrap",
-        "S-0110: shroud and fog are not drawn",
-    ),
     // S-0111
     (
         "building_resource_pips_hidden",

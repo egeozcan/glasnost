@@ -535,6 +535,7 @@ pub fn game_with_non_players(ruleset: &Ruleset, size: i32, seed: u32) -> World {
             human: false,
             start: None,
             role,
+            ai: false,
         });
     }
     crate::load::new_game(rules, &empty_map(size), catalogue(), &s)
