@@ -635,7 +635,8 @@ pub fn spy_satellite_active(w: &World, house: HouseId) -> bool {
 }
 
 /// Whether the object is discovered by the house (S-0409 Terms): objects of
-/// the house count as discovered by it.
+/// the house count as discovered by it (placeholder for the contradiction
+/// with S-0410 claim 7, request Q-0110).
 pub fn discovered(w: &World, house: HouseId, id: ObjectId) -> bool {
     if w.obj(id).is_some_and(|o| o.owner == Some(house)) {
         return true;
@@ -750,7 +751,9 @@ fn discover(w: &mut World, h: HouseId, flipped: &BTreeSet<u32>) {
     }
 }
 
-/// The object of a cell nearest the cell's centre (S-0409 Terms).
+/// The object of a cell nearest the cell's centre (S-0409 Terms). Every
+/// object of the cell's lists competes and ties go to the lower object
+/// number (placeholder, request Q-0110).
 fn nearest_in_cell(w: &World, c: CellXY) -> Option<ObjectId> {
     let centre = Pos::centre(c, 0);
     let mut ids: Vec<ObjectId> = Vec::new();
