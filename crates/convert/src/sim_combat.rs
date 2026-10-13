@@ -1758,7 +1758,7 @@ impl Builder<'_> {
                 }
             }
             if held.is_none() {
-                // spec: S-0102 claim 23 (after a layer holding the section, an unset strength takes the tree strength as it stands then)
+                // spec: S-0102 claim 23, S-0006 claim 5 (after a layer holding the section, an unset strength takes the tree strength as it stands then; an explicit −1 refills)
                 held = Some(tree_at(Some(r)));
             }
         }

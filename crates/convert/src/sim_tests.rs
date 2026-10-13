@@ -538,7 +538,9 @@ fn overlay_cell_animation() {
 /// spec: S-0102 claim 23 and S-0009 claim 42 (a terrain type's strength:
 /// unset until a layer gives it; after each layer holding its section an
 /// unset strength takes the game-wide tree strength as it stands then, 25
-/// when absent; −1 unsets it; quirks.tree_strength_fixed_at_first_section)
+/// when absent; −1 unsets it; quirks.tree_strength_fixed_at_first_section);
+/// S-0006 claim 5 (an explicit −1 replaces an earlier strength with the
+/// current tree strength; an omitted key fills only while the strength is −1)
 #[test]
 fn terrain_strength_and_tree_strength() {
     let base = "[General]\nTreeStrength=40\n[TerrainTypes]\n0=Oak\n1=Elm\n2=Ash\n3=Yew\n\
