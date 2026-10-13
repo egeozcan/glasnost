@@ -122,8 +122,9 @@ pub struct LayerQuirks {
     /// mission's mission-named file acts as a layer of the previous game.
     /// Not consulted: campaigns are out of scope.
     pub mission_rules_before_reset: bool,
-    /// `quirks.mode_number_first_wins` (S-0006 claim 13). Not consulted:
-    /// the mode list is not read (Q-0006).
+    /// `quirks.mode_number_first_wins` (S-0006 claim 13): a mode chosen
+    /// from the list plays the first listed mode with its number
+    /// (`modes::select`).
     pub mode_number_first_wins: bool,
     /// `quirks.extra_light_truncation` (S-0104 claim 13): the extra-light
     /// values are stored as ⌊v × 1000⌋, so a value such as 0.57 loses a

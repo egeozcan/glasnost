@@ -544,6 +544,47 @@ fn file(name: &str, text: &str) -> InputFile {
     }
 }
 
+/// spec: S-0006 claims 1 and 13 (a skirmish plays the selected listed mode's file; no listed mode, an empty layer)
+#[test]
+fn skirmish_mode_from_the_mode_list() {
+    use crate::modes::ModeChoice;
+    let list = file(
+        "mpmodesmd.ini",
+        "[Battle]\n1=N,T,first.ini,F\n2=N,T,second.ini,F\n[Siege]\n2=N,T,third.ini,F\n",
+    );
+    let pick = |mode, first_wins| {
+        let mut o = ImportOptions {
+            mode,
+            ..ImportOptions::default()
+        };
+        o.quirks.mode_number_first_wins = first_wins;
+        crate::mode_from_list(Some(&list), &o).0
+    };
+    assert_eq!(
+        pick(ModeChoice::Preselected, true).as_deref(),
+        Some("first.ini")
+    );
+    assert_eq!(
+        pick(ModeChoice::Remembered(2), true).as_deref(),
+        Some("second.ini")
+    );
+    assert_eq!(
+        pick(ModeChoice::Listed(2), true).as_deref(),
+        Some("second.ini")
+    );
+    assert_eq!(
+        pick(ModeChoice::Listed(2), false).as_deref(),
+        Some("third.ini")
+    );
+    let (none, w) = crate::mode_from_list(None, &ImportOptions::default());
+    assert_eq!(none, None);
+    assert!(w[0].message.contains("cannot be resolved"));
+    let empty = file("mpmodesmd.ini", "[battle]\n1=N,T,first.ini,F\n");
+    let (none, w) = crate::mode_from_list(Some(&empty), &ImportOptions::default());
+    assert_eq!(none, None);
+    assert!(w.iter().any(|w| w.message.contains("lists no mode")));
+}
+
 /// The converted tree resolves through the rules pipeline, explains every
 /// value back to its INI line, and keeps high bytes.
 #[test]
