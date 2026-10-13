@@ -854,7 +854,8 @@ fn voxel_canvas_carries_over_between_games() {
 
 /// spec: S-0102 claims 10, 13, 16 and 23 (an animated terrain object is drawn in the object pass
 /// as a reader, with image frame 0, its stage at placement, whatever its health; its sort key is
-/// X + Y of its cell's centre), S-0009 claim 43 (terrain objects enter the drawing order first)
+/// X + Y of its cell's centre), claim 30 (its body ranks right before its own shadow), S-0009
+/// claim 43 (terrain objects enter the drawing order first)
 #[test]
 fn animated_terrain_object_in_the_object_pass() {
     let rules = format!(
@@ -898,8 +899,8 @@ fn animated_terrain_object_in_the_object_pass() {
     assert_eq!(b.scene.images[shadow.image as usize].pixels()[0], 3);
     assert_eq!(bias(body), (Profile::Upright, -12));
     assert_eq!(bias(shadow), (Profile::Flat, -3));
-    // Provisional only for the order of body and shadow (Q-0051).
-    assert!(body.provisional && shadow.provisional);
+    // S-0102 claim 30: the body, then its own shadow, with nothing between them.
+    assert!(!body.provisional && !shadow.provisional);
     assert_eq!(at(shadow), at(body) + 1);
     // Same key as the vehicle on its cell: the terrain object entered first, so it is drawn first.
     let vehicle = items_of(&b, "vehicle");

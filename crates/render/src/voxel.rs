@@ -37,9 +37,6 @@
 //!
 //! - stale shades of normal indices outside the part's table (claim 20):
 //!   such indices get shade 0, the value at program start;
-//! - the depth-mode leak's off state (`quirks.depth_mode_leak`): its on
-//!   state is what [`VoxelCanvas`] does; which off state the switch
-//!   selects waits for Q-0056;
 //! - recoil placement in a pose (claim 27): [`RecoilCycle`] gives the slide,
 //!   but where the shift enters the turret and barrel transforms is not
 //!   applied here;
@@ -67,9 +64,7 @@ use crate::rz::{add_rz, div_rz, dot3_rz, mul_f32_rz, mul_rz, sub_rz, to_f32_rz, 
 /// Switches of S-0105 not here: `voxel_single_pixel` and
 /// `voxel_no_intersection_depth` (fixed behaviour not implemented),
 /// `voxel_buffer_wrap` and `barrel_pivot_frame_mixup` (fixed behaviour is
-/// an open question for the lead), `depth_mode_leak` (its on state is what
-/// [`VoxelCanvas`] always does; the off state waits for Q-0056), and the
-/// switches of claims 12, 27, 28 and 37 that concern model choice and
+/// an open question for the lead), and the switches of claims 12, 27, 28 and 37 that concern model choice and
 /// recoil placement. `voxel_stale_normal_shades` is here only for its fixed
 /// value. The round-toward-zero switch belongs to the planned number
 /// domains spec, not to S-0105.
@@ -100,7 +95,9 @@ pub struct VoxelQuirks {
     /// x carries add 1/256 pixel to y. Off: independent components.
     pub voxel_x_carry_into_y: bool,
     /// `quirks.voxel_section_sort_ties` (claim 23, F8): sections with equal
-    /// nearest depth follow F8's exchange order. Off: stable order.
+    /// nearest depth need not keep file order; F8 binds two tie rows, and
+    /// other ties follow an interim exchange order (Q-0210). Off: stable
+    /// order.
     pub voxel_section_sort_ties: bool,
     /// `quirks.voxel_depth_double_width` (claim 24): depth-buffered voxels
     /// are two pixels wide. Off: one pixel.
@@ -163,6 +160,13 @@ pub struct VoxelQuirks {
     /// it survive into later images. Off: every fresh draw starts on a fully
     /// transparent colour plane.
     pub voxel_colour_partial_clear: bool,
+    /// `quirks.depth_mode_leak` (claims 32 and 34, S2): a depth-option
+    /// type's fresh shadow switches the depth-buffered mode on, is itself
+    /// made in it, and leaves it on for every later fresh draw until a
+    /// depth-option part's fresh draw ends. Off (Q-0056): a shadow never
+    /// switches the mode on and is always made with it off; the mode is on
+    /// only during a fresh depth-option part draw.
+    pub depth_mode_leak: bool,
 }
 
 impl Default for VoxelQuirks {
@@ -192,13 +196,14 @@ impl Default for VoxelQuirks {
             barrel_cache_ignores_elevation: true,
             voxel_depth_plane_partial_clear: true,
             voxel_colour_partial_clear: true,
+            depth_mode_leak: true,
         }
     }
 }
 
 impl VoxelQuirks {
     /// The switches by name.
-    pub fn named(&self) -> [(&'static str, bool); 23] {
+    pub fn named(&self) -> [(&'static str, bool); 24] {
         [
             ("table_trig_negative_bias", self.table_trig_negative_bias),
             ("hva_scale_first_section", self.hva_scale_first_section),
@@ -243,6 +248,7 @@ impl VoxelQuirks {
                 "voxel_depth_plane_partial_clear",
                 self.voxel_depth_plane_partial_clear,
             ),
+            ("depth_mode_leak", self.depth_mode_leak),
             (
                 "voxel_colour_partial_clear",
                 self.voxel_colour_partial_clear,
@@ -1533,6 +1539,9 @@ enum Step {
 
 /// The steps of one column, in drawing order (S-0105 claims 21, 35, 36).
 ///
+/// Normal mode 0 binds only claim 35's three cases; for other mode-0
+/// columns the grouping below is an interim rule (Q-0211).
+///
 /// With `quirks.voxel_topdown_column_origin` on, a column is read in groups
 /// from its first value (bottom-up) or its last value backward (top-down):
 /// bottom-up *e, n,* the *n* voxels, one unused value; top-down *n,* the
@@ -1591,7 +1600,8 @@ fn column_steps(data: &[u8], nz: u8, top_down: bool, mode: u8, quirks: &VoxelQui
                 steps.push(voxel(v));
                 pos += per;
             }
-            // spec: S-0105 claim 35 (one value that is not used)
+            // the span's closing count (VXL layout, glasnost_fmt::vxl) is skipped; mode 0 beyond
+            // claim 35's cases: interim (Q-0211)
             pos += 1;
             count = count.wrapping_add(e).wrapping_add(n);
         }
@@ -1614,7 +1624,8 @@ fn column_steps(data: &[u8], nz: u8, top_down: bool, mode: u8, quirks: &VoxelQui
                 steps.push(voxel(&data[start..end]));
                 end = start;
             }
-            // spec: S-0105 claim 35 (one unused value, then the empty count)
+            // the span's opening count, then the empty count (VXL layout, glasnost_fmt::vxl); mode 0
+            // beyond claim 35's cases: interim (Q-0211)
             let Some(at) = end.checked_sub(2) else {
                 break;
             };
@@ -1814,18 +1825,27 @@ fn wrap(v: i64) -> u64 {
     v.rem_euclid(POSITION_WRAP as i64) as u64
 }
 
-/// The section order of claim 23 by formula F8: `depths[s]` is the nearest
-/// view-space depth of section `s` (file order); the result lists sections
-/// in drawing order. With `quirks.voxel_section_sort_ties` off, a stable
-/// ascending sort.
+/// The sections of a part from lowest to highest overlap priority (claim
+/// 23, F8): `depths[s]` is the nearest view-space depth of section `s`
+/// (file order); the result lists sections in drawing order. Distinct
+/// depths ascend and F8's two tie rows hold. Other equal-depth
+/// configurations are open in S-0105; the exchange order used for them is
+/// an interim rule (Q-0210). With `quirks.voxel_section_sort_ties` off, a
+/// stable ascending sort.
 pub fn section_order(depths: &[f32], quirks: &VoxelQuirks) -> Vec<usize> {
     let mut pi: Vec<usize> = (0..depths.len()).collect();
     if !quirks.voxel_section_sort_ties {
-        // spec: S-0105 Edge cases (voxel_section_sort_ties off: stable order)
-        pi.sort_by(|&a, &b| depths[a].total_cmp(&depths[b]));
+        // spec: S-0105 Edge cases (voxel_section_sort_ties off: stable order); F8 (exact
+        // comparisons: equal values, −0 and +0 included, tie)
+        pi.sort_by(|&a, &b| {
+            depths[a]
+                .partial_cmp(&depths[b])
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         return pi;
     }
-    // spec: S-0105 Formulas F8
+    // spec: S-0105 F8 (distinct depths ascend; the tie rows A, B → A, B and A, B, C with
+    // z(A) = z(B) > z(C) → C, B, A); other ties: interim exchange order (Q-0210)
     for t in 0..pi.len() {
         let mut chain = vec![t];
         let mut min = depths[pi[t]];
@@ -2298,10 +2318,11 @@ fn draw_shadow_into(
 /// its type has the depth option or the mode is on (claim 32), and leaves
 /// the mode as S2 gives.
 ///
-/// The depth-mode leak (`quirks.depth_mode_leak`) is always in its on state
-/// here: a depth-option type's shadow switches the mode on and leaves it on.
-/// Which of the two off states S-0105 offers the switch selects waits for
-/// Q-0056, so the switch has no field yet.
+/// With `quirks.depth_mode_leak` on, a depth-option type's shadow switches
+/// the mode on and leaves it on; off, the mode is on only during a fresh
+/// depth-option part draw (claim 32). The quirks are passed per draw while
+/// the canvas lives across maps, so with the switch off a mode left on by
+/// earlier draws is ignored.
 #[derive(Clone, Debug, Default)]
 pub struct VoxelCanvas {
     /// The planes; `None` until the first fresh draw, which clears both
@@ -2397,8 +2418,9 @@ impl VoxelCanvas {
             return None;
         }
         // spec: S-0105 claim 32, S2 (a depth-option part is drawn with the
-        // mode on; any other part with the mode as it stands)
-        let depth_buffered = depth_option || self.depth_mode;
+        // mode on; any other part with the mode as it stands; quirks.depth_mode_leak
+        // off: the mode is off between draws)
+        let depth_buffered = depth_option || (quirks.depth_mode_leak && self.depth_mode);
         let buf = self.begin(depth_buffered, quirks);
         let (img, rect) = draw_model_into(buf, model, frame, draw, vpl, depth_buffered, quirks)?;
         self.last_copy = Some(rect);
@@ -2426,8 +2448,9 @@ impl VoxelCanvas {
     ) -> Option<PartImage> {
         model.sections.get(shadow_section)?;
         // spec: S-0105 claim 34, S2 (a depth-option type's shadow is made with
-        // the mode on, any other with the mode as it stands)
-        let depth_buffered = depth_option || self.depth_mode;
+        // the mode on, any other with the mode as it stands); claim 32
+        // (quirks.depth_mode_leak off: every shadow is made with the mode off)
+        let depth_buffered = quirks.depth_mode_leak && (depth_option || self.depth_mode);
         let buf = self.begin(depth_buffered, quirks);
         let (img, rect) = draw_shadow_into(
             &mut buf.colour,
@@ -2439,7 +2462,7 @@ impl VoxelCanvas {
             quirks,
         )?;
         self.last_copy = Some(rect);
-        if depth_option {
+        if depth_option && quirks.depth_mode_leak {
             // spec: S-0105 claim 32, S2 (quirks.depth_mode_leak on: a depth-option
             // type's shadow switches the mode on and leaves it on)
             self.depth_mode = true;
@@ -3613,7 +3636,9 @@ mod tests {
         // File order A, B at equal depths draws A, B in both states (claim 23).
         assert_eq!(section_order(&[2.0, 2.0], &q()), [0, 1]);
         assert_eq!(section_order(&[2.0, 2.0], &stable), [0, 1]);
-        // F8 always ends in ascending depth.
+        // F8: exact comparisons, so −0 and +0 tie.
+        assert_eq!(section_order(&[0.0, -0.0], &stable), [0, 1]);
+        // Distinct depths always ascend (F8); the order among the other ties is interim (Q-0210).
         let d = [5.0, 1.0, 4.0, 1.0, 3.0, 9.0, 2.0, 2.0];
         let o = section_order(&d, &q());
         assert!(o.windows(2).all(|w| d[w[0]] <= d[w[1]]));
@@ -4532,5 +4557,67 @@ mod tests {
             c.draw_part(&single, 0, &v, None, false, &q()).unwrap()
         });
         assert_eq!(reused, leaked);
+    }
+
+    /// spec: S-0105 claim 32, Edge cases (quirks.depth_mode_leak off, Q-0056: a shadow never
+    /// switches the mode on, so a later part of a type without the option is drawn without it)
+    #[test]
+    fn depth_mode_leak_off_keeps_the_mode_to_depth_option_parts() {
+        let single = model(vec![filled([1, 1, 1], [0.0; 3], [1.0; 3], 1, 50, 0)]);
+        let plate = model(vec![filled([2, 2, 1], [0.0; 3], [2.0, 2.0, 1.0], 1, 51, 0)]);
+        let v = view(&q());
+        let off = VoxelQuirks {
+            depth_mode_leak: false,
+            ..q()
+        };
+        let mut c = VoxelCanvas::new();
+        c.draw_shadow(&plate, 0, &Mat34::IDENTITY, 0, false, true, &off)
+            .unwrap();
+        assert!(!c.depth_mode());
+        let img = c.draw_part(&single, 0, &v, None, false, &off).unwrap();
+        assert_eq!(img.opaque().len(), 1, "the look without the mode");
+        // A mode left on by draws with the switch on is not used with it off.
+        c.draw_shadow(&plate, 0, &Mat34::IDENTITY, 0, false, true, &q())
+            .unwrap();
+        assert!(c.depth_mode());
+        let img = c.draw_part(&single, 0, &v, None, false, &off).unwrap();
+        assert_eq!(img.opaque().len(), 1);
+    }
+
+    /// spec: S-0105 claims 32 and 34, S2 (quirks.depth_mode_leak on: a depth-option shadow is made
+    /// in the mode, so its clear resets the depth plane over the previous draw's clear area; off:
+    /// its clear leaves the depth plane as it is, and later depth-tested parts see the old depths)
+    #[test]
+    fn depth_option_shadow_clears_depth_only_with_the_leak() {
+        let n = 20usize;
+        let probe = model(vec![filled(
+            [n as u8, n as u8, 1],
+            [0.0; 3],
+            [60.0, 60.0, 1.0],
+            1,
+            90,
+            0,
+        )]);
+        let spoiler = model(vec![filled([1, 1, 1], [0.0; 3], [1.0; 3], 1, 91, 0)]);
+        let id = Mat34::IDENTITY;
+        let run = |quirks: &VoxelQuirks| {
+            let mut c = VoxelCanvas::new();
+            let first = c.draw_part(&probe, 0, &id, None, true, quirks).unwrap();
+            c.draw_shadow(&probe, 0, &id, 0, false, true, quirks)
+                .unwrap();
+            c.draw_part(&spoiler, 0, &id, None, false, quirks).unwrap();
+            let second = c.draw_part(&probe, 0, &id, None, true, quirks).unwrap();
+            (first, second)
+        };
+        let (first, second) = run(&q());
+        assert_eq!(second, first, "the shadow cleared the probe's depths");
+        let off = VoxelQuirks {
+            depth_mode_leak: false,
+            ..q()
+        };
+        let (first_off, second_off) = run(&off);
+        assert_eq!(first_off, first);
+        let kept = second_off.opaque().len();
+        assert!(kept > 0 && kept <= 100, "{kept}");
     }
 }

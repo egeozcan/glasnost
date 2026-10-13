@@ -193,7 +193,6 @@ mod notes {
     pub const RUBBLE: &str = "rubble overlays outside a rubble cell draw nothing (S-0112 claim 5); rubble cells arise only in play";
     pub const SMUDGE_CLIP: &str = "a smudge is painted whole once per covered cell, not clipped to that cell (S-0102 claim 25): it differs only where covered cells differ in level or light";
     pub const TERRAIN_STRENGTH: &str = "the rules did not resolve: a terrain object type without a strength key is drawn with image frame 0 (its strength from the game-wide tree strength, S-0102 claim 23, needs the typed rules)";
-    pub const ANIMATED_TERRAIN_SHADOW: &str = "Q-0051: an animated terrain object's shadow is drawn right after its body in the object pass (provisional)";
     pub const ORE_MINE_STAGE: &str = "an ore mine's animation (S-0401 claim 15) is not played: it shows image frame 0, its stage at placement (S-0102 claim 23)";
     pub const VOXEL_SHADOW_POINT: &str = "voxel shadows are placed at the object's ground point (the locomotor's shadow point has no spec)";
     pub const NO_SLOT_ANIMS: &str = "building slot animations (S-0108) need animation playback (S-0109), which is not implemented yet: not drawn";
@@ -1415,7 +1414,6 @@ impl Builder<'_> {
             };
             // spec: S-0102 claim 10 (cell pass: writers; object pass: readers)
             let test = if animated {
-                self.note(notes::ANIMATED_TERRAIN_SHADOW);
                 DepthTest::Reader
             } else {
                 DepthTest::Writer
@@ -1444,12 +1442,12 @@ impl Builder<'_> {
                 },
                 Paint::Lit(row),
                 Group::TerrainObjects,
-                // provisional (Q-0051): an animated object's body and shadow order
-                animated,
+                false,
                 Some(object),
             ));
             // spec: S-0102 claims 13 and 23 (its shadow: body frame + ⌊N/2⌋, −L(z) − 3, flat);
-            // provisional for an animated object (Q-0051): drawn right after its body
+            // claim 30 (an animated object's body ranks before its own shadow, in one group with
+            // nothing between them; the same for an ore mine)
             if frame + frames / 2 < frames {
                 items.extend(self.place_sprite(
                     &sprite,
@@ -1463,7 +1461,7 @@ impl Builder<'_> {
                     },
                     Paint::Shadow,
                     Group::Shadows,
-                    animated,
+                    false,
                     Some(object),
                 ));
             }
@@ -2500,7 +2498,8 @@ impl Builder<'_> {
             let key = voxel::shadow_key(voxel::RAMP_FLAT, body_raw);
             if let Some(part) = self.cached_part(kind, idx, key, |b| {
                 let body = b.voxel_model(&file)?;
-                // spec: S-0105 claim 32 (a depth-option type's fresh shadow switches the mode on)
+                // spec: S-0105 claim 32 (quirks.depth_mode_leak: a depth-option type's fresh shadow
+                // switches the mode on; off, it never does)
                 b.p.canvas.draw_shadow(
                     &body,
                     section,
@@ -2511,7 +2510,8 @@ impl Builder<'_> {
                     &q,
                 )
             }) {
-                // spec: S-0102 claim 18 (the voxel shadow: bias U, upright, a reader, in the object's own drawing)
+                // spec: S-0102 claim 18 (the voxel shadow: bias U, upright, a reader, in the object's own drawing);
+                // before the body, which covers it: interim for a vehicle (Q-0213)
                 items.push(Self::part_item(
                     part,
                     point,
