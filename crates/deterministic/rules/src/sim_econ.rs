@@ -122,6 +122,11 @@ pub struct EconFields {
     /// (S-0405 claim 13); absent: none.
     #[serde(default)]
     pub powers_unit: Option<String>,
+    /// Buildings: `Sight`, the sight field *S* in cells (S-0409 claims 4
+    /// and 8; infantry, vehicles and aircraft carry it in their own
+    /// section); absent: 0.
+    #[serde(default)]
+    pub sight: Option<i32>,
     /// Buildings: `Radar` (S-0410 claim 1, S-0409 claim 15); absent: no.
     #[serde(default)]
     pub radar: Option<bool>,

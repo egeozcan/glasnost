@@ -90,6 +90,7 @@ const BUILDING_ECON: &[Row] = &[
     ("extra_power", "ExtraPower", Int, "S-0405"),
     ("powered_special", "PoweredSpecial", Bool, "S-0405"),
     ("powers_unit", "PowersUnit", Ref(Kind::Vehicles), "S-0405"),
+    ("sight", "Sight", Int, "S-0409"),
     ("radar", "Radar", Bool, "S-0409, S-0410"),
     ("spy_sat", "SpySat", Bool, "S-0409"),
     ("refinery", "Refinery", Bool, "S-0402"),

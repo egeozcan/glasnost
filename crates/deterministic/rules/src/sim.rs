@@ -1726,6 +1726,9 @@ pub struct WeaponType {
     /// `FireOnce` (S-0309 claim 21).
     #[serde(default)]
     pub fire_once: Option<bool>,
+    /// `RevealOnFire`, the reveal-on-fire flag (S-0409 claim 16); absent: no.
+    #[serde(default)]
+    pub reveal_on_fire: Option<bool>,
 }
 
 /// A projectile's simulation fields.
