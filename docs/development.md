@@ -288,7 +288,6 @@ Provisional rules of combat, each tied to a request:
 | `combat::projectile::lead` | a moving vehicle's speed *u* is 0, so no shot is led | Q-0071 |
 | `combat::range::approach_search` | S-0307 revision 2 answers Q-0072 only for ground units on flat open ground without bridges, attacking an object, without the close-range property; every other case takes the same search meanwhile, and a failed search after candidates centres its nearby-cell search on the target's cell, as with empty radii. Until the movement session's approach step (S-0215 claim 37) calls the search, an actor in *attack* does not approach a target it cannot fire at yet | Q-0072 |
 | `combat::projectile` | F12's pitch facing takes S-0204's table exceptions and F13's does not | Q-0077 |
-| `combat::projectile` | the rows of T1 test the position before the cruise lift; a vertical projectile crossing a deck detonates at its new height | Q-0078 |
 | `combat::acquire` | a landed aircraft counts in the map-wide search's second pass and is scored with its distance in cells | Q-0079 |
 | `tick::object_turn`, `combat::damage::delay_kill_expiry_turn` | a building's delayed-kill expiry hit comes at the end of its turn, after the general part (healing, behaviour, the delayed shot, the economy events), where S-0312 claim 21 puts a removal | Q-0170 |
 | `orders::prone_get_up` | a behaviour order resulting in *move* is the movement order that makes a prone unit get up, when the order is applied | Q-0087 |
