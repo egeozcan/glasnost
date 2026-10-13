@@ -231,32 +231,29 @@ pub fn deck_frame(d: u8, (x, y): (i32, i32)) -> usize {
 /// The vertical shift *s* of an overlay's draw point and the displacement
 /// of its shadow's draw point (S-0102 claim 24).
 pub fn draw_shift(position: u8, flags: Flags, deck: bool, data: u8) -> (i32, (i32, i32)) {
-    let mut s = 0;
-    // spec: S-0102 claim 24 (ore or gems, a wall, a crate, or index 126: −12)
-    if flags.tiberium || flags.wall || flags.crate_ || position == VEIN {
-        s -= 12;
-    }
-    // spec: S-0102 claim 24 (a railroad land type: −1)
-    if flags.railroad {
-        s -= 1;
-    }
-    // spec: S-0102 claim 24 (index 126: a further −1)
-    if position == VEIN {
-        s -= 1;
-    }
+    // spec: S-0102 claim 24 (s = s_type + s_rail + s_cell, three independent terms)
+    let s_type = if position == VEIN {
+        -13 // spec: S-0102 claim 24 (s_type: the overlay type with index 126)
+    } else if flags.tiberium || flags.wall || flags.crate_ {
+        -12 // spec: S-0102 claim 24 (s_type: otherwise ore or gems, a wall or a crate)
+    } else {
+        0
+    };
+    // spec: S-0102 claim 24 (s_rail: a railroad land type)
+    let s_rail = if flags.railroad { -1 } else { 0 };
     let deck_mid = deck && (9..=17).contains(&data); // spec: S-0102 claim 24 (data 9 to 17)
-    if deck {
-        s -= 16; // spec: S-0102 claim 24 (any overlay on a deck cell: −16)
-    }
-    if deck_mid {
-        s -= 15; // spec: S-0102 claim 24 (deck cell with data 9 to 17: −15)
-    }
-    if position == SHIFT_239 && !deck {
-        s -= 15; // spec: S-0102 claim 24 (index 239 off deck cells: −15)
-    }
+    let s_cell = if deck_mid {
+        -31 // spec: S-0102 claim 24 (s_cell: a bridge-deck cell with data 9 to 17)
+    } else if deck {
+        -16 // spec: S-0102 claim 24 (s_cell: otherwise a bridge-deck cell)
+    } else if position == SHIFT_239 {
+        -15 // spec: S-0102 claim 24 (s_cell: no bridge deck, the overlay type with index 239)
+    } else {
+        0
+    };
     // spec: S-0102 claim 24 (the shadow 15 left and 7 down on a deck cell with data 9 to 17)
     let shadow = if deck_mid { (-15, 7) } else { (0, 0) };
-    (s, shadow)
+    (s_type + s_rail + s_cell, shadow)
 }
 
 #[cfg(test)]

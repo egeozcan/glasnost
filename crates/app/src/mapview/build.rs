@@ -45,6 +45,7 @@ use glasnost_sim::rules::{Kind as SimKind, SimRules};
 
 use super::quirks::{
     ViewQuirks, cliff_factor, drawn_body_frame, occupiable_hurt, overlay_depth_lift,
+    sprite_vehicle_facing_part,
 };
 
 /// File bytes read for a scene, by upper-case name.
@@ -168,16 +169,13 @@ pub const VPL_FILE: &[u8] = b"voxels.vpl"; // spec: S-0105 Import mapping
 /// The notes a scene can carry: gaps in the specs (with their request) and
 /// parts our viewer does not draw yet.
 mod notes {
-    pub const STANDING_POSE: &str =
-        "Q-0021: a vehicle drawn as a sprite is taken to be in its standing pose (provisional)";
+    pub const LIVE_SPRITE_VEHICLE: &str = "vehicles drawn as sprites keep no walk counter in the live game: a moving one is drawn with its standing frame, not the moving row (S-0102 claim 22)";
     pub const TILES_UNLOADED: &str = "no game was set up: tiles are drawn as the map stores them, before the load's terrain recalculation and smoothing (S-0010 claim 12)";
-    pub const OVERLAY_SHADOW_DEPTH: &str =
-        "Q-0021: an overlay shadow's depth bias is taken as its overlay's, flat (provisional)";
     pub const RUBBLE: &str = "rubble overlays outside a rubble cell draw nothing (S-0112 claim 5); rubble cells arise only in play";
     pub const SMUDGE_CLIP: &str = "a smudge is painted whole once per covered cell, not clipped to that cell (S-0102 claim 25): it differs only where covered cells differ in level or light";
     pub const TERRAIN_STRENGTH: &str = "the rules did not resolve: a terrain object type without a strength key is drawn with image frame 0 (its strength from the game-wide tree strength, S-0102 claim 23, needs the typed rules)";
-    pub const ANIMATED_TERRAIN: &str =
-        "Q-0023: animated terrain objects show image frame 0 (provisional)";
+    pub const ANIMATED_TERRAIN_SHADOW: &str = "Q-0051: an animated terrain object's shadow is drawn right after its body in the object pass (provisional)";
+    pub const ORE_MINE_STAGE: &str = "an ore mine's animation (S-0401 claim 15) is not played: it shows image frame 0, its stage at placement (S-0102 claim 23)";
     pub const VOXEL_SHADOW_POINT: &str = "voxel shadows are placed at the object's ground point (the locomotor's shadow point has no spec)";
     pub const NO_SLOT_ANIMS: &str = "building slot animations (S-0108) need animation playback (S-0109), which is not implemented yet: not drawn";
     pub const NO_COMPANION: &str =
@@ -189,7 +187,7 @@ mod notes {
     pub const AIRCRAFT_AIR: &str = "an aircraft on a cell outside the usable area is drawn landed: its flight height has no spec (S-0009 claim 38)";
     pub const VPL: &str =
         "Q-0022: voxels are lit through the lighting table read by a provisional byte layout";
-    pub const NO_VPL: &str = "no voxel lighting table, or one whose layout was not recognised (Q-0022): every row reads as zero, so voxels draw nothing (S-0105 claim 38)";
+    pub const NO_VPL: &str = "no voxel lighting table, or one whose layout was not recognised (Q-0022): every row reads as zero, so every voxel writes a transparent pixel (S-0105 claims 19 and 38)";
     pub const VPL_REJECTED: &str = "the voxel lighting table is missing or short and quirks.vpl_unloaded_rows_blank is off: the importer rejects it (S-0105 claim 38)";
     pub const SHORT_VPL: &str = "the voxel lighting table ends before its last row, or has more than 128 rows: missing rows read as zero (S-0105 claim 38)";
     pub const WATER_FILL: &str = "water-fill variants are drawn by the game load (S-0009 claim 6, S-0202): without a game the base water tile is drawn";
@@ -431,6 +429,8 @@ struct Builder<'a> {
     options: &'a Options,
     p: Painter,
     built: Built,
+    /// Whether the builder draws the live game's objects ([`Painter::mobiles`]).
+    live: bool,
 }
 
 /// A decoded tile cell: diamond image, its depth data and template
@@ -488,6 +488,19 @@ pub fn build(
 /// hold the cell pass only. Returns the painter that draws more items into
 /// the scene later.
 pub fn build_parts(inputs: &Inputs, live: bool) -> (Built, Painter) {
+    build_parts_with(inputs, live, voxel::VoxelCanvas::new())
+}
+
+/// [`build_parts`] with the voxel buffer `canvas` that earlier fresh voxel
+/// draws of the program left, with its depth-buffered mode: S-0105 claim 34
+/// and S2 keep both across games (only the start of the program resets
+/// them). The image caches start empty, as S-0105 claim 26 has our engine
+/// empty them when a game starts.
+pub fn build_parts_with(
+    inputs: &Inputs,
+    live: bool,
+    canvas: voxel::VoxelCanvas,
+) -> (Built, Painter) {
     let import = inputs.import;
     let art = match &import.art_file {
         Some(f) => Document::parse(&f.bytes, Default::default(), &mut Vec::new()),
@@ -502,25 +515,30 @@ pub fn build_parts(inputs: &Inputs, live: bool) -> (Built, Painter) {
         palettes: inputs.palettes,
         assets: inputs.assets,
         options: inputs.options,
-        p: Painter::new(art),
+        p: Painter::new(art, canvas),
         built: Built::default(),
+        live: false,
     };
     b.light_cells();
     b.tiles();
     // spec: S-0102 claim 25 (a smudge is painted right after the terrain tile; overlays come later)
     b.smudges();
     b.overlays();
-    b.terrain_objects();
+    // spec: S-0102 claims 10, 16 and 23 (animated terrain objects leave the cell pass for the
+    // ground layer of the object pass)
+    let terrain = b.terrain_objects();
     let mut ground = Vec::new();
     b.structures(&mut ground);
     b.built.scene.cell_pass_len = b.built.scene.items.len();
     b.built.notes.insert(notes::NO_SLOT_ANIMS.into());
     if live {
-        b.built.ground = ground;
+        b.built.ground = terrain;
+        b.built.ground.extend(ground);
         return (b.built, b.p);
     }
-    // spec: S-0009 claim 43 (objects enter the drawing order vehicles, aircraft, infantry, then buildings)
-    let mut entries = Vec::new();
+    // spec: S-0009 claim 43 (objects enter the drawing order terrain objects, vehicles, aircraft,
+    // infantry, then buildings)
+    let mut entries = terrain;
     b.mobiles(&mut entries);
     entries.extend(ground);
     // spec: S-0102 claim 6 (an entering object goes before the first strictly greater key: a stable sort)
@@ -997,6 +1015,7 @@ impl Builder<'_> {
         let runs = self.tiberium_runs();
         let (local_hsv, _) = self.owner_colour(HUMAN);
         let mut beyond = 0usize;
+        let mut shadows = Vec::new();
         for (c, cell) in cells {
             let o = cell.overlay;
             if o == NO_OVERLAY {
@@ -1157,6 +1176,11 @@ impl Builder<'_> {
                     (s, f + n / 2)
                 })
             };
+            // spec: S-0102 claim 13 (an overlay's shadow: −2 − 15 × ℓ_s with ℓ_s the cell's level alone,
+            // never the deck's 4 levels nor the upright −15; flat; writes), S-0112 claim 8
+            // (every overlay kind); S-0102 Edge cases (quirks.overlay_lift_exact_levels covers overlay shadows)
+            let shadow_bias = -2
+                - overlay_depth_lift(level, &ViewQuirks::default(), &ProjectionQuirks::default());
             if let Some((sprite, frame)) = shadow
                 && self.sprite_frames(&sprite).is_some_and(|n| frame < n)
                 && let Some(item) = self.place_sprite(
@@ -1164,22 +1188,23 @@ impl Builder<'_> {
                     frame,
                     (p.0 + shadow_offset.0, p.1 + shadow_offset.1),
                     DepthTest::Writer,
-                    // provisional (Q-0021): an overlay shadow's depth bias is the overlay's own, flat
                     ItemDepth::Profile {
                         profile: Profile::Flat,
-                        bias,
+                        bias: shadow_bias,
                         companion: None,
                     },
                     Paint::Shadow,
                     Group::Shadows,
-                    true,
+                    false,
                     Some(object),
                 )
             {
-                self.built.scene.items.push(item);
-                self.note(notes::OVERLAY_SHADOW_DEPTH);
+                shadows.push(item);
             }
         }
+        // spec: S-0102 claim 16 rank 3 (every overlay of the repainted area ranks before every overlay
+        // shadow of that area)
+        self.built.scene.items.extend(shadows);
         if beyond > 0 {
             *self
                 .built
@@ -1268,9 +1293,11 @@ impl Builder<'_> {
         }
     }
 
-    /// Terrain objects (S-0102 claims 13 and 23, S-0112 claim 3, S-0104
-    /// claim 13).
-    fn terrain_objects(&mut self) {
+    /// Terrain objects (S-0102 claims 10, 13, 16 and 23, S-0112 claim 3,
+    /// S-0104 claim 13): those that are not animated in the cell pass, the
+    /// animated ones returned as ground-layer entries of the object pass.
+    fn terrain_objects(&mut self) -> Vec<GroundEntry> {
+        let mut animated_entries = Vec::new();
         let list = self.map.objects.terrain.clone();
         for t in list {
             let Some(i) = find_type(self.import, Kind::TerrainObjects, &t.type_name) else {
@@ -1320,23 +1347,39 @@ impl Builder<'_> {
                 point
             };
             let frames = self.sprite_frames(&sprite).unwrap_or(0);
-            // spec: S-0102 claim 23 (frame 0 while its health, its type's strength at the start, is 2 or more; 1 below)
-            // spec: S-0009 claim 42 (the starting health is the type's strength with the game-wide tree strength applied; unset: −1)
-            // (The typed rules list the terrain types in the import's registration order.)
-            let typed = self
-                .rules
-                .and_then(|r| r.terrain.get(i))
-                .map(|tr| tr.strength);
-            let strength = typed.or_else(|| {
-                rule(self.import, Kind::TerrainObjects, i, b"Strength").and_then(value::integer)
-            });
-            if typed.is_none() && strength.is_none() {
-                self.note(notes::TERRAIN_STRENGTH);
-            }
-            let frame = usize::from(strength.is_some_and(|s| s < 2));
-            if rule_bool(self.import, Kind::TerrainObjects, i, b"IsAnimated", false) {
-                self.note(notes::ANIMATED_TERRAIN);
-            }
+            // spec: S-0102 claim 23 (an animated terrain object: the type's animated flag; no
+            // destruction sequence has begun at placement)
+            let animated = rule_bool(self.import, Kind::TerrainObjects, i, b"IsAnimated", false);
+            let frame = if animated {
+                // spec: S-0102 claim 23, Constants (an animated terrain object's stage is 0 at
+                // placement, whatever its health)
+                if spawns {
+                    self.note(notes::ORE_MINE_STAGE);
+                }
+                0
+            } else {
+                // spec: S-0102 claim 23 (frame 0 while its health, its type's strength at the start, is 2 or more; 1 below)
+                // spec: S-0009 claim 42 (the starting health is the type's strength with the game-wide tree strength applied; unset: −1)
+                // (The typed rules list the terrain types in the import's registration order.)
+                let typed = self
+                    .rules
+                    .and_then(|r| r.terrain.get(i))
+                    .map(|tr| tr.strength);
+                let strength = typed.or_else(|| {
+                    rule(self.import, Kind::TerrainObjects, i, b"Strength").and_then(value::integer)
+                });
+                if typed.is_none() && strength.is_none() {
+                    self.note(notes::TERRAIN_STRENGTH);
+                }
+                usize::from(strength.is_some_and(|s| s < 2))
+            };
+            // spec: S-0102 claim 10 (cell pass: writers; object pass: readers)
+            let test = if animated {
+                self.note(notes::ANIMATED_TERRAIN_SHADOW);
+                DepthTest::Reader
+            } else {
+                DepthTest::Writer
+            };
             let object = self.add_object(ObjectInfo {
                 kind: "terrain object",
                 type_name: String::from_utf8_lossy(&t.type_name).into_owned(),
@@ -1346,12 +1389,14 @@ impl Builder<'_> {
                 notes: Vec::new(),
             });
             let lz = height_lift(z);
-            // spec: S-0102 claim 13 (terrain object: −L(z) − 12, upright, writes)
-            if let Some(item) = self.place_sprite(
+            let mut items = Vec::new();
+            // spec: S-0102 claim 13 (terrain object: −L(z) − 12, upright; writes in the cell pass,
+            // reads in the object pass)
+            items.extend(self.place_sprite(
                 &sprite,
                 frame,
                 p,
-                DepthTest::Writer,
+                test,
                 ItemDepth::Profile {
                     profile: Profile::Upright,
                     bias: -lz - 12,
@@ -1359,18 +1404,18 @@ impl Builder<'_> {
                 },
                 Paint::Row(row),
                 Group::TerrainObjects,
-                false,
+                // provisional (Q-0051): an animated object's body and shadow order
+                animated,
                 Some(object),
-            ) {
-                self.built.scene.items.push(item);
-            }
-            // spec: S-0102 claims 13 and 23 (its shadow: body frame + ⌊N/2⌋, −L(z) − 3, flat, writes)
-            if frame + frames / 2 < frames
-                && let Some(item) = self.place_sprite(
+            ));
+            // spec: S-0102 claims 13 and 23 (its shadow: body frame + ⌊N/2⌋, −L(z) − 3, flat);
+            // provisional for an animated object (Q-0051): drawn right after its body
+            if frame + frames / 2 < frames {
+                items.extend(self.place_sprite(
                     &sprite,
                     frame + frames / 2,
                     p,
-                    DepthTest::Writer,
+                    test,
                     ItemDepth::Profile {
                         profile: Profile::Flat,
                         bias: -lz - 3,
@@ -1378,13 +1423,22 @@ impl Builder<'_> {
                     },
                     Paint::Shadow,
                     Group::Shadows,
-                    false,
+                    animated,
                     Some(object),
-                )
-            {
-                self.built.scene.items.push(item);
+                ));
+            }
+            if animated {
+                animated_entries.push(GroundEntry {
+                    // spec: S-0102 claim 5 (sort key X + Y of its position, the centre of its cell)
+                    key: i64::from(x) + i64::from(y),
+                    items,
+                    object: Some(object),
+                });
+            } else {
+                self.built.scene.items.extend(items);
             }
         }
+        animated_entries
     }
 
     /// Whether a pre-placed building with health value `value` starts
@@ -2132,17 +2186,13 @@ impl Builder<'_> {
         } else {
             walk_start
         };
-        // spec: S-0102 claim 22 (facing part: (f₈ + 1) mod 8 with 8 facings, else 0;
-        // quirks.sprite_vehicle_eight_facings_only)
-        let d = if facings == 8 {
-            (n_step(m.body, 8) as i32 + 1) % 8
-        } else {
-            0
-        };
+        // spec: S-0102 claim 22 (facing part; quirks.sprite_vehicle_eight_facings_only)
+        let d = sprite_vehicle_facing_part(facings, m.body, &ViewQuirks::default());
         // spec: S-0102 Import mapping (IdleRate absent: 0)
         let idle_rate = rule_int(self.import, k, i, b"IdleRate", 0);
-        // spec: S-0102 claim 22 (frame table: no tick has run, so the walk counter w is 0, nothing fires
-        // or dies; the standing-pose state is taken as on, Q-0021)
+        // spec: S-0102 claim 22 (frame table: the walk counter w is 0 and nothing fires or dies; the
+        // standing-pose state is on from creation until a movement step starts and again once it
+        // ends, so the row d never applies to a vehicle that is not part-way through a step)
         let frame = if idle_rate != 0 {
             walk_start + d * walk_frames
         } else if standing_frames > 0 {
@@ -2150,7 +2200,9 @@ impl Builder<'_> {
         } else {
             walk_start + d * walk_frames
         };
-        self.note(notes::STANDING_POSE);
+        if self.live {
+            self.note(notes::LIVE_SPRITE_VEHICLE);
+        }
         let Ok(frame) = usize::try_from(frame) else {
             return Vec::new();
         };
@@ -2194,7 +2246,7 @@ impl Builder<'_> {
                 },
                 Paint::Row(row),
                 Group::Vehicles,
-                true,
+                false,
                 Some(m.object),
             )
         };
@@ -2580,7 +2632,7 @@ pub struct Inputs<'a> {
 }
 
 impl Painter {
-    fn new(art: Document) -> Self {
+    fn new(art: Document, canvas: voxel::VoxelCanvas) -> Self {
         Self {
             art,
             lights: Lights {
@@ -2590,11 +2642,17 @@ impl Painter {
             rows: Rows::default(),
             images: BTreeMap::new(),
             voxels: BTreeMap::new(),
-            canvas: voxel::VoxelCanvas::new(),
+            canvas,
             models: BTreeMap::new(),
             vpl: None,
             tile_files: BTreeMap::new(),
         }
+    }
+
+    /// The voxel buffer, for the next game of the program (S-0105 claim
+    /// 34, S2).
+    pub fn canvas(&self) -> &voxel::VoxelCanvas {
+        &self.canvas
     }
 
     /// An integer of a type's art section (the section of its image name),
@@ -2625,11 +2683,18 @@ impl Painter {
             palettes: inputs.palettes,
             assets: inputs.assets,
             options: inputs.options,
-            p: std::mem::replace(self, Painter::new(Document::empty(Default::default()))),
+            p: std::mem::replace(
+                self,
+                Painter::new(
+                    Document::empty(Default::default()),
+                    voxel::VoxelCanvas::new(),
+                ),
+            ),
             built: Built {
                 scene: std::mem::take(scene),
                 ..Default::default()
             },
+            live: true,
         };
         let entries = mobiles.iter().map(|m| b.mobile(m)).collect();
         *self = b.p;

@@ -157,6 +157,12 @@ pub struct VoxelQuirks {
     /// the depth-buffered mode. Off: the whole depth plane is cleared before
     /// every draw made in that mode.
     pub voxel_depth_plane_partial_clear: bool,
+    /// `quirks.voxel_colour_partial_clear` (claim 34): before a fresh draw
+    /// the colour plane is cleared over the clear area only (or as a whole
+    /// when that area does not fit in the buffer), so pixels written outside
+    /// it survive into later images. Off: every fresh draw starts on a fully
+    /// transparent colour plane.
+    pub voxel_colour_partial_clear: bool,
 }
 
 impl Default for VoxelQuirks {
@@ -185,13 +191,14 @@ impl Default for VoxelQuirks {
             voxel_cache_alt_turret_frame: true,
             barrel_cache_ignores_elevation: true,
             voxel_depth_plane_partial_clear: true,
+            voxel_colour_partial_clear: true,
         }
     }
 }
 
 impl VoxelQuirks {
     /// The switches by name.
-    pub fn named(&self) -> [(&'static str, bool); 22] {
+    pub fn named(&self) -> [(&'static str, bool); 23] {
         [
             ("table_trig_negative_bias", self.table_trig_negative_bias),
             ("hva_scale_first_section", self.hva_scale_first_section),
@@ -235,6 +242,10 @@ impl VoxelQuirks {
             (
                 "voxel_depth_plane_partial_clear",
                 self.voxel_depth_plane_partial_clear,
+            ),
+            (
+                "voxel_colour_partial_clear",
+                self.voxel_colour_partial_clear,
             ),
         ]
     }
@@ -2336,7 +2347,13 @@ impl VoxelCanvas {
                 x1.saturating_add(1).clamp(cx0, size),
                 y1.saturating_add(1).clamp(cy0, size),
             );
-            if fits {
+            if !quirks.voxel_colour_partial_clear {
+                // spec: S-0105 Edge cases (voxel_colour_partial_clear off: every fresh draw starts on a
+                // fully transparent colour plane)
+                buf.colour.fill(0);
+            } else if fits {
+                // spec: S-0105 claim 34 (quirks.voxel_colour_partial_clear: the colour plane is cleared
+                // over the clear area only)
                 for y in cy0..cy1 {
                     let row = (y * size) as usize;
                     buf.colour[row + cx0 as usize..row + cx1 as usize].fill(0);
@@ -3593,6 +3610,9 @@ mod tests {
             ..q()
         };
         assert_eq!(section_order(&[2.0, 2.0, 1.0], &stable), [2, 0, 1]);
+        // File order A, B at equal depths draws A, B in both states (claim 23).
+        assert_eq!(section_order(&[2.0, 2.0], &q()), [0, 1]);
+        assert_eq!(section_order(&[2.0, 2.0], &stable), [0, 1]);
         // F8 always ends in ascending depth.
         let d = [5.0, 1.0, 4.0, 1.0, 3.0, 9.0, 2.0, 2.0];
         let o = section_order(&d, &q());
@@ -4400,6 +4420,65 @@ mod tests {
         let (first_off, second_off) = run(&off, false);
         assert_eq!(first_off, first);
         assert_eq!(second_off, first);
+    }
+
+    /// spec: S-0105 claim 34 (quirks.voxel_colour_partial_clear: a pixel
+    /// written outside the previous fresh draw's widened copy rectangle
+    /// survives the next clear; off, every fresh draw starts transparent)
+    #[test]
+    fn colour_residue_outside_the_clear_area() {
+        let single = model(vec![filled([1, 1, 1], [0.0; 3], [1.0; 3], 1, 50, 0)]);
+        let id = Mat34::IDENTITY;
+        for (quirks, survives) in [
+            (q(), true),
+            (
+                VoxelQuirks {
+                    voxel_colour_partial_clear: false,
+                    ..q()
+                },
+                false,
+            ),
+        ] {
+            let mut c = VoxelCanvas::new();
+            c.draw_part(&single, 0, &id, None, false, &quirks).unwrap();
+            let [x0, y0, w, h] = c.last_copy.unwrap();
+            // A stray pixel two columns right of the clear area (columns x₀ … x₀ + w), and one
+            // inside it.
+            let size = BUFFER_SIZE as i64;
+            let outside = (y0 * size + x0 + w + 2) as usize;
+            let inside = ((y0 + h) * size + x0 + w) as usize;
+            let buf = c.buf.as_mut().unwrap();
+            buf.colour[outside] = 77;
+            buf.colour[inside] = 78;
+            let buf = c.begin(false, &quirks);
+            assert_eq!(buf.colour[outside] == 77, survives);
+            assert_eq!(buf.colour[inside], 0);
+        }
+    }
+
+    /// spec: S-0105 claims 19, 21 (a later voxel whose lighting-table entry is
+    /// 0 is still written: it erases the earlier voxel's pixel), claim 24
+    /// (in the depth-buffered mode it is tested and stores its depth)
+    #[test]
+    fn zero_entry_voxel_erases() {
+        let id = Mat34::IDENTITY;
+        // Two sections on the same pixel; the later one (drawn last by claim 23, being nearer)
+        // has colour 0, whose entry is 0 in every row of the table.
+        let vpl = marker_vpl();
+        let far = filled([1, 1, 1], [0.0, 0.0, 0.0], [1.0; 3], 1, 9, 0);
+        let near = filled([1, 1, 1], [0.0, 0.0, 5.0], [1.0, 1.0, 6.0], 1, 0, 0);
+        let m = model(vec![far.clone(), near]);
+        let img = draw_model(&m, 0, &id, Some(&vpl), false, &q()).unwrap();
+        assert!(
+            img.opaque().is_empty(),
+            "the 0 voxel erased the earlier one"
+        );
+        let alone = draw_model(&model(vec![far]), 0, &id, Some(&vpl), false, &q()).unwrap();
+        assert_eq!(alone.opaque().len(), 1);
+        // Depth-buffered: nearest first, so the 0 voxel comes first, passes, stores its depth,
+        // and the farther voxel then fails the test.
+        let img = draw_model(&m, 0, &id, Some(&vpl), true, &q()).unwrap();
+        assert!(img.opaque().is_empty());
     }
 
     /// spec: S-0105 claim 32, S2 (quirks.depth_mode_leak on: a depth-option

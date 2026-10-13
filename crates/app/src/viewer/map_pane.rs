@@ -143,6 +143,16 @@ impl MapPane {
         self.listings = listings;
     }
 
+    /// The voxel buffer the shown map's drawing left, for the next map
+    /// (S-0105 claim 34, S2: kept across games; a fresh one at program
+    /// start).
+    pub fn voxel_canvas(&self) -> glasnost_render::voxel::VoxelCanvas {
+        self.shown
+            .as_ref()
+            .map(|s| s.loaded.voxel_canvas())
+            .unwrap_or_default()
+    }
+
     /// A map finished loading.
     pub fn set_loaded(&mut self, loaded: Loaded) {
         self.generation += 1;

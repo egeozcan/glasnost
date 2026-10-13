@@ -111,19 +111,29 @@ fn rec(x: u16, y: u16, level: u8) -> Record {
 }
 
 pub(super) fn context() -> (glasnost_convert::Import, Catalogue, Assets) {
+    context_with(RULES)
+}
+
+/// A type's art: its image name and sprite file.
+fn art_of(image: &str, sprite: &str) -> TypeArt {
+    TypeArt {
+        image: image.as_bytes().to_vec(),
+        sprite: Some(sprite.as_bytes().to_vec()),
+        ..Default::default()
+    }
+}
+
+/// The test context with the rules text `rules`.
+fn context_with(rules: &str) -> (glasnost_convert::Import, Catalogue, Assets) {
     let mut import = convert(
         &Inputs {
-            base: input("rules.ini", RULES),
+            base: input("rules.ini", rules),
             art: input("art.ini", ART),
             ..Default::default()
         },
         &ImportOptions::default(),
     );
-    let art = |image: &str, sprite: &str| TypeArt {
-        image: image.as_bytes().to_vec(),
-        sprite: Some(sprite.as_bytes().to_vec()),
-        ..Default::default()
-    };
+    let art = art_of;
     let mut hut = art("HUTX", "hutx.shp");
     hut.building_sprites.insert("bib", b"hutxbib.shp".to_vec());
     import.arts = BTreeMap::from([
@@ -158,7 +168,16 @@ pub(super) fn context() -> (glasnost_convert::Import, Catalogue, Assets) {
 
 /// Builds the scene of `text` in the test context.
 fn build_text(text: &[u8], options: &Options) -> (Built, glasnost_map::Map) {
-    let (import, catalogue, assets) = context();
+    build_in(context(), text, options)
+}
+
+/// Builds the scene of `text` in the context `ctx`.
+fn build_in(
+    ctx: (glasnost_convert::Import, Catalogue, Assets),
+    text: &[u8],
+    options: &Options,
+) -> (Built, glasnost_map::Map) {
+    let (import, catalogue, assets) = ctx;
     let doc = Document::parse(text, Quirks::default(), &mut Vec::new());
     let map = decode(
         &doc,
@@ -317,8 +336,8 @@ fn overlays() {
     // canvas 10 × 10 centred, frame at (4, 4): (−120 − 5 + 4, 225 − 12 − 5 + 4).
     assert_eq!((items[0].x, items[0].y), (-121, 212));
     // S-0112 claim 8: the ore's shadow is the stored type's frame d + ⌊N/2⌋ = 3 + 4 (pixel 8).
-    let shadow = items[1];
-    assert_eq!(shadow.paint, Paint::Shadow);
+    let shadows: Vec<&Item> = items.iter().filter(|i| i.paint == Paint::Shadow).collect();
+    let shadow = shadows[0];
     assert_eq!(b.scene.images[shadow.image as usize].pixels()[0], 8);
     // The fence is upright (DrawFlat=no) on level 2: −17 − 30.
     let level = map
@@ -330,6 +349,60 @@ fn overlays() {
     let bodies: Vec<&Item> = items.iter().filter(|i| i.paint != Paint::Shadow).collect();
     assert_eq!(bias(bodies[1]), (Profile::Upright, -47));
     assert!(bodies.iter().all(|i| !i.provisional));
+}
+
+/// spec: S-0102 claims 13, 16 (rank 3) and 27; S-0112 claim 8 (the depth of every overlay shadow)
+#[test]
+fn overlay_shadow_depth_and_rank() {
+    let (b, _) = scene(&Options::default());
+    let items = items_of(&b, "overlay");
+    let (bodies, shadows): (Vec<&Item>, Vec<&Item>) =
+        items.iter().partition(|i| i.paint != Paint::Shadow);
+    assert_eq!((bodies.len(), shadows.len()), (2, 2));
+    for s in &shadows {
+        // Flat writers, no longer provisional (Q-0021 answered).
+        assert_eq!(s.test, DepthTest::Writer);
+        assert!(!s.provisional);
+    }
+    // The ore at level 0: −2 − 15 × 0, the same as its flat body.
+    assert_eq!(bias(shadows[0]), (Profile::Flat, -2));
+    // The upright fence at level 2: −2 − 15 × 2, not its body's −17 − 30.
+    assert_eq!(bias(shadows[1]), (Profile::Flat, -32));
+    // Every overlay body ranks before every overlay shadow (claim 16, rank 3).
+    let at = |i: &Item| b.scene.items.iter().position(|x| x == i).unwrap();
+    let last_body = bodies.iter().map(|i| at(i)).max().unwrap();
+    let first_shadow = shadows.iter().map(|i| at(i)).min().unwrap();
+    assert!(last_body < first_shadow);
+}
+
+/// spec: S-0102 claims 13 and 27, S-0112 claims 1 and 8 (a deck cell's shadow takes the cell's
+/// level alone: 60 depth units farther than the deck's own pixels)
+#[test]
+fn deck_overlay_shadow_skips_the_deck_levels() {
+    // Overlay types 0 … 24, the deck at bridge position 24 (S-0112 claim 1).
+    let mut rules = String::from("[OverlayTypes]\n");
+    for i in 0..25 {
+        rules.push_str(&format!("{i}=OV{i}\n"));
+    }
+    let mut ctx = context_with(&format!("{RULES}{rules}"));
+    ctx.0
+        .arts
+        .insert((Kind::Overlays, 24), art_of("OV24", "deckx.shp"));
+    ctx.2.insert(b"deckx.shp", shp((10, 10), 8, (2, 2), (4, 4)));
+    let m = MapText {
+        ini: "[Basic]\nNewINIFormat=4\n[Map]\nSize=0,0,10,10\nLocalSize=0,0,10,10\n".into(),
+        terrain: Some(record_bytes(&[rec(5, 9, 1), rec(0, 0, 0)])),
+        overlay: Some(overlay_stream(255, &[(5, 9, 24)])),
+        overlay_data: Some(overlay_stream(0, &[])),
+        ..Default::default()
+    };
+    let (b, _) = build_in(ctx, m.text().as_bytes(), &Options::default());
+    let items = items_of(&b, "overlay");
+    let body = items.iter().find(|i| i.paint != Paint::Shadow).unwrap();
+    let shadow = items.iter().find(|i| i.paint == Paint::Shadow).unwrap();
+    // Body: −2 − 15 × (1 + 4); shadow: −2 − 15 × 1.
+    assert_eq!(bias(body), (Profile::Flat, -77));
+    assert_eq!(bias(shadow), (Profile::Flat, -17));
 }
 
 /// A 1 × 1 tile file whose diamond holds `value`, with an optional extra
@@ -695,4 +768,97 @@ fn hostile_maps_build() {
         }
         let _ = build_text(&t, &Options::default());
     }
+}
+
+/// spec: S-0105 claim 34 and S2 (the voxel buffer and the depth-buffered mode are kept across
+/// games: only the start of the program resets them), claim 26 (our engine empties the image
+/// caches when a game starts)
+#[test]
+fn voxel_canvas_carries_over_between_games() {
+    use glasnost_render::voxel::{Mat34, VoxelCanvas, VoxelModel, VoxelQuirks};
+    let q = VoxelQuirks::default();
+    let model = VoxelModel::new(&glasnost_fmt::vxl::synthetic_model(), None, &q);
+    let mut canvas = VoxelCanvas::new();
+    // A depth-option type's fresh shadow opens a claim 32 window.
+    canvas
+        .draw_shadow(&model, 0, &Mat34::IDENTITY, 0, false, true, &q)
+        .unwrap();
+    assert!(canvas.depth_mode());
+    let (import, catalogue, assets) = context();
+    let text = scene_map_text();
+    let doc = Document::parse(&text, Quirks::default(), &mut Vec::new());
+    let map = decode(&doc, &DecodeContext::default()).map;
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = super::build::Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    // The next game's scene continues with that canvas: the window is still open.
+    let (_, painter) = super::build::build_parts_with(&inputs, false, canvas);
+    assert!(painter.canvas().depth_mode());
+    // A program start has it off.
+    let (_, fresh) = super::build::build_parts(&inputs, false);
+    assert!(!fresh.canvas().depth_mode());
+}
+
+/// spec: S-0102 claims 10, 13, 16 and 23 (an animated terrain object is drawn in the object pass
+/// as a reader, with image frame 0, its stage at placement, whatever its health; its sort key is
+/// X + Y of its cell's centre), S-0009 claim 43 (terrain objects enter the drawing order first)
+#[test]
+fn animated_terrain_object_in_the_object_pass() {
+    let rules = format!(
+        "{RULES}[TerrainTypes]\n0=TREEX\n1=MINEX\n2=ANIMX\n[ANIMX]\nIsAnimated=yes\nStrength=1\n[TREEX]\nStrength=1\n"
+    );
+    let mut ctx = context_with(&rules);
+    ctx.0
+        .arts
+        .insert((Kind::TerrainObjects, 2), art_of("ANIMX", "animx.shp"));
+    ctx.2.insert(b"animx.shp", shp((10, 10), 4, (2, 2), (4, 4)));
+    // The animated object on (6, 9) and a vehicle on the same cell (equal sort keys).
+    let (b, _) = build_in(
+        ctx,
+        b"[Basic]\nNewINIFormat=4\n[Map]\nSize=0,0,10,10\nLocalSize=0,0,10,10\n\
+          [Terrain]\n9006=ANIMX\n10006=TREEX\n[Units]\n0=Neutral,CARX,256,6,9,64\n",
+        &Options::default(),
+    );
+    let at = |i: &Item| b.scene.items.iter().position(|x| x == i).unwrap();
+    let items = items_of(&b, "terrain object");
+    let of = |name: &str| -> Vec<Item> {
+        items
+            .iter()
+            .filter(|i| b.objects[i.object.unwrap() as usize].type_name == name)
+            .copied()
+            .collect()
+    };
+    let (anim, tree) = (of("ANIMX"), of("TREEX"));
+    // The tree's shadow frame 1 + ⌊2/2⌋ lies beyond its sprite (S-0112 claim 9): body only.
+    assert_eq!((anim.len(), tree.len()), (2, 1));
+    // The tree stays in the cell pass as a writer, damaged frame 1 at strength 1 (pixel 2).
+    assert!(tree.iter().all(|i| at(i) < b.scene.cell_pass_len));
+    assert!(tree.iter().all(|i| i.test == DepthTest::Writer));
+    assert_eq!(b.scene.images[tree[0].image as usize].pixels()[0], 2);
+    // The animated object: object pass, readers, body frame 0 (pixel 1) despite strength 1,
+    // shadow frame 0 + ⌊4/2⌋ = 2 (pixel 3), biases −12 upright and −3 flat.
+    assert!(anim.iter().all(|i| at(i) >= b.scene.cell_pass_len));
+    assert!(anim.iter().all(|i| i.test == DepthTest::Reader));
+    let body = anim.iter().find(|i| i.paint != Paint::Shadow).unwrap();
+    let shadow = anim.iter().find(|i| i.paint == Paint::Shadow).unwrap();
+    assert_eq!(b.scene.images[body.image as usize].pixels()[0], 1);
+    assert_eq!(b.scene.images[shadow.image as usize].pixels()[0], 3);
+    assert_eq!(bias(body), (Profile::Upright, -12));
+    assert_eq!(bias(shadow), (Profile::Flat, -3));
+    // Provisional only for the order of body and shadow (Q-0051).
+    assert!(body.provisional && shadow.provisional);
+    assert_eq!(at(shadow), at(body) + 1);
+    // Same key as the vehicle on its cell: the terrain object entered first, so it is drawn first.
+    let vehicle = items_of(&b, "vehicle");
+    assert!(!vehicle.is_empty());
+    assert!(vehicle.iter().all(|v| at(v) > at(shadow)));
 }

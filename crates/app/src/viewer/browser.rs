@@ -254,7 +254,13 @@ impl Browser {
                     log::info!("map to open: {:?}", hit.as_ref().map(|h| &h.1));
                     if let (Some((file, origin)), Some(vfs)) = (hit, self.vfs.take()) {
                         self.busy = true;
-                        spawner.spawn(tasks::load_map(vfs, file, origin, Default::default()));
+                        spawner.spawn(tasks::load_map(
+                            vfs,
+                            file,
+                            origin,
+                            Default::default(),
+                            self.map.voxel_canvas(),
+                        ));
                     }
                 }
                 self.map.set_listings(maps);
@@ -648,7 +654,8 @@ impl Browser {
                 Some(MapAction::Load(file, origin, options)) => {
                     if let Some(vfs) = self.vfs.take() {
                         self.busy = true;
-                        spawner.spawn(tasks::load_map(vfs, file, origin, options));
+                        let canvas = self.map.voxel_canvas();
+                        spawner.spawn(tasks::load_map(vfs, file, origin, options, canvas));
                     }
                 }
                 None => {}

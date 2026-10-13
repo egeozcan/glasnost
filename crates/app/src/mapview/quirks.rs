@@ -12,6 +12,7 @@
 //! the test at the end of this file checks that every switch the rendering
 //! specs name is one or the other.
 
+use glasnost_num::geom::n_step;
 use glasnost_render::projection::{
     LEVEL_LEPTONS, ProjectionQuirks, TERRAIN_LIFT, height_lift_with,
 };
@@ -42,6 +43,12 @@ pub struct ViewQuirks {
     /// body frame is min(f, ⌊N/2⌋), the first shadow frame. Off:
     /// min(f, ⌊N/2⌋ − 1), the last body frame.
     pub building_frame_clamp_to_shadow: bool,
+    /// `quirks.sprite_vehicle_eight_facings_only` (S-0102 claim 22): a
+    /// vehicle drawn as a sprite turns its image only with a facing count
+    /// of exactly 8. Off: with a count that is a power of two from 2 to 256,
+    /// the count-step facing of the body facing turned an eighth of a turn
+    /// clockwise.
+    pub sprite_vehicle_eight_facings_only: bool,
 }
 
 impl Default for ViewQuirks {
@@ -53,13 +60,14 @@ impl Default for ViewQuirks {
             overlay_lift_exact_levels: true,
             occupiable_hurt_rule: true,
             building_frame_clamp_to_shadow: true,
+            sprite_vehicle_eight_facings_only: true,
         }
     }
 }
 
 impl ViewQuirks {
     /// The switches by name.
-    pub fn named(&self) -> [(&'static str, bool); 5] {
+    pub fn named(&self) -> [(&'static str, bool); 6] {
         [
             (
                 "ground_layer_single_pass_sort",
@@ -74,6 +82,10 @@ impl ViewQuirks {
             (
                 "building_frame_clamp_to_shadow",
                 self.building_frame_clamp_to_shadow,
+            ),
+            (
+                "sprite_vehicle_eight_facings_only",
+                self.sprite_vehicle_eight_facings_only,
             ),
         ]
     }
@@ -106,6 +118,29 @@ pub fn overlay_depth_lift(level: i32, q: &ViewQuirks, p: &ProjectionQuirks) -> i
     } else {
         // spec: S-0102 Edge cases (quirks.overlay_lift_exact_levels off: the objects' lift L(z), S-0101 F2)
         height_lift_with(LEVEL_LEPTONS * level, p)
+    }
+}
+
+/// The facing part *d* of a vehicle drawn as a sprite (S-0102 claim 22)
+/// whose type has `facings` facings, for body facing `body`. Disguise is
+/// not modelled (a disguised vehicle would give 0 in both states).
+pub fn sprite_vehicle_facing_part(facings: i32, body: u16, q: &ViewQuirks) -> i32 {
+    if q.sprite_vehicle_eight_facings_only {
+        // spec: S-0102 claim 22 (d = (f₈ + 1) mod 8 with 8 facings, else 0)
+        return if facings == 8 {
+            (n_step(body, 8) as i32 + 1) % 8
+        } else {
+            0
+        };
+    }
+    // spec: S-0102 Edge cases (quirks.sprite_vehicle_eight_facings_only off: a power of two n from 2
+    // to 256 gives the n-step facing (S-0204 F4) of the body facing turned clockwise by 8192
+    // facing units; any other count gives 0)
+    match u32::try_from(facings) {
+        Ok(n) if (2..=256).contains(&n) && n.is_power_of_two() => {
+            n_step(body.wrapping_add(8192), n) as i32
+        }
+        _ => 0,
     }
 }
 
@@ -162,10 +197,6 @@ pub const NOT_IMPLEMENTED: &[(&str, &str)] = &[
         "slot_values_replace_animation_adjustments",
         "S-0102 claim 17: building slot animations are not drawn",
     ),
-    (
-        "sprite_vehicle_eight_facings_only",
-        "S-0102 claim 22: the on state is drawn; the off state's facing part for counts 2 and 4 is asked in Q-0050",
-    ),
     // S-0103
     (
         "deploy_animation_neutral_brightness",
@@ -199,10 +230,6 @@ pub const NOT_IMPLEMENTED: &[(&str, &str)] = &[
     (
         "trigger_tint_retints_all_tables",
         "S-0104 claim 17: trigger actions do not change the lighting",
-    ),
-    (
-        "infantry_height_light_limited",
-        "S-0104 claim 13: the on state is drawn; the off state at a height of 208 leptons in a shadowed cell is asked in Q-0050",
     ),
     // S-0105
     (
@@ -389,7 +416,42 @@ mod tests {
             overlay_lift_exact_levels: false,
             occupiable_hurt_rule: false,
             building_frame_clamp_to_shadow: false,
+            sprite_vehicle_eight_facings_only: false,
         }
+    }
+
+    /// spec: S-0102 claim 22, Edge cases (quirks.sprite_vehicle_eight_facings_only)
+    #[test]
+    fn sprite_vehicle_facing_switch() {
+        let on = ViewQuirks::default();
+        let off = off();
+        const NORTH: u16 = 0;
+        const EAST: u16 = 16384;
+        // On: only a count of 8 turns the image; map north is part 1, east part 3.
+        assert_eq!(sprite_vehicle_facing_part(8, NORTH, &on), 1);
+        assert_eq!(sprite_vehicle_facing_part(8, EAST, &on), 3);
+        assert_eq!(sprite_vehicle_facing_part(4, EAST, &on), 0);
+        assert_eq!(sprite_vehicle_facing_part(16, EAST, &on), 0);
+        // Off, n = 8: the on state's formula for every facing.
+        for f in (0..=u16::MAX).step_by(97) {
+            assert_eq!(
+                sprite_vehicle_facing_part(8, f, &off),
+                sprite_vehicle_facing_part(8, f, &on)
+            );
+        }
+        // Off, n = 4: a vehicle facing map north shows part 1 (the half goes clockwise).
+        assert_eq!(sprite_vehicle_facing_part(4, NORTH, &off), 1);
+        assert_eq!(sprite_vehicle_facing_part(4, EAST, &off), 2);
+        // Off, n = 2: 0 + 8192 rounds to step 0, east + 8192 to step 1.
+        assert_eq!(sprite_vehicle_facing_part(2, NORTH, &off), 0);
+        assert_eq!(sprite_vehicle_facing_part(2, EAST, &off), 1);
+        // Off, n = 16: (f₁₆ + 2) mod 16.
+        assert_eq!(sprite_vehicle_facing_part(16, EAST, &off), 6);
+        assert_eq!(sprite_vehicle_facing_part(16, 65535, &off), 2);
+        // Off, a count that is not a power of two from 2 to 256: 0.
+        assert_eq!(sprite_vehicle_facing_part(3, EAST, &off), 0);
+        assert_eq!(sprite_vehicle_facing_part(1, EAST, &off), 0);
+        assert_eq!(sprite_vehicle_facing_part(512, EAST, &off), 0);
     }
 
     /// spec: S-0102 claim 14, Edge cases (quirks.cliff_fudge_far_cliff_weaker)
