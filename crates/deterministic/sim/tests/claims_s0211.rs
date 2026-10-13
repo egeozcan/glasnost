@@ -737,6 +737,7 @@ fn block_tile(w: u8, h: u8, code: u8) -> TileInfo {
             .collect(),
         variants: 0,
         anim: None,
+        no_burrowing: false,
     }
 }
 

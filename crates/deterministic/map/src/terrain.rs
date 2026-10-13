@@ -68,6 +68,10 @@ pub struct TileInfo {
     /// The tile's animation, if its plain image names one (S-0010 claim 19).
     #[serde(default)]
     pub anim: Option<TileAnim>,
+    /// Whether the tile's tileset has its allow-burrowing flag off (S-0010
+    /// claim 17 and Import mapping; absent: allowed).
+    #[serde(default)]
+    pub no_burrowing: bool,
 }
 
 /// A tile's animation (S-0010 claim 19 and Import mapping): the animation
@@ -546,6 +550,7 @@ mod tests {
             })],
             variants: 0,
             anim: None,
+            no_burrowing: false,
         };
         let mut tiles = vec![one(0, 0), one(9, 0), one(11, 0), one(14, 0)];
         for s in 1..=4 {
@@ -644,6 +649,7 @@ mod tests {
             })],
             variants: 0,
             anim: None,
+            no_burrowing: false,
         });
         let ov = |i: u8| {
             (i == 3).then_some(OverlayLand {
@@ -779,6 +785,7 @@ mod tests {
                 })],
                 variants: 0,
                 anim: None,
+                no_burrowing: false,
             });
         }
         cat.roles.rough_ground = 3;
@@ -815,6 +822,7 @@ mod tests {
                 })],
                 variants: 0,
                 anim: None,
+                no_burrowing: false,
             });
         }
         cat.roles.smooth_ramp = 24;

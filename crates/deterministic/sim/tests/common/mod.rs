@@ -137,6 +137,7 @@ impl Scene {
             })],
             variants: 0,
             anim: None,
+            no_burrowing: false,
         };
         let mut tiles: Vec<TileInfo> = (0..=4).map(|s| tile(0, s)).collect();
         tiles.extend((0..16).map(|k| tile(k, 0)));

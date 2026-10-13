@@ -182,6 +182,8 @@ pub struct Tileset {
     pub non_height_view: i32,
     /// Each tile's animation, tiles 1 … C in order (S-0010 claim 19).
     pub anims: Vec<Option<TileAnim>>,
+    /// The allow-burrowing flag (S-0010 claim 17, `AllowBurrowing`).
+    pub allow_burrowing: bool,
 }
 
 /// A theater's catalogue.
@@ -284,6 +286,11 @@ impl Catalogue {
                     .value(b"NonMarbleMadness")
                     .and_then(value::integer)
                     .unwrap_or(DEFAULT_NON_HEIGHT_VIEW),
+                // spec: S-0010 Import mapping (`AllowBurrowing`, boolean, absent: yes)
+                allow_burrowing: section
+                    .value(b"AllowBurrowing")
+                    .and_then(value::boolean)
+                    .unwrap_or(true),
             });
             first = first.saturating_add(count.max(0));
         }
@@ -528,17 +535,19 @@ impl Catalogue {
                     )),
                 }
             }
-            // spec: S-0010 claim 19 (a tile's animation, from its tileset's animation section)
-            info.anim = self
+            let set = self
                 .tilesets
                 .iter()
-                .find(|s| (s.first..s.first.saturating_add(s.count.max(0))).contains(&(t as i32)))
-                .and_then(|s| {
-                    s.anims
-                        .get((t as i32 - s.first) as usize)
-                        .cloned()
-                        .flatten()
-                });
+                .find(|s| (s.first..s.first.saturating_add(s.count.max(0))).contains(&(t as i32)));
+            // spec: S-0010 claim 17 (the tile's tileset's allow-burrowing flag)
+            info.no_burrowing = set.is_some_and(|s| !s.allow_burrowing);
+            // spec: S-0010 claim 19 (a tile's animation, from its tileset's animation section)
+            info.anim = set.and_then(|s| {
+                s.anims
+                    .get((t as i32 - s.first) as usize)
+                    .cloned()
+                    .flatten()
+            });
             tiles.push(info);
         }
         (
@@ -623,6 +632,7 @@ fn tile_info(bytes: &[u8]) -> Result<TileInfo, String> {
             .collect(),
         variants: 0,
         anim: None,
+        no_burrowing: false,
     })
 }
 
@@ -752,6 +762,22 @@ mod tests {
         let (cat, _) = c.tile_catalogue(&images, &|_| None);
         assert_eq!(cat.tiles[0].anim, None);
         assert_eq!(cat.tiles[2].anim.as_ref().map(|x| x.attaches_to), Some(2));
+    }
+
+    /// spec: S-0010 claim 17 and Import mapping (`AllowBurrowing`, boolean, absent: yes; carried to each tile of the set)
+    #[test]
+    fn claim_17_allow_burrowing() {
+        let d = doc(
+            "[TileSet0000]\nTilesInSet=1\n[TileSet0001]\nTilesInSet=2\nAllowBurrowing=no\n\
+             [TileSet0002]\nTilesInSet=1\nAllowBurrowing=yes\n",
+        );
+        let c = Catalogue::read(&d, Theater::Temperate);
+        let flags: Vec<bool> = c.tilesets.iter().map(|s| s.allow_burrowing).collect();
+        assert_eq!(flags, [true, false, true]);
+        let images = c.images(&|_| false);
+        let (cat, _) = c.tile_catalogue(&images, &|_| None);
+        let refused: Vec<bool> = cat.tiles.iter().map(|t| t.no_burrowing).collect();
+        assert_eq!(refused, [false, true, true, false]);
     }
 
     /// spec: S-0009 Formulas (tile number translation)
