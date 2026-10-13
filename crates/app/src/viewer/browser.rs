@@ -133,6 +133,8 @@ pub struct Browser {
     pub map: MapPane,
     /// A map to open once the install is mounted.
     pub pending_map: Option<String>,
+    /// The game the pending map starts (local snapshots).
+    pub pending_game: crate::mapview::build::GameMode,
 }
 
 impl Browser {
@@ -175,6 +177,7 @@ impl Browser {
             map_mode: false,
             map: MapPane::default(),
             pending_map: None,
+            pending_game: Default::default(),
         }
     }
 
@@ -258,7 +261,10 @@ impl Browser {
                             vfs,
                             file,
                             origin,
-                            Default::default(),
+                            crate::mapview::build::Options {
+                                game: self.pending_game,
+                                ..Default::default()
+                            },
                             self.map.voxel_canvas(),
                         ));
                     }
@@ -1752,6 +1758,69 @@ mod tests {
         let path = out.join("map-viewer-ui.png");
         std::fs::write(&path, png(size[0], size[1], &rgba)).unwrap();
         eprintln!("wrote {}", path.display());
+    }
+
+    /// Local only: mounts the install named by `GLASNOST_GAME_DIR`, starts
+    /// a skirmish against the script on the map named by
+    /// `GLASNOST_SNAPSHOT_MAP` (default "dustbowl"), deploys the controlled
+    /// house's base unit, starts the first build the sidebar offers, runs
+    /// `GLASNOST_SNAPSHOT_TICKS` ticks (default 600) and writes screenshots
+    /// of the viewer (CPU reference) at the start and the end to
+    /// `local-lane/skirmish-view/` (git-ignored). Never commit them.
+    #[test]
+    #[ignore = "local only: needs GLASNOST_GAME_DIR and a GPU"]
+    fn snapshot_skirmish_view() {
+        let Some(dir) = std::env::var_os("GLASNOST_GAME_DIR") else {
+            return;
+        };
+        let queue = Queue::default();
+        let mut b = Browser::new(None);
+        b.pending_map =
+            Some(std::env::var("GLASNOST_SNAPSHOT_MAP").unwrap_or_else(|_| "dustbowl".into()));
+        b.pending_game = crate::mapview::build::GameMode::Skirmish;
+        b.mount(
+            &queue,
+            tasks::native_files(std::path::Path::new(&dir)).unwrap(),
+        );
+        settle(&mut b, &queue);
+        b.map.set_use_gpu(false);
+        let ticks: i32 = std::env::var("GLASNOST_SNAPSHOT_TICKS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(600);
+        let size = [1600, 900];
+        let out =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../local-lane/skirmish-view");
+        std::fs::create_dir_all(&out).unwrap();
+        let shoot = |b: &mut Browser, name: &str| {
+            // A fresh context per shot: each offscreen render has its own
+            // renderer, so no texture may carry over.
+            let ctx = egui::Context::default();
+            super::super::configure_fonts(&ctx);
+            b.map.forget_textures();
+            b.texture = None;
+            let Some(rgba) = render_offscreen(&ctx, size, |ui| b.ui(ui, &queue, "offscreen"))
+            else {
+                eprintln!("no GPU adapter; skipped");
+                return false;
+            };
+            let path = out.join(name);
+            std::fs::write(&path, png(size[0], size[1], &rgba)).unwrap();
+            eprintln!("wrote {}", path.display());
+            true
+        };
+        if !shoot(&mut b, "start.png") {
+            return;
+        }
+        let deployed = b.map.deploy_base();
+        b.map.advance(150);
+        let building = b.map.build_first();
+        b.map.advance(ticks - 150);
+        eprintln!(
+            "deployed: {deployed}; build started: {building}; {}",
+            b.map.status
+        );
+        shoot(&mut b, "after.png");
     }
 
     /// Local only: mounts the install named by `GLASNOST_GAME_DIR`, opens a

@@ -90,6 +90,21 @@ pub struct Options {
     pub human_slot: u8,
     /// Lobby colour slot of the computer placeholder house.
     pub computer_slot: u8,
+    /// The game a loaded map starts.
+    pub game: GameMode,
+}
+
+/// The game the viewer starts on a loaded map (our own viewer choice).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum GameMode {
+    /// One house per object owner, every owner's objects placed
+    /// (`glasnost_sim::load::sandbox_setup`).
+    #[default]
+    Sandbox,
+    /// A two-house skirmish (`econ::setup::skirmish`): the user's house
+    /// and a computer house played by `glasnost_ai`'s script, each
+    /// starting with its base unit.
+    Skirmish,
 }
 
 impl Default for Options {
@@ -99,6 +114,7 @@ impl Default for Options {
             skirmish: true,
             human_slot: 0,
             computer_slot: 1,
+            game: GameMode::Sandbox,
         }
     }
 }
@@ -277,16 +293,7 @@ pub fn wanted_files(
         );
     }
 
-    let mut add_art = |kind: Kind, idx: usize| {
-        if let Some(a) = import.arts.get(&(kind, idx)) {
-            out.extend(a.sprite.iter().map(|s| upper(s)));
-            for v in a.voxels.values() {
-                out.insert(upper(v));
-                out.insert(upper(&hva_name(v)));
-            }
-            out.extend(a.building_sprites.values().map(|s| upper(s)));
-        }
-    };
+    let mut add_art = |kind: Kind, idx: usize| art_files(import, kind, idx, &mut out);
     let used_overlays: BTreeSet<u8> = map.cells.iter().map(|(_, c)| c.overlay).collect();
     for o in used_overlays {
         if o != NO_OVERLAY {
@@ -341,6 +348,31 @@ pub fn wanted_files(
         super::combat::OVERLAY_PALETTE,
     ] {
         out.insert(upper(f));
+    }
+    out
+}
+
+/// The files of one type's art: sprite, voxel models with their motion
+/// files, and building part sprites.
+fn art_files(import: &Import, kind: Kind, idx: usize, out: &mut BTreeSet<Vec<u8>>) {
+    if let Some(a) = import.arts.get(&(kind, idx)) {
+        out.extend(a.sprite.iter().map(|s| upper(s)));
+        for v in a.voxels.values() {
+            out.insert(upper(v));
+            out.insert(upper(&hva_name(v)));
+        }
+        out.extend(a.building_sprites.values().map(|s| upper(s)));
+    }
+}
+
+/// The art files of every building, vehicle and infantry type: a live
+/// game can create types the map does not hold (deploys, production).
+pub fn game_files(import: &Import) -> BTreeSet<Vec<u8>> {
+    let mut out = BTreeSet::new();
+    for &(kind, idx) in import.arts.keys() {
+        if matches!(kind, Kind::Buildings | Kind::Vehicles | Kind::Infantry) {
+            art_files(import, kind, idx, &mut out);
+        }
     }
     out
 }
@@ -1467,13 +1499,7 @@ impl Builder<'_> {
             r.quirks.near_full_health_rounds_up,
             r.quirks.chop_rounding,
         );
-        // spec: S-0108 F3 (h = health / strength in binary64, compared with the ratios)
-        let ratio = F64::from_i64(i64::from(h), r.mode)
-            .div(F64::from_i64(i64::from(strength), r.mode), r.mode);
-        (
-            ratio.le(r.general.condition_yellow),
-            ratio.le(r.general.condition_red),
-        )
+        condition_of(r, h, strength)
     }
 
     /// The foundation W × H of a building (S-0108 Import mapping).
@@ -1561,7 +1587,6 @@ impl Builder<'_> {
                 continue;
             };
             any = true;
-            let (hsv, ours) = self.owner_colour(&p.owner);
             let object = self.add_object(ObjectInfo {
                 kind: "building",
                 type_name: String::from_utf8_lossy(&p.type_name).into_owned(),
@@ -1578,158 +1603,185 @@ impl Builder<'_> {
             if fields.upgrade_count.unwrap_or(0) > 0 {
                 self.note(notes::UPGRADES);
             }
-            let z = LEVEL_LEPTONS * i32::from(cell.level);
-            let lz = height_lift(z);
-            // spec: S-0108 claim 8, S-0009 claim 38 (centred on the top corner of the foundation's top-left cell)
-            let anchor = project_lifted(256 * p.cell.x, 256 * p.cell.y, z);
-            let u = self
-                .p
-                .lights
-                .get(p.cell)
-                .map_or(NEUTRAL_BRIGHTNESS, |l| l.unscaled_ground);
-            let terrain_palette = self
-                .art_value(Kind::Buildings, i, b"TerrainPalette")
-                .and_then(value::boolean)
-                .unwrap_or(false);
-            let row = if terrain_palette {
-                // spec: S-0103 claim 8, S-0104 claim 13 (terrain-palette building: the centre cell's table and scaled ground)
-                let (w, h) = self.foundation(i);
-                let (cx, cy) = light::building_centre_cell((p.cell.x, p.cell.y), (w, h));
-                let centre = CellXY::new(cx, cy);
-                let l = self.p.lights.get(centre);
-                self.tile_row(
-                    l.map_or(TileTable::Neutral, |l| l.table),
-                    l.map_or(NEUTRAL_BRIGHTNESS, |l| l.scaled_ground),
-                )
-            } else {
-                // spec: S-0104 claim 13 (an ordinary building: U of its top-left foundation cell)
-                self.house_row(hsv, u)
-            };
-            let _ = ours;
-            let Some(sprite) = art.sprite.clone() else {
-                continue;
-            };
-            let n = self.sprite_frames(&sprite).unwrap_or(0);
-            // spec: S-0009 claim 40 (a map-placed building is complete and idle at once);
-            // S-0108 claim 6 (a change during the game's set-up is immediate: stage = a of the range)
-            let idle = self
-                .art_value(Kind::Buildings, i, b"AnimIdle")
-                .map(|v| value::int_tuple_or::<3>(v, [0, 1, 0]).0)
-                .unwrap_or([0, 1, 0]);
-            let k = idle[0].max(0) as usize;
-            let occupiable = rule_bool(self.import, Kind::Buildings, i, b"CanBeOccupied", false);
-            let gate = rule_bool(self.import, Kind::Buildings, i, b"Gate", false);
-            let (damaged, badly) = self.building_condition(i, p.health);
-            // spec: S-0108 claim 2 (occupiable: 2·[occupied] + [hurt], hurt badly damaged at tech level 0 or
-            // below, damaged above; gate: 0, damaged G + 1; others: k, damaged k + 1 in the idle state)
-            let f = if occupiable {
-                // spec: S-0108 Import mapping (TechLevel absent: 255)
-                let tech = rule_int(self.import, Kind::Buildings, i, b"TechLevel", 255);
-                // spec: S-0108 claim 2 (quirks.occupiable_hurt_rule)
-                usize::from(occupiable_hurt(
-                    tech,
-                    damaged,
-                    badly,
-                    &ViewQuirks::default(),
-                ))
-            } else if gate {
-                if damaged {
-                    self.note(notes::GATE_DAMAGED);
-                }
-                0
-            } else {
-                k + usize::from(damaged)
-            };
-            // spec: S-0108 claim 3 (drawn frame min(f, ⌊N/2⌋), quirks.building_frame_clamp_to_shadow)
-            let body_frame = drawn_body_frame(f, n, &ViewQuirks::default());
-            let normal_z = self
-                .art_value(Kind::Buildings, i, b"NormalZAdjust")
-                .and_then(value::integer)
-                .unwrap_or(0);
-            // spec: S-0102 claim 16 (each building's group: body, then shadow, then bib)
-            // spec: S-0102 claim 13 (body: −L(z) − 2 + normal depth adjustment, upright, writes)
-            if let Some(item) = self.place_sprite(
-                &sprite,
-                body_frame,
-                anchor,
-                DepthTest::Writer,
-                ItemDepth::Profile {
-                    profile: Profile::Upright,
-                    bias: -lz - 2 + normal_z,
-                    companion: None,
-                },
-                Paint::Row(row),
-                Group::Buildings,
-                true,
-                Some(object),
-            ) {
-                self.built.scene.items.push(item);
-            }
-            // spec: S-0108 claim 9 (shadow frame F + ⌊N/2⌋ unless the type suppresses shadows; none past the sprite)
-            let shadow = body_frame + n / 2;
-            if !rule_bool(self.import, Kind::Buildings, i, b"NoShadow", false)
-                && shadow < n
-                && let Some(item) = self.place_sprite(
-                    &sprite,
-                    shadow,
-                    anchor,
-                    DepthTest::Writer,
-                    // spec: S-0102 claim 13 (building shadow: −L(z) − 4, flat, writes)
-                    ItemDepth::Profile {
-                        profile: Profile::Flat,
-                        bias: -lz - 4,
-                        companion: None,
-                    },
-                    Paint::Shadow,
-                    Group::Shadows,
-                    true,
-                    Some(object),
-                )
-            {
-                self.built.scene.items.push(item);
-            }
-            // spec: S-0108 claim 7 (bib: same frame f, no clamp, outside the construction state)
-            if let Some(bib) = art.building_sprites.get("bib").cloned()
-                && let Some(item) = self.place_sprite(
-                    &bib,
-                    f,
-                    anchor,
-                    DepthTest::Writer,
-                    // spec: S-0102 claim 13 (bib: −L(z) − 3, flat, writes)
-                    ItemDepth::Profile {
-                        profile: Profile::Flat,
-                        bias: -lz - 3,
-                        companion: None,
-                    },
-                    Paint::Row(row),
-                    Group::Bibs,
-                    true,
-                    Some(object),
-                )
-            {
-                self.built.scene.items.push(item);
-            }
-            // Voxel turret or barrel in the object pass (S-0105 claims 5, 9, 37; S-0102 claims 5, 13).
-            let turret_voxel =
-                rule_bool(self.import, Kind::Buildings, i, b"TurretAnimIsVoxel", false);
-            if turret_voxel || art.voxels.contains_key("barrel") {
-                let items = self.building_voxels(i, &art, p, anchor, lz, u, hsv, object);
-                // spec: S-0102 F4 (key = 256·(c_x + c_y) + 32 for a voxel turret − 16 for a gate)
-                let key = i64::from(256 * (p.cell.x + p.cell.y))
-                    + if turret_voxel { 32 } else { 0 }
-                    - if gate { 16 } else { 0 };
-                if !items.is_empty() {
-                    ground.push(GroundEntry {
-                        key,
-                        items,
-                        object: Some(object),
-                    });
-                }
-            }
+            let condition = self.building_condition(i, p.health);
+            // spec: S-0009 claim 39 (a building's turret starts at 256 × (v mod 256))
+            let facing = facing_from_value(p.facing);
+            let items = self.building_items(
+                i, &art, p.cell, cell.level, &p.owner, condition, facing, object, ground,
+            );
+            self.built.scene.items.extend(items);
         }
         if any {
             self.note(notes::NO_COMPANION);
         }
+    }
+
+    /// The items of one building of type `idx` with its foundation's
+    /// top-left cell at `cell` (height level `level`): body, shadow and bib
+    /// (returned, for the cell pass) and its voxel turret or barrel (pushed
+    /// to `ground` as a ground-layer entry). `condition` is (damaged, badly
+    /// damaged); `facing` the turret's facing.
+    #[allow(clippy::too_many_arguments)]
+    fn building_items(
+        &mut self,
+        i: usize,
+        art: &glasnost_convert::art::TypeArt,
+        cell: CellXY,
+        level: i8,
+        owner: &[u8],
+        condition: (bool, bool),
+        facing: u16,
+        object: u32,
+        ground: &mut Vec<GroundEntry>,
+    ) -> Vec<Item> {
+        let mut items = Vec::new();
+        let (hsv, _) = self.owner_colour(owner);
+        let z = LEVEL_LEPTONS * i32::from(level);
+        let lz = height_lift(z);
+        // spec: S-0108 claim 8, S-0009 claim 38 (centred on the top corner of the foundation's top-left cell)
+        let anchor = project_lifted(256 * cell.x, 256 * cell.y, z);
+        let u = self
+            .p
+            .lights
+            .get(cell)
+            .map_or(NEUTRAL_BRIGHTNESS, |l| l.unscaled_ground);
+        let terrain_palette = self
+            .art_value(Kind::Buildings, i, b"TerrainPalette")
+            .and_then(value::boolean)
+            .unwrap_or(false);
+        let row = if terrain_palette {
+            // spec: S-0103 claim 8, S-0104 claim 13 (terrain-palette building: the centre cell's table and scaled ground)
+            let (w, h) = self.foundation(i);
+            let (cx, cy) = light::building_centre_cell((cell.x, cell.y), (w, h));
+            let centre = CellXY::new(cx, cy);
+            let l = self.p.lights.get(centre);
+            self.tile_row(
+                l.map_or(TileTable::Neutral, |l| l.table),
+                l.map_or(NEUTRAL_BRIGHTNESS, |l| l.scaled_ground),
+            )
+        } else {
+            // spec: S-0104 claim 13 (an ordinary building: U of its top-left foundation cell)
+            self.house_row(hsv, u)
+        };
+        let Some(sprite) = art.sprite.clone() else {
+            return items;
+        };
+        let n = self.sprite_frames(&sprite).unwrap_or(0);
+        // spec: S-0009 claim 40 (a map-placed building is complete and idle at once);
+        // S-0108 claim 6 (a change during the game's set-up is immediate: stage = a of the range)
+        let idle = self
+            .art_value(Kind::Buildings, i, b"AnimIdle")
+            .map(|v| value::int_tuple_or::<3>(v, [0, 1, 0]).0)
+            .unwrap_or([0, 1, 0]);
+        let k = idle[0].max(0) as usize;
+        let occupiable = rule_bool(self.import, Kind::Buildings, i, b"CanBeOccupied", false);
+        let gate = rule_bool(self.import, Kind::Buildings, i, b"Gate", false);
+        let (damaged, badly) = condition;
+        // spec: S-0108 claim 2 (occupiable: 2·[occupied] + [hurt], hurt badly damaged at tech level 0 or
+        // below, damaged above; gate: 0, damaged G + 1; others: k, damaged k + 1 in the idle state)
+        let f = if occupiable {
+            // spec: S-0108 Import mapping (TechLevel absent: 255)
+            let tech = rule_int(self.import, Kind::Buildings, i, b"TechLevel", 255);
+            // spec: S-0108 claim 2 (quirks.occupiable_hurt_rule)
+            usize::from(occupiable_hurt(
+                tech,
+                damaged,
+                badly,
+                &ViewQuirks::default(),
+            ))
+        } else if gate {
+            if damaged {
+                self.note(notes::GATE_DAMAGED);
+            }
+            0
+        } else {
+            k + usize::from(damaged)
+        };
+        // spec: S-0108 claim 3 (drawn frame min(f, ⌊N/2⌋), quirks.building_frame_clamp_to_shadow)
+        let body_frame = drawn_body_frame(f, n, &ViewQuirks::default());
+        let normal_z = self
+            .art_value(Kind::Buildings, i, b"NormalZAdjust")
+            .and_then(value::integer)
+            .unwrap_or(0);
+        // spec: S-0102 claim 16 (each building's group: body, then shadow, then bib)
+        // spec: S-0102 claim 13 (body: −L(z) − 2 + normal depth adjustment, upright, writes)
+        if let Some(item) = self.place_sprite(
+            &sprite,
+            body_frame,
+            anchor,
+            DepthTest::Writer,
+            ItemDepth::Profile {
+                profile: Profile::Upright,
+                bias: -lz - 2 + normal_z,
+                companion: None,
+            },
+            Paint::Row(row),
+            Group::Buildings,
+            true,
+            Some(object),
+        ) {
+            items.push(item);
+        }
+        // spec: S-0108 claim 9 (shadow frame F + ⌊N/2⌋ unless the type suppresses shadows; none past the sprite)
+        let shadow = body_frame + n / 2;
+        if !rule_bool(self.import, Kind::Buildings, i, b"NoShadow", false)
+            && shadow < n
+            && let Some(item) = self.place_sprite(
+                &sprite,
+                shadow,
+                anchor,
+                DepthTest::Writer,
+                // spec: S-0102 claim 13 (building shadow: −L(z) − 4, flat, writes)
+                ItemDepth::Profile {
+                    profile: Profile::Flat,
+                    bias: -lz - 4,
+                    companion: None,
+                },
+                Paint::Shadow,
+                Group::Shadows,
+                true,
+                Some(object),
+            )
+        {
+            items.push(item);
+        }
+        // spec: S-0108 claim 7 (bib: same frame f, no clamp, outside the construction state)
+        if let Some(bib) = art.building_sprites.get("bib").cloned()
+            && let Some(item) = self.place_sprite(
+                &bib,
+                f,
+                anchor,
+                DepthTest::Writer,
+                // spec: S-0102 claim 13 (bib: −L(z) − 3, flat, writes)
+                ItemDepth::Profile {
+                    profile: Profile::Flat,
+                    bias: -lz - 3,
+                    companion: None,
+                },
+                Paint::Row(row),
+                Group::Bibs,
+                true,
+                Some(object),
+            )
+        {
+            items.push(item);
+        }
+        // Voxel turret or barrel in the object pass (S-0105 claims 5, 9, 37; S-0102 claims 5, 13).
+        let turret_voxel = rule_bool(self.import, Kind::Buildings, i, b"TurretAnimIsVoxel", false);
+        if turret_voxel || art.voxels.contains_key("barrel") {
+            let items = self.building_voxels(i, art, facing, anchor, lz, u, hsv, object);
+            // spec: S-0102 F4 (key = 256·(c_x + c_y) + 32 for a voxel turret − 16 for a gate)
+            let key = i64::from(256 * (cell.x + cell.y)) + if turret_voxel { 32 } else { 0 }
+                - if gate { 16 } else { 0 };
+            if !items.is_empty() {
+                ground.push(GroundEntry {
+                    key,
+                    items,
+                    object: Some(object),
+                });
+            }
+        }
+        items
     }
 
     /// A building's voxel turret and barrel, or its barrel alone (S-0105
@@ -1739,7 +1791,7 @@ impl Builder<'_> {
         &mut self,
         idx: usize,
         art: &glasnost_convert::art::TypeArt,
-        p: &glasnost_map::objects::Placed,
+        facing: u16,
         anchor: (i32, i32),
         lz: i32,
         brightness: i32,
@@ -1749,8 +1801,6 @@ impl Builder<'_> {
         let q = VoxelQuirks::default();
         let vpl = self.vpl();
         let k = Kind::Buildings;
-        // spec: S-0009 claim 39 (a building's turret starts at 256 × (v mod 256))
-        let facing = facing_from_value(p.facing);
         // spec: S-0105 Terms (turret anchor: the draw point moved by TurretAnimX and TurretAnimY, rules keys);
         // S-0009 claim 38 (the draw point is the S-0108 claim 8 image anchor)
         let at = (
@@ -2707,6 +2757,105 @@ impl Painter {
         *scene = b.built.scene;
         (entries, b.built.notes)
     }
+    /// Draws the live game's own buildings into `scene`: for each, its
+    /// items (body, shadow, bib, then any voxel turret or barrel).
+    pub fn buildings(
+        &mut self,
+        inputs: &Inputs,
+        scene: &mut Scene,
+        list: &[LiveBuilding],
+    ) -> (Vec<Vec<Item>>, BTreeSet<String>) {
+        let mut b = Builder {
+            map: inputs.map,
+            rules: inputs.rules,
+            cells_loaded: inputs.cells,
+            import: inputs.import,
+            catalogue: inputs.catalogue,
+            palettes: inputs.palettes,
+            assets: inputs.assets,
+            options: inputs.options,
+            p: std::mem::replace(
+                self,
+                Painter::new(
+                    Document::empty(Default::default()),
+                    voxel::VoxelCanvas::new(),
+                ),
+            ),
+            built: Built {
+                scene: std::mem::take(scene),
+                ..Default::default()
+            },
+            live: true,
+        };
+        let mut out = Vec::new();
+        for d in list {
+            let Some(art) = b.import.arts.get(&(Kind::Buildings, d.idx)).cloned() else {
+                out.push(Vec::new());
+                continue;
+            };
+            let level = inputs
+                .cells
+                .and_then(|g| g.get(d.cell))
+                .or_else(|| inputs.map.cells.get(d.cell))
+                .map_or(0, |c| c.level);
+            let condition = match inputs.rules {
+                Some(r) => condition_of(r, d.health.0, d.health.1),
+                None => (false, false),
+            };
+            let mut ground = Vec::new();
+            let mut items = b.building_items(
+                d.idx,
+                &art,
+                d.cell,
+                level,
+                &d.owner,
+                condition,
+                d.facing,
+                d.object,
+                &mut ground,
+            );
+            for g in ground {
+                items.extend(g.items);
+            }
+            out.push(items);
+        }
+        *self = b.p;
+        *scene = b.built.scene;
+        (out, b.built.notes)
+    }
+}
+
+/// Whether a building with health `h` of strength `strength` is damaged
+/// and badly damaged (S-0108 F3).
+fn condition_of(r: &SimRules, h: i32, strength: i32) -> (bool, bool) {
+    if strength == 0 {
+        return (false, false);
+    }
+    // spec: S-0108 F3 (h = health / strength in binary64, compared with the ratios)
+    let ratio =
+        F64::from_i64(i64::from(h), r.mode).div(F64::from_i64(i64::from(strength), r.mode), r.mode);
+    (
+        ratio.le(r.general.condition_yellow),
+        ratio.le(r.general.condition_red),
+    )
+}
+
+/// A building the live game put on the map (deployed or placed), not one
+/// of the map's own.
+#[derive(Clone, Debug)]
+pub struct LiveBuilding {
+    /// Import registration index of its type.
+    pub idx: usize,
+    /// Top-left foundation cell.
+    pub cell: CellXY,
+    /// Owner house name.
+    pub owner: Vec<u8>,
+    /// Health and strength.
+    pub health: (i32, i32),
+    /// Turret facing.
+    pub facing: u16,
+    /// Item object code.
+    pub object: u32,
 }
 
 /// A greyscale-free minimap: each cell as two pixels with its tile's radar
@@ -2721,24 +2870,10 @@ pub fn minimap(map: &Map, catalogue: &Catalogue, assets: &Assets) -> (u32, u32, 
         f.height.clamp(0, 512) as u32 * 2,
     );
     let mut px = vec![0u8; (w * h * 4) as usize];
-    let mut radar: BTreeMap<Vec<u8>, Option<Tmp>> = BTreeMap::new();
+    let colours = tile_radar_colours(&map.cells, catalogue, assets);
     for (c, cell) in map.cells.iter() {
-        let colours = catalogue.art_tile(cell.tile).and_then(|t| {
-            // spec: S-0010 claim 3 (the theater's suffix, else the fallback suffixes)
-            let file = upper(&catalogue.find_image(t, 0, &|n| assets.get(n).is_some())?);
-            let tmp = radar
-                .entry(file.clone())
-                .or_insert_with(|| assets.get(&file).and_then(|b| Tmp::parse(b).ok()))
-                .as_ref()?;
-            let tile = tmp
-                .tiles
-                .get(usize::from(cell.sub_tile))
-                .copied()
-                .flatten()?;
-            Some((tile.radar_left, tile.radar_right))
-        });
         let ((l, r), usable) = (
-            colours.unwrap_or(([0, 0, 0], [0, 0, 0])),
+            colours.get(&c).copied().unwrap_or(([0, 0, 0], [0, 0, 0])),
             // spec: S-0009 claim 5a (the height-aware test limits the minimap; slopes need the theater spec)
             f.is_usable(c, i32::from(cell.level), false),
         );
@@ -2755,4 +2890,35 @@ pub fn minimap(map: &Map, catalogue: &Catalogue, assets: &Assets) -> (u32, u32, 
         }
     }
     (w, h, px)
+}
+
+/// Each cell's two tile radar colours (left, right) from its tile file's
+/// own data, for the cells whose tile file and sub-tile were found.
+pub fn tile_radar_colours(
+    cells: &glasnost_map::CellGrid,
+    catalogue: &Catalogue,
+    assets: &Assets,
+) -> BTreeMap<CellXY, ([u8; 3], [u8; 3])> {
+    let mut radar: BTreeMap<Vec<u8>, Option<Tmp>> = BTreeMap::new();
+    let mut out = BTreeMap::new();
+    for (c, cell) in cells.iter() {
+        let colours = catalogue.art_tile(cell.tile).and_then(|t| {
+            // spec: S-0010 claim 3 (the theater's suffix, else the fallback suffixes)
+            let file = upper(&catalogue.find_image(t, 0, &|n| assets.get(n).is_some())?);
+            let tmp = radar
+                .entry(file.clone())
+                .or_insert_with(|| assets.get(&file).and_then(|b| Tmp::parse(b).ok()))
+                .as_ref()?;
+            let tile = tmp
+                .tiles
+                .get(usize::from(cell.sub_tile))
+                .copied()
+                .flatten()?;
+            Some((tile.radar_left, tile.radar_right))
+        });
+        if let Some(v) = colours {
+            out.insert(c, v);
+        }
+    }
+    out
 }

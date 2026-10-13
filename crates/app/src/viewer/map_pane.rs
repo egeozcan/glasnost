@@ -28,10 +28,15 @@ use glasnost_sim::targeting::{self, ClickOn, KeyCommand, Modifiers};
 use glasnost_sim::world::{HouseId, ObjectId, Target};
 use glasnost_vfs::FileRef;
 
-use crate::mapview::build::{self, ObjectInfo};
+use crate::mapview::build::{self, GameMode, ObjectInfo};
+use crate::mapview::credits::CreditCounter;
 use crate::mapview::find::Listing;
 use crate::mapview::live::{self, InputReport, Live, Pacer};
 use crate::mapview::load::Loaded;
+use crate::mapview::radar::{self, Radar};
+use crate::mapview::sidebar::{self, Action, Tab};
+use glasnost_sim::econ::TypeRef;
+use glasnost_sim::econ::sidebar::Click;
 
 /// What the pane asks the browser to do.
 pub enum MapAction {
@@ -72,6 +77,20 @@ struct Shown {
     paused: bool,
     /// One tick requested while paused.
     step_once: bool,
+    /// The sidebar's credits counter (S-0416), moved once per tick run.
+    credits: CreditCounter,
+    /// The sidebar tab shown.
+    tab: Tab,
+    /// The building type in placement mode (S-0411 claim 4).
+    placing: Option<TypeRef>,
+    /// The radar map of the live game (S-0410).
+    radar: Option<Radar>,
+    /// The radar map's texture.
+    radar_texture: Option<TextureHandle>,
+    /// The tick the radar texture shows.
+    radar_tick: i32,
+    /// Draw the placeholder shroud over unexplored cells.
+    shroud: bool,
 }
 
 /// The pane.
@@ -175,7 +194,11 @@ impl MapPane {
             loaded.map_warnings.len(),
             loaded.problems.len(),
             match &loaded.live {
-                Some(l) => format!(", sandbox game with {} houses", l.world.houses.len()),
+                Some(l) => format!(
+                    ", {} game with {} houses",
+                    if l.setup.sandbox { "sandbox" } else { "skirmish" },
+                    l.world.houses.len()
+                ),
                 None => ", no game".into(),
             }
         );
@@ -189,6 +212,22 @@ impl MapPane {
             .live
             .as_ref()
             .map_or((HouseId(0), 0), |l| (l.default_house(), l.setup.game_speed));
+        let radar = loaded
+            .live
+            .as_ref()
+            .and_then(|l| Radar::new(&l.world, map_theater(&loaded), &loaded.tile_colours));
+        // In a skirmish the view starts on the controlled house's base unit.
+        let start = loaded
+            .live
+            .as_ref()
+            .filter(|l| !l.setup.sandbox)
+            .and_then(|l| {
+                l.world
+                    .objects
+                    .values()
+                    .find(|o| o.owner == Some(house) && o.on_map)
+            })
+            .map_or(start, |o| project_lifted(o.pos.x, o.pos.y, o.pos.z));
         self.shown = Some(Shown {
             scene,
             generation: self.generation,
@@ -200,6 +239,13 @@ impl MapPane {
             speed,
             paused: false,
             step_once: false,
+            credits: CreditCounter::default(),
+            tab: Tab::Buildings,
+            placing: None,
+            radar,
+            radar_texture: None,
+            radar_tick: -1,
+            shroud: true,
         });
         self.set_centre(start, true);
         self.pinned = None;
@@ -265,6 +311,96 @@ impl MapPane {
         })
     }
 
+    /// Local snapshots: issues the deploy order of the controlled house's
+    /// first mobile unit. Returns whether it was accepted.
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub(crate) fn deploy_base(&mut self) -> bool {
+        let Some(shown) = self.shown.as_mut() else {
+            return false;
+        };
+        let house = shown.house;
+        let Some(live) = shown.loaded.live.as_mut() else {
+            return false;
+        };
+        // Orders are blocked during ticks 0 to 3 (S-0201 claim 14).
+        while live.world.tick < 4 {
+            live.step();
+        }
+        let Some(id) = live
+            .world
+            .objects
+            .values()
+            .find(|o| o.owner == Some(house) && o.kind.is_mobile() && o.on_map)
+            .map(|o| o.id)
+        else {
+            return false;
+        };
+        let rep = live.issue_orders(
+            house,
+            vec![glasnost_sim::orders::Order::Deploy { actor: id }],
+        );
+        rep.issued > 0
+    }
+
+    /// Local snapshots: a left click on the first build icon of the first
+    /// tab with icons. Returns whether it gave an order.
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub(crate) fn build_first(&mut self) -> bool {
+        let Some(shown) = self.shown.as_mut() else {
+            return false;
+        };
+        let house = shown.house;
+        let Some(live) = shown.loaded.live.as_mut() else {
+            return false;
+        };
+        let m = sidebar::model(&live.world, house);
+        let Some(c) = m.tabs.first().and_then(|(_, v)| v.first()) else {
+            return false;
+        };
+        match sidebar::click(&live.world, house, c.t, Click::Left, false) {
+            Action::Order(o) => live.issue_orders(house, vec![o]).issued > 0,
+            _ => false,
+        }
+    }
+
+    /// Local snapshots: runs `n` ticks at once, as the pacer would one by
+    /// one, and redraws.
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub(crate) fn advance(&mut self, n: i32) {
+        let Some(shown) = self.shown.as_mut() else {
+            return;
+        };
+        for _ in 0..n.max(0) {
+            let scene = Rc::make_mut(&mut shown.scene);
+            let (inputs, live) = shown.loaded.split();
+            let Some(live) = live else {
+                return;
+            };
+            live.step();
+            live.redraw(&inputs, scene);
+            shown
+                .credits
+                .update(glasnost_sim::econ::production::available_credits(
+                    &live.world,
+                    shown.house,
+                ));
+            if let Some(r) = shown.radar.as_mut() {
+                r.observe(&live.world, shown.house);
+            }
+        }
+        shown.paused = true;
+    }
+
+    /// Local snapshots: drops every texture handle, for a new egui context.
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub(crate) fn forget_textures(&mut self) {
+        self.cpu_texture = None;
+        if let Some(s) = self.shown.as_mut() {
+            s.minimap = None;
+            s.radar_texture = None;
+        }
+    }
+
     /// Chooses the GPU map pass or the CPU reference.
     #[cfg_attr(not(test), allow(dead_code))]
     pub fn set_use_gpu(&mut self, on: bool) {
@@ -285,12 +421,139 @@ impl MapPane {
             .show(ui, |ui| {
                 action = self.list_ui(ui, mounted, busy);
             });
+        if self.shown.as_ref().is_some_and(|s| s.loaded.live.is_some()) {
+            egui::Panel::right("sidebar")
+                .resizable(false)
+                .default_size(250.0)
+                .show(ui, |ui| self.sidebar_ui(ui));
+        }
         egui::Panel::right("map info")
             .resizable(true)
             .default_size(320.0)
             .show(ui, |ui| self.info_ui(ui));
         egui::CentralPanel::default().show(ui, |ui| self.view_ui(ui));
         action
+    }
+
+    /// The live game's sidebar (M5a placeholder layout, our own): credits,
+    /// power, the radar map, the tabs with their build icons, and the
+    /// placement mode.
+    fn sidebar_ui(&mut self, ui: &mut Ui) {
+        let Some(shown) = self.shown.as_mut() else {
+            return;
+        };
+        let house = shown.house;
+        let Some(live) = shown.loaded.live.as_mut() else {
+            return;
+        };
+        let m = sidebar::model(&live.world, house);
+        ui.label(
+            RichText::new(format!("$ {}", shown.credits.shown))
+                .strong()
+                .size(20.0)
+                .color(Color32::from_rgb(240, 220, 120)),
+        );
+        let (output, drain) = m.power;
+        let power = format!("power {output} / drain {drain}");
+        if drain > output {
+            ui.colored_label(Color32::from_rgb(240, 80, 60), power);
+        } else {
+            ui.label(power);
+        }
+        // The radar map (S-0410), redrawn once per tick.
+        if let Some(r) = &shown.radar {
+            if shown.radar_tick != live.world.tick || shown.radar_texture.is_none() {
+                let img = egui::ColorImage::from_rgba_unmultiplied(
+                    [radar::SIZE.0 as usize, radar::SIZE.1 as usize],
+                    &r.rgba(&live.world, house),
+                );
+                match &mut shown.radar_texture {
+                    Some(t) => t.set(img, TextureOptions::NEAREST),
+                    None => {
+                        shown.radar_texture =
+                            Some(ui.ctx().load_texture("radar", img, TextureOptions::NEAREST))
+                    }
+                }
+                shown.radar_tick = live.world.tick;
+            }
+            if let Some(t) = &shown.radar_texture {
+                let size = egui::vec2(radar::SIZE.0 as f32 * 1.6, radar::SIZE.1 as f32 * 1.6);
+                let resp =
+                    ui.add(egui::Image::new((t.id(), size)).sense(egui::Sense::click_and_drag()));
+                // spec: S-0410 claim 1 (without radar the map stays dark)
+                if !glasnost_sim::econ::radar::available(&live.world, house) {
+                    ui.painter().text(
+                        resp.rect.center(),
+                        egui::Align2::CENTER_CENTER,
+                        "no radar",
+                        egui::FontId::proportional(14.0),
+                        Color32::GRAY,
+                    );
+                }
+                if let Some(p) = resp.interact_pointer_pos()
+                    && (resp.clicked() || resp.dragged())
+                {
+                    let x = ((p.x - resp.rect.min.x) / 1.6) as i32;
+                    let y = ((p.y - resp.rect.min.y) / 1.6) as i32;
+                    if let Some(c) = r.cell_at(&live.world, x, y) {
+                        let (lx, ly) = cell_centre(c.x, c.y);
+                        self.pending_jump = Some(project_lifted(lx, ly, 0));
+                    }
+                }
+            }
+        }
+        ui.checkbox(&mut shown.shroud, "shroud (placeholder)");
+        ui.separator();
+        ui.horizontal_wrapped(|ui| {
+            for t in Tab::ALL {
+                let n = m.tab(t).len();
+                let label = format!("{} {n}", t.label());
+                if ui
+                    .add_enabled(n > 0, egui::Button::selectable(shown.tab == t, label))
+                    .clicked()
+                {
+                    shown.tab = t;
+                }
+            }
+        });
+        if m.tab(shown.tab).is_empty()
+            && let Some((t, _)) = m.tabs.first()
+        {
+            shown.tab = *t;
+        }
+        let shift = ui.input(|i| i.modifiers.shift);
+        let mut action = None;
+        egui::ScrollArea::vertical().show(ui, |ui| {
+            egui::Grid::new("cameos").num_columns(2).show(ui, |ui| {
+                for (i, c) in m.tab(shown.tab).iter().enumerate() {
+                    if let Some(a) = cameo_ui(ui, c, shift, &live.world, house) {
+                        action = Some(a);
+                    }
+                    if i % 2 == 1 {
+                        ui.end_row();
+                    }
+                }
+            });
+        });
+        if let Some(t) = shown.placing {
+            ui.separator();
+            ui.label(format!(
+                "Placing {}: left click on the map to place, right click to stop.",
+                crate::mapview::live::type_name(&live.rules, t.kind, t.index)
+            ));
+        }
+        match action {
+            Some(Action::Order(o)) => {
+                let rep = live.issue_orders(house, vec![o]);
+                self.status = input_status(&rep);
+            }
+            Some(Action::Place(t)) => {
+                shown.placing = Some(t);
+                self.status = "Placement mode.".into();
+            }
+            Some(Action::Refused) => self.status = "Refused: the line is busy.".into(),
+            Some(Action::Nothing) | None => {}
+        }
     }
 
     fn list_ui(&mut self, ui: &mut Ui, mounted: bool, busy: bool) -> Option<MapAction> {
@@ -314,6 +577,19 @@ impl MapPane {
             "skirmish view (S-0009 claim 27)",
         )
         .on_hover_text("When the sandbox game starts, every owner's objects are shown: the game places them all.");
+        egui::ComboBox::from_label("game on load")
+            .selected_text(match self.options.game {
+                GameMode::Sandbox => "sandbox",
+                GameMode::Skirmish => "skirmish vs script",
+            })
+            .show_ui(ui, |ui| {
+                ui.selectable_value(&mut self.options.game, GameMode::Sandbox, "sandbox");
+                ui.selectable_value(
+                    &mut self.options.game,
+                    GameMode::Skirmish,
+                    "skirmish vs script",
+                );
+            });
         egui::ComboBox::from_label("detail level (S-0104)")
             .selected_text(format!("{:?}", self.options.detail))
             .show_ui(ui, |ui| {
@@ -618,7 +894,64 @@ impl MapPane {
                     None => ClickOn::Cell(glasnost_map::CellXY::new(cx, cy)),
                 }
             });
-            if r.clicked() {
+            if let Some(cover) = shroud_cells(live, shown.shroud, house, &view, r.rect, ppp) {
+                let painter = ui.painter_at(r.rect);
+                for d in cover {
+                    painter.add(egui::Shape::convex_polygon(
+                        d.to_vec(),
+                        Color32::from_black_alpha(230),
+                        egui::Stroke::NONE,
+                    ));
+                }
+            }
+            // Placement mode (S-0411 claim 4; S-0406): the foundation under
+            // the cursor, green where the building would be placed, red
+            // elsewhere; a left click places, a right click stops.
+            if let Some(t) = shown.placing {
+                let still_ready = sidebar::model(&live.world, house)
+                    .tabs
+                    .iter()
+                    .flat_map(|(_, v)| v)
+                    .any(|c| c.t == t && c.ready);
+                if !still_ready {
+                    shown.placing = None;
+                }
+            }
+            let placing = shown.placing;
+            if let (Some(t), Some((cx, cy, _))) = (placing, hover) {
+                let cursor = glasnost_map::CellXY::new(cx, cy);
+                let (cells, ok) = sidebar::preview(&live.world, house, t, cursor);
+                let painter = ui.painter_at(r.rect);
+                let fill = if ok {
+                    Color32::from_rgba_unmultiplied(60, 220, 80, 110)
+                } else {
+                    Color32::from_rgba_unmultiplied(230, 50, 40, 110)
+                };
+                for c in cells {
+                    let level = live.world.cells.cell(c).map_or(0, |x| i32::from(x.level));
+                    painter.add(egui::Shape::convex_polygon(
+                        cell_diamond(c, level, &view, r.rect, ppp).to_vec(),
+                        fill,
+                        egui::Stroke::new(1.0, Color32::WHITE),
+                    ));
+                }
+                if r.clicked() {
+                    match sidebar::place(&live.world, house, t, cursor) {
+                        Some(o) => {
+                            let rep = live.issue_orders(house, vec![o]);
+                            if rep.issued > 0 {
+                                shown.placing = None;
+                            }
+                            report = Some(rep);
+                        }
+                        None => self.status = "Cannot place there.".into(),
+                    }
+                }
+                if r.secondary_clicked() {
+                    shown.placing = None;
+                    self.status = "Placement stopped.".into();
+                }
+            } else if r.clicked() {
                 match target {
                     Some(on @ ClickOn::Object(_)) => {
                         // A left click selects: without force-select it acts
@@ -635,7 +968,8 @@ impl MapPane {
                     _ => shown.selection.clear(),
                 }
             }
-            if r.secondary_clicked()
+            if placing.is_none()
+                && r.secondary_clicked()
                 && let Some(on) = target
             {
                 report = Some(live.click(house, &mut shown.selection, on, mods));
@@ -693,6 +1027,109 @@ impl MapPane {
     }
 }
 
+/// One build icon of the placeholder sidebar: a button with the type's name
+/// and price, its clock as a progress bar, and the ready, on-hold and
+/// queue-count labels (S-0411 claims 3, 7 and 8). Returns what a click did.
+fn cameo_ui(
+    ui: &mut Ui,
+    c: &sidebar::Cameo,
+    shift: bool,
+    w: &glasnost_sim::world::World,
+    house: HouseId,
+) -> Option<Action> {
+    let mut action = None;
+    ui.vertical(|ui| {
+        ui.set_width(110.0);
+        let mut text = RichText::new(format!("{}\n${}", c.name, c.price));
+        if c.darkened {
+            text = text.weak();
+        }
+        let b = ui.add_sized([110.0, 44.0], egui::Button::new(text));
+        if b.clicked() {
+            action = Some(sidebar::click(w, house, c.t, Click::Left, shift));
+        }
+        if b.secondary_clicked() {
+            action = Some(sidebar::click(w, house, c.t, Click::Right, shift));
+        }
+        if let Some((stage, last)) = c.progress() {
+            ui.add(
+                egui::ProgressBar::new(stage as f32 / last as f32)
+                    .desired_width(110.0)
+                    .desired_height(6.0),
+            );
+        }
+        let mut tags = Vec::new();
+        if c.ready {
+            tags.push("ready".to_string());
+        }
+        if c.on_hold {
+            tags.push("on hold".to_string());
+        }
+        if let Some(q) = c.queued {
+            tags.push(format!("× {q}"));
+        }
+        if !tags.is_empty() {
+            ui.label(RichText::new(tags.join(" · ")).small().strong());
+        }
+    });
+    action
+}
+
+/// The screen corners of cell `c` at height level `level` (top, right,
+/// bottom, left): its diamond of S-0101 F1, lifted by the terrain lift.
+fn cell_diamond(
+    c: glasnost_map::CellXY,
+    level: i32,
+    view: &View,
+    rect: egui::Rect,
+    ppp: f32,
+) -> [egui::Pos2; 4] {
+    use glasnost_render::projection::{TERRAIN_LIFT, cell_top};
+    let (tx, ty) = cell_top(c.x, c.y);
+    let ty = ty - TERRAIN_LIFT * level;
+    let at = |x: i32, y: i32| {
+        egui::pos2(
+            rect.min.x + (x - view.origin.0) as f32 / ppp,
+            rect.min.y + (y - view.origin.1) as f32 / ppp,
+        )
+    };
+    // spec: S-0101 F1 (a cell's diamond: 60 × 30 pixels below its top corner)
+    [
+        at(tx, ty),
+        at(tx + 30, ty + 15),
+        at(tx, ty + 30),
+        at(tx - 30, ty + 15),
+    ]
+}
+
+/// The placeholder shroud: the diamonds of the cells on screen that the
+/// house has not explored (S-0409's explored state). Our own stand-in
+/// until the shroud drawing of S-0110 is implemented; `None` when off.
+fn shroud_cells(
+    live: &Live,
+    on: bool,
+    house: HouseId,
+    view: &View,
+    rect: egui::Rect,
+    ppp: f32,
+) -> Option<Vec<[egui::Pos2; 4]>> {
+    if !on || live.setup.sandbox {
+        return None;
+    }
+    let grown = rect.expand(40.0);
+    let mut out = Vec::new();
+    for (c, cell) in live.world.cells.grid.iter() {
+        if glasnost_sim::econ::shroud::explored(&live.world, house, c) {
+            continue;
+        }
+        let d = cell_diamond(c, i32::from(cell.level), view, rect, ppp);
+        if grown.contains(d[0]) || grown.contains(d[2]) {
+            out.push(d);
+        }
+    }
+    Some(out)
+}
+
 /// The status line after an input.
 fn input_status(rep: &InputReport) -> String {
     match (rep.issued, rep.refused) {
@@ -732,7 +1169,22 @@ fn run_ticks(ctx: &egui::Context, shown: &mut Shown) {
     if let Some(live) = live {
         live.step();
         live.redraw(&inputs, scene);
+        // spec: S-0416 claim 2 (one step per cycle, aiming at the available credits)
+        shown
+            .credits
+            .update(glasnost_sim::econ::production::available_credits(
+                &live.world,
+                shown.house,
+            ));
+        if let Some(r) = shown.radar.as_mut() {
+            r.observe(&live.world, shown.house);
+        }
     }
+}
+
+/// The theater of a loaded map.
+fn map_theater(loaded: &Loaded) -> glasnost_map::Theater {
+    loaded.map.theater
 }
 
 /// The game panel: tick, pacing, the controlled house, notes.
@@ -741,7 +1193,12 @@ fn game_ui(ui: &mut Ui, shown: &mut Shown, status: &mut String) {
         return;
     };
     ui.separator();
-    ui.label(RichText::new("Sandbox game").strong());
+    let title = if live.setup.sandbox {
+        "Sandbox game"
+    } else {
+        "Skirmish game"
+    };
+    ui.label(RichText::new(title).strong());
     ui.label(format!(
         "tick {}; pending orders {}",
         live.world.tick,

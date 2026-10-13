@@ -31,7 +31,8 @@ use glasnost_sim::targeting::{self, ClickOn, KeyCommand, Modifiers};
 use glasnost_sim::world::{GameSetup, HouseId, Layer, ObjectId, World};
 
 use super::build::{
-    Built, GroundEntry, InfantryFrame, Inputs, Mobile, Painter, find_type, rule_int,
+    Built, GameMode, GroundEntry, InfantryFrame, Inputs, LiveBuilding, Mobile, Painter, find_type,
+    rule_int,
 };
 use super::combat::{self, Cache, Counts, Marker, Ratios, Transient, TransientKind};
 use super::quirks::ViewQuirks;
@@ -245,6 +246,9 @@ pub struct Live {
     pub undrawn_types: BTreeSet<String>,
     /// Why the game stopped, when a tick failed.
     pub failed: Option<String>,
+    /// The computer houses' scripts (`glasnost_ai`), one per AI house of a
+    /// skirmish.
+    scripts: Vec<glasnost_ai::scripted::Script>,
 }
 
 /// The import kind of a simulation kind.
@@ -311,14 +315,22 @@ fn guarded<T>(f: impl FnOnce() -> T) -> Result<T, String> {
     }
 }
 
-/// Starts the sandbox game of a map: setup, then a new game.
+/// Starts the game of a map: setup, then a new game. The sandbox has one
+/// house per object owner; the skirmish has the user's house and a
+/// computer house (the house names of the map format's placeholders, so the
+/// colour slots apply), the rules' first two countries that are not
+/// passive, random start positions and the setup's default values.
 pub fn start(
     map: &glasnost_map::Map,
     resolved: &glasnost_rules::Resolved,
     tiles: glasnost_map::terrain::TileCatalogue,
+    mode: GameMode,
 ) -> Result<(World, Arc<SimRules>, GameSetup, Vec<String>), String> {
     let rules = Arc::new(SimRules::new(&resolved.ruleset, &resolved.sim_rules_hash));
-    let (setup, substituted) = glasnost_sim::load::sandbox_setup(map, &rules, SANDBOX_SEED);
+    let (setup, substituted) = match mode {
+        GameMode::Sandbox => glasnost_sim::load::sandbox_setup(map, &rules, SANDBOX_SEED),
+        GameMode::Skirmish => (skirmish_setup(&rules)?, Vec::new()),
+    };
     if setup.houses.is_empty() {
         return Err("the map places no owned objects: the sandbox game has no house".into());
     }
@@ -329,6 +341,52 @@ pub fn start(
     .map_err(|p| format!("the simulation failed while setting up the game: {p}"))??;
     Ok((world, rules, setup, substituted))
 }
+
+/// The viewer's skirmish setup (our own viewer choice).
+fn skirmish_setup(rules: &SimRules) -> Result<GameSetup, String> {
+    use glasnost_sim::econ::setup::{self, Player, Settings};
+    let countries: Vec<String> = rules
+        .country_names
+        .iter()
+        .zip(&rules.countries)
+        .filter(|(n, c)| {
+            !c.passive
+                && n.as_str() != glasnost_sim::load::NEUTRAL
+                && n.as_str() != glasnost_sim::load::SPECIAL
+        })
+        .map(|(n, _)| n.clone())
+        .take(2)
+        .collect();
+    if countries.len() < 2 {
+        return Err("the rules have fewer than two countries that are not passive".into());
+    }
+    let players = [
+        Player {
+            name: HUMAN_HOUSE.into(),
+            country: countries[0].clone(),
+            ..Default::default()
+        },
+        Player {
+            name: COMPUTER_HOUSE.into(),
+            country: countries[1].clone(),
+            ai: true,
+            ..Default::default()
+        },
+    ];
+    Ok(setup::skirmish(
+        rules,
+        &players,
+        Settings::default(),
+        0,
+        SANDBOX_SEED,
+    ))
+}
+
+/// The house names of the map format's human and computer placeholders
+/// (S-0009 Import mapping), given to the skirmish's two houses.
+pub const HUMAN_HOUSE: &str = "<human player>"; // spec: S-0009 Import mapping (house names)
+/// See [`HUMAN_HOUSE`].
+pub const COMPUTER_HOUSE: &str = "Computer"; // spec: S-0009 Import mapping (house names)
 
 impl Live {
     /// Wraps a started game around a scene built with `live` on: takes the
@@ -412,7 +470,23 @@ impl Live {
             notes: BTreeSet::new(),
             undrawn_types: undrawn,
             failed: None,
+            scripts: Vec::new(),
         };
+        // The skirmish's AI houses are played by the script (S-0412
+        // claim 12: AI houses; the script is our own opponent).
+        if !live.setup.sandbox {
+            let starts = glasnost_ai::skirmish::start_cells(inputs.map);
+            for (i, h) in live.setup.houses.iter().enumerate() {
+                if h.ai && h.role == glasnost_sim::world::HouseRole::Player {
+                    let mut s = glasnost_ai::scripted::Script::new(
+                        HouseId(i as u8),
+                        glasnost_ai::fixture::plan(),
+                    );
+                    s.set_starts(&live.world, &starts);
+                    live.scripts.push(s);
+                }
+            }
+        }
         // Objects enter the ground layer in the order they are put on the
         // map, which is object ID order (S-0203 claim 3, S-0009 claim 43); a
         // static entry enters with its building or animated terrain object,
@@ -438,6 +512,27 @@ impl Live {
         live
     }
 
+    /// Finds the import type of every simulation type on the map that has
+    /// none yet (types the game created after the start).
+    fn learn_types(&mut self, inputs: &Inputs) {
+        let missing: Vec<(SimKind, u32)> = self
+            .world
+            .objects
+            .values()
+            .map(|o| (o.kind, o.type_index))
+            .filter(|k| !self.types.contains_key(k))
+            .collect();
+        for (kind, index) in missing {
+            let name = type_name(&self.rules, kind, index);
+            let found =
+                import_kind(kind).and_then(|k| find_type(inputs.import, k, &name_bytes(&name)));
+            if found.is_none() {
+                self.undrawn_types.insert(name);
+            }
+            self.types.insert((kind, index), found);
+        }
+    }
+
     /// The voxel buffer the game's fresh voxel draws left (S-0105 claim 34,
     /// S2).
     pub fn voxel_canvas(&self) -> &glasnost_render::voxel::VoxelCanvas {
@@ -455,6 +550,13 @@ impl Live {
     pub fn step(&mut self) {
         if self.failed.is_some() {
             return;
+        }
+        if self.world.tick % glasnost_ai::scripted::THINK_PERIOD == 0 {
+            for s in &mut self.scripts {
+                for o in s.think(&self.world) {
+                    orders::issue(&mut self.world, s.house, o);
+                }
+            }
         }
         let world = &mut self.world;
         if let Err(p) = guarded(|| glasnost_sim::tick::step(world)) {
@@ -601,6 +703,7 @@ impl Live {
     /// ground entries are reused and the mobile objects are drawn from the
     /// game, all in ground-layer order.
     pub fn redraw(&mut self, inputs: &Inputs, scene: &mut Scene) {
+        self.learn_types(inputs);
         let ids: Vec<ObjectId> = self
             .ground
             .order()
@@ -640,6 +743,47 @@ impl Live {
             self.gone = gone;
         }
         scene.items.truncate(self.cell_pass_len);
+        // The game's own buildings (deployed or placed) follow the cell
+        // pass, in object ID order (our placeholder order; the map's
+        // buildings keep their place in the cell pass).
+        let own: Vec<LiveBuilding> = self
+            .world
+            .objects
+            .values()
+            .filter(|o| {
+                o.kind == SimKind::Building
+                    && o.on_map
+                    && !self.building_ids.values().any(|id| *id == o.id)
+            })
+            .filter_map(|o| {
+                let idx = (*self.types.get(&(o.kind, o.type_index))?)?;
+                let owner = o
+                    .owner
+                    .and_then(|h| self.world.houses.get(usize::from(h.0)))
+                    .map(|h| h.name.as_bytes().to_vec())
+                    .unwrap_or_default();
+                let strength = self
+                    .rules
+                    .buildings
+                    .get(o.type_index as usize)
+                    .map_or(0, |b| b.strength);
+                Some(LiveBuilding {
+                    idx,
+                    cell: o.pos.cell(),
+                    owner,
+                    health: (o.health, strength),
+                    facing: o.turret.value(self.world.tick),
+                    object: sim_code(o.id),
+                })
+            })
+            .collect();
+        if !own.is_empty() {
+            let (drawn, notes) = self.painter.buildings(inputs, scene, &own);
+            self.notes.extend(notes);
+            for items in drawn {
+                scene.items.extend(items);
+            }
+        }
         for e in self.ground.order() {
             match e {
                 Entrant::Static(i) => {

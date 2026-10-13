@@ -15,6 +15,7 @@ glasnost-map.workspace = true
 glasnost-num.workspace = true
 glasnost-rules.workspace = true
 glasnost-sim.workspace = true
+glasnost-ai.workspace = true
 glasnost-fmt.workspace = true
 glasnost-render.workspace = true
 glasnost-vfs.workspace = true

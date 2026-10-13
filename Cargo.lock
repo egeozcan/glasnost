@@ -913,6 +913,7 @@ version = "0.0.0"
 dependencies = [
  "egui",
  "egui-wgpu",
+ "glasnost-ai",
  "glasnost-audio",
  "glasnost-convert",
  "glasnost-fmt",
