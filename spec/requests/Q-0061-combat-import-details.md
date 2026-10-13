@@ -1,9 +1,9 @@
 ---
 id: Q-0061
 title: Combat import details - a type's threat coefficient before any layer, the defence category word, and name and integer list items
-status: open
+status: answered
 related: [S-0309, S-0302, S-0003, S-0303, S-0312]
-answered-by: []
+answered-by: [S-0312]
 ---
 
 ## Need

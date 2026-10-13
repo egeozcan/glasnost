@@ -1,9 +1,9 @@
 ---
 id: Q-0070
 title: The draws of a smudge choice when a building is destroyed
-status: open
+status: answered
 related: [S-0312]
-answered-by: []
+answered-by: [S-0312]
 ---
 
 ## Need

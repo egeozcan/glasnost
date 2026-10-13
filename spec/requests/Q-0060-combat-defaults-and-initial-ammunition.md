@@ -1,9 +1,9 @@
 ---
 id: Q-0060
 title: Absent-key defaults of some combat values, and a new object's ammunition
-status: open
+status: answered
 related: [S-0301, S-0303, S-0312]
-answered-by: []
+answered-by: [S-0312]
 ---
 
 ## Need
