@@ -444,7 +444,6 @@ fn object(ctx: &mut Ctx, kind: Kind, t: &TypeRec) -> TypeArt {
     let mut walk = ImageWalk::new(t, kind, snow, &ctx.q);
     let mut flags = Flags::default();
     let mut buildup: Option<Vec<u8>> = None;
-    let mut secondary_names: BTreeMap<&str, (Vec<u8>, Vec<u8>)> = BTreeMap::new();
     let mut icon_set = false;
     let last = *t.reads.last().unwrap_or(&0);
     for &r in &t.reads {
@@ -505,28 +504,19 @@ fn object(ctx: &mut Ctx, kind: Kind, t: &TypeRec) -> TypeArt {
                     }
                 }
                 for (role, key) in SECONDARY {
-                    match section_text(sec, key, BUILDING_NAME_MAX).filter(|n| !n.is_empty()) {
-                        Some(n) => {
-                            secondary_names.insert(role, (n.clone(), image.clone()));
-                            match ctx.subst_found(&with_ext(&n, "shp"), subst_on) {
-                                Some(f) => {
-                                    a.building_sprites.insert(role, f);
-                                }
-                                None => {
-                                    a.building_sprites.remove(role);
-                                }
-                            }
+                    // spec: S-0007 claim 11 (a later read whose art section does not set the name, or sets it empty, keeps the sprite)
+                    let Some(n) =
+                        section_text(sec, key, BUILDING_NAME_MAX).filter(|n| !n.is_empty())
+                    else {
+                        continue;
+                    };
+                    // spec: S-0007 claim 11 (set: the file found replaces the sprite; none found leaves none)
+                    match ctx.subst_found(&with_ext(&n, "shp"), subst_on) {
+                        Some(f) => {
+                            a.building_sprites.insert(role, f);
                         }
                         None => {
-                            if let Some((_, from)) = secondary_names.get(role)
-                                && *from != image
-                            {
-                                // S-0007 open question 1: not determined (Q-0008).
-                                a.building_sprites.remove(role);
-                                a.notes.push(format!(
-                                    "{role} sprite: a later read's art section does not name it; the result is open (S-0007 open question, Q-0008)"
-                                ));
-                            }
+                            a.building_sprites.remove(role);
                         }
                     }
                 }
@@ -1038,6 +1028,53 @@ mod tests {
         let n = get(&o, &a, Kind::Buildings, "NAGIZMO");
         assert_eq!(s(&n.sprite).as_deref(), Some("NAGIZMO.des"));
         assert!(n.icon.as_deref() == Some(PLACEHOLDER_ICON));
+    }
+
+    /// spec: S-0007 claim 11 (the eight other building sprites at a later
+    /// type read; scenario A19)
+    #[test]
+    fn building_secondary_sprites_at_a_later_read() {
+        let base = "[BuildingTypes]\n1=ZW\n[ZW]\nX=1\n";
+        let map = "[ZW]\nImage=ZB\n";
+        let f = files(&["ZW.shp", "ZB.shp", "ZWBIB.shp", "ZBBIB.shp", "ZWRUB.shp"]);
+        let bib = |art: &str| {
+            let (o, a) = run(
+                &[(base, Role::Base), (map, Role::Map)],
+                art,
+                Theater::Temperate,
+                &f,
+            );
+            let p = get(&o, &a, Kind::Buildings, "ZW");
+            assert_eq!(s(&p.sprite).as_deref(), Some("ZB.shp"));
+            (
+                p.building_sprites
+                    .get("bib")
+                    .map(|v| String::from_utf8_lossy(v).into_owned()),
+                p.building_sprites
+                    .get("rubble")
+                    .map(|v| String::from_utf8_lossy(v).into_owned()),
+                p.notes.clone(),
+            )
+        };
+        let first = "[ZW]\nBibShape=ZWBIB\nRubble=ZWRUB\n";
+        // Not set at the later read: the earlier read's sprite stays.
+        let (b, r, notes) = bib(&format!("{first}[ZB]\nX=1\n"));
+        assert_eq!(b.as_deref(), Some("ZWBIB.shp"));
+        assert_eq!(r.as_deref(), Some("ZWRUB.shp"));
+        assert!(notes.is_empty(), "{notes:?}");
+        // Set empty: as absent.
+        let (b, _, _) = bib(&format!("{first}[ZB]\nBibShape=\nX=1\n"));
+        assert_eq!(b.as_deref(), Some("ZWBIB.shp"));
+        // Set to a name that resolves: replaced.
+        let (b, r, _) = bib(&format!("{first}[ZB]\nBibShape=ZBBIB\n"));
+        assert_eq!(b.as_deref(), Some("ZBBIB.shp"));
+        assert_eq!(r.as_deref(), Some("ZWRUB.shp"));
+        // Set to a name that neither resolves nor falls back: none.
+        let (b, _, _) = bib(&format!("{first}[ZB]\nBibShape=ZNOPE\n"));
+        assert_eq!(b, None);
+        // No earlier read gave one and the later read does not set it: none.
+        let (b, _, _) = bib("[ZB]\nX=1\n");
+        assert_eq!(b, None);
     }
 
     /// spec: S-0007 claim 13 (terrain objects and smudges use the type name at the refresh)
