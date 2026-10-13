@@ -2,11 +2,11 @@
 id: S-0110
 title: Shroud and fog rendering
 topic: rendering
-revision: 6
+revision: 7
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-13
+approved-on: 2026-10-14
 measurements: []
 requests: []
 supersedes: []
@@ -339,8 +339,11 @@ piece of the same cell; a lower cell's shroud piece can replace an upper cell's 
   neighbours that are not legal, so when it is explored it gets edge pieces towards them unless
   their shared explored state is explored for the local player's house. A hostile gap field
   can make that state explored when it stops while the local player's house has an active spy
-  satellite and no other hostile field covers a non-legal cell. Once explored, the shared state
-  remains explored, including after a whole-map re-cover. This is governed by
+  satellite and no other hostile field covers a non-legal cell. Later gap changes can cover
+  the shared state again. Whole-map reveal and re-cover do not reset it directly, but their
+  gap-field removal and restoration participate in its changes as S-0409 claim 21 specifies.
+  In particular, exploration persists through a re-cover with no hostile field covering
+  non-legal cells; it is not immune to later gap changes. This is governed by
   `quirks.offmap_cells_shared` (owned by S-0409, default on, original behaviour).
   Off: non-legal cells always count as unexplored. Claims 1 and 8 read the same shared
   state; SH8 part Q2 tests both consequences. Whether those border cells lie inside the local area
@@ -633,8 +636,14 @@ appears several times; that is harmless, since each check below is made within o
     `quirks.offmap_cells_shared` on, those edges disappear and Q shows its wrench: its candidate
     (0, 257) now reads the shared explored state. A purpose-made map trigger then performs a
     whole-map re-cover (S-0011; S-0409 claim 15); keep the infantry beside Q so its own cell is
-    explored again, and repeat the capture. Expected: both effects persist. With the switch off in our engine,
-    the edges remain and Q has no wrench. One valid run; falsified if either effect disagrees.
+    explored again, and repeat the capture. No hostile field may cover non-legal cells during
+    this re-cover. Expected: both effects persist in this field-free case. Then restore the
+    generator's power so that the same hostile border field starts again, with no intervening
+    gap changes. Expected: the border edges return and Q's wrench disappears, even though
+    Q's own cell stays explored. Whole-map operations with running border fields follow
+    S-0409 claim 21 and are tested by its V18, not by this field-free re-cover.
+    With the switch off in our engine, the edges remain and Q has no wrench throughout.
+    One valid run; falsified if either effect disagrees at any of these captures.
     Use a stock-sprite capture for edge pieces and the test shroud sprite for the wrench.
     Changing the sprite between captures requires a fresh run with the same preconditions.
 - **SH9 (Import mapping, missing shroud data).** Named test archives reproduce the mounted stock
@@ -666,7 +675,10 @@ appears several times; that is harmless, since each check below is made within o
 ## Cross-spec consistency
 
 - S-0409 owns explored/seen states, the off-map shared-state exception and fog being off in
-  skirmish. Claims 1 and 8 here read that exception; they do not override it. Its sight reveal
+  skirmish. Claims 1 and 8 here read that exception; they do not override it. Persistence
+  follows S-0409 claim 21, including changes caused by whole-map gap-field removal and
+  restoration; later gap changes can restore covered border pieces and shrouded point results.
+  Its sight reveal
   tests legality before acting, so the point-test wrap does not imply wrapped sight reveals.
 - S-0101 owns projection and the 15-pixel terrain lift; S-0106 owns centre surface height.
   SH6 and SH8 use flat cells so their centre heights really are whole levels. S-0111 claim 19
