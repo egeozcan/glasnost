@@ -371,6 +371,23 @@ impl Live {
                 building_ids.insert(i as u32, o.id);
             }
         }
+        // Static terrain objects (the animated ones are ground entries) and
+        // their simulation objects: same type name and cell.
+        let mut terrain_ids: BTreeMap<u32, ObjectId> = BTreeMap::new();
+        for (i, info) in built.objects.iter().enumerate() {
+            if info.kind != "terrain object" {
+                continue;
+            }
+            let id = world.objects.values().find(|o| {
+                o.kind == SimKind::Terrain
+                    && o.pos.cell() == info.cell
+                    && type_name(&rules, o.kind, o.type_index).as_bytes()
+                        == info.type_name.as_bytes()
+            });
+            if let Some(o) = id {
+                terrain_ids.insert(i as u32, o.id);
+            }
+        }
         let static_ground = std::mem::take(&mut built.ground);
         let mut live = Self {
             world,
@@ -397,14 +414,14 @@ impl Live {
             failed: None,
         };
         // Objects enter the ground layer in the order they are put on the
-        // map, which is object ID order (S-0203 claim 3); a static entry
-        // enters with its building, and entries whose building the game did
-        // not place enter last.
+        // map, which is object ID order (S-0203 claim 3, S-0009 claim 43); a
+        // static entry enters with its building or animated terrain object,
+        // and entries whose object the game did not place enter last.
         let mut entrants: Vec<(u32, Entrant, i64)> = Vec::new();
         for (i, g) in live.static_ground.iter().enumerate() {
             let rank = g
                 .object
-                .and_then(|o| live.building_ids.get(&o))
+                .and_then(|o| live.building_ids.get(&o).or_else(|| terrain_ids.get(&o)))
                 .map_or(u32::MAX, |id| id.0);
             entrants.push((rank, Entrant::Static(i), g.key));
         }

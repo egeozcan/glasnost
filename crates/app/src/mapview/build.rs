@@ -172,8 +172,8 @@ mod notes {
     pub const RUBBLE: &str = "rubble overlays outside a rubble cell draw nothing (S-0112 claim 5); rubble cells arise only in play";
     pub const SMUDGE_CLIP: &str = "a smudge is painted whole once per covered cell, not clipped to that cell (S-0102 claim 25): it differs only where covered cells differ in level or light";
     pub const TERRAIN_STRENGTH: &str = "Q-0023: a terrain object type without a strength key is drawn with image frame 0 (provisional)";
-    pub const ANIMATED_TERRAIN: &str =
-        "Q-0023: animated terrain objects show image frame 0 (provisional)";
+    pub const ANIMATED_TERRAIN_SHADOW: &str = "Q-0051: an animated terrain object's shadow is drawn right after its body in the object pass (provisional)";
+    pub const ORE_MINE_STAGE: &str = "an ore mine's animation (S-0401 claim 15) is not played: it shows image frame 0, its stage at placement (S-0102 claim 23)";
     pub const VOXEL_SHADOW_POINT: &str = "voxel shadows are placed at the object's ground point (the locomotor's shadow point has no spec)";
     pub const NO_SLOT_ANIMS: &str = "building slot animations (S-0108) need animation playback (S-0109), which is not implemented yet: not drawn";
     pub const NO_COMPANION: &str =
@@ -516,17 +516,21 @@ pub fn build_parts_with(
     // spec: S-0102 claim 25 (a smudge is painted right after the terrain tile; overlays come later)
     b.smudges();
     b.overlays();
-    b.terrain_objects();
+    // spec: S-0102 claims 10, 16 and 23 (animated terrain objects leave the cell pass for the
+    // ground layer of the object pass)
+    let terrain = b.terrain_objects();
     let mut ground = Vec::new();
     b.structures(&mut ground);
     b.built.scene.cell_pass_len = b.built.scene.items.len();
     b.built.notes.insert(notes::NO_SLOT_ANIMS.into());
     if live {
-        b.built.ground = ground;
+        b.built.ground = terrain;
+        b.built.ground.extend(ground);
         return (b.built, b.p);
     }
-    // spec: S-0009 claim 43 (objects enter the drawing order vehicles, aircraft, infantry, then buildings)
-    let mut entries = Vec::new();
+    // spec: S-0009 claim 43 (objects enter the drawing order terrain objects, vehicles, aircraft,
+    // infantry, then buildings)
+    let mut entries = terrain;
     b.mobiles(&mut entries);
     entries.extend(ground);
     // spec: S-0102 claim 6 (an entering object goes before the first strictly greater key: a stable sort)
@@ -1265,9 +1269,11 @@ impl Builder<'_> {
         }
     }
 
-    /// Terrain objects (S-0102 claims 13 and 23, S-0112 claim 3, S-0104
-    /// claim 13).
-    fn terrain_objects(&mut self) {
+    /// Terrain objects (S-0102 claims 10, 13, 16 and 23, S-0112 claim 3,
+    /// S-0104 claim 13): those that are not animated in the cell pass, the
+    /// animated ones returned as ground-layer entries of the object pass.
+    fn terrain_objects(&mut self) -> Vec<GroundEntry> {
+        let mut animated_entries = Vec::new();
         let list = self.map.objects.terrain.clone();
         for t in list {
             let Some(i) = find_type(self.import, Kind::TerrainObjects, &t.type_name) else {
@@ -1317,16 +1323,32 @@ impl Builder<'_> {
                 point
             };
             let frames = self.sprite_frames(&sprite).unwrap_or(0);
-            // spec: S-0102 claim 23 (frame 0 while its health, its type's strength at the start, is 2 or more; 1 below)
-            let strength =
-                rule(self.import, Kind::TerrainObjects, i, b"Strength").and_then(value::integer);
-            if strength.is_none() {
-                self.note(notes::TERRAIN_STRENGTH);
-            }
-            let frame = usize::from(strength.is_some_and(|s| s < 2));
-            if rule_bool(self.import, Kind::TerrainObjects, i, b"IsAnimated", false) {
-                self.note(notes::ANIMATED_TERRAIN);
-            }
+            // spec: S-0102 claim 23 (an animated terrain object: the type's animated flag; no
+            // destruction sequence has begun at placement)
+            let animated = rule_bool(self.import, Kind::TerrainObjects, i, b"IsAnimated", false);
+            let frame = if animated {
+                // spec: S-0102 claim 23, Constants (an animated terrain object's stage is 0 at
+                // placement, whatever its health)
+                if spawns {
+                    self.note(notes::ORE_MINE_STAGE);
+                }
+                0
+            } else {
+                // spec: S-0102 claim 23 (frame 0 while its health, its type's strength at the start, is 2 or more; 1 below)
+                let strength = rule(self.import, Kind::TerrainObjects, i, b"Strength")
+                    .and_then(value::integer);
+                if strength.is_none() {
+                    self.note(notes::TERRAIN_STRENGTH);
+                }
+                usize::from(strength.is_some_and(|s| s < 2))
+            };
+            // spec: S-0102 claim 10 (cell pass: writers; object pass: readers)
+            let test = if animated {
+                self.note(notes::ANIMATED_TERRAIN_SHADOW);
+                DepthTest::Reader
+            } else {
+                DepthTest::Writer
+            };
             let object = self.add_object(ObjectInfo {
                 kind: "terrain object",
                 type_name: String::from_utf8_lossy(&t.type_name).into_owned(),
@@ -1336,12 +1358,14 @@ impl Builder<'_> {
                 notes: Vec::new(),
             });
             let lz = height_lift(z);
-            // spec: S-0102 claim 13 (terrain object: −L(z) − 12, upright, writes)
-            if let Some(item) = self.place_sprite(
+            let mut items = Vec::new();
+            // spec: S-0102 claim 13 (terrain object: −L(z) − 12, upright; writes in the cell pass,
+            // reads in the object pass)
+            items.extend(self.place_sprite(
                 &sprite,
                 frame,
                 p,
-                DepthTest::Writer,
+                test,
                 ItemDepth::Profile {
                     profile: Profile::Upright,
                     bias: -lz - 12,
@@ -1349,18 +1373,18 @@ impl Builder<'_> {
                 },
                 Paint::Row(row),
                 Group::TerrainObjects,
-                false,
+                // provisional (Q-0051): an animated object's body and shadow order
+                animated,
                 Some(object),
-            ) {
-                self.built.scene.items.push(item);
-            }
-            // spec: S-0102 claims 13 and 23 (its shadow: body frame + ⌊N/2⌋, −L(z) − 3, flat, writes)
-            if frame + frames / 2 < frames
-                && let Some(item) = self.place_sprite(
+            ));
+            // spec: S-0102 claims 13 and 23 (its shadow: body frame + ⌊N/2⌋, −L(z) − 3, flat);
+            // provisional for an animated object (Q-0051): drawn right after its body
+            if frame + frames / 2 < frames {
+                items.extend(self.place_sprite(
                     &sprite,
                     frame + frames / 2,
                     p,
-                    DepthTest::Writer,
+                    test,
                     ItemDepth::Profile {
                         profile: Profile::Flat,
                         bias: -lz - 3,
@@ -1368,13 +1392,22 @@ impl Builder<'_> {
                     },
                     Paint::Shadow,
                     Group::Shadows,
-                    false,
+                    animated,
                     Some(object),
-                )
-            {
-                self.built.scene.items.push(item);
+                ));
+            }
+            if animated {
+                animated_entries.push(GroundEntry {
+                    // spec: S-0102 claim 5 (sort key X + Y of its position, the centre of its cell)
+                    key: i64::from(x) + i64::from(y),
+                    items,
+                    object: Some(object),
+                });
+            } else {
+                self.built.scene.items.extend(items);
             }
         }
+        animated_entries
     }
 
     /// Whether a pre-placed building with health value `value` starts

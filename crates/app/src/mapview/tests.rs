@@ -746,3 +746,58 @@ fn voxel_canvas_carries_over_between_games() {
     let (_, fresh) = super::build::build_parts(&inputs, false);
     assert!(!fresh.canvas().depth_mode());
 }
+
+/// spec: S-0102 claims 10, 13, 16 and 23 (an animated terrain object is drawn in the object pass
+/// as a reader, with image frame 0, its stage at placement, whatever its health; its sort key is
+/// X + Y of its cell's centre), S-0009 claim 43 (terrain objects enter the drawing order first)
+#[test]
+fn animated_terrain_object_in_the_object_pass() {
+    let rules = format!(
+        "{RULES}[TerrainTypes]\n0=TREEX\n1=MINEX\n2=ANIMX\n[ANIMX]\nIsAnimated=yes\nStrength=1\n[TREEX]\nStrength=1\n"
+    );
+    let mut ctx = context_with(&rules);
+    ctx.0
+        .arts
+        .insert((Kind::TerrainObjects, 2), art_of("ANIMX", "animx.shp"));
+    ctx.2.insert(b"animx.shp", shp((10, 10), 4, (2, 2), (4, 4)));
+    // The animated object on (6, 9) and a vehicle on the same cell (equal sort keys).
+    let (b, _) = build_in(
+        ctx,
+        b"[Basic]\nNewINIFormat=4\n[Map]\nSize=0,0,10,10\nLocalSize=0,0,10,10\n\
+          [Terrain]\n9006=ANIMX\n10006=TREEX\n[Units]\n0=Neutral,CARX,256,6,9,64\n",
+        &Options::default(),
+    );
+    let at = |i: &Item| b.scene.items.iter().position(|x| x == i).unwrap();
+    let items = items_of(&b, "terrain object");
+    let of = |name: &str| -> Vec<Item> {
+        items
+            .iter()
+            .filter(|i| b.objects[i.object.unwrap() as usize].type_name == name)
+            .copied()
+            .collect()
+    };
+    let (anim, tree) = (of("ANIMX"), of("TREEX"));
+    // The tree's shadow frame 1 + ⌊2/2⌋ lies beyond its sprite (S-0112 claim 9): body only.
+    assert_eq!((anim.len(), tree.len()), (2, 1));
+    // The tree stays in the cell pass as a writer, damaged frame 1 at strength 1 (pixel 2).
+    assert!(tree.iter().all(|i| at(i) < b.scene.cell_pass_len));
+    assert!(tree.iter().all(|i| i.test == DepthTest::Writer));
+    assert_eq!(b.scene.images[tree[0].image as usize].pixels()[0], 2);
+    // The animated object: object pass, readers, body frame 0 (pixel 1) despite strength 1,
+    // shadow frame 0 + ⌊4/2⌋ = 2 (pixel 3), biases −12 upright and −3 flat.
+    assert!(anim.iter().all(|i| at(i) >= b.scene.cell_pass_len));
+    assert!(anim.iter().all(|i| i.test == DepthTest::Reader));
+    let body = anim.iter().find(|i| i.paint != Paint::Shadow).unwrap();
+    let shadow = anim.iter().find(|i| i.paint == Paint::Shadow).unwrap();
+    assert_eq!(b.scene.images[body.image as usize].pixels()[0], 1);
+    assert_eq!(b.scene.images[shadow.image as usize].pixels()[0], 3);
+    assert_eq!(bias(body), (Profile::Upright, -12));
+    assert_eq!(bias(shadow), (Profile::Flat, -3));
+    // Provisional only for the order of body and shadow (Q-0051).
+    assert!(body.provisional && shadow.provisional);
+    assert_eq!(at(shadow), at(body) + 1);
+    // Same key as the vehicle on its cell: the terrain object entered first, so it is drawn first.
+    let vehicle = items_of(&b, "vehicle");
+    assert!(!vehicle.is_empty());
+    assert!(vehicle.iter().all(|v| at(v) > at(shadow)));
+}
