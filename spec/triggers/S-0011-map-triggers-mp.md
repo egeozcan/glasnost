@@ -2,11 +2,11 @@
 id: S-0011
 title: Map triggers (multiplayer subset)
 topic: triggers
-revision: 4
+revision: 5
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-10
+approved-on: 2026-10-13
 measurements: []
 requests: []
 supersedes: []
@@ -92,11 +92,12 @@ engine does instead (claims 26 and 36). The terms below are specific to this spe
 - **Team definition.** A map-defined group that the original's team system builds and runs.
   The team system is outside this spec (a pointer only).
 - **End of loading.** The point in loading a game after the starting units are placed (S-0009, its
-  table "Start position resolution") and after the other set-up steps of the table *Load-time draw
-  order* (State and ordering), and before the first tick. At this point claim 34 creates the
-  remaining tags, claim 6 decides which tags are polled and claim 35 assigns tags to houses. It is
-  not the glossary's *game start*, which is the moment loading begins. The whole of loading, from
-  game start to the end of loading, happens while the tick counter is 0.
+  table "Start position resolution") and after starting crates, but before the game-start terrain
+  recalculation pass of S-0010 claim 12 and before the first tick. At this point claim 34 creates
+  the remaining tags, claim 6 decides which tags are polled and claim 35 assigns tags to houses.
+  The name denotes this tag set-up point, not completion of every row in *Load-time draw order*
+  (State and ordering). It is not the glossary's *game start*, which is the moment loading begins.
+  The whole of loading, the game-start pass included, happens while the tick counter is 0.
 - **Elapsed-time event.** An event with the elapsed-time code (claim 13); with the random-delay
   event it is one of the two timer events.
 - **Trigger-played animation.** As defined in S-0109: an animation that claim 36 creates. This spec
@@ -426,9 +427,7 @@ engine does instead (claims 26 and 36). The terms below are specific to this spe
       medium for "without announcement"
 
 25. **Enable and disable a trigger.** The enable action names a trigger definition. Every existing
-    instance of that definition, in any tag, whose difficulty flag at the game's difficulty
-    position (claim 4) is set becomes enabled and has its timer re-armed (claim 15). Instances
-    whose flag is clear are left as they are. The disable action disables every instance of the
+    instance of that definition, in any tag, becomes enabled and has its timer re-armed (claim 15) when its difficulty flag at the game's difficulty position is set. If that position is outside 0 … 2, every existing instance of the definition becomes enabled and has its timer re-armed, whatever its three difficulty flags. Instances that do not meet the applicable condition are left as they are. The disable action disables every instance of the
     named definition. Neither action creates instances, so naming a definition that is no member of
     any existing tag's chain has no effect.
     - Backing: `measurable` (scenario T2, variant B, and T10, variant C)
@@ -730,7 +729,7 @@ name are not established either. Nothing else in the table fixes an order of int
 | Initial fill | one per visited cell, for a water fill only | S-0009, claim 6 |
 | Cell tags, in entry order | for each tag created there: claim 14's draws for each of its trigger instances, in chain order | this spec, claim 34 |
 | Terrain stream, tunnels, overlays | none known | S-0009 |
-| First terrain recalculation pass, in S-0009's visiting order | for each tile animation started (S-0010 claim 19): the draws of its creation (S-0109 claim 3). These animations are removed again before the second pass, but their draws have been taken | S-0010, claim 12; S-0109 |
+| First terrain recalculation pass, in S-0009's visiting order | for each tile animation started (S-0010 claim 19): the draws of its creation (S-0109 claim 3) and of its immediate start event (S-0109 claim 13 and the specs of its effects). These animations are removed again before the second pass, but their draws and start-event effects remain | S-0010, claims 12 and 19; S-0109 |
 | Vein set-up around veinhole markers | draws for the vein overlays, when the map has veinholes (not established) | no spec yet |
 | Terrain objects | not established | no spec yet |
 | Pre-placed objects: the vehicle entries, then aircraft, then infantry, then buildings, each in entry order | per object: its creation draw (S-0202 claim 10); then, if its tag is created there, claim 14's draws for that tag's instances; then the draws of placing it (not established). A building's upgrades are created after the building's tag and take their own creation draws | S-0202; this spec, claim 34 |
@@ -740,7 +739,8 @@ name are not established either. Nothing else in the table fixes an order of int
 | Late phase | list 3's random entries; the re-assignment draws | S-0009, claims 20, 28 and 29 |
 | Starting units | the creation draw of each starting unit, and whatever else placing it draws (not established) | S-0202; starting-unit rules, no spec yet |
 | Starting crates, when crates are on | the draws of placing them (not established) | crate rules, no spec yet |
-| End of loading | claim 14's draws for every tag created there, in registration order, and for each tag its instances in chain order | this spec, claim 34 |
+| End of loading: remaining tag set-up (Terms) | claim 14's draws for every tag created there, in registration order, and for each tag its instances in chain order | this spec, claim 34 |
+| Game-start terrain recalculation pass, in S-0009's visiting order | as the first pass, for the tile animations it starts. A cell that already started one in the second pass starts no second animation, so takes no further animation-creation draws in this pass | S-0010, claims 12 and 19; S-0109 |
 
 ## Edge cases and quirks
 
@@ -758,12 +758,8 @@ name are not established either. Nothing else in the table fixes an order of int
   is satisfied when the causing object's owner is that house (including the "References" rule of
   S-0009 claim 29 on maps with 9 or more header pairs). The importer warns about such a value in
   either case.
-- **"None" owner.** An owner written as `<none>` gives the first country of the country list
-  (claim 5), against S-0003 claim 14. Original data behaviour, kept for every map, with an importer
-  warning.
-- **Exact type names.** The type name of the type-exists and type-does-not-exist events is matched
-  case-sensitively and with no "no type" marker (claim 21), against S-0003 claim 14. Original data
-  behaviour, kept for every map, with an importer warning when the name matches no type.
+- **“None” owner.** `quirks.none_owner_is_first_country` (YR default: on). An owner written as `<none>` gives the first country of the country list (claim 5), with an importer warning. Off: `<none>` names no owner country.
+- **Exact type names.** `quirks.exact_trigger_type_names` (YR default: on). The type name of the type-exists and type-does-not-exist events is matched case-sensitively, and `none` and `<none>` are ordinary unmatched type names (claim 21); the importer warns when the name matches no type. Off: use S-0003 claim 14's case-insensitive type-name matching and no-type markers.
 - **Short references are registry indexes.** A reference parameter whose text is shorter than 3
   characters is read as a registration index into the team, trigger or tag definitions (Import
   mapping, I2), not as a name. Original data behaviour, kept for every map, with an importer warning.
@@ -974,13 +970,13 @@ clear and elapsed time 2, has two enable actions: one names the fourth trigger, 
 single-flag trigger whose flag is the fifth field if the session's position is 1 or 2, and the one
 whose flag is the sixth field if it is 0 (so its flag is clear at the session's position). Variant
 C, for a setting outside 0 … 2: as the main run, with named test data whose base rules copy sets
-the multiplayer-dialog difficulty field to 3, and the lobby left untouched. *Observable:* which
+the multiplayer-dialog difficulty field to 3, and the lobby left untouched. Also include variant B's fifth trigger and its enable actions. *Observable:* which
 markers change owner, and when. *Expected:* in tick 0 only the trigger whose flag matches the
 session's position fires; the position is the base rules' multiplayer-dialog difficulty value
 unless the lobby changed it. The fourth never fires. In variant B the fourth fires in tick 30 or 31
 (the enable in tick 30, the firing in the same tick's poll or the next one, by registration order),
 and the named single-flag trigger never fires. In variant C all three single-flag triggers fire in
-tick 0 and the fourth never fires. *Falsified if:* not exactly one of the three fires in the main
+tick 0 and the fourth fires in tick 30 or 31 after the enable action. *Falsified if:* not exactly one of the three fires in the main
 run, the position does not follow the setting, or variant B or C differs. *Inconclusive if* in
 variant C the lobby shows a computer-difficulty control that replaces the value 3.
 
@@ -1084,7 +1080,7 @@ makes the demolition warhead one of the radiation kind and V's type immune to ra
 main run's setup. *Observable:* the tick counter, read by the recorder, and the game's response to
 input. *Expected:* from tick 30 the tick counter stops advancing and the game stops responding
 (the recorder shows V's health unchanged, above 0). *Falsified if:* the game goes on past tick 30,
-or V is destroyed.
+or V is destroyed. Variant D (berserk protection): use the main-run setup, but make the demolition warhead cause berserk and ensure V is not immune to radiation, psychic or poison damage. *Observable:* V's health and the tick counter and response to input after tick 30. *Expected:* V takes no health damage; as a survivor, it remains above 0 health and the original's action hangs from tick 30. *Falsified if:* V loses health or the game continues responding after tick 30.
 
 **Scenario T10 (claims 8, 13, 15, 16, 25).** Variants, each with its own counter:
 - *A:* one-time polled triggers with elapsed time 0, 1 and 7. Expected drops in ticks 0, 15 and 105.
@@ -1257,6 +1253,16 @@ draw comes before the draws of its tag; the vehicle entries come before the buil
 E take their draws at the end of loading, in registration order; every draw happens before the first
 tick. *Falsified if:* another order, or a tag created at its object or cell tag taking its draws at
 the end of loading.
+Variant B, one run per case: retain the tags above and add the terrain and named theater test data
+of S-0010 scenario G4 part C, runs 1 and 2. The observed area is that scenario's lower ramp cell,
+away from starting units and pre-placed objects. Record its animation at the first drawn frame,
+and recover the creation and immediate start-event draws from the stream log using S-0109 and the
+specs of the animation's effects. *Expected:* in run 1 the animation starts in the game-start pass
+and its draws follow the arming draws of D and E. In run 2 the second pass starts its animation
+before D and E take their arming draws, and the game-start pass takes no further creation draws
+for that cell. Both runs finish these draws before tick 0. *Falsified if:* the draw groups occur in
+another order, or run 2 creates a second tile animation in that cell. A run in which a unit enters
+or leaves the observed cell before the first drawn frame is void.
 
 ## Open questions
 
