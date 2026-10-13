@@ -8,12 +8,13 @@
 //! 1. deploy the MCV (any vehicle that deploys into a building) while the
 //!    house has no construction yard;
 //! 2. build a power plant, a refinery, then a factory of infantry and one of
-//!    vehicles, and place each one when it is done, on the first legal cell
-//!    of a square spiral around the construction yard;
+//!    vehicles, and place each one when it is done, on the first cell of a
+//!    square spiral around the construction yard that passes the place
+//!    order's conditions and the cell test;
 //! 3. build another power plant whenever the drain reaches the output;
 //! 4. keep the plan's harvester count, and send idle harvesters to harvest;
-//! 5. build army units round-robin, and when a wave is ready attack-move it
-//!    to the nearest seen enemy or the next enemy start position (lobby
+//! 5. once the harvesters are kept, build army units round-robin, and when
+//!    a wave is ready attack-move it to the nearest seen enemy or the next enemy start position (lobby
 //!    knowledge: the map's start waypoints); idle units attack seen enemies
 //!    near them.
 //!
@@ -29,7 +30,7 @@ use glasnost_map::CellXY;
 use glasnost_sim::econ::TypeRef;
 use glasnost_sim::econ::{deploy, placement, production, shroud, tech};
 use glasnost_sim::orders::Order;
-use glasnost_sim::rules::{Behaviour, FactoryKind, Kind};
+use glasnost_sim::rules::{Behaviour, FactoryKind, Kind, Locomotor};
 use glasnost_sim::world::{HouseId, ObjectId, Target, World};
 
 /// A build plan.
@@ -153,9 +154,12 @@ fn plays(w: &World, t: TypeRef, role: Role) -> bool {
             };
             let ground = matches!(t.kind, Kind::Infantry)
                 || deploy::deploys_into(w, t.kind, t.index).is_none();
+            // Only types the simulation moves (no spec gives the other
+            // locomotors' movement yet, Q-0181).
+            let moves = u.locomotor != Locomotor::None;
             match role {
-                Role::Harvester => u.harvester,
-                Role::Army => u.primary.is_some() && !u.harvester && ground,
+                Role::Harvester => u.harvester && moves,
+                Role::Army => u.primary.is_some() && !u.harvester && ground && moves,
                 _ => false,
             }
         }
@@ -378,8 +382,19 @@ impl Script {
             }
         }
 
-        // The army: one type round-robin per kind of factory.
-        let army_types = self.candidates(w, Role::Army);
+        // The army: one type round-robin per kind of factory, once the
+        // harvesters are kept (while a harvester can still be had: a
+        // harvester type or a vehicle factory to build or one owned).
+        let vehicle_factory = Role::Factory(FactoryKind::Vehicle);
+        let economy_first = harvesters.len() < self.plan.harvesters
+            && (!self.candidates(w, Role::Harvester).is_empty()
+                || !self.candidates(w, vehicle_factory).is_empty()
+                || !self.of_role(w, vehicle_factory).is_empty());
+        let army_types = if economy_first {
+            Vec::new()
+        } else {
+            self.candidates(w, Role::Army)
+        };
         for kind in [Kind::Vehicle, Kind::Infantry] {
             let of_kind: Vec<TypeRef> = army_types
                 .iter()
@@ -467,9 +482,12 @@ impl Script {
     }
 
     /// The first cell of a square spiral around the construction yard where
-    /// a place order for `t` is legal and the foundation is free.
+    /// a place order for `t` is legal, the cell test passes and the
+    /// foundation is free.
     fn place_cell(&self, w: &World, t: TypeRef) -> Option<CellXY> {
         let home = self.home(w)?;
+        // The place order's conditions and the cell test (S-0406 claims 3 to 6, 8 and 12); an upgrade needs only the former.
+        let upgrade = placement::place_type(w, t.index).upgrade_of.is_some();
         for ring in 1..=SPIRAL_RINGS {
             for dy in -ring..=ring {
                 for dx in -ring..=ring {
@@ -477,7 +495,16 @@ impl Script {
                         continue;
                     }
                     let c = CellXY::new(home.x + dx, home.y + dy);
-                    if placement::place_legal(w, self.house, t, c) && self.free(w, t, c) {
+                    if placement::place_legal(w, self.house, t, c)
+                        && (upgrade
+                            || placement::cell_test(
+                                w,
+                                t.index,
+                                c,
+                                &placement::Test::order(self.house),
+                            ))
+                        && self.free(w, t, c)
+                    {
                         return Some(c);
                     }
                 }

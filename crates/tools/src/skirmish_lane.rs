@@ -17,6 +17,7 @@ use glasnost_ai::scripted::{Plan, Role, all_types, role_of};
 use glasnost_ai::skirmish;
 use glasnost_map::Map;
 use glasnost_map::terrain::TileCatalogue;
+use glasnost_sim::combat::effects::Effect;
 use glasnost_sim::econ::setup::{self, Player, Settings};
 use glasnost_sim::econ::tech;
 use glasnost_sim::load::new_game;
@@ -50,10 +51,19 @@ struct Game {
     orders: usize,
     /// Per player house: distinct objects of each role it ever had.
     built: [BTreeMap<Role, usize>; PLAYERS],
+    /// The players' country registration indices.
+    countries: Vec<usize>,
     /// Types of the rules by role (a role with none blocks the plan).
     types: BTreeMap<Role, usize>,
     /// Per player house: ticks in which its credits rose.
     paid: [u32; PLAYERS],
+    /// Per player house: credits at the end.
+    credits: [i32; PLAYERS],
+    /// Per player house: types it could build at the end, by role.
+    buildable: [BTreeMap<Role, usize>; PLAYERS],
+    /// Shots and kills of the game (S-0301, S-0312).
+    shots: usize,
+    killed: usize,
     replay_ms: u128,
     replay_matches: bool,
     save_matches: bool,
@@ -127,21 +137,49 @@ async fn run_async(
     Ok(report(mount_ms, looked, &games, max_ticks, seed))
 }
 
-/// The countries of the players: the rules' first countries that are not
-/// passive and not the neutral or special house's.
-fn countries(rules: &SimRules) -> Vec<String> {
+/// The open countries: those that are not passive and not the neutral or
+/// special house's, with their registration indices.
+fn countries(rules: &SimRules) -> Vec<(u32, String)> {
     rules
         .country_names
         .iter()
         .zip(&rules.countries)
-        .filter(|(n, c)| {
+        .enumerate()
+        .filter(|(_, (n, c))| {
             !c.passive
                 && n.as_str() != glasnost_sim::load::NEUTRAL
                 && n.as_str() != glasnost_sim::load::SPECIAL
         })
-        .map(|(n, _)| n.clone())
-        .take(PLAYERS)
+        .map(|(i, (n, _))| (i as u32, n.clone()))
         .collect()
+}
+
+/// The players' countries: the first open countries that own a harvester
+/// type the scripts can use (one the simulation moves, with a tech level),
+/// else the first open countries.
+fn player_countries(w: &World) -> Vec<String> {
+    let open = countries(w.rules());
+    let harvests = |c: u32| {
+        all_types(w).into_iter().any(|t| {
+            role_of(w, t) == Some(Role::Harvester)
+                && w.rules()
+                    .econ
+                    .tech
+                    .of(t)
+                    .is_some_and(|f| f.tech_level >= 0 && f.owners.contains(&c))
+        })
+    };
+    let able: Vec<String> = open
+        .iter()
+        .filter(|(c, _)| harvests(*c))
+        .map(|(_, n)| n.clone())
+        .take(PLAYERS)
+        .collect();
+    if able.len() == PLAYERS {
+        able
+    } else {
+        open.into_iter().map(|(_, n)| n).take(PLAYERS).collect()
+    }
 }
 
 fn play(
@@ -152,29 +190,48 @@ fn play(
     max_ticks: i32,
     seed: u32,
 ) -> Result<(), String> {
-    let players: Vec<Player> = countries(rules)
-        .into_iter()
-        .enumerate()
-        .map(|(i, country)| Player {
-            name: format!("Player {i}"),
-            country,
-            start: None,
-            ai: true,
-            values: Default::default(),
-        })
-        .collect();
-    if players.len() < PLAYERS {
+    let players = |names: Vec<String>| -> Vec<Player> {
+        names
+            .into_iter()
+            .enumerate()
+            .map(|(i, country)| Player {
+                name: format!("Player {i}"),
+                country,
+                start: None,
+                ai: true,
+                values: Default::default(),
+            })
+            .collect()
+    };
+    let first = players(
+        countries(rules)
+            .into_iter()
+            .map(|(_, n)| n)
+            .take(PLAYERS)
+            .collect(),
+    );
+    if first.len() < PLAYERS {
         return Err("too few countries".into());
     }
-    let setup = setup::skirmish(rules, &players, Settings::default(), 0, seed);
-    let probe =
-        new_game(rules.clone(), map, tiles.clone(), &setup).map_err(|e| format!("{e:?}"))?;
+    let probe = new_game(
+        rules.clone(),
+        map,
+        tiles.clone(),
+        &setup::skirmish(rules, &first, Settings::default(), 0, seed),
+    )
+    .map_err(|e| format!("{e:?}"))?;
     for t in all_types(&probe) {
         if let Some(r) = role_of(&probe, t) {
             *g.types.entry(r).or_default() += 1;
         }
     }
+    let chosen = player_countries(&probe);
+    g.countries = chosen
+        .iter()
+        .filter_map(|n| rules.country_names.iter().position(|x| x == n))
+        .collect();
     drop(probe);
+    let setup = setup::skirmish(rules, &players(chosen), Settings::default(), 0, seed);
     let t = Instant::now();
     let run = skirmish::run(
         rules.clone(),
@@ -196,10 +253,20 @@ fn play(
     let mut seen: [BTreeMap<Role, BTreeSet<u32>>; PLAYERS] = Default::default();
     let mut last = [i32::MAX; PLAYERS];
     let paid = &mut g.paid;
+    let (mut shots, mut killed, mut drained) = (0usize, 0usize, 0usize);
     let t = Instant::now();
     let world = run
         .replay
         .run(rules.clone(), map, tiles.clone(), |w| {
+            // The effects pile up in a replay: count the new ones.
+            for e in w.effects.iter().skip(drained) {
+                match e {
+                    Effect::Shot { .. } => shots += 1,
+                    Effect::Killed { .. } => killed += 1,
+                    _ => {}
+                }
+            }
+            drained = w.effects.len();
             for h in 0..PLAYERS {
                 watch(w, h, &mut seen[h]);
                 let c = w.houses[h].credits;
@@ -211,6 +278,17 @@ fn play(
         })
         .map_err(|e| format!("replay: {e:?}"))?;
     g.replay_ms = t.elapsed().as_millis();
+    (g.shots, g.killed) = (shots, killed);
+    for h in 0..PLAYERS {
+        g.credits[h] = world.houses[h].credits;
+        for t in all_types(&world) {
+            if let Some(r) = role_of(&world, t)
+                && tech::buildable(&world, HouseId(h as u8), t)
+            {
+                *g.buildable[h].entry(r).or_default() += 1;
+            }
+        }
+    }
     for (built, seen) in g.built.iter_mut().zip(&seen) {
         *built = seen.iter().map(|(r, s)| (*r, s.len())).collect();
     }
@@ -266,13 +344,18 @@ fn report(mount_ms: u128, looked: usize, games: &[Game], max_ticks: i32, seed: u
             .iter()
             .map(|(r, n)| format!("{} {n}", role_name(*r)))
             .collect();
-        let _ = writeln!(s, "  types by role: {}", types.join(", "));
+        let _ = writeln!(
+            s,
+            "  types by role: {}; player countries (registration index): {:?}",
+            types.join(", "),
+            g.countries
+        );
         if !g.types.contains_key(&Role::Yard)
             || !g.types.keys().any(|r| matches!(r, Role::Factory(_)))
         {
             let _ = writeln!(
                 s,
-                "  no construction yard or factory types: the importer maps no factory words until request Q-0100 is answered"
+                "  no construction yard or factory types: the scripts cannot build a base"
             );
         }
         if let Some(e) = &g.failure {
@@ -301,12 +384,19 @@ fn report(mount_ms: u128, looked: usize, games: &[Game], max_ticks: i32, seed: u
             } else {
                 roles.join(", ")
             };
+            let can: Vec<String> = g.buildable[h]
+                .iter()
+                .map(|(r, n)| format!("{} {n}", role_name(*r)))
+                .collect();
             let _ = writeln!(
                 s,
-                "  house {h}: {roles}; credits rose in {} ticks",
-                g.paid[h]
+                "  house {h}: {roles}; credits rose in {} ticks, {} at the end; could build at the end: {}",
+                g.paid[h],
+                g.credits[h],
+                can.join(", ")
             );
         }
+        let _ = writeln!(s, "  combat: {} shots, {} killed", g.shots, g.killed);
         let _ = writeln!(
             s,
             "  replay reproduces the final state: {}; save in mid-game, loaded and continued, matches: {}",

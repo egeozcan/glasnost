@@ -697,7 +697,9 @@ impl Builder<'_> {
             Kind::Buildings => {
                 self.efields(&mut econ, t, kind, BUILDING_ECON);
                 self.building_art_econ(&mut econ, index, t);
-                self.factory_warning(t);
+                if let Some(word) = self.factory_kind(t) {
+                    rec.put("factory", jsonc::string(word.to_string()));
+                }
                 // spec: S-0407 Import mapping (Owner: the owner countries, compared with the country registry)
                 if let Some(list) =
                     self.name_list(t.keys.get(&b"Owner"[..]), Kind::Countries, "Owner")
@@ -763,21 +765,42 @@ impl Builder<'_> {
         }
     }
 
-    /// `Factory` is not converted: no approved spec gives the words its value
-    /// is compared with (placeholder, Q-0100).
-    fn factory_warning(&mut self, t: &TypeRec) {
-        let Some(state) = t.keys.get(&b"Factory"[..]) else {
-            return;
-        };
-        let Some(e) = state.history.last() else {
-            return;
-        };
-        if matches!(e.what, What::Set(_)) {
-            self.warn(e.layer, e.line, format!(
-                "buildings {} Factory: the words of the factory field are not specified yet; the building is not a factory building (placeholder, Q-0100)",
-                show(&t.name)
-            ));
+    /// The factory kind of a building type as our format's word (S-0003
+    /// claim 21, Import mapping row C19), or `None` for no factory.
+    fn factory_kind(&mut self, t: &TypeRec) -> Option<&'static str> {
+        let mut held: Option<&'static str> = None;
+        for e in t
+            .keys
+            .get(&b"Factory"[..])
+            .into_iter()
+            .flat_map(|s| &s.history)
+        {
+            match &e.what {
+                What::Set(v) => {
+                    // spec: S-0003 claim 21 (claim 1's text reading, 31-byte limit, trailing whitespace trimmed)
+                    let word = value::text(v, FACTORY_TEXT_LIMIT);
+                    if word.is_empty() {
+                        // spec: S-0003 claim 21 (missing or empty keeps the value in force)
+                        continue;
+                    }
+                    match factory_word(word) {
+                        Some(w) => held = w,
+                        None => {
+                            // spec: S-0003 claim 21 (a non-empty unmatched word gives no factory, with claim 16's warning)
+                            held = None;
+                            self.warn(e.layer, e.line, format!(
+                                "buildings {} Factory {:?}: not a factory kind word; the building is not a factory building (S-0003 claim 21)",
+                                show(&t.name),
+                                show(word)
+                            ));
+                        }
+                    }
+                }
+                What::Reset => held = None,
+                _ => {}
+            }
         }
+        held
     }
 
     /// The `econ` record of a country.
@@ -916,4 +939,24 @@ pub(crate) fn image_run(values: &[i32]) -> Option<[i32; 3]> {
         };
     }
     run
+}
+
+/// The text limit of the factory field (S-0003 Import mapping row C19).
+const FACTORY_TEXT_LIMIT: usize = 31; // spec: S-0003 Import mapping row C19 (31-byte text limit)
+
+/// A factory field's word, compared whole ignoring ASCII case (S-0003
+/// claim 21, row C19): `Some(Some(kind))` for a producing word in our
+/// format's words, `Some(None)` for a recognised word that names no
+/// production kind (the no-factory word included), `None` when unmatched.
+fn factory_word(word: &[u8]) -> Option<Option<&'static str>> {
+    let lower = word.to_ascii_lowercase();
+    // spec: S-0003 Import mapping row C19 (the four producing words, the no-factory word and the other recognised words)
+    Some(match lower.as_slice() {
+        b"infantrytype" => Some("infantry"),
+        b"unittype" => Some("vehicle"),
+        b"aircrafttype" => Some("aircraft"),
+        b"buildingtype" => Some("building"),
+        b"<none>" | b"terraintype" | b"infantry" | b"unit" | b"aircraft" | b"building" => None,
+        _ => return None,
+    })
 }

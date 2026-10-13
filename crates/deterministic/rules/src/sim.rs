@@ -1408,8 +1408,9 @@ pub struct BuildingType {
     /// `NumberImpassableRows` (S-0209 Terms); absent: none.
     #[serde(default)]
     pub number_impassable_rows: Option<i32>,
-    /// `Factory`, the kind it builds (`infantry`, `vehicle`, `aircraft`,
-    /// `building`).
+    /// `Factory`, the kind it builds in our words (`infantry`, `vehicle`,
+    /// `aircraft`, `building`; the importer maps the original's words by
+    /// S-0003 claim 21).
     #[serde(default)]
     pub factory: Option<String>,
     /// `WeaponsFactory`.
