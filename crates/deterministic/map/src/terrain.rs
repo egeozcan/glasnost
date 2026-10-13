@@ -169,6 +169,10 @@ pub struct TileCatalogue {
     pub tiles: Vec<TileInfo>,
     /// Role starts.
     pub roles: Roles,
+    /// Each tile's tileset allow-tiberium flag, by tile number (S-0010
+    /// claim 16); a tile without an entry has the flag off.
+    #[serde(default)]
+    pub allow_tiberium: Vec<bool>,
 }
 
 impl TileCatalogue {
@@ -559,6 +563,7 @@ mod tests {
         TileCatalogue {
             tiles,
             roles: Roles::default(),
+            allow_tiberium: Vec::new(),
         }
     }
 

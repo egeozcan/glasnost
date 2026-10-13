@@ -6756,6 +6756,15 @@
             }
           ]
         },
+        "image_frames": {
+          "description": "The number of image frames *N* of the type's sprite (S-0401 claim\n15, S-0112 Terms *frame count*), from its art; absent: not known,\nand an animated ore mine never makes resource (a provisional rule:\nthe importer does not read terrain sprites yet).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
         "immune": {
           "description": "`Immune` (S-0302 claim 20).",
           "type": [
@@ -6842,6 +6851,20 @@
           ],
           "format": "int32",
           "default": null
+        },
+        "image_run": {
+          "description": "The image run (*P*, *F*, *S*) that the image numbers given by every\nrules layer leave (S-0112 claim 10, Constants), worked out by the\nimporter from the key's history (the value 2 keeps an earlier *S*);\nabsent: worked out from `image` alone, and no run when that is\nabsent too (S-0112 claim 12).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "maxItems": 3,
+          "minItems": 3
         },
         "spread": {
           "description": "`Spread`, the spread field *S* (S-0401 F4); absent: 0.",

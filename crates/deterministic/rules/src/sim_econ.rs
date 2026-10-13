@@ -357,6 +357,14 @@ pub struct TiberiumType {
     /// `Image`, the image number (S-0112 claim 10).
     #[serde(default)]
     pub image: Option<i32>,
+    /// The image run (*P*, *F*, *S*) that the image numbers given by every
+    /// rules layer leave (S-0112 claim 10, Constants), worked out by the
+    /// importer from the key's history (the value 2 keeps an earlier *S*);
+    /// absent: worked out from `image` alone, and no run when that is
+    /// absent too (S-0112 claim 12).
+    // nocite: a triple (P, F, S), our format's shape
+    #[serde(default)]
+    pub image_run: Option<[i32; 3]>,
 }
 
 /// A superweapon type (S-0407 and S-0412 Import mapping).

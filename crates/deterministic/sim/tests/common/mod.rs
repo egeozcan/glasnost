@@ -145,6 +145,7 @@ impl Scene {
         let catalogue = TileCatalogue {
             tiles,
             roles: Roles::default(),
+            allow_tiberium: Vec::new(),
         };
 
         let setup = GameSetup {

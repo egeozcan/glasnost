@@ -199,6 +199,8 @@ pub struct Tileset {
     pub anims: Vec<Option<TileAnim>>,
     /// The allow-burrowing flag (S-0010 claim 17, `AllowBurrowing`).
     pub allow_burrowing: bool,
+    /// The allow-tiberium flag (S-0010 claim 16, S-0401 claim 10).
+    pub allow_tiberium: bool,
 }
 
 /// A theater's catalogue.
@@ -297,6 +299,11 @@ impl Catalogue {
                 count,
                 authored,
                 first,
+                // spec: S-0010 claim 16 and S-0401 Import mapping (AllowTiberium absent: no)
+                allow_tiberium: section
+                    .value(b"AllowTiberium")
+                    .and_then(value::boolean)
+                    .unwrap_or(false),
                 non_height_view: section
                     .value(b"NonMarbleMadness")
                     .and_then(value::integer)
@@ -533,6 +540,7 @@ impl Catalogue {
     ) -> (TileCatalogue, Vec<String>) {
         let mut warnings = Vec::new();
         let mut tiles = Vec::with_capacity(images.len());
+        let mut allow_tiberium = Vec::with_capacity(images.len());
         for (t, img) in images.iter().enumerate() {
             let mut info = TileInfo::default();
             if let Some(name) = &img.plain {
@@ -556,6 +564,8 @@ impl Catalogue {
                 .find(|s| (s.first..s.first.saturating_add(s.count.max(0))).contains(&(t as i32)));
             // spec: S-0010 claim 17 (the tile's tileset's allow-burrowing flag)
             info.no_burrowing = set.is_some_and(|s| !s.allow_burrowing);
+            // spec: S-0010 claim 16 (the tile's tileset's allow-tiberium flag)
+            allow_tiberium.push(set.is_some_and(|s| s.allow_tiberium));
             // spec: S-0010 claim 19 (a tile's animation, from its tileset's animation section)
             info.anim = set.and_then(|s| {
                 s.anims
@@ -569,6 +579,7 @@ impl Catalogue {
             TileCatalogue {
                 tiles,
                 roles: self.roles,
+                allow_tiberium,
             },
             warnings,
         )
@@ -777,6 +788,16 @@ mod tests {
             Theater::Snow,
         );
         assert_eq!((none.clear_base, none.water_base), (-1, -1));
+    }
+
+    /// spec: S-0010 claim 16 and S-0401 Import mapping (the tileset's AllowTiberium flag; absent: no)
+    #[test]
+    fn claim_16_allow_tiberium() {
+        let d = doc("[TileSet0000]\nTilesInSet=2\nAllowTiberium=yes\n[TileSet0001]\nTilesInSet=1\n");
+        let c = Catalogue::read(&d, Theater::Temperate);
+        let images = c.images(&|_| false);
+        let (cat, _) = c.tile_catalogue(&images, &|_| None);
+        assert_eq!(cat.allow_tiberium, vec![true, true, false]);
     }
 
     /// spec: S-0010 claim 19 and Import mapping (tile animations from the section named by the set name: TileNNAnim, TileNNAttachesTo, absent −1; an empty name gives none)
