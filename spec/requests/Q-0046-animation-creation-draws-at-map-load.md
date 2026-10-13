@@ -3,7 +3,7 @@ id: Q-0046
 title: Animation creation draws at map load (start events, the overlay cell-animation key)
 status: answered
 related: [S-0009, S-0010, S-0109, S-0202]
-answered-by: [S-0009, S-0010, S-0109, S-0202]
+answered-by: [S-0009, S-0010, S-0109, S-0202, S-0401]
 ---
 
 ## Need
