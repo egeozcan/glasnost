@@ -51,10 +51,10 @@ pub fn undeploys_into(w: &World, t: u32) -> Option<u32> {
 /// The deploy facing *D* of a building type (S-0415 Constants: absent
 /// 128).
 pub fn deploy_facing(w: &World, t: u32) -> i32 {
+    // spec: S-0415 Constants (deploy facing absent-key default 128)
     w.rules()
         .buildings
         .get(t as usize)
-        // spec: S-0415 Constants (deploy facing absent-key default 128)
         .map_or(128, |b| b.raw.econ.deploy_facing.unwrap_or(128))
 }
 
@@ -405,7 +405,7 @@ pub fn pack_up(w: &mut World, id: ObjectId) {
     }
     crate::objects::remove(w, id);
     if can_stand(w, c) {
-        let z = w.surface_at(256 * c.x + 128, 256 * c.y + 128);
+        let z = w.surface_at(256 * c.x + 128, 256 * c.y + 128); // spec: S-0204 claim 3 (the cell centre)
         let tick = w.tick;
         if let Some(ob) = w.obj_mut(vid) {
             if let Some(spot) = o.guard_spot {
@@ -451,6 +451,7 @@ fn can_stand(w: &World, c: CellXY) -> bool {
 }
 
 /// The construction behaviour's processing delay (request Q-0130).
+// spec: S-0108 claim 5 (construction is processed every tick until the build-up ends; request Q-0130)
 pub const CONSTRUCTION_DELAY: i32 = 1;
 
 /// The construction behaviour of a building (S-0108 claim 5; request
