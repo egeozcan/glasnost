@@ -2,11 +2,11 @@
 id: S-0201
 title: Game speed and tick rate
 topic: simulation
-revision: 7
+revision: 8
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-10
+approved-on: 2026-10-13
 measurements: []
 requests: []
 supersedes: []
@@ -22,6 +22,9 @@ no tick runs (lost focus, the options menu, a freeze) or the player cannot give 
 ticks run (the first ticks of a game, a chrono flash). It owns exception 2 of glossary claim G3,
 the game-speed dependence of a chrono flash that overlaps a freeze, and that exception's part of the
 shared switch `quirks.speed_normalised_delays`; what happens inside one tick is S-0203.
+This revision covers skirmishes only. Network games and campaigns are out of scope; the retained
+campaign passages record earlier findings for a future campaign spec, not requirements for this
+revision's implementation or measurement.
 
 ## Terms
 
@@ -34,8 +37,11 @@ shared switch `quirks.speed_normalised_delays`; what happens inside one tick is 
   62.5 pacing units make one second.
 - **Cycle.** As in the glossary: the unit of real time in which the original runs a game. Cycles
   follow one another without overlap. In a single-player game every cycle makes one drawn frame (claim 6). A cycle
-  that is not frozen also takes the player's input and runs one tick (S-0203); a frozen cycle
-  (claim 10) takes no input and runs no tick. The cycle lasts at least its paced period (none at
+  that is not frozen takes at most one input event from the player's waiting inputs, in the order
+  they were made, and then runs one tick (S-0203). An input event is a key or mouse button going
+  down or coming back up. A frozen cycle (claim 10) takes no input and runs no tick. S-0213,
+  claim 1, owns the input-event limit, its confidence and its backing (scenario O9); claim 2 here
+  owns pacing, not that limit. The cycle lasts at least its paced period (none at
   index 0, claim 5), measured from its start (claim 2). During a stand-still there are no cycles at
   all.
 - **Stand-still.** A stretch of real time with no cycles, as in the glossary's *cycle* entry: the
@@ -853,9 +859,8 @@ whether the vehicle's destination changes.
   reading of the win action, the two radar-movie actions, the pause action and the chrono-flash
   action (Import mapping, with their type codes), which S-0011 parses but leaves outside its subset.
   S-0011's table of action codes should point here for them, or take them over in a later revision.
-- **Citations, for sign-off.** This spec is written against glossary revision 7, the glossary of
-  its batch. That revision's claim G3 holds exception 2 and gives `quirks.speed_normalised_delays`
-  the scope used here. Its Conventions list S-0011, S-0202, S-0203 and S-0205 among the drafts of the
-  batch, so they are cited by number and claim. Its *departure* entry lists the pause action with
-  *N* = 0, the paced period of index 0 and the real-time length of a timed freeze as departures of
-  this spec.
+- **Citations, for sign-off.** The current glossary's claim G3 holds exception 2 and gives
+  `quirks.speed_normalised_delays` the scope used here. S-0011, S-0202, S-0203 and S-0205 are
+  approved specs cited by number and claim. The glossary's *departure* entry lists the pause
+  action with *N* = 0, the paced period of index 0 and the real-time length of a timed freeze as
+  departures of this spec.
