@@ -187,6 +187,23 @@ fn claim_1_refund() {
     );
 }
 
+// spec: S-0408 claim 1 and F1 (the seam S-0312 F5 reads: the owner's refund; none without an owner)
+#[test]
+fn claim_1_building_refund_seam() {
+    let mut w = game(&rules());
+    let hut = put(&mut w, "HUT", 0, c(0, 0));
+    let over = put(&mut w, "OVER", 0, c(3, 0));
+    let neutral = put(&mut w, "HUT", 2, c(6, 0));
+    assert_eq!(glasnost_sim::seams::building_refund(&w, hut), Some(500));
+    assert_eq!(glasnost_sim::seams::building_refund(&w, over), Some(77));
+    assert_eq!(
+        glasnost_sim::seams::building_refund(&w, neutral),
+        Some(1000)
+    );
+    w.obj_mut(hut).unwrap().owner = None;
+    assert_eq!(glasnost_sim::seams::building_refund(&w, hut), None);
+}
+
 // spec: S-0408 F1 (r written as 0.7 is narrowed to the single just below 0.7: 1000 gives 699)
 #[test]
 fn f1_refund_percentage_single() {
