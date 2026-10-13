@@ -1,9 +1,9 @@
 ---
 id: Q-0123
 title: In what order are the cancel orders given when one recheck removes several types?
-status: open
+status: answered
 related: [S-0404, S-0407, S-0411]
-answered-by: []
+answered-by: [S-0411]
 ---
 
 ## Need
