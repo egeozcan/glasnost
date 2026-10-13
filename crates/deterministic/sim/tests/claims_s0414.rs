@@ -42,7 +42,10 @@ fn scene(ai: bool) -> Scene {
         s.ruleset.sim.countries.insert(n.into(), country(false));
     }
     s.register("countries", "Gammaland");
-    s.ruleset.sim.countries.insert("Gammaland".into(), country(false));
+    s.ruleset
+        .sim
+        .countries
+        .insert("Gammaland".into(), country(false));
     s.setup.houses.push(HouseSetup {
         name: "Gamma".into(),
         country: "Gammaland".into(),
@@ -52,7 +55,10 @@ fn scene(ai: bool) -> Scene {
         s.setup.houses[1].ai = true;
         s.setup.houses[2].ai = true;
     }
-    for (i, (x, y)) in [(40i16, 40i16), (52, 40), (40, 52), (52, 52)].into_iter().enumerate() {
+    for (i, (x, y)) in [(40i16, 40i16), (52, 40), (40, 52), (52, 52)]
+        .into_iter()
+        .enumerate()
+    {
         s.map.waypoints.insert(i as u16, (x, y));
     }
     s.setup.sandbox = false;
@@ -119,7 +125,12 @@ fn on_map(w: &World, h: HouseId) -> [i32; 4] {
 #[test]
 fn claim_1_when_houses_are_tested() {
     let mut s = scene(false);
-    s.ruleset.sim.countries.get_mut("Gammaland").unwrap().multiplay_passive = Some(true);
+    s.ruleset
+        .sim
+        .countries
+        .get_mut("Gammaland")
+        .unwrap()
+        .multiplay_passive = Some(true);
     let mut w = s.build();
     spawn(&mut w, Kind::Vehicle, "TANK", 1, 0, 0);
     common::run(&mut w, 1);
@@ -163,7 +174,10 @@ fn claim_2_short_game_test() {
     spawn(&mut w, Kind::Building, "HUT", 2, 10, 0);
     common::run(&mut w, 2);
     assert!(!defeated(&w, A), "third base-unit position");
-    assert!(defeated(&w, B), "fourth position, a tank and a vehicle building");
+    assert!(
+        defeated(&w, B),
+        "fourth position, a tank and a vehicle building"
+    );
     assert!(!defeated(&w, C), "counted building");
 }
 
@@ -199,7 +213,12 @@ fn claim_3_normal_test() {
     let mut w = s.build();
     spawn(&mut w, Kind::Building, "VB2", 0, -10, 0);
     armed(&mut w);
-    let id = w.objects.values().find(|o| o.owner == Some(A) && o.kind == Kind::Vehicle).unwrap().id;
+    let id = w
+        .objects
+        .values()
+        .find(|o| o.owner == Some(A) && o.kind == Kind::Vehicle)
+        .unwrap()
+        .id;
     kill(&mut w, id);
     common::run(&mut w, 2);
     assert!(!defeated(&w, A));
@@ -284,7 +303,12 @@ fn claim_4_off_map_existence() {
     let r = w.rules_arc();
     let hut = r.index_of(Kind::Building, "HUT").unwrap();
     glasnost_sim::objects::create(&mut w, Kind::Building, hut, Some(A));
-    let id = w.objects.values().find(|o| o.owner == Some(A) && o.kind == Kind::Vehicle).unwrap().id;
+    let id = w
+        .objects
+        .values()
+        .find(|o| o.owner == Some(A) && o.kind == Kind::Vehicle)
+        .unwrap()
+        .id;
     kill(&mut w, id);
     common::run(&mut w, 2);
     assert!(!defeated(&w, A), "a building off the map still counts");
@@ -308,7 +332,12 @@ fn claim_5_defeat() {
     armed(&mut w);
     let man = spawn(&mut w, Kind::Infantry, "DSMAN", 1, 6, 6);
     let hut = spawn(&mut w, Kind::Building, "INSB", 1, 8, 8);
-    let id = w.objects.values().find(|o| o.owner == Some(B) && o.kind == Kind::Vehicle).unwrap().id;
+    let id = w
+        .objects
+        .values()
+        .find(|o| o.owner == Some(B) && o.kind == Kind::Vehicle)
+        .unwrap()
+        .id;
     kill(&mut w, id);
     common::run(&mut w, 2);
     assert!(defeated(&w, B));
@@ -351,7 +380,10 @@ fn claim_6_end_test() {
 #[test]
 fn claim_7_results() {
     let mut s = scene(false);
-    for (n, role) in [("Neutral", HouseRole::Neutral), ("Special", HouseRole::Special)] {
+    for (n, role) in [
+        ("Neutral", HouseRole::Neutral),
+        ("Special", HouseRole::Special),
+    ] {
         s.register("countries", n);
         s.ruleset.sim.countries.insert(n.into(), country(true));
         s.setup.houses.push(HouseSetup {
@@ -392,11 +424,18 @@ fn claim_8_end_delay() {
     w.houses[2].allies = vec![B, C];
     common::run(&mut w, 2);
     assert_eq!(w.econ.end.ended, Some(1));
-    assert_eq!(w.econ.end.over, Some(2), "a delay of 0 still lets one tick run");
+    assert_eq!(
+        w.econ.end.over,
+        Some(2),
+        "a delay of 0 still lets one tick run"
+    );
     assert!(victory::outcome(&w).is_none());
     common::run(&mut w, 1);
     let o = victory::outcome(&w).expect("over");
-    assert_eq!(o.results, vec![(A, Verdict::Loss), (B, Verdict::Win), (C, Verdict::Win)]);
+    assert_eq!(
+        o.results,
+        vec![(A, Verdict::Loss), (B, Verdict::Win), (C, Verdict::Win)]
+    );
 }
 
 // spec: S-0414 claim 9 (a house defeated during the end delay loses; the delay restarts only for a person-played house with a win pending; quirks.defeat_during_end_delay)
@@ -410,7 +449,7 @@ fn claim_9_defeat_during_delay() {
         w.houses[0].allies = vec![A, B];
         w.houses[1].allies = vec![A, B];
         let id = w.objects.values().find(|o| o.owner == Some(C)).unwrap().id;
-    kill(&mut w, id);
+        kill(&mut w, id);
         common::run(&mut w, 2);
         assert_eq!(w.econ.end.ended, Some(1));
         assert_eq!(w.econ.end.over, Some(27));
@@ -504,7 +543,13 @@ fn claim_12_making_peace() {
     assert!(!w.allied(Some(A), Some(B)));
     // A civilian-side house cannot be allied.
     let mut s = allies_scene();
-    s.ruleset.sim.countries.get_mut("Betaland").unwrap().econ.side = Some("Civilian".into());
+    s.ruleset
+        .sim
+        .countries
+        .get_mut("Betaland")
+        .unwrap()
+        .econ
+        .side = Some("Civilian".into());
     let mut w = s.build();
     armed(&mut w);
     victory::alliance(&mut w, A, B);
@@ -524,7 +569,12 @@ fn claim_13_breaking() {
     victory::alliance(&mut w, A, A);
     assert!(w.allied(Some(A), Some(A)));
     let mut s = allies_scene();
-    s.ruleset.sim.countries.get_mut("Betaland").unwrap().multiplay_passive = Some(true);
+    s.ruleset
+        .sim
+        .countries
+        .get_mut("Betaland")
+        .unwrap()
+        .multiplay_passive = Some(true);
     let mut w = s.build();
     w.houses[0].allies = vec![A, B];
     w.houses[1].allies = vec![A, B];

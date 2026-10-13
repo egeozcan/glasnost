@@ -23,8 +23,14 @@ fn skirmish() -> Scene {
         s.ruleset.sim.countries.insert(n.into(), country(false));
     }
     s.register("countries", "Gammaland");
-    s.ruleset.sim.countries.insert("Gammaland".into(), country(false));
-    for (i, (x, y)) in [(40i16, 40i16), (52, 40), (40, 52), (52, 52)].into_iter().enumerate() {
+    s.ruleset
+        .sim
+        .countries
+        .insert("Gammaland".into(), country(false));
+    for (i, (x, y)) in [(40i16, 40i16), (52, 40), (40, 52), (52, 52)]
+        .into_iter()
+        .enumerate()
+    {
         s.map.waypoints.insert(i as u16, (x, y));
     }
     s.setup.sandbox = false;
@@ -44,7 +50,10 @@ fn claim_1_fields_read() {
     c.econ.smart_ai = Some(true);
     let r = s.sim_rules();
     let mode = r.mode;
-    assert_eq!(r.countries[0].speed_aircraft, Decimal("1.5".into()).single_value(mode));
+    assert_eq!(
+        r.countries[0].speed_aircraft,
+        Decimal("1.5".into()).single_value(mode)
+    );
     assert!(r.econ.setup.civilian[0]);
     assert!(!r.econ.setup.civilian[1]);
 }
@@ -98,8 +107,20 @@ fn claim_5_colour_field() {
             hsv: [0, 0, 0],
         })
         .collect();
-    s.ruleset.sim.countries.get_mut("Gammaland").unwrap().econ.color = Some("blue".into());
-    s.ruleset.sim.countries.get_mut("Alphaland").unwrap().econ.color = Some("Red".into());
+    s.ruleset
+        .sim
+        .countries
+        .get_mut("Gammaland")
+        .unwrap()
+        .econ
+        .color = Some("blue".into());
+    s.ruleset
+        .sim
+        .countries
+        .get_mut("Alphaland")
+        .unwrap()
+        .econ
+        .color = Some("Red".into());
     s.setup.houses.push(HouseSetup {
         name: "Alpha2".into(),
         ..s.setup.houses[0].clone()
@@ -110,15 +131,29 @@ fn claim_5_colour_field() {
     let w = s.build();
     assert_eq!(setup::colour_field(&w, 0), 6, "the last Alphaland house");
     assert_eq!(setup::colour_field(&w, 2), 2, "Gammaland: Blue, position 2");
-    assert_eq!(setup::colour_field(&w, 1), 0, "Betaland: no slot, imported default 0");
+    assert_eq!(
+        setup::colour_field(&w, 1),
+        0,
+        "Betaland: no slot, imported default 0"
+    );
 }
 
 // spec: S-0413 claim 6 (played and not passive: on; played and passive: off; unplayed: unchanged; the neutral and special houses count)
 #[test]
 fn claim_6_wall_owner_rewrite() {
     let mut s = skirmish();
-    s.ruleset.sim.countries.get_mut("Alphaland").unwrap().wall_owner = Some(false);
-    s.ruleset.sim.countries.get_mut("Gammaland").unwrap().wall_owner = Some(false);
+    s.ruleset
+        .sim
+        .countries
+        .get_mut("Alphaland")
+        .unwrap()
+        .wall_owner = Some(false);
+    s.ruleset
+        .sim
+        .countries
+        .get_mut("Gammaland")
+        .unwrap()
+        .wall_owner = Some(false);
     s.register("countries", "Special");
     let mut sp = country(true);
     sp.wall_owner = Some(true);
@@ -137,7 +172,12 @@ fn claim_6_wall_owner_rewrite() {
     assert!(!setup::wall_owner(&w, 2), "unplayed: imported");
     // The sandbox has no game start: imported values.
     let mut s2 = Scene::new();
-    s2.ruleset.sim.countries.get_mut("Alphaland").unwrap().wall_owner = Some(false);
+    s2.ruleset
+        .sim
+        .countries
+        .get_mut("Alphaland")
+        .unwrap()
+        .wall_owner = Some(false);
     assert!(!setup::wall_owner(&s2.build(), 0));
 }
 
@@ -154,5 +194,8 @@ fn claim_8_same_advantages() {
     assert_eq!(w.houses[0].combat.firepower, w.houses[1].combat.firepower);
     assert_eq!(w.houses[0].combat.rof_factor, w.houses[1].combat.rof_factor);
     let mode = w.rules().mode;
-    assert_eq!(w.houses[0].combat.firepower, Decimal("1.25".into()).value(mode));
+    assert_eq!(
+        w.houses[0].combat.firepower,
+        Decimal("1.25".into()).value(mode)
+    );
 }

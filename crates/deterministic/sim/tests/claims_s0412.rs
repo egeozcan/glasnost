@@ -5,7 +5,7 @@ mod common;
 use common::Scene;
 use glasnost_rules::sim::{Country, Decimal, DifficultyRow};
 use glasnost_sim::econ::setup::{
-    self, HouseValues, LobbyChoice, Player, Row, SetupError, Settings,
+    self, HouseValues, LobbyChoice, Player, Row, Settings, SetupError,
 };
 use glasnost_sim::load::LoadError;
 use glasnost_sim::world::{GameSetup, HouseId, HouseRole, HouseSetup, World};
@@ -145,7 +145,10 @@ fn claim_3_extra_credits() {
     s.setup.houses[1].ai = true;
     add_neutral_special(&mut s, false);
     let w = s.build();
-    assert_eq!(w.houses[1].credits, 10000, "AI house: the credits setting only");
+    assert_eq!(
+        w.houses[1].credits, 10000,
+        "AI house: the credits setting only"
+    );
     assert!(!w.houses[3].removed, "an AI house stops the cleanup");
     assert_eq!(w.houses[3].credits, 0);
 }
@@ -189,9 +192,19 @@ fn claim_5_rows_and_handicap() {
     d.insert("easy".into(), row("0.5", "2"));
     d.insert("normal".into(), row("1", "1"));
     d.insert("difficult".into(), row("2", "0.5"));
-    s.ruleset.sim.countries.get_mut("Betaland").unwrap().firepower = Some(Decimal("3".into()));
+    s.ruleset
+        .sim
+        .countries
+        .get_mut("Betaland")
+        .unwrap()
+        .firepower = Some(Decimal("3".into()));
     add_neutral_special(&mut s, true);
-    s.ruleset.sim.countries.get_mut("Special").unwrap().firepower = Some(Decimal("3".into()));
+    s.ruleset
+        .sim
+        .countries
+        .get_mut("Special")
+        .unwrap()
+        .firepower = Some(Decimal("3".into()));
     values(&mut s, 0).handicap = Some(Row::Easy);
     values(&mut s, 1).handicap = Some(Row::Difficult);
     let w = s.build();
@@ -232,7 +245,10 @@ fn claim_6_random_country() {
     let mut seen = std::collections::BTreeSet::new();
     for seed in 0..200 {
         let mut g = s.setup.clone();
-        let choices = [LobbyChoice { country: true, colour: false }; 2];
+        let choices = [LobbyChoice {
+            country: true,
+            colour: false,
+        }; 2];
         setup::resolve_lobby(&mut g, &r, &choices, &[], seed).unwrap();
         for h in &g.houses {
             assert!(first_ten.contains(&h.country), "{}", h.country);
@@ -245,9 +261,16 @@ fn claim_6_random_country() {
     let r = s.sim_rules();
     for seed in 0..50 {
         let mut g = s.setup.clone();
-        let choices = [LobbyChoice { country: true, colour: false }; 2];
+        let choices = [LobbyChoice {
+            country: true,
+            colour: false,
+        }; 2];
         setup::resolve_lobby(&mut g, &r, &choices, &[], seed).unwrap();
-        assert!(g.houses.iter().all(|h| r.country_names.contains(&h.country)));
+        assert!(
+            g.houses
+                .iter()
+                .all(|h| r.country_names.contains(&h.country))
+        );
     }
 }
 
@@ -260,7 +283,10 @@ fn claim_6_switch_off() {
     let offered = vec!["Land11".to_string(), "Land10".to_string()];
     for seed in 0..50 {
         let mut g = s.setup.clone();
-        let choices = [LobbyChoice { country: true, colour: false }; 2];
+        let choices = [LobbyChoice {
+            country: true,
+            colour: false,
+        }; 2];
         setup::resolve_lobby(&mut g, &r, &choices, &offered, seed).unwrap();
         assert!(g.houses.iter().all(|h| offered.contains(&h.country)));
     }
@@ -283,7 +309,10 @@ fn claim_7_random_colour() {
         g.skirmish.houses = vec![HouseValues::default(); 8];
         g.skirmish.houses[0].colour = Some(5);
         g.skirmish.houses[7].observer = true;
-        let mut choices = [LobbyChoice { country: false, colour: true }; 8];
+        let mut choices = [LobbyChoice {
+            country: false,
+            colour: true,
+        }; 8];
         choices[0].colour = false;
         setup::resolve_lobby(&mut g, &r, &choices, &[], seed).unwrap();
         let slots: Vec<u8> = g.skirmish.houses.iter().filter_map(|v| v.colour).collect();
@@ -298,7 +327,10 @@ fn claim_7_random_colour() {
     // Nine players on random: the ninth finds no free slot.
     let mut g = s.setup.clone();
     g.houses.push(g.houses[0].clone());
-    let choices = [LobbyChoice { country: false, colour: true }; 9];
+    let choices = [LobbyChoice {
+        country: false,
+        colour: true,
+    }; 9];
     assert_eq!(
         setup::resolve_lobby(&mut g, &r, &choices, &[], 1),
         Err(SetupError::NoFreeColour(8))
@@ -312,7 +344,10 @@ fn claim_7_no_game_draw() {
     let r = s.sim_rules();
     let mut g = s.setup.clone();
     let before = load(&s).unwrap().rng.clone();
-    let choices = [LobbyChoice { country: false, colour: true }; 2];
+    let choices = [LobbyChoice {
+        country: false,
+        colour: true,
+    }; 2];
     setup::resolve_lobby(&mut g, &r, &choices, &[], 99).unwrap();
     let mut s2 = s;
     s2.setup = g;
@@ -344,8 +379,20 @@ fn claim_8_start_alliances() {
 fn claim_8_civilian_side() {
     let mut s = skirmish();
     add_neutral_special(&mut s, true);
-    s.ruleset.sim.countries.get_mut("Special").unwrap().econ.side = Some("Civilian".into());
-    s.ruleset.sim.countries.get_mut("Neutral").unwrap().econ.side = Some("Civilian".into());
+    s.ruleset
+        .sim
+        .countries
+        .get_mut("Special")
+        .unwrap()
+        .econ
+        .side = Some("Civilian".into());
+    s.ruleset
+        .sim
+        .countries
+        .get_mut("Neutral")
+        .unwrap()
+        .econ
+        .side = Some("Civilian".into());
     let w = s.build();
     let al = |a: u8, b: u8| w.allied(Some(HouseId(a)), Some(HouseId(b)));
     assert!(al(3, 0) && al(3, 1));
@@ -446,8 +493,20 @@ fn claim_14_game_start() {
     let mut s = skirmish();
     add_neutral_special(&mut s, true);
     // A non-passive extra house the cleanup removes.
-    add_house(&mut s, "Extra", "Extraland", HouseRole::Player, false, false);
-    s.ruleset.sim.countries.get_mut("Extraland").unwrap().wall_owner = Some(false);
+    add_house(
+        &mut s,
+        "Extra",
+        "Extraland",
+        HouseRole::Player,
+        false,
+        false,
+    );
+    s.ruleset
+        .sim
+        .countries
+        .get_mut("Extraland")
+        .unwrap()
+        .wall_owner = Some(false);
     let w = s.build();
     assert_eq!(w.tick, 0);
     assert!(w.houses[4].removed);
@@ -455,7 +514,10 @@ fn claim_14_game_start() {
     assert!(!w.allied(Some(HouseId(3)), Some(HouseId(4))));
     assert!(w.allied(Some(A), Some(HouseId(3))));
     let extra = w.houses[4].country;
-    assert!(!setup::wall_owner(&w, extra), "no rewrite for a removed house");
+    assert!(
+        !setup::wall_owner(&w, extra),
+        "no rewrite for a removed house"
+    );
     assert!(w.econ.end.active);
 }
 
@@ -484,7 +546,12 @@ fn skirmish_builder() {
     ];
     let g = setup::skirmish(&r, &players, Settings::default(), 0, 7);
     assert_eq!(g.houses.len(), 4);
-    assert!(g.houses.iter().take(2).all(|h| h.human && h.role == HouseRole::Player));
+    assert!(
+        g.houses
+            .iter()
+            .take(2)
+            .all(|h| h.human && h.role == HouseRole::Player)
+    );
     assert!(g.houses[1].ai);
     assert_eq!(g.houses[2].role, HouseRole::Neutral);
     assert_eq!(g.houses[3].role, HouseRole::Special);

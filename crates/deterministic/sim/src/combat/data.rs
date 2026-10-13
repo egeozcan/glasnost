@@ -1395,7 +1395,11 @@ pub fn combat_rules(
             dec(&s.difficulty.get(n).cloned().unwrap_or_default().rof, mode).unwrap_or(one)
         }),
         rows_firepower: ["easy", "normal", "difficult"].map(|n| {
-            dec(&s.difficulty.get(n).cloned().unwrap_or_default().firepower, mode).unwrap_or(one)
+            dec(
+                &s.difficulty.get(n).cloned().unwrap_or_default().firepower,
+                mode,
+            )
+            .unwrap_or(one)
         }),
     };
     let countries = country_names

@@ -217,7 +217,9 @@ fn result(w: &World, h: HouseId) -> Option<&HouseResult> {
 }
 
 fn result_mut(w: &mut World, h: HouseId) -> Option<&mut HouseResult> {
-    w.houses.get_mut(usize::from(h.0)).map(|x| &mut x.econ.result)
+    w.houses
+        .get_mut(usize::from(h.0))
+        .map(|x| &mut x.econ.result)
 }
 
 // ---------------------------------------------------------------------------
@@ -309,7 +311,11 @@ pub fn contender(w: &World, h: HouseId) -> bool {
 // The counts (claim 4)
 
 fn flags(w: &World, kind: Kind, t: u32) -> (bool, bool) {
-    rules(w).flags.get(&(kind, t)).copied().unwrap_or((false, false))
+    rules(w)
+        .flags
+        .get(&(kind, t))
+        .copied()
+        .unwrap_or((false, false))
 }
 
 /// The on-map count an object of this type is on, with whether it is added
@@ -323,7 +329,9 @@ fn slot(w: &World, id: ObjectId) -> Option<(Slot, bool, bool)> {
         Kind::Vehicle => {
             if dont_score {
                 // spec: S-0414 claim 4 (not scored: added but never taken off, quirks.unscored_vehicle_stays_counted; off: never counted)
-                return q.unscored_vehicle_stays_counted.then_some((Slot::V, true, false));
+                return q
+                    .unscored_vehicle_stays_counted
+                    .then_some((Slot::V, true, false));
             }
             Some((Slot::V, true, true))
         }
@@ -426,7 +434,11 @@ fn counted_buildings(w: &World, h: HouseId) -> i32 {
         .filter(|o| o.owner == Some(h) && o.kind == Kind::Building)
         .filter(|o| {
             let (ds, ins) = flags(w, Kind::Building, o.type_index);
-            let vb = r.vehicle_building.get(o.type_index as usize).copied().unwrap_or(false);
+            let vb = r
+                .vehicle_building
+                .get(o.type_index as usize)
+                .copied()
+                .unwrap_or(false);
             // spec: S-0414 Terms (a counted building: not counting as a vehicle, neither insignificant nor not scored)
             !vb && !ds && !ins
         })
@@ -578,7 +590,14 @@ fn destroy_all(w: &mut World, h: HouseId) {
     let ids: Vec<ObjectId> = w
         .objects
         .values()
-        .filter(|o| o.owner == Some(h) && o.on_map && matches!(o.kind, Kind::Infantry | Kind::Vehicle | Kind::Aircraft | Kind::Building))
+        .filter(|o| {
+            o.owner == Some(h)
+                && o.on_map
+                && matches!(
+                    o.kind,
+                    Kind::Infantry | Kind::Vehicle | Kind::Aircraft | Kind::Building
+                )
+        })
         .map(|o| o.id)
         .collect();
     let warhead = w.rules().combat.general.c4_warhead;
@@ -612,7 +631,11 @@ fn destroy_all(w: &mut World, h: HouseId) {
 /// when it is undefeated and has no result pending; an observer's house's
 /// order does nothing.
 pub fn surrender(w: &mut World, house: HouseId) {
-    if !w.econ.end.active || ended(w) || defeated(w, house) || crate::econ::setup::observer(w, house) {
+    if !w.econ.end.active
+        || ended(w)
+        || defeated(w, house)
+        || crate::econ::setup::observer(w, house)
+    {
         // spec: S-0414 claim 11 and Edge cases (a defeated house, a pending result or an observer's house: nothing)
         return;
     }

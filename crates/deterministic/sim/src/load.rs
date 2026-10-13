@@ -201,7 +201,13 @@ pub fn new_game(
             removed: false,
             credits,
             pending: Vec::new(),
-            combat: crate::combat::fire::house_combat(&rules, country, h.role, setup.houses.len(), row),
+            combat: crate::combat::fire::house_combat(
+                &rules,
+                country,
+                h.role,
+                setup.houses.len(),
+                row,
+            ),
             econ: crate::econ::HouseEcon {
                 setup: state,
                 ..Default::default()

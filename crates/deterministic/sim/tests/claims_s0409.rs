@@ -601,14 +601,28 @@ fn claims_2_11_owner_view_one_way() {
     spawn(&mut w, Kind::Building, "TOWER", 0, -10, 0);
     spawn(&mut w, Kind::Building, "TOWER", 1, 10, 0);
     step(&mut w);
-    assert!(shroud::explored(&w, B, c(-10, 0)), "Alpha's sight counts for Beta");
-    assert!(!shroud::explored(&w, A, c(10, 0)), "Beta's sight does not count for Alpha");
+    assert!(
+        shroud::explored(&w, B, c(-10, 0)),
+        "Alpha's sight counts for Beta"
+    );
+    assert!(
+        !shroud::explored(&w, A, c(10, 0)),
+        "Beta's sight does not count for Alpha"
+    );
     spawn(&mut w, Kind::Building, "GAP", 0, -10, 10);
     spawn(&mut w, Kind::Building, "GAP", 1, 10, 10);
     step(&mut w);
     step(&mut w);
-    assert_eq!(shroud::counts(&w, B, c(-10, 10)).map(|x| x.1), Some(0), "not hostile to Beta");
-    assert_eq!(shroud::counts(&w, A, c(10, 10)).map(|x| x.1), Some(1), "hostile to Alpha");
+    assert_eq!(
+        shroud::counts(&w, B, c(-10, 10)).map(|x| x.1),
+        Some(0),
+        "not hostile to Beta"
+    );
+    assert_eq!(
+        shroud::counts(&w, A, c(10, 10)).map(|x| x.1),
+        Some(1),
+        "hostile to Alpha"
+    );
 }
 
 /// A legal cell whose upper-left diagonal neighbour is not legal.
@@ -633,7 +647,14 @@ fn claim_14_shared_state_waits_for_last_field() {
     let e = edge_cell(&w);
     let off = CellXY::new(e.x - 1, e.y - 1);
     let g1 = testkit::spawn(&mut w, Kind::Building, "GAP", 1, e, 0);
-    let g2 = testkit::spawn(&mut w, Kind::Building, "GAP", 1, CellXY::new(e.x + 1, e.y), 0);
+    let g2 = testkit::spawn(
+        &mut w,
+        Kind::Building,
+        "GAP",
+        1,
+        CellXY::new(e.x + 1, e.y),
+        0,
+    );
     step(&mut w);
     step(&mut w);
     spawn(&mut w, Kind::Building, "SAT", 0, 0, 0);

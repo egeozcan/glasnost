@@ -177,7 +177,11 @@ impl Rules {
     pub fn new(r: &Ruleset, mode: Rounding) -> Self {
         let g = &r.sim.general.economy;
         let names = r.registries.get("countries").cloned().unwrap_or_default();
-        let colours: Vec<String> = r.colours.iter().map(|c| c.name.to_ascii_lowercase()).collect();
+        let colours: Vec<String> = r
+            .colours
+            .iter()
+            .map(|c| c.name.to_ascii_lowercase())
+            .collect();
         Self {
             // spec: S-0412 Import mapping (Money absent: 10000)
             money: g.money.unwrap_or(10000),
@@ -249,7 +253,10 @@ pub fn short_game(w: &World) -> bool {
 /// The game's superweapon setting (S-0412 claim 9; S-0407 claim 7 reads
 /// it).
 pub fn superweapons_allowed(w: &World) -> bool {
-    w.econ.settings.superweapons.unwrap_or(rules(w).superweapons)
+    w.econ
+        .settings
+        .superweapons
+        .unwrap_or(rules(w).superweapons)
 }
 
 /// The crate setting (S-0412 claim 10).
@@ -291,9 +298,13 @@ pub fn person_played(w: &World, h: HouseId) -> bool {
 /// Whether the house plays a country of the civilian side (S-0414 claim
 /// 12).
 pub fn civilian(w: &World, h: HouseId) -> bool {
-    w.houses
-        .get(usize::from(h.0))
-        .is_some_and(|x| rules(w).civilian.get(x.country as usize).copied().unwrap_or(false))
+    w.houses.get(usize::from(h.0)).is_some_and(|x| {
+        rules(w)
+            .civilian
+            .get(x.country as usize)
+            .copied()
+            .unwrap_or(false)
+    })
 }
 
 /// Whether the house's country is passive (S-0009 Terms).
@@ -330,7 +341,13 @@ pub fn colour_field(w: &World, country: u32) -> u32 {
         .colour_field
         .get(&country)
         .map(|&s| u32::from(s))
-        .unwrap_or_else(|| rules(w).colour_field.get(country as usize).copied().unwrap_or(0))
+        .unwrap_or_else(|| {
+            rules(w)
+                .colour_field
+                .get(country as usize)
+                .copied()
+                .unwrap_or(0)
+        })
 }
 
 // ---------------------------------------------------------------------------
@@ -425,11 +442,20 @@ impl std::fmt::Display for SetupError {
                 "short game with bases off is refused (S-0412 claim 11, quirks.short_game_without_bases off)"
             ),
             Self::NoFreeColour(h) => {
-                write!(f, "house {h} on a random colour finds no free colour slot (S-0412 claim 7)")
+                write!(
+                    f,
+                    "house {h} on a random colour finds no free colour slot (S-0412 claim 7)"
+                )
             }
-            Self::NoCountry(h) => write!(f, "house {h} on a random country has no country to choose (S-0412 claim 6)"),
+            Self::NoCountry(h) => write!(
+                f,
+                "house {h} on a random country has no country to choose (S-0412 claim 6)"
+            ),
             Self::AllBaseUnitsMode => {
-                write!(f, "the all-base-units game mode is not implemented (S-0412 claim 13)")
+                write!(
+                    f,
+                    "the all-base-units game mode is not implemented (S-0412 claim 13)"
+                )
             }
         }
     }
@@ -748,7 +774,7 @@ fn colour_fields(w: &mut World) {
 /// The whole speed of an aircraft in progress units per tick (S-0413 claim
 /// 3, Formulas *Aircraft speed*): S-0207 F2 with the country's aircraft
 /// factor. `rho` is the aircraft's speed fraction, which the flight rules
-/// own (planned S-0501); nothing calls this before they exist.
+/// own (the M6 flight rules); nothing calls this before they exist.
 pub fn aircraft_speed(w: &World, id: crate::world::ObjectId, rho: F64) -> i32 {
     let r = w.rules();
     let mode = r.mode;
