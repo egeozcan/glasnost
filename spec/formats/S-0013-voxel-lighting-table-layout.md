@@ -2,11 +2,11 @@
 id: S-0013
 title: voxel lighting table file layout
 topic: formats
-revision: 1
+revision: 2
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-13
+approved-on: 2026-10-14
 measurements: []
 requests: [Q-0022]
 supersedes: []
@@ -106,8 +106,7 @@ network games are out of scope.
    Our engine never wraps the requested length: it uses at most the first min(R, 128)
    rows, preserving any partial row and filling unsupplied entries with zero. Remaining
    bytes are ignored. Any R above 128 produces an importer warning. This is the safe
-   deterministic departure shared with S-0105 claim 38, not a quirk switch. S-0105 needs
-   the corresponding correction to its original excessive-count boundary in this round.
+   deterministic departure shared with S-0105 claim 38, not a quirk switch.
    - Backing: `measurable` (L5) for the safe excessive-count and zero-byte wrapped cases,
      and our engine's result. The unsafe original cases are `unmeasured`: their result
      is unspecified and a test could disturb unrelated game state.
@@ -184,8 +183,7 @@ The observed area is the parked test vehicle's cell and the surrounding three-ce
 Apply the bystander's void rule. Use S-0105 MS-23's colour/normal probe model with separated pixels,
 no overlapping voxels, and cache disabled. Capture all 32 body facings and compare pixel-for-pixel
 with the stock-table control. One run per variant suffices: no random statistic is involved.
-A screen recorder and a read-only archive extractor/file inspector suffice; the combat bench
-is not needed. Any harness changes are proposals to the user, not edits to the harness.
+Visual capture and file inspection are sufficient for these scenarios; no combat-specific measurement setup is required. Any harness changes are proposals to the user, not edits to the harness.
 
 **L1 — File extents and value forms (claims 1–3).**
 - Setup: the stock voxel lighting table from each of the base and expansion archives, extracted
@@ -194,8 +192,7 @@ is not needed. Any harness changes are proposals to the user, not edits to the h
   range and the remaining consecutive row bytes. Record the file length, header values and
   positions, and whether the two files match; keep raw component lists outside the spec.
 - Expected: the row count at positions 8–11 makes the stock length equal 784 + 256R.
-  Positions 16–783 form 256 three-byte colours, with component values reaching beyond 63.
-  Exactly R blocks of 256 bytes follow. The two stock copies match.
+  Positions 16–783 form 256 three-byte colour entries, each component occupying one byte. Exactly R blocks of 256 bytes follow. This claim makes no assertion about whether the two inspected files match.
 - Falsifier: a length inconsistent with that count, row bytes beginning elsewhere, or a
   four-byte colour form needed to account for the content. Component names cannot be
   established from drawing, since this palette is ignored; colour triples in the file are the
