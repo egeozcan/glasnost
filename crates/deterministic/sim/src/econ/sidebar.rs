@@ -178,6 +178,7 @@ pub fn removal_orders(w: &mut World, house: HouseId, removed: &[TypeRef]) {
     if !production::player(w, house) {
         return;
     }
+    // Q-0123 (interim: the removed types in the taken-up set's order, kind then type index)
     for &t in removed {
         let line = production::line_of(w, house, t);
         let item = line.is_some_and(|l| l.item.as_ref().is_some_and(|i| i.t == t));
