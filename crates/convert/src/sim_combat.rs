@@ -87,6 +87,12 @@ pub(super) const COMBAT_FIELDS: &[Row] = &[
         Refs(Kind::Animations),
         "S-0312",
     ),
+    (
+        "destroy_particle_systems",
+        "DestroyParticleSystems",
+        Refs(Kind::ParticleSystems),
+        "S-0003, S-0312",
+    ),
     ("trainable", "Trainable", Bool, "S-0311"),
     ("dont_score", "DontScore", Bool, "S-0311"),
     ("self_healing", "SelfHealing", Bool, "S-0314"),
@@ -665,6 +671,9 @@ const COEFFICIENTS: [(&str, &str); 5] = [
     ),
 ];
 
+/// The text limit of a building's category word (S-0302 Import mapping).
+const BUILD_CAT_LIMIT: usize = 31; // spec: S-0302 Import mapping (BuildCat: the first 31 bytes)
+
 /// The coefficient magnitude above which the importer warns (S-0309 Edge
 /// cases: 10⁶).
 const COEFFICIENT_WARN: i128 = 1_000_000; // spec: S-0309 Edge cases (a coefficient's magnitude above 10^6)
@@ -901,10 +910,11 @@ fn text_of(state: Option<&KeyState>) -> Option<Vec<u8>> {
     })
 }
 
-fn list_of(state: Option<&KeyState>) -> Option<Vec<Vec<u8>>> {
+fn list_of(state: Option<&KeyState>, untrimmed: bool) -> Option<Vec<Vec<u8>>> {
     fold(state, None, |v, _| {
         Some(
-            value::list(v, value::COMMON_TEXT_LIMIT)
+            // spec: S-0003 claims 12 and 19 (quirks.list_items_untrimmed off: name items trimmed before the no-type test)
+            value::name_items(v, value::COMMON_TEXT_LIMIT, untrimmed)
                 .into_iter()
                 .filter(|i| !value::is_no_type(i))
                 .map(<[u8]>::to_vec)
@@ -1286,14 +1296,20 @@ impl Builder<'_> {
         if max <= 0 {
             return;
         }
-        let types = list_of(key(t, "DebrisTypes")).unwrap_or_default();
+        let types = list_of(
+            key(t, "DebrisTypes"),
+            self.i.ini_quirks.list_items_untrimmed,
+        )
+        .unwrap_or_default();
         // spec: S-0003 claim 20 (the maxima list: decimal prefixes)
         let maxima = fold(key(t, "DebrisMaximums"), None, |v, _| {
             Some(value::decimal_prefix_list(v))
         })
         .unwrap_or_default();
         let metallic = self.global(GENERAL, "MetallicDebris");
-        let metallic_empty = list_of(metallic.as_ref()).unwrap_or_default().is_empty();
+        let metallic_empty = list_of(metallic.as_ref(), self.i.ini_quirks.list_items_untrimmed)
+            .unwrap_or_default()
+            .is_empty();
         let at = key(t, "MaxDebris");
         if types.is_empty() && metallic_empty {
             // spec: S-0303 Edge cases, S-0312 Edge cases (a positive maximum debris count with nothing to throw)
@@ -1339,7 +1355,7 @@ impl Builder<'_> {
                 |x| x.gt(COEFFICIENT_WARN) || x.lt(-COEFFICIENT_WARN),
                 |v| format!("{name} {k} {v} is above 10^6 in magnitude: threat scores can wrap (S-0309 Edge cases)"),
             );
-            // spec: Q-0061 (placeholder: the held coefficient before any layer gives the key is 0)
+            // spec: S-0309 claim 26 (each of a newly registered type's coefficients starts at double-precision 0)
             let mut held = "0".to_owned();
             for &r in &t.reads {
                 let given = state.and_then(|s| {
@@ -1444,9 +1460,9 @@ impl Builder<'_> {
             }
         }
         let name = format!("{} {}", kind.key(), show(&t.name));
-        // spec: S-0308 Edge cases (a weapon count above 18: our engine reads the first 18 numbered keys; the importer warns)
+        // spec: S-0308 claim 16 and Edge cases (a weapon count above 18: our engine fills only the first 18 slots and their elite slots, the higher references still register weapons; the importer warns)
         self.each_int(key(t, "WeaponCount"), |n| n > SLOTS as i32, |v| {
-            format!("{name} WeaponCount {v} is above 18; only Weapon1 … Weapon18 are read (S-0308 claim 1, a departure)")
+            format!("{name} WeaponCount {v} is above 18; only Weapon1 … Weapon18 fill firing slots, the higher numbered weapons are registered but never fired (S-0308 claim 16, a departure)")
         });
         let tc = int_of(key(t, "TurretCount")).unwrap_or(0);
         let unit = kind != Kind::Buildings;
@@ -1494,7 +1510,10 @@ impl Builder<'_> {
     /// systems whose `BehavesLike` is `Smoke` (letter case ignored), in list
     /// order, as type keys.
     fn smoke_systems(&mut self, combat: &mut Rec, t: &TypeRec) {
-        let Some(list) = list_of(key(t, "DamageParticleSystems")) else {
+        let Some(list) = list_of(
+            key(t, "DamageParticleSystems"),
+            self.i.ini_quirks.list_items_untrimmed,
+        ) else {
             return;
         };
         let Some(reg) = self.i.outcome.registries.get(&Kind::ParticleSystems) else {
@@ -1588,14 +1607,21 @@ impl Builder<'_> {
         self.each_int(key(t, "SuppressionThreshold"), |x| x < 0, |v| {
             format!("{name} SuppressionThreshold {v} is below 0: every non-negative hit suppresses the parasite (S-0315 claim 6)")
         });
+        let untrimmed = self.i.ini_quirks.list_items_untrimmed;
         for k in ["VeteranAbilities", "EliteAbilities"] {
             for (v, layer, line) in sets(key(t, k)) {
-                for item in value::list(&v, value::COMMON_TEXT_LIMIT) {
+                for item in value::name_items(&v, value::COMMON_TEXT_LIMIT, untrimmed) {
+                    if untrimmed && value::edge_whitespace(item) {
+                        // spec: S-0311 Edge cases (quirks.list_items_untrimmed on: the importer warns for surrounding whitespace)
+                        self.warn(layer, line, format!(
+                            "{name} {k}: a list item with whitespace at its start or end names a different type (S-0003 claim 12, quirks.list_items_untrimmed)"
+                        ));
+                    }
                     if !ABILITIES
                         .iter()
                         .any(|a| item.eq_ignore_ascii_case(a.as_bytes()))
                     {
-                        // spec: S-0311 Edge cases (items are not trimmed; the importer warns for every item that names no ability)
+                        // spec: S-0311 Edge cases (the importer warns for each non-empty item that matches no ability, in either setting of quirks.list_items_untrimmed)
                         self.warn(layer, line, format!(
                             "{name} {k}: {:?} names no ability and is ignored (S-0311 Import mapping)",
                             show(item)
@@ -1617,9 +1643,11 @@ impl Builder<'_> {
             rec.put("combat", combat.node());
         }
         self.cfields(rec, t, kind, BUILDING_COMBAT);
-        // spec: S-0302 Import mapping, S-0004 Import mapping (BuildCat: a defence building when the word is Combat; a named value, S-0003 claim 16; placeholder, Q-0061)
+        // spec: S-0004 claim 11 (the sidebar tab's build category uses this same rule)
+        // spec: S-0302 Import mapping (BuildCat: the first 31 bytes, surrounding whitespace trimmed, a whole word compared ignoring A–Z case; a defence building only for Combat, any other nonempty word, unknown ones included, is not; missing or empty keeps the held category, initially not a defence)
         if let Some(d) = fold(key(t, "BuildCat"), None, |v, _| {
-            Some(value::named(v, NAME_LIMIT, &["Combat"]).is_some())
+            let word = value::text(v, BUILD_CAT_LIMIT).trim_ascii();
+            (!word.is_empty()).then(|| word.eq_ignore_ascii_case(b"Combat"))
         }) {
             rec.put("defense", jsonc::boolean(d));
         }
@@ -2167,12 +2195,19 @@ impl Builder<'_> {
             |v| format!("[General] DisabledDisguiseDetectionPercent {v:?} has no second item: no disguised target is let through by the draw (S-0309 claim 25, a departure)"),
         );
         let fires = self.global(GENERAL, "DamageFireTypes");
-        if list_of(fires.as_ref()).unwrap_or_default().len() < FIRE_TYPES {
+        if list_of(fires.as_ref(), self.i.ini_quirks.list_items_untrimmed)
+            .unwrap_or_default()
+            .len()
+            < FIRE_TYPES
+        {
             // spec: S-0302 Edge cases (the importer warns when the damage-fire list has fewer than three entries)
             self.warn_at(fires.as_ref(), "[General] DamageFireTypes has fewer than three animations: a building fire of a missing kind is not started (S-0302 claim 13, a departure)".to_owned());
         }
         let splash = self.global(COMBAT_DAMAGE, "SplashList");
-        if list_of(splash.as_ref()).unwrap_or_default().is_empty() {
+        if list_of(splash.as_ref(), self.i.ini_quirks.list_items_untrimmed)
+            .unwrap_or_default()
+            .is_empty()
+        {
             // spec: S-0312 Edge cases (an empty splash list: no splash, a departure; the importer warns)
             self.warn_at(splash.as_ref(), "[CombatDamage] SplashList is empty: a vehicle dropped into water shows no splash (S-0312 claim 11, a departure)".to_owned());
         }
@@ -2264,7 +2299,10 @@ impl Builder<'_> {
                     "{name} has a berserk warhead and damage {damage}: the berserk time is 0 or less (S-0302 claim 10)"
                 ));
             }
-            if damage < 0 && list_of(key(h, "AnimList")).is_some_and(|l| !l.is_empty()) {
+            if damage < 0
+                && list_of(key(h, "AnimList"), self.i.ini_quirks.list_items_untrimmed)
+                    .is_some_and(|l| !l.is_empty())
+            {
                 // spec: S-0303 Edge cases (negative damage with an animation list: no animation for a negative entry; the importer warns)
                 self.warn_at(key(w, "Damage"), format!(
                     "{name} has negative damage and its warhead an animation list: negative entries show no animation (S-0303 F5, a departure)"

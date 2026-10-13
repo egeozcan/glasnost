@@ -643,6 +643,9 @@ pub fn apply_in(
         origin: BTreeMap::new(),
         // spec: S-0006 claim 12 (the table is left with zero in all 16 positions; only the map's entries count)
         map_only_colour_add: bad_language_rules && quirks.bad_language_rules_skips_mode,
+        untrimmed: layers
+            .first()
+            .is_none_or(|l| l.doc.quirks().list_items_untrimmed),
     };
     for (li, layer) in layers.iter().enumerate() {
         if li == 0 && game == GameKind::Skirmish {
@@ -702,6 +705,9 @@ struct Run<'a> {
     /// Only the map layer fills the colour-adjustment table (S-0006 claim
     /// 12).
     map_only_colour_add: bool,
+    /// `quirks.list_items_untrimmed` (S-0003 claim 12), from the layers'
+    /// ini switches.
+    untrimmed: bool,
 }
 
 impl Run<'_> {
@@ -945,7 +951,7 @@ impl Run<'_> {
         for (_, winner) in list.list_positions() {
             let side = self.side_index(&winner.key);
             let mut members = Vec::new();
-            for item in value::list(&winner.value, value::COMMON_TEXT_LIMIT) {
+            for item in value::name_items(&winner.value, value::COMMON_TEXT_LIMIT, self.untrimmed) {
                 if let Some(c) = self.country_by_name(item) {
                     members.push(c);
                 } else if let Some(s) = self
@@ -1185,7 +1191,21 @@ impl Run<'_> {
             // spec: S-0004 claim 13 (the value is cut to the field's limit, trailing whitespace removed)
             refs::Form::Single => vec![value::text(stored, limit)],
             // spec: S-0004 claim 13, S-0003 claim 12 (list items in item order, empty items skipped)
-            refs::Form::List => value::list(stored, limit),
+            // spec: S-0003 claim 12 (quirks.list_items_untrimmed off: name items trimmed; on: the importer warns for an item with whitespace at either end)
+            refs::Form::List => {
+                let items = value::name_items(stored, limit, self.untrimmed);
+                if self.untrimmed && items.iter().any(|i| value::edge_whitespace(i)) {
+                    self.warn(
+                        hist,
+                        line,
+                        format!(
+                            "{}: a list item with whitespace at its start or end names a different type (S-0003 claim 12, quirks.list_items_untrimmed)",
+                            f.key
+                        ),
+                    );
+                }
+                items
+            }
         };
         for name in items {
             if name.is_empty() {

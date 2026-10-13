@@ -537,6 +537,16 @@ fn self_naming_long_names_stop() {
     assert_eq!(names(&o, Kind::Vehicles).len(), 3);
 }
 
+/// spec: S-0308 claim 16 (numbered references above 18 register weapons up to the weapon count, normal before elite at each number and lower numbers first; a weapon so created reads its section and creates its projectile)
+#[test]
+fn numbered_weapons_above_eighteen_register() {
+    let text = "[VehicleTypes]\n1=Vf\n[Vf]\nTurretCount=1\nWeaponCount=20\nEliteWeapon20=E20\n\
+                Weapon20=N20\nWeapon19=N19\nWeapon21=N21\n[N20]\nProjectile=Far\n";
+    assert_eq!(weapons_of(text), ["N19", "N20", "E20"]);
+    let o = run(&[(Role::Base, text)], "");
+    assert!(names(&o, Kind::Projectiles).iter().any(|x| x == "Far"));
+}
+
 /// spec: S-0004 claim 15 (the departure suppresses only a name already used in the chain, compared without regard to letter case; distinct long names sharing a stored prefix are not suppressed)
 #[test]
 fn long_name_departure_scope() {

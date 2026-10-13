@@ -580,3 +580,40 @@ fn resource_state_round_trip() {
         glasnost_sim::save::state_hash(&w)
     );
 }
+
+// spec: S-0303 claim 17 (revision 5: a cell loses trunc(D / 10) bales only when its resource overlay's type has the chain-reaction flag and the warhead has the resource flag; either missing: no loss)
+#[test]
+fn s0303_claim_17_resource_loss_needs_both_flags() {
+    for (chain, flag, want) in [(true, true, 4), (false, true, 8), (true, false, 8)] {
+        let mut r = ruleset();
+        r.sim.overlays.get_mut("OV00").unwrap().chain_reaction = Some(chain);
+        r.sim.warheads.insert(
+            "ORESHOT".into(),
+            glasnost_rules::sim::WarheadType {
+                tiberium: Some(flag),
+                ..Default::default()
+            },
+        );
+        let c = at(0, 0);
+        let mut w = game_with_ore(&r, &[(c, ORE, 8)], 7);
+        let h = w
+            .rules()
+            .combat
+            .warheads
+            .iter()
+            .position(|x| x.name == "ORESHOT")
+            .unwrap() as u32;
+        glasnost_sim::combat::area::detonate(
+            &mut w,
+            glasnost_sim::combat::area::Detonation {
+                point: glasnost_sim::world::Pos::centre(c, 0),
+                damage: 45,
+                warhead: Some(h),
+                source: None,
+                house: None,
+                resources: true,
+            },
+        );
+        assert_eq!(stage(&w, c), Some(want), "chain {chain}, flag {flag}");
+    }
+}

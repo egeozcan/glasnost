@@ -1285,6 +1285,10 @@ pub struct CombatFields {
     /// `DestroyAnim`, animation names (S-0312 claims 9, 19).
     #[serde(default)]
     pub destroy_anim: Option<Vec<String>>,
+    /// `DestroyParticleSystems`, particle-system names, `none` and
+    /// `<none>` omitted (S-0312 claim 19 f; S-0003 claim 19, row C18).
+    #[serde(default)]
+    pub destroy_particle_systems: Option<Vec<String>>,
     /// `Trainable` (S-0311 claim 8).
     #[serde(default)]
     pub trainable: Option<bool>,

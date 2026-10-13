@@ -544,7 +544,7 @@ fn weapon_slots_and_clear_weapons() {
     assert!(warned(&w, "Cart WeaponCount 20 is above 18"));
 }
 
-/// spec: S-0309 Import mapping and Edge cases (`quirks.coefficient_zero_replaced` on and off; the default as it stands when the type is read; the warnings)
+/// spec: S-0309 claim 26, Import mapping and Edge cases (each coefficient starts at 0; `quirks.coefficient_zero_replaced` on and off; the default as it stands when the type is read; the warnings)
 #[test]
 fn threat_coefficients() {
     let base = "[VehicleTypes]\n1=Cart\n2=Tank\n3=Jeep\n\
@@ -1001,6 +1001,67 @@ fn combat_coverage() {
     assert_eq!(row("weapons", "ROF"), (Field, "S-0301".into()));
 }
 
+/// spec: S-0004 claim 11 and S-0302 Import mapping and claim 5 (the sidebar tab and the defence factor share the category; BuildCat: the first 31 bytes, trimmed, a whole word ignoring A–Z case; only Combat makes a defence building; an unknown nonempty word is not one, not the held value; missing or empty keeps the held category)
+#[test]
+fn build_category_word() {
+    let defence = |base: &str, mode: &str| {
+        let text = format!("[BuildingTypes]\n1=Hut\n[Hut]\n{base}");
+        let (s, _, _) = import(&text, mode, "", "", &ImportOptions::default());
+        s.buildings["Hut"].defense
+    };
+    assert_eq!(defence("BuildCat=  cOmBaT  \n", ""), Some(true));
+    assert_eq!(defence("BuildCat=Power\n", ""), Some(false));
+    assert_eq!(defence("BuildCat=Combatx\n", ""), Some(false));
+    // An unknown word after Combat gives DontCare, not the held Combat.
+    assert_eq!(
+        defence("BuildCat=Combat\n", "[Hut]\nBuildCat=Bunker\n"),
+        Some(false)
+    );
+    // An empty value keeps the held category.
+    assert_eq!(
+        defence("BuildCat=Combat\n", "[Hut]\nBuildCat=\n"),
+        Some(true)
+    );
+    // Never given: not a defence.
+    assert_ne!(defence("Strength=1\n", ""), Some(true));
+    // Only the first 31 bytes count: text after them is not seen.
+    let padded = format!("BuildCat=Combat{}x\n", " ".repeat(25));
+    assert_eq!(defence(&padded, ""), Some(true));
+    let padded = format!("BuildCat=Combat{}x\n", " ".repeat(24));
+    assert_eq!(defence(&padded, ""), Some(false));
+}
+
+/// spec: S-0303 claims 25 and 26 and S-0312 claim 28 (no-type items are left out of the animation and debris lists and hold no place; a value of only no-type items empties the list; an empty value keeps it; the maxima are read independently of the types)
+#[test]
+fn no_type_list_items_and_maxima() {
+    let base = "[Warheads]\n1=Pow\n2=Bam\n\
+                [Pow]\nAnimList=none,Alpha,<NONE>,Beta\nDebrisTypes=<none>,Chunk\nDebrisMaximums=2,abc,3\n\
+                [Bam]\nAnimList=Gamma\n";
+    let mode = "[Bam]\nAnimList=\n";
+    let (s, _, _) = import(base, mode, "", "", &ImportOptions::default());
+    let pow = &s.warheads["Pow"];
+    assert_eq!(
+        pow.anim_list.as_deref(),
+        Some(&["Alpha".to_owned(), "Beta".to_owned()][..])
+    );
+    assert_eq!(pow.debris_types.as_deref(), Some(&["Chunk".to_owned()][..]));
+    assert_eq!(pow.debris_maximums.as_deref(), Some(&[2, 0, 3][..]));
+    // An empty value keeps the list in force.
+    assert_eq!(
+        s.warheads["Bam"].anim_list.as_deref(),
+        Some(&["Gamma".to_owned()][..])
+    );
+    // Only no-type items: an empty list.
+    let (s, _, _) = import(
+        base,
+        "[Bam]\nAnimList=none,<none>\n",
+        "",
+        "",
+        &ImportOptions::default(),
+    );
+    assert_eq!(s.warheads["Bam"].anim_list.as_deref(), Some(&[][..]));
+}
+
 /// spec: S-0007 claim 33, S-0004 claim 14, S-0306 Import mapping (a projectile's trailer and trailer delay come from the art section of each read's non-empty rules image; rules keys have no effect; absent or empty keeps, a no-type name clears the trailer)
 #[test]
 fn projectile_trailer_settings_from_art() {
@@ -1031,4 +1092,63 @@ fn projectile_trailer_settings_from_art() {
     );
     // A no-type name clears the trailer.
     assert_eq!(get(&[&a, "[Dart]\nImage=Pc\n"]), (None, Some(2)));
+}
+
+/// spec: S-0003 claim 12 and Edge cases, S-0312 claim 28 (quirks.list_items_untrimmed: on, the importer warns for a name item with whitespace at either end; off, items are trimmed, a whitespace-only item is skipped, and there is no warning)
+#[test]
+fn list_items_untrimmed_switch() {
+    let base = "[Warheads]\n1=Pow\n[Pow]\nAnimList=Alpha , ,Beta\n";
+    let (_, w) = direct(&[base], "", &[], &[], IniQuirks::default());
+    assert!(warned(&w, "quirks.list_items_untrimmed"));
+    let off = IniQuirks {
+        list_items_untrimmed: false,
+        ..IniQuirks::default()
+    };
+    let (s, w) = direct(&[base], "", &[], &[], off);
+    assert_eq!(
+        s.warheads["Pow"].anim_list.as_deref(),
+        Some(&["Alpha".to_owned(), "Beta".to_owned()][..])
+    );
+    assert!(!warned(&w, "quirks.list_items_untrimmed"));
+}
+
+/// spec: S-0311 Import mapping and Edge cases (revision 2: quirks.list_items_untrimmed on, `firepower ` names no ability and both warnings are given; off, it is trimmed and matches; an unknown non-empty item warns in either setting)
+#[test]
+fn ability_lists_follow_list_items_untrimmed() {
+    let base = "[InfantryTypes]\n1=Walker\n[Walker]\nVeteranAbilities=firepower ,sight,bogus\n";
+    let (s, w) = direct(&[base], "", &[], &[], IniQuirks::default());
+    assert_eq!(
+        s.infantry["Walker"].veteran_abilities,
+        ["FIREPOWER ", "SIGHT", "BOGUS"]
+    );
+    assert!(warned(&w, "VeteranAbilities: a list item with whitespace"));
+    assert!(warned(&w, "\"firepower \" names no ability"));
+    assert!(warned(&w, "\"bogus\" names no ability"));
+    let off = IniQuirks {
+        list_items_untrimmed: false,
+        ..IniQuirks::default()
+    };
+    let (s, w) = direct(&[base], "", &[], &[], off);
+    assert_eq!(
+        s.infantry["Walker"].veteran_abilities,
+        ["FIREPOWER", "SIGHT", "BOGUS"]
+    );
+    assert!(!warned(&w, "a list item with whitespace"));
+    assert!(!warned(&w, "\"firepower\" names no ability"));
+    assert!(warned(&w, "\"bogus\" names no ability"));
+}
+
+/// spec: S-0003 claim 19 and Import mapping row C18, S-0312 Import mapping (DestroyParticleSystems: a particle-system name list; `none` and `<none>` take no place)
+#[test]
+fn destroy_particle_systems_omit_no_type_items() {
+    let base = "[VehicleTypes]\n1=Cart\n[ParticleSystems]\n1=Smog\n\
+                [Cart]\nDestroyParticleSystems=none,Smog,<NONE>,Glow,Smog\n";
+    let (s, _, _) = import(base, "", "", "", &ImportOptions::default());
+    assert_eq!(
+        s.vehicles["Cart"]
+            .combat
+            .destroy_particle_systems
+            .as_deref(),
+        Some(&["Smog".to_owned(), "Glow".to_owned(), "Smog".to_owned()][..])
+    );
 }

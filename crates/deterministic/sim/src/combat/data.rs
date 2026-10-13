@@ -574,6 +574,9 @@ pub struct BuildingCombat {
     pub defense: bool,
     /// Can be demolished (the charges flag; S-0302 claim 7).
     pub can_c4: bool,
+    /// Both a resource gatherer and a resource destination (S-0308 table P
+    /// row 6: no airstrike target).
+    pub gatherer_destination: bool,
     /// Eligible for delayed kills.
     pub delay_kill: bool,
     /// Leaves rubble.
@@ -659,10 +662,10 @@ pub struct CombatGeneral {
     pub crush_warhead: Option<WarheadId>,
     /// Ion-cannon warhead.
     pub ion_cannon_warhead: Option<WarheadId>,
-    /// Bridge strength (no absent-key default stated: request Q-0060).
-    pub bridge_strength: Option<i32>,
-    /// Ammunition-crate damage (no absent-key default stated: request Q-0060).
-    pub ammo_crate_damage: Option<i32>,
+    /// Bridge strength, bridge-strength points (S-0303 claims 18 and 24).
+    pub bridge_strength: i32,
+    /// Ammunition-crate damage, damage points (S-0303 claims 19 and 24).
+    pub ammo_crate_damage: i32,
     /// Splash list.
     pub splash_list: Vec<String>,
     /// Ballistic scatter B, leptons.
@@ -713,8 +716,8 @@ pub struct CombatGeneral {
     pub lightning_warhead: Option<WarheadId>,
     /// Lightning-bolt explosion.
     pub bolt_explosion: Option<String>,
-    /// Crew escape chance (no absent-key default stated: request Q-0060).
-    pub crew_escape: Option<F64>,
+    /// Crew escape chance (S-0312 claims 13 and 27).
+    pub crew_escape: F64,
     /// Crew types by side: allied, soviet, third (infantry indices).
     pub side_crew: [Option<u32>; 3], // spec: S-0312 Terms (three side crew types)
     /// Technician type.
@@ -723,8 +726,8 @@ pub struct CombatGeneral {
     pub engineer: Option<u32>,
     /// Survivor divisors q by side 0, 1 and 2 (S-0312 F5).
     pub survivor_divisor: [i32; 3], // spec: S-0312 F5 (three survivor divisors)
-    /// Sinking weight (no absent-key default stated: request Q-0060).
-    pub sinking_weight: Option<F64>,
+    /// Sinking weight (S-0312 claims 10 and 27).
+    pub sinking_weight: F64,
     /// Building repair period P_b, ticks.
     pub repair_period: i32,
     /// Vehicle repair count K_u.
@@ -1298,8 +1301,9 @@ pub fn combat_rules(
         c4_warhead: warhead(&g.c4_warhead),
         crush_warhead: warhead(&g.crush_warhead),
         ion_cannon_warhead: warhead(&g.ion_cannon_warhead),
-        bridge_strength: g.bridge_strength,
-        ammo_crate_damage: g.ammo_crate_damage,
+        // spec: S-0303 claim 24 (at a fresh program start the bridge strength is 1000 and the ammunition-crate damage 100; an omission keeps the value in force)
+        bridge_strength: g.bridge_strength.unwrap_or(1000),
+        ammo_crate_damage: g.ammo_crate_damage.unwrap_or(100), // spec: S-0303 claim 24 (ammunition-crate damage 100)
         splash_list: g.splash_list.clone().unwrap_or_default(),
         // spec: S-0306 Constants (ballistic scatter absent: 256 leptons)
         ballistic_scatter: g
@@ -1341,7 +1345,8 @@ pub fn combat_rules(
         nullify_anim: g.weapon_nullify_anim.clone(),
         lightning_warhead: warhead(&g.lightning_warhead),
         bolt_explosion: g.weather_con_bolt_explosion.clone(),
-        crew_escape: dec(&g.crew_escape, mode),
+        // spec: S-0312 claim 27 (at a fresh program start the crew escape chance is 0.5; an omission keeps the value in force)
+        crew_escape: dec(&g.crew_escape, mode).unwrap_or_else(|| nearest_double("0.5")),
         side_crew: [
             infantry(&g.allied_crew),
             infantry(&g.soviet_crew),
@@ -1349,13 +1354,14 @@ pub fn combat_rules(
         ],
         technician: infantry(&g.technician),
         engineer: infantry(&g.engineer),
-        // spec: S-0312 Import mapping (survivor divisors absent from every layer: 200, 100 and 300, engine constants)
+        // spec: S-0312 claim 27 and Import mapping (survivor divisors absent from every layer: 200, 100 and 300, engine constants)
         survivor_divisor: [
             g.allied_survivor_divisor.unwrap_or(200),
             g.soviet_survivor_divisor.unwrap_or(100),
             g.third_survivor_divisor.unwrap_or(300),
         ],
-        sinking_weight: dec(&g.ship_sinking_weight, mode),
+        // spec: S-0312 claim 27 (at a fresh program start the sinking weight is 3.0)
+        sinking_weight: dec(&g.ship_sinking_weight, mode).unwrap_or_else(|| F64::from_i64(3, mode)),
         repair_period: repair_period(rate(&g.repair_rate), mode),
         repair_count_vehicle: repair_count(rate(&g.u_repair_rate), mode),
         repair_count_infantry: repair_count(rate(&g.i_repair_rate), mode),

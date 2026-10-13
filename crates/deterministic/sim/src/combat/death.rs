@@ -234,7 +234,7 @@ pub fn kill(w: &mut World, id: ObjectId, hit: &Hit) {
         Kind::Infantry => infantry_death(w, id, hit),
         Kind::Vehicle => {
             let tc = type_combat(w, id).cloned().unwrap_or_default();
-            // Sinking (claim 10) needs the game-wide sinking weight; without it no vehicle sinks (request Q-0060).
+            // Sinking (claim 10) is not modelled yet; its sinking weight defaults to 3.0 (claim 27).
             // spec: S-0312 claim 9 (one list pick each: explosion list, then destruction list)
             if !tc.explosion.is_empty() {
                 let k = w.rng.list_pick(tc.explosion.len() as u32) as usize;
@@ -371,10 +371,8 @@ fn crew(w: &mut World, id: ObjectId, hit: &Hit) {
     if hit.no_escape || !u.vehicle.crewed || u.passengers > 0 {
         return;
     }
-    let Some(chance) = rules.combat.general.crew_escape else {
-        w.note("S-0312 claim 13: no crew escape chance is given; no crew escapes (request Q-0060)");
-        return;
-    };
+    // spec: S-0312 claim 27 (the crew escape chance always applies, 0.5 by default)
+    let chance = rules.combat.general.crew_escape;
     // spec: S-0312 claim 13 (a chance test "less than" with one unit-interval value)
     let v = w.rng.unit(rules.mode);
     if !v.lt(chance) {
@@ -516,7 +514,8 @@ fn building_death(w: &mut World, id: ObjectId, hit: &Hit) {
             }
         }
         let _scorch = w.rng.percent() < 50; // spec: S-0312 Constants (smudge choice 50 percent)
-        w.note("S-0312 claim 19: the smudge choice's own draws are not stated by any spec (request Q-0070)");
+        // spec: S-0312 claim 26 (the smudge choice, large form: with n fitting candidates one draw R(0, n − 1); n = 0 takes no draw and places nothing)
+        w.note("S-0312 claim 26: smudge types, the smudges of cells and the morphable flag of tilesets are not modelled, so no smudge type fits: n = 0, no draw and no smudge");
     }
     // spec: S-0312 claim 19 (b) (each foundation cell: nearby point raw value, delay R(0, 3), list pick)
     if !tc.explosion.is_empty() {
@@ -538,9 +537,41 @@ fn building_death(w: &mut World, id: ObjectId, hit: &Hit) {
     }
     // (f) destruction particle systems: which kinds are eligible belongs to the particle specs; none is created.
     survivors(w, id, hit);
-    // spec: S-0312 claim 21 (a building that is neither exploding nor being sold leaves play at the end of its death effects)
-    // An exploding building should stay in play and leave later; when is not specified (request Q-0081), so it leaves now too.
+    // spec: S-0312 claim 21 (only the type's explodes flag counts, or the sale's behaviour at the destruction: the building awaits removal with 0 health)
+    let selling = o.beh.current == Some(crate::rules::Behaviour::Selling);
+    if tc.explodes || selling {
+        return;
+    }
+    // spec: S-0312 claim 21 (any other destroyed building leaves play at the end of its death effects; rubble and crate, claim 20, are not modelled)
     leave_play(w, id);
+}
+
+/// A building awaiting removal (S-0312 claim 21), after the general part
+/// of its own turn: when it is still in play with 0 health (being erased
+/// and an electromagnetic pulse, which also make it wait, are not
+/// modelled), it leaves its cells, takes the second round of claims 18
+/// and 19 (g) (`quirks.building_removal_second_round`), and leaves play.
+pub fn removal_turn(w: &mut World, id: ObjectId) {
+    let Some(o) = w.obj(id) else { return };
+    if o.kind != Kind::Building || !o.combat.killed || o.health > 0 || !o.on_map {
+        return;
+    }
+    if w.rules().quirks.building_removal_second_round {
+        // spec: S-0312 claim 21 (a second round of claims 18 and 19 (g), C worked out afresh by F5; absorbed passengers are already out)
+        // The building leaves its cells before this round; with C = 0 (F5, no sides yet) the round takes no draw, so the order is not observable here.
+        second_round(w, id);
+    }
+    // Passengers still inside die (claim 21): no building carries passengers in our engine.
+    // spec: S-0312 claim 21 (it then leaves play; rubble and crate of claim 20 are not modelled)
+    leave_play(w, id);
+}
+
+/// The second round of a building's removal (S-0312 claim 21): claim
+/// 18's survivors and claim 19 (g)'s smudge steps, which need C > 0. As
+/// for the first round, C = 0 until sides exist (see `survivors`).
+fn second_round(w: &mut World, id: ObjectId) {
+    // spec: S-0312 claim 21 (C afresh by F5; C = 0: nothing in claim 18 happens, and no smudge step of claim 19 (g))
+    let _refund = crate::seams::building_refund(w, id);
 }
 
 /// Survivors of a destroyed building (S-0312 claim 18). The count C of F5

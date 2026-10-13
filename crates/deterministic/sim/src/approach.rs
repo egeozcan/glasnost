@@ -2,13 +2,15 @@
 //! vehicle with a target out of range keeps it, keeps or renews its
 //! destination, or looks for an approach position.
 //!
+//! The approach-position search is S-0307's (claims 15 to 17,
+//! `combat::range::approach_search`, request Q-0172 for the cases its
+//! revision leaves open), and so is part h's balloon-hover approach (claim
+//! 18, `combat::range::balloon_hover_approach`).
+//!
 //! Seams, each answering "no" or "nothing" until its topic fills it in: the
-//! approach-position search of S-0307 claims 15 to 17 (`search`, which
-//! finds nothing yet, request Q-0072 for what follows), the approach
-//! destinations of a vehicle (no rule fills them yet, S-0215 Open
-//! questions), the special vehicle approaches of part h (S-0210 claim 11's
-//! crushing approaches and S-0307's balloon-hover rule), the magnetic beam
-//! of part c, draining links, bunkers, open-topped passengers and teams.
+//! approach destinations of a vehicle (no rule fills them yet, S-0215 Open
+//! questions), part h's crushing approaches (S-0210 claim 11), the magnetic
+//! beam of part c, draining links, bunkers, open-topped passengers and teams.
 //! Every object on the map has the in-the-playfield mark (no object arrives
 //! from outside the usable area yet).
 
@@ -61,11 +63,31 @@ fn deploy_to_fire_refused(w: &World, id: ObjectId) -> bool {
 }
 
 /// The approach-position search of S-0307 claims 15 to 17, started with the
-/// radius r′ of F10. The search belongs to the combat topic and finds
-/// nothing yet (request Q-0072).
-fn search(w: &mut World, id: ObjectId, r_prime: i32) -> Option<Target> {
-    let _ = (w, id, r_prime);
-    None
+/// radius r′ of F10, and its outcome applied (S-0215 claim 37 f, last row).
+fn search(w: &mut World, id: ObjectId, r_prime: i32) {
+    use crate::combat::range::Approach;
+    // The search reads the reach regions, which must be up to date.
+    crate::regions::ensure(w);
+    let Some(outcome) = crate::combat::range::approach_search(w, id, r_prime) else {
+        return;
+    };
+    let Some(o) = w.obj(id) else { return };
+    let (before, t) = (o.dest, o.target);
+    let Some(ob) = w.obj_mut(id) else { return };
+    match outcome {
+        // spec: S-0307 claims 15 and 16 (a position found: it becomes the destination and the target is kept)
+        Approach::Cell(c) => ob.dest = Some(Target::Cell(c)),
+        // spec: S-0307 claim 17 (a hunter-seeker or vehicle thief takes the target object as destination and keeps the target)
+        Approach::TargetItself => ob.dest = t,
+        // spec: S-0307 claim 17 (any other actor drops the target; the destination becomes the nearby cell, or none)
+        Approach::Drop(n) => {
+            ob.target = None;
+            ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
+            ob.dest = n.map(Target::Cell);
+        }
+    }
+    // spec: S-0107 claim 15 (a destination assigned: the destination-driven get-up)
+    infantry::destination_assigned(w, id, before);
 }
 
 /// r′ of F10 for the actor's weapon chosen for the target.
@@ -95,6 +117,13 @@ pub fn step(w: &mut World, id: ObjectId) {
     }
     // spec: S-0215 claim 37 (c) (no target: nothing; the magnetic beam is a seam)
     let Some(t) = o.target else { return };
+    // spec: S-0215 claim 37 (h) and S-0307 claim 18 (before the other parts: a balloon-hover vehicle whose weapon chosen for the target has a vertical projectile takes the target as its destination, keeps it, and does nothing else; the crushing approaches before it are a seam)
+    if crate::combat::range::balloon_hover_approach(w, id) {
+        if let Some(ob) = w.obj_mut(id) {
+            ob.dest = Some(t);
+        }
+        return;
+    }
     let human = o.owner.is_some_and(|h| w.houses[usize::from(h.0)].human);
     let rules = w.rules_arc();
     let u = rules.unit(o.kind, o.type_index);
@@ -165,14 +194,7 @@ pub fn step(w: &mut World, id: ObjectId) {
     }
     // spec: S-0215 claim 37 (f) (a vehicle with approach destinations takes the first; no rule fills them yet)
     let rp = r_prime(w, id, t, f2);
-    if let Some(dest) = search(w, id, rp) {
-        let before = w.obj(id).and_then(|o| o.dest);
-        if let Some(ob) = w.obj_mut(id) {
-            ob.dest = Some(dest);
-        }
-        // spec: S-0107 claim 15 (a destination assigned: the destination-driven get-up)
-        infantry::destination_assigned(w, id, before);
-    }
+    search(w, id, rp);
 }
 
 /// The per-tick approach of S-0215 claim 37 (a): an infantry unit or

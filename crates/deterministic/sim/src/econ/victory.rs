@@ -666,7 +666,12 @@ pub fn alliance(w: &mut World, house: HouseId, other: HouseId) {
         }
         // spec: S-0414 claim 13 (the alliance ends in both directions, also for a defeated issuer)
         for (a, b) in [(house, other), (other, house)] {
+            let was = w.allied(Some(a), Some(b));
             w.houses[usize::from(a.0)].allies.retain(|&x| x != b);
+            // spec: S-0309 claim 16 (a house made an enemy of another, here one whose alliance ended: its anger towards it grows by 1)
+            if was {
+                crate::combat::acquire::alliance_anger(w, a, b, false);
+            }
         }
     } else {
         // spec: S-0414 claim 12 (B is not A and not of the civilian side; A is undefeated)
@@ -685,6 +690,8 @@ pub fn alliance(w: &mut World, house: HouseId, other: HouseId) {
         if let Err(p) = allies.binary_search(&other) {
             allies.insert(p, other);
         }
+        // spec: S-0309 claim 16 (made an ally: the anger towards it becomes 0, the enemy house worked out again)
+        crate::combat::acquire::alliance_anger(w, house, other, true);
         drop_allied_targets(w, house);
     }
     // spec: S-0409 claim 2 and Edge cases (the sights follow the new alliances)

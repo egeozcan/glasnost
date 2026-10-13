@@ -1232,10 +1232,9 @@ fn the_red_threshold_is_compared_exactly() {
             };
             assert_eq!(got, want, "chop {chop}, {from} − {amount}");
         }
-        // The ratio is read as S-0003 claim 6 reads decimals (a single just
-        // above 0.6), so X lies just above 600 and a hit ending at 600 is
-        // red; S-0302's rounding paragraph assumes the nearest double
-        // instead (request Q-0075).
+        // The ratio is read as a single and widened exactly (S-0302 Import
+        // mapping, revision 11; S-0003 claim 6): just above 0.6, so X lies
+        // just above 600 and a hit ending at 600 is red.
         assert!(f(600).lt(x));
         assert_eq!(result_from(&mut w, t, h, 601, 1), HitResult::NowRed);
     }
@@ -1501,6 +1500,38 @@ fn delay_kill_credited_again_on() {
     assert_eq!(w.houses[0].combat.kills, 2);
     assert_eq!(apply!(w, b, by_at(a, 50, plain, 0)), HitResult::NowDead);
     assert_eq!(w.houses[0].combat.kills, 3);
+}
+
+// spec: S-0311 claim 9 (revision 2: each lethal hit during a delayed-kill countdown gives its recipient another kill value; ordinary expiry carries no attacker, so nobody gains experience or a kill count then)
+#[test]
+fn s0311_claim_9_delayed_kill_experience() {
+    let (mut w, b, a) = delay_world("2", |r| {
+        r.sim.vehicles.get_mut("BOX").unwrap().cost = Some(1000);
+        r.sim.buildings.get_mut("DEPOT").unwrap().cost = Some(500);
+        r.sim.general.veteran_ratio = Some(dec("4"));
+    });
+    let slow = wh(&w, "SLOW");
+    let exp = |w: &World| w.obj(a).unwrap().combat.experience;
+    let e0 = exp(&w);
+    apply!(w, b, by_at(a, 5000, slow, 0));
+    let e1 = exp(&w);
+    assert_ne!(e1, e0, "the first lethal hit gives experience");
+    apply!(w, b, by_at(a, 50, slow, 0));
+    let e2 = exp(&w);
+    assert_ne!(e2, e1, "a further lethal hit gives it again");
+    assert_eq!(w.houses[0].combat.kills, 2);
+    for _ in 0..120 {
+        glasnost_sim::tick::step(&mut w);
+    }
+    assert!(
+        w.obj(b).is_none_or(|o| o.health <= 0),
+        "the countdown expired"
+    );
+    assert_eq!(exp(&w), e2, "no experience at expiry");
+    assert_eq!(
+        w.houses[0].combat.kills, 2,
+        "no attacking-house kill at expiry"
+    );
 }
 
 // spec: S-0302 Edge cases (quirks.delay_kill_credited_again off: credited once, the countdown still shortened)
@@ -1778,4 +1809,175 @@ fn radiation_immune_building() {
         let h = wh(&w, "RAD");
         assert_eq!(loss!(w, t, hit(100, h)).0, want, "{immune:?}");
     }
+}
+
+// ---------------------------------------------------------------------------
+// Claim 16: the countdown's expiry (revision 11, Q-0081 parts 1 and 2).
+// ---------------------------------------------------------------------------
+
+/// Runs ticks until the building is gone or `limit` ticks have passed;
+/// returns the number of the tick in which it went.
+fn tick_of_removal(w: &mut World, b: ObjectId, limit: i32) -> Option<i32> {
+    for _ in 0..limit {
+        let t = w.tick;
+        glasnost_sim::tick::step(w);
+        if w.obj(b).is_none() {
+            return Some(t);
+        }
+    }
+    None
+}
+
+fn with_demo(r: &mut Ruleset) {
+    warhead(r, "DEMO", |h| h.verses = every("1"));
+    r.sim.general.c4_warhead = Some("DEMO".into());
+}
+
+// spec: S-0302 claim 16 (expiry: on the building's first turn at or after t + K it takes a hit of its whole health with the demolition warhead, ignoring defences, and is destroyed; it stays at 1 health until then; scenario D13 part e)
+#[test]
+fn claim_16_expiry_hit_destroys_the_building() {
+    let (mut w, b, a) = delay_world("2", with_demo);
+    let slow = wh(&w, "SLOW");
+    let t = w.tick;
+    apply!(w, b, by_at(a, 5000, slow, 0));
+    assert_eq!(countdown(&w, b), Some(100));
+    testkit::run(&mut w, 99);
+    assert_eq!(health(&w, b), 1);
+    assert_eq!(tick_of_removal(&mut w, b, 300), Some(t + 100));
+}
+
+// spec: S-0302 claim 16 (K = 0: the expiry comes in the building's turn of the same tick, not inside the initial hit)
+#[test]
+fn claim_16_zero_countdown_expires_in_the_next_turn() {
+    let (mut w, b, a) = delay_world("0.5", with_demo);
+    let slow = wh(&w, "SLOW");
+    let t = w.tick;
+    apply!(w, b, by_at(a, 5000, slow, 0));
+    assert_eq!(countdown(&w, b), Some(0));
+    assert_eq!(health(&w, b), 1);
+    assert_eq!(tick_of_removal(&mut w, b, 10), Some(t));
+}
+
+// spec: S-0302 claim 16 (the expiry hit carries no attacker and no attacking house: no further experience, score or kill count for the original firer; the victim's loss bookkeeping runs again)
+#[test]
+fn claim_16_expiry_credits_nobody() {
+    let (mut w, b, a) = delay_world("2", with_demo);
+    let slow = wh(&w, "SLOW");
+    apply!(w, b, by_at(a, 5000, slow, 0));
+    let (kills, score, losses) = (
+        w.houses[0].combat.kills,
+        w.houses[0].combat.score,
+        w.houses[1].combat.losses,
+    );
+    assert_eq!(kills, 1);
+    assert!(tick_of_removal(&mut w, b, 300).is_some());
+    assert_eq!(w.houses[0].combat.kills, kills);
+    assert_eq!(w.houses[0].combat.score, score);
+    assert_eq!(w.houses[1].combat.losses, losses + 1);
+}
+
+// spec: S-0302 claim 16 and F3 case (i) (the expiry hit ignores defences, so with no demolition warhead it still takes the whole health: the building is destroyed at expiry)
+#[test]
+fn claim_16_expiry_without_a_demolition_warhead() {
+    let (mut w, b, a) = delay_world("0.5", |_| {});
+    let slow = wh(&w, "SLOW");
+    let t = w.tick;
+    apply!(w, b, by_at(a, 5000, slow, 0));
+    assert_eq!(tick_of_removal(&mut w, b, 20), Some(t));
+}
+
+/// Losses of the victim house before and after `n` ticks of a building
+/// whose demolition warhead itself causes delayed kills.
+fn repeated_expiry_losses(credited_again: bool, n: i32) -> (i32, i32) {
+    let (mut w, b, a) = delay_world("0.5", |r| {
+        r.globals.quirks.delay_kill_credited_again = credited_again;
+        r.sim.general.c4_warhead = Some("SLOW".into());
+    });
+    let slow = wh(&w, "SLOW");
+    apply!(w, b, by_at(a, 5000, slow, 0));
+    let before = w.houses[1].combat.losses;
+    testkit::run(&mut w, n);
+    assert_eq!(health(&w, b), 1);
+    (before, w.houses[1].combat.losses)
+}
+
+// spec: S-0302 claim 16 (a demolition warhead that causes another delayed kill lets the building survive the expiry and take another expiry hit on each later turn; with quirks.delay_kill_credited_again on each such hit registers the destruction again)
+#[test]
+fn claim_16_repeated_expiry_credited_again_on() {
+    let (before, after) = repeated_expiry_losses(true, 3);
+    assert_eq!(after, before + 3);
+}
+
+// spec: S-0302 claim 16 (quirks.delay_kill_credited_again off: repeated destruction registration at an expiry hit is suppressed too)
+#[test]
+fn claim_16_repeated_expiry_credited_again_off() {
+    let (before, after) = repeated_expiry_losses(false, 3);
+    assert_eq!(after, before);
+}
+
+// spec: S-0302 claim 16 (a bridge repair hut performs its repair action instead: the countdown is cleared, with no expiry hit)
+#[test]
+fn claim_16_bridge_repair_hut_clears_the_countdown() {
+    let (mut w, b, a) = delay_world("0.5", |r| {
+        with_demo(r);
+        r.sim.buildings.get_mut("DEPOT").unwrap().bridge_repair_hut = Some(true);
+    });
+    let slow = wh(&w, "SLOW");
+    apply!(w, b, by_at(a, 5000, slow, 0));
+    assert_eq!(tick_of_removal(&mut w, b, 5), None);
+    assert_eq!(health(&w, b), 1);
+    assert_eq!(countdown(&w, b), None);
+}
+
+// spec: S-0302 claims 1 and 16 (a building is killed at the delayed-kill hit: projectiles it fired before carry neither attacker nor attacking house; shots it fires during the countdown carry it)
+#[test]
+fn claim_16_firer_in_a_countdown() {
+    let mut r = testkit::combat_ruleset();
+    warhead(&mut r, "PLAIN", |h| h.verses = every("1"));
+    warhead(&mut r, "SLOW", |h| {
+        h.verses = every("1");
+        h.causes_delay_kill = Some(true);
+        h.delay_kill_frames = Some(1000);
+        h.delay_kill_at_max = Some(dec("1"));
+        h.cell_spread = Some(dec("1"));
+    });
+    building(&mut r, "TOWER", |b| {
+        b.eligible_for_delay_kill = Some(true);
+        b.primary = Some("Gun".into());
+    });
+    vehicle(&mut r, "BOX", |t| t.strength = Some(30000));
+    let mut w = testkit::game_with(&r, SIZE, 1);
+    let tower = put(&mut w, Kind::Building, "TOWER", ALPHA, -1);
+    put(&mut w, Kind::Vehicle, "BOX", BETA, 2);
+    let first = |w: &mut World| {
+        for _ in 0..600 {
+            if !w.projectiles.is_empty() {
+                return;
+            }
+            glasnost_sim::tick::step(w);
+        }
+        panic!("no shot");
+    };
+    first(&mut w);
+    let carried = |w: &World| {
+        let mut v: Vec<_> = w
+            .projectiles
+            .values()
+            .map(|p| (p.attacker, p.house))
+            .collect();
+        v.dedup();
+        v
+    };
+    assert_eq!(carried(&w), vec![(Some(tower), Some(HouseId(ALPHA)))]);
+    let slow = wh(&w, "SLOW");
+    assert_eq!(apply!(w, tower, hit(5000, slow)), HitResult::PostMortem);
+    assert_eq!(carried(&w), vec![(None, None)]);
+    // Once the old shots have landed, the building fires again and its new shots carry it.
+    for _ in 0..600 {
+        glasnost_sim::tick::step(&mut w);
+        if w.projectiles.values().any(|p| p.attacker == Some(tower)) {
+            return;
+        }
+    }
+    panic!("no shot during the countdown");
 }

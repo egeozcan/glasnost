@@ -106,6 +106,14 @@ const BUILDING_ECON: &[Row] = &[
     ("refinery", "Refinery", Bool, "S-0402"),
     ("ore_purifier", "OrePurifier", Bool, "S-0402"),
     ("dock_unload", "DockUnload", Bool, "S-0402"),
+    // S-0308 table P row 6: a building that is both is no airstrike target.
+    ("resource_gatherer", "ResourceGatherer", Bool, "S-0308"),
+    (
+        "resource_destination",
+        "ResourceDestination",
+        Bool,
+        "S-0308",
+    ),
     ("factory_plant", "FactoryPlant", Bool, "S-0404"),
     ("infantry_cost_bonus", "InfantryCostBonus", Dec, "S-0404"),
     ("units_cost_bonus", "UnitsCostBonus", Dec, "S-0404"),
@@ -648,10 +656,11 @@ impl Builder<'_> {
 
     /// A list of names kept as written in upper case (S-0003 claim 12: split
     /// at commas, empty items skipped; a given list replaces the held one).
-    fn upper_list(state: Option<&KeyState>) -> Option<Node> {
+    fn upper_list(state: Option<&KeyState>, untrimmed: bool) -> Option<Node> {
         fold(state, None, |v, _| {
             Some(
-                value::list(v, value::COMMON_TEXT_LIMIT)
+                // spec: S-0003 claim 12 (quirks.list_items_untrimmed off: name items trimmed)
+                value::name_items(v, value::COMMON_TEXT_LIMIT, untrimmed)
                     .into_iter()
                     .map(|item| jsonc::string(encode(&item.to_ascii_uppercase())))
                     .collect::<Vec<_>>(),
@@ -665,7 +674,10 @@ impl Builder<'_> {
         let mut econ = Rec::default();
         self.efields(&mut econ, t, kind, ECON_FIELDS);
         for &(field, k, _) in NAME_LISTS {
-            if let Some(n) = Self::upper_list(t.keys.get(k.as_bytes())) {
+            if let Some(n) = Self::upper_list(
+                t.keys.get(k.as_bytes()),
+                self.i.ini_quirks.list_items_untrimmed,
+            ) {
                 econ.put(field, n);
             }
         }

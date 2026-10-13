@@ -325,6 +325,29 @@ pub fn list(stored: &[u8], limit: usize) -> Vec<&[u8]> {
         .collect()
 }
 
+/// A list of names (S-0003 claim 12): as [`list`], and with
+/// `quirks.list_items_untrimmed` off (`untrimmed` false) each item trimmed
+/// of its leading and trailing whitespace, an item left empty being skipped.
+pub fn name_items(stored: &[u8], limit: usize, untrimmed: bool) -> Vec<&[u8]> {
+    let items = list(stored, limit);
+    if untrimmed {
+        return items;
+    }
+    // spec: S-0003 claim 12 and Edge cases (quirks.list_items_untrimmed off: S-0001's trim without its defect; a whitespace-only item is skipped like an empty one)
+    items
+        .into_iter()
+        .map(trim_full)
+        .filter(|i| !i.is_empty())
+        .collect()
+}
+
+/// Whether a name item begins or ends with a whitespace byte (S-0003
+/// claim 12: with `quirks.list_items_untrimmed` on the importer warns).
+pub fn edge_whitespace(item: &[u8]) -> bool {
+    item.first().is_some_and(|&b| is_whitespace(b))
+        || item.last().is_some_and(|&b| is_whitespace(b))
+}
+
 /// A debris maxima list (S-0003 claim 20): each non-empty item of the
 /// list, cut at 511 bytes, gives one decimal integer prefix (claims 3 and
 /// 4: no hexadecimal forms; an item with no digits gives 0 and keeps its

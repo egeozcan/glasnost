@@ -771,6 +771,30 @@ fn friendly_damage() {
     assert_eq!((lost(&w, own), lost(&w, foe)), (200, 300));
 }
 
+// spec: S-0303 claim 14 (revision 6: a projectile whose firer was removed from the game since the shot carries neither the firer nor its house, so an affects-allies-off warhead hurts the firer's allies)
+#[test]
+fn friendly_damage_removed_firer() {
+    use glasnost_sim::combat::projectile::projectile_detonation;
+    let mut r = testkit::combat_ruleset();
+    vehicle(&mut r, "BOX", |_| {});
+    warhead(&mut r, "KIND", |h| {
+        h.cell_spread = Some(dec("1"));
+        h.affects_allies = Some(false);
+    });
+    weapon(&mut r, "Gun", |t| t.warhead = Some("KIND".into()));
+    let mut w = testkit::game_with(&r, SIZE, 1);
+    let firer = put(&mut w, Kind::Vehicle, "BOX", ALPHA, -8, 0);
+    let own = put(&mut w, Kind::Vehicle, "BOX", ALPHA, 0, 0);
+    let gun = wp(&w, "Gun");
+    let p = centre(0, 0);
+    let alpha = Some(HouseId(ALPHA));
+    projectile_detonation(&mut w, gun, 100, p, Some(firer), alpha, p, false);
+    assert_eq!(lost(&w, own), 0, "the firer is carried: its ally is spared");
+    glasnost_sim::objects::remove(&mut w, firer);
+    projectile_detonation(&mut w, gun, 100, p, Some(firer), alpha, p, false);
+    assert_eq!(lost(&w, own), 100, "neither firer nor house carried");
+}
+
 // ---------------------------------------------------------------------------
 // Claim 16 and F4: walls.
 // ---------------------------------------------------------------------------
@@ -1274,4 +1298,22 @@ fn naval_vehicle_over_water_shows_the_warheads_own_animation() {
             "naval {naval:?} underwater {underwater:?}"
         );
     }
+}
+
+// ---------------------------------------------------------------------------
+// Claim 24 (revision 5): defaults of bridge and barrel damage.
+// ---------------------------------------------------------------------------
+
+// spec: S-0303 claim 24 (absent from every layer: bridge strength 1000 and ammunition-crate damage 100; the barrel's nested detonation still happens with that damage)
+#[test]
+fn claim_24_defaults_of_bridge_and_barrel_damage() {
+    let mut r = testkit::combat_ruleset();
+    r.sim.general.bridge_strength = None;
+    r.sim.general.ammo_crate_damage = None;
+    let w = testkit::game_with(&r, SIZE, 1);
+    assert_eq!(w.rules().combat.general.bridge_strength, 1000);
+    assert_eq!(w.rules().combat.general.ammo_crate_damage, 100);
+    r.sim.general.ammo_crate_damage = Some(80);
+    let w = testkit::game_with(&r, SIZE, 1);
+    assert_eq!(w.rules().combat.general.ammo_crate_damage, 80);
 }
