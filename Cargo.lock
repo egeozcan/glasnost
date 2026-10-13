@@ -1066,6 +1066,7 @@ dependencies = [
 name = "glasnost-tools"
 version = "0.0.0"
 dependencies = [
+ "glasnost-ai",
  "glasnost-convert",
  "glasnost-fmt",
  "glasnost-ini",

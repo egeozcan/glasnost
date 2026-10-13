@@ -215,15 +215,12 @@ pub fn setup(seed: u32) -> GameSetup {
     )
 }
 
-/// The build plan both houses follow.
+/// The build plan both houses follow: types by role from the rules, two
+/// harvesters, waves of six.
 pub fn plan() -> Plan {
     Plan {
-        power: "POWR".into(),
-        refinery: "PROC".into(),
-        factories: vec!["PILL".into(), "FACT".into()],
-        harvester: "MINR".into(),
+        names: Default::default(),
         harvesters: 2,
-        army: vec!["GUNR".into(), "WALKER".into()],
         wave: 6,
     }
 }

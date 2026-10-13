@@ -9,6 +9,7 @@
 
 pub mod headless;
 pub mod local_lane;
+pub mod skirmish_lane;
 
 use std::io;
 use std::path::Path;
