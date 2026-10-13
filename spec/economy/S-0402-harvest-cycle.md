@@ -2,11 +2,11 @@
 id: S-0402
 title: Harvest cycle (loading, field and refinery choice, docking, unloading, income, slave and chrono miners)
 topic: economy
-revision: 4
+revision: 5
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-11
+approved-on: 2026-10-13
 measurements: []
 requests: []
 supersedes: []
@@ -417,8 +417,14 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
       delay, such as the absent-key default 2147483647, any start tick of 1 or more makes the sum
       negative and the test pass, while a start tick of 0 leaves the sum at 2147483647 and the test
       fails. `quirks.slave_kick_delay_wraps` (default: the original). With the switch off, the sums
-      are exact. The condition *k* + *s*<sub>m</sub> < *t* is always required, so with a kick delay
-      near 2³¹ the miner then never wakes its slaves at all.
+      are exact. This wake-up rule always requires *k* + *s*<sub>m</sub> < *t*, so with a kick
+      delay near 2³¹ it then never wakes the slaves through this rule.
+
+      **Separate area-guard effect.** S-0215 claim 26's “wakes its slaves anyway” effect requires
+      only that the slave group be at rest: every other condition above is skipped, including
+      both kick-delay tests, the owner condition, the miner's land type and the short scan.
+      S-0215 claim 26 owns which outcomes receive that effect; it does not occur at every
+      processing of *area guard*. Its scenario B31 distinguishes it from the wake-up rule above.
     - **Slaves.** A woken slave searches (ring search with the slave scan range, from itself),
       walks to the cell found, and loads one bale (S-0401, claim 3) at each processing of its
       *harvest*, which comes every *h* ticks, *h* being its type's harvest-rate field; its capacity
@@ -435,7 +441,8 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     - Where the miner deploys, when it undeploys and moves on, and its own scan fields (the long
       scan and the scan correction) are not specified here (Open questions).
     - Backing: `measurable` (scenario H7; its variant b for the kick wrap and its switch, variant e
-      for the group's rest tick, variant f for the deployed miner and the slaves' health)
+      for the group's rest tick, variant f for the deployed miner and the slaves' health, and
+      S-0215 scenario B31 for the separate area-guard effect)
     - Confidence: medium for the slave cycle and the wake-up rule; low for the miner's own
       movement
 
