@@ -81,7 +81,6 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0302](combat/S-0302-damage-resolution.md) | Damage resolution (shot damage, defences, versus values, rounding, healing, health thresholds) | combat | 10 | approved | — |
 | [S-0211](movement/S-0211-land-types-passability.md) | Land types and passability | movement | 10 | approved | — |
 | [S-0112](rendering/S-0112-overlay-terrain-object-drawing.md) | Overlay and terrain object drawing | rendering | 6 | approved | — |
-| [S-0105](rendering/S-0105-voxel-rendering.md) | Rendering of voxel models | rendering | 6 | approved | — |
 | [S-0207](movement/S-0207-ground-vehicle-movement.md) | Ground vehicle movement (drive locomotor) | movement | 6 | approved | — |
 | [S-0210](movement/S-0210-crushing.md) | Crushing (who crushes whom, when, the outcome, walls, warnings, slowdown and automatic crushing) | movement | 14 | approved | — |
 | [S-0212](movement/S-0212-pathfinding.md) | Pathfinding (observable behaviour) | movement | 17 | approved | — |
@@ -96,3 +95,4 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0013](formats/S-0013-voxel-lighting-table-layout.md) | voxel lighting table file layout | formats | 1 | approved | — |
 | [S-0102](rendering/S-0102-draw-order.md) | Draw order, render layers, depth compositing, sprite placement and shadow pixels | rendering | 5 | approved | — |
 | [S-0104](rendering/S-0104-lighting.md) | Lighting | rendering | 11 | approved | — |
+| [S-0105](rendering/S-0105-voxel-rendering.md) | Rendering of voxel models | rendering | 7 | approved | — |
