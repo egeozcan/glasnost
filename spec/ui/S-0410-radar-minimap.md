@@ -2,11 +2,11 @@
 id: S-0410
 title: Radar and minimap (when radar is available, what the radar map shows and how it is coloured)
 topic: ui
-revision: 4
+revision: 5
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-12
+approved-on: 2026-10-13
 measurements: []
 requests: []
 supersedes: []
@@ -123,7 +123,11 @@ house as S-0409 defines (Terms); a gap field that is not hostile to *H* is a *fr
    The conditions above decide *H*'s radar only until *H* is defeated (S-0414, claim 5). In the tick
    of the defeat the map is revealed for *H* (S-0409, claim 15) and *H*'s radar comes on, without
    waiting for a recheck (claim 2). From then on it stays on for the rest of the game, whatever *H*'s
-   power, outage, free-radar flag or buildings are. **Departure (scope, no switch):** in the original
+   power, outage, free-radar flag or buildings are. In the original the human house's defeat ends
+   the game even while a computer house remains (S-0414, claim 6), so this radar state is
+   observable only during the end delay (S-0414, claim 8). In our engine it lasts while the
+   defeated person watches the remaining sides fight, until the game is over.
+   **Departure (scope, no switch):** in the original
    only the local player's house follows these rules; in our engine every player house whose radar
    map is shown (the local player's, or another's shown to an observer) follows them, each until its
    own defeat. Radar reaches no game state, so nothing else changes (decision of the project
@@ -137,7 +141,10 @@ house as S-0409 defines (Terms); a gap field that is not hostile to *H* is a *fr
    next update in the houses' part of the tick (S-0203) after an event that triggers
    re-evaluation. The known such events are: its power balance changes, it gains, loses or starts
    selling a building, an electromagnetic lock of one of its radar buildings ends, and a radar
-   outage of the house starts or ends (the list may be incomplete, Open questions). The free-radar
+   outage of the house starts or ends, and an upgrade is successfully placed on one of its
+   buildings (S-0406, claim 12), whether or not the upgrade changes its power balance (the list may
+   be incomplete, Open questions). The upgrade's own radar flag does not grant radar: no building
+   of the upgrade type enters play, and claim 1 still tests the host building's type. The free-radar
    flag is not an event: it is fixed for the game (claim 1). After its defeat (claim 1) a house's
    radar is no longer re-evaluated. The spy satellite rule that S-0409 owns (its claim 15) has
    its own timing there, and nothing about it is a radar matter here.
@@ -148,9 +155,12 @@ house as S-0409 defines (Terms); a gap field that is not hostile to *H* is a *fr
    spec, not a statement about the original, low confidence: if the original waits for a later
    event, claim 2 is revised).
    - Backing: `measurable` (scenarios R1 and R2, the recorder logs the tick on which the panel
-     switches; the three uncertain causes are recorded only, not falsifiers)
-   - Confidence: medium for the listed events and the timing; low for the completeness of the list
-     and for the three uncertain causes
+     switches; the three uncertain causes are recorded only, not falsifiers). The upgrade-specific
+     request is `unmeasured` as in S-0406 claim 12: an upgrade can change the answer through power,
+     already a listed cause, while with unchanged inputs and radar already matching claim 1 a
+     recheck leaves no observable difference
+   - Confidence: medium for the listed events and the timing, including upgrade placement; low
+     for the completeness of the list and for the three uncertain causes
 
 3. **Radar on and off.** When a house's radar becomes available or unavailable, its radar panel
    plays the radar-on or radar-off sound (Import mapping) and its opening or closing animation.
@@ -758,14 +768,20 @@ panel at a fixed screen resolution; a *recorder* for tick numbers. One valid run
   applies, so the pixel alternates in runs of |*F*| ticks); falsified if they differ or the
   negative run never inverts. *F* = 0 has no scenario: the original fails there (F5).
 - **R8 (claims 1 and 2, defeat).** The human player owns no radar building, the map has no free
-  radar, and the human house is defeated (S-0414 scenario V2) while a computer house remains, so the game
-  goes on (S-0414, claim 6). Observable: the radar map in the drawn frames from the defeat tick on,
-  with the recorder, and the sound and the panel's animation at the defeat. Expected: the
-  radar map is shown from the defeat tick with the radar-on sound and the opening animation, the
-  whole map is revealed, and it stays shown for the rest of the game. A repeat with a radar
-  building and a radar outage that the radar-outage trigger action starts a few ticks before the
-  defeat (so that it still runs at the defeat; a weather storm is not used, as in R1) shows the
-  same. Falsified if: no radar at the defeat, or radar lost again afterwards.
+  radar, and the human house is defeated (S-0414 scenario V2) while an enemy bystander computer
+  house remains. Named test data: a test rules file lengthens the end-delay field of S-0414
+  (claim 8) enough to capture the panel opening and several later drawn frames. The original ends
+  the game at the human's defeat even with the computer house still alive (S-0414, claim 6), so
+  all observations are taken within that delay, before the result screen. Observable: the radar
+  map in the drawn frames from the defeat tick until the game is over, with the recorder, and
+  the sound and the panel's animation at the defeat. Expected: radar comes on in the defeat tick
+  with the radar-on sound and opening animation, the whole map is revealed, and the map stays
+  shown once the panel opens throughout the remaining end delay. A repeat with a radar building
+  and a radar outage that the radar-outage trigger action starts a few ticks before the defeat
+  (so that it still runs at the defeat; a weather storm is not used, as in R1) shows the same.
+  Falsified if: no radar at the defeat, or radar lost again within the end delay. Our engine's
+  longer observation period, while the remaining hostile sides fight on (S-0414, claim 6), is a
+  documented departure, not something this run can measure.
 - **R9 (claim 7, own and not-owned cases; low-confidence tests).** Observable (all parts): whether
   the object's radar pixel shows its house colour, and on which tick it first does. Part A: an own vehicle not yet
   discovered by the human player (placed by a trigger at game start in a place the player has not
