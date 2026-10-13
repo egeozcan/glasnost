@@ -129,14 +129,24 @@ pub fn variant_pattern(mut draw: impl FnMut() -> u32) -> ([u8; 64], u32) {
     (p, taken)
 }
 
+/// The alternate-image mark of a tile cell's flag value (S-0010 Terms and
+/// Import mapping): its bit of value 4, whatever its other bits hold.
+pub const ALTERNATE_IMAGE_MARK: u32 = 4; // spec: S-0010 Constants (alternate-image mark: bit of value 4 of the flag value)
+
+/// Whether a tile cell's flag value carries the alternate-image mark
+/// (S-0010 claim 13, Terms).
+pub fn alternate_image_mark(flags: u32) -> bool {
+    flags & ALTERNATE_IMAGE_MARK != 0
+}
+
 /// The image a cell shows (S-0010 claim 13, Formulas *Variant*): for a cell
 /// (x, y) of sub-tile `t` of a tile whose plain image is `w` × `h` cells
-/// and has `n` variants, with the 8 × 8 pattern `p8`.
-///
-/// Placeholder (Q-0055): claim 13's alternate-image mark is not read,
-/// because the spec does not say where the tile file carries it, so every
-/// tile cell uses the pattern. A marked cell would show the plain image
-/// (its alternate-image state is clear at map load and no spec sets it).
+/// and has `n` variants, with the 8 × 8 pattern `p8`. `marked` is the
+/// alternate-image mark of the plain image's tile cell at index
+/// t mod (w × h) (read from the plain image's file only, claim 13): a
+/// marked cell uses no pattern and shows image 1 while its alternate-image
+/// state is set and image 0 while it is clear. The state is clear at map
+/// load and no spec sets it, so a marked cell shows image 0.
 pub fn variant_image(
     (x, y): (i32, i32),
     t: i32,
@@ -144,7 +154,12 @@ pub fn variant_image(
     n: usize,
     p8: &[u8; 64],
     origin_mismatch: bool,
+    marked: bool,
 ) -> usize {
+    if marked {
+        // spec: S-0010 claim 13 and Formulas (a marked cell: image 1 with the state set, 0 with it clear; the state is clear at map load)
+        return 0;
+    }
     let (w, h) = (w.max(1), h.max(1));
     // spec: S-0010 Formulas ((X, Y) = (x, y) for t = 0, else the origin divided by the size, truncated)
     let (cx, cy) = if t == 0 && origin_mismatch {
@@ -152,7 +167,7 @@ pub fn variant_image(
     } else {
         ((x - t.rem_euclid(w)) / w, (y - t.div_euclid(w)) / h)
     };
-    // spec: S-0010 claim 13 (the 4 × 4 pattern with at most 4 images, else the 8 × 8 pattern)
+    // spec: S-0010 claim 13 and Constants (the 4 × 4 pattern with at most 4 images, the plain image included, else the 8 × 8 pattern)
     let p = if n < 4 {
         P4[cy.rem_euclid(4) as usize][cx.rem_euclid(4) as usize]
     } else {
@@ -641,29 +656,54 @@ mod tests {
     fn claim_13_variant_choice() {
         let p8 = [7u8; 64];
         // One-cell tile with 2 images: P4 at (x mod 4, y mod 4), mod 2.
-        assert_eq!(variant_image((5, 2), 0, (1, 1), 1, &p8, true), 3 % 2);
-        assert_eq!(variant_image((6, 7), 0, (1, 1), 3, &p8, true), 3);
+        assert_eq!(variant_image((5, 2), 0, (1, 1), 1, &p8, true, false), 3 % 2);
+        assert_eq!(variant_image((6, 7), 0, (1, 1), 3, &p8, true, false), 3);
         // More than 4 images: the 8 × 8 pattern.
-        assert_eq!(variant_image((6, 7), 0, (1, 1), 4, &p8, true), 7 % 5);
+        assert_eq!(variant_image((6, 7), 0, (1, 1), 4, &p8, true, false), 7 % 5);
         // A 2 × 2 tile placed with its origin at (6, 9): sub-tile 3 is cell (7, 10), X = 3, Y = 4.
         assert_eq!(
-            variant_image((7, 10), 3, (2, 2), 3, &p8, true),
+            variant_image((7, 10), 3, (2, 2), 3, &p8, true, false),
             usize::from(P4[0][3])
         );
         // The origin cell uses its own coordinates (6, 9) with the quirk, (3, 4) without.
         assert_eq!(
-            variant_image((6, 9), 0, (2, 2), 3, &p8, true),
+            variant_image((6, 9), 0, (2, 2), 3, &p8, true, false),
             usize::from(P4[1][2])
         );
         assert_eq!(
-            variant_image((6, 9), 0, (2, 2), 3, &p8, false),
+            variant_image((6, 9), 0, (2, 2), 3, &p8, false, false),
             usize::from(P4[0][3])
         );
         // An origin beyond the low edge: truncation toward zero, non-negative remainders.
         assert_eq!(
-            variant_image((0, 0), 1, (2, 1), 3, &p8, true),
+            variant_image((0, 0), 1, (2, 1), 3, &p8, true, false),
             usize::from(P4[0][0])
         );
+    }
+
+    /// spec: S-0010 claim 13, Terms and Import mapping (the alternate-image
+    /// mark is the bit of value 4 of a tile cell's flag value, whatever its
+    /// other bits; a marked cell uses no pattern and, its state being clear
+    /// at map load, shows the plain image; image count up to 4 uses P4)
+    #[test]
+    fn claim_13_alternate_image_mark() {
+        let p8 = [7u8; 64];
+        assert!(alternate_image_mark(4));
+        assert!(alternate_image_mark(4 | 1 | 2 | 8));
+        assert!(!alternate_image_mark(8));
+        assert!(!alternate_image_mark(1 | 2));
+        // An 8 × 8 block of a one-cell tile with 4 images: some cells would show image 1 by P4.
+        let mut patterned = Vec::new();
+        for y in 0..8 {
+            for x in 0..8 {
+                patterned.push(variant_image((x, y), 0, (1, 1), 3, &p8, true, false));
+                assert_eq!(variant_image((x, y), 0, (1, 1), 3, &p8, true, true), 0);
+            }
+        }
+        assert!(patterned.contains(&1));
+        // Four variants (five images) use the 8 × 8 pattern, never table P4.
+        assert_eq!(variant_image((0, 0), 0, (1, 1), 4, &p8, true, false), 7 % 5);
+        assert_eq!(variant_image((0, 0), 0, (1, 1), 4, &p8, true, true), 0);
     }
 
     /// spec: S-0010 claim 14 (entries 0 … 7, no clash with earlier index neighbours, 64 … 4096 draws)

@@ -441,6 +441,67 @@ fn claims_13_22_diamond_and_variant() {
     }
 }
 
+/// `tmp_tile` with the tile cell's flag value set to `flags` (the writer
+/// keeps the bit of value 4).
+fn tmp_tile_flags(value: u8, flags: u32) -> Vec<u8> {
+    let bytes = tmp_tile(value, None);
+    let tmp = glasnost_fmt::tmp::Tmp::parse(&bytes).expect("tile file");
+    let mut header = tmp.tiles[0].expect("tile cell");
+    header.flags = flags;
+    TmpWriter {
+        cells_x: 1,
+        cells_y: 1,
+        tile_width: 60,
+        tile_height: 30,
+        tiles: vec![Some(WriteTile {
+            header,
+            diamond: vec![value; 900],
+            depth: None,
+            extra: None,
+        })],
+    }
+    .write()
+}
+
+/// spec: S-0010 claim 13 (the alternate-image mark, the bit of value 4 of the plain image's tile cell,
+/// read from the plain image's file only: a marked cell shows the plain image at map load, a mark in a
+/// variant file has no effect)
+#[test]
+fn claim_13_alternate_image_mark() {
+    let cells = [(6, 9, 0), (7, 9, 0), (8, 9, 0), (6, 10, 0), (7, 10, 0)];
+    // Some of these cells show the variant by P4.
+    assert!(cells.iter().any(|&(x, y, _)| {
+        glasnost_convert::theater::P4[(y % 4) as usize][(x % 4) as usize] % 2 == 1
+    }));
+    let b = build_tiles(&cells, |a| {
+        a.insert(b"clr01.tem", tmp_tile_flags(7, 4));
+        a.insert(b"clr01a.tem", tmp_tile(8, None));
+    });
+    for &(x, y, _) in &cells {
+        let t = tile_at(&b, i32::from(x), i32::from(y));
+        assert_eq!(t.len(), 1, "cell ({x}, {y})");
+        assert_eq!(
+            b.scene.images[t[0].image as usize].pixels()[28],
+            7,
+            "cell ({x}, {y})"
+        );
+    }
+    // The mark in the variant's file only: the pattern as usual.
+    let b = build_tiles(&cells, |a| {
+        a.insert(b"clr01.tem", tmp_tile(7, None));
+        a.insert(b"clr01a.tem", tmp_tile_flags(8, 4));
+    });
+    for &(x, y, _) in &cells {
+        let t = tile_at(&b, i32::from(x), i32::from(y));
+        let p = glasnost_convert::theater::P4[(y % 4) as usize][(x % 4) as usize] % 2;
+        assert_eq!(
+            b.scene.images[t[0].image as usize].pixels()[28],
+            7 + p,
+            "cell ({x}, {y})"
+        );
+    }
+}
+
 /// spec: S-0010 claim 23 (the extra image at the box corner plus the position difference, after its diamond)
 #[test]
 fn claim_23_extra_image() {

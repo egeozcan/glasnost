@@ -41,7 +41,8 @@ pub const TILE_HEADER_LEN: usize = 52;
 pub const FLAG_EXTRA: u32 = 1;
 /// Flag: the tile has depth data.
 pub const FLAG_DEPTH: u32 = 2;
-/// Flag: the tile has a damaged variant.
+/// Flag: the tile has a damaged variant (public format docs); S-0010 reads
+/// this bit as the alternate-image mark (claim 13, Import mapping).
 pub const FLAG_DAMAGED: u32 = 4;
 
 /// One tile header.
