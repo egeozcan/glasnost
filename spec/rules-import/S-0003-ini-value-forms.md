@@ -2,11 +2,11 @@
 id: S-0003
 title: INI value forms
 topic: rules-import
-revision: 10
+revision: 11
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-13
+approved-on: 2026-10-14
 measurements: []
 requests: [Q-0061, Q-0075, Q-0100]
 supersedes: []
@@ -395,8 +395,9 @@ our engine's result.
     (S-0001 claim 13). What follows from that for a type whose section is spelled in a different case
     is specified in S-0004 (type registration), claim 7.
 
-    This is not a universal rule for every map field that names a type. S-0011 claim 21's
-    type-exists and type-does-not-exist events require an exact, case-sensitive type name,
+    This rule excludes the trigger owner-country field and the exact trigger-event type-name
+    rules of S-0011 claims 5 and 21. S-0011 claim 21's type-exists and type-does-not-exist
+    events require an exact, case-sensitive type name,
     and treat both no-type spellings as ordinary names, not markers. Its claim 5's trigger
     owner country instead treats the angle-bracketed no-type spelling, ignoring ASCII case,
     as the first registered country. The bare spelling has no marker handling there: it
