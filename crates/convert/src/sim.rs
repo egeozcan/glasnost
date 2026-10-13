@@ -387,6 +387,8 @@ const UNIT_FIELDS: &[(&str, &str, Form)] = &[
     ("weapon_count", "WeaponCount", Int),
     // spec: S-0214 Import mapping (Teleporter)
     ("teleporter", "Teleporter", Bool),
+    // spec: S-0214 Import mapping (Selectable: the type permits selection, boolean)
+    ("selectable", "Selectable", Bool),
 ];
 
 /// Building rules fields (`glasnost_rules::sim::BuildingType`). `Factory`
@@ -398,6 +400,8 @@ const BUILDING_FIELDS: &[(&str, &str, Form)] = &[
     ("bib", "Bib", Bool),
     ("gate", "Gate", Bool),
     ("invisible_in_game", "InvisibleInGame", Bool),
+    // spec: S-0214 Import mapping (Selectable: the type permits selection, boolean)
+    ("selectable", "Selectable", Bool),
     ("laser_fence", "LaserFence", Bool),
     ("firestorm_wall", "FirestormWall", Bool),
     ("naval", "Naval", Bool),

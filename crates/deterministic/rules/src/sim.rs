@@ -1095,6 +1095,10 @@ pub struct UnitType {
     /// `Teleporter`: a self-teleporting type (S-0214 claim 11).
     #[serde(default)]
     pub teleporter: Option<bool>,
+    /// `Selectable`: the type permits selection (S-0214 Terms and claim
+    /// 16; absent: yes).
+    #[serde(default)]
+    pub selectable: Option<bool>,
     /// The combat fields shared with buildings (M4).
     #[serde(default)]
     pub combat: CombatFields,
@@ -1382,6 +1386,10 @@ pub struct BuildingType {
     /// `InvisibleInGame`.
     #[serde(default)]
     pub invisible_in_game: Option<bool>,
+    /// `Selectable`: the type permits selection (S-0214 Terms and claim
+    /// 16; absent: yes).
+    #[serde(default)]
+    pub selectable: Option<bool>,
     /// `LaserFence`.
     #[serde(default)]
     pub laser_fence: Option<bool>,

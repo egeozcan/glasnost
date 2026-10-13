@@ -235,15 +235,25 @@ fn other_house(w: &World, actor: ObjectId, target: ObjectId) -> bool {
 }
 
 /// Whether the object can be selected (S-0214 Terms, *can be selected*):
-/// a live unit or building on the map, but not a building whose type is
-/// invisible in the game. Whether a unit below the surface or a cloaked
-/// one can be selected is an open question of S-0214; M3 has neither
-/// state, so such units count as selectable.
+/// a unit or building in play on the map whose type's selection flag
+/// permits it, but not a building whose type is invisible in the game.
+/// Zero health does not exclude a building still in play (awaiting
+/// removal, S-0214 claim 16); being erased does (no erasing weapon yet).
+/// Whether a unit below the surface or a cloaked one can be selected is an
+/// open question of S-0214; neither state exists yet, so such units count
+/// as selectable.
 pub fn selectable(w: &World, id: ObjectId) -> bool {
     // spec: S-0214 Terms (can be selected: units and buildings; a building whose type is invisible in the game is believed not to be, low)
-    unit_or_building(w, id)
-        && !invisible(w, id)
-        && w.obj(id).is_some_and(|o| o.on_map && o.health > 0)
+    // spec: S-0214 Terms and Import mapping (the type's selection flag must permit selection; absent: yes)
+    let flag = match kind(w, id) {
+        Some(Kind::Building) => building(w, id).is_none_or(|b| b.raw.selectable.unwrap_or(true)),
+        _ => unit(w, id).is_none_or(|u| u.raw.selectable.unwrap_or(true)),
+    };
+    // spec: S-0214 claim 16 (zero health does not exclude a building still in play awaiting removal; being erased does)
+    let alive = w.obj(id).is_some_and(|o| {
+        o.on_map && (o.health > 0 || (o.kind == Kind::Building && o.combat.killed))
+    });
+    unit_or_building(w, id) && !invisible(w, id) && flag && alive && !being_erased(w, id)
 }
 
 /// A vehicle-like building: it undeploys into a vehicle and has a 1 × 1

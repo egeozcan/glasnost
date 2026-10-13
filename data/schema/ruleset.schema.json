@@ -909,6 +909,14 @@
           ],
           "default": null
         },
+        "selectable": {
+          "description": "`Selectable`: the type permits selection (S-0214 Terms and claim\n16; absent: yes).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
         "spyable": {
           "description": "`Spyable`.",
           "type": [
@@ -7763,6 +7771,14 @@
           "description": "`Secondary`.",
           "type": [
             "string",
+            "null"
+          ],
+          "default": null
+        },
+        "selectable": {
+          "description": "`Selectable`: the type permits selection (S-0214 Terms and claim\n16; absent: yes).",
+          "type": [
+            "boolean",
             "null"
           ],
           "default": null
