@@ -16,14 +16,15 @@
 //! 5. once the harvesters are kept, build army units round-robin, and when
 //!    a wave is ready attack-move it to the nearest seen enemy or the next enemy start position (lobby
 //!    knowledge: the map's start waypoints); idle units attack seen enemies
-//!    near them.
+//!    near them. A smaller wave goes too once units have waited long enough,
+//!    so a house that cannot afford a full wave still attacks.
 //!
 //! Types are found by role from the rules (a building with power output, the
 //! refinery flag, a factory kind; a harvester; a unit with a primary weapon)
 //! among those the house can build now, the cheapest first; a plan can name
 //! the types to use instead.
 //!
-//! The numbers here (think period, spiral size, engage distance) are tuning
+//! The numbers here (think period, spiral size, engage distance, wave patience) are tuning
 //! of our own opponent, not game behaviour.
 
 use glasnost_map::CellXY;
@@ -65,6 +66,10 @@ pub const THINK_PERIOD: i32 = 15; // nocite: tuning of our own opponent
 
 /// Cells within which an idle army unit attacks a seen enemy.
 const ENGAGE: i64 = 10; // nocite: tuning of our own opponent
+
+/// Ticks after which idle army units go as a wave even when fewer than the
+/// plan's wave size.
+const WAVE_PATIENCE: i32 = 3000; // nocite: tuning of our own opponent
 
 /// Free cells kept between the house's buildings.
 const GAP: i32 = 2; // nocite: tuning of our own opponent
@@ -211,6 +216,8 @@ pub struct Script {
     next_target: usize,
     /// The next army type's index.
     next_army: usize,
+    /// The tick since which idle army units have been waiting for a wave.
+    waiting_since: Option<i32>,
 }
 
 impl Script {
@@ -223,6 +230,7 @@ impl Script {
             targets: Vec::new(),
             next_target: 0,
             next_army: 0,
+            waiting_since: None,
         }
     }
 
@@ -435,7 +443,13 @@ impl Script {
                 waiting.push(id);
             }
         }
-        if waiting.len() >= self.plan.wave.max(1) {
+        let since = *self.waiting_since.get_or_insert(w.tick);
+        if waiting.is_empty() {
+            self.waiting_since = None;
+        }
+        let patient = !waiting.is_empty() && w.tick - since >= WAVE_PATIENCE;
+        if waiting.len() >= self.plan.wave.max(1) || patient {
+            self.waiting_since = None;
             // The nearest seen enemy, else the next enemy start cell.
             let home = self.home(w);
             let goal = home

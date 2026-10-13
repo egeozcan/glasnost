@@ -27,6 +27,20 @@ pub struct HouseTech {
     pub stolen: [bool; 3], // spec: S-0407 Terms (three stolen-tech flags)
     /// Ever-built counts by type (S-0407 Terms, claim 10).
     pub ever_built: BTreeMap<TypeRef, i32>,
+    /// The icons of the taken-up set by sidebar tab, first to fourth, each
+    /// in its icon order (S-0004 claim 11, S-0411 claim 13). Kept for every
+    /// player house, as if it were the local player (S-0411 claim 13).
+    pub icons: [Vec<Icon>; 4], // spec: S-0004 claim 11 (four sidebar tabs)
+}
+
+/// An icon in a sidebar tab (S-0004 claim 11): its type and the cost it was
+/// sorted by when it was added (items are not re-sorted later).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Icon {
+    /// The type.
+    pub t: TypeRef,
+    /// Its price to the house when it was added (S-0004 claim 11 rule 5).
+    pub cost: i32,
 }
 
 /// One of the six generic groups (S-0407 Terms, Import mapping).
@@ -127,6 +141,13 @@ pub struct TypeTech {
     pub docks: i32,
     /// A building type that is an upgrade type (S-0406 Terms).
     pub upgrade: bool,
+    /// The sidebar tab, 0 to 3 for the first to fourth (S-0004 claim 11).
+    pub tab: u8,
+    /// The counts-as-aircraft flag (S-0004 claim 11 rule 3). Not imported
+    /// yet: always no (interim Q-0123).
+    pub considered_aircraft: bool,
+    /// The naval flag (S-0004 claim 11 rule 3).
+    pub naval: bool,
 }
 
 /// The typed tech-tree rules (S-0407 Import mapping).
@@ -149,6 +170,10 @@ pub struct Rules {
     pub secrets: Vec<TypeRef>,
     /// The pad aircraft types (claim 16).
     pub pad_aircraft: Vec<u32>,
+    /// Per country (registration index): the index of its own side, if it
+    /// has one (S-0004 claim 9), for the sidebar order (S-0004 claim 11
+    /// rule 2).
+    pub country_side: Vec<Option<i32>>,
 }
 
 impl Rules {
@@ -231,9 +256,12 @@ impl Rules {
             t.overrides = overrides(&e.prerequisite_override);
             // spec: S-0407 Import mapping (BuildLimit absent: 2³¹ − 1)
             t.limit = e.build_limit.unwrap_or(i32::MAX);
+            // spec: S-0004 Import mapping (base-planning side = AIBasePlanningSide) and S-0407 Import mapping (absent: −1)
+            t.side = e.ai_base_planning_side.unwrap_or(-1);
         };
         let units = |list: &[String],
-                     map: &std::collections::BTreeMap<String, glasnost_rules::sim::UnitType>|
+                     map: &std::collections::BTreeMap<String, glasnost_rules::sim::UnitType>,
+                     tab: u8|
          -> Vec<TypeTech> {
             list.iter()
                 .map(|n| {
@@ -247,6 +275,9 @@ impl Rules {
                         owners: owners(&u.owner),
                         // spec: S-0407 Import mapping (AirportBound absent: no)
                         airport_bound: u.econ.airport_bound.unwrap_or(false),
+                        tab,
+                        // spec: S-0004 Import mapping (naval = Naval; absent: no)
+                        naval: u.combat.naval.unwrap_or(false),
                         ..Default::default()
                     };
                     econ_fields(&u.econ, &mut t);
@@ -254,9 +285,12 @@ impl Rules {
                 })
                 .collect()
         };
-        let infantry_t = units(&infantry, &s.infantry);
-        let vehicles_t = units(&vehicles, &s.vehicles);
-        let aircraft_t = units(&aircraft, &s.aircraft);
+        // spec: S-0004 claim 11 (infantry: the third tab; vehicles and aircraft: the fourth)
+        let infantry_t = units(&infantry, &s.infantry, 2);
+        // spec: S-0004 claim 11 (vehicles: the fourth tab)
+        let vehicles_t = units(&vehicles, &s.vehicles, 3);
+        // spec: S-0004 claim 11 (aircraft: the fourth tab)
+        let aircraft_t = units(&aircraft, &s.aircraft, 3);
         let buildings_t = buildings
             .iter()
             .map(|n| {
@@ -306,6 +340,10 @@ impl Rules {
                         0
                     },
                     upgrade: e.powers_up_building.is_some(),
+                    // spec: S-0004 claim 11 (build category combat: the second tab; other buildings: the first; the category's import is S-0302 claim 5's)
+                    tab: u8::from(b.defense.unwrap_or(false)),
+                    // spec: S-0004 Import mapping (naval = Naval; absent: no)
+                    naval: b.naval.unwrap_or(false),
                     ..Default::default()
                 };
                 econ_fields(e, &mut t);
@@ -346,6 +384,17 @@ impl Rules {
             proc_alternate,
             secrets,
             pad_aircraft: names(&g.pad_aircraft, &aircraft),
+            country_side: countries
+                .iter()
+                .map(|c| {
+                    // spec: S-0004 claim 9 (a country's own side; side names compared without regard to case; a side's index is its position in the imported side list)
+                    let side = s.countries.get(c).and_then(|c| c.econ.side.as_deref())?;
+                    r.sides
+                        .iter()
+                        .position(|x| x.name.eq_ignore_ascii_case(side))
+                        .map(|i| i as i32)
+                })
+                .collect(),
         }
     }
 
@@ -680,10 +729,11 @@ fn answer_with(w: &World, house: HouseId, t: TypeRef, production_exception: bool
     }
 }
 
-/// Whether a building is a factory building that *could make* type `t` for
-/// its owner (S-0404 Terms), with the tech-tree condition when `tech`, and
-/// ignoring the power switch and docks. `exclude`: a building about to
-/// leave the map.
+/// Whether a building is a factory building that could make type `t` for
+/// its owner *without the tech-tree rule* (S-0404 Terms), ignoring the power
+/// switch and docks; with `tech`, the full tech-tree answer must not refuse
+/// the type as well (only S-0403's `quirks.multiple_factory_counts_all` off
+/// asks that). S-0404's own *could make* is `could_make_limit_only`.
 pub fn could_make(w: &World, b: &Object, t: TypeRef, tech: bool) -> bool {
     let r = w.rules();
     if b.kind != Kind::Building || !b.on_map || being_sold(b) {
@@ -722,11 +772,13 @@ pub fn could_make(w: &World, b: &Object, t: TypeRef, tech: bool) -> bool {
 }
 
 /// Whether the house has a factory building that could make `t` (claim 1
-/// (b): tech-tree condition, power and docks left out).
+/// (b): tech-tree condition, power and docks left out; not being sold or
+/// queued to be sold).
 fn factory_condition(w: &World, house: HouseId, t: TypeRef) -> bool {
+    // spec: S-0407 claim 1 (b) (a factory not being sold or queued to be sold)
     w.objects
         .values()
-        .any(|b| b.owner == Some(house) && could_make(w, b, t, false))
+        .any(|b| b.owner == Some(house) && could_make(w, b, t, false) && !queued_to_be_sold(b))
 }
 
 /// A qualifying factory for a type (S-0407 Terms): a factory building of
@@ -758,8 +810,9 @@ pub fn recheck_due(w: &mut World, house: HouseId) {
 }
 
 /// The recheck (S-0407 claims 1 and 12): the whole taken-up set worked out
-/// again from the state at this moment. Returns the types that left the set,
-/// in set order, for the removal orders of S-0404 claim 9 and S-0411 claim 2.
+/// again from the state at this moment, and the icons kept with it (S-0004
+/// claim 11). Returns the types that left the set in S-0411 claim 13's
+/// order, for the removal orders of S-0404 claim 9 and S-0411 claim 2.
 pub fn recheck(w: &mut World, house: HouseId) -> Vec<TypeRef> {
     let Some(h) = w.houses.get(usize::from(house.0)) else {
         return Vec::new();
@@ -785,11 +838,156 @@ pub fn recheck(w: &mut World, house: HouseId) -> Vec<TypeRef> {
         }
     }
     // spec: S-0411 claim 2 (an icon is added when its type becomes offered and removed only when a recheck removes it from the taken-up set)
-    let removed: Vec<TypeRef> = before.difference(&after).copied().collect();
+    let gone: BTreeSet<TypeRef> = before.difference(&after).copied().collect();
+    // spec: S-0411 claim 13 (the removed types in tab order, first to fourth, and within a tab in the icon order immediately before removal)
+    let mut removed: Vec<TypeRef> = h
+        .econ
+        .tech
+        .icons
+        .iter()
+        .flatten()
+        .map(|i| i.t)
+        .filter(|t| gone.contains(t))
+        .collect();
+    // A type of the set without an icon cannot occur; were it to, it goes
+    // last, in set order.
+    let rest: Vec<TypeRef> = gone
+        .iter()
+        .copied()
+        .filter(|t| !removed.contains(t))
+        .collect();
+    removed.extend(rest);
+    let side = w
+        .rules()
+        .econ
+        .tech
+        .country_side
+        .get(h.country as usize)
+        .copied()
+        .flatten();
+    // Q-0191 (interim: several types offered at one recheck are added in set order, kind then registration index)
+    let added: Vec<(Icon, IconKey)> = after
+        .difference(&before)
+        .map(|&t| {
+            let cost = super::production::price(w, house, t);
+            (Icon { t, cost }, icon_key(w, t, side))
+        })
+        .collect();
+    let mut keys: BTreeMap<TypeRef, IconKey> = h
+        .econ
+        .tech
+        .icons
+        .iter()
+        .flatten()
+        .filter(|i| !gone.contains(&i.t))
+        .map(|i| (i.t, icon_key(w, i.t, side)))
+        .collect();
+    let tie_newest_first = w.rules().quirks.sidebar_tie_newest_first;
+    let both_flags = w.rules().quirks.sidebar_both_flags_rank;
     let hh = &mut w.houses[usize::from(house.0)].econ.tech;
     hh.recheck_due = false;
     hh.taken_up = after;
+    for tab in hh.icons.iter_mut() {
+        tab.retain(|i| !gone.contains(&i.t));
+    }
+    for (icon, key) in added {
+        let tab = &mut hh.icons[usize::from(key.tab)];
+        // spec: S-0004 claim 11 (an item already shown is not added twice)
+        if tab.iter().any(|i| i.t == icon.t) {
+            continue;
+        }
+        // spec: S-0004 claim 11 (placed in front of the first item it sorts before, else after all of them)
+        let at = tab
+            .iter()
+            .position(|old| {
+                keys.get(&old.t).is_some_and(|ok| {
+                    sorts_before(&key, icon.cost, ok, old.cost, both_flags, tie_newest_first)
+                })
+            })
+            .unwrap_or(tab.len());
+        tab.insert(at, icon);
+        keys.insert(icon.t, key);
+    }
     removed
+}
+
+/// The fixed sort keys of an item (S-0004 claim 11).
+#[derive(Clone, Copy, Debug)]
+struct IconKey {
+    tab: u8,
+    /// Rule 2: the base-planning side equals the house's side.
+    own_side: bool,
+    /// Rule 3: the counts-as-aircraft flag, for vehicle and aircraft types
+    /// only.
+    air: bool,
+    /// Rule 3: the naval flag, for vehicle and aircraft types only.
+    naval: bool,
+    /// Rule 4.
+    tech_level: i32,
+}
+
+fn icon_key(w: &World, t: TypeRef, side: Option<i32>) -> IconKey {
+    let f = tt(w, t).cloned().unwrap_or_default();
+    // spec: S-0004 claim 11 rule 3 (the flags count only for vehicle and aircraft types)
+    let unit = matches!(t.kind, Kind::Vehicle | Kind::Aircraft);
+    IconKey {
+        tab: f.tab,
+        // spec: S-0004 claim 11 rule 2 (the base-planning side equals the house's side)
+        own_side: side.is_some_and(|s| s == f.side),
+        air: unit && f.considered_aircraft,
+        naval: unit && f.naval,
+        tech_level: f.tech_level,
+    }
+}
+
+/// Category rank (S-0004 claim 11 rule 3): ground 0, air 1, both flags 1
+/// as the new item and 2 as an item already in the tab
+/// (`quirks.sidebar_both_flags_rank`; off: 1), naval 3.
+fn rank(k: &IconKey, new: bool, both_flags: bool) -> i32 {
+    // spec: S-0004 claim 11 rule 3 (the rank table: ground 0, air 1, both 1 new or 2 existing, naval 3)
+    match (k.air, k.naval) {
+        (false, false) => 0,
+        (true, false) => 1,
+        (true, true) if new || !both_flags => 1,
+        (true, true) => 2,
+        (false, true) => 3,
+    }
+}
+
+/// Whether a new item sorts before an item already in the tab (S-0004
+/// claim 11, rules 1 to 6).
+fn sorts_before(
+    new: &IconKey,
+    new_cost: i32,
+    old: &IconKey,
+    old_cost: i32,
+    both_flags: bool,
+    tie_newest_first: bool,
+) -> bool {
+    // Rule 1 never applies: the simulation has no superweapon items yet.
+    let a = (
+        // spec: S-0004 claim 11 rule 2 (the item whose base-planning side equals the house's side first)
+        !new.own_side,
+        // spec: S-0004 claim 11 rule 3 (category rank, lowest first)
+        rank(new, true, both_flags),
+        // spec: S-0004 claim 11 rule 4 (tech level, lowest first)
+        new.tech_level,
+        // spec: S-0004 claim 11 rule 5 (cost to the house at the time it is added, lowest first)
+        new_cost,
+    );
+    let b = (
+        !old.own_side,
+        rank(old, false, both_flags),
+        old.tech_level,
+        old_cost,
+    );
+    match a.cmp(&b) {
+        std::cmp::Ordering::Less => true,
+        std::cmp::Ordering::Greater => false,
+        // Q-0123 (interim: display names are not imported, so they compare equal)
+        // spec: S-0004 claim 11 rule 6 (equal names: the newly added item first; quirks.sidebar_tie_newest_first)
+        std::cmp::Ordering::Equal => tie_newest_first,
+    }
 }
 
 /// Whether a type is offered to a house (S-0407 claim 1).
@@ -818,17 +1016,25 @@ pub fn at_limit(w: &World, house: HouseId, t: TypeRef) -> bool {
     limit_answer(w, house, t, true) == Answer::AtLimit
 }
 
-/// Whether a factory building could make `t` when a build order is applied
-/// or for an icon's darkening (S-0407 claim 13, S-0411 claims 3 and 4):
-/// could make without the tech-tree rule, with the build-limit test kept,
-/// including its allowance for an item in production (S-0407 claim 9).
-/// Interim rule of request Q-0122: S-0404 claim 3's wording names the full
-/// tech-tree condition.
+/// Whether a factory building *could make* `t` (S-0404 Terms, revision 3):
+/// the factory conditions and the build-limit answer with the allowance
+/// for an item in production (S-0407 claim 9), not the full tech tree. The
+/// factory check of S-0404 claim 8, the darkening of S-0411 claim 3 and,
+/// through `could_start`, the application of build orders and the forced
+/// start of S-0404 claims 3 and 10 use it.
 pub fn could_make_limit_only(w: &World, b: &Object, t: TypeRef) -> bool {
-    // spec: S-0407 claim 13 (the build order checks only the factory conditions and the build limit when applied) and S-0411 claim 3 (the build-limit test retained); Q-0122
+    // spec: S-0404 Terms (could make: the factory conditions and the build-limit answer with the production allowance, no full tech-tree test) and S-0407 claim 13
     could_make(w, b, t, false)
         && b.owner
             .is_some_and(|h| limit_answer(w, h, t, true) == Answer::Allowed)
+}
+
+/// Whether a factory building may serve a new start, a queue request, a
+/// resume or a release (S-0411 claim 14): it could make `t` (S-0404 Terms)
+/// and is not queued to be sold either.
+pub fn could_start(w: &World, b: &Object, t: TypeRef) -> bool {
+    // spec: S-0411 claim 14 (a factory queued to be sold is excluded from new starts, queue requests, resumes and releases; request Q-0190)
+    could_make_limit_only(w, b, t) && !queued_to_be_sold(b)
 }
 
 /// The house's part of the house update for the tech tree (S-0407 claim 12):
@@ -899,10 +1105,11 @@ pub fn queue_refused(w: &World, house: HouseId, t: TypeRef, copies: i32) -> bool
             // spec: S-0407 claim 16 (the item in production counted in the owned count and in the line; quirks.queue_limit_counts_item_twice)
             let item = !q.queue_limit_counts_item_twice && in_production(w, house, t);
             // spec: S-0407 F3 (L > 0: refused when O + Q ≥ L)
-            owned_count(w, house, t).saturating_add(copies - i32::from(item)) >= l
+            // spec: S-0407 F3 (signed 32-bit sums, wrapping modulo 2³², S-0205 claim 1)
+            owned_count(w, house, t).wrapping_add(copies.wrapping_sub(i32::from(item))) >= l
         } else {
-            // spec: S-0407 F3 (L ≤ 0: refused when L = −2³¹ or E + Q ≥ −L)
-            l == i32::MIN || ever_built(w, house, t).saturating_add(copies) >= -l
+            // spec: S-0407 F3 (L ≤ 0: refused when L = −2³¹ or E + Q ≥ −L, the sum wrapping)
+            l == i32::MIN || ever_built(w, house, t).wrapping_add(copies) >= -l
         }
     };
     if t.kind == Kind::Aircraft && f.airport_bound {
@@ -914,8 +1121,10 @@ pub fn queue_refused(w: &World, house: HouseId, t: TypeRef, copies: i32) -> bool
                 kind: Kind::Aircraft,
                 index: p,
             };
-            d += present_count(w, house, pt);
-            d += crate::econ::production::copies_in_line(w, house, pt);
+            // spec: S-0407 F3 (the sums wrap modulo 2³²)
+            d = d
+                .wrapping_add(present_count(w, house, pt))
+                .wrapping_add(crate::econ::production::copies_in_line(w, house, pt));
         }
         // spec: S-0407 claim 16 (T: the docks of the house's dock buildings)
         let total: i32 = w
@@ -924,7 +1133,8 @@ pub fn queue_refused(w: &World, house: HouseId, t: TypeRef, copies: i32) -> bool
             .filter(|b| b.kind == Kind::Building && b.on_map && b.owner == Some(house))
             .filter_map(|b| r.buildings.get(b.type_index as usize))
             .map(|b| b.docks)
-            .sum();
+            // spec: S-0407 F3 (the sums wrap modulo 2³²)
+            .fold(0i32, i32::wrapping_add);
         let dock = d >= total;
         // spec: S-0407 F3 (a dock-bound aircraft: refused when D ≥ T; quirks.dock_bound_aircraft_ignores_limit)
         return if q.dock_bound_aircraft_ignores_limit {

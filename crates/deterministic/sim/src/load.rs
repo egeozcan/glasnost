@@ -420,15 +420,14 @@ pub fn new_game(
     }
 
     if !setup.sandbox {
-        // spec: S-0412 claim 14 (the rest of game start after the starting units: crates, then the secret-lab draws)
-        // spec: S-0202 claim 14 (the initial crates and the secret-lab choices come before the game-start pass, also when the starting-unit step took no final draw)
+        // spec: S-0412 claim 14 (the rest of game start after the starting units, all before tick 0)
+        // spec: S-0202 claim 14 (the crate placement and the secret-lab choices come before the game-start pass)
+        // Q-0192 (interim: S-0202 claim 14's order, although S-0412 claim 14 calls the secret-lab draws the last of game start)
         crate::econ::setup::start_game(&mut w);
     }
-    // No tags are created (S-0011 claim 34, noted above), so the
-    // end-of-loading tag draws of S-0202 claim 14 are not taken.
 
     // spec: S-0010 claim 12 (the game-start pass: every legal cell once more, in the visiting order, after the starting units and before the first tick; its tile animations by claim 19)
-    // spec: S-0202 claim 14 (its tile-animation draws follow the final draw, the crate draws, the secret-lab choices and the end-of-loading tag draws)
+    // spec: S-0202 claim 14 (its tile-animation draws follow the starting units' final draw, the crate placement draws, the secret-lab choices and the end-of-loading tag draws, and precede the first tick; the tags are not implemented, S-0011)
     recalc_cells(&mut w, &order);
 
     // spec: S-0010 claim 25 (once at game start, before the first tick: the bridge spans, S-0212's bridge links, and the bridge-body marks of low spans)

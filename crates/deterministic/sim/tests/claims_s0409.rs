@@ -558,15 +558,92 @@ fn point_test() {
     assert!(shroud::point_shrouded(&w, A, Pos::centre(c(12, 12), 0)));
 }
 
-// spec: S-0409 Terms (discovered by H: a reveal that changes the cover piece of an object's cell marks it; own objects count as discovered)
+fn clear_marks(w: &mut World) {
+    for st in w.econ.shroud.houses.iter_mut().flatten() {
+        st.discovered.clear();
+    }
+}
+
+// spec: S-0409 claim 20 (placing an object in a ground layer marks it discovered by every player house, regardless of owner, shroud or fog; ownership alone does not set or stand in for the mark)
 #[test]
-fn discovery() {
+fn claim_20_placement_discovers() {
     let mut w = game(&rules());
     let enemy = spawn(&mut w, Kind::Vehicle, "EYE1", 1, 3, 0);
-    assert!(!shroud::discovered(&w, A, enemy));
+    let own = spawn(&mut w, Kind::Vehicle, "EYE1", 0, -3, 0);
+    assert!(!shroud::explored(&w, A, c(3, 0)));
+    for h in [A, B] {
+        assert!(shroud::discovered(&w, h, enemy));
+        assert!(shroud::discovered(&w, h, own));
+    }
+    clear_marks(&mut w);
+    assert!(
+        !shroud::discovered(&w, A, own),
+        "ownership alone does not count"
+    );
+}
+
+// spec: S-0409 claim 20 (placement outside the usable area clears the mark when the placement finishes)
+#[test]
+fn claim_20_outside_usable_area() {
+    // The test map with an invented smaller local area, so that some legal
+    // cells lie outside the usable area.
+    let mut map = testkit::empty_map(SIZE);
+    let fp = glasnost_map::Footprint::new(SIZE, SIZE, [4, 4, SIZE - 8, SIZE - 8]);
+    let mut grid = glasnost_map::CellGrid::new(fp);
+    let legal: Vec<CellXY> = grid.iter().map(|(c, _)| c).collect();
+    for c in legal {
+        *grid.get_mut(c).unwrap() = *map.cells.get(c).unwrap();
+    }
+    map.footprint = fp;
+    map.cells = grid;
+    let rules = std::sync::Arc::new(glasnost_sim::rules::SimRules::new(
+        &rules(),
+        "synthetic-test",
+    ));
+    let mut w = glasnost_sim::load::new_game(rules, &map, testkit::catalogue(), &testkit::setup(3))
+        .expect("loads");
+    let cell = w
+        .cells
+        .grid
+        .iter()
+        .map(|(c, _)| c)
+        .find(|&c| !w.cells.usable(c))
+        .expect("a legal cell outside the usable area");
+    let v = testkit::spawn(&mut w, Kind::Vehicle, "EYE1", 0, cell, 0);
+    assert!(!shroud::discovered(&w, A, v));
+    assert!(!shroud::discovered(&w, B, v));
+}
+
+// spec: S-0409 claim 20 (a reveal whose cover piece changes marks one object per eligible cell: the smallest F6 distance from the cell's top corner)
+// spec: S-0409 F6 (the floor of the root of a² + b², a = X mod 256, b = Y mod 256)
+#[test]
+fn claim_20_reveal_selection() {
+    let mut w = game(&rules());
+    let near = spawn(&mut w, Kind::Vehicle, "EYE1", 1, 3, 0);
+    let far = spawn(&mut w, Kind::Vehicle, "EYE1", 1, 3, 0);
+    let mid = Pos::centre(c(3, 0), 0);
+    // The cell's top corner, half a cell before its centre (test geometry).
+    let (x0, y0) = (mid.x - 128, mid.y - 128);
+    w.obj_mut(near).unwrap().pos.x = x0 + 10;
+    w.obj_mut(near).unwrap().pos.y = y0 + 10;
+    w.obj_mut(far).unwrap().pos.x = x0 + 128;
+    w.obj_mut(far).unwrap().pos.y = y0 + 128;
+    clear_marks(&mut w);
     spawn(&mut w, Kind::Building, "TOWER", 0, 0, 0);
-    assert!(shroud::discovered(&w, A, enemy));
-    assert!(shroud::discovered(&w, B, enemy));
+    assert!(shroud::discovered(&w, A, near));
+    assert!(!shroud::discovered(&w, A, far));
+}
+
+// spec: S-0409 claim 20 (equal distances favour the non-building most recently placed in that cell layer)
+#[test]
+fn claim_20_reveal_tie() {
+    let mut w = game(&rules());
+    let first = spawn(&mut w, Kind::Vehicle, "EYE1", 1, 3, 0);
+    let last = spawn(&mut w, Kind::Vehicle, "EYE1", 1, 3, 0);
+    clear_marks(&mut w);
+    spawn(&mut w, Kind::Building, "TOWER", 0, 0, 0);
+    assert!(shroud::discovered(&w, A, last));
+    assert!(!shroud::discovered(&w, A, first));
 }
 
 // spec: S-0409 claim 1 (the state hash survives a save/load round trip with shroud state)
@@ -671,6 +748,43 @@ fn claim_14_shared_state_waits_for_last_field() {
     glasnost_sim::objects::remove(&mut w, g2);
     step(&mut w);
     assert!(shroud::explored(&w, A, off));
+}
+
+// spec: S-0409 claim 21 (V18: one running border field; neither gaining nor losing the satellite leaves the shared state explored; stopping the field while the satellite is active does; losing it afterwards does not reset that)
+#[test]
+fn claim_21_shared_state_in_whole_map_operations() {
+    let mut w = game(&rules());
+    let e = edge_cell(&w);
+    let off = CellXY::new(e.x - 1, e.y - 1);
+    let gap = testkit::spawn(&mut w, Kind::Building, "GAP", 1, e, 0);
+    step(&mut w);
+    step(&mut w);
+    assert!(!shroud::explored(&w, A, off));
+    let sat = spawn(&mut w, Kind::Building, "SAT", 0, 0, 0);
+    step(&mut w);
+    step(&mut w);
+    assert!(shroud::spy_satellite_active(&w, A));
+    assert!(!shroud::explored(&w, A, off), "gain");
+    glasnost_sim::objects::remove(&mut w, sat);
+    step(&mut w);
+    assert!(!shroud::spy_satellite_active(&w, A));
+    assert!(!shroud::explored(&w, A, off), "loss");
+    let sat = spawn(&mut w, Kind::Building, "SAT", 0, 0, 0);
+    step(&mut w);
+    step(&mut w);
+    glasnost_sim::objects::remove(&mut w, gap);
+    step(&mut w);
+    assert!(
+        shroud::explored(&w, A, off),
+        "field stopped while the satellite is active"
+    );
+    glasnost_sim::objects::remove(&mut w, sat);
+    step(&mut w);
+    assert!(!shroud::spy_satellite_active(&w, A));
+    assert!(
+        shroud::explored(&w, A, off),
+        "losing it afterwards does not reset it"
+    );
 }
 
 // spec: S-0409 claim 15 (r3: the spy-satellite test continues after defeat at the recheck moments; losing the satellite then re-covers the map, while radar stays on, S-0410 claim 1)

@@ -136,7 +136,7 @@ pub fn switched(w: &mut World, id: ObjectId) {
     };
     // spec: S-0405 claim 7 (a building switched on or off makes its house due)
     crate::econ::power::make_due(w, owner);
-    // spec: S-0410 claim 2 (our engine treats switching a radar building off or on as an event)
+    // spec: S-0410 claim 2 (an accepted power-switch change switching one of its buildings off or on is an event)
     crate::econ::radar::mark_due(w, owner);
     // spec: S-0407 claim 12 (c) (a building switched on or off)
     super::tech::recheck_due(w, owner);

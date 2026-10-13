@@ -1001,19 +1001,17 @@ fn claim_10_forced_start() {
     }
 }
 
-// spec: S-0404 Edge cases (quirks.unstartable_queue_head_stalls: a head that cannot start is dropped and nothing starts; off: the next that can starts)
+// spec: S-0404 claim 10 and Edge cases (quirks.unstartable_queue_head_stalls: a head that cannot start, here by the build-limit answer with the production allowance, is dropped and nothing starts; off: the next that can starts) and S-0407 claim 16 (a queued copy is not started past its limit)
 #[test]
 fn claim_10_dropped_head() {
     for quirk in [true, false] {
         let mut r = ruleset();
         r.globals.quirks.unstartable_queue_head_stalls = quirk;
-        add_building(&mut r, "PREQ", plain(100));
-        r.sim.vehicles.get_mut("JEEP").unwrap().econ.prerequisite = Some(vec!["PREQ".into()]);
+        r.sim.vehicles.get_mut("JEEP").unwrap().econ.build_limit = Some(1);
         r.registries.get_mut("vehicles").unwrap().push("VAN".into());
         r.sim.vehicles.insert("VAN".into(), wheel(300));
         let mut w = game(&r);
         building(&mut w, "WARFACT", 0, 0, 0);
-        let p = building(&mut w, "PREQ", 0, 6, 6);
         ready(&mut w);
         rich(&mut w);
         let tank = t(&w, Kind::Vehicle, "TANK");
@@ -1023,7 +1021,16 @@ fn claim_10_dropped_head() {
         assert!(issue(&mut w, 0, Order::Build { what: jeep }));
         assert!(issue(&mut w, 0, Order::Build { what: van }));
         step(&mut w);
-        objects::remove(&mut w, p);
+        assert_eq!(line(&w, 0, tank).unwrap().queue, vec![jeep, van]);
+        // The house comes to own one JEEP: O = L with no JEEP in production.
+        glasnost_sim::testkit::spawn(
+            &mut w,
+            Kind::Vehicle,
+            "JEEP",
+            0,
+            glasnost_sim::testkit::mid(SIZE, 8, 8),
+            0,
+        );
         production::cancel(&mut w, HouseId(0), tank, false);
         let l = line(&w, 0, tank).unwrap();
         if quirk {
@@ -1034,6 +1041,33 @@ fn claim_10_dropped_head() {
             assert!(l.queue.is_empty());
         }
     }
+}
+
+// spec: S-0404 claim 10 and claim 8 (P10 part C, P8 run 10: a stale prerequisite refusal alone neither drops a queued type nor stops its start; the factory check omits the full tech tree)
+#[test]
+fn claim_10_stale_prerequisite_starts() {
+    let mut r = ruleset();
+    add_building(&mut r, "PREQ", plain(100));
+    r.sim.vehicles.get_mut("JEEP").unwrap().econ.prerequisite = Some(vec!["PREQ".into()]);
+    let mut w = game(&r);
+    let f = building(&mut w, "WARFACT", 0, 0, 0);
+    let p = building(&mut w, "PREQ", 0, 6, 6);
+    ready(&mut w);
+    rich(&mut w);
+    let tank = t(&w, Kind::Vehicle, "TANK");
+    let jeep = t(&w, Kind::Vehicle, "JEEP");
+    assert!(issue(&mut w, 0, Order::Build { what: tank }));
+    assert!(issue(&mut w, 0, Order::Build { what: jeep }));
+    step(&mut w);
+    // The prerequisite goes without a recheck in between (claim 8's check runs on a switch).
+    objects::remove(&mut w, p);
+    switch(&mut w, f, false);
+    let l = line(&w, 0, tank).unwrap();
+    assert_eq!(l.item.as_ref().unwrap().hold, Hold::Auto);
+    assert_eq!(l.queue, vec![jeep]);
+    switch(&mut w, f, true);
+    production::cancel(&mut w, HouseId(0), tank, false);
+    assert_eq!(item(&w, 0, jeep).unwrap().t, jeep);
 }
 
 // spec: S-0404 claim 11 (one creation draw per item started; none at steps, holds, resumes, refunds or completion)

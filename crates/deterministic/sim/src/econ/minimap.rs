@@ -468,9 +468,8 @@ fn insignificant(w: &World, id: ObjectId) -> bool {
 }
 
 /// The radar pixels at which an object is listed for house `h` (claims 7
-/// and 8): empty when it is not listed. A building is listed at the pixels
-/// of its foundation cells' centres (a placeholder for the pixel set of
-/// claim 8, request Q-0112).
+/// and 8): empty when it is not listed. A building is listed at the pixel
+/// set of F8 inside the image.
 pub fn listed(w: &World, h: HouseId, id: ObjectId, g: &Grid, img: &Image) -> Vec<(i32, i32)> {
     let Some(o) = w.obj(id) else {
         return Vec::new();
@@ -485,7 +484,7 @@ pub fn listed(w: &World, h: HouseId, id: ObjectId, g: &Grid, img: &Image) -> Vec
     }
     let own = o.owner == Some(h);
     if own {
-        // spec: S-0410 claim 7 (owned by H: discovered by H, S-0409 Terms; request Q-0110)
+        // spec: S-0410 claim 7 (owned by H: the discovered-by-H mark, S-0409 claim 20; ownership alone does not pass)
         if !crate::econ::shroud::discovered(w, h, id) {
             return Vec::new();
         }
@@ -504,22 +503,45 @@ pub fn listed(w: &World, h: HouseId, id: ObjectId, g: &Grid, img: &Image) -> Vec
         }
     }
     if o.kind == Kind::Building {
-        let (fw, fh) = o.foundation;
-        let top = o.pos.cell();
-        let mut px = Vec::new();
-        for dy in 0..fh {
-            for dx in 0..fw {
-                let c = Pos::centre(CellXY::new(top.x + dx, top.y + dy), 0);
-                let p = object_pixel(g, img, c.x, c.y, false);
-                if !px.contains(&p) {
-                    px.push(p);
-                }
-            }
-        }
-        px
+        // spec: S-0410 F8 (around the unclamped F4 pixel of its stored position)
+        let top = object_pixel(g, img, o.pos.x, o.pos.y, false);
+        building_pixels(img, top, o.foundation)
+            .into_iter()
+            // spec: S-0410 F8 (pixels outside the radar image are omitted, never clamped)
+            .filter(|&(p, q)| (0..img.width).contains(&p) && (0..img.height).contains(&q))
+            .collect()
     } else {
         vec![object_pixel(g, img, o.pos.x, o.pos.y, own)]
     }
+}
+
+/// The building pixel set of F8 (claim 8) for a foundation of *A* × *B*
+/// cells whose top pixel is `top`, in row order, before the pixels outside
+/// the image are left out.
+pub fn building_pixels(img: &Image, top: (i32, i32), foundation: (i32, i32)) -> Vec<(i32, i32)> {
+    let s = img.s.to_f64();
+    let half = nearest_double("0.5");
+    let extent = |dim: i32| -> i32 {
+        // spec: S-0410 F8 (E(d) = trunc(max(d·s + 0.5, 1)) when d = 1, else trunc(max(d·s + 0.5, 2)), double precision, round toward zero)
+        let floor = if dim == 1 { 1 } else { 2 };
+        let v = d(i64::from(dim)).mul(s, RZ).add(half, RZ);
+        let m = if v.lt(d(floor)) { d(floor) } else { v };
+        m.to_i32_common()
+    };
+    let (ab, bb) = (extent(foundation.0), extent(foundation.1));
+    let (p, q) = top;
+    let mut out = Vec::new();
+    // spec: S-0410 F8 (rows r from 0 through a_b + b_b − 2)
+    for r in 0..=(ab + bb - 2) {
+        // spec: S-0410 F8 (left(r) = −r for r < b_b, else r − 2b_b + 2)
+        let left = if r < bb { -r } else { r - 2 * bb + 2 };
+        // spec: S-0410 F8 (right(r) = r for r < a_b, else 2a_b − r − 2)
+        let right = if r < ab { r } else { 2 * ab - r - 2 };
+        for i in left..=right {
+            out.push((p + i, q + r));
+        }
+    }
+    out
 }
 
 /// The draw-time tests of claim 7 for a listed object at a pixel.
