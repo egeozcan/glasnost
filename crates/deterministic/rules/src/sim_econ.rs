@@ -140,9 +140,13 @@ pub struct EconFields {
     /// Buildings: `OrePurifier` (S-0402 Terms, claim 12); absent: no.
     #[serde(default)]
     pub ore_purifier: Option<bool>,
-    /// Buildings: `DockUnload` (S-0402 claim 10); absent: no.
+    /// Buildings: `DockUnload`, a dock-unload refinery (S-0402 Terms, claim 10); absent: no.
     #[serde(default)]
     pub dock_unload: Option<bool>,
+    /// Buildings: `Weeder`, the weed-flag building of S-0402 claim 13's
+    /// idle step-off; absent: no.
+    #[serde(default)]
+    pub weeder: Option<bool>,
     /// Buildings: `FactoryPlant`, grants cost bonuses (S-0404 claim 2);
     /// absent: no.
     #[serde(default)]

@@ -106,6 +106,7 @@ const BUILDING_ECON: &[Row] = &[
     ("refinery", "Refinery", Bool, "S-0402"),
     ("ore_purifier", "OrePurifier", Bool, "S-0402"),
     ("dock_unload", "DockUnload", Bool, "S-0402"),
+    ("weeder", "Weeder", Bool, "S-0402"),
     // S-0308 table P row 6: a building that is both is no airstrike target.
     ("resource_gatherer", "ResourceGatherer", Bool, "S-0308"),
     (
@@ -689,6 +690,7 @@ impl Builder<'_> {
             Kind::Vehicles => {
                 self.efields(&mut econ, t, kind, UNIT_ECON);
                 self.efields(&mut econ, t, kind, VEHICLE_ECON);
+                self.dock_unload_warning(t);
             }
             Kind::Aircraft => {
                 self.efields(&mut econ, t, kind, UNIT_ECON);
@@ -711,6 +713,45 @@ impl Builder<'_> {
         }
         if !econ.0.is_empty() {
             rec.put("econ", econ.node());
+        }
+    }
+
+    /// The importer warning of S-0402 Edge cases: a building type in a
+    /// harvester's dock list that lacks the dock-unload flag never directs
+    /// the harvester to a docking cell.
+    fn dock_unload_warning(&mut self, t: &TypeRec) {
+        let flag = |state: Option<&KeyState>| fold(state, None, |v, _| value::boolean(v));
+        if flag(t.keys.get(&b"Harvester"[..])) != Some(true) {
+            return;
+        }
+        let untrimmed = self.i.ini_quirks.list_items_untrimmed;
+        let Some((names, layer, line)) = fold(t.keys.get(&b"Dock"[..]), None, |v, e| {
+            Some((
+                value::name_items(v, value::COMMON_TEXT_LIMIT, untrimmed)
+                    .into_iter()
+                    .map(<[u8]>::to_vec)
+                    .collect::<Vec<_>>(),
+                e.layer,
+                e.line,
+            ))
+        }) else {
+            return;
+        };
+        let outcome = self.i.outcome;
+        let reg = &outcome.registries[&Kind::Buildings];
+        for n in names {
+            // spec: S-0003 claim 14 (names compared with ASCII case folding)
+            let Some(b) = reg.iter().find(|b| b.name.eq_ignore_ascii_case(&n)) else {
+                continue;
+            };
+            if flag(b.keys.get(&b"DockUnload"[..])) != Some(true) {
+                // spec: S-0402 Edge cases (the importer warns when a building type in a harvester's dock list lacks the dock-unload flag)
+                self.warn(layer, line, format!(
+                    "vehicles {} Dock {}: no DockUnload, so a harvester never unloads there (S-0402 claim 10)",
+                    show(&t.name),
+                    show(&n)
+                ));
+            }
         }
     }
 

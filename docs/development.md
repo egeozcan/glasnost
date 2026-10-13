@@ -309,12 +309,7 @@ Provisional rules of M5a, each tied to a request:
 | `econ::sell::sell_upgrade` | the upgrade count drops by 1, not below 0, whatever raised it | Q-0131 |
 | `econ::deploy::can_stand` | a packed-up vehicle is refused only by a cell that is not usable or whose ground record shows a building or a vehicle | Q-0132 |
 | `econ::placement::put_on_map`, `econ::deploy` (completion) | a placed building faces 0; a deployed building faces *D* × 256 | Q-0133 |
-| `econ::harvest::docking_cell`, `econ::harvest::process_enter` | the docking cell is (*x*₀ + *W*, *y*₀ + ⌊*H*/2⌋); *enter* drives there by an ordinary path and, at rest there, starts *unload* at once; claim 8's connectivity uses the docking cell | Q-0140 |
-| `econ::harvest::queueing_cell`, `econ::harvest::step_off_refinery` | the queueing cell when the entry outcome there is *clear*, else S-0212's nearby-cell search (substitution use) from it; none found: drive to the refinery; the idle step-off uses the same search | Q-0141 |
-| `econ::harvest::process_unload` | *unload* without contact: stop, clear the destination, fall back, then force *guard* when nothing was queued (delay 1); a dock slot is held only while its harvester holds contact | Q-0142 |
-| `econ::harvest::purifier_count` | the neutral and special houses count 0 virtual purifiers | Q-0143 |
-| `econ::harvest::choose_refinery` | the holding order is `HouseEcon::acquired` (joined at placement or capture) | Q-0144 |
-| free units (no code) | no free unit is created; a harvester given the placement fall-back starts *harvest* | Q-0145 |
+| `econ::harvest` (the idle step-off) | when the step-off search of S-0402 claim 13 gives no cell, the harvester stays where it is, with no destination, and still queues *guard* (no draw) | Q-0194 |
 | `combat::death::kill`, `econ::production::release`, `econ::production::place` | a production item killed by a destruction hit (S-0414 claim 15) is only marked killed (no other death effect, no draws) and stays on its line with health 0 until a cancellation deletes it; a release order for it fails and cancels it with the refund, a place order does nothing | Q-0193 |
 
 ## Tests

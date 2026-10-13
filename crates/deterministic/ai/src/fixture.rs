@@ -4,7 +4,7 @@
 //! behaviour.
 //!
 //! - Buildings: YARD (construction yard, 3 × 3, builds buildings), POWR
-//!   (power plant, 2 × 2), PROC (refinery, 3 × 3), PILL (barracks, 2 × 2),
+//!   (power plant, 2 × 2), PROC (dock-unload refinery, 3 × 3), PILL (barracks, 2 × 2),
 //!   FACT (war factory, 3 × 3).
 //! - Vehicles: MCV (deploys into YARD, the base unit), MINR (harvester,
 //!   docks at PROC), GUNR (a gun vehicle); the testkit's CART, CRUSHER and
@@ -98,6 +98,7 @@ pub fn ruleset() -> Ruleset {
     let powr = building(2, 2, 600, 100);
     let mut proc_ = building(3, 3, 1500, -40);
     proc_.econ.refinery = Some(true);
+    proc_.econ.dock_unload = Some(true);
     // Harvesters queue beside the docking cell (east of the foundation).
     proc_.econ.queueing_cell = Some([3, 2]);
     let mut pill = building(2, 2, 500, -20);

@@ -250,3 +250,20 @@ fn buildup_and_refinery_foundation_are_converted() {
         Some("25e-2")
     );
 }
+
+// spec: S-0402 Import mapping (building Weeder) and Edge cases (a warning for each building type in a harvester's dock list that lacks DockUnload)
+#[test]
+fn weeder_and_the_dock_unload_warning() {
+    let base = "[BuildingTypes]\n0=BINA\n1=BINB\n[BINA]\nRefinery=yes\nDockUnload=yes\n[BINB]\nWeeder=yes\n\
+[VehicleTypes]\n0=CART\n1=WAGON\n[CART]\nHarvester=yes\nDock=BINA,BINB\n[WAGON]\nDock=BINB\n";
+    let (s, w) = import(base, "");
+    assert_eq!(s.buildings["BINB"].econ.weeder, Some(true));
+    assert_eq!(s.buildings["BINA"].econ.weeder, None);
+    assert_eq!(s.buildings["BINA"].econ.dock_unload, Some(true));
+    let dock: Vec<&String> = w.iter().filter(|m| m.contains("DockUnload")).collect();
+    assert_eq!(dock.len(), 1, "{w:?}");
+    assert!(
+        dock[0].contains("CART") && dock[0].contains("BINB"),
+        "{dock:?}"
+    );
+}

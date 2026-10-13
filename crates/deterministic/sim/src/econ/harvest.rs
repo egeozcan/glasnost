@@ -9,14 +9,13 @@
 //! and 17 and the slave miner's tests of claim 14 answer through
 //! `crate::seams`.
 //!
-//! Provisional rules (requests Q-0140 to Q-0143, listed in
-//! docs/development.md): where a harvester docks and how it gets there
-//! (Q-0140), the cell search around a queueing cell and off a refinery
-//! (Q-0141), an *unload* without contact (Q-0142) and the virtual purifiers
-//! of the neutral and special houses (Q-0143).
+//! Provisional rule (request Q-0194, listed in docs/development.md): an
+//! idle harvester whose step-off search finds no cell stays where it is.
 //!
 //! Seams: the building animations of claim 11 (no building animation is
 //! modelled, so none is ever playing and none delays the harvester), the
+//! second route to *unload* through a finished cell next to the refinery
+//! (claim 10; when it can occur is an open question of the spec), the
 //! slave cycle of claim 14 (no slave is ever created, so a slave group is
 //! never at rest and the wake-up rule never holds in play; the rule itself
 //! is [`wake_rule`]), and the chrono miner's teleporting and its dropped
@@ -60,6 +59,10 @@ pub struct BuildingHarvest {
     pub slots: i32,
     /// The queueing shift (*x*, *y*), cells.
     pub queueing: (i32, i32),
+    /// A dock-unload refinery (Terms, claim 10).
+    pub dock_unload: bool,
+    /// The weed flag (claim 13's idle step-off).
+    pub weeder: bool,
 }
 
 /// The harvest rules.
@@ -159,6 +162,9 @@ impl Rules {
                     slots: e.art_number_of_docks.unwrap_or(1).max(1),
                     // spec: S-0402 Import mapping (QueueingCell absent: 0, 0)
                     queueing: e.queueing_cell.map_or((0, 0), |[x, y]| (x, y)),
+                    // spec: S-0402 Import mapping (DockUnload, Weeder absent: no)
+                    dock_unload: e.dock_unload.unwrap_or(false),
+                    weeder: e.weeder.unwrap_or(false),
                 }
             })
             .collect();
@@ -319,6 +325,10 @@ pub struct HarvestState {
     pub unloading: bool,
     /// Finishing (claim 11).
     pub finishing: bool,
+    /// Tethered to the refinery it holds contact with (claim 10, glossary
+    /// *tether link*); it counts only while that contact lasts.
+    #[serde(default)]
+    pub tethered: bool,
 }
 
 impl HarvestState {
@@ -443,13 +453,42 @@ fn zone(w: &World, id: ObjectId) -> Option<glasnost_rules::sim::MovementZone> {
 
 /// Whether the movement zone of `id` connects cell `a` with cell `b`
 /// (S-0212 claim 4).
-fn connected(w: &mut World, id: ObjectId, a: CellXY, b: CellXY) -> bool {
+fn cells_connected(w: &mut World, id: ObjectId, a: CellXY, b: CellXY) -> bool {
     let Some(z) = zone(w, id) else { return false };
     crate::regions::ensure(w);
     matches!(
         (crate::regions::reach_in(w, a, z), crate::regions::reach_in(w, b, z)),
         (crate::regions::Reach::Region(x), crate::regions::Reach::Region(y)) if x == y
     )
+}
+
+/// Whether a harvester is connected to a refinery (S-0402 claim 8): the
+/// cell of its heading point (its own position when it is not moving) and
+/// the cell of the refinery's reference point lie in the same reach region
+/// for the movement zone of its type, read for the deck when it is on a
+/// bridge deck. A heading-point cell outside the usable area counts as
+/// connected to every refinery.
+fn connected(w: &mut World, id: ObjectId, refinery: ObjectId) -> bool {
+    let Some(z) = zone(w, id) else { return false };
+    let Some(o) = w.obj(id) else { return false };
+    let deck = o.layer == Layer::Deck;
+    // spec: S-0402 claim 8 (the cell of the heading point, S-0212 Terms; its own position when it is not moving)
+    let from = if crate::occupancy::in_progress(w, id) {
+        crate::path::heading_point(w, id).unwrap_or(o.pos).cell()
+    } else {
+        o.pos.cell()
+    };
+    // spec: S-0402 claim 8 (a heading-point cell outside the usable area: connected to every refinery)
+    if !w.cells.usable(from) {
+        return true;
+    }
+    let to = w.reference_point(refinery).cell();
+    crate::regions::ensure(w);
+    use crate::regions::Reach;
+    // spec: S-0402 claim 8 (the same reach region, S-0212 claim 4, read for the deck when the harvester is on a bridge deck)
+    let a = crate::regions::reach_read(w, from, z, deck);
+    let b = crate::regions::reach_read(w, to, z, deck);
+    a == b && matches!(a, Reach::Region(_) | Reach::LoneDeck)
 }
 
 /// The ring search with range `range` from cell `from` (S-0402 claim 4).
@@ -511,7 +550,7 @@ fn acceptable(w: &mut World, id: ObjectId, from: CellXY, c: CellXY, reference: i
         return false;
     }
     // spec: S-0402 claim 4 (the movement zone connects it with the harvester's cell)
-    if !connected(w, id, from, c) {
+    if !cells_connected(w, id, from, c) {
         return false;
     }
     // spec: S-0402 claim 4 (the entry outcome clear for a ground vehicle mover, S-0209 claim 5)
@@ -532,15 +571,29 @@ fn owns_dock(w: &World, id: ObjectId) -> bool {
     })
 }
 
-/// The docking cell of a refinery (provisional, request Q-0140): the cell
-/// just east of the foundation, in its row ⌊*H*/2⌋, so that the refinery
-/// occupies the docking cell's neighbour in step direction 6.
+/// The docking cell of a dock-unload refinery (S-0402 Terms, claim 10):
+/// (*x*₀ + 3, *y*₀ + 1) from its top-left cell, whatever the size of its
+/// foundation. A refinery that is not a dock-unload refinery has none.
 pub fn docking_cell(w: &World, refinery: ObjectId) -> Option<CellXY> {
-    let o = w.obj(refinery)?;
-    let tl = o.pos.cell();
-    let (fw, fh) = o.foundation;
-    // Provisional (request Q-0140): the docking cell east of the foundation, in row ⌊H/2⌋.
-    Some(CellXY::new(tl.x + fw, tl.y + fh / 2)) // spec: S-0402 Terms (the refinery in step direction 6 of the docking cell); provisional cell, request Q-0140
+    // spec: S-0402 Terms (only a dock-unload refinery directs a harvester to its docking cell)
+    if !building(w, refinery).is_some_and(|b| b.dock_unload) {
+        return None;
+    }
+    let tl = w.obj(refinery)?.pos.cell();
+    // spec: S-0402 Terms and Constants (the docking cell (x₀ + 3, y₀ + 1), independent of the foundation size and the art)
+    Some(CellXY::new(tl.x + 3, tl.y + 1))
+}
+
+/// Whether a harvester is tethered to the refinery it holds contact with
+/// (S-0402 claim 10).
+fn tethered(w: &World, id: ObjectId) -> bool {
+    w.obj(id).is_some_and(|o| o.contact.is_some()) && st(w, id).tethered
+}
+
+/// The harvesters docked with a refinery (S-0408 Terms): those holding a
+/// dock slot and contact with it.
+pub fn docked(w: &World, refinery: ObjectId) -> Vec<ObjectId> {
+    live_holders(w, refinery)
 }
 
 /// Whether a refinery accepts a harvester (S-0402 claim 10); `waiting`: the
@@ -593,6 +646,9 @@ fn take_contact(w: &mut World, harvester: ObjectId, refinery: ObjectId) {
     if let Some(o) = w.obj_mut(harvester) {
         o.contact = Some(refinery);
     }
+    if let Some(s) = state(w, harvester) {
+        s.tethered = false;
+    }
 }
 
 /// The harvester breaks off contact and frees its dock slot.
@@ -602,6 +658,10 @@ fn break_contact(w: &mut World, harvester: ObjectId) {
     };
     if let Some(o) = w.obj_mut(harvester) {
         o.contact = None;
+    }
+    if let Some(s) = state(w, harvester) {
+        // spec: glossary (tether link: lost when the link is broken off)
+        s.tethered = false;
     }
     if let Some(d) = w.obj_mut(r).and_then(|b| b.econ.dock.as_mut()) {
         d.holders.retain(|&h| h != harvester);
@@ -677,7 +737,7 @@ pub fn choose_refinery(w: &mut World, id: ObjectId, waiting: bool) -> Option<Obj
     let o = w.obj(id)?.clone();
     let owner = o.owner?;
     let docks = unit(w, id)?.docks.clone();
-    // Provisional (request Q-0144): the holding order is the house's acquisition list.
+    // spec: S-0402 Terms (the holding order: joined when put on the map for the owner, left when it ceases to exist or changes owner; econ::events keeps it)
     let order = w.houses[usize::from(owner.0)].econ.acquired.clone();
     let mut bests = Vec::new();
     for &ty in &docks {
@@ -692,11 +752,8 @@ pub fn choose_refinery(w: &mut World, id: ObjectId, waiting: bool) -> Option<Obj
             {
                 continue;
             }
-            // spec: S-0402 claim 8 (connected by the movement zone; provisional: through the docking cell, request Q-0140)
-            let Some(dc) = docking_cell(w, b) else {
-                continue;
-            };
-            if !connected(w, id, o.pos.cell(), dc) || !accepts(w, b, id, waiting) {
+            // spec: S-0402 claim 8 (connected by the movement zone, and accepting it)
+            if !connected(w, id, b) || !accepts(w, b, id, waiting) {
                 continue;
             }
             let primary = w.obj(b).is_some_and(|x| x.econ.building.primary);
@@ -761,22 +818,56 @@ pub fn process_harvest(w: &mut World, id: ObjectId) -> i32 {
 }
 
 /// The idle step-off (S-0402 claim 13): off the cell of a refinery-flag
-/// building, to a free cell nearby (provisional search, request Q-0141).
+/// or weed-flag building, to the cell of S-0212's nearby-cell search with
+/// claim 13's settings.
 fn step_off_refinery(w: &mut World, id: ObjectId) {
-    let Some(c) = w.obj(id).map(|o| o.pos.cell()) else {
+    let Some(o) = w.obj(id).cloned() else {
         return;
     };
-    let on_refinery = w
+    let c = o.pos.cell();
+    // spec: S-0402 claim 13 (a refinery-flag building, or a weed-flag building, Import mapping)
+    let Some(b) = w
         .cells
         .list(c, Layer::Ground)
         .iter()
-        .any(|&b| building(w, b).is_some_and(|x| x.refinery));
-    if !on_refinery {
+        .copied()
+        .find(|&b| building(w, b).is_some_and(|x| x.refinery || x.weeder))
+    else {
         return;
-    }
+    };
+    let r = w.rules_arc();
+    let Some(u) = r.unit(o.kind, o.type_index) else {
+        return;
+    };
+    // spec: S-0402 claim 13 (the centre: the cell of that building's reference point)
+    let centre = w.reference_point(b).cell();
+    let deck = o.layer == Layer::Deck;
     crate::regions::ensure(w);
-    if let Some(n) = crate::path::nearby(w, c, crate::path::NearbyUse::Substitution { unit: id }) {
-        drive_to(w, id, Target::Cell(n));
+    let settings = crate::path::NearbySettings {
+        // spec: S-0402 claim 13 (the harvester's own locomotion class, winged counted as track)
+        class: u.class.map(|k| match k {
+            glasnost_rules::sim::LocomotionClass::Winged => {
+                glasnost_rules::sim::LocomotionClass::Track
+            }
+            other => other,
+        }),
+        // spec: S-0402 claim 13 (its type's own movement zone; the reach region of the centre cell for that zone, read for the deck when it is on a bridge deck)
+        zone: u.zone,
+        reach: Some(crate::regions::reach_read(w, centre, u.zone, deck)),
+        // spec: S-0402 claim 13 (deck mode when it is on a bridge deck; no height condition; no further test)
+        deck,
+        height: false,
+        // spec: S-0402 claim 13 (no reference cell: the preferred cell at position N mod n)
+        reference: None,
+        no_bridges: false,
+        no_overlay: false,
+    };
+    match crate::path::nearby(w, centre, crate::path::NearbyUse::Settings(settings)) {
+        Some(n) => drive_to(w, id, Target::Cell(n)),
+        None => {
+            // Request Q-0194 (interim: no result, the harvester stays where it is)
+            w.note("Q-0194: an idle harvester's step-off search found no cell; it stays (interim)");
+        }
     }
 }
 
@@ -963,39 +1054,45 @@ fn returning(w: &mut World, id: ObjectId) -> i32 {
         if !chrono && distance_3d(w, id, r) <= 768 {
             return standard(w, id);
         }
-        let dest = queueing_cell(w, id, r).map_or(Target::Object(r), Target::Cell);
-        // spec: S-0402 claim 9 (it drives to the queueing cell or the nearest free cell around it; with none, towards the refinery)
+        // spec: S-0402 claim 9 (it drives to the search's cell; with none, its destination is the refinery building itself)
+        let dest = queueing_cell(w, r).map_or(Target::Object(r), Target::Cell);
         drive_to(w, id, dest);
     }
     standard(w, id)
 }
 
-/// The queueing cell of a refinery (S-0402 Terms): its position's cell
-/// moved by the queueing shift, or the nearest free cell around it
-/// (provisional search, request Q-0141).
-fn queueing_cell(w: &mut World, id: ObjectId, refinery: ObjectId) -> Option<CellXY> {
-    let b = w.obj(refinery)?;
-    let tl = b.pos.cell();
+/// Where a harvester queues at a refinery (S-0402 claim 9): the result of
+/// S-0212's nearby-cell search around the queueing cell (the refinery's
+/// top-left cell moved by its queueing shift) with claim 9's settings, or
+/// none.
+fn queueing_cell(w: &mut World, refinery: ObjectId) -> Option<CellXY> {
+    use glasnost_rules::sim::{LocomotionClass, MovementZone};
+    let tl = w.obj(refinery)?.pos.cell();
     let (qx, qy) = building(w, refinery).map_or((0, 0), |x| x.queueing);
+    // spec: S-0402 Terms (the queueing cell: the top-left cell moved by the queueing shift)
     let q = CellXY::new(tl.x + qx, tl.y + qy);
-    let reference = crate::occupancy::reference_level(w, id);
-    if w.cells.cell(q).is_some()
-        && crate::occupancy::vehicle_outcome(w, id, q, reference)
-            == crate::occupancy::Outcome::Clear
-    {
-        return Some(q);
-    }
     crate::regions::ensure(w);
-    crate::path::nearby(w, q, crate::path::NearbyUse::Substitution { unit: id })
+    let settings = crate::path::NearbySettings {
+        // spec: S-0402 claim 9 and Constants (locomotion class wheel, movement zone normal, whatever the harvester's own)
+        class: Some(LocomotionClass::Wheel),
+        zone: MovementZone::Normal,
+        // spec: S-0402 claim 9 (no reach region; never in deck mode; no height condition; no further test)
+        reach: None,
+        deck: false,
+        height: false,
+        // spec: S-0402 claim 9 (the reference cell: the refinery's top-left cell, without the queueing shift)
+        reference: Some(tl),
+        no_bridges: false,
+        no_overlay: false,
+    };
+    crate::path::nearby(w, q, crate::path::NearbyUse::Settings(settings))
 }
 
-/// The processing of *enter* for a harvester (S-0402 claim 10; the approach
-/// is provisional, request Q-0140): it drives to the docking cell of the
-/// refinery it holds contact with and, there and at rest, queues *unload*
-/// with an immediate start.
+/// The processing of *enter* for a harvester (S-0402 claim 10): in
+/// contact with a dock-unload refinery, it asks to dock, and the first
+/// matching row of claim 10's table applies. Every processing is followed
+/// by the next after the standard delay of *enter*.
 pub fn process_enter(w: &mut World, id: ObjectId) -> i32 {
-    let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
-    let t = w.tick;
     let Some(o) = w.obj(id).cloned() else {
         return 1;
     };
@@ -1017,20 +1114,49 @@ pub fn process_enter(w: &mut World, id: ObjectId) -> i32 {
         crate::process::fall_back(w, id, false);
         return 1;
     };
+    // spec: S-0402 claim 10 row 1 (the refinery refuses, it does when switched off, and the harvester is not tethered: it breaks off contact and falls back to rest)
+    if !tethered(w, id) && !accepts(w, r, id, false) {
+        break_contact(w, id);
+        crate::process::fall_back(w, id, false);
+        return standard(w, id);
+    }
+    // spec: S-0402 claim 10 and Edge cases (a refinery that is not a dock-unload refinery never directs the harvester: it stays in enter)
     let Some(dc) = docking_cell(w, r) else {
-        return 1;
+        return standard(w, id);
     };
-    let here = o.pos.cell();
-    if here == dc && !crate::occupancy::in_progress(w, id) {
-        if let Some(ob) = w.obj_mut(id) {
-            ob.dest = None;
-            ob.beh.queue_and_start_at_once(Behaviour::Unload, t, stale);
+    if o.pos.cell() != dc {
+        // spec: S-0402 claim 10 row 2 (not on the docking cell: its destination is set to it, an ordinary move)
+        if o.dest != Some(Target::Cell(dc)) {
+            drive_to(w, id, Target::Cell(dc));
         }
-        return 1;
+        return standard(w, id);
     }
-    if o.dest != Some(Target::Cell(dc)) {
-        drive_to(w, id, Target::Cell(dc));
+    // spec: S-0402 claim 10 rows 3 to 5 (on the docking cell: it and the refinery become tethered)
+    if let Some(s) = state(w, id) {
+        s.tethered = true;
     }
+    let t = w.tick;
+    // spec: S-0402 claim 10 and Constants (the facing aimed at on the docking cell: exactly 16384)
+    const DOCK_FACING: u16 = 16384;
+    if w.body_facing(id) != DOCK_FACING {
+        let rate = w
+            .rules()
+            .unit(o.kind, o.type_index)
+            .map_or(0, |u| u.turn_rate);
+        if let Some(ob) = w.obj_mut(id) {
+            // spec: S-0402 claim 10 row 3 (facing not exactly 16384: it turns its body on the spot towards 16384)
+            ob.body.turn_to(DOCK_FACING, t, rate);
+        }
+    } else if !crate::occupancy::in_progress(w, id) {
+        let sold = w
+            .obj(r)
+            .is_some_and(|b| b.econ.sale.is_some() || b.beh.current == Some(Behaviour::Selling));
+        // spec: S-0402 claim 10 row 4 (facing 16384 and not moving: the refinery queues unload on it, without an immediate start, unless it is being sold)
+        if !sold && let Some(ob) = w.obj_mut(id) {
+            ob.beh.queue(Some(Behaviour::Unload));
+        }
+    }
+    // spec: S-0402 claim 10 row 5 (still moving: tethered, nothing else) and the standard delay of enter
     standard(w, id)
 }
 
@@ -1070,20 +1196,7 @@ pub fn process_unload(w: &mut World, id: ObjectId) -> i32 {
         s.finishing = false;
     }
     if o.contact.is_none() {
-        // spec: S-0402 claim 11 (not in contact: stops, clears its destination and falls back to rest)
-        crate::drive::stop(w, id);
-        if let Some(ob) = w.obj_mut(id) {
-            ob.dest = None;
-        }
-        crate::process::fall_back(w, id, false);
-        if w.obj(id).is_some_and(|x| x.beh.queued.is_none()) {
-            // Provisional (request Q-0142): S-0215 claim 15 queues nothing while unload is current; the harvester is given guard.
-            w.note("S-0402 claim 11: an unload without contact falls back to guard (provisional, request Q-0142)");
-            if let Some(ob) = w.obj_mut(id) {
-                ob.beh.force(Behaviour::Guard, t, stale);
-            }
-        }
-        return 1;
+        return no_contact(w, id);
     }
     let s = st(w, id);
     if !s.unloading {
@@ -1111,6 +1224,7 @@ pub fn process_unload(w: &mut World, id: ObjectId) -> i32 {
     let Some(b) = west_building(w, id) else {
         if !s.finishing {
             // spec: S-0402 claim 11 (unloading, no building in the neighbouring cell: breaks off contact, harvest with an immediate start)
+            leave_unloading(w, id);
             break_contact(w, id);
             if let Some(ob) = w.obj_mut(id) {
                 ob.beh.queue_and_start_at_once(Behaviour::Harvest, t, stale);
@@ -1147,20 +1261,235 @@ pub fn process_unload(w: &mut World, id: ObjectId) -> i32 {
     1
 }
 
-/// The finishing row of claim 11: queues *harvest*, breaks off contact and
-/// starts the queued behaviour.
+/// Leaves the unloading state (S-0402 claim 11).
+fn leave_unloading(w: &mut World, id: ObjectId) {
+    if let Some(x) = state(w, id) {
+        x.unloading = false;
+        x.finishing = false;
+    }
+}
+
+/// Whether a harvester is in the unloading state of S-0402 claim 11: from
+/// the start row of *unload* until it leaves. A vehicle in that state is
+/// not ready to change (S-0215 claim 11, the letting-out transition).
+pub fn in_unloading_state(w: &World, id: ObjectId) -> bool {
+    w.obj(id).is_some_and(|o| {
+        o.beh.current == Some(Behaviour::Unload)
+            && o.econ.harvest.as_ref().is_some_and(|s| s.unloading)
+    })
+}
+
+/// The first row of claim 11: a processing of *unload* not in contact with
+/// anything.
+fn no_contact(w: &mut World, id: ObjectId) -> i32 {
+    let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
+    let t = w.tick;
+    let stalls = w.rules().quirks.unload_without_contact_stalls;
+    if stalls {
+        // spec: S-0402 claim 11 row 1 (falls back to rest, S-0215 claim 15, which queues nothing while unload is current; quirks.unload_without_contact_stalls)
+        crate::process::fall_back(w, id, false);
+    } else {
+        // spec: S-0402 Edge cases (quirks.unload_without_contact_stalls off: the fall-back as if unload were not current)
+        let cur = w.obj_mut(id).map(|o| o.beh.current.take());
+        crate::process::fall_back(w, id, false);
+        if let (Some(cur), Some(o)) = (cur, w.obj_mut(id)) {
+            o.beh.current = cur;
+        }
+    }
+    // spec: S-0402 claim 11 row 1 (leaves the unloading state; stops if it is moving)
+    leave_unloading(w, id);
+    if crate::occupancy::in_progress(w, id) {
+        crate::drive::stop(w, id);
+    }
+    // spec: S-0402 claim 11 row 1 (then a start-next if it has a queued behaviour and is ready to change; with the switch off it starts at once)
+    let ready = !stalls || crate::process::ready(w, id);
+    if ready && let Some(ob) = w.obj_mut(id) {
+        ob.beh.start_next(t, stale);
+    }
+    // spec: S-0402 Constants (processing interval of unload without contact: 1 tick)
+    1
+}
+
+/// The two finishing rows of claim 11.
 fn finish(w: &mut World, id: ObjectId) -> i32 {
     let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
     let t = w.tick;
-    // spec: S-0402 claim 11 (finishing, otherwise: queues harvest, breaks off contact, starts the queued behaviour)
+    let Some(o) = w.obj(id).cloned() else {
+        return 1;
+    };
+    leave_unloading(w, id);
+    if o.dest.is_some() && o.beh.queued.is_some_and(|b| b != Behaviour::Harvest) {
+        // spec: S-0402 claim 11 (finishing with a destination and a queued behaviour other than harvest: leaves the unloading state, stops if moving, starts the queued behaviour if ready; contact kept)
+        if crate::occupancy::in_progress(w, id) {
+            crate::drive::stop(w, id);
+        }
+        if crate::process::ready(w, id)
+            && let Some(ob) = w.obj_mut(id)
+        {
+            ob.beh.start_next(t, stale);
+        }
+        // spec: S-0402 claim 11 (the standard delay of the behaviour then current, one draw)
+        return standard(w, id);
+    }
+    // spec: S-0402 claim 11 (finishing, otherwise: queues harvest without an immediate start; if ready to change, breaks off contact and starts the queued behaviour)
     if let Some(ob) = w.obj_mut(id) {
         ob.beh.queue(Some(Behaviour::Harvest));
     }
-    break_contact(w, id);
-    if let Some(ob) = w.obj_mut(id) {
-        ob.beh.start_next(t, stale);
+    if crate::process::ready(w, id) {
+        break_contact(w, id);
+        if let Some(ob) = w.obj_mut(id) {
+            ob.beh.start_next(t, stale);
+        }
     }
-    1
+    // spec: S-0402 claim 11 (the standard delay of the behaviour then current, one draw)
+    standard(w, id)
+}
+
+/// A refinery's sale reaches its first processing (S-0402 claim 11, S-0408
+/// claim 6): every harvester docked with it is told to leave. One in the
+/// unloading state leaves it, scatters, queues *harvest* and starts it,
+/// keeping the unpaid part of its load; one still in *enter* queues *guard*
+/// and scatters. The sale then breaks off the contact.
+pub fn refinery_sold(w: &mut World, refinery: ObjectId) {
+    let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
+    let t = w.tick;
+    for h in docked(w, refinery) {
+        if in_unloading_state(w, h) {
+            // spec: S-0402 claim 11 (refinery sold: a harvester in the unloading state leaves it at once, scatters, queues harvest and starts it if ready, which it now is)
+            leave_unloading(w, h);
+            scatter(w, h);
+            let ready = crate::process::ready(w, h);
+            if let Some(ob) = w.obj_mut(h) {
+                ob.beh
+                    .queue_and_start(Some(Behaviour::Harvest), ready, t, stale);
+            }
+        } else if w
+            .obj(h)
+            .is_some_and(|o| o.beh.current == Some(Behaviour::Enter))
+        {
+            // spec: S-0402 claim 11 (refinery sold: a harvester still in enter queues guard instead and scatters)
+            if let Some(ob) = w.obj_mut(h) {
+                ob.beh.queue(Some(Behaviour::Guard));
+            }
+            scatter(w, h);
+        }
+        // spec: S-0402 claim 11 (the sale then breaks off the contact)
+        break_contact(w, h);
+    }
+}
+
+/// A scatter without a threat point (S-0208 claim 13, S-0207 claim 16 for
+/// a vehicle): the destination becomes the cell of the nearby-cell search
+/// around the vehicle's scatter centre; behaviours unchanged, no draw.
+fn scatter(w: &mut World, id: ObjectId) {
+    let Some(o) = w.obj(id).cloned() else { return };
+    let class = w.rules().unit(o.kind, o.type_index).and_then(|u| u.class);
+    // spec: S-0207 claim 16 (the vehicle's scatter centre: its locomotor destination's cell, else its own)
+    let centre = crate::path::locomotor_destination(w, id).map_or(o.pos.cell(), |p| p.cell());
+    crate::regions::ensure(w);
+    // spec: S-0208 claim 13 (the nearby-cell search's cell in the scatter use; the unit moves there)
+    if let Some(c) = crate::path::nearby(
+        w,
+        centre,
+        crate::path::NearbyUse::Scatter {
+            class,
+            deck: o.layer == Layer::Deck,
+        },
+    ) {
+        drive_to(w, id, Target::Cell(c));
+    }
+}
+
+/// A building's grand opening (S-0402 claim 18): its free unit, if its
+/// type has one, unless claim 18 withholds it.
+pub fn grand_opening(w: &mut World, building: ObjectId) {
+    use glasnost_rules::sim::LocomotionClass;
+    let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
+    let Some(b) = w.obj(building).cloned() else {
+        return;
+    };
+    let Some(owner) = b.owner else { return };
+    let Some(free) = super::production::free_unit(w, b.type_index) else {
+        return;
+    };
+    let player = w
+        .houses
+        .get(usize::from(owner.0))
+        .is_some_and(|h| h.role == HouseRole::Player);
+    if player
+        && let Some(sp) = b.econ.start_price
+        && sp != 0
+        && sp <= super::sell::adjusted_cost(w, b.type_index)
+    {
+        // spec: S-0402 claim 18 (a produced building of a player house whose start price is not 0 and not above the adjusted cost C gets none)
+        return;
+    }
+    let Some(zone) = w.rules().unit(free.kind, free.index).map(|u| u.zone) else {
+        return;
+    };
+    // spec: S-0402 claim 18 (a new vehicle of the free unit's type, owned by the building's owner; the object creation draw)
+    let unit = crate::objects::create(w, free.kind, free.index, Some(owner));
+    let tl = b.pos.cell();
+    let refc = w.reference_point(building).cell();
+    // spec: S-0402 claim 18 and Constants (the first place: the cell in step direction 4, map south, of the reference point's cell)
+    let (dx, dy) = crate::regions::STEPS[4];
+    let first = CellXY::new(refc.x + dx, refc.y + dy);
+    let reference = crate::occupancy::reference_level(w, unit);
+    let accepts = |w: &World, c: CellXY| {
+        // spec: S-0402 claim 18 (a place accepts the unit when its entry outcome there is clear, S-0209)
+        w.cells.cell(c).is_some()
+            && crate::occupancy::vehicle_outcome(w, unit, c, reference)
+                == crate::occupancy::Outcome::Clear
+    };
+    crate::regions::ensure(w);
+    let search = |w: &World, no_overlay: bool| {
+        let settings = crate::path::NearbySettings {
+            // spec: S-0402 claim 18 and Constants (locomotion class wheel, whatever the free unit's own; its type's movement zone)
+            class: Some(LocomotionClass::Wheel),
+            zone,
+            // spec: S-0402 claim 18 (the reach region of the centre cell for that zone, read for the ground; never in deck mode; the height condition; bridge cells never qualify)
+            reach: Some(crate::regions::reach_read(w, tl, zone, false)),
+            deck: false,
+            height: true,
+            // spec: S-0402 claim 18 (the reference cell: the top-left cell)
+            reference: Some(tl),
+            no_bridges: true,
+            no_overlay,
+        };
+        // spec: S-0402 claim 18 (the centre: the building's top-left cell)
+        crate::path::nearby(w, tl, crate::path::NearbyUse::Settings(settings))
+    };
+    // spec: S-0402 claim 18 and Constants (facing 49152 at the first place, 40960 at a searched place)
+    let mut place = accepts(w, first).then_some((first, 49152u16));
+    if place.is_none() {
+        // spec: S-0402 claim 18 (the second place: the search with the no-overlay condition)
+        place = search(w, true)
+            .filter(|&c| accepts(w, c))
+            .map(|c| (c, 40960));
+    }
+    if place.is_none() {
+        // spec: S-0402 claim 18 (the third place: the same search without the overlay condition)
+        place = search(w, false)
+            .filter(|&c| accepts(w, c))
+            .map(|c| (c, 40960));
+    }
+    let Some((cell, facing)) = place else {
+        // spec: S-0402 claim 18 (no place accepts it: the unit is removed again and the owner receives the refund with the percentage taken as 1)
+        crate::objects::remove(w, unit);
+        let refund = super::sell::refund_whole(w, owner, free);
+        if let Some(h) = w.houses.get_mut(usize::from(owner.0)) {
+            h.credits = h.credits.wrapping_add(refund);
+        }
+        return;
+    };
+    let p = crate::world::Pos::centre(cell, 0);
+    let z = w.surface_at(p.x, p.y);
+    crate::objects::place(w, unit, crate::world::Pos::new(p.x, p.y, z), facing);
+    let t = w.tick;
+    if let Some(ob) = w.obj_mut(unit) {
+        // spec: S-0402 claim 18 (a placed free unit queues harvest with an immediate start, whatever its type)
+        ob.beh.queue_and_start_at_once(Behaviour::Harvest, t, stale);
+    }
 }
 
 /// The purifier count *n*ₚ of a house (S-0402 Terms, claim 12): its
@@ -1185,10 +1514,14 @@ pub fn purifier_count(w: &World, house: HouseId) -> i64 {
         })
         .count() as i64;
     let h = &w.houses[usize::from(house.0)];
-    // spec: S-0402 claim 12 (virtual purifiers: never for an AI house of our engine; the neutral and special houses' list position is provisional, request Q-0143: none)
     let virtual_ = match h.role {
+        // spec: S-0402 claim 12 (virtual purifiers: never for a player house of our engine, AI houses included)
         HouseRole::Player => 0,
-        HouseRole::Neutral | HouseRole::Special => 0,
+        // spec: S-0402 claim 12 (the neutral and special houses: the list entry their difficulty index selects, index 1 in every skirmish; a missing list or entry counts 0)
+        HouseRole::Neutral | HouseRole::Special => usize::try_from(h.econ.setup.difficulty)
+            .ok()
+            .and_then(|i| r.econ.harvest.virtual_purifiers.get(i))
+            .map_or(0, |&v| i64::from(v)),
     };
     real + virtual_
 }

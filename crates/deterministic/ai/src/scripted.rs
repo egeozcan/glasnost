@@ -15,9 +15,11 @@
 //! 4. keep the plan's harvester count, and send idle harvesters to harvest;
 //! 5. once the harvesters are kept, build army units round-robin, and when
 //!    a wave is ready attack-move it to the nearest seen enemy or the next enemy start position (lobby
-//!    knowledge: the map's start waypoints); idle units attack seen enemies
-//!    near them. A smaller wave goes too once units have waited long enough,
-//!    so a house that cannot afford a full wave still attacks.
+//!    knowledge: the map's start waypoints), and once every start position
+//!    has been visited, to the nearest cell of a coarse search grid that
+//!    the house does not see now; idle units attack seen enemies near them.
+//!    A smaller wave goes too once units have waited long enough, so a house
+//!    that cannot afford a full wave still attacks.
 //!
 //! Types are found by role from the rules (a building with power output, the
 //! refinery flag, a factory kind; a harvester; a unit with a primary weapon)
@@ -70,6 +72,10 @@ const ENGAGE: i64 = 10; // nocite: tuning of our own opponent
 /// Ticks after which idle army units go as a wave even when fewer than the
 /// plan's wave size.
 const WAVE_PATIENCE: i32 = 3000; // nocite: tuning of our own opponent
+
+/// Spacing of the search grid that waves sweep once every enemy start
+/// position has been visited.
+const SEARCH_STEP: i32 = 8; // nocite: tuning of our own opponent
 
 /// Free cells kept between the house's buildings.
 const GAP: i32 = 2; // nocite: tuning of our own opponent
@@ -181,11 +187,24 @@ fn is_yard(w: &World, o: &glasnost_sim::world::Object) -> bool {
             .is_some_and(|b| b.factory == Some(FactoryKind::Building))
 }
 
-/// Whether a unit has nothing to do: no destination, no target, and a
-/// resting behaviour (or a move that has arrived).
+/// Cells within which a unit moving to a cell counts as arrived, so that a
+/// crowd jammed around its goal is free for the next wave.
+const ARRIVED: i64 = 2; // nocite: tuning of our own opponent
+
+/// Whether a unit has nothing to do: no destination (or a cell destination
+/// it has as good as reached), no target, and a resting behaviour (or a
+/// move that has arrived).
 fn idle(w: &World, id: ObjectId) -> bool {
     w.obj(id).is_some_and(|o| {
-        o.dest.is_none()
+        let arrived = match o.dest {
+            None => true,
+            Some(Target::Cell(c)) => {
+                o.beh.current == Some(Behaviour::Move)
+                    && dist2(c, o.pos.cell()) <= ARRIVED * ARRIVED
+            }
+            Some(_) => false,
+        };
+        arrived
             && o.target.is_none()
             && matches!(
                 o.beh.current,
@@ -452,9 +471,18 @@ impl Script {
             self.waiting_since = None;
             // The nearest seen enemy, else the next enemy start cell.
             let home = self.home(w);
+            let from = w.obj(waiting[0]).map(|o| o.pos.cell());
             let goal = home
                 .and_then(|h| enemies.iter().min_by_key(|&&(_, c)| dist2(c, h)))
                 .map(|&(_, c)| c)
+                .or_else(|| {
+                    (self.next_target < self.targets.len()).then(|| {
+                        let c = self.targets[self.next_target];
+                        self.next_target += 1;
+                        c
+                    })
+                })
+                .or_else(|| from.and_then(|f| self.unseen_cell(w, f)))
                 .or_else(|| {
                     (!self.targets.is_empty()).then(|| {
                         let c = self.targets[self.next_target % self.targets.len()];
@@ -475,6 +503,19 @@ impl Script {
             }
         }
         out
+    }
+
+    /// The nearest cell of the search grid, from `from`, that is in the
+    /// usable area and that the house does not see now; the first in cell
+    /// order on equal distance.
+    fn unseen_cell(&self, w: &World, from: CellXY) -> Option<CellXY> {
+        w.cells
+            .grid
+            .iter()
+            .map(|(c, _)| c)
+            .filter(|c| c.x % SEARCH_STEP == 0 && c.y % SEARCH_STEP == 0)
+            .filter(|&c| w.cells.usable(c) && !shroud::seen(w, self.house, c))
+            .min_by_key(|&c| (dist2(c, from), c.y, c.x))
     }
 
     /// Enemy objects on cells the house sees, with their cells.

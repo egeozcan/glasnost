@@ -77,7 +77,7 @@ pub fn building(w: i32, h: i32) -> BuildingType {
 ///   with the tiberium flag;
 /// - tiberiums ORE (value 25) and GEM (value 50), growth and spread
 ///   fractions 0 (no growth or spread unless a test sets them);
-/// - buildings REFN (refinery, 3 × 3, one dock slot), REF2 (refinery,
+/// - buildings REFN (dock-unload refinery, 3 × 3, one dock slot), REF2 (the same,
 ///   3 × 3, queueing shift (−2, 1)), PURI (ore purifier, 1 × 1), HUT
 ///   (1 × 1), MINE terrain object handled by the tests that need one;
 /// - vehicles HARV (harvester, capacity 5), CHRONO (a chrono miner),
@@ -124,6 +124,7 @@ pub fn ruleset() -> Ruleset {
     }
     let mut refn = building(3, 3);
     refn.econ.refinery = Some(true);
+    refn.econ.dock_unload = Some(true);
     let mut ref2 = refn.clone();
     ref2.econ.queueing_cell = Some([-2, 1]);
     let mut puri = building(1, 1);

@@ -1045,6 +1045,31 @@ pub enum NearbyUse {
         /// The actor.
         unit: ObjectId,
     },
+    /// A use whose spec gives every setting itself (S-0402 claims 9, 13
+    /// and 18).
+    Settings(NearbySettings),
+}
+
+/// The settings of a nearby-cell search (S-0212 claim 25) that its user
+/// gives in full.
+#[derive(Clone, Copy, Debug)]
+pub struct NearbySettings {
+    /// The locomotion class.
+    pub class: Option<LocomotionClass>,
+    /// The movement zone.
+    pub zone: MovementZone,
+    /// The reach region the cells must lie in, if any.
+    pub reach: Option<Reach>,
+    /// Deck mode.
+    pub deck: bool,
+    /// The height condition.
+    pub height: bool,
+    /// The reference cell, if any.
+    pub reference: Option<CellXY>,
+    /// Bridge cells never qualify.
+    pub no_bridges: bool,
+    /// The further test: the cell holds no overlay of any kind.
+    pub no_overlay: bool,
 }
 
 /// The nearby-cell search (S-0212 claim 25).
@@ -1129,6 +1154,16 @@ pub fn nearby(w: &World, centre: CellXY, use_: NearbyUse) -> Option<CellXY> {
                 let rr = regions::reach_read(w, o.pos.cell(), u.zone, false);
                 (u.class, u.zone, Some(rr), false, true, false, None, false)
             }
+            NearbyUse::Settings(x) => (
+                x.class,
+                x.zone,
+                x.reach,
+                x.deck,
+                x.height,
+                x.no_overlay,
+                x.reference,
+                x.deck,
+            ),
         };
     let centre_level = w.cells.cell(centre).map_or(0, |c| i32::from(c.level))
         + if centre_deck && is_deck(centre) {
@@ -1137,7 +1172,12 @@ pub fn nearby(w: &World, centre: CellXY, use_: NearbyUse) -> Option<CellXY> {
             0
         };
     // spec: S-0212 claim 25 (the empty-radius approach-failure row of T5 excludes bridge cells, whatever the locomotion class)
-    let no_bridges = matches!(use_, NearbyUse::Approach { .. });
+    let no_bridges = match use_ {
+        NearbyUse::Approach { .. } => true,
+        NearbyUse::Settings(x) => x.no_bridges,
+        _ => false,
+    };
+    let overlay_test = matches!(use_, NearbyUse::Settings(_));
     let mut collected: Vec<CellXY> = Vec::new();
     let mut stop_after_ring = false;
     'rings: for r in 0..=max_r {
@@ -1156,7 +1196,12 @@ pub fn nearby(w: &World, centre: CellXY, use_: NearbyUse) -> Option<CellXY> {
                 deck_mode,
                 height_cond,
                 centre_level,
-            ) && (!further || burrow_ok(w, c))
+            ) && (!further
+                || (if overlay_test {
+                    no_overlay(w, c)
+                } else {
+                    burrow_ok(w, c)
+                }))
             {
                 collected.push(c);
                 // spec: S-0212 claim 25 (cut off at the 24th collected cell)
@@ -1206,6 +1251,14 @@ pub fn nearby(w: &World, centre: CellXY, use_: NearbyUse) -> Option<CellXY> {
             preferred.get(w.tick.rem_euclid(n) as usize).copied()
         }
     }
+}
+
+/// The further test of S-0402 claim 18's first free-unit search: the
+/// cell holds no overlay of any kind (a cell outside the map holds none).
+fn no_overlay(w: &World, c: CellXY) -> bool {
+    w.cells
+        .cell(c)
+        .is_none_or(|x| x.overlay == glasnost_map::NO_OVERLAY)
 }
 
 /// The further test of the nearby-cell search (S-0212 claim 25): the

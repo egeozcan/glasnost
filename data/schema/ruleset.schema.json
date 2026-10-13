@@ -2225,7 +2225,7 @@
           }
         },
         "dock_unload": {
-          "description": "Buildings: `DockUnload` (S-0402 claim 10); absent: no.",
+          "description": "Buildings: `DockUnload`, a dock-unload refinery (S-0402 Terms, claim 10); absent: no.",
           "type": [
             "boolean",
             "null"
@@ -2762,6 +2762,14 @@
         },
         "water_bound": {
           "description": "Buildings: `WaterBound` (S-0406 claim 3 d); absent: no, unless the\nlocomotion-class key names *float*.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "weeder": {
+          "description": "Buildings: `Weeder`, the weed-flag building of S-0402 claim 13's\nidle step-off; absent: no.",
           "type": [
             "boolean",
             "null"

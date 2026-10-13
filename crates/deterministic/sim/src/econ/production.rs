@@ -847,6 +847,10 @@ fn start_item(w: &mut World, li: usize, t: TypeRef, forced: bool) {
     } else {
         Hold::None
     };
+    if let Some(o) = w.obj_mut(object) {
+        // spec: S-0402 Terms (the start price, recorded on the produced object)
+        o.econ.start_price = Some(p);
+    }
     let tick = w.tick;
     w.econ.lines.lines[li].item = Some(Item {
         t,

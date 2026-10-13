@@ -76,6 +76,10 @@ pub struct ObjectEcon {
     pub harvest: Option<harvest::HarvestState>,
     /// A refinery's docks (S-0402).
     pub dock: Option<harvest::DockState>,
+    /// A produced object's start price (S-0402 Terms, S-0404 claim 2): its
+    /// price when its production started; none for an object not produced.
+    #[serde(default)]
+    pub start_price: Option<i32>,
     /// Deploying or packing up (S-0415).
     pub deploy: deploy::DeployState,
     /// A building's construction state (S-0108, S-0406 claim 1).
