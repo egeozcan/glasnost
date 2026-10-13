@@ -123,6 +123,81 @@ fn gains(w: &mut World, ids: &[ObjectId], n: i32) -> Vec<(i32, Vec<i32>)> {
 
 // ================================================================ S-0314
 
+/// The rules of H3 part a: TRUCK of cost 900 and strength 600, repair step
+/// 10, repair percentage 25 %.
+fn repair_rules() -> Ruleset {
+    let mut r = rules();
+    let t = r.sim.vehicles.get_mut("TRUCK").unwrap();
+    t.strength = Some(600);
+    t.cost = Some(900);
+    r.sim.general.repair_step = Some(10);
+    r.sim.general.repair_percent = dec("25%");
+    r
+}
+
+// spec: S-0314 F2 (q = S ÷ R, c = C ÷ q, step cost = max(1, trunc(RZ₅₃(c × p))): 900, 600, 10, 0.25 give 3)
+// spec: S-0314 F2 and Edge cases (our engine: R′ = max(1, R), q = max(1, S ÷ R′): H3 part d, 4000, 500, −5, 0.25 give 2; a strength below the step gives q = 1)
+#[test]
+fn f2_step_cost_and_its_departure() {
+    let rz = Rounding::TowardZero;
+    let p = glasnost_sim::rules::nearest_double("0.25");
+    assert_eq!(heal::f2_step_cost(900, 600, 10, p, rz), 3);
+    assert_eq!(heal::f2_step_cost(4000, 500, -5, p, rz), 2);
+    assert_eq!(heal::f2_step_cost(4000, 500, 0, p, rz), 2);
+    assert_eq!(heal::f2_step_cost(100, 5, 10, p, rz), 25);
+    // The minimum of 1 credit, also for a negative cost.
+    assert_eq!(heal::f2_step_cost(10, 600, 10, p, rz), 1);
+    assert_eq!(heal::f2_step_cost(-500, 600, 10, p, rz), 1);
+}
+
+// spec: S-0314 claim 4 (the step size: the infantry repair step for infantry, the repair step for others, at least 1)
+// spec: S-0314 claim 5 (an infantry unit's step costs 0; a vehicle's is F2 on its type's cost field; a building's needs S-0408's adjusted cost, a seam)
+#[test]
+fn claims_4_and_5_step_size_and_cost() {
+    let mut r = repair_rules();
+    r.sim.general.i_repair_step = Some(0);
+    let mut w = game(&r);
+    let g = spawn(&mut w, Kind::Infantry, "GRUNT", 0, 0, 0);
+    let t = spawn(&mut w, Kind::Vehicle, "TRUCK", 0, 2, 0);
+    let b = spawn(&mut w, Kind::Building, "SHED", 0, 4, 0);
+    assert_eq!(heal::step_size(&w, g), 1);
+    assert_eq!(heal::step_size(&w, t), 10);
+    assert_eq!(heal::step_cost(&w, g), Some(0));
+    assert_eq!(heal::step_cost(&w, t), Some(3));
+    assert_eq!(heal::step_cost(&w, b), None);
+}
+
+// spec: S-0314 claim 3 (the rows in order: full health is not needed, before the money test; cannot pay changes nothing; otherwise the paying house, the object's owner, pays and health rises by the step size, more needed, or becomes the strength, done)
+// spec: S-0314 claim 3 (a step cost of 0 is never refused, even with no money)
+#[test]
+fn claim_3_repair_step_outcomes() {
+    use heal::StepOutcome::*;
+    let mut w = game(&repair_rules());
+    let t = spawn(&mut w, Kind::Vehicle, "TRUCK", 0, 0, 0);
+    // Full health and no money: not needed.
+    w.houses[0].credits = 0;
+    assert_eq!(heal::repair_step(&mut w, t), Some(NotNeeded));
+    // Hurt, 2 credits for a step of 3: nothing changes.
+    set_health(&mut w, t, 300);
+    w.houses[0].credits = 2;
+    assert_eq!(heal::repair_step(&mut w, t), Some(CannotPay));
+    assert_eq!((health(&w, t), w.houses[0].credits), (300, 2));
+    // 1000 credits: +10 and −3 per step (H3 part a).
+    w.houses[0].credits = 1000;
+    assert_eq!(heal::repair_step(&mut w, t), Some(MoreNeeded));
+    assert_eq!((health(&w, t), w.houses[0].credits), (310, 997));
+    // The last step brings the health to the strength exactly.
+    set_health(&mut w, t, 595);
+    assert_eq!(heal::repair_step(&mut w, t), Some(Done));
+    assert_eq!((health(&w, t), w.houses[0].credits), (600, 994));
+    // An infantry unit's free step with no money.
+    let g = spawn(&mut w, Kind::Infantry, "GRUNT", 0, 2, 0);
+    set_health(&mut w, g, 50);
+    w.houses[0].credits = 0;
+    assert_eq!(heal::repair_step(&mut w, g), Some(MoreNeeded));
+    assert_eq!(health(&w, g), 51);
+}
+
 // spec: S-0314 F1 (P_b = trunc(RZ₅₃(r × 900)), K = the smallest positive integer with RZ₅₃(r × 900) ≤ K: the double 0.016 and the decimal 0.016 give 14 and 15, 0.1 gives 90 and 91, 0.125 gives 112 and 113)
 #[test]
 fn f1_periods_and_counts() {

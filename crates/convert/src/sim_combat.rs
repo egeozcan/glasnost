@@ -626,13 +626,13 @@ const CREWS: [(&str, &str); 5] = [
     ("engineer", "Engineer"),
 ];
 
-/// The side crew types and the survivor divisor of each side (S-0312 F4,
-/// F5).
-// spec: S-0312 F4 and F5 (the three side crews and their survivor divisors)
-const SIDE_CREWS: [(&str, &str); 3] = [
-    ("AlliedCrew", "AlliedSurvivorDivisor"),
-    ("SovietCrew", "SovietSurvivorDivisor"),
-    ("ThirdCrew", "ThirdSurvivorDivisor"),
+/// The side crew types, the survivor divisor of each side and the
+/// divisor's engine default (S-0312 F4, F5, Import mapping).
+// spec: S-0312 F4, F5 and Import mapping (the three side crews, their survivor divisors, absent: 200, 100 and 300)
+const SIDE_CREWS: [(&str, &str, i32); 3] = [
+    ("AlliedCrew", "AlliedSurvivorDivisor", 200),
+    ("SovietCrew", "SovietSurvivorDivisor", 100),
+    ("ThirdCrew", "ThirdSurvivorDivisor", 300),
 ];
 
 /// The five threat coefficients of a type and the matching game-wide
@@ -2107,12 +2107,12 @@ impl Builder<'_> {
             },
             |v| format!("[General] RepairRate {v} gives a building repair period below one tick or negative: our engine uses at least 1 tick (S-0314 Edge cases)"),
         );
-        for (crew, divisor) in SIDE_CREWS {
+        for (crew, divisor, absent) in SIDE_CREWS {
             let d = self.global(GENERAL, divisor);
             let c = self.global(GENERAL, crew);
             let found =
                 text_of(c.as_ref()).is_some_and(|n| self.find_rec(Kind::Infantry, &n).is_some());
-            if int_of(d.as_ref()).unwrap_or(0) > 0 && !found {
+            if int_of(d.as_ref()).unwrap_or(absent) > 0 && !found {
                 // spec: S-0312 Edge cases (a missing crew type for a side with a survivor divisor above 0: no survivor, a departure)
                 self.warn_at(c.as_ref().or(d.as_ref()), format!(
                     "[General] {crew} names no infantry type while {divisor} is above 0: our engine releases no survivor there (S-0312 F4, a departure)"

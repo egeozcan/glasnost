@@ -374,6 +374,90 @@ fn s0215_area_guard_threshold() {
     }
 }
 
+/// Makes house `h` the neutral house, not human-controlled (the rules of
+/// S-0215 that read the owner look only at that).
+fn make_neutral(w: &mut World, h: usize) {
+    w.houses[h].human = false;
+    w.houses[h].role = glasnost_sim::world::HouseRole::Neutral;
+}
+
+/// The queued behaviour after a fall-back to rest from *move* of the first
+/// object of `kind` of house 1 in a game of `r`, with house 1 neutral or a
+/// player house.
+fn rest_of(r: &glasnost_rules::schema::Ruleset, kind: Kind, neutral: bool) -> Option<Behaviour> {
+    let mut w = game_with(r, 1);
+    while w.tick < 4 {
+        tick::step(&mut w);
+    }
+    if neutral {
+        make_neutral(&mut w, 1);
+    }
+    let id = of(&w, 1, kind, 0)[0];
+    let t = w.tick;
+    let o = w.obj_mut(id).unwrap();
+    o.beh.force(Behaviour::Move, t);
+    o.beh.queued = None;
+    o.dest = None;
+    o.target = None;
+    process::fall_back(&mut w, id, false);
+    w.obj(id).unwrap().beh.queued
+}
+
+// spec: S-0215 claim 14 rows 7 to 10 (the neutral and special houses keep the rows for owners that are not human-controlled, at skill level 0: guard below the area-guard threshold; else area guard when armed, an engineer or a vehicle thief, and guard otherwise)
+// spec: S-0215 claim 14 rows 11 and 12 (a player house's infantry: guard without the ability or the area-guard default)
+#[test]
+fn s0215_claim_14_non_player_infantry_rows() {
+    let mut r = testkit::ruleset();
+    // Row 7: threshold 4, skill 0.
+    r.sim.general.iq_guard_area = Some(4);
+    assert_eq!(rest_of(&r, Kind::Infantry, true), Some(Behaviour::Guard));
+    // Threshold 0: the armed walker of the neutral house rests in area guard (row 9), a player's in guard (row 12).
+    r.sim.general.iq_guard_area = Some(0);
+    assert_eq!(
+        rest_of(&r, Kind::Infantry, true),
+        Some(Behaviour::AreaGuard)
+    );
+    assert_eq!(rest_of(&r, Kind::Infantry, false), Some(Behaviour::Guard));
+    // Unarmed: guard (row 10); an unarmed engineer: area guard (row 9).
+    r.sim.infantry.get_mut("WALKER").unwrap().primary = None;
+    assert_eq!(rest_of(&r, Kind::Infantry, true), Some(Behaviour::Guard));
+    r.sim.infantry.get_mut("WALKER").unwrap().engineer = Some(true);
+    assert_eq!(
+        rest_of(&r, Kind::Infantry, true),
+        Some(Behaviour::AreaGuard)
+    );
+    assert_eq!(rest_of(&r, Kind::Infantry, false), Some(Behaviour::Guard));
+}
+
+// spec: S-0215 claim 15 row 4 (a human-controlled harvester off its resource's land type queues guard; a harvester of the neutral or special house queues harvest wherever it stands)
+#[test]
+fn s0215_claim_15_non_player_harvester_harvests_anywhere() {
+    let mut r = testkit::ruleset();
+    r.sim.vehicles.get_mut("CART").unwrap().harvester = Some(true);
+    let mut w = game_with(&r, 1);
+    while w.tick < 4 {
+        tick::step(&mut w);
+    }
+    for (neutral, want) in [(false, Behaviour::Guard), (true, Behaviour::Harvest)] {
+        let mut w = w.clone();
+        if neutral {
+            make_neutral(&mut w, 0);
+        }
+        let id = of(&w, 0, Kind::Vehicle, 0)[0];
+        let t = w.tick;
+        let o = w.obj_mut(id).unwrap();
+        o.beh.force(Behaviour::Move, t);
+        o.beh.queued = None;
+        o.dest = None;
+        process::fall_back(&mut w, id, false);
+        assert_eq!(
+            w.obj(id).unwrap().beh.queued,
+            Some(want),
+            "neutral {neutral}"
+        );
+    }
+}
+
 // spec: S-0215 Import mapping (cells to leptons: w(trunc(c × 256)); 4.5 cells give 1152 and 0.3 cells give 76)
 // spec: S-0215 F9 (gate times: 0.1 game minutes give 90 ticks, 0.2 give 180; a wrapped product is negative; 0 at 2⁶³ or more)
 // spec: S-0215 Constants (absent-key defaults: gate deploy time and close delay 0)
@@ -823,6 +907,71 @@ fn s0215_deployer_in_guard_undeploys() {
     assert_eq!(b.last.map(|l| l.1), Some(6));
 }
 
+/// The tick on which the walker of house 1 starts its deploy sequence by
+/// S-0215 claim 31's auto-deploy row, within 300 ticks of being put in
+/// guard, and that processing's delay; the auto-deploy delay list is
+/// `list`, house 1 is neutral when `neutral`.
+fn auto_deploy_tick(list: Option<Vec<i32>>, neutral: bool) -> Option<(i32, i32, i32)> {
+    let mut r = testkit::ruleset();
+    r.sim.general.ai_auto_deploy_frame_delay = list;
+    let walker = r.sim.infantry.get_mut("WALKER").unwrap();
+    walker.deployer = Some(true);
+    walker.deploy_fire = Some(true);
+    walker.undeploy_delay = Some(-1);
+    for (k, n) in [
+        ("deploy", 4),
+        ("deployed", 1),
+        ("undeploy", 6),
+        ("ready", 1),
+    ] {
+        walker.sequences.insert(
+            k.into(),
+            glasnost_rules::sim::SequenceEntry {
+                start: 0,
+                count: n,
+                multiplier: 0,
+                direction: None,
+            },
+        );
+    }
+    let mut w = game_with(&r, 1);
+    while w.tick < 4 {
+        tick::step(&mut w);
+    }
+    if neutral {
+        make_neutral(&mut w, 1);
+    }
+    let inf = of(&w, 1, Kind::Infantry, 0)[0];
+    let s = w.tick;
+    let o = w.obj_mut(inf).unwrap();
+    o.beh.force(Behaviour::Guard, s);
+    o.guard_spot = None;
+    o.dest = None;
+    for _ in 0..300 {
+        tick::step(&mut w);
+        let o = w.obj(inf).unwrap();
+        if o.infantry.as_ref().unwrap().seq == Some(glasnost_sim::infantry::Seq::Deploy) {
+            let (at, d) = o.beh.last.unwrap();
+            return Some((s, at, d));
+        }
+    }
+    None
+}
+
+// spec: S-0215 claim 31 (the auto-deploy row: an undeployed deploy-to-fire unit of the neutral or special house, in guard with no destination and no guard spot, starts its deploy sequence at the first processing with t > t_s + A, A the list's entry for difficulty index 1; the delay is the sequence's frame count)
+// spec: S-0215 claim 31 (our engine: no player house auto-deploys; a list without a second entry: the row does not apply)
+#[test]
+fn s0215_claim_31_auto_deploy_of_non_player_houses() {
+    let (s, at, d) = auto_deploy_tick(Some(vec![300, 40, 5]), true).expect("deploys");
+    assert!(at > s + 40, "deployed at {at}, start {s}");
+    let dr = testkit::rules().behaviour(Behaviour::Guard).rate_delay;
+    assert!(at <= s + 40 + dr + 3, "deployed at {at}, start {s}");
+    assert_eq!(d, 4);
+    assert_eq!(auto_deploy_tick(Some(vec![300, 40, 5]), false), None);
+    assert_eq!(auto_deploy_tick(Some(vec![40]), true), None);
+    assert_eq!(auto_deploy_tick(None, true), None);
+}
+
 // ---------------------------------------------------------------------------
 // S-0215 claim 35: gates
 
@@ -958,6 +1107,39 @@ fn s0215_gate_open_and_close_cycle() {
     assert_eq!(b.progress, 5);
     assert_eq!(b.queued, Some(Behaviour::Guard));
     assert!(!process::gate_open(&w, gate));
+}
+
+// spec: S-0215 claim 35 (d) and scenario B28 case g (the door reaches rest at the gate's turn before its processing: with Td = 90 the opening processing of tick t + 90 finds it at rest open and chooses 0, and the first Std processing comes in tick t + 91; request Q-0030)
+#[test]
+fn s0215_gate_door_rests_before_the_processing() {
+    let (mut w, gate) = gate_world(true);
+    process::gate_met(&mut w, gate);
+    let t = w.tick;
+    let mut delays = Vec::new();
+    for _ in 0..92 {
+        tick::step(&mut w);
+        let b = &w.obj(gate).unwrap().beh;
+        delays.push((w.tick - 1, b.last, b.progress, door(&w, gate)));
+    }
+    // Tick t: the door starts opening, delay 0.
+    assert!(matches!(delays[0].3, Door::Opening { since, ticks: 90 } if since == t));
+    // Ticks t + 1 to t + 89: stage opening, the door still moving, delay 0 each.
+    for (tick, last, progress, d) in &delays[1..90] {
+        assert_eq!(*last, Some((*tick, 0)), "tick {tick}");
+        assert_eq!(*progress, 1);
+        assert!(matches!(d, Door::Opening { .. }));
+    }
+    // Tick t + 90: the door is at rest before the processing, which moves to waiting with 0.
+    let (tick, last, progress, d) = delays[90];
+    assert_eq!(tick, t + 90);
+    assert_eq!(d, Door::Open);
+    assert_eq!((last, progress), (Some((t + 90, 0)), 2));
+    // Tick t + 91: the first waiting processing, with its Std (D_r of the rate of open, + U(0, 2)).
+    let (tick, last, _, _) = delays[91];
+    let (at, delay) = last.unwrap();
+    assert_eq!(at, tick);
+    let dr = w.rules().behaviour(Behaviour::Open).rate_delay;
+    assert!((dr..=dr + 2).contains(&delay), "{delay}");
 }
 
 // spec: S-0215 claim 35 (c) (waiting: an object in the ground layer of a foundation cell restarts the close countdown)

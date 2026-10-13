@@ -516,6 +516,29 @@ pub fn game_with(ruleset: &Ruleset, size: i32, seed: u32) -> World {
         .expect("synthetic test game loads")
 }
 
+/// A new sandbox game like [`game_with`], with two more houses that are
+/// not player houses: house 2 is the neutral house and house 3 the special
+/// house (S-0009 claim 19), neither human-controlled, of the countries
+/// Alphaland and Betaland.
+pub fn game_with_non_players(ruleset: &Ruleset, size: i32, seed: u32) -> World {
+    let rules = Arc::new(SimRules::new(ruleset, "synthetic-test"));
+    let mut s = setup(seed);
+    for (name, country, role) in [
+        ("Neutral", "Alphaland", HouseRole::Neutral),
+        ("Special", "Betaland", HouseRole::Special),
+    ] {
+        s.houses.push(HouseSetup {
+            name: name.into(),
+            country: country.into(),
+            human: false,
+            start: None,
+            role,
+        });
+    }
+    crate::load::new_game(rules, &empty_map(size), catalogue(), &s)
+        .expect("synthetic test game loads")
+}
+
 /// The middle cell of a map of `size` (s = 2W, d = 0), offset by (dx, dy).
 pub fn mid(size: i32, dx: i32, dy: i32) -> CellXY {
     CellXY::new(size + dx, size + dy)

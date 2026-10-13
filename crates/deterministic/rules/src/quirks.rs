@@ -383,6 +383,10 @@ pub struct Quirks {
     // spec: S-0215 claim 35
     #[serde(default = "on")]
     pub gate_reverse_snaps: bool,
+    /// A turreted building's turret snap bound reads the turn-rate field as a signed value modulo 256; off: the bound is 256 times the turn rate S-0206 gives for the field.
+    // spec: S-0215 Edge cases and F8
+    #[serde(default = "on")]
+    pub turret_snap_bound_wraps: bool,
     /// Disarm bomb gives its attack order only to an actor able to fire; off: it needs only that the actor is movable.
     // spec: S-0214 Edge cases
     #[serde(default = "on")]
@@ -1027,6 +1031,7 @@ impl Default for Quirks {
             cleanup_skips_next_house: true,
             drive_giveup_ignores_contact: true,
             gate_reverse_snaps: true,
+            turret_snap_bound_wraps: true,
             disarm_bomb_needs_weapon: true,
             berserk_carrier_tote: true,
             building_cell_attack_no_weapon: true,
@@ -1368,6 +1373,7 @@ impl Quirks {
                 self.drive_giveup_ignores_contact,
             ),
             ("gate_reverse_snaps", self.gate_reverse_snaps),
+            ("turret_snap_bound_wraps", self.turret_snap_bound_wraps),
             ("disarm_bomb_needs_weapon", self.disarm_bomb_needs_weapon),
             ("berserk_carrier_tote", self.berserk_carrier_tote),
             (

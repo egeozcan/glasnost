@@ -941,12 +941,13 @@ fn claim_13_no_crew_cases() {
     }
 }
 
-// spec: S-0312 claim 25 (no special rules for computer-controlled houses: the crew of a house that is not human-controlled is put on guard too)
-#[test]
-fn claim_25_computer_house_crew_guards() {
+/// The crew's behaviour after the death of a VICTIM of house 0, with house
+/// 0 human-controlled or not and of the given role.
+fn crew_behaviour(human: bool, role: glasnost_sim::world::HouseRole) -> Option<Behaviour> {
     let r = crew_rules();
     let mut setup = testkit::setup(11);
-    setup.houses[0].human = false;
+    setup.houses[0].human = human;
+    setup.houses[0].role = role;
     let mut w = glasnost_sim::load::new_game(
         std::sync::Arc::new(glasnost_sim::rules::SimRules::new(&r, "s0312")),
         &testkit::empty_map(SIZE),
@@ -958,7 +959,38 @@ fn claim_25_computer_house_crew_guards() {
     kill(&mut w, id);
     let c = crews(&w);
     assert_eq!(c.len(), 1);
-    assert_eq!(w.obj(c[0]).unwrap().beh.current, Some(Behaviour::Guard));
+    w.obj(c[0]).unwrap().beh.current
+}
+
+// spec: S-0312 claim 25 (orders after a death depend on the owner: a player house's crew, human or AI, is put on guard; the neutral or special house's crew on hunt)
+// spec: S-0312 claim 13 (the crew of an owner that is not human-controlled is put on hunt)
+#[test]
+fn claim_25_crew_orders_by_owner() {
+    use glasnost_sim::world::HouseRole;
+    assert_eq!(
+        crew_behaviour(true, HouseRole::Player),
+        Some(Behaviour::Guard)
+    );
+    assert_eq!(
+        crew_behaviour(false, HouseRole::Neutral),
+        Some(Behaviour::Hunt)
+    );
+    assert_eq!(
+        crew_behaviour(false, HouseRole::Special),
+        Some(Behaviour::Hunt)
+    );
+}
+
+// spec: S-0312 Import mapping (survivor divisors absent from every layer: 200, 100 and 300, engine constants); F5 (q by side)
+#[test]
+fn f5_survivor_divisor_defaults() {
+    let r = crew_rules();
+    let rules = glasnost_sim::rules::SimRules::new(&r, "s0312");
+    assert_eq!(rules.combat.general.survivor_divisor, [200, 100, 300]);
+    let mut r = crew_rules();
+    r.sim.general.soviet_survivor_divisor = Some(40);
+    let rules = glasnost_sim::rules::SimRules::new(&r, "s0312");
+    assert_eq!(rules.combat.general.survivor_divisor, [200, 40, 300]);
 }
 
 // spec: S-0312 State and ordering (a vehicle's death effects in order: debris (F1), explosion pick, destruction pick, then the crew's unit-interval value, creation draw and health)

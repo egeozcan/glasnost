@@ -297,6 +297,37 @@ fn shot_damage_truncates_each_factor() {
     assert_eq!(damage::shot_damage(&w, s, z), 12);
 }
 
+// spec: S-0302 claim 3 and F1 (the neutral and special houses have the firepower multiplier exactly 1.0, with no row and no country firepower factor; S-0412 claim 5, scenario D19 part d)
+#[test]
+fn claim_3_non_player_houses_firepower_one() {
+    let mut r = testkit::combat_ruleset();
+    weapon(&mut r, "Zap", |t| {
+        t.damage = Some(8);
+        t.warhead = Some("SA".into());
+    });
+    vehicle(&mut r, "SHOOTER", |t| t.primary = Some("Zap".into()));
+    for (row, v) in [("easy", "2"), ("normal", "1.5"), ("difficult", "0.5")] {
+        r.sim.difficulty.insert(
+            row.into(),
+            glasnost_rules::sim::DifficultyRow {
+                firepower: Some(dec(v)),
+                ..Default::default()
+            },
+        );
+    }
+    country(&mut r, "Alphaland", |c| c.firepower = Some(dec("1.5")));
+    let mut w = testkit::game_with_non_players(&r, SIZE, 1);
+    let z = wp(&w, "Zap");
+    // A player house of the country: 8 × RZ(1.5 × 1.5) = 18.
+    let p = put(&mut w, Kind::Vehicle, "SHOOTER", ALPHA, 0);
+    assert_eq!(damage::shot_damage(&w, p, z), 18);
+    // The neutral house (house 2, the same country) and the special house: 8.
+    for h in [2, 3] {
+        let n = put(&mut w, Kind::Vehicle, "SHOOTER", h, 2 * i32::from(h));
+        assert_eq!(damage::shot_damage(&w, n, z), 8, "house {h}");
+    }
+}
+
 // spec: S-0302 claim 2 and F1 (E₀ = D for D ≤ 0: the firepower multipliers and the veteran factor leave a non-positive damage unchanged)
 #[test]
 fn shot_damage_leaves_non_positive_damage_unchanged() {

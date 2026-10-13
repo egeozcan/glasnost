@@ -26,10 +26,17 @@ pub fn initial_ammo(r: &SimRules, kind: Kind, type_index: u32) -> i32 {
     }
 }
 
-/// A house's combat factors, fixed when the houses are set up: every house
-/// uses the normal difficulty row (S-0301 claim 3, S-0302 claim 3; glossary
-/// *difficulty skill block*).
-pub fn house_combat(r: &SimRules, country: u32, houses: usize) -> HouseCombat {
+/// A house's combat factors, fixed when the houses are set up: every
+/// player house uses the normal difficulty row (S-0301 claim 3, S-0302
+/// claim 3; glossary *difficulty skill block*); the neutral and special
+/// houses have no row and no country factor, so both factors are exactly
+/// 1.0 (S-0412 claim 5).
+pub fn house_combat(
+    r: &SimRules,
+    country: u32,
+    role: crate::world::HouseRole,
+    houses: usize,
+) -> HouseCombat {
     let mode = r.mode;
     let g = &r.combat.general;
     let one = F64::from_i64(1, mode);
@@ -38,11 +45,20 @@ pub fn house_combat(r: &SimRules, country: u32, houses: usize) -> HouseCombat {
         .countries
         .get(country as usize)
         .map_or((one, one), |c| (c.rof, c.firepower));
+    let player = role == crate::world::HouseRole::Player;
     HouseCombat {
-        // spec: S-0301 F2 (h = RZ₅₃(ℓ × κ) in a skirmish)
-        rof_factor: g.row_rof.mul(rof, mode),
-        // spec: S-0302 claim 3 and F1 (F_h = RZ₅₃(φᵣ × φ_c))
-        firepower: g.row_firepower.mul(fp, mode),
+        // spec: S-0301 F2 (h = RZ₅₃(ℓ × κ) for a player house in a skirmish; h = 1.0 for the neutral and special houses, S-0412 claim 5)
+        rof_factor: if player {
+            g.row_rof.mul(rof, mode)
+        } else {
+            one
+        },
+        // spec: S-0302 claim 3 and F1 (F_h = RZ₅₃(φᵣ × φ_c) for a player house; exactly 1.0 for the neutral and special houses, S-0412 claim 5)
+        firepower: if player {
+            g.row_firepower.mul(fp, mode)
+        } else {
+            one
+        },
         anger: vec![0; houses],
         enemy: None,
         score: 0,

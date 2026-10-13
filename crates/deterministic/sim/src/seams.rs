@@ -1,0 +1,122 @@
+//! Seams where the behaviour and combat rules (S-02xx, S-03xx) call into
+//! topics that milestone M5a implements: the harvest cycle and slave
+//! miners (S-0402), production payment and credits (S-0404), power
+//! (S-0405), selling and building refunds (S-0408), and defeat (S-0414).
+//!
+//! Each function states the rule it stands for and what it answers until
+//! that topic exists. The answers are chosen so that the calling rule
+//! takes its "the other topic's condition does not hold" branch; none of
+//! them invents a value. M5a replaces the bodies, not the call sites.
+
+use crate::world::{HouseId, ObjectId, World};
+
+/// Whether the wake-up rule of S-0402 claim 14 holds for a slave master
+/// (S-0215 claim 24, vehicle table row 1; claim 26, row 1). Slave masters
+/// and their slaves are not modelled before M5a, so it never holds.
+pub fn slave_wake_rule_holds(_w: &World, _master: ObjectId) -> bool {
+    // spec: S-0402 claim 14 (the wake-up rule; a seam until the harvest cycle exists)
+    false
+}
+
+/// Whether a slave master's slave group is at rest (S-0402 claim 14), for
+/// S-0215 claim 26's "wakes its slaves anyway". Never, before M5a.
+pub fn slave_group_at_rest(_w: &World, _master: ObjectId) -> bool {
+    // spec: S-0402 claim 14 (a slave group at rest; a seam until the harvest cycle exists)
+    false
+}
+
+/// A slave master wakes its slaves (S-0402 claim 14; S-0215 claims 24 and
+/// 26). Nothing to wake before M5a.
+pub fn wake_slaves(_w: &mut World, _master: ObjectId) {
+    // spec: S-0402 claim 14 (waking the slaves; a seam until the harvest cycle exists)
+}
+
+/// Whether a unit is a harvesting slave (S-0215 Terms; S-0402 claim 14),
+/// for S-0215 claim 14 row 8 and claim 15 row 11. No unit is one before
+/// M5a.
+pub fn is_harvesting_slave(_w: &World, _id: ObjectId) -> bool {
+    // spec: S-0402 claim 14 (harvesting slaves; a seam until the harvest cycle exists)
+    false
+}
+
+/// Whether a slave master (S-0215 claim 15 row 11). No vehicle is one
+/// before M5a.
+pub fn is_slave_master(_w: &World, _id: ObjectId) -> bool {
+    // spec: S-0402 claim 14 (slave masters; a seam until the harvest cycle exists)
+    false
+}
+
+/// The guard rules of S-0402 that queue *harvest* again for a harvester in
+/// *guard* (claim 13 for an owner that is not human-controlled, claim 17
+/// for a chrono miner), for S-0215 claim 24's vehicle table row 2. Returns
+/// whether such a rule applied (it queues *harvest* itself); the processing
+/// then ends with 1 tick. None applies before M5a.
+pub fn harvester_guard_rule(_w: &mut World, _id: ObjectId) -> bool {
+    // spec: S-0402 claims 13 and 17 (the guard rules that queue harvest again; a seam until the harvest cycle exists)
+    false
+}
+
+/// Whether a house is short of power (S-0405), for the SAM power row of
+/// S-0215 claim 32. Power is not modelled before M5a, so no house is.
+pub fn short_of_power(_w: &World, _house: HouseId) -> bool {
+    // spec: S-0405 (short of power; a seam until the power topic exists)
+    false
+}
+
+/// The power row of a SAM building's *aiming* stage (S-0215 claim 32):
+/// its type has the needs-power flag, drains power (a negative power value,
+/// S-0405's base drain) and its owner is short of power. The power value is
+/// imported with the power topic, so the row never applies before M5a.
+pub fn sam_held_by_low_power(w: &World, building: ObjectId) -> bool {
+    let Some(o) = w.obj(building) else {
+        return false;
+    };
+    let needs = w
+        .rules()
+        .buildings
+        .get(o.type_index as usize)
+        .is_some_and(|b| b.raw.powered.unwrap_or(false));
+    // spec: S-0215 claim 32 and S-0405 (needs power, drains power, owner short of power; the drain test waits for the power value)
+    needs && o.owner.is_some_and(|h| short_of_power(w, h))
+}
+
+/// A house's available credits (glossary; S-0404 claim 4). In a skirmish
+/// nothing puts resources into a house's own storage, so they equal the
+/// credit balance (S-0314 Terms, *money of a house*); storage is M5a's.
+pub fn available_credits(w: &World, house: HouseId) -> i32 {
+    // spec: S-0404 claim 4 and S-0314 Terms (available credits equal the credit balance in a skirmish)
+    w.houses.get(usize::from(house.0)).map_or(0, |h| h.credits)
+}
+
+/// A house pays `amount` credits (S-0314 claims 3 and 8). The payment rules
+/// of S-0404 (storage first, the credit display) are M5a's; until then the
+/// balance drops by the amount.
+pub fn pay(w: &mut World, house: HouseId, amount: i32) {
+    if let Some(h) = w.houses.get_mut(usize::from(house.0)) {
+        // spec: S-0404 claim 4 and S-0314 claim 3 (the paying house's credits drop by the step cost)
+        h.credits = h.credits.wrapping_sub(amount);
+    }
+}
+
+/// A building type's adjusted cost (S-0408 claim 2, F2), for the step
+/// cost of S-0314 claim 5. `None` until M5a: the deductions for a free unit
+/// and pad aircraft are S-0408's.
+pub fn building_adjusted_cost(_w: &World, _building_type: u32) -> Option<i32> {
+    // spec: S-0408 claim 2 (the adjusted cost of a building type; a seam until selling exists)
+    None
+}
+
+/// A building's refund for its owner (S-0408 claim 1, F1), the *K* of
+/// S-0312 F5. `None` until M5a.
+pub fn building_refund(_w: &World, _building: ObjectId) -> Option<i32> {
+    // spec: S-0408 claim 1 and F1 (the refund; a seam until selling exists)
+    None
+}
+
+/// Whether a house's game is over, the state S-0414's defeat puts it in
+/// (S-0312 claim 18's survivor condition). No house is defeated before the
+/// victory rules exist.
+pub fn game_over(_w: &World, _house: HouseId) -> bool {
+    // spec: S-0414 claim 5 (the defeated state; a seam until the victory rules exist)
+    false
+}
