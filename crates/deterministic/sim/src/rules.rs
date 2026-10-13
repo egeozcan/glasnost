@@ -1352,8 +1352,8 @@ fn building_rules(
         naval,
         name: name.to_owned(),
         strength: bt.strength.unwrap_or(0),
-        // spec: S-0108 Import mapping (Foundation absent: 1x1)
-        foundation: (f[0].max(1), f[1].max(1)),
+        // spec: S-0108 Import mapping (Foundation absent: 1x1; the zero-size word is 0 × 0), S-0406 claim 2 and S-0009 claim 38 (a zero-size building has no foundation cells)
+        foundation: (f[0].max(0), f[1].max(0)),
         turret: bt.turret.unwrap_or(false),
         turn_rate: turn_rate(bt.rot.unwrap_or(0), q.turn_rate_negative_wrap),
         gate: bt.gate.unwrap_or(false),
