@@ -224,8 +224,13 @@ pub struct Header {
     pub origin: (i32, i32),
     /// Marker extent Wh, Hh.
     pub extent: (i32, i32),
-    /// Pairs 1 … N_h as read; `None` for a pair the map does not hold.
-    pub pairs: Vec<Option<(i32, i32)>>,
+    /// Pairs 1 … N_h as read; `None` for a pair the map does not hold
+    /// (pairs 9 … 16 then leave the marks in force). A component is `None`
+    /// when it cannot be read: the pair that applies it completes it from
+    /// the matching component of the mark in force at that phase (S-0009
+    /// claim 29, our engine's departure). Pairs 1 … 8 come completed from
+    /// the value in force, (0, 0).
+    pub pairs: Vec<Option<[Option<i32>; 2]>>,
 }
 
 impl Default for Header {

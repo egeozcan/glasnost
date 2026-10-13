@@ -753,17 +753,27 @@ impl Decoder<'_> {
             let stored = self.doc.value(b"Header", key.as_bytes());
             let pair = match stored {
                 // spec: S-0009 Import mapping (pairs 1 … 8 default to (0, 0); pairs 9 … 16 leave the marks)
-                None => (i <= PREVIEW_PAIRS).then_some((0, 0)),
+                None => (i <= PREVIEW_PAIRS).then_some([Some(0), Some(0)]),
                 Some(v) => {
-                    // spec: S-0009 Import mapping (S-0003 claim 9: an unread component takes the value in force)
-                    let ([x, y], unread) = value::int_tuple_or::<2>(v, [0, 0]);
-                    if unread {
+                    let mut read = value::int_tuple::<2>(v);
+                    if read.iter().any(Option::is_none) {
+                        // spec: S-0009 claim 29 and Import mapping (an unread component: our engine keeps the readable ones and completes the rest from the value in force, with a warning)
                         self.warn(
                             self.line_of(b"Header", key.as_bytes()),
-                            format!("[Header] {key}: a component cannot be read (S-0003 claim 9)"),
+                            format!(
+                                "[Header] {key}: a component cannot be read; our engine takes the value in force's (S-0009 claim 29, S-0003 claim 9)"
+                            ),
                         );
                     }
-                    Some((x, y))
+                    if i <= PREVIEW_PAIRS {
+                        // spec: S-0009 Import mapping (pairs 1 … 8: the value in force is (0, 0))
+                        for c in &mut read {
+                            c.get_or_insert(0);
+                        }
+                    }
+                    // Pairs 9 … 16 keep unread components unread: the mark in force
+                    // at each phase completes them (S-0009 claim 29).
+                    Some(read)
                 }
             };
             pairs.push(pair);
