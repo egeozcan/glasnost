@@ -2,11 +2,11 @@
 id: S-0212
 title: Pathfinding (observable behaviour)
 topic: movement
-revision: 19
+revision: 20
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-13
+approved-on: 2026-10-14
 measurements: []
 requests: [Q-0017, Q-0041, Q-0042, Q-0043, Q-0088]
 supersedes: []
@@ -915,9 +915,10 @@ Terms specific to this spec:
     *j* qualifies, the V is *not flattened* and stays as it is. For two diagonal runs the new steps
     end on the same cell as the steps they replace, so the rest of the path is unchanged.
 
-    *Which V's are flattened.* Apply the following state table to the path left by the preceding
-    judgement. The next judgement concerns the V whose first run begins earliest among the steps
-    that are not final.
+    *Which V's are flattened.* For the path left by the preceding judgement, the following state
+    table gives the resulting final steps and the path portion eligible for later judgements. When
+    more than one V is eligible, the V whose first run begins earliest among the steps that are not
+    final determines the result.
 
     | Judgement result | Steps made final | Remaining path considered by later judgements |
     |---|---|---|
@@ -1178,7 +1179,7 @@ Terms specific to this spec:
     - when its destination changes,
     - when its next step is blocked (claim 22 for the drive locomotor, S-0209 claims 7 to 10 for the
       walk locomotor),
-    - and, with the drive locomotor, in the chase case below.
+    - and, with the driving or hovering locomotor, in the chase case below.
 
     When a path is recomputed as the last stored step begins, the unit still takes that old step,
     and the new path's first step is dropped: the unit continues with the new path's second step
@@ -1189,7 +1190,7 @@ Terms specific to this spec:
     starts where that step leads and its result is stored after it, still up to 24 steps in total,
     so the quirk does not arise.
 
-    When a unit with the drive locomotor has a vehicle or an infantry unit rather than a cell as its
+    When a unit with the driving or hovering locomotor has a vehicle or an infantry unit rather than a cell as its
     destination, the stored path
     is cut to ⌊*D* / 256⌋ steps when that is less than 24, where *D* is the distance in leptons from
     the unit to its heading point (F6c). When *D* is under 256 the stored path is emptied at once, so
@@ -1199,7 +1200,9 @@ Terms specific to this spec:
     chased unit moves slowly it stays close to the chased unit's position.
     The walk locomotor cuts no stored path for a chased unit either.
     - Backing: `measurable` (scenario P5, and P9's train refresh run for the train rule; P5 run 1i
-      for the absence of the refresh in the walk locomotor). `unmeasured` for the absence of the
+      for the absence of the refresh in the walk locomotor). The hovering chase cut is
+      `unmeasured`: S-0207 scenario D21 explains why its effect cannot be isolated from the
+      hovering unit's other step-point reactions. `unmeasured` for the absence of the
       chase cut in the walk locomotor: a walker that follows a moving unit meets it within a few
       cells as a moving blocker or a stationary friendly, and S-0209's reactions then make new
       paths of their own, so the absence of the cut cannot be isolated
@@ -1226,14 +1229,21 @@ Terms specific to this spec:
     as a fresh search of the drive locomotor: no delay after a found path, *R* after a failed search
     or a failed gate. After a re-path for a moving blocker the delay *R* starts again whatever its
     result, a failed gate included.
-    - Backing: `measurable` (scenarios P6, P7 run 5, P9 follower run 3 for the follower-car
+    For the hovering locomotor, a fresh search with no stored steps left waits for *R* to
+    expire. Every such fresh search starts *R* again from its tick, whether it finds a path,
+    fails in the search or fails at the gate. In particular, a successful fresh search does not
+    remove the delay as it does for the driving locomotor. S-0207 claim 19 gives the waits
+    this produces when a hovering unit discards its path while its target is in range.
+    - Backing: `measurable` (S-0207 scenario D21 runs 3 and 3c for the hovering delay after
+      success; scenario P19 for its failed-search and failed-gate cases; scenarios P6, P7 run 5, P9 follower run 3 for the follower-car
       exception; for the walk locomotor, S-0209's scenarios C2 (c, d) and C5 for the delay between
       re-paths and C19 for the immediate new path). `unmeasured` for a walker's delay after a failed
       search or a failed gate: what a walker does after such a failure belongs to S-0209 and S-0215,
       and the delay would show only as the timing of a later search that those reactions also
       decide. `unmeasured` for the delay after a follower car's computation, for the reason claim 26
       gives
-    - Confidence: medium (for the walk locomotor: medium for the delays as stated)
+    - Confidence: medium (for the walk and hovering locomotors: medium for the delays as stated,
+      low for the exact tick of the hovering search after a wait, tested by S-0207 D21)
 
 22. **Blocked next step (drive locomotor).** For a unit with the drive locomotor, when the entry
     outcome for the next stored step is *moving blocker*, the unit starts a blockage timer of *B*
@@ -1267,13 +1277,15 @@ Terms specific to this spec:
     |---|---|
     | The gate of claim 6 fails | The path computation ends at once with no path. The unit does not leave its team, no behaviour is queued and its house gives it no new destination. A unit with the drive locomotor has its destination cleared, so it stops where it is. The retry delay runs after a fresh search, and after a re-path only for the walk locomotor (claim 21). What its *move* behaviour does without a destination belongs to S-0215 (it falls back to rest). No other row of this claim applies. |
     | The search fails (including the immediate failure of claim 14), and the unit is more than 1 cell (Chebyshev) from the destination, or is not on a bridge deck while the destination is a bridge cell | The unit stops (its current motion ends) and the retry delay *R* starts. It gives up: it leaves its team, its destination is cleared, and it queues *guard* if it has a human-controlled owner or *area guard* if it has a computer-controlled owner. A unit with a computer-controlled owner in a skirmish or multiplayer game is then given a new destination chosen by its house (a house cell whose choice belongs to the AI-visible-rules specs), provided that choice yields a cell; otherwise it gets none. These two computer-controlled rules (*area guard*, the new destination) describe the original only. In our engine the rule for a human-controlled owner holds for every unit, those of an *AI house* included (glossary *AI house*): such a unit queues *guard* and its house gives it no destination. This is Departure D5, with no switch. Our AI may give the same unit a destination as an ordinary order. |
-    | The search fails in any other case (within 1 cell) | The unit stops and the retry delay *R* starts. It does not give up: it stays in its team and no behaviour is queued. A unit with the drive locomotor also has its destination cleared, so it ends up standing where it is without a destination. For the other locomotors the destination is kept, and the unit tries again once its behaviour starts it moving towards it (S-0215), which the retry delay holds back. |
+    | The search fails in any other case (within 1 cell) | The unit stops and the retry delay *R* starts. It does not give up: it stays in its team and no behaviour is queued. A unit with the drive locomotor also has its destination cleared, so it ends up standing where it is without a destination. For locomotors other than driving, ship and hovering, the destination is kept, and the unit tries again once its behaviour starts it moving towards it (S-0215), which the retry delay holds back. A unit with the ship or hovering locomotor also has its destination cleared, like a unit with the driving locomotor. |
 
-    The same clearing ends every failed search of a drive-locomotor unit, so in rows 2 and 3 such a
-    unit is left without a destination, unless its house has just given it a new one (row 2, in the original only). Being
-    within the close-enough distance of the destination makes no difference to any row.
-    - Backing: `measurable` (scenarios P3, P4, P7 runs 5, 5b and 6, P8, P11)
-    - Confidence: medium. Low for the other locomotors in row 3
+    The same clearing ends every failed search of a unit with the driving, ship or hovering
+    locomotor, so in rows 2 and 3 such a unit is left without a destination, unless its house has
+    just given it a new one (row 2, in the original only). Being within the close-enough distance
+    of the destination makes no difference to any row.
+    - Backing: `measurable` (scenarios P3, P4, P7 runs 5, 5b and 6, P8, P11; P19 for ship and
+      hovering units in row 3)
+    - Confidence: medium for driving, ship and hovering. Low for the remaining locomotors in row 3
 
 ### Destination substitution
 
@@ -1733,7 +1745,7 @@ south and west.
 
 | State of the unit's path | Event | Result |
 |---|---|---|
-| no stored steps, retry delay over | needs to move | path computation: the gate of claim 6 judges the destination as ordered, and only a destination that passes it can be substituted (claim 24). On success the steps are stored and no retry delay follows (claim 21). On failure claim 23 |
+| no stored steps, retry delay over | needs to move | path computation: the gate of claim 6 judges the destination as ordered, and only a destination that passes it can be substituted (claim 24). On success the steps are stored; no retry delay follows for driving or walking, but the hovering locomotor starts R again (claim 21). On failure claim 23 |
 | no stored steps, retry delay running | needs to move | waits (a follower car sent by its leader computes at once instead, claim 26) |
 | stored path | next step *clear* | follows it (movement specs) |
 | stored path, drive locomotor | next step of another outcome, neither *moving blocker* nor *blocked* | reacts as S-0209 and the movement specs say: opens a gate, attacks an obstacle or waits (claim 22) |
@@ -2717,6 +2729,28 @@ A failed search follows claim 23. Falsifier: no search on the refusal tick and a
 only after the timer expires. Scripted input plus the movement recorder is the proposed tool.
 Void the run if the bystander enters the corridor or acts on either test unit.
 
+**P19. Failed search beside the destination: ship and hovering (claims 21 and 23).**
+Use a tiny level map with an isolated bystander computer player, game speed 2, director and
+mods off except this test map and named overrides. Use a human-owned stock hovering type
+on clear ground, and a human-owned stock ship type in a separate open-water area. In each
+area place one destination tile of a distinct land type that is connected to the mover's
+reach region. An override makes that tile's land multiplier zero for the mover's locomotion
+class, without changing its passability category or reach region. Set the retry delay to
+0.1 game minutes, giving *R* = 90 ticks. Give a move order to the tile from 10 cells away.
+Record search ticks, destination, position, stored steps, retry timer and queued behaviour
+with a read-only movement recorder. Obtain one qualifying run per locomotor: the mover must
+reach a neighbouring cell and then fail a search within 1 cell of the destination, with no
+destination substitution or gate failure. Expected: on that failed-search tick the mover
+loses its destination and starts *R*, without queuing a behaviour. For hovering, the fresh
+search that fails waits for *R* counted from the preceding successful fresh search. Falsified
+if either mover keeps its destination after the qualifying failure, or if the hovering fresh
+search occurs before that delay expires. A run with another unit entering the observed area,
+a substitution, or no qualifying search is void or inconclusive, not a falsifier. Scripted
+input and the read-only movement recorder are the proposed tool. A separate hovering run
+orders the mover to a cell on an isolated island in another reach region while its timer is
+expired. Expected: no step, a gate failure, destination cleared, and *R* starting on that tick.
+A different timer value falsifies the failed-gate delay rule of claim 21.
+
 ## Open questions
 
 - Sectors and connections (claim 13b): which further cells a tunnel's link joins, and how often the
@@ -2745,16 +2779,17 @@ Void the run if the bystander enters the corridor or acts on either test unit.
   path computation in any way is not established. It does not change the movement zone that the
   coarse search of a path computation uses (claim 13). The estimate *E* of claim 24 uses the
   unit's own movement zone, not *infantry*; no scenario checks this.
-- Units with the other locomotors (hover, ship, mechanical walker) also compute paths. Whether they
-  use the blockage modes of claim 22 and the immediate refresh of claim 20 like the drive locomotor
-  is not established.
+- Ship and mechanical-walker locomotors also compute paths. Whether they use the blockage modes
+  of claim 22 and the immediate refresh of claim 20 like the drive locomotor is not established.
+  The hovering locomotor's chase cut and fresh-search delay are established in claims 20 and 21.
+  Its other blockage and refresh rules remain outside this spec's established claims.
 - Whether the path-length conditions of claim 19 (a vehicle with at least two stored steps, an infantry
   unit with at least three) apply in search mode 2 as well as in mode 1 is not established. This spec
   applies them in both.
 - The house cell to which a unit with a computer-controlled owner is sent in the original after giving up (claim 23) is not
   identified.
-- For locomotors other than the drive locomotor, whether a unit of claim 23's third row keeps its
-  destination, and when it starts moving towards it again (S-0215), is not established.
+- For locomotors other than driving, ship and hovering, whether a unit of claim 23's third row
+  keeps its destination, and when it starts moving towards it again (S-0215), is not established.
 
 ## Questions for the project lead
 
