@@ -112,6 +112,24 @@ fn claim_5_attack_move_gesture_on_a_heal() {
     );
 }
 
+// spec: S-0214 Terms (Allied, enemy: judged from the actor's side with the one-way alliance; whether the target's house allies the actor's is not asked)
+#[test]
+fn terms_allied_is_judged_from_the_actor_side() {
+    let r = testkit::combat_ruleset();
+    let mut w = game(&r);
+    // House 1 allies house 0; house 0 does not ally house 1.
+    w.houses[1].allies.push(ALPHA);
+    w.houses[1].allies.sort();
+    let a = spawn(&mut w, Kind::Vehicle, "CART", 0, mid(SIZE, 0, 0), 0);
+    let b = spawn(&mut w, Kind::Vehicle, "CART", 1, mid(SIZE, 3, 0), 0);
+    // House 0's actor: house 1's cart is an enemy.
+    assert_eq!(act(&w, a, ClickOn::Object(b)), Action::Attack);
+    // House 1's actor: house 0's cart is allied, so no attack without force-fire.
+    let beta = HouseId(1);
+    let from_b = targeting::action(&w, beta, b, ClickOn::Object(a), Modifiers::default());
+    assert_ne!(from_b, Action::Attack);
+}
+
 // spec: S-0214 Terms (selection response) and Import mapping (VoiceSelect: n is the count of the list, every entry kept; absent: none); F5 (no value taken for n = 0)
 #[test]
 fn f5_selection_response_count() {

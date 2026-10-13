@@ -217,8 +217,10 @@ fn unit_or_building(w: &World, id: ObjectId) -> bool {
     kind(w, id).is_some_and(|k| k != Kind::Terrain)
 }
 
-/// Allied with the actor: the houses are allied or the same (S-0214
-/// Terms). A target without a house is an enemy.
+/// Allied with the actor (S-0214 Terms, *Allied, enemy*): judged from the
+/// actor's side, with the one-way alliance: the actor's house allies the
+/// target's house (a house allies itself). A target without a house is an
+/// enemy.
 fn allied(w: &World, actor: ObjectId, target: ObjectId) -> bool {
     let a = w.obj(actor).and_then(|o| o.owner);
     let t = w.obj(target).and_then(|o| o.owner);
