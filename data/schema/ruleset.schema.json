@@ -5659,6 +5659,11 @@
           "type": "boolean",
           "default": true
         },
+        "defeat_cancellation_skip": {
+          "description": "Immediate deletions by one destruction hit of a defeat or surrender skip later objects.",
+          "type": "boolean",
+          "default": true
+        },
         "defeat_during_end_delay": {
           "description": "A house defeated during the end delay loses (the person-played house's win turns into a loss and restarts the delay).",
           "type": "boolean",
@@ -5831,6 +5836,11 @@
         },
         "forced_start_player_hold": {
           "description": "A forced start with no switched-on factory starts on a player hold when the house can pay P ÷ 54.",
+          "type": "boolean",
+          "default": true
+        },
+        "foundation_exit_lists": {
+          "description": "The infantry exit search uses each foundation's fixed exit list, gaps and repeats included.",
           "type": "boolean",
           "default": true
         },
@@ -6531,6 +6541,11 @@
         },
         "unit_changes_no_recheck": {
           "description": "Unit entries, departures, owner changes and removals below the limit call for no recheck.",
+          "type": "boolean",
+          "default": true
+        },
+        "unload_without_contact_stalls": {
+          "description": "A harvester whose refinery breaks off contact while it unloads, with nothing queued, stays in unload until an order gives it a behaviour.",
           "type": "boolean",
           "default": true
         },
