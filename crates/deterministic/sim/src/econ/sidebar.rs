@@ -170,15 +170,14 @@ pub fn legal(w: &World, house: HouseId, order: &Order) -> bool {
 /// recheck removed from the taken-up set (its icon goes with it), a cancel
 /// order when it is its line's item, then a cancel-all order when the house
 /// has a line of its kind. The orders are applied at the tick's order
-/// boundary (S-0203 claim 7). The types are taken in set order (kind, then
-/// registration index); no spec orders the removals of several types, and
-/// the final state does not depend on it.
+/// boundary (S-0203 claim 7). The types come in tab order and, within a
+/// tab, in icon order (S-0411 claim 13).
 pub fn removal_orders(w: &mut World, house: HouseId, removed: &[TypeRef]) {
     // spec: S-0404 claim 9 (for every player house; the non-player houses never build)
     if !production::player(w, house) {
         return;
     }
-    // Q-0123 (interim: the removed types in the taken-up set's order, kind then type index)
+    // spec: S-0411 claim 13 (the types in the order the recheck gives: tab, then icon order; each type's orders before the next type's)
     for &t in removed {
         let line = production::line_of(w, house, t);
         let item = line.is_some_and(|l| l.item.as_ref().is_some_and(|i| i.t == t));
@@ -280,10 +279,11 @@ pub fn darkened(w: &World, house: HouseId, t: TypeRef) -> bool {
 }
 
 /// The house's icons (claim 2): its taken-up set, the types offered at the
-/// last recheck (S-0407 Terms).
+/// last recheck (S-0407 Terms), in tab order and then icon order (S-0004
+/// claim 11).
 pub fn icons(w: &World, house: HouseId) -> Vec<TypeRef> {
     w.houses
         .get(usize::from(house.0))
-        .map(|h| h.econ.tech.taken_up.iter().copied().collect())
+        .map(|h| h.econ.tech.icons.iter().flatten().map(|i| i.t).collect())
         .unwrap_or_default()
 }

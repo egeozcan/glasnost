@@ -562,3 +562,142 @@ fn claim_9_release_tick() {
     step(&mut w);
     assert!(w.obj(obj).unwrap().on_map);
 }
+
+// spec: S-0004 claim 11 (rules 3 to 6: category rank, then tech level, then cost when added; a full tie puts the newest first under quirks.sidebar_tie_newest_first)
+// spec: S-0411 claim 13 (the icon order is kept for every player house)
+#[test]
+fn claim_13_icon_order() {
+    for newest_first in [true, false] {
+        let mut r = ruleset();
+        r.globals.quirks.sidebar_tie_newest_first = newest_first;
+        // A copy of TANK, registered after it: tied with it on every key.
+        r.registries
+            .get_mut("vehicles")
+            .unwrap()
+            .push("TANK2".into());
+        let copy = r.sim.vehicles["TANK"].clone();
+        r.sim.vehicles.insert("TANK2".into(), copy);
+        let mut w = game(&r);
+        building(&mut w, "WARFACT", 0, 0, 0);
+        building(&mut w, "NAVYARD", 0, 6, 0);
+        building(&mut w, "BARRACKS", 0, -6, 6);
+        ready(&mut w);
+        let v = |n| t(&w, Kind::Vehicle, n);
+        let (jeep, tank, tank2, boat) = (v("JEEP"), v("TANK"), v("TANK2"), v("BOAT"));
+        let grunt = t(&w, Kind::Infantry, "GRUNT");
+        let icons = sidebar::icons(&w, H);
+        let vehicles: Vec<TypeRef> = icons
+            .iter()
+            .copied()
+            .filter(|x| x.kind == Kind::Vehicle)
+            .collect();
+        // JEEP is cheaper; BOAT is naval (rank 3); TANK2 ties TANK.
+        if newest_first {
+            assert_eq!(vehicles, vec![jeep, tank2, tank, boat]);
+        } else {
+            assert_eq!(vehicles, vec![jeep, tank, tank2, boat]);
+        }
+        // The third tab (infantry) comes before the fourth.
+        let pos = |x| icons.iter().position(|y| *y == x).unwrap();
+        assert!(pos(grunt) < pos(jeep));
+    }
+}
+
+fn two_tab_rules() -> Ruleset {
+    let mut r = preq_rules();
+    r.sim.infantry.get_mut("GRUNT").unwrap().econ.prerequisite = Some(vec!["PREQ".into()]);
+    r.sim.buildings.get_mut("HUT").unwrap().econ.prerequisite = Some(vec!["PREQ".into()]);
+    r
+}
+
+// spec: S-0411 claim 13 (several offers removed at one recheck: the orders in tab order, first to fourth, not registration order; each type's cancel before its cancel-all, and all its orders before the next type's)
+#[test]
+fn claim_13_tab_order() {
+    let mut w = game(&two_tab_rules());
+    building(&mut w, "BARRACKS", 0, 0, 0);
+    building(&mut w, "CONYARD", 0, -6, 0);
+    let p = building(&mut w, "PREQ", 0, 6, 6);
+    ready(&mut w);
+    set_credits(&mut w, 0, 1_000_000);
+    let grunt = t(&w, Kind::Infantry, "GRUNT");
+    let hut = t(&w, Kind::Building, "HUT");
+    assert!(issue(&mut w, 0, Order::Build { what: grunt }));
+    assert!(issue(&mut w, 0, Order::Build { what: hut }));
+    step(&mut w);
+    objects::remove(&mut w, p);
+    glasnost_sim::econ::tech::house_update(&mut w, H);
+    // HUT (first tab) before GRUNT (third tab), although infantry types
+    // come first in the set.
+    assert_eq!(
+        w.houses[0].pending,
+        vec![
+            Order::Cancel { what: hut },
+            Order::CancelAll { what: hut },
+            Order::Cancel { what: grunt },
+            Order::CancelAll { what: grunt },
+        ]
+    );
+}
+
+// spec: S-0411 claim 13 (an item of A, one queued B, both removed: A's icon first gives cancel A, cancel-all A, cancel-all B, and B starts at the first cancellation, takes one creation draw and is refunded 0; B's icon first removes B before cancel A and no B item starts)
+// spec: S-0404 claim 11 (one creation draw per item started)
+#[test]
+fn claim_13_intermediate_start() {
+    let mut draws = Vec::new();
+    for a_first in [true, false] {
+        let mut r = preq_rules();
+        let jeep = r.sim.vehicles.get_mut("JEEP").unwrap();
+        jeep.econ.prerequisite = Some(vec!["PREQ".into()]);
+        // Tech level orders the two icons (S-0004 claim 11 rule 4).
+        jeep.tech_level = Some(if a_first { 2 } else { 1 });
+        r.sim.vehicles.get_mut("TANK").unwrap().tech_level = Some(if a_first { 1 } else { 2 });
+        let setup = |r: &Ruleset| {
+            let mut w = game(r);
+            building(&mut w, "WARFACT", 0, 0, 0);
+            let p = building(&mut w, "PREQ", 0, 6, 6);
+            ready(&mut w);
+            set_credits(&mut w, 0, 1_000_000);
+            (w, p)
+        };
+        let (mut w, preq) = setup(&r);
+        let (mut control, _) = setup(&r);
+        let (a, b) = (t(&w, Kind::Vehicle, "TANK"), t(&w, Kind::Vehicle, "JEEP"));
+        assert!(issue(&mut w, 0, Order::Build { what: a }));
+        assert!(issue(&mut w, 0, Order::Build { what: b }));
+        for _ in 0..40 {
+            step(&mut w);
+            step(&mut control);
+        }
+        assert!(item(&w, 0, a).is_some());
+        assert_eq!(line(&w, 0, a).unwrap().queue, vec![b]);
+        let paid = credits(&w, 0);
+        objects::remove(&mut w, preq);
+        glasnost_sim::econ::tech::house_update(&mut w, H);
+        let expected = if a_first {
+            vec![
+                Order::Cancel { what: a },
+                Order::CancelAll { what: a },
+                Order::CancelAll { what: b },
+            ]
+        } else {
+            vec![
+                Order::CancelAll { what: b },
+                Order::Cancel { what: a },
+                Order::CancelAll { what: a },
+            ]
+        };
+        assert_eq!(w.houses[0].pending, expected);
+        let before = w.rng.taken();
+        let control_before = control.rng.taken();
+        // The orders are applied at the end of the tick.
+        step(&mut w);
+        step(&mut control);
+        draws.push((w.rng.taken() - before) as i64 - (control.rng.taken() - control_before) as i64);
+        assert!(line(&w, 0, a).is_none_or(|l| l.item.is_none() && l.queue.is_empty()));
+        // A is refunded what it paid; B paid nothing and is refunded 0.
+        assert!(paid < 1_000_000);
+        assert_eq!(credits(&w, 0), 1_000_000);
+    }
+    // One creation draw more when B starts in between.
+    assert_eq!(draws[0] - draws[1], 1);
+}

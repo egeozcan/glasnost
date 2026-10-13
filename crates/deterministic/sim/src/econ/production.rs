@@ -1224,6 +1224,7 @@ pub fn check_line(w: &mut World, house: HouseId, lk: LineKind, exclude: Option<O
     let can = |w: &World, t: TypeRef, on: bool| {
         !factories(w, house, |b| {
             // spec: S-0404 claim 8 (could make: the build-limit answer with the production allowance, not the full tech tree)
+            // Q-0190 (interim: a factory building queued to be sold still counts)
             Some(b.id) != exclude && (!on || switched_on(b)) && tech::could_make_limit_only(w, b, t)
         })
         .is_empty()
@@ -1303,6 +1304,7 @@ pub fn factory_removed(w: &mut World, house: HouseId, b: ObjectId) {
         if l.house == house
             && l.kind.factory_kind() == kind
             && let Some(t) = l.item.as_ref().map(|i| i.t)
+            // Q-0190 (interim: a factory building queued to be sold still counts)
             && factories(w, house, |x| x.id != b && tech::could_make(w, x, t, false)).is_empty()
         {
             // spec: S-0404 claim 8 (removed for good: no other factory could make the item: cancelled as after a cancel)

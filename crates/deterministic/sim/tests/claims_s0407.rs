@@ -709,7 +709,10 @@ fn claim_16_queued_copy_needs_the_allowance() {
             .unwrap()
             .econ
             .number_of_docks = Some(3);
-        r.registries.get_mut("aircraft").unwrap().push("PADA".into());
+        r.registries
+            .get_mut("aircraft")
+            .unwrap()
+            .push("PADA".into());
         let mut a = r.sim.aircraft["PLANE"].clone();
         a.econ.airport_bound = Some(true);
         a.econ.build_limit = Some(limit);

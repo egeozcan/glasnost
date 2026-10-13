@@ -27,6 +27,20 @@ pub struct HouseTech {
     pub stolen: [bool; 3], // spec: S-0407 Terms (three stolen-tech flags)
     /// Ever-built counts by type (S-0407 Terms, claim 10).
     pub ever_built: BTreeMap<TypeRef, i32>,
+    /// The icons of the taken-up set by sidebar tab, first to fourth, each
+    /// in its icon order (S-0004 claim 11, S-0411 claim 13). Kept for every
+    /// player house, as if it were the local player (S-0411 claim 13).
+    pub icons: [Vec<Icon>; 4], // spec: S-0004 claim 11 (four sidebar tabs)
+}
+
+/// An icon in a sidebar tab (S-0004 claim 11): its type and the cost it was
+/// sorted by when it was added (items are not re-sorted later).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Icon {
+    /// The type.
+    pub t: TypeRef,
+    /// Its price to the house when it was added (S-0004 claim 11 rule 5).
+    pub cost: i32,
 }
 
 /// One of the six generic groups (S-0407 Terms, Import mapping).
@@ -127,6 +141,13 @@ pub struct TypeTech {
     pub docks: i32,
     /// A building type that is an upgrade type (S-0406 Terms).
     pub upgrade: bool,
+    /// The sidebar tab, 0 to 3 for the first to fourth (S-0004 claim 11).
+    pub tab: u8,
+    /// The counts-as-aircraft flag (S-0004 claim 11 rule 3). Not imported
+    /// yet: always no (interim Q-0123).
+    pub considered_aircraft: bool,
+    /// The naval flag (S-0004 claim 11 rule 3).
+    pub naval: bool,
 }
 
 /// The typed tech-tree rules (S-0407 Import mapping).
@@ -149,6 +170,10 @@ pub struct Rules {
     pub secrets: Vec<TypeRef>,
     /// The pad aircraft types (claim 16).
     pub pad_aircraft: Vec<u32>,
+    /// Per country (registration index): the index of its own side, if it
+    /// has one (S-0004 claim 9), for the sidebar order (S-0004 claim 11
+    /// rule 2).
+    pub country_side: Vec<Option<i32>>,
 }
 
 impl Rules {
@@ -231,9 +256,12 @@ impl Rules {
             t.overrides = overrides(&e.prerequisite_override);
             // spec: S-0407 Import mapping (BuildLimit absent: 2³¹ − 1)
             t.limit = e.build_limit.unwrap_or(i32::MAX);
+            // spec: S-0004 Import mapping (base-planning side = AIBasePlanningSide) and S-0407 Import mapping (absent: −1)
+            t.side = e.ai_base_planning_side.unwrap_or(-1);
         };
         let units = |list: &[String],
-                     map: &std::collections::BTreeMap<String, glasnost_rules::sim::UnitType>|
+                     map: &std::collections::BTreeMap<String, glasnost_rules::sim::UnitType>,
+                     tab: u8|
          -> Vec<TypeTech> {
             list.iter()
                 .map(|n| {
@@ -247,6 +275,9 @@ impl Rules {
                         owners: owners(&u.owner),
                         // spec: S-0407 Import mapping (AirportBound absent: no)
                         airport_bound: u.econ.airport_bound.unwrap_or(false),
+                        tab,
+                        // spec: S-0004 Import mapping (naval = Naval; absent: no)
+                        naval: u.combat.naval.unwrap_or(false),
                         ..Default::default()
                     };
                     econ_fields(&u.econ, &mut t);
@@ -254,9 +285,10 @@ impl Rules {
                 })
                 .collect()
         };
-        let infantry_t = units(&infantry, &s.infantry);
-        let vehicles_t = units(&vehicles, &s.vehicles);
-        let aircraft_t = units(&aircraft, &s.aircraft);
+        // spec: S-0004 claim 11 (infantry: the third tab; vehicles and aircraft: the fourth)
+        let infantry_t = units(&infantry, &s.infantry, 2);
+        let vehicles_t = units(&vehicles, &s.vehicles, 3);
+        let aircraft_t = units(&aircraft, &s.aircraft, 3);
         let buildings_t = buildings
             .iter()
             .map(|n| {
@@ -306,6 +338,10 @@ impl Rules {
                         0
                     },
                     upgrade: e.powers_up_building.is_some(),
+                    // spec: S-0004 claim 11 (build category combat: the second tab; other buildings: the first; the category's import is S-0302 claim 5's)
+                    tab: u8::from(b.defense.unwrap_or(false)),
+                    // spec: S-0004 Import mapping (naval = Naval; absent: no)
+                    naval: b.naval.unwrap_or(false),
                     ..Default::default()
                 };
                 econ_fields(e, &mut t);
@@ -346,6 +382,17 @@ impl Rules {
             proc_alternate,
             secrets,
             pad_aircraft: names(&g.pad_aircraft, &aircraft),
+            country_side: countries
+                .iter()
+                .map(|c| {
+                    // spec: S-0004 claim 9 (a country's own side; side names compared without regard to case; a side's index is its position in the imported side list)
+                    let side = s.countries.get(c).and_then(|c| c.econ.side.as_deref())?;
+                    r.sides
+                        .iter()
+                        .position(|x| x.name.eq_ignore_ascii_case(side))
+                        .map(|i| i as i32)
+                })
+                .collect(),
         }
     }
 
@@ -727,9 +774,9 @@ pub fn could_make(w: &World, b: &Object, t: TypeRef, tech: bool) -> bool {
 /// queued to be sold).
 fn factory_condition(w: &World, house: HouseId, t: TypeRef) -> bool {
     // spec: S-0407 claim 1 (b) (a factory not being sold or queued to be sold)
-    w.objects.values().any(|b| {
-        b.owner == Some(house) && could_make(w, b, t, false) && !queued_to_be_sold(b)
-    })
+    w.objects
+        .values()
+        .any(|b| b.owner == Some(house) && could_make(w, b, t, false) && !queued_to_be_sold(b))
 }
 
 /// A qualifying factory for a type (S-0407 Terms): a factory building of
@@ -761,8 +808,9 @@ pub fn recheck_due(w: &mut World, house: HouseId) {
 }
 
 /// The recheck (S-0407 claims 1 and 12): the whole taken-up set worked out
-/// again from the state at this moment. Returns the types that left the set,
-/// in set order, for the removal orders of S-0404 claim 9 and S-0411 claim 2.
+/// again from the state at this moment, and the icons kept with it (S-0004
+/// claim 11). Returns the types that left the set in S-0411 claim 13's
+/// order, for the removal orders of S-0404 claim 9 and S-0411 claim 2.
 pub fn recheck(w: &mut World, house: HouseId) -> Vec<TypeRef> {
     let Some(h) = w.houses.get(usize::from(house.0)) else {
         return Vec::new();
@@ -788,11 +836,156 @@ pub fn recheck(w: &mut World, house: HouseId) -> Vec<TypeRef> {
         }
     }
     // spec: S-0411 claim 2 (an icon is added when its type becomes offered and removed only when a recheck removes it from the taken-up set)
-    let removed: Vec<TypeRef> = before.difference(&after).copied().collect();
+    let gone: BTreeSet<TypeRef> = before.difference(&after).copied().collect();
+    // spec: S-0411 claim 13 (the removed types in tab order, first to fourth, and within a tab in the icon order immediately before removal)
+    let mut removed: Vec<TypeRef> = h
+        .econ
+        .tech
+        .icons
+        .iter()
+        .flatten()
+        .map(|i| i.t)
+        .filter(|t| gone.contains(t))
+        .collect();
+    // A type of the set without an icon cannot occur; were it to, it goes
+    // last, in set order.
+    let rest: Vec<TypeRef> = gone
+        .iter()
+        .copied()
+        .filter(|t| !removed.contains(t))
+        .collect();
+    removed.extend(rest);
+    let side = w
+        .rules()
+        .econ
+        .tech
+        .country_side
+        .get(h.country as usize)
+        .copied()
+        .flatten();
+    // Q-0191 (interim: several types offered at one recheck are added in set order, kind then registration index)
+    let added: Vec<(Icon, IconKey)> = after
+        .difference(&before)
+        .map(|&t| {
+            let cost = super::production::price(w, house, t);
+            (Icon { t, cost }, icon_key(w, t, side))
+        })
+        .collect();
+    let mut keys: BTreeMap<TypeRef, IconKey> = h
+        .econ
+        .tech
+        .icons
+        .iter()
+        .flatten()
+        .filter(|i| !gone.contains(&i.t))
+        .map(|i| (i.t, icon_key(w, i.t, side)))
+        .collect();
+    let tie_newest_first = w.rules().quirks.sidebar_tie_newest_first;
+    let both_flags = w.rules().quirks.sidebar_both_flags_rank;
     let hh = &mut w.houses[usize::from(house.0)].econ.tech;
     hh.recheck_due = false;
     hh.taken_up = after;
+    for tab in hh.icons.iter_mut() {
+        tab.retain(|i| !gone.contains(&i.t));
+    }
+    for (icon, key) in added {
+        let tab = &mut hh.icons[usize::from(key.tab)];
+        // spec: S-0004 claim 11 (an item already shown is not added twice)
+        if tab.iter().any(|i| i.t == icon.t) {
+            continue;
+        }
+        // spec: S-0004 claim 11 (placed in front of the first item it sorts before, else after all of them)
+        let at = tab
+            .iter()
+            .position(|old| {
+                keys.get(&old.t).is_some_and(|ok| {
+                    sorts_before(&key, icon.cost, ok, old.cost, both_flags, tie_newest_first)
+                })
+            })
+            .unwrap_or(tab.len());
+        tab.insert(at, icon);
+        keys.insert(icon.t, key);
+    }
     removed
+}
+
+/// The fixed sort keys of an item (S-0004 claim 11).
+#[derive(Clone, Copy, Debug)]
+struct IconKey {
+    tab: u8,
+    /// Rule 2: the base-planning side equals the house's side.
+    own_side: bool,
+    /// Rule 3: the counts-as-aircraft flag, for vehicle and aircraft types
+    /// only.
+    air: bool,
+    /// Rule 3: the naval flag, for vehicle and aircraft types only.
+    naval: bool,
+    /// Rule 4.
+    tech_level: i32,
+}
+
+fn icon_key(w: &World, t: TypeRef, side: Option<i32>) -> IconKey {
+    let f = tt(w, t).cloned().unwrap_or_default();
+    // spec: S-0004 claim 11 rule 3 (the flags count only for vehicle and aircraft types)
+    let unit = matches!(t.kind, Kind::Vehicle | Kind::Aircraft);
+    IconKey {
+        tab: f.tab,
+        // spec: S-0004 claim 11 rule 2 (the base-planning side equals the house's side)
+        own_side: side.is_some_and(|s| s == f.side),
+        air: unit && f.considered_aircraft,
+        naval: unit && f.naval,
+        tech_level: f.tech_level,
+    }
+}
+
+/// Category rank (S-0004 claim 11 rule 3): ground 0, air 1, both flags 1
+/// as the new item and 2 as an item already in the tab
+/// (`quirks.sidebar_both_flags_rank`; off: 1), naval 3.
+fn rank(k: &IconKey, new: bool, both_flags: bool) -> i32 {
+    // spec: S-0004 claim 11 rule 3 (the rank table: ground 0, air 1, both 1 new or 2 existing, naval 3)
+    match (k.air, k.naval) {
+        (false, false) => 0,
+        (true, false) => 1,
+        (true, true) if new || !both_flags => 1,
+        (true, true) => 2,
+        (false, true) => 3,
+    }
+}
+
+/// Whether a new item sorts before an item already in the tab (S-0004
+/// claim 11, rules 1 to 6).
+fn sorts_before(
+    new: &IconKey,
+    new_cost: i32,
+    old: &IconKey,
+    old_cost: i32,
+    both_flags: bool,
+    tie_newest_first: bool,
+) -> bool {
+    // Rule 1 never applies: the simulation has no superweapon items yet.
+    let a = (
+        // spec: S-0004 claim 11 rule 2 (the item whose base-planning side equals the house's side first)
+        !new.own_side,
+        // spec: S-0004 claim 11 rule 3 (category rank, lowest first)
+        rank(new, true, both_flags),
+        // spec: S-0004 claim 11 rule 4 (tech level, lowest first)
+        new.tech_level,
+        // spec: S-0004 claim 11 rule 5 (cost to the house at the time it is added, lowest first)
+        new_cost,
+    );
+    let b = (
+        !old.own_side,
+        rank(old, false, both_flags),
+        old.tech_level,
+        old_cost,
+    );
+    match a.cmp(&b) {
+        std::cmp::Ordering::Less => true,
+        std::cmp::Ordering::Greater => false,
+        // Q-0123 (interim: display names are not imported, so they compare equal)
+        // spec: S-0004 claim 11 rule 6 (equal names: the newly added item first; quirks.sidebar_tie_newest_first)
+        std::cmp::Ordering::Equal => tie_newest_first,
+    }
 }
 
 /// Whether a type is offered to a house (S-0407 claim 1).
