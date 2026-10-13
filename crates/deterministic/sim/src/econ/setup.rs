@@ -24,7 +24,8 @@
 //!    14: crates (a seam), the computer-only extra credits of claim 3 (only
 //!    for non-passive neutral and special houses in our engine), the start
 //!    alliances of claim 8, the wall-owner rewrite and colour fields of
-//!    S-0413 claims 5 and 6, and the secret labs (S-0407 claim 14) last.
+//!    S-0413 claims 5 and 6, and the secret labs (S-0407 claim 14) last, before
+//!    the game-start pass (S-0202 claim 14, request Q-0192).
 //!
 //! The outcome of the game is [`crate::econ::victory::outcome`].
 //!
@@ -605,8 +606,9 @@ pub fn row_of(setup: &GameSetup, i: usize) -> Row {
 /// Game start after the starting units (S-0412 claim 14), for a skirmish:
 /// the crates (claim 10), the extra credits (claim 3), the start alliances
 /// (claim 8), the wall-owner flags (S-0413 claim 6), the colour fields
-/// (S-0413 claim 5) and, last of the draws, the secret labs (S-0407 claim
-/// 14). Removed houses get none of it (claim 14).
+/// (S-0413 claim 5) and, last of this function's draws, the secret labs
+/// (S-0407 claim 14); the game-start pass's draws come after them (S-0202
+/// claim 14, request Q-0192). Removed houses get none of it (claim 14).
 pub fn start_game(w: &mut World) {
     // spec: S-0412 claim 14 (the crate draws follow the starting units' draws)
     place_crates(w);
