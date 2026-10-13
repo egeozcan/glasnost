@@ -305,6 +305,18 @@ Provisional rules of combat, each tied to a request:
 | `combat::damage`, `combat::death` | a building's delayed-kill countdown ends without effect; an exploding building, or one destroyed while being sold, leaves play at once | Q-0081 |
 | `orders::prone_get_up` | a behaviour order resulting in *move* is the movement order that makes a prone unit get up, when the order is applied | Q-0087 |
 
+## Simulation (M5a: economy and base building)
+
+- **Power, shroud and radar (S-0405, S-0409, S-0410).** `econ::power` keeps each house's totals and blackout (`HousePower`), works them out in the house update when an event has made the house due (placement, removal, owner change, switch, health noticed in the building's own turn, blackout start and end), and answers `low_power` and `fraction` (the double that S-0403 claim 5 reads). `in_operation` is the live test of claim 8 and `firing_answer` is table T1 at S-0301 rank 4 (`combat::check`); the one-off effects (control-centre count, gap field, super-gap end) run in the building's own turn through `econ::events::turn`. `power::switch` applies the power orders. `econ::shroud` keeps per player house the cover count, hostile gap count and marks of table S1 (plus one shared off-map state), applies sights in the objects' turns and at building placement, runs the re-cover sweep before the turn pass and the optional regrowth, gap fields, the spy satellite's reveal and the whole-map re-cover (taken back and re-applied in object order), the reveal on fire (`combat::fire::shot`), area reveals for other specs, `defeat_reveal`, discovery, the point test of S-0110 claim 8 and the query `explored`. `econ::radar` rechecks claim 1 in the house update after an event (power first, then radar and the spy satellite); `on_defeat` turns radar on for good and reveals the map. `econ::minimap` holds the radar map's pure functions (point grid F1, scale F2, cell at a pixel F3, object pixel F4, flash F5, terrain mean F6, tile colour F7, overlay table T1, listing, arrivals and `compose`) for the viewer; nothing there is game state. Seams, each a small function in `econ::power` that answers "no" or 0: pulses and locks, being erased or drained, chargers, absorbed passengers, engineers, occupants; the superweapon charge hold (claim 15) and the super-gap's deploy behaviour (claim 16); what a disabled vehicle cannot do. Stubs in other topics: `production::power_changed` (S-0405 claim 11) and `victory::defeated` (S-0409 claim 11). Ledgers: `docs/m5-claims/S-0405.md`, `S-0409.md`, `S-0410.md`.
+
+Provisional rules of M5a, each tied to a request:
+
+| Where | Interim rule | Request |
+|---|---|---|
+| `econ::shroud::discovered`, `econ::minimap::listed` | own objects count as discovered (S-0409 Terms), so every own object is listed on the radar map; every object of a cell competes for the discovered mark, ties to the lower object number | Q-0110 |
+| `econ::shroud` (whole-map operations) | the shared state of non-legal cells is left out of the whole-map re-cover and reveal | Q-0111 |
+| `econ::minimap::listed` | a building is listed at the F4 pixels of its foundation cells' centres | Q-0112 |
+
 ## Tests
 
 ```sh

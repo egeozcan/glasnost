@@ -253,6 +253,14 @@ pub fn new_game(
         scratch: Default::default(),
         pathfinder: Default::default(),
     };
+    // spec: S-0409 claim 3 (the states at game start, before any object is placed)
+    crate::econ::shroud::start(&mut w);
+    for h in &mut w.houses {
+        // spec: S-0410 claim 1 (the map's free-radar flag, fixed for the game)
+        h.econ.radar.free = map.basic.free_radar;
+        // The first house update works claim 1 out for every house (S-0410 claim 1 holds from the start).
+        h.econ.radar.due = true;
+    }
     let q = rules.quirks;
     let order = map.cells.visiting_order(q.narrow_map_partial_pass);
     let players = starts::player_count(&w);

@@ -121,6 +121,8 @@ pub fn shot(w: &mut World, firer: ObjectId, slot: usize, target: Target) -> bool
     if launched.is_none() && wr.projectile.is_some() {
         return false;
     }
+    // spec: S-0409 claim 16 (a shot from a reveal-on-fire weapon reveals the firer to the target's owner)
+    crate::econ::shroud::fired(w, firer, &wr.name, target);
     let t = w.tick;
     let j = k + 1;
     let berserk = o.combat.berserk_until.is_some_and(|u| t < u);

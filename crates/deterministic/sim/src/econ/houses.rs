@@ -14,5 +14,12 @@ pub fn part(w: &mut World) {
 
 /// One house's update.
 fn house_update(w: &mut World, h: HouseId) {
-    let _ = (w, h);
+    // Power, then radar (S-0405 claim 7, S-0410 claim 2): the radar recheck
+    // after an event sees the power worked out in the same update (S-0410
+    // scenario R1, the power changes at (d) and (e)).
+    if crate::econ::power::house_update(w, h) {
+        // spec: S-0410 claim 2 (a change of the power balance asks for a recheck)
+        crate::econ::radar::mark_due(w, h);
+    }
+    crate::econ::radar::house_update(w, h);
 }

@@ -19,6 +19,14 @@ pub fn part(w: &mut World) {
     let _ = w;
 }
 
+/// The house has worked out its power again (S-0405 claim 11): the step
+/// period of each of its production lines must be worked out again at once
+/// (S-0403 claim 8), from the power fraction `crate::econ::power::fraction`.
+/// Stub for the production topic (S-0403, S-0404).
+pub fn power_changed(w: &mut World, house: HouseId) {
+    let _ = (w, house);
+}
+
 /// Applies a build order (S-0404 claim 3).
 pub fn build(w: &mut World, house: HouseId, t: TypeRef) {
     let _ = (w, house, t);

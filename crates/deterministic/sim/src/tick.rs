@@ -18,6 +18,10 @@ pub fn step(w: &mut World) {
     // spec: S-0203 row 9 (growth and spread of resources, S-0401)
     crate::econ::resource::part(w);
     // Rows 2, 10, 11, 12, 3, 13 and 14 (and row 4) have no topic yet: empty seams.
+    // spec: S-0409 claim 13 (the re-cover sweep, before the turn pass of its tick)
+    crate::econ::shroud::sweep(w);
+    // spec: S-0203 claim 1 (other work once per tick, no draws: the regrowth of shroud, placed freely; S-0409 claim 18)
+    crate::econ::shroud::regrowth(w);
     turn_pass(w);
     // spec: S-0203 claim 1 (after the turn pass: rows 15, 16, 6, 7, then the orders, row 8)
     // Rows 15 and 16 (blast rings, crate respawns): empty seams.
@@ -75,6 +79,8 @@ fn object_turn(w: &mut World, id: ObjectId) {
     }
     if kind == Kind::Building {
         crate::combat::behave::delayed_shot_turn(w, id);
+        // spec: S-0405 claims 7 and 9, S-0409 claim 8 (the building's own turn)
+        crate::econ::events::turn(w, id, false);
         return;
     }
     let loco = w
@@ -86,6 +92,8 @@ fn object_turn(w: &mut World, id: ObjectId) {
         Some(Locomotor::Walk) => walk::tick(w, id),
         _ => false,
     };
+    // spec: S-0405 claim 13, S-0409 claim 8 (the unit's own turn, after its movement of the tick)
+    crate::econ::events::turn(w, id, moved);
     if kind == Kind::Vehicle {
         crate::combat::fire::reload_turn(w, id);
         crate::combat::fire::firing_frame_turn(w, id);
