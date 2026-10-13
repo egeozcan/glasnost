@@ -2562,3 +2562,17 @@ fn claim7_landed_aircraft_in_the_ground_pass_uses_leptons() {
 fn claim7_landed_aircraft_in_both_passes() {
     assert!(landed_hunt(true, true).is_some());
 }
+
+// spec: S-0309 table C row exists (revision 4: a destroyed building awaiting removal keeps its foundation cells with 0 health and is not a candidate; scenario A14 part o)
+#[test]
+fn table_c_exists_building_awaiting_removal() {
+    let mut r = base();
+    shed(&mut r, Some("Gun"), 5, false);
+    assert!(found(&r, Kind::Building, "SHED"));
+    let (mut w, a, b) = one_target(&r, Kind::Building, "SHED");
+    let o = w.obj_mut(b).unwrap();
+    o.health = 0;
+    o.combat.killed = true;
+    assert!(w.obj(b).unwrap().on_map, "still in its foundation cells");
+    assert_eq!(range_search(&mut w, a), None);
+}

@@ -617,3 +617,23 @@ fn claim_11_order() {
     common::run(&mut w, 1);
     assert!(defeated(&w, A));
 }
+
+// spec: S-0309 claim 16 (revision 4: made an ally, the anger towards the new ally becomes 0 and the enemy house is worked out again; made an enemy, the anger grows by 1 point, for each house whose alliance ended)
+#[test]
+fn s0309_claim_16_anger_on_alliance_changes() {
+    let mut w = allies_scene().build();
+    armed(&mut w);
+    w.houses[0].combat.anger[1] = 7;
+    glasnost_sim::combat::acquire::recompute_enemy(&mut w, 0);
+    assert_eq!(w.houses[0].combat.enemy, Some(B));
+    victory::alliance(&mut w, A, B);
+    assert_eq!(w.houses[0].combat.anger[1], 0);
+    assert_eq!(w.houses[0].combat.enemy, None, "the new ally was the enemy house");
+    // Breaking it: Alpha is made an enemy of Beta; Beta, which never allied Alpha, is not.
+    let before = w.houses[1].combat.anger[0];
+    victory::alliance(&mut w, A, B);
+    assert!(!w.allied(Some(A), Some(B)));
+    assert_eq!(w.houses[0].combat.anger[1], 1);
+    assert_eq!(w.houses[1].combat.anger[0], before);
+    assert_eq!(w.houses[0].combat.enemy, Some(B));
+}

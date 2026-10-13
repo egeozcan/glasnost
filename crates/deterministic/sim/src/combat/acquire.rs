@@ -10,7 +10,7 @@ use crate::combat::data::Ability;
 use crate::combat::veterancy::{has_ability, type_combat};
 use crate::combat::weapon::{armed, mean_damage, versus, would_use};
 use crate::rules::{Behaviour, Kind};
-use crate::world::{AttackMoveMemory, HouseRole, ObjectId, Target, World};
+use crate::world::{AttackMoveMemory, HouseId, HouseRole, ObjectId, Target, World};
 
 /// τ_r, the retaliation threshold: the single nearest 0.01 (S-0304
 /// Constants).
@@ -78,6 +78,28 @@ pub fn anger(w: &mut World, victim: ObjectId, attacker: ObjectId, dealt: i32) {
         *a = a.wrapping_add(delta);
     }
     recompute_enemy(w, vo.0 as usize);
+}
+
+/// A house's anger when its alliance with another house changes (S-0309
+/// claim 16): made an enemy of `other`, its anger towards it grows by 1
+/// point; made an ally, that anger becomes 0. The enemy house is then
+/// worked out again (which clears it if the new ally was it).
+pub fn alliance_anger(w: &mut World, house: HouseId, other: HouseId, ally: bool) {
+    let Some(a) = w
+        .houses
+        .get_mut(usize::from(house.0))
+        .and_then(|h| h.combat.anger.get_mut(usize::from(other.0)))
+    else {
+        return;
+    };
+    *a = if ally {
+        0 // spec: S-0309 claim 16 (made an ally: the anger towards the new ally becomes 0)
+    } else {
+        // spec: S-0309 claim 16 and F8 (made an enemy: the anger grows by 1 point, a wrapping 32-bit addition)
+        a.wrapping_add(1)
+    };
+    // spec: S-0309 claim 16 (each such change is followed by the same recomputation)
+    recompute_enemy(w, usize::from(house.0));
 }
 
 /// Works a house's enemy house out again (S-0309 claim 16): the house,
