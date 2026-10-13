@@ -4,8 +4,8 @@
 
 use glasnost_map::CellXY;
 use glasnost_num::geom::{
-    delta, direction, direction_constants, facing_of_angle, root_floor, table_angle_real,
-    table_root, table_root_real,
+    delta, direction, direction_constants, root_floor, table_angle_real, table_root,
+    table_root_real,
 };
 use glasnost_num::trig::{acos_t, cos_t, sin_t};
 use glasnost_num::{F64, Rounding};
@@ -245,11 +245,11 @@ fn straight_pitch(w: &World, fire: Pos, q: Pos, target_building: bool, hb: i32) 
     };
     let x = f(i64::from(dprime), mode).max(crate::rules::nearest_double("0.05"));
     let y = f(i64::from(z.abs() - tau), mode);
-    // Whether S-0204's 50 table exceptions apply to this pitch facing (pitch_of applies them) is request Q-0077.
-    let (a, _) = table_angle_real(x, y, mode);
+    let (a, i) = table_angle_real(x, y, mode);
     // spec: S-0306 F13 (θ_c = sgn(Z) × A(|Z| − τ, max(d′, 0.05)))
     let tc = if z < 0 { a.negated() } else { a };
-    angle_facing(tc, mode)
+    // spec: S-0204 claim 12 and F6 (the exceptions of F3 apply to the straight launch pitch, by the sign of θ_c after its negation)
+    i32::from(glasnost_num::geom::pitch_of_angle(tc, i, mode) as i16)
 }
 
 /// The scatter of S-0306 F5: displacement `p` moved by radius `sigma` in the
@@ -585,11 +585,8 @@ fn lead(w: &World, firer: ObjectId, target: ObjectId, aim: Pos) -> Pos {
         }
         _ => r.combat.weapon(lw).speed,
     };
-    // The target vehicle's current speed u in leptons per tick is not defined for the driving
-    // locomotor, whose progress is in progress units (S-0207 F2): request Q-0071. Until it is
-    // answered u = 0, so no shot is led.
-    let u = 0;
-    let _ = target;
+    // spec: S-0306 claim 3 (u, the target's speed estimate: S-0207 F2 at the fraction it holds now, read as leptons per tick); S-0207 claim 18 and F2a
+    let u = crate::drive::speed_estimate(w, target);
     let b = w.obj(target).map_or(0, |o| i32::from(o.body.value(w.tick)));
     let point9 = crate::rules::nearest_double("0.9");
     // spec: S-0306 F6 (ℓ = trunc(RZ₅₃(RZ₅₃(D₃ / RZ₅₃(w × 0.9)) × u)))
@@ -665,8 +662,8 @@ fn pitch_of(w: &World, v: [F64; 3]) -> i32 {
     let mode = w.rules().mode;
     let h = hlen(w, v);
     let (a, i) = table_angle_real(h, v[2], mode);
-    // spec: S-0306 F12 (p(V) = trunc((A(V_z, H) − π/2) × c₂), a 16-bit value)
-    i32::from(facing_of_angle(a, i, true, mode) as i16)
+    // spec: S-0306 F12 (p(V) = trunc((A(V_z, H) − π/2) × c₂), a 16-bit value); S-0204 claim 12 and F6 (the exceptions of F3, by the sign of the angle)
+    i32::from(glasnost_num::geom::pitch_of_angle(a, i, mode) as i16)
 }
 
 /// The steering turn of one turn (S-0306 claims 12 to 15, F10 to F12).

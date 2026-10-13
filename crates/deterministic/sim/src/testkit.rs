@@ -562,6 +562,7 @@ pub fn spawn(
     cell: CellXY,
     facing: u16,
 ) -> ObjectId {
+    let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
     let ti = w
         .rules()
         .index_of(kind, name)
@@ -572,7 +573,7 @@ pub fn spawn(
     crate::objects::place(w, id, crate::world::Pos::new(p.x, p.y, z), facing);
     let tick = w.tick;
     if let Some(o) = w.obj_mut(id) {
-        o.beh.force(Behaviour::Guard, tick);
+        o.beh.force(Behaviour::Guard, tick, stale);
     }
     id
 }

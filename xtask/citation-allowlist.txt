@@ -9,3 +9,4 @@ crates/deterministic/num/src/soft.rs cite # IEEE 754 binary32/binary64 arithmeti
 crates/deterministic/num/src/bigmath.rs cite # reference big-integer arithmetic of our own (π, arctangent, sine series) used to check the committed tables against their definitions; its literals are series coefficients and working precision, not game behaviour
 crates/deterministic/num/src/tablegen.rs cite # test-only generator (compiled under cfg(test)) that recomputes the committed tables from their definitions
 crates/deterministic/sim/src/testkit.rs cite # synthetic test scenario (invented rules, map and scripted orders for tests, the headless runner and the determinism gate); its numbers are test data, not game behaviour
+crates/deterministic/ai/src/fixture.rs cite # synthetic skirmish (invented rules and map for the scripted skirmish tests and the determinism gate); its numbers are test data, not game behaviour

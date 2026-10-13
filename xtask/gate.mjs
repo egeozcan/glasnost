@@ -5,7 +5,9 @@ import { readFileSync } from "node:fs";
 
 const [wasmPath, scenario, goldenPath] = process.argv.slice(2);
 const golden = readFileSync(goldenPath, "utf8");
-const ticks = golden.split("\n").filter((l) => l && !l.startsWith("#")).length;
+// The header names the ticks run ("…, 3000 ticks, …"); a scenario with a
+// stride keeps fewer hash lines than that.
+const ticks = Number(/, (\d+) ticks,/.exec(golden.split("\n")[0])[1]);
 const { instance } = await WebAssembly.instantiate(readFileSync(wasmPath), {});
 const len = instance.exports.gate_run(Number(scenario), ticks);
 const ptr = instance.exports.gate_ptr();
@@ -16,6 +18,6 @@ if (got === golden) {
   const a = got.split("\n");
   const b = golden.split("\n");
   const i = a.findIndex((l, k) => l !== b[k]);
-  console.error(`wasm32 (${goldenPath}): line ${i + 1} differs (tick ${i - 1}): got ${a[i]}, want ${b[i]}`);
+  console.error(`wasm32 (${goldenPath}): line ${i + 1} differs: got ${a[i]}, want ${b[i]}`);
   process.exit(1);
 }

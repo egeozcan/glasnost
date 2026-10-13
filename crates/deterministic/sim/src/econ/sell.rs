@@ -191,6 +191,7 @@ pub fn sell(w: &mut World, house: HouseId, actor: ObjectId) {
 }
 
 fn sell_building(w: &mut World, id: ObjectId) {
+    let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
     let Some(o) = w.obj(id) else { return };
     let t = o.type_index;
     if !has_buildup(w, t) {
@@ -214,7 +215,7 @@ fn sell_building(w: &mut World, id: ObjectId) {
     let tick = w.tick;
     if let Some(ob) = w.obj_mut(id) {
         // spec: S-0408 claim 4 (the building's behaviour becomes selling)
-        ob.beh.force(Behaviour::Selling, tick);
+        ob.beh.force(Behaviour::Selling, tick, stale);
         ob.econ.sale = Some(Sale {
             stage: Stage::Ordered,
             packs,
@@ -530,6 +531,7 @@ fn finish(w: &mut World, id: ObjectId, packs: bool) {
 
 /// Sells the top upgrade of building `id` (S-0408 claim 5).
 fn sell_upgrade(w: &mut World, id: ObjectId, u: u32) {
+    let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
     let Some(house) = w.obj(id).and_then(|o| o.owner) else {
         return;
     };
@@ -553,7 +555,7 @@ fn sell_upgrade(w: &mut World, id: ObjectId, u: u32) {
         ob.econ.building.upgrade_count = (ob.econ.building.upgrade_count - 1).max(0);
         ob.econ.sale = None;
         // spec: S-0408 claim 5 (the building goes to guard, otherwise unchanged)
-        ob.beh.force(Behaviour::Guard, tick);
+        ob.beh.force(Behaviour::Guard, tick, stale);
     }
     // spec: S-0408 claim 5 (the house works out its power again, S-0405 claim 7)
     crate::econ::power::make_due(w, house);

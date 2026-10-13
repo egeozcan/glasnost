@@ -13,6 +13,7 @@
 //! networking, file formats or the importer. `cargo xtask check` and the
 //! `xtask` tests enforce that rule.
 
+pub mod approach;
 pub mod behaviour;
 pub mod bridges;
 pub mod cells;

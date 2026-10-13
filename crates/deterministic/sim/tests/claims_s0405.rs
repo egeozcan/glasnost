@@ -196,10 +196,13 @@ fn claim_3_counted_buildings() {
     let mut w = game(&rules());
     let p = put(&mut w, "PLANT", 0, 0, 0);
     let t = w.tick;
-    w.obj_mut(p).unwrap().beh.force(Behaviour::Construction, t);
+    w.obj_mut(p)
+        .unwrap()
+        .beh
+        .force(Behaviour::Construction, t, true);
     step(&mut w);
     assert_eq!(power::totals(&w, A), (120, 0));
-    w.obj_mut(p).unwrap().beh.force(Behaviour::Selling, t);
+    w.obj_mut(p).unwrap().beh.force(Behaviour::Selling, t, true);
     step(&mut w);
     assert_eq!(power::totals(&w, A), (120, 0));
     glasnost_sim::objects::remove(&mut w, p);
@@ -380,12 +383,15 @@ fn claim_8_in_operation_rows() {
     let t = w.tick;
     w.obj_mut(def).unwrap().beh.queued = Some(Behaviour::Selling);
     assert!(power::in_operation(&w, def));
-    w.obj_mut(def).unwrap().beh.force(Behaviour::Selling, t);
+    w.obj_mut(def)
+        .unwrap()
+        .beh
+        .force(Behaviour::Selling, t, true);
     assert!(!power::in_operation(&w, def));
     w.obj_mut(def)
         .unwrap()
         .beh
-        .force(Behaviour::Construction, t);
+        .force(Behaviour::Construction, t, true);
     assert!(!power::in_operation(&w, def));
     // Health 0 is not alive.
     w.obj_mut(nd).unwrap().health = 0;
@@ -424,12 +430,15 @@ fn claim_9_firing_answers() {
     w.obj_mut(def)
         .unwrap()
         .beh
-        .force(Behaviour::Construction, t);
+        .force(Behaviour::Construction, t, true);
     assert_eq!(power::firing_answer(&w, def), Some(Answer::Illegal));
-    w.obj_mut(pc).unwrap().beh.force(Behaviour::Selling, t);
+    w.obj_mut(pc)
+        .unwrap()
+        .beh
+        .force(Behaviour::Selling, t, true);
     assert_eq!(power::firing_answer(&w, pc), Some(Answer::Impossible));
     put(&mut w, "PLANT", 0, 6, 0);
-    w.obj_mut(def).unwrap().beh.force(Behaviour::Guard, t);
+    w.obj_mut(def).unwrap().beh.force(Behaviour::Guard, t, true);
     step(&mut w);
     assert_eq!(power::firing_answer(&w, def), None);
 }
@@ -641,7 +650,7 @@ fn claim_16_super_gap_ends_with_operation() {
     step(&mut w);
     assert_eq!(power::totals(&w, A), (120, 30));
     let t = w.tick;
-    w.obj_mut(g).unwrap().beh.force(Behaviour::Selling, t);
+    w.obj_mut(g).unwrap().beh.force(Behaviour::Selling, t, true);
     step(&mut w);
     assert!(!w.obj(g).unwrap().econ.building.super_gap);
     step(&mut w);

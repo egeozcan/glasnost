@@ -297,7 +297,7 @@ pub fn approach_radii(w: &World, r_prime: i32, beta: i32, infantry: bool) -> Vec
     // spec: S-0307 F4 and Constants (radii u′, u′ − 256, …, strictly greater than 204.8 leptons)
     let cut = crate::rules::nearest_double("204.8");
     (0..)
-        .map(|k: i32| first.wrapping_sub(k.wrapping_mul(256)))
+        .map(|k: i32| first.wrapping_sub(k.wrapping_mul(256))) // spec: S-0307 F4 (steps of 256 leptons)
         .take_while(|&rad| F64::from_i64(i64::from(rad), mode).gt(cut))
         .collect()
 }
@@ -364,8 +364,8 @@ pub fn approach_search(w: &World, id: ObjectId, r_prime: i32) -> Option<Approach
     let detour = |cell: CellXY| -> bool {
         // spec: S-0307 claim 16 and Constants (E(c, t) ≤ C(c, t) + 8 or E(a, c) ≤ C(a, c) + 8 cells; a failed estimate never satisfies)
         let e = |p: CellXY, q: CellXY| crate::path::coarse_estimate(w, u.zone, p, q);
-        e(cell, t_cell).is_some_and(|x| x <= cheb(cell, t_cell) + 8)
-            || e(a_cell, cell).is_some_and(|x| x <= cheb(a_cell, cell) + 8)
+        e(cell, t_cell).is_some_and(|x| x <= cheb(cell, t_cell) + 8) // spec: S-0307 claim 16 (8 cells)
+            || e(a_cell, cell).is_some_and(|x| x <= cheb(a_cell, cell) + 8) // spec: S-0307 claim 16 (8 cells)
     };
     let alternatives: &[(i32, i32)] = if r.quirks.approach_alternative_walk {
         &ALTERNATIVES

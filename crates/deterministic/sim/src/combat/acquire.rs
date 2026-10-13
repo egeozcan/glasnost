@@ -1235,6 +1235,7 @@ pub fn per_tick(w: &mut World, a: ObjectId) {
 
 /// The attack-move searches of S-0309 claim 23 (a).
 fn attack_move_search(w: &mut World, a: ObjectId) {
+    let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
     let Some(o) = w.obj(a).cloned() else { return };
     let tick = w.tick;
     let Some(mem) = o.attack_move else { return };
@@ -1265,7 +1266,8 @@ fn attack_move_search(w: &mut World, a: ObjectId) {
                 && let Some(ob) = w.obj_mut(a)
             {
                 // spec: S-0309 claim 23 (a target: queues attack with an immediate start and counts as engaged)
-                ob.beh.queue_and_start_at_once(Behaviour::Attack, tick);
+                ob.beh
+                    .queue_and_start_at_once(Behaviour::Attack, tick, stale);
                 ob.combat.engaged = true;
             }
         }
@@ -1281,7 +1283,8 @@ fn attack_move_search(w: &mut World, a: ObjectId) {
             let found = w.obj(a).is_some_and(|x| x.target.is_some());
             if let Some(ob) = w.obj_mut(a) {
                 if found {
-                    ob.beh.queue_and_start_at_once(Behaviour::Attack, tick);
+                    ob.beh
+                        .queue_and_start_at_once(Behaviour::Attack, tick, stale);
                     ob.combat.engaged = true;
                 } else {
                     // spec: S-0309 claim 23 (nothing found: the memory's target again)

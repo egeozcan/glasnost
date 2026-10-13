@@ -422,6 +422,7 @@ const PLAYER_AT: [&str; 8] = [
 /// upgrades directly after it), each kind in entry order (claim 43).
 /// Smudges, placed last, hold no simulation state.
 pub fn place_map_objects(w: &mut World, map: &Map, sandbox: bool) {
+    let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
     let r = w.rules_arc();
     for t in &map.objects.terrain {
         // spec: S-0009 claim 42 (a name that is not yet a type creates one, which has no rules data)
@@ -551,12 +552,12 @@ pub fn place_map_objects(w: &mut World, map: &Map, sandbox: bool) {
             if kind == Kind::Building {
                 // spec: S-0009 claim 40 (a pre-placed building is complete and starts in the guard behaviour)
                 if let Some(o) = w.obj_mut(id) {
-                    o.beh.force(Behaviour::Guard, t);
+                    o.beh.force(Behaviour::Guard, t, stale);
                 }
             } else if let Some(b) = fields.behaviour.as_deref().and_then(behaviour_by_name) {
                 // spec: S-0009 claim 41 (the behaviour the object starts with; none: the placement fall-back)
                 if let Some(o) = w.obj_mut(id) {
-                    o.beh.force(b, t);
+                    o.beh.force(b, t, stale);
                 }
             }
             let mut pos = pos;
@@ -611,7 +612,7 @@ pub fn place_map_objects(w: &mut World, map: &Map, sandbox: bool) {
                     let uid = create(w, Kind::Building, ui, Some(owner));
                     // spec: S-0009 claim 40 (the upgrades start at full health, at the same cell and facing)
                     if let Some(o) = w.obj_mut(uid) {
-                        o.beh.force(Behaviour::Guard, t);
+                        o.beh.force(Behaviour::Guard, t, stale);
                     }
                     place(w, uid, pos, facing);
                 }

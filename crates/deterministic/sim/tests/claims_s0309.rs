@@ -264,7 +264,7 @@ fn expire(w: &mut World, a: ObjectId) {
 
 fn set_beh(w: &mut World, a: ObjectId, b: Behaviour) {
     let t = w.tick;
-    w.obj_mut(a).unwrap().beh.force(b, t);
+    w.obj_mut(a).unwrap().beh.force(b, t, true);
 }
 
 fn set_target(w: &mut World, a: ObjectId, t: Option<Target>, opp: bool) {

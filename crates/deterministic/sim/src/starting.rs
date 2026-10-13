@@ -172,6 +172,7 @@ fn standing_position(w: &mut World, c: CellXY, infantry: bool) -> u8 {
 /// body facing 0, at the terrain's height there, in the guard behaviour;
 /// a vehicle of a visceroid type takes its draw R(0, 29) (S-0009 claim 46).
 fn put(w: &mut World, id: ObjectId, c: CellXY, p: u8) {
+    let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
     let Some(kind) = w.obj(id).map(|o| o.kind) else {
         return;
     };
@@ -195,7 +196,7 @@ fn put(w: &mut World, id: ObjectId, c: CellXY, p: u8) {
         Behaviour::AreaGuard
     };
     if let Some(o) = w.obj_mut(id) {
-        o.beh.force(b, t);
+        o.beh.force(b, t, stale);
     }
     // spec: S-0009 claim 46 (body facing 0)
     objects::place(w, id, pos, 0);

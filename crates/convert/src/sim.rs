@@ -334,6 +334,8 @@ const UNIT_FIELDS: &[(&str, &str, Form)] = &[
     ("stupid_hunt", "StupidHunt", Bool),
     ("hover_attack", "HoverAttack", Bool),
     ("close_range", "CloseRange", Bool),
+    // spec: S-0215 Import mapping (CanApproachTarget: the can-approach property of claim 37 d)
+    ("can_approach_target", "CanApproachTarget", Bool),
     ("distributed_fire", "DistributedFire", Bool),
     ("opportunity_fire", "OpportunityFire", Bool),
     ("open_topped", "OpenTopped", Bool),
@@ -540,6 +542,13 @@ const GENERAL_FIELDS: &[(&str, &[u8], &str, Form)] = &[
         Int,
     ),
     ("guard_mode_stray", b"General", "GuardModeStray", Dec),
+    // spec: S-0215 Import mapping (ApproachTargetResetMultiplier: m of F10, an integer)
+    (
+        "approach_target_reset_multiplier",
+        b"General",
+        "ApproachTargetResetMultiplier",
+        Int,
+    ),
     // spec: S-0207 Import mapping
     ("veteran_speed", b"General", "VeteranSpeed", Dec),
     ("tracked_uphill", b"General", "TrackedUphill", Dec),
