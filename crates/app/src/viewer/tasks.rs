@@ -161,16 +161,19 @@ pub fn find_maps(vfs: Vfs) -> Task {
     })
 }
 
-/// Loads a map for viewing.
+/// Loads a map for viewing, continuing from the voxel buffer `canvas` the
+/// program's earlier games left (S-0105 claim 34, S2).
 pub fn load_map(
     mut vfs: Vfs,
     file: FileRef,
     origin: String,
     options: crate::mapview::build::Options,
+    canvas: glasnost_render::voxel::VoxelCanvas,
 ) -> Task {
     Box::pin(async move {
         let bytes = vfs.read(&file).await.unwrap_or_default();
-        let loaded = crate::mapview::load::load(&mut vfs, bytes, origin, &options, true).await;
+        let loaded =
+            crate::mapview::load::load(&mut vfs, bytes, origin, &options, true, canvas).await;
         TaskResult::MapLoaded(Box::new((vfs, loaded)))
     })
 }

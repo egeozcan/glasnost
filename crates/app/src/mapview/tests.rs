@@ -635,3 +635,41 @@ fn hostile_maps_build() {
         let _ = build_text(&t, &Options::default());
     }
 }
+
+/// spec: S-0105 claim 34 and S2 (the voxel buffer and the depth-buffered mode are kept across
+/// games: only the start of the program resets them), claim 26 (our engine empties the image
+/// caches when a game starts)
+#[test]
+fn voxel_canvas_carries_over_between_games() {
+    use glasnost_render::voxel::{Mat34, VoxelCanvas, VoxelModel, VoxelQuirks};
+    let q = VoxelQuirks::default();
+    let model = VoxelModel::new(&glasnost_fmt::vxl::synthetic_model(), None, &q);
+    let mut canvas = VoxelCanvas::new();
+    // A depth-option type's fresh shadow opens a claim 32 window.
+    canvas
+        .draw_shadow(&model, 0, &Mat34::IDENTITY, 0, false, true, &q)
+        .unwrap();
+    assert!(canvas.depth_mode());
+    let (import, catalogue, assets) = context();
+    let text = scene_map_text();
+    let doc = Document::parse(&text, Quirks::default(), &mut Vec::new());
+    let map = decode(&doc, &DecodeContext::default()).map;
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = super::build::Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    // The next game's scene continues with that canvas: the window is still open.
+    let (_, painter) = super::build::build_parts_with(&inputs, false, canvas);
+    assert!(painter.canvas().depth_mode());
+    // A program start has it off.
+    let (_, fresh) = super::build::build_parts(&inputs, false);
+    assert!(!fresh.canvas().depth_mode());
+}

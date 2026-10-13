@@ -166,6 +166,10 @@ pub const NOT_IMPLEMENTED: &[(&str, &str)] = &[
         "sprite_vehicle_eight_facings_only",
         "S-0102 claim 22: the on state is drawn; the off state's facing part for counts 2 and 4 is asked in Q-0050",
     ),
+    (
+        "tree_strength_fixed_at_first_section",
+        "S-0102 claim 23: a terrain type's strength is filled in by the rules import (S-0009 claim 42), which does not implement the game-wide tree strength yet",
+    ),
     // S-0103
     (
         "deploy_animation_neutral_brightness",

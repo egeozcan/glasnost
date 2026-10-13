@@ -421,6 +421,12 @@ impl Live {
         live
     }
 
+    /// The voxel buffer the game's fresh voxel draws left (S-0105 claim 34,
+    /// S2).
+    pub fn voxel_canvas(&self) -> &glasnost_render::voxel::VoxelCanvas {
+        self.painter.canvas()
+    }
+
     /// The ground layer.
     pub fn ground(&self) -> &GroundLayer {
         &self.ground

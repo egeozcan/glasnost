@@ -187,7 +187,7 @@ mod notes {
     pub const AIRCRAFT_AIR: &str = "an aircraft on a cell outside the usable area is drawn landed: its flight height has no spec (S-0009 claim 38)";
     pub const VPL: &str =
         "Q-0022: voxels are lit through the lighting table read by a provisional byte layout";
-    pub const NO_VPL: &str = "no voxel lighting table, or one whose layout was not recognised (Q-0022): every row reads as zero, so voxels draw nothing (S-0105 claim 38)";
+    pub const NO_VPL: &str = "no voxel lighting table, or one whose layout was not recognised (Q-0022): every row reads as zero, so every voxel writes a transparent pixel (S-0105 claims 19 and 38)";
     pub const VPL_REJECTED: &str = "the voxel lighting table is missing or short and quirks.vpl_unloaded_rows_blank is off: the importer rejects it (S-0105 claim 38)";
     pub const SHORT_VPL: &str = "the voxel lighting table ends before its last row, or has more than 128 rows: missing rows read as zero (S-0105 claim 38)";
     pub const WATER_FILL: &str = "water-fill variants are drawn by the game load (S-0009 claim 6, S-0202): without a game the base water tile is drawn";
@@ -483,6 +483,19 @@ pub fn build(
 /// hold the cell pass only. Returns the painter that draws more items into
 /// the scene later.
 pub fn build_parts(inputs: &Inputs, live: bool) -> (Built, Painter) {
+    build_parts_with(inputs, live, voxel::VoxelCanvas::new())
+}
+
+/// [`build_parts`] with the voxel buffer `canvas` that earlier fresh voxel
+/// draws of the program left, with its depth-buffered mode: S-0105 claim 34
+/// and S2 keep both across games (only the start of the program resets
+/// them). The image caches start empty, as S-0105 claim 26 has our engine
+/// empty them when a game starts.
+pub fn build_parts_with(
+    inputs: &Inputs,
+    live: bool,
+    canvas: voxel::VoxelCanvas,
+) -> (Built, Painter) {
     let import = inputs.import;
     let art = match &import.art_file {
         Some(f) => Document::parse(&f.bytes, Default::default(), &mut Vec::new()),
@@ -497,7 +510,7 @@ pub fn build_parts(inputs: &Inputs, live: bool) -> (Built, Painter) {
         palettes: inputs.palettes,
         assets: inputs.assets,
         options: inputs.options,
-        p: Painter::new(art),
+        p: Painter::new(art, canvas),
         built: Built::default(),
     };
     b.light_cells();
@@ -2552,7 +2565,7 @@ pub struct Inputs<'a> {
 }
 
 impl Painter {
-    fn new(art: Document) -> Self {
+    fn new(art: Document, canvas: voxel::VoxelCanvas) -> Self {
         Self {
             art,
             lights: Lights {
@@ -2562,11 +2575,17 @@ impl Painter {
             rows: Rows::default(),
             images: BTreeMap::new(),
             voxels: BTreeMap::new(),
-            canvas: voxel::VoxelCanvas::new(),
+            canvas,
             models: BTreeMap::new(),
             vpl: None,
             tile_files: BTreeMap::new(),
         }
+    }
+
+    /// The voxel buffer, for the next game of the program (S-0105 claim
+    /// 34, S2).
+    pub fn canvas(&self) -> &voxel::VoxelCanvas {
+        &self.canvas
     }
 
     /// An integer of a type's art section (the section of its image name),
@@ -2597,7 +2616,13 @@ impl Painter {
             palettes: inputs.palettes,
             assets: inputs.assets,
             options: inputs.options,
-            p: std::mem::replace(self, Painter::new(Document::empty(Default::default()))),
+            p: std::mem::replace(
+                self,
+                Painter::new(
+                    Document::empty(Default::default()),
+                    voxel::VoxelCanvas::new(),
+                ),
+            ),
             built: Built {
                 scene: std::mem::take(scene),
                 ..Default::default()
