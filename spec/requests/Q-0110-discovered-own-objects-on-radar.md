@@ -1,9 +1,9 @@
 ---
 id: Q-0110
 title: Whether a house's own objects count as discovered by it (radar listing), and which object of a cell is marked
-status: open
+status: answered
 related: [S-0409, S-0410]
-answered-by: []
+answered-by: [S-0409]
 ---
 
 ## Need
