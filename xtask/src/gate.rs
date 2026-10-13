@@ -1,5 +1,6 @@
 //! `cargo xtask gate`: the determinism gate. The synthetic replays
-//! (`glasnost_sim::testkit`: scripted movement and combat) must give the
+//! (`glasnost_sim::testkit`: scripted movement and combat; `glasnost_ai`:
+//! the scripted skirmish) must give the
 //! committed per-tick state hashes (`crates/sim-gate/golden/*.txt`) in a
 //! native release build and as a wasm32 module under node.
 
@@ -51,7 +52,7 @@ pub fn run_gate() -> Result<(), String> {
         .join("release")
         .join("glasnost_sim_gate.wasm");
     // The scenario indices of `glasnost_sim_gate::Scenario::ALL`.
-    for (i, name) in ["scripted", "combat"].iter().enumerate() {
+    for (i, name) in ["scripted", "combat", "skirmish"].iter().enumerate() {
         run(Command::new("node")
             .current_dir(&root)
             .arg("xtask/gate.mjs")

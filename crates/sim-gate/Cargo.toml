@@ -1,6 +1,6 @@
 [package]
 name = "glasnost-sim-gate"
-description = "Glasnost determinism gate: the scripted synthetic replay's per-tick state hashes, native and wasm32"
+description = "Glasnost determinism gate: the synthetic replays' per-tick state hashes (scripted, combat, skirmish), native and wasm32"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,6 +11,7 @@ publish.workspace = true
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
+glasnost-ai.workspace = true
 glasnost-sim.workspace = true
 
 [lints]
