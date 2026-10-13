@@ -1565,42 +1565,102 @@ impl Quirks {
                 self.fraidycat_ammo_panic_ignores_fearless,
             ),
             ("last_bale_lost", self.last_bale_lost),
-            ("spread_offer_by_emptied_type", self.spread_offer_by_emptied_type),
-            ("spread_attempts_count_failures", self.spread_attempts_count_failures),
-            ("spread_mark_kept_on_last_neighbour", self.spread_mark_kept_on_last_neighbour),
+            (
+                "spread_offer_by_emptied_type",
+                self.spread_offer_by_emptied_type,
+            ),
+            (
+                "spread_attempts_count_failures",
+                self.spread_attempts_count_failures,
+            ),
+            (
+                "spread_mark_kept_on_last_neighbour",
+                self.spread_mark_kept_on_last_neighbour,
+            ),
             ("spread_stage_from_index", self.spread_stage_from_index),
             ("full_cell_no_regrowth", self.full_cell_no_regrowth),
-            ("resource_timers_carry_over", self.resource_timers_carry_over),
-            ("thinning_hits_waypoint_only", self.thinning_hits_waypoint_only),
+            (
+                "resource_timers_carry_over",
+                self.resource_timers_carry_over,
+            ),
+            (
+                "thinning_hits_waypoint_only",
+                self.thinning_hits_waypoint_only,
+            ),
             ("refinery_distance_wraps", self.refinery_distance_wraps),
             ("zero_load_period_stalls", self.zero_load_period_stalls),
             ("slave_kick_delay_wraps", self.slave_kick_delay_wraps),
-            ("multiple_factory_counts_all", self.multiple_factory_counts_all),
+            (
+                "multiple_factory_counts_all",
+                self.multiple_factory_counts_all,
+            ),
             ("build_step_period_cap", self.build_step_period_cap),
             ("resume_restarts_step", self.resume_restarts_step),
             ("refund_at_current_price", self.refund_at_current_price),
             ("forced_start_player_hold", self.forced_start_player_hold),
-            ("defence_line_partial_factory_check", self.defence_line_partial_factory_check),
-            ("unstartable_queue_head_stalls", self.unstartable_queue_head_stalls),
+            (
+                "defence_line_partial_factory_check",
+                self.defence_line_partial_factory_check,
+            ),
+            (
+                "unstartable_queue_head_stalls",
+                self.unstartable_queue_head_stalls,
+            ),
             ("blackout_one_short", self.blackout_one_short),
-            ("shared_control_centre_count", self.shared_control_centre_count),
-            ("wall_exception_skips_ground", self.wall_exception_skips_ground),
-            ("placement_shroud_at_cursor", self.placement_shroud_at_cursor),
-            ("upgrade_level_without_room", self.upgrade_level_without_room),
-            ("upgrade_prerequisite_last_building", self.upgrade_prerequisite_last_building),
-            ("placed_buildings_not_ever_built", self.placed_buildings_not_ever_built),
-            ("secret_lab_pick_by_position", self.secret_lab_pick_by_position),
+            (
+                "shared_control_centre_count",
+                self.shared_control_centre_count,
+            ),
+            (
+                "wall_exception_skips_ground",
+                self.wall_exception_skips_ground,
+            ),
+            (
+                "placement_shroud_at_cursor",
+                self.placement_shroud_at_cursor,
+            ),
+            (
+                "upgrade_level_without_room",
+                self.upgrade_level_without_room,
+            ),
+            (
+                "upgrade_prerequisite_last_building",
+                self.upgrade_prerequisite_last_building,
+            ),
+            (
+                "placed_buildings_not_ever_built",
+                self.placed_buildings_not_ever_built,
+            ),
+            (
+                "secret_lab_pick_by_position",
+                self.secret_lab_pick_by_position,
+            ),
             ("unit_changes_no_recheck", self.unit_changes_no_recheck),
             ("sale_start_no_recheck", self.sale_start_no_recheck),
             ("stale_offer_orderable", self.stale_offer_orderable),
-            ("queue_limit_counts_item_twice", self.queue_limit_counts_item_twice),
-            ("dock_bound_aircraft_ignores_limit", self.dock_bound_aircraft_ignores_limit),
-            ("infantry_limit_exception_exact", self.infantry_limit_exception_exact),
+            (
+                "queue_limit_counts_item_twice",
+                self.queue_limit_counts_item_twice,
+            ),
+            (
+                "dock_bound_aircraft_ignores_limit",
+                self.dock_bound_aircraft_ignores_limit,
+            ),
+            (
+                "infantry_limit_exception_exact",
+                self.infantry_limit_exception_exact,
+            ),
             ("country_index_wraps", self.country_index_wraps),
-            ("unscored_vehicle_stays_counted", self.unscored_vehicle_stays_counted),
+            (
+                "unscored_vehicle_stays_counted",
+                self.unscored_vehicle_stays_counted,
+            ),
             ("nominal_survivor_count", self.nominal_survivor_count),
             ("wall_sale_no_refund", self.wall_sale_no_refund),
-            ("packup_release_by_guard_spot", self.packup_release_by_guard_spot),
+            (
+                "packup_release_by_guard_spot",
+                self.packup_release_by_guard_spot,
+            ),
             ("gap_radius_wrap", self.gap_radius_wrap),
             ("sight_bonus_wrap", self.sight_bonus_wrap),
             ("building_sight_top_left", self.building_sight_top_left),
@@ -1608,28 +1668,64 @@ impl Quirks {
             ("height_block_cell", self.height_block_cell),
             ("gap_end_keeps_cover", self.gap_end_keeps_cover),
             ("fire_reveal_expires", self.fire_reveal_expires),
-            ("recover_skips_allied_units", self.recover_skips_allied_units),
+            (
+                "recover_skips_allied_units",
+                self.recover_skips_allied_units,
+            ),
             ("recover_keeps_pending", self.recover_keeps_pending),
             ("uncounted_sight", self.uncounted_sight),
             ("offmap_cells_shared", self.offmap_cells_shared),
-            ("spy_satellite_first_building_decides", self.spy_satellite_first_building_decides),
-            ("defeat_reveal_keeps_pending", self.defeat_reveal_keeps_pending),
+            (
+                "spy_satellite_first_building_decides",
+                self.spy_satellite_first_building_decides,
+            ),
+            (
+                "defeat_reveal_keeps_pending",
+                self.defeat_reveal_keeps_pending,
+            ),
             ("shroud_point_cell_wrap", self.shroud_point_cell_wrap),
-            ("radar_first_building_decides", self.radar_first_building_decides),
-            ("overlay_list_position_rules", self.overlay_list_position_rules),
+            (
+                "radar_first_building_decides",
+                self.radar_first_building_decides,
+            ),
+            (
+                "overlay_list_position_rules",
+                self.overlay_list_position_rules,
+            ),
             ("radar_pixel_cell_shift", self.radar_pixel_cell_shift),
             ("release_order_once", self.release_order_once),
-            ("done_aircraft_click_cancels", self.done_aircraft_click_cancels),
-            ("random_country_fixed_range", self.random_country_fixed_range),
-            ("superweapon_setting_tests_first_only", self.superweapon_setting_tests_first_only),
+            (
+                "done_aircraft_click_cancels",
+                self.done_aircraft_click_cancels,
+            ),
+            (
+                "random_country_fixed_range",
+                self.random_country_fixed_range,
+            ),
+            (
+                "superweapon_setting_tests_first_only",
+                self.superweapon_setting_tests_first_only,
+            ),
             ("crate_count_humans_only", self.crate_count_humans_only),
             ("short_game_without_bases", self.short_game_without_bases),
-            ("alliance_message_slot_colour", self.alliance_message_slot_colour),
-            ("short_game_first_three_base_units", self.short_game_first_three_base_units),
-            ("vehicle_buildings_keep_nobody_alive", self.vehicle_buildings_keep_nobody_alive),
+            (
+                "alliance_message_slot_colour",
+                self.alliance_message_slot_colour,
+            ),
+            (
+                "short_game_first_three_base_units",
+                self.short_game_first_three_base_units,
+            ),
+            (
+                "vehicle_buildings_keep_nobody_alive",
+                self.vehicle_buildings_keep_nobody_alive,
+            ),
             ("defeat_during_end_delay", self.defeat_during_end_delay),
             ("deploy_refuses_own_walls", self.deploy_refuses_own_walls),
-            ("failed_packup_keeps_vehicle", self.failed_packup_keeps_vehicle),
+            (
+                "failed_packup_keeps_vehicle",
+                self.failed_packup_keeps_vehicle,
+            ),
             ("packup_sound_on_sale", self.packup_sound_on_sale),
         ]
     }
@@ -1770,7 +1866,8 @@ mod tests {
                     .and_then(|n| n.to_str())
                     .unwrap_or("")
                     .to_owned();
-                if name.starts_with("S-02") || name.starts_with("S-03") || name.starts_with("S-04") {
+                if name.starts_with("S-02") || name.starts_with("S-03") || name.starts_with("S-04")
+                {
                     files.push(p);
                 }
             }

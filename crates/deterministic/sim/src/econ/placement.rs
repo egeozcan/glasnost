@@ -381,7 +381,9 @@ fn nothing_in_way(w: &World, p: &PlaceType, c: CellXY, test: &Test) -> bool {
     };
     // spec: S-0406 claim 3 b (the occupancy record: no standing position taken and no vehicle present)
     let taken = rec.marks.iter().any(Option::is_some);
-    let vehicles = rec.vehicles.saturating_sub(ignored_claims(w, test.ignore, c));
+    let vehicles = rec
+        .vehicles
+        .saturating_sub(ignored_claims(w, test.ignore, c));
     !taken && vehicles == 0
 }
 
@@ -811,26 +813,31 @@ pub fn upgrade_target(w: &World, house: HouseId, u: u32, cell: CellXY) -> Option
     let p = place_type(w, u);
     let target = p.upgrade_of?;
     let tower = w.rules().gates.tower == Some(target);
-    w.cells.list(cell, Layer::Ground).iter().copied().find(|&id| {
-        let Some(o) = w.obj(id) else { return false };
-        if o.kind != Kind::Building || o.owner != Some(house) || o.type_index != target {
-            return false;
-        }
-        let c = o.econ.building.upgrade_count;
-        let cap = place_type(w, target).upgrades;
-        match p.level {
-            // spec: S-0406 claim 12 (level field absent: the count below the type's upgrade count)
-            -1 => c < cap,
-            // spec: S-0406 claim 12 (level 1 to 3: the count is 0)
-            1..=3 => {
-                // spec: S-0406 Edge cases (quirks.upgrade_level_without_room off: refused when U = 0 and not the wall tower)
-                let no_room = cap == 0 && !tower && !w.rules().quirks.upgrade_level_without_room;
-                c == 0 && !no_room
+    w.cells
+        .list(cell, Layer::Ground)
+        .iter()
+        .copied()
+        .find(|&id| {
+            let Some(o) = w.obj(id) else { return false };
+            if o.kind != Kind::Building || o.owner != Some(house) || o.type_index != target {
+                return false;
             }
-            // spec: S-0406 claim 12 (any other level value refuses)
-            _ => false,
-        }
-    })
+            let c = o.econ.building.upgrade_count;
+            let cap = place_type(w, target).upgrades;
+            match p.level {
+                // spec: S-0406 claim 12 (level field absent: the count below the type's upgrade count)
+                -1 => c < cap,
+                // spec: S-0406 claim 12 (level 1 to 3: the count is 0)
+                1..=3 => {
+                    // spec: S-0406 Edge cases (quirks.upgrade_level_without_room off: refused when U = 0 and not the wall tower)
+                    let no_room =
+                        cap == 0 && !tower && !w.rules().quirks.upgrade_level_without_room;
+                    c == 0 && !no_room
+                }
+                // spec: S-0406 claim 12 (any other level value refuses)
+                _ => false,
+            }
+        })
 }
 
 /// Adds an upgrade of type `u` to building `b` (S-0406 claim 12, F5).

@@ -215,8 +215,8 @@ pub fn sellable(w: &World, id: ObjectId) -> bool {
             Some(Behaviour::Construction | Behaviour::Selling)
         );
     // spec: S-0408 claim 3 (b) (the firestorm-wall flag and the house's firestorm not active)
-    let fw = b.raw.firestorm_wall.unwrap_or(false)
-        && !o.owner.is_some_and(|h| firestorm_active(w, h));
+    let fw =
+        b.raw.firestorm_wall.unwrap_or(false) && !o.owner.is_some_and(|h| firestorm_active(w, h));
     a || fw
 }
 

@@ -32,7 +32,12 @@ const ECON_FIELDS: &[Row] = &[
         "S-0407",
     ),
     ("build_limit", "BuildLimit", Int, "S-0407"),
-    ("build_time_multiplier", "BuildTimeMultiplier", Dec, "S-0403"),
+    (
+        "build_time_multiplier",
+        "BuildTimeMultiplier",
+        Dec,
+        "S-0403",
+    ),
     ("soylent", "Soylent", Int, "S-0408"),
     ("radar_invisible", "RadarInvisible", Bool, "S-0410"),
     ("radar_visible", "RadarVisible", Bool, "S-0410"),
@@ -65,7 +70,12 @@ const UNIT_ECON: &[Row] = &[
         Bool,
         "S-0402, S-0414, S-0415",
     ),
-    ("resource_destination", "ResourceDestination", Bool, "S-0402"),
+    (
+        "resource_destination",
+        "ResourceDestination",
+        Bool,
+        "S-0402",
+    ),
     ("enslaves", "Enslaves", Ref(Kind::Infantry), "S-0402"),
     ("slaves_number", "SlavesNumber", Int, "S-0402"),
     ("slave_regen_rate", "SlaveRegenRate", Int, "S-0402"),
@@ -102,7 +112,12 @@ const BUILDING_ECON: &[Row] = &[
     ("aircraft_cost_bonus", "AircraftCostBonus", Dec, "S-0404"),
     ("buildings_cost_bonus", "BuildingsCostBonus", Dec, "S-0404"),
     ("defenses_cost_bonus", "DefensesCostBonus", Dec, "S-0404"),
-    ("free_unit", "FreeUnit", Ref(Kind::Vehicles), "S-0404, S-0408"),
+    (
+        "free_unit",
+        "FreeUnit",
+        Ref(Kind::Vehicles),
+        "S-0404, S-0408",
+    ),
     ("unsellable", "Unsellable", Bool, "S-0408"),
     ("click_repairable", "ClickRepairable", Bool, "S-0408"),
     ("adjacent", "Adjacent", Int, "S-0406"),
@@ -245,10 +260,34 @@ const DIALOG: &[u8] = b"MultiplayerDialogSettings"; // spec: S-0412 Import mappi
 /// Game-wide economy values: our field, the section, the key, the form and
 /// the spec.
 const GENERAL_ECON: &[(&str, &[u8], &str, Form, &str)] = &[
-    ("harvester_load_rate", GENERAL, "HarvesterLoadRate", Int, "S-0402"),
-    ("harvester_dump_rate", GENERAL, "HarvesterDumpRate", Dec, "S-0402"),
-    ("tiberium_long_scan", GENERAL, "TiberiumLongScan", Dec, "S-0402"),
-    ("tiberium_short_scan", GENERAL, "TiberiumShortScan", Dec, "S-0402"),
+    (
+        "harvester_load_rate",
+        GENERAL,
+        "HarvesterLoadRate",
+        Int,
+        "S-0402",
+    ),
+    (
+        "harvester_dump_rate",
+        GENERAL,
+        "HarvesterDumpRate",
+        Dec,
+        "S-0402",
+    ),
+    (
+        "tiberium_long_scan",
+        GENERAL,
+        "TiberiumLongScan",
+        Dec,
+        "S-0402",
+    ),
+    (
+        "tiberium_short_scan",
+        GENERAL,
+        "TiberiumShortScan",
+        Dec,
+        "S-0402",
+    ),
     (
         "harvester_too_far_distance",
         GENERAL,
@@ -328,7 +367,13 @@ const GENERAL_ECON: &[(&str, &[u8], &str, Form, &str)] = &[
         Dec,
         "S-0403",
     ),
-    ("multiple_factory", GENERAL, "MultipleFactory", Dec, "S-0403"),
+    (
+        "multiple_factory",
+        GENERAL,
+        "MultipleFactory",
+        Dec,
+        "S-0403",
+    ),
     (
         "wall_build_speed_coefficient",
         GENERAL,
@@ -357,7 +402,13 @@ const GENERAL_ECON: &[(&str, &[u8], &str, Form, &str)] = &[
         Bool,
         "S-0404, S-0408",
     ),
-    ("spy_power_blackout", GENERAL, "SpyPowerBlackout", Int, "S-0405"),
+    (
+        "spy_power_blackout",
+        GENERAL,
+        "SpyPowerBlackout",
+        Int,
+        "S-0405",
+    ),
     ("refund_percent", GENERAL, "RefundPercent", Dec, "S-0408"),
     ("buildup_time", GENERAL, "BuildupTime", Dec, "S-0108"),
     (
@@ -437,7 +488,13 @@ const GENERAL_ECON: &[(&str, &[u8], &str, Form, &str)] = &[
         Int,
         "S-0409",
     ),
-    ("reveal_by_height", GENERAL, "RevealByHeight", Bool, "S-0409"),
+    (
+        "reveal_by_height",
+        GENERAL,
+        "RevealByHeight",
+        Bool,
+        "S-0409",
+    ),
     ("flash_frame_time", GENERAL, "FlashFrameTime", Int, "S-0410"),
     (
         "radar_combat_flash_time",
@@ -446,8 +503,20 @@ const GENERAL_ECON: &[(&str, &[u8], &str, Form, &str)] = &[
         Int,
         "S-0410",
     ),
-    ("multiplayer_aicm", GENERAL, "MultiplayerAICM", Ints, "S-0412"),
-    ("build_tech", AI, "BuildTech", Refs(Kind::Buildings), "S-0407"),
+    (
+        "multiplayer_aicm",
+        GENERAL,
+        "MultiplayerAICM",
+        Ints,
+        "S-0412",
+    ),
+    (
+        "build_tech",
+        AI,
+        "BuildTech",
+        Refs(Kind::Buildings),
+        "S-0407",
+    ),
     (
         "build_refinery",
         AI,
@@ -487,7 +556,13 @@ const GENERAL_ECON: &[(&str, &[u8], &str, Form, &str)] = &[
         Bool,
         "S-0412",
     ),
-    ("build_off_ally", DIALOG, "BuildOffAlly", Bool, "S-0406, S-0412"),
+    (
+        "build_off_ally",
+        DIALOG,
+        "BuildOffAlly",
+        Bool,
+        "S-0406, S-0412",
+    ),
     ("shroud", DIALOG, "Shroud", Bool, "S-0409"),
     ("allies_allowed", DIALOG, "AlliesAllowed", Bool, "S-0414"),
     (
@@ -541,7 +616,11 @@ pub fn converted_keys() -> Vec<(&'static str, String, &'static str)> {
         };
         out.push((cat, (*k).to_owned(), *spec));
     }
-    out.push(("global:MultiplayerDialogSettings", "Bases".to_owned(), "S-0412"));
+    out.push((
+        "global:MultiplayerDialogSettings",
+        "Bases".to_owned(),
+        "S-0412",
+    ));
     for (_, k) in DOCK_ANIMS {
         out.push(("art", (*k).to_owned(), "S-0402"));
     }
@@ -632,17 +711,17 @@ impl Builder<'_> {
             );
         }
         // spec: S-0108 Import mapping (Buildup: a name; none gives no build-up sprite, an empty value keeps the earlier name)
-        let buildup = self
-            .art_values(kind, index, t, "Buildup")
-            .iter()
-            .fold(None, |held, (v, _)| {
-                let name = value::text(v, BUILDUP_MAX);
-                if name.is_empty() {
-                    held
-                } else {
-                    Some(!value::is_no_type(name))
-                }
-            });
+        let buildup =
+            self.art_values(kind, index, t, "Buildup")
+                .iter()
+                .fold(None, |held, (v, _)| {
+                    let name = value::text(v, BUILDUP_MAX);
+                    if name.is_empty() {
+                        held
+                    } else {
+                        Some(!value::is_no_type(name))
+                    }
+                });
         if buildup == Some(true) {
             econ.put("buildup", jsonc::boolean(true));
         }
@@ -673,7 +752,9 @@ impl Builder<'_> {
         let Some(state) = t.keys.get(&b"Factory"[..]) else {
             return;
         };
-        let Some(e) = state.history.last() else { return };
+        let Some(e) = state.history.last() else {
+            return;
+        };
         if matches!(e.what, What::Set(_)) {
             self.warn(e.layer, e.line, format!(
                 "buildings {} Factory: the words of the factory field are not specified yet; the building is not a factory building (placeholder, Q-0100)",
@@ -741,7 +822,16 @@ impl Builder<'_> {
         let globals = &self.i.outcome.globals;
         let mut rows = Vec::new();
         for &(field, section, k, form, _) in GENERAL_ECON {
-            rows.push((field, globals.get(section).and_then(|s| s.get(k.as_bytes())).cloned(), form, section, k));
+            rows.push((
+                field,
+                globals
+                    .get(section)
+                    .and_then(|s| s.get(k.as_bytes()))
+                    .cloned(),
+                form,
+                section,
+                k,
+            ));
         }
         for (field, state, form, section, k) in rows {
             let what = format!("[{}] {k}", show(section));

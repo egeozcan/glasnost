@@ -229,7 +229,10 @@ fn claim_3_sellable() {
     let lock = put(&mut w, "LOCK", 0, c(6, 0));
     assert!(!sell::sellable(&w, lock));
     let t = w.tick;
-    w.obj_mut(hut).unwrap().beh.force(Behaviour::Construction, t);
+    w.obj_mut(hut)
+        .unwrap()
+        .beh
+        .force(Behaviour::Construction, t);
     assert!(!sell::sellable(&w, hut));
     w.obj_mut(hut).unwrap().beh.force(Behaviour::Guard, t);
     w.obj_mut(hut).unwrap().econ.construction.building_up = true;
@@ -385,10 +388,7 @@ fn claim_12_wall_sale() {
     }
     assert_eq!(w.cells.cell(c(4, 0)).unwrap().overlay, 0, "no owner: stays");
     assert_eq!(w.houses[0].credits, credits);
-    assert_eq!(
-        sounds(&w).iter().filter(|s| **s == Sound::Sell).count(),
-        2
-    );
+    assert_eq!(sounds(&w).iter().filter(|s| **s == Sound::Sell).count(), 2);
 }
 
 // spec: S-0408 claim 12 (the first builder of the overlay with the unsellable flag: the wall stays)
@@ -445,7 +445,12 @@ fn claim_13_building_repair() {
 #[test]
 fn claim_14_repairable() {
     let mut r = rules();
-    r.sim.buildings.get_mut("LOCK").unwrap().econ.click_repairable = Some(false);
+    r.sim
+        .buildings
+        .get_mut("LOCK")
+        .unwrap()
+        .econ
+        .click_repairable = Some(false);
     let mut w = game(&r);
     let hut = put(&mut w, "HUT", 0, c(0, 0));
     assert!(!sell::repairable(&w, hut), "full health");

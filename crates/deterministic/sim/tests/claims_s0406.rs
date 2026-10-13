@@ -233,7 +233,10 @@ fn claim_1_placement_point_and_construction() {
 fn construction_completes_after_buildup() {
     let r = rules();
     let mut w = with_yard(&r);
-    assert_eq!(glasnost_sim::econ::sell::buildup_ticks(&w, ty(&w, "HUT")), 36);
+    assert_eq!(
+        glasnost_sim::econ::sell::buildup_ticks(&w, ty(&w, "HUT")),
+        36
+    );
     let start = w.tick;
     assert!(place(&mut w, "HUT", c(0, 0)));
     let id = buildings_at(&w, c(0, 0))[0];
@@ -305,7 +308,10 @@ fn claim_3d_ground() {
     assert!(!place(&mut w, "HUT", c(0, 0)));
     w.cells.grid.get_mut(c(2, 0)).unwrap().land = land::WATER;
     assert!(!place(&mut w, "HUT", c(2, 0)));
-    assert!(!place(&mut w, "BIG", c(1, -1)), "one cell refusing refuses all");
+    assert!(
+        !place(&mut w, "BIG", c(1, -1)),
+        "one cell refusing refuses all"
+    );
     assert!(place(&mut w, "HUT", c(4, 0)));
 }
 
@@ -326,11 +332,21 @@ fn claim_3_to_tile_one_cell() {
     let mut w = with_yard(&r);
     let t = ty(&w, "TILE");
     // Both cells of the 2 × 1 rectangle hold tile 0, inside the catalogue's range: the tileset test refuses both.
-    assert!(!placement::cell_test(&w, t, c(0, 0), &placement::Test::order(A)));
+    assert!(!placement::cell_test(
+        &w,
+        t,
+        c(0, 0),
+        &placement::Test::order(A)
+    ));
     w.cells.grid.get_mut(c(1, 0)).unwrap().tile = 9999;
     // A unit in the passing cell does not matter under the to-tile rule.
     testkit::spawn(&mut w, Kind::Vehicle, "CART", 0, c(1, 0), 0);
-    assert!(placement::cell_test(&w, t, c(0, 0), &placement::Test::order(A)));
+    assert!(placement::cell_test(
+        &w,
+        t,
+        c(0, 0),
+        &placement::Test::order(A)
+    ));
 }
 
 // spec: S-0406 claim 4 and F1 (the ring of A + 1 cells around the foundation rectangle, less the rectangle; own base-normal buildings support)

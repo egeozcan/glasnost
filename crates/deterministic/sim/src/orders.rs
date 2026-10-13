@@ -6,11 +6,11 @@ use glasnost_num::F64;
 use glasnost_num::geom::{root_floor, table_root};
 use serde::{Deserialize, Serialize};
 
+use crate::econ::TypeRef;
 use crate::occupancy::{self, Outcome};
 use crate::regions::{self, Reach};
 use crate::rules::{Behaviour, Kind};
 use crate::scatter::{self, ScatterRequest};
-use crate::econ::TypeRef;
 use crate::world::{AttackMoveMemory, HouseId, Layer, ObjectId, Pos, Target, World};
 
 /// An order (S-0213 table T1). House orders of other topics (production,

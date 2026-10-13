@@ -444,8 +444,7 @@ pub fn pack_up(w: &mut World, id: ObjectId) {
 /// usable cell with no building and no vehicle claim.
 fn can_stand(w: &World, c: CellXY) -> bool {
     w.cells.usable(c)
-        && w
-            .cells
+        && w.cells
             .occ(c, crate::world::Layer::Ground)
             .is_some_and(|r| r.buildings == 0 && r.vehicles == 0)
 }

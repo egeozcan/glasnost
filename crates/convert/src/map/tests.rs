@@ -222,7 +222,9 @@ fn preview_and_header() {
 fn map_growth_switch() {
     let on = decode_text(&format!("{BASE}[Map]\n"));
     assert_eq!(on.map.basic.tiberium_growth, None);
-    let off = decode_text("[Basic]\nNewINIFormat=4\nTiberiumGrowthEnabled=no\n[Map]\nSize=0,0,10,6\nLocalSize=1,2,8,3\nTheater=snow\n");
+    let off = decode_text(
+        "[Basic]\nNewINIFormat=4\nTiberiumGrowthEnabled=no\n[Map]\nSize=0,0,10,6\nLocalSize=1,2,8,3\nTheater=snow\n",
+    );
     assert_eq!(off.map.basic.tiberium_growth, Some(false));
 }
 

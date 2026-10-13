@@ -793,7 +793,8 @@ mod tests {
     /// spec: S-0010 claim 16 and S-0401 Import mapping (the tileset's AllowTiberium flag; absent: no)
     #[test]
     fn claim_16_allow_tiberium() {
-        let d = doc("[TileSet0000]\nTilesInSet=2\nAllowTiberium=yes\n[TileSet0001]\nTilesInSet=1\n");
+        let d =
+            doc("[TileSet0000]\nTilesInSet=2\nAllowTiberium=yes\n[TileSet0001]\nTilesInSet=1\n");
         let c = Catalogue::read(&d, Theater::Temperate);
         let images = c.images(&|_| false);
         let (cat, _) = c.tile_catalogue(&images, &|_| None);
