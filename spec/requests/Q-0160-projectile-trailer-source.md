@@ -1,9 +1,9 @@
 ---
 id: Q-0160
 title: Where a projectile's trailer animation and trailer delay are read (S-0306 against S-0007 claim 33)
-status: open
+status: answered
 related: [S-0306, S-0007, S-0004]
-answered-by: []
+answered-by: [S-0306]
 ---
 
 ## Need
