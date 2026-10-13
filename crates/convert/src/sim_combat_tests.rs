@@ -208,9 +208,9 @@ fn projectile_fields() {
                 Dropping=no\nAirburst=yes\nVeryHigh=no\nLevel=yes\nFloater=no\nSubjectToCliffs=yes\n\
                 SubjectToWalls=no\nSubjectToElevation=yes\nRanged=no\nDegenerates=yes\nScalable=no\n\
                 Acceleration=4\nCourseLockDuration=2\nArm=3\nDetonationAltitude=600\nCluster=5\n\
-                AirburstWeapon=zap\nTrailer=Puff\nSpawnDelay=6\nROT=8\nImage=DARTART\n\
+                AirburstWeapon=zap\nROT=8\nImage=DARTART\n\
                 [ElevationModel]\nElevationIncrement=2\n";
-    let art = "[DARTART]\nVoxel=yes\n";
+    let art = "[DARTART]\nVoxel=yes\nTrailer=Puff\nSpawnDelay=6\n";
     let (s, _) = direct(&[base], art, &["Zap"], &["Dart"], IniQuirks::default());
     let p = &s.projectiles["Dart"];
     assert_eq!(
@@ -259,12 +259,12 @@ fn weapon_and_projectile_warnings() {
                 [Zap]\nBurst=0\nROF=-3\nDamage=-20000000\nWarhead=Boom\nProjectile=Dart\nSpeed=0\n\
                 [Boom]\nAnimList=Pop,Bang\n[Dart]\nROT=-1\nCluster=0\nCourseLockDuration=-1\n\
                 [Lob]\nProjectile=Flak\nWarhead=Mad\nDamage=0\n\
-                [Flak]\nFlakScatter=yes\nInaccurate=yes\nArcing=yes\nVertical=yes\nTrailer=Puff\nSpawnDelay=0\n\
+                [Flak]\nFlakScatter=yes\nInaccurate=yes\nArcing=yes\nVertical=yes\nImage=FlakArt\n\
                 SubjectToElevation=yes\n[Mad]\nPsychedelic=yes\n[Lone]\nDamage=1\n\
                 [ElevationModel]\nElevationBonusCap=-150\n";
     let (_, w) = direct(
         &[base],
-        "",
+        "[FlakArt]\nTrailer=Puff\nSpawnDelay=0\n",
         &["Zap", "Lob", "Lone"],
         &["Dart", "Flak"],
         IniQuirks::default(),
@@ -999,4 +999,36 @@ fn combat_coverage() {
     assert_eq!(row("buildings", "Cost"), (Field, "S-0311, S-0314".into()));
     // spec: S-0004 claim 13 (a weapon created by a vehicle's primary field: its section is a weapon's)
     assert_eq!(row("weapons", "ROF"), (Field, "S-0301".into()));
+}
+
+/// spec: S-0007 claim 33, S-0004 claim 14, S-0306 Import mapping (a projectile's trailer and trailer delay come from the art section of each read's non-empty rules image; rules keys have no effect; absent or empty keeps, a no-type name clears the trailer)
+#[test]
+fn projectile_trailer_settings_from_art() {
+    let art = "[Pa]\nTrailer=Puff\nSpawnDelay=6\n[Pb]\nTrailer=\n[Pc]\nTrailer=none\nSpawnDelay=2\n\
+               [Dart]\nTrailer=Other\nSpawnDelay=9\n";
+    let get = |layers: &[&str]| {
+        let (s, _) = direct(layers, art, &[], &["Dart"], IniQuirks::default());
+        let p = &s.projectiles["Dart"];
+        (p.trailer.clone(), p.spawn_delay)
+    };
+    let base = "[Warheads]\n1=Dart\n";
+    // The rules keys have no effect, and there is no fallback to the type name.
+    assert_eq!(
+        get(&[&format!("{base}[Dart]\nTrailer=Rt\nSpawnDelay=4\n")]),
+        (None, None)
+    );
+    let a = format!("{base}[Dart]\nImage=Pa\n");
+    assert_eq!(get(&[&a]), (Some("Puff".into()), Some(6)));
+    // A later read without an image reads neither setting: both are kept.
+    assert_eq!(
+        get(&[&a, "[Dart]\nImage=\n"]),
+        (Some("Puff".into()), Some(6))
+    );
+    // An empty trailer and a missing delay keep the held values.
+    assert_eq!(
+        get(&[&a, "[Dart]\nImage=Pb\n"]),
+        (Some("Puff".into()), Some(6))
+    );
+    // A no-type name clears the trailer.
+    assert_eq!(get(&[&a, "[Dart]\nImage=Pc\n"]), (None, Some(2)));
 }
