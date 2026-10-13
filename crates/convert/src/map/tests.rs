@@ -213,7 +213,7 @@ fn s0012_claim_1_joining() {
         .collect();
     let long = terrain_b64(&recs);
     assert!(long.len() > 127, "{}", long.len());
-    let s = terrain_text(&[long.clone()]);
+    let s = terrain_text(std::slice::from_ref(&long));
     let d = decode_text(&s);
     assert!(
         d.warnings

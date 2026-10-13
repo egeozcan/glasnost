@@ -154,10 +154,10 @@ pub struct TextBytes {
 /// four characters is discarded (our engine's rule).
 pub fn decode_text_groups(text: &[u8]) -> TextBytes {
     let mut out = TextBytes::default();
-    let groups = text.chunks_exact(4);
-    out.short_tail = groups.remainder().len();
+    let (groups, tail) = text.as_chunks::<4>();
+    out.short_tail = tail.len();
     let count = text.len() / 4;
-    for (gi, group) in groups.enumerate() {
+    for (gi, group) in groups.iter().enumerate() {
         let mut digits = [0u8; 4];
         let mut n = 0usize;
         for &c in group {

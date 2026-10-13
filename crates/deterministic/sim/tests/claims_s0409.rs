@@ -387,7 +387,7 @@ fn claim_11_gap_radius_wrap() {
         step(&mut w);
         // The tower's sight holds (0, 0); cell (4, 0) is explored with no sight by the second tower's area reveal.
         let _ = covers;
-        assert_eq!(w.objects.values().any(|o| o.econ.sight.gap.is_some()), true);
+        assert!(w.objects.values().any(|o| o.econ.sight.gap.is_some()));
         let cells = w
             .objects
             .values()
