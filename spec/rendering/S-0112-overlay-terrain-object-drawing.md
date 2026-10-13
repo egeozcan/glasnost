@@ -2,7 +2,7 @@
 id: S-0112
 title: Overlay and terrain object drawing
 topic: rendering
-revision: 7
+revision: 8
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -19,7 +19,8 @@ supersedes: []
 Which palette, shade table and brightness rule each overlay, smudge and terrain object is drawn
 with, and which sprite and image frame each overlay's body and shadow show (including wall
 connection bits and tiberium image runs). Placement, depth and shadow darkening are S-0102's, and
-building shade rows is S-0103's and S-0104's.
+building shade rows is S-0103's and S-0104's. This revision covers skirmish; network games and
+campaigns are out of scope.
 
 ## Terms
 
@@ -131,8 +132,12 @@ and *quirk switch*.
      claim 6). Map tint, coloured light sources and global effects never change their colours.
      Ore and gems also ignore the cell's light level: their brightness is always 1000, so they use
      row 26 wherever the light-alpha value is the default (S-0104 claim 15), and row 26 reproduces
-     the palette exactly, without the −1 of S-0104 claim 7. Only a light-glow image over them, which
-     changes the light-alpha value, changes their row. Veins follow the cell's brightness only.
+     the palette exactly, without the −1 of S-0104 claim 7. Shroud cover pieces and light-glow
+     images can change their shade row through the per-pixel light-alpha value, despite their
+     fixed brightness. S-0110 claims 5 and 6 own those updates: cover pieces act before glows,
+     and a glow cannot brighten a pixel whose covered value is 0. Conditional fog updates are
+     deferred outside skirmish, where fog is always off. Veins follow the cell's brightness and
+     the same per-pixel light-alpha updates.
    - **Walls take neither the tile tints nor their owner's colour.** Walls show the local player's
      house colour, whoever built them and whoever the local player is fighting (`quirks.wall_local_player_colour`).
      A trigger action that changes the map tint, or a global effect, reaches them as it reaches every
@@ -159,7 +164,8 @@ and *quirk switch*.
      positions of row 1 win over every flag. Outside deck cells and marker cells a tiberium overlay
      always takes its picture from claim 4, whatever its other flags.
    - Backing: `measurable` (OV1 for rows 3 and 5 and the theater independence; OV2 for the
-     brightness and tint of rows 2 to 8; OV5 for row 4; OV9 for the image frames of rows 6 and
+     brightness and tint of rows 2 to 8; OV18 for ore and gem shade-row changes through shroud
+     and glow; OV5 for row 4; OV9 for the image frames of rows 6 and
      8; OV8 for row 7; OV10 part A for row 1 and its precedence over row 8, part B for its
      precedence over row 2 and part C for its precedence over rows 3, 4, 6 and 7; OV7 part A
      for row 2's image frames and its precedence over row 8, parts B, C and D for its precedence
@@ -529,7 +535,7 @@ leave rubble, and the other cells with the rubble overlay, draw no shadow.
 | deck data values that vary | 0, 9 | overlay data value | claim 6 |
 | rubble image frame of a body sprite | 3 | image frame | claim 5 |
 | overlay shadow depth bias | −2 − 15 × *ℓ*<sub>s</sub> | depth units | every overlay kind, flat profile, writes depth; *ℓ*<sub>s</sub> without a deck's 4 levels (claim 8; S-0102 claim 13) |
-| ore and gem brightness | 1000 | ‰ | row 26 of 53, S-0104 |
+| ore and gem brightness | 1000 | ‰ | row 26 of 53 when light-alpha is 127, S-0104 |
 | start-up table rows | 53 | rows | untinted, S-0104 claim 6 |
 | start-up resource palette file | `TEMPERAT.PAL` | file name | read once per session |
 | start-up mine palette file | `UNITSNO.PAL` | file name | read once per session |
@@ -561,8 +567,10 @@ original, not stock data:
   this spec changes game state. The runs of claim 10 are rules state, set when rules layers are
   read (S-0006).
 - A change of light (S-0104 claim 9) shows on the next drawing of the cell for every row that
-  reads a light level. Ore and gems never change with the cell's light level; only a light-glow
-  image over them changes their row (claim 1).
+  reads a light level. Ore and gems never change with the cell's light level, but shroud cover
+  pieces and light-glow images can change their shade row through light-alpha (claim 1 and
+  S-0110 claims 5 and 6). Each drawn frame uses its own cover and glow result, with initial
+  light-alpha 127; earlier drawn frames leave no darkening behind.
 - The connection bits of claim 7 change on the tick of the event that recomputes them. They are
   game state (they are overlay data values) and the wall's picture follows them.
 - A recomputation reads the neighbours as they are at the moment of its event, not at the end of
@@ -660,7 +668,10 @@ original, not stock data:
 
 **Common setup.** Every scenario uses the glossary's measurement setup, a purpose-made tiny map,
 neutral test lighting (S-0104) unless the scenario changes it, the local player in house slot 0
-with a known colour, no shroud (a reveal at the start) and game speed index 4. Pixel colours are
+with a known colour, all ground revealed at the start and game speed index 4. Unless a scenario
+explicitly tests cover or glow, sample only pixels with light-alpha 127, away from shroud edges
+and light-glow images. Fog is always off in skirmish. OV18 overrides the cover artwork, not this
+fog setting. Pixel colours are
 read from screenshots at 800 × 600 in the 5-6-5 layout and compared with the expected palette
 entries after S-0103's 16-bit packing (claim 9). "Sprite frame *f*" means the picture of image frame
 *f* of the named sprite, rendered offline from the stock file with the expected palette for
@@ -1132,6 +1143,33 @@ comparison.
   - *Falsified if:* a block at one of the four positions shows sprite frame 0 in every cell, a moved
     bridge type shows the 4 × 4 pattern, or the block of *E* shows the pattern. The run is
     inconclusive if the game refuses the reordered list or a block does not appear.
+
+- **OV18, ore and gems under cover and glow (claim 1).** Use the common skirmish setup with
+  one bystander computer player separated from the observed ore and gem cells. Director and
+  unrelated mods are off. No harvester enters the observed area; any change of a test cell's
+  overlay type or data value voids the run. Choose flat test cells with known body sprites and
+  non-transparent body pixels inside their height-0 diamonds, outside shadows and other objects.
+  Named test shroud sprite: all 47 pieces are uniformly index *v* inside their cell's diamond
+  and index 254 outside it. Make three no-glow runs, *v* = 0, 64 and 127, plus a reference run
+  with every piece entirely index 254. Then repeat the three runs with one stock glow-casting
+  building whose named test glow image has bands *g* = 0, 127 and 254 across both resource
+  pictures. No second glow overlaps the samples. Remove named test files afterwards.
+  - *Procedure and tool:* take lossless 800 × 600 screenshots of the stationary test cells in
+    each run, game speed index 4. Compare known body-pixel palette indices with packed colours
+    of the start-up resource table. One valid run per case, seven runs total.
+  - *Observable:* ore and gem pixel colours at each sampled cover value and glow band, and in
+    the reference. Record ambiguous palette-row matches as inconclusive.
+  - *Expected:* without glow, *a* = *v*; with glow,
+    *a* = min(255, ⌊*v*·*g*/127⌋). Each body pixel uses row
+    min(52, ⌊26·*a*/127⌋), the S-0104 claim 15 mapping at brightness 1000 ‰ with 53 rows.
+    These are non-negative integer calculations with division rounded down. The transparent
+    reference uses *a* = 127, row 26. Cover value 0 stays black under every glow band; value
+    64 is darkened without glow but brightened by band 254. The resource palette remains
+    untinted in all cases.
+  - *Falsified if:* an unambiguous sampled pixel differs from its predicted packed colour,
+    cover leaves all ore or gem pixels at row 26, a glow restores a cover-value-0 pixel,
+    or the result follows a glow before cover rather than a glow scaling the covered value.
+    This tests shroud and glow only, not deferred fog updates or multiple-glow ordering.
 
 ## Open questions
 
