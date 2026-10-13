@@ -227,7 +227,6 @@ pub fn place(w: &mut World, id: ObjectId, pos: Pos, facing: Facing) {
 /// pass (S-0203 claim 10), its marks and claims are cleared and its cells
 /// recomputed.
 pub fn remove(w: &mut World, id: ObjectId) {
-    crate::econ::events::leaving_map(w, id, true);
     let Some(o) = w.obj(id).cloned() else {
         return;
     };
