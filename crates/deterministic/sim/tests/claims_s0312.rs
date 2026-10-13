@@ -1525,3 +1525,17 @@ fn claim_27_defaults_of_the_crew_survivor_and_sinking_values() {
             .eq_num(glasnost_sim::rules::nearest_double("0.25"))
     );
 }
+
+// spec: S-0312 claim 21 (revision 5: a building destroyed while being sold is not processed at 0 health, so its sale does not advance or pay its refund; it is removed in its own next turn like an exploding building)
+#[test]
+fn claim_21_destroyed_sale_stops() {
+    let r = rules();
+    let mut w = game(&r);
+    let id = spawn(&mut w, Kind::Building, "HUT", 0, 0, 0);
+    w.obj_mut(id).unwrap().beh.current = Some(Behaviour::Selling);
+    assert_eq!(kill(&mut w, id), HitResult::NowDead);
+    let credits = w.houses[0].credits;
+    glasnost_sim::tick::step(&mut w);
+    assert!(w.obj(id).is_none(), "removed in its own next turn");
+    assert_eq!(w.houses[0].credits, credits, "no sale refund");
+}
