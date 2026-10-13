@@ -1268,3 +1268,39 @@ fn s0214_nothing_over_a_selected_object() {
         targeting::ClickResult::default()
     );
 }
+
+/// The suspended slot after a move order is applied to an actor that holds
+/// one (S-0215 claims 8 to 10; the order itself forgets the put-aside pair,
+/// claim 12).
+fn suspended_after_move(stale: bool) -> Option<Behaviour> {
+    let mut r = testkit::combat_ruleset();
+    r.globals.quirks.stale_suspended_revert = stale;
+    let mut w = testkit::game_with(&r, 32, 3);
+    let id = testkit::spawn(
+        &mut w,
+        Kind::Infantry,
+        "WALKER",
+        0,
+        testkit::mid(32, 0, 0),
+        0,
+    );
+    w.tick = 10;
+    let o = w.obj_mut(id).unwrap();
+    o.beh.suspended = Some(Behaviour::Guard);
+    assert!(orders::issue(&mut w, ALPHA, mv(id, testkit::mid(32, 4, 0))));
+    for _ in 0..30 {
+        testkit::run(&mut w, 1);
+        if w.obj(id).unwrap().beh.current == Some(Behaviour::Move) {
+            return w.obj(id).unwrap().beh.suspended;
+        }
+    }
+    panic!("the move never started");
+}
+
+// spec: S-0215 claims 8 to 10 (start-next leaves the suspended behaviour in place)
+// spec: S-0215 Edge cases (quirks.stale_suspended_revert off: an effective start-next empties it)
+#[test]
+fn s0215_stale_suspended_revert() {
+    assert_eq!(suspended_after_move(true), Some(Behaviour::Guard));
+    assert_eq!(suspended_after_move(false), None);
+}
