@@ -34,6 +34,7 @@ pub mod rng;
 pub mod rules;
 pub mod save;
 pub mod scatter;
+pub mod seams;
 pub mod starting;
 pub mod starts;
 pub mod surface;

@@ -1482,6 +1482,26 @@ pub fn selection_response(raw: u32, responses: u32) -> Option<u32> {
     raw.checked_rem(responses)
 }
 
+/// The number n of selection responses of an object's type (S-0214 Terms,
+/// *selection response*, and F5): the count of the type's list, every
+/// entry counted; 0 when it has none.
+pub fn selection_responses(w: &World, id: ObjectId) -> u32 {
+    let Some(o) = w.obj(id) else { return 0 };
+    let r = w.rules();
+    // spec: S-0214 Import mapping (VoiceSelect: n is the count of the list; absent: empty, no response)
+    let list = match o.kind {
+        Kind::Building => r
+            .buildings
+            .get(o.type_index as usize)
+            .and_then(|b| b.raw.voice_select.as_ref()),
+        Kind::Terrain => None,
+        _ => r
+            .unit(o.kind, o.type_index)
+            .and_then(|u| u.raw.voice_select.as_ref()),
+    };
+    list.map_or(0, |l| l.len() as u32)
+}
+
 /// The move destination of claim 11. No cell or object is shrouded before
 /// the visibility topic, so the shroud rules of the claim never apply.
 fn move_destination(

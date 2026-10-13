@@ -1662,6 +1662,34 @@ fn s0215_claim_32_voxel_turret_snap() {
     }
 }
 
+// spec: S-0215 Edge cases and F8 (quirks.turret_snap_bound_wraps: on, the bound reads the field modulo 256, so 200 gives 14 336 and 256 gives 0; off, b = 256 × ω with ω = 127 for both, so 32 512)
+#[test]
+fn s0215_quirk_turret_snap_bound_wraps_both_settings() {
+    for (field, off, on_snaps, off_snaps) in [
+        (200, 10_000, true, true),
+        (200, 20_000, false, true),
+        (256, 1000, false, true),
+        (100, 20_000, true, true),
+        (100, 26_000, false, false),
+    ] {
+        for wraps in [true, false] {
+            let mut r = turret_tower(field, true);
+            r.globals.quirks.turret_snap_bound_wraps = wraps;
+            let (mut w, t, b) = tower_duel(&r);
+            attack(&mut w, t);
+            let from = dir(&w, t, b).wrapping_sub(off);
+            turret_at(&mut w, t, from);
+            let snaps = if wraps { on_snaps } else { off_snaps };
+            let want = if snaps { 1 } else { 2 };
+            assert_eq!(
+                behave::building_process(&mut w, t),
+                want,
+                "field {field}, error {off}, wraps {wraps}"
+            );
+        }
+    }
+}
+
 // spec: S-0215 claim 32 (rearming never snaps; a sprite turret never snaps)
 #[test]
 fn s0215_claim_32_no_snap_for_rearming_or_sprite_turrets() {

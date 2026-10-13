@@ -280,8 +280,12 @@ enum Form {
     Refs(Kind),
     /// A list of integers (S-0003 claims 3 and 12).
     Ints,
+    /// A list of names that are not type names (S-0003 claims 1 and 12),
+    /// each item as [`Form::Text`] gives it, kept in order with none left
+    /// out.
+    Texts,
 }
-use Form::{Bool, Dec, Int, Ints, Ref, Refs, Text};
+use Form::{Bool, Dec, Int, Ints, Ref, Refs, Text, Texts};
 
 /// Rules fields shared by infantry, vehicle and aircraft types: our field
 /// name, the INI key (the field docs of `glasnost_rules::sim::UnitType`).
@@ -331,6 +335,8 @@ const UNIT_FIELDS: &[(&str, &str, Form)] = &[
     ("open_topped", "OpenTopped", Bool),
     ("non_vehicle", "NonVehicle", Bool),
     ("prevent_attack_move", "PreventAttackMove", Bool),
+    // spec: S-0214 Import mapping (VoiceSelect: the selection responses, a list of sound names kept in the listed order)
+    ("voice_select", "VoiceSelect", Texts),
     ("move_to_shroud", "MoveToShroud", Bool),
     ("pushy", "Pushy", Bool),
     ("perma_disguise", "PermaDisguise", Bool),
@@ -402,6 +408,8 @@ const BUILDING_FIELDS: &[(&str, &str, Form)] = &[
     ("cloning", "Cloning", Bool),
     ("powered", "Powered", Bool),
     ("toggle_power", "TogglePower", Bool),
+    // spec: S-0214 Import mapping (VoiceSelect: the selection responses, a list of sound names kept in the listed order)
+    ("voice_select", "VoiceSelect", Texts),
     ("can_be_occupied", "CanBeOccupied", Bool),
     ("can_occupy_fire", "CanOccupyFire", Bool),
     ("capturable", "Capturable", Bool),
@@ -551,6 +559,13 @@ const GENERAL_FIELDS: &[(&str, &[u8], &str, Form)] = &[
     ("iq_guard_area", b"IQ", "GuardArea", Int),
     ("iq_auto_crush", b"IQ", "AutoCrush", Int),
     ("iq_max", b"IQ", "MaxIQLevels", Int),
+    // spec: S-0215 Import mapping (AIAutoDeployFrameDelay: a list of integers in ticks, for difficulty indexes 0, 1 and 2)
+    (
+        "ai_auto_deploy_frame_delay",
+        b"General",
+        "AIAutoDeployFrameDelay",
+        Ints,
+    ),
     // spec: S-0201 Import mapping
     (
         "lobby_game_speed",
@@ -576,6 +591,16 @@ const PERCENTAGE_KEYS: [&str; 4] = [
     "RepairPercent",
     "CrewEscape",
 ];
+
+/// Entries of the auto-deploy delay list, one per difficulty index (S-0215
+/// claim 31).
+// spec: S-0215 claim 31 and Edge cases (one entry for each of the difficulty indexes 0, 1 and 2)
+const AUTO_DEPLOY_ENTRIES: usize = 3;
+
+/// Turn-rate fields of a turreted building for which the snap bound and the
+/// turn rate agree (S-0215 Edge cases).
+// spec: S-0215 Edge cases (fields from 0 to 127 are not affected)
+const TURRET_SNAP_QUIET: std::ops::RangeInclusive<i32> = 0..=127;
 
 /// Cliff-back settings the importer accepts without a warning (S-0211
 /// Edge cases).
@@ -802,6 +827,18 @@ impl Builder<'_> {
                 )
             })
             .map(jsonc::array),
+            // spec: S-0003 claim 12 and S-0214 Import mapping (a list of names: every item kept in the listed order, none dropped or reordered)
+            Texts => fold(state, None, |v, _| {
+                Some(
+                    value::list(v, value::COMMON_TEXT_LIMIT)
+                        .into_iter()
+                        .map(|item| {
+                            jsonc::string(encode(value::text(item, value::COMMON_TEXT_LIMIT)))
+                        })
+                        .collect::<Vec<_>>(),
+                )
+            })
+            .map(jsonc::array),
         }
     }
 
@@ -914,6 +951,16 @@ impl Builder<'_> {
                 ));
             }
             let Some(state) = state else { continue };
+            if key == "AIAutoDeployFrameDelay"
+                && let Some(v) = &state.value
+                && value::list(v, value::COMMON_TEXT_LIMIT).len() < AUTO_DEPLOY_ENTRIES
+            {
+                // spec: S-0215 claim 31 and Edge cases (the importer warns when the auto-deploy delay list has fewer than 3 entries)
+                self.warn(0, 0, format!(
+                    "[{}] {key} has fewer than {AUTO_DEPLOY_ENTRIES} entries: the original's delay for a missing difficulty index is unspecified; without a second entry the neutral and special houses' infantry never auto-deploys (S-0215 claim 31, a departure)",
+                    show(section)
+                ));
+            }
             for e in &state.history {
                 let What::Set(v) = &e.what else { continue };
                 if key == "CliffBackImpassability"
@@ -1134,6 +1181,7 @@ impl Builder<'_> {
                 Kind::Infantry | Kind::Vehicles | Kind::Aircraft => self.unit(&mut rec, kind, i, t),
                 Kind::Buildings => {
                     self.fields(&mut rec, t, kind, BUILDING_FIELDS);
+                    self.turret_snap_warning(t);
                     self.foundation(&mut rec, kind, i, t);
                     self.building_combat(&mut rec, i, t);
                 }
@@ -1285,6 +1333,25 @@ impl Builder<'_> {
         }
         if let Some(name) = loco {
             rec.put("locomotor", jsonc::string(name));
+        }
+    }
+
+    /// The turret snap bound of a turreted building reads its turn-rate field
+    /// modulo 256 while the turn rate clamps it (S-0215 Edge cases, F8): the
+    /// importer warns for a turreted building type whose field lies outside
+    /// 0 to 127, where the two rules differ.
+    fn turret_snap_warning(&mut self, t: &TypeRec) {
+        let turret = fold(t.keys.get(&b"Turret"[..]), None, |v, _| value::boolean(v));
+        let rot = fold(t.keys.get(&b"ROT"[..]), None, |v, _| value::integer(v));
+        if turret == Some(true)
+            && let Some(r) = rot
+            && !TURRET_SNAP_QUIET.contains(&r)
+        {
+            // spec: S-0215 Edge cases (the importer warns for a turreted building type whose turn-rate field is outside 0 to 127)
+            self.warn(0, 0, format!(
+                "buildings {} ROT {r} is outside 0 to 127: its turret snap bound reads the field modulo 256 while its turn rate clamps it (S-0215 F8, quirks.turret_snap_bound_wraps)",
+                show(&t.name)
+            ));
         }
     }
 

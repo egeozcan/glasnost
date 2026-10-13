@@ -423,6 +423,10 @@ pub struct General {
     /// `[IQ] MaxIQLevels` (S-0209 claim 11).
     #[serde(default)]
     pub iq_max: Option<i32>,
+    /// `[General] AIAutoDeployFrameDelay`, ticks: the auto-deploy delay list
+    /// of S-0215 claim 31, entries for difficulty indexes 0, 1 and 2.
+    #[serde(default)]
+    pub ai_auto_deploy_frame_delay: Option<Vec<i32>>,
     /// `[MultiplayerDialogSettings] GameSpeed` (S-0201 claim 7).
     #[serde(default)]
     pub lobby_game_speed: Option<i32>,
@@ -943,6 +947,10 @@ pub struct UnitType {
     /// `PreventAttackMove`.
     #[serde(default)]
     pub prevent_attack_move: Option<bool>,
+    /// `VoiceSelect`: the type's selection responses, in the listed order,
+    /// every entry kept (S-0214 Terms, F5).
+    #[serde(default)]
+    pub voice_select: Option<Vec<String>>,
     /// `MoveToShroud`.
     #[serde(default)]
     pub move_to_shroud: Option<bool>,
@@ -1391,6 +1399,10 @@ pub struct BuildingType {
     /// `TogglePower`.
     #[serde(default)]
     pub toggle_power: Option<bool>,
+    /// `VoiceSelect`: the type's selection responses, in the listed order,
+    /// every entry kept (S-0214 Terms, F5).
+    #[serde(default)]
+    pub voice_select: Option<Vec<String>>,
     /// `CanBeOccupied`.
     #[serde(default)]
     pub can_be_occupied: Option<bool>,

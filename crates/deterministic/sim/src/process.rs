@@ -12,9 +12,13 @@
 //! recorded as a note on the world.
 //!
 //! Gates (claim 35): a gate's *open* runs its stages here, the door moves at
-//! the start of the gate's turn (request Q-0030), [`gate_open`] gives the
-//! passage state that S-0209's gate rows read, and [`gate_met`] is the
-//! effect of the *closed friendly gate* outcome, for the entry rules to call.
+//! every turn of the gate before its per-tick start and processing (claim
+//! 35 (d)), [`gate_open`] gives the passage state that S-0209's gate rows
+//! read, and [`gate_met`] is the effect of the *closed friendly gate*
+//! outcome, for the entry rules to call.
+//!
+//! The rules that S-0215 leaves to the harvest cycle, power and the other
+//! M5a topics call [`crate::seams`].
 
 use glasnost_map::CellXY;
 use glasnost_num::geom::root_floor;
@@ -235,7 +239,28 @@ fn fall_back_infantry(w: &mut World, id: ObjectId) {
     if cur.is_some_and(|b| r.behaviour(b).zombie || r.behaviour(b).paralysed) {
         return;
     }
-    // spec: S-0215 claim 14 rows 11 and 12 (our engine: area guard with the ability or the type default, else guard)
+    let human = o.owner.is_none_or(|h| w.houses[usize::from(h.0)].human);
+    if !human {
+        // The neutral and special houses keep rows 7 to 10 (S-0215 Terms, houses in our engine); no unit is a team member.
+        let skill = o.owner.map_or(0, |h| w.houses[usize::from(h.0)].skill);
+        let armed = u.primary.is_some();
+        let b = if skill < r.general.iq_guard_area {
+            // spec: S-0215 claim 14 row 7 (not human-controlled, skill below the area-guard threshold: guard)
+            Behaviour::Guard
+        } else if crate::seams::is_harvesting_slave(w, id) {
+            // spec: S-0215 claim 14 row 8 (a harvesting slave: guard)
+            Behaviour::Guard
+        } else if armed || u.engineer || u.vehicle_thief {
+            // spec: S-0215 claim 14 row 9 (armed, an engineer or a vehicle thief: area guard)
+            Behaviour::AreaGuard
+        } else {
+            // spec: S-0215 claim 14 row 10 (otherwise guard)
+            Behaviour::Guard
+        };
+        queue(w, b);
+        return;
+    }
+    // spec: S-0215 claim 14 rows 11 and 12 (a player house: area guard with the ability or the type default, else guard)
     if guard_area_ability(w, id) || u.default_to_guard_area {
         queue(w, Behaviour::AreaGuard);
     } else {
@@ -299,9 +324,11 @@ fn fall_back_vehicle(w: &mut World, id: ObjectId, placement: bool) {
             .cells
             .cell(o.pos.cell())
             .is_some_and(|c| c.land == glasnost_map::terrain::land::TIBERIUM);
+        // spec: S-0215 claim 15 row 4 and Terms (the exception off the resource land type is for human-controlled harvesters; the neutral and special houses' harvesters queue harvest wherever they stand)
+        let human = o.owner.is_none_or(|h| w.houses[usize::from(h.0)].human);
         queue(
             w,
-            if placement || on_ore {
+            if placement || on_ore || !human {
                 Behaviour::Harvest
             } else {
                 Behaviour::Guard
@@ -331,6 +358,11 @@ fn fall_back_vehicle(w: &mut World, id: ObjectId, placement: bool) {
     let area = guard_area_ability(w, id) || u.default_to_guard_area;
     // spec: S-0215 claim 15 row 10 (skill below the area-guard threshold, without the ability or the type default)
     if skill < r.general.iq_guard_area && !area {
+        queue(w, Behaviour::Guard);
+        return;
+    }
+    // spec: S-0215 claim 15 row 11 (armed, a harvesting slave or a slave master: guard; no vehicle is a team member)
+    if crate::seams::is_harvesting_slave(w, id) || crate::seams::is_slave_master(w, id) {
         queue(w, Behaviour::Guard);
         return;
     }
@@ -532,9 +564,8 @@ fn frame_count(w: &World, id: ObjectId, q: Seq) -> i32 {
         .map_or(0, |e| e.count)
 }
 
-/// The deployer rules of S-0215 claim 31 for a deployed unit, applied when
-/// one applies (returning its delay); `None` when none applies (an
-/// undeployed unit: the last row is the original's computer owners only).
+/// The deployer rules of S-0215 claim 31, applied when one applies
+/// (returning its delay); `None` when none applies.
 fn deployer_rule(w: &mut World, id: ObjectId) -> Option<i32> {
     let o = w.obj(id)?;
     let u = w.rules().unit(o.kind, o.type_index)?;
@@ -547,7 +578,7 @@ fn deployer_rule(w: &mut World, id: ObjectId) -> Option<i32> {
         .and_then(|s| s.seq)
         .is_some_and(Seq::is_deploy);
     if !deployed {
-        return None;
+        return auto_deploy(w, id);
     }
     if undeploy_delay(w, id) >= 0 {
         // spec: S-0215 claim 31 row 1 (deployed, undeploy delay 0 or more: starts undeploy; its frame count)
@@ -566,6 +597,47 @@ fn deployer_rule(w: &mut World, id: ObjectId) -> Option<i32> {
     }
     // The radiation rows need weapon radiation levels (combat); a type that does not deploy to fire follows claims 24 and 26.
     None
+}
+
+/// The last row of S-0215 claim 31 for an undeployed unit: the auto-deploy
+/// of an owner that is not human-controlled. In our engine no player house
+/// reaches it; the neutral and special houses keep it, with A the list's
+/// entry for their difficulty index 1, and without that entry the row does
+/// not apply (claim 31, a documented departure).
+fn auto_deploy(w: &mut World, id: ObjectId) -> Option<i32> {
+    let t = w.tick;
+    let o = w.obj(id)?.clone();
+    let r = w.rules_arc();
+    let u = r.unit(o.kind, o.type_index)?;
+    // spec: S-0215 claim 31 (the last row: an owner that is not human-controlled; Terms, houses in our engine: the neutral and special houses only)
+    let human = o.owner.is_none_or(|h| w.houses[usize::from(h.0)].human);
+    if human {
+        return None;
+    }
+    // spec: S-0215 claim 31 (A: the entry for difficulty index 1 of the neutral and special houses; no such entry: the row does not apply)
+    let a = r.general.auto_deploy_delay?;
+    let fires = u.raw.deploy_fire.unwrap_or(false);
+    let immune = u.raw.immune_to_radiation.unwrap_or(false);
+    let on_spot = match o.guard_spot {
+        None => true,
+        Some(Target::Cell(c)) => c == o.pos.cell(),
+        Some(Target::Object(x)) => w.obj(x).is_some_and(|g| g.pos.cell() == o.pos.cell()),
+    };
+    // spec: S-0215 claim 31 (deploys to fire, not immune, undeploy delay negative, no destination, no guard spot or on its cell, and t > t_s + A with the sum wrapping)
+    let due = t > o.beh.start_tick.wrapping_add(a);
+    if !(fires && !immune && undeploy_delay(w, id) < 0 && o.dest.is_none() && on_spot && due) {
+        return None;
+    }
+    if moving(w, id) {
+        // spec: S-0215 claim 31 (moving: it is told to stop, the locomotor stop of S-0213 claim 8; the standard delay)
+        if let Some(ob) = w.obj_mut(id) {
+            ob.path.steps.clear();
+        }
+        return Some(standard_delay(w, id));
+    }
+    // spec: S-0215 claim 31 (otherwise it starts its deploy sequence; the delay is that sequence's frame count)
+    infantry::request(w, id, Seq::Deploy, false);
+    Some(frame_count(w, id, Seq::Deploy))
 }
 
 /// Unload for infantry (S-0215 claim 30).
@@ -676,6 +748,18 @@ fn process_guard(w: &mut World, id: ObjectId) -> i32 {
     let Some(o) = w.obj(id).cloned() else {
         return NO_RULE_DELAY;
     };
+    if o.kind == Kind::Vehicle {
+        // spec: S-0215 claim 24 vehicle table row 1 (a slave master for which S-0402's wake-up rule holds: wakes its slaves, the standard delay; excludes the rest)
+        if crate::seams::slave_wake_rule_holds(w, id) {
+            crate::seams::wake_slaves(w, id);
+            return standard_delay(w, id);
+        }
+        // spec: S-0215 claim 24 vehicle table row 2 (a guard rule of S-0402 that queues harvest again: 1 tick, no draw; excludes the rest)
+        if crate::seams::harvester_guard_rule(w, id) {
+            return 1;
+        }
+        // Row 3 (the weeder's rule) is left by S-0402 to a later revision; row 4 is the original's computer players' only.
+    }
     if o.target.is_none() && o.kind == Kind::Infantry {
         // spec: S-0215 claim 24 (no target: attempts its idle action, S-0107 claim 14)
         let in_progress = moving(w, id);
@@ -780,12 +864,21 @@ fn process_area_guard(w: &mut World, id: ObjectId) -> i32 {
         return NO_RULE_DELAY;
     };
     let half = r.quirks.ranged_draw_half_span;
+    // spec: S-0215 claim 26 row 1 (a slave master for which S-0402's wake-up rule holds: wakes its slaves, the standard delay)
+    if o.kind == Kind::Vehicle && crate::seams::slave_wake_rule_holds(w, id) {
+        crate::seams::wake_slaves(w, id);
+        return standard_delay(w, id);
+    }
     if o.kind == Kind::Vehicle && u.harvester {
         // spec: S-0215 claim 26 row 4 (a harvester: harvest at once; 1 + U(1, 10))
         if let Some(ob) = w.obj_mut(id) {
             ob.beh.queue_and_start_at_once(Behaviour::Harvest, t);
         }
         return 1i32.wrapping_add(w.rng.ranged(1, 10, half)); // spec: S-0215 claim 26 row 4 (1 + U(1, 10))
+    }
+    // spec: S-0215 claim 26 (no row ended the processing: a slave master wakes its slaves anyway when its slave group is at rest, S-0402 claim 14)
+    if o.kind == Kind::Vehicle && crate::seams::slave_group_at_rest(w, id) {
+        crate::seams::wake_slaves(w, id);
     }
     if let Some(gs) = o.guard_spot {
         let gp = match gs {
@@ -948,14 +1041,16 @@ pub fn gate_met(w: &mut World, gate: ObjectId) {
     o.beh.force(Behaviour::Open, t);
 }
 
-/// The door motion at the gate's own update (S-0215 claim 35 (d)): a
+/// The door motion at every turn of the gate (S-0215 claim 35 (d)): a
 /// moving door is at rest on the first tick on which its time has passed
-/// since the motion began. Within the update it moves before the per-tick
-/// start and the processing (request Q-0030: S-0203 does not place it).
+/// since the motion began. It moves whatever the gate's behaviour and
+/// whether or not the gate processes in that turn, before its processing,
+/// so a processing in the turn in which the door reaches rest finds it at
+/// rest.
 fn door_update(w: &mut World, id: ObjectId) {
     let t = w.tick;
     let Some(o) = w.obj_mut(id) else { return };
-    // spec: S-0215 claim 35 (d) (at rest once Td ticks have passed since the motion began; placement in the update: Q-0030)
+    // spec: S-0215 claim 35 (d) (at rest once Td ticks have passed since the motion began; at every turn of the gate, before its processing)
     o.beh.gate.door = match o.beh.gate.door {
         Door::Opening { since, ticks } if t.wrapping_sub(since) >= ticks => Door::Open,
         Door::Closing { since, ticks } if t.wrapping_sub(since) >= ticks => Door::Closed,

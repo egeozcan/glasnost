@@ -1014,6 +1014,17 @@
           "format": "int32",
           "default": null
         },
+        "voice_select": {
+          "description": "`VoiceSelect`: the type's selection responses, in the listed order,\nevery entry kept (S-0214 Terms, F5).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "string"
+          }
+        },
         "weapons_factory": {
           "description": "`WeaponsFactory`.",
           "type": [
@@ -1844,6 +1855,18 @@
       "description": "Game-wide values (keys of `[General]`, `[AI]`, `[IQ]`, `[AudioVisual]`,\nthe combat-damage section and `[MultiplayerDialogSettings]`).",
       "type": "object",
       "properties": {
+        "ai_auto_deploy_frame_delay": {
+          "description": "`[General] AIAutoDeployFrameDelay`, ticks: the auto-deploy delay list\nof S-0215 claim 31, entries for difficulty indexes 0, 1 and 2.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
         "allied_crew": {
           "description": "`[General] AlliedCrew`, an infantry type key (S-0312 F4).",
           "type": [
@@ -4517,6 +4540,11 @@
           "type": "boolean",
           "default": true
         },
+        "turret_snap_bound_wraps": {
+          "description": "A turreted building's turret snap bound reads the turn-rate field as a signed value modulo 256; off: the bound is 256 times the turn rate S-0206 gives for the field.",
+          "type": "boolean",
+          "default": true
+        },
         "turret_spin_quantised": {
           "description": "A spinning turret turns by the quantised steps of claim 11.",
           "type": "boolean",
@@ -5748,6 +5776,17 @@
           "description": "`VeteranAbilities`, upper-case ability names.",
           "type": "array",
           "default": [],
+          "items": {
+            "type": "string"
+          }
+        },
+        "voice_select": {
+          "description": "`VoiceSelect`: the type's selection responses, in the listed order,\nevery entry kept (S-0214 Terms, F5).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
           "items": {
             "type": "string"
           }
