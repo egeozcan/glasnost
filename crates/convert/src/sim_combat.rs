@@ -1143,7 +1143,7 @@ impl Builder<'_> {
 
     /// The stored value of an art key in the type's image section after
     /// each type read (S-0007 claim 1), in read order.
-    fn art_values(&self, kind: Kind, index: usize, t: &TypeRec, k: &str) -> Vec<(Vec<u8>, u32)> {
+    pub(super) fn art_values(&self, kind: Kind, index: usize, t: &TypeRec, k: &str) -> Vec<(Vec<u8>, u32)> {
         self.images(kind, index, t)
             .iter()
             .filter_map(|image| {
@@ -1155,7 +1155,7 @@ impl Builder<'_> {
 
     /// An integer art key: a value the image section gives replaces the
     /// held one; an absent key keeps it (S-0003 claim 3).
-    fn art_int(&self, kind: Kind, index: usize, t: &TypeRec, k: &str) -> Option<i32> {
+    pub(super) fn art_int(&self, kind: Kind, index: usize, t: &TypeRec, k: &str) -> Option<i32> {
         self.art_values(kind, index, t, k)
             .iter()
             .fold(None, |held, (v, _)| value::integer(v).or(held))
@@ -1170,7 +1170,7 @@ impl Builder<'_> {
 
     /// An integer pair or triple of the art data (S-0003 claim 9): unread
     /// components keep the held value's (0 before any), with a warning.
-    fn art_tuple<const N: usize>(
+    pub(super) fn art_tuple<const N: usize>(
         &mut self,
         kind: Kind,
         index: usize,

@@ -123,6 +123,8 @@ pub struct House {
     pub pending: Vec<Order>,
     /// Combat state (M4).
     pub combat: crate::combat::state::HouseCombat,
+    /// Economy state (M5a).
+    pub econ: crate::econ::HouseEcon,
 }
 
 /// A house's role (S-0009 claim 19, glossary *house*).
@@ -209,6 +211,8 @@ pub struct Object {
     pub speed_bonus: F64,
     /// Combat state (M4).
     pub combat: crate::combat::state::CombatState,
+    /// Economy state (M5a).
+    pub econ: crate::econ::ObjectEcon,
 }
 
 /// One house in the game setup.
@@ -246,6 +250,9 @@ pub struct GameSetup {
     pub unit_count: i32,
     /// The bases setting (S-0009 claim 45).
     pub bases: bool,
+    /// The other setup values of a skirmish (S-0412 claim 1).
+    #[serde(default)]
+    pub skirmish: crate::econ::setup::Settings,
 }
 
 /// The game state.
@@ -282,6 +289,8 @@ pub struct World {
     /// state: neither saved nor hashed).
     #[serde(skip)]
     pub notes: Vec<String>,
+    /// Economy, production, structures and visibility (M5a).
+    pub econ: crate::econ::WorldEcon,
     /// The map's theater.
     pub theater: Theater,
     /// The pathfinder in use (S-0212, behind a swappable interface).

@@ -24,6 +24,7 @@ pub mod quirks;
 pub mod resolve;
 pub mod schema;
 pub mod sim;
+pub mod sim_econ;
 pub mod validate;
 
 use jsonc::Node;

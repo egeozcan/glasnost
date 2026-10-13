@@ -667,6 +667,274 @@ pub struct Quirks {
     // spec: S-0315 claim 2
     #[serde(default = "on")]
     pub fraidycat_ammo_panic_ignores_fearless: bool,
+    /// The last bale taken from a cell yields nothing.
+    // spec: S-0401 claim 3
+    #[serde(default = "on")]
+    pub last_bale_lost: bool,
+    /// Neighbours of an emptied cell join the emptied cell's tiberium's spread list.
+    // spec: S-0401 claim 5
+    #[serde(default = "on")]
+    pub spread_offer_by_emptied_type: bool,
+    /// Failed spread attempts count and the cell returns to the front of the list.
+    // spec: S-0401 claim 9
+    #[serde(default = "on")]
+    pub spread_attempts_count_failures: bool,
+    /// A cell dropped from the spread list with one free neighbour can rejoin only through a rebuilding.
+    // spec: S-0401 claim 9
+    #[serde(default = "on")]
+    pub spread_mark_kept_on_last_neighbour: bool,
+    /// The stage a cell needs to spread depends on the tiberium's index.
+    // spec: S-0401 claim 17
+    #[serde(default = "on")]
+    pub spread_stage_from_index: bool,
+    /// Harvesting a full cell takes it out of growth until a rebuilding.
+    // spec: S-0401 claim 18
+    #[serde(default = "on")]
+    pub full_cell_no_regrowth: bool,
+    /// Resource timers carry over between games of one session.
+    // spec: S-0401 claim 19
+    #[serde(default = "on")]
+    pub resource_timers_carry_over: bool,
+    /// The waypoint-thinning action takes every bale from the waypoint's own cell only.
+    // spec: S-0401 claim 16
+    #[serde(default = "on")]
+    pub thinning_hits_waypoint_only: bool,
+    /// The squared refinery distance is a signed 32-bit integer that wraps.
+    // spec: S-0402 claim 8
+    #[serde(default = "on")]
+    pub refinery_distance_wraps: bool,
+    /// A load period of 0 keeps the harvester loading for good after its first bale.
+    // spec: S-0402 claim 5
+    #[serde(default = "on")]
+    pub zero_load_period_stalls: bool,
+    /// The slave miner's kick delay wraps when added to the tick number.
+    // spec: S-0402 claim 14
+    #[serde(default = "on")]
+    pub slave_kick_delay_wraps: bool,
+    /// Every factory building of the kind counts for the several-factories factor, also those that cannot make the item.
+    // spec: S-0403 claim 6
+    #[serde(default = "on")]
+    pub multiple_factory_counts_all: bool,
+    /// The step period never exceeds 255 ticks.
+    // spec: S-0403 claim 1
+    #[serde(default = "on")]
+    pub build_step_period_cap: bool,
+    /// A resumed line waits a full step period before its next step.
+    // spec: S-0403 claim 8
+    #[serde(default = "on")]
+    pub resume_restarts_step: bool,
+    /// A cancel refunds the item's price at the moment of the cancel less the balance owed.
+    // spec: S-0404 claim 6
+    #[serde(default = "on")]
+    pub refund_at_current_price: bool,
+    /// A forced start with no switched-on factory starts on a player hold when the house can pay P ÷ 54.
+    // spec: S-0404 claim 10
+    #[serde(default = "on")]
+    pub forced_start_player_hold: bool,
+    /// The factory check after a building-factory event covers only the ordinary-building line.
+    // spec: S-0404 claim 8; S-0414
+    #[serde(default = "on")]
+    pub defence_line_partial_factory_check: bool,
+    /// A queued type that cannot start is dropped and the line starts nothing more.
+    // spec: S-0404 claim 10
+    #[serde(default = "on")]
+    pub unstartable_queue_head_stalls: bool,
+    /// A blackout of length d counts as 0 output in at most d − 1 house updates.
+    // spec: S-0405 claim 6
+    #[serde(default = "on")]
+    pub blackout_one_short: bool,
+    /// One count of active control centres per house serves every control-centre type.
+    // spec: S-0405 claim 13
+    #[serde(default = "on")]
+    pub shared_control_centre_count: bool,
+    /// A cell meeting a wall exception passes without the ground conditions of claim 3 (d).
+    // spec: S-0406 claim 8
+    #[serde(default = "on")]
+    pub wall_exception_skips_ground: bool,
+    /// A person's placement click takes the shroud result from when the cursor entered the cell.
+    // spec: S-0406 claim 6
+    #[serde(default = "on")]
+    pub placement_shroud_at_cursor: bool,
+    /// An upgrade is placed even when the target records nothing.
+    // spec: S-0406 claim 12
+    #[serde(default = "on")]
+    pub upgrade_level_without_room: bool,
+    /// An upgrade prerequisite examines only the most recently acquired eligible building.
+    // spec: S-0407 claim 8 (c)
+    #[serde(default = "on")]
+    pub upgrade_prerequisite_last_building: bool,
+    /// A building put on the map by a place order does not raise its type's ever-built count.
+    // spec: S-0407 claim 10
+    #[serde(default = "on")]
+    pub placed_buildings_not_ever_built: bool,
+    /// Each secret lab picks its entry by position with replacement, so labs can share a type.
+    // spec: S-0407 claim 14
+    #[serde(default = "on")]
+    pub secret_lab_pick_by_position: bool,
+    /// Unit entries, departures, owner changes and removals below the limit call for no recheck.
+    // spec: S-0407 claim 12
+    #[serde(default = "on")]
+    pub unit_changes_no_recheck: bool,
+    /// The start of a sale calls for no recheck of the offer.
+    // spec: S-0407 claim 12
+    #[serde(default = "on")]
+    pub sale_start_no_recheck: bool,
+    /// A type left in the offer after it stopped qualifying can be ordered until the next recheck.
+    // spec: S-0407 claim 13
+    #[serde(default = "on")]
+    pub stale_offer_orderable: bool,
+    /// The queue-time limit test counts the item in production twice.
+    // spec: S-0407 claim 16
+    #[serde(default = "on")]
+    pub queue_limit_counts_item_twice: bool,
+    /// A dock-bound aircraft type is tested at queue time by the dock test only.
+    // spec: S-0407 claim 16
+    #[serde(default = "on")]
+    pub dock_bound_aircraft_ignores_limit: bool,
+    /// The infantry in-production exception of the build limit applies only at exactly L owned.
+    // spec: S-0407 claim 9
+    #[serde(default = "on")]
+    pub infantry_limit_exception_exact: bool,
+    /// Country lists cannot tell apart countries whose indices are equal modulo 32.
+    // spec: S-0407 F1
+    #[serde(default = "on")]
+    pub country_index_wraps: bool,
+    /// A vehicle of a not-scored type is counted on entering the map and never taken off.
+    // spec: S-0414 claim 4; S-0407
+    #[serde(default = "on")]
+    pub unscored_vehicle_stays_counted: bool,
+    /// A nominal survivor is not added to the infantry count but is taken off when it leaves.
+    // spec: S-0414 claim 4; S-0407
+    #[serde(default = "on")]
+    pub nominal_survivor_count: bool,
+    /// A wall sale pays nothing.
+    // spec: S-0408 claim 12
+    #[serde(default = "on")]
+    pub wall_sale_no_refund: bool,
+    /// A packing building releases survivors according to its guard spot and undeploy type only.
+    // spec: S-0415 claim 9; S-0408
+    #[serde(default = "on")]
+    pub packup_release_by_guard_spot: bool,
+    /// A gap radius is read reduced into −128 … 127.
+    // spec: S-0409 claim 11
+    #[serde(default = "on")]
+    pub gap_radius_wrap: bool,
+    /// The height bonus of sight wraps into −128 … 127.
+    // spec: S-0409 F1
+    #[serde(default = "on")]
+    pub sight_bonus_wrap: bool,
+    /// A building's sight, area reveal and gap field are centred on its top-left foundation cell.
+    // spec: S-0409 claim 5
+    #[serde(default = "on")]
+    pub building_sight_top_left: bool,
+    /// A sight whose centre is not a legal cell reveals nothing.
+    // spec: S-0409 claim 5
+    #[serde(default = "on")]
+    pub sight_centre_off_map: bool,
+    /// The height block tests the displaced cell and the step directions of table T2.
+    // spec: S-0409 claim 7
+    #[serde(default = "on")]
+    pub height_block_cell: bool,
+    /// When a hostile gap field stops, its cells stay unexplored until a sight reaches them.
+    // spec: S-0409 claim 11
+    #[serde(default = "on")]
+    pub gap_end_keeps_cover: bool,
+    /// The reveal on fire is a plain reveal that the next re-cover sweep undoes.
+    // spec: S-0409 claim 16
+    #[serde(default = "on")]
+    pub fire_reveal_expires: bool,
+    /// The whole-map re-cover takes in allied units' sights only at their next refresh.
+    // spec: S-0409 claim 15
+    #[serde(default = "on")]
+    pub recover_skips_allied_units: bool,
+    /// The whole-map re-cover and reveal leave pending re-cover marks in place.
+    // spec: S-0409 claim 15
+    #[serde(default = "on")]
+    pub recover_keeps_pending: bool,
+    /// The original applies an uncounted sight at a few moments, never removed.
+    // spec: S-0409 claim 8
+    #[serde(default = "on")]
+    pub uncounted_sight: bool,
+    /// Every cell that is not legal shares one explored state per house.
+    // spec: S-0409 claim 14
+    #[serde(default = "on")]
+    pub offmap_cells_shared: bool,
+    /// Only the first qualifying spy-satellite building is looked at.
+    // spec: S-0409 claim 15
+    #[serde(default = "on")]
+    pub spy_satellite_first_building_decides: bool,
+    /// The defeat reveal leaves the defeated house's pending re-cover marks in place.
+    // spec: S-0409 claim 15
+    #[serde(default = "on")]
+    pub defeat_reveal_keeps_pending: bool,
+    /// A cell coordinate outside 0 … 511 is read as another cell by gap fields and the shroud point test.
+    // spec: S-0409 claim 14; S-0110
+    #[serde(default = "on")]
+    pub shroud_point_cell_wrap: bool,
+    /// Only the first qualifying radar building decides whether the house has radar.
+    // spec: S-0410 claim 1; S-0405 claim 12; S-0409
+    #[serde(default = "on")]
+    pub radar_first_building_decides: bool,
+    /// Radar overlay colours depend on the overlay type's position in the overlay list.
+    // spec: S-0410 claim 9
+    #[serde(default = "on")]
+    pub overlay_list_position_rules: bool,
+    /// The cell a radar pixel stands for is the one F3 gives, shifted from the point colour's cell.
+    // spec: S-0410 claim 6
+    #[serde(default = "on")]
+    pub radar_pixel_cell_shift: bool,
+    /// The automatic place order of a done unit is sent once.
+    // spec: S-0411 claim 9
+    #[serde(default = "on")]
+    pub release_order_once: bool,
+    /// A left click on a done aircraft with every dock taken cancels it.
+    // spec: S-0411 claim 4
+    #[serde(default = "on")]
+    pub done_aircraft_click_cancels: bool,
+    /// A random country is drawn from registration indices 0 … 9.
+    // spec: S-0412 claim 6
+    #[serde(default = "on")]
+    pub random_country_fixed_range: bool,
+    /// The superweapon setting's build bar tests only a building type's first superweapon.
+    // spec: S-0412 Edge cases; S-0407 claim 7
+    #[serde(default = "on")]
+    pub superweapon_setting_tests_first_only: bool,
+    /// Only human participants count for the initial crate count.
+    // spec: S-0412 claim 10
+    #[serde(default = "on")]
+    pub crate_count_humans_only: bool,
+    /// A short game with the bases setting off is allowed (every house without a counted building fails at tick 1).
+    // spec: S-0412 claim 11
+    #[serde(default = "on")]
+    pub short_game_without_bases: bool,
+    /// Alliance messages take the colour of the country's colour field rewritten by the lobby slot.
+    // spec: S-0413 claim 5
+    #[serde(default = "on")]
+    pub alliance_message_slot_colour: bool,
+    /// Only the first three positions of the base-unit list count in the short-game test.
+    // spec: S-0414 claim 2
+    #[serde(default = "on")]
+    pub short_game_first_three_base_units: bool,
+    /// A building that counts as a vehicle keeps its house alive only when it is a refinery-list building.
+    // spec: S-0414 claim 3
+    #[serde(default = "on")]
+    pub vehicle_buildings_keep_nobody_alive: bool,
+    /// A house defeated during the end delay loses (the person-played house's win turns into a loss and restarts the delay).
+    // spec: S-0414 claim 9; S-0412
+    #[serde(default = "on")]
+    pub defeat_during_end_delay: bool,
+    /// A deploying vehicle cannot deploy onto its own house's wall.
+    // spec: S-0415 claim 3
+    #[serde(default = "on")]
+    pub deploy_refuses_own_walls: bool,
+    /// The vehicle of a failed pack-up remains.
+    // spec: S-0415 claim 11
+    #[serde(default = "on")]
+    pub failed_packup_keeps_vehicle: bool,
+    /// A sold building with a pack-up sound also plays it.
+    // spec: S-0415 claim 9
+    #[serde(default = "on")]
+    pub packup_sound_on_sale: bool,
 }
 
 impl Default for Quirks {
@@ -834,6 +1102,73 @@ impl Default for Quirks {
             building_fire_point_shift_fixed: true,
             negative_self_heal_counts: true,
             fraidycat_ammo_panic_ignores_fearless: true,
+            last_bale_lost: true,
+            spread_offer_by_emptied_type: true,
+            spread_attempts_count_failures: true,
+            spread_mark_kept_on_last_neighbour: true,
+            spread_stage_from_index: true,
+            full_cell_no_regrowth: true,
+            resource_timers_carry_over: true,
+            thinning_hits_waypoint_only: true,
+            refinery_distance_wraps: true,
+            zero_load_period_stalls: true,
+            slave_kick_delay_wraps: true,
+            multiple_factory_counts_all: true,
+            build_step_period_cap: true,
+            resume_restarts_step: true,
+            refund_at_current_price: true,
+            forced_start_player_hold: true,
+            defence_line_partial_factory_check: true,
+            unstartable_queue_head_stalls: true,
+            blackout_one_short: true,
+            shared_control_centre_count: true,
+            wall_exception_skips_ground: true,
+            placement_shroud_at_cursor: true,
+            upgrade_level_without_room: true,
+            upgrade_prerequisite_last_building: true,
+            placed_buildings_not_ever_built: true,
+            secret_lab_pick_by_position: true,
+            unit_changes_no_recheck: true,
+            sale_start_no_recheck: true,
+            stale_offer_orderable: true,
+            queue_limit_counts_item_twice: true,
+            dock_bound_aircraft_ignores_limit: true,
+            infantry_limit_exception_exact: true,
+            country_index_wraps: true,
+            unscored_vehicle_stays_counted: true,
+            nominal_survivor_count: true,
+            wall_sale_no_refund: true,
+            packup_release_by_guard_spot: true,
+            gap_radius_wrap: true,
+            sight_bonus_wrap: true,
+            building_sight_top_left: true,
+            sight_centre_off_map: true,
+            height_block_cell: true,
+            gap_end_keeps_cover: true,
+            fire_reveal_expires: true,
+            recover_skips_allied_units: true,
+            recover_keeps_pending: true,
+            uncounted_sight: true,
+            offmap_cells_shared: true,
+            spy_satellite_first_building_decides: true,
+            defeat_reveal_keeps_pending: true,
+            shroud_point_cell_wrap: true,
+            radar_first_building_decides: true,
+            overlay_list_position_rules: true,
+            radar_pixel_cell_shift: true,
+            release_order_once: true,
+            done_aircraft_click_cancels: true,
+            random_country_fixed_range: true,
+            superweapon_setting_tests_first_only: true,
+            crate_count_humans_only: true,
+            short_game_without_bases: true,
+            alliance_message_slot_colour: true,
+            short_game_first_three_base_units: true,
+            vehicle_buildings_keep_nobody_alive: true,
+            defeat_during_end_delay: true,
+            deploy_refuses_own_walls: true,
+            failed_packup_keeps_vehicle: true,
+            packup_sound_on_sale: true,
         }
     }
 }
@@ -1211,6 +1546,73 @@ impl Quirks {
                 "fraidycat_ammo_panic_ignores_fearless",
                 self.fraidycat_ammo_panic_ignores_fearless,
             ),
+            ("last_bale_lost", self.last_bale_lost),
+            ("spread_offer_by_emptied_type", self.spread_offer_by_emptied_type),
+            ("spread_attempts_count_failures", self.spread_attempts_count_failures),
+            ("spread_mark_kept_on_last_neighbour", self.spread_mark_kept_on_last_neighbour),
+            ("spread_stage_from_index", self.spread_stage_from_index),
+            ("full_cell_no_regrowth", self.full_cell_no_regrowth),
+            ("resource_timers_carry_over", self.resource_timers_carry_over),
+            ("thinning_hits_waypoint_only", self.thinning_hits_waypoint_only),
+            ("refinery_distance_wraps", self.refinery_distance_wraps),
+            ("zero_load_period_stalls", self.zero_load_period_stalls),
+            ("slave_kick_delay_wraps", self.slave_kick_delay_wraps),
+            ("multiple_factory_counts_all", self.multiple_factory_counts_all),
+            ("build_step_period_cap", self.build_step_period_cap),
+            ("resume_restarts_step", self.resume_restarts_step),
+            ("refund_at_current_price", self.refund_at_current_price),
+            ("forced_start_player_hold", self.forced_start_player_hold),
+            ("defence_line_partial_factory_check", self.defence_line_partial_factory_check),
+            ("unstartable_queue_head_stalls", self.unstartable_queue_head_stalls),
+            ("blackout_one_short", self.blackout_one_short),
+            ("shared_control_centre_count", self.shared_control_centre_count),
+            ("wall_exception_skips_ground", self.wall_exception_skips_ground),
+            ("placement_shroud_at_cursor", self.placement_shroud_at_cursor),
+            ("upgrade_level_without_room", self.upgrade_level_without_room),
+            ("upgrade_prerequisite_last_building", self.upgrade_prerequisite_last_building),
+            ("placed_buildings_not_ever_built", self.placed_buildings_not_ever_built),
+            ("secret_lab_pick_by_position", self.secret_lab_pick_by_position),
+            ("unit_changes_no_recheck", self.unit_changes_no_recheck),
+            ("sale_start_no_recheck", self.sale_start_no_recheck),
+            ("stale_offer_orderable", self.stale_offer_orderable),
+            ("queue_limit_counts_item_twice", self.queue_limit_counts_item_twice),
+            ("dock_bound_aircraft_ignores_limit", self.dock_bound_aircraft_ignores_limit),
+            ("infantry_limit_exception_exact", self.infantry_limit_exception_exact),
+            ("country_index_wraps", self.country_index_wraps),
+            ("unscored_vehicle_stays_counted", self.unscored_vehicle_stays_counted),
+            ("nominal_survivor_count", self.nominal_survivor_count),
+            ("wall_sale_no_refund", self.wall_sale_no_refund),
+            ("packup_release_by_guard_spot", self.packup_release_by_guard_spot),
+            ("gap_radius_wrap", self.gap_radius_wrap),
+            ("sight_bonus_wrap", self.sight_bonus_wrap),
+            ("building_sight_top_left", self.building_sight_top_left),
+            ("sight_centre_off_map", self.sight_centre_off_map),
+            ("height_block_cell", self.height_block_cell),
+            ("gap_end_keeps_cover", self.gap_end_keeps_cover),
+            ("fire_reveal_expires", self.fire_reveal_expires),
+            ("recover_skips_allied_units", self.recover_skips_allied_units),
+            ("recover_keeps_pending", self.recover_keeps_pending),
+            ("uncounted_sight", self.uncounted_sight),
+            ("offmap_cells_shared", self.offmap_cells_shared),
+            ("spy_satellite_first_building_decides", self.spy_satellite_first_building_decides),
+            ("defeat_reveal_keeps_pending", self.defeat_reveal_keeps_pending),
+            ("shroud_point_cell_wrap", self.shroud_point_cell_wrap),
+            ("radar_first_building_decides", self.radar_first_building_decides),
+            ("overlay_list_position_rules", self.overlay_list_position_rules),
+            ("radar_pixel_cell_shift", self.radar_pixel_cell_shift),
+            ("release_order_once", self.release_order_once),
+            ("done_aircraft_click_cancels", self.done_aircraft_click_cancels),
+            ("random_country_fixed_range", self.random_country_fixed_range),
+            ("superweapon_setting_tests_first_only", self.superweapon_setting_tests_first_only),
+            ("crate_count_humans_only", self.crate_count_humans_only),
+            ("short_game_without_bases", self.short_game_without_bases),
+            ("alliance_message_slot_colour", self.alliance_message_slot_colour),
+            ("short_game_first_three_base_units", self.short_game_first_three_base_units),
+            ("vehicle_buildings_keep_nobody_alive", self.vehicle_buildings_keep_nobody_alive),
+            ("defeat_during_end_delay", self.defeat_during_end_delay),
+            ("deploy_refuses_own_walls", self.deploy_refuses_own_walls),
+            ("failed_packup_keeps_vehicle", self.failed_packup_keeps_vehicle),
+            ("packup_sound_on_sale", self.packup_sound_on_sale),
         ]
     }
 
@@ -1332,7 +1734,17 @@ mod tests {
     fn every_spec_quirk_has_a_switch() {
         let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../../../spec");
         let mut files = Vec::new();
-        for dir in ["simulation", "movement", "infantry", "ui", "combat"] {
+        for dir in [
+            "simulation",
+            "movement",
+            "infantry",
+            "ui",
+            "combat",
+            "economy",
+            "production",
+            "structures",
+            "visibility",
+        ] {
             for e in std::fs::read_dir(format!("{root}/{dir}")).expect("spec dir") {
                 let p = e.expect("entry").path();
                 let name = p
@@ -1340,7 +1752,7 @@ mod tests {
                     .and_then(|n| n.to_str())
                     .unwrap_or("")
                     .to_owned();
-                if name.starts_with("S-02") || name.starts_with("S-03") {
+                if name.starts_with("S-02") || name.starts_with("S-03") || name.starts_with("S-04") {
                     files.push(p);
                 }
             }

@@ -89,6 +89,7 @@ pub fn create(w: &mut World, kind: Kind, type_index: u32, owner: Option<HouseId>
             crate::combat::fire::initial_ammo(&r, kind, type_index),
             F64::from_i64(1, w.rules().mode),
         ),
+        econ: Default::default(),
     };
     w.objects.insert(id, obj);
     veteran_at_creation(w, id);

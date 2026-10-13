@@ -460,6 +460,10 @@ const TERRAIN_OBJECT_FIELDS: &[(&str, &str, Form)] = &[
     ("snow_occupation_bits", "SnowOccupationBits", Int),
     // spec: S-0203 Import mapping (SpawnsTiberium)
     ("spawns_tiberium", "SpawnsTiberium", Bool),
+    // spec: S-0401 Import mapping (IsAnimated, AnimationRate, AnimationProbability)
+    ("is_animated", "IsAnimated", Bool),
+    ("animation_rate", "AnimationRate", Int),
+    ("animation_probability", "AnimationProbability", Dec),
 ];
 
 /// Weapon fields.
@@ -924,6 +928,8 @@ impl Builder<'_> {
             Kind::Projectiles,
             Kind::Warheads,
             Kind::Animations,
+            Kind::Tiberiums,
+            Kind::Superweapons,
         ] {
             let node = self.kind(kind);
             root.push((kind.key().to_owned(), node));
@@ -1021,6 +1027,7 @@ impl Builder<'_> {
             }
         }
         self.general_combat(&mut rec);
+        self.general_econ(&mut rec);
         rec.node()
     }
 
@@ -1170,6 +1177,7 @@ impl Builder<'_> {
                 Kind::Countries => {
                     self.fields(&mut rec, t, kind, COUNTRY_FIELDS);
                     self.country_combat(&mut rec, t);
+                    self.country_econ(&mut rec, t);
                     // spec: S-0009 claim 33 (the early phase sees the base rules' passive field only)
                     let base = fold(t.keys.get(&b"MultiplayPassive"[..]), Some(0), |v, _| {
                         value::boolean(v)
@@ -1184,6 +1192,7 @@ impl Builder<'_> {
                     self.turret_snap_warning(t);
                     self.foundation(&mut rec, kind, i, t);
                     self.building_combat(&mut rec, i, t);
+                    self.type_econ(&mut rec, kind, i, t);
                 }
                 Kind::Overlays => {
                     self.overlay(&mut rec, i, t);
@@ -1206,6 +1215,8 @@ impl Builder<'_> {
                     self.warhead_combat(&mut rec, t);
                 }
                 Kind::Animations => self.animation(&mut rec, t),
+                Kind::Tiberiums => self.tiberium(&mut rec, t),
+                Kind::Superweapons => self.superweapon(&mut rec, t),
                 _ => {}
             }
             // A weapon, projectile, warhead or animation that read no section still exists with the
@@ -1255,6 +1266,7 @@ impl Builder<'_> {
             self.infantry_art(rec, kind, index, t);
         }
         self.unit_combat(rec, kind, index, t);
+        self.type_econ(rec, kind, index, t);
     }
 
     /// A list of type names after every layer (S-0003 claim 12: split at
@@ -1852,6 +1864,10 @@ pub fn attach(tree: &mut Node, sim: Node) {
 mod combat;
 pub use combat::converted_keys;
 
+#[path = "sim_econ.rs"]
+mod econ;
+pub use econ::converted_keys as econ_converted_keys;
+
 #[cfg(test)]
 #[path = "sim_tests.rs"]
 mod tests;
@@ -1859,3 +1875,7 @@ mod tests;
 #[cfg(test)]
 #[path = "sim_combat_tests.rs"]
 mod combat_tests;
+
+#[cfg(test)]
+#[path = "sim_econ_tests.rs"]
+mod econ_tests;
