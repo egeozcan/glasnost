@@ -2,13 +2,13 @@
 id: S-0007
 title: Art lookup (image indirection, sprite or voxel, companion files, theater substitution)
 topic: rules-import
-revision: 6
+revision: 7
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-10
+approved-on: 2026-10-13
 measurements: []
-requests: [Q-0008]
+requests: [Q-0008, Q-0083]
 supersedes: []
 ---
 
@@ -33,7 +33,7 @@ rules*, *engine constant*, *game*, *game-mode file*, *local player*, *loose file
 *session*, *stock data*, *theater*, *type*, *type kind*, *type name*, *type section*, *unspecified*,
 *voxel model*. When a name resolves, it is matched without regard to letter case (S-0005).
 
-- **Image name.** The name a type uses to find its art (claims 1, 9 and 10). At most 24 characters.
+- **Image name.** The name a type uses to find its art (claims 1, 9 and 10). At most 24 bytes.
   It is never empty (claim 1), except for a projectile, whose image name is empty when its section
   has no image key (claim 26).
 - **Invisible projectile.** A projectile whose rules section sets the invisible flag. It is never
@@ -88,9 +88,9 @@ rules*, *engine constant*, *game*, *game-mode file*, *local player*, *loose file
 - **Per-session store** (with its sorts *kept file*, *deferred sprite* and *art read afresh*). S-0005's
   terms (S-0005 claim 22). This spec uses them only in claim 24, to say that it makes no claim about
   them.
-- **Cut to n characters.** A text value longer than n characters is replaced by its first n
-  characters; a shorter one is unchanged. This is S-0003's text rule (claim 1) with a text limit of
-  n. Every length in this spec is counted in characters of the stored value.
+- **Cut to n bytes.** A text value longer than n bytes is replaced by its first n
+  bytes; a shorter one is unchanged. This is S-0003's text rule (claim 1) with a text limit of
+  n. Text limits count input bytes, not decoded Unicode characters. Names are not decoded.
 - **Main icon, alternate icon.** A buildable type's two sidebar pictures (claims 22 and 25). The
   sidebar shows one of them for the type.
 - **Translucent sprite, translucent-sprite name.** A type's optional secondary (alpha) sprite, and
@@ -111,9 +111,9 @@ rules*, *engine constant*, *game*, *game-mode file*, *local player*, *loose file
    read in the same game, a missing image key keeps the image name already set (claim 10 gives a
    consequence). An empty value counts as missing (S-0003), so the image name is never empty.
    Projectiles differ (claim 26). Values
-   longer than 24 characters are cut to their first 24 characters. For **animations**, the image key
+   longer than 24 bytes are cut to their first 24 bytes. For **animations**, the image key
    is read from the own art section, not from the rules database.
-   - Backing: `measurable` (A4)
+   - Backing: `measurable` (A4; S-0004 K7 for byte rather than decoded-character limits)
    - Confidence: high
 
 2. **Art section; animation flags.** All art settings of a type (the theater flag, the new-theater
@@ -201,12 +201,14 @@ rules*, *engine constant*, *game*, *game-mode file*, *local player*, *loose file
    so an animation's flag is the same at every type read of a game. If the flag is set and the
    current theater is snow, the letter A is appended to the image name at the type read (claim 10 gives when
    exactly), and the sprite name is built from the suffixed name (so image "X" loads "XA.shp"). The
-   suffixed name is cut to 24 characters. The suffixed name then serves as the image name for every
+   suffixed name is cut to 24 bytes. The suffixed name then serves as the image name for every
    purpose: the type's own sprite (claim 5), the sidebar icons (claims 22 and 25), and the art
    settings that other specs read from the art section, which come from the art section named by
-   the suffixed name. The one exception is the theater, new-theater, voxel and line-trail
+   the suffixed name. For these non-projectile types, the exception is the theater, new-theater, voxel and line-trail
    settings *of the read that adds the suffix*: they come from the art section of the name as it
-   was before that read added the A.
+   was before that read added the A. A building's convert-to-overlay reference and a sprite
+   aircraft's trailer settings use the suffixed art section in that same read (claim 33,
+   S-0004 claim 14).
    - The suffix applies to sprite-body infantry, vehicles and aircraft, and to overlays, buildings,
      terrain objects and smudges. For buildings, terrain objects and smudges, their own naming rules
      (claims 11 to 13) use the suffixed image name. It also applies to particles, particle systems
@@ -275,10 +277,10 @@ rules*, *engine constant*, *game*, *game-mode file*, *local player*, *loose file
 
     Name lengths and later reads:
     - The art section's own image key and the eight names other than the build-up name are cut to
-      63 characters. The image key is read afresh at every type read from the art section as it is
+      63 bytes. The image key is read afresh at every type read from the art section as it is
       then: when that art section does not set it, that read uses the image name, whatever an
       earlier read's art section had set.
-    - The build-up name is cut to **15** characters. A type read whose art section does not set it,
+    - The build-up name is cut to **15** bytes. A type read whose art section does not set it,
       or sets it empty, keeps the build-up name of the earlier read.
     - **The eight other sprites at a later type read** (deploying, roof-deploying, door,
       under-door, under-roof-door, rubble, special overlay, bib). Each is decided on its own, by the
@@ -447,13 +449,16 @@ rules*, *engine constant*, *game*, *game-mode file*, *local player*, *loose file
     For overlays, terrain objects, smudges, projectiles and particles no spec gives it
     yet; this claim says only that no separate file is loaded for them. It holds for every kind in
     this spec.
-    - Backing: `measurable` (A15)
+    - Backing: `unmeasured` (A15 tests an infantry sprite only. The universal claim that no kind
+      loads a separate shadow file has no observable measurement proposal here: the absence of a
+      separate load does not itself produce a visible result, and the draft gives no established
+      separate-file name or other observable to test for the remaining kinds.)
     - Confidence: high
 
 ### Other art files of a type
 
 22. **Main icon.** A buildable type's main icon is the art section's icon name ‖ .shp, with the icon
-    name cut to 24 characters. There is no theater handling and no generic fallback. If that file
+    name cut to 24 bytes. There is no theater handling and no generic fallback. If that file
     cannot be resolved (or the name is empty), the hard-coded placeholder "XXICON.SHP" is used. The
     icon is set at the type's first type read in a game and is not replaced by later type reads in the
     same game: a game-mode file or map override section cannot change it, not even by changing the
@@ -464,7 +469,7 @@ rules*, *engine constant*, *game*, *game-mode file*, *local player*, *loose file
 
 23. **Translucent sprite.** If a type's own section sets a translucent-sprite name, the file
     translucent-sprite name ‖ .shp is loaded, with no theater handling and no generic fallback. The
-    name is cut to its first 24 characters. The section is the one of claim 1: the type's section of
+    name is cut to its first 24 bytes. The section is the one of claim 1: the type's section of
     the rules database, or, for an animation, its own art section (so a rules layer cannot change an
     animation's translucent sprite, S-0006 claim 8). The loaded sprite is the type's light-glow image
     of S-0104 (Terms, claim 15) and S-0110 (claim 6), which changes the light-alpha values under it
@@ -495,7 +500,7 @@ rules*, *engine constant*, *game*, *game-mode file*, *local player*, *loose file
 
 25. **Alternate icon.** A buildable type may also have an alternate icon, named by its art section's
     alternate icon name.
-    - **Loading.** The file is alternate icon name ‖ .shp, with the name cut to 24 characters, no
+    - **Loading.** The file is alternate icon name ‖ .shp, with the name cut to 24 bytes, no
       theater handling, no generic fallback and **no placeholder**. A type read loads it only if the
       type has no alternate icon yet and its art section sets a non-empty alternate icon name. Once
       an alternate icon is loaded, later type reads of the game never replace it. Unlike the main
@@ -520,7 +525,7 @@ rules*, *engine constant*, *game*, *game-mode file*, *local player*, *loose file
 ### Projectiles, particles, particle systems, voxel animations, superweapons
 
 26. **Projectile image name.** After a type read of a projectile, its image name is the value of the
-    image key in that read's section of the projectile (cut to 24 characters), and **empty** when that
+    image key in that read's section of the projectile (cut to 24 bytes), and **empty** when that
     section has no image key or an empty one. Unlike claim 1, there is no default of the type name and
     nothing carries over from an earlier type read. A projectile with an empty image name has no
     sprite and no model; its translucent sprite still follows claim 23. (Its lookups would use names with an empty base, such as ".shp"; no stock
@@ -533,12 +538,13 @@ rules*, *engine constant*, *game*, *game-mode file*, *local player*, *loose file
       gave it an image key. The importer warns when such a section has no image key while an earlier
       rules layer gave one.
     (`quirks.projectile_image_afresh`)
-    - Backing: `measurable` (A20 parts a and b)
+    - Backing: `measurable` (A20 parts a and b; S-0004 K7 for the byte limit)
     - Confidence: high
 
 27. **Projectile art.** Let I be a projectile's non-empty image name (claim 26). Its art section is
-    the one named by I. That section gives the theater flag, the new-theater flag, the voxel flag,
-    the line-trail settings and the projectile's other art settings that other specs use.
+    the one named by I. Its trailer animation and trailer delay use this section before any arctic
+    change to the drawing name (claim 33; S-0004 claim 14). The theater flag, the new-theater flag,
+    the voxel flag and the line-trail settings follow claim 2 and the exception in claim 9.
     - **Without the voxel flag:** the sprite is the one claims 5 to 8 give an infantry sprite (found
       and subst as defined under Formulas): found(I ‖
       .E) with the theater flag, found(subst(I ‖ .shp)) with the new-theater flag, found(I ‖ .shp)
@@ -577,7 +583,7 @@ rules*, *engine constant*, *game*, *game-mode file*, *local player*, *loose file
     - Confidence: medium
 
 30. **Models of voxel animations.** A voxel animation's image name I follows claim 1 (its rules section,
-    default the type name, kept when a later type read has no image key, cut to 24 characters).
+    default the type name, kept when a later type read has no image key, cut to 24 bytes).
     - **Own model.** At each type read the model is the file I ‖ .vxl, read afresh. **No motion file
       is loaded** for it, and there are no turret, barrel or alternate-body parts, no theater handling
       and no generic fallback. The arctic suffix of claims 9 and 10 applies to I only when the
@@ -624,7 +630,7 @@ rules*, *engine constant*, *game*, *game-mode file*, *local player*, *loose file
       afresh share keys)
 
 31. **Superweapon sidebar icon.** A superweapon's sidebar icon is c ‖ .shp, where c is the sidebar
-    icon name in the superweapon's rules section, cut to 24 characters. Its default is the type
+    icon name in the superweapon's rules section, cut to 24 bytes. Its default is the type
     name, and a later type read without the key keeps the name (an empty value counts as missing,
     S-0003). There is no theater handling and no generic fallback. If the file cannot be resolved,
     the placeholder "XXICON.SHP" is used, as for the main icon (claim 22). Unlike the main icon, the
@@ -642,9 +648,32 @@ rules*, *engine constant*, *game*, *game-mode file*, *local player*, *loose file
       no picture through which a file could show.
     - Confidence: high
 
+33. **Art sections for references and trailers.** A building's convert-to-overlay reference and
+    an aircraft's trailer animation and trailer delay come from the art database, never their
+    rules section. They use the image name in force in that type read, including any snow suffix
+    that claims 9 and 10 add in that read. Thus a sprite aircraft can have a different trailer on
+    snow, and a building can create a different overlay type there. A voxel aircraft does not
+    acquire the suffix. S-0004 claim 14 owns the registration consequences of these references.
+    - A projectile's trailer animation and trailer delay also come from the art database. Their
+      section is named by the non-empty image value supplied by that read's rules section,
+      cut to 24 bytes, before any snow suffix changes its drawing name. Even a voxel projectile
+      whose model uses an arctic name takes its trailer settings from the unsuffixed section.
+      There is no fallback to its type name. If the current read has no image value, or an empty
+      one, neither trailer setting is read: both keep their earlier values, even though the
+      projectile loses its own picture under claim 26. Losing its picture does not clear its trail.
+    - A missing or empty trailer reference keeps the earlier reference, initially none. A reserved
+      no-type name clears it, by S-0004. A missing or empty delay keeps the earlier delay, initially 3 ticks.
+      These reads require the type's rules section in the current layer, as S-0004 claim 14 says.
+      Trailer timing during projectile flight is S-0306 claim 16, not an art-naming rule.
+    - Backing: `measurable` (A24 for trailer section selection, snow and retained projectile
+      settings; S-0004 K2 and K7 for the building reference and image-byte limit). Retaining or
+      clearing a building's held reference remains `unmeasured`, as S-0004 claim 14 explains:
+      already registered overlays do not disappear when the reference changes.
+    - Confidence: high
+
 ## Formulas
 
-All quantities are character strings: there is no arithmetic, so no rounding rule applies and no
+All name quantities are byte strings: there is no arithmetic, so no rounding rule applies and no
 floating point is involved. Letters are compared without regard to case.
 
 Notation:
@@ -696,7 +725,7 @@ key is set, and I otherwise:
 > theater flag set: file = (type name) ‖ .E when that resolves at the theater refresh; = ∅ otherwise
 
 **Projectile** (claims 26, 27), with K the image key of the type read's section (cut to 24
-characters) and I = K, or empty when K is absent or empty:
+bytes) and I = K, or empty when K is absent or empty:
 
 > I empty, or invisible projectile: no art
 > voxel flag not set: sprite as the infantry sprite above, from I (never I ‖ "A")
@@ -714,12 +743,12 @@ image name; no art when the art section's voxel flag is set.
 > otherwise: model = I ‖ .vxl, no motion file, no fallback
 
 **Superweapon icon** (claim 31), at every type read, with s the sidebar icon name cut to 24
-characters:
+bytes:
 
 > s ‖ .shp when that resolves; = XXICON.SHP otherwise
 
 **Icons** (claims 22 and 25), with c and a the icon name and the alternate icon name, each cut to 24
-characters:
+bytes:
 
 > main icon, set at the first type read only: c ‖ .shp when c is non-empty and
 > c ‖ .shp resolves; = XXICON.SHP otherwise
@@ -745,14 +774,15 @@ start with a matching pair.
 
 | Name (ours) | Value | Unit | Notes |
 |---|---|---|---|
-| image name length | 24 | characters | longer values are cut to the first 24 |
-| translucent-sprite name length | 24 | characters | as above |
-| building art-section image key length | 63 | characters | longer values are cut (claim 11) |
-| building secondary sprite name length (all but build-up) | 63 | characters | longer values are cut (claim 11) |
-| build-up sprite name length | 15 | characters | longer values are cut (claim 11) |
-| icon name length, alternate icon name length | 24 | characters | longer values are cut (claims 22, 25) |
-| projectile image name length | 24 | characters | longer values are cut (claim 26) |
-| superweapon sidebar icon name length | 24 | characters | longer values are cut (claim 31) |
+| image name length | 24 | bytes | longer values are cut to the first 24 |
+| translucent-sprite name length | 24 | bytes | as above |
+| building art-section image key length | 63 | bytes | longer values are cut (claim 11) |
+| building secondary sprite name length (all but build-up) | 63 | bytes | longer values are cut (claim 11) |
+| build-up sprite name length | 15 | bytes | longer values are cut (claim 11) |
+| icon name length, alternate icon name length | 24 | bytes | longer values are cut (claims 22, 25) |
+| projectile image name length | 24 | bytes | longer values are cut (claim 26) |
+| superweapon sidebar icon name length | 24 | bytes | longer values are cut (claim 31) |
+| initial trailer delay | 3 | ticks | aircraft and projectiles, claim 33 |
 | substitution first letters | G, N, C, Y | characters | case-insensitive |
 | substitution second letters | A, T | characters | case-insensitive |
 | generic fallback letter | G | character | replaces the second character |
@@ -789,7 +819,7 @@ start with a matching pair.
 
 | State | Event | Result |
 |---|---|---|
-| image name | type read with an image key | the key's value, cut to 24 characters |
+| image name | type read with an image key | the key's value, cut to 24 bytes |
 | image name | type read without an image key | unchanged |
 | arctic flag set after the previous read (snow): no (also before the first read) | type read after which the flag is set | A appended (claims 9, 10); now "yes" |
 | arctic flag set after the previous read (snow): yes | type read after which the flag is set | nothing appended, whatever the image name now is; stays "yes" |
@@ -803,6 +833,7 @@ start with a matching pair.
 | building secondary sprite (each of eight): any | type read whose art section does not set its name, or sets it empty | unchanged (claim 11) |
 | building secondary sprite: any | type read whose art section sets its name | the file found, or none (claim 11) |
 | projectile image name: any | any type read | the read's image key, or empty without one (claim 26) |
+| projectile trailer settings: any | type read with no non-empty image value | unchanged, even when its own picture is lost (claim 33) |
 | voxel animation share flags and source: any | any type read | the read's values, or "not set" and "none" without them (claim 30) |
 | superweapon icon: any | any type read | rebuilt from the sidebar icon name then in force (claim 31) |
 
@@ -916,8 +947,8 @@ row is replaced by the projectile row below:
 
 | Key | Parse | Feeds | Default when absent |
 |---|---|---|---|
-| `Image` | text, cut to 24 characters | image name (claim 1) | the type name |
-| `AlphaImage` | text, cut to 24 characters | translucent sprite (claim 23) | empty |
+| `Image` | text, cut to 24 bytes | image name (claim 1) | the type name |
+| `AlphaImage` | text, cut to 24 bytes | translucent sprite (claim 23) | empty |
 | `AlternateArcticArt` | boolean | arctic alternate (claims 9, 10) | no |
 | `NoSpawnAlt` | boolean | "WO" alternate body (claim 16) | no |
 | `Turret` | boolean | turret parts (claims 16, 19) | no |
@@ -937,11 +968,11 @@ Art database, the art section (section = image name):
 | `Voxel` | boolean | voxel or sprite (claim 4) | no |
 | `Theater` | boolean | theater flag (claims 2, 6, 11 to 15) | no |
 | `NewTheater` | boolean | new-theater flag (claims 2, 7, 11, 12, 14, 15) | no |
-| `Image` | text, cut to 63 characters | building body sprite name only (claims 3, 11); the animation's own art section is covered below the table | empty, **afresh**: the image name is then used |
-| `Buildup` | text, cut to 15 characters | building build-up sprite (claims 11, 12) | empty (no sprite); an empty value also keeps the earlier name |
-| `DeployingAnim`, `RoofDeployingAnim`, `DoorAnim`, `UnderDoorAnim`, `UnderRoofDoorAnim`, `Rubble`, `SpecialZOverlay`, `BibShape` | text, cut to 63 characters | building secondary sprites (claim 11) | empty (no sprite); at a later read, absent or empty keeps the sprite already held (claim 11) |
-| `Cameo` | text, cut to 24 characters | main icon (claim 22) | empty → placeholder; **frozen** (claim 22) |
-| `AltCameo` | text, cut to 24 characters | alternate icon (claim 25) | empty → none; **frozen** once loaded (claim 25) |
+| `Image` | text, cut to 63 bytes | building body sprite name only (claims 3, 11); the animation's own art section is covered below the table | empty, **afresh**: the image name is then used |
+| `Buildup` | text, cut to 15 bytes | building build-up sprite (claims 11, 12) | empty (no sprite); an empty value also keeps the earlier name |
+| `DeployingAnim`, `RoofDeployingAnim`, `DoorAnim`, `UnderDoorAnim`, `UnderRoofDoorAnim`, `Rubble`, `SpecialZOverlay`, `BibShape` | text, cut to 63 bytes | building secondary sprites (claim 11) | empty (no sprite); at a later read, absent or empty keeps the sprite already held (claim 11) |
+| `Cameo` | text, cut to 24 bytes | main icon (claim 22) | empty → placeholder; **frozen** (claim 22) |
+| `AltCameo` | text, cut to 24 bytes | alternate icon (claim 25) | empty → none; **frozen** once loaded (claim 25) |
 
 Animations (defined in the art database). Every animation property is read from the art database,
 the same in every rules layer (S-0006 claim 8). The own art section (section = animation type name)
@@ -949,8 +980,8 @@ gives, with the parse forms, defaults and later-read rules of the rules-database
 
 | Key | Parse | Feeds | Default when absent |
 |---|---|---|---|
-| `Image` | text, cut to 24 characters | image name (claim 1) | the type name |
-| `AlphaImage` | text, cut to 24 characters | translucent sprite (claim 23) | empty |
+| `Image` | text, cut to 24 bytes | image name (claim 1) | the type name |
+| `AlphaImage` | text, cut to 24 bytes | translucent sprite (claim 23) | empty |
 | `AlternateArcticArt` | boolean | arctic alternate (claims 9, 10) | no |
 | `Theater`, `NewTheater` | boolean | theater and new-theater flags, by claim 2's table | no |
 
@@ -961,16 +992,29 @@ Projectiles, voxel animations and superweapons, rules database, the type's own s
 
 | Key | Parse | Feeds | Default when absent |
 |---|---|---|---|
-| `Image` (projectile) | text, cut to 24 characters | projectile image name (claim 26) | empty, **afresh** (no art) |
+| `Image` (projectile) | text, cut to 24 bytes | projectile image name (claim 26); unsuffixed trailer section (claim 33) | empty, **afresh** (no body art; trailer settings not read) |
 | `Inviso` (projectile) | boolean | invisible projectile (claim 27) | no |
 | `ShareBodyData`, `ShareTurretData`, `ShareBarrelData` (voxel animation) | boolean | share flags (claim 30) | no, **afresh** |
 | `ShareSource` (voxel animation) | type name, matched against the existing infantry, vehicle, aircraft and building types; naming a type creates none, and a name that matches none gives no share source | share source (claim 30) | none, **afresh** |
-| `SidebarImage` (superweapon) | text, cut to 24 characters | superweapon sidebar icon name (claim 31) | the type name; rebuilt at every type read |
+| `SidebarImage` (superweapon) | text, cut to 24 bytes | superweapon sidebar icon name (claim 31) | the type name; rebuilt at every type read |
 
 Particles, particle systems and voxel animations use the general rows (`Image`, `AlphaImage`,
 `AlternateArcticArt`; the art section's `Theater`, `NewTheater`, `Voxel`). Weapons, warheads and
 tiberiums feed no art file (claim 32); a tiberium's `Image` is a number and belongs to a tiberium
 spec.
+
+Art-file references and trailer settings (claim 33). These rows require the current rules layer
+to contain the referring type's rules section. The selected section uses the current rules `Image`
+for buildings and aircraft, including the suffix when claims 9 and 10 add it. For projectiles it
+uses the current non-empty rules `Image` before drawing-name suffixing; absent or empty `Image`
+skips both trailer rows and keeps their earlier values. An art-section `Image` that names a
+building's body sprite does not select these reference sections.
+
+| User data | Parse | Feeds | Default when absent |
+|---|---|---|---|
+| Art, selected building image section, `ToOverlay` | overlay name, creating, cut to 127 bytes (S-0004) | convert-to-overlay reference; S-0004 claim 14 | none; later absent or empty keeps held reference |
+| Art, selected aircraft or projectile image section, `Trailer` | animation name, creating, cut to 127 bytes (S-0004) | trailer animation; S-0004 claim 14 | none; later absent or empty keeps held reference; reserved no-type value clears |
+| Art, selected aircraft or projectile image section, `SpawnDelay` | integer ticks (S-0003) | trailer delay; projectile timing is S-0306 claim 16 | 3 ticks; later missing or empty keeps held delay |
 
 The map's theater (S-0009) selects the theater row of Table 1.
 
@@ -1433,6 +1477,43 @@ theater flag or the new-theater flag is.
     if the usual icon or no icon shows.
   - (c) It sets only an unrelated key. Expected: the usual icon. Falsified otherwise.
   - Observable: the sidebar icon. Runs: one per variant.
+
+- **A24 — art-file trailer sections (claim 33; Q-0083).**
+  - Setup: named test data, an art database copy in the test expansion archive. Tiny temperate
+    and snow skirmish maps, game speed 2, 800×600, director and mods off except the named test
+    files; one human player and one bystander computer player kept outside the observed firing
+    and flight corridor. Add an aircraft and a visible long-flight projectile first in the map
+    layer, each with an explicit image name different from its type name and the arctic flag set.
+    Supply distinct, already listed visible trailer animations in the type-name art section,
+    the explicit-image art section, the image-plus-A art section and the rules section.
+    Provide valid body art, including an arctic model for the voxel-projectile variant.
+  - Procedure: fly the aircraft through the corridor and fire the projectile across it. Record
+    video with tick numbers and trail pictures. One run per variant, several flights or shots.
+    Repeat with sprite and voxel art. Swap the two image-section trailers as a positive control.
+  - Expected: a sprite aircraft uses the suffixed trailer on its first snow read, unsuffixed
+    on temperate. A voxel aircraft and either projectile use the unsuffixed trailer on both.
+    Neither uses the type-name or rules trailer. A control must show the swapped trailer.
+    A contrary trailer falsifies section selection; no trail with a failed control is inconclusive.
+  - Delay test: give the selected and rejected sections different positive integer delays.
+    Use a non-scalable projectile and measure consecutive trail-creation ticks as in S-0306 P10.
+    Expected: the selected unsuffixed art section supplies the delay, not the rules or suffixed
+    section. A period matching either rejected section falsifies. For the aircraft, compare
+    each flight with controls in which all candidate sections give the same delay: one control
+    per candidate delay. Controls must have distinguishable trail intervals. Expected: the
+    test matches the selected-section delay's control, and changing a rejected section's delay
+    does not alter it. Matching a rejected delay's control falsifies; indistinguishable controls
+    are inconclusive. This comparison asserts section selection, not an aircraft timing formula.
+    For either kind, a first read without a delay must match an explicit 3-tick-delay control.
+  - Layered test: a named loose base-rules copy gives the projectile a non-empty image and
+    trailer settings in the matching art section. The map's override omits the image, then in a
+    separate variant sets it empty. Expected: body art disappears but the earlier trail and
+    period remain. Restating a new non-empty image selects that image's trailer and delay.
+    In that new art section, absent or empty trailer retains the earlier trail, a reserved
+    no-type value clears it, and a missing or empty delay retains the earlier delay. Test each separately,
+    with an explicit-image positive control. A lost or changed trail merely because the image
+    is omitted, a trail after explicit clearing, or an incorrect retained period falsifies.
+  - Building section selection and byte limits: run S-0004 K2 and K7. Their marked overlay
+    artwork distinguishes the image-named, suffixed and type-name sections and the 24-byte cut.
 
 ## Open questions
 
