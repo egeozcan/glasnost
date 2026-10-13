@@ -648,10 +648,11 @@ impl Builder<'_> {
 
     /// A list of names kept as written in upper case (S-0003 claim 12: split
     /// at commas, empty items skipped; a given list replaces the held one).
-    fn upper_list(state: Option<&KeyState>) -> Option<Node> {
+    fn upper_list(state: Option<&KeyState>, untrimmed: bool) -> Option<Node> {
         fold(state, None, |v, _| {
             Some(
-                value::list(v, value::COMMON_TEXT_LIMIT)
+                // spec: S-0003 claim 12 (quirks.list_items_untrimmed off: name items trimmed)
+                value::name_items(v, value::COMMON_TEXT_LIMIT, untrimmed)
                     .into_iter()
                     .map(|item| jsonc::string(encode(&item.to_ascii_uppercase())))
                     .collect::<Vec<_>>(),
@@ -665,7 +666,10 @@ impl Builder<'_> {
         let mut econ = Rec::default();
         self.efields(&mut econ, t, kind, ECON_FIELDS);
         for &(field, k, _) in NAME_LISTS {
-            if let Some(n) = Self::upper_list(t.keys.get(k.as_bytes())) {
+            if let Some(n) = Self::upper_list(
+                t.keys.get(k.as_bytes()),
+                self.i.ini_quirks.list_items_untrimmed,
+            ) {
                 econ.put(field, n);
             }
         }

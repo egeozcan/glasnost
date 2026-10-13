@@ -510,7 +510,7 @@ fn game_start_particle_system() {
     assert_eq!(names(&o, Kind::ParticleSystems), ["gascloudsys"]);
 }
 
-/// spec: S-0004 claim 8 (a long name that names its own kind would create types without end; our departure stops it, Q-0083)
+/// spec: S-0004 claims 8 and 15 (a long name that names its own kind would create types without end; our departure leaves one new copy, with a warning, and does not act across layers)
 #[test]
 fn self_naming_long_names_stop() {
     let long24 = "Abcdefghijklmnopqrstuvwx";
@@ -519,8 +519,8 @@ fn self_naming_long_names_stop() {
         &format!("[{long24}]\nNext={long24}yz\n"),
     );
     assert_eq!(names(&o, Kind::Animations), [long24, long24]);
-    assert!(warned(&o, "Q-0083"));
-    // A long name met once more in another layer creates one more copy there (claim 8).
+    assert!(warned(&o, "S-0004 claim 15, a departure"));
+    // A long name met once more in another layer creates one more copy there (claims 8 and 15).
     let o = run(
         &[
             (
@@ -545,4 +545,113 @@ fn numbered_weapons_above_eighteen_register() {
     assert_eq!(weapons_of(text), ["N19", "N20", "E20"]);
     let o = run(&[(Role::Base, text)], "");
     assert!(names(&o, Kind::Projectiles).iter().any(|x| x == "Far"));
+}
+
+/// spec: S-0004 claim 15 (the departure suppresses only a name already used in the chain, compared without regard to letter case; distinct long names sharing a stored prefix are not suppressed)
+#[test]
+fn long_name_departure_scope() {
+    let long24 = "Abcdefghijklmnopqrstuvwx";
+    let tank = |inner: &str| {
+        format!(
+            "[VehicleTypes]\n1=Tank\n[Tank]\nUnloadingClass={long24}y1\n[{long24}]\nUnloadingClass={inner}\n"
+        )
+    };
+    // A distinct long name: one more copy, which then repeats its own name.
+    let o = base(&tank(&format!("{long24}y2")));
+    assert_eq!(names(&o, Kind::Vehicles).len(), 3);
+    // The same name in another letter case is a repeat.
+    let o = base(&tank(&format!("{}Y1", long24.to_uppercase())));
+    assert_eq!(names(&o, Kind::Vehicles).len(), 2);
+    assert!(warned(&o, "S-0004 claim 15, a departure"));
+}
+
+/// spec: S-0004 claim 16 (numbered weapon references above 18 register, up to the weapon count)
+#[test]
+fn weapons_above_eighteen_register() {
+    let mut text = String::from("[VehicleTypes]\n1=Big\n[Big]\nTurretCount=1\nWeaponCount=19\n");
+    for n in 18..=20 {
+        text.push_str(&format!("Weapon{n}=N{n}\nEliteWeapon{n}=E{n}\n"));
+    }
+    assert_eq!(weapons_of(&text), ["N18", "E18", "N19", "E19"]);
+}
+
+fn run_in(layers: &[(Role, &str)], art: &str, snow: bool) -> Outcome {
+    let layers: Vec<Layer> = layers.iter().map(|(r, t)| layer(*r, t)).collect();
+    let select = layers::ArtSelect {
+        snow,
+        quirks: crate::art::ArtQuirks::default(),
+    };
+    layers::apply_in(
+        &layers,
+        &doc(art),
+        "art.ini",
+        GameKind::Skirmish,
+        &LayerQuirks::default(),
+        false,
+        &select,
+    )
+}
+
+/// spec: S-0004 claim 14, S-0007 claim 33 (buildings and aircraft: the art section of the image in force, with the snow suffix of S-0007 claims 9 and 10; none for a voxel aircraft; a rules key of the same name has no effect)
+#[test]
+fn art_references_follow_the_snow_suffix() {
+    let rules = "[BuildingTypes]\n1=Bk\n[Bk]\nAlternateArcticArt=yes\n\
+                 [AircraftTypes]\n1=Fs\n2=Fv\n[Fs]\nAlternateArcticArt=yes\n[Fv]\nAlternateArcticArt=yes\n";
+    let art = "[Bk]\nToOverlay=Ot\n[BkA]\nToOverlay=Os\n\
+               [Fs]\nTrailer=Ts\n[FsA]\nTrailer=TsA\n\
+               [Fv]\nVoxel=yes\nTrailer=Tv\n[FvA]\nTrailer=TvA\n";
+    let o = run_in(&[(Role::Base, rules)], art, false);
+    assert_eq!(names(&o, Kind::Overlays), ["Ot"]);
+    assert_eq!(names(&o, Kind::Animations), ["Ts", "Tv"]);
+    let o = run_in(&[(Role::Base, rules)], art, true);
+    assert_eq!(names(&o, Kind::Overlays), ["Os"]);
+    assert_eq!(names(&o, Kind::Animations), ["TsA", "Tv"]);
+    // The current layer's image replaces the earlier name before the suffix.
+    let o = run_in(
+        &[(Role::Base, &rules.replace("[Fs]\n", "[Fs]\nImage=Fp\n"))],
+        "[Fp]\nTrailer=Tp\n[FpA]\nTrailer=TpA\n[Fs]\nTrailer=Ts\n",
+        true,
+    );
+    assert_eq!(names(&o, Kind::Animations), ["TpA"]);
+    // A rules-section key of the same name has no effect.
+    let o = run_in(
+        &[(Role::Base, "[BuildingTypes]\n1=Bn\n[Bn]\nToOverlay=Or\n")],
+        "",
+        false,
+    );
+    assert!(names(&o, Kind::Overlays).is_empty());
+}
+
+/// spec: S-0004 claim 14, S-0007 claims 26 and 33 (a projectile's trailer: the art section of this read's non-empty rules image, unsuffixed, no fallback to the type name)
+#[test]
+fn projectile_trailer_from_its_image_section() {
+    let rules = |shell: &str| {
+        format!(
+            "[VehicleTypes]\n1=Tank\n[Tank]\nPrimary=Gun\n[Gun]\nProjectile=Shell\n[Shell]\n{shell}"
+        )
+    };
+    let art = "[Shell]\nTrailer=Tn\n[Pic]\nTrailer=Tp\n[PicA]\nTrailer=Ta\n";
+    // No image, or an empty one: no trailer read, not even from the type-name section; the rules key has no effect.
+    for shell in ["Trailer=Tr\n", "Image=\n"] {
+        let o = run_in(&[(Role::Base, &rules(shell))], art, false);
+        assert!(names(&o, Kind::Animations).is_empty(), "{shell}");
+    }
+    // A non-empty image: its unsuffixed section, even on snow with the arctic flag.
+    let o = run_in(
+        &[(Role::Base, &rules("Image=Pic\nAlternateArcticArt=yes\n"))],
+        art,
+        true,
+    );
+    assert_eq!(names(&o, Kind::Animations), ["Tp"]);
+    // Afresh at each read: an image given only in the map layer reads the trailer there.
+    let o = run_in(
+        &[
+            (Role::Base, &rules("")),
+            (Role::Map, "[Shell]\nImage=Pic\n"),
+        ],
+        art,
+        false,
+    );
+    assert_eq!(names(&o, Kind::Animations), ["Tp"]);
+    assert_eq!(o.registries[&Kind::Animations][0].created_in, 1);
 }

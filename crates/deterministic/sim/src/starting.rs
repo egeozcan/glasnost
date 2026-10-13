@@ -100,7 +100,10 @@ fn accepts(w: &World, c: CellXY, infantry: bool) -> bool {
 /// The placement search of S-0009 claim 46 around `b` with first radius
 /// `r0`, with its draws: the start element, then for each radius the draw
 /// k = R(0, 7), the eight first-pass candidates and the eight second-pass
-/// candidates with four draws each. Returns the accepting cell.
+/// candidates with four draws each. Returns the accepting cell. This is the
+/// rank order of claim 46 (rank 0 for b; with q = 17·(r − r₀), ρ(r) at
+/// q + 1, F(r, j) at q + 2 + j, G(r, j) at q + 10 + j): the draws taken are
+/// those of every rank up to the accepting candidate's.
 fn search(w: &mut World, b: CellXY, r0: i32, infantry: bool) -> Option<CellXY> {
     let q = w.rules().quirks;
     // spec: S-0009 claim 46 (the start element: b itself, no draw)

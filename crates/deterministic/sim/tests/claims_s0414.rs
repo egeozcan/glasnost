@@ -628,7 +628,10 @@ fn s0309_claim_16_anger_on_alliance_changes() {
     assert_eq!(w.houses[0].combat.enemy, Some(B));
     victory::alliance(&mut w, A, B);
     assert_eq!(w.houses[0].combat.anger[1], 0);
-    assert_eq!(w.houses[0].combat.enemy, None, "the new ally was the enemy house");
+    assert_eq!(
+        w.houses[0].combat.enemy, None,
+        "the new ally was the enemy house"
+    );
     // Breaking it: Alpha is made an enemy of Beta; Beta, which never allied Alpha, is not.
     let before = w.houses[1].combat.anger[0];
     victory::alliance(&mut w, A, B);

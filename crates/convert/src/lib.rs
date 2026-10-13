@@ -407,13 +407,19 @@ pub fn convert(inputs: &Inputs, options: &ImportOptions) -> Import {
         warnings.extend(coverage::case_warnings(&l.doc, &l.file));
     }
     warnings.extend(coverage::case_warnings(&art, &art_label));
-    let outcome = layers::apply_with(
+    // spec: S-0004 claim 14 (the snow suffix selects the art section of building and aircraft references)
+    let select = layers::ArtSelect {
+        snow: options.theater == Some(Theater::Snow),
+        quirks: options.art,
+    };
+    let outcome = layers::apply_in(
         &layers,
         &art,
         &art_label,
         options.game,
         &options.quirks,
         bad_language_rules,
+        &select,
     );
     warnings.extend(ini_warnings.into_iter().map(|(file, w)| {
         Warning {
@@ -455,7 +461,7 @@ pub fn convert(inputs: &Inputs, options: &ImportOptions) -> Import {
     }
 }
 
-fn q_named(q: &IniQuirks) -> [(&'static str, bool); 5] {
+fn q_named(q: &IniQuirks) -> [(&'static str, bool); 6] {
     [
         (
             "ini_final_line_needs_newline",
@@ -465,5 +471,6 @@ fn q_named(q: &IniQuirks) -> [(&'static str, bool); 5] {
         ("ini_duplicate_hash_order", q.ini_duplicate_hash_order),
         ("ini_hash_identity", q.ini_hash_identity),
         ("percent_list_integer_prefix", q.percent_list_integer_prefix),
+        ("list_items_untrimmed", q.list_items_untrimmed),
     ]
 }

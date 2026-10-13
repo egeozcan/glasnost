@@ -146,6 +146,58 @@ fn claim_40_building_initial_state_and_upgrades() {
     assert_eq!(w.objects.len(), 3);
 }
 
+/// spec: S-0009 claim 38 (a pre-placed building's bounding rectangle starts at its cell; its occupied cells are S-0406 claim 2's: the 8-cell 3 × 3 word lacks (2, 1), the zero-size word has none)
+#[test]
+fn claim_38_building_foundation_cells() {
+    let mut s = scene();
+    for (name, size, refinery) in [("REFY", [3, 3], true), ("NIL", [0, 0], false)] {
+        s.register("buildings", name);
+        s.ruleset.sim.buildings.insert(
+            name.into(),
+            BuildingType {
+                strength: Some(100),
+                foundation: Some(size),
+                foundation_refinery: Some(refinery),
+                ..Default::default()
+            },
+        );
+    }
+    for (ty, c) in [("REFY", cell(2, 2)), ("NIL", cell(8, 8))] {
+        s.map.objects.structures.push(Structure {
+            placed: placed("Alpha", ty, c, 256, 0),
+        });
+        s.map.objects.structure_fields.push(EntryFields::default());
+    }
+    let w = s.build();
+    let held = |x: i32, y: i32| {
+        w.cells
+            .list(cell(x, y), glasnost_sim::world::Layer::Ground)
+            .iter()
+            .filter(|&&id| w.obj(id).is_some_and(|o| o.kind == Kind::Building))
+            .count()
+    };
+    let mut occupied = Vec::new();
+    for y in 0..12 {
+        for x in 0..12 {
+            if held(x, y) > 0 {
+                occupied.push((x - 2, y - 2));
+            }
+        }
+    }
+    let expected: Vec<(i32, i32)> = (0..3)
+        .flat_map(|j| (0..3).map(move |i| (i, j)))
+        .filter(|&c| c != (2, 1))
+        .collect();
+    assert_eq!(occupied, expected);
+    assert_eq!(
+        w.objects
+            .values()
+            .filter(|o| o.kind == Kind::Building)
+            .count(),
+        2
+    );
+}
+
 /// spec: S-0009 claim 41 (the behaviour name; a name that matches none means none)
 #[test]
 fn claim_41_behaviour_name() {

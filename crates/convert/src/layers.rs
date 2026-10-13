@@ -588,6 +588,39 @@ pub fn apply_with(
     quirks: &LayerQuirks,
     bad_language_rules: bool,
 ) -> Outcome {
+    apply_in(
+        layers,
+        art,
+        art_file,
+        game,
+        quirks,
+        bad_language_rules,
+        &ArtSelect::default(),
+    )
+}
+
+/// What selects the art section of a building's or aircraft's art-file
+/// references (S-0004 claim 14): whether the game's theater is snow and
+/// `quirks.arctic_suffix_on_flag_turning_on` (S-0007 claims 9 and 10).
+#[derive(Clone, Copy, Debug, Default)]
+pub struct ArtSelect {
+    /// The game's theater is snow.
+    pub snow: bool,
+    /// The art lookup's switches.
+    pub quirks: crate::art::ArtQuirks,
+}
+
+/// [`apply_with`], in a theater: the snow suffix selects the art section of
+/// building and aircraft references (S-0004 claim 14).
+pub fn apply_in(
+    layers: &[Layer],
+    art: &Document,
+    art_file: &str,
+    game: GameKind,
+    quirks: &LayerQuirks,
+    bad_language_rules: bool,
+    select: &ArtSelect,
+) -> Outcome {
     let mut out = Outcome::default();
     for l in layers {
         out.files.push((l.role.label().to_owned(), l.file.clone()));
@@ -602,6 +635,7 @@ pub fn apply_with(
         out,
         quirks: *quirks,
         art,
+        select: *select,
         art_layer,
         pending: Vec::new(),
         layer_now: 0,
@@ -609,6 +643,9 @@ pub fn apply_with(
         origin: BTreeMap::new(),
         // spec: S-0006 claim 12 (the table is left with zero in all 16 positions; only the map's entries count)
         map_only_colour_add: bad_language_rules && quirks.bad_language_rules_skips_mode,
+        untrimmed: layers
+            .first()
+            .is_none_or(|l| l.doc.quirks().list_items_untrimmed),
     };
     for (li, layer) in layers.iter().enumerate() {
         if li == 0 && game == GameKind::Skirmish {
@@ -618,6 +655,17 @@ pub fn apply_with(
     }
     run.finish();
     run.out
+}
+
+/// The image name that selects a projectile's trailer section of the art
+/// database at its type read of layer `li` (S-0004 claim 14, S-0007 claim
+/// 33): the image key of that read's rules section, cut to 24 bytes, when
+/// it is given and not empty. Nothing carries over from an earlier read.
+pub(crate) fn projectile_trailer_image(t: &TypeRec, li: usize) -> Option<&[u8]> {
+    // spec: S-0004 claim 14, S-0007 claims 26 and 33 (afresh at each read; absent or empty: no trailer read)
+    crate::art::given_at(t, "Image", li)
+        .map(|v| value::text(v, crate::art::IMAGE_MAX))
+        .filter(|n| !n.is_empty())
 }
 
 /// A type by kind and registration index.
@@ -639,6 +687,8 @@ struct Run<'a> {
     out: Outcome,
     quirks: LayerQuirks,
     art: &'a Document,
+    /// The theater and switches the art-file references' section depends on.
+    select: ArtSelect,
     art_layer: usize,
     /// Types created by reference that read the creating layer anyway
     /// (switch `quirks.unlisted_reference_unread` off).
@@ -655,6 +705,9 @@ struct Run<'a> {
     /// Only the map layer fills the colour-adjustment table (S-0006 claim
     /// 12).
     map_only_colour_add: bool,
+    /// `quirks.list_items_untrimmed` (S-0003 claim 12), from the layers'
+    /// ini switches.
+    untrimmed: bool,
 }
 
 impl Run<'_> {
@@ -898,7 +951,7 @@ impl Run<'_> {
         for (_, winner) in list.list_positions() {
             let side = self.side_index(&winner.key);
             let mut members = Vec::new();
-            for item in value::list(&winner.value, value::COMMON_TEXT_LIMIT) {
+            for item in value::name_items(&winner.value, value::COMMON_TEXT_LIMIT, self.untrimmed) {
                 if let Some(c) = self.country_by_name(item) {
                     members.push(c);
                 } else if let Some(s) = self
@@ -1041,19 +1094,7 @@ impl Run<'_> {
     fn references(&mut self, kind: Kind, index: usize, section: &Section, hist: usize) {
         let from = Some((kind, index));
         let referrer = self.reg(kind)[index].name.clone();
-        // The art section of a building, aircraft or projectile: the one named by its image (S-0004 claim 13; Q-0083).
-        let art_section = if matches!(kind, Kind::Buildings | Kind::Aircraft | Kind::Projectiles) {
-            let image = crate::art::text_as_of(
-                &self.reg(kind)[index],
-                "Image",
-                self.layer_now,
-                crate::art::IMAGE_MAX,
-            )
-            .unwrap_or_else(|| referrer.clone());
-            self.art.section(&image).cloned()
-        } else {
-            None
-        };
+        let art_section = self.art_reference_section(kind, index, hist);
         for f in refs::type_fields(kind) {
             let (src, src_layer) = if f.art {
                 match &art_section {
@@ -1106,6 +1147,29 @@ impl Run<'_> {
         }
     }
 
+    /// The art section a building's or aircraft's or projectile's art-file
+    /// references come from at its type read of layer `li` (S-0004 claim
+    /// 14, S-0007 claim 33). `None` for other kinds, and for a projectile
+    /// whose section of this layer gives no image or an empty one.
+    fn art_reference_section(&self, kind: Kind, index: usize, li: usize) -> Option<Section> {
+        let t = &self.reg(kind)[index];
+        let image = match kind {
+            Kind::Buildings | Kind::Aircraft => {
+                // spec: S-0004 claim 14 (the image in force at this read, with the snow suffix of S-0007 claims 9 and 10; none for voxel aircraft)
+                let mut walk =
+                    crate::art::ImageWalk::new(t, kind, self.select.snow, &self.select.quirks);
+                for &r in t.reads.iter().filter(|&&r| r <= li) {
+                    walk.step(self.art, t, r);
+                }
+                walk.image
+            }
+            // spec: S-0004 claim 14 (a projectile: this read's non-empty rules image, cut to 24 bytes, no suffix and no fallback to the type name)
+            Kind::Projectiles => projectile_trailer_image(t, li)?.to_vec(),
+            _ => return None,
+        };
+        self.art.section(&image).cloned()
+    }
+
     /// One creating field's value (S-0004 claim 13): cut to the field's
     /// limit, split into items for a list, each item found or created.
     fn field(
@@ -1127,7 +1191,21 @@ impl Run<'_> {
             // spec: S-0004 claim 13 (the value is cut to the field's limit, trailing whitespace removed)
             refs::Form::Single => vec![value::text(stored, limit)],
             // spec: S-0004 claim 13, S-0003 claim 12 (list items in item order, empty items skipped)
-            refs::Form::List => value::list(stored, limit),
+            // spec: S-0003 claim 12 (quirks.list_items_untrimmed off: name items trimmed; on: the importer warns for an item with whitespace at either end)
+            refs::Form::List => {
+                let items = value::name_items(stored, limit, self.untrimmed);
+                if self.untrimmed && items.iter().any(|i| value::edge_whitespace(i)) {
+                    self.warn(
+                        hist,
+                        line,
+                        format!(
+                            "{}: a list item with whitespace at its start or end names a different type (S-0003 claim 12, quirks.list_items_untrimmed)",
+                            f.key
+                        ),
+                    );
+                }
+                items
+            }
         };
         for name in items {
             if name.is_empty() {
@@ -1274,12 +1352,12 @@ impl Run<'_> {
         };
         let read_now = read_here || !self.quirks.unlisted_reference_unread;
         if read_now && self.repeats(target, name, from) {
-            // Departure (Q-0083): the original would create types without end.
+            // spec: S-0004 claim 15 (departure: a repeated same-layer creation in a chain of creating references is suppressed, with a warning; no switch)
             self.warn(
                 hist,
                 line,
                 format!(
-                    "{} {:?} would create another {} of that stored name, which would read the same section and name it again without end; not created (S-0004 claim 8, a departure, Q-0083)",
+                    "{} {:?} would create another {} of that stored name, which would read the same section and name it again without end; not created (S-0004 claim 15, a departure)",
                     how_key(&how),
                     show(name),
                     target.key()
@@ -1300,8 +1378,9 @@ impl Run<'_> {
     /// creators of `from` (itself included), created in this layer, is of
     /// `target` and was created by the same name. Such a new type would
     /// get the same stored name, read the same section and create the next
-    /// one in turn (S-0004 claim 8 with names longer than their stored
-    /// form).
+    /// one in turn (S-0004 claims 8 and 15 with names longer than their
+    /// stored form). Names are compared after their field's limit and
+    /// trimming, without regard to letter case (claim 15).
     fn repeats(&self, target: Kind, name: &[u8], from: Option<(Kind, usize)>) -> bool {
         let mut cur = from;
         while let Some(c) = cur {

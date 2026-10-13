@@ -252,8 +252,6 @@ const PROJECTILE_COMBAT: &[Row] = &[
         Ref(Kind::Weapons),
         "S-0306",
     ),
-    ("trailer", "Trailer", Ref(Kind::Animations), "S-0306"),
-    ("spawn_delay", "SpawnDelay", Int, "S-0306"),
 ];
 
 /// Combat fields of warheads (`Verses` has its own reading).
@@ -906,10 +904,11 @@ fn text_of(state: Option<&KeyState>) -> Option<Vec<u8>> {
     })
 }
 
-fn list_of(state: Option<&KeyState>) -> Option<Vec<Vec<u8>>> {
+fn list_of(state: Option<&KeyState>, untrimmed: bool) -> Option<Vec<Vec<u8>>> {
     fold(state, None, |v, _| {
         Some(
-            value::list(v, value::COMMON_TEXT_LIMIT)
+            // spec: S-0003 claims 12 and 19 (quirks.list_items_untrimmed off: name items trimmed before the no-type test)
+            value::name_items(v, value::COMMON_TEXT_LIMIT, untrimmed)
                 .into_iter()
                 .filter(|i| !value::is_no_type(i))
                 .map(<[u8]>::to_vec)
@@ -1055,6 +1054,7 @@ pub fn converted_keys() -> Vec<(&'static str, String, &'static str)> {
         "S-0301",
     );
     keyed(&["art"], &s(&["TargetCoordOffset", "Height"]), "S-0306");
+    keyed(&["art"], &s(&["Trailer", "SpawnDelay"]), "S-0306, S-0007");
     keyed(
         &["art"],
         &s(&["TurretAnimIsVoxel", "BarrelAnimIsVoxel"]),
@@ -1290,14 +1290,20 @@ impl Builder<'_> {
         if max <= 0 {
             return;
         }
-        let types = list_of(key(t, "DebrisTypes")).unwrap_or_default();
+        let types = list_of(
+            key(t, "DebrisTypes"),
+            self.i.ini_quirks.list_items_untrimmed,
+        )
+        .unwrap_or_default();
         // spec: S-0003 claim 20 (the maxima list: decimal prefixes)
         let maxima = fold(key(t, "DebrisMaximums"), None, |v, _| {
             Some(value::decimal_prefix_list(v))
         })
         .unwrap_or_default();
         let metallic = self.global(GENERAL, "MetallicDebris");
-        let metallic_empty = list_of(metallic.as_ref()).unwrap_or_default().is_empty();
+        let metallic_empty = list_of(metallic.as_ref(), self.i.ini_quirks.list_items_untrimmed)
+            .unwrap_or_default()
+            .is_empty();
         let at = key(t, "MaxDebris");
         if types.is_empty() && metallic_empty {
             // spec: S-0303 Edge cases, S-0312 Edge cases (a positive maximum debris count with nothing to throw)
@@ -1498,7 +1504,10 @@ impl Builder<'_> {
     /// systems whose `BehavesLike` is `Smoke` (letter case ignored), in list
     /// order, as type keys.
     fn smoke_systems(&mut self, combat: &mut Rec, t: &TypeRec) {
-        let Some(list) = list_of(key(t, "DamageParticleSystems")) else {
+        let Some(list) = list_of(
+            key(t, "DamageParticleSystems"),
+            self.i.ini_quirks.list_items_untrimmed,
+        ) else {
             return;
         };
         let Some(reg) = self.i.outcome.registries.get(&Kind::ParticleSystems) else {
@@ -1763,7 +1772,7 @@ impl Builder<'_> {
                 }
             }
             if held.is_none() {
-                // spec: S-0102 claim 23 (after a layer holding the section, an unset strength takes the tree strength as it stands then)
+                // spec: S-0102 claim 23, S-0006 claim 5 (after a layer holding the section, an unset strength takes the tree strength as it stands then; an explicit −1 refills)
                 held = Some(tree_at(Some(r)));
             }
         }
@@ -1841,14 +1850,55 @@ impl Builder<'_> {
                 "{name} is arcing and also steering or vertical: its shots are void in almost every case (S-0306 Edge cases)"
             ));
         }
-        let trailer =
-            text_of(key(t, "Trailer")).is_some_and(|n| !n.is_empty() && !value::is_no_type(&n));
-        if trailer && int_of(key(t, "SpawnDelay")) == Some(0) {
-            // spec: S-0306 Edge cases (a spawn delay of 0 with a trailer: no trailer animation, a departure; the importer warns)
-            self.warn_at(key(t, "SpawnDelay"), format!(
-                "{name} has a trailer and SpawnDelay 0: our engine creates no trailer animation (S-0306 Edge cases, a departure)"
-            ));
+        let (trailer, delay) = self.projectile_trailer(t);
+        if let Some(Some(n)) = &trailer {
+            rec.put("trailer", jsonc::string(n.clone()));
         }
+        if let Some((d, line)) = delay {
+            rec.put("spawn_delay", int_node(d));
+            if d == 0 && matches!(trailer, Some(Some(_))) {
+                // spec: S-0306 Edge cases (a spawn delay of 0 with a trailer: no trailer animation, a departure; the importer warns)
+                self.art_warn(line, format!(
+                    "{name} has a trailer and SpawnDelay 0: our engine creates no trailer animation (S-0306 Edge cases, a departure)"
+                ));
+            }
+        }
+    }
+
+    /// A projectile's trailer animation and trailer delay (S-0007 claim 33,
+    /// S-0306 Import mapping): read at each type read from the art section
+    /// that the read's non-empty rules image names (S-0004 claim 14), never
+    /// from the rules section. The trailer is `None` while no read gave
+    /// one, `Some(None)` once a no-type name cleared it; the delay comes
+    /// with the art line that gave it.
+    fn projectile_trailer(&self, t: &TypeRec) -> (Option<Option<String>>, Option<(i32, u32)>) {
+        let mut trailer = None;
+        let mut delay = None;
+        for &r in &t.reads {
+            // spec: S-0007 claim 33, S-0004 claim 14 (no image value, or an empty one: neither setting is read)
+            let Some(image) = crate::layers::projectile_trailer_image(t, r) else {
+                continue;
+            };
+            let Some(sec) = self.i.art.section(image) else {
+                continue;
+            };
+            if let Some(v) = sec.value(b"Trailer") {
+                let n = value::text(v, value::COMMON_TEXT_LIMIT);
+                // spec: S-0007 claim 33 (an empty trailer keeps the held one; a no-type name clears it)
+                if value::is_no_type(n) {
+                    trailer = Some(None);
+                } else if !n.is_empty() {
+                    trailer = Some(self.ref_name(Kind::Animations, n));
+                }
+            }
+            if let Some(e) = sec.get(b"SpawnDelay") {
+                // spec: S-0007 claim 33, S-0003 claim 3 (an integer; missing or empty keeps the held delay)
+                if let Some(d) = value::integer(&e.value) {
+                    delay = Some((d, e.line));
+                }
+            }
+        }
+        (trailer, delay)
     }
 
     /// Warhead combat fields, the versus list and their warnings.
@@ -2131,12 +2181,19 @@ impl Builder<'_> {
             |v| format!("[General] DisabledDisguiseDetectionPercent {v:?} has no second item: no disguised target is let through by the draw (S-0309 claim 25, a departure)"),
         );
         let fires = self.global(GENERAL, "DamageFireTypes");
-        if list_of(fires.as_ref()).unwrap_or_default().len() < FIRE_TYPES {
+        if list_of(fires.as_ref(), self.i.ini_quirks.list_items_untrimmed)
+            .unwrap_or_default()
+            .len()
+            < FIRE_TYPES
+        {
             // spec: S-0302 Edge cases (the importer warns when the damage-fire list has fewer than three entries)
             self.warn_at(fires.as_ref(), "[General] DamageFireTypes has fewer than three animations: a building fire of a missing kind is not started (S-0302 claim 13, a departure)".to_owned());
         }
         let splash = self.global(COMBAT_DAMAGE, "SplashList");
-        if list_of(splash.as_ref()).unwrap_or_default().is_empty() {
+        if list_of(splash.as_ref(), self.i.ini_quirks.list_items_untrimmed)
+            .unwrap_or_default()
+            .is_empty()
+        {
             // spec: S-0312 Edge cases (an empty splash list: no splash, a departure; the importer warns)
             self.warn_at(splash.as_ref(), "[CombatDamage] SplashList is empty: a vehicle dropped into water shows no splash (S-0312 claim 11, a departure)".to_owned());
         }
@@ -2228,7 +2285,10 @@ impl Builder<'_> {
                     "{name} has a berserk warhead and damage {damage}: the berserk time is 0 or less (S-0302 claim 10)"
                 ));
             }
-            if damage < 0 && list_of(key(h, "AnimList")).is_some_and(|l| !l.is_empty()) {
+            if damage < 0
+                && list_of(key(h, "AnimList"), self.i.ini_quirks.list_items_untrimmed)
+                    .is_some_and(|l| !l.is_empty())
+            {
                 // spec: S-0303 Edge cases (negative damage with an animation list: no animation for a negative entry; the importer warns)
                 self.warn_at(key(w, "Damage"), format!(
                     "{name} has negative damage and its warhead an animation list: negative entries show no animation (S-0303 F5, a departure)"

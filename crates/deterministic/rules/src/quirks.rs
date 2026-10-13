@@ -1897,6 +1897,10 @@ pub const EXTERNAL_QUIRKS: &[(&str, &str)] = &[
         "percent_list_integer_prefix",
         "importer (ini::Quirks), S-0003 claim 13",
     ),
+    (
+        "list_items_untrimmed",
+        "importer (ini::Quirks), S-0003 claim 12",
+    ),
 ];
 
 #[cfg(test)]

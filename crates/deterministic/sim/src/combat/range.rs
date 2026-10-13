@@ -419,8 +419,7 @@ pub fn approach_search(w: &World, id: ObjectId, r_prime: i32) -> Option<Approach
     }
     // spec: S-0307 claim 17 (any other actor drops the target; with empty radii the nearby-cell search is centred on the target's reference cell)
     if radii.is_empty() {
-        let nearby =
-            crate::path::nearby(w, t_cell, crate::path::NearbyUse::Approach { unit: id });
+        let nearby = crate::path::nearby(w, t_cell, crate::path::NearbyUse::Approach { unit: id });
         return Some(Approach::Drop(nearby));
     }
     // spec: S-0307 Open questions and S-0215 Open questions (the centre after candidates is not established and must not be assumed to be the target's cell; request Q-0172, interim: no nearby-cell search, the destination is cleared)
