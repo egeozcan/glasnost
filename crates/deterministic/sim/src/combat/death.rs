@@ -377,6 +377,7 @@ fn crew(w: &mut World, id: ObjectId, hit: &Hit) {
     let Some(crew_type) = crew_type(w, id) else {
         return;
     };
+    // spec: S-0312 claim 13 (a crew that is due takes the creation draw whether or not it can then be placed)
     place_survivor(w, crew_type, o.owner, o.pos, true);
 }
 
@@ -412,7 +413,7 @@ fn place_survivor(
             .is_some_and(|o| !o.taken(p))
     });
     let Some(p) = free else {
-        // spec: S-0312 claim 13 (one that cannot be placed is removed again at once, no health draw)
+        // spec: S-0312 claims 13 and 18 (one that cannot be placed never enters play and takes no health draw; the creation draw is already taken)
         w.objects.remove(&id);
         return;
     };
@@ -438,12 +439,13 @@ fn place_survivor(
         },
     );
     let tick = w.tick;
+    let human = owner.is_none_or(|h| w.houses[usize::from(h.0)].human);
     if let Some(ob) = w.obj_mut(id) {
-        // spec: S-0312 claims 13, 18 and 25 (a crew is put on guard; a survivor on move, for every house)
-        let b = if crew {
-            crate::rules::Behaviour::Guard
-        } else {
-            crate::rules::Behaviour::Move
+        // spec: S-0312 claim 25 (a player house: a crew on guard, a survivor on move; the neutral or special house: hunt)
+        let b = match (human, crew) {
+            (true, true) => crate::rules::Behaviour::Guard,
+            (true, false) => crate::rules::Behaviour::Move,
+            (false, _) => crate::rules::Behaviour::Hunt,
         };
         ob.beh.force(b, tick);
     }
@@ -534,13 +536,17 @@ fn building_death(w: &mut World, id: ObjectId, hit: &Hit) {
     leave_play(w, id);
 }
 
-/// Survivors of a destroyed building (S-0312 claim 18).
+/// Survivors of a destroyed building (S-0312 claim 18). The count C of F5
+/// needs the owner's side, which the simulation's rules do not carry yet
+/// (an owner whose side is not 0, 1 or 2 gives C = 0), and the building's
+/// refund K (S-0408 claim 1, `seams::building_refund`); the chance needs
+/// the owner's game not to be over (S-0414, `seams::game_over`). Until
+/// sides and M5a exist, C = 0 and no survivor is released.
 fn survivors(w: &mut World, id: ObjectId, hit: &Hit) {
-    let Some(o) = w.obj(id).cloned() else { return };
-    let rules = w.rules_arc();
-    let crewed = rules.buildings[o.type_index as usize].raw.powered.is_some() && false;
-    let _ = crewed;
-    // Sides and the survivor divisors decide C (F5); sides are not in the simulation's rules yet, so C = 0 (F5: an owner whose side is not 0, 1 or 2).
+    let Some(o) = w.obj(id) else { return };
+    // spec: S-0312 F5 (C = min(max(trunc(K / q), 1), 5) with K the refund; C = 0 for an owner without a side, so here C = 0)
+    let _refund = crate::seams::building_refund(w, id);
+    let _over = o.owner.is_some_and(|h| crate::seams::game_over(w, h));
     let _ = hit;
 }
 

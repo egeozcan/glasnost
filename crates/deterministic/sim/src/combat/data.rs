@@ -721,8 +721,8 @@ pub struct CombatGeneral {
     pub technician: Option<u32>,
     /// Engineer type.
     pub engineer: Option<u32>,
-    /// Survivor divisors by side (no absent-key default stated: request Q-0060).
-    pub survivor_divisor: [Option<i32>; 3], // spec: S-0312 F5 (three survivor divisors)
+    /// Survivor divisors q by side 0, 1 and 2 (S-0312 F5).
+    pub survivor_divisor: [i32; 3], // spec: S-0312 F5 (three survivor divisors)
     /// Sinking weight (no absent-key default stated: request Q-0060).
     pub sinking_weight: Option<F64>,
     /// Building repair period P_b, ticks.
@@ -1344,10 +1344,11 @@ pub fn combat_rules(
         ],
         technician: infantry(&g.technician),
         engineer: infantry(&g.engineer),
+        // spec: S-0312 Import mapping (survivor divisors absent from every layer: 200, 100 and 300, engine constants)
         survivor_divisor: [
-            g.allied_survivor_divisor,
-            g.soviet_survivor_divisor,
-            g.third_survivor_divisor,
+            g.allied_survivor_divisor.unwrap_or(200),
+            g.soviet_survivor_divisor.unwrap_or(100),
+            g.third_survivor_divisor.unwrap_or(300),
         ],
         sinking_weight: dec(&g.ship_sinking_weight, mode),
         repair_period: repair_period(rate(&g.repair_rate), mode),
