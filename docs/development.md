@@ -220,7 +220,6 @@ Every quirk switch of the implemented specs has a field in `ini::Quirks` (includ
 | `convert::art` | a building secondary sprite dropped by a later read's art section is left undetermined (a note, no file); no art for projectiles, particles and voxel animations | Q-0008 |
 | `app::mapview::build` | an animated terrain object's shadow is drawn right after its body in the object pass (S-0102 claims 10, 13 and 23 give no order) | Q-0051 |
 | `convert::sim::combat` | a type's threat coefficient starts at 0 before any layer gives it; `BuildCat` is a named value compared with `Combat`; `none` items are left out of name lists; an unreadable integer-list item is 0 | Q-0061 |
-| `fmt::vpl` | four little-endian 32-bit header values, a palette, rows of 256; the row count is the first header value that fits the length exactly, else the largest the file ends inside; rows it does not supply read as zero (S-0105 claim 38) | Q-0022 |
 
 ## Map viewer (M2)
 
