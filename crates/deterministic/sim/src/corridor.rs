@@ -151,7 +151,7 @@ pub fn build(w: &World) -> Sectors {
         }
         // spec: S-0212 claim 13b (an enabled link adds straight connections at every level, with no height or usable-area condition)
         for link in w.cells.links.iter().filter(|x| x.enabled) {
-            for (a, b) in link_pairs(link) {
+            for (a, b) in link_pairs(w, link) {
                 let s = lv.sector(w, a);
                 let t = lv.sector(w, b);
                 if s == NONE || t == NONE || s == t {
@@ -182,22 +182,40 @@ pub fn build(w: &World) -> Sectors {
     Sectors { levels }
 }
 
+/// The two side displacements of S-0212 claim 13b's table for the place
+/// *i* of the first end's tile in its bridge or wooden-bridge role.
+// nocite: the array length is the claim's two sides, not a behavioural number
+pub fn side_displacements(i: i32) -> Option<[(i32, i32); 2]> {
+    // spec: S-0212 claim 13b (table: 0, 1, 6 to 10 map north then south; 3, 4, 11 to 15 map east then west; 2, 5 map north-west then south-east)
+    match i {
+        0 | 1 | 6..=10 => Some([(0, -1), (0, 1)]),
+        3 | 4 | 11..=15 => Some([(1, 0), (-1, 0)]),
+        2 | 5 => Some([(-1, -1), (1, 1)]),
+        _ => None,
+    }
+}
+
 /// The cell pairs whose sectors an enabled bridge link connects (S-0212
-/// claim 13b): its two end cells, and for each side across the bridge's
-/// axis the cells beside the two end cells on that side. Which side cells
-/// the original takes for two of the 16 tiles of each bridge role (the
-/// diagonal neighbours) is not stated by tile (request Q-0088); the cells
-/// across the axis are used for every tile.
-// nocite: the three cell pairs the claim lists, not a behavioural number
-fn link_pairs(l: &crate::cells::BridgeLink) -> [(CellXY, CellXY); 3] {
-    let (sx, sy) = if l.along_x { (0, 1) } else { (1, 0) };
-    let by = |c: CellXY, k: i32| CellXY::new(c.x + k * sx, c.y + k * sy);
-    // spec: S-0212 claim 13b (the end cells, and the cells beside them on the same side, for each of the two sides)
-    [
-        (l.first, l.second),
-        (by(l.first, -1), by(l.second, -1)),
-        (by(l.first, 1), by(l.second, 1)),
-    ]
+/// claim 13b): its two end cells, and for each of the two sides the two end
+/// cells moved by the same displacement, which the place of the first end's
+/// tile in its bridge role alone decides. A first end whose tile is in
+/// neither role adds no side pairs (the claim gives side cells only by that
+/// tile).
+fn link_pairs(w: &World, l: &crate::cells::BridgeLink) -> Vec<(CellXY, CellXY)> {
+    // spec: S-0212 claim 13b (the sectors of the two end cells)
+    let mut out = vec![(l.first, l.second)];
+    let place = match (w.cells.cell(l.first), w.catalogue.as_ref()) {
+        (Some(c), Some(cat)) => glasnost_map::bridges::role_index(&cat.roles, c.tile),
+        _ => None,
+    };
+    if let Some(sides) = place.and_then(side_displacements) {
+        let by = |c: CellXY, (dx, dy): (i32, i32)| CellXY::new(c.x + dx, c.y + dy);
+        for d in sides {
+            // spec: S-0212 claim 13b (each side: the first end plus its displacement to the second end plus the same displacement, exact integer cells)
+            out.push((by(l.first, d), by(l.second, d)));
+        }
+    }
+    out
 }
 
 /// Connections closed by the retries of one path computation, per level,

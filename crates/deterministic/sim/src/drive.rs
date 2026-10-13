@@ -541,10 +541,8 @@ fn step_check(w: &mut World, id: ObjectId, u: &UnitRules, repeated: bool, no_cur
                 give_up(w, id);
                 return false;
             }
-            // spec: S-0207 claim 15 table T4 and S-0212 claim 22 (blocked clears the stored path; a fresh search follows after the delay)
-            discard_path(w, id);
-            wait(w, id);
-            return false;
+            // spec: S-0207 claim 15 table T4 and S-0212 claim 22 (first check, blocked: clear the stored path, a fresh search in mode 0 on the same tick whatever the retry timer, then the repeated check)
+            return search_and_recheck(w, id, u);
         }
     }
     // spec: S-0207 claim 7 (the next step chooses the track; crush mode drives straight)

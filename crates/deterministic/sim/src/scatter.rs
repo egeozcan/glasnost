@@ -102,8 +102,12 @@ pub fn request(w: &mut World, id: ObjectId, req: ScatterRequest) -> bool {
     let q = r.quirks;
     // spec: S-0208 claims 12 and 13 (one ranged draw j over 0 … 4)
     let j = w.rng.ranged(0, 4, q.ranged_draw_half_span);
-    // spec: S-0208 Terms (scatter centre cell: the locomotor destination's cell, else the unit's own)
-    let centre = path::locomotor_destination(w, id).map_or(o.pos.cell(), |p| p.cell());
+    // spec: S-0208 Terms (scatter centre cell: the cell of the scatter reference point, the walking target while there is one, else the unit's own position; never a farther destination)
+    let centre = o
+        .walk
+        .as_ref()
+        .and_then(|s| s.target)
+        .map_or(o.pos.cell(), |p| p.cell());
     let d0 = match req.threat {
         // spec: S-0208 claim 12 (d₀: the facing from the threat point to the unit, rounded)
         Some(tp) => eighth(direction(
@@ -188,7 +192,7 @@ pub fn vehicle_request(w: &mut World, id: ObjectId, req: ScatterRequest) -> bool
     if a || b || c || d || e || f || g {
         return false;
     }
-    // spec: S-0208 Terms (scatter centre cell: the locomotor destination's cell, else its own; S-0207 claim 16)
+    // spec: S-0207 claim 16 (the vehicle's scatter centre: its locomotor destination's cell, else its own; interim wording kept for vehicles, request Q-0200)
     let centre = path::locomotor_destination(w, id).map_or(o.pos.cell(), |p| p.cell());
     let Some(threat) = req.threat else {
         // spec: S-0207 claim 16 (no threat point: no draw; the nearby-cell search's cell; behaviours unchanged)

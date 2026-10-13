@@ -1,5 +1,6 @@
-//! Infantry movement, the walk locomotor (S-0208 claims 1 to 10, 14), with
-//! a walker's reactions on its asking tick (S-0209 claims 6 to 10).
+//! Infantry movement, the walk locomotor (S-0208 claims 1 to 10, 14, 16
+//! and 17), with a walker's reactions on its asking tick (S-0209 claims 6
+//! to 10).
 
 use glasnost_map::CellXY;
 use glasnost_map::terrain::land;
@@ -11,7 +12,7 @@ use crate::cells::position;
 use crate::occupancy::{self, Outcome};
 use crate::path::{self, Mode, Search};
 use crate::regions::STEPS;
-use crate::rules::Kind;
+use crate::rules::{Behaviour, Kind};
 use crate::scatter;
 use crate::world::{Layer, ObjectId, Pos, Target, World};
 
@@ -27,6 +28,11 @@ pub struct WalkState {
     pub arrived: Option<i32>,
     /// The unit moved on the current tick.
     pub moved_tick: Option<i32>,
+    /// The infantry speed fraction of S-0310 (Terms), 0 or 1 for a walker:
+    /// 1 from a walking step until the walker stops (S-0208 claims 16 and
+    /// 17).
+    #[serde(default)]
+    pub fraction: bool,
 }
 
 /// The point of a standing position within a cell (S-0208 table P).
@@ -175,6 +181,9 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
         let d = root_floor(dist2(here, tp), q.table_root_distance, r.mode);
         if d < ARRIVAL {
             arrive(w, id, target);
+            // spec: S-0208 State and ordering (on the arrival tick, after the placement: claim 17's in-range stop, then claim 16's end-of-walk test)
+            approach_stop(w, id);
+            end_of_walk(w, id);
             return true;
         }
         let s = walking_speed(w, id);
@@ -212,6 +221,8 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
             ob.pos = new_pos;
             if let Some(s) = ob.walk.as_mut() {
                 s.moved_tick = Some(t);
+                // spec: S-0310 Terms (the infantry speed fraction is 1 from a walking step)
+                s.fraction = true;
             }
         }
         if new_pos.cell() != old_cell {
@@ -229,15 +240,19 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
         return false;
     }
     if o.dest.is_none() && o.path.steps.is_empty() {
+        stopped(w, id);
         return false;
     }
     if o.path.steps.is_empty() {
         let goal = path::goal_cell(w, id);
         if goal == Some(o.pos.cell()) || goal.is_none() {
-            // Arrived at the destination: the move is finished.
+            // A standing walker given a destination in its own cell (no
+            // arrival tick ends that walk under claim 16): the move is
+            // finished.
             if let Some(ob) = w.obj_mut(id) {
                 ob.dest = None;
             }
+            stopped(w, id);
             return false;
         }
         // spec: S-0212 claims 20 and 21 (a fresh search once the retry delay is over)
@@ -248,12 +263,140 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
             Search::Found => {}
             other => {
                 path::failed(w, id, other, false);
+                stopped(w, id);
                 return false;
             }
         }
     }
     ask(w, id, true);
+    if w.obj(id)
+        .and_then(|o| o.walk.as_ref())
+        .is_some_and(|s| s.target.is_none())
+    {
+        stopped(w, id);
+    }
     false
+}
+
+/// The walker stands without a walking target on a tick it does not step
+/// (no path, blocked, waiting, or no destination left): its speed fraction
+/// is 0 (S-0310 Terms).
+fn stopped(w: &mut World, id: ObjectId) {
+    // spec: S-0310 Terms (the infantry speed fraction is 0 once the walker stops)
+    if let Some(s) = w.obj_mut(id).and_then(|o| o.walk.as_mut()) {
+        s.fraction = false;
+    }
+}
+
+/// Whether the arrival-tick tests of S-0208 claims 16 and 17 apply: the
+/// unit is alive and on the map. No unit falls in our engine yet.
+fn arrival_tests_apply(w: &World, id: ObjectId) -> bool {
+    // spec: S-0208 claim 16 (only for a unit that is alive, on the map and not falling)
+    w.obj(id).is_some_and(|o| o.on_map && o.health > 0)
+}
+
+/// Whether a walker's target is in range for S-0208 claim 17. For a type
+/// that is not open-topped: S-0307's range test with the weapon S-0308
+/// selects for the target, run as if the target were the cell holding it
+/// (that cell's centre is the measured point). For an open-topped type: the
+/// 3-D approximate distance between the two reference points is below the
+/// weapon range ρ of S-0307 claim 13.
+pub fn walker_in_range(w: &World, id: ObjectId, target: ObjectId) -> bool {
+    let (Some(o), Some(x)) = (w.obj(id), w.obj(target)) else {
+        return false;
+    };
+    let r = w.rules();
+    let open_topped = r
+        .unit(o.kind, o.type_index)
+        .is_some_and(|u| u.raw.open_topped.unwrap_or(false));
+    let (slot, weapon) = crate::combat::weapon::would_use(w, id, Some(Target::Object(target)));
+    if open_topped {
+        let (a, b) = (w.reference_point(target), w.reference_point(id));
+        let (dx, dy, dz) = (
+            i64::from(a.x - b.x),
+            i64::from(a.y - b.y),
+            i64::from(a.z - b.z),
+        );
+        // spec: S-0208 claim 17 (open-topped: trunc(√̃(Δx² + Δy² + Δz²)) between the reference points, strictly below ρ)
+        let d = root_floor(
+            (dx * dx + dy * dy + dz * dz) as u64,
+            r.quirks.table_root_distance,
+            r.mode,
+        ) as i64;
+        let rho = crate::combat::range::firer_weapon_range(w, id, slot);
+        return d < i64::from(rho);
+    }
+    // spec: S-0208 claim 17 (S-0307's range test against the target's cell, whose centre is the measured point)
+    crate::combat::range::in_range(w, id, weapon, Some(Target::Cell(x.pos.cell())), None)
+}
+
+/// S-0208 claim 17: on its arrival tick, a walker whose target is a mobile
+/// actor in range, in *attack*, *area guard*, *hunt* or *rescue* (its
+/// current behaviour, else its queued one), loses its destination and keeps
+/// its target.
+fn approach_stop(w: &mut World, id: ObjectId) {
+    if !arrival_tests_apply(w, id) {
+        return;
+    }
+    let Some(o) = w.obj(id) else { return };
+    let (Some(Target::Object(x)), Some(_)) = (o.target, o.dest) else {
+        return;
+    };
+    // spec: S-0208 claim 17 (the target is an infantry unit, vehicle or aircraft)
+    if !w
+        .obj(x)
+        .is_some_and(|t| matches!(t.kind, Kind::Infantry | Kind::Vehicle | Kind::Aircraft))
+    {
+        return;
+    }
+    // spec: S-0208 claim 17 (the current behaviour, or the queued one when there is none: attack, area guard, hunt or rescue)
+    if !matches!(
+        o.beh.current.or(o.beh.queued),
+        Some(Behaviour::Attack | Behaviour::AreaGuard | Behaviour::Hunt | Behaviour::Rescue)
+    ) {
+        return;
+    }
+    if walker_in_range(w, id, x)
+        && let Some(ob) = w.obj_mut(id)
+    {
+        // spec: S-0208 claim 17 (the unit loses its destination and keeps its target)
+        ob.dest = None;
+    }
+}
+
+/// S-0208 claim 16: on its arrival tick the walk ends when the unit has no
+/// locomotor destination, or stands in that destination's cell less than
+/// two height levels from it.
+fn end_of_walk(w: &mut World, id: ObjectId) {
+    if !arrival_tests_apply(w, id) {
+        return;
+    }
+    let Some(o) = w.obj(id) else { return };
+    let ends = match o.dest {
+        // spec: S-0208 claim 16 (no locomotor destination: the walk ends)
+        None => true,
+        Some(d) => {
+            let (cell, z) = match d {
+                // A cell destination's height is that of the surface the walker
+                // stands on in the cell (interim, request Q-0201).
+                Target::Cell(c) => (c, o.pos.z),
+                Target::Object(t) => match w.obj(t) {
+                    Some(t) => (t.pos.cell(), t.pos.z),
+                    None => return,
+                },
+            };
+            // spec: S-0208 claim 16 and Constants (in the destination's cell, |Δz| < 208 leptons, strict)
+            cell == o.pos.cell() && (z - o.pos.z).abs() < 208
+        }
+    };
+    if ends && let Some(ob) = w.obj_mut(id) {
+        // spec: S-0208 claim 16 (the destination is lost, the speed fraction becomes 0, the unit stands with no movement in progress)
+        ob.dest = None;
+        ob.path.steps.clear();
+        if let Some(s) = ob.walk.as_mut() {
+            s.fraction = false;
+        }
+    }
 }
 
 /// The walker's asking tick (S-0209 claims 6 to 10). `first`: the first ask

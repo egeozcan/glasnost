@@ -899,19 +899,26 @@ fn threat_scatter_screen_cover() {
     assert_eq!(dest, Some(neighbour(cell(0, 0), 1)), "notes: {:?}", w.notes);
 }
 
-// spec: S-0208 claim 12 (the candidates surround the scatter centre cell, the cell of a walking unit's destination)
-#[test]
-fn threat_scatter_around_the_locomotor_destination() {
+/// A fraidycat walking from cell(0, 0) to cell(8, 0), stopped once `pick`
+/// holds after a tick; sends it a threat request from map west and returns
+/// (the cell its centre must be, the destination it got).
+fn scatter_while_walking(pick: impl Fn(&World, ObjectId) -> bool) -> (CellXY, Option<Target>) {
     let mut s = scatter_scene(true);
     place(&mut s, "TESTCAT", cell(0, 0), 2);
     let mut w = s.build();
     let id = men(&w)[0];
     open_orders(&mut w);
-    let goal = cell(8, 0);
-    order_move(&mut w, id, goal);
-    common::run(&mut w, 6);
-    assert!(occupancy::in_progress(&w, id));
+    order_move(&mut w, id, cell(8, 0));
+    for _ in 0..200 {
+        tick::step(&mut w);
+        if pick(&w, id) {
+            break;
+        }
+    }
+    assert!(pick(&w, id), "the walk reached the wanted state");
     let p = pos(&w, id);
+    // spec: S-0208 Terms (the scatter reference point: the walking target while there is one, else the unit's own position)
+    let centre = walk_target(&w, id).map_or(p.cell(), |t| t.cell());
     let mut r = w.rng.clone();
     let j = r.ranged(0, 4, half_span(&w));
     // Not forced: the fraidycat accepts it in move (scatter property on).
@@ -923,10 +930,27 @@ fn threat_scatter_around_the_locomotor_destination() {
     assert!(scatter::request(&mut w, id, req));
     // d₀ from the threat (to map west of the unit) to the unit: map east.
     let d = (2 + j - 2).rem_euclid(8) as usize;
-    assert_eq!(
-        w.obj(id).unwrap().dest,
-        Some(Target::Cell(neighbour(goal, d)))
-    );
+    (neighbour(centre, d), w.obj(id).unwrap().dest)
+}
+
+// spec: S-0208 Terms and claim 12 (the scatter centre cell is the cell of the walking target while there is one, never the cell of a farther destination)
+#[test]
+fn threat_scatter_around_the_walking_target() {
+    let (want, got) = scatter_while_walking(|w, id| {
+        walk_target(w, id).is_some_and(|t| t.cell() != pos(w, id).cell())
+    });
+    assert_eq!(got, Some(Target::Cell(want)));
+    assert_ne!(want, neighbour(cell(8, 0), 2), "not around the destination");
+}
+
+// spec: S-0208 Terms and claim 12 (without a walking target, on an arrival or asking tick, the scatter centre cell is the unit's own cell)
+#[test]
+fn threat_scatter_around_the_own_cell_between_steps() {
+    let (want, got) = scatter_while_walking(|w, id| {
+        let o = w.obj(id).unwrap();
+        o.dest.is_some() && walk_target(w, id).is_none() && o.pos.cell() != cell(0, 0)
+    });
+    assert_eq!(got, Some(Target::Cell(want)));
 }
 
 // spec: S-0208 claim 13 (no threat point: one draw, the nearby-cell search gives a neighbour, independent of the draw)
@@ -1056,4 +1080,171 @@ fn remaining_top_unit_keeps_allied_vehicle_out_either_way() {
         let out = occupancy::vehicle_outcome(&w, cart, c, occupancy::reference_level(&w, cart));
         assert_eq!(out, Outcome::StationaryFriendly, "switch {quirk}");
     }
+}
+
+// ---------------------------------------------------------------------------
+// End of a walk and the approaching walker (claims 16 and 17)
+
+fn fraction(w: &World, id: ObjectId) -> bool {
+    w.obj(id)
+        .and_then(|o| o.walk.as_ref())
+        .is_some_and(|s| s.fraction)
+}
+
+// spec: S-0208 claim 16 (the walk ends on the arrival tick in the destination's cell: no destination, speed fraction 0, standing where it arrived)
+#[test]
+fn walk_ends_on_the_arrival_tick_in_the_destination_cell() {
+    let s = scene();
+    let (w, id, t) = walk_east(&s, 0, 3);
+    let last = t.last().expect("ticks");
+    // The trace stops on the first tick that ends with no destination and
+    // no walking target: that is the arrival tick itself.
+    assert!(last.had_target && !last.has_target, "an arrival tick");
+    assert_eq!(last.after.cell(), cell(3, 0));
+    let o = w.obj(id).unwrap();
+    assert_eq!(o.dest, None);
+    assert!(o.path.steps.is_empty());
+    assert!(!fraction(&w, id));
+    assert!(!occupancy::in_progress(&w, id));
+}
+
+// spec: S-0310 Terms (the infantry speed fraction is 1 from a walking step until the walker stops, also over arrival ticks of a walk that continues)
+#[test]
+fn speed_fraction_while_walking() {
+    let mut s = scene();
+    s.place_infantry(0, "TESTMAN", cell(0, 0), 0);
+    let mut w = s.build();
+    let id = men(&w)[0];
+    open_orders(&mut w);
+    assert!(!fraction(&w, id));
+    order_move(&mut w, id, cell(4, 0));
+    let mut stepped = false;
+    for _ in 0..400 {
+        let before = pos(&w, id);
+        tick::step(&mut w);
+        if pos(&w, id) != before {
+            stepped = true;
+        }
+        if w.obj(id).unwrap().dest.is_none() {
+            break;
+        }
+        if stepped {
+            assert!(fraction(&w, id), "1 from the first step on");
+        }
+    }
+    assert!(stepped);
+    assert!(!fraction(&w, id));
+}
+
+/// The synthetic combat rules with the WALKER armed with the 4-cell Rifle.
+fn armed_rules() -> glasnost_rules::schema::Ruleset {
+    let mut r = glasnost_sim::testkit::combat_ruleset();
+    r.sim.infantry.get_mut("WALKER").unwrap().primary = Some("Rifle".into());
+    r
+}
+
+/// A WALKER of house 0 at the middle cell, whose target is a CART of house
+/// 1 `tx` cells map east, in behaviour `b`, with a destination `dx` cells
+/// east. Returns (world, walker, cart).
+fn approach_duel(b: Behaviour, tx: i32, dx: i32) -> (World, ObjectId, ObjectId) {
+    use glasnost_sim::testkit;
+    let mut w = testkit::game_with(&armed_rules(), 32, 3);
+    let a = testkit::spawn(
+        &mut w,
+        Kind::Infantry,
+        "WALKER",
+        0,
+        testkit::mid(32, 0, 0),
+        0,
+    );
+    let t = testkit::spawn(&mut w, Kind::Vehicle, "CART", 1, testkit::mid(32, tx, 0), 0);
+    let o = w.obj_mut(a).unwrap();
+    o.target = Some(Target::Object(t));
+    o.beh.current = Some(b);
+    o.dest = Some(Target::Cell(testkit::mid(32, dx, 0)));
+    (w, a, t)
+}
+
+/// Runs the duel until the walker has no destination; returns, for each
+/// arrival tick, (the target in range at its cell centre, the destination
+/// kept); the last entry is the tick it stopped on.
+fn run_approach(w: &mut World, a: ObjectId) -> Vec<(bool, bool)> {
+    let mut out = Vec::new();
+    for _ in 0..600 {
+        let arrived = w.obj(a).unwrap().walk.as_ref().unwrap().arrived;
+        tick::step(w);
+        let o = w.obj(a).unwrap();
+        if o.walk.as_ref().unwrap().arrived != arrived {
+            let Some(Target::Object(t)) = o.target else {
+                panic!("the target is kept");
+            };
+            out.push((walk::walker_in_range(w, a, t), o.dest.is_some()));
+        }
+        if w.obj(a).unwrap().dest.is_none() {
+            break;
+        }
+    }
+    out
+}
+
+// spec: S-0208 claim 17 (on an arrival tick, a walker in attack or area guard whose mobile target is in range at its cell centre loses its destination and keeps its target; the walk ends there, claim 16)
+#[test]
+fn approaching_walker_stops_in_range() {
+    for b in [Behaviour::Attack, Behaviour::AreaGuard] {
+        // The target 10 cells east, the destination 9 cells east: the
+        // Rifle's 4 cells are reached on the way.
+        let (mut w, a, t) = approach_duel(b, 10, 9);
+        let arrivals = run_approach(&mut w, a);
+        let (&(in_range, kept), before) = arrivals.split_last().expect("arrivals");
+        assert!(
+            in_range && !kept,
+            "{b:?}: stopped on an in-range arrival: {arrivals:?} {:?}",
+            w.obj(a).map(|o| (o.dest, o.target, o.beh.current))
+        );
+        assert!(
+            before.iter().all(|&(r, k)| !r && k),
+            "{b:?}: no earlier arrival in range: {before:?}"
+        );
+        let o = w.obj(a).unwrap();
+        assert_eq!(o.target, Some(Target::Object(t)), "{b:?}");
+        assert!(
+            o.pos.cell().x < glasnost_sim::testkit::mid(32, 9, 0).x,
+            "{b:?}: short of the destination"
+        );
+        assert!(!fraction(&w, a));
+    }
+}
+
+// spec: S-0208 claim 17 (under another behaviour there is no early stop: the walker continues to its destination)
+#[test]
+fn walker_in_move_does_not_stop_in_range() {
+    let (mut w, a, _) = approach_duel(Behaviour::Move, 10, 8);
+    let arrivals = run_approach(&mut w, a);
+    assert!(
+        arrivals.iter().any(|&(r, k)| r && k),
+        "in range and walking on: {arrivals:?}"
+    );
+    assert_eq!(
+        w.obj(a).unwrap().pos.cell(),
+        glasnost_sim::testkit::mid(32, 8, 0)
+    );
+}
+
+// spec: S-0208 claim 17 (exception: a destination that is the target object itself is lost as the firing sequence starts)
+#[test]
+fn destination_on_the_target_is_lost_on_firing() {
+    let (mut w, a, t) = approach_duel(Behaviour::Attack, 2, 0);
+    w.obj_mut(a).unwrap().dest = Some(Target::Object(t));
+    let mut fired = false;
+    for _ in 0..60 {
+        tick::step(&mut w);
+        let o = w.obj(a).unwrap();
+        if o.infantry.as_ref().is_some_and(|s| s.attack) {
+            fired = true;
+            assert_eq!(o.dest, None, "lost with the firing sequence");
+            assert_eq!(o.target, Some(Target::Object(t)));
+            break;
+        }
+    }
+    assert!(fired, "the walker started a firing sequence");
 }

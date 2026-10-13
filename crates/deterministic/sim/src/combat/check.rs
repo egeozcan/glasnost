@@ -174,7 +174,7 @@ fn vehicle_moving(w: &World, firer: ObjectId, weapon: WeaponId) -> bool {
 fn infantry_moving(w: &World, firer: ObjectId, weapon: WeaponId) -> bool {
     let Some(o) = w.obj(firer) else { return false };
     // spec: S-0310 claim 8 and Terms (speed fraction above 0.1: it has taken a walking step and not yet stopped)
-    let walking = o.walk.as_ref().is_some_and(|s| s.target.is_some());
+    let walking = o.walk.as_ref().is_some_and(|s| s.fraction);
     let interruptible = o
         .infantry
         .as_ref()

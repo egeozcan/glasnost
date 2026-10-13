@@ -217,6 +217,14 @@ pub fn infantry_step(w: &mut World, id: ObjectId) {
                 st.attack = true;
             }
             ob.combat.last_shot_target = Some(t);
+            // spec: S-0208 claim 17 (exception: a destination that is the target object itself is lost, and any movement still in progress ends, as the firing sequence starts)
+            if matches!(t, Target::Object(_)) && ob.dest == Some(t) {
+                ob.dest = None;
+                ob.path.steps.clear();
+                if let Some(s) = ob.walk.as_mut() {
+                    s.fraction = false;
+                }
+            }
         }
         crate::infantry::request(w, id, q, false);
     }
