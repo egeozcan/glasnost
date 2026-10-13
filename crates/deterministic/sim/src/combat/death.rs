@@ -549,29 +549,32 @@ fn building_death(w: &mut World, id: ObjectId, hit: &Hit) {
 /// A building awaiting removal (S-0312 claim 21), after the general part
 /// of its own turn: when it is still in play with 0 health (being erased
 /// and an electromagnetic pulse, which also make it wait, are not
-/// modelled), it leaves its cells, takes the second round of claims 18
-/// and 19 (g) (`quirks.building_removal_second_round`), and leaves play.
+/// modelled), it leaves play and its cells, then takes the second round of
+/// claims 18 and 19 (g) (`quirks.building_removal_second_round`).
 pub fn removal_turn(w: &mut World, id: ObjectId) {
     let Some(o) = w.obj(id) else { return };
     if o.kind != Kind::Building || !o.combat.killed || o.health > 0 || !o.on_map {
         return;
     }
+    // What the second round reads of the building, taken before it leaves play.
+    let refund = crate::seams::building_refund(w, id);
+    // spec: S-0312 claim 21 (the building leaves play and ceases to occupy its foundation cells before any second-round survivor enters play; it has left the update order before the second round)
+    leave_play(w, id);
     if w.rules().quirks.building_removal_second_round {
         // spec: S-0312 claim 21 (a second round of claims 18 and 19 (g), C worked out afresh by F5; absorbed passengers are already out)
-        // The building leaves its cells before this round; with C = 0 (F5, no sides yet) the round takes no draw, so the order is not observable here.
-        second_round(w, id);
+        second_round(w, refund);
     }
     // Passengers still inside die (claim 21): no building carries passengers in our engine.
-    // spec: S-0312 claim 21 (it then leaves play; rubble and crate of claim 20 are not modelled)
-    leave_play(w, id);
+    // Rubble and crate of claim 20 are then placed: not modelled.
 }
 
-/// The second round of a building's removal (S-0312 claim 21): claim
-/// 18's survivors and claim 19 (g)'s smudge steps, which need C > 0. As
-/// for the first round, C = 0 until sides exist (see `survivors`).
-fn second_round(w: &mut World, id: ObjectId) {
+/// The second round of a building's removal (S-0312 claim 21), after it
+/// has left play: claim 18's survivors and claim 19 (g)'s smudge steps,
+/// which need C > 0. As for the first round, C = 0 until sides exist (see
+/// `survivors`), so the round takes no draw.
+fn second_round(_w: &mut World, refund: Option<i32>) {
     // spec: S-0312 claim 21 (C afresh by F5; C = 0: nothing in claim 18 happens, and no smudge step of claim 19 (g))
-    let _refund = crate::seams::building_refund(w, id);
+    let _ = refund;
 }
 
 /// Survivors of a destroyed building (S-0312 claim 18). The count C of F5
