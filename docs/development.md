@@ -286,7 +286,7 @@ Provisional rules of combat, each tied to a request:
 | `convert::sim` | a type's threat coefficient, the defence category word and the `none` items of name lists are imported as the request's workaround says | Q-0061 |
 | `combat::death::building_death` | the smudge choice of a destroyed building takes no draw and places no smudge | Q-0070 |
 | `combat::projectile::lead` | a moving vehicle's speed *u* is 0, so no shot is led | Q-0071 |
-| `process::process_attack` | an actor in *attack* does not approach a target it cannot fire at yet; it keeps its target and fires when the firing check lets it | Q-0072 |
+| `combat::range::approach_search` | S-0307 revision 2 answers Q-0072 only for ground units on flat open ground without bridges, attacking an object, without the close-range property; every other case takes the same search meanwhile, and a failed search after candidates centres its nearby-cell search on the target's cell, as with empty radii. Until the movement session's approach step (S-0215 claim 37) calls the search, an actor in *attack* does not approach a target it cannot fire at yet | Q-0072 |
 | `combat::projectile` | F12's pitch facing takes S-0204's table exceptions and F13's does not | Q-0077 |
 | `combat::projectile` | the rows of T1 test the position before the cruise lift; a vertical projectile crossing a deck detonates at its new height | Q-0078 |
 | `combat::acquire` | a landed aircraft counts in the map-wide search's second pass and is scored with its distance in cells | Q-0079 |

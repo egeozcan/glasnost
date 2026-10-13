@@ -920,3 +920,163 @@ fn edge_negative_range_field() {
     put(&mut s.w, s.t, Pos::new(a.x + 200, a.y, 250));
     assert!(test(&s));
 }
+
+// ---------------------------------------------------------------------------
+// Claims 15 to 18 and F4 (revision 2): the approach-position search.
+// ---------------------------------------------------------------------------
+
+use glasnost_sim::combat::range::{
+    Approach, approach_radii, approach_search, balloon_hover_approach,
+};
+
+// spec: S-0307 F4 (ρ′ = ρ − 128 for ρ ≥ 512 is the caller's; u = max(0, trunc(ρ′ + β − a)) with a = 281.6 for infantry and 179.2 for vehicles; u′ = 256 for 0 < u ≤ 256; radii step down by 256 while above 204.8)
+#[test]
+fn f4_approach_radii() {
+    let r = base("5");
+    let s = setup(&r, 1, 0);
+    let w = &s.w;
+    // ρ = 1280: ρ′ = 1152; vehicle u = trunc(972.8) = 972, infantry trunc(870.4) = 870.
+    assert_eq!(approach_radii(w, 1152, 0, false), vec![972, 716, 460]);
+    assert_eq!(approach_radii(w, 1152, 0, true), vec![870, 614, 358]);
+    // u′ = 256 for 0 < u ≤ 256: 400 − 179.2 = 220.8 and 482 − 281.6 = 200.4.
+    assert_eq!(approach_radii(w, 400, 0, false), vec![256]);
+    assert_eq!(approach_radii(w, 482, 0, true), vec![256]);
+    // u = 0 (no radius at all) and the 204.8 cut: 435 − 179.2 = 255.8 → 256; 692 − 179.2 = 512.8 → 512, 256.
+    assert_eq!(approach_radii(w, 100, 0, false), Vec::<i32>::new());
+    assert_eq!(approach_radii(w, 692, 0, false), vec![512, 256]);
+    // β, the building lengthening, adds to ρ′.
+    assert_eq!(
+        approach_radii(w, 1152, 256, false),
+        vec![1228, 972, 716, 460]
+    );
+}
+
+/// The cart (house 0) at the middle and the buggy (house 1) ten cells east,
+/// the cart's target, with the regions up to date.
+fn approach_setup(r: &Ruleset) -> S {
+    let mut s = setup(r, 10, 0);
+    s.w.obj_mut(s.a).unwrap().target = Some(Target::Object(s.t));
+    glasnost_sim::regions::ensure(&mut s.w);
+    s
+}
+
+/// A blocking vehicle of house 0 in cell (dx, dy) from the middle.
+fn block(s: &mut S, dx: i32, dy: i32) {
+    testkit::spawn(&mut s.w, Kind::Vehicle, "BUGGY", 0, cell_of(dx, dy), 0);
+    glasnost_sim::regions::ensure(&mut s.w);
+}
+
+// spec: S-0307 claim 15 and F4 (open ground: the outer radius first, around the target, towards the attacker: radius 972 straight west of the target gives the cell four cells west of it, which passes the range test from its centre at height 0; scenario RG10)
+#[test]
+fn claim_15_open_ground_choice() {
+    let r = base("5");
+    let s = approach_setup(&r);
+    assert_eq!(
+        approach_search(&s.w, s.a, 1152),
+        Some(Approach::Cell(cell_of(6, 0)))
+    );
+}
+
+// spec: S-0307 claim 16 (a vehicle whose primary cell is not clear takes the first alternative that passes the range and clear-cell tests: (0, −1) and then (1, −2) with quirks.approach_alternative_walk on; scenario RG11)
+#[test]
+fn quirk_approach_alternative_walk_on() {
+    let r = base("5");
+    let mut s = approach_setup(&r);
+    block(&mut s, 6, 0);
+    assert_eq!(
+        approach_search(&s.w, s.a, 1152),
+        Some(Approach::Cell(cell_of(6, -1)))
+    );
+    block(&mut s, 6, -1);
+    assert_eq!(
+        approach_search(&s.w, s.a, 1152),
+        Some(Approach::Cell(cell_of(7, -2)))
+    );
+}
+
+// spec: S-0307 Edge cases (quirks.approach_alternative_walk off: the eight neighbours in step-direction order 0 to 7, so after (0, −1) comes (1, −1))
+#[test]
+fn quirk_approach_alternative_walk_off() {
+    let mut r = base("5");
+    r.globals.quirks.approach_alternative_walk = false;
+    let mut s = approach_setup(&r);
+    block(&mut s, 6, 0);
+    block(&mut s, 6, -1);
+    assert_eq!(
+        approach_search(&s.w, s.a, 1152),
+        Some(Approach::Cell(cell_of(7, -1)))
+    );
+}
+
+// spec: S-0307 claim 16 (an infantry unit skips a primary cell that is not clear and takes a later primary, never an alternative)
+#[test]
+fn claim_16_infantry_skips_an_obstructed_primary() {
+    let mut r = base("5");
+    r.sim.infantry.get_mut("WALKER").unwrap().primary = Some("Probe".into());
+    let mut w = testkit::game_with(&r, N, 1);
+    let a = testkit::spawn(&mut w, Kind::Infantry, "WALKER", 0, cell_of(0, 0), 0);
+    let t = testkit::spawn(&mut w, Kind::Vehicle, "BUGGY", 1, cell_of(10, 0), 0);
+    w.obj_mut(a).unwrap().target = Some(Target::Object(t));
+    glasnost_sim::regions::ensure(&mut w);
+    // Infantry: radius 870 west of the target's centre is cell (7, 0).
+    assert_eq!(
+        approach_search(&w, a, 1152),
+        Some(Approach::Cell(cell_of(7, 0)))
+    );
+    // Blocked: δ = ±1 … ±6 stay in that cell; δ = +8 (170 leptons north) is the next primary, (7, −1).
+    testkit::spawn(&mut w, Kind::Vehicle, "BUGGY", 0, cell_of(7, 0), 0);
+    glasnost_sim::regions::ensure(&mut w);
+    assert_eq!(
+        approach_search(&w, a, 1152),
+        Some(Approach::Cell(cell_of(7, -1)))
+    );
+    // Both blocked: δ = −8 gives (7, 1), where a vehicle would have taken the alternative (1, −2).
+    testkit::spawn(&mut w, Kind::Vehicle, "BUGGY", 0, cell_of(7, -1), 0);
+    glasnost_sim::regions::ensure(&mut w);
+    assert_eq!(
+        approach_search(&w, a, 1152),
+        Some(Approach::Cell(cell_of(7, 1)))
+    );
+}
+
+// spec: S-0307 claim 17 (no position found: an ordinary actor drops its target and gets the nearby-cell search's cell around the target's reference cell, the radii being empty; scenario RG12)
+#[test]
+fn claim_17_failed_search_drops_the_target() {
+    let r = base("5");
+    let s = approach_setup(&r);
+    let got = approach_search(&s.w, s.a, 100);
+    let Some(Approach::Drop(Some(c))) = got else {
+        panic!("{got:?}")
+    };
+    // The nearby-cell search starts at the target's cell, which holds the target: a cell next to it.
+    let t = cell_of(10, 0);
+    assert!((c.x - t.x).abs().max((c.y - t.y).abs()) <= 1, "{c:?}");
+}
+
+// spec: S-0307 claim 17 (a hunter-seeker type takes the target object as its destination and keeps the target)
+#[test]
+fn claim_17_hunter_seeker_keeps_the_target() {
+    let mut r = base("5");
+    r.sim.vehicles.get_mut("CART").unwrap().hunter_seeker = Some(true);
+    let s = approach_setup(&r);
+    assert_eq!(
+        approach_search(&s.w, s.a, 100),
+        Some(Approach::TargetItself)
+    );
+}
+
+// spec: S-0307 claim 18 (a balloon-hover vehicle whose weapon for the target has a vertical projectile takes the target object as its destination; without the vertical flag, or without the property, it does not; scenario RG13)
+#[test]
+fn claim_18_balloon_hover_vertical() {
+    for (hover, vertical, want) in [
+        (true, true, true),
+        (true, false, false),
+        (false, true, false),
+    ] {
+        let mut r = base("5");
+        r.sim.vehicles.get_mut("CART").unwrap().balloon_hover = Some(hover);
+        line(&mut r).vertical = Some(vertical);
+        let s = approach_setup(&r);
+        assert_eq!(balloon_hover_approach(&s.w, s.a), want);
+    }
+}
