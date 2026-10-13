@@ -2,11 +2,11 @@
 id: S-0411
 title: Sidebar behaviour (build icons, clicks and the orders they give, icon states, queue counts, ready and placement)
 topic: ui
-revision: 6
+revision: 7
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-13
+approved-on: 2026-10-14
 measurements: []
 requests: [Q-0121, Q-0123]
 supersedes: []
@@ -25,20 +25,17 @@ is S-0407's; tab assignment and icon order are S-0004's (claim 11),
 production rules S-0404's, build times S-0403's and the credits display S-0416's.
 Network games and campaigns are out of scope.
 
-**Cross-spec changes required at hand-off.** S-0404 revision 3 already supplies the application
-and cancellation-timing corrections formerly requested here. Its factory eligibility definition
-must also exclude a building queued to be sold, not only one already being sold (claim 14).
-S-0407 claim 13 and its state table must distinguish issuing cancellation orders at the recheck
-from applying them at the tick's end, and except held-item resume from the issue-time limit test.
-Its claim 16 must retain S-0404 claim 10's application-time limit test on queued starts.
-S-0407's claim 1/Open question 4 and the glossary's hand-off note must drop their obsolete
-request for per-tick-removal corrections: approved S-0411 revision 5 already made them.
-S-0407 T14 run 7 must distinguish the refund on permanent factory removal from the later
-sidebar cancellation boundary, as claim 14 and S2 do here.
-S-0407's taken-up-set definition and claim 1's unconditional admission row must also account
-for S-0004 claim 11's full-tab suppression, rather than equating every otherwise eligible type
-with a shown icon. Whether a suppressed type is offered for order legality and what happens
-when space opens remain unresolved here; no cancellation or refill rule is inferred for it.
+**Paired revisions.** S-0404 revision 4 supplies the application and cancellation-timing
+rules, excludes factories being sold or queued to be sold, and cancels a busy or failed unit
+release with a refund at the place order's application boundary (claims 7 and 13).
+S-0407 revision 5's corrections, retained in revision 6, distinguish cancellation orders issued
+at the recheck from their application at the tick's end, exempt held-item resume from the
+issue-time limit test, and retain the application-time limit test on queued starts (claims
+13 and 16). Its T14 run 7 distinguishes the permanent-removal refund from the later sidebar
+cancellation boundary. The former per-tick-removal correction requests are resolved.
+Full-tab suppression remains S-0004 claim 11's rule: whether a suppressed type is offered for
+order legality, gains an icon when space opens, or gives cancellation orders on losing
+availability remains unresolved here and in S-0407. No cancellation or refill rule is inferred.
 
 ## Terms
 
@@ -248,8 +245,8 @@ last recheck). In addition:
 
    So a running item is first held and then cancelled by a second right click; queued copies of a
    type are removed before its item (S-0404, claim 6).
-   - Backing: `measurable` (scenario S5 for reachable clicks; the right click on a done unit that
-     waits for release, by S7's fourth run; on a done building, by S8's third run); `unmeasured`
+   - Backing: `measurable` (scenario S5 for reachable clicks; the right click on a done unit with
+     no factory building that could release it, by S7's fourth run; on a done building, by S8's third run); `unmeasured`
      for the conditional extra hold order, for the input restriction explained above
    - Confidence: medium (the Shift variant); high (hold first, then cancel); medium (the extra hold
      order after a pending new-build click)
@@ -282,8 +279,8 @@ last recheck). In addition:
      smoothing rule is asserted here. Scenario S6 records those drawn frames for a later revision.
      They are presentation only and do not change progress. After the item exists, the claimed
      stage is progress + 1, which S6 tests against recorded progress.
-   - A *ready* label is shown while the item is done (for buildings until placed; for units only
-     while the release waits, S-0404 claim 7).
+   - A *ready* label is shown while the item is done (for buildings until placed; for units before a place order releases or cancels the item, or while no factory building
+     could release it, S-0404 claim 7).
    - An *on hold* label is shown while the line is on a player or automatic hold and the item is not
      done.
    - A line waiting for money shows neither label; its clock simply stops.
@@ -294,20 +291,25 @@ last recheck). In addition:
 9. **Automatic release of finished units.** When a unit item of the local player becomes done in
    tick *n*, the sidebar gives a place order without a cell for it (S-0404, claim 7) in tick *n* + 1,
    without any click. The order is applied at the end of tick *n* + 1; when a factory building
-   could release it and its exit is clear, the unit is released at that boundary. If the unit is not released in tick *n* + 1, the sidebar does not repeat the
-   order. When no factory building of the house could release the unit (S-0404, Terms, *could release*,
-   which includes the switched-on test and, for an aircraft, its fallback), the item stays done
-   until a left click on the icon (claim 4), even after such a building appears. A blocked exit
-   does not guarantee that the house's item stays done: the refund, retention, hand-off and retry
-   conditions remain open under S-0404 claim 7 and Q-0120. For a building item the sidebar instead plays the construction-complete
+   could release it, the release result follows S-0404 claim 13. A released unit leaves the
+   production line at that boundary; a busy or failed release cancels the done item with
+   S-0404 claim 6's refund at the same boundary, with no retry. Obstructions need not prevent
+   release: a ground vehicle can appear inside its factory before unloading takes it outside.
+   No unconditional clear-exit test is added here. The sidebar does not repeat the automatic
+   order. When no factory building of the house could release the unit (S-0404, Terms,
+   *could release*, which includes the switched-on test and, for an aircraft, its fallback),
+   the order does nothing and the item stays done even after such a building appears. A later
+   left click gives claim 4's order; a right click can cancel it (claim 5). For a building item the sidebar instead plays the construction-complete
    announcement and makes the tab flash (claim 11). In our engine every player house, AI houses
    included, gets this automatic place order, issued in tick *n* + 1 for an item done in tick *n*,
    as the local player's is (AI-house ruling).
-   - Backing: `measurable` (scenario S7 for units; scenario S8 for the announcement and the tab
+   - Backing: `measurable` (scenario S7 for units, S4 j for a clicked failed release,
+     S-0404 P12 for per-kind release outcomes; scenario S8 for the announcement and the tab
      flash of a building item); `unmeasured` for issuing the automatic place order for every
      player house, a project rule not observable in the original
-   - Confidence: high (automatic release of units); medium (the one-tick delay, the announcement
-     and the flash)
+   - Confidence: high (the automatic place order for units); medium (the one-tick delay,
+     retention with no eligible factory, cancellation and refund on a busy or failed release,
+     the announcement and the flash; S-0404 claims 7 and 13)
 
 10. **Placement.** In placement mode a left click on a battlefield cell gives a place order with that
     cell (S-0404, claim 7), subject to the order-legality checks of S-0406 claim 6. Placement mode
@@ -443,11 +445,12 @@ Ordering consequences:
   sidebar sends its automatic place order once, in tick *n* + 1 for an item done in tick *n*
   (claim 9). If no factory building could release the unit at that moment (S-0404, Terms), nothing
   sends the order again: the item stays done until a left click on the icon, even after a building
-  that could release it appears. Blocked-exit retention and retry remain open under S-0404
-  claim 7 and Q-0120. With the switch off,
-  the sidebar sends the place order in every tick in which a unit item of a player house is done and
-  not yet released, so the unit leaves at the end of the first tick whose order finds a building
-  that could release it with an unblocked exit.
+  that could release it appears, unless another cancellation ends it. A busy or failed release
+  instead cancels the item with a refund at that boundary (S-0404 claims 7 and 13), leaving
+  nothing to retry. With the switch off, the sidebar sends the place order in every tick in
+  which a unit item of a player house is done. At the first boundary whose order finds an
+  eligible factory, the item is released or cancelled with a refund according to S-0404
+  claims 7 and 13. This switch changes order repetition, not the factory's release result.
   Scenario S7 (second run) measures the default.
 - **Left click on a done item with no factory building** (claim 4, rows 1 and 3): the click refunds
   the item, as the removal of claim 2 does. It has no switch: for a non-aircraft type it is reached
@@ -456,8 +459,10 @@ Ordering consequences:
   (`quirks.done_aircraft_click_cancels`, default on = original). The test of claim 4's first row
   counts, for an aircraft, only aircraft factory buildings with a free dock, so a click on a done
   aircraft while all docks are taken refunds it, although the place order itself would have used a
-  switched-on aircraft factory building without a free dock (S-0404, claim 7). With the switch off, the test
-  ignores docks and the click gives the place order.
+  switched-on aircraft factory building without a free dock (S-0404, claims 7 and 13): a type
+  that need not return to a dock enters from the local area's edge, whereas a dock-bound type
+  is cancelled with a refund. With the switch off, the test ignores docks and the click gives
+  the place order, subject to those same release results.
 - **The removal of unbuildable icons cancels production** (claim 2): in the original only for the
   local player; in our engine for every player house (S-0404, claim 9). This is a rule of our
   engine (glossary, *AI house* and *local player*: game state may not depend on the local player),
@@ -486,7 +491,7 @@ house) and one bystander computer player, whose void rule applies with the obser
 the observed area; scripted input for exact click ticks; screen and audio capture of the sidebar at
 every drawn frame; a recorder (Terms) where a scenario names it. Game speed 6, resolution
 800 × 600, director off and mods off, except the named test map overrides. The test map is
-named SidebarProbe and contains the test types, limits, prerequisites and timing overrides each
+named “sidebar probe map” and contains the test types, limits, prerequisites and timing overrides each
 part needs; its chosen field values are recorded with the measurement. No predicted outcome
 depends on random draws, although production starts do take creation draws (S-0404 claim 11).
 Each part is run once; repeat a part only to confirm a surprising result. Scripted clicks are
@@ -604,9 +609,11 @@ the time the script sent a button event, dates a click.
   fresh runs, until the icon is gone; (f) a done
   aircraft icon while every dock of the house's aircraft factory buildings has been taken during its
   build. Switch those buildings off at the end of the done tick, before the automatic place order,
-  and leave them off through the click so the item remains done; (g) in a fresh run for each modifier key, left-click an idle infantry icon once with that key held; (j) a done unit icon
-  while its exit is blocked, only if the recorder confirms that the house's item still exists
-  and is done (Q-0120 leaves that retention open).
+  and leave them off through the click so the item remains done; (g) in a fresh run for each modifier key, left-click an idle infantry icon once with that key held; (j) a done infantry icon with no queued copies. Keep its item done by switching its only
+  factory off at the end of the done tick, as in S7's second run. Block every candidate exit
+  cell of S-0404 claim 13, then switch the factory on and left-click the icon in a later
+  cycle. The recorder must confirm that the done item still exists before the click and
+  that the factory remains eligible; void a run where either condition fails.
 - Observable: line state, queue count, credits, sounds played; a recorder logs orders in every
   part, including no-order refusals and the place order of (j). In (e) to (e3) it also dates
   sale start, the click, building removal and icon removal.
@@ -622,7 +629,8 @@ the time the script sent a button event, dates a click.
   recheck. In (e3), it remains until that recheck too: the recorder logs one build order per
   click on the shown idle icon, or one build order requesting resume per click on the held item's
   icon; nothing starts, queues or resumes in either run. (f) refund (the done aircraft is cancelled); (g) at most one copy started or
-  queued. In (j) the click gives a place order without a cell and does not cancel the item.
+  queued. In (j) the click gives a place order without a cell, not a cancel order. Its failed release
+  cancels the item with a refund when that place order is applied (S-0404 claims 7 and 13).
   Each click whose order starts, queues, resumes or cancels, and each busy-building-line
   refusal in (c), plays an interface sound (claim 12). The sounds of (d), (j) and the ignored
   over-limit resume in (b2) are recorded without a prediction.
@@ -677,23 +685,32 @@ the time the script sent a button event, dates a click.
   test type with a very low cost field); the recorder's tick counter; second run with the only vehicle
   factory building switched off by its power switch, S-0405, by an order applied at the end
   of the done tick (after completion but before the automatic place order), so that no building
-  could release the unit (S-0404, Terms), then switched on again; third run with the only vehicle factory building's exit blocked
-  by units at completion, then cleared (as S-0404, scenario P7); fourth run as the second, then a
+  could release the unit (S-0404, Terms), then switched on again; third run with an infantry
+  item, no queued copies and an eligible switched-on infantry factory whose every candidate
+  exit cell is blocked at completion (S-0404 claim 13 and P12 d), then cleared after the
+  automatic order is applied. Also repeat S-0404 P12 b's busy ground-factory setup, with no
+  other same-type factory to receive the release and no queued copies; fourth run as the second, then a
   right click on the done icon before switching on, with a recorder.
 - Observable: recorded progress and done tick, automatic place-order issue and application
   ticks, release tick and first drawn frame showing the unit outside the factory building; sounds.
   The recorder distinguishes release at a boundary from later movement out of the exit.
 - Expected: in the clear-exit control the automatic order is issued in the tick after the done
   tick and releases the unit at that tick's end; in the second run it does not
-  appear after switching on until a left click on the icon. The third run records refund,
-  retention, hand-off and the need for another click without a prediction (Q-0120). In the fourth
+  appear after switching on until a left click on the icon. In the third run a failed
+  infantry release cancels the item with a refund at the automatic order's application
+  boundary; the busy ground-factory variant does the same. With unchanged price since the
+  start, the refund equals the credits paid. Clearing the exit later releases nothing and
+  causes no retry: the item no longer exists. In the fourth
   run the recorder shows a cancel order and the item is refunded (claim 5).
   The done item plays an announcement (claim 12).
 - Falsified if: in the first run the automatic order or release boundary differs from the
   prediction, the sidebar re-sends the
   order by itself in the second run, or the fourth-run right click gives no cancel order or no refund, or the
   second-run unit appears after switching on without a click, or no announcement plays when the
-  item is done.
+  item is done, or in the third run or its busy variant the done item survives the failed
+  or busy release, the refund is missing or dated to a later boundary, or clearing the exit
+  produces the cancelled unit or a retry order. A ground vehicle that has already appeared
+  inside a factory and is waiting to move outside is not a retained production item.
 
 **S8. Placement and flashing.**
 - Setup: an ordinary building of low build time that completes during the recording, with the second
@@ -721,7 +738,7 @@ the time the script sent a button event, dates a click.
   flash, or the right click leaves placement mode on or fails to cancel and refund the item.
 
 **S9. Cancellation order for several types (claim 13).**
-- Setup: SidebarProbe overrides define infantry A and B with the same prerequisite and eligible
+- Setup: “sidebar probe map” overrides define infantry A and B with the same prerequisite and eligible
   factory, generous build limits, unequal tech levels so their icon order is unambiguous and
   opposite their registration order. A is the unfinished item, with no queued A and one queued
   B. Neither item can complete during observation. Other lines have unfinished items and
@@ -762,9 +779,11 @@ the time the script sent a button event, dates a click.
 6. Which sound, if any, the build-limit click, the darkened-icon click and the click on a lit
    aircraft icon with every dock taken play (claims 4 and 12, S3).
 7. Which look (lit or dark) the tab flash shows in each period (claim 11, S8).
-8. Q-0120: blocked-exit retention, hand-off, refund and retry rules belong to S-0404 and remain
-   open there; S4 j is conditional on a recorded done item and S7's third run makes no exit
-   prediction.
+8. Q-0120 is only partly resolved by S-0404 claims 7 and 13: a busy or failed release
+   cancels with a refund, without retry. The remaining unloading and post-exit movement,
+   aircraft docking position and nearby destination, exact infantry exit-entry test and
+   release draw questions remain with S-0404. This spec adds no rules for those outcomes
+   and does not claim to answer the whole request.
 9. Whether a type suppressed by a full tab is offered for order legality, whether or when a type suppressed by a full tab gains an icon after a slot opens, and whether
    losing availability while suppressed gives cancellation orders, are not established (claims
    2 and 13). S-0004 F4 tests suppression, not these later outcomes.
