@@ -2,11 +2,11 @@
 id: S-0211
 title: Land types and passability
 topic: movement
-revision: 10
+revision: 11
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-12
+approved-on: 2026-10-13
 measurements: []
 requests: [Q-0018, Q-0020]
 supersedes: []
@@ -36,7 +36,7 @@ other specs.
 *absent-key default*, *departure*, *importer warning*, *field*, *theater*, *tileset*, *sub-tile*,
 *type kind*, *building*, *registry*, *registration index*, *house*, *game start*, *session*,
 *unspecified*, *measurement setup* and *recorder* are used as in the glossary. Every spec this one
-cites is approved, except S-0406 (a draft of the same batch, cited only for the placement rule in claim 13 and its pointers). S-0006, S-0009, S-0010, S-0207, S-0208, S-0209, S-0210 and S-0212 also have
+cites is approved. S-0006, S-0009, S-0010, S-0207, S-0208, S-0209, S-0210, S-0212 and S-0406 also have
 revisions in the same batch as this revision, and the claims and scenarios cited for them are those
 revisions' (for example, S-0009's claim 44, the slope condition of its claim 12, and its scenarios
 M6d and M25 exist only in S-0009's revision). From other specs: *track*, *speed fraction*, *target fraction*, *slowdown distance*, the
@@ -228,8 +228,9 @@ The crusher flag's effect in play is S-0210's (crushing).
    **When it is recomputed.** This list is authoritative for every spec (S-0010 calls the same event
    *terrain recalculation* and cites it). A land recompute of a cell happens on these events, and
    the recompute sees the cell's contents after the change:
-   - map load: every cell, twice (S-0010 claim 12 gives the two passes). Any whole-map change of the
-     terrain at game start recomputes every cell again.
+   - map load and game start: the two load milestones and the unconditional game-start
+     recalculation of S-0010 claim 12. The game-start recalculation covers every legal cell after
+     starting-unit placement and before the first tick, whether or not terrain has changed.
    - an overlay is placed, removed or changed on the cell: ore grows, spreads or is harvested, a
      wall is built, damaged, sold or destroyed, a bridge is destroyed or repaired, a destroyed building
      leaves rubble, or an animation replaces the overlay.
@@ -262,11 +263,11 @@ The crusher flag's effect in play is S-0210's (crushing).
      | Recompute when an overlay changes but keeps its type (ore growing or being harvested, a wall's damage stage) | `unmeasured`: the land type and the category depend only on the overlay's type and flags (claims 5 and 11), so such a recompute has no visible effect in this spec |
      | Recompute when an animation replaces the overlay | `unmeasured`: which animations put which overlay types in place belongs to the animation specs, and no scenario of this spec sets one up |
      | Recompute when the cell's tile, sub-tile or ground level is changed in play | `measurable` (S-0212 scenario P15 case (k): a collapsed destroyable cliff leaves a passable cell, whose category follows only at a recompute) |
-     | Recompute on a further whole-map change of the terrain at game start | `unmeasured`: which such changes happen belongs to S-0009 and S-0010, and no scenario of this spec separates such a pass from the two passes of map load |
+     | Game-start recalculation | `measurable` (S-0010 claim 12, scenario R1 part D and scenario G4 part C for its terrain and animation outcomes); the exact count of whole-map recalculations is `unmeasured`, because the outcomes do not distinguish extra recalculations once terrain is stable |
      | Recompute when a terrain object is removed | `measurable` (scenario L14) |
      | Recompute when a terrain object is put into a cell | `unmeasured`: in a skirmish, terrain objects are known to be put into cells only while the map loads, between the two passes of S-0010 claim 12, and the second pass recomputes every cell anyway, so the placement's own recompute has no separate observable |
      | Recompute when a building is placed or removed | `unmeasured`: a building changes no land type (claim 5 reads only the tile, the overlay and the neighbours' levels) and, as scenario L20 shows for the three kinds of building that can be set up, no category (claim 11), so the recompute has no visible effect in this spec. The method of scenario L23 (a cell whose tile is dropped by the recompute, read by the placement check on that cell) cannot separate it either: while a building covers the cell the check is blocked by occupancy, and once the building is gone its removal has recomputed the cell too, so placement and removal cannot be told apart; and the check needs stock land data that make rough and clear land differ in buildability, which this spec cannot assume |
-     | Recompute when a vehicle moves | `measurable` (S-0010 scenario R1, part E, which uses a named test theater file with the rough-transition role unset: the first unit to enter or leave such a cell makes the recompute visible as a change of the cell's tile; the category cannot show it, because it never depends on units, claim 11) |
+     | Recompute when a vehicle moves | `measurable` (S-0010 scenario R1 parts D2 and E: a named test theater file sets the rough-transition start to the tile count, and cell (*x*₀ + 2, *y*₀ + 2) of its 4 × 4 block still holds a stray tile number at the first tick; a vehicle entering or leaving it makes the recompute visible as clear land in the placement check; the category cannot show it, because it never depends on units, claim 11) |
      | Recompute when an infantry unit moves, and when an aircraft lands in a cell or leaves it | `measurable` (scenario L23, parts A and B, by S-0010 scenario R1 part E's method) |
 
    - Confidence: high for rows 1, 4 and 5; medium for rows 2 and 3 (the map's tile numbers and
@@ -579,17 +580,13 @@ The crusher flag's effect in play is S-0210's (crushing).
     wall and laser-fence overlay exceptions and the to-tile rule) is S-0406 claims 3 and 8. This
     spec does not repeat it, and a rule here would only drift from it. It supplies what that rule
     reads:
-    - *B*(*ℓ*) of claim 2 (c), which the ordinary ground test asks of a cell's land type. It is not
-      asked for a type with the naval flag, which tests the tile range instead, nor for a
-      water-bound type, which tests the float multiplier only, nor for a cell that meets a wall
-      exception. So *B* alone does not decide whether a building may stand on a cell.
-    - The land multipliers of claim 2, which include the *float* multiplier of the water-bound test.
-    - The high-bridge marks of claim 15, which the ground test reads as "marked as part of a
-      bridge".
-    - Backing and confidence: those of S-0406 claim 3 for the placement rule. Scenarios L7 (the
-      ordinary ground rule), L15 (the naval range) and L21 (the high-bridge marks) stay here
-      because they exercise this spec's *B*, land types and marks. They test ordinary building
-      types, where S-0406's rule and the old one agree.
+    - *B*(*ℓ*) of claim 2 (c).
+    - The land multipliers of claim 2.
+    - The high-bridge marks of claim 15. The separate bridge-body mark is owned by S-0010
+      claim 25, not by this spec; its band can include cells without overlays.
+    - Backing and confidence: those of S-0406 claims 3 and 8 for the placement rule. Scenarios
+      L7 (the ordinary ground rule), L15 (the naval range) and L21 (the bridge marks) stay here
+      as observations; their placement outcomes back S-0406 claim 3 (d).
 
 14. **Restricted land type.** A vehicle type with a restricted land type may enter a cell only in
     these cases (all other cells count as impassable for it):
@@ -641,8 +638,9 @@ The crusher flag's effect in play is S-0210's (crushing).
     - (d) When a high bridge is destroyed, the cells it marked stop being high-bridge cells, and a
       rebuilt bridge marks them again. Which cells a destruction or a repair touches belongs to the
       bridge specs.
-    - (e) The bridge's other marks (the cells it counts as part of its body for S-0406 claim 3 d, its
-      direction for pathfinding) belong to the bridge specs and S-0212.
+    - (e) The bridge-body mark used by S-0406 claim 3 (d) belongs to S-0010 claim 25. The bridge
+      axis and the deck-entry mark belong to S-0212 Terms, which define them on the same four
+      marked cells.
     - Backing: `measurable` (scenario L21: runs 1 and 2 for the marked cells and part c, run 3 for
       part b on a steep cell; S-0009 scenario M6d part B for the refusal on an already recomputed
       cell); part d is `unmeasured`: which cells a destruction or a repair touches belongs to the
@@ -696,7 +694,6 @@ The crusher flag's effect in play is S-0210's (crushing).
 | Cliff-back reduction modulus | 256 | setting value | Claim 8 and Formulas |
 | Category 6 threshold (rule 3) | 0.01 | factor | Claim 11 |
 | Occupation pattern that gives category 2 | 7 | pattern value | Claim 11, rule 4 |
-| Naval placement range | 14 | tiles | Owned by S-0406 (claim 3 d) and S-0010; no claim of this spec uses it, scenario L15 tests it |
 | Tunnel tile sizes with one qualifying cell | 3 × 4, 3 × 5 (sub-tile 6); 4 × 3, 5 × 3 (sub-tile 2) | cells, sub-tile number | Claim 14 |
 | Overlay registration indices passable on a deck | 237, 238 | registration index | Claim 14 |
 | High-bridge overlay indices | 24, 25, 237, 238 | registration index | Claim 15 |
@@ -791,7 +788,6 @@ database*; S-0006, claim 10).
 | terrain-object section, keys `TemperateOccupationBits`, `SnowOccupationBits` | occupation patterns (claim 11, rule 4) | integer | 7 (an engine constant; a terrain object without the key gets category 2, claim 11, rule 4) |
 | `[General]`, key `CliffBackImpassability` | cliff-back setting *r* | integer; only its remainder modulo 256 matters (claim 8, Formulas) | 0 (no effect) |
 | Theater tile data, per tile cell | tile land code, slope shape index | public tile format (S-0010) | no image data for a cell: row 3 of claim 5 (claim 6) |
-| Theater data file, the water role | the naval placement range (S-0406 claim 3 d) | as in S-0010 | unset: tiles 0 to 12 (S-0010, `quirks.unset_role_range`) |
 
 ## Measurement scenarios
 
@@ -1392,7 +1388,7 @@ otherwise.
   destination. That would mean the buildings gave the cells a category other than 0 (every other
   category refuses zone *normal*), so claim 11's rule 4 and rule 5 are revised.
 
-**L21: which cells carry a bridge deck (claims 13 and 15).**
+**L21: bridge marks (claim 15; placement outcomes: S-0406 claim 3 d).**
 - *Setup:* a test map of flat, buildable clear ground (slope shape 0 everywhere), the human player
   with a construction yard and enough credits, and building placement of a one-cell building type
   whose land rules allow clear ground. The map places a single overlay of registration index 24 in
@@ -1418,6 +1414,16 @@ otherwise.
 - *Falsified if:* any other pattern of refused cells, a difference between runs 1 and 2, or in run
   3 no overlay on *A* or another pattern of refused cells around it.
 - *Runs:* one each.
+- *Part d, the bridge-body band (S-0406 claim 3 d; S-0010 claim 25).* Use the low-span map of
+  S-0010 scenario G3 part E, including its no-span control, with no overlays and every tested
+  cell flat. Instead of the tunnelling unit, use the placement indicator of an ordinary one-cell
+  building with every other placement condition satisfied, including adjacency and exploration.
+  A named map override sets clear land buildable; the tested cells have clear land. Record whether
+  placement is allowed on each of the six cross-band cells. Expected: refused on rows *y*₀ − 2,
+  *y*₀ − 1, *y*₀ and *y*₀ + 1, allowed on rows *y*₀ − 3 and *y*₀ + 2; without the far-end tile,
+  allowed on all six. Any other pattern falsifies the placement refusal attributed to the
+  bridge-body band. If the no-span control refuses any cell, the setup is inconclusive. Run once
+  per map.
 
 **L22: the order of the rows of rule 2 (claim 11).**
 - *Setup:* eight land-sided maps, Q1 to Q8, each built like map 0 of L19 (flat clear ground, a near
@@ -1461,30 +1467,31 @@ otherwise.
 
 **L23: recompute when an infantry unit or an aircraft is on the ground in a cell (claim 5; named
 test files).**
-- *Setup:* the data and the map of S-0010 scenario R1 part D (a loose copy of the theater data
-  file whose rough-transition key names exactly the first missing tileset number, and the
-  plus-shaped patch of rough cells), with the condition on the buildable fields that R1 part D
-  states. Part A: an infantry unit of the human house, standing outside the plus. Part B: an
-  aircraft of the human house of a type that lands on open ground (the test author picks one),
-  standing outside the plus. Each part in a fresh program start.
-- *Procedure:* after loading, the placement check of R1 part D on the centre cell. Part A: walk the
-  infantry unit onto the centre and off again. Part B: order the aircraft to land on the
-  centre; once it stands there, order it away again. Then the same placement check.
-- *Observable:* whether the centre judges as rough or as clear land before and after; in part B
-  also whether the aircraft stood on the ground in the centre cell (recorder).
+- *Setup:* the data and map of S-0010 scenario R1 part D2: a loose theater data file whose
+  rough-transition key names exactly the first missing tileset number, and a 4 × 4 block of
+  rough cells. Use its buildable-field condition and placement controls. The tested cell is
+  (*x*₀ + 2, *y*₀ + 2), which still holds a stray tile number at the first tick. Part A: an
+  infantry unit of the human house, standing outside the block. Part B: an aircraft of the human
+  house of a type that lands on open ground (the test author picks one), standing outside the
+  block. Each part in a fresh program start.
+- *Procedure:* after loading, the placement check of R1 part D2 on the tested cell. Part A: walk
+  the infantry unit onto that cell and off again. Part B: order the aircraft to land on that
+  cell; once it stands there, order it away again. Then the same placement check.
+- *Observable:* whether the tested cell judges as rough or clear land before and after; in part B
+  also whether the aircraft stood on the ground in that cell (recorder).
 - *Expected:* before: rough land. After: clear land, because putting the unit on the ground in the
   cell, or taking it out, recomputed the cell, which now holds no tile (S-0010 scenario R1 part E
   gives the same result for a vehicle).
-- *Falsified if:* the centre still judges as rough land after part A, or after part B when the
-  aircraft did stand in the centre cell. If the aircraft landed elsewhere, part B is inconclusive
+- *Falsified if:* the tested cell still judges as rough land after part A, or after part B when
+  the aircraft did stand in that cell. If the aircraft landed elsewhere, part B is inconclusive
   and is repeated.
 
 ## Open questions
 
 - Which events switch a laser-fence section between its active and inactive states (claim 11) belong
   to the structures specs. It matters only with `quirks.passability_laser_fence_lost` off.
-- Which cells a bridge marks as part of its body (S-0406 claim 3 d) belongs to the bridge specs. Which cells
-  carry a deck is claim 15.
+- Which overlays a bridge destruction or repair touches belongs to the bridge specs. The
+  bridge-body mark is S-0010 claim 25; which cells carry a deck is claim 15.
 - Which game events check *M* ≠ 0 and the absence of an overlay before putting a mobile object on a
   cell (for example a unit leaving a factory) belongs to the occupancy and production specs.
 - The difference between *no* and *never* in the zone table belongs to S-0212.
