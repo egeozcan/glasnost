@@ -290,6 +290,8 @@ pub fn skirmish_setup(map: &glasnost_map::Map, rules: &SimRules, seed: u32) -> G
             human: true,
             start: None,
             role: HouseRole::Player,
+            // The tool's computer players are AI houses (S-0412 claim 12).
+            ai: i != 0,
         });
     }
     for (name, role) in [
@@ -303,6 +305,7 @@ pub fn skirmish_setup(map: &glasnost_map::Map, rules: &SimRules, seed: u32) -> G
                 human: false,
                 start: None,
                 role,
+                ai: false,
             });
         }
     }

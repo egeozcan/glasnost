@@ -117,6 +117,11 @@ pub struct House {
     pub start: Option<u32>,
     /// The house's role in the game (S-0009 claim 19).
     pub role: HouseRole,
+    /// Removed from the game by the unused-house cleanup (S-0009 claim
+    /// 28): it takes no position, receives no starting units and owns
+    /// nothing.
+    #[serde(default)]
+    pub removed: bool,
     /// Credits (S-0009 claim 45: a left-over starting-unit budget).
     pub credits: i32,
     /// Orders waiting to be applied (S-0213 claim 2).
@@ -228,6 +233,12 @@ pub struct HouseSetup {
     pub start: Option<u32>,
     /// The house's role (S-0009 claim 19).
     pub role: HouseRole,
+    /// An AI house of our engine filling a lobby computer slot (glossary
+    /// *AI house*; S-0412 claim 12): it counts as human-controlled for the
+    /// unit rules, and as a computer player for the unused-house cleanup
+    /// (S-0009 claim 28).
+    #[serde(default)]
+    pub ai: bool,
 }
 
 /// How a game is set up: everything the simulation needs besides rules and

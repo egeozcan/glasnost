@@ -3871,6 +3871,15 @@
           "format": "int32",
           "default": null
         },
+        "max_players": {
+          "description": "`[Maximums] Players` as the base rules alone give it: the maximum\nplayer count of the unused-house cleanup (S-0009 claim 28).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
         "maximum_cheer_rate": {
           "description": "`MaximumCheerRate`, ticks (S-0213 claim 19).",
           "type": [
@@ -4960,6 +4969,14 @@
       "properties": {
         "armor": {
           "description": "`Armor`, the armour name as written.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "cell_anim": {
+          "description": "`CellAnim`, the overlay type's cell animation (S-0009 claim 12 and\nImport mapping): an animation type key; absent: none.",
           "type": [
             "string",
             "null"
@@ -6754,7 +6771,7 @@
           "default": null
         },
         "strength": {
-          "description": "`Strength` (S-0302 claim 20).",
+          "description": "`Strength` (S-0302 claim 20), with the game-wide tree strength\nalready applied by the importer (S-0102 claim 23); absent: unset,\nwhich a placed object starts with as health −1 (S-0009 claim 42).",
           "type": [
             "integer",
             "null"

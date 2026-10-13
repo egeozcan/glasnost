@@ -121,7 +121,7 @@ pub fn place_stream(w: &mut World, map: &Map, stream: &[(CellXY, u8, u8)]) {
             continue;
         };
         // spec: S-0009 claim 12 (artwork or cell animation; crates only in campaign games, quirks.skirmish_drops_map_crates)
-        if !t.has_art || (t.crate_ && q.skirmish_drops_map_crates) {
+        if !(t.has_art || t.cell_anim.is_some()) || (t.crate_ && q.skirmish_drops_map_crates) {
             continue;
         }
         let Some(slope) = w.cells.cell(c).map(|x| x.slope) else {
@@ -170,13 +170,26 @@ fn place_overlay(w: &mut World, c: CellXY, o: u8) {
     recalc_cells(w, &[c]);
 }
 
-/// The creation draws of an overlay type's cell animation (S-0202 claim
-/// 10). No approved spec names the rules key of an overlay type's cell
-/// animation (S-0009 Import mapping says only "its cell-animation key"), so
-/// no overlay type has one in our data and no draw is taken (request
-/// Q-0046).
+/// The cell animation of an overlay of type `o` just placed (S-0009 claim
+/// 12, *Cell animations*): one animation of the type's cell animation
+/// starts, with the creation draws of S-0202 claim 10, after the overlay is
+/// in its cell and before that placement's recalculation of the cell (so
+/// before the draws of any tile animation that recalculation starts).
+/// Animation playback (S-0109) is not modelled, so the animation itself,
+/// its position (the cell corner of cell (x + 2, y + 2), claim 12) and its
+/// start event's effects leave no state; the start event's draws are still
+/// open (request Q-0046, questions 2a to 2c).
 fn cell_animation(w: &mut World, o: u8) {
-    let _ = (w, o);
+    let Some(name) = w
+        .rules()
+        .overlays
+        .get(usize::from(o))
+        .and_then(|t| t.cell_anim.clone())
+    else {
+        return;
+    };
+    // spec: S-0009 claim 12 (Order: the cell animation's creation draws come before the tile animation of the same placement)
+    crate::load::anim_creation_draws(w, &name);
 }
 
 /// Whether a cell holds an overlay, for the end-row test (S-0202 claim

@@ -178,10 +178,15 @@ const OVERLAY_COMBAT: &[Row] = &[
 ];
 
 /// Combat fields of terrain-object types.
-const TERRAIN_COMBAT: &[Row] = &[
-    ("strength", "Strength", Int, "S-0302"),
-    ("immune", "Immune", Bool, "S-0302"),
-];
+const TERRAIN_COMBAT: &[Row] = &[("immune", "Immune", Bool, "S-0302")];
+
+/// The game-wide tree strength's absent-key default (S-0102 claim 23 and
+/// Import mapping).
+const TREE_STRENGTH_DEFAULT: i32 = 25; // spec: S-0102 Constants (game-wide tree strength default 25)
+
+/// The strength value that unsets a terrain type's strength (S-0102 claim
+/// 23).
+const UNSET_STRENGTH: i32 = -1; // spec: S-0102 claim 23 (writing −1 unsets the strength)
 
 /// Combat fields of weapons.
 const WEAPON_COMBAT: &[Row] = &[
@@ -967,6 +972,12 @@ pub fn converted_keys() -> Vec<(&'static str, String, &'static str)> {
     let s = |k: &[&str]| k.iter().map(|k| (*k).to_owned()).collect::<Vec<_>>();
     keyed(&TYPES, &s(&["Armor"]), "S-0305");
     keyed(&["terrain_objects", "overlays"], &s(&["Armor"]), "S-0305");
+    keyed(
+        &["terrain_objects"],
+        &s(&["Strength"]),
+        "S-0102, S-0009, S-0302",
+    );
+    keyed(&["global:General"], &s(&["TreeStrength"]), "S-0102, S-0009");
     let mut weapons = s(&[
         "Primary",
         "Secondary",
@@ -1694,9 +1705,62 @@ impl Builder<'_> {
     /// Terrain-object combat fields.
     pub(super) fn terrain_combat(&mut self, rec: &mut Rec, t: &TypeRec) {
         self.cfields(rec, t, Kind::TerrainObjects, TERRAIN_COMBAT);
+        if let Some(v) = self.terrain_strength(t) {
+            rec.put("strength", int_node(v));
+        }
         if let Some(word) = self.armour(Kind::TerrainObjects, t) {
             rec.put("armor", jsonc::string(word));
         }
+    }
+
+    /// A terrain type's strength (S-0102 claim 23, S-0009 claim 42): unset
+    /// until a layer gives it; after each layer that reads the type's
+    /// section, a strength still unset takes `[General] TreeStrength` as it
+    /// stands in that layer (25 when no layer gives it), and −1 unsets it
+    /// again. With `quirks.tree_strength_fixed_at_first_section` off, a type
+    /// left unset by its own key takes the tree strength in force after the
+    /// last layer. `None`: unset (no layer read the section), which the
+    /// simulation reads as −1.
+    fn terrain_strength(&mut self, t: &TypeRec) -> Option<i32> {
+        let state = key(t, "Strength");
+        let tree = self.global(GENERAL, "TreeStrength");
+        let tree_at = |upto: Option<usize>| {
+            // spec: S-0102 Import mapping (TreeStrength absent: 25)
+            fold(tree.as_ref(), upto, |v, _| value::integer(v)).unwrap_or(TREE_STRENGTH_DEFAULT)
+        };
+        let unset = |v: Option<i32>| v.filter(|&x| x != UNSET_STRENGTH);
+        if t.reads.is_empty() {
+            // spec: S-0102 claim 23 (a type whose section no layer holds keeps its strength unset)
+            return None;
+        }
+        if !self.i.sim_quirks.tree_strength_fixed_at_first_section {
+            // spec: S-0102 Edge cases (switch off: the tree strength in force after the last layer)
+            let own = unset(fold(state, None, |v, _| value::integer(v)));
+            return Some(own.unwrap_or_else(|| tree_at(None)));
+        }
+        let mut held: Option<i32> = None;
+        for &r in &t.reads {
+            for e in state.into_iter().flat_map(|s| &s.history) {
+                if e.layer != r {
+                    continue;
+                }
+                match &e.what {
+                    // spec: S-0003 claims 3 and 8 (an unreadable integer keeps the value in force); S-0102 claim 23 (−1 unsets)
+                    What::Set(v) => {
+                        if let Some(x) = value::integer(v) {
+                            held = unset(Some(x));
+                        }
+                    }
+                    What::Reset => held = None,
+                    _ => {}
+                }
+            }
+            if held.is_none() {
+                // spec: S-0102 claim 23 (after a layer holding the section, an unset strength takes the tree strength as it stands then)
+                held = Some(tree_at(Some(r)));
+            }
+        }
+        held
     }
 
     /// Weapon combat fields and their warnings.

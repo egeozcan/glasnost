@@ -3,6 +3,7 @@
 //! loads, with their draws in the order claim 46 gives.
 
 use glasnost_map::CellXY;
+use glasnost_num::geom::root_floor;
 
 use crate::objects;
 use crate::regions::STEPS;
@@ -34,22 +35,39 @@ const NON_PLAYER_TECH: i32 = 1; // spec: S-0009 Constants (tech level of the neu
 /// 46).
 const TOWARDS_HIGHER: i32 = 50; // spec: S-0009 Constants (displacement direction threshold 50)
 
+/// The nearest ground occupant's distance δ of an object (S-0009 Formulas,
+/// *Nearest ground occupant*): ⌊r(a² + b²)⌋ with (a, b) its reference
+/// point's place within its own cell, measured to the cell corner; the
+/// height plays no part.
+fn corner_distance(w: &World, id: ObjectId) -> u64 {
+    let p = w.reference_point(id);
+    // spec: S-0009 Formulas (a = X mod 256, b = Y mod 256, least non-negative residues)
+    let a = u64::from(p.x.rem_euclid(256).unsigned_abs());
+    let b = u64::from(p.y.rem_euclid(256).unsigned_abs()); // spec: S-0009 Formulas (b = Y mod 256)
+    let q = w.rules().quirks;
+    // spec: S-0009 Formulas (δ = ⌊r(a² + b²)⌋, r the table square root of S-0204 F1)
+    root_floor(a * a + b * b, q.table_root_distance, w.rules().mode)
+}
+
 /// Whether a cell accepts a starting unit (S-0009 claim 46): it is usable
-/// (the height-aware test) and holds no infantry, vehicle, aircraft or
-/// building, or the unit is infantry and the cell's occupant nearest to
-/// its centre is infantry. Interim (request Q-0045): the ground layer's
-/// list is read on every cell, bridge cells included, and the nearest
-/// occupant is the one with the smallest squared distance from its
-/// position to the cell centre, the first listed on ties. With
-/// `quirks.starting_infantry_share_centre` off an infantry unit also needs
-/// a free standing position (S-0208 claim 3, centre class, with its draw);
-/// the position found is returned.
-fn accepts(w: &mut World, c: CellXY, infantry: bool) -> Option<u8> {
+/// (the height-aware test) and has no ground occupant, or the unit is
+/// infantry and the cell's nearest ground occupant is infantry. Ground
+/// occupants are the infantry units, vehicles, aircraft and buildings of
+/// the cell's ground layer (deck objects never count); the nearest is the
+/// one with the smallest distance to the cell corner. Ties: the occupant
+/// that came into the cell last wins among infantry, vehicles and aircraft,
+/// any of them wins over a building, and between buildings the first come
+/// wins, which is the ground list's order (S-0209 claim 13) with a strict
+/// comparison. With `quirks.starting_infantry_share_centre` off an infantry
+/// unit also needs a standing position by S-0208 claim 3 for class centre
+/// (no flag row, and not all three side positions taken); testing takes no
+/// draw.
+fn accepts(w: &World, c: CellXY, infantry: bool) -> bool {
     if !w.cells.usable(c) {
-        return None;
+        return false;
     }
-    let centre = Pos::centre(c, 0);
-    let mut nearest: Option<(i64, Kind)> = None;
+    let mut nearest: Option<(u64, Kind)> = None;
+    // spec: S-0009 claim 46 and Terms (ground occupants: infantry, vehicles, aircraft and buildings on the ground layer)
     for &id in w.cells.list(c, Layer::Ground) {
         let Some(o) = w.obj(id) else { continue };
         if !matches!(
@@ -58,49 +76,36 @@ fn accepts(w: &mut World, c: CellXY, infantry: bool) -> Option<u8> {
         ) {
             continue;
         }
-        let dx = i64::from(o.pos.x - centre.x);
-        let dy = i64::from(o.pos.y - centre.y);
-        let d = dx * dx + dy * dy;
+        let d = corner_distance(w, id);
+        // spec: S-0009 claim 46 (ties: the later of infantry, vehicles and aircraft, these before buildings, the earlier building; the list's order)
         if nearest.is_none_or(|(b, _)| d < b) {
             nearest = Some((d, o.kind));
         }
     }
-    // spec: S-0009 claim 46 (no occupant, or an infantry unit whose nearest occupant is infantry)
+    // spec: S-0009 claim 46 (no ground occupant, or an infantry unit whose nearest ground occupant is infantry)
     let ok = match nearest {
         None => true,
         Some((_, k)) => infantry && k == Kind::Infantry,
     };
-    if !ok {
-        return None;
+    if !ok || !infantry || w.rules().quirks.starting_infantry_share_centre {
+        return ok;
     }
-    if !infantry || w.rules().quirks.starting_infantry_share_centre {
-        // spec: S-0009 claim 46 (quirks.starting_infantry_share_centre: the centre position, no draw)
-        return Some(crate::cells::position::CENTRE);
-    }
-    // spec: S-0009 Edge cases (switch off: the standing position of S-0208 claim 3 for class centre, with its draw)
-    if crate::occupancy::no_position_by_flags(w, c, Layer::Ground) {
-        return None;
-    }
-    let q = w.rules().quirks;
-    let k = w.rng.ranged(0, 3, q.ranged_draw_half_span); // spec: S-0208 claim 3 (centre class: one ranged draw over 0 … 3)
-    crate::occupancy::first_free(
-        w,
-        c,
-        Layer::Ground,
-        walk::row_for(crate::cells::position::CENTRE, k),
-    )
+    // spec: S-0009 Edge cases (switch off: S-0208 claim 3 must give a position: no flag row, and a side position free)
+    !crate::occupancy::no_position_by_flags(w, c, Layer::Ground)
+        && w.cells
+            .occ(c, Layer::Ground)
+            .is_some_and(|r| crate::cells::position::SIDES.iter().any(|&p| !r.taken(p)))
 }
 
 /// The placement search of S-0009 claim 46 around `b` with first radius
 /// `r0`, with its draws: the start element, then for each radius the draw
 /// k = R(0, 7), the eight first-pass candidates and the eight second-pass
-/// candidates with four draws each. Returns the accepting cell and the
-/// standing position for an infantry unit.
-fn search(w: &mut World, b: CellXY, r0: i32, infantry: bool) -> Option<(CellXY, u8)> {
+/// candidates with four draws each. Returns the accepting cell.
+fn search(w: &mut World, b: CellXY, r0: i32, infantry: bool) -> Option<CellXY> {
     let q = w.rules().quirks;
     // spec: S-0009 claim 46 (the start element: b itself, no draw)
-    if let Some(p) = accepts(w, b, infantry) {
-        return Some((b, p));
+    if accepts(w, b, infantry) {
+        return Some(b);
     }
     let fp = *w.cells.footprint();
     // spec: S-0009 Formulas (clamp(v) = min(max(v, 1), W + H − 1))
@@ -116,10 +121,8 @@ fn search(w: &mut World, b: CellXY, r0: i32, infantry: bool) -> Option<(CellXY, 
         }
         for &c in &first {
             // spec: S-0009 claim 46 (a candidate equal to b other than the start element never takes the unit)
-            if c != b
-                && let Some(p) = accepts(w, c, infantry)
-            {
-                return Some((c, p));
+            if c != b && accepts(w, c, infantry) {
+                return Some(c);
             }
         }
         for &f in &first {
@@ -140,14 +143,29 @@ fn search(w: &mut World, b: CellXY, r0: i32, infantry: bool) -> Option<(CellXY, 
                 f.y - ay
             });
             let c = CellXY::new(x, y);
-            if c != b
-                && let Some(p) = accepts(w, c, infantry)
-            {
-                return Some((c, p));
+            if c != b && accepts(w, c, infantry) {
+                return Some(c);
             }
         }
     }
     None
+}
+
+/// The standing position a starting unit takes on the cell that accepted
+/// it (S-0009 claim 46): the centre with
+/// `quirks.starting_infantry_share_centre`, with no draw; with the switch
+/// off an infantry unit takes one draw R(0, 3) and the first free position
+/// of that row of S-0208 table O (S-0009 Edge cases).
+fn standing_position(w: &mut World, c: CellXY, infantry: bool) -> u8 {
+    let centre = crate::cells::position::CENTRE;
+    if !infantry || w.rules().quirks.starting_infantry_share_centre {
+        // spec: S-0009 claim 46 (quirks.starting_infantry_share_centre: the centre position, no draw)
+        return centre;
+    }
+    let q = w.rules().quirks;
+    // spec: S-0009 Edge cases (switch off: the draw R(0, 3) of S-0208 claim 3, once, on the accepting cell)
+    let k = w.rng.ranged(0, 3, q.ranged_draw_half_span);
+    crate::occupancy::first_free(w, c, Layer::Ground, walk::row_for(centre, k)).unwrap_or(centre)
 }
 
 /// Puts a created starting unit on cell `c` at standing position `p`, with
@@ -251,16 +269,16 @@ pub fn give(w: &mut World, bases: &[Option<CellXY>], setup: &GameSetup) {
             let id = objects::create(w, Kind::Vehicle, bt, Some(owner));
             // spec: S-0009 claim 46 (the base unit goes directly to its base cell's centre; a base cell that is not legal: the search with first radius 1, a departure)
             let at = if w.cells.idx(b).is_some() {
-                Some((b, crate::cells::position::CENTRE))
+                Some(b)
             } else {
                 search(w, b, BASE_RADIUS, false)
             };
-            let Some((c, p)) = at else {
+            let Some(c) = at else {
                 // spec: S-0009 claim 45 (early stop: the base unit cannot be placed; it is removed again)
                 w.objects.remove(&id);
                 return;
             };
-            put(w, id, c, p);
+            put(w, id, c, crate::cells::position::CENTRE);
         }
         // spec: S-0009 claim 45 (the start pools, in registration order: allowed to start, owned by the house's country, tech level at most the house's, base units left out)
         let pool = |kind: Kind| -> Vec<u32> {
@@ -306,7 +324,8 @@ pub fn give(w: &mut World, bases: &[Option<CellXY>], setup: &GameSetup) {
             let id = objects::create(w, kind, t, Some(owner));
             // spec: S-0009 claim 46 (every other starting unit: the placement search with first radius 4)
             match search(w, b, UNIT_RADIUS, kind == Kind::Infantry) {
-                Some((c, p)) => {
+                Some(c) => {
+                    let p = standing_position(w, c, kind == Kind::Infantry);
                     put(w, id, c, p);
                     let c = r.unit(kind, t).map_or(0, |u| u.cost);
                     // spec: S-0009 Formulas (R falls by the type's cost, wrapping)
