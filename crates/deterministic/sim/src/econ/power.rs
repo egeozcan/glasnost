@@ -561,8 +561,8 @@ pub fn firing_answer(w: &World, id: ObjectId) -> Option<Answer> {
 /// Applies a power-off or power-on order (S-0213 claim 13, S-0405 claim 10).
 pub fn switch(w: &mut World, actor: ObjectId, on: bool) {
     let Some(o) = w.obj(actor) else { return };
-    // spec: S-0213 claim 13 (a building that is live and on the map)
-    if o.kind != Kind::Building || !o.on_map {
+    // spec: S-0405 claim 10 and S-0213 claim 13 (a building that is live and on the map)
+    if o.kind != Kind::Building || !o.on_map || o.health <= 0 {
         return;
     }
     let Some(t) = bp(w, o.type_index).cloned() else {
@@ -586,6 +586,11 @@ pub fn switch(w: &mut World, actor: ObjectId, on: bool) {
     }
     if let Some(ob) = w.obj_mut(actor) {
         ob.econ.building.switched_off = !on;
+    }
+    // spec: S-0405 claim 10 (an accepted switch-off ends the gap field immediately; switching on lets it start again in the next building turn in operation, claim 9)
+    // The lights and working animations of claim 10 are presentation, derived from `switched_off` and the in-operation result; no simulation state.
+    if !on {
+        crate::econ::shroud::gap_switched_off(w, actor);
     }
     crate::econ::events::switched(w, actor);
 }
@@ -676,6 +681,8 @@ pub fn building_turn(w: &mut World, id: ObjectId) {
     }
     let op = in_operation(w, id);
     if prev == Some(op) {
+        // spec: S-0405 claim 9 (the effects are reconciled on a turn even without an in-operation transition: a charged gap building switched off can generate again)
+        crate::econ::shroud::gap_refresh(w, id);
         return;
     }
     if let Some(ob) = w.obj_mut(id) {

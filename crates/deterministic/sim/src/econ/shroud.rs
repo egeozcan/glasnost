@@ -1131,6 +1131,13 @@ fn stop_gap(w: &mut World, id: ObjectId) {
     }
 }
 
+/// An accepted switch-off ends the building's gap field at once (S-0405
+/// claim 10), without waiting for its next turn.
+pub fn gap_switched_off(w: &mut World, id: ObjectId) {
+    // spec: S-0405 claim 10 (an accepted switch-off also ends its gap field immediately)
+    stop_gap(w, id);
+}
+
 /// A building's gap follows its operation (claim 11, S-0405 claim 9):
 /// called in the building's own turn when its in-operation result changes.
 pub fn gap_refresh(w: &mut World, id: ObjectId) {
@@ -1449,7 +1456,7 @@ pub fn regrowth(w: &mut World) {
     let Some(period) = sr.regrowth_period.filter(|_| sr.regrowth) else {
         return;
     };
-    // spec: S-0409 claim 18 (every trunc(rate × 900) ticks, the first on the first tick of the game; every tick when the period is 0 or less)
+    // spec: S-0409 claim 18 (every trunc(rate × 900) ticks, the first at tick 0; every tick when the period is 0 or less)
     if period > 0 && w.tick.rem_euclid(period) != 0 {
         return;
     }

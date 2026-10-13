@@ -38,6 +38,7 @@ fn rules() -> Ruleset {
     for i in 1..=12 {
         r.sim.vehicles.insert(format!("EYE{i}"), veh(i));
     }
+    vs_extra(&mut r);
     r.registries.insert(
         "buildings".into(),
         ["TOWER", "BIGTOWER", "GAP", "SAT", "BEACON"]
@@ -67,6 +68,15 @@ fn rules() -> Ruleset {
     beacon.econ.reveal_to_all = Some(true);
     r.sim.buildings.insert("BEACON".into(), beacon);
     r
+}
+
+/// EYE0 (sight 0) and EYENEG (sight -1).
+fn vs_extra(r: &mut Ruleset) {
+    let vs = r.registries.get_mut("vehicles").unwrap();
+    vs.push("EYE0".into());
+    vs.push("EYENEG".into());
+    r.sim.vehicles.insert("EYE0".into(), veh(0));
+    r.sim.vehicles.insert("EYENEG".into(), veh(-1));
 }
 
 fn game(r: &Ruleset) -> World {
@@ -569,4 +579,91 @@ fn shroud_state_round_trips() {
     let bytes = glasnost_sim::save::save(&w);
     let w2 = glasnost_sim::save::load(&bytes, w.rules_arc(), testkit::catalogue()).unwrap();
     assert_eq!(glasnost_sim::save::state_hash(&w2), h);
+}
+
+// spec: S-0409 claim 6 (a radius of 0 reveals nothing; our engine also reveals nothing for a negative radius)
+#[test]
+fn claim_6_zero_and_negative_radius() {
+    for name in ["EYE0", "EYENEG"] {
+        let mut w = game(&rules());
+        spawn(&mut w, Kind::Vehicle, name, 0, 0, 0);
+        step(&mut w);
+        assert!(explored_around(&w, A, c(0, 0), 3).is_empty(), "{name}");
+    }
+}
+
+// spec: S-0409 claims 2 and 11 (r3: the object owner's view decides: its sight counts, and its gap field is not hostile, for a house its owner allies, one way)
+#[test]
+fn claims_2_11_owner_view_one_way() {
+    let mut w = game(&rules());
+    // Alpha allies Beta; Beta does not ally Alpha.
+    w.houses[0].allies = vec![A, B];
+    spawn(&mut w, Kind::Building, "TOWER", 0, -10, 0);
+    spawn(&mut w, Kind::Building, "TOWER", 1, 10, 0);
+    step(&mut w);
+    assert!(shroud::explored(&w, B, c(-10, 0)), "Alpha's sight counts for Beta");
+    assert!(!shroud::explored(&w, A, c(10, 0)), "Beta's sight does not count for Alpha");
+    spawn(&mut w, Kind::Building, "GAP", 0, -10, 10);
+    spawn(&mut w, Kind::Building, "GAP", 1, 10, 10);
+    step(&mut w);
+    step(&mut w);
+    assert_eq!(shroud::counts(&w, B, c(-10, 10)).map(|x| x.1), Some(0), "not hostile to Beta");
+    assert_eq!(shroud::counts(&w, A, c(10, 10)).map(|x| x.1), Some(1), "hostile to Alpha");
+}
+
+/// A legal cell whose upper-left diagonal neighbour is not legal.
+fn edge_cell(w: &World) -> CellXY {
+    for y in 4..2 * SIZE {
+        for x in 4..2 * SIZE {
+            let p = CellXY::new(x, y);
+            if shroud::counts(w, A, p).is_some()
+                && shroud::counts(w, A, CellXY::new(x - 1, y - 1)).is_none()
+            {
+                return p;
+            }
+        }
+    }
+    panic!("no edge cell");
+}
+
+// spec: S-0409 claim 14 (r3: the shared state of the non-legal cells becomes explored at a hostile field's end only when no other hostile field still covers a non-legal cell)
+#[test]
+fn claim_14_shared_state_waits_for_last_field() {
+    let mut w = game(&rules());
+    let e = edge_cell(&w);
+    let off = CellXY::new(e.x - 1, e.y - 1);
+    let g1 = testkit::spawn(&mut w, Kind::Building, "GAP", 1, e, 0);
+    let g2 = testkit::spawn(&mut w, Kind::Building, "GAP", 1, CellXY::new(e.x + 1, e.y), 0);
+    step(&mut w);
+    step(&mut w);
+    spawn(&mut w, Kind::Building, "SAT", 0, 0, 0);
+    step(&mut w);
+    step(&mut w);
+    assert!(shroud::spy_satellite_active(&w, A));
+    assert!(!shroud::explored(&w, A, off));
+    glasnost_sim::objects::remove(&mut w, g1);
+    step(&mut w);
+    assert!(
+        !shroud::explored(&w, A, off),
+        "another hostile field still covers a non-legal cell"
+    );
+    glasnost_sim::objects::remove(&mut w, g2);
+    step(&mut w);
+    assert!(shroud::explored(&w, A, off));
+}
+
+// spec: S-0409 claim 15 (r3: the spy-satellite test continues after defeat at the recheck moments; losing the satellite then re-covers the map, while radar stays on, S-0410 claim 1)
+#[test]
+fn claim_15_satellite_after_defeat() {
+    let mut w = game(&rules());
+    let sat = spawn(&mut w, Kind::Building, "SAT", 0, -10, -10);
+    step(&mut w);
+    step(&mut w);
+    assert!(shroud::spy_satellite_active(&w, A));
+    glasnost_sim::econ::radar::on_defeat(&mut w, A);
+    glasnost_sim::objects::remove(&mut w, sat);
+    step(&mut w);
+    assert!(!shroud::spy_satellite_active(&w, A));
+    assert!(!shroud::explored(&w, A, c(15, 15)));
+    assert!(glasnost_sim::econ::radar::available(&w, A));
 }

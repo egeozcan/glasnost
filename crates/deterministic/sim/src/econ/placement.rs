@@ -862,7 +862,7 @@ pub fn add_upgrade(w: &mut World, b: ObjectId, u: u32) {
     if let Some(h) = owner {
         // spec: S-0406 claim 12 (power and the offer take the upgrade into account, S-0405 claim 7, S-0407 claim 12)
         crate::econ::power::make_due(w, h);
-        // spec: S-0406 claim 12 (radar decided again under S-0410's rules)
+        // spec: S-0406 claim 12 and S-0410 claim 2 (a successful upgrade placement is a radar recheck event, whatever it does to power)
         crate::econ::radar::mark_due(w, h);
     }
 }

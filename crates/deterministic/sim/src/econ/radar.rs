@@ -156,14 +156,16 @@ pub fn house_update(w: &mut World, h: HouseId) {
         r.outage_until = None;
         r.due = true;
     }
-    // spec: S-0410 claim 2 (after its defeat a house's radar is no longer re-evaluated)
-    if r.defeated || !r.due {
+    if !r.due {
         return;
     }
     r.due = false;
-    let now = claim_1(w, h);
-    set(w, h, now);
-    // spec: S-0409 claim 15 (the spy satellite is checked whenever the radar state is rechecked)
+    // spec: S-0410 claim 2 (after its defeat a house's radar is no longer re-evaluated)
+    if !r.defeated {
+        let now = claim_1(w, h);
+        set(w, h, now);
+    }
+    // spec: S-0409 claim 15 (the spy satellite is checked whenever the radar state would be rechecked, also after defeat)
     crate::econ::shroud::spy_satellite_check(w, h);
 }
 
