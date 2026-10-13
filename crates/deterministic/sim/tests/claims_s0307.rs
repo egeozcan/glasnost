@@ -1108,3 +1108,11 @@ fn claim_18_approach_step_takes_the_target() {
     assert_eq!(o.dest, Some(Target::Object(s.t)));
     assert_eq!(o.target, Some(Target::Object(s.t)));
 }
+
+// spec: S-0307 claim 17 and Open questions (a failed search after non-empty radii: the target is dropped; the nearby-cell search's centre is not established, request Q-0172, interim: the destination is cleared)
+#[test]
+fn claim_17_failure_after_candidates_clears_the_destination() {
+    let r = base("0.1");
+    let s = approach_setup(&r);
+    assert_eq!(approach_search(&s.w, s.a, 1152), Some(Approach::Drop(None)));
+}

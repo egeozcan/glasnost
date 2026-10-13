@@ -318,7 +318,7 @@ pub fn approach_radii(w: &World, r_prime: i32, beta: i32, infantry: bool) -> Vec
 /// Claims 15 and 16 cover ground units on flat height-0 terrain without
 /// bridges, a target that is an object, and types without the close-range
 /// property; the same rules are applied to every other case meanwhile
-/// (request Q-0072, which the revision answers only in part). The regions
+/// (request Q-0172, the part of Q-0072 the specs leave open). The regions
 /// must be up to date ([`crate::regions::ensure`]).
 pub fn approach_search(w: &World, id: ObjectId, r_prime: i32) -> Option<Approach> {
     let r = w.rules();
@@ -417,9 +417,14 @@ pub fn approach_search(w: &World, id: ObjectId, r_prime: i32) -> Option<Approach
     if hunter || (o.kind == Kind::Infantry && u.vehicle_thief) {
         return Some(Approach::TargetItself);
     }
-    // spec: S-0307 claim 17 (any other actor drops the target; with empty radii the nearby-cell search is centred on the target's reference cell; its centre after candidates is not specified, request Q-0072, interim: the same)
-    let nearby = crate::path::nearby(w, t_cell, crate::path::NearbyUse::Approach { unit: id });
-    Some(Approach::Drop(nearby))
+    // spec: S-0307 claim 17 (any other actor drops the target; with empty radii the nearby-cell search is centred on the target's reference cell)
+    if radii.is_empty() {
+        let nearby =
+            crate::path::nearby(w, t_cell, crate::path::NearbyUse::Approach { unit: id });
+        return Some(Approach::Drop(nearby));
+    }
+    // spec: S-0307 Open questions and S-0215 Open questions (the centre after candidates is not established and must not be assumed to be the target's cell; request Q-0172, interim: no nearby-cell search, the destination is cleared)
+    Some(Approach::Drop(None))
 }
 
 /// Whether a balloon-hover vehicle's approach step takes the target object
