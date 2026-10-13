@@ -2,13 +2,13 @@
 id: S-0303
 title: Area damage (spread, falloff, cells scanned, walls, bridges and detonation effects)
 topic: combat
-revision: 4
+revision: 5
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-10
+approved-on: 2026-10-13
 measurements: []
-requests: [Q-0020]
+requests: [Q-0020, Q-0060, Q-0061]
 supersedes: []
 ---
 
@@ -21,7 +21,8 @@ the distance each object is measured at, how the damage falls off, which objects
 order of the hits, and what the detonation does to walls, bridges, resource cells and exploding
 overlays; it also gives the explosion animation and the debris of a projectile's detonation. What
 one hit does to one object (armour, multipliers, the health change) is damage resolution, S-0302,
-and what happens when an object dies is S-0312.
+and what happens when an object dies is S-0312. This revision covers skirmish; network games
+and campaigns are out of scope.
 
 ## Terms
 
@@ -90,12 +91,12 @@ addition:
 
 ### When area damage happens and what it reaches
 
-1. **One detonation, all at once.** A detonation applies all of its effects at the moment it
-   happens, inside the turn of whatever detonated (for a projectile, S-0203 claim 5), before any
-   other object acts. Every hit, wall hit and other effect of claims 3 to 20 completes before the
-   detonation ends, including any further detonation that a hit sets off (an object's death weapon,
-   S-0312, or an exploding overlay, claim 19): such a nested detonation runs to its end at the
-   moment it is set off, in the middle of the outer detonation's order (claim 11).
+1. **One detonation, all at once.** A detonation's effects are observable within the turn of
+   whatever caused it (for a projectile, S-0203 claim 5), before any other object acts. Before
+   the detonation has finished, every hit, wall hit and other effect of claims 3 to 20 has taken
+   effect. If a hit sets off another detonation (an object's death weapon, S-0312, or an exploding
+   overlay, claim 19), its effects occur before the outer detonation's later hit effects. Thus
+   nested effects can change the outcome of later hits of the outer detonation (claim 11).
    - Backing: `measurable` (scenario A11: a death weapon going off between two hits of one
      detonation)
    - Confidence: high
@@ -109,8 +110,9 @@ addition:
    but the debris depends only on the warhead and is thrown whatever the damage amount. A
    projectile that has no warhead is a departure (Edge cases).
    - Backing: `measurable` (scenario A1, variant e, for the inert flag; A14, variant f, for the
-     damage amount 0); `unmeasured` for the projectile without a warhead (the original stops, so
-     there is no value to compare)
+     damage amount 0); `unmeasured` for area damage without a warhead (no producer with a
+     reproducible named-data setup for that case is established) and for the projectile without
+     a warhead (the original stops, so there is no effect value to compare)
    - Confidence: high
 
 3. **Spread radius and scanned cells.** Objects can be hit only if they are in a scanned cell (or
@@ -121,7 +123,7 @@ addition:
    *S* up to the next whole cell when its fraction exceeds 0.01. An object at a distance at most *R*
    in a cell that is not scanned is not hit, and an object in a scanned cell further than *R* is
    not hit either. This has no switch, as decided at the delegated sign-off of 2026-10-10.
-   - Backing: `measurable` (scenario A2)
+   - Backing: `measurable` (scenario A2, variant b for ring 11)
    - Confidence: high
 
 4. **Cell layer.** When the centre cell carries a high bridge and *P* lies more than 208 leptons
@@ -153,7 +155,10 @@ addition:
    near diagonals (F7, `quirks.flying_search_sectors`). A detonation at or below that terrain
    height never hits a flying object through this rule, whatever *R* is
    (`quirks.ground_detonation_misses_aircraft`).
-   - Backing: `measurable` (scenario A5 for the height condition; scenario A16 for the sectors)
+   - Backing: `measurable` (scenario A5 for the height condition; scenario A16 for the sectors), and
+     `unmeasured` for rocket-propelled missile registration and the full sector membership list:
+     these scenarios use aircraft and jumpjets, not missiles, and sample only three distant
+     sectors rather than every F7 sector
    - Confidence: high for the height condition; medium for the set of tracked objects and for F7
      (Open questions: whether a tracked flying object can also appear in a scanned cell)
 
@@ -199,7 +204,8 @@ addition:
    only to objects found in scanned cells: a tracked flying object found by claim 6 is not left out
    for being the source object or a listed harvester (`quirks.flying_candidates_unfiltered`).
    - Backing: `measurable` (scenario A6 for the source object, the self-damage flag and the
-     harvester flag; A3 for the destroyed building; A16, variant c, for the flying source object)
+     harvester flag and the crushing-warhead exception; A3 for the destroyed building, and
+     A16, variants c and c2, for the flying source object and listed harvester)
    - Confidence: high; medium for the exemption of tracked flying objects
 
 10. **Aircraft in the air count at half distance.** An aircraft object that is in the air (Terms:
@@ -211,18 +217,19 @@ addition:
     - Backing: `measurable` (scenario A5, variant c)
     - Confidence: high
 
-11. **Order of the hits.** The candidates are fixed when the detonation happens, from the objects
-    present then: an
-    object that appears in a scanned cell while the hits are being delivered gets no hit from this
-    detonation (State and ordering). They are hit one after another in this order: the tracked
-    flying objects of claim 6, in the order of F7, then the objects of the scanned cells in scan
-    order (table T1), within a cell in the order of claim 5.
-    A building gets its hits at the places where its foundation cells come in that order. Each hit
-    is resolved completely (S-0302) before the next, including any death it causes and the
-    effects of that death (S-0312). So a death weapon set off by an earlier hit can kill or damage
-    an object that a later hit of the same detonation would have reached; that later hit then does
-    nothing to it (claim 9). The order also fixes the order of every random draw the hits take.
-    - Backing: `measurable` (scenario A11)
+11. **Observable order of hit effects.** The objects present when the detonation begins determine
+    its candidate entries. An object that first appears in a scanned cell while hit effects are
+    occurring receives no entry for that detonation (State and ordering). The observable sequence
+    of hit effects is the tracked flying objects of claim 6 in F7 order, followed by scanned
+    cells in T1 order and, within a cell, the listing order of claim 5. A building's eligible
+    foundation-cell entries occur at the corresponding places in that sequence. The damage
+    (S-0302), resulting death effects (S-0312), nested detonations and scenario-random-stream
+    draws associated with one entry take effect before those associated with the next. An earlier
+    entry's death weapon can therefore kill an object before its later entry, which then does
+    nothing to it (claim 9). Damage without death can instead change its remaining health.
+    - Backing: `measurable` (scenario A11, including variant d for newly placed objects), and
+      `unmeasured` for the complete F7 sector and within-sector hit order: A16 tests membership,
+      not pairwise hit ordering, and sector-crossing registration order remains unresolved
     - Confidence: high for the order of cells and hits; medium for the order among several tracked
       flying objects (F7)
 
@@ -257,10 +264,10 @@ addition:
     exception is in damage resolution (S-0302 claim 8, the allies row of stage 2): when the warhead's
     affects-allies field is off and the hit carries an attacker, an object whose house is allied with
     the attacker's house takes no damage from the hit. What a detonation carries is S-0302's claim
-    1: the firing object and its owner when the firing object is still in play at the detonation,
-    otherwise neither. So when the firer no longer exists (for example a projectile whose firer has
-    been destroyed, S-0203 claim 6d), the hit has no attacker and allies are damaged even by such a
-    warhead. This spec adds nothing to the rule and has no switch for it.
+    1: the firing object and its owner unless its killing hit, removal or another loss of the
+    carried attacker described there has occurred since the shot. Being in play is not the test:
+    a killed firer can still exist during its death effects without being carried. When the
+    projectile has lost its attacker, allies are damaged even by such a warhead. This spec adds nothing to the rule and has no switch for it.
     - Backing: `measurable` (scenario A8)
     - Confidence: medium (the test is clear; which detonations still carry their source object
       when the firer is gone is owned by the specs that create them)
@@ -303,14 +310,14 @@ addition:
     - Backing: `measurable` (scenario A10; the draws only statistically)
     - Confidence: high for which cells and the full amount; medium for the stage rules of F4
 
-17. **Resource cells.** For every scanned cell, in scan order, a cell whose overlay type has the
-    chain-reaction flag loses trunc(*D* / 10) units of resource (nothing when the result is 0 or
-    less), provided the overlay type is not a resource type or the warhead has the
-    resource flag, and provided the producer of the detonation allows it (every producer named in
-    this spec allows it). Only a cell that actually holds resource loses anything, so in effect the
-    rule needs a resource overlay type with the chain-reaction flag and a warhead with the resource
-    flag. (Craters remove resources by a rule of their own, S-0109 claim 18.)
-    - Backing: `measurable` (scenario A10, variant d, with a test overlay type)
+17. **Resource cells.** For every scanned cell, in scan order, a cell loses trunc(*D* / 10)
+    resource units (nothing when the result is 0 or less) only if it holds a resource overlay
+    whose type has the chain-reaction flag, the warhead has the resource flag, and the detonation
+    producer allows resource reduction. Every producer named in this spec allows it. (Craters
+    remove resources by a rule of their own, S-0109 claim 18.)
+    - Backing: `measurable` (scenario A10, variant d, with a test overlay type), and
+      `unmeasured` for resource permission of every named producer: A10 uses a projectile,
+      not each death, crash, animation, superweapon and trigger producer
     - Confidence: medium
 
 18. **Bridges.** When the map's destroyable-bridges setting is on and the warhead has the wall
@@ -327,8 +334,10 @@ addition:
     first that succeeds, so that it can complete a destruction that one attempt leaves unfinished.
     Any other warhead makes one attempt after its draw. Which attempts succeed, and what each
     attempt changes, belong to the bridge specs, which are not written.
-    - Backing: `measurable` (scenario A12; statistical for the chance, and variant b for the
-      repeats)
+    - Backing: `measurable` (scenario A12; statistical for the chance, variant b for the repeats
+      and variant c for the height window); `unmeasured` for the exact membership and ordering of
+      several bridge tests on one cell: no scenario identifies a cell where several apply, and
+      the bridge-piece acceptance rules are not established
     - Confidence: medium (the chance and the flags); low (the exact set of bridge cells each test
       accepts, the height window, and the repeats)
 
@@ -359,14 +368,17 @@ addition:
     body-rocking rates that S-0106 draws (scaled by the type's weight), takes no draw, and is
     believed not to reach game state. The strength is passed on to that presentation as a number
     whose precision this spec does not fix.
-    - Backing: `measurable` for the particle system (scenario A13, variant c); `unmeasured` for
-      the rocking strength (presentation only)
+    - Backing: `measurable` for the particle system (scenario A13, variant c), and
+      `unmeasured` for rocking: no scenario calibrates visible tilt against strength, weight and
+      direction, or tests its possible effect on firing. Presentation alone does not make it
+      unobservable
     - Confidence: high for the particle system; low that rocking never reaches game state
 
 ### Detonation effects of a projectile's warhead
 
 21. **Explosion animation.** After a projectile's area damage, its warhead's explosion animation is
-    chosen by Formulas F5 from the projectile's damage amount *D*, the warhead's animation list and
+    chosen by Formulas F5 from its then-current damage amount (S-0306 claim 21, including
+    degeneration under claim 18 there), the warhead's animation list and
     the land type *L* of the projectile position *Q* (Terms), and created at the detonation point
     *P*. *L* is the land type of the cell that contains *Q* when the projectile's height above the
     terrain is below 208 leptons, and "air" (no land type) otherwise. Over water the splash list
@@ -404,6 +416,37 @@ addition:
     *nullified* (claim 15). The projectile detonation uses it in claim 21; other producers say in
     their own specs whether they use it.
     - Backing: `measurable` through claim 21 (scenario A14, variants b and c)
+    - Confidence: high
+
+24. **Defaults of bridge and barrel damage.** At a fresh program start the game-wide bridge
+    strength is 1000 bridge-strength points and the ammunition-crate damage is 100 damage points.
+    Omitting either field from a rules layer keeps its value in force, including a value left by
+    an earlier game of the same session (S-0006). Neither omission disables the corresponding
+    effect: claim 18 still tests bridge destruction, and claim 19 still produces its nested
+    detonation with that damage amount. The damage is an integer delivered amount, before the
+    demolition warhead's falloff and the target's damage resolution.
+    - Backing: `measurable` (scenario A17)
+    - Confidence: high
+
+25. **Animation and debris list items.** In this spec's explosion-animation, splash, barrel-debris,
+    metallic-debris and warhead voxel-debris lists, an item naming no type is omitted, not kept as
+    an empty place. The no-type spellings are given in Import mapping. The remaining items retain
+    their relative order. Every list length and entry number in claims 19, 21 and 22 and F5 and F6
+    is taken after those omissions. Thus an omitted first item does not prevent the next animation
+    from being selected at entry 0, does not enlarge a random choice's range and takes no barrel
+    debris chance draw. Empty comma-separated items are also skipped, as S-0003 claim 12 says.
+    - Backing: `measurable` (scenario A18)
+    - Confidence: high
+
+26. **Debris maxima are decimal-prefix items.** Each non-empty item in the warhead's maxima list
+    contributes one signed 32-bit integer: leading whitespace, an optional sign and decimal digits
+    are read up to the first non-digit. An item with no readable decimal digits contributes 0
+    and keeps its place. Hexadecimal prefix and suffix forms of a scalar integer field do not
+    apply. Empty comma-separated items contribute no place. Arithmetic of the conversion follows
+    S-0003's decimal integer form, including its overflow rule. The types list and maxima list
+    are read independently: dropping a no-type item from the types does not drop the corresponding
+    maxima item. F6 pairs the first retained type with the first maxima item, and so on.
+    - Backing: `measurable` (scenario A19)
     - Confidence: high
 
 ## Formulas
@@ -458,24 +501,17 @@ falloff at *d* = 512 gives 249; applying it to 1000 first (750) and dividing aft
 For *D* < 0 (claim 13): *D*₁ = *D* when *d* < 8, else 0; the defences leave the amount unchanged
 (S-0302 claim 5) and there is no versus step and no cap.
 
-**F4. Wall hit** (claim 16). Let *L* be the wall type's damage-stage count, *T* its wall strength, *s*
-the cell's damage stage and *v* its overlay data value, with *s* = ⌊*v* / 16⌋ (S-0210 claim 8).
+**F4. Wall hit** (claim 16). Let *L* be the wall type's damage-stage count, *T* its wall strength, *s* the cell's damage stage and *v* its overlay data value, with *s* = ⌊*v* / 16⌋ (S-0210 claim 8). Let *a* be the hit amount: *a* = *D* for a non-absolute hit, except that *a* = −1 makes the hit absolute when `quirks.wall_hit_minus_one_is_absolute` is on. An absolute hit always succeeds; otherwise a hit with *a* ≥ *T* succeeds without a draw, and a hit with *a* < *T* succeeds exactly when one ranged draw *r* over 0 … *T*, inclusive, gives *a* > *r*. The draw is still taken for a negative *a*. For 0 ≤ *a* < *T*, the success probability is *a* / (*T* + 1); a negative *a* other than the absolute −1 case cannot succeed.
 
-- *Success test.* An absolute wall hit always succeeds, with no draw, whatever the sign of the damage
-  amount *D*. A wall hit that is not absolute has the amount *a* = *D*, except that *a* = −1 makes
-  it absolute (claim 16). A wall hit of amount *a* ≥ *T* succeeds with no draw. A wall hit of
-  amount *a* < *T* takes one ranged draw *r* over 0 to *T* (inclusive) and succeeds when *a* > *r*,
-  so with probability *a* / (*T* + 1) for 0 ≤ *a* < *T*, and never for *a* < 0 other than −1 (the
-  draw is still taken).
-- *Success.* *v* increases by 16, so *s* increases by 1. If the new stage is *L* − 1 and *L* > 2,
-  each of the four orthogonal neighbours (map north, map east, map south, map west, in that order)
-  that holds a wall of the same overlay type at stage 0 takes a wall hit of 200 (this is S-0210 F3's
-  neighbour hit, which may take its own draw).
-- *Destruction.* After a success the wall is removed from the cell when the hit was absolute, when
-  *s* ≥ *L*, or when *s* = *L* − 1 and *v* mod 16 = 0 (a wall with no link to a neighbour). A wall at
-  stage *L* − 1 that still links to a neighbour stays until a further successful hit.
+The state and effects of a successful hit are:
 
-Exact integer arithmetic. Units: wall-hit points, damage stages.
+| Result of successful hit | Behaviour |
+|---|---|
+| Overlay data value and damage stage | *v* increases by 16; the resulting stage is ⌊*v* / 16⌋, one greater than the prior stage. |
+| Removal | The wall is removed when the hit was absolute, the resulting stage is at least *L*, or the resulting stage is *L* − 1 and *v* mod 16 = 0. A wall at stage *L* − 1 that still links to a neighbour remains until a further successful hit. |
+| Neighbour hits | If the resulting stage is *L* − 1 and *L* > 2, each orthogonal neighbour, in map-north, map-east, map-south, map-west order, that holds a same-type wall at stage 0 takes a wall hit of 200. Each neighbour hit follows these same rules and may take its own draw. |
+
+Comparisons and state values use exact integer arithmetic. Units: *D*, *a* and *T* are wall-hit points; *r* is a ranged-draw result; *s* and *L* are damage stages; *v* is overlay data value, in increments of 16 per stage.
 
 **F5. Explosion animation** (claim 21). Let *D* be the projectile's damage amount, *W* the warhead,
 *L* the land type of claim 21 (water, another land type, or none for air) and *Q* = (*q*ₓ, *q*ᵧ,
@@ -497,27 +533,13 @@ Integer division truncated toward zero; entries counted from 0. For −24 ≤ *D
 for the splash list) the entry is 0, a valid entry. For smaller *D* the entry is negative, which
 lies outside the list (Edge cases).
 
-**F6. Warhead debris** (claim 22). With *X* the warhead's maximum debris count (*X* > 0) and *Y* its
-minimum debris count:
+**F6. Warhead debris** (claim 22). With *X* the warhead's maximum debris count (*X* > 0) and *Y* its minimum debris count, the total number of pieces is *N* = R(*Y*, *X* − 1), one ranged draw whose bounds may come in either order (S-0202 claim 4). All debris is created at the projectile position *Q* (claim 22).
 
-> *N* = R(*Y*, *X* − 1)  (one ranged draw; the bounds may come in either order, S-0202 claim 4)
+When the warhead lists *m* > 0 retained debris types *t*₀ … *t*ₘ₋₁, with respective maxima *u*₀ … *u*ₘ₋₁, the number of pieces assigned to each type is defined by this recurrence. The initial remainder is ℓ₀ = *N*. For every deal index *j* for which ℓⱼ > 0, let *i* = *j* mod *m*, and let raw*ⱼ* be the next scenario-random-stream value, read as a signed integer. The assignment and remaining count are
 
-All the debris below is created at the projectile position *Q* (claim 22).
+> *g*ⱼ = min(|raw*ⱼ*| mod (*u*ᵢ + 1), ℓⱼ), ℓⱼ₊₁ = ℓⱼ − *g*ⱼ.
 
-If the warhead lists debris types *t*₀ … *t*ₘ₋₁ with maxima *u*₀ … *u*ₘ₋₁, the *N* pieces are dealt
-out in deals *j* = 0, 1, 2, …: deal *j* goes to type *t*ᵢ with *i* = *j* mod *m* (the types in list
-order, and round again after *t*ₘ₋₁), takes the raw value raw*ⱼ*, the next one from the scenario
-random stream, read as a signed integer, and gives that type
-
-> ℓ₀ = *N*, *g*ⱼ = min(|raw*ⱼ*| mod (*u*ᵢ + 1), ℓⱼ), ℓⱼ₊₁ = ℓⱼ − *g*ⱼ
-
-pieces (the "magnitude first" remainder of S-0202 claim 6), each one debris animation of that type.
-ℓⱼ is the number of pieces still left before deal *j*. A deal is made only while pieces are left
-(ℓⱼ > 0), so the deals are *j* = 0 … *J* − 1, with *J* the least *j* for which ℓⱼ = 0, and they
-take *J* raw values (when there is no such *j*, see Edge cases: debris that can never be placed).
-If the warhead lists no debris types, the detonation creates *N* animations, each of the type at
-entry R(0, *c* − 1) of the game-wide metallic debris list (*c* its length), at *Q* raised by 20
-leptons. Exact integer arithmetic.
+The deal-indexed assignment *g*ⱼ pieces consists of debris animations of type *t*ᵢ. The remainder operation is the "magnitude first" remainder of S-0202 claim 6. The sequence ends when ℓⱼ = 0; it uses one raw value for each deal up to and including the deal that reduces the remainder to zero. If the remainder never reaches zero, the non-terminating case is described under Edge cases: debris that can never be placed. If the warhead lists no debris types, the detonation creates *N* animations, each selected by entry R(0, *c* − 1) of the game-wide metallic debris list (*c* its length), at *Q* raised by 20 leptons. Arithmetic is exact integer arithmetic; counts are pieces and the position raise is in leptons.
 
 **F7. Flying-object search** (claims 6 and 11). Let *W* and *H* be the map's width and height
 (S-0009) and *B* = *W* + *H* − 1, the largest cell coordinate of the map along either axis. Sector
@@ -597,6 +619,8 @@ order of registration, each once.
 | Invisible-projectile animation scatter | 32 | leptons | claim 21 |
 | Edge fraction, absent-key default | 1.0 | fraction | Import mapping |
 | Spread, absent-key default | 0 | cells | Import mapping |
+| Bridge strength, initial default | 1000 | bridge-strength points | claim 24 |
+| Ammunition-crate damage, initial default | 100 | damage points | claim 24 |
 
 **Table T1. Scanned cells and scan order.** Ring *r* is the set of cells displaced (Δ*x*, Δ*y*) from
 the centre cell with *m*(Δ*x*, Δ*y*) = *r*. A detonation with scan radius *k* scans rings 0, 1, …, *k*
@@ -630,23 +654,26 @@ A scanned cell outside the map has no contents and takes part in nothing.
 through the draws on the scenario random stream (the random-state recorder) and through nested
 detonations:
 
-- Before the first hit, every scanned cell has had its resource reduction (claim 17) and its wall
-  hit (claim 16). The wall hits' draws (F4), and the draws of any neighbour hits they set off
-  (S-0210 F3), all come before any draw of the first hit. The wall hits follow scan order (table
-  T1).
-- The candidates are fixed before the first hit (claim 11), so an object that appears in a scanned
-  cell while the hits are delivered gets no hit from this detonation.
-- The hits follow the order of claim 11. All draws and effects of one hit come before any draw of
-  the next. These include the hit's damage resolution (S-0302), a death it causes and that death's
-  effects (S-0312), and any nested detonation, which runs to its end.
+- The observable state by the time the first object hit occurs includes the resource reductions
+  and wall hits for every scanned cell (claims 17 and 16). Wall-hit draws (F4), including draws
+  for any neighbour hits they set off (S-0210 F3), precede draws from the first object hit and
+  follow T1 scan order.
+- An object that first appears in a scanned cell while this detonation's hit effects are
+  occurring receives no hit from this detonation (claim 11).
+- Nested-effect outcomes and recorded draws follow claim 11's entry sequence: the damage
+  resolution, death effects, nested-detonation effects and draws attributable to one entry
+  precede those attributable to the next.
 - A nullified detonation (claim 15) does nothing after its hits: no bridge draw, no exploding
   overlay, no warhead particle system and no rocking.
-- In any other detonation, these follow the last hit, in this order: the bridge draws (claim 18:
-  one ranged draw for each bridge test that applies, none for the ion-cannon warhead); the exploding
-  overlay of the centre cell, with its nested detonation and then its percent draws (claim 19); and
-  last, the creation of the warhead's particle system (claim 20).
-- Rocking (claim 20) takes no draw and is presentation only, so its place in this order is not
-  observable and is not specified.
+- For a detonation that is not nullified, applicable bridge-test draws (claim 18: one ranged draw
+  for each applicable test, none for the ion-cannon warhead) follow hit-related draws and precede
+  centre-cell exploding-overlay effects. The overlay's nested detonation and percent draws
+  (claim 19) precede creation of the warhead's particle system (claim 20).
+- Rocking (claim 20) is believed to be presentation only and to take no draw. Its place in this
+  order is not specified. The resource-before-object timing above and the post-hit ordering of
+  bridge, overlay and particle effects are `unmeasured` except for the wall-draw ordering tested
+  by A11 variant e: no scenario combines those other effects with an identifiable object-hit
+  draw to distinguish their order. Confidence: medium.
 
 **Order of a projectile's detonation** (claims 21 to 23, with S-0306 for the rest). The random-state
 recorder sees the draws of a projectile's detonation on the scenario random stream in this order:
@@ -661,7 +688,10 @@ recorder sees the draws of a projectile's detonation on the scenario random stre
 
 Before row 1, the warhead's screen-shake ranges take one ranged draw each, horizontal then vertical,
 for each range that is not zero at both ends, from the unsynchronised random stream, so they reach
-no game state and do not shift the scenario random stream. The result of the area damage decides
+no game state and do not shift the scenario random stream. Backing: `measurable` (A14 variant n
+for stream, count and order); confidence: high for those draws. Their never reaching game state
+is `unmeasured`, confidence medium: no scenario compares later gameplay with and without shake.
+The result of the area damage decides
 what is created:
 
 | Detonation result | Explosion animation | Debris |
@@ -746,9 +776,10 @@ A projectile that is no longer in play after its area damage creates nothing (cl
 | rules, warhead section, `Particle` | particle system (claim 20) | particle-system name | none |
 | rules, warhead section, `Conventional` | conventional flag (F5) | boolean | no |
 | rules, warhead section, `EMEffect` | electromagnetic flag (F5) | boolean | no |
-| rules, warhead section, `AnimList` | animation list (F5) | animation-name list | empty |
+| rules, warhead section, `AnimList` | animation list (F5) | animation-name list; claim 25 | empty |
 | rules, warhead section, `MaxDebris`, `MinDebris` | *X*, *Y* (F6) | integer | 0, 0 |
-| rules, warhead section, `DebrisTypes`, `DebrisMaximums` | debris types and maxima (F6) | voxel-animation list, integer list | empty |
+| rules, warhead section, `DebrisTypes` | debris types (F6) | voxel-animation-name list; claim 25; 127-byte text limit | empty |
+| rules, warhead section, `DebrisMaximums` | maxima (F6) | decimal-prefix integer list, not the scalar hexadecimal forms; claim 26; 511-byte text limit | empty |
 | rules, warhead section, `ShakeXlo`, `ShakeXhi`, `ShakeYlo`, `ShakeYhi` | screen-shake ranges (State and ordering) | integer | 0 |
 | rules, unit or building type section, `DamageSelf` | self-damage flag (claim 9) | boolean | no |
 | rules, unit type section, `Naval`, `Underwater` | naval flag, underwater flag (claim 21; the same keys as S-0308 and S-0311) | boolean | no |
@@ -760,18 +791,26 @@ A projectile that is no longer in play after its area damage creates nothing (cl
 | rules, the combat-damage section, `CrushWarhead` | crushing warhead (claim 9) | warhead name | none |
 | rules, the combat-damage section, `C4Warhead` | demolition warhead (claim 19) | warhead name | none |
 | rules, the combat-damage section, `IonCannonWarhead` | ion-cannon warhead (claim 18) | warhead name | none |
-| rules, the combat-damage section, `BridgeStrength` | bridge strength (claim 18) | integer | owned by the bridge specs |
-| rules, the combat-damage section, `AmmoCrateDamage` | ammunition-crate damage (claim 19) | integer | owned by the crate specs |
+| rules, the combat-damage section, `BridgeStrength` | bridge strength (claims 18, 24) | integer | initially 1000 bridge-strength points; a missing key keeps the value in force |
+| rules, the combat-damage section, `AmmoCrateDamage` | ammunition-crate damage (claims 19, 24) | integer | initially 100 damage points; a missing key keeps the value in force |
 | rules, the combat-damage section, `MaxDamage` | maximum damage *M* (F3; S-0302) | integer | S-0302 |
-| rules, the combat-damage section, `SplashList` | splash list (F5) | animation-name list | empty |
+| rules, the combat-damage section, `SplashList` | splash list (F5) | animation-name list; claim 25 | empty |
 | rules, the general section, `LightningWarhead`, `WeatherConBoltExplosion` | lightning warhead and its animation (F5) | warhead name, animation name | none |
 | rules, the general section, `HarvesterUnit` | harvester list (claim 9) | vehicle-type list | empty |
-| rules, the general section, `BarrelExplode`, `BarrelDebris`, `BarrelParticle` | barrel effects (claim 19) | animation name, voxel-animation list, particle-system name | none |
-| rules, the general section, `MetallicDebris` | metallic debris list (F6) | animation-name list | empty |
+| rules, the general section, `BarrelExplode`, `BarrelDebris`, `BarrelParticle` | barrel effects (claim 19) | animation name, voxel-animation-name list (claim 25), particle-system name | none; the list starts empty |
+| rules, the general section, `MetallicDebris` | metallic debris list (F6) | animation-name list; claim 25 | empty |
 | rules, the general section, `WeaponNullifyAnim` | nullify animation (claims 15 and 21) | animation name | none |
 | map, the special-flags section, `Inert` | inert flag (claim 2) | boolean | no |
 | map, the special-flags section, `HarvesterImmune` | harvester immunity (claim 9) | boolean | no |
 | map, the special-flags section, `DestroyableBridges` | destroyable bridges (claim 18); the skirmish lobby's bridge setting is the map specs' | boolean | owned by the map specs |
+
+For `AnimList`, `SplashList`, `BarrelDebris`, `MetallicDebris` and `DebrisTypes`, the
+case-insensitive whole-item spellings `none` and `<none>` are omitted (claim 25). Names otherwise
+follow S-0003's list splitting and type-name matching, including its untrimmed-item quirk. These
+name lists have a 127-byte text limit. `DebrisMaximums` has a 511-byte text limit and the same
+comma splitting, but uses claim 26's conversion: `12abc`, `3.9`, `$10`, `10h`, `abc` give
+12, 3, 0, 10, 0 respectively, each retaining one place. Numeric warnings follow S-0003's decimal
+form, not its scalar hexadecimal forms.
 
 The importer warns about a spread outside 0 to 11 cells, about a map with *W* + *H* − 1 < 20, and
 about the debris (including an empty metallic debris list) and animation-list cases of Edge cases
@@ -779,11 +818,16 @@ and quirks.
 
 ## Measurement scenarios
 
-All scenarios run under the glossary's *measurement setup* on purpose-made flat test maps, in a
-skirmish with one human player and one passive computer player far away, at any game speed. Test
-warheads and weapons are given in the test map's override sections (named test files); each scenario
-names the fields it sets, with invented values. Health values are read with a *recorder* that reads
-the game's state. Scenarios whose result depends on random draws are statistical, as stated.
+All scenarios run under the glossary's *measurement setup*, with director and mods off except
+for the named test files, on purpose-made flat test maps unless a bridge or shore is named. Each
+skirmish has one human player and one bystander computer player kept outside the observed area
+(the test objects and all cells within reach of their effects), with the glossary's void rule.
+Use game speed 2 unless stated otherwise. Test warheads and weapons are given in the test map's
+override sections (named test files); each scenario names the fields it sets, with invented values.
+Unless specified otherwise, cause one detonation per run and use three runs per deterministic
+variant, recording positions, health and effect creation with a read-only recorder. Statistical
+runs have their counts below; the random-state recorder can also compare their actual draws.
+No measurement has been recorded for this revision.
 
 **A1. Falloff (claims 7, 12; claim 2 variant e).** *Setup:* a test weapon with damage 1000, a test
 warhead with spread 4 (*R* = 1024), edge fraction 0.5 and versus 100 % for the target armour class, no
@@ -805,9 +849,11 @@ with the targets' health raised above 1500 (expected: F3's value at each recorde
 targets' owner has the vehicle armour factor 3.0 (S-0302 claim 3) and everything else as in variant a,
 expected 333, 291, 274, 249, 239, 215, 208, 182, 166 (the falloff on the defended amount 333), where
 a falloff on 1000 followed by the division would give 250, 240 and 183 at distances 512, 572 and
-923; falsified if the values at those three distances are those. *Variant e:* the same map as a
+923; any loss different from F3 on the defended amount falsifies the rule. *Variant e:* the same map as a
 with the inert flag set, and a wall cell inside the spread with the wall flag set on the warhead
-(expected: no health lost, the wall's stage unchanged). *Variant f (off-lattice
+(expected: no health lost, the wall's stage unchanged). Also name a particle system on the
+warhead and put an exploding overlay in the centre cell: it stays, no warhead particle system
+appears, and no area-effect draw is taken. Any contrary effect falsifies the inert-area rule. *Variant f (off-lattice
 distances, 1023 and 1025):* the same warhead fired from the vertical test projectile of S-0306
 claim 11, whose type's detonation altitude field is varied from run to run; the recorder reads *P*
 and the targets' positions, and a target displaced by (3, 2) cells from the cell under *P* (horizontal distance 923) gives
@@ -827,8 +873,13 @@ Separately, a vehicle on the centre of a ring-1 cell (256 leptons away) with spr
 stage; whether the vehicle is hit. *Expected:* spread 0.01 changes only the centre cell; 0.02 and
 1.01 rings 0 and 1; 1.02 rings 0 to 2; 3.5 every cell of ring metric 4 or less, including (3, 3) at
 4.24 cells, but not (4, 2) at 4.47 cells. The vehicle is not hit at 0.99 (scanned but beyond *R*)
-and hit at 1.0. *Falsified if:* any wall outside those rings changes, a wall inside them does not,
-(4, 2) changes at 3.5, or the vehicle result differs.
+and hit at 1.0. *Variant b (ring 11):* spread 11 and walls at every cell in and just outside
+T1, each below its strength so that a hit takes a draw; use the recorder's starting random state
+to predict each F4 success and neighbour hit. Expected: exactly the T1 entries contribute wall
+hits in its stated order, including two hits on (−3, 11) and none on the omitted cells. Compare
+recorded wall stages and stream state with that prediction. Any disagreement falsifies the list
+or its order. *Falsified if:* any main-part wall or vehicle outcome differs, or b's wall stages
+or draws differ from T1 and F4.
 
 **A3. Buildings: one hit per foundation cell (claims 7, 8, 9).** *Setup:* test weapon with damage 100
 and a test warhead with spread 3 (*R* = 768), edge fraction 1.0, versus 100 % for the building's
@@ -842,9 +893,12 @@ not of the airburst kind). *Observable:* health lost. *Expected:* the 1 × 1 bui
 3 × 3 building loses 900 when all nine cells are within *R* (S-0302's per-hit rules applied to each
 hit). Variant b: F3 with *d* = ⌊*r*(*n*)⌋ − 208 for the distance the recorder gives; with a
 measured distance of 300 that is *d* = 92 and a loss of 94, against 80 if the full distance were
-used and 100 if *d* were 0. *Falsified if:* in the main part either building loses an amount other
-than 100 for each of its scanned foundation cells within *R* (in particular, if both lose the same
-amount), or in variant b the loss matches the full distance or *d* = 0.
+used and 100 if *d* were 0. *Variant c:* repeat with the can-be-demolished flag off and a zero
+versus value: each eligible foundation entry costs 1 health point. Then restore versus 100 % and
+lower the building's starting health below one hit; it dies once and later entries produce no
+further death effects. *Falsified if:* any main-part loss differs from 100 per eligible cell,
+any variant-b loss differs from F3 at the recorded reduced distance, variant c does not lose
+1 per entry with zero versus, or the destroyed building produces repeated death effects.
 
 **A4. Bridge-deck layer (claim 4).** *Setup:* a high bridge; one vehicle on the deck and one on the
 ground under the deck in the same cell; detonations (spread 2, edge fraction 1.0) once at the deck
@@ -859,7 +913,10 @@ detonation at a set height with the same spread, from the vertical test projecti
 launch child projectiles); (c) the same projectile with the aircraft at a known distance and edge
 fraction 0.5. *Observable:* health lost by the aircraft. *Expected:* (a) no damage to the aircraft,
 (b) damage; (c) damage as F3 with half the measured distance. *Falsified if:* (a) damages it, (b)
-leaves it undamaged, or (c) matches the full distance. *Runs:* 3 each.
+leaves it undamaged, or (c) differs from F3 at the halved distance. *Variant d:* repeat b and c
+with a jumpjet instead of an aircraft-kind object. Expected: it is reached through the flying
+search but uses its full distance in F3. Any other health loss falsifies that distinction.
+*Runs:* 3 each.
 
 **A6. Source object and flags (claim 9).** *Setup:* a vehicle that fires a test weapon (spread 2) at
 a cell next to itself; variant b gives its type the self-damage flag; variant c places a stock
@@ -867,20 +924,27 @@ harvester-list vehicle in the spread with the map's harvester-immunity flag set,
 without it. *Variant e:* a building whose type is invisible in game, inside the spread; *variant f:* a vehicle
 inside a transport (held out of play) that is inside the spread. *Observable:* health lost by the
 firer and the harvester (variants e and f: by the building and the passenger). *Expected:* the firer is not hit (a), is hit (b); the harvester is not hit (c), is hit
-(d); the invisible building and the passenger are not hit (e, f). *Falsified if:* any differs.
+(d); the invisible building and the passenger are not hit (e, f). *Variant g:* a's setup with
+the test warhead selected as the game-wide crushing warhead, self-damage still off: the firer
+is hit. *Falsified if:* any differs.
 
 **A7. Healing point (claim 13).** *Setup:* a test weapon with damage −50, spread 3, fired at a
 damaged vehicle; other damaged vehicles at 300 leptons from the detonation point and, in repeated
 runs, the vertical test projectile of S-0306 claim 11 detonated 7 and then 8 leptons above a damaged
 vehicle (the recorder reads the distance, so cell-centred vehicles need not stand at 7 and 8
 leptons). *Observable:* each vehicle's health. *Expected:* only targets at *d* < 8 heal, each by 50
-(vehicles only: an undemolishable building would lose 1 instead, S-0302 claim 7). *Falsified if:*
-the target at 8 or 300 heals, or a target below 8 leptons does not heal by exactly 50.
+(vehicles only). *Variant b:* a building with the can-be-demolished flag off, enough health to
+survive all entries, and eligible foundation cells both below and above 8 leptons: it loses
+1 health point per eligible entry rather than healing (S-0302 claim 7). *Falsified if:*
+any vehicle at 8 or 300 heals, one below 8 does not heal by exactly 50, or the building's loss
+differs from the eligible-entry count.
 
 **A8. Allies (claim 14).** *Setup:* a test warhead with the affects-allies field off; an allied
 house's vehicle in the spread. (a) The firer alive at detonation; (b) a slow projectile whose firer
 is destroyed before it lands. *Observable:* the ally's health. *Expected:* (a) no damage to the ally; (b) the ally is damaged.
-*Falsified if:* (a) damages it or (b) does not.
+Repeat a with the affects-allies field on, and with a same-house target distinct from the
+firer: it is damaged with the field on and protected with the field off and attacker present.
+*Falsified if:* any expected health outcome differs.
 
 **A9. Curtain protection (claim 15).** *Setup:* a vehicle under the iron-curtain effect, and an
 unprotected vehicle within *R* of the detonation point (not necessarily in the same cell, so that
@@ -891,8 +955,13 @@ the protected vehicle; (b) spread 0.6; (c) the same as (a) under a force shield 
 (c) it takes damage. *Variant d:* the protected object is a tracked flying object, with the
 detonation raised above the terrain as in scenario A5 (b), spread 0.5, 84 and then 86 leptons from
 *P*: nullified at 84, not at 86. *Variant e:* the protected vehicle in the centre cell 84 leptons
-from *P* with spread 0.3 (*R* = 76, so the vehicle is beyond *R*): still nullified. *Falsified if:*
-any differs.
+from *P* with spread 0.3 (*R* = 76, so the vehicle is beyond *R*): still nullified.
+*Variant f (cell and post-hit effects):* repeat a on separate copies with scanned wall and resource
+cells configured as A10, and with a centre-cell exploding overlay and a named warhead particle
+system as A13. Expected: the walls and resource cells change just as without protection, but
+the exploding overlay remains and no warhead particle system appears. Also repeat at an A12
+bridge-test cell with a protected centre-cell vehicle: no bridge draw or destruction occurs.
+*Falsified if:* any differs.
 
 **A10. Walls and resources (claims 16, 17).** *Setup:* a line of stock walls through the spread,
 (a) a warhead with the wall flag and damage at least the wall strength (no draws): the stage of
@@ -903,9 +972,20 @@ chain-reaction and resource flags and resource amount, and a warhead with the re
 17): it loses trunc(*D*/10) units; (e) healing
 warheads with the wall flag (damage −50 and then −1) and one with the absolute flag and damage −50:
 the wall's stage is unchanged at −50 (a draw is taken, seen through the recorder), and the wall is
-removed at −1 and with the absolute flag. *Observable:* wall stages and removals, and the
-resource amount. *Falsified if:* a wall outside the scanned cells changes, the shares differ,
-variant d loses an amount other than trunc(*D*/10), or variant e differs.
+removed at −1 and with the absolute flag. Repeat d with each required flag separately off and
+with damage 9 and −50: no resource reduction. Use resource amounts above trunc(*D*/10) to avoid
+exhaustion, disable growth for the observation, and record the amount immediately before and after
+the detonation. In d with positive damage, the expected loss is capped by the available amount.
+*Observable:* wall stages and removals, resource amount and attributed wall-hit draws. *Falsified if:* a wall outside the scanned cells changes, the shares differ,
+variant d differs from that capped loss, any negative control reduces resources, or variant e
+differs in wall state or draw count. *Variant f:* wall flag off, wood flag on, with wooden and
+non-wooden wall types: only the wooden wall takes a hit. Both flags off: neither does; the absolute
+flag alone removes both. *Variant g (F4 stages):* named test wall art and rules give a stage
+count above 2. Test a linked wall and an isolated wall at the penultimate-stage transition, with
+same-type stage-0 neighbours. Record overlay data and draws before and after one certain hit.
+Expected: the stage rises by 1, stage-0 orthogonal neighbours get F4's 200-point hits in map
+north, east, south, west order, the isolated wall disappears and a linked penultimate-stage wall
+stays until its next successful hit. Different state or draw outcomes falsify F4.
 
 **A11. Order of hits and nested detonations (claims 1, 11).** *Setup:* a test warhead with spread
 3 and edge fraction 1.0 fired by a stock vehicle *F*; vehicle *A* in the centre cell, with a test
@@ -921,6 +1001,17 @@ that can share a cell (for example two infantry units, if S-0209 allows it), *A*
 death weapon; the observable is again whether *B*'s kill is credited to *F*. The expected result
 follows from S-0209's listing order (claim 13): credited if *B* is listed before *A*, not credited
 if *A* is listed first. The variant is falsified if the credit disagrees with that order.
+*Variant d (new object):* the first outer hit kills a non-exploding transport with a surviving
+passenger and no death weapon. Give the passenger enough health to survive the outer amount and
+ensure its escape cell is a scanned cell later in T1 order, and discard runs where placement
+fails. Record passenger health immediately after escape and after the outer detonation. Expected:
+no outer-hit health loss for that passenger; any loss attributable to the outer detonation
+falsifies the fixed-entry rule. *Variant e (cell effects before object hits):* use a death weapon
+that makes one identifiable electromagnetic animation-choice draw, with scanned wall cells whose
+F4 hits take draws. Record the random state and wall stages. Expected: all outer wall-hit draws,
+including neighbour-hit draws where F4 applies, precede that death-weapon draw. A reversed order
+falsifies State and ordering. Resource-before-hit timing is `unmeasured`: these scenarios read
+resource totals after detonation, not during a hit effect.
 
 **A12. Bridges (claim 18).** *Setup:* destroyable bridges on; a low bridge and a high bridge; a
 warhead with the wall flag and damage *D*. Statistical over 200 runs per value, at a bridge cell
@@ -936,7 +1027,15 @@ with the wall flag and a damage amount above the bridge strength (so that its si
 certain to be made) on one copy of the map, and one detonation of the ion-cannon warhead on another. The
 observable is the state of the bridge cells afterwards. *Expected:* for some cell position the
 ion-cannon detonation leaves more destroyed than the single attempt. *Falsified if:* the two agree at
-every position (the repeats are then unobservable, and the constant for them goes).
+every tested position; that would leave the claimed observable benefit of repeats unsupported,
+not establish the absence of repeats. *Variant c (height window):* use a high-bridge cell where
+variant b's certain single attempt destroys a section, with a wall-capable warhead and damage
+above bridge strength. Vary the recorded detonation height across both endpoints of claim 18,
+including each endpoint and a point 1 lepton on either side; use the vertical test projectile
+and discard runs that do not attain the requested height. Expected: no high-bridge draw or
+attempt at the lower endpoint, an attempt 1 lepton above it and at the upper endpoint, and none
+1 lepton above the upper endpoint. Repeat over a low bridge: no such height exclusion.
+Any different recorded attempt or draw outcome falsifies the height rule.
 
 **A13. Exploding overlays (claims 19, 20).** *Setup:* a stock exploding overlay (barrel) in the
 centre cell of a detonation with a warhead that cannot damage overlays otherwise, and another in a
@@ -965,7 +1064,10 @@ the invisible kind, with the recorder reading the scenario random stream's posit
 after the detonation: one raw value more than the same detonation with a visible projectile, and the
 animation within 32 leptons of *P*. *Variant f (damage amount 0, claim 2):* the same
 warhead with damage 0 and a maximum debris count above 0: no explosion animation, and debris is
-still thrown. *Variant g (negative damage):* damage −24 with the animation list of 4: entry 0.
+still thrown. Also set the wall flag, name a particle system and place a centre-cell barrel,
+scanned walls and a healthy target. Expected: no target health loss, wall-stage change, barrel
+removal, warhead particle system or area-effect draw. Any such effect falsifies claim 2.
+*Variant g (negative damage):* damage −24 with the animation list of 4: entry 0.
 *Variant h (nullified, electromagnetic):* variant a of scenario A9 with an electromagnetic warhead
 whose projectile hits: the recorder's stream position advances by one raw value even though the
 nullify animation is the one that shows. *Variant i (*Q* against *P*):* a projectile with cluster
@@ -975,9 +1077,23 @@ animation comes from the warhead's own list (the land type is that of the projec
 position), and each is shown at its own detonation point. *Variant j (the air rule, claim 21):* over water with the conventional flag, a splash list of 3, and
 the vertical test projectile of S-0306 claim 11 detonating 207 and then 208 leptons above the
 terrain (the recorder reads the height): the splash animation at 207, the warhead's own list at
-208. *Falsified if:* any entry differs, variant e takes no extra
-raw value, variant j differs, variant f shows an animation or no debris, variant h takes no draw, or a splash
-animation appears in variant i.
+208. *Variant k:* select the test warhead as the game-wide lightning warhead and specify a
+distinct lightning explosion type; on land it shows that type without an animation-choice draw.
+*Variant l:* the water setup with a bridge in the projectile's cell, then with an underwater
+naval vehicle, then with no object hit. Expected: the bridge uses the warhead list; the underwater
+and missed cases use the splash list. *Variant m (degeneration):* a degenerating projectile
+starts with damage 80; vary flight length so the recorder gives its then-current damage on both
+sides of an animation-entry boundary. Record health loss of an armour-1 target at distance 0.
+Expected: the animation entry and health loss both follow the amount at detonation, with the
+5-point degeneration floor, not 80. *Falsified if:* any entry, position, health loss or attributed
+draw count differs from F5 and these predictions (including the single extra raw value in e
+and the one electromagnetic choice in h). In d, compare each actual choice with F5 using the
+recorded ranged draw, not merely whether every entry appears. *Variant n (screen shake):* use a
+warhead with horizontal range 2 to 3 and vertical range 7 to 8, then repeat with each range and
+both ranges zero at both ends. Record both random streams immediately before the detonation and
+the screen displacement. Expected: one unsynchronised ranged draw for each nonzero range,
+horizontal then vertical, and no additional scenario-stream draw. Any count, stream or axis-choice
+order different from those predictions falsifies the draw rule.
 
 **A15. Warhead debris (claim 22).** *Setup:* a test warhead with minimum debris 2, maximum 6 and no
 debris types; counted over 200 detonations. *Observable:* the number, types and positions of the
@@ -987,9 +1103,11 @@ of the scenario random stream; expected: the two types together number 2 to 5 pi
 detonation, and each type's count is the one F6 gives for the raw values read. Variant c (position, claim 22): the projectile
 of variant i of scenario A14 with this warhead: the recorder reads the debris positions, which
 equal the projectile's own position for every detonation of the cluster (the metallic ones 20
-leptons higher). *Falsified if:* a count of 6 appears, or 1, or in variant b a type's count differs
-from F6 for the recorded raw values, or the debris of a further detonation appears at that
-detonation's point.
+leptons higher). *Falsified if:* any count is outside 2 to 5, any type or position differs from F6 at the
+recorded random state, or the count frequencies differ from uniform by more than 3 standard
+errors (each count has expected share 0.25). Repeat a on an inert map and during A9's nullified
+detonation: expected the same count rule on the inert map and no debris when nullified.
+Either different outcome falsifies claim 22.
 
 **A16. Flying-object search sectors (claims 6, 9, 11).** *Setup:* a purpose-made test map whose
 width and height add up to 61 to 80 (*W* + *H* − 1 from 60 to 79), so the sector size of F7 is
@@ -1008,14 +1126,69 @@ north-east group). Variant c: the firer is itself a hovering aircraft within *R*
 cell of sector *C*, so that its sector is always searched.
 *Observable:* health lost by each aircraft. *Expected:* the off-diagonal aircraft takes no damage,
 the diagonal one takes the full damage (edge fraction 1.0); b: that aircraft is damaged; c: the
-firing aircraft is damaged. *Falsified if:* the off-diagonal aircraft is damaged, the diagonal or
+firing aircraft is damaged. *Variant c2:* place that aircraft type in the game-wide harvester
+list and enable the harvester-immunity flag: it is still damaged. *Falsified if:* c2 is immune,
+the off-diagonal aircraft is damaged, the diagonal or
 variant-b aircraft is not, or c leaves the firer undamaged. *Runs:* 3 each.
+
+**A17. Absent bridge and barrel values (claim 24; Q-0060).** *Setup:* a named loose test rules
+file with both fields removed, and no language, mode or map layer giving either field. Restart
+the program before each run. Use A12's single-test low-bridge cell, a wall-capable test warhead
+and damage 501, and separately A13's exploding overlay with a test demolition warhead of edge
+fraction 1 and versus 100 %, and vehicles of armour 1 at recorded positions inside its spread.
+Use the measurement setup, director and mods off, game speed 2, one human player and one bystander
+computer player kept outside the test area. *Procedure:* cause one bridge detonation or one barrel
+detonation per run. *Observable:* bridge destructions and vehicle health loss, using the recorder.
+*Runs:* 400 bridge runs and 3 barrel runs, each at a fresh program start. *Expected:* bridge
+destruction share 0.5 within 3 standard errors, and each qualifying barrel target loses 100
+health points, after accounting for any separately recorded outer hit. *Falsified if:* the share
+is outside that band, no bridge attempt occurs, or barrel health loss differs. *Layer variant:*
+a named map gives bridge strength 2000 and ammunition-crate damage 140, followed without restarting
+by the same test with both fields absent everywhere. Expected: the second game retains those
+values, giving bridge destruction probability 0.25 and barrel loss 140; resetting to 1000 and 100
+or suppressing either effect falsifies the retention rule.
+
+**A18. No-type items in effect lists (claim 25; Q-0061).** *Setup:* the measurement setup and
+houses of A17; named test maps give each list in turn an omitted first item and one valid stock
+type, with no whitespace around the comma. Test both no-type spellings of Import mapping,
+including mixed case. For the explosion and splash lists use damage 1 and the applicable F5
+case. For metallic debris use no warhead voxel types and a positive fixed piece count. For
+voxel debris use a positive maximum for the sole retained type. For barrel debris use A13's
+centre barrel. *Procedure:* detonate once per run; record created effect types and the scenario
+random state. *Runs:* 3 per deterministic case and 200 for barrel debris. *Expected:* graded and
+splash selections show the valid type at entry 0; metallic and voxel pieces are of the valid
+type only. Barrel debris has one entry, one chance draw and appearance probability 0.15 within
+3 standard errors, not two chance draws or probability 1 − 0.85². *Falsified if:* a first-entry
+selection shows nothing, a list choice includes an empty place, or the barrel draw count or
+appearance share differs. Repeat with the omitted item last to test that valid entries do not
+move relative to one another.
+
+**A19. Maxima parsing and independent list positions (claim 26; Q-0061).** *Setup:* the
+measurement setup and houses of A17, with named test maps giving a warhead two distinct stock
+voxel-debris types, a fixed positive total piece count, and maxima pairs whose first item is
+in turn a positive decimal with a leading plus sign and trailing text, a fractional decimal, a hexadecimal-prefix-looking
+item, a hexadecimal-suffix-looking item, or unreadable text. Keep the second maximum positive.
+Use the spellings and expected integers of Import mapping. *Procedure:* detonate and record the
+raw scenario values and each type's piece count. *Runs:* 10 per pair. *Expected:* every allocation
+matches F6 with the parsed maxima, including zero in place for unreadable text. A no-type item
+prepended to the types list changes neither of the two retained types' maxima. *Falsified if:*
+any allocation or draw count differs from F6 at the recorded raw values and the predicted parsed
+maxima, including hexadecimal conversion or omission of a retained zero maxima item. *Text-limit variant:* prepend enough
+zero maxima items that a positive maximum falls beyond byte 127 but before byte 511, and give
+matching valid repeated types. Use long runs of zero digits within a few maxima items so that
+the types list still fits its own 127-byte limit. Expected: F6 reaches that positive maximum and finishes.
+A read-only recorder can confirm the full list length before detonation. Repeat with the
+positive maximum starting immediately after byte 511: it must be absent from the imported list.
+A list truncated at 127 bytes, or retaining a token wholly after byte 511, falsifies claim 26's
+import mapping. Do not detonate if the recorder shows only zero maxima, because the original
+would not finish (Edge cases).
 
 ## Open questions
 
-- Whether a tracked flying object can also be listed in a scanned cell's layer while it flies (it
-  would then be hit twice, once at the halved distance if it is of the aircraft kind). Scenario A5
-  with an aircraft directly over a scanned cell, and A16 with a jumpjet, would settle it.
+- S-0209 claim 13 excludes an aircraft using ordinary flight at positive terrain-relative
+  height from cell layers, so it cannot receive a second entry that way. Whether other tracked
+  flying kinds, such as jumpjets, can also be listed remains open; if listed they could receive
+  two entries. Claim 10 would halve both entries for an aircraft in the air, not just one.
 - Exactly when each kind of flying object is registered and unregistered (lift-off, landing,
   leaving the map), which the movement specs own; F7 relies only on the registration order. In
   particular, where an object that crosses into a sector in flight comes in that sector's order
@@ -1027,11 +1200,13 @@ variant-b aircraft is not, or c leaves the firer undamaged. *Runs:* 3 each.
 - The boundary with S-0302: this spec states the falloff on the defended amount and, for completeness,
   the versus step and cap as the original computes them in one expression (F3); S-0302 owns the
   defences (its F2), the versus step and the cap, and must agree.
-- The original hands a projectile's damage to the area damage after scaling it by a per-projectile
-  factor, a multiple of 1/256, which is 1.0 when the projectile is
-  created; the explosion animation (F5) uses the unscaled damage. This spec takes *D* as passed to
-  the area damage and assumes the factor stays at 1.0, so that both are the same amount. Whether
-  any producer changes the factor is for S-0306 to say.
+- S-0306 claim 21 supplies the projectile's damage amount at detonation, including the loss
+  during earlier non-detonating turns under its claim 18 (with its floor of 5 damage points).
+  F5 also uses that then-current amount, not the amount at creation. Separately, whether a
+  producer can change a per-projectile scaling factor from its initial 1.0 is not established.
+  No rule here assumes that damage lost during flight is such a factor change; *D* remains
+  the amount supplied by the producer. The possible factor change is `unmeasured`, confidence
+  low: no producer or named-data setup that changes it is known.
 - How a projectile can leave play during its own area damage (claim 21), which S-0306 owns.
 - Rocking (claim 20): whether a rocked body's tilt can reach game state (for example through a
   firing angle).
