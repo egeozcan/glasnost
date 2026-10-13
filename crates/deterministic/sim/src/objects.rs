@@ -42,9 +42,11 @@ pub fn create(w: &mut World, kind: Kind, type_index: u32, owner: Option<HouseId>
             let b = &r.buildings[type_index as usize];
             (b.strength, b.foundation, Locomotor::None)
         }
-        // spec: S-0302 claim 20 (a terrain object has its type's strength)
+        // spec: S-0302 claim 20 and S-0009 claim 42 (a terrain object starts with its type's strength; −1 when the type's strength is unset, S-0102 claim 23)
         Kind::Terrain => (
-            r.terrain.get(type_index as usize).map_or(0, |t| t.strength),
+            r.terrain
+                .get(type_index as usize)
+                .map_or(-1, |t| t.strength),
             (1, 1),
             Locomotor::None,
         ),

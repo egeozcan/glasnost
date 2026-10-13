@@ -104,6 +104,10 @@ pub struct Cells {
     /// Whether a cell is a high-bridge cell, with a bridge deck (S-0211
     /// claim 15).
     pub deck: Vec<bool>,
+    /// The bridge-body mark of each cell (S-0010 Terms and claim 25): clear
+    /// after map load, set at game start on the bands of low bridge spans.
+    #[serde(default)]
+    pub bridge_body: Vec<bool>,
     /// Marking counter.
     pub mark_seq: u32,
     /// The owner of each cell's wall (S-0210 claim 14); `None`: no owner.
@@ -143,6 +147,7 @@ impl Cells {
             occ: vec![[Occupancy::default(); 2]; n], // spec: S-0209 Terms (two cell layers)
             lists: vec![[Vec::new(), Vec::new()]; n],
             deck: vec![false; n],
+            bridge_body: vec![false; n],
             mark_seq: 0,
             wall_owner: vec![None; n],
             anim_started: vec![false; n],

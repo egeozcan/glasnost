@@ -156,6 +156,7 @@ impl Scene {
                     human: true,
                     start: None,
                     role: HouseRole::Player,
+                    ai: false,
                 },
                 HouseSetup {
                     name: "Beta".into(),
@@ -163,6 +164,7 @@ impl Scene {
                     human: true,
                     start: None,
                     role: HouseRole::Player,
+                    ai: false,
                 },
             ],
             alliances: Vec::new(),

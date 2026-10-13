@@ -521,6 +521,8 @@ fn claim_45_neutral_house_area_guard() {
     s.setup.houses[1].country = "Neutral".into();
     s.setup.houses[1].human = false;
     s.setup.houses[1].role = glasnost_sim::world::HouseRole::Neutral;
+    // An AI house, a computer player, so that the cleanup of claim 28 does not run (S-0412 claim 12).
+    s.setup.houses[0].ai = true;
     let w = load(&s).expect("loads");
     let behaviours = |h: u8| -> Vec<Option<Behaviour>> {
         w.objects
@@ -664,4 +666,394 @@ fn claim_38_bridge_flag_puts_a_vehicle_on_the_deck() {
         assert_eq!(o.layer, glasnost_sim::world::Layer::Ground);
         assert_eq!(o.pos.z, w.surface_at(o.pos.x, o.pos.y));
     }
+}
+
+/// spec: S-0009 claim 12 (Cell animations: an overlay whose type has a cell
+/// animation is created even without artwork, and its animation's creation
+/// draws, S-0202 claim 10, come before those of the tile animation that the
+/// same placement's recalculation of the cell starts)
+#[test]
+fn claim_12_cell_animation_draws_before_the_tile_animation() {
+    use glasnost_map::terrain::TileAnim;
+    use glasnost_rules::sim::{AnimationType, OverlayType};
+    use glasnost_sim::rng::Rng;
+    let mut s = scene();
+    s.register("overlays", "GLOW");
+    s.ruleset.sim.overlays.insert(
+        "GLOW".into(),
+        OverlayType {
+            has_art: Some(false),
+            cell_anim: Some("SPARK".into()),
+            ..Default::default()
+        },
+    );
+    s.register("animations", "SPARK");
+    s.register("animations", "ROCK");
+    // SPARK: a random stage delay (one ranged draw over 450 … 900); ROCK: a bouncing type.
+    s.ruleset.sim.animations.insert(
+        "SPARK".into(),
+        AnimationType {
+            random_rate: Some([2, 1]),
+            ..Default::default()
+        },
+    );
+    s.ruleset.sim.animations.insert(
+        "ROCK".into(),
+        AnimationType {
+            bouncer: Some(true),
+            ..Default::default()
+        },
+    );
+    s.catalogue.tiles[1].anim = Some(TileAnim {
+        name: "ROCK".into(),
+        attaches_to: 0,
+    });
+    s.set_cell(cell(0, 0), 1, 0);
+    s.cell_mut(cell(0, 0)).overlay = 0;
+    let w = s.build();
+    assert_eq!(
+        w.cells.cell(cell(0, 0)).unwrap().overlay,
+        0,
+        "created without artwork"
+    );
+    let bounce = |r: &mut Rng| {
+        for _ in 0..3 {
+            let _ = r.raw();
+        }
+        for _ in 0..3 {
+            let _ = r.ranged(-65535, 65535, true);
+        }
+    };
+    let mut r = Rng::new(s.setup.seed);
+    // The overlay stream: the cell animation, then the tile animation of the placement's recalculation.
+    let _ = r.ranged(450, 900, true);
+    bounce(&mut r);
+    // The second pass's tile animation, then the final draw.
+    bounce(&mut r);
+    let _ = r.ranged(0, 65535, true);
+    assert_eq!(w.rng, r);
+
+    // No cell animation: no creation draw of its own.
+    let glow = s.ruleset.sim.overlays.get_mut("GLOW").unwrap();
+    glow.cell_anim = None;
+    glow.has_art = Some(true);
+    let w = s.build();
+    let mut r = Rng::new(s.setup.seed);
+    bounce(&mut r);
+    bounce(&mut r);
+    let _ = r.ranged(0, 65535, true);
+    assert_eq!(w.rng, r);
+}
+
+/// spec: S-0009 claim 42 (a terrain object starts with its type's strength as its health; a type whose strength is unset starts with health −1, S-0102 claim 23)
+#[test]
+fn claim_42_terrain_object_starting_health() {
+    let mut s = scene();
+    s.register("terrain_objects", "OAK");
+    s.ruleset.sim.terrain_objects.insert(
+        "OAK".into(),
+        TerrainObjectType {
+            strength: Some(7),
+            ..Default::default()
+        },
+    );
+    s.place_terrain("TREE", cell(0, 0));
+    s.place_terrain("OAK", cell(2, 0));
+    let w = s.build();
+    let health: Vec<i32> = w
+        .objects
+        .values()
+        .filter(|o| o.kind == Kind::Terrain)
+        .map(|o| o.health)
+        .collect();
+    assert_eq!(health, [-1, 7]);
+}
+
+/// The starting scene with only the infantry pool (MAN), no base units,
+/// Alpha on position 0 at cell (40, 40) and Beta on position 1.
+fn infantry_start_scene() -> Scene {
+    let mut s = starting_scene();
+    s.ruleset.sim.vehicles.get_mut("TANK").unwrap().owner = Some(Vec::new());
+    s.setup.bases = false;
+    s.setup.houses[0].start = Some(0);
+    s.setup.houses[1].start = Some(1);
+    s
+}
+
+/// The cells on which house `h`'s starting units stand.
+fn unit_cells(w: &World, h: u8) -> Vec<glasnost_map::CellXY> {
+    w.objects
+        .values()
+        .filter(|o| o.owner == Some(glasnost_sim::world::HouseId(h)) && o.kind != Kind::Building)
+        .map(|o| o.pos.cell())
+        .collect()
+}
+
+/// spec: S-0009 claim 46 and Formulas (the nearest ground occupant is measured to the cell corner
+/// with the table root of a² + b², not to the centre; on a tie the occupant that came into the cell
+/// last wins among infantry, vehicles and aircraft) (scenario M26 variant J)
+#[test]
+fn claim_46_nearest_ground_occupant_from_the_corner() {
+    let base = glasnost_map::CellXY::new(40, 40);
+    let run = |sub: i32| {
+        let mut s = infantry_start_scene();
+        // Beta's vehicle at the base cell's centre, then Beta's infantry unit at position `sub`.
+        s.place_unit(1, "TANK", base, 0);
+        s.place_infantry(1, "MAN", base, sub);
+        let w = load(&s).expect("loads");
+        let cells = unit_cells(&w, 0);
+        assert!(!cells.is_empty());
+        cells.iter().filter(|&&c| c == base).count() == cells.len()
+    };
+    // J1: the top position (64, 64) is nearer the corner than the centre: infantry is nearest.
+    assert!(run(1), "J1");
+    // J2: the bottom position (192, 192) is farther: the vehicle is nearest, none on the base cell.
+    let mut s = infantry_start_scene();
+    s.place_unit(1, "TANK", base, 0);
+    s.place_infantry(1, "MAN", base, 4);
+    let w = load(&s).expect("loads");
+    assert!(!unit_cells(&w, 0).contains(&base), "J2");
+    // J3: both at the centre, a tie: the infantry unit came in last and wins.
+    assert!(run(0), "J3");
+}
+
+/// spec: S-0009 claim 46 and Terms (objects on a bridge deck are not ground occupants: a cell whose
+/// deck holds a vehicle accepts a starting unit, which stands on the ground) (scenario M26 variant K)
+#[test]
+fn claim_46_deck_objects_do_not_count() {
+    let base = glasnost_map::CellXY::new(40, 40);
+    let run = |flag: bool| {
+        let mut s = starting_scene();
+        s.setup.bases = false;
+        s.setup.houses[0].start = Some(0);
+        s.setup.houses[1].start = Some(1);
+        for i in 0..=24 {
+            let name = format!("OV{i}");
+            s.register("overlays", &name);
+            s.ruleset.sim.overlays.insert(
+                name,
+                glasnost_rules::sim::OverlayType {
+                    has_art: Some(true),
+                    ..Default::default()
+                },
+            );
+        }
+        // A high-bridge overlay (index 24, S-0211 claim 15) on the base cell.
+        s.cell_mut(base).overlay = 24;
+        s.place_unit(1, "TANK", base, 0);
+        s.map.objects.unit_fields.push(EntryFields {
+            bridge: Some(flag),
+            ..Default::default()
+        });
+        load(&s).expect("loads")
+    };
+    let w = run(true);
+    let first = w
+        .objects
+        .values()
+        .find(|o| o.owner == Some(glasnost_sim::world::HouseId(0)))
+        .expect("a starting unit");
+    assert_eq!(first.pos.cell(), base, "K1");
+    assert_eq!(first.layer, glasnost_sim::world::Layer::Ground);
+    let w = run(false);
+    let first = w
+        .objects
+        .values()
+        .find(|o| o.owner == Some(glasnost_sim::world::HouseId(0)) && o.kind == Kind::Vehicle)
+        .expect("a starting vehicle");
+    assert_ne!(first.pos.cell(), base, "K2");
+}
+
+/// spec: S-0009 Edge cases (quirks.starting_infantry_share_centre off: testing a cell takes no draw;
+/// one draw R(0, 3) on the accepting cell gives the standing position of S-0208 claim 3's row)
+#[test]
+fn claim_46_switch_off_standing_position() {
+    use glasnost_sim::rng::Rng;
+    let mut s = infantry_start_scene();
+    s.setup.houses.truncate(1);
+    s.setup.unit_count = 1;
+    s.ruleset.globals.quirks.starting_infantry_share_centre = false;
+    let w = load(&s).expect("loads");
+    let men: Vec<_> = w
+        .objects
+        .values()
+        .filter(|o| o.kind == Kind::Infantry)
+        .collect();
+    // n = 1 (MAN), C = 50: B = trunc(50 / 1) × 1 = 50: one MAN.
+    assert_eq!(men.len(), 1);
+    // Replay the draws: the early lists (position 0 defined, no random entry), then the starting unit:
+    // its type R(0, 0) (no draw), its creation draw, the base cell accepts with no search draw, R(0, 3).
+    let mut r = Rng::new(s.setup.seed);
+    let _ = r.raw();
+    let _ = r.ranged(0, 3, true);
+    let _ = r.ranged(0, 65535, true);
+    assert_eq!(w.rng, r);
+    // The position is a side position of S-0208 table O, never the centre.
+    let at = (men[0].pos.x.rem_euclid(256), men[0].pos.y.rem_euclid(256));
+    let sides: Vec<_> = glasnost_sim::cells::position::SIDES
+        .iter()
+        .map(|&p| glasnost_sim::walk::standing_point(p))
+        .collect();
+    assert!(sides.contains(&at), "{at:?}");
+}
+
+/// A skirmish with Alpha (a human player) and the neutral and special
+/// houses, both countries not passive, each owning a pre-placed vehicle.
+fn cleanup_scene() -> Scene {
+    let mut s = starting_scene();
+    s.setup.bases = false;
+    s.setup.unit_count = 0;
+    s.setup.houses.truncate(1);
+    for (name, role) in [
+        ("Neutral", glasnost_sim::world::HouseRole::Neutral),
+        ("Special", glasnost_sim::world::HouseRole::Special),
+    ] {
+        s.register("countries", name);
+        s.ruleset.sim.countries.insert(
+            name.into(),
+            glasnost_rules::sim::Country {
+                multiplay_passive: Some(false),
+                ..Default::default()
+            },
+        );
+        s.setup.houses.push(glasnost_sim::world::HouseSetup {
+            name: name.into(),
+            country: name.into(),
+            human: false,
+            start: None,
+            role,
+            ai: false,
+        });
+    }
+    s.map.objects.units.push(Unit {
+        placed: placed("Neutral", "TANK", cell(-6, 0), 256, 0),
+    });
+    s.map.objects.units.push(Unit {
+        placed: placed("Special", "TANK", cell(-6, 4), 256, 0),
+    });
+    s
+}
+
+fn owned(w: &World, h: u8) -> usize {
+    w.objects
+        .values()
+        .filter(|o| o.owner == Some(glasnost_sim::world::HouseId(h)))
+        .count()
+}
+
+/// spec: S-0009 claim 28 (no computer player and fewer human slots than the maximum player count:
+/// eligible houses are removed with their objects, the house after a removed one kept,
+/// quirks.cleanup_skips_next_house; an AI house is a computer player, S-0412 claim 12)
+#[test]
+fn claim_28_unused_house_cleanup() {
+    let s = cleanup_scene();
+    let w = load(&s).expect("loads");
+    assert!(w.houses[1].removed && !w.houses[2].removed);
+    assert_eq!((owned(&w, 1), owned(&w, 2)), (0, 1));
+    assert_eq!(w.houses[1].start, None);
+    // Switch off: every eligible house is removed.
+    let mut off = cleanup_scene();
+    off.ruleset.globals.quirks.cleanup_skips_next_house = false;
+    let w = load(&off).expect("loads");
+    assert!(w.houses[1].removed && w.houses[2].removed);
+    assert_eq!((owned(&w, 1), owned(&w, 2)), (0, 0));
+    // An AI house: a computer player, no cleanup.
+    let mut ai = cleanup_scene();
+    ai.setup.houses[0].ai = true;
+    let w = load(&ai).expect("loads");
+    assert!(w.houses.iter().all(|h| !h.removed));
+    // As many human slots as the maximum player count: no cleanup.
+    let mut full = cleanup_scene();
+    full.ruleset.sim.general.max_players = Some(1);
+    let w = load(&full).expect("loads");
+    assert!(w.houses.iter().all(|h| !h.removed));
+    // A passive neutral country: not eligible; the special house is then removed.
+    let mut passive = cleanup_scene();
+    passive
+        .ruleset
+        .sim
+        .countries
+        .get_mut("Neutral")
+        .unwrap()
+        .multiplay_passive = Some(true);
+    let w = load(&passive).expect("loads");
+    assert!(!w.houses[1].removed && w.houses[2].removed);
+}
+
+/// spec: S-0010 claim 12 and claim 19 (the game-start pass after the starting units: a cell that has
+/// started no tile animation since the second pass starts that of the tile the second pass left, with
+/// its creation draws; at most one per cell)
+#[test]
+fn s0010_claim_12_game_start_pass() {
+    use glasnost_map::terrain::TileAnim;
+    use glasnost_rules::sim::AnimationType;
+    use glasnost_sim::rng::Rng;
+    let mut s = scene();
+    s.register("animations", "SPARK");
+    s.ruleset.sim.animations.insert(
+        "SPARK".into(),
+        AnimationType {
+            random_rate: Some([2, 1]),
+            ..Default::default()
+        },
+    );
+    s.catalogue.tiles[1].anim = Some(TileAnim {
+        name: "SPARK".into(),
+        attaches_to: 0,
+    });
+    s.set_cell(cell(0, 0), 1, 0);
+    let w = s.build();
+    let mut r = Rng::new(s.setup.seed);
+    let _ = r.ranged(450, 900, true);
+    let _ = r.ranged(450, 900, true);
+    let _ = r.ranged(0, 65535, true);
+    assert_eq!(w.rng, r, "the game-start pass starts no second animation");
+    // A cell the second pass did not start: mark it unstarted and run the pass again as game start does.
+    let mut w = w;
+    let i = w.cells.idx(cell(0, 0)).unwrap();
+    w.cells.anim_started[i] = false;
+    let order = w.cells.grid.visiting_order(true);
+    glasnost_sim::load::recalc_cells(&mut w, &order);
+    let _ = r.ranged(450, 900, true);
+    assert_eq!(w.rng, r);
+}
+
+/// spec: S-0010 claim 25 (at game start the bands of low bridge spans carry the bridge-body mark;
+/// the end cells and the cells beyond the band stay clear; the mark is game state)
+#[test]
+fn s0010_claim_25_bridge_body_marks_at_game_start() {
+    let mut s = scene();
+    // The wooden-bridge role starts at tile 5, so tile 11 is its i = 6 (start sub-tile 4, east; end
+    // sub-tile 4) and the flat tile 0 between the ends lies outside it; tile 11 is made five cells wide.
+    s.catalogue.roles.wooden_bridge = 5;
+    let mut wide = s.catalogue.tiles[11].clone();
+    wide.width = 5;
+    wide.height = 1;
+    wide.cells = vec![wide.cells[0]; 5];
+    s.catalogue.tiles[11] = wide;
+    for x in [0, 10] {
+        let c = s.cell_mut(cell(x, 0));
+        c.tile = 11;
+        c.sub_tile = 4;
+    }
+    let w = s.build();
+    let marked = |dx: i32, dy: i32| {
+        let i = w.cells.idx(cell(dx, dy)).unwrap();
+        w.cells.bridge_body[i]
+    };
+    for dy in [-2, -1, 0, 1] {
+        assert!(marked(5, dy), "row {dy}");
+    }
+    assert!(!marked(5, -3) && !marked(5, 2));
+    assert!(!marked(0, 0) && !marked(10, 0));
+    let l = glasnost_sim::save::load(
+        &glasnost_sim::save::save(&w),
+        s.sim_rules(),
+        std::sync::Arc::new(s.catalogue.clone()),
+    )
+    .expect("loads back");
+    assert_eq!(
+        glasnost_sim::save::state_hash(&w),
+        glasnost_sim::save::state_hash(&l)
+    );
 }

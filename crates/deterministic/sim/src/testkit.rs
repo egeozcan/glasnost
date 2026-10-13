@@ -212,6 +212,7 @@ pub fn setup(seed: u32) -> GameSetup {
                 human: true,
                 start: None,
                 role: HouseRole::Player,
+                ai: false,
             },
             HouseSetup {
                 name: "Beta".into(),
@@ -219,6 +220,7 @@ pub fn setup(seed: u32) -> GameSetup {
                 human: true,
                 start: None,
                 role: HouseRole::Player,
+                ai: false,
             },
         ],
         alliances: Vec::new(),

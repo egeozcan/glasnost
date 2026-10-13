@@ -41,8 +41,7 @@ fn random_cell(w: &mut World, areas: &StartAreas) -> Result<CellXY, LoadError> {
             let v = w.rng.ranged(MARGIN, span - 11, q.ranged_draw_half_span); // spec: S-0009 Formulas (v ~ U[10, W + H − 11])
             CellXY::new(v + 1, u + 11) // spec: S-0009 Formulas (candidate (v + 1, u + 11))
         } else {
-            // spec: S-0009 Edge cases (quirks.random_start_asymmetric_range off: both from 11 … W + H − 10).
-            // Which draw gives x is not stated: the first gives y as with the switch on (request Q-0045).
+            // spec: S-0009 Edge cases (quirks.random_start_asymmetric_range off: both from 11 … W + H − 10; the first draw gives y, the second x; bounds in either order when W + H < 21)
             let y = w
                 .rng
                 .ranged(MARGIN + 1, span - MARGIN, q.ranged_draw_half_span);
@@ -81,8 +80,7 @@ pub fn build_list(w: &mut World, map: &Map, players: usize) -> Result<Vec<CellXY
         v.resize(n, None);
         v
     } else {
-        // spec: S-0009 Edge cases (quirks.start_waypoint_gap off: position i is waypoint i when defined).
-        // N is kept as with the switch on; the request Q-0045 asks.
+        // spec: S-0009 Edge cases (quirks.start_waypoint_gap off: position i is waypoint i when defined; N = max(P, K) with K counted as with the switch on; random entries in increasing position order)
         (0..n).map(defined).collect()
     };
     let missing = list.iter().filter(|e| e.is_none()).count();

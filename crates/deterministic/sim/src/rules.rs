@@ -247,6 +247,8 @@ pub struct OverlayRules {
     pub chain_reaction: bool,
     /// Explodes flag (S-0303 claim 19).
     pub explodes: bool,
+    /// The cell animation's type name (S-0009 claim 12), if any.
+    pub cell_anim: Option<String>,
 }
 
 /// A terrain-object type's resolved fields.
@@ -258,7 +260,7 @@ pub struct TerrainRules {
     pub occupation: (i32, i32),
     /// The spawns-resources flag (S-0203 claim 2).
     pub spawns_resources: bool,
-    /// Strength (S-0302 claim 20).
+    /// Strength (S-0302 claim 20; S-0102 claim 23): −1 when unset.
     pub strength: i32,
     /// Armour class index (S-0305).
     pub armour: usize,
@@ -611,6 +613,9 @@ pub struct SimRules {
     pub base_units: Vec<u32>,
     /// The game's tech level (S-0009 Terms).
     pub game_tech_level: i32,
+    /// The maximum player count of the unused-house cleanup (S-0009 claim
+    /// 28).
+    pub max_players: i32,
     /// The gate and wall tower types (S-0112 claim 7).
     pub gates: GateTypes,
     /// Animation types by registration index.
@@ -894,8 +899,8 @@ impl SimRules {
                     ),
                     // spec: S-0203 Import mapping (SpawnsTiberium absent: no)
                     spawns_resources: t.spawns_tiberium.unwrap_or(false),
-                    // spec: S-0302 Import mapping (Strength absent: 0)
-                    strength: t.strength.unwrap_or(0),
+                    // spec: S-0102 claim 23 and S-0009 claim 42 (a terrain type's strength left unset, which the importer writes as absent: health −1)
+                    strength: t.strength.unwrap_or(-1),
                     // spec: S-0305 claim 2 (a type no layer has given the field: class none)
                     armour: t.armor.unwrap_or_default().index(),
                     immune: t.immune.unwrap_or(false),
@@ -960,6 +965,8 @@ impl SimRules {
             base_units,
             // spec: S-0009 Terms and Import mapping (the game's tech level: the base rules' value, 10 when they omit it)
             game_tech_level: g.multiplayer_tech_level.unwrap_or(10),
+            // spec: S-0009 Constants and Import mapping (maximum player count when the base rules omit it: 8)
+            max_players: g.max_players.unwrap_or(8),
             gates,
             land,
             behaviours,
@@ -1309,6 +1316,8 @@ fn overlay_rules(name: &str, o: rs::OverlayType) -> OverlayRules {
         },
         chain_reaction: o.chain_reaction.unwrap_or(false),
         explodes: o.explodes.unwrap_or(false),
+        // spec: S-0009 Import mapping (CellAnim absent: no cell animation)
+        cell_anim: o.cell_anim,
     }
 }
 
