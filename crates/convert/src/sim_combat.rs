@@ -667,6 +667,9 @@ const COEFFICIENTS: [(&str, &str); 5] = [
     ),
 ];
 
+/// The text limit of a building's category word (S-0302 Import mapping).
+const BUILD_CAT_LIMIT: usize = 31; // spec: S-0302 Import mapping (BuildCat: the first 31 bytes)
+
 /// The coefficient magnitude above which the importer warns (S-0309 Edge
 /// cases: 10⁶).
 const COEFFICIENT_WARN: i128 = 1_000_000; // spec: S-0309 Edge cases (a coefficient's magnitude above 10^6)
@@ -1618,9 +1621,10 @@ impl Builder<'_> {
             rec.put("combat", combat.node());
         }
         self.cfields(rec, t, kind, BUILDING_COMBAT);
-        // spec: S-0302 Import mapping, S-0004 Import mapping (BuildCat: a defence building when the word is Combat; a named value, S-0003 claim 16; placeholder, Q-0061)
+        // spec: S-0302 Import mapping (BuildCat: the first 31 bytes, surrounding whitespace trimmed, a whole word compared ignoring A–Z case; a defence building only for Combat, any other nonempty word, unknown ones included, is not; missing or empty keeps the held category, initially not a defence)
         if let Some(d) = fold(key(t, "BuildCat"), None, |v, _| {
-            Some(value::named(v, NAME_LIMIT, &["Combat"]).is_some())
+            let word = value::text(v, BUILD_CAT_LIMIT).trim_ascii();
+            (!word.is_empty()).then(|| word.eq_ignore_ascii_case(b"Combat"))
         }) {
             rec.put("defense", jsonc::boolean(d));
         }

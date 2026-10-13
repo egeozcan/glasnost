@@ -216,10 +216,10 @@ Every quirk switch of the implemented specs has a field in `ini::Quirks` (includ
 | `ini::Document::layer` | a layered load that leaves two occurrences with one name hash in a changed table is refused (hash order on) | Q-0004 |
 | `convert::layers` | the trailer animations of aircraft and projectiles are created from the art file (S-0004), while `convert::sim` reads a projectile's `Trailer` from its rules section (S-0306); the art-file fields read the art section named by the image in force, without the arctic suffix; a self-naming long name stops after one copy per layer, with a warning (numbered weapon fields above 18 creating weapons is now S-0308 claim 16) | Q-0083 |
 | `convert` import options | the game-mode file is named by the user; the mode list is not read | Q-0006 |
+| `convert::sim` (`Form::Ints`, `AIAutoDeployFrameDelay`) | the items of a general integer list are read with S-0003 claim 3's integer form within 127 bytes; an empty item takes no place; an unreadable item gives 0 and keeps its place | Q-0171 |
 | `convert::layers`, `convert::sim` | land-type resets (S-0211 claim 2) are applied in `sim.land_types` only; `ini_globals` keeps per-key layering | Q-0007 |
 | `convert::art` | a building secondary sprite dropped by a later read's art section is left undetermined (a note, no file); no art for projectiles, particles and voxel animations | Q-0008 |
 | `app::mapview::build` | an animated terrain object's shadow is drawn right after its body in the object pass (S-0102 claims 10, 13 and 23 give no order) | Q-0051 |
-| `convert::sim::combat` | a type's threat coefficient starts at 0 before any layer gives it; `BuildCat` is a named value compared with `Combat`; `none` items are left out of name lists; an unreadable integer-list item is 0 | Q-0061 |
 
 ## Map viewer (M2)
 
@@ -265,7 +265,7 @@ Provisional rules of the simulation, each tied to a request:
 
 ## Simulation (M4: combat)
 
-Combat lives in `glasnost_sim::combat`, driven from the tick pipeline and the behaviours of M3; every phase runs in S-0203's places (no component picks its own order). Its rules are typed in `combat::data` (`CombatRules`, built inside `SimRules` from the schema's combat fields: weapons, projectiles, warheads with their versus values read at double precision, per-type `TypeCombat`, countries' multipliers, the general values and the difficulty rows). The quirk switches the combat specs name are in `rules::Quirks` (162 switches now, each defaulting to the original), plus `clear_weapons_any_turret_count` and `coefficient_zero_replaced` (importer, `convert::sim::SimQuirks`) and `percent_list_integer_prefix` (`ini::Quirks`); the quirk inventory test checks every switch the simulation, movement, infantry, rendering and combat specs propose.
+Combat lives in `glasnost_sim::combat`, driven from the tick pipeline and the behaviours of M3; every phase runs in S-0203's places (no component picks its own order). Its rules are typed in `combat::data` (`CombatRules`, built inside `SimRules` from the schema's combat fields: weapons, projectiles, warheads with their versus values read at double precision, per-type `TypeCombat`, countries' multipliers, the general values and the difficulty rows). The quirk switches the combat specs name are in `rules::Quirks` (164 switches now, each defaulting to the original), plus `clear_weapons_any_turret_count` and `coefficient_zero_replaced` (importer, `convert::sim::SimQuirks`) and `percent_list_integer_prefix` (`ini::Quirks`); the quirk inventory test checks every switch the simulation, movement, infantry, rendering and combat specs propose.
 
 - **Firing (S-0301, S-0310, S-0313).** `check` is the firing check in S-0301 claim 9's rank order, with S-0310's aiming answers (turret and body facing, the building aim point); `fire` makes a shot (burst counter, the delay kinds and their draws, ammunition and reloading, firing-frame sync, the full delay F1 and the reload F3), `position` the fire point (the 3 × 4 single-precision matrices of S-0313 F1, burst alternation, building pixel shifts F3), `behave` the firing parts of the behaviours (vehicles S-0310 claim 9, infantry S-0107 claim 11, buildings S-0215 claim 32 with the turret snap), and `ballistics` the arc speed and reachability.
 - **Weapons and acquisition (S-0308, S-0309).** `weapon` chooses the slot by table P (with table N, gattling and switching types, elite slots), the mean damage of a healer for acquisition and the versus lookup (S-0304, S-0305); `acquire` holds the searches (ring order F2, candidates by table C, threat F4 to F9, early stops, the timer draw first), retaliation, anger, expected remaining health and the per-tick search after an actor's processing, area guard and hunt.
@@ -282,9 +282,6 @@ Provisional rules of combat, each tied to a request:
 
 | Where | Interim rule | Request |
 |---|---|---|
-| `combat::data` | crew escape, sinking weight, bridge strength and ammunition-crate damage absent from every layer are "not given", and the rules that need them do not take effect | Q-0060 |
-| `convert::sim` | a type's threat coefficient, the defence category word and the `none` items of name lists are imported as the request's workaround says | Q-0061 |
-| `combat::death::building_death` | the smudge choice of a destroyed building takes no draw and places no smudge | Q-0070 |
 | `combat::projectile::lead` | a moving vehicle's speed *u* is 0, so no shot is led | Q-0071 |
 | `combat::range::approach_search` | S-0307 revision 2 answers Q-0072 only for ground units on flat open ground without bridges, attacking an object, without the close-range property; every other case takes the same search meanwhile, and a failed search after candidates centres its nearby-cell search on the target's cell, as with empty radii. Until the movement session's approach step (S-0215 claim 37) calls the search, an actor in *attack* does not approach a target it cannot fire at yet | Q-0072 |
 | `combat::projectile` | F12's pitch facing takes S-0204's table exceptions and F13's does not | Q-0077 |

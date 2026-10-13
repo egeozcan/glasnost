@@ -228,7 +228,7 @@ pub fn kill(w: &mut World, id: ObjectId, hit: &Hit) {
         Kind::Infantry => infantry_death(w, id, hit),
         Kind::Vehicle => {
             let tc = type_combat(w, id).cloned().unwrap_or_default();
-            // Sinking (claim 10) needs the game-wide sinking weight; without it no vehicle sinks (request Q-0060).
+            // Sinking (claim 10) is not modelled yet; its sinking weight defaults to 3.0 (claim 27).
             // spec: S-0312 claim 9 (one list pick each: explosion list, then destruction list)
             if !tc.explosion.is_empty() {
                 let k = w.rng.list_pick(tc.explosion.len() as u32) as usize;
@@ -365,10 +365,8 @@ fn crew(w: &mut World, id: ObjectId, hit: &Hit) {
     if hit.no_escape || !u.vehicle.crewed || u.passengers > 0 {
         return;
     }
-    let Some(chance) = rules.combat.general.crew_escape else {
-        w.note("S-0312 claim 13: no crew escape chance is given; no crew escapes (request Q-0060)");
-        return;
-    };
+    // spec: S-0312 claim 27 (the crew escape chance always applies, 0.5 by default)
+    let chance = rules.combat.general.crew_escape;
     // spec: S-0312 claim 13 (a chance test "less than" with one unit-interval value)
     let v = w.rng.unit(rules.mode);
     if !v.lt(chance) {
@@ -509,7 +507,8 @@ fn building_death(w: &mut World, id: ObjectId, hit: &Hit) {
             }
         }
         let _scorch = w.rng.percent() < 50; // spec: S-0312 Constants (smudge choice 50 percent)
-        w.note("S-0312 claim 19: the smudge choice's own draws are not stated by any spec (request Q-0070)");
+        // spec: S-0312 claim 26 (the smudge choice, large form: with n fitting candidates one draw R(0, n − 1); n = 0 takes no draw and places nothing)
+        w.note("S-0312 claim 26: smudge types, the smudges of cells and the morphable flag of tilesets are not modelled, so no smudge type fits: n = 0, no draw and no smudge");
     }
     // spec: S-0312 claim 19 (b) (each foundation cell: nearby point raw value, delay R(0, 3), list pick)
     if !tc.explosion.is_empty() {

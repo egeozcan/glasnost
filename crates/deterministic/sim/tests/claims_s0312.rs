@@ -1490,3 +1490,38 @@ fn claim_3_expiry_then_awaiting_removal() {
     glasnost_sim::tick::step(&mut w);
     assert!(w.obj(id).is_none());
 }
+
+// ---------------------------------------------------------------- claim 27 (revision 4)
+
+// spec: S-0312 claim 27 (absent from every layer: crew escape chance 0.5, sinking weight 3.0, survivor divisors 200, 100 and 300; a given value replaces them)
+#[test]
+fn claim_27_defaults_of_the_crew_survivor_and_sinking_values() {
+    let mut r = testkit::combat_ruleset();
+    let g = &mut r.sim.general;
+    g.crew_escape = None;
+    g.ship_sinking_weight = None;
+    g.allied_survivor_divisor = None;
+    g.soviet_survivor_divisor = None;
+    g.third_survivor_divisor = None;
+    let w = testkit::game_with(&r, 16, 1);
+    let mode = w.rules().mode;
+    let gw = &w.rules().combat.general;
+    assert!(
+        gw.crew_escape
+            .eq_num(glasnost_sim::rules::nearest_double("0.5"))
+    );
+    assert!(
+        gw.sinking_weight
+            .eq_num(glasnost_num::F64::from_i64(3, mode))
+    );
+    assert_eq!(gw.survivor_divisor, [200, 100, 300]);
+    r.sim.general.crew_escape = dec("0.25");
+    let w = testkit::game_with(&r, 16, 1);
+    assert!(
+        w.rules()
+            .combat
+            .general
+            .crew_escape
+            .eq_num(glasnost_sim::rules::nearest_double("0.25"))
+    );
+}

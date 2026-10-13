@@ -839,7 +839,7 @@ impl Builder<'_> {
                 )
             })
             .map(jsonc::array),
-            // spec: S-0003 claims 3 and 12 (a list of integers; an item the integer form cannot read is 0: placeholder, Q-0061)
+            // spec: S-0003 claims 3 and 12 (a list of integers; an item the integer form cannot read is 0 and keeps its place: interim, request Q-0171)
             Ints => fold(state, None, |v, _| {
                 Some(
                     value::list(v, value::COMMON_TEXT_LIMIT)

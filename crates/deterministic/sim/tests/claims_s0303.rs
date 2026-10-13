@@ -1275,3 +1275,21 @@ fn naval_vehicle_over_water_shows_the_warheads_own_animation() {
         );
     }
 }
+
+// ---------------------------------------------------------------------------
+// Claim 24 (revision 5): defaults of bridge and barrel damage.
+// ---------------------------------------------------------------------------
+
+// spec: S-0303 claim 24 (absent from every layer: bridge strength 1000 and ammunition-crate damage 100; the barrel's nested detonation still happens with that damage)
+#[test]
+fn claim_24_defaults_of_bridge_and_barrel_damage() {
+    let mut r = testkit::combat_ruleset();
+    r.sim.general.bridge_strength = None;
+    r.sim.general.ammo_crate_damage = None;
+    let w = testkit::game_with(&r, SIZE, 1);
+    assert_eq!(w.rules().combat.general.bridge_strength, 1000);
+    assert_eq!(w.rules().combat.general.ammo_crate_damage, 100);
+    r.sim.general.ammo_crate_damage = Some(80);
+    let w = testkit::game_with(&r, SIZE, 1);
+    assert_eq!(w.rules().combat.general.ammo_crate_damage, 80);
+}

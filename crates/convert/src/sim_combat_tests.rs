@@ -1000,3 +1000,64 @@ fn combat_coverage() {
     // spec: S-0004 claim 13 (a weapon created by a vehicle's primary field: its section is a weapon's)
     assert_eq!(row("weapons", "ROF"), (Field, "S-0301".into()));
 }
+
+/// spec: S-0302 Import mapping and claim 5 (BuildCat: the first 31 bytes, trimmed, a whole word ignoring A–Z case; only Combat makes a defence building; an unknown nonempty word is not one, not the held value; missing or empty keeps the held category)
+#[test]
+fn build_category_word() {
+    let defence = |base: &str, mode: &str| {
+        let text = format!("[BuildingTypes]\n1=Hut\n[Hut]\n{base}");
+        let (s, _, _) = import(&text, mode, "", "", &ImportOptions::default());
+        s.buildings["Hut"].defense
+    };
+    assert_eq!(defence("BuildCat=  cOmBaT  \n", ""), Some(true));
+    assert_eq!(defence("BuildCat=Power\n", ""), Some(false));
+    assert_eq!(defence("BuildCat=Combatx\n", ""), Some(false));
+    // An unknown word after Combat gives DontCare, not the held Combat.
+    assert_eq!(
+        defence("BuildCat=Combat\n", "[Hut]\nBuildCat=Bunker\n"),
+        Some(false)
+    );
+    // An empty value keeps the held category.
+    assert_eq!(
+        defence("BuildCat=Combat\n", "[Hut]\nBuildCat=\n"),
+        Some(true)
+    );
+    // Never given: not a defence.
+    assert_ne!(defence("Strength=1\n", ""), Some(true));
+    // Only the first 31 bytes count: text after them is not seen.
+    let padded = format!("BuildCat=Combat{}x\n", " ".repeat(25));
+    assert_eq!(defence(&padded, ""), Some(true));
+    let padded = format!("BuildCat=Combat{}x\n", " ".repeat(24));
+    assert_eq!(defence(&padded, ""), Some(false));
+}
+
+/// spec: S-0303 claims 25 and 26 and S-0312 claim 28 (no-type items are left out of the animation and debris lists and hold no place; a value of only no-type items empties the list; an empty value keeps it; the maxima are read independently of the types)
+#[test]
+fn no_type_list_items_and_maxima() {
+    let base = "[Warheads]\n1=Pow\n2=Bam\n\
+                [Pow]\nAnimList=none,Alpha,<NONE>,Beta\nDebrisTypes=<none>,Chunk\nDebrisMaximums=2,abc,3\n\
+                [Bam]\nAnimList=Gamma\n";
+    let mode = "[Bam]\nAnimList=\n";
+    let (s, _, _) = import(base, mode, "", "", &ImportOptions::default());
+    let pow = &s.warheads["Pow"];
+    assert_eq!(
+        pow.anim_list.as_deref(),
+        Some(&["Alpha".to_owned(), "Beta".to_owned()][..])
+    );
+    assert_eq!(pow.debris_types.as_deref(), Some(&["Chunk".to_owned()][..]));
+    assert_eq!(pow.debris_maximums.as_deref(), Some(&[2, 0, 3][..]));
+    // An empty value keeps the list in force.
+    assert_eq!(
+        s.warheads["Bam"].anim_list.as_deref(),
+        Some(&["Gamma".to_owned()][..])
+    );
+    // Only no-type items: an empty list.
+    let (s, _, _) = import(
+        base,
+        "[Bam]\nAnimList=none,<none>\n",
+        "",
+        "",
+        &ImportOptions::default(),
+    );
+    assert_eq!(s.warheads["Bam"].anim_list.as_deref(), Some(&[][..]));
+}

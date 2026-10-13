@@ -794,9 +794,9 @@ impl SimRules {
             ],
             // spec: S-0211 Import mapping (CliffBackImpassability absent: 0)
             cliff_back: g.cliff_back_impassability.unwrap_or(0),
-            // spec: S-0107 Import mapping (ConditionYellow absent: 0.5)
+            // spec: S-0107 Import mapping (ConditionYellow absent: 0.5); S-0302 Import mapping (read as a single, widened exactly, a `%` product taken as a double)
             condition_yellow: dec(&g.condition_yellow, mode).unwrap_or_else(|| constant("0.5")),
-            // spec: S-0107 Import mapping (ConditionRed absent: 0.5)
+            // spec: S-0107 Import mapping (ConditionRed absent: 0.5); S-0302 Import mapping (read as a single, widened exactly, a `%` product taken as a double)
             condition_red: dec(&g.condition_red, mode).unwrap_or_else(|| constant("0.5")),
             // spec: S-0107 Import mapping (IdleActionFrequency absent: the double nearest 0.083)
             idle_frequency: dec(&g.idle_action_frequency, mode)

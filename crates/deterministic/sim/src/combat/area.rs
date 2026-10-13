@@ -300,9 +300,11 @@ pub fn detonate(w: &mut World, det: Detonation) -> DetonationResult {
             .filter(|&o| o != NO_OVERLAY)
             .and_then(|o| rules.overlays.get(usize::from(o)).cloned());
         if let Some(ov) = &ov
+            // spec: S-0303 claim 17 (a resource overlay whose type has the chain-reaction flag, a warhead with the resource flag, a producer that allows it)
+            && ov.tiberium
             && ov.chain_reaction
+            && h.tiberium
             && det.resources
-            && (!ov.tiberium || h.tiberium)
             && det.damage / 10 > 0
         {
             // spec: S-0303 claim 17 (resource reduction by trunc(D / 10)); spec: S-0401 claim 16 (a) (taken by claim 3's rule)
@@ -432,22 +434,18 @@ fn exploding_overlay(w: &mut World, centre: CellXY, det: &Detonation) {
         crate::combat::effects::anim(w, &a, det.point);
     }
     // spec: S-0303 claim 19 (a nested detonation with the ammunition-crate damage, the demolition warhead, no source object, the outer house)
-    match g.ammo_crate_damage {
-        Some(dmg) => {
-            detonate(
-                w,
-                Detonation {
-                    point: det.point,
-                    damage: dmg,
-                    warhead: g.c4_warhead,
-                    source: None,
-                    house: det.house,
-                    resources: true,
-                },
-            );
-        }
-        None => w.note("S-0303 claim 19: no ammunition-crate damage is given; the barrel's detonation does nothing (request Q-0060)"),
-    }
+    // spec: S-0303 claim 24 (the default ammunition-crate damage never disables the nested detonation)
+    detonate(
+        w,
+        Detonation {
+            point: det.point,
+            damage: g.ammo_crate_damage,
+            warhead: g.c4_warhead,
+            source: None,
+            house: det.house,
+            resources: true,
+        },
+    );
     // spec: S-0303 claim 19 (percent draws r₀, r₁, …: the first entry below 15 appears; then one percent draw for the particle system, below 25)
     let debris = g.barrel_debris.clone();
     for name in &debris {

@@ -1232,10 +1232,9 @@ fn the_red_threshold_is_compared_exactly() {
             };
             assert_eq!(got, want, "chop {chop}, {from} − {amount}");
         }
-        // The ratio is read as S-0003 claim 6 reads decimals (a single just
-        // above 0.6), so X lies just above 600 and a hit ending at 600 is
-        // red; S-0302's rounding paragraph assumes the nearest double
-        // instead (request Q-0075).
+        // The ratio is read as a single and widened exactly (S-0302 Import
+        // mapping, revision 11; S-0003 claim 6): just above 0.6, so X lies
+        // just above 600 and a hit ending at 600 is red.
         assert!(f(600).lt(x));
         assert_eq!(result_from(&mut w, t, h, 601, 1), HitResult::NowRed);
     }
