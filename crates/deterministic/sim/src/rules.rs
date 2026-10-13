@@ -233,8 +233,8 @@ pub enum FactoryKind {
 
 impl FactoryKind {
     /// The kind of our format's factory word (`infantry`, `vehicle`,
-    /// `aircraft`, `building`). The importer writes none of them yet: the
-    /// original's words are asked in Q-0100.
+    /// `aircraft`, `building`), which the importer writes for the
+    /// original's words (S-0003 claim 21).
     pub fn from_word(w: &str) -> Option<Self> {
         Some(match w {
             "infantry" => Self::Infantry,
