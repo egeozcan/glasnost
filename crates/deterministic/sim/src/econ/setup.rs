@@ -614,7 +614,7 @@ pub fn start_game(w: &mut World) {
     start_alliances(w);
     rewrite_wall_owners(w);
     colour_fields(w);
-    // spec: S-0412 claim 14 and S-0407 claim 14 (the secret-lab draws are the last draws of game start)
+    // spec: S-0407 claim 14 and S-0202 claim 14 (the secret-lab choices: the last draws here, before the game-start pass of S-0010 claim 12)
     crate::econ::tech::assign_secret_labs(w);
     // spec: S-0414 claim 1 (in a skirmish every contender is tested)
     w.econ.end.active = true;

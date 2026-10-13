@@ -382,7 +382,7 @@ pub fn new_game(
     // Late phase: list 3 and the late assignments (S-0009 claims 20, 28 and 29).
     let mut bases: Vec<Option<CellXY>> = vec![None; w.houses.len()];
     if !setup.sandbox {
-        // The unused-house cleanup, once all map objects are placed and before the late phase (S-0009 claim 28; its place after the second pass is interim, request Q-0101).
+        // spec: S-0202 claim 14 and S-0009 claim 28 (the unused-house cleanup follows the second whole-map recalculation and precedes the late start-position phase)
         cleanup(&mut w, setup);
         let list3 = starts::build_list(&mut w, map, players)?;
         let n = list3.len();
@@ -419,7 +419,14 @@ pub fn new_game(
         starting::give(&mut w, &bases, setup);
     }
 
-    // spec: S-0010 claim 12 (the game-start pass: every legal cell once more, in the visiting order, after the starting units and before the first tick; its tile animations by claim 19). Its place after the final draw is interim (request Q-0101).
+    if !setup.sandbox {
+        // spec: S-0412 claim 14 (the rest of game start after the starting units, all before tick 0)
+        // spec: S-0202 claim 14 (the crate placement and the secret-lab choices come before the game-start pass)
+        crate::econ::setup::start_game(&mut w);
+    }
+
+    // spec: S-0010 claim 12 (the game-start pass: every legal cell once more, in the visiting order, after the starting units and before the first tick; its tile animations by claim 19)
+    // spec: S-0202 claim 14 (its tile-animation draws follow the starting units' final draw, the crate placement draws, the secret-lab choices and the end-of-loading tag draws, and precede the first tick; the tags are not implemented, S-0011)
     recalc_cells(&mut w, &order);
 
     // spec: S-0010 claim 25 (once at game start, before the first tick: the bridge spans, S-0212's bridge links, and the bridge-body marks of low spans)
@@ -436,10 +443,6 @@ pub fn new_game(
     crate::regions::rebuild(&mut w);
     // spec: S-0401 claims 4 and 13 (the map growth switch, and the game-start rebuilding of the lists, which takes no draw and sees only terrain objects)
     crate::econ::resource::game_start(&mut w, map.basic.tiberium_growth.unwrap_or(true));
-    if !setup.sandbox {
-        // spec: S-0412 claim 14 (the rest of game start after the starting units, the secret-lab draws last, all before tick 0)
-        crate::econ::setup::start_game(&mut w);
-    }
     Ok(w)
 }
 
