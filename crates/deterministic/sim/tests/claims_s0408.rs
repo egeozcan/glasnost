@@ -367,6 +367,26 @@ fn claim_6_destroyed_during_sale() {
     assert_eq!(w.houses[0].credits, credits);
 }
 
+// spec: S-0408 claim 6 (r4: the sale stops at the killing hit: while the dead building awaits removal, no later selling processing completes the sale or refunds)
+#[test]
+fn claim_6_sale_stops_at_the_killing_hit() {
+    let mut w = game(&rules());
+    let hut = put(&mut w, "HUT", 0, c(0, 0));
+    let credits = w.houses[0].credits;
+    order(&mut w, A, Order::Sell { actor: hut });
+    for _ in 0..5 {
+        step(&mut w);
+    }
+    // Dead but still on the map, as while S-0312 defers its removal.
+    w.obj_mut(hut).unwrap().health = 0;
+    for _ in 0..200 {
+        glasnost_sim::econ::sell::process_selling(&mut w, hut);
+        step(&mut w);
+    }
+    assert!(w.obj(hut).is_some_and(|o| o.on_map));
+    assert_eq!(w.houses[0].credits, credits);
+}
+
 // spec: S-0408 claim 11 (a vehicle on a building cell: removed at once, its refund, the unit-sold announcement; elsewhere nothing)
 #[test]
 fn claim_11_vehicle_sale() {

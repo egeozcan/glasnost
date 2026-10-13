@@ -951,6 +951,16 @@ pub struct Quirks {
     // spec: S-0415 claim 9
     #[serde(default = "on")]
     pub packup_sound_on_sale: bool,
+    /// A sidebar item tied with existing items on every key goes before
+    /// them (the newest first); off: after them.
+    // spec: S-0004 claim 11
+    #[serde(default = "on")]
+    pub sidebar_tie_newest_first: bool,
+    /// An item with both the counts-as-aircraft and naval flags ranks 1 as
+    /// the new item and 2 as an item already in the tab; off: 1 in both.
+    // spec: S-0004 claim 11
+    #[serde(default = "on")]
+    pub sidebar_both_flags_rank: bool,
     /// An explicit initial ammunition above a nonnegative maximum is used as
     /// it stands; off: capped at the maximum.
     // spec: S-0301 claim 10, Formulas F6
@@ -1205,6 +1215,8 @@ impl Default for Quirks {
             deploy_refuses_own_walls: true,
             failed_packup_keeps_vehicle: true,
             packup_sound_on_sale: true,
+            sidebar_tie_newest_first: true,
+            sidebar_both_flags_rank: true,
             initial_ammo_above_capacity: true,
             building_removal_second_round: true,
             approach_alternative_walk: true,
@@ -1761,6 +1773,8 @@ impl Quirks {
                 self.failed_packup_keeps_vehicle,
             ),
             ("packup_sound_on_sale", self.packup_sound_on_sale),
+            ("sidebar_tie_newest_first", self.sidebar_tie_newest_first),
+            ("sidebar_both_flags_rank", self.sidebar_both_flags_rank),
             (
                 "initial_ammo_above_capacity",
                 self.initial_ammo_above_capacity,

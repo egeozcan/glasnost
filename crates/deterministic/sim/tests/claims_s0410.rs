@@ -129,7 +129,7 @@ fn claim_1_defeat() {
     assert!(radar::available(&w, A));
 }
 
-// spec: S-0410 claim 2 (rechecked in the house's next update after an event: a power order in tick n changes the panel in tick n + 1)
+// spec: S-0410 claim 2 (rechecked in the house's next update after an event: an accepted power-switch change in tick n changes the panel in tick n + 1)
 #[test]
 fn claim_2_recheck_timing() {
     let mut w = game(&rules());
@@ -398,4 +398,83 @@ fn claim_2_upgrade_placement_rechecks() {
     step(&mut w);
     assert!(!w.houses[0].econ.radar.due);
     assert!(!radar::available(&w, A));
+}
+
+fn image_at_scale_one() -> minimap::Image {
+    let one = glasnost_num::F64::from_i64(1, Rounding::TowardZero).to_f32(Rounding::TowardZero);
+    minimap::Image {
+        s: one,
+        width: 140,
+        height: 108,
+        left: 0,
+        top: 0,
+    }
+}
+
+fn row_widths(px: &[(i32, i32)]) -> Vec<usize> {
+    let rows = px.iter().map(|p| p.1).max().map_or(0, |m| m + 1);
+    (0..rows)
+        .map(|r| px.iter().filter(|p| p.1 == r).count())
+        .collect()
+}
+
+// spec: S-0410 F8 and claim 8 (the stepped diamond from the foundation's width and height and the scale; top pixel (p, q); the zero-size foundation is nonempty)
+#[test]
+fn claim_8_building_pixel_set() {
+    let img = image_at_scale_one();
+    let set = |f| minimap::building_pixels(&img, (20, 0), f);
+    assert_eq!(set((1, 1)), vec![(20, 0)]);
+    assert_eq!(row_widths(&set((2, 2))), vec![1, 3, 1]);
+    assert_eq!(row_widths(&set((3, 3))), vec![1, 3, 5, 3, 1]);
+    assert_eq!(row_widths(&set((0, 0))), vec![1, 3, 1]);
+    // A parallelogram: a wider than b.
+    let p = set((3, 2));
+    assert_eq!(row_widths(&p), vec![1, 3, 3, 1]);
+    assert_eq!(p[0], (20, 0));
+}
+
+// spec: S-0410 F8 (pixels outside the radar image are omitted, never clamped)
+#[test]
+fn claim_8_building_set_not_clamped() {
+    let mut w = game(&rules());
+    let d = put(&mut w, "PLANT", 0);
+    step(&mut w);
+    let g = grid_of(&w);
+    let img = minimap::image(&g);
+    let o = w.obj(d).unwrap();
+    let top = minimap::object_pixel(&g, &img, o.pos.x, o.pos.y, false);
+    let all = minimap::building_pixels(&img, top, o.foundation);
+    let listed = minimap::listed(&w, A, d, &g, &img);
+    let inside: Vec<_> = all
+        .into_iter()
+        .filter(|&(p, q)| p >= 0 && q >= 0 && p < img.width && q < img.height)
+        .collect();
+    assert_eq!(listed, inside);
+}
+
+// spec: S-0410 claim 7 (an own object is listed only with the discovered-by-H mark; ownership alone does not pass)
+#[test]
+fn claim_7_own_object_needs_the_mark() {
+    let mut w = game(&rules());
+    let d = put(&mut w, "PLANT", 0);
+    step(&mut w);
+    let g = grid_of(&w);
+    let img = minimap::image(&g);
+    assert!(!minimap::listed(&w, A, d, &g, &img).is_empty());
+    for st in w.econ.shroud.houses.iter_mut().flatten() {
+        st.discovered.clear();
+    }
+    assert!(!shroud::discovered(&w, A, d));
+    assert!(minimap::listed(&w, A, d, &g, &img).is_empty());
+}
+
+// spec: S-0410 claim 1 (r6: the qualifying building is switched on, on the map and not being sold; no further test of its strength)
+#[test]
+fn claim_1_no_alive_test() {
+    let mut w = game(&rules());
+    put(&mut w, "PLANT", 0);
+    let d = put(&mut w, "DISH", 2);
+    step(&mut w);
+    w.obj_mut(d).unwrap().health = 0;
+    assert!(radar::claim_1(&w, A));
 }

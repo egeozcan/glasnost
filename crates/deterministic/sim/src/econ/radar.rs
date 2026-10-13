@@ -82,7 +82,7 @@ pub fn start_outage(w: &mut World, h: HouseId, ticks: i32) {
 }
 
 /// Whether the building qualifies for radar (claim 1): a radar building
-/// that is switched on, on the map, alive and not being sold.
+/// that is switched on, on the map and not being sold.
 fn qualifies(w: &World, id: ObjectId) -> bool {
     w.obj(id).is_some_and(|o| {
         o.kind == Kind::Building
@@ -93,10 +93,9 @@ fn qualifies(w: &World, id: ObjectId) -> bool {
                 .get(o.type_index as usize)
                 .copied()
                 .unwrap_or(false)
-            // spec: S-0410 claim 1 (switched on, on the map, alive, neither current nor queued behaviour selling)
+            // spec: S-0410 claim 1 (switched on, on the map, neither current nor queued behaviour selling)
             && !o.econ.building.switched_off
             && o.on_map
-            && o.health > 0
             && o.beh.current != Some(Behaviour::Selling)
             && o.beh.queued != Some(Behaviour::Selling)
     })

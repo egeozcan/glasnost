@@ -411,6 +411,10 @@ pub fn process_selling(w: &mut World, id: ObjectId) -> i32 {
     let Some(o) = w.obj(id).cloned() else {
         return SELLING_DELAY;
     };
+    // spec: S-0408 claim 6 (a building destroyed during its sale: the sale stops at the killing hit; no later selling processing completes it)
+    if o.health <= 0 {
+        return SELLING_DELAY;
+    }
     let tick = w.tick;
     let sale = o.econ.sale.clone().unwrap_or(Sale {
         stage: Stage::Ordered,

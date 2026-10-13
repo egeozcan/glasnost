@@ -6324,6 +6324,16 @@
           "type": "boolean",
           "default": true
         },
+        "sidebar_both_flags_rank": {
+          "description": "An item with both the counts-as-aircraft and naval flags ranks 1 as\nthe new item and 2 as an item already in the tab; off: 1 in both.",
+          "type": "boolean",
+          "default": true
+        },
+        "sidebar_tie_newest_first": {
+          "description": "A sidebar item tied with existing items on every key goes before\nthem (the newest first); off: after them.",
+          "type": "boolean",
+          "default": true
+        },
         "sight_bonus_wrap": {
           "description": "The height bonus of sight wraps into −128 … 127.",
           "type": "boolean",
