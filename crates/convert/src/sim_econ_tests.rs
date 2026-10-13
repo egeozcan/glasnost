@@ -30,13 +30,13 @@ fn import(base: &str, art: &str) -> (SimData, Vec<String>) {
     (r.ruleset.sim, w)
 }
 
-const BASE: &str = "[Countries]\n0=Ruritania\n[Ruritania]\nCostUnitsMult=1.25\nIncomeMult=0.75\nSide=Blue\nMultiplay=yes\nCost=2\n\
+const BASE: &str = "[Countries]\n0=Ruritania\n[Ruritania]\nCostUnitsMult=1.25\nIncomeMult=0.75\nSide=Blue\nMultiplay=yes\nCost=2\nSmartAI=yes\nPrefix=B\nSuffix=Ru\nParentCountry=Ruritania\n\
 [BuildingTypes]\n0=MILL\n1=PLANT\n[MILL]\nPower=-30\nRefinery=yes\nAdjacent=4\nPrerequisite=plant,power\nOwner=Ruritania,Nowhere\nUnitsCostBonus=0.5\nFactory=Whatever\nImage=MILLART\n\
 [PLANT]\nPower=100\nExtraPower=7\nSight=6\n\
 [VehicleTypes]\n0=TRUCK\n[TRUCK]\nDock=MILL,Elsewhere\nBuildLimit=3\nPoweredUnit=yes\n\
 [Tiberiums]\n0=Rubies\n1=Opals\n[Rubies]\nValue=33\nGrowthPercentage=0.2\nImage=1\n[Opals]\nImage=2\n\
 [SuperWeaponTypes]\n0=Zap\n[Zap]\nDisableableFromShell=yes\nType=Thing\n\
-[General]\nHarvesterLoadRate=9\nPrerequisitePower=PLANT\nPadAircraft=Ghost\n\
+[General]\nHarvesterLoadRate=9\nAIHateDelays=4,5,6\nPrerequisitePower=PLANT\nPadAircraft=Ghost\n\
 [AI]\nBuildTech=MILL\n\
 [AudioVisual]\nSavourDelay=0.5\n\
 [CrateRules]\nCrateMaximum=4\n\
@@ -85,7 +85,7 @@ fn unit_econ_fields_are_converted() {
     assert_eq!(truck.econ.powered_unit, Some(true));
 }
 
-// spec: S-0402 Import mapping, S-0404 Import mapping, S-0413 claim 2 and Import mapping
+// spec: S-0402 Import mapping, S-0404 Import mapping, S-0413 claims 2 and 4 and Import mapping
 #[test]
 fn country_econ_fields_and_no_effect_warning() {
     let (s, w) = import(BASE, ART);
@@ -97,6 +97,10 @@ fn country_econ_fields_and_no_effect_warning() {
     assert_eq!(c.income_mult.as_ref().map(|d| d.0.as_str()), Some("75e-2"));
     assert_eq!(c.side.as_deref(), Some("Blue"));
     assert_eq!(c.multiplay, Some(true));
+    assert_eq!(c.smart_ai, Some(true));
+    assert_eq!(c.prefix.as_deref(), Some("B"));
+    assert_eq!(c.suffix.as_deref(), Some("Ru"));
+    assert_eq!(c.parent_country.as_deref(), Some("Ruritania"));
     assert!(w.iter().any(|m| m.contains("S-0413 claim 2")));
 }
 
@@ -121,6 +125,7 @@ fn tiberiums_superweapons_and_general_econ() {
     assert_eq!(g.bases, Some(false));
     assert_eq!(g.short_game, Some(true));
     assert_eq!(g.money, Some(777));
+    assert_eq!(g.ai_hate_delays.as_deref(), Some(&[4, 5, 6][..]));
     assert!(g.savour_delay.is_some());
 }
 

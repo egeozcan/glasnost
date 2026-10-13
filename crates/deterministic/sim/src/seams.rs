@@ -114,9 +114,8 @@ pub fn building_refund(w: &World, building: ObjectId) -> Option<i32> {
 }
 
 /// Whether a house's game is over, the state S-0414's defeat puts it in
-/// (S-0312 claim 18's survivor condition). No house is defeated before the
-/// victory rules exist.
-pub fn game_over(_w: &World, _house: HouseId) -> bool {
-    // spec: S-0414 claim 5 (the defeated state; a seam until the victory rules exist)
-    false
+/// (S-0312 claim 18's survivor condition).
+pub fn game_over(w: &World, house: HouseId) -> bool {
+    // spec: S-0414 claim 5 (the defeated state)
+    crate::econ::victory::defeated(w, house)
 }

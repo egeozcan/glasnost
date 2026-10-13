@@ -82,15 +82,15 @@ pub fn anger(w: &mut World, victim: ObjectId, attacker: ObjectId, dealt: i32) {
 
 /// Works a house's enemy house out again (S-0309 claim 16): the house,
 /// other than itself, not allied and not defeated, with the greatest anger
-/// above 0, the earlier in house order on ties. No house is defeated in our
-/// engine yet (the victory topic owns defeat).
+/// above 0, the earlier in house order on ties (S-0414 owns defeat).
 pub fn recompute_enemy(w: &mut World, house: usize) {
     let Some(h) = w.houses.get(house) else { return };
     let mut best: Option<(usize, i32)> = None;
     for (i, &a) in h.combat.anger.iter().enumerate() {
         let allied = h.allied_with(crate::world::HouseId(i as u8));
         // spec: S-0309 claim 16 (greatest anger above 0; ties: the earlier house in house order)
-        if i == house || allied || a <= 0 {
+        let defeated = crate::econ::victory::defeated(w, crate::world::HouseId(i as u8));
+        if i == house || allied || defeated || a <= 0 {
             continue;
         }
         if best.is_none_or(|(_, b)| a > b) {

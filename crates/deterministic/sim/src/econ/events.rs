@@ -22,6 +22,8 @@ pub fn entered_map(w: &mut World, id: ObjectId, by_order: bool) {
         house.econ.acquired.push(id);
     }
     let _ = by_order;
+    // spec: S-0414 claim 4 (the on-map counts: an entry)
+    crate::econ::victory::entered_map(w, id);
     crate::econ::power::entered_map(w, id);
     if kind == Kind::Building
         && let Some(h) = owner
@@ -48,6 +50,8 @@ pub fn entered_map(w: &mut World, id: ObjectId, by_order: bool) {
 pub fn leaving_map(w: &mut World, id: ObjectId, for_good: bool) {
     let Some(o) = w.obj(id) else { return };
     let (kind, owner) = (o.kind, o.owner);
+    // spec: S-0414 claim 4 (the on-map counts: a leaving)
+    crate::econ::victory::leaving_map(w, id);
     crate::econ::power::leaving_map(w, id);
     crate::econ::shroud::leaving_map(w, id, for_good);
     crate::econ::resource::removed(w, id);
@@ -91,6 +95,8 @@ pub fn leaving_map(w: &mut World, id: ObjectId, for_good: bool) {
 pub fn owner_changed(w: &mut World, id: ObjectId, old: Option<HouseId>) {
     let Some(o) = w.obj(id) else { return };
     let (kind, new) = (o.kind, o.owner);
+    // spec: S-0414 claim 4 (a change of owner on the map: a leaving for the old owner, an entry for the new)
+    crate::econ::victory::owner_changed(w, id, old);
     crate::econ::shroud::owner_changed(w, id);
     if kind.is_mobile() && !w.rules().quirks.unit_changes_no_recheck {
         // spec: S-0407 claim 12 (n) and quirks.unit_changes_no_recheck (both houses)

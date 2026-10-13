@@ -49,6 +49,7 @@ pub fn house_combat(
     country: u32,
     role: crate::world::HouseRole,
     houses: usize,
+    row: crate::econ::setup::Row,
 ) -> HouseCombat {
     let mode = r.mode;
     let g = &r.combat.general;
@@ -59,16 +60,18 @@ pub fn house_combat(
         .get(country as usize)
         .map_or((one, one), |c| (c.rof, c.firepower));
     let player = role == crate::world::HouseRole::Player;
+    // spec: S-0412 claim 5 (the normal row, or the row the player's handicap picks)
+    let ri = crate::econ::setup::row_index(row);
     HouseCombat {
         // spec: S-0301 F2 (h = RZ₅₃(ℓ × κ) for a player house in a skirmish; h = 1.0 for the neutral and special houses, S-0412 claim 5)
         rof_factor: if player {
-            g.row_rof.mul(rof, mode)
+            g.rows_rof[ri].mul(rof, mode)
         } else {
             one
         },
         // spec: S-0302 claim 3 and F1 (F_h = RZ₅₃(φᵣ × φ_c) for a player house; exactly 1.0 for the neutral and special houses, S-0412 claim 5)
         firepower: if player {
-            g.row_firepower.mul(fp, mode)
+            g.rows_firepower[ri].mul(fp, mode)
         } else {
             one
         },

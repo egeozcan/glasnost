@@ -28,12 +28,13 @@ fn building(strength: i32, power: i32) -> BuildingType {
 /// drain 10), NODRAIN (needs power, no drain), SPECIAL (special-power flag),
 /// ENG (needs an engineer), ABS (absorbing, extra output 30), XTRA (output
 /// 100, extra output 30), UPx upgrades, CENTRE (control centre for DRONE),
-/// GAPPER (super-gap radius, extra drain 20); vehicle DRONE (powered unit).
+/// GAPPER (super-gap radius, extra drain 20), GAPGEN (gap generator, radius 3,
+/// drain 10); vehicle DRONE (powered unit).
 fn rules() -> Ruleset {
     let mut r = testkit::ruleset();
     let names = [
         "PLANT", "CONS", "DEF", "NODRAIN", "SPECIAL", "ENG", "ABS", "XTRA", "UP10", "UP20", "UPD5",
-        "CENTRE", "CENTRE2", "GAPPER", "SMALL", "WALLY",
+        "CENTRE", "CENTRE2", "GAPPER", "SMALL", "WALLY", "GAPGEN",
     ];
     r.registries.insert(
         "buildings".into(),
@@ -83,6 +84,10 @@ fn rules() -> Ruleset {
     g.econ.super_gap_radius_in_cells = Some(5);
     g.econ.extra_power = Some(-20);
     s.buildings.insert("GAPPER".into(), g);
+    let mut gg = building(500, -10);
+    gg.gap_generator = Some(true);
+    gg.econ.gap_radius_in_cells = Some(3);
+    s.buildings.insert("GAPGEN".into(), gg);
     let mut wall = building(500, 0);
     wall.firestorm_wall = Some(true);
     wall.econ.power = Some(-5);
@@ -479,6 +484,48 @@ fn claim_10_power_switch() {
     assert!(!w.obj(fw).unwrap().econ.building.switched_off);
     power::switch(&mut w, c, true);
     assert!(!w.obj(c).unwrap().econ.building.switched_off);
+}
+
+// spec: S-0405 claim 10 (an order repeating the state already set changes nothing; a dead or off-map building takes no order)
+#[test]
+fn claim_10_repeat_dead_and_off_map() {
+    let mut w = game(&rules());
+    put(&mut w, "PLANT", 0, 0, 0);
+    let c = put(&mut w, "CONS", 0, 2, 0);
+    power::switch(&mut w, c, true);
+    assert!(!w.obj(c).unwrap().econ.building.switched_off);
+    power::switch(&mut w, c, false);
+    power::switch(&mut w, c, false);
+    assert!(w.obj(c).unwrap().econ.building.switched_off);
+    let d = put(&mut w, "CONS", 0, 4, 0);
+    w.obj_mut(d).unwrap().health = 0;
+    power::switch(&mut w, d, false);
+    assert!(!w.obj(d).unwrap().econ.building.switched_off, "dead");
+    let e = put(&mut w, "CONS", 0, 6, 0);
+    w.obj_mut(e).unwrap().on_map = false;
+    power::switch(&mut w, e, false);
+    assert!(!w.obj(e).unwrap().econ.building.switched_off, "off the map");
+}
+
+// spec: S-0405 claims 9 and 10 (an accepted switch-off ends the gap field at once; switched on, it starts again in the next building turn in operation)
+#[test]
+fn claim_10_switch_ends_gap_at_once() {
+    let mut w = game(&rules());
+    put(&mut w, "PLANT", 0, 0, 0);
+    let g = put(&mut w, "GAPGEN", 0, 2, 0);
+    for _ in 0..3 {
+        step(&mut w);
+    }
+    assert!(w.obj(g).unwrap().econ.sight.gap.is_some());
+    power::switch(&mut w, g, false);
+    assert!(
+        w.obj(g).unwrap().econ.sight.gap.is_none(),
+        "ended without waiting for the building's turn"
+    );
+    power::switch(&mut w, g, true);
+    assert!(w.obj(g).unwrap().econ.sight.gap.is_none());
+    step(&mut w);
+    assert!(w.obj(g).unwrap().econ.sight.gap.is_some());
 }
 
 // spec: S-0405 claim 13 (the count of active control centres: from 1 to 0 disables the powered unit's vehicles; from 0 to 1 enables them; one count for all types)

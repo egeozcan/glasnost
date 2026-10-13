@@ -29,12 +29,15 @@ pub enum LoadError {
     /// No random start cell could be found: 1000 candidates in a row failed
     /// (S-0009 claim 18, a departure from the original's endless load).
     NoStartCell,
+    /// The skirmish setup is refused (S-0412).
+    Setup(crate::econ::setup::SetupError),
 }
 
 impl std::fmt::Display for LoadError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::UnknownCountry(c) => write!(f, "unknown country {c:?}"),
+            Self::Setup(e) => write!(f, "{e}"),
             Self::NoStartCell => write!(
                 f,
                 "no start cell could be found on the map: 1000 random candidates in a row had no clear 8 × 8 area (S-0009 claim 18)"
@@ -176,14 +179,19 @@ pub fn new_game(
     catalogue: Arc<TileCatalogue>,
     setup: &GameSetup,
 ) -> Result<World, LoadError> {
+    // spec: S-0412 claims 11 and 13 (setups our engine refuses)
+    crate::econ::setup::check(setup, &rules).map_err(LoadError::Setup)?;
     let mut houses = Vec::new();
-    for h in &setup.houses {
+    for (i, h) in setup.houses.iter().enumerate() {
         let country = rules
             .country_names
             .iter()
             .position(|n| *n == h.country)
             .ok_or_else(|| LoadError::UnknownCountry(h.country.clone()))?
             as u32;
+        // spec: S-0412 claims 2, 4 and 5 (credits, difficulty index and row when the houses are created)
+        let (state, credits) = crate::econ::setup::house_values(setup, i, &rules);
+        let row = crate::econ::setup::row_of(setup, i);
         houses.push(House {
             name: h.name.clone(),
             country,
@@ -194,10 +202,19 @@ pub fn new_game(
             start: None,
             role: h.role,
             removed: false,
-            credits: 0,
+            credits,
             pending: Vec::new(),
-            combat: crate::combat::fire::house_combat(&rules, country, h.role, setup.houses.len()),
-            econ: Default::default(),
+            combat: crate::combat::fire::house_combat(
+                &rules,
+                country,
+                h.role,
+                setup.houses.len(),
+                row,
+            ),
+            econ: crate::econ::HouseEcon {
+                setup: state,
+                ..Default::default()
+            },
         });
     }
     for (i, h) in houses.iter_mut().enumerate() {
@@ -415,6 +432,10 @@ pub fn new_game(
     crate::regions::rebuild(&mut w);
     // spec: S-0401 claims 4 and 13 (the map growth switch, and the game-start rebuilding of the lists, which takes no draw and sees only terrain objects)
     crate::econ::resource::game_start(&mut w, map.basic.tiberium_growth.unwrap_or(true));
+    if !setup.sandbox {
+        // spec: S-0412 claim 14 (the rest of game start after the starting units, the secret-lab draws last, all before tick 0)
+        crate::econ::setup::start_game(&mut w);
+    }
     Ok(w)
 }
 

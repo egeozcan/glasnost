@@ -224,6 +224,10 @@ const COUNTRY_ECON: &[Row] = &[
     ("side", "Side", Text, "S-0413"),
     ("multiplay", "Multiplay", Bool, "S-0413"),
     ("color", "Color", Text, "S-0413"),
+    ("parent_country", "ParentCountry", Text, "S-0413"),
+    ("prefix", "Prefix", Text, "S-0413"),
+    ("suffix", "Suffix", Text, "S-0413"),
+    ("smart_ai", "SmartAI", Bool, "S-0413"),
 ];
 
 /// The country's general factors with no effect (S-0413 claim 2): the
@@ -510,6 +514,7 @@ const GENERAL_ECON: &[(&str, &[u8], &str, Form, &str)] = &[
         Ints,
         "S-0412",
     ),
+    ("ai_hate_delays", GENERAL, "AIHateDelays", Ints, "S-0412"),
     (
         "build_tech",
         AI,

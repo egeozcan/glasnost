@@ -103,6 +103,10 @@ pub struct WorldEcon {
     pub shroud: shroud::Shroud,
     /// The end of the game (S-0414).
     pub end: victory::GameEnd,
+    /// Game-start values: the rewritten country flags and the crate count
+    /// (S-0412, S-0413).
+    #[serde(default)]
+    pub start: setup::StartState,
 }
 
 /// The typed rules of the M5a topics, built from the ruleset once
@@ -122,6 +126,10 @@ pub struct EconRules {
     pub production: production::Rules,
     /// The tech tree (S-0407).
     pub tech: tech::Rules,
+    /// Skirmish setup (S-0412, S-0413).
+    pub setup: setup::Rules,
+    /// Victory and defeat (S-0414).
+    pub victory: victory::Rules,
     /// Ore and gems (S-0401).
     pub resource: resource::Rules,
     /// The harvest cycle (S-0402).
@@ -138,6 +146,8 @@ impl EconRules {
             placement: placement::Rules::new(r, mode),
             production: production::Rules::new(r, mode),
             tech: tech::Rules::new(r, mode),
+            setup: setup::Rules::new(r, mode),
+            victory: victory::Rules::new(r, mode),
             resource: resource::Rules::new(r, mode),
             harvest: harvest::Rules::new(r, mode),
         }

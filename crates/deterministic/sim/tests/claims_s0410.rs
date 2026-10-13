@@ -30,7 +30,7 @@ fn rules() -> Ruleset {
     let mut r = testkit::ruleset();
     r.registries.insert(
         "buildings".into(),
-        ["PLANT", "DISH", "CONS"]
+        ["PLANT", "DISH", "CONS", "UPDISH"]
             .iter()
             .map(|s| s.to_string())
             .collect(),
@@ -38,6 +38,9 @@ fn rules() -> Ruleset {
     r.sim.buildings.insert("PLANT".into(), bt(100, false));
     r.sim.buildings.insert("DISH".into(), bt(-20, true));
     r.sim.buildings.insert("CONS".into(), bt(-200, false));
+    let mut up = bt(0, true);
+    up.econ.powers_up_building = Some("PLANT".into());
+    r.sim.buildings.insert("UPDISH".into(), up);
     r
 }
 
@@ -380,4 +383,19 @@ fn claims_6_7_8_listing_and_compose() {
     assert_eq!(out[(px.1 * img.width + px.0) as usize], [31, 0, 0]);
     assert!(out.contains(&[0, 0, 0]), "shrouded pixels are black");
     let _ = Rounding::TowardZero;
+}
+
+// spec: S-0410 claim 2 (r5: a successful upgrade placement is a recheck event even without a power change; the upgrade's own radar flag grants nothing)
+#[test]
+fn claim_2_upgrade_placement_rechecks() {
+    let mut w = game(&rules());
+    let p = put(&mut w, "PLANT", 0);
+    step(&mut w);
+    assert!(!w.houses[0].econ.radar.due);
+    // UPDISH is the fourth building type (index 3).
+    glasnost_sim::econ::placement::add_upgrade(&mut w, p, 3);
+    assert!(w.houses[0].econ.radar.due);
+    step(&mut w);
+    assert!(!w.houses[0].econ.radar.due);
+    assert!(!radar::available(&w, A));
 }
