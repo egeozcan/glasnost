@@ -641,6 +641,7 @@ pub fn place_building(w: &mut World, house: HouseId, t: TypeRef, cell: CellXY) -
 /// state; then the wall fill for a place order (`by_order`). The facing is
 /// 0 unless the caller sets one.
 pub fn put_on_map(w: &mut World, id: ObjectId, cell: CellXY, by_order: bool) {
+    // The facing of a placed building is not stated (request Q-0133): 0.
     put_on_map_facing(w, id, cell, by_order, 0);
 }
 

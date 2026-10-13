@@ -336,6 +336,7 @@ fn complete(w: &mut World, id: ObjectId, b: u32, at: CellXY) -> bool {
     // Leave the vehicle's cell before the building enters it.
     crate::objects::remove(w, id);
     // spec: S-0415 claim 6 (the centre of the anchor at the surface height; construction begins; not a place order, S-0415 claim 7)
+    // The building's facing is not stated (request Q-0133): the deploy facing D × 256.
     let d = deploy_facing(w, b);
     crate::econ::placement::put_on_map_facing(w, bid, at, false, facing_of(d));
     let yard = w.rules().buildings[b as usize]
