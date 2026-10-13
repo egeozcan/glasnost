@@ -78,12 +78,10 @@ pub fn find_spans(w: &mut World, order: &[CellXY]) {
     let rank: std::collections::BTreeMap<CellXY, usize> =
         order.iter().enumerate().map(|(i, &c)| (c, i)).collect();
     spans.sort_by_key(|s| rank.get(&s.start).copied().unwrap_or(usize::MAX));
-    // The band of each low span; where bands overlap, the span whose start
-    // cell comes first in the visiting order decides the axis, so the
-    // spans are applied last to first.
+    // spec: S-0010 claim 25 (where bands overlap, the span whose start cell comes first in the visiting order decides the axis; so the spans are applied last to first)
     for s in spans.iter().rev().filter(|s| !s.high) {
         let axis = if s.east {
-            // spec: S-0212 Terms (a low span's band sets the axis: along cell x for a span running east, along cell y for one running south)
+            // spec: S-0010 claim 25, S-0212 Terms (each band cell gets the axis: along cell x for a span running east, along cell y for one running south)
             Axis::X
         } else {
             Axis::Y

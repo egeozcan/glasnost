@@ -94,7 +94,11 @@ pub fn recalc_cells(w: &mut World, order: &[CellXY]) {
 /// tile names an animation and its sub-tile is the tile's attaches-to
 /// value. While the map loads, before the second pass, only a cell's first
 /// recalculation can start one (S-0202 table); from the second pass on, a
-/// cell starts at most one. Returns the animation type's name.
+/// cell starts at most one. Returns the animation type's name. Claim 19
+/// leaves out of these once-only rules a type with the vein-animation flag
+/// and leaves what happens then open (S-0010 Open questions); the sim
+/// rules carry no such flag for animations, so our engine applies the
+/// rules to every tile animation.
 fn tile_anim_due(w: &mut World, cat: &TileCatalogue, c: CellXY) -> Option<String> {
     let i = w.cells.idx(c)?;
     let cell = *w.cells.cell(c)?;
