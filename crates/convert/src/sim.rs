@@ -822,6 +822,8 @@ impl Builder<'_> {
 
     /// A field's value in force, as a node.
     fn field(&mut self, state: Option<&KeyState>, form: Form, what: &str) -> Option<Node> {
+        // spec: S-0003 claim 12 (quirks.list_items_untrimmed off: name items trimmed)
+        let untrimmed = self.i.ini_quirks.list_items_untrimmed;
         match form {
             // spec: S-0003 claims 3 and 4 (integer forms; a hexadecimal form without digits keeps the value)
             Int => fold(state, None, |v, _| value::integer(v)).map(int_node),
@@ -838,17 +840,32 @@ impl Builder<'_> {
                 .flatten()
                 .map(jsonc::string),
             // spec: S-0003 claims 12, 14 and 19 (a list of type names; a given list replaces the held one; none and <none> items take no place, so a list of only those is empty)
-            Refs(kind) => fold(state, None, |v, _| {
-                Some(
-                    value::list(v, value::COMMON_TEXT_LIMIT)
-                        .into_iter()
-                        .filter_map(|item| self.ref_name(kind, item))
-                        .map(jsonc::string)
-                        .collect::<Vec<_>>(),
-                )
-            })
-            .map(jsonc::array),
-            // spec: S-0003 claims 3 and 12 (a list of integers; an item the integer form cannot read is 0: placeholder, Q-0061)
+            Refs(kind) => {
+                let mut spaced = None;
+                let list = fold(state, None, |v, e| {
+                    let items = value::name_items(v, value::COMMON_TEXT_LIMIT, untrimmed);
+                    if untrimmed && items.iter().any(|i| value::edge_whitespace(i)) {
+                        spaced = Some((e.layer, e.line));
+                    }
+                    Some(
+                        items
+                            .into_iter()
+                            .filter_map(|item| self.ref_name(kind, item))
+                            .map(jsonc::string)
+                            .collect::<Vec<_>>(),
+                    )
+                });
+                // spec: S-0003 claim 12 (quirks.list_items_untrimmed on: the importer warns for a name item that begins or ends with whitespace)
+                if let Some((layer, line)) = spaced {
+                    self.warn(
+                        layer,
+                        line,
+                        format!("{what}: a list item with whitespace at its start or end names a different type (S-0003 claim 12, quirks.list_items_untrimmed)"),
+                    );
+                }
+                list.map(jsonc::array)
+            }
+            // spec: S-0003 claims 3 and 12 (a list of integers; an item the integer form cannot read is 0 and keeps its place: interim, request Q-0171)
             Ints => fold(state, None, |v, _| {
                 Some(
                     value::list(v, value::COMMON_TEXT_LIMIT)
@@ -871,7 +888,7 @@ impl Builder<'_> {
             // spec: S-0003 claim 12 and S-0214 Import mapping (a list of names: every item kept in the listed order, none dropped or reordered)
             Texts => fold(state, None, |v, _| {
                 Some(
-                    value::list(v, value::COMMON_TEXT_LIMIT)
+                    value::name_items(v, value::COMMON_TEXT_LIMIT, untrimmed)
                         .into_iter()
                         .map(|item| {
                             jsonc::string(encode(value::text(item, value::COMMON_TEXT_LIMIT)))
@@ -1290,9 +1307,11 @@ impl Builder<'_> {
             ("elite_abilities", "EliteAbilities"),
         ] {
             // spec: S-0003 claim 12 (list: split at commas, empty items skipped; a given list replaces the old one)
+            let untrimmed = self.i.ini_quirks.list_items_untrimmed;
+            // spec: S-0311 Import mapping and S-0003 claim 12 (ability items compared without trimming while quirks.list_items_untrimmed is on)
             let list = fold(t.keys.get(key.as_bytes()), None, |v, _| {
                 Some(
-                    value::list(v, value::COMMON_TEXT_LIMIT)
+                    value::name_items(v, value::COMMON_TEXT_LIMIT, untrimmed)
                         .into_iter()
                         .map(|item| jsonc::string(encode(&item.to_ascii_uppercase())))
                         .collect::<Vec<_>>(),
@@ -1320,9 +1339,11 @@ impl Builder<'_> {
     /// type are dropped with a warning (S-0004 claim 3; S-0003 claim 12).
     fn name_list(&mut self, state: Option<&KeyState>, kind: Kind, what: &str) -> Option<Node> {
         let mut dropped = Vec::new();
+        let untrimmed = self.i.ini_quirks.list_items_untrimmed;
         let list = fold(state, None, |v, e| {
             Some(
-                value::list(v, value::COMMON_TEXT_LIMIT)
+                // spec: S-0003 claim 12 (quirks.list_items_untrimmed off: name items trimmed)
+                value::name_items(v, value::COMMON_TEXT_LIMIT, untrimmed)
                     .into_iter()
                     .filter_map(|item| {
                         let key = self.type_key(kind, item);

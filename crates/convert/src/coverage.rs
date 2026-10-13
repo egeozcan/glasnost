@@ -237,10 +237,7 @@ const NAMED: &[(&str, &[&str])] = &[
             "ShakeYlo",
         ],
     ),
-    (
-        "S-0308",
-        &["Overpowerable", "ResourceDestination", "ResourceGatherer"],
-    ),
+    ("S-0308", &["Overpowerable"]),
     ("S-0311", &["EliteFlashTimer"]),
     (
         "S-0312",
@@ -248,7 +245,6 @@ const NAMED: &[(&str, &[&str])] = &[
             "Bright",
             "CrateBeneath",
             "CrateBeneathIsMoney",
-            "DestroyParticleSystems",
             "DestroySmokeOffset",
             "Wake",
         ],

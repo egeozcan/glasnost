@@ -587,6 +587,17 @@ fn claim_11_country_veteran_lists() {
     assert_eq!(exp(&w, beta), F32::ZERO);
 }
 
+// spec: S-0311 claim 11 (revision 2, scenario X7 part b: the country-list rule does not test trainability)
+#[test]
+fn claim_11_country_list_ignores_trainable() {
+    let mut r = ruleset("4", Some("2.5"));
+    r.sim.vehicles.get_mut("KILLER").unwrap().combat.trainable = Some(false);
+    r.sim.countries.get_mut("Alphaland").unwrap().veteran_units = Some(vec!["KILLER".into()]);
+    let mut w = game(&r);
+    let v = spawn(&mut w, Kind::Vehicle, "KILLER", 0, -4);
+    assert_eq!(exp(&w, v), F32(ONE));
+}
+
 /// A game whose map places one KILLER vehicle and one WALKER of house
 /// Alpha per veterancy value (`None`: the field absent).
 fn map_game(r: &Ruleset, values: &[Option<i32>]) -> World {

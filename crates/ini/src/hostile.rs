@@ -15,6 +15,7 @@ pub fn run(data: &[u8]) {
         ini_duplicate_hash_order: false,
         ini_hash_identity: false,
         percent_list_integer_prefix: false,
+        list_items_untrimmed: false,
     };
     for quirks in [Quirks::default(), off] {
         let mut warnings = Vec::new();
@@ -28,6 +29,7 @@ pub fn run(data: &[u8]) {
                 let v = &e.value;
                 let _ = s.get(&e.key);
                 let _ = value::text(v, value::COMMON_TEXT_LIMIT);
+                let _ = value::name_items(v, value::COMMON_TEXT_LIMIT, quirks.list_items_untrimmed);
                 let _ = value::boolean(v);
                 let _ = value::integer(v);
                 let _ = value::decimal(v, DecimalField::Double);

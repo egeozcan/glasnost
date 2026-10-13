@@ -461,7 +461,7 @@ pub fn convert(inputs: &Inputs, options: &ImportOptions) -> Import {
     }
 }
 
-fn q_named(q: &IniQuirks) -> [(&'static str, bool); 5] {
+fn q_named(q: &IniQuirks) -> [(&'static str, bool); 6] {
     [
         (
             "ini_final_line_needs_newline",
@@ -471,5 +471,6 @@ fn q_named(q: &IniQuirks) -> [(&'static str, bool); 5] {
         ("ini_duplicate_hash_order", q.ini_duplicate_hash_order),
         ("ini_hash_identity", q.ini_hash_identity),
         ("percent_list_integer_prefix", q.percent_list_integer_prefix),
+        ("list_items_untrimmed", q.list_items_untrimmed),
     ]
 }

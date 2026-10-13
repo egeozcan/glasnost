@@ -963,7 +963,7 @@ pub fn turn(w: &mut World, id: ObjectId) {
     }
     let kind = p.kind();
     let mut lift = 0;
-    let (newpos, disp_v) = match kind {
+    let (unlifted, disp_v) = match kind {
         ProjectileKind::Straight | ProjectileKind::Arcing => {
             // spec: S-0306 claim 10 (V_z falls by g, then trunc(P + V))
             pr.vel[2] = pr.vel[2].sub(g, mode);
@@ -991,6 +991,8 @@ pub fn turn(w: &mut World, id: ObjectId) {
         }
     };
     let _ = disp_v;
+    // spec: S-0306 claim 15 and T1 (a steering projectile's new position P′ includes the cruise lift in every row of T1, the closing step, the deck test and T2; only the steering distance is measured before the lift)
+    let newpos = Pos::new(unlifted.x, unlifted.y, unlifted.z.wrapping_add(lift));
     pr.turns += 1;
     let hp = newpos.z - w.surface_at(newpos.x, newpos.y);
     let mut rows = Rows::default();
@@ -1013,6 +1015,10 @@ pub fn turn(w: &mut World, id: ObjectId) {
     };
     let cross =
         crossing(start.z, newpos.z, deck_old).or_else(|| crossing(start.z, newpos.z, deck_new));
+    // spec: S-0306 T1 (vertical: a high-bridge cell, old or new; deck height = terrain height of the cell of P′ + 416)
+    let deck_here = Some(terrain_new + 416);
+    let vertical_cross = (w.high_bridge(start.cell()) || w.high_bridge(nc))
+        && crossing(start.z, newpos.z, deck_here).is_some();
     let in_map = w.cells.cell(nc).is_some();
     if matches!(kind, ProjectileKind::Straight | ProjectileKind::Arcing) {
         // spec: S-0306 T1 row 1 (below the terrain; a deck crossing; 0 to 149 above the terrain over a building or one of the three wall overlays)
@@ -1043,7 +1049,7 @@ pub fn turn(w: &mut World, id: ObjectId) {
     }
     if kind == ProjectileKind::Vertical {
         // spec: S-0306 T1 (vertical: above the detonation altitude, h < 0, or a deck crossing)
-        rows.vertical = newpos.z > p.detonation_altitude || h < 0 || cross.is_some();
+        rows.vertical = newpos.z > p.detonation_altitude || h < 0 || vertical_cross;
     }
     if kind == ProjectileKind::Steering {
         let target_pt = pr.target.map(|t| aim_target_point(w, t));
@@ -1051,12 +1057,13 @@ pub fn turn(w: &mut World, id: ObjectId) {
             target_pt.is_some_and(|tp| !(q.origin_as_missing_target_point && tp == Pos::default()));
         let sd = if has_target {
             let tp = target_pt.unwrap_or_default();
-            let (dx, dy) = (i128::from(tp.x - newpos.x), i128::from(tp.y - newpos.y));
+            // spec: S-0306 claim 15 (the steering distance is measured at P′ before the cruise lift)
+            let (dx, dy) = (i128::from(tp.x - unlifted.x), i128::from(tp.y - unlifted.y));
             // spec: S-0306 Terms (steering distance: ζ = trunc(Δz / 4), 0 for airburst)
             let zeta = if p.airburst {
                 0
             } else {
-                i128::from((tp.z - newpos.z) / 4)
+                i128::from((tp.z - unlifted.z) / 4)
             };
             root_n(w, dx * dx + dy * dy + zeta * zeta)
         } else {
@@ -1210,8 +1217,8 @@ pub fn turn(w: &mut World, id: ObjectId) {
     };
     match outcome {
         None => {
-            // The rows of T1 test P′, the position before the cruise lift of claim 15 (request Q-0078).
-            pr.pos = Pos::new(newpos.x, newpos.y, newpos.z.wrapping_add(lift));
+            // spec: S-0306 claim 15 (the position kept when no row applies is the lifted one)
+            pr.pos = newpos;
             // spec: S-0306 claim 18 (a degenerating projectile loses 1 per turn without a detonation, not below 5)
             if p.degenerates && pr.damage > 5 {
                 pr.damage -= 1;
@@ -1474,6 +1481,12 @@ pub fn projectile_detonation(
 ) -> DetonationResult {
     let rules = w.rules_arc();
     let half = rules.quirks.ranged_draw_half_span;
+    // spec: S-0303 claim 14 and S-0302 claim 1 (a firer removed from the game by any means since the shot: neither attacker nor attacking house is carried; a loaded firer, which stays carried, is a seam: transports)
+    let (attacker, house) = if attacker.is_some_and(|a| w.obj(a).is_none()) {
+        (None, None)
+    } else {
+        (attacker, house)
+    };
     let warhead = rules.combat.weapon(weapon).warhead;
     let Some(h) = warhead else {
         // spec: S-0303 Edge cases (a projectile without a warhead does nothing, a departure)

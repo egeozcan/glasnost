@@ -966,6 +966,17 @@ pub struct Quirks {
     // spec: S-0301 claim 10, Formulas F6
     #[serde(default = "on")]
     pub initial_ammo_above_capacity: bool,
+    /// A building awaiting removal takes a second round of survivors and
+    /// smudge steps when it is removed; off: no second round.
+    // spec: S-0312 claim 21, Edge cases
+    #[serde(default = "on")]
+    pub building_removal_second_round: bool,
+    /// A vehicle's approach search tries the eight alternative cells in
+    /// the original's order (0, −1), (1, −2), …, (0, 0); off: the eight
+    /// neighbours in direction order 0 to 7.
+    // spec: S-0307 claim 16, Edge cases
+    #[serde(default = "on")]
+    pub approach_alternative_walk: bool,
 }
 
 impl Default for Quirks {
@@ -1207,6 +1218,8 @@ impl Default for Quirks {
             sidebar_tie_newest_first: true,
             sidebar_both_flags_rank: true,
             initial_ammo_above_capacity: true,
+            building_removal_second_round: true,
+            approach_alternative_walk: true,
         }
     }
 }
@@ -1766,6 +1779,11 @@ impl Quirks {
                 "initial_ammo_above_capacity",
                 self.initial_ammo_above_capacity,
             ),
+            (
+                "building_removal_second_round",
+                self.building_removal_second_round,
+            ),
+            ("approach_alternative_walk", self.approach_alternative_walk),
         ]
     }
 
@@ -1892,6 +1910,10 @@ pub const EXTERNAL_QUIRKS: &[(&str, &str)] = &[
     (
         "percent_list_integer_prefix",
         "importer (ini::Quirks), S-0003 claim 13",
+    ),
+    (
+        "list_items_untrimmed",
+        "importer (ini::Quirks), S-0003 claim 12",
     ),
 ];
 

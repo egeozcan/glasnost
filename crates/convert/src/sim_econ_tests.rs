@@ -67,9 +67,84 @@ fn building_econ_fields_are_converted() {
     assert_eq!(s.buildings["PLANT"].econ.extra_power, Some(7));
     // spec: S-0409 Import mapping (a building's Sight, cells)
     assert_eq!(s.buildings["PLANT"].econ.sight, Some(6));
-    // Q-0100: the factory field is not converted and the importer warns.
+    // spec: S-0003 claim 21 (an unmatched word gives no factory, with a warning)
     assert_eq!(mill.factory, None);
-    assert!(w.iter().any(|m| m.contains("Q-0100")));
+    assert!(
+        w.iter()
+            .any(|m| m.contains("Factory") && m.contains("claim 21"))
+    );
+}
+
+// spec: S-0003 claim 21 and Import mapping row C19 (the factory kind words)
+#[test]
+fn factory_kind_words() {
+    // Byte 32 is past the 31-byte cut; byte 31 is not.
+    let cut_ok = format!("InfantryType{}x", " ".repeat(31 - 12));
+    let cut_bad = format!("InfantryType{}x", " ".repeat(30 - 12));
+    assert_eq!(cut_ok.len(), 32);
+    let names = [
+        ("A", "infantrytype"),
+        ("B", "UNITTYPE"),
+        ("C", "AircraftType  "),
+        ("D", "BuildingType"),
+        ("E", "<NONE>"),
+        ("F", "none"),
+        ("G", "TerrainType"),
+        ("H", "Infantry"),
+        ("I", "UnitTypex"),
+        ("J", "Unit Type"),
+        ("K", cut_ok.as_str()),
+        ("L", cut_bad.as_str()),
+    ];
+    let mut base = String::from("[BuildingTypes]\n");
+    for (i, (n, _)) in names.iter().enumerate() {
+        base.push_str(&format!("{i}={n}\n"));
+    }
+    for (n, v) in names {
+        base.push_str(&format!("[{n}]\nFactory={v}\n"));
+    }
+    let (s, w) = import(&base, "");
+    // A type left with no field at all is not written out.
+    let kind = |n: &str| s.buildings.get(n).and_then(|b| b.factory.clone());
+    assert_eq!(kind("A").as_deref(), Some("infantry"));
+    assert_eq!(kind("B").as_deref(), Some("vehicle"));
+    assert_eq!(kind("C").as_deref(), Some("aircraft"));
+    assert_eq!(kind("D").as_deref(), Some("building"));
+    assert_eq!(kind("K").as_deref(), Some("infantry"));
+    for n in ["E", "F", "G", "H", "I", "J", "L"] {
+        assert_eq!(kind(n), None, "{n}");
+    }
+    // Recognised words give no warning; unmatched ones do.
+    let warned = |n: &str| {
+        w.iter()
+            .any(|m| m.contains(&format!("buildings {n} Factory")))
+    };
+    for n in ["E", "G", "H"] {
+        assert!(!warned(n), "{n}");
+    }
+    for n in ["F", "I", "J", "L"] {
+        assert!(warned(n), "{n}");
+    }
+}
+
+// spec: S-0003 claim 21 (empty keeps the value in force; an unmatched word does not)
+#[test]
+fn factory_kind_layers() {
+    let base = "[BuildingTypes]\n0=A\n1=B\n[A]\nFactory=UnitType\n[B]\nFactory=UnitType\n";
+    let mode = "[A]\nFactory=\n[B]\nFactory=Nonsense\n";
+    let inputs = Inputs {
+        base: Some(file("rules.ini", base)),
+        mode: Some(file("mode.ini", mode)),
+        map: Some(file("test.map", "")),
+        art: Some(file("art.ini", "")),
+        ..Inputs::default()
+    };
+    let import = convert(&inputs, &ImportOptions::default());
+    let r = glasnost_rules::resolve_ruleset(Some((import.tree, import.provenance)), &[])
+        .unwrap_or_else(|e| panic!("{e}"));
+    let s = r.ruleset.sim;
+    assert_eq!(s.buildings["A"].factory.as_deref(), Some("vehicle"));
+    assert_eq!(s.buildings.get("B").and_then(|b| b.factory.clone()), None);
 }
 
 // spec: S-0402 Import mapping, S-0405 Import mapping, S-0407 Import mapping

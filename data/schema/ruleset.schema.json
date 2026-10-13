@@ -632,7 +632,7 @@
           "default": null
         },
         "factory": {
-          "description": "`Factory`, the kind it builds (`infantry`, `vehicle`, `aircraft`,\n`building`).",
+          "description": "`Factory`, the kind it builds in our words (`infantry`, `vehicle`,\n`aircraft`, `building`; the importer maps the original's words by\nS-0003 claim 21).",
           "type": [
             "string",
             "null"
@@ -1240,6 +1240,17 @@
         },
         "destroy_anim": {
           "description": "`DestroyAnim`, animation names (S-0312 claims 9, 19).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "string"
+          }
+        },
+        "destroy_particle_systems": {
+          "description": "`DestroyParticleSystems`, particle-system names, `none` and\n`<none>` omitted (S-0312 claim 19 f; S-0003 claim 19, row C18).",
           "type": [
             "array",
             "null"
@@ -2548,7 +2559,7 @@
           "default": null
         },
         "resource_destination": {
-          "description": "Units: `ResourceDestination` (S-0402 claim 14); absent: no.",
+          "description": "Units and buildings: `ResourceDestination` (S-0402 claim 14; S-0308\ntable P row 6); absent: no.",
           "type": [
             "boolean",
             "null"
@@ -2556,7 +2567,7 @@
           "default": null
         },
         "resource_gatherer": {
-          "description": "Units: `ResourceGatherer` (S-0402 claim 14; S-0414 Terms; S-0415\nclaim 4); absent: no.",
+          "description": "Units and buildings: `ResourceGatherer` (S-0402 claim 14; S-0414\nTerms; S-0415 claim 4; S-0308 table P row 6); absent: no.",
           "type": [
             "boolean",
             "null"
@@ -5468,6 +5479,11 @@
           "type": "boolean",
           "default": true
         },
+        "approach_alternative_walk": {
+          "description": "A vehicle's approach search tries the eight alternative cells in\nthe original's order (0, −1), (1, −2), …, (0, 0); off: the eight\nneighbours in direction order 0 to 7.",
+          "type": "boolean",
+          "default": true
+        },
         "area_damage_per_foundation_cell": {
           "description": "A building takes one hit for each scanned foundation cell within the spread radius.",
           "type": "boolean",
@@ -5510,6 +5526,11 @@
         },
         "building_pitch_term": {
           "description": "A straight shot at a building pitches by the building's art height term.",
+          "type": "boolean",
+          "default": true
+        },
+        "building_removal_second_round": {
+          "description": "A building awaiting removal takes a second round of survivors and\nsmudge steps when it is removed; off: no second round.",
           "type": "boolean",
           "default": true
         },

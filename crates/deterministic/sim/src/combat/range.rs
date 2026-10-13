@@ -4,6 +4,7 @@
 
 use glasnost_map::CellXY;
 use glasnost_num::geom::root_floor;
+use glasnost_num::trig::{cos_t, sin_t};
 use glasnost_num::{F64, int};
 
 use crate::combat::ballistics;
@@ -237,4 +238,211 @@ pub fn in_range(
 pub fn firer_weapon_range(w: &World, firer: ObjectId, slot: usize) -> i32 {
     // spec: S-0307 claim 13 (0 without a weapon, else R₀ with no bonus)
     super::weapon::slot_weapon(w, firer, slot).map_or(0, |x| w.rules().combat.weapon(x).range)
+}
+
+/// The outcome of the approach-position search (S-0307 claims 15 to 17).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Approach {
+    /// A position was found: the destination becomes this cell and the
+    /// target is kept (claims 15 and 16).
+    Cell(CellXY),
+    /// No position was found by a hunter-seeker or a vehicle thief: the
+    /// destination becomes the target object itself and the target is kept
+    /// (claim 17).
+    TargetItself,
+    /// No position was found by any other actor: the target is dropped and
+    /// the destination becomes the nearby cell, or is cleared when there is
+    /// none (claim 17).
+    Drop(Option<CellXY>),
+}
+
+/// The bearing differences of F4, in 1/256-turn units, in preference order.
+// spec: S-0307 F4 (bearing differences 0, +1, −1, … +6, −6, +8, −8, +16, −16, +24, −24, +32, −32, +48, −48, +64, −64)
+const BEARINGS: [i32; 25] = [
+    0, 1, -1, 2, -2, 3, -3, 4, -4, 5, -5, 6, -6, 8, -8, 16, -16, 24, -24, 32, -32, 48, -48, 64, -64,
+];
+
+/// A vehicle's alternative cells of an obstructed primary cell, in
+/// preference order (S-0307 claim 16).
+// spec: S-0307 claim 16 (displacements (0, −1), (1, −2), (2, −2), (3, −1), (3, 0), (2, 1), (1, 1), (0, 0))
+const ALTERNATIVES: [(i32, i32); 8] = [
+    (0, -1),
+    (1, -2),
+    (2, -2),
+    (3, -1),
+    (3, 0),
+    (2, 1),
+    (1, 1),
+    (0, 0),
+];
+
+/// The radii of S-0307 F4 for the adjusted reach `r_prime` (ρ′), the
+/// building lengthening `beta` and whether the actor is infantry.
+pub fn approach_radii(w: &World, r_prime: i32, beta: i32, infantry: bool) -> Vec<i32> {
+    let mode = w.rules().mode;
+    // spec: S-0307 F4 and Constants (margin a: 281.6 leptons for infantry, 179.2 for vehicles, the nearest doubles)
+    let margin = if infantry {
+        crate::rules::nearest_double("281.6")
+    } else {
+        crate::rules::nearest_double("179.2")
+    };
+    // spec: S-0307 F4 (u = max(0, trunc(RZ₅₃(ρ′ + β − a))); ρ′ + β wraps as a 32-bit sum)
+    let sum = wrap(i64::from(r_prime) + i64::from(beta));
+    let u = F64::from_i64(i64::from(sum), mode)
+        .sub(margin, mode)
+        .to_i32_common()
+        .max(0);
+    // spec: S-0307 F4 (u′ = 256 when 0 < u ≤ 256, else u)
+    let first = if u > 0 && u <= 256 { 256 } else { u };
+    // spec: S-0307 F4 and Constants (radii u′, u′ − 256, …, strictly greater than 204.8 leptons)
+    let cut = crate::rules::nearest_double("204.8");
+    (0..)
+        .map(|k: i32| first.wrapping_sub(k.wrapping_mul(256))) // spec: S-0307 F4 (steps of 256 leptons)
+        .take_while(|&rad| F64::from_i64(i64::from(rad), mode).gt(cut))
+        .collect()
+}
+
+/// The approach-position search of S-0307 claims 15 to 17, for the actor's
+/// current target, started with the adjusted reach `r_prime` (ρ′ of F4,
+/// which is S-0215 F10's r′, so the caller passes the r′ it has worked
+/// out, including that spec's deploy-to-fire replacement).
+///
+/// It is meant to be called by S-0215 claim 37's approach step when that
+/// step asks for a search, and only for an infantry unit or vehicle that
+/// has a target. It changes nothing; the caller applies the outcome:
+/// `Cell(c)` sets the destination to `c` and keeps the target,
+/// `TargetItself` sets the destination to the target object and keeps it,
+/// and `Drop(n)` clears the target and sets the destination to `n` (none
+/// clears it). `None`: the actor has no target or no type.
+///
+/// Claims 15 and 16 cover ground units on flat height-0 terrain without
+/// bridges, a target that is an object, and types without the close-range
+/// property; the same rules are applied to every other case meanwhile
+/// (request Q-0172, the part of Q-0072 the specs leave open). The regions
+/// must be up to date ([`crate::regions::ensure`]).
+pub fn approach_search(w: &World, id: ObjectId, r_prime: i32) -> Option<Approach> {
+    let r = w.rules();
+    let mode = r.mode;
+    let o = w.obj(id)?;
+    let t = o.target?;
+    let u = r.unit(o.kind, o.type_index)?;
+    let (_, weapon) = super::weapon::would_use(w, id, Some(t));
+    // spec: S-0307 F4 (T: the target's reference point; the attacker's reference point)
+    let tp = target_point(w, t);
+    let ap = w.reference_point(id);
+    let beta = match t {
+        Target::Object(x) => w
+            .obj(x)
+            .filter(|x| x.kind == Kind::Building)
+            .map_or(0, |x| 64 * (x.foundation.0 + x.foundation.1)), // spec: S-0307 F4 and Constants (β: the building lengthening of claim 9, 64 leptons per foundation cell of width plus height)
+        Target::Cell(_) => 0,
+    };
+    let radii = approach_radii(w, r_prime, beta, o.kind == Kind::Infantry);
+    // spec: S-0307 F4 (b: S-0204's 256-step facing of the direction from T to the attacker's reference point)
+    let f = glasnost_num::geom::direction(
+        i64::from(ap.x - tp.x),
+        i64::from(ap.y - tp.y),
+        r.quirks.table_direction,
+    );
+    let b = glasnost_num::geom::n_step(f, 256) as i32; // spec: S-0307 F4 (a 256-step facing)
+    // spec: S-0307 F4 (c = the double nearest −0.00009587672516830327 radians per facing unit)
+    let c = crate::rules::nearest_double("-0.00009587672516830327");
+    let a_cell = ap.cell();
+    let t_cell = tp.cell();
+    let ground = Layer::Ground;
+    let clear = |cell: CellXY| -> bool {
+        // spec: S-0307 claim 15 (a clear cell: enterable by class for its class and zone, an occupancy record empty as a whole, in the actor's reach region)
+        crate::passability::enterable_by_class(r, w, cell, u.class, u.zone, false)
+            && w.cells.occ(cell, ground).is_none_or(|x| x.empty())
+            && crate::regions::same_region(w, u.zone, o.pos.cell(), o.layer, cell, ground)
+    };
+    let fits = |cell: CellXY| -> bool {
+        // spec: S-0307 claim 15 (a point outside the usable area never qualifies; the range test from the cell centre at world height 0 with the weapon chosen for the target)
+        w.cells.usable(cell) && in_range(w, id, weapon, Some(t), Some(Pos::centre(cell, 0)))
+    };
+    let cheb = |p: CellXY, q: CellXY| (p.x - q.x).abs().max((p.y - q.y).abs());
+    let detour = |cell: CellXY| -> bool {
+        // spec: S-0307 claim 16 and Constants (E(c, t) ≤ C(c, t) + 8 or E(a, c) ≤ C(a, c) + 8 cells; a failed estimate never satisfies)
+        let e = |p: CellXY, q: CellXY| crate::path::coarse_estimate(w, u.zone, p, q);
+        e(cell, t_cell).is_some_and(|x| x <= cheb(cell, t_cell) + 8) // spec: S-0307 claim 16 (8 cells)
+            || e(a_cell, cell).is_some_and(|x| x <= cheb(a_cell, cell) + 8) // spec: S-0307 claim 16 (8 cells)
+    };
+    let alternatives: &[(i32, i32)] = if r.quirks.approach_alternative_walk {
+        &ALTERNATIVES
+    } else {
+        // spec: S-0307 Edge cases (approach_alternative_walk off: the eight neighbours in step-direction order 0 to 7)
+        &crate::regions::STEPS
+    };
+    for &radius in &radii {
+        let rd = F64::from_i64(i64::from(radius), mode);
+        for d in BEARINGS {
+            // spec: S-0307 F4 (p: the signed representative of 256(b + δ) modulo 65536)
+            let p = i64::from((256 * (b + d)).rem_euclid(65536) as u16 as i16);
+            // spec: S-0307 F4 (θ = RZ₅₃((p − 16383) × c))
+            let theta = F64::from_i64(p - 16383, mode).mul(c, mode);
+            // spec: S-0307 F4 (x = trunc(RZ₅₃(T.x + RZ₅₃(cosₜ(θ) × radius))), y = trunc(RZ₅₃(T.y − RZ₅₃(sinₜ(θ) × radius))))
+            let x = F64::from_i64(i64::from(tp.x), mode)
+                .add(cos_t(theta, mode).mul(rd, mode), mode)
+                .to_i32_common();
+            let y = F64::from_i64(i64::from(tp.y), mode)
+                .sub(sin_t(theta, mode).mul(rd, mode), mode)
+                .to_i32_common();
+            // spec: S-0307 F4 (candidate cell (trunc(x / 256), trunc(y / 256)))
+            let cell = CellXY::new(x / 256, y / 256);
+            if !fits(cell) {
+                continue;
+            }
+            let chosen = if clear(cell) {
+                Some(cell)
+            } else if o.kind == Kind::Vehicle {
+                // spec: S-0307 claim 16 (a vehicle: the first alternative that passes the range and clear-cell tests)
+                alternatives
+                    .iter()
+                    .map(|&(dx, dy)| CellXY::new(cell.x + dx, cell.y + dy))
+                    .find(|&a| fits(a) && clear(a))
+            } else {
+                // spec: S-0307 claim 16 (an infantry unit skips a primary cell that is not clear)
+                None
+            };
+            // spec: S-0307 claim 16 (only the first qualifying alternative meets the detour limit; when it fails the next primary has preference)
+            if let Some(ch) = chosen
+                && detour(ch)
+            {
+                return Some(Approach::Cell(ch));
+            }
+        }
+    }
+    // spec: S-0307 claim 17 (no position: a hunter-seeker or a vehicle thief takes the target object as its destination and keeps the target)
+    let hunter = u.raw.hunter_seeker.unwrap_or(false);
+    if hunter || (o.kind == Kind::Infantry && u.vehicle_thief) {
+        return Some(Approach::TargetItself);
+    }
+    // spec: S-0307 claim 17 (any other actor drops the target; with empty radii the nearby-cell search is centred on the target's reference cell)
+    if radii.is_empty() {
+        let nearby = crate::path::nearby(w, t_cell, crate::path::NearbyUse::Approach { unit: id });
+        return Some(Approach::Drop(nearby));
+    }
+    // spec: S-0307 Open questions and S-0215 Open questions (the centre after candidates is not established and must not be assumed to be the target's cell; request Q-0172, interim: no nearby-cell search, the destination is cleared)
+    Some(Approach::Drop(None))
+}
+
+/// Whether a balloon-hover vehicle's approach step takes the target object
+/// as its destination and keeps the target (S-0307 claim 18): its weapon
+/// chosen for the target exists and has a vertical projectile. The
+/// approach step then does nothing else.
+pub fn balloon_hover_approach(w: &World, id: ObjectId) -> bool {
+    let Some(o) = w.obj(id) else { return false };
+    let r = w.rules();
+    // spec: S-0307 claim 18 (a vehicle with the balloon-hover property)
+    let hover = o.kind == Kind::Vehicle
+        && r.unit(o.kind, o.type_index)
+            .is_some_and(|u| u.raw.balloon_hover.unwrap_or(false));
+    if !hover || o.target.is_none() {
+        return false;
+    }
+    let (_, weapon) = super::weapon::would_use(w, id, o.target);
+    // spec: S-0307 claim 18 (the weapon and its projectile must both exist, and the projectile be vertical)
+    weapon
+        .and_then(|x| r.combat.projectile_of(x))
+        .is_some_and(|p| p.vertical)
 }

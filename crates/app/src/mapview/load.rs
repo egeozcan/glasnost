@@ -44,7 +44,7 @@ pub struct Loaded {
     pub minimap: (u32, u32, Vec<u8>),
     /// Each cell's (left, right) tile radar colours after loading, when the
     /// game started (for its radar map).
-    pub tile_colours: std::collections::BTreeMap<glasnost_map::CellXY, ([u8; 3], [u8; 3])>,
+    pub tile_colours: std::collections::BTreeMap<glasnost_map::CellXY, [u8; 3]>,
     /// Problems that kept parts of the map from being drawn, or the game
     /// from starting.
     pub problems: Vec<String>,
@@ -214,11 +214,8 @@ pub async fn load(
             None
         }
     };
-    let minimap = build::minimap(&map, &catalogue, &assets);
-    let tile_colours = match (&live, &cells) {
-        (Some(_), Some(c)) => build::tile_radar_colours(c, &catalogue, &assets),
-        _ => Default::default(),
-    };
+    let tile_colours = build::tile_radar_colours(&built.shown_tiles, &assets);
+    let minimap = build::minimap(&map, &tile_colours);
     Loaded {
         map,
         map_warnings,

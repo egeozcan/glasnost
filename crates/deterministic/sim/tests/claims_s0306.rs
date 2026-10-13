@@ -2440,13 +2440,16 @@ fn terms_steering_distance_vertical_quarter() {
     assert!(matches!(step(&mut s, id), Out::Flying(_)));
 }
 
-// spec: S-0306 T1 (steering: h ≤ 0 detonates, at P′)
+// spec: S-0306 T1 and T2 (steering: h ≤ 0 detonates, at P′ after the cruise lift of claim 15, here 18 leptons)
 #[test]
 fn t1_steering_ground_row() {
     let mut s = steering_s(10);
     let p = c(-5, 3, 0);
     let id = missile(&mut s, p, [64, 0, 0]);
-    assert_eq!(step(&mut s, id), Out::Detonated(Pos::new(p.x + 64, p.y, 0)));
+    assert_eq!(
+        step(&mut s, id),
+        Out::Detonated(Pos::new(p.x + 64, p.y, 18))
+    );
 }
 
 // spec: S-0306 T1 (steering: no target and h at least the missile safety altitude)
@@ -2464,14 +2467,15 @@ fn t1_steering_safety_altitude_row() {
 
 /// A steering projectile 60 unlocked turns into its flight, with closing
 /// average `c60`, moving at right angles to its target (a closing step near
-/// 0) 10 cells away.
+/// 0) 10 cells away, at its cruising altitude (no cruise lift, which the
+/// closing step would see).
 fn orbiting(mods: impl Fn(&mut Ruleset), c60: i64) -> Out {
     let mut r = steering(5, 1, 3);
     r.sim.general.missile_rot_var = Some(d("0"));
     mods(&mut r);
     let mut s = setup(&r, 10, 0);
     let tp = pos(&s, s.t);
-    let id = missile(&mut s, Pos::new(tp.x - 2560, tp.y - 32, 300), [0, 64, 0]);
+    let id = missile(&mut s, Pos::new(tp.x - 2560, tp.y - 32, 520), [0, 64, 0]);
     {
         let x = s.w.projectiles.get_mut(&id).unwrap();
         x.unlocked = 60;
@@ -2591,7 +2595,7 @@ fn t1_passed_by_counts_as_arrival_for_a_jumpjet_firer() {
     assert_eq!(step(&mut s, id), Out::Detonated(tp));
 }
 
-// spec: S-0306 T1 (each check past the arm time that detonates by neither arrival row replaces Ω by η)
+// spec: S-0306 T1 (each check past the arm time that detonates by neither arrival row replaces Ω by η, measured at P′ after the cruise lift of claim 15)
 #[test]
 fn t1_omega_is_replaced() {
     let mut s = steering_s(10);
@@ -2599,7 +2603,7 @@ fn t1_omega_is_replaced() {
     let p = Pos::new(tp.x - 1500, tp.y, 300);
     let id = missile(&mut s, p, [64, 0, 0]);
     step(&mut s, id);
-    let pp = Pos::new(p.x + 64, p.y, p.z);
+    let pp = Pos::new(p.x + 64, p.y, p.z + 18);
     let k = pr(&s, id).stored;
     assert_eq!(pr(&s, id).omega, d3(&s.w, pp, k) / 2);
 }
@@ -3421,4 +3425,59 @@ fn claim16_scalable_raised_delay() {
         }
         assert_eq!(s.w.scaled_spawn_delay.get(&pid), Some(&want));
     }
+}
+
+// ---------------------------------------------------------------------------
+// Revision 4: the vertical deck crossing and the lifted position.
+// ---------------------------------------------------------------------------
+
+// spec: S-0306 claim 11, T1 and T2 (a vertical projectile crossing the deck height of a high-bridge cell, up or down, detonates at its own new height: no move to the deck height, no 20-lepton drop; scenario P33 runs c and e)
+#[test]
+fn t1_vertical_deck_crossing_at_its_own_height() {
+    // |V| = 40 is below S_w, so it is rescaled to 40 + α = 43 (the rescaled component falls just short of 43 in size and P + trunc(V) truncates it towards 0).
+    for (z0, vz, want) in [(400, 40i64, 442), (450, -40, 408)] {
+        let (mut s, id) = vertical(3, 5000, true);
+        let p = c(-10, -8, z0);
+        set_deck(&mut s.w, p.cell());
+        let pj = s.w.projectiles.get_mut(&id).unwrap();
+        pj.pos = p;
+        pj.vel = [n(0), n(0), n(vz)];
+        let out = step(&mut s, id);
+        let Out::Detonated(q) = out else {
+            panic!("no detonation: {out:?}")
+        };
+        assert_eq!(q.z, want, "start {z0}, V_z {vz}");
+    }
+}
+
+// spec: S-0306 T1 (vertical: no detonation without a crossing of the deck height)
+#[test]
+fn t1_vertical_no_deck_crossing() {
+    let (mut s, id) = vertical(3, 5000, true);
+    let p = c(-10, -8, 300);
+    set_deck(&mut s.w, p.cell());
+    let pj = s.w.projectiles.get_mut(&id).unwrap();
+    pj.pos = p;
+    pj.vel = [n(0), n(0), n(40)];
+    assert!(matches!(step(&mut s, id), Out::Flying(_)));
+}
+
+// spec: S-0306 claim 15 and T1 (every row tests the lifted P′: a cruise lift of 18 that takes P′ across the deck height detonates at the deck height; before the lift it would not have crossed)
+#[test]
+fn claim15_lifted_position_crosses_the_deck() {
+    let (mut s, id, p) = cruise(400, |_| {});
+    set_deck(&mut s.w, p.cell());
+    set_deck(&mut s.w, cell_of(-11, 0));
+    let out = step(&mut s, id);
+    let Out::Detonated(q) = out else {
+        panic!("no detonation: {out:?}")
+    };
+    assert_eq!(q.z, 416);
+}
+
+// spec: S-0306 claim 15 (without a bridge the lifted position is the position the projectile keeps)
+#[test]
+fn claim15_lifted_position_is_kept() {
+    let (mut s, id, p) = cruise(400, |_| {});
+    assert_eq!(step(&mut s, id), Out::Flying(Pos::new(p.x + 64, p.y, 418)));
 }

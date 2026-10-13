@@ -115,3 +115,22 @@ fn guard_area_ability_only_at_its_rank() {
         );
     }
 }
+
+// spec: S-0311 claim 5 and F4 (revision 2: a nonzero veteran sight factor multiplies the radius from the sight field, truncated toward zero, before S-0409 claim 4's limit; a factor of 0 leaves it unchanged; scenario X10's 4, 8 and 5 cells)
+#[test]
+fn claim_5_sight_factor() {
+    for (factor, want) in [("2", 8), ("0", 4), ("1.375", 5)] {
+        let mut r = ruleset();
+        r.sim.general.veteran_sight = Some(Decimal(factor.into()));
+        let cart = r.sim.vehicles.get_mut("CART").unwrap();
+        cart.sight = Some(4);
+        cart.veteran_abilities = vec!["SIGHT".into()];
+        let mut w = testkit::game_with(&r, SIZE, 3);
+        let rookie = spawn(&mut w, Kind::Vehicle, "CART", 0, mid(SIZE, -6, -4), 64);
+        let vet = spawn(&mut w, Kind::Vehicle, "CART", 0, mid(SIZE, -6, 4), 64);
+        veteran(&mut w, vet);
+        let radius = |id| glasnost_sim::econ::shroud::sight_radius(&w, id);
+        assert_eq!(radius(rookie), Some(4), "factor {factor}");
+        assert_eq!(radius(vet), Some(want), "factor {factor}");
+    }
+}

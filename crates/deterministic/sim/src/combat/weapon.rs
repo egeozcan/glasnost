@@ -235,11 +235,12 @@ pub fn choose_slot(w: &World, firer: ObjectId, target: Option<Target>) -> usize 
         Target::Cell(_) => None,
     };
     let target_building = target_obj.is_some_and(|o| o.kind == Kind::Building);
-    // spec: S-0308 table P row 6 (an airstrike secondary decides alone)
+    // spec: S-0308 table P row 6 (an airstrike secondary decides alone: 1 against a building that accepts charges and is not both a resource gatherer and a resource destination)
     if sec_h.is_some_and(|h| h.airstrike) {
-        let accepts = matches!(t, Target::Object(x)
-            if target_building && r.buildings[w.obj(x).map_or(0, |o| o.type_index) as usize].building.can_c4);
-        // The resource gatherer and destination flags of row 6 are not imported (economy, M5): no building is both.
+        let accepts = matches!(t, Target::Object(x) if target_building && {
+            let bc = &r.buildings[w.obj(x).map_or(0, |o| o.type_index) as usize].building;
+            bc.can_c4 && !bc.gatherer_destination
+        });
         return usize::from(accepts);
     }
     // spec: S-0308 table P row 7 (a locomotor primary against a building: 1)

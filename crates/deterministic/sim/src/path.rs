@@ -1040,6 +1040,11 @@ pub enum NearbyUse {
         /// aircraft).
         free_no_move: bool,
     },
+    /// The failed approach-position search of S-0307 claim 17.
+    Approach {
+        /// The actor.
+        unit: ObjectId,
+    },
 }
 
 /// The nearby-cell search (S-0212 claim 25).
@@ -1116,6 +1121,13 @@ pub fn nearby(w: &World, centre: CellXY, use_: NearbyUse) -> Option<CellXY> {
                 let further =
                     free_no_move && u.zone == MovementZone::Subterranean && o.pos.z < ground;
                 (u.class, z, rr, deck, true, further, None, deck)
+            }
+            NearbyUse::Approach { unit } => {
+                let o = w.obj(unit)?;
+                let u = w.rules().unit(o.kind, o.type_index)?.clone();
+                // spec: S-0307 claim 17 (its locomotion class, its own movement zone, its current ground reach region, deck mode off, the height condition on, no further test, no reference cell)
+                let rr = regions::reach_read(w, o.pos.cell(), u.zone, false);
+                (u.class, u.zone, Some(rr), false, true, false, None, false)
             }
         };
     let centre_level = w.cells.cell(centre).map_or(0, |c| i32::from(c.level))

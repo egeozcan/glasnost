@@ -97,6 +97,7 @@ fn renewed(m: Option<i32>, dx: i32, tx: i32) -> Option<Target> {
 // spec: S-0215 claim 37 (e) (a destination is cleared when the target is out of range and more than m × r′ from it; kept otherwise, also in range)
 // spec: S-0215 F10 (r′ = ρ − 128 for ρ ≥ 512; ρ₃(target, destination) > m × r′, strict; m × r′ wraps as a signed 32-bit product)
 // spec: S-0215 Constants (approach reset multiplier absent: 1)
+// spec: S-0215 claim 37 (e) (a cleared destination: part f applies in the same step, here S-0307 claim 15's search)
 #[test]
 fn destination_renewal_threshold() {
     let keep = Some(Target::Cell(at(9, 0)));
@@ -104,11 +105,16 @@ fn destination_renewal_threshold() {
     assert_eq!(renewed(None, 9, 10), keep);
     // ρ₃ = 1280 = 1 × r′: kept (strict comparison); 1536 > 1280: cleared.
     assert_eq!(renewed(None, 5, 10), Some(Target::Cell(at(5, 0))));
-    assert_eq!(renewed(None, 4, 10), None);
+    // Cleared: part f searches in the same step (S-0307 claim 15) and gives a new destination.
+    let fresh = renewed(None, 4, 10);
+    assert!(fresh.is_some() && fresh != Some(Target::Cell(at(4, 0))));
     // m = 2: 2560 ≥ 1536, kept.
     assert_eq!(renewed(Some(2), 4, 10), Some(Target::Cell(at(4, 0))));
     // m × r′ = 1677722 × 1280 wraps below 0: even a destination on the target is cleared.
-    assert_eq!(renewed(Some(1_677_722), 10, 10), None);
+    assert_ne!(
+        renewed(Some(1_677_722), 10, 10),
+        Some(Target::Cell(at(10, 0)))
+    );
     // The target in range: the destination is kept whatever its distance.
     assert_eq!(renewed(Some(1_677_722), 9, 3), keep);
 }

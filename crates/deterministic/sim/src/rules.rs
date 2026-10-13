@@ -233,8 +233,8 @@ pub enum FactoryKind {
 
 impl FactoryKind {
     /// The kind of our format's factory word (`infantry`, `vehicle`,
-    /// `aircraft`, `building`). The importer writes none of them yet: the
-    /// original's words are asked in Q-0100.
+    /// `aircraft`, `building`), which the importer writes for the
+    /// original's words (S-0003 claim 21).
     pub fn from_word(w: &str) -> Option<Self> {
         Some(match w {
             "infantry" => Self::Infantry,
@@ -798,9 +798,9 @@ impl SimRules {
             ],
             // spec: S-0211 Import mapping (CliffBackImpassability absent: 0)
             cliff_back: g.cliff_back_impassability.unwrap_or(0),
-            // spec: S-0107 Import mapping (ConditionYellow absent: 0.5)
+            // spec: S-0107 Import mapping (ConditionYellow absent: 0.5); S-0302 Import mapping (read as a single, widened exactly, a `%` product taken as a double)
             condition_yellow: dec(&g.condition_yellow, mode).unwrap_or_else(|| constant("0.5")),
-            // spec: S-0107 Import mapping (ConditionRed absent: 0.5)
+            // spec: S-0107 Import mapping (ConditionRed absent: 0.5); S-0302 Import mapping (read as a single, widened exactly, a `%` product taken as a double)
             condition_red: dec(&g.condition_red, mode).unwrap_or_else(|| constant("0.5")),
             // spec: S-0107 Import mapping (IdleActionFrequency absent: the double nearest 0.083)
             idle_frequency: dec(&g.idle_action_frequency, mode)
@@ -1310,6 +1310,8 @@ fn building_rules(
         defense: b(bt.defense),
         // spec: S-0302 Constants (can-be-demolished flag absent: yes)
         can_c4: bt.can_c4.unwrap_or(true),
+        // spec: S-0308 Import mapping (ResourceGatherer and ResourceDestination absent: no)
+        gatherer_destination: b(bt.econ.resource_gatherer) && b(bt.econ.resource_destination),
         delay_kill: b(bt.eligible_for_delay_kill),
         leave_rubble: b(bt.leave_rubble),
         helipad: b(bt.helipad),

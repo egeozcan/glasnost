@@ -58,7 +58,8 @@ fn object_turn(w: &mut World, id: ObjectId) {
         return;
     }
     let Some(o) = w.obj(id) else { return };
-    let killed = o.combat.killed;
+    // A building in a delayed-kill countdown is killed but alive (S-0302 claim 16): it takes its whole turn.
+    let dead = crate::combat::damage::dead(o);
     // spec: S-0309 claim 15 (the expected remaining health changes in the object's own turn)
     crate::combat::acquire::expected_health_turn(w, id);
     let Some(o) = w.obj(id) else { return };
@@ -66,7 +67,13 @@ fn object_turn(w: &mut World, id: ObjectId) {
     if let Some(ob) = w.obj_mut(id) {
         ob.last_turn = t;
     }
-    if killed {
+    if dead {
+        if kind == Kind::Building {
+            // spec: S-0312 claim 21 (a building awaiting removal: the general part of its turn, then its removal)
+            process::turn(w, id);
+            crate::combat::death::removal_turn(w, id);
+            return;
+        }
         // A killed object that stays in play (an infantry unit in its death sequence) only plays it out.
         crate::combat::death::infantry_death_turn(w, id);
         return;
@@ -81,6 +88,9 @@ fn object_turn(w: &mut World, id: ObjectId) {
         crate::combat::behave::delayed_shot_turn(w, id);
         // spec: S-0405 claims 7 and 9, S-0409 claim 8 (the building's own turn)
         crate::econ::events::turn(w, id, false);
+        // The expiry's place within the building's turn is not stated (request Q-0170): after the general part, as claim 21's removal.
+        // spec: S-0302 claim 16 (the countdown's expiry hit, in the building's own turn)
+        crate::combat::damage::delay_kill_expiry_turn(w, id);
         return;
     }
     let loco = w

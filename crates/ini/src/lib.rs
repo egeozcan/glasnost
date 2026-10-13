@@ -49,6 +49,10 @@ pub struct Quirks {
     /// fixed-count percentage list that contains `%` uses only its integer
     /// prefix; off, its full decimal at 53 bits.
     pub percent_list_integer_prefix: bool,
+    /// `quirks.list_items_untrimmed` (S-0003 claim 12): list items keep
+    /// the whitespace around them; off, name items are trimmed (S-0001's
+    /// trim without its defect) and an item of only whitespace is skipped.
+    pub list_items_untrimmed: bool,
 }
 
 impl Default for Quirks {
@@ -60,6 +64,7 @@ impl Default for Quirks {
             ini_duplicate_hash_order: true,
             ini_hash_identity: true,
             percent_list_integer_prefix: true,
+            list_items_untrimmed: true,
         }
     }
 }
