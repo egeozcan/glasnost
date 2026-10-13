@@ -98,7 +98,11 @@ pub fn switched(w: &mut World, id: ObjectId) {
 pub fn turn(w: &mut World, id: ObjectId, moved: bool) {
     let Some(o) = w.obj(id) else { return };
     match o.kind {
-        Kind::Building => crate::econ::power::building_turn(w, id),
+        Kind::Building => {
+            crate::econ::power::building_turn(w, id);
+            // spec: S-0314 claim 8 and S-0408 claim 13 (a building whose repair is on steps in its turn; the place in the tick is S-0203's)
+            crate::econ::sell::building_turn(w, id);
+        }
         Kind::Vehicle => crate::econ::power::vehicle_turn(w, id),
         _ => {}
     }

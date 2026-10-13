@@ -300,6 +300,8 @@ fn apply_other(w: &mut World, house: HouseId, o: &Order) {
                 ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
                 ob.dest = None;
                 ob.beh.queue(Some(Behaviour::Unload));
+                // spec: S-0415 claim 2 (each deploy order begins a new deploy: its first attempt is still to come)
+                ob.econ.deploy = crate::econ::deploy::DeployState::default();
             }
         }
         Order::GuardSpot { actor, spot } => {

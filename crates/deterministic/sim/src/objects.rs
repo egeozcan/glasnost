@@ -139,6 +139,12 @@ pub fn foundation_cells(top_left: CellXY, f: (i32, i32)) -> Vec<CellXY> {
 /// marks the occupancy record (S-0209 claim 1), sets its facings at once
 /// (S-0206 claim 5) and its cells are recomputed (S-0211 claim 5).
 pub fn place(w: &mut World, id: ObjectId, pos: Pos, facing: Facing) {
+    place_with(w, id, pos, facing, false);
+}
+
+/// [`place`], saying whether a building is put on the map by a place order
+/// (S-0407 claim 10, the `by_order` of `crate::econ::events::entered_map`).
+pub fn place_with(w: &mut World, id: ObjectId, pos: Pos, facing: Facing, by_order: bool) {
     let tick = w.tick;
     let Some(o) = w.obj(id).cloned() else {
         return;
@@ -149,7 +155,8 @@ pub fn place(w: &mut World, id: ObjectId, pos: Pos, facing: Facing) {
     let mut touched = vec![cell];
     match o.kind {
         Kind::Building => {
-            touched = foundation_cells(cell, o.foundation);
+            // spec: S-0406 claim 2 (a building is in its foundation cells only)
+            touched = crate::econ::placement::foundation_cells(w, o.type_index, cell);
             for &c in &touched {
                 w.cells.enter(c, Layer::Ground, id, true);
                 w.cells.claim_building(c, true);
@@ -219,7 +226,7 @@ pub fn place(w: &mut World, id: ObjectId, pos: Pos, facing: Facing) {
         // spec: S-0215 Terms (the placement fall-back: an actor falls back to rest when placed)
         crate::process::fall_back(w, id, true);
     }
-    crate::econ::events::entered_map(w, id, false);
+    crate::econ::events::entered_map(w, id, by_order);
 }
 
 /// Takes an object off the map and out of play (destroyed, removed or gone
@@ -240,7 +247,8 @@ pub fn remove(w: &mut World, id: ObjectId) {
         Kind::Building => {
             // spec: S-0314 claim 10 (a building removed or destroyed subtracts its counts, flooring at 0)
             crate::combat::heal::building_counts(w, id, o.owner, false);
-            touched = foundation_cells(cell, o.foundation);
+            // spec: S-0406 claim 2 (a building is in its foundation cells only)
+            touched = crate::econ::placement::foundation_cells(w, o.type_index, cell);
             for &c in &touched {
                 w.cells.leave(c, Layer::Ground, id);
                 w.cells.claim_building(c, false);

@@ -74,7 +74,7 @@ pub fn ready(w: &World, id: ObjectId) -> bool {
 }
 
 /// The standard delay D = D_r + U(0, 2) (S-0215 F2), the draw last.
-fn standard_delay(w: &mut World, id: ObjectId) -> i32 {
+pub(crate) fn standard_delay(w: &mut World, id: ObjectId) -> i32 {
     let dr = rate_delay(w, id);
     let half = w.rules().quirks.ranged_draw_half_span;
     // spec: S-0215 F2 and F0 (D = D_r + U(0, 2), wrapping 32-bit)
@@ -510,6 +510,18 @@ fn process(w: &mut World, id: ObjectId) -> i32 {
         (Some(Behaviour::AreaGuard), Kind::Infantry | Kind::Vehicle) => process_area_guard(w, id),
         (Some(Behaviour::Hunt), Kind::Infantry | Kind::Vehicle) => process_hunt(w, id),
         (Some(Behaviour::Unload), Kind::Infantry) => process_unload_infantry(w, id),
+        // spec: S-0415 claim 1 (unload of a vehicle: ranks 1 to 3 are other topics' rules, rank 4 deploys; the standard delay of S-0215 claim 6)
+        (Some(Behaviour::Unload), Kind::Vehicle)
+            if crate::econ::deploy::process_unload(w, id).is_some() =>
+        {
+            standard_delay(w, id)
+        }
+        // spec: S-0408 claim 16 (selling: a processing delay of 1, no draw)
+        (Some(Behaviour::Selling), Kind::Building) => crate::econ::sell::process_selling(w, id),
+        // spec: S-0108 claim 5 (construction ends when the build-up does; request Q-0130)
+        (Some(Behaviour::Construction), Kind::Building) => {
+            crate::econ::deploy::process_construction(w, id)
+        }
         (
             Some(Behaviour::Guard | Behaviour::Sticky | Behaviour::AreaGuard | Behaviour::Attack),
             Kind::Building,

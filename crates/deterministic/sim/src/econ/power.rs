@@ -191,8 +191,13 @@ pub struct BuildingSwitches {
     pub switched_off: bool,
     /// The primary factory of its kind (S-0213 claim 13).
     pub primary: bool,
-    /// Upgrade types recorded on the building (S-0406 claim 12).
+    /// Upgrade types recorded on the building, in the order they were
+    /// added (S-0406 claim 12: positions 1 to 3).
     pub upgrades: Vec<u32>,
+    /// The building's upgrade count: the room it has used (S-0406 claim 12,
+    /// F5).
+    #[serde(default)]
+    pub upgrade_count: i32,
     /// Repair switched on (S-0213 claim 13, S-0314).
     pub repairing: bool,
     /// The health the building last noticed in its own turn (claim 7).
