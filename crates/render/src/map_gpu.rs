@@ -167,6 +167,11 @@ pub struct MapRenderer {
     packer: Packer,
     row_count: usize,
     target_format: wgpu::TextureFormat,
+    rows: wgpu::Texture,
+    /// The light-alpha texture and its size.
+    alpha: (wgpu::Texture, (u32, u32)),
+    /// Whether the light-alpha texture holds 127 everywhere.
+    alpha_default: bool,
 }
 
 /// Why the scene could not be uploaded.
@@ -283,9 +288,27 @@ impl MapRenderer {
                     },
                     count: None,
                 },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 3,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Uint,
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
             ],
         });
-        let bind_group = bind_group(device, &layout, &view_buffer, &atlas_texture, &rows_texture);
+        let alpha = alpha_texture(device, queue, (1, 1));
+        let bind_group = bind_group(
+            device,
+            &layout,
+            &view_buffer,
+            &atlas_texture,
+            &rows_texture,
+            &alpha,
+        );
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("map"),
             source: wgpu::ShaderSource::Wgsl(SHADER_SOURCE.into()),
@@ -380,6 +403,9 @@ impl MapRenderer {
             packer,
             row_count: scene.rows.len(),
             target_format,
+            rows: rows_texture,
+            alpha: (alpha, (1, 1)),
+            alpha_default: true,
         })
     }
 
@@ -434,8 +460,15 @@ impl MapRenderer {
         if scene.rows.len() != self.row_count {
             let (rows, per_column) =
                 rows_texture(device, queue, scene, self.packer.side, self.target_format)?;
-            self.bind_group =
-                bind_group(device, &self.layout, &self.view_buffer, &self.atlas, &rows);
+            self.bind_group = bind_group(
+                device,
+                &self.layout,
+                &self.view_buffer,
+                &self.atlas,
+                &rows,
+                &self.alpha.0,
+            );
+            self.rows = rows;
             self.rows_per_column = per_column;
             self.row_count = scene.rows.len();
         }
@@ -459,6 +492,28 @@ impl MapRenderer {
         filter: &Filter,
         q: &ComposeQuirks,
     ) -> usize {
+        self.render_lit(
+            device, queue, encoder, target, depth, scene, view, filter, q, None,
+        )
+    }
+
+    /// [`Self::render`] with the light-alpha values `alpha` of the view's
+    /// pixels, row by row (S-0110 claims 5 and 6; `None`: 127 everywhere).
+    #[allow(clippy::too_many_arguments)]
+    pub fn render_lit(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        encoder: &mut wgpu::CommandEncoder,
+        target: &wgpu::TextureView,
+        depth: &wgpu::TextureView,
+        scene: &Scene,
+        view: &View,
+        filter: &Filter,
+        q: &ComposeQuirks,
+        alpha: Option<&[u8]>,
+    ) -> usize {
+        self.set_alpha(device, queue, view.size, alpha);
         let uniform = ViewUniform {
             origin: [view.origin.0, view.origin.1],
             size: [view.size.0 as i32, view.size.1 as i32],
@@ -513,11 +568,13 @@ impl MapRenderer {
                     (role, kind, bias, 0, None)
                 }
             };
-            let (row, diamond) = match item.paint {
-                Paint::Row(r) => (r as u32, 0),
+            let (row, diamond, shade_rows, rho) = match item.paint {
+                Paint::Row(r) => (r as u32, 0, 0, 0),
                 // spec: S-0010 claim 22 (a diamond has no transparent index)
-                Paint::Diamond(r) => (r as u32, 1),
-                Paint::Shadow => (0, 0),
+                Paint::Diamond(r) => (r as u32, 1, 0, 0),
+                Paint::Lit(s) => (s.base, 0, u32::from(s.rows), u32::from(s.rho)),
+                Paint::LitDiamond(s) => (s.base, 1, u32::from(s.rows), u32::from(s.rho)),
+                Paint::Shadow => (0, 0, 0, 0),
             };
             let ds = depth_slot.unwrap_or(Slot {
                 x: 0,
@@ -533,7 +590,7 @@ impl MapRenderer {
                 ],
                 place: [item.x, item.y, bias, reference_row],
                 depth: [ds.x, ds.y, ds.layer, flags],
-                paint: [row, diamond, 0, 0],
+                paint: [row, diamond, shade_rows, rho],
             });
             let n = list.len() as u32;
             match batches.last_mut() {
@@ -599,6 +656,88 @@ impl MapRenderer {
     }
 }
 
+impl MapRenderer {
+    /// Makes the light-alpha texture hold `alpha` (or 127 everywhere) for
+    /// a view of `size`.
+    fn set_alpha(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        size: (u32, u32),
+        alpha: Option<&[u8]>,
+    ) {
+        let size = (size.0.max(1), size.1.max(1));
+        let n = size.0 as usize * size.1 as usize;
+        let alpha = alpha.filter(|a| a.len() == n);
+        if self.alpha.1 != size {
+            let t = alpha_texture(device, queue, size);
+            self.bind_group = bind_group(
+                device,
+                &self.layout,
+                &self.view_buffer,
+                &self.atlas,
+                &self.rows,
+                &t,
+            );
+            self.alpha = (t, size);
+            self.alpha_default = true;
+        }
+        let bytes = match alpha {
+            Some(a) => {
+                self.alpha_default = false;
+                std::borrow::Cow::Borrowed(a)
+            }
+            None if self.alpha_default => return,
+            None => {
+                self.alpha_default = true;
+                std::borrow::Cow::Owned(vec![crate::light::DEFAULT_LIGHT_ALPHA as u8; n])
+            }
+        };
+        queue.write_texture(
+            wgpu::TexelCopyTextureInfo {
+                texture: &self.alpha.0,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            &bytes,
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(size.0),
+                rows_per_image: Some(size.1),
+            },
+            wgpu::Extent3d {
+                width: size.0,
+                height: size.1,
+                depth_or_array_layers: 1,
+            },
+        );
+    }
+}
+
+/// A light-alpha texture of `size`, 127 everywhere (S-0110 claim 5).
+fn alpha_texture(device: &wgpu::Device, queue: &wgpu::Queue, size: (u32, u32)) -> wgpu::Texture {
+    device.create_texture_with_data(
+        queue,
+        &wgpu::TextureDescriptor {
+            label: Some("map light-alpha"),
+            size: wgpu::Extent3d {
+                width: size.0,
+                height: size.1,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::R8Uint,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        },
+        wgpu::util::TextureDataOrder::LayerMajor,
+        &vec![crate::light::DEFAULT_LIGHT_ALPHA as u8; size.0 as usize * size.1 as usize],
+    )
+}
+
 /// The palette-row texture of `scene` and its rows per column.
 fn rows_texture(
     device: &wgpu::Device,
@@ -654,6 +793,7 @@ fn bind_group(
     view_buffer: &wgpu::Buffer,
     atlas: &wgpu::Texture,
     rows: &wgpu::Texture,
+    alpha: &wgpu::Texture,
 ) -> wgpu::BindGroup {
     device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: Some("map"),
@@ -676,6 +816,12 @@ fn bind_group(
                 binding: 2,
                 resource: wgpu::BindingResource::TextureView(
                     &rows.create_view(&wgpu::TextureViewDescriptor::default()),
+                ),
+            },
+            wgpu::BindGroupEntry {
+                binding: 3,
+                resource: wgpu::BindingResource::TextureView(
+                    &alpha.create_view(&wgpu::TextureViewDescriptor::default()),
                 ),
             },
         ],

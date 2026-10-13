@@ -475,7 +475,7 @@ impl Gfx {
         let (color, depth, display) = m.targets.as_ref().ok_or("no targets")?;
         let mut encoder =
             device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("map") });
-        m.renderer.render(
+        m.renderer.render_lit(
             device,
             &self.queue,
             &mut encoder,
@@ -485,6 +485,7 @@ impl Gfx {
             &r.view,
             &r.filter,
             &glasnost_render::compose::ComposeQuirks::default(),
+            r.alpha.as_deref(),
         );
         // The pass renders into an exact (non-sRGB) target; egui samples an
         // sRGB-typed copy of the same bytes.

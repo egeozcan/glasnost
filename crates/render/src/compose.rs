@@ -107,14 +107,54 @@ pub enum DepthSource<'a> {
     },
 }
 
+/// A shade table and a brightness: the rows `base … base + rows − 1` of
+/// the scene, of which each pixel takes the row its light-alpha value
+/// gives (S-0104 claim 15).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Shade {
+    /// The table's first row.
+    pub base: u32,
+    /// The table's number of rows *N*.
+    pub rows: u16,
+    /// ρ of the drawing's brightness.
+    pub rho: u16,
+}
+
+impl Shade {
+    /// The table of `rows` rows from `base`, at brightness `b` ‰.
+    pub fn new(base: usize, rows: usize, b: i32) -> Self {
+        Self {
+            base: base as u32,
+            rows: rows as u16,
+            rho: crate::light::brightness_rho(b) as u16,
+        }
+    }
+
+    /// The row a pixel of light-alpha `alpha` takes.
+    pub fn row(&self, alpha: u8) -> usize {
+        self.base as usize
+            + crate::light::alpha_row(
+                i32::from(alpha),
+                i32::from(self.rho),
+                usize::from(self.rows),
+            )
+    }
+}
+
 /// What a drawing's visible pixels do to the frame.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Paint {
-    /// Each pixel takes `rows[row][index]`.
+    /// Each pixel takes `rows[row][index]`: drawing that does not read the
+    /// light-alpha values (S-0110 claim 5).
     Row(usize),
     /// A tile diamond (S-0010 claim 22): as `Row`, but every pixel of the
     /// diamond shape is painted, palette index 0 included.
     Diamond(usize),
+    /// Each pixel takes the row of its light-alpha value in a shade table
+    /// (S-0104 claim 15, S-0110 claim 5).
+    Lit(Shade),
+    /// A tile diamond shaded as `Lit`.
+    LitDiamond(Shade),
     /// Each non-zero pixel darkens the pixel beneath: every hi-colour
     /// channel halved, rounded down (S-0102 claim 26, F7).
     Shadow,
@@ -221,6 +261,9 @@ pub struct Frame {
     pub origin_row: i32,
     /// Depth reference *C* (F1).
     pub reference: i32,
+    /// Light-alpha value per pixel (S-0104 claim 15, S-0110 claim 5): 127
+    /// unless covers or glows changed it ([`Frame::set_light_alpha`]).
+    pub alpha: Vec<u8>,
 }
 
 /// Q(v) = trunc₀(v / 3) × 3 (S-0102 F2).
@@ -241,6 +284,17 @@ impl Frame {
             depth: vec![DEPTH_CLEAR; n],
             origin_row,
             reference,
+            // spec: S-0110 claim 5 (127 before any cover or glow acts in a drawn frame)
+            alpha: vec![crate::light::DEFAULT_LIGHT_ALPHA as u8; n],
+        }
+    }
+
+    /// Sets the light-alpha values the covers and glows of this drawn frame
+    /// produced (S-0110 claims 5 and 6), one per pixel, row by row. A
+    /// buffer of another size is ignored.
+    pub fn set_light_alpha(&mut self, alpha: Vec<u8>) {
+        if alpha.len() == self.alpha.len() {
+            self.alpha = alpha;
         }
     }
 
@@ -289,13 +343,15 @@ impl Frame {
         } else {
             d.y + h - 1
         };
-        let row_table = match d.paint {
+        let first_row = match d.paint {
             Paint::Row(i) | Paint::Diamond(i) => rows.get(i),
+            Paint::Lit(s) | Paint::LitDiamond(s) => rows.get(s.base as usize),
             Paint::Shadow => None,
         };
-        if !matches!(d.paint, Paint::Shadow) && row_table.is_none() {
+        if !matches!(d.paint, Paint::Shadow) && first_row.is_none() {
             return;
         }
+        let diamond = matches!(d.paint, Paint::Diamond(_) | Paint::LitDiamond(_));
         for y in y0..y1 {
             let base = match &d.depth {
                 DepthSource::Tile { reference_row, .. } => {
@@ -315,9 +371,7 @@ impl Frame {
                 };
                 // spec: S-0104 claim 6 (entry 0 is transparent in every row);
                 // S-0010 claim 22 (a diamond has no transparent index)
-                if index == 0
-                    && !(matches!(d.paint, Paint::Diamond(_)) && in_diamond(ix as i32, iy as i32))
-                {
+                if index == 0 && !(diamond && in_diamond(ix as i32, iy as i32)) {
                     continue;
                 }
                 let depth = match &d.depth {
@@ -325,7 +379,7 @@ impl Frame {
                         Some(td) => base + i32::from(td.get(ix, iy).unwrap_or(0)),
                         // spec: S-0102 claim 9 (tiles without depth data do not touch the buffer)
                         None => {
-                            self.paint(x, y, index, d.paint, row_table);
+                            self.paint(x, y, index, d.paint, rows);
                             continue;
                         }
                     },
@@ -351,7 +405,7 @@ impl Frame {
                     DepthTest::Writer | DepthTest::Reader => depth < stored,
                     // spec: S-0102 claim 25 (a smudge neither reads nor writes depth)
                     DepthTest::Ignore => {
-                        self.paint(x, y, index, d.paint, row_table);
+                        self.paint(x, y, index, d.paint, rows);
                         continue;
                     }
                 };
@@ -365,7 +419,7 @@ impl Frame {
                     // spec: S-0102 F2 (a writer stores the pixel depth, reduced modulo 65536)
                     self.depth[i] = depth.rem_euclid(DEPTH_MOD) as u16;
                 }
-                self.paint(x, y, index, d.paint, row_table);
+                self.paint(x, y, index, d.paint, rows);
             }
         }
     }
@@ -396,14 +450,19 @@ impl Frame {
         }
     }
 
-    fn paint(&mut self, x: i32, y: i32, index: u8, paint: Paint, row: Option<&Row565>) {
+    fn paint(&mut self, x: i32, y: i32, index: u8, paint: Paint, rows: &[Row565]) {
         let i = (y as u32 * self.width + x as u32) as usize;
-        match (paint, row) {
-            (Paint::Row(_) | Paint::Diamond(_), Some(row)) => {
-                self.color[i] = row[usize::from(index)]
+        let row = match paint {
+            Paint::Row(r) | Paint::Diamond(r) => rows.get(r),
+            // spec: S-0104 claim 15, S-0110 claim 5 (the pixel's light-alpha value picks the row)
+            Paint::Lit(s) | Paint::LitDiamond(s) => rows.get(s.row(self.alpha[i])),
+            Paint::Shadow => {
+                self.color[i] = darken565(self.color[i]);
+                return;
             }
-            (Paint::Shadow, _) => self.color[i] = darken565(self.color[i]),
-            _ => {}
+        };
+        if let Some(row) = row {
+            self.color[i] = row[usize::from(index)];
         }
     }
 

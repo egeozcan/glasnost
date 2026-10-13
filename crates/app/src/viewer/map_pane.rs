@@ -24,11 +24,13 @@ use glasnost_render::projection::{
     ProjectionQuirks, cell_centre, cursor_cell, limit_centre, project_lifted, view_origin,
 };
 use glasnost_render::scene::{Filter, Group, Scene, View};
+use glasnost_render::shroud::ShroudQuirks;
 use glasnost_sim::targeting::{self, ClickOn, KeyCommand, Modifiers};
 use glasnost_sim::world::{HouseId, ObjectId, Target};
 use glasnost_vfs::FileRef;
 
 use crate::mapview::build::{self, GameMode, ObjectInfo};
+use crate::mapview::cover;
 use crate::mapview::credits::CreditCounter;
 use crate::mapview::find::Listing;
 use crate::mapview::live::{self, InputReport, Live, Pacer};
@@ -56,6 +58,9 @@ pub struct GpuRequest {
     pub view: View,
     /// Filter.
     pub filter: Filter,
+    /// The light-alpha values of the view after the shroud covers (S-0110),
+    /// row by row; `None`: 127 everywhere.
+    pub alpha: Option<Vec<u8>>,
 }
 
 /// A loaded map as the pane keeps it.
@@ -89,7 +94,7 @@ struct Shown {
     radar_texture: Option<TextureHandle>,
     /// The tick the radar texture shows.
     radar_tick: i32,
-    /// Draw the placeholder shroud over unexplored cells.
+    /// Draw the shroud covers (S-0110) of the controlled house.
     shroud: bool,
 }
 
@@ -312,7 +317,27 @@ impl MapPane {
             generation: s.generation,
             view: self.view(),
             filter: self.filter(),
+            alpha: self.light_alpha(),
         })
+    }
+
+    /// The light-alpha values of the view after the controlled house's
+    /// shroud covers (S-0110 claims 1 to 10), or `None` when no cover is
+    /// drawn: no live game, the sandbox (every owner's objects, no single
+    /// player), or the covers turned off.
+    fn light_alpha(&self) -> Option<Vec<u8>> {
+        let s = self.shown.as_ref()?;
+        let live = s.loaded.live.as_ref()?;
+        if !s.shroud || live.setup.sandbox {
+            return None;
+        }
+        Some(cover::light_alpha(
+            &live.world,
+            s.house,
+            &self.view(),
+            &s.loaded.covers,
+            &ShroudQuirks::default(),
+        ))
     }
 
     /// Local snapshots: issues the deploy order of the controlled house's
@@ -506,7 +531,7 @@ impl MapPane {
                 }
             }
         }
-        ui.checkbox(&mut shown.shroud, "shroud (placeholder)");
+        ui.checkbox(&mut shown.shroud, "shroud");
         ui.separator();
         ui.horizontal_wrapped(|ui| {
             for t in Tab::ALL {
@@ -791,7 +816,12 @@ impl MapPane {
         let texture = if self.use_gpu {
             self.gpu_texture
         } else {
-            let frame = scene.compose(&self.view(), &self.filter(), &ComposeQuirks::default());
+            let frame = scene.compose_lit(
+                &self.view(),
+                &self.filter(),
+                &ComposeQuirks::default(),
+                self.light_alpha(),
+            );
             let img = egui::ColorImage::from_rgba_unmultiplied(
                 [size.0 as usize, size.1 as usize],
                 &frame.to_rgba(),
@@ -898,16 +928,6 @@ impl MapPane {
                     None => ClickOn::Cell(glasnost_map::CellXY::new(cx, cy)),
                 }
             });
-            if let Some(cover) = shroud_cells(live, shown.shroud, house, &view, r.rect, ppp) {
-                let painter = ui.painter_at(r.rect);
-                for d in cover {
-                    painter.add(egui::Shape::convex_polygon(
-                        d.to_vec(),
-                        Color32::from_black_alpha(230),
-                        egui::Stroke::NONE,
-                    ));
-                }
-            }
             // Placement mode (S-0411 claim 4; S-0406): the foundation under
             // the cursor, green where the building would be placed, red
             // elsewhere; a left click places, a right click stops.
@@ -1104,34 +1124,6 @@ fn cell_diamond(
         at(tx, ty + 30),
         at(tx - 30, ty + 15),
     ]
-}
-
-/// The placeholder shroud: the diamonds of the cells on screen that the
-/// house has not explored (S-0409's explored state). Our own stand-in
-/// until the shroud drawing of S-0110 is implemented; `None` when off.
-fn shroud_cells(
-    live: &Live,
-    on: bool,
-    house: HouseId,
-    view: &View,
-    rect: egui::Rect,
-    ppp: f32,
-) -> Option<Vec<[egui::Pos2; 4]>> {
-    if !on || live.setup.sandbox {
-        return None;
-    }
-    let grown = rect.expand(40.0);
-    let mut out = Vec::new();
-    for (c, cell) in live.world.cells.grid.iter() {
-        if glasnost_sim::econ::shroud::explored(&live.world, house, c) {
-            continue;
-        }
-        let d = cell_diamond(c, i32::from(cell.level), view, rect, ppp);
-        if grown.contains(d[0]) || grown.contains(d[2]) {
-            out.push(d);
-        }
-    }
-    Some(out)
 }
 
 /// The status line after an input.
