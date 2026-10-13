@@ -280,6 +280,15 @@ pub fn remove(w: &mut World, id: ObjectId) {
             }
         }
     }
+    // spec: S-0309 claim 23 (d) (removal of a remembered target turns the memory into the cell of the target's last position; the engaged mark is kept)
+    let remembered = crate::world::AttackMoveMemory::Target(crate::world::Target::Object(id));
+    for ob in w.objects.values_mut() {
+        if ob.attack_move == Some(remembered) {
+            ob.attack_move = Some(crate::world::AttackMoveMemory::Dest(
+                crate::world::Target::Cell(cell),
+            ));
+        }
+    }
     w.objects.remove(&id);
     if on_ground {
         crate::load::recalc_cells(w, &touched);
