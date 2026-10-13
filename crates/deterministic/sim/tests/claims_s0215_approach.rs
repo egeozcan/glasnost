@@ -179,6 +179,99 @@ fn per_tick_drop_of_an_unreachable_target() {
     assert_eq!(w.obj(a).unwrap().target, Some(Target::Object(t)));
 }
 
+/// The destination after one approach step of a CRUSHER of `house` whose
+/// target is a CART `tx` cells east, after `prep` adjusted the rules and
+/// the world.
+fn crush_step(
+    house: u8,
+    tx: i32,
+    prep_rules: impl FnOnce(&mut Ruleset),
+    prep: impl FnOnce(&mut World, ObjectId),
+) -> (Option<Target>, ObjectId) {
+    let mut r = rules(None, None);
+    prep_rules(&mut r);
+    let mut w = testkit::game_with_non_players(&r, SIZE, 3);
+    let (a, t) = duel(&mut w, house, tx, Behaviour::Attack);
+    prep(&mut w, a);
+    approach::step(&mut w, a);
+    (w.obj(a).unwrap().dest, t)
+}
+
+fn omni(r: &mut Ruleset) {
+    r.sim.vehicles.get_mut("CRUSHER").unwrap().omni_crusher = Some(true);
+}
+
+fn crushable_cart(r: &mut Ruleset) {
+    r.sim.vehicles.get_mut("CART").unwrap().crushable = Some(true);
+}
+
+// spec: S-0210 claim 11 (omni-crusher variant: the target object itself as destination, at any distance, also with a move destination; not for an opportunity target of a player house, while the neutral house keeps the original's exemption)
+// spec: S-0215 claim 37 (h) (a crushing approach replaces the step; its destination is the target object itself)
+#[test]
+fn omni_crusher_approach() {
+    let far = Target::Cell(at(9, 0));
+    // A player house, far away, with a move destination: replaced.
+    let (d, t) = crush_step(0, 10, omni, |w, a| w.obj_mut(a).unwrap().dest = Some(far));
+    assert_eq!(d, Some(Target::Object(t)));
+    // An opportunity target of a player house: the common step (kept destination).
+    let (d, _) = crush_step(0, 10, omni, |w, a| {
+        let o = w.obj_mut(a).unwrap();
+        o.dest = Some(far);
+        o.combat.opportunity = true;
+    });
+    assert_eq!(d, Some(far));
+    // The neutral house: an opportunity target too.
+    let (d, t) = crush_step(2, 10, omni, |w, a| {
+        let o = w.obj_mut(a).unwrap();
+        o.dest = Some(far);
+        o.combat.opportunity = true;
+    });
+    assert_eq!(d, Some(Target::Object(t)));
+    // Without the flag: the common step.
+    let (d, _) = crush_step(0, 10, |_| {}, |w, a| w.obj_mut(a).unwrap().dest = Some(far));
+    assert_eq!(d, Some(far));
+}
+
+// spec: S-0210 claim 11 (the original's attack-target variant, kept for the neutral and special houses: a crushable target less than the crush range away, no move destination)
+// spec: S-0210 F2 (crush range absent: 384 leptons; the attack-target variant needs d < R, strict)
+#[test]
+fn attack_target_crushing_approach() {
+    // One cell away (256 < 384), the neutral and the special house: replaced.
+    for house in [2, 3] {
+        let (d, t) = crush_step(house, 1, crushable_cart, |_, _| {});
+        assert_eq!(d, Some(Target::Object(t)), "house {house}");
+    }
+    // A player house never does it: in range, the step ends with no destination.
+    let (d, _) = crush_step(0, 1, crushable_cart, |_, _| {});
+    assert_eq!(d, None);
+    // With a move destination: the common step keeps it.
+    let near = Target::Cell(at(0, 1));
+    let (d, _) = crush_step(2, 1, crushable_cart, |w, a| {
+        w.obj_mut(a).unwrap().dest = Some(near)
+    });
+    assert_eq!(d, Some(near));
+    // A target it cannot crush: the common step.
+    let (d, _) = crush_step(2, 1, |_| {}, |_, _| {});
+    assert_eq!(d, None);
+    // Two cells away (512 ≥ 384): the common step.
+    let (d, _) = crush_step(2, 2, crushable_cart, |_, _| {});
+    assert_eq!(d, None);
+}
+
+// spec: S-0215 claim 37 (g) (zero type speed is no exclusion from the approach step: an out-of-range attacker with zero speed still receives an approach position)
+#[test]
+fn zero_speed_still_approaches() {
+    let mut r = rules(None, None);
+    r.sim.vehicles.get_mut("CRUSHER").unwrap().speed = Some(0);
+    let mut w = testkit::game_with(&r, SIZE, 3);
+    let (a, _) = duel(&mut w, 0, 10, Behaviour::Attack);
+    approach::step(&mut w, a);
+    assert!(
+        matches!(w.obj(a).unwrap().dest, Some(Target::Cell(_))),
+        "an approach position"
+    );
+}
+
 // spec: S-0207 claim 19 (a) (a driving vehicle never stops, nor loses its destination or a stored step, because its target came in range; it drives on to its destination)
 #[test]
 fn driving_attacker_keeps_its_move_in_range() {

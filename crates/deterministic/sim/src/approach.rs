@@ -5,12 +5,13 @@
 //! The approach-position search is S-0307's (claims 15 to 17,
 //! `combat::range::approach_search`, request Q-0172 for the cases its
 //! revision leaves open), and so is part h's balloon-hover approach (claim
-//! 18, `combat::range::balloon_hover_approach`).
+//! 18, `combat::range::balloon_hover_approach`). Part h's crushing
+//! approaches are S-0210 claim 11's.
 //!
 //! Seams, each answering "no" or "nothing" until its topic fills it in: the
 //! approach destinations of a vehicle (no rule fills them yet, S-0215 Open
-//! questions), part h's crushing approaches (S-0210 claim 11), the magnetic
-//! beam of part c, draining links, bunkers, open-topped passengers and teams.
+//! questions), the magnetic beam of part c, draining links, bunkers,
+//! open-topped passengers and teams.
 //! Every object on the map has the in-the-playfield mark (no object arrives
 //! from outside the usable area yet).
 
@@ -18,7 +19,7 @@ use glasnost_num::geom::root_floor;
 
 use crate::infantry::{self, Seq};
 use crate::rules::{Behaviour, Kind};
-use crate::world::{ObjectId, Pos, Target, World};
+use crate::world::{HouseRole, ObjectId, Pos, Target, World};
 
 /// The reference point of a target or destination (S-0215 F10): an
 /// object's reference point, or a cell's centre at its height.
@@ -90,6 +91,66 @@ fn search(w: &mut World, id: ObjectId, r_prime: i32) {
     infantry::destination_assigned(w, id, before);
 }
 
+/// Whether a vehicle's approach step is replaced by a crushing approach of
+/// S-0210 claim 11 (S-0215 claim 37 h):
+/// - the omni-crusher variant: its type has the omni-crusher flag and it
+///   can crush its target (claim 2), at any distance and also with a move
+///   destination; not for an opportunity target of a player house (human
+///   or AI), while the neutral and special houses keep the original's
+///   exemption;
+/// - the original's attack-target variant, kept for the neutral and special
+///   houses only: it can crush its target, the distance is below the crush
+///   range (F2, strict), and it has no move destination.
+fn crushing_approach(w: &World, id: ObjectId) -> bool {
+    let Some(o) = w.obj(id) else { return false };
+    if o.kind != Kind::Vehicle {
+        return false;
+    }
+    let Some(Target::Object(x)) = o.target else {
+        return false;
+    };
+    let r = w.rules();
+    let Some(u) = r.unit(o.kind, o.type_index) else {
+        return false;
+    };
+    // spec: S-0210 claim 11 (both variants need a target it can crush under claim 2)
+    if !crate::occupancy::crushable_by(w, id, x) {
+        return false;
+    }
+    // spec: S-0210 claim 11 (our engine: the rules of a player house, human-controlled or AI; the neutral and special houses keep the original's computer-controlled rules)
+    let player = o
+        .owner
+        .is_none_or(|h| w.houses[usize::from(h.0)].role == HouseRole::Player);
+    // spec: S-0210 claim 11 (omni-crusher variant: at any distance, also with a move destination; not for an opportunity target of a player house)
+    if u.omni_crusher && !(player && o.combat.opportunity) {
+        return true;
+    }
+    if player || o.dest.is_some() {
+        // spec: S-0210 claim 11 (the attack-target variant needs a computer-controlled owner and no move destination)
+        return false;
+    }
+    let Some(t) = w.obj(x) else { return false };
+    // spec: S-0210 claim 11 (the attack-target variant: a unit or building)
+    if !matches!(
+        t.kind,
+        Kind::Infantry | Kind::Vehicle | Kind::Aircraft | Kind::Building
+    ) {
+        return false;
+    }
+    let (dx, dy, dz) = (
+        i64::from(t.pos.x - o.pos.x),
+        i64::from(t.pos.y - o.pos.y),
+        i64::from(t.pos.z - o.pos.z),
+    );
+    // spec: S-0210 F2 (d = trunc(√̃(Δx² + Δy² + Δz²)) between the centres; the attack-target variant needs d < R, strict)
+    let d = root_floor(
+        (dx * dx + dy * dy + dz * dz) as u64,
+        r.quirks.table_root_distance,
+        r.mode,
+    ) as i64;
+    d < i64::from(r.general.crush_range)
+}
+
 /// r′ of F10 for the actor's weapon chosen for the target.
 fn r_prime(w: &World, id: ObjectId, t: Target, f2: bool) -> i32 {
     let (slot, _) = crate::combat::weapon::would_use(w, id, Some(t));
@@ -117,7 +178,14 @@ pub fn step(w: &mut World, id: ObjectId) {
     }
     // spec: S-0215 claim 37 (c) (no target: nothing; the magnetic beam is a seam)
     let Some(t) = o.target else { return };
-    // spec: S-0215 claim 37 (h) and S-0307 claim 18 (before the other parts: a balloon-hover vehicle whose weapon chosen for the target has a vertical projectile takes the target as its destination, keeps it, and does nothing else; the crushing approaches before it are a seam)
+    // spec: S-0215 claim 37 (h) and S-0210 claim 11 (before the other parts: a crushing approach takes the target object itself as destination, and nothing else of the step happens)
+    if crushing_approach(w, id) {
+        if let Some(ob) = w.obj_mut(id) {
+            ob.dest = Some(t);
+        }
+        return;
+    }
+    // spec: S-0215 claim 37 (h) and S-0307 claim 18 (before the other parts: a balloon-hover vehicle whose weapon chosen for the target has a vertical projectile takes the target as its destination, keeps it, and does nothing else)
     if crate::combat::range::balloon_hover_approach(w, id) {
         if let Some(ob) = w.obj_mut(id) {
             ob.dest = Some(t);
