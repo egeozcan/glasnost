@@ -2,13 +2,13 @@
 id: S-0003
 title: INI value forms
 topic: rules-import
-revision: 9
+revision: 10
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-13
 measurements: []
-requests: [Q-0061, Q-0075]
+requests: [Q-0061, Q-0075, Q-0100]
 supersedes: []
 ---
 
@@ -22,7 +22,8 @@ including spellings, truncation, number domains, rounding, overflow and malforme
 engine does where the original's result is undefined or not characterised here, and which inputs make
 the importer warn. Reading a file into sections and entries is S-0001, duplicate resolution is
 S-0002, and the floating-point rounding mode these value forms rely on (claim 17) belongs as a whole
-to S-0205 (number domains).
+to S-0205 (number domains). These claims cover skirmish imports; network games and campaigns
+are out of scope.
 
 ## Terms
 
@@ -278,7 +279,7 @@ our engine's result.
    unspecified, and `a,2,3` leaves all three unspecified. The same holds for the map header's
    start-position pairs (Import mapping row C12): `5` gives 5 and an unspecified second number. A
    missing key, or one written with an empty value, gives the value in force for the whole pair or
-   triple.
+   triple. This corrects approved S-0009 claim 29 and Import mapping row C12, which currently say that an unreadable component takes the value in force in the original. Revise S-0009 with this spec so it states that the original's unreadable component is unspecified and our engine supplies the matching component of the value in force; confirm both revisions together at hand-off.
 
    **Our engine** gives every unread component the matching component of the value in force, and
    keeps every component that was read; the importer warns. So `1,2` for a triple whose value in
@@ -387,13 +388,26 @@ our engine's result.
 
 ### References to types by name
 
-14. **Type names match case-insensitively.** Wherever a value names a type (list sections, weapon,
-    warhead and prerequisite references), the name is compared with existing type names using ASCII
+14. **Ordinary type references match case-insensitively.** For list-section values, weapon,
+    warhead and prerequisite references, the name is compared with existing type names using ASCII
     case folding (A–Z only). `alpha` finds the type `Alpha`. The values `none` and `<none>`, in any
     case, mean "no type" and never create one. Section and key names, by contrast, are case-sensitive
     (S-0001 claim 13). What follows from that for a type whose section is spelled in a different case
     is specified in S-0004 (type registration), claim 7.
-    - Backing: `measurable` (scenario V9)
+
+    This is not a universal rule for every map field that names a type. S-0011 claim 21's
+    type-exists and type-does-not-exist events require an exact, case-sensitive type name,
+    and treat both no-type spellings as ordinary names, not markers. Its claim 5's trigger
+    owner country instead treats the angle-bracketed no-type spelling, ignoring ASCII case,
+    as the first registered country. The bare spelling has no marker handling there: it
+    undergoes ordinary case-insensitive country type-name or country name-field lookup.
+    The event results, owner failures and compatibility rules remain S-0011's, not new
+    switches here. A building's factory kind is a vocabulary word (claim 21), not a
+    reference to a registered type, and does not use this claim's marker rules.
+    - Backing: `measurable` (scenario V9; S-0011 T14 for event letter case and T22 for
+      owner lookup); `unmeasured` for event marker handling, as S-0011 claim 21 explains:
+      ordinary lookup failure and marker rejection are indistinguishable when no type has
+      that exact marker name
     - Confidence: high
 
 15. **Type names longer than 24 bytes** are cut when the type is created, and they then no longer
@@ -469,8 +483,9 @@ our engine's result.
 
 ### Combat name and integer lists
 
-19. **No-type items in combat name lists do not occupy places.** The animation-name and
-    voxel-animation-name lists identified in Import mapping rows C15 and C16 omit `none` and
+19. **No-type items in combat name lists do not occupy places.** The animation-name,
+    voxel-animation-name and destruction particle-system-name lists identified in Import
+    mapping rows C15, C16 and C18 omit `none` and
     `<none>`, ignoring ASCII letter case. The remaining items keep their relative order,
     including repetitions. A list written `none,Alpha,<none>,Beta` therefore has two entries,
     `Alpha` and `Beta`, not four. Selection indices and random-choice ranges use this retained
@@ -498,6 +513,30 @@ our engine's result.
     - Backing: `measurable` (scenario V15; S-0303 A19); `unmeasured` (the 511-byte
       reader limit: S-0001's physical-line limit cuts a value sooner once the key and `=`
       take part of that line, so file input cannot reach this separate limit)
+    - Confidence: high
+
+### Factory kind vocabulary
+
+21. **A building's factory kind is a named value, not a type reference.** The four vocabulary
+    words in Import mapping row C19 make it a factory building of infantry, vehicles,
+    aircraft or buildings, respectively. They name categories, not individual registered
+    types. The field uses claim 1's text reading with a limit of 31 bytes, then a whole-text
+    comparison ignoring ASCII letter case. Leading whitespace has already been removed
+    from the stored value (S-0001); trailing whitespace is removed after the cut, including
+    whitespace left by the trim defect. Internal whitespace is retained. A prefix of a
+    vocabulary word or a vocabulary word followed by non-whitespace text is not a match.
+    Missing or empty keeps the value in force; before any layer the field says no factory.
+    A non-empty unmatched word gives no factory, not the value in force, with claim 16's
+    importer warning. The explicit no-factory vocabulary word in C19 also gives no factory.
+
+    Additional vocabulary words can be recognised without naming any of those four
+    production kinds; C19 gives examples. Such a building cannot serve any of the four
+    production lines on that basis alone: the production specs require the corresponding
+    factory kind (S-0403 Terms, S-0404 claim 7, S-0407 claim 1). In particular, the words
+    for object instances are not aliases for the corresponding type-kind words. Recognition
+    of another category does not grant a fifth production line. This claim concerns the
+    imported production kind only, not every order or visual property of such a building.
+    - Backing: `measurable` (scenario V16)
     - Confidence: high
 
 ## Formulas
@@ -716,6 +755,8 @@ unspecified in the original; our engine leaves the value in force and warns (cla
 | C15 | Warhead `AnimList`; `[CombatDamage]` `SplashList`; type `DebrisAnims`, `Explosion`, `DestroyAnim`; `[General]` `DamageFireTypes`, `MetallicDebris` | Animation-name lists, 127-byte text limit. Claims 12, 14 and 19: `none` and `<none>` are omitted, not empty slots. Start empty; missing or empty keeps the list in force |
 | C16 | Type or warhead `DebrisTypes`; `[General]` `BarrelDebris` | Voxel-animation-name lists, 127-byte text limit, otherwise as C15 (claim 19) |
 | C17 | Type or warhead `DebrisMaximums` | Decimal-prefix integer list (claim 20), 511-byte text limit. Unreadable non-empty items retain a place with 0; empty items are skipped. Start empty; missing or empty keeps the list in force |
+| C18 | Type `DestroyParticleSystems` | Particle-system-name list, 127-byte text limit; claims 12, 14 and 19. `none` and `<none>` are omitted, not slots. Start empty; missing or empty keeps the list in force |
+| C19 | Building type `Factory` | Named value (claim 21), 31-byte text limit. Producing vocabulary: `Infantry` immediately followed by `Type` = infantry, `Unit` immediately followed by `Type` = vehicles, `Aircraft` immediately followed by `Type` = aircraft, `Building` immediately followed by `Type` = buildings. Each is one word with no intervening space. Whole text compared ignoring ASCII case, after claim 1's cut and trailing trim. `<none>` explicitly means no factory; bare `none` is unmatched and also gives no factory. Missing or empty keeps the value in force, initially no factory. Non-empty unmatched text gives no factory, with a warning. Additional recognised words include `Terrain` immediately followed by `Type` (one word), and bare `Infantry`, `Unit`, `Aircraft` and `Building`; none names one of the four production kinds. These are not aliases for the four producing words ending in `Type` |
 
 ## Measurement scenarios
 
@@ -860,12 +901,12 @@ spec's scenario use that scenario's named test data.
 - **V14 (no-type omissions, Q-0061).** Common setup, game speed 2, one human player and
   one distant bystander computer player, director and mods off. Named map overrides use
   two existing, visibly distinct animation types, called `Alpha` and `Beta` here, and two
-  visibly distinct voxel-debris types. Compare each C15/C16 list written with the corresponding
+  visibly distinct voxel-debris types. Compare each C15/C16/C18 list written with the corresponding
   two names against the same list with `none`, `<NONE>` and repeated empty comma-separated
   items inserted before and between them. Also compare a previously populated list overridden
   with `none` against one left absent. For the warhead animation list choose damage selecting
   entry 0 under S-0303 F5; observe `Alpha`, not no animation. For splash, damage-fire,
-  explosion, destruction and debris lists, trigger their effect as S-0303 A18 and S-0312's
+  explosion, destruction, destruction particle-system and debris lists, trigger their effect as S-0303 A18 and S-0312's
   death scenarios describe, recording animation types/counts and the scenario random stream.
   Use 100 events per list form; predict selections and draw counts from each recorded initial
   random state and the owning formula, rather than comparing unmatched seeds. Expected:
@@ -889,6 +930,26 @@ spec's scenario use that scenario's named test data.
   a per-deal maximum of 16 rather than 10 for `10h`, or
   second-type debris for `2,abc,3` would do so. Observe the test kill/detonation area only
   and apply the bystander's void rule.
+
+- **V16 (factory-kind words, Q-0100).** Tiny purpose-made skirmish map, game speed 2,
+  one human player and one distant bystander computer player, director and mods off.
+  Named map overrides change the factory-kind entry of one pre-placed factory building.
+  remove every other factory of that kind from the observed house. Keep prerequisites,
+  power, tech level and credits sufficient. Test each of C19's four producing words on a
+  building suitable to release that kind, comparing a control without the override with
+  lower-case and mixed-case forms and forms surrounded by spaces. Request an eligible
+  item and record whether production begins and completes, using sidebar video and a
+  read-only production recorder. Expected: all case/outer-space variants allow the same
+  production as the canonical word. Then use a nonsense word, a producing word followed
+  by `x`, its object-instance counterpart, the terrain-type word, and each no-factory
+  spelling in C19. Expected: none serves any of the four production lines; the earlier
+  producing kind is not retained. Empty and absent entries do retain the earlier kind.
+  To test the 31-byte cut, append spaces to a producing word through byte 31 and an `x`
+  at byte 32: expected producing kind, while an `x` at byte 31 gives no factory. One run
+  per form and kind, recording the imported kind on our engine as well. Production in a
+  negative variant, lost production in a positive variant, or the byte-32 suffix disabling
+  production falsifies claim 21. The bystander's void rule applies to the factory and its
+  release area. No claim that unrelated orders are unchanged is tested here.
 
 ## Open questions
 

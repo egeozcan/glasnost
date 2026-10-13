@@ -43,7 +43,6 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0416](ui/S-0416-credit-display.md) | Credit display (the ticking credits counter on the sidebar) | ui | 1 | approved | — |
 | [S-0214](ui/S-0214-order-targeting-rules.md) | Order targeting rules (what a click means for each kind of object, and group orders) | ui | 13 | approved | — |
 | [S-0314](combat/S-0314-healing-repair.md) | Healing and repair in combat (healers, self-healing, house-wide healing, repair depot, hospital, building repair) | combat | 4 | approved | — |
-| [S-0003](rules-import/S-0003-ini-value-forms.md) | INI value forms | rules-import | 9 | approved | — |
 | [S-0006](rules-import/S-0006-rules-layering.md) | Rules layering | rules-import | 9 | approved | — |
 | [S-0009](formats/S-0009-map-file-semantics.md) | Map file semantics (geometry, terrain streams, waypoint markers, start positions, preview) | formats | 13 | approved | — |
 | [S-0010](formats/S-0010-theater-tileset-semantics.md) | Theater data, tilesets and the terrain values of a cell | formats | 11 | approved | — |
@@ -96,3 +95,4 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0412](simulation/S-0412-skirmish-setup-rules.md) | Skirmish setup rules (setup values, starting credits, random lobby choices, handicap, alliances at game start, superweapon and crate settings) | simulation | 3 | approved | — |
 | [S-0409](visibility/S-0409-shroud-sight.md) | Shroud and sight (explored and seen cells, sight radius and shape, height blocking, gap generators, re-covering, reveal on fire) | visibility | 4 | approved | — |
 | [S-0410](ui/S-0410-radar-minimap.md) | Radar and minimap (when radar is available, what the radar map shows and how it is coloured) | ui | 6 | approved | — |
+| [S-0003](rules-import/S-0003-ini-value-forms.md) | INI value forms | rules-import | 10 | approved | — |
