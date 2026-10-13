@@ -436,10 +436,10 @@ pub fn turn(w: &mut World, id: ObjectId) {
         if kind == Kind::Building {
             second_start(w, id);
         }
-        // spec: S-0215 claim 37 (a) (the per-tick approach of an actor that cannot reach its target; its place in the tick is interim, request Q-0161)
-        crate::approach::per_tick(w, id);
         // spec: S-0215 claim 33 (b) and (d) (the per-tick search after the processing)
         crate::combat::acquire::per_tick(w, id);
+        // spec: S-0215 claim 37 (a) and (a2) (the per-tick approach of an actor that cannot reach its target, after the per-tick search on a tick without processing too)
+        crate::approach::per_tick(w, id);
         return;
     }
     let d = process(w, id);
@@ -449,10 +449,10 @@ pub fn turn(w: &mut World, id: ObjectId) {
     if kind == Kind::Building {
         second_start(w, id);
     }
-    // spec: S-0215 claim 37 (a) (the per-tick approach of an actor that cannot reach its target; its place in the tick is interim, request Q-0161)
-    crate::approach::per_tick(w, id);
     // spec: S-0215 claim 33 (b) and (d) (the per-tick search after the processing, judged on the behaviour it leaves)
     crate::combat::acquire::per_tick(w, id);
+    // spec: S-0215 claim 37 (a) and (a2) (the per-tick approach of an actor that cannot reach its target follows the processing and the per-tick search, with no one-step-per-tick limit)
+    crate::approach::per_tick(w, id);
 }
 
 /// The attack-move resumption at the start of an object's tick (S-0309

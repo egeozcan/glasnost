@@ -305,3 +305,52 @@ fn driving_attacker_keeps_its_move_in_range() {
     assert!(in_range_moving, "the target came in range on the way");
     assert_eq!(w.obj(a).unwrap().target, Some(Target::Object(t)));
 }
+
+/// A CRUSHER of house 0 at (0, 0) in *guard* with no target, guard range 10
+/// cells, and a CART of house 1 at (8, 0): out of weapon range, inside the
+/// guard range.
+fn guard_search(w: &mut World) -> ObjectId {
+    let a = testkit::spawn(w, Kind::Vehicle, "CRUSHER", 0, at(0, 0), 0);
+    testkit::spawn(w, Kind::Vehicle, "CART", 1, at(8, 0), 0);
+    let o = w.obj_mut(a).unwrap();
+    o.beh.current = Some(Behaviour::Guard);
+    o.target = None;
+    o.targeting_timer = 0;
+    a
+}
+
+fn guard_rules() -> Ruleset {
+    let mut r = rules(None, None);
+    r.sim.vehicles.get_mut("CRUSHER").unwrap().guard_range =
+        Some(glasnost_rules::sim::Decimal("10".into()));
+    r
+}
+
+// spec: S-0215 claim 37 (a2) (the per-tick approach follows the per-tick search: a target found by that search is dropped on that very tick when unreachable and out of range, with no destination held)
+// spec: S-0215 claim 33 (b) and (d) (the per-tick search in guard)
+#[test]
+fn per_tick_approach_follows_the_per_tick_search() {
+    let r = guard_rules();
+    // Control: the search finds the target on reachable ground and it is kept.
+    let mut w = testkit::game_with(&r, SIZE, 3);
+    let a = guard_search(&mut w);
+    testkit::run(&mut w, 1);
+    assert!(
+        w.obj(a).unwrap().target.is_some(),
+        "control: the search acquires the target"
+    );
+    // Behind the wall: the search alone finds it.
+    let mut w = walled_game(&r);
+    let a = guard_search(&mut w);
+    glasnost_sim::combat::acquire::per_tick(&mut w, a);
+    assert!(w.obj(a).unwrap().target.is_some(), "the search acquires");
+    // Through a tick it is gone by the end of its acquisition tick.
+    let mut w = walled_game(&r);
+    let a = guard_search(&mut w);
+    let before = w.tick;
+    testkit::run(&mut w, 1);
+    let o = w.obj(a).unwrap();
+    assert!(o.targeting_timer > before, "the targeting timer restarted");
+    assert_eq!(o.target, None, "dropped on its acquisition tick");
+    assert_eq!(o.dest, None);
+}

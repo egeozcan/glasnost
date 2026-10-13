@@ -281,7 +281,6 @@ Provisional rules of combat, each tied to a request:
 | Where | Interim rule | Request |
 |---|---|---|
 | `combat::range::approach_search`, `approach::search` | the search of S-0307 claims 15 to 17 is applied unchanged to the cases those claims do not cover (cell targets, close-range types, slopes and bridges, alternatives outside the usable area); when the radii are not empty and no candidate qualifies, an ordinary actor drops its target and its destination is cleared (no nearby-cell search, so no centre is assumed); a balloon-hover vehicle attacking a cell takes that cell as its destination | Q-0172 |
-| `process::turn`, `approach::per_tick` | the per-tick approach step of claim 37 (a) runs after the actor's processing (or its per-tick start) and before its per-tick search, every tick | Q-0161 |
 | `process::fall_back_vehicle`, `process::fall_back_infantry`; `glasnost_ai::scripted::idle` | nothing removes an attack-move memory when its destination is reached: the actor stays in *move* with no destination (claims 14 and 15, row 1); the scripted skirmish player treats such an actor as idle and orders it again | Q-0162 |
 | `tick::object_turn`, `combat::damage::delay_kill_expiry_turn` | a building's delayed-kill expiry hit comes at the end of its turn, after the general part (healing, behaviour, the delayed shot, the economy events), where S-0312 claim 21 puts a removal | Q-0170 |
 
