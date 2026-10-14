@@ -3,7 +3,7 @@ id: Q-0478
 title: How can an empty country name prefix value give an empty prefix when an empty value is no entry?
 status: answered
 related: [S-0413, S-0001, S-0006]
-answered-by: [S-0001]
+answered-by: [S-0001, S-0413]
 ---
 
 ## Need
