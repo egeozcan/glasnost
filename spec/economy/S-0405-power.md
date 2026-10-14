@@ -2,13 +2,13 @@
 id: S-0405
 title: Power (output and drain, damaged power plants, low power, blackouts, which buildings stop)
 topic: economy
-revision: 7
+revision: 8
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0180, Q-0224]
+requests: [Q-0180, Q-0224, Q-0276]
 supersedes: []
 ---
 
@@ -446,6 +446,31 @@ house's own update in a tick, which comes after the turn pass and before orders 
     - Backing: `measurable` (W13 for start states and subsequent input; W7 for the pulse gate)
     - Confidence: high
 
+19. **Meaning of the power meter (Q-0276).** The local player's meter represents the
+    house totals *O* and *D* of claim 4, not the power fraction alone. Its occupied extent
+    represents max(*O*, *D*) when that maximum is positive. Within that extent, the supplied part represents *O*, the
+    near-shortage part represents the first 100 power units of unmet drain, and the
+    further-shortage part represents any remaining unmet drain (F4). With full power
+    only the supplied part remains; unused output is not a separate shortage part.
+    With both totals 0, the meter uses only the supplied part as an empty-house fallback
+    (F4); this does not mean that the house generates positive power.
+    Thus the distinction is an absolute shortage of 100 power units, not a percentage
+    threshold. These are semantic parts, not required colours or artwork.
+
+    The meter expands as the base grows. Its scale uses the sum *B* of base output plus
+    base drain of the house's buildings, without health scaling, upgrade contributions,
+    passenger contributions, switching or blackout suppression. A damaged or switched-off
+    plant therefore changes the totals represented but does not itself shrink *B*.
+    F4 gives the scale and the proportions. This display calculation changes no game state.
+
+    Layout, orientation, colours, artwork, display resolution and transition animation
+    remain implementer design under S-0411's interface scope. F4 specifies settled
+    meaning, not a pixel reproduction or an animation deadline. In particular, do not
+    replace this meter with a drain/output fraction that discards the absolute shortage
+    threshold and base-dependent occupied extent.
+    - Backing: `measurable` (W14)
+    - Confidence: high (shortage split and scale), medium (settled display interpretation)
+
 ## Formulas
 
 All results in power units are integers (S-0205, claim 1). The formulas display RZ₅₃ for
@@ -477,10 +502,42 @@ in floating point in the original. Example (invented values): *P* = 120, *H* = 3
 The division is one double division in floating point in the original. S-0403 narrows *p* to single
 precision before it uses it.
 
+**F4, settled meter scale and proportions** (claim 19). *N* > 1 is the chosen display
+capacity in abstract bands, an integer design parameter, not a prescribed screen size.
+*B* is the non-negative integer sum of the house's buildings' base output and base drain.
+The occupied capacity *A*, in bands, is:
+
+> *q* = trunc(RZ₅₃(RZ₅₃(400 / RZ₅₃(*B* + 400)) × *N*))
+>
+> *A* = *N* − min(*N* − 1, max(0, *q*))
+
+The constant 400 has units of power units. The addition, division and multiplication in
+*q* are floating-point operations in the original, with conversion toward zero at the
+end. The clamps and subtraction defining *A* are integer operations. There is at least
+one band of capacity even for *B* = 0.
+
+Let *U* = max(0, *D* − *O*), *V* = min(*U*, 100), *W* = *U* − *V*, and
+*T* = *O* + *V* + *W* = max(*O*, *D*), all exact integers in power units.
+For *T* > 0, the three parts have unquantised target extents:
+
+> supplied = RZ₅₃(*A* × RZ₅₃(*O* / *T*))
+>
+> near shortage = RZ₅₃(*A* × RZ₅₃(*V* / *T*))
+>
+> further shortage = RZ₅₃(*A* × RZ₅₃(*W* / *T*))
+
+Division and multiplication are double floating-point operations. Extents are in bands.
+With *T* = 0 the supplied extent is *A* and both shortage extents are 0, an empty-house
+display fallback rather than a change to *O*. These are proportions before artwork quantisation:
+rounding these extents to drawn marks, including distribution of residual fractions,
+is implementer design, not a further game-state rule. No formula here prescribes pixels.
+
 ## Constants
 
 | Name (ours) | Value | Unit | Notes |
 |---|---|---|---|
+| Meter scale constant | 400 | power units | F4 |
+| Near-shortage interval | 100 | power units | Claim 19, F4 |
 | Chargers that keep a building in operation | 2 | infantry units | Claim 8 |
 | Upgrade positions whose upgrades count in power | 3 | positions | Terms; the positions and the cap on the upgrade count are S-0406's (claim 12) |
 | Blackout end, ticks before *t*₀ + *d* | 1 | ticks | Claim 6: the blackout ends in the house update of tick *t*₀ + *d* − 1 |
@@ -918,6 +975,35 @@ switched off the house has full power (W3's second pair).
   the same initial states but offers no power-mode order.
 - *Falsified if:* any initial state differs, a flag-0 pure producer loses output, a later
   applicable power-on fails without a pulse, or a firestorm-wall power order changes state.
+
+**W14: meaningful meter scale (claim 19, Q-0276).**
+- *Setup:* a named test map defines own test plants and consumers with base output 500
+  and base drain 300 in total, hence *B* = 800, and no upgrades or passengers. A second
+  variant has base output 500 and base drain 500, hence *B* = 1000. Use game speed 2,
+  stock data except these named overrides, director and unrelated mods off, and the
+  distant bystander under the common void rule. The observed area is these buildings
+  and the local player's meter. A third variant has no buildings and both totals 0.
+- *Procedure:* capture the settled meter at full health. In the first variant damage
+  plants until total output is 200, then switch them off. In the second variant damage
+  plants until output is 300, then switch them off. Wait until the meter stops moving
+  after each change; record *O*, *D* and building health with the read-only recorder.
+- *Runs:* three per variant.
+- *Observable:* occupied extent and the lengths of the three visibly distinct meter
+  parts in screenshots, compared with the recorded totals. Infer the original's band
+  capacity from its repeated drawn marks rather than fixing any screen position here.
+- *Expected:* in the first variant, the full-power occupied extent is *A* for *B* = 800.
+  At (200, 300), the supplied and near-shortage target proportions are 2/3 and 1/3,
+  with no further-shortage part. At (0, 300), near and further shortage have proportions
+  1/3 and 2/3. In the second variant, at (300, 500), supplied, near and further shortage
+  have proportions 3/5, 1/5 and 1/5. At (0, 500), the shortage proportions are 1/5
+  and 4/5. The settled occupied capacity follows F4 for the respective *B* and does not
+  shrink merely because plants are damaged or switched off. The empty-house variant
+  has one supplied band and no shortage bands. Allow a single drawn
+  band of quantisation discrepancy per part, not a changed semantic threshold.
+- *Falsified if:* a settled part differs by more than one band from these proportions,
+  shortage classification follows a percentage rather than 100 power units, or the
+  occupied extent follows damage-scaled output instead of the base-dependent scale.
+  No transition duration or colour choice is tested by this scenario.
 
 ## Open questions
 
