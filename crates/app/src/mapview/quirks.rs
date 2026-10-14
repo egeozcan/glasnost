@@ -511,6 +511,10 @@ mod tests {
             .collect();
         files.sort();
         assert!(files.len() >= 12, "found {} rendering specs", files.len());
+        // Switches a spec names only to withdraw them.
+        const WITHDRAWN: &[&str] = &[
+            "pip_colour_default_shift", // spec: S-0111 Cross-spec consistency (the former switch is withdrawn; pip-value retention is mandatory)
+        ];
         let mut missing = BTreeSet::new();
         let mut seen = BTreeSet::new();
         for f in files {
@@ -526,7 +530,9 @@ mod tests {
                     continue;
                 }
                 seen.insert(name.clone());
-                if !have.contains(name.as_str()) && !NOT_IMPLEMENTED.iter().any(|(n, _)| *n == name)
+                if !have.contains(name.as_str())
+                    && !NOT_IMPLEMENTED.iter().any(|(n, _)| *n == name)
+                    && !WITHDRAWN.contains(&name.as_str())
                 {
                     missing.insert(format!("{} in {}", name, f.display()));
                 }
