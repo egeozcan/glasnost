@@ -2,7 +2,7 @@
 id: S-0102
 title: Draw order, render layers, depth compositing, sprite placement and shadow pixels
 topic: rendering
-revision: 9
+revision: 10
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -25,11 +25,10 @@ sprite shows, and what a shadow does to the pixels under it. Positions, world pi
 lift *L(z)* are those of S-0101. This spec covers skirmish; network games and campaigns are out
 of scope.
 
-**Cross-spec correction required at hand-off.** S-0108 claim 23 still says this spec's door-sprite
-term excludes the closed state and requests a Terms correction. That statement is obsolete:
-revision 8 already included closed, and this revision retains it. Remove that stale requirement
-and the matching S-0108 cross-spec change entry; retain its door-visibility rule and depth pointer
-here. No door-depth change is required.
+**Cross-spec wording correction required.** The glossary's *sprite* and *aircraft* entries still
+say aircraft can be drawn as sprites. They must instead point to claim 21: aircraft bodies are
+voxel models only, and an aircraft type without voxel art draws no body. This is a vocabulary
+correction to match the existing rule, not a new rendering rule.
 
 ## Terms
 
@@ -203,25 +202,40 @@ screen rows.
      to a building with a voxel turret through the override section; the animation sort adjustment
      D21)
    - Confidence: high
-6. **The ground layer is kept nearly sorted.** An object entering the ground layer is placed
-   immediately before the first object in list order whose sort key is strictly greater than its own, or at the
-   end if there is none. On a sorted list this puts it after all objects with an equal
-   key; on a list that is not fully sorted it can land earlier than its sorted place (for keys
-   5, 10, 3, a newcomer with key 4 goes first). Once per tick the ground layer list receives one pass
-   of adjacent swaps from front to back: each neighbouring pair is swapped when the later object's key
-   is strictly smaller than the earlier one's. Consequences:
-   - An object whose key grew can travel any number of places toward the back (drawn later) in one
-     tick, but an object whose key shrank moves at most one place toward the front per tick. When an
-     object's key drops past the keys of several others in one tick (possible only when their keys
-     are closer together than its change of key per tick), it stays drawn over some of them for up to
-     one tick per object passed. At ordinary unit speeds against units standing a cell apart, a key
-     never passes more than one other key per tick, and the limit is not visible.
-   - Objects with equal keys keep their relative order.
-   - A reorder caused by movement in tick *n* is first visible in the picture drawn after tick
-     *n* + 1: the pass of each tick uses each object's key as it stood in the picture drawn after
-     the previous tick, not the key it has after its movement in this tick.
-   - Backing: `measurable` (scenario D3)
-   - Confidence: high for the insertion and swap rules; medium for the exact one-tick lag
+6. **Ground-layer drawing order.** A newcomer appears immediately before the first object in
+   the existing drawing order whose sort key is strictly greater than its own, or after all objects
+   if there is none. In an already sorted order it follows every equal-key object. In an unsorted
+   order it need not reach its fully sorted place: existing keys 5, 10, 3 leptons and a newcomer
+   with key 4 leptons give 4, 5, 10, 3 leptons, not 3, 4, 5, 10 leptons.
+
+   The drawing order has one ordering transition per tick, with the following exact result.
+   Number the objects in the order before that transition from 1 to *N*, and let *k*ᵢ be object
+   *i*'s key in leptons. Its resulting drawing position is the integer given by this table.
+   Every position and every comparison refers to that same pre-transition order, not to an order
+   partly changed during the transition. This specifies which object covers which in an overlap,
+   not how an implementation stores or rearranges objects.
+
+   | Condition for object *i* | Resulting drawing position (1 is drawn earliest) |
+   |---|---|
+   | some earlier object has a key strictly greater than *k*ᵢ | *i* − 1 |
+   | no earlier key is strictly greater, and *j* is the first later position with *k*ⱼ ≥ *k*ᵢ | *j* − 1 |
+   | no earlier key is strictly greater, and no later key is at least *k*ᵢ | *N* |
+
+   Arithmetic on positions is exact integer arithmetic, without rounding. For example, keys
+   10, 5, 3 leptons become 5, 3, 10 leptons, not the fully sorted 3, 5, 10 leptons.
+   Equal-key objects retain their relative order through this transition.
+
+   An increase of a key can therefore move an object any number of drawing positions later in
+   one tick, while a decrease moves it at most one position earlier per tick. For a mover passing
+   behind several stationary objects in an otherwise sorted order, it can remain drawn over some
+   of them for several ticks, crossing one drawing position per transition. If each key change
+   crosses at most one stationary object's key, that multi-tick settling is not visible.
+   A movement-caused key change in tick *n* first affects drawing order in the picture after tick
+   *n* + 1: the transition uses the keys before the current tick's movement, not after it.
+   - Backing: `measurable` (D3 (a), (b) for movement ordering and lag; D3 (c) for equal-key
+     stability). Entry placement is `unmeasured`: D3 observes already-placed objects, and no
+     scenario here controls a newcomer's appearance while the existing order still has inversions.
+   - Confidence: high for entry placement and the ordering result; medium for the exact one-tick lag
 7. **Other layers are never sorted.** Objects entering the underground, surface, air or top layer
    are appended at the end of the list and never sorted. Among aircraft, for instance, the one that
    most recently entered or re-entered the layer is drawn over the others regardless of screen
@@ -554,7 +568,7 @@ screen rows.
     (`quirks.slot_values_replace_animation_adjustments`). The slot's values take effect only once the
     animation is in its layer. So a slot animation that enters the ground layer is placed in the
     list (claim 6) by a key with its type's own sort adjustment, and the slot's y-sort counts from
-    the next sorting pass on. The turret slot's depth adjustment is also the depth adjustment of a
+    the next ordering transition on. The turret slot's depth adjustment is also the depth adjustment of a
     voxel turret (claim 13), and the turret slot's keys come from the building's rules section
     (Import mapping).
     - Backing: `measurable` (scenario D22 (a) to (c)). The insertion with the type's own value is
@@ -1106,7 +1120,7 @@ red or blue *C*, and likewise with 4 for green.
 | jumpjet cruise height default | 500 | leptons | Absent-key default of a type's jumpjet cruise height |
 | jumpjet cruise height minimum | 208 | leptons | 2 height levels; a smaller configured value is raised to this |
 | bridge deck height | 416 | leptons | 4 height levels |
-| ground-layer sort passes | 1 per tick | passes | One front-to-back adjacent-swap pass |
+| ground-layer ordering transitions | 1 per tick | transitions | Drawing-position result of claim 6 |
 | centring | ⌊*W*/2⌋, ⌊*H*/2⌋ | pixels | Canvas point placed on the draw point (F6) |
 | ore-spawning terrain object raise | 16 | screen rows | Draw point moved up (claim 23) |
 | terrain object damaged frame threshold | 2 | hit points | Image frame 1 below it (claim 23) |
@@ -1167,7 +1181,7 @@ So above a deck its layer follows its height above the deck.
 | State | Event | Result |
 |---|---|---|
 | any | object enters the ground layer | placed just before the first object, counting from the front, whose key is strictly greater than its own; at the end if there is none |
-| any | tick | one front-to-back pass; swap neighbours where later key < earlier key |
+| any | tick | drawing positions change by claim 6's result, using the keys before that tick's movement |
 | any | object leaves the layer | removed; the order of the rest is unchanged |
 
 **Painting order of a drawn frame** (each later step can paint over the earlier ones, subject to
@@ -1197,7 +1211,7 @@ building's key. Between two units, the one later in the list is drawn on top whe
 
 ## Edge cases and quirks
 
-- **`quirks.ground_layer_single_pass_sort`** (default: on). For every switch in this section with a stated default, that default is the original YR behaviour; an alternative explicitly identified as our engine's alternative is not behaviour of the original. The ground layer gets one adjacent-swap pass per tick (claim 6). Alternative: fully sort the ground layer every tick (stable, by key). With the quirk on, fast units moving up the screen can be drawn over units they have already passed behind for a few ticks.
+- **`quirks.ground_layer_single_pass_sort`** (default: on). For every switch in this section with a stated default, that default is the original YR behaviour; an alternative explicitly identified as our engine's alternative is not behaviour of the original. The ground layer has the limited settling of claim 6's drawing-position result. Alternative: fully sort the ground layer every tick (stable, by key), using the same pre-movement keys and visibility lag. With the quirk on, fast units moving up the screen can be drawn over units they have already passed behind for a few ticks.
 - **`quirks.unsorted_upper_layers`** (default: on). Underground, surface, air and top layers keep
   insertion order (claim 7). Alternative: sort them like the ground layer. With the quirk on,
   overlapping aircraft are ordered by their latest layer entry or re-entry, not by screen position.
@@ -1362,7 +1376,8 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
   The jumpjet (air) covers the vehicle wherever they overlap, whatever their screen positions.
   (b) The flat projectile (surface) is covered by the vehicle; the other projectile (air) covers the
   vehicle. Falsified if the vehicle is drawn over the hovering jumpjet, if the jumpjet is drawn over
-  the flying aircraft, or if the flat projectile is drawn over the vehicle.
+  the flying aircraft, if the flat projectile is drawn over the vehicle, or if the non-flat
+  projectile is covered by the vehicle.
 - **D3, ground-layer sorting (claim 6).** Setup: a flat map. (a) Two identical vehicles on
   neighbouring cell columns (screen columns 30 pixels apart), the first starting two cells higher on
   screen; order the first to drive straight down-screen past the second so that their images overlap.
@@ -1378,8 +1393,22 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
   vehicles, the mover goes under them one at a time, one per tick, so for *m* − 1 ticks it is still
   drawn over some of them. Ordinary run: the mover goes under each standing vehicle one tick after its
   key drops below that vehicle's key. Falsified if in the fast run the mover is under all *m* vehicles
-  in the second picture after that tick (the outcome of a full sort), or if in (a) the mover goes on
-  top before its key exceeds the other's.
+  in the second picture after that tick (the outcome of a full sort), or if in (a) the first picture
+  showing the mover on top is not the picture after tick *n* + 1, where tick *n* is the first tick
+  whose movement makes its key exceed the other's. A fast-run picture whose mover order differs
+  from claim 6's drawing-position table also falsifies it. If the movement rules never permit a
+  drop past two keys in one tick, (b)'s multi-position settling is `unmeasured` because this setup
+  cannot distinguish it from a full sort.
+  (c) Equal-key stability. Use two map-placed sprite vehicles at (x, y) and (x + 1, y − 1),
+  whose cell-centre keys are equal. Named test files replace their sprites with two distinct,
+  opaque test squares on 129 × 129-pixel canvases and set their art to sprite drawing with one
+  walking frame, one facing and no firing frames. Set their idle rates to 0 and suppress their
+  shadows through the map override. These test images overlap despite the 60-column separation.
+  After at least ten stationary ticks, record which colour covers the overlap. Keep both still
+  for twenty more ticks, then drive a third vehicle past both in each direction without touching
+  their cells. Expected: the two equal-key colours keep the recorded overlap priority whenever
+  not covered by the third vehicle. Any reversal falsifies equal-key stability. Initial priority
+  is recorded, not predicted; this does not test entry placement.
 - **D4, building keys (claim 5).** Setup: a flat map; a building with a voxel turret whose turret
   image overlaps the route below, and a vehicle driving straight down the column of cells just west of
   the foundation (cells with x one less than the foundation's first column), from north of the
@@ -1824,7 +1853,8 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
   type's section. Observable: the image frame shown at the start. Expected: image frame 0 if the
   stock rules' game-wide tree strength is 2 or more (the type took it in the base rules and keeps
   it); image frame 1 is the quirk-off result. Not measurable if the stock game-wide tree strength
-  is below 2.
+  is below 2. When the stock value is 2 or more, any starting image frame other than 0 falsifies
+  the retained-strength rule.
   (vi) Animated terrain objects. Part 1: a stock terrain type marked animated that has the
   spawns-resources flag (an ore mine), placed by the map on a flat cell, with its animation
   probability set to 1 and its animation rate to 4 ticks through the override section, so that its
@@ -1951,7 +1981,8 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
   unit standing still. Run 2: the same type with its shadow suppressed through the test map's
   override section, the unit at the same place and facing. Observable: the body's pixels inside the
   shadow frame's outline. Expected: in run 1 each channel is ⌊*v*/2⌋ of the run 2 value. Falsified
-  if the two runs show the same body pixels there.
+  if any qualifying channel differs from ⌊*v*/2⌋, including unchanged body pixels where the
+  expected halving differs from *v*.
 - **D33, depth of vehicles drawn as sprites and of animated terrain objects (claims 3, 12, 13).**
   Setup: a flat map at level 0, the reading of D15, and the vehicle type of D29 with all four
   fudges set to 0 through the override section (its body bias *U* − 2 = −3 with *s* = −1; its own
