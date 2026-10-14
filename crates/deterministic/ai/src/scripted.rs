@@ -165,10 +165,9 @@ fn plays(w: &World, t: TypeRef, role: Role) -> bool {
             };
             let ground = matches!(t.kind, Kind::Infantry)
                 || deploy::deploys_into(w, t.kind, t.index).is_none();
-            // Only types the simulation moves: driving and teleporting
-            // vehicles and walking infantry (an infantry or aircraft type
-            // with the teleporting locomotor does not move, Q-0181 and
-            // Q-0232).
+            // Only types the simulation moves: driving, walking and
+            // teleporting vehicles and infantry (an aircraft type with the
+            // teleporting locomotor does not move, Q-0232).
             let moves = u.locomotor != Locomotor::None;
             match role {
                 Role::Harvester => u.harvester && moves,

@@ -2246,3 +2246,44 @@ fn coarse_tie_goes_to_the_first_recorded() {
     .expect("a corridor");
     assert_eq!(chains[0], vec![a, sector(&w, 0, cell(2, 0)), d]);
 }
+
+// spec: S-0212 claim 23 row 2 (a unit on the ground within 1 cell of a bridge-cell destination gives up all the same)
+#[test]
+fn search_failure_next_to_a_bridge_cell_gives_up() {
+    let mut s = scene();
+    s.place_unit(0, CAR, cell(0, 0), 64);
+    let mut w = s.build();
+    lay_deck(&mut w, cell(1, 1), true);
+    let id = vehicles(&w)[0];
+    {
+        let o = w.obj_mut(id).unwrap();
+        o.beh.queued = None;
+        o.dest = Some(Target::Cell(cell(1, 1)));
+    }
+    path::failed(&mut w, id, Search::SearchFailed, false);
+    let o = w.obj(id).unwrap();
+    assert_eq!(o.dest, None);
+    assert_eq!(o.beh.queued, Some(Behaviour::Guard));
+}
+
+// spec: S-0212 claim 23 row 2 and Departure D5 (a unit of a house that is not human-controlled, the neutral or special house, queues area guard when it gives up; an AI house counts as human-controlled and queues guard)
+#[test]
+fn search_failure_of_a_neutral_unit_queues_area_guard() {
+    for (human, want) in [(false, Behaviour::AreaGuard), (true, Behaviour::Guard)] {
+        let mut s = scene();
+        s.place_unit(0, CAR, cell(0, 0), 64);
+        let mut w = s.build();
+        w.houses[0].human = human;
+        let id = vehicles(&w)[0];
+        {
+            let o = w.obj_mut(id).unwrap();
+            o.beh.queued = None;
+            o.dest = Some(Target::Cell(cell(5, 0)));
+        }
+        path::failed(&mut w, id, Search::SearchFailed, false);
+        let o = w.obj(id).unwrap();
+        // The house's new destination is not given (request Q-0238).
+        assert_eq!(o.dest, None);
+        assert_eq!(o.beh.queued, Some(want), "human {human}");
+    }
+}

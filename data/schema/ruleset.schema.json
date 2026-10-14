@@ -6747,6 +6747,11 @@
           "type": "boolean",
           "default": true
         },
+        "teleport_infantry_negative_level_entry": {
+          "description": "A teleporting infantry unit's landing entry check takes a cell at terrain level −6 or lower as clear without testing terrain or occupants; off: the ordinary landing entry check applies.",
+          "type": "boolean",
+          "default": true
+        },
         "thinning_hits_waypoint_only": {
           "description": "The waypoint-thinning action takes every bale from the waypoint's own cell only.",
           "type": "boolean",

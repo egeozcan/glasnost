@@ -171,3 +171,54 @@ fn removed_target_becomes_its_last_cell() {
     assert_eq!(o.beh.current, Some(Behaviour::Move));
     assert_eq!(o.dest, Some(Target::Cell(last)));
 }
+
+/// A WALKER of house 0 at (0, 0) with a guard spot two cells away, and an
+/// enemy CART at (12, 0).
+fn infantry_setup() -> (World, ObjectId, ObjectId, Target) {
+    let r = testkit::combat_ruleset();
+    let mut w = testkit::game_with(&r, SIZE, 5);
+    let a = spawn(&mut w, Kind::Infantry, "WALKER", 0, mid(SIZE, 0, 0), 64);
+    let e = spawn(&mut w, Kind::Vehicle, "CART", 1, mid(SIZE, 12, 0), 192);
+    let spot = Target::Cell(mid(SIZE, 0, 2));
+    let o = w.obj_mut(a).unwrap();
+    o.beh.last_common_effects = None;
+    o.guard_spot = Some(spot);
+    (w, a, e, spot)
+}
+
+// spec: S-0215 claim 13 (Q-0202: the refresh precedes the guard-spot row, which replaces a resumed destination; a resumed move that started stays current, now to the guard spot, and the guard spot is forgotten)
+#[test]
+fn guard_spot_row_replaces_a_resumed_destination() {
+    let (mut w, a, _, spot) = infantry_setup();
+    let c = Target::Cell(mid(SIZE, 8, 0));
+    let t = w.tick;
+    let o = w.obj_mut(a).unwrap();
+    o.attack_move = Some(AttackMoveMemory::Dest(c));
+    o.combat.engaged = true;
+    o.beh.force(Behaviour::Attack, t, true);
+    process::fall_back(&mut w, a, false);
+    let o = w.obj(a).unwrap();
+    assert_eq!(o.beh.current, Some(Behaviour::Move));
+    assert_eq!(o.beh.queued, None, "move is already current (claim 7)");
+    assert_eq!(o.dest, Some(spot));
+    assert_eq!(o.guard_spot, None);
+    assert_eq!(o.attack_move, Some(AttackMoveMemory::Dest(c)));
+}
+
+// spec: S-0215 claim 13 (Q-0202: with target-only memory the resumed attack target is kept; an already-started attack stays current with move queued)
+#[test]
+fn guard_spot_row_after_a_resumed_attack_queues_move() {
+    let (mut w, a, e, spot) = infantry_setup();
+    let t = w.tick;
+    let o = w.obj_mut(a).unwrap();
+    o.attack_move = Some(AttackMoveMemory::Target(Target::Object(e)));
+    o.combat.engaged = false;
+    o.beh.force(Behaviour::Guard, t, true);
+    process::fall_back(&mut w, a, false);
+    let o = w.obj(a).unwrap();
+    assert_eq!(o.beh.current, Some(Behaviour::Attack));
+    assert_eq!(o.beh.queued, Some(Behaviour::Move));
+    assert_eq!(o.target, Some(Target::Object(e)));
+    assert_eq!(o.dest, Some(spot));
+    assert_eq!(o.guard_spot, None);
+}
