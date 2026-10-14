@@ -2,8 +2,8 @@
 id: S-0106
 title: Slope shapes, terrain surface height and voxel tilt on slopes
 topic: rendering
-revision: 5
-sources-class: [decomp]
+revision: 6
+sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
@@ -65,7 +65,9 @@ lepton ρ*, *table trigonometry*, *table square root*, *fresh draw*, *image cach
   the same rotation as *R*<sub>s</sub>.
 - **Tilt state** of a unit with a tilting locomotor: its *current shape* *s*<sub>c</sub>, its
   *previous shape* *s*<sub>p</sub>, and the tick *t*<sub>0</sub> at which the current shape was last
-  changed by a transition (claim 6).
+  changed by a transition (claim 6). A restarted transition also has a *start orientation*:
+  the quaternion of the interrupted transition at the tick of the change, excluding rocking
+  and body facing. This preserves continuity of slope tilt without preserving unrelated rocking.
 - **Transition fraction** *p*. 1 when no transition is running, else (*t* − *t*<sub>0</sub>) / 3 for
   ticks *t* = *t*<sub>0</sub>, *t*<sub>0</sub> + 1, *t*<sub>0</sub> + 2 (claim 6).
 - **Rocking.** A pitch or roll of a unit's body, of 0.005 radians or more, that its locomotor applies
@@ -144,7 +146,8 @@ lepton ρ*, *table trigonometry*, *table square root*, *fresh draw*, *image cach
    | 0 and 17 … 20 | none (identity) | 0 for flat terrain / saddle tile geometry unresolved |
 
    So edge slopes tilt the body more steeply than their surface, and corner and valley slopes less
-   steeply (`quirks.slope_tilt_angles`). A corner slope and the valley slope with the same uphill
+   steeply. This difference is specified as the original's shape-dependent rendering, not as
+   an established defect requiring a geometric replacement. A corner slope and the valley slope with the same uphill
    direction (5 and 9, 6 and 10, 7 and 11, 8 and 12) give identical tilts. The angles come from
    arctangents taken from a table with a coarse step (Formulas F2), and the rotations use the table
    trigonometry of S-0105 (F1), which is why the tilts are 29.3115° and 21.3574° rather than the
@@ -179,34 +182,42 @@ lepton ρ*, *table trigonometry*, *table square root*, *fresh draw*, *image cach
      vehicle specs); medium for flying and rocket, whose bodies take their orientation from rules
      of the aircraft specs that this spec does not fix
 
-6. **Tilt state of the tilting locomotors.** On every tick on which the slope shape of the cell
+6. **Tilt state of the tilting locomotors.** On each ground-layer movement tick on which the slope shape of the cell
    that contains the unit's centre differs from its current shape, a unit with a tilting locomotor
    starts a transition of 3 ticks, at that tick *t*<sub>0</sub>, from its current shape to the
    cell's shape: from then on its previous shape is the shape that was current, and its current
    shape is the cell's shape. A change while a transition is still
-   running starts a new transition from the old *current* shape, not from the orientation drawn at
-   that moment, so the drawn tilt jumps (`quirks.tilt_transition_restart_jump`). When the unit is
+   running starts a new three-tick transition from the interrupted transition's orientation
+   at the tick of the change, evaluated by F3, to the new shape's orientation. The slope tilt
+   therefore stays continuous on restart; the previous shape remains a record of the old
+   current shape, not the restart's interpolation endpoint.
+   The original instead restarted from the old current shape, causing a presentation-only jump.
+   There is no switch for that jump. When the unit is
    placed on the map, its current and previous shapes are both set to the shape of its cell and no
    transition runs, so it starts settled. This claim covers ground-layer units only.
    A stationary unit whose cell changes shape and a unit on a bridge deck are left open.
    - Backing: `measurable` for ordinary transitions (T3), settled placement (T2's
-     placement part and T6), and interrupted transitions (T11's restart part).
+     placement part and T6), and interrupted transitions (T11's restart part: oracle
+     comparison for the original jump, engine conformance for continuous restart).
    - Confidence: high
 
 7. **Drawn tilt during a transition.** In the drawn frames of tick *t*<sub>0</sub> + *j*, for
    *j* = 0, 1, 2, a non-rocking unit's body is drawn with *D* = *M* · Rz(*θ*<sub>body</sub>), the
    product, in that order, of the rotation *M* of the spherical interpolation from
-   *q*<sub>s<sub>p</sub></sub> to *q*<sub>s<sub>c</sub></sub> at fraction *p* = *j*/3 (Formulas F3)
-   and its 32-step body rotation, as in claim 8. From tick *t*<sub>0</sub> + 3
+   the start orientation to *q*<sub>s<sub>c</sub></sub> at fraction *p* = *j*/3 (Formulas F3).
+   For an uninterrupted transition the start orientation is *q*<sub>s<sub>p</sub></sub>.
+   For a restart it is claim 6's interrupted orientation. This interpolation is combined
+   with its 32-step body rotation, as in claim 8. From tick *t*<sub>0</sub> + 3
    on, the body is settled and drawn with *R*<sub>s<sub>c</sub></sub> (claim 8). Because the
    interpolated orientations describe slightly different rotations from the table transforms, two
-   small jumps are part of the original's look: at *j* = 0 the old tilt is drawn as
+   small endpoint differences occur in an uninterrupted transition: at *j* = 0 the old tilt is drawn as
    *q*<sub>s<sub>p</sub></sub> (for an edge slope 29.3555° instead of 29.3115°), and at
    *t*<sub>0</sub> + 3 the tilt snaps from the two-thirds orientation to the table transform. For
    example, driving from flat ground onto an edge slope the drawn tilt is 0°, 9.756°, 19.600°, then
    29.3115°. During the transition S-0105 claim 26 draws every part fresh.
    - Backing: `measurable` (T3 and T11's pair part) for transition images and timing,
-     including a change between equal orientations. Exact component values that produce
+     including a change between equal orientations. Restart continuity is engine conformance
+     in T11, not an oracle expectation. Exact component values that produce
      identical pixels are `unmeasured`, for the arithmetic reason of claim 4.
    - Confidence: high for the three-tick timing and the interpolation endpoints; high for the
      intermediate rotations (the sample values below follow from F3 and tables C3 and S-0105 F1),
@@ -261,10 +272,10 @@ lepton ρ*, *table trigonometry*, *table square root*, *fresh draw*, *image cach
     (Import mapping) always gets the flat shadow (*s* taken as 0). For aircraft, which of the
     aircraft's facings gives *θ*<sub>body</sub> belongs to the aircraft specs (Open questions).
     These tilt assertions describe the unmasked footprint, not every darkened screen pixel.
-    A fresh vehicle shadow excludes its completed own-part image; a reused one retains the
-    exclusions from the image that made it (S-0105 claim 39), which can reflect an earlier pose
-    or another object of the same type and key. This spec changes neither that exclusion rule
-    nor its switch `quirks.voxel_shadow_cached_cutouts`, owned by S-0105.
+    Every vehicle shadow, fresh or reused, excludes the vehicle's current completed own-part
+    image (S-0105 claim 39). Only the unmasked footprint is cached, so an earlier pose or
+    another object of the same type and key supplies no retained exclusions.
+    The original reused shadows with old-pose cutouts, a presentation glitch fixed by that claim.
     - Backing: `measurable`: scenario T4 for the driving, teleporting, hovering, jumpjet, flying
       and rocket locomotors, T6 for the walking, mechanical walking, drop-pod, tunnelling and naval
       locomotors, T3 for the shadow during a transition and T8 for the dropship exception
@@ -276,31 +287,34 @@ lepton ρ*, *table trigonometry*, *table square root*, *fresh draw*, *image cach
     - **Ramp state of the shadow.** The ramp state in a shadow's image-cache key (S-0105 claim 31)
       is the *s* of claim 11, for every locomotor (always 0 for an aircraft with the dropship
       flag). So an unmasked shadow footprint made on flat ground is never reused on a slope.
-      - Backing: `measurable` (scenario T3 and T6: a shadow already made on flat ground at the
-        same facing must not reappear on a slope)
+      - Backing: `measurable` (scenario T3 and T6) when the two shapes have visibly
+        different footprints: a flat footprint must not reappear on shapes 1 … 16 at
+        the same facing. Separate shadow reuse classes for equal-transform shapes
+        are `unmeasured`: unlike body shading in T12, the unmasked shadow has no
+        fresh-draw shading difference, and current masking agrees on every appearance,
+        so no scenario here distinguishes their separate keys.
       - Confidence: high
     - **Unsettled shadows.** While a driving or naval unit's body is not settled, and while a
       hovering unit rocks, its shadow image is made fresh: it is never taken from the image cache
       and is not added to it, although the shadow transform is the same as when it is settled.
       If eligible under S-0105 claim 31's cloak and no-shadow conditions, such a shadow is always
       drawn, so the skip on a cache miss that S-0105 claim 31 leaves open never applies to it.
-      S-0105 claims 31 and 33 include this unsettled-shadow freshness case. For a type with the
-      depth-buffer option, a shadow made fresh this way opens a window of S-0105 claim 32 with
-      `quirks.depth_mode_leak` on (the default). With that switch off, no shadow opens a window.
-      S-0105 claims 32 and 34 own its depth-plane effects. With stock data no type with the
-      depth-buffer option has the driving, naval or hovering locomotor (all have the jumpjet
-      locomotor, whose shadow stays cached while it rocks), so S-0105 claim 33's statement about
-      stock play still holds; the unsettled-shadow case needs data that gives the depth-buffer
-      option to a vehicle with one of those locomotors.
-      - Backing: `measurable` for hovering, driving and naval shadow freshness and
-        non-retention through own-image exclusions (T10's rocking, transition and return
-        parts). The key covers every input of the unmasked footprint, so fresh and reused
-        unmasked footprints have the same pixels, but their vehicle own-image exclusions
-        can differ (S-0105 claims 31 and 39). Exemption from an original cache-miss skip
-        remains `unmeasured`: the skip's enabling condition is unknown in S-0105, so
-        no practical comparison can force that condition while changing only settledness.
-        Depth-mode effects are S-0105 claims 32 and 34's measurable rules; no claim here
-        predicts which other object's draw falls within a window.
+      S-0105 claim 31 includes this unsettled-shadow freshness case. No shadow enables
+      depth mode, regardless of its type's depth-buffer option or whether it is fresh.
+      Only a fresh depth-option part draw uses that mode (S-0105 claim 32); shadows
+      ordinarily preserve retained depths, apart from the initial clear (S-0105 claim 34).
+      Another object's depth look cannot change because of an unsettled shadow
+      (S-0105 claim 33). The original could leave depth mode enabled after a depth-option
+      shadow, a presentation glitch fixed by those claims.
+      - Backing: `unmeasured` for hovering, driving and naval shadow freshness and
+        non-retention. The key covers every input of the unmasked footprint, so fresh and
+        reused footprints have the same pixels; current own-image exclusions also agree
+        on every appearance (S-0105 claims 31 and 39). T10 therefore tests corrected
+        masking and mode isolation, not freshness or storage. Exemption from an original
+        cache-miss skip is also `unmeasured`: the skip's enabling condition is unknown
+        in S-0105, so no practical comparison can force it while changing only settledness.
+        Masking and depth-mode isolation are `measurable` through T10's engine-conformance
+        comparisons, following S-0105 claims 32, 33, 34 and 39.
       - Confidence: high
 
 13. **Fresh bodies of other locomotors.** Besides the driving and naval cases of S-0105 claim 26,
@@ -364,7 +378,10 @@ level in leptons. The exact arctangents would be 29.88° and 22.11°. The tilt o
 claim 4 (29.3115°, 21.3574°) differs again from *τ* because the three rotations are made with table
 trigonometry. Constants table C4 gives the resulting matrices.
 
-**F3. Interpolated tilt (claim 7).** Let *q*<sub>0</sub> = *q*<sub>s<sub>p</sub></sub>, *q*<sub>1</sub> = *q*<sub>s<sub>c</sub></sub> (table C3), and *t* = *p* stored in single precision. Let *δ* be the four-component dot product *q*<sub>0</sub> · *q*<sub>1</sub>, stored in single precision. Define the interpolation weights by
+**F3. Interpolated tilt (claim 7).** Let *q*<sub>0</sub> be the start orientation
+(*q*<sub>s<sub>p</sub></sub> from table C3 for an uninterrupted transition, or claim 6's
+interrupted quaternion for a restart), *q*<sub>1</sub> = *q*<sub>s<sub>c</sub></sub>
+(table C3), and *t* = *p* stored in single precision. Let *δ* be the four-component dot product *q*<sub>0</sub> · *q*<sub>1</sub>, stored in single precision. Define the interpolation weights by
 
 > *(*k*<sub>0</sub>, *k*<sub>1</sub>)* = (*1 − t*, *t*) when *1 − δ ≤ 10⁻⁵*,
 >
@@ -389,7 +406,7 @@ rotation):
 | row y | 2(*xy* + *wz*) | 1 − 2(*x*² + *z*²) | 2(*yz* − *wx*) |
 | row z | 2(*xz* − *wy*) | 2(*yz* + *wx*) | 1 − 2(*x*² + *y*²) |
 
-At *p* = 0 it is the matrix of *q*<sub>s<sub>p</sub></sub> itself. Floating-point work follows
+At *p* = 0 it is the matrix of the start orientation itself. Floating-point work follows
 S-0105 F0 (the round-toward-zero mode of S-0205 claim 5, switch `quirks.chop_rounding`).
 
 Sample values (tilt of the up axis, taken as the arccosine of the row z, column z entry; they
@@ -510,7 +527,7 @@ stationary cell-shape changes and multiple-border crossings left open below.
 |---|---|---|
 | any | the unit is placed on the map | *s*<sub>c</sub> = *s*<sub>p</sub> = *σ*; no transition running |
 | no transition running, on *s*<sub>c</sub> | a tick on which *σ* ≠ *s*<sub>c</sub> | in transition from the former *s*<sub>c</sub> to *σ*: *s*<sub>p</sub> is the former *s*<sub>c</sub>, *s*<sub>c</sub> is *σ*, *t*<sub>0</sub> is this tick |
-| in transition | a tick on which *σ* ≠ *s*<sub>c</sub> | as above: the new transition starts from the old *s*<sub>c</sub> (the drawn tilt jumps) |
+| in transition | a tick on which *σ* ≠ *s*<sub>c</sub> | new three-tick transition towards *σ*, starting from the interrupted orientation at this tick (F3); previous/current shapes and start tick change as above; slope tilt is continuous |
 | in transition | tick *t*<sub>0</sub> + 3 begins with *σ* = *s*<sub>c</sub> | no transition running, on *s*<sub>c</sub> |
 
 Rocking (claim 9) is not part of this state: the rows hold whether or not the unit rocks. A body
@@ -524,25 +541,15 @@ for the table are those of claims 6 and 7.
 
 All switches default to the original behaviour.
 
-- **`quirks.slope_tilt_angles`.** Original: edge slopes tilt the body by 29.3115° and corner and
-  valley slopes by 21.3574° (claim 4), steeper and shallower than their surfaces as drawn.
-  Proposed fixed behaviour, pending the lead choice below: each shape uses its surface's
-  nominal drawn angle (Terms, level height in model units). This is a nominal input angle,
-  not a promise of an exact final up-axis angle after table trigonometry.
-  *R*<sub>s</sub> and *q*<sub>s</sub> are built exactly as in F2 and C3, with the same
-  *α*<sub>s</sub>, the same table trigonometry and the same single-precision stores, but with
-  *τ* = arctan(1/√6) (0.38759669 rad, 22.2077°) for shapes 1 … 4 and *τ* = arctan(1/√3) = π/6 rad
-  (30°) for shapes 5 … 16, both taken exactly in double precision instead of from the table
-  arctangent. Shapes 0 and 17 … 20 stay untilted. The same replacement *R*<sub>s</sub>
-  is used for shadows under claim 11: the shadow-tilt rule and transition duration do not
-  change, but the body and shadow angles both change. This paragraph is a proposal,
-  not a resolved design choice; the lepton-space alternative remains with the project lead.
+- **Shape-dependent angles.** Claim 4 specifies the original angles without an optional
+  geometric replacement. The comparison with the drawn surface establishes a mismatch,
+  but not whether the intended visual convention is the drawn-surface angle or the angle
+  in world leptons. The previously proposed angle switch is withdrawn rather than choosing
+  an unapproved alternative. This does not affect surface height, movement or collisions.
 - **`quirks.negative_level_floor_raised`.** Original: below level 0 the surface is 1 lepton higher
   than 104ℓ (claim 3). Fixed: *B*(ℓ) = 104ℓ for every level.
-- **`quirks.tilt_transition_restart_jump`.** Original: a shape change during a transition restarts
-  from the old current shape, so the drawn tilt jumps (claim 6). Fixed: the new transition
-  interpolates (F3) from the orientation *q* that F3 gives for the interrupted transition at the
-  tick of the change, instead of from the tilt orientation of the old current shape.
+- **Continuous restart.** Claim 6 removes the original's presentation-only restart jump
+  unconditionally. T11 separates its oracle comparison from engine conformance.
 - **`quirks.tilter_flag_ignored`.** Original: the tilter flag has no effect (claim 10). Fixed: a
   vehicle whose flag is no is never tilted by slopes (its body and shadow drawn as on flat ground).
 - **Interpolated endpoints.** The jumps of claim 7 at *j* = 0 and on settling are part of the
@@ -573,24 +580,26 @@ loaded, that is, after the ramp smoothing of S-0010 claims 11 and 12. A *recorde
 Game speed 2, resolution 800 × 600, director and mods off except for the explicitly named
 test data. The observed area is the test cells and routes; one bystander computer player is kept
 outside it, with the glossary's void rule. Manual play or scripted input and tick-indexed image
-capture are used; no change to a harness is required by this spec.
+capture are used.
 *Runs:* one per scenario part and control, except T6 uses one per named locomotor,
 T11 uses one per tested pair or locomotor, and T12 one per locomotor and shape pair. Repeat only void
 or inconclusive runs. Every comparison uses the recorded positions, cells, facings and ticks. Where
 an event that a scenario needs may fail to happen, the scenario says what is recorded instead.
 
 *Renders* below are golden images made with S-0105's pipeline and the transforms of this spec at
-the stated facing: the *C4 render* uses table C4 (and F3 during a transition), the *fixed render*
-uses the transforms of `quirks.slope_tilt_angles` switched off (Edge cases), and the *lepton
-render* uses the alternative named in the Questions for the project lead (built as the fixed
-render, but with *τ* = arctan(104/256) for shapes 1 … 4 and *τ* = arctan(208/(256√2)) for shapes
-5 … 16). A *C4 shadow render* is
+the stated facing: the *C4 render* uses table C4 (and F3 during an uninterrupted transition).
+The *geometric comparison renders* replace only F2's nominal tilt angle: one uses
+arctan(1/√6) for shapes 1 … 4 and π/6 for shapes 5 … 16, the other uses
+arctan(104/256) and arctan(208/(256√2)), respectively. These angles are double-precision
+radians, rounded as S-0105 F0 specifies; all other F2 operations are unchanged. They are
+falsifying hypotheses for the oracle, not alternative engine behaviours. A *C4 shadow render* is
 S-0105 claim 30's footprint with *S* = *R*<sub>s</sub> · Rz(*θ*<sub>body</sub>). The *flat image*
 of a unit is its capture on flat ground at the same facing.
 
 Shadow shape comparisons in T3, T4, T6 and T7 use that unmasked footprint only as the set
 of potential shadow pixels. Golden images also apply S-0105 claim 39's vehicle own-image
-exclusions, including retained exclusions when reused; screen darkening follows S-0102.
+exclusions from the current completed own-part image on every appearance; screen darkening
+follows S-0102. Corrected reuse comparisons are engine conformance, not oracle checks.
 A missing or retained pixel explained by those rules does not falsify the slope transform.
 
 **T1. Surface height (claims 1 to 3).**
@@ -641,7 +650,7 @@ A missing or retained pixel explained by those rules does not falsify the slope 
   cache's key). While it rocks, the body stays leaning towards map west by about the shape-1 tilt,
   with the rocking added, and returns to the shape-1 C4 render once the rocking ends.
 - *Falsified if:* any settled screenshot fails to match the C4 render (in particular if it
-  matches the fixed or lepton render instead); a corner and a valley slope with the same uphill
+  matches a geometric comparison render instead); a corner and a valley slope with the same uphill
   direction look different; a shape-1 … 16 cell shows the flat image; the placed vehicle starts flat or in an intermediate
   tilt; the rocking body is drawn as on flat ground with only the rocking. Comparisons of
   renders that produce identical pixels are inconclusive for their differing arithmetic,
@@ -786,44 +795,41 @@ A missing or retained pixel explained by those rules does not falsify the slope 
   No rocking when hit, indistinguishable probe rows or no accepted movement tests nothing
   for that part and is recorded as inconclusive.
 
-**T10. Hovering-shadow freshness (claim 12).**
-- *Setup and procedure:* run S-0105 MS-27's hovering hole-to-filled reuse comparison and
-  its cache-disabled control, using its named two-frame test body and unchanged shadow key.
-  Use that scenario's skirmish setup, speed index 2 and bystander void rule at 800 × 600.
-  Body caching is disabled, shadow caching enabled except in the fresh-shadow control.
-  After the filled frame appears, cause the hovering unit to rock without changing the
-  body frame, body facing or ramp shape. One run and its control, with tick-indexed captures.
-- *Observable:* the qualifying own-body overlap pixel, the frame's asymmetric marker and
-  visible rocking. Confirm that the shadow key and filled frame remain unchanged.
-- *Expected:* before rocking, the newly filled pixel is darkened by the retained shadow
-  cutout pattern. While rocking, it is undarkened, matching the fresh-shadow control:
-  the shadow now excludes the current completed own-part image.
-- *Driving/naval rocking parts:* repeat with a driving vehicle, then T6's naval subject,
-  on flat ground and settled shape 1. Use the same two-frame model, body-cache-disabled
-  setting, frame marker and fixed facing. Judge only pixels that remain within the
-  unmasked footprint and current own image during the recorded rocking pose.
-- *Transition part:* use T11's driving and naval routes. Before travel, a separate
-  same-type vehicle settled on the destination shape makes a frame-0 shadow there.
-  Verify that a frame-1 subject settled on that shape at the same facing inherits the
-  old cutout, then have another frame-1 subject enter that shape in a transition.
-  Expected: throughout its transition, qualifying filled pixels match the fresh-shadow
-  control rather than the preloaded cutout, despite the matching shadow key.
-- *Return part:* after rocking or the transition ends, make a non-rocking frame-1
-  subject use the same key again. Expected: it recovers the old frame-0 cutout, not the
-  transient fresh exclusion. This tests that the unsettled shadow did not replace the
-  stored image. Verify the original cutout on a settled control before and after.
-- *Falsified if:* cached darkening continues during verified rocking or a transition
-  with unchanged frame and matching shadow key; or the settled return shows the
-  transient exclusion although the settled controls still show the old cutout.
-  A changed key, invalidated cache, absent rocking, wrong frame, or absence of a
-  qualifying overlap pixel voids that part. In the cache-disabled control, each judged
-  pixel must be undarkened; otherwise the overlap or scene-depth setup is invalid.
-- *Empty-key part:* in a separate program run, let a frame-0 subject first use a shadow
-  key only while unsettled. After it settles, a frame-1 subject uses that key at the
-  same facing and shape. Expected: its qualifying filled pixel is undarkened once the
-  settled shadow appears, since no transient frame-0 cutout was stored. Darkening by
-  that frame-0 cutout falsifies non-storage. Record a skipped first settled appearance
-  separately; it does not test the unknown miss-skip rule.
+**T10. Current shadow masking and depth-mode isolation (claims 11 and 12).**
+- *Setup:* S-0105 MS-27's named two-frame test body, hole-to-filled comparison,
+  asymmetric frame marker and shadow-cache-disabled control. Use its skirmish setup,
+  speed index 2 and bystander void rule at 800 × 600. Body caching is disabled.
+  Shadow caching is enabled except in the control. Run separately for a hovering
+  vehicle, a driving vehicle and T6's naval subject, using its legality controls.
+  These are engine-conformance runs for the lead-confirmed presentation fixes.
+- *Procedure:* capture frame 0, then frame 1 at the same shadow key. Cause rocking
+  without changing frame, facing or slope. For driving/naval subjects, also use T11's
+  route after another same-type frame-0 vehicle has shown the destination-shape
+  footprint at the matching facing. Capture each transition and the settled return.
+  Reverse frame order and repeat with a second same-type object sharing the key.
+  Use one run per locomotor and part, with a fresh-shadow and a no-shadow control.
+- *Observable:* tick-indexed part/shadow images, frame marker, facing, cell shape and
+  visible rocking or transition. Judge overlap pixels that lie within the unmasked
+  footprint and the current completed own image at the recorded pose.
+- *Expected:* filled own-image pixels are undarkened on every appearance, before,
+  during and after rocking or a transition, matching both controls. A current hole
+  permits qualifying scene darkening even if an earlier frame or another object
+  filled that position. No old-pose exclusion persists on returning to settledness.
+- *Falsified if:* a qualifying current own-image pixel is darkened, or a current hole
+  retains an earlier pose's exclusion. Wrong frame, changed key, absent required pose
+  or no qualifying overlap makes that comparison inconclusive. Fresh-shadow overlaps
+  can also be checked against the oracle; corrected reuse is checked against the spec.
+- *Mode-isolation part:* run S-0105 MS-9's depth-option and non-depth probe comparison,
+  adding the above driving/naval transitions and hovering/driving/naval rocking poses.
+  Named test data gives the subject the depth-buffer option; retain MS-9's probe models
+  and controls. Capture one run per locomotor/pose and control. Expected: each probe
+  keeps the look selected by its own type option regardless of the subject's shadow
+  freshness or settledness. A non-depth probe acquiring the depth look, or a depth-option
+  probe losing it, falsifies isolation. This is engine conformance for S-0105 claims
+  32 and 33; retained depths between non-depth draws remain unmeasured as in claim 34.
+- *Limit:* neither corrected masking nor mode isolation distinguishes fresh from
+  reused footprints, or storage from non-storage, when the key is unchanged. No part
+  of T10 is evidence for unsettled-shadow freshness or the unknown cache-miss skip.
 
 **T11. Shape-pair transitions, restarts and rocking (claims 6, 7 and 9).**
 - *Setup:* named test files are copies of theater tile files whose plain tile cells
@@ -842,12 +848,19 @@ A missing or retained pixel explained by those rules does not falsify the slope 
   between different arithmetic yielding that image.
 - *Restart part:* use consecutive shapes 0, 1 and 4. Named test-map data increases
   only the subject's speed until the recorder verifies that entry into shape 4
-  follows entry into shape 1 by 1 or 2 ticks. Start settled on shape 0. Expected:
-  on the second crossing, the body shows the orientation of shape 1, not the
-  partially tilted flat-to-1 pose. It then follows F3 from 1 to 4 for a new 3-tick
-  transition. Falsified by a continuous continuation from the interrupted pose,
-  or by retaining the first transition's settling deadline. If the required
-  crossings are not achieved, record the actual intervals and do not judge restart.
+  follows entry into shape 1 by 1 or 2 ticks. Start settled on shape 0. Record
+  centre cell, facing, tick, body and shadow in every drawn frame.
+  Oracle expectation: on the second crossing, the body shows shape 1's quaternion
+  orientation, not the partially tilted flat-to-1 pose, then follows F3 from 1 to 4
+  for a new 3-tick transition. A continuous continuation from the interrupted pose
+  or retention of the first settling deadline falsifies that original-behaviour account.
+  Engine-conformance expectation: at the second crossing, evaluate the first transition's
+  quaternion at its recorded elapsed fraction, use that as the new F3 start orientation,
+  and settle to shape 4 three ticks later. A jump to shape 1's full tilt, any image
+  inconsistent with that restarted interpolation, or a different settling deadline
+  falsifies the corrected rule. Shadow tilt remains immediate in both comparisons.
+  If the required crossings are not achieved, record the actual intervals and do not
+  judge restart.
 - *Rocking part:* on shape 1 and on flat ground, compare driving and naval subjects,
   a powered-down hovering subject, and a jumpjet subject. A named test-map weapon
   rocks the subjects with a small amplitude, without moving or destroying them.
@@ -925,12 +938,3 @@ A missing or retained pixel explained by those rules does not falsify the slope 
 - Whether the drawn frames of tick *t*<sub>0</sub> already show *p* = 0 (claim 7) or the old settled
   tilt; both look nearly the same.
 
-## Questions for the project lead
-
-- **Fixed behaviour of `quirks.slope_tilt_angles`.** The Edge cases propose the angles of the
-  surface as drawn: arctan(1/√6) ≈ 22.21° for edge slopes and 30° for the others. The alternative is
-  the arctangents in leptons, arctan(104/256) ≈ 22.11° for edge slopes and arctan(208/(256√2)) ≈
-  29.88° for the others, taken exactly. Those are the nominal values of the original's two table
-  angles *τ*<sub>B</sub> and *τ*<sub>A</sub>, so up to the table's rounding this alternative gives
-  edge slopes the angle the original gives corner and valley slopes, and the reverse. Which should
-  the switch give?
