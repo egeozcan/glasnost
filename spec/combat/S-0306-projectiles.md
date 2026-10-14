@@ -2,11 +2,11 @@
 id: S-0306
 title: Projectiles (launch, flight, homing, scatter, detonation)
 topic: combat
-revision: 5
+revision: 6
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-13
+approved-on: 2026-10-14
 measurements: []
 requests: [Q-0071, Q-0077, Q-0078, Q-0083, Q-0160]
 supersedes: []
@@ -271,14 +271,20 @@ they are used.
    - flak-scattering and not invisible: *σ* = trunc(R(0, *B*) × *D* / *R*_W), where *D* is the
      spatial distance from the fire point to the aim point (computed in single precision,
      truncated) and *R*_W the
-     firer's weapon range of S-0307 (claim 13) for that weapon: the weapon range, reduced for an
-     open-topped transport to the shortest primary-weapon range of its passengers.
+     firer's weapon range of S-0307 (claim 13) for that weapon: the weapon's range without
+     bonuses, reduced for an open-topped transport to the smallest of its own range and its
+     passengers' current-weapon ranges. A multi-weapon passenger uses its weapon-number slot.
+     Any other passenger uses slot 0. A passenger without a current weapon is skipped. This
+     reads the current weapon regardless of the transport's target, not the passenger's weapon
+     choice against that target.
 
    The radius draw comes first, then one direction draw R(0, 2147483646). Only the horizontal
    position moves. Inaccurate projectiles of other kinds do not scatter at launch; flak-scattering
    invisible projectiles scatter by claim 9.
    - Backing: `measurable` (scenario P3, statistical, with the random-state recorder for the draw
-     count; its variant f for the open-topped reduction of *R*_W)
+     count; its variant f for the open-topped reduction of *R*_W). The multi-weapon current-slot
+     and missing-passenger-weapon cases are `unmeasured`, as in S-0307 claim 13: no normal-action
+     fixture establishing these passenger states is known; RG16 there remains pending.
    - Confidence: high
 
 5. **Launch direction.** A projectile with ρ = 0 that is not dropping (straight, arcing or
@@ -1389,7 +1395,9 @@ fire point (S-0313, the fire point's height term in the test file) and check the
   Expected: distances between 0 and 512 × *D* / *R*_W with *R*_W = 7 cells (1792 leptons), so
   about 30 % of them above 512 × *D* / 2560, the bound of a 10-cell range; the control stays
   within 512 × *D* / 2560. Falsified if no distance with the passenger exceeds 512 × *D* / 2560
-  (+1), or one exceeds 512 × *D* / 1792 (+1).
+  (+1), or one exceeds 512 × *D* / 1792 (+1). This ordinary passenger uses slot 0 as its current
+  weapon, so this run does not distinguish current-weapon selection from a primary-only rule.
+  The distinguishing multi-weapon and missing-weapon fixtures remain pending in S-0307 RG16.
 
 **P4. Direction and elevation of straight shots (claims 5, 6 b–c, 7).**
 - Setup: straight test projectile (not drawn as a voxel model), targets 5 cells away on level
@@ -2288,8 +2296,11 @@ fire point (S-0313, the fire point's height term in the test file) and check the
 - Which animation type a projectile with the nuclear warhead creates is fixed by name (claim 25); how
   the radar event of that detonation behaves is the interface specs', and what the nuke flash does
   is S-0104's.
-- Which cells of a bridge carry the "bridge deck" mark used by the elevation level in the cliff
-  test of claim 22 (see S-0307, Open questions).
+- Overlapping bridge markings and the repair lifecycle of the *elevation-deck mark* used by
+  the elevation level in claim 22's cliff test remain open (S-0307, Open questions). S-0307
+  Terms establishes the ordinary intact-overlay and destruction scope. This mark is distinct
+  from S-0212's *deck-entry mark*, which controls movement onto a deck, and from the
+  high-bridge-cell test; those marks are not interchangeable.
 - The moving test and the speed fraction of a vehicle target on a locomotor other than the driving
   one (claim 3, the speed estimate *u*) belong to the specs of those locomotors, which do not yet
   define them; the formula of *u* itself is the same for every vehicle.
