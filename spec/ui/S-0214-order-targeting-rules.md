@@ -2,13 +2,13 @@
 id: S-0214
 title: Order targeting rules (what a click means for each kind of object, and group orders)
 topic: ui
-revision: 20
+revision: 21
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0081, Q-0277]
+requests: [Q-0081, Q-0277, Q-0278, Q-0286]
 supersedes: []
 ---
 
@@ -63,9 +63,10 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
   S-0412 allies the non-civilian houses and no house allies it, so an own actor treats an object
   of the special house as an enemy (medium; scenario T11). A cell has no relation.
 - **Modifier roles.** Three keys held while clicking change the action: *force-move*,
-  *force-fire* and *force-select*. They are roles. Which physical keys play them is the player's
-  key binding (the original's default binding is outside the scope of this spec). The
-  *attack-move gesture* is force-fire and force-select held together.
+  *force-fire* and *force-select*. The original uses Alt for force-move, Ctrl for force-fire
+  and Shift for force-select (claim 23). These held gestures are distinct from the saved
+  command bindings of S-0213. The *attack-move gesture* is force-fire and force-select held
+  together: Ctrl+Shift with the original's bindings.
 - **Type-select role.** A fourth role, like the modifier roles a role and not a physical key:
   while it is held during a *select* or *toggle select* click, the click applies to every object
   of the clicked object's type that is on the screen (claim 12). Pressing it twice in quick
@@ -102,7 +103,8 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
 - **Box point.** The point used for a band box: for a mobile object, its drawing origin in the
   battlefield view, including world-height lift, rather than its ground shadow or the centre
   of its visible pixels. Normal standing objects use the projection of their position
-  (S-0101 F1 and claim 5). Transient drawing displacements are discussed under Open questions.
+  (S-0101 F1 and claim 5). This normal-position formula is not a universal promise for
+  transient drawing states: claim 19 records the remaining uncertainty and its settling test.
   A building uses its position projected with height lift, not the extent of its foundation.
 - **Cursor hot spot.** The point of a cursor image that coincides with the pointer's input
   pixel. Cursor frames below are numbered from 0 in the imported cursor image.
@@ -316,13 +318,17 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
    and aircraft are never eligible. One ineligible object in the selection turns the gesture off
    for the whole selection. Whether or not the gesture is on, force-fire and force-select held
    together count as if neither were held for every other rule of this spec (Terms, *counted
-   modifiers*). Attack-move mode is switched on by the command-bar button only when the selection
-   is not empty and every selected unit or building is eligible (otherwise a message appears and
-   the mode stays off); it ends when the next battlefield click has been handled or the selection
-   is cleared.
+   modifiers*). Attack-move mode is entered with the command-bar button, not with a
+   dedicated keyboard command. With a nonempty selection it is switched on only when every
+   selected unit or building is eligible; an ineligible selection gives a message and does not
+   newly arm it. With an empty selection the button gives a no-selection message but still arms
+   the mode; this creates no order by itself. The mode ends when the next battlefield click has
+   been handled or the selection is cleared. The held Ctrl+Shift gesture needs no command bar
+   and is not a latched mode: releasing either key ends the gesture.
    - Backing: `measurable` (Scenario T3, which includes the healing case; the prevent-attack-move
-     flag by the T10 line of that name)
-   - Confidence: medium (low for the end of attack-move mode)
+     flag by the T10 line of that name; Scenario T17 for physical keys, button entry, refusal,
+     empty-selection warning and the one-click lifetime)
+   - Confidence: high for the physical gesture and button entry; medium for order conversion
 
 6. **The attack rule.** The attack rule holds for an own actor and a target object when all of
    the following hold. Row G8 of table G uses it, after the rows above it:
@@ -436,6 +442,9 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
         the actor's type may move into shroud, and an actor of an underground type (unless the
         general rules allow underground moves into shroud) and an aircraft get no order from a
         click on an object in shroud, whether its action is *move* or *no-move*.
+    These are mobile move-order destinations. A building's guard-spot or rally-point order
+    instead uses table M part 3 and S-0213 claim 20: rally-point searches have their own
+    parameters in S-0212 claim 25 and do not inherit this direct-destination bypass.
     - *Zones in the search:* every search uses the actor's movement zone, with two substitutions
       (zone names are S-0211's, claim 12). An actor of zone *subterranean* is searched as zone
       *normal*. An actor of zone *fly* is searched as zone *infantry* for a click on an object
@@ -494,8 +503,12 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
 
 13. **Sidebar modes.** With an empty selection, the sidebar's mode buttons give these actions:
     - *Sell mode:* over an own building that can be sold and is not vehicle-like, *sell*. Over a
-      wall cell owned by the acting house that is neither shrouded nor fogged, *sell*, which
-      produces the sell wall order. Anywhere else, *no-sell*, including over own vehicles,
+      wall cell owned by the acting house that is neither shrouded nor fogged, *sell*.
+      This produces a sell-wall order only when no individual object was picked. Its target
+      is the cursor cell of S-0101 claims 9 and 10, not a cell chosen by wall-art pixels.
+      S-0408 claim 12a gives the cell rule and the distinction from object-sale dispatch.
+      A picked individual object with a *sell* action receives an object-sale order instead,
+      never a fallback wall-sale order. Anywhere else, *no-sell*, including over own vehicles,
       aircraft and vehicle-like buildings. No rule studied gives a *sell unit* action, which would
       produce a sell order for a vehicle or aircraft (Open questions).
     - *Repair mode:* over an own object that can be repaired, *repair switch*. Anywhere else,
@@ -512,8 +525,9 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
     A click with *sell* produces a sell order (S-0213, claim 12), with *repair switch* a repair
     order, and with *power switch* a power-on order for a building that is offline and a
     power-off order for one that is online.
-    - Backing: `measurable` (Scenario T8)
-    - Confidence: medium
+    - Backing: `measurable` (Scenario T8; S-0408 Scenario S11 for the wall-cell and
+      object-versus-wall dispatch)
+    - Confidence: medium; high for wall-cell targeting
 
 14. **Click feedback.** Only the first object of the selection, in selection order, can give the
     spoken acknowledgement, whether or not its own action gives it an order: when that object gets
@@ -632,9 +646,16 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
     shroud-cell test when the box is released: eligible own candidates are not rejected
     just because their cells are shrouded. Objects omitted from the current screen candidates
     cannot be taken; this is not a search of all objects in the rectangle's ground area.
-    - Backing: `measurable` (Scenario T14)
+    Exact points during transient mobile drawing displacements remain `unmeasured`,
+    with low confidence: a normal projected position does not establish the point during
+    every deploy, factory-exit, sinking or lifted state, and no complete state-to-point
+    correspondence has been confirmed. No universal reference-point formula is claimed
+    for those states. Scenario T14 part B is the settling scenario, not an assertion that
+    transient points equal their normal positions.
+    - Backing: `measurable` (Scenario T14) for the stated membership rules; `unmeasured`
+      for the transient-point qualification above (reason and settling scenario given there)
     - Confidence: high for ownership, point inclusion and add-not-toggle; medium for state
-      exclusions, type-select interaction and shroud
+      exclusions, type-select interaction and shroud; low for transient points
 
 20. **Box capacity is not a selection limit (Q-0278 part 4).** The original admits at most
     500 screen candidates in one drawn frame, shared by box selection and pointing at
@@ -645,10 +666,18 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
     claim 2 is independent: selecting an object does not reserve an order place. Additions
     use claim 12's selection order; S-0701 claim 17 gives the response only to the first
     successful addition, not necessarily the eventual first object in selection order.
-    Which objects win the screen-candidate limit in a crowded mixed view remains open.
-    - Backing: `measurable` (Scenario T15)
-    - Confidence: high for both limits being separate; medium for observable crowded-view
-      outcomes until candidate admission order is settled
+    Candidate admission at overflow is not nearest-to-box-centre selection and does not
+    prefer own eligible units: the box uses candidates already admitted for the view,
+    without replenishing places consumed by ineligible objects. Mobile drawing candidates
+    consume places before the later building candidates; an ordinary building can nevertheless
+    consume a place that remains. Exact identities within an overflowing mobile group remain
+    `unmeasured`, with low confidence: no complete observable tie rule has been established
+    for equal drawing priorities or changing render layers. Scenario T15 part B settles
+    that detail; this spec does not invent a creation-order or distance tie-break.
+    - Backing: `measurable` (Scenario T15) for the capacity and mobile-before-building
+      consequence; `unmeasured` for exact overflowing-mobile identities (reason above)
+    - Confidence: high for the separate limits and absence of eligibility replenishment,
+      medium for mobile-before-building priority; low for the remaining overflow tie rule
 
 21. **Battlefield cursor images (Q-0277 parts 1 and 3, battlefield actions).** Table C gives
     the cursor frames for every action in table A, outside route-point editing. A range is
@@ -676,6 +705,18 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
     cropped bounding box. Our interface measures the same intervals with its own real-time
     input/display clock; no clock value affects simulation state.
     - Backing: `measurable` (Scenario T16)
+    - Confidence: high
+
+23. **Physical held gestures (Q-0286 question 2).** In the original Alt held gives
+    force-move, Ctrl held gives force-fire and Shift held gives force-select. Either side
+    of each modifier key plays the same role. Pressing or releasing such a key alone creates
+    no unit order: its held state changes the subsequent click. There is no separate Cmd
+    binding in the original. These gestures are not the rebindable stop, scatter, guard,
+    deploy, cheer or route commands of S-0213 claim 22. Ctrl+Shift enters the attack-move
+    gesture of claim 5 only for an eligible selection; the command-bar button is the other
+    entry described there, not an additional default attack-move key. Ordinary box addition
+    reads Shift independently, including while Ctrl is also held (claim 19).
+    - Backing: `measurable` (Scenario T17)
     - Confidence: high
 
 ## Formulas
@@ -736,7 +777,6 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
 | Drag threshold | 4 | pixels of truncated table-root distance | Claim 18, F6; strictly greater starts the drag |
 | Screen candidates | 500 | objects per drawn frame | Claim 20; not the selected-object limit |
 | Cursor frame interval | 4 | 16-millisecond presentation-clock units | Claim 22; nominally 64 milliseconds per advance, checked only on updates |
-|---|---|---|---|
 | Type-select double press | 500 | milliseconds | Claim 12. Press times are whole milliseconds; a second press counts when its time minus the first press's time is at most 500. Input only. |
 | Full health | 1 | health ratio | Tables I and V. The original fixes the threshold at 1 and does not read it from data. |
 | Attackable height limit | −20 | leptons of height above the surface | F3; a target must be strictly above it |
@@ -1371,6 +1411,9 @@ Ordering consequences:
 | Cursor image `MOUSE.SHA` | table C's frame numbers and full canvas dimensions | sprite image, resolved by S-0005; frame encoding follows the sprite format | no replacement file is specified if missing |
 | Cursor palette `MOUSEPAL.PAL` | cursor colours | 256-entry palette, S-0103 | no replacement palette is specified if missing |
 | Box threshold, candidate count and cursor timing | claims 18, 20 and 22 | engine constants, not imported keys | F6 and Constants |
+| Physical held modifiers | force-move, force-fire and force-select (claim 23) | engine bindings, not rules keys or saved command entries | Alt, Ctrl and Shift respectively |
+| Attack-move entry | claim 5 | held Ctrl+Shift, or the available command-bar button; no dedicated default keyboard command | gesture available without a command bar |
+| Transient box points and crowded-view admission | qualifications of claims 19 and 20 | drawing-state behaviour, not imported selection-distance or count keys | no additional imported default; unresolved details have settling scenarios |
 | Object type `Immune` | immune target (rows I27, V6, AC5, AC9, B8) | boolean (S-0003) | no |
 | Object type `LegalTarget` | legal target (claim 6 (a), attackable cell) | boolean (S-0003) | yes |
 | Object type `Bombable` | accepts bombs (row I19) | boolean (S-0003) | yes |
@@ -1402,8 +1445,8 @@ adds one allied bystander computer player, made mutually allied with the human p
 teams (S-0412, claim 8). The glossary's void rule applies to each bystander, and the *observed area*
 of each scenario is the part of the map that holds its test objects. A scenario that clicks an
 object of the allied bystander uses one of that bystander's objects, which the scenario names. The
-scenarios do not depend on which physical keys play the modifier roles: the measurer uses the
-original's own binding. Objects are pre-placed by the map. A recorder logs each object's behaviour, target and destination per tick, and each order
+scenarios use Alt for force-move, Ctrl for force-fire and Shift for force-select.
+Scenario T17 checks those physical bindings directly. Objects are pre-placed by the map. A recorder logs each object's behaviour, target and destination per tick, and each order
 issued. The cursor shape is observed on screen and used only to read the representative's action.
 Each test is done once, because no click draws from the scenario random stream (response-choice
 and playback draws use the unsynchronised stream, which T2 part B reads). Where a
@@ -1513,7 +1556,8 @@ click a far cell (attack-move expected), and click another far cell without the 
 move expected, since the mode ended with the first click); then press the button, clear the
 selection, select the tank again and click a far cell (a plain move expected); then select a tank
 and an unarmed engineer together (one ineligible object) and press the button: expected a message
-and the mode stays off, so that a click on a far cell gives plain moves. Row G3: an own
+and the mode is not newly armed, so that a click on a far cell gives plain moves.
+T17 separately tests button entry with an empty selection. Row G3: an own
 bomb planter, alone, force-fires at the own tank (rows G8 and I19 give *bomb*), so that its bomb
 is attached to the tank; then select the tank alone and click it,
 once with a named test rules file that turns both bomb-detonation settings on (expected: a
@@ -1952,8 +1996,64 @@ whole view: at most 500 can be newly selected; other screen candidates can lower
 count. Repeat with 130 individually selected units and issue an order: only 128 can have
 orders pending, as S-0213 O2 tests independently. A selection that cannot exceed 500 across
 views, or a single ordinary box admitting more than 500 objects, falsifies the count claims.
-The identities omitted in a crowded mixed view are recorded without an expected order
-until the admission-order open question is settled.
+*Part B, settling overflow identities:* repeat the crowded run with 490 own mobile units
+and 20 ordinary buildings in the view, then with 510 mobile units split between own and
+enemy houses, and then with mobile units split between ground and air render layers.
+Record admitted identities, box additions and selection order separately, with the
+read-only recorder and tick-labelled video. Repeat each case with reversed placement-entry
+order, exchanged ownership and small view scrolls; keep all tested points inside the
+box and the same rendering state. Expected confirmed consequence: mobile candidates have
+priority over building candidates, and enemy candidates consume capacity without a
+replacement own unit being admitted at box release. A building admitted while 500
+otherwise admitted mobile candidates fit, or eligibility-based replenishment at release,
+falsifies that consequence. The remaining mobile tie rule is unmeasured: compare the
+logged sets against drawing order, creation order and screen-position order, including
+repeated equal-priority cases. A repeatable discriminating result settles it in a follow-up
+revision; no one of those tie hypotheses is promised by this revision.
+
+**Scenario T14 part B: settling transient box points (claim 19).** Use T14's setup,
+scripted input and read-only recorder, at fixed view position. Track one own vehicle
+through factory exit, in-place deploying and undeploying, sinking, and magnetic lift
+and release, in separate stock-data runs. Use an ordinary stationary vehicle as control.
+At each reachable state, obtain the smallest inclusive rectangle that adds the object
+by moving each edge one pixel per independent replay; record its world position,
+height lift, drawing origin, eligibility and admitted screen point at release. Repeat
+three times per state, with no unrelated unit touching the box. Expected established
+rule: for an eligible admitted object, the boundary is its one admitted point, not its
+image extent; the stationary control agrees with the normal projection. Any inclusion
+outside that point falsifies the established inclusion rule. The correspondence of
+transient points to projection and drawing corrections is unmeasured: record the pixel
+difference rather than assuming zero. A state excluded by eligibility cannot settle its
+point by selection alone; record that state as inconclusive and use the read-only
+screen-point record to distinguish displacement from refusal. A consistent difference
+across the three runs supplies the state-specific formula for a follow-up revision.
+
+**Scenario T17: physical gestures and mode entry (claims 5 and 23, Q-0286).** Use the
+usual isolated flat skirmish map at 800×600, speed 6, director and mods off, with two
+own armed tanks, an enemy tank and an own unarmed engineer. Start with fresh keyboard
+preferences. With one tank selected, try left and right Alt separately while clicking
+the enemy tank: expect move, not attack. Try left and right Ctrl while clicking the
+other own tank: expect attack. Try left and right Shift while clicking that tank twice:
+expect addition then removal. Repeat with the keys released: expect ordinary resolution,
+not a lingering force gesture. Hold Ctrl+Shift and click a distant open cell: expect
+attack-move; release either key before a separate click: expect ordinary resolution.
+Add the engineer and repeat Ctrl+Shift: expect no attack-move for either object. An
+additive Shift or Ctrl+Shift box retains already-selected units instead of toggling them.
+Record input events, selection and issued orders; any differing role or latching
+falsifies the key rule. Repeat after changing the saved stop-command binding: the
+physical modifiers stay the same.
+
+If the command bar is available, press its attack-move button with the armed tank alone,
+then click two distant cells without modifiers: expect attack-move then plain move.
+Clear the selection after button entry: the next move is plain. With tank and engineer
+selected and mode initially off, press the button: expect a refusal message and plain
+moves on the next click. With nothing selected, press the button: expect a no-selection
+message, the mode armed but no unit order, and the next battlefield release clearing
+it. Record the mode with the read-only recorder as well as video; warning alone does
+not distinguish the empty-selection case from refusal. Repeat each button case once.
+Any different mode state, order or expiry falsifies the corresponding entry rule.
+If the profile supplies no command bar, record the button cases as inconclusive rather
+than substituting a guessed keyboard shortcut.
 
 **Scenario T16: cursor images (claims 21 and 22, Q-0277).** Use the usual 800×600 isolated
 map with speed indices 2 and 6 in separate runs, director and mods off. Reuse T3–T10's
@@ -2017,10 +2117,14 @@ Rows with no step, `unmeasured`, each for a reason.
 
 ## Open questions
 
-- Q-0278: exact box points during transient mobile drawing displacements, and admission
-  order at the 500 screen-candidate limit, are not fully specified. Normal origin inclusion,
-  ownership, modifiers, thresholds and counts are specified by claims 18–20; T14 and T15
-  can discriminate the remaining point and overflow details. The request is not fully closed.
+- Q-0278 is answered by claims 18–20, with two explicitly unmeasured qualifications:
+  state-specific transient box points (claim 19, T14 part B) and exact identities within
+  overflowing mobile drawing candidates (claim 20, T15 part B). Both remain low-confidence
+  open details with reasons and settling scenarios, not guessed normal-position or
+  creation-order rules. No other part of this request remains open.
+- Q-0286 question 2 is answered by claims 5 and 23 and T17. S-0213 claims 22 and 23
+  already answer questions 1 and 3. Its companion request text should name both specs
+  at the coordinated hand-off.
 - Q-0277's edge-scroll cursors and radar's choice of cursor are companion-spec parts
   (S-0213 and S-0410). Building-placement hover images belong with S-0406's placement
   display. Claims 21 and 22 answer this spec's ordinary battlefield and sidebar-mode parts.
@@ -2087,8 +2191,8 @@ Rows with no step, `unmeasured`, each for a reason.
 
 ## Questions for the project lead
 
-- **Claim 11 and S-0212.** Claim 11 is the same as in approved revision 12 (checked by comparing the
-  two texts). The sign-off diff should check S-0212's claim 25 (scenario P16, runs (u) and (r)) against it: a click on a cell
-  uses the nearby-cell search only when the clicked cell is not itself the destination. A free
-  mover's *no-move* searches without a reach region on every cell and object, inside the usable
-  area or not.
+- **Coordinated hand-off checks.** Confirm S-0212 claim 25 and P16 runs (u) and (r)
+  preserve claim 11's direct-destination bypass, unrestricted free-mover no-move search
+  and distinction from rally-point searches. The current companion passage already agrees.
+  Confirm S-0213 claims 22 and 23 cite claims 5 and 23 here for Q-0286 question 2, and
+  S-0408 claim 12a keeps claim 13's cursor-cell and object-versus-wall-sale distinction.
