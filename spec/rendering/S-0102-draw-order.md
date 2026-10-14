@@ -2,7 +2,7 @@
 id: S-0102
 title: Draw order, render layers, depth compositing, sprite placement and shadow pixels
 topic: rendering
-revision: 10
+revision: 11
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -24,11 +24,6 @@ drawn as sprites, terrain objects, overlays and smudges), which image frame a ve
 sprite shows, and what a shadow does to the pixels under it. Positions, world pixels and the height
 lift *L(z)* are those of S-0101. This spec covers skirmish; network games and campaigns are out
 of scope.
-
-**Cross-spec wording correction required.** The glossary's *sprite* and *aircraft* entries still
-say aircraft can be drawn as sprites. They must instead point to claim 21: aircraft bodies are
-voxel models only, and an aircraft type without voxel art draws no body. This is a vocabulary
-correction to match the existing rule, not a new rendering rule.
 
 ## Terms
 
@@ -102,13 +97,11 @@ screen rows.
 
 ### Structure of a drawn frame
 
-1. **Order of a drawn frame.** Each drawn frame starts from the terrain picture, after the cell pass
-   has repainted whatever parts of it were marked for redraw (claim 16 gives the precedence inside
-   the cell pass). The object pass then draws the five layers in the fixed order underground, surface,
-   ground, air, top, and within a layer in layer-list order. So wherever two objects overlap and both
-   pass the depth test, the one in the later layer, or later in the same list, is visible. After the
-   last layer, the status extras of every vehicle, infantry, aircraft and building drawn in that drawn
-   frame are painted, so every status extra appears above every object of every layer.
+1. **Order of a drawn frame.** The terrain picture, including the areas repainted under claim 16,
+   appears behind the objects of all five layers. Where two objects overlap and both pass the depth
+   test, the object in the later layer—or later in the same layer's specified drawing order—appears
+   on top. Status extras of every vehicle, infantry, aircraft and building drawn in the frame appear
+   above objects of every layer.
    - Backing: `measurable` (scenarios D1, D6, D7)
    - Confidence: high
 2. **Effects around the layers.** Ion-cannon blast effects are drawn before the layers, so objects of
@@ -1184,18 +1177,13 @@ So above a deck its layer follows its height above the deck.
 | any | tick | drawing positions change by claim 6's result, using the keys before that tick's movement |
 | any | object leaves the layer | removed; the order of the rest is unchanged |
 
-**Painting order of a drawn frame** (each later step can paint over the earlier ones, subject to
-the depth test where one applies):
-
-| Step | What is painted |
-|---|---|
-| 1 | terrain picture (cell pass, claim 16) |
-| 2 | ion-cannon blast effects |
-| 3 | underground, surface and ground layers, in list order |
-| 4 | building information tips |
-| 5 | air and top layers, in list order |
-| 6 | status extras of all drawn vehicles, infantry, aircraft and buildings |
-| 7 | light flashes, beam effects, range circles, map beacons |
+**Observable ordering of a drawn frame.** The terrain picture appears behind the object layers, and
+ion-cannon blast effects appear behind objects of every layer. Among the layers, underground,
+surface and ground objects appear below building information tips; air and top objects and the
+status extras of vehicles, infantry, aircraft and buildings appear above those tips. Status extras
+appear above objects of every layer. Light flashes, beam effects, range circles and map beacons
+appear above both objects and status extras. Within each layer, the ordering consequences are those
+stated in claims 1, 6 and 7; where a depth test applies, it can still determine which pixels show.
 
 **Observable consequences.** A building's body is painted in the cell pass with its depth written,
 so whether a unit appears in front of or behind it is decided by depth, not by the unit's place in
