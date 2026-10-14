@@ -416,7 +416,7 @@ impl Client {
         };
         match k {
             Key::Escape => s.toggle_pause(),
-            // spec: S-0213 table T2 (stop, scatter, guard and deploy keys; cheer)
+            // spec: S-0213 table T2 (the key commands); the default keys are interim (Q-0286)
             Key::Char('s') => s.key(KeyCommand::Stop),
             Key::Char('x') => s.key(KeyCommand::Scatter),
             Key::Char('g') => s.key(KeyCommand::Guard),

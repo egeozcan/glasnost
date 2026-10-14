@@ -15,3 +15,6 @@ pub mod install;
 pub mod paint;
 pub mod play;
 pub mod session;
+pub mod window;
+
+pub use window::{GameOptions, run_game};

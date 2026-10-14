@@ -24,7 +24,7 @@ pub mod preview;
 mod rules;
 pub(crate) mod tasks;
 #[cfg(target_arch = "wasm32")]
-mod web;
+pub(crate) mod web;
 
 use browser::Browser;
 use input::Input;

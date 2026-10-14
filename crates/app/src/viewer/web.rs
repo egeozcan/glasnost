@@ -34,7 +34,18 @@ pub fn open_folder_picker() {
 }
 
 /// Mounts whatever folder the user picks.
-pub fn install_folder_picker(proxy: EventLoopProxy<ViewerEvent>) {
+pub(super) fn install_folder_picker(proxy: EventLoopProxy<ViewerEvent>) {
+    on_folder_picked(move |files| {
+        let proxy = proxy.clone();
+        wasm_bindgen_futures::spawn_local(async move {
+            let result = tasks::mount(files).await;
+            let _ = proxy.send_event(ViewerEvent::Task(result));
+        });
+    });
+}
+
+/// Calls `f` with the files of each folder the user picks.
+pub(crate) fn on_folder_picked(mut f: impl FnMut(Vec<PickedFile>) + 'static) {
     let Some(input) = picker() else {
         log::warn!("the page has no #{PICKER_ID} input; folder picking is unavailable");
         return;
@@ -61,11 +72,7 @@ pub fn install_folder_picker(proxy: EventLoopProxy<ViewerEvent>) {
                 source: Rc::new(WebFileSource::new(file)),
             });
         }
-        let proxy = proxy.clone();
-        wasm_bindgen_futures::spawn_local(async move {
-            let result = tasks::mount(files).await;
-            let _ = proxy.send_event(ViewerEvent::Task(result));
-        });
+        f(files);
     });
     input.set_onchange(Some(on_change.as_ref().unchecked_ref()));
     on_change.forget();

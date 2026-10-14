@@ -3,7 +3,8 @@
 //!
 //! **Milestone M0**: the palette-indexed quad demo ([`run_demo`]).
 //! **M1**: the asset viewer ([`run_viewer`], module [`viewer`]).
-//! **M5** turns this into the game client (simulation worker, UI, audio).
+//! **M5b**: the game client ([`run_game`], module [`game`]): menu, skirmish
+//! setup, the game against the AI and the end screen.
 
 use std::sync::Arc;
 
@@ -22,6 +23,7 @@ pub mod game;
 pub mod mapview;
 mod status;
 pub mod viewer;
+pub use game::{GameOptions, run_game};
 pub use status::Status;
 pub use viewer::{ViewerOptions, run_viewer};
 
