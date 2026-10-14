@@ -210,7 +210,7 @@ impl Session {
             pause_targets: Targets::new(),
             problems: Vec::new(),
         };
-        problems.extend(s.loaded.problems.drain(..));
+        problems.append(&mut s.loaded.problems);
         s.problems = problems;
         s.set_centre(start.unwrap_or((0, 0)), true);
         s.play.say("Game started.");
@@ -374,12 +374,10 @@ impl Session {
             return;
         };
         let row = painter.add_palette(pal);
-        let mut next = ICON_SPRITES;
-        for (t, img) in &self.icons {
+        for (next, (t, img)) in (ICON_SPRITES..).zip(&self.icons) {
             if painter.add_sprite(next, 0, img, row) {
                 self.icon_ids.insert(*t, next);
             }
-            next += 1;
         }
     }
 

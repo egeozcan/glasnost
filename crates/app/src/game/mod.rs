@@ -7,8 +7,10 @@
 //! - [`session`]: a game on a loaded map: camera, battlefield, radar,
 //!   gestures and the interface's draw list.
 //! - [`paint`]: draw lists to 2D-batch quads.
+//! - [`client`]: the screens, pacing, sound and input without a window.
 //! - [`install`]: the install's rules, maps and samples for the menus.
 
+pub mod client;
 pub mod install;
 pub mod paint;
 pub mod play;
