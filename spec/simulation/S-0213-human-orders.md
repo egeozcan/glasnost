@@ -2,7 +2,7 @@
 id: S-0213
 title: Human orders (the order set, when orders apply, and what each order changes)
 topic: simulation
-revision: 14
+revision: 15
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -95,8 +95,12 @@ Terms).
   the route-mode key, in which clicks build a *planned route* (a list of places, each with an
   action) for the selected objects instead of ordering them at once (claim 16). An object that has
   a planned route, being built or being followed, is a *route holder*.
-- **Selection.** The local player's set of selected objects, in the order they were selected.
-  Selection is an input-side notion and is not game state.
+- **Selection, selection order.** The local player's selected objects, ordered by S-0214's
+  selection-order rule (also S-0701 claim 18), not simply by when each was selected. An object
+  whose type's primary weapon has positive damage goes before the existing selection when
+  selected; any other object goes after it. Thus positive-primary-damage types come first,
+  most recently selected first, followed by the others, earliest selected first. This is not
+  a test of the weapon the object currently uses. Selection is input-side state, not game state.
 - **Pending list.** The list in which orders wait between being issued and being applied
   (claim 2).
 - **Attack-move memory.** What an attack-move order leaves on its actor: that the actor's *move*
@@ -130,6 +134,8 @@ Terms).
    tick *N* + 1, as S-0203 (claim 7) states for the tick as a whole. The first tick in which an
    object can act on an order is therefore the tick after the one in which the order was issued.
    All orders issued in the same tick are applied together, in the order of claim 3.
+   Orders issued for a selection use S-0214's selection order (Terms), not chronological
+   selection history.
    - **Which tick an input belongs to.** In a single-player game the player's input is taken once
      per unfrozen cycle, before that cycle's tick (S-0201, Terms, *Cycle*), and not while the game waits
      between ticks. Each unfrozen cycle takes at most one input event from the player's waiting inputs, in
@@ -157,8 +163,8 @@ Terms).
 2. **At most 128 pending orders.** The pending list holds at most 128 orders. An order issued
    while it is full is dropped silently and never applied. The list is emptied when the orders
    are applied (claim 1), so the limit applies to the orders issued during one tick. A click
-   that orders a selection issues one order per selected object, in selection order (S-0214), so
-   when more than 128 objects are selected only the first 128 are ordered. The key commands of
+   that orders a selection issues one order per selected object, in S-0214's selection order
+   (Terms), so when more than 128 objects are selected only the first 128 are ordered. The key commands of
    table T2 are limited in the same way: once the list is full, every further order of the
    command is dropped. Since an unfrozen cycle takes at most one input event (claim 1), the orders that the player's
    input issues in one tick all come from a single click or key command. The list holds the orders of
@@ -280,7 +286,9 @@ Terms).
    order and a plain move order to the same cell are different in this comparison and never form
    one run. A *run* is maximal: it takes in every such order in
    a row, so the order before it and the order after it, if any, differ from it in behaviour,
-   target or destination. Only the mobile actors of the run that are not inside a
+   target or destination. Run order is issue order; for a single selection click this is
+   S-0214's selection order (Terms), including its positive-primary-damage types in
+   most-recently-selected-first order. Only the mobile actors of the run that are not inside a
    tunnel take part (the *members*); an actor inside a tunnel keeps the common cell. The spreading
    does not check validity: a member that is off the map still takes part (confidence: low), and its
    own order then has no effect (claim 4). The result is as follows.
@@ -587,9 +595,10 @@ Terms).
     - Confidence: medium
 
 18. **Key commands.** The commands of table T2 turn one key press into orders for the selection.
-    Each command looks at every selected object in selection order and issues at most one order
-    for each, under the conditions in the table.
-    - Backing: `measurable` (Scenarios O5 and O6)
+    Each command uses S-0214's selection order (Terms) and issues at most one order
+    for each selected object, under the conditions in the table. The pending-list limit
+    therefore drops the last objects in that order, not necessarily those selected last.
+    - Backing: `measurable` (Scenarios O5 and O6; Scenario O2 for order precedence at the limit)
     - Confidence: medium (high for stop and scatter)
 
 19. **Cheer rate limit.** The cheer command is accepted only if the current tick is more than
@@ -774,7 +783,7 @@ from claim 17. Every row that carries an actor also ends the actor's planned rou
 | Route point add, commit, delete | route data | (claim 16) | Route mode (claim 16) |
 
 **Table T2: key commands.** The command keys are the player's own key bindings. "Selected object"
-means each object of the selection in turn. *Movable*, *able to fire*, the *deploy check* and
+means each object in S-0214's selection order (Terms). *Movable*, *able to fire*, the *deploy check* and
 *deploy readiness* are the input-side conditions of S-0214 (Terms). An object that fails a row's
 condition gets no order.
 
@@ -790,7 +799,7 @@ condition gets no order.
 While route mode is held, the guard command adds a guard action to the planned routes instead of
 issuing orders.
 
-**The deploy rule.** If the first selected object is a building of the player's that holds
+**The deploy rule.** If the first object in selection order is a building of the player's that holds
 garrison occupants, only that building gets a deploy order. Otherwise each selected object gets a
 deploy order if it is a unit or building, is movable or able to fire, is not berserk, and passes
 both the deploy check and deploy readiness of S-0214. Deploy readiness is never met by a
@@ -928,8 +937,10 @@ game's normal input only, as a player would, and never writes into the game.
 
 **Scenario O2: pending-list limit (claims 2 and 18).**
 - *Setup:* 130 infantry of one cheap stock type, owned by the human player and placed by the map
-  on open ground.
-- *Procedure:* (a) select all 130 (by drag selection in several steps if needed) and give one
+  on open ground. Use a type whose primary weapon has positive damage. For the ordering
+  test, add the objects individually to the selection in a recorded order, using scripted
+  modifier-clicks if needed; band-box discovery order is not assumed.
+- *Procedure:* (a) select all 130 and give one
   move click to a far cell. Repeat (a) 3 times from the same start. (b) From the same start:
   select 128 of them and give a move click to a far cell; select the other 2 and give a move click
   to the same far cell; while all 130 are moving, select all 130 and press the stop key once. Repeat (b) 3 times from the same start.
@@ -937,7 +948,9 @@ game's normal input only, as a player would, and never writes into the game.
   selection order where the selection order is known. (b) After the stop key: how many have no
   destination and how many keep moving, and which ones keep moving.
 - *Expected:* (a) exactly 128 change their destination. (b) Exactly 128 stop and 2 keep moving,
-  and the 2 that keep moving are the last 2 in selection order.
+  and the 2 that keep moving are the last 2 in selection order. With the individually
+  recorded additions of this positive-primary-damage type, those are the first 2 selected,
+  not the last 2 selected.
 - *Falsified if:* (a) all 130 respond, or fewer than 128 respond; (b) all 130 stop, or fewer than
   128 stop, or, where the selection order is known, the 2 that keep moving are not the last 2 in
   selection order.
@@ -1142,13 +1155,16 @@ game's normal input only, as a player would, and never writes into the game.
   one per cell in a row 3 cells away, all selected; one move click to an empty cell 10 cells
   away; 3 runs. Expected: the 3 infantry that started in one cell get one destination cell
   between them. Falsified if they get different destination cells. (Spreading involves no random draw.)
-- *Part (c), leader tie-break:* 2 identical vehicles *P* and *Q* of the player's standing at the
-  same place within their cells, in two cells 4 cells apart, so that the centre of the two lies exactly half way
-  between them and both are at the same distance from it; they are selected in the order *P*, *Q*; one move click to an empty cell 10 cells away. Then the same with the selection order
-  *Q* then *P*. 10 runs of each order. Expected: the vehicle selected last gets the clicked cell
-  (it is the latest in the run on equal distances), and the other gets a different cell. Falsified
-  if in any run the vehicle selected first gets the clicked cell. (Spreading involves no random
-  draw.)
+- *Part (c), leader tie-break:* 2 identical vehicles *P* and *Q* of a stock type whose primary
+  weapon has positive damage, owned by the player and standing at the same place within their
+  cells, in two cells 4 cells apart, so that the centre of the two lies exactly half way
+  between them and both are at the same distance from it. Select *P*, then add *Q* by a
+  modifier-click, and give one move click to an empty cell 10 cells away. Repeat from the same
+  start selecting *Q*, then adding *P*. 10 runs of each chronological selection order.
+  Expected: selecting *P* then *Q* produces selection and issue order *Q*, *P*, so *P* gets
+  the clicked cell as the latest in the run. Reversing the additions gives that cell to *Q*.
+  Thus the vehicle selected earliest wins this tie, and the other gets a different cell.
+  Falsified if the vehicle selected last gets the clicked cell. Spreading involves no random draw.
 - *Part (d), the look classes:* a purpose-made map with, around one clicked cell *k* on open ground, three
   variants, each with 9 identical vehicles of the player's in a 3 × 3 block 8 cells from *k*, all
   selected, one move click on *k*, 5 runs each: (i) *k* on a shore, with water on the side
@@ -1450,6 +1466,15 @@ table T1 defer to S-0414 (claims 11 to 14) and S-0405 (claim 10); the game-end d
 2026-10-11 (play to the last side) is S-0414's. Items to confirm against the versions handed
 off together at sign-off:
 
+- **Selection-order correction, joint hand-off:** S-0214 must replace its chronological
+  selection definition and earliest-selected representative tie-break with the selection
+  order used here and in S-0701 claim 18: positive-primary-damage types first, most recently
+  selected first, then other types, earliest selected first. Confirm its definition and
+  tied-representative scenario at sign-off. Claims 1, 2, 7 and 18 here, table T2 and Scenarios
+  O2 and O10 use that order; the pending-order limit and leader tie-break themselves are unchanged.
+- **Route timing confirmed:** S-0215 claim 13 already issues the next route point through
+  the ordinary order boundary, as claim 16 here states; no immediate destination assignment
+  is implied. Confirm the current companion text at sign-off rather than an older revision number.
 - **Cited specs:** pointers refer to the current approved specs and their latest working
   drafts in this correction round, under the glossary's convention. Confirm the versions
   handed off together, particularly the Q-0072 movement and approach pointers of claim 21.
