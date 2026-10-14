@@ -359,7 +359,6 @@ impl Script {
             .collect()
     }
 
-    /// The house's objects on the map that play `role`.
     /// The house's deployed slave miners and other buildings with slaves
     /// (S-0402 claim 19): economy, like its harvesters.
     pub(crate) fn slave_buildings(&self, w: &World) -> Vec<ObjectId> {
@@ -386,12 +385,16 @@ impl Script {
             .min_by_key(|&c| (dist2(c, from), c.y, c.x))
     }
 
+    /// The house's objects on the map that play `role`. A slave with a
+    /// master (S-0402 claim 14) works for its master and is never army, even
+    /// when its type is armed.
     pub(crate) fn of_role(&self, w: &World, role: Role) -> Vec<ObjectId> {
         self.own(w)
             .into_iter()
             .filter(|&id| {
                 w.obj(id)
                     .is_some_and(|o| self.allowed(w, tech::type_of(o), role))
+                    && !(role == Role::Army && slaves::is_slave(w, id))
             })
             .collect()
     }

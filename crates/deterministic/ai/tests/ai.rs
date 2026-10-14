@@ -10,7 +10,7 @@ use std::collections::BTreeMap;
 
 use glasnost_ai::brain::Brain;
 use glasnost_ai::{fixture, game::Game};
-use glasnost_sim::econ::{shroud, tech, victory};
+use glasnost_sim::econ::{shroud, slaves, tech, victory};
 use glasnost_sim::objects;
 use glasnost_sim::orders::Order;
 use glasnost_sim::rules::Kind;
@@ -350,8 +350,8 @@ fn a_broke_house_sells_a_building() {
     assert!(!sold, "no sale while the economy runs");
 }
 
-/// The skirmish ruleset with slave miners for harvesters: SLAVE (an
-/// unarmed walker of storage 2, harvest rate 3), SMV (a slave-miner vehicle
+/// The skirmish ruleset with slave miners for harvesters: SLAVE (a walker
+/// with a rifle, storage 2, harvest rate 3), SMV (a slave-miner vehicle
 /// with three slaves, built at the war factory, deploying into SMB) and SMB
 /// (its 3 × 3 deployed form, not on the sidebar); MINR is no longer offered.
 /// Invented values.
@@ -376,6 +376,7 @@ fn slave_rules() -> std::sync::Arc<glasnost_sim::rules::SimRules> {
         locomotor: Some(Locomotor::Walk),
         storage: Some(2),
         sight: Some(4),
+        primary: Some("Rifle".into()),
         ..Default::default()
     };
     slave.econ.harvest_rate = Some(3);
@@ -456,6 +457,13 @@ fn a_slave_miner_side_earns_income() {
             paid[i] |= c > last[i];
             last[i] = c;
             slaves_out[i] |= !of(w, h, "SLAVE").is_empty();
+            // Slaves work for their master: the plan never sends them in a wave.
+            assert!(
+                of(w, h, "SLAVE")
+                    .iter()
+                    .all(|&s| w.obj(s).is_some_and(|o| o.attack_move.is_none())),
+                "house {h} sent a slave with the army"
+            );
         }
         paid.iter().all(|&p| p)
     });
@@ -484,4 +492,18 @@ fn a_slave_miner_side_earns_income() {
         step_until(&mut g, lost + 6000, |w| !of(w, 0, "SMB").is_empty()),
         "the slave miner lost at tick {lost} was rebuilt and deployed"
     );
+    // Through the waves that follow, no slave with a master goes with the
+    // army (those of the removed miner have none and may).
+    let end = g.world.tick + 8000;
+    step_until(&mut g, end, |w| {
+        for h in 0..2u8 {
+            assert!(
+                of(w, h, "SLAVE").iter().all(|&s| !slaves::is_slave(w, s)
+                    || w.obj(s).is_some_and(|o| o.attack_move.is_none())),
+                "house {h} sent a slave with the army at tick {}",
+                w.tick
+            );
+        }
+        false
+    });
 }

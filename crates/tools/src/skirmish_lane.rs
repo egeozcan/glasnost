@@ -371,6 +371,10 @@ fn play(
                     if let Some(hs) = &o.econ.harvest {
                         let key = format!("{:?}/{:?}", o.beh.current, hs.phase);
                         *harvest_ticks[h].entry(key).or_default() += 1;
+                    } else if let Some(ss) = &o.econ.slave {
+                        // A slave on the map (S-0402 claim 14), by its own phase.
+                        let key = format!("slave {:?}/{:?}", o.beh.current, ss.phase);
+                        *harvest_ticks[h].entry(key).or_default() += 1;
                     }
                 }
                 last[h] = c;
@@ -455,6 +459,10 @@ fn play_ai(
             {
                 if let Some(hs) = &o.econ.harvest {
                     let key = format!("{:?}/{:?}", o.beh.current, hs.phase);
+                    *g.harvest_ticks[h].entry(key).or_default() += 1;
+                } else if let Some(ss) = &o.econ.slave {
+                    // A slave on the map (S-0402 claim 14), by its own phase.
+                    let key = format!("slave {:?}/{:?}", o.beh.current, ss.phase);
                     *g.harvest_ticks[h].entry(key).or_default() += 1;
                 }
             }
