@@ -2,7 +2,7 @@
 id: S-0215
 title: Behaviours (standing orders) and their processing
 topic: simulation
-revision: 20
+revision: 21
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -72,7 +72,14 @@ refresh before the rest tables, but neither settled these collisions. Q-0231 is 
 by claim 26: the newly taken own-cell guard spot qualifies in that same processing, including
 its search, targeting-timer restart and idle-action outcomes. The earlier version left that
 qualification open; S-0309's area-search rule already supplies candidate eligibility, not a
-one-processing deferral.
+one-processing deferral. Q-0241 question 3 is clarified by claim 1: set-up supplies queued
+*guard*, not a guaranteed current *guard* on tick 0. The automatic start of a set-up turreted
+building and the upgrade comparison remain open (B36); this revision does not endorse a
+set-up ready mark as a replacement rule. Q-0238 is only partly answered: S-0212 claim 23a
+already supplies same-tick destination assignment, queue-only *area guard* and the final
+nearby search. Claim 38 here supplies the centre-choice draw sequence and the base/start
+preference, but leaves the exact chosen cell and no-base geometric fallback open. Keep both
+requests open until their missing parts are established and the complementary specs approved.
 
 **Queueing wording.** Throughout this spec, "queues *b*" without further words means a queue
 request (claim 7) *without* an immediate start. A rule that asks for the readiness-dependent
@@ -408,9 +415,16 @@ Terms used by this spec:
 
    A building's placement fall-back queues *construction*, rather than choosing a resting
    behaviour, and requests the construction body (S-0406 claim 17). At game set-up it instead
-   receives the idle body and *guard* queued.
+   receives the idle body and *guard* queued. This is the meaning of S-0009 claim 40's
+   “starts in the *guard* behaviour”: a query can see queued *guard* under this claim,
+   but that wording does not promise that *guard* is already current. Creation starts with
+   the ready mark clear; the set-up placement's choice of idle body and queued *guard*
+   does not itself set that mark. In particular, merely having a weapon is not a set-up
+   ready-mark setter. When placement does not find the actor ready, its queue remains
+   pending under claim 11. The first automatic start for a set-up turreted building is
+   not established here (Q-0241, Open questions).
    - Backing: `measurable` (scenario B1, reading the slots with the recorder; S-0406 PL11 for
-     construction entry and the queued-behaviour query; scenario B33 for game-set-up buildings)
+     construction entry and the queued-behaviour query; scenario B35 for game-set-up buildings; B36 for the initial mark and queued/current distinction)
    - Confidence: high
 
 2. **When an actor processes its behaviour.** On each tick on which an actor's own update runs (its
@@ -763,7 +777,7 @@ Terms used by this spec:
     - Backing: `measurable` (scenario B3, cases b, c, g and h; scenario B23 for the vehicle
       exceptions of queued *enter* and contact with a vehicle-factory building, and case c for a
       transport letting its passengers out; scenario B16, case d, for buildings; S-0406 PL11 for
-      the construction ready mark and second start; scenario B33 for the body-range rule,
+      the construction ready mark and second start; scenario B35 for the body-range rule,
       and S-0417 U2 for factory release and unloading leaving the mark alone). Further parts are
       `unmeasured`. The deploying and undeploying transitions and the unfinished unload or deploy
       cycle: which vehicles have them, how long they last and how they end belong to the deploy
@@ -841,10 +855,16 @@ Terms used by this spec:
 
     | Situation | Effect |
     |---|---|
-    | its own locomotor has been temporarily replaced by another (for example while it is carried by another object) | it gets its own locomotor back; S-0417 claim 5 establishes temporary driving during factory exit |
+    | its own locomotor has been temporarily replaced by another (for example while it is carried by another object) | it gets its own locomotor back; S-0417 claim 5 establishes temporary driving during factory exit; S-0207 claim 21 owns the restored teleporting state |
     | it is a vehicle with approach destinations remaining after refresh | the first of them becomes its destination and is removed from the list; the route row and the guard-spot row do not apply in this fall-back |
     | it follows a route, the approach row does not apply, and it is not in a *patrol* that has already begun (progress count not 0) | it issues the action of the next route point as an order; this is not an immediate destination assignment |
     | it is an infantry unit that is not a harvesting slave, its guard spot is on another cell, the approach row does not apply, and it has not got its own locomotor back in this fall-back | the guard spot becomes its destination; unless its current behaviour is *area guard*, it also queues *move* and forgets the guard spot |
+
+    Restoration retains the suspended movement state, rather than creating an empty one.
+    For teleporting vehicles S-0207 claim 21 distinguishes a retained pending jump, landing
+    point and phase-in expiry from the destination changes that the remaining fall-back
+    effects may then make. Retention at restoration does not exempt a move from replacement
+    or cancellation by those later effects.
 
     The approach row prevents the route and guard-spot rows. Otherwise the guard-spot row's
     destination survives this fall-back. A route point issues an order through the ordinary order
@@ -2159,7 +2179,9 @@ apply in our engine to the actors of every player house.
       a mobile target passes that claim's range test. Normally that test measures to the
       target's cell centre, not its own reference point; open-topped types have the separate
       test stated there. Non-mobile targets cause no early stop. This arrival rule does not
-      change the approach step's retention rule of part e.
+      change the approach step's retention rule of part e. S-0208 claim 21 separately owns
+      the walking consequence of S-0307 claim 22(b)'s successful close-range own-cell
+      shortcut. Its choice of a walking point is not a new exception to parts a or e here.
     - Backing: `measurable` (scenario B32: case a for the cadence and the in-range rule, case b
       for the kept destination and its renewal, case c for the can-approach property in
       *attack* and *area guard*, case c2 for *hunt* with a human-controlled owner, case d for
@@ -2187,6 +2209,36 @@ apply in our engine to the actors of every player house.
     - Confidence: high (parts a, b, c, d, e and the outcomes of part f); medium (the per-tick rule of
       part a, the in-the-playfield mark, part f2, part g's deployed infantry and zero-speed types).
       High for part a2's ordering and independent eligibility.
+
+38. **House-selected centre after path give-up (Q-0238, partial).** This complements
+    S-0212 claim 23a and its final nearby-search row in T5. It applies to the original's
+    non-human-owned units and, in our engine, only to the neutral and special houses,
+    not player houses. Both non-player houses use the same selection rule.
+
+    The house's recorded base centre is preferred to its recorded base-start cell. When
+    neither exists, the point used for the random displacement is world position
+    (0, 0, 0) leptons, not the failing unit's own position. This is the empty world
+    point tested by this selection. Absence of a base or start does not bypass the
+    choice or its draws. The exact base-centre maintenance, displacement formula and
+    correction into the usable area remain open; no final destination cell is asserted
+    by this partial claim.
+
+    For the draw sequence, let *R* be the house's recorded base radius clamped to
+    768 … 2048 leptons, in exact integer arithmetic. Infantry and vehicles always
+    use the central choice, irrespective of their weapons: no outer-choice index
+    is drawn. One *U*(0, *R*) supplies the displacement radius, followed by exactly
+    one raw scenario-stream value for direction. The direction uses only the low
+    eight bits of that raw value, but still consumes the whole value. An empty
+    generated point falls back to the recorded base-centre/base-start cell without
+    another draw. Converting the selected point to a cell and correcting it into
+    the usable area take no draw. The final nearby search likewise takes none
+    (S-0212 claim 25). The ranged draw may consume multiple raw values through
+    S-0202's rejection rule; this is one ranged request plus one raw direction draw,
+    not a promise of exactly two raw values in total.
+    - Backing: `measurable` (B37, with S-0212 P26 for the final search and timing)
+    - Confidence: high for the base/start preference, zero-origin fallback and draw
+      assignments; medium for the empty generated-point fallback, pending the
+      conditional observations of B37
 
 ## Formulas
 
@@ -2630,6 +2682,8 @@ are fixed rules, not behaviour-rate or targeting-delay fields.
 |---|---|---|
 | none | per-tick approach placement and repeated-step eligibility (claim 37 a2) | not configurable through data; fixed as stated in that claim |
 | none | same-processing qualification of a newly taken own-cell guard spot, search and idle-action outcomes (claim 26, Q-0231) | fixed behaviour, no imported setting or absent-key choice; the existing behaviour-rate and targeting-delay fields still supply their delays |
+| none | initial ready mark and queued/current distinction for set-up buildings (claim 1, Q-0241) | fixed behaviour, not a new data flag; building map entry, idle body and turret flag mappings stay with S-0009, S-0108 and the rows below |
+| none | house-centre preference and random draws after path give-up (claim 38, Q-0238) | fixed behaviour, no per-behaviour rate or absent-key setting; house radius and centre maintenance remain open |
 
 **Behaviour property sections.** Each behaviour's properties come from a game-wide section of the
 rules data named after the behaviour. Section names are looked up exactly as S-0001 says (with
@@ -3912,7 +3966,7 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   These collision cases remain `unmeasured` until a legal input sequence establishes the
   prerequisites; this scenario proposes recording them, not a state-writing harness.
 
-- **B33 (claims 1 and 11).** Use the common skirmish setup, speed 2, director and mods off,
+- **B35 (claims 1 and 11).** Use the common skirmish setup, speed 2, director and mods off,
   a tiny open-ground map and one unarmed map-placed building with no turret. Record its body
   state and current and queued behaviours at entry and each turn. Expected at game set-up:
   idle body and *guard* queued, not a construction body or *construction* queued. One run.
@@ -3954,7 +4008,49 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   run. Per-tick searches or actions of other objects must be separated by the recorder; if
   they cannot be separated, that run cannot establish the draw assignment.
 
+- **B36 (claim 1, Q-0241).** Common tiny skirmish map, speed 2, 800 × 600, director
+  and mods off. Place a stock turreted defence for a non-player owner and a named enemy
+  unit in its range; keep the bystander away. Record current, queued and suspended
+  behaviours, ready mark, body state, target, processing timer and first shot from
+  placement through tick 1000. Before any turn, expect idle body, *guard* queued,
+  current *none* and ready mark clear. A mark already set by ordinary placement or
+  current *guard* already assigned there falsifies claim 1's new qualification.
+  Repeat with a named test type identical except unarmed, and a non-turreted base
+  with a turret-bearing upgrade installed by the map. Three runs per case; remove
+  named data afterwards. Record the first mark setter and first start if either occurs:
+  their ticks are investigation results, not predicted by this revision. Do not inject
+  a ready mark or force a start to make the test succeed. Enemy action before the first
+  recorded turn invalidates the placement observation.
+
+- **B37 (claim 38, Q-0238).** Reuse S-0212 P26's unreachable-destination skirmish
+  setup for the neutral and special houses, speed 2, 800 × 600, director and mods off.
+  A read-only recorder records the house's base centre, base-start cell and base radius,
+  the selected centre and scenario random-stream state
+  at give-up. Three valid runs per owner with no recorded base/start, then with a map
+  placing that owner's base buildings. Separate unrelated draws from other objects.
+  Expect the ranged/raw assignments of claim 38, including direction randomness when
+  no base/start exists, and no further draw for cell correction or final nearby search.
+  Any choice-index draw, absence of the required direction draw, or
+  a final-search draw falsifies the draw rule. Record conditional empty-point fallback
+  cases only if reached without writing state; otherwise that branch remains untested.
+  The exact cell is recorded to investigate the remaining geometric question, not
+  compared against a conjectured centre equal to the unit's position.
+
 ## Open questions
+
+- **Q-0241 questions 1 and 2:** the first automatic start of a turreted building placed
+  at set-up is not established. Placement queues *guard* but does not itself set the
+  ready mark, and neither the ordinary idle body-range gate nor the unprocessed armed
+  *guard* rule supplies a bootstrap. Determine whether a later set-up or first-turn
+  rule starts it, or whether the queue genuinely remains pending without an outside
+  event. The armed/unarmed and set-up-upgrade comparisons are B36. No first-tick ready
+  mark is adopted as a workaround here. Question 3's queued/current ambiguity is resolved
+  by claim 1; S-0009 claim 40 needs the same wording.
+- **Q-0238 question 1:** establish the complete geometric centre choice, house radius
+  and centre maintenance, and usable-area correction when neither base nor start exists.
+  Claim 38 settles the base/start preference and draw assignments, not the final cell.
+  S-0212 claim 23a already settles question 3 and the final nearby search. The request
+  must remain open until this complementary answer is complete and approved.
 
 - Whether any stock map, campaign mission or team script puts an actor into *queued move* or
   *attack move*. The program itself never makes *queued move* current, and makes *attack move*
@@ -4021,6 +4117,11 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
 
 ### Cross-spec changes to confirm
 
+- S-0009 claim 40 should say set-up queues *guard*, rather than promising it current.
+  Claim 1 and B36 here clarify Q-0241 question 3; its bootstrap remains open.
+- S-0212 claim 23a should cite claim 38 here for the complete central-choice draw
+  sequence for infantry and vehicles. Keep Q-0238 open for the exact centre geometry
+  and no-base usable-area correction; its request record presently says answered.
 - S-0309's current claim 23 b already cites claim 13 here for assignments that can supersede
   the refresh result and for route-generated orders rather than immediate destination changes.
 Joint hand-off checks: S-0213 revision 13 claim 16 already supplies the route-order timing
