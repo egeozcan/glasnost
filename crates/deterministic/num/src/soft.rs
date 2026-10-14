@@ -738,6 +738,19 @@ mod tests {
         assert_eq!(h(-1.7).add(half, RZ).to_i32_common(), -1);
     }
 
+    // spec: S-0205 Formulas (adding one half: an out-of-range rounded sum takes claim 7's common form, wrap and zero result)
+    #[allow(clippy::disallowed_types)]
+    #[test]
+    fn adding_one_half_out_of_range() {
+        let half = h(0.5);
+        // 2^32 + 5 wraps to 5 (claim 7 wrap from 2^31 up).
+        assert_eq!(h(4294967301.0).add(half, RZ).to_i32_common(), 5);
+        assert_eq!(h(4294967301.0).add(half, RN).to_i32_common(), 5);
+        // 2^63 and above give zero.
+        assert_eq!(h(1e19).add(half, RZ).to_i32_common(), 0);
+        assert_eq!(h(f64::INFINITY).add(half, RZ).to_i32_common(), 0);
+    }
+
     #[test]
     fn overflow_saturates_toward_zero() {
         let max = F64(0x7FEF_FFFF_FFFF_FFFF);
