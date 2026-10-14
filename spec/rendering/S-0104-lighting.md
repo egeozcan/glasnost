@@ -2,7 +2,7 @@
 id: S-0104
 title: Lighting
 topic: rendering
-revision: 15
+revision: 16
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -124,7 +124,7 @@ This spec covers skirmish rendering only; campaigns and network games are out of
 6. **Building a shade table.** A shade table turns a palette, a tint (r, g, b) and a shade count *N* into *N* rows of 256 16-bit pixels (Formulas, "Shade table"):
    - Each tint channel is clamped to [0, 2000] ‰ and converted to a 16.16 factor.
    - With *N* ≥ 2, row *j* multiplies the tint by 2*j*/(*N* − 1). Row 0 is black, the middle row is roughly the tint itself, and the last row is twice the tint.
-   - Tint-exempt indices (S-0103) ignore the tint. They darken linearly over the first few rows and are at full palette colour from then on.
+   - Tint-exempt indices (S-0103) ignore the tint. They darken linearly over the first few rows and are at full palette colour from then on: in a 53-row table, row 6 and every later row show full palette colour; only rows below 6 darken them.
    - Entry 0 of every row is transparent.
    - Every 16.16 factor *F* that scales a palette component, the tint factors and the tint-exempt brightness factor alike, takes effect as ⌊*F*/16⌋·16: it is rounded down to a multiple of 16 (its low 4 bits are dropped).
    - Each resulting 8-bit channel is capped at 255 and packed into the display's 16-bit format.
