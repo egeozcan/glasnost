@@ -5,6 +5,10 @@
 //! report holds counts and timings only (no names, no values, no paths) and
 //! checks that the recorded replay reproduces the game and that a save in
 //! mid-game, loaded and continued, ends in the same state. Never in CI.
+//!
+//! With [`Players::Ai`] (M5b) the houses are played by our own AI through
+//! `glasnost_ai::game::Game` instead: the replay holds no orders then (no
+//! person plays), and replaying it runs the AI again.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
@@ -13,6 +17,7 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Instant;
 
+use glasnost_ai::game::Game as AiGame;
 use glasnost_ai::scripted::{Plan, Role, all_types, role_of};
 use glasnost_ai::skirmish;
 use glasnost_map::Map;
@@ -27,6 +32,15 @@ use glasnost_sim::world::{HouseId, World};
 
 /// Players of the lane's games.
 const PLAYERS: usize = 2;
+
+/// Who plays the lane's houses.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Players {
+    /// M5a's script, every `THINK_PERIOD` ticks, its orders recorded.
+    Scripted,
+    /// The own AI of M5b (`glasnost_ai::game::Game`).
+    Ai,
+}
 
 /// The lane's plan: types by role, two harvesters, waves of six (our own
 /// opponent's tuning, as in the synthetic skirmish).
@@ -51,6 +65,8 @@ struct Game {
     orders: usize,
     /// Per player house: distinct objects of each role it ever had.
     built: [BTreeMap<Role, usize>; PLAYERS],
+    /// Per player house: the first tick it had an object of each role.
+    first: [BTreeMap<Role, i32>; PLAYERS],
     /// The players' country registration indices.
     countries: Vec<usize>,
     /// Types of the rules by role (a role with none blocks the plan).
@@ -84,8 +100,9 @@ pub fn run(
     only: &[usize],
     max_ticks: i32,
     seed: u32,
+    players: Players,
 ) -> std::io::Result<String> {
-    pollster::block_on(run_async(dir, maps, only, max_ticks, seed))
+    pollster::block_on(run_async(dir, maps, only, max_ticks, seed, players))
 }
 
 async fn run_async(
@@ -94,6 +111,7 @@ async fn run_async(
     only: &[usize],
     max_ticks: i32,
     seed: u32,
+    players: Players,
 ) -> std::io::Result<String> {
     let t0 = Instant::now();
     let mut vfs = crate::local_lane::mount(dir).await?;
@@ -130,7 +148,15 @@ async fn run_async(
             ..Default::default()
         };
         let result = catch_unwind(AssertUnwindSafe(|| {
-            play(&mut g, &rules, &map, Arc::new(tiles), max_ticks, seed)
+            play(
+                &mut g,
+                &rules,
+                &map,
+                Arc::new(tiles),
+                max_ticks,
+                seed,
+                players,
+            )
         }));
         match result {
             Ok(Ok(())) => {}
@@ -139,7 +165,7 @@ async fn run_async(
         }
         games.push(g);
     }
-    Ok(report(mount_ms, looked, &games, max_ticks, seed))
+    Ok(report(mount_ms, looked, &games, max_ticks, seed, players))
 }
 
 /// The open countries: those that are not passive and not the neutral or
@@ -194,6 +220,7 @@ fn play(
     tiles: Arc<TileCatalogue>,
     max_ticks: i32,
     seed: u32,
+    who: Players,
 ) -> Result<(), String> {
     let players = |names: Vec<String>| -> Vec<Player> {
         names
@@ -237,6 +264,9 @@ fn play(
         .collect();
     drop(probe);
     let setup = setup::skirmish(rules, &players(chosen), Settings::default(), 0, seed);
+    if who == Players::Ai {
+        return play_ai(g, rules, map, tiles, max_ticks, setup);
+    }
     let t = Instant::now();
     let run = skirmish::run(
         rules.clone(),
@@ -261,6 +291,7 @@ fn play(
     let income = &mut g.income;
     let harvest_ticks = &mut g.harvest_ticks;
     let (mut shots, mut killed, mut drained) = (0usize, 0usize, 0usize);
+    let first = &mut g.first;
     let t = Instant::now();
     let world = run
         .replay
@@ -275,7 +306,7 @@ fn play(
             }
             drained = w.effects.len();
             for h in 0..PLAYERS {
-                watch(w, h, &mut seen[h]);
+                watch(w, h, &mut seen[h], &mut first[h]);
                 let c = w.houses[h].credits;
                 if c > last[h] {
                     paid[h] += 1;
@@ -325,14 +356,121 @@ fn play(
     Ok(())
 }
 
-/// Notes the house's objects on the map by role.
-fn watch(w: &World, h: usize, seen: &mut BTreeMap<Role, BTreeSet<u32>>) {
+/// The AI's game (M5b): the own AI plays both houses through
+/// `glasnost_ai::game::Game`; the replay (no person's orders) runs the AI
+/// again, and a save in mid-game, loaded and continued, must end alike.
+fn play_ai(
+    g: &mut Game,
+    rules: &Arc<SimRules>,
+    map: &Map,
+    tiles: Arc<TileCatalogue>,
+    max_ticks: i32,
+    setup: glasnost_sim::world::GameSetup,
+) -> Result<(), String> {
+    let mut seen: [BTreeMap<Role, BTreeSet<u32>>; PLAYERS] = Default::default();
+    let mut last = [i32::MAX; PLAYERS];
+    let mut drained = 0usize;
+    let t = Instant::now();
+    let mut game = AiGame::new(rules.clone(), map, "install", tiles.clone(), setup.clone())
+        .map_err(|e| format!("{e:?}"))?;
+    while game.world.tick < max_ticks {
+        game.step();
+        let w = &game.world;
+        // The effects pile up when nobody drains them: count the new ones.
+        for e in w.effects.iter().skip(drained) {
+            match e {
+                Effect::Shot { .. } => g.shots += 1,
+                Effect::Killed { .. } => g.killed += 1,
+                _ => {}
+            }
+        }
+        drained = w.effects.len();
+        for h in 0..PLAYERS {
+            watch(w, h, &mut seen[h], &mut g.first[h]);
+            let c = w.houses[h].credits;
+            if c > last[h] {
+                g.paid[h] += 1;
+                g.income[h] += i64::from(c - last[h]);
+            }
+            for o in w
+                .objects
+                .values()
+                .filter(|o| o.on_map && o.health > 0 && o.owner == Some(HouseId(h as u8)))
+            {
+                if let Some(hs) = &o.econ.harvest {
+                    let key = format!("{:?}/{:?}", o.beh.current, hs.phase);
+                    *g.harvest_ticks[h].entry(key).or_default() += 1;
+                }
+            }
+            last[h] = c;
+        }
+        if let Some(o) = game.outcome() {
+            g.over = true;
+            g.winner = o
+                .results
+                .iter()
+                .find(|r| r.1 == glasnost_sim::econ::victory::Verdict::Win)
+                .map(|r| r.0.0);
+            break;
+        }
+    }
+    g.run_ms = t.elapsed().as_millis();
+    g.ticks = game.world.tick;
+    g.orders = game.replay().orders.len();
+    let world = &game.world;
+    for h in 0..PLAYERS {
+        g.credits[h] = world.houses[h].credits;
+        for t in all_types(world) {
+            if let Some(r) = role_of(world, t)
+                && tech::buildable(world, HouseId(h as u8), t)
+            {
+                *g.buildable[h].entry(r).or_default() += 1;
+            }
+        }
+    }
+    for (built, seen) in g.built.iter_mut().zip(&seen) {
+        *built = seen.iter().map(|(r, s)| (*r, s.len())).collect();
+    }
+    let end = game.state_hash();
+
+    // The replay runs the AI again.
+    let t = Instant::now();
+    let replayed = AiGame::run_replay(game.replay(), rules.clone(), map, tiles.clone(), |_| {})
+        .map_err(|e| format!("replay: {e:?}"))?;
+    g.replay_ms = t.elapsed().as_millis();
+    g.replay_matches = replayed.state_hash() == end;
+
+    // A save in mid-game, loaded and continued.
+    let mut half = AiGame::new(rules.clone(), map, "install", tiles.clone(), setup)
+        .map_err(|e| format!("{e:?}"))?;
+    while half.world.tick < g.ticks / 2 {
+        half.step();
+    }
+    let mut loaded =
+        AiGame::load(&half.save(), rules.clone(), tiles).map_err(|e| format!("load: {e:?}"))?;
+    let same_at_save = loaded.state_hash() == half.state_hash();
+    while loaded.world.tick < g.ticks {
+        loaded.step();
+    }
+    g.save_matches = same_at_save && loaded.state_hash() == end;
+    Ok(())
+}
+
+/// Notes the house's objects on the map by role, and the first tick of
+/// each role.
+fn watch(
+    w: &World,
+    h: usize,
+    seen: &mut BTreeMap<Role, BTreeSet<u32>>,
+    first: &mut BTreeMap<Role, i32>,
+) {
     for (id, o) in &w.objects {
         if o.owner != Some(HouseId(h as u8)) || !o.on_map || o.health <= 0 {
             continue;
         }
         if let Some(r) = role_of(w, tech::type_of(o)) {
             seen.entry(r).or_default().insert(id.0);
+            first.entry(r).or_insert(w.tick);
         }
     }
 }
@@ -344,11 +482,22 @@ fn role_name(r: Role) -> String {
     }
 }
 
-fn report(mount_ms: u128, looked: usize, games: &[Game], max_ticks: i32, seed: u32) -> String {
+fn report(
+    mount_ms: u128,
+    looked: usize,
+    games: &[Game],
+    max_ticks: i32,
+    seed: u32,
+    players: Players,
+) -> String {
     let mut s = String::new();
+    let (cmd, who) = match players {
+        Players::Scripted => ("skirmish", "scripted houses"),
+        Players::Ai => ("ai", "AI houses"),
+    };
     let _ = writeln!(
         s,
-        "glasnost-headless skirmish: {} games of {PLAYERS} scripted houses, at most {max_ticks} ticks, seed {seed}; install mounted in {mount_ms} ms; {looked} maps read",
+        "glasnost-headless {cmd}: {} games of {PLAYERS} {who}, at most {max_ticks} ticks, seed {seed}; install mounted in {mount_ms} ms; {looked} maps read",
         games.len()
     );
     for g in games {
@@ -413,6 +562,11 @@ fn report(mount_ms: u128, looked: usize, games: &[Game], max_ticks: i32, seed: u
                 g.credits[h],
                 can.join(", ")
             );
+            let first: Vec<String> = g.first[h]
+                .iter()
+                .map(|(r, t)| format!("{} {t}", role_name(*r)))
+                .collect();
+            let _ = writeln!(s, "  house {h} first tick by role: {}", first.join(", "));
         }
         for h in 0..PLAYERS {
             let mut ticks: Vec<_> = g.harvest_ticks[h].iter().collect();

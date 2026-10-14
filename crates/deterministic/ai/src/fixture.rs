@@ -205,7 +205,7 @@ pub fn map_diagonal() -> Map {
     let mut m = testkit::empty_map(SIZE);
     let mut waypoints = BTreeMap::new();
     let d = START_DX * 2 / 3;
-    let mut field = |m: &mut Map, cx: i32, cy: i32| {
+    let field = |m: &mut Map, cx: i32, cy: i32| {
         for ox in 0..5 {
             for oy in 0..5 {
                 if let Some(cell) = m.cells.get_mut(at(cx + ox - 2, cy + oy - 2)) {
