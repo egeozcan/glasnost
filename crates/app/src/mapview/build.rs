@@ -211,6 +211,17 @@ pub const COMPANION_FILE: &[u8] = b"BUILDNGZ.SHA"; // spec: S-0102 Import mappin
 /// The notes a scene can carry: gaps in the specs (with their request) and
 /// parts our viewer does not draw yet.
 mod notes {
+    /// The warning of S-0105 claim 22 and Import mapping for a model whose
+    /// `role` image (a part name or "shadow") has a copy rectangle side
+    /// above 4096 pixels, at the pose `pose`.
+    pub fn voxel_too_large(file: &[u8], role: &str, pose: &str, copy: [i64; 2]) -> String {
+        format!(
+            "voxel model {}: its {role} image at {pose} has a {} × {} pixel copy rectangle; only the centred 4096 × 4096 pixel window is drawn (S-0105 claim 22). Poses not yet drawn are not checked",
+            String::from_utf8_lossy(file),
+            copy[0],
+            copy[1]
+        )
+    }
     pub const LIVE_SPRITE_VEHICLE: &str = "vehicles drawn as sprites keep no walk counter in the live game: a moving one is drawn with its standing frame, not the moving row (S-0102 claim 22)";
     pub const TILES_UNLOADED: &str = "no game was set up: tiles are drawn as the map stores them, before the load's terrain recalculation and smoothing (S-0010 claim 12)";
     pub const RUBBLE: &str = "rubble overlays outside a rubble cell draw nothing (S-0112 claim 5); rubble cells arise only in play";
@@ -796,6 +807,10 @@ pub struct Painter {
     /// read: its index in `Scene::signed` and its stored rectangle's canvas
     /// column and row; `Some(None)` when the file or its frame 0 is missing.
     companion: Option<Option<(u32, (i32, i32))>>,
+    /// Voxel models (upper-case file names) already warned about for an
+    /// image larger than the retained limit (S-0105 claim 22: once per
+    /// model).
+    oversized: BTreeSet<Vec<u8>>,
 }
 
 /// A voxel part image added to the scene: its index and offset from the
@@ -2525,15 +2540,19 @@ impl Builder<'_> {
         let bias = -lz + rule_int(self.import, k, idx, b"TurretAnimZAdjust", 0);
         // spec: S-0104 claim 13 (every part of an ordinary building: U of its top-left cell)
         let row = self.house_row(hsv, brightness);
-        let turret = art.voxels.get("turret").and_then(|f| self.voxel_model(f));
-        let barrel = art.voxels.get("barrel").and_then(|f| self.voxel_model(f));
+        let model_of = |b: &mut Self, part: &'static str| {
+            let file = art.voxels.get(part)?.clone();
+            b.voxel_model(&file).map(|m| (m, file, part))
+        };
+        let turret = model_of(self, "turret");
+        let barrel = model_of(self, "barrel");
         let mut items = Vec::new();
         // spec: S-0105 claim 16 (an animation-frame counter of 0 before any attack: frame 0)
         let counter = 0;
         let parts = match turret {
             Some(t) => {
                 let pose = voxel::building_turret_parts(facing, offset, elevation, &q);
-                let turret_frame = voxel::building_turret_frame(counter, t.frame_count() as u32);
+                let turret_frame = voxel::building_turret_frame(counter, t.0.frame_count() as u32);
                 // spec: S-0105 claim 16 (quirks.barrel_frame_zero)
                 let barrel_frame = voxel::barrel_frame_with_turret(turret_frame, &q);
                 // spec: S-0105 claim 26 (building turret key; the barrel's is the turret's
@@ -2563,7 +2582,7 @@ impl Builder<'_> {
             // kept with the barrel images under its facing, frame and elevation)
             None => {
                 let frame = barrel.as_ref().map_or(0, |b| {
-                    voxel::barrel_only_frame(counter, b.frame_count() as u32)
+                    voxel::barrel_only_frame(counter, b.0.frame_count() as u32)
                 });
                 vec![(
                     barrel,
@@ -2574,12 +2593,15 @@ impl Builder<'_> {
             }
         };
         for (model, draw, frame, key) in parts {
-            let Some(m) = model else {
+            let Some((m, file, role)) = model else {
                 continue;
             };
             if let Some(part) = self.cached_part(k, idx, key, |b| {
-                b.p.canvas
-                    .draw_part(&m, frame, &draw, vpl.as_ref(), depth_buffered, &q)
+                let img = b
+                    .p
+                    .canvas
+                    .draw_part(&m, frame, &draw, vpl.as_ref(), depth_buffered, &q);
+                b.limit_checked(&file, role, key, img)
             }) {
                 items.push(Self::part_item(
                     part,
@@ -3041,6 +3063,27 @@ impl Builder<'_> {
         m
     }
 
+    /// `img`, drawn from the model `file` in the role `role` at the image
+    /// key `key`, after warning once per model when its copy rectangle is
+    /// larger than the retained limit (S-0105 claim 22, Import mapping).
+    fn limit_checked(
+        &mut self,
+        file: &[u8],
+        role: &str,
+        key: voxel::ImageKey,
+        img: Option<voxel::PartImage>,
+    ) -> Option<voxel::PartImage> {
+        if let Some(i) = &img
+            && i.exceeds_limit()
+            // spec: S-0105 claim 22, Import mapping (one warning per model, not per pose, appearance or image role)
+            && self.p.oversized.insert(upper(file))
+        {
+            let note = notes::voxel_too_large(file, role, &format!("{key:?}"), i.copy_size);
+            self.note(&note);
+        }
+        img
+    }
+
     /// The voxel lighting table (S-0105 claims 19 and 38; its byte layout
     /// is S-0013's). A missing or too short file gives the
     /// empty table, whose rows all read as zero (claim 38,
@@ -3192,8 +3235,11 @@ impl Builder<'_> {
         let draw_shadow = move |b: &mut Self, (section, aircraft_like): (usize, bool)| {
             let body = b.voxel_model(&shadow_file)?;
             // spec: S-0105 claim 32 (a shadow never enables depth mode, whatever the type's option)
-            b.p.canvas
-                .draw_shadow(&body, section, &pose().shadow, 0, aircraft_like, &q)
+            let img = b
+                .p
+                .canvas
+                .draw_shadow(&body, section, &pose().shadow, 0, aircraft_like, &q);
+            b.limit_checked(&shadow_file, "shadow", shadow_key, img)
         };
         // An aircraft's shadow comes before the body, which covers it.
         if kind != Kind::Vehicles
@@ -3221,14 +3267,15 @@ impl Builder<'_> {
         if let Some(part) = self.cached_part(kind, idx, key, |b| {
             let body = b.voxel_model(&body_file)?;
             let vpl = b.vpl();
-            b.p.canvas.draw_part(
+            let img = b.p.canvas.draw_part(
                 &body,
                 body_frame,
                 &pose().body,
                 vpl.as_ref(),
                 depth_buffered,
                 &q,
-            )
+            );
+            b.limit_checked(&body_file, "body", key, img)
         }) {
             placed.push(part);
             // spec: S-0102 claim 13 (a voxel vehicle: bias U, upright, a reader)
@@ -3279,8 +3326,11 @@ impl Builder<'_> {
                     } else {
                         (p.turret, turret_frame)
                     };
-                    b.p.canvas
-                        .draw_part(&model, frame, &draw, vpl.as_ref(), depth_buffered, &q)
+                    let img = b
+                        .p
+                        .canvas
+                        .draw_part(&model, frame, &draw, vpl.as_ref(), depth_buffered, &q);
+                    b.limit_checked(&file, part_name, key, img)
                 }) {
                     placed.push(part);
                     items.push(Self::part_item(
@@ -3499,6 +3549,7 @@ impl Painter {
             vpl: None,
             tile_files: BTreeMap::new(),
             companion: None,
+            oversized: BTreeSet::new(),
         }
     }
 

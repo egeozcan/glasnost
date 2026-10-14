@@ -198,7 +198,9 @@ Q-0216 is answered by S-0105 revision 10, claim 35: top-down, a span's empty cou
 
 Q-0415 is answered by S-0102 revision 13, claim 31 and F5: the body of a building on a foundation under 8 cells wide samples image frame 0 of `BUILDNGZ.SHA` (`render::compose::companion_origin`: live constants (198, 446) with the art displacement `ZShapePointMove`; the remembered constants (144, 172) wait for the fog memory, which is not drawn yet). Its bytes are signed adjustments (`companion_adjustment`), every row takes the unrounded upright anchor minus the sample, and body pixels outside the stored rectangle are clipped, with no depth written, on the CPU and on the GPU (the signed images share the atlas). The building shadow and bib are no longer provisional.
 
-Q-0460 is answered by S-0409 revision 10 (claim 5, F2) and S-0101 revision 9: the sight centre keeps its own floating-point simulation lift (`glasnost_sim::econ::shroud::height_lift`, unchanged, now cited to S-0409 F2 and tested on its check values: level 20 moves the centre 9 cells, not the 10 of the exact drawing lift), while the renderer draws with S-0101 claim 3's exact lift; S-0102 revision 13 retires `quirks.overlay_lift_exact_levels`, so overlays lift exactly 15 per level (`mapview::quirks::overlay_depth_lift`).
+Q-0470 is answered by S-0105 revision 13, claim 22 and F6: a part or shadow image keeps at most the 4096 × 4096-pixel window of its copy rectangle, centred on it with an odd extra pixel discarded on the right or bottom (`render::voxel::IMAGE_LIMIT`; the former interim window, centred on the origin shift, was the same window, because the copy rectangle is centred there within half a pixel), and a part or shadow whose placement is not finite is not drawn. The importer does not read voxel models, so the once-per-model warning is a scene note (`mapview::build`, `limit_checked`) raised the first time a drawn part or shadow image of the model exceeds the limit; poses not yet drawn are not checked.
+
+Q-0460 is answered by S-0409 revision 10 (claim 5, F2) and S-0101 revision 10 (claim 3, F2: the exact lift is the drawing lift only; `mapview::tests::drawing_lift_is_not_the_sight_lift`): the sight centre keeps its own floating-point simulation lift (`glasnost_sim::econ::shroud::height_lift`, unchanged, now cited to S-0409 F2 and tested on its check values: level 20 moves the centre 9 cells, not the 10 of the exact drawing lift), while the renderer draws with S-0101 claim 3's exact lift; S-0102 revision 13 retires `quirks.overlay_lift_exact_levels`, so overlays lift exactly 15 per level (`mapview::quirks::overlay_depth_lift`).
 
 **Open requests and their placeholders.**
 
@@ -206,7 +208,6 @@ Q-0460 is answered by S-0409 revision 10 (claim 5, F2) and S-0101 revision 9: th
 |---|---|---|
 | `app::mapview::build` (`body_companion`) | without `BUILDNGZ.SHA`, or with an unreadable image frame 0, a building body on a foundation under 8 cells wide is drawn with the plain upright profile (S-0102 F2), marked provisional and noted; S-0102 leaves missing-file recovery unspecified | Q-0490 |
 | `render::voxel::section_order` | mixed-depth ties outside F8's fourteen rows and all-equal parts keep the previous revision's exchange order; the depth-buffered mode draws its reverse (S-0105 claims 23 and 24; revision 11 answers questions 1 to 6 and leaves question 7 `unmeasured`) | Q-0215 |
-| `render::voxel` (`IMAGE_LIMIT`) | a part or shadow image whose F6 copy rectangle is larger than 4096 pixels on a side keeps only a 4096 × 4096 window of it, centred on the voxel-image origin shift (128, 128); pixels outside the window are not drawn (S-0105 claim 22 enlarges images with no limit) | Q-0470 |
 
 ## Map viewer (M2)
 

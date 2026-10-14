@@ -1759,3 +1759,55 @@ fn owner_definition_and_radar_colour() {
     assert_eq!(radar(b"Americans"), [248, 56, 56]);
     assert_eq!(radar(b"Yuri"), [112, 116, 192]);
 }
+
+/// spec: S-0101 claim 3 and F2 (r10: the exact lift is the drawing lift only; the sight
+/// centre keeps S-0409 claim 5's floating-point simulation lift), S-0409 F2
+#[test]
+fn drawing_lift_is_not_the_sight_lift() {
+    use glasnost_render::projection::height_lift;
+    use glasnost_sim::econ::shroud;
+    let sim = |z| shroud::height_lift(z, glasnost_num::Rounding::TowardZero);
+    // Level 20: the drawing lift is 300 pixels, the simulation lift 299, so the sight
+    // centre moves trunc(299 / 30) = 9 cells, not 10.
+    assert_eq!(height_lift(2080), 300);
+    assert_eq!(sim(2080), 299);
+    assert_eq!(sim(2080) / 30, 9);
+    // Whole levels below 20 agree.
+    for h in 0..20 {
+        assert_eq!(height_lift(104 * h), sim(104 * h), "level {h}");
+    }
+}
+
+/// spec: S-0105 claim 22 and Import mapping (Q-0470: a model whose part or shadow image would
+/// have a copy-rectangle side above 4096 pixels gives one warning, naming the model file, not one
+/// per pose, appearance or image role; a model within the limit gives none)
+#[test]
+fn oversized_voxel_model_warns_once() {
+    use glasnost_fmt::bytes::F32Bits;
+    use glasnost_fmt::vxl::{VxlWriter, synthetic_model};
+    let notes = |stretch: f32| {
+        let mut ctx = context();
+        let car = ctx.0.arts.get_mut(&(Kind::Vehicles, 0)).unwrap();
+        car.voxels.insert("body".into(), b"carx.vxl".to_vec());
+        let mut model = synthetic_model();
+        // The body section stretched along x.
+        model.limbs[0].max[0] = F32Bits::new(stretch);
+        ctx.2.insert(b"carx.vxl", VxlWriter { model: &model }.write());
+        // Two cars facing differently: two body images and two shadows of the same model.
+        let (b, _) = build_in(
+            ctx,
+            b"[Basic]\nNewINIFormat=4\n[Map]\nSize=0,0,10,10\nLocalSize=0,0,10,10\n\
+              [Units]\n0=Neutral,CARX,256,6,9,64\n1=Neutral,CARX,256,7,9,192\n",
+            &Options::default(),
+        );
+        assert!(!items_of(&b, "vehicle").is_empty());
+        b.notes
+            .into_iter()
+            .filter(|n| n.contains("voxel model"))
+            .collect::<Vec<_>>()
+    };
+    let warned = notes(1.0e6);
+    assert_eq!(warned.len(), 1, "{warned:?}");
+    assert!(warned[0].contains("carx.vxl"), "{warned:?}");
+    assert!(notes(5.0).is_empty());
+}
