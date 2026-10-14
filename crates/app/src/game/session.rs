@@ -342,6 +342,17 @@ impl Session {
         }
     }
 
+    /// Whether a view-arrow press or release made now is accepted (S-0213
+    /// claim 23, S-0201 claim 14): not while orders are blocked, under
+    /// `quirks.blocked_arrow_events`.
+    pub fn arrow_event_accepted(&self) -> bool {
+        let w = &self.play.game.world;
+        scroll::arrow_event_accepted(
+            glasnost_sim::orders::blocked(w),
+            w.rules().quirks.blocked_arrow_events,
+        )
+    }
+
     /// One unfrozen cycle's scrolling (S-0101 claims 12 to 14): the edge
     /// request of F9 plus the held arrows' (left, right, up, down), added
     /// before F5 limits the centre. `edge` is false while edge scrolling is

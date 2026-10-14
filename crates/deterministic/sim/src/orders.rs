@@ -159,11 +159,18 @@ const MIN_RUN: usize = 2;
 // spec: S-0213 claim 2 (at most 128 pending orders per house)
 pub const PENDING_LIMIT: usize = 128;
 
+/// Whether orders are blocked in the cycle of the current tick (S-0213
+/// claim 1, S-0201 claim 14).
+pub fn blocked(w: &World) -> bool {
+    // spec: S-0213 claim 1 and S-0201 claim 14 (the block covers the cycles of ticks up to its last blocked tick)
+    w.tick <= w.orders_blocked_through
+}
+
 /// Issues an order in a house's name during the current tick. Returns
 /// whether it was taken (S-0213 claims 1 and 2).
 pub fn issue(w: &mut World, house: HouseId, order: Order) -> bool {
     // spec: S-0213 claim 1 (an order block refuses input)
-    if w.tick <= w.orders_blocked_through {
+    if blocked(w) {
         return false;
     }
     // spec: S-0213 claim 3 and S-0404 claim 10 (a production order is judged when it is issued)

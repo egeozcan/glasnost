@@ -69,6 +69,16 @@ pub fn edge_enabled(focused: bool, tick: i32, blocked_through: i32) -> bool {
     focused && tick > blocked_through
 }
 
+/// Whether a view-arrow press or release is accepted (S-0213 claim 23,
+/// S-0201 claim 14): `blocked` says orders are blocked in this cycle, and
+/// `discard` is `quirks.blocked_arrow_events`. A discarded event changes no
+/// accepted contribution: a blocked release leaves a held arrow scrolling,
+/// a blocked press adds nothing.
+pub fn arrow_event_accepted(blocked: bool, discard: bool) -> bool {
+    // spec: S-0213 claim 23 and S-0201 claim 14 (presses and releases made during an order block are discarded under quirks.blocked_arrow_events; off, they are accepted)
+    !(blocked && discard)
+}
+
 fn dbl(v: i64) -> F64 {
     F64::from_i64(v, Rounding::TowardZero)
 }
@@ -258,6 +268,15 @@ mod tests {
         assert!(!edge_enabled(true, 0, 3));
         assert!(edge_enabled(true, 4, 3));
         assert!(!edge_enabled(false, 4, 3));
+    }
+
+    /// spec: S-0201 claim 14 and S-0213 claim 23 (arrow events during an order block are discarded under quirks.blocked_arrow_events, accepted with it off or outside the block)
+    #[test]
+    fn s0201_claim_14_arrow_events_during_order_block() {
+        assert!(!arrow_event_accepted(true, true));
+        assert!(arrow_event_accepted(true, false));
+        assert!(arrow_event_accepted(false, true));
+        assert!(arrow_event_accepted(false, false));
     }
 
     /// spec: S-0101 claim 12 and F9 (corners scroll diagonally, edge midpoints along one screen axis)
