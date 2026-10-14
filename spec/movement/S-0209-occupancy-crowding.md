@@ -2,13 +2,13 @@
 id: S-0209
 title: Cell occupancy and crowding (capacity, entry outcomes, waiting, re-routing, scatter requests)
 topic: movement
-revision: 24
+revision: 25
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0019, Q-0020, Q-0240, Q-0310, Q-0311, Q-0356]
+requests: [Q-0019, Q-0020, Q-0240, Q-0310, Q-0311, Q-0356, Q-0560]
 supersedes: []
 ---
 
@@ -91,7 +91,8 @@ house's *firestorm*, the passability categories (*wall-like* among them) and the
     measurement.
 - **Cell layer.** A cell has a ground layer and, when it carries a high bridge, a bridge-deck layer.
   These are its cell layers. Every object in a cell belongs to one of them: an object on a bridge
-  deck to the deck layer, every other object to the ground layer. This classification does not
+  deck to the deck layer, every other object to the ground layer. Claim 15 gives when an ordinary
+  walker changes this membership; target reservation uses a separate surface choice. This classification does not
   mean every object is listed there: claim 13 excludes aircraft in flight from both lists. It is
   neither a rules layer nor a render layer.
 
@@ -378,9 +379,11 @@ rank* and *elite weapon*), *n*
    - *Reservation.* When a walker chooses its walking target in the next cell (S-0208 claim 3), its
      old mark is cleared and the new target is marked at once, with the walker's house as the next
      cell's infantry house. The position is reserved before the walker gets there, and its old
-     position is free from that tick. The walker is listed in the next cell only from the tick on
-     which its position moves into it (claim 13), so for a few ticks the next cell shows the taken
-     position and the walker's house while the walker is still listed in the cell it is leaving.
+     position is free from that tick. Claim 15 gives the reserved surface, independently of the
+     entry check's record and the walker's listing layer. The walker is listed in the next cell only
+     from the tick on which its position moves into it (claim 13), so for a few ticks the next cell
+     shows the taken position and the walker's house while the walker is still listed in the cell
+     it is leaving.
    - *Teleporting infantry.* S-0208 claim 19 owns the chosen-point reservation and
      its post-jump lifecycle (Q-0311). The chosen point's height determines whether
      its standing position and infantry house are marked in ground or deck. Landing
@@ -1155,6 +1158,61 @@ rank* and *elite weapon*), *n*
       2026-10-10; Open questions), as for row VO1 of claim 5 (U7).
     - Confidence: high for skirmish; low for the campaign case
 
+### Ordinary walkers changing surface
+
+15. **Listing layer and reservation surface are distinct (Q-0560).** Choosing a walking target
+    does not change an ordinary walker's own cell layer. Whenever its horizontal position crosses
+    into another cell, its listing belongs to that newly entered cell on that tick, with the layer
+    given below. Let *A* be the cell it leaves and *B* the cell its position enters, with integer
+    terrain height levels *a* and *b*. These rules apply to every actual crossing, including a
+    brief crossing of a third cell on the straight line to a diagonal walking target. The target's
+    cell and target's surface do not override them.
+
+    | Cell crossed into | Height relation | Layer after crossing |
+    |---|---|---|
+    | *B* carries a high bridge | *b* = *a* − 4 height levels | deck |
+    | *B* carries a high bridge | any other relation | the layer the walker had before crossing |
+    | *B* carries no high bridge, *A* carries one | any relation | ground |
+    | neither cell carries a high bridge | any relation | unchanged (normally ground) |
+
+    Thus stepping from ground at deck level onto a high bridge makes the walker a deck object
+    on the first tick its position lies in that bridge cell. Stepping from deck onto a bank makes
+    it a ground object on the first tick its position lies in the bank cell. Neither transition
+    waits for arrival on the standing position. Its next ordinary ask uses the resulting layer
+    for the reference level of Terms. A deck walker crossing a third high-bridge cell stays on
+    deck; crossing a third cell without a high bridge puts it on ground. From ground, a third
+    high-bridge cell gives deck membership only on the exact four-level drop in the table.
+
+    **Surface reserved on the asking tick.** Let *z* be the walker's current integer world height
+    in leptons, and *F* the terrain surface height at its desired point in the asked cell
+    (S-0208 claim 3). The standing-position choice uses the deck record precisely when that cell
+    carries a high bridge and *z* > *F* + 312 leptons; otherwise it uses ground. This is an exact
+    integer comparison, strict at equality. The chosen standing position has height *H* + 416
+    leptons in deck mode and *H* in ground mode, where *H* is the terrain surface height at that
+    chosen position (S-0208 claim 1). Its reservation and infantry house are marked on that
+    chosen surface immediately. The old mark is cleared using the former walking target's
+    position and height, or the walker's actual position and height if there was no target,
+    not using the newly selected surface or the walker's new listing layer. Crossing cells does
+    not transfer this reservation. The ground record's object-present flag remains the separate
+    refusal test of S-0208 claim 3 even in deck mode.
+
+    The entry-outcome record of Terms is therefore not necessarily the standing-position record.
+    For flat cells under a deck, a walker at *z* = *F* + 416 chooses and reserves deck. For a
+    walker standing on deck over flat ground, with the next bridge cell's ground exactly one
+    height level higher, the entry check reads ground and the standing-position choice also uses
+    ground: the height difference is exactly 312 leptons. With the next ground one level lower,
+    the entry check still reads ground but the position choice uses and reserves deck: the
+    difference is 520 leptons. In both cases crossing directly between these bridge cells keeps
+    deck listing membership. These conditional results do not establish that a valid bridge
+    can span such ground. S-0212 claim 10 still decides whether a requested path step is legal.
+    S-0207 claim 5 already gives the equivalent boundary-time rule for driving vehicles, not for
+    walkers; S-0208 claims 1 and 3 already give target heights and reservations, but their surface
+    choice must use the height test here rather than the walker's current surface alone.
+    - Backing: `measurable` (scenario C22, parts e and f). `unmeasured` for the uneven-ground
+      conditional examples: no valid bridge layout with that ground has been established here.
+    - Confidence: high for the boundary-time transition and the strict target-surface comparison,
+      medium for their conditional uneven-ground consequences.
+
 ## Formulas
 
 **F1. Distance to the destination (claim 8).**
@@ -1343,6 +1401,7 @@ Ordering stated as consequences:
 
 | User data | Feeds | Form | Absent |
 |---|---|---|---|
+| No additional rules or art key | ordinary walking layer transitions and target-surface comparison (claim 15) | fixed engine rules; terrain height levels and high-bridge presence come from the map, as S-0009 claim 7 and S-0211 claim 15 give them | not configurable by a missing key |
 | Rules, `[General]`, `CloseEnough` | close-enough distance (F2) | real, in cells. The value −1 is this key's "not given" value (S-0006 claim 3): written explicitly, it keeps the value in force, as if absent | keeps the value in force; before any rules layer gives it, 640 leptons (2.5 cells) |
 | Rules, `[AI]`, `BlockagePathDelay` | blockage delay | integer, ticks | keeps the value in force; before any rules layer gives it, 60 ticks |
 | Rules, the combat-damage section (as S-0210's Import mapping names it), `PlayerScatter` | player-scatter rule (claim 11) | boolean | keeps the value in force; before any rules layer gives it, no |
@@ -2476,6 +2535,36 @@ Edge cases).**
     If a ship of S-0211 scenario L6's kind cannot pass under the bridge on this map (so that the
     bridge's cells are not water), (d) cannot decide.
 
+**C22 extensions for claim 15 (Q-0560).**
+- *Setup:* the same stock walking infantry and high bridge over flat ground, with banks at deck
+  level, human owner and one distant bystander computer player. Game speed index 2, director and
+  mods off. Keep the bridge, banks and their neighbouring cells as the observed area. In (e),
+  order a walk from one bank across the bridge to the other, then reverse it. In (f), use map
+  placement at different side positions and nearby allied infantry to make the straight line to
+  a diagonal target pass through a third cell; test a third cell carrying a high bridge and one
+  without one. Accept a run only when the recorded line actually enters that third cell.
+- *Procedure:* record every tick from the asking tick through arrival, for two runs per direction
+  and third-cell case. Use scripted normal input if needed. Void a run if an unnamed bystander
+  object reaches the observed area.
+- *Observable:* horizontal cell, world height, walking target, cell-layer membership, the taken
+  standing positions and infantry house of both records in every crossed cell. A read-only
+  recorder is suitable; no state is written into the game.
+- *Expected:* (e) the asking tick changes the reservation but not membership. The first boundary
+  crossing onto the bridge changes membership to deck, and the first crossing off it changes
+  membership to ground, before arrival. (f) every third-cell crossing follows claim 15's table,
+  not the walking target's surface. Target choice reads deck exactly above the strict 312-lepton
+  threshold and marks the chosen-height record immediately; crossing alone transfers no mark.
+- *Falsified if:* membership changes at target choice or only at arrival; a third-cell crossing
+  uses the target's layer instead of the table; or reservation and listing are always forced to
+  the same surface. If no valid third-cell route is obtained, that sub-test is inconclusive.
+- *Conditional uneven-ground probe:* if a valid high bridge spanning a one-level ground change is
+  established, repeat (e) in both directions across that change, recording the target-surface
+  choice as well as the entry check's record. A flat departure deck 416 leptons above its ground
+  reserves ground when entering the one-level-higher-ground cell, but deck when entering the
+  one-level-lower-ground cell; listing stays deck in both. The opposite choice falsifies the
+  corresponding conditional example. This is a proposed protocol, not evidence that such a map
+  is valid.
+
 **Scenario C23: building cells a mover may cross (claim 4, row WP10; claim 5, rows VP12, VP15 and
 VP16; Terms *blocking cell*).** Every building
 here belongs to the human player, and every mover is of the human player. Walkers are of an
@@ -2948,7 +3037,7 @@ That moment is called the *window*. Common setup:
 S-0209 owns occupancy outcomes by the decision of 2026-10-10. No new policy decision is needed.
 S-0208's current correction-batch text agrees with claim 5 for a still allied infantry occupant,
 and S-0212's current claim 27 agrees with rows VP21 to VP23 for moving allied units.
-The current S-0212 revision 27 draft contains the corrections below; confirm their final
+The current S-0212 draft contains the corrections below; confirm their final
 approved text at paired hand-off, rather than treating the earlier approved summary as authority:
 
 - Retain claim 5's override rule: a *blocked* value before the first override defeats it, while
