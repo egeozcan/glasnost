@@ -2,7 +2,7 @@
 id: S-0108
 title: Building sprites
 topic: rendering
-revision: 8
+revision: 9
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -131,24 +131,27 @@ are out of scope.
    | Any other building, damaged, other state | *k* + the maximum of (*a* + *c*) over *idle*, *active*, *aux-1* and *aux-2* |
 
    For an occupiable type, hurt means badly damaged when the tech level is 0 or below, and damaged
-   when it is above 0 (`quirks.occupiable_hurt_rule`). When the tech level is −1 and the occupied,
-   hurt frame would be 3, it is 1 instead (`quirks.unbuildable_occupied_damaged_frame`). The
+   when it is above 0 (`quirks.occupiable_hurt_rule`). An occupied, hurt building uses frame 3,
+   including a civilian building whose tech level is −1. This is a drawing-only departure. The
    damaged-frame maximum excludes *full* (`quirks.full_state_unmaxed`). The four included ranges
    default to *a* = 0, *c* = 1, giving the normal frame + 1 with default art.
    - Backing: `measurable` (B1 for construction/selling, B2 for ordinary damaged idle frames,
-     B3 for occupation, B13 for gates). The non-idle damaged maximum and overlapping type
+     B3 for occupation, B13 for gates); B3's occupied, hurt civilian frame is a departure
+     tested against this spec, not the original. The non-idle damaged maximum and overlapping type
      properties are `unmeasured`: no scenario here establishes those states. The exclusion of
      *full* shares that limitation.
    - Confidence: high
 
-3. **Image-frame clamp at draw time.** The body frame actually drawn is min(*f*, ⌊N/2⌋), where *N*
-   is the image-frame count of the sprite in use. An image-frame index past the body half therefore
-   shows the first shadow frame as an ordinary, undarkened image
-   (`quirks.building_frame_clamp_to_shadow`). The clamp does not apply to the bib (claim 7). An
+3. **Image-frame clamp at draw time.** For a sprite with at least one body frame, the body frame
+   actually drawn is min(*f*, ⌊N/2⌋ − 1), where *N* is the image-frame count of the sprite in use.
+   A request past the body half shows the last body frame and its corresponding shadow (claim 9),
+   a drawing-only departure. With no body frames, no body or shadow is drawn.
+   The clamp does not apply to the bib (claim 7). An
    image-frame index at or past the image-frame count of any sprite
    (body, shadow, bib, unloading sprites) draws nothing for that image. A negative index also
    draws nothing; it is not clamped upward to image frame 0.
-   - Backing: `measurable` (B12 for the body clamp and shadow index at the sprite count).
+   - Backing: `measurable` (B12 for the body clamp, a departure tested against this spec,
+     not the original). The no-body-frame result is a defined departure.
      Other out-of-range images are `unmeasured` here: no bib or unloading sprite with an
      out-of-range requested index is supplied by B12. Negative door indices are `measurable`
      through B20; other negative image indices are `unmeasured` here because no scenario requests them.
@@ -157,14 +160,15 @@ are out of scope.
 4. **Gates.** A gate's build-up has *G* + 1 image frames, whatever the sprite holds (except for a gate
    with the theater flag after the theater refresh, claim 5). In the *construction* state a gate
    runs the opposite way to other buildings. During build-up it shows *f = a + c − k − 1*, so its
-   build-up plays from the last build-up frame to the first. While it is being sold it shows
-   *f = k*, so its build-up frames run forwards: the gate's reversal and the selling reversal cancel
-   (`quirks.gate_double_reverse`). While the gate is opening or
+   build-up plays from the last build-up frame to the first. While it is being sold it also shows
+   *f = a + c − k − 1*, playing the selling build-up backwards like other buildings, a drawing-only
+   departure that does not alter the stage, range, delay or sale completion tick. While the gate is opening or
    closing, the image frame drawn from the body sprite is *p* when not damaged and *p* + *G* + 1 when
    damaged, where *p* is the gate's door position clamped to 0 … *G* − 1. The clamp of claim 3 does
    not apply then, and no bib, unloading or under-door image is drawn. The door position and its
    timing belong to the gate spec.
-   - Backing: `measurable` (B13 for build-up/sale reversal and moving-gate frames).
+   - Backing: `measurable` (B13 for build-up reversal and moving-gate frames,
+     selling reversal is a departure tested against this spec, not the original).
      Suppression of bib/unloading/under-door images and bypass of the body clamp are
      `unmeasured` here: B13 supplies no gate with those extra images or a body half shorter
      than its gate range.
@@ -188,7 +192,7 @@ are out of scope.
    tick *T*, the restart is at *T* + (*n* − 1) × *d_b* + 1 and handover is at
    *T* + 2(*n* − 1) × *d_b* + 1. Positive-delay ranges with one stage or fewer never report
    completion (S-0406 claim 18, including `quirks.single_stage_buildup_never_completes`).
-   Selling uses the same range and delay, backwards except for gates (claim 4), but need not play
+   Selling uses the same range and delay, backwards including gates (claim 4), but need not play
    the full range: a type naming a vehicle to pack into, without a guard spot, can complete on
    advancing stage 23 before the last stage (S-0408 claim 17). That claim owns sale completion
    timing; no build-up sprite uses S-0408 claim 4 instead of a build-down. The construction delay is never
@@ -205,11 +209,13 @@ are out of scope.
    1 when *N_b* = 0 (Formulas F1). *N_b* is the whole image-frame count of the sprite, shadow half
    included, and a gate gets the same rule. The build-up time *B* plays no part
    (`quirks.theater_refresh_buildup_range`). Because the stage then runs past ⌊*N_b*/2⌋, the clamp of
-   claim 3 shows image frame ⌊*N_b*/2⌋, the first shadow frame drawn as an image, for the second half of the
-   build-up. When the file does not resolve, the building has no build-up sprite (S-0007 claim 12),
+   claim 3 holds image frame ⌊*N_b*/2⌋ − 1, the last body frame with its corresponding shadow,
+   for the second half of the build-up; the displayed frame is a drawing-only departure,
+   while the construction range and timing stay unchanged. When the file does not resolve, the building has no build-up sprite (S-0007 claim 12),
    and the range keeps its earlier value.
    - Backing: `measurable` (B1 for positive-delay ordinary build-up, B13 for gates, B19 for
-     theater-flag build-up; S-0406 PL11 a to f for placement/deploy timing, the two placed
+     theater-flag build-up, with the clamped displayed frame tested against this spec as a
+     departure, not the original; S-0406 PL11 a to f for placement/deploy timing, the two placed
      build-up runs, zero-delay completion and ranges that never complete; S-0408 S10 for
      stage-23 sale completion). Failed reload retaining the range
      is `unmeasured` (B19 supplies the file; a missing sprite hides its range).
@@ -283,11 +289,12 @@ are out of scope.
 
 9. **Shadows.** Unless the type suppresses shadows, the shadow of the drawn body frame *F* (after
    the clamp of claim 3) is image frame *F* + ⌊N/2⌋ of the same sprite, drawn at the same position as a
-   darkening, with its own depth bias (S-0102). When the clamp has limited *F* to ⌊N/2⌋ and *N* is
-   even, the shadow index is *N*, past the sprite, and no shadow is drawn. When *N* is odd it is the
-   last image frame of the sprite. No game option or data turns building shadows off for all buildings.
+   darkening, with its own depth bias (S-0102). For a body frame clamped to ⌊N/2⌋ − 1,
+   its shadow index is 2⌊N/2⌋ − 1, valid for both even and odd *N* with at least one body frame.
+   No game option or data turns building shadows off for all buildings.
    The per-type flag is the only control, as for units (S-0107 claim 19).
-   - Backing: `measurable` (B12 for shadow indices and per-type suppression).
+   - Backing: `measurable` (B12 for shadow indices and per-type suppression,
+     shadows of clamped body frames are tested against this spec as a departure, not the original).
      The assertion of no global option is `unmeasured`: the scenario tests the type flag,
      not every possible setting.
    - Confidence: high (the shadow frame), medium (no shadow past the sprite)
@@ -558,8 +565,9 @@ mode of S-0205 (number domains). The delay is computed each time the build-up sp
 is held then: at each type read that loads it, and at the theater refresh for a building with the
 new-theater flag (claim 5).
 
-**F2 Body frame** (integer): see claim 2. The body frame drawn is min(f, ⌊N/2⌋), and the shadow
-frame is that body frame + ⌊N/2⌋. Any image-frame index below 0 or ≥ N draws nothing. Moving gates are exempt from the body clamp (claim 4).
+**F2 Body frame** (integer): see claim 2. With at least one body frame, the body frame drawn is
+min(f, ⌊N/2⌋ − 1), and the shadow frame is that body frame + ⌊N/2⌋. With no body frames,
+no body or shadow is drawn. Any image-frame index below 0 or ≥ N draws nothing. Moving gates are exempt from the body clamp (claim 4).
 The bib and door image are also unclamped (claims 7 and 23).
 
 **F3 Damaged tests.** h = health / strength, where health and strength are integers and the
@@ -625,7 +633,7 @@ outside construction; moving gates use claim 4, not this table:
 | construction state, building (gate: claim 4) | *k* (build-up sprite) |
 | construction state, selling (gate: claim 4) | *a* + *c* − *k* − 1 (build-up sprite) |
 | occupiable, not hurt | 0 empty, 2 occupied |
-| occupiable, hurt | 1 empty, 3 occupied (1 when tech level is −1) |
+| occupiable, hurt | 1 empty, 3 occupied |
 | gate, any state but *construction*, not opening or closing | 0, or *G* + 1 damaged |
 | other, not damaged | *k* |
 | other, damaged, *idle* state | *k* + 1 |
@@ -653,18 +661,18 @@ outside construction; moving gates use claim 4, not this table:
 
 ## Edge cases and quirks
 
-- **`quirks.unbuildable_occupied_damaged_frame`** (default: on). An occupied, hurt, occupiable
-  building whose type has tech level −1 shows body frame 1 (the empty damaged frame) instead of body
-  frame 3. Off: body frame 3.
+- **Occupied civilian damaged frame** (departure, claim 2). The original shows the empty
+  damaged frame 1 rather than occupied damaged frame 3 for a hurt occupied building with tech
+  level −1, a wrong-frame glitch whose correction without a switch is confirmed by the project lead.
 - **`quirks.occupiable_hurt_rule`** (default: on). For occupiable types, "hurt" means badly damaged
   when the tech level is 0 or below (unbuildable civilian buildings), and merely damaged when it is
   above 0. Off: always use the damaged threshold.
-- **`quirks.building_frame_clamp_to_shadow`** (default: on). The clamp of claim 3 goes up to
-  ⌊N/2⌋, which is the first shadow frame, not the last body frame. A sprite without enough damaged
-  frames then shows a shadow silhouette as its body, and with an even *N* no shadow (claim 9). Off:
-  clamp to ⌊N/2⌋ − 1, so the last body frame shows with its own shadow.
-- **`quirks.gate_double_reverse`** (default: on). A gate being sold plays its build-up forwards,
-  because two reversals cancel (claim 4). Off: backwards, like other buildings.
+- **Body-frame clamp** (departure, claims 3 and 9). The original clamps to ⌊N/2⌋ and can
+  display a shadow silhouette as the body with a missing shadow for even *N* or a mismatched shadow
+  for odd *N*, a wrong-frame glitch whose correction without a switch is confirmed by the project lead.
+- **Gate selling direction** (departure, claim 4). The original plays a sold gate's build-up
+  forwards, a drawing-only reversal glitch whose correction without a switch is confirmed by
+  the project lead.
 - **`quirks.building_wrap_normalisation`** (default: on). Speed normalisation of a body range
   follows two different rules. When a state is entered immediately, it needs the "normalised" mark and
   excludes construction. When a state is entered deferred, and on every wrap, it ignores the mark
@@ -896,17 +904,20 @@ expected numbers are computed from the type's own fields at measurement time.
   - Falsified if: a switch comes one damage step early or late, a slot animation restarts from image
     frame 0, the repaired garrisoned building shows occupied art, or the slot without a damaged name
     vanishes when the copy is damaged.
-- **B3 (claim 2).**
+- **B3 (claim 2).** The occupied, hurt tech-level-−1 frame is a departure tested against
+  this spec on our engine, not against the original; the remaining threshold and frame tests
+  still use the original.
   - Setup: an occupiable civilian building with tech level −1 and an occupiable type with a
     positive tech level. If stock types cannot reach health strictly between the two imported
     condition ratios, use named test rules data setting separated ratios. A map-override copy of
-    the first type has tech level 0, to separate the hurt threshold from the −1 frame substitution.
+    the first type has tech level 0, to check the hurt threshold at both non-positive tech levels.
   - Procedure: garrison the first, damage it to between the yellow and red ratios, then below red.
     Garrison the second and damage it to between the yellow and red ratios. Repeat with the
     tech-level-0 copy; also record its ungarrisoned damaged frames and a hit exactly at the red ratio.
   - Observable: the body frame index.
   - Runs: one per building.
-  - Expected: for the first, body frame 2 between the ratios and body frame 1 below red. Body frame 3
+  - Expected: for the first, body frame 2 between the ratios and body frame 3 at or below red
+    on our engine. Body frame 3
     for the second. The tech-level-0 copy shows 2 between the ratios, 3 at or below red while
     occupied, and 1 at or below red while empty.
   - Falsified if: any of those frame indices differs, or equality at red does not count as hurt.
@@ -1036,7 +1047,9 @@ expected numbers are computed from the type's own fields at measurement time.
     matches its original's on every tick.
   - Falsified if: either entry or post-wrap stage delay differs from N(*d*, *s*), the slot
     animations stay frozen until power comes back, or the toggled copy's record differs.
-- **B12 (claims 3, 9).**
+- **B12 (claims 3, 9).** Damaged-frame clamp and corresponding-shadow checks are departures
+  tested against this spec on our engine, not against the original; undamaged frames and
+  per-type shadow suppression still use the original.
   - Setup: test data. A test building whose body sprite has *N* = 2 image frames (one body, one
     shadow), and a second with *N* = 3, both with default ranges and each image frame visually
     distinct. A third
@@ -1044,19 +1057,20 @@ expected numbers are computed from the type's own fields at measurement time.
   - Procedure: place each, then damage it past the yellow ratio.
   - Observable: the image drawn as the body, and whether a shadow is drawn.
   - Runs: one per sprite.
-  - Expected: undamaged, image frame 0 with shadow frame 1 for both sprites. Damaged, *N* = 2:
-    image frame 1 drawn as an undarkened body, no shadow. Damaged, *N* = 3: image frame 1 drawn as
-    the body with image frame 2 as its shadow. No shadow for the third type.
+  - Expected: undamaged, image frame 0 with shadow frame 1 for both sprites. Damaged on our
+    engine, both sprites still show body frame 0 and shadow frame 1: ⌊N/2⌋ − 1 = 0 in both
+    cases. No shadow for the third type.
   - Falsified if: any recorded body or shadow index differs from the expected indices,
-    the damaged *N* = 2 sprite has a shadow, or the shadow-suppressed type has one.
-- **B13 (claim 4).**
+    either damaged sprite lacks its corresponding shadow, or the shadow-suppressed type has one.
+- **B13 (claim 4).** Selling direction is a departure tested against this spec on our engine,
+  not against the original; build-up direction and moving-gate frames still use the original.
   - Setup: a stock gate.
   - Procedure: build it, open and close it, damage it past the yellow ratio, open it again, sell it.
   - Observable: body frame index per tick and bib visibility.
   - Runs: one.
-  - Expected: the build-up plays from its last build-up frame to its first, the sale plays first to
-    last,
-    the body frames while the gate opens or closes run 0 … *G* − 1 undamaged and *G* + 1 … 2*G*
+  - Expected: the build-up plays from its last build-up frame to its first; on our engine the
+    sale also plays backwards, with frame *a + c − k − 1* and unchanged sale completion timing
+    under S-0408 claim 17. The body frames while the gate opens or closes run 0 … *G* − 1 undamaged and *G* + 1 … 2*G*
     damaged, and no bib shows while the gate moves.
   - Falsified if: either construction sequence has the wrong direction, any moving-gate index
     differs from claim 4 for the recorded gate position, or a bib shows during gate movement.
@@ -1127,7 +1141,9 @@ expected numbers are computed from the type's own fields at measurement time.
     *special-3* does not replace the named slots after repair ends, *idle* does not follow
     natural *special-3* completion, or the delayed-fire building fails to restart *active-1*.
 
-- **B19 (claim 5, theater-flag rule).**
+- **B19 (claim 5, theater-flag rule).** Clamped displayed frames are a departure tested
+  against this spec on our engine, not against the original; the range and stage delay still
+  use the original.
   - Setup: test data. In a copy of the art data, a test building type with the theater flag set
     (and not the new-theater flag) and a build-up name *X*. In the test expansion archive, the file
     *X* ‖ .E for the theater of the test map (S-0007 claim 12), a build-up sprite of *N_b* image
@@ -1140,11 +1156,14 @@ expected numbers are computed from the type's own fields at measurement time.
   - Runs: one per type and build-up time.
   - Expected: the theater-flag type's recorded stage reaches *N_b* − 1 after
     (*N_b* − 1) × ⌊75 / *N_b*⌋ ticks, whatever the build-up time. While build-up is still drawn,
-    its image frame is ⌊*N_b*/2⌋ for each recorded stage from ⌊*N_b*/2⌋ on. The copy
+    on our engine its image frame is ⌊*N_b*/2⌋ − 1 with its corresponding shadow for each
+    recorded stage from ⌊*N_b*/2⌋ on. The copy
     without the flag runs through ⌊*N_b*/2⌋ build-up frames at the delay of F1, which changes with the build-up
     time.
   - Falsified if: the theater-flag type's stage delay differs from ⌊75 / *N_b*⌋ or changes with
-    build-up time, or its recorded construction range has only ⌊*N_b*/2⌋ stages. Construction
+    build-up time, its recorded construction range has only ⌊*N_b*/2⌋ stages, or our engine
+    displays a frame other than the last body frame or lacks its corresponding shadow in the
+    clamped stages. Construction
     handover timing is recorded separately, as in B1, not inferred from image disappearance.
 
 - **B20 (claims 3, 23, non-positive and out-of-range door frames).**
