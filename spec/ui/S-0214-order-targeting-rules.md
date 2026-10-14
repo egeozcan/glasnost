@@ -2,7 +2,7 @@
 id: S-0214
 title: Order targeting rules (what a click means for each kind of object, and group orders)
 topic: ui
-revision: 22
+revision: 23
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -22,7 +22,8 @@ which of the selected objects decides the cursor, how each selected object then 
 click for itself, and which order of S-0213 each action produces. The rules depend on the kind of
 the acting object, its type's abilities, the relation of the target to it and the modifier keys
 held. These are input rules. They decide which orders are created, never how an order is applied
-(S-0213). This revision also covers battlefield pointer images and ordinary band-box selection.
+(S-0213). This spec also covers battlefield pointer images, ordinary band-box selection,
+mouse-button gestures and the distinction between a right click and right-drag scrolling.
 Skirmish only; network games and campaigns are out of scope.
 
 ## Terms
@@ -98,7 +99,9 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
   other types, oldest-added first. The primary weapon is the type's normal first weapon, not
   the weapon the object currently chooses. Claim 12 gives the addition and removal rules.
   This order decides representative ties, order issuance and order acknowledgements.
-- **Band box.** The screen-aligned rectangle dragged with the primary battlefield mouse
+- **Primary battlefield button.** The left mouse button. Unless a passage says right click,
+  a battlefield *click* in this spec means a left-button press and release, not a right click.
+- **Band box.** The screen-aligned rectangle dragged with the left mouse
   button. Its endpoints and inclusion test are F6. It selects by one screen point per object,
   not by intersection with the object's image or foundation.
 - **Box point.** The point used for a band box: for a mobile object, its drawing origin in the
@@ -612,7 +615,7 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
     - Backing: `measurable` (Scenario T13)
     - Confidence: high
 
-18. **Beginning a band box (Q-0278 part 1).** A primary-button press in the battlefield can
+18. **Beginning a band box (Q-0278 part 1).** A left-button press in the battlefield can
     start a selection drag when sell, repair, power, building-placement and superweapon
     targeting modes are off. After a pointer-motion input with F6 distance greater than
     4 pixels, release is handled as a band box rather than an ordinary click, subject to
@@ -784,6 +787,59 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
     - Confidence: high for building-before-mobile and render-order priority; medium for
       building creation priority
 
+26. **Mouse buttons for clicks and selection.** In ordinary battlefield input, a left-button
+    release resolves the action at the release pixel: it selects or toggles selection under
+    claims 3 and 12, or gives the move, attack, enter and other orders of claims 2–11 and
+    table M. Pressing the button alone issues none of these orders. A left-button drag
+    makes the band box of claims 18 and 19, with the F6 threshold; it is not drag scrolling.
+    A right-button press alone neither deselects nor gives an order. A right-button release
+    without an intervening scroll drag clears the selection in ordinary mode, regardless
+    of whether it is over an object or empty ground. It never resolves table M as an order
+    click. This clears selection, not the units' existing behaviours or destinations.
+    The original has no in-game setting or saved option that exchanges the selecting/order
+    button with the deselecting button. Its scrolling-method preference changes how a
+    right drag scrolls, not which button selects, orders or deselects (Import mapping).
+    These are the original's left/right button roles; a host-level exchange of mouse buttons
+    is not an additional game control scheme.
+    - Backing: `measurable` (Scenario T19)
+    - Confidence: high for button dispatch and release timing; medium for absence of an
+      alternative scheme across the settings interface
+
+27. **Right-drag versus right-click.** An accepted right-button press in the battlefield
+    anchors a possible scroll drag at that screen pixel. While held, a sampled displacement
+    starts the scroll drag exactly when F8's axis test passes. This is not the 4-pixel
+    table-root test of a left-button band box. Once started, the scroll-drag classification
+    stays until release, even if the pointer returns to its anchor or scrolling is stopped
+    by a view limit. Its release does not clear selection, cancel a targeting mode or give
+    an object order. Without a sampled crossing it is the right click of claim 26 or 28.
+    Dragging with the right button therefore permits changing the view while retaining
+    the selection. The scrolling rate, direction, pointer recentering and view limits are
+    companion rules of S-0101; this claim fixes only the gesture and release distinction.
+    The original's threshold depends on host drag metrics, not on imported game rules or
+    the scroll-speed setting. By decision of the project lead, our engine uses a fixed
+    metric of 4 pixels on each axis (the usual host default), so a right drag starts beyond
+    8 pixels on either axis; no universal numeric pixel threshold is asserted for the
+    original.
+    - Backing: `measurable` (Scenario T19)
+    - Confidence: high for the axis test, strict comparison and latched release distinction
+
+28. **Right-click cancellation in targeting modes.** A battlefield right click, without a
+    scroll drag, cancels building placement, repair, sell, power-switch, superweapon
+    targeting, route-editing or beacon-placement mode instead of performing ordinary
+    deselection. It creates no move, attack, sell, repair, place or beacon order. In
+    particular it does not sell the building under the pointer, repair it, or put down a
+    beacon. Placement cancellation removes the carried outline but leaves the completed
+    building ready for placement: it is not the production-item cancellation/refund of a
+    right click on its sidebar icon (S-0411 claims 5 and 10).
+    Only when no targeting mode applies does the click clear selection. Ending a mode
+    does not additionally perform the ordinary deselection fallback. Ordinary sell,
+    repair, power-switch, route-editing and beacon modes exclude one another; this claim
+    does not prescribe outcomes for impossible combinations of those modes. A right drag
+    followed by release leaves the mode active under claim 27.
+    - Backing: `measurable` (Scenario T20)
+    - Confidence: high for cancellation versus deselection and placement-item retention,
+      medium for route-editing interactions
+
 ## Formulas
 
 > **F1 (representative distance).** *d* = ⌊*r*(*n*)⌋, *n* = (*x*ₒ − *x*ₜ)² + (*y*ₒ − *y*ₜ)² +
@@ -828,7 +884,7 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
 > outside a list takes no choice draw. These counts exclude sound playback's own draws
 > (S-0701). Integer arithmetic, no rounding, no rejection of values.
 
-> **F6 (drag threshold and box).** For integer screen displacements Δ*x*, Δ*y* from the
+> **F6 (left-drag threshold and box).** For integer screen displacements Δ*x*, Δ*y* from the
 > button-press pixel, *d* = ⌊*r*(Δ*x*² + Δ*y*²)⌋ pixels, using the table square root of
 > S-0204 F1. The original forms the squared sum in double precision and truncates the root
 > toward zero. Drag begins exactly when *d* > 4. For press (*a*, *b*) and final endpoint
@@ -845,10 +901,20 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
 > Projection and height-lift rounding are S-0101 claim 5 and F1's; transient mobile point
 > corrections remain qualified by claim 19.
 
+> **F8 (right-drag threshold).** Let Δ*x*, Δ*y* be integer screen-pixel displacements
+> from the right-button press pixel. Let *h*ₓ and *h*ᵧ be the host's horizontal and vertical
+> drag metrics in pixels. Right-drag scrolling starts when |Δ*x*| > 2*h*ₓ or
+> |Δ*y*| > 2*h*ᵧ. Equality on both axes remains a click. All operations and comparisons
+> are exact integers with no rounding; there is no radial distance calculation here.
+> The factor 2 is an engine constant. In the original the two metrics are host input
+> settings; our engine fixes both at 4 pixels (lead decision, claim 27).
+
 ## Constants
 
 | Name (ours) | Value | Unit | Notes |
-| Drag threshold | 4 | pixels of truncated table-root distance | Claim 18, F6; strictly greater starts the drag |
+| Left-drag threshold | 4 | pixels of truncated table-root distance | Claim 18, F6; strictly greater starts the band box |
+| Right-drag metric factor | 2 | dimensionless | Claim 27, F8; applied separately to each host drag metric |
+| Right-drag metric (ours) | 4 | pixels per axis | Claim 27, F8; fixed by lead decision in place of the host setting |
 | Screen candidates | 500 | objects per drawn frame | Claims 20, 24 and 25; not the selected-object limit |
 | Mobile candidate margin | 32 | pixels on each axis | F7; independent of image dimensions |
 | Cursor frame interval | 4 | 16-millisecond presentation-clock units | Claim 22; nominally 64 milliseconds per advance, checked only on updates |
@@ -865,7 +931,12 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
 | Drag armed | Motion with F6 distance at most 4 pixels | Still armed, ordinary click remains possible |
 | Drag armed | Motion with F6 distance above 4 pixels | Box active, anchored at press pixel |
 | Box active | Motion | Box endpoint changes; returning near the anchor does not disarm it |
-| Box active | Primary-button release | Selection result of claim 19; box ends |
+| Box active | Left-button release | Selection result of claim 19; box ends |
+| Ordinary mode, right press accepted | Right-button motion not crossing F8 | Selection unchanged; right click still possible |
+| Right press accepted | Sampled motion crossing F8 | Scroll drag active; selection and targeting mode retained |
+| Scroll drag active | Return to anchor, or reach view limit | Still classified as a scroll drag |
+| Scroll drag active | Right-button release | Drag ends, no deselection or mode cancellation |
+| Right press accepted, no scroll drag | Right-button release | Cancel targeting mode under claim 28, otherwise clear selection |
 
 **Table C: battlefield cursor frames** (claims 21 and 22). These are frame numbers in the
 imported cursor image, not action numbers. All multi-frame rows animate with claim 22's interval.
@@ -1500,6 +1571,8 @@ Ordering consequences:
 | Box threshold, candidate count, point bounds, admission priority and cursor timing | claims 18, 20, 22, 24 and 25 | engine constants and drawing state, not imported keys; neither the 500-place capacity nor the 32-pixel margin is a data field | F6, F7 and Constants |
 | Physical held modifiers | force-move, force-fire and force-select (claim 23) | engine bindings, not rules keys or saved command entries | Alt, Ctrl and Shift respectively |
 | Attack-move entry | claim 5 | held Ctrl+Shift, or the available command-bar button; no dedicated default keyboard command | gesture available without a command bar |
+| Mouse-button scheme | claims 26–28 | no game INI/settings key exchanges left selecting/order clicks with right deselect/cancel clicks | fixed left/right roles |
+| Right-drag threshold | claim 27, F8 | host drag metrics, not an INI/rules key; distinct from left-drag F6 | host-dependent in the original; ours is fixed at 4 pixels per axis (lead decision) |
 | Transient box points and crowded-view admission | qualifications of claims 19 and 20 | drawing-state behaviour, not imported selection-distance or count keys | no additional imported default; unresolved details have settling scenarios |
 | Object type `Immune` | immune target (rows I27, V6, AC5, AC9, B8) | boolean (S-0003) | no |
 | Object type `LegalTarget` | legal target (claim 6 (a), attackable cell) | boolean (S-0003) | yes |
@@ -2280,6 +2353,58 @@ Rows with no step, `unmeasured`, each for a reason.
   the allied transport standing and moving).
 - The three parts of claim 6 listed there as `unmeasured`: the sonic exception, the blinking
   disguise and the disguise as scenery (reasons in claim 6).
+
+**Scenario T19: mouse buttons and drag classification (claims 26 and 27).** Use an
+isolated, large flat stock-data skirmish map, 800×600, speed 6, director and mods off,
+with own tanks and infantry, an enemy tank, an own transport and one bystander computer
+player kept outside the observed area. Use scripted press, motion and release events,
+video and a read-only recorder of selection, issued orders and view origin. Record the
+host's two drag metrics. Repeat each case three times, allowing a normal input sample
+between each motion and release.
+- Left-press an own tank, hold, then release: selection appears on release, not press.
+  Left-click open ground, the enemy tank and a transport with suitable infantry selected:
+  expect move, attack and enter respectively under the existing tables. Right-click the
+  same targets: selection clears and no such order is issued. Existing orders continue
+  after deselection. Observe before release to distinguish right-press from right-release.
+- Left-drag using T14's (4, 0), (3, 3), (5, 0) and (4, 4) samples: expect its F6
+  click/box distinction, with no right-drag scrolling substituted.
+- With a unit selected and the view far from limits, right-press at an interior pixel.
+  Move by (2*h*ₓ, 0), (0, 2*h*ᵧ), and (2*h*ₓ, 2*h*ᵧ) in separate runs, then release:
+  expect no scroll drag and ordinary deselection. Increase just one axis by one pixel:
+  expect scroll drag and selection retained at release. In another run cross, return to
+  the anchor, then release: selection still retained. Repeat at a view limit: a classified
+  drag retains selection even where further outward scrolling cannot move the view.
+- Start fresh with fresh scrolling preferences, then repeat left selection/orders,
+  right deselection and right dragging with its values 0, 1 and 2 in separate launches.
+  Expected: only scrolling mechanics may differ; the button roles and F8 classification
+  do not. Inspect the in-game control settings for an alternative button scheme. This
+  does not require a guessed key for one.
+Any order created by a right click, selection change at press rather than release,
+left/right exchange through a game option, radial rather than axis right-drag threshold,
+or deselection after a sampled F8 crossing falsifies the corresponding claim. A script
+that releases before motion is sampled is inconclusive. Record thresholds rather than
+assuming the host supplies a particular pixel count.
+
+**Scenario T20: right-click cancellation (claim 28).** Use T19's map/settings, sufficient
+credits to complete a stock building, and screen capture plus a read-only mode,
+production-item, credit, selection and order recorder. Repeat each case three times.
+Arm placement from its ready sidebar icon and right-click empty battlefield ground:
+expect the outline and placement mode to end, the item still done, no refund or place
+order, and the ability to take the same ready item up again. Contrast right-clicking
+its sidebar icon: S-0411 claim 5's cancellation/refund, not mere mode exit. Repeat the
+battlefield click over a legal placement site and over an invalid one: both merely end
+the mode. Arm sell, repair, power-switch and beacon placement separately; right-click
+both a valid target and empty ground. Expect the mode to end without its target order
+or beacon. Test superweapon targeting and route-editing where available with the same
+cancel-not-action expectation. Enter the ordinary sidebar modes successively: the new
+mode replaces the preceding one, rather than stacking another cancellation layer.
+In each reachable mode repeat a right drag with a sampled F8 crossing before release:
+expect scrolling without cancelling the mode.
+Any item refund from battlefield placement cancellation, target order/beacon from a
+right click, retained mode after a non-drag click, extra ordinary deselection on mode
+exit, or mode cancellation after a classified drag falsifies the corresponding rule.
+Unavailable targeting modes are inconclusive; do not force otherwise unreachable
+mode combinations by changing the game's state.
 
 ## Open questions
 
