@@ -2,13 +2,13 @@
 id: S-0408
 title: Selling and building repair (refund, what a sale releases, selling vehicles and walls, which buildings can be sold or repaired)
 topic: economy
-revision: 7
+revision: 8
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0131]
+requests: [Q-0130, Q-0131]
 supersedes: []
 ---
 
@@ -44,7 +44,8 @@ house state, on or off). In addition:
   tethered, and which services make such a link, belong to the specs of those services (open
   question on claim 6).
 - **Build-down.** The part of a building's construction state in which it plays its build-up
-  backwards while it is sold; S-0108 (claim 5) owns its timing.
+  backwards while it is sold; S-0108 (claim 5) owns its timing. Its completion report is
+  S-0215's *ready mark* (Terms), with the sale's completion tests given in claim 17.
 - **Refund.** The credits a house receives for an object it sells (claim 1).
 - **Adjusted cost.** The cost a building type is refunded from (claim 2). For every other type it is
   the type's cost field.
@@ -172,7 +173,7 @@ house state, on or off). In addition:
      its level field or the target type's limit. Only the sold position is cleared; lower
      recorded upgrades are not cleared. The next sale sells the building, since its count is 0.
      Their power no longer counts at count 0 (the count gate of S-0405 claims 1 and 2).
-     This revision requires those claims to state that gate explicitly at hand-off.
+     S-0405 claims 1 and 2 already state this count gate; no cross-spec change is required.
    - A count of 0 sells the building, even if positions still hold upgrades. A positive count
      whose position is empty is the bad-data departure in Edge cases; this can occur after
      selling a level-field upgrade without the turret flag.
@@ -368,9 +369,13 @@ house state, on or off). In addition:
 
 17. **Exact build-down completion and refund tick.** Let *D* be the tick at which the sale
     starts its build-down (claim 6), *n* its actual stage count and *d_b* its stage delay in ticks
-    (S-0108 claim 5). In uninterrupted play, for *n* ≥ 2 and *d_b* ≥ 1, removal and payment
-    occur at *D* + (*n* − 1) × *d_b*, on the tick the last stage is reached, not a tick later.
-    The building need not remain on the map for a drawn frame showing that last stage.
+    (S-0108 claim 5). The completion report uses the same ready mark as construction
+    (S-0406 claim 17): a building turn whose stage advance lands on the range's last stage
+    sets it. Passing the end and wrapping to the range's start does not set it. Selling's
+    every-tick processing sees the mark in that same tick. In uninterrupted play, for
+    *n* ≥ 2 and *d_b* ≥ 1, removal and payment occur at *D* + (*n* − 1) × *d_b*, on the
+    tick the last stage is reached, not a tick later. The building need not remain on the
+    map for a drawn frame showing that last stage.
     - A gate uses *n* = *G* + 1, with *G* S-0108's gate stage count. Reversing the displayed
       frames changes neither the advancing stage nor the refund tick. After a successful
       theater-flag refresh, use the whole sprite count and special delay of S-0108 claim 5,
@@ -391,11 +396,17 @@ house state, on or off). In addition:
     These formulas assume no interrupted building turns, processing gates, intervening
     behaviour change or restarted animation. A completion report that cannot be acted on
     immediately is acted on at the next eligible selling processing; a killing hit instead
-    stops the sale as claim 6 gives. Positive-delay one-stage and non-positive-count ranges
-    remain open, as in S-0108 and S-0406; none of these duration formulas covers them.
+    stops the sale as claim 6 gives.
+    - A positive-delay range with *n* ≤ 1 never reports completion: each advance runs past
+      the end and wraps without landing on its last stage, or on stage 23. The building
+      stays in build-down and pays no refund, although claim 6's releases have already
+      occurred. A non-positive count uses delay 1 by S-0108 claim 5 and therefore falls
+      in this case. A one-stage range with zero delay instead follows the zero-delay rule
+      above. This is the sale effect of `quirks.single_stage_buildup_never_completes`
+      (S-0406 claim 18; Edge cases below).
     - Backing: `measurable` (scenario S10; S3 parts c and d for no-sprite orders)
     - Confidence: high (same-tick report, restart, ordinary and early completion); medium
-      (gate and theater ranges, zero-delay completion)
+      (gate and theater ranges, zero-delay completion and ranges that never report)
 
 ## Formulas
 
@@ -450,7 +461,9 @@ or first-processing tick. *n* and *d_b* are S-0108's actual construction range.
 Integers, in ticks; exact multiplication and addition, no rounding. S-0108 owns the
 floating-point calculation and rounding of *d_b*. Payment and removal share tick *E* for
 an ordinary sale. S-0415 owns the result for packing up. No formula applies to a no-sprite
-sell order (claim 4).
+sell order (claim 4). With `quirks.single_stage_buildup_never_completes` on, no finite
+*E* exists for a positive-delay build-down with *n* ≤ 1. With it off, *E* = *D* + *d_b*
+for such a range: completion is reported on its first wrap (Edge cases).
 
 ## Constants
 
@@ -481,6 +494,7 @@ sell order (claim 4).
 | building, any behaviour, type with no build-up sprite | sell order, type with the firestorm-wall flag | removed at once; no refund, no survivors (claim 4) |
 | building, any behaviour, type with no build-up sprite and no firestorm-wall flag | sell order | nothing (claim 4) |
 | build-down | completion report, eligible selling processing on this turn | refund and stored resources credited; building removed on the report tick (claim 17) |
+| build-down, positive-delay range of 1 stage or fewer | stage wraps, original quirk on | No completion report, removal or payment; sale remains in build-down (claim 17) |
 | *selling*, any stage (the build-down included) | building destroyed | sale stops; no refund or further sale survivors; awaits its own next eligible turn, with a second destruction-survivor and smudge round on removal (claim 6; S-0312 claim 21) |
 | *selling* | sell order | nothing changes, except that the local player hears the order sound again for an own building (claim 4) |
 | vehicle or aircraft on a building | sell order (no input creates one) | refund; removed at once (claim 11) |
@@ -523,6 +537,13 @@ tick the building disappears.
   type with no build-up sprite that has neither the unsellable flag nor the firestorm-wall flag,
   since input would still not offer *sell* on it (a firestorm-wall type is sellable through claim
   3(b), so it gets no such warning).
+- **Single-stage build-down never completes** (claim 17). The shared
+  `quirks.single_stage_buildup_never_completes` of S-0406 (default on, original) also
+  governs selling: positive-delay ranges with 1 stage or fewer never report completion,
+  so no refund or sale removal occurs. Off: such a range reports completion on the first
+  building turn whose advance passes its end and wraps, giving payment and removal at
+  *D* + *d_b* in uninterrupted play. Ranges with at least 2 stages and zero-delay ranges
+  are unchanged. The importer warning of S-0406 claim 18 applies in both switch states.
 - **Destroyed during its sale.** No refund or further sale survivors, at whatever stage (claim 6).
   Its second destruction-survivor and smudge round is covered by
   `quirks.building_removal_second_round` (S-0312): default original, with that second round omitted
@@ -783,7 +804,12 @@ tick number. Any game speed.
   without contacts, country cost factors 1 and no cost bonuses. Test ordinary ranges with
   invented stage counts 6 and 30 and positive delays 2 and 3 ticks, a gate with a known gate
   range, and theater-flag ordinary and gate types with 30 whole sprite frames after refresh
-  (S-0108 B19's test-file setup). Include a build-up sprite with zero stage delay. For the
+  (S-0108 B19's test-file setup). Include a build-up sprite with zero stage delay, both
+  multi-stage and one-stage. Also use completed, map-placed buildings with named test
+  sprites giving *n* = 1 at delay 2 and *n* = 0 at delay 1; map placement avoids the
+  construction that never completes in S-0406 claim 18. Repeat these two types naming
+  a vehicle to pack into, once without and once with a guard spot, checking that neither
+  completion test makes a positive-delay range of 1 stage or fewer finish. For the
   early-report variants use a building that names a vehicle to pack into and a 30-stage range,
   once with no guard spot and once with a guard spot. S-0415 D6/D7 supply reachable pack-up
   inputs. Any game speed; repeat each variant once at another speed. One sale per variant
@@ -792,28 +818,36 @@ tick number. Any game speed.
   input. With a read-only recorder, log each tick's build-down stage, behaviour, foundation
   occupancy and house credits, from order application through removal. Record *D*, the
   restart at stage 0, rather than assuming it equals the order tick. Repeat the no-sprite
-  cases of S3 c/d, logging their order-application ticks too.
+  cases of S3 c/d, logging their order-application ticks too. For the positive-delay
+  one-stage and zero-stage types, record for 100 ticks after *D*, including the first
+  wrap and later wraps. On our engine only, repeat these with the shared single-stage
+  quirk off.
 - *Observable:* *D*, last stage seen before removal, removal tick, refund tick, and any
-  packed vehicle's appearance. Record the actual range for gate and theater variants.
+  packed vehicle's appearance. Record the ready mark and the actual range for gate and
+  theater variants; for degenerate ranges, record wraps and the continued presence of
+  the building and its unchanged credits.
 - *Expected:* ordinary positive-delay refunds and removal at *D* + (*n* − 1) × *d_b*.
   6 stages at delay 2 give *D* + 10 ticks. The theater test range is 30 stages at delay 2,
   giving *D* + 58, for the gate too. The packing-capable 30-stage, delay-3 variant with no
   guard spot completes at *D* + 69; with a guard spot at *D* + 87. Its vehicle/refund result
   follows S-0415. Zero delay completes at *D* + 1. No-sprite ordinary orders do nothing.
   no-sprite firestorm-wall orders remove in the application tick with no refund. Tick
-  intervals agree at both speeds.
+  intervals agree at both speeds. Positive-delay *n* = 1 and *n* = 0 never set the
+  ready mark, stay in build-down through all 100 observed ticks and give no refund,
+  including the packing-capable variants. A one-stage zero-delay range instead completes
+  at *D* + 1. On our engine with the shared quirk off, the positive-delay one-stage
+  type completes at *D* + 2 and the zero-stage type at *D* + 1.
 - *Falsified if:* payment/removal is one tick after the report, uses *n* rather than *n* − 1
   advances, uses a gate's sprite half-count or a theater sprite's half-count, ignores the
   stage-23 early report or applies it with a guard spot, pays at *D* for zero delay, or
-  treats an ordinary no-sprite order as a zero-delay refunded sale.
+  treats an ordinary no-sprite order as a zero-delay refunded sale, or a positive-delay
+  one-stage or zero-stage range reports completion, pays or removes on any observed wrap.
 
 ## Open questions
 
 - Whether the occupants of a garrison leave before the sale survivors (claim 9; S5 part a), which
   the structures specs' account of the occupants' leaving can settle.
 - Which links make a docked unit that keeps the sale waiting (claim 6).
-- Positive-delay one-stage and non-positive-count build-down completion (claim 17; S10 may
-  be extended with exploratory ranges, but no duration is asserted for them).
 - Whether any skirmish path fills a building's own storage, so that claim 10 can occur.
 - In which order a building's storage lists its resource types, the order in which claim 10 pays
   them (F3).

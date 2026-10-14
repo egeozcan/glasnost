@@ -3,7 +3,7 @@ id: Q-0130
 title: When a placed or deployed building's construction ends, and what it does next
 status: answered
 related: [S-0108, S-0406, S-0408, S-0415, S-0215]
-answered-by: [S-0406]
+answered-by: [S-0406, S-0408]
 ---
 
 ## Need
