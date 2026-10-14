@@ -574,11 +574,25 @@ fn connected(w: &mut World, id: ObjectId, refinery: ObjectId) -> bool {
 
 /// The ring search with range `range` from cell `from` (S-0402 claim 4).
 pub fn ring_search(w: &mut World, id: ObjectId, from: CellXY, range: i32) -> Option<CellXY> {
+    let reference = crate::occupancy::reference_level(w, id);
+    ring_search_with(w, from, range, &mut |w, c| {
+        acceptable(w, id, from, c, reference)
+    })
+}
+
+/// The ring search of S-0402 claim 4 from cell `from` with range `range`,
+/// with the acceptability test `accept` (the searcher's own, claim 4's
+/// for a harvester).
+pub(crate) fn ring_search_with(
+    w: &mut World,
+    from: CellXY,
+    range: i32,
+    accept: &mut dyn FnMut(&mut World, CellXY) -> bool,
+) -> Option<CellXY> {
     // spec: S-0402 claim 4 (the harvester's own cell, when its land type is tiberium, whatever the cell holds)
     if w.cells.cell(from).is_some_and(|c| c.land == land::TIBERIUM) {
         return Some(from);
     }
-    let reference = crate::occupancy::reference_level(w, id);
     // spec: S-0402 claim 4 (rings k = 1 … R − 1; nothing when R ≤ 1)
     for k in 1..range {
         let mut best: Option<(i64, (i32, i32), CellXY)> = None;
@@ -588,7 +602,7 @@ pub fn ring_search(w: &mut World, id: ObjectId, from: CellXY, range: i32) -> Opt
                     continue;
                 }
                 let c = CellXY::new(from.x + a, from.y + b);
-                if !acceptable(w, id, from, c, reference) {
+                if !accept(w, c) {
                     continue;
                 }
                 let worth = resource::worth(w, c);
@@ -869,6 +883,10 @@ pub fn process_harvest(w: &mut World, id: ObjectId) -> i32 {
         s.harvest_start = Some(start);
         s.phase = Phase::Seeking;
         s.pending_load_period = false;
+    }
+    // spec: S-0402 claim 22 (a miner with gatherer and destination fields and a slave group processes harvest through its group rule, not claims 3 to 10)
+    if let Some(d) = super::slaves::process_harvest(w, id) {
+        return d;
     }
     // spec: S-0402 claim 3 and claim 13 (in every phase: no building of a dock type, guard queued, 1 tick)
     if !owns_dock(w, id) {
@@ -1789,22 +1807,26 @@ pub fn wake_rule(
     before(s_m) && at_rest && (computer || on_ore || (before(s_g) && scan()))
 }
 
-/// Whether S-0402 claim 14's wake-up rule holds for a slave miner in play.
-/// No slave is created by our engine yet, so no slave group is ever at rest
-/// (a seam) and the rule never holds; [`wake_rule`] is the rule itself.
-pub fn slave_wake_rule_holds(w: &World, id: ObjectId) -> bool {
-    if !is_slave_miner(w, id) {
+/// Whether S-0402 claim 14's wake-up rule holds for a slave master in play
+/// ([`wake_rule`] is the rule itself).
+pub fn slave_wake_rule_holds(w: &mut World, id: ObjectId) -> bool {
+    let Some(g) = w.obj(id).and_then(|o| o.econ.group.clone()) else {
         return false;
-    }
-    let Some(o) = w.obj(id) else { return false };
-    let r = w.rules();
-    // spec: S-0402 claim 14 (a slave group at rest: no slave exists, a seam)
-    let at_rest = false;
-    let computer = o.owner.is_some_and(|h| !w.houses[usize::from(h.0)].human);
-    let on_ore = w
-        .cells
-        .cell(o.pos.cell())
-        .is_some_and(|c| c.land == land::TIBERIUM);
+    };
+    let Some(o) = w.obj(id).cloned() else {
+        return false;
+    };
+    let r = w.rules_arc();
+    // spec: S-0402 claim 14 (the group at rest: no slave sent out since the group last came together)
+    let at_rest = g.state == super::slaves::GroupState::AtRest;
+    // spec: S-0402 claim 14 (the computer-controlled condition: not for player houses in our engine; the neutral and special houses keep it)
+    let computer = o.owner.is_some_and(|h| {
+        let house = &w.houses[usize::from(h.0)];
+        house.role != HouseRole::Player && !house.human
+    });
+    let here = o.pos.cell();
+    let on_ore = w.cells.cell(here).is_some_and(|c| c.land == land::TIBERIUM);
+    let range = r.econ.harvest.slave_short_scan;
     wake_rule(
         r.econ.harvest.kick_delay,
         o.beh.start_tick,
@@ -1812,9 +1834,11 @@ pub fn slave_wake_rule_holds(w: &World, id: ObjectId) -> bool {
         at_rest,
         computer,
         on_ore,
-        o.beh.start_tick,
+        // spec: S-0402 claim 14 (s_g, the group's last-rest tick; initially 0, claim 21)
+        g.last_rest,
         r.quirks.slave_kick_delay_wraps,
-        || false,
+        // spec: S-0402 claim 14 (the short-scan test: the ring search from the miner with the slave-miner short scan range)
+        || ring_search(w, id, here, range).is_some(),
     )
 }
 

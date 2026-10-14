@@ -640,10 +640,13 @@ fn choose_target(w: &mut World, id: ObjectId, d: u8, next: CellXY) -> bool {
     let desired = (o.pos.x + 256 * dx, o.pos.y + 256 * dy);
     let class = position_class(desired.0.rem_euclid(256), desired.1.rem_euclid(256), true); // spec: S-0204 claim 2 (the position within the cell)
     let mission = mission_target_in(w, id, next);
-    // The second case of claim 4 (an enslaved unit at its master's unloading cell) needs
-    // enslaved units, which no topic of M3 creates.
-    // spec: S-0208 claim 4 (the mission target's cell: occupants ignored, no draw)
-    let pos = choose_position(w, next, o.layer, class, mission);
+    // spec: S-0208 claim 4 (an enslaved unit in its master's unloading cell while the master is there)
+    let at_master = crate::econ::slaves::master_of(w, id).is_some_and(|m| {
+        crate::econ::slaves::unloading_cell(w, m) == Some(next)
+            && w.cells.list(next, o.layer).contains(&m)
+    });
+    // spec: S-0208 claim 4 (the mission target's cell, or the master's unloading cell: occupants ignored, no draw)
+    let pos = choose_position(w, next, o.layer, class, mission || at_master);
     let Some(p) = pos else { return false };
     let (u, v) = standing_point(p);
     let (x, y) = (256 * next.x + u, 256 * next.y + v); // spec: S-0208 table P (a standing position within the cell)

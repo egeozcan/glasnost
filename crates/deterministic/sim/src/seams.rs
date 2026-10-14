@@ -3,47 +3,44 @@
 //! miners (S-0402), production payment and credits (S-0404), power
 //! (S-0405), selling and building refunds (S-0408), and defeat (S-0414).
 //!
-//! Each function states the rule it stands for and what it answers until
-//! that topic exists. The answers are chosen so that the calling rule
-//! takes its "the other topic's condition does not hold" branch; none of
-//! them invents a value. M5a replaces the bodies, not the call sites.
+//! Each function states the rule it stands for and answers through the
+//! topic that owns it.
 
 use crate::world::{HouseId, ObjectId, World};
 
 /// Whether the wake-up rule of S-0402 claim 14 holds for a slave master
-/// (S-0215 claim 24, vehicle table row 1; claim 26, row 1). Slave masters
-/// and their slaves are not modelled before M5a, so it never holds.
-pub fn slave_wake_rule_holds(w: &World, master: ObjectId) -> bool {
-    // spec: S-0402 claim 14 (the wake-up rule, crate::econ::harvest::wake_rule; it needs the group at rest, and no slave group exists yet)
+/// (S-0215 claim 24, vehicle table row 1; claim 26, row 1).
+pub fn slave_wake_rule_holds(w: &mut World, master: ObjectId) -> bool {
+    // spec: S-0402 claim 14 (the wake-up rule, crate::econ::harvest::wake_rule)
     crate::econ::harvest::slave_wake_rule_holds(w, master)
 }
 
 /// Whether a slave master's slave group is at rest (S-0402 claim 14), for
-/// S-0215 claim 26's "wakes its slaves anyway". Never, before M5a.
-pub fn slave_group_at_rest(_w: &World, _master: ObjectId) -> bool {
-    // spec: S-0402 claim 14 (a slave group at rest; a seam until the harvest cycle exists)
-    false
+/// S-0215 claim 26's "wakes its slaves anyway".
+pub fn slave_group_at_rest(w: &World, master: ObjectId) -> bool {
+    // spec: S-0402 claim 14 (a slave group at rest)
+    crate::econ::slaves::at_rest(w, master)
 }
 
-/// A slave master wakes its slaves (S-0402 claim 14; S-0215 claims 24 and
-/// 26). Nothing to wake before M5a.
-pub fn wake_slaves(_w: &mut World, _master: ObjectId) {
-    // spec: S-0402 claim 14 (waking the slaves; a seam until the harvest cycle exists)
+/// A slave master wakes its slaves (S-0402 claims 14 and 22; S-0215 claims
+/// 24 and 26): its group starts field seeking.
+pub fn wake_slaves(w: &mut World, master: ObjectId) {
+    // spec: S-0402 claim 22 (waking starts field seeking, not the immediate emergence of the hidden slaves)
+    crate::econ::slaves::wake(w, master);
 }
 
 /// Whether a unit is a harvesting slave (S-0215 Terms; S-0402 claim 14),
-/// for S-0215 claim 14 row 8 and claim 15 row 11. No unit is one before
-/// M5a.
-pub fn is_harvesting_slave(_w: &World, _id: ObjectId) -> bool {
-    // spec: S-0402 claim 14 (harvesting slaves; a seam until the harvest cycle exists)
-    false
+/// for S-0215 claim 14 row 8 and claim 15 row 11: a slave with a master.
+pub fn is_harvesting_slave(w: &World, id: ObjectId) -> bool {
+    // spec: S-0402 claim 14 (harvesting slaves: the slaves of a slave group)
+    crate::econ::slaves::is_slave(w, id)
 }
 
-/// Whether a slave master (S-0215 claim 15 row 11). No vehicle is one
-/// before M5a.
+/// Whether a slave master (S-0215 claim 15 row 11): a slave miner, or an
+/// object that has a slave group.
 pub fn is_slave_master(w: &World, id: ObjectId) -> bool {
-    // spec: S-0402 claim 14 and Terms (a slave miner: gatherer, destination and an enslaves field)
-    crate::econ::harvest::is_slave_miner(w, id)
+    // spec: S-0402 claim 14 and Terms (a slave miner: gatherer, destination and an enslaves field; claim 19: the group)
+    crate::econ::harvest::is_slave_miner(w, id) || crate::econ::slaves::is_master(w, id)
 }
 
 /// The guard rules of S-0402 that queue *harvest* again for a harvester in

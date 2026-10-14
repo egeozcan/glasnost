@@ -1108,7 +1108,7 @@ fn claim_14_quirk_slave_kick_delay_wraps() {
     ));
 }
 
-// spec: S-0402 claim 14 (a slave miner: gatherer, destination and an enslaves field; no slave group exists, so the rule never holds in play)
+// spec: S-0402 claim 14 (a slave miner: gatherer, destination and an enslaves field; its group, of no slaves here, is at rest, and with the wrapping kick delay a start tick of 0 fails the rule)
 #[test]
 fn claim_14_slave_miner() {
     let r = ruleset();
@@ -1118,7 +1118,7 @@ fn claim_14_slave_miner() {
     assert!(harvest::is_slave_miner(&w, m));
     assert!(!harvest::is_slave_miner(&w, h));
     assert!(glasnost_sim::seams::is_slave_master(&w, m));
-    assert!(!glasnost_sim::seams::slave_wake_rule_holds(&w, m));
+    assert!(!glasnost_sim::seams::slave_wake_rule_holds(&mut w, m));
 }
 
 // spec: S-0402 claim 16 and F4 (full when total / C equals 1.0: exactly total = C)

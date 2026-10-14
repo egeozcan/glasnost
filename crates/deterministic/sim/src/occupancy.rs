@@ -286,6 +286,8 @@ pub fn infantry_outcome(w: &World, mover: ObjectId, c: CellXY, reference: i32) -
         );
     }
     let mut override_value: Option<(usize, Outcome)> = None;
+    let master = crate::econ::slaves::master_of(w, mover);
+    let mut excused = false;
     for &oid in w.cells.list(c, obj_layer) {
         if oid == mover {
             continue;
@@ -294,7 +296,12 @@ pub fn infantry_outcome(w: &World, mover: ObjectId, c: CellXY, reference: i32) -
         let allied = w.allied(m.owner, o.owner);
         let in_cell_target = mission == Some(Target::Object(oid))
             || mission == Some(Target::Cell(c)) && o.pos.cell() == c;
-        let v: (bool, Option<Outcome>) = if in_cell_target {
+        let wp2 = master == Some(oid) && crate::econ::slaves::unloading_cell(w, oid) == Some(c);
+        let v: (bool, Option<Outcome>) = if wp2 {
+            // spec: S-0209 claim 4 (row WP2: the walker's master at its unloading cell gives none, and the walker is excused from the vehicle-present flag)
+            excused = true;
+            (false, None)
+        } else if in_cell_target {
             // spec: S-0209 claim 4 (row WP3: the mission target overrides: clear)
             (true, Some(Outcome::Clear))
         } else if o.kind == Kind::Building {
@@ -411,7 +418,7 @@ pub fn infantry_outcome(w: &World, mover: ObjectId, c: CellXY, reference: i32) -
         return Outcome::Blocked;
     };
     // 4d: the record table.
-    if rec.vehicle_present() && cval == Outcome::Clear {
+    if rec.vehicle_present() && !excused && cval == Outcome::Clear {
         // spec: S-0209 claim 4 (row WR1)
         return Outcome::MovingBlocker;
     }

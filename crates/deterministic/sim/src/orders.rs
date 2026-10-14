@@ -247,6 +247,17 @@ fn apply_other(w: &mut World, house: HouseId, o: &Order) {
             let kind = w.obj(actor).map(|ob| ob.kind);
             if kind == Some(Kind::Vehicle) {
                 crate::drive::stop(w, actor);
+                if crate::econ::slaves::is_master(w, actor)
+                    && !w.obj(actor).is_some_and(|ob| {
+                        matches!(
+                            crate::econ::placement::seen_behaviour(ob),
+                            Some(Behaviour::Construction | Behaviour::Selling)
+                        )
+                    })
+                {
+                    // spec: S-0213 claim 8 (a vehicle that controls slave units, whatever its behaviour: its slaves are sent back to guard it)
+                    crate::econ::slaves::recall(w, actor);
+                }
             }
             if let Some(ob) = w.obj_mut(actor) {
                 if matches!(
@@ -486,6 +497,13 @@ fn apply_behaviour(w: &mut World, o: &Order, dest_override: Option<Target>) {
             .filter(|c| c.kind == Kind::Building)
             .and_then(|c| w.rules().buildings.get(c.type_index as usize))
             .is_some_and(|b| b.raw.econ.dock_unload.unwrap_or(false));
+    if b != Behaviour::Attack
+        && ob.kind == Kind::Vehicle
+        && crate::econ::slaves::is_master(w, actor)
+    {
+        // spec: S-0213 table T3 (h) (an actor that controls slave units, resulting behaviour not attack: its slaves are sent back to guard it)
+        crate::econ::slaves::recall(w, actor);
+    }
     let Some(m) = w.obj_mut(actor) else { return };
     if !keeps {
         // spec: S-0213 table T3 (b) (otherwise it breaks off any contact)

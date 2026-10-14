@@ -201,6 +201,13 @@ pub fn sell(w: &mut World, house: HouseId, actor: ObjectId) {
     }
 }
 
+/// An automatic packing-up requested by a deployed slave master (S-0402
+/// claim 22): the building goes the way of a sell order that makes it pack
+/// up (S-0415 claims 9 and 10). The caller has checked that it packs up.
+pub(crate) fn start_pack_up(w: &mut World, id: ObjectId) {
+    sell_building(w, id);
+}
+
 fn sell_building(w: &mut World, id: ObjectId) {
     let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
     let Some(o) = w.obj(id) else { return };

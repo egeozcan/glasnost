@@ -561,9 +561,16 @@ fn process(w: &mut World, id: ObjectId) -> i32 {
         (Some(Behaviour::AreaGuard), Kind::Infantry | Kind::Vehicle) => process_area_guard(w, id),
         (Some(Behaviour::Hunt), Kind::Infantry | Kind::Vehicle) => process_hunt(w, id),
         (Some(Behaviour::Unload), Kind::Infantry) => process_unload_infantry(w, id),
-        // spec: S-0402 State and ordering (a harvester's harvest, enter and unload)
-        (Some(Behaviour::Harvest), Kind::Vehicle) if crate::econ::harvest::is_harvester(w, id) => {
+        // spec: S-0402 State and ordering (a harvester's harvest, enter and unload); claim 22 (a slave master's harvest)
+        (Some(Behaviour::Harvest), Kind::Vehicle)
+            if crate::econ::harvest::is_harvester(w, id)
+                || crate::econ::slaves::is_master(w, id) =>
+        {
             crate::econ::harvest::process_harvest(w, id)
+        }
+        // spec: S-0402 claim 14 (a slave's harvest)
+        (Some(Behaviour::Harvest), Kind::Infantry) if crate::econ::slaves::is_slave(w, id) => {
+            crate::econ::slaves::process_slave(w, id)
         }
         (Some(Behaviour::Enter), Kind::Vehicle) if crate::econ::harvest::is_harvester(w, id) => {
             crate::econ::harvest::process_enter(w, id)
