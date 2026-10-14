@@ -2,7 +2,7 @@
 id: S-0208
 title: Infantry movement (standing positions, walking step and speed, crawling, scatter destinations)
 topic: infantry
-revision: 19
+revision: 20
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -61,6 +61,13 @@ S-0210 (crushing), S-0211 (land types and passability), S-0212 (pathfinding), S-
 and S-0311 (veterancy), and for claims 16 and 17 S-0307 (weapon range test), S-0308 (weapon
 choice) and S-0310 (turrets and facing for fire, for the firing check's answers and the infantry
 speed fraction).
+
+**Cross-spec confirmation at hand-off.** Claim 19's infantry teleport fallback parameters
+agree with S-0212 claim 25's corresponding search-use row. Retain both texts together,
+including the distinct search deck mode and standing-position deck mode. The coordinated
+blocked-first-check rule belongs to S-0207 claim 15 and S-0212 claim 22, and failed-approach
+searches, including close-range failure, belong to S-0307 claim 17 and S-0212 claim 25.
+Neither changes this infantry teleport fallback.
 
 ## Terms
 
@@ -215,10 +222,10 @@ used by this spec:
   trigonometry (S-0105 Formulas F1). See Formulas F3 and F8. S-0209 and S-0210 use √̃ too.
 - **Enterable.** A neighbouring cell is enterable for a unit when S-0209's occupancy check gives the
   outcome *clear* for that unit.
-- **Tether link.** A link that two objects share while one of them performs a docking, loading or
-  unloading manoeuvre with the other. Both hold it from the moment one of them begins loading or
-  unloading, gives the other clearance to unload, or docks at a refinery, and both lose it when
-  that manoeuvre ends or the link is broken off. A unit holding one is not sent the second case of
+- **Tether link.** A link that two objects share during a docking, loading or unloading manoeuvre
+  when that exchange creates one. Both hold it from the moment the exchange's rule establishes
+  it—when one begins loading or unloading, gives the other clearance to unload, or docks at a
+  refinery—and both lose it when that manoeuvre ends or the link is broken off. A unit holding one is not sent the second case of
   request A (claim 15). A successful infantry factory-release contact exchange gives the released
   unit one until its next cell-arrival update (S-0417 claim 10). Whether that interval can isolate
   the damage-scatter condition remains open (scenario W12).
@@ -833,7 +840,8 @@ used by this spec:
       status; the teleporting locomotor reports its own position as its heading point,
     - search deck mode: on when the centre cell carries a high bridge,
     - a height condition, no further test, no no-overlay condition, bridge cells allowed,
-    - no reference cell, so selection depends on the tick number rather than a random draw.
+    - no reference cell, so selection uses the landing-point fixation tick number by
+      S-0212 claim 25, rather than a random draw.
 
     A found cell gets another standing-position choice with its centre as desired point,
     the same occupant-ignoring condition and the same standing-position deck mode as the first
