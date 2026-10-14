@@ -1006,7 +1006,14 @@ impl SimRules {
         // spec: S-0306 Constants (gravity absent: 3 leptons per tick²)
         let gravity = g.gravity.unwrap_or(3);
         let (weapons_c, projectiles_c, warheads_c, weapon_index) =
-            crate::combat::data::tables(&s.weapons, &s.projectiles, &s.warheads, gravity, mode);
+            crate::combat::data::tables(
+                &s.weapons,
+                &s.projectiles,
+                &s.warheads,
+                gravity,
+                quirks.negative_range_fields,
+                mode,
+            );
         // spec: S-0309 Import mapping (the game-wide default coefficients; engine default 0)
         let coefficient_defaults: [F64; 5] = g
             .coefficient_defaults
@@ -1015,6 +1022,7 @@ impl SimRules {
         let cx = CombatCx {
             weapons: &weapon_index,
             coefficients: coefficient_defaults,
+            negative_range_fields: quirks.negative_range_fields,
         };
         let mut names = BTreeMap::new();
         let units = |kind: Kind,
@@ -1237,6 +1245,8 @@ impl SimRules {
 struct CombatCx<'a> {
     weapons: &'a BTreeMap<String, u32>,
     coefficients: [F64; 5], // spec: S-0309 F4 (five coefficients)
+    /// `quirks.negative_range_fields` (S-0307 Edge cases), for the air range bonus.
+    negative_range_fields: bool,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1389,6 +1399,9 @@ fn unit_combat(
         cx.weapons,
         mode,
     );
+    // spec: S-0307 Edge cases (quirks.negative_range_fields, the air range bonus)
+    c.air_range_bonus =
+        crate::combat::data::range_field(c.air_range_bonus, cx.negative_range_fields, false);
     let w = |n: &Option<String>| n.as_ref().and_then(|n| cx.weapons.get(n).copied());
     c.gunner = u.gunner.unwrap_or(false);
     // spec: S-0308 Constants (mode index absent 0, passenger weapon index absent −1, deploy weapon index absent 1)
@@ -1423,6 +1436,9 @@ fn building_rules(
         cx.weapons,
         mode,
     );
+    // spec: S-0307 Edge cases (quirks.negative_range_fields, the air range bonus)
+    combat.air_range_bonus =
+        crate::combat::data::range_field(combat.air_range_bonus, cx.negative_range_fields, false);
     combat.immune = bt.immune.unwrap_or(false);
     // spec: S-0302 Import mapping (ImmuneToRadiation absent: no)
     combat.immune_radiation = bt.immune_to_radiation.unwrap_or(false);

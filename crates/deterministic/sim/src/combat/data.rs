@@ -45,6 +45,18 @@ pub fn leptons(d: &Decimal, mode: Rounding) -> i32 {
         .to_i32_common()
 }
 
+/// A range field in leptons after `quirks.negative_range_fields` (S-0307
+/// Edge cases): kept as it is when the switch is on, otherwise max(0, v),
+/// except that a weapon range of −512 (`unlimited`) stays unlimited.
+pub fn range_field(v: i32, keep_negative: bool, weapon_range: bool) -> i32 {
+    // spec: S-0307 Edge cases (quirks.negative_range_fields off: max(0, value); a weapon range of −512 remains unlimited)
+    if keep_negative || (weapon_range && v == crate::combat::range::UNLIMITED) {
+        v
+    } else {
+        v.max(0)
+    }
+}
+
 /// A weapon's resolved fields.
 #[derive(Clone, Debug, Default)]
 pub struct WeaponRules {
@@ -824,6 +836,7 @@ pub fn tables(
     projectiles: &BTreeMap<String, ProjectileType>,
     warheads: &BTreeMap<String, WarheadType>,
     gravity: i32,
+    negative_range_fields: bool,
     mode: Rounding,
 ) -> (
     Vec<WeaponRules>,
@@ -948,7 +961,12 @@ pub fn tables(
         .iter()
         .map(|(n, w)| {
             let projectile = w.projectile.as_ref().and_then(|p| p_index.get(p).copied());
-            let range = w.range.as_ref().map_or(0, |d| leptons(d, mode));
+            // spec: S-0307 Edge cases (quirks.negative_range_fields; the replaced range also feeds the speed below)
+            let range = range_field(
+                w.range.as_ref().map_or(0, |d| leptons(d, mode)),
+                negative_range_fields,
+                true,
+            );
             let rho0 = projectile.is_some_and(|p| pr[p as usize].rot == 0);
             let floater = projectile.is_some_and(|p| pr[p as usize].floater);
             // spec: S-0306 Import mapping (stored speed = min(trunc(256 × min(v, 100) / 100), 255); v ≤ 0 gives 0)
@@ -972,7 +990,11 @@ pub fn tables(
                 burst: w.burst.unwrap_or(1).max(1),
                 speed,
                 range,
-                min_range: w.minimum_range.as_ref().map_or(0, |d| leptons(d, mode)),
+                min_range: range_field(
+                    w.minimum_range.as_ref().map_or(0, |d| leptons(d, mode)),
+                    negative_range_fields,
+                    false,
+                ),
                 cell_rangefinding: b(w.cell_rangefinding),
                 sonic: b(w.is_sonic),
                 spark: b(w.use_spark_particles),
