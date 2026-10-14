@@ -56,6 +56,31 @@ pub struct TabView {
     /// The tab holds a done building or defence waiting for placement
     /// (S-0411 claim 11).
     pub waiting: bool,
+    /// The tick whose sidebar update started the tab's current flash
+    /// (S-0411 claim 11); kept by the client.
+    pub flash_start: Option<i32>,
+}
+
+/// Whether a tab whose flash started at tick `t` shows lit at tick `u`
+/// (S-0411 claim 11 and Formulas). `extra` is
+/// `quirks.tab_flash_initial_extra_period`.
+pub fn tab_lit(t: i32, u: i32, extra: bool) -> bool {
+    // spec: S-0411 Formulas (each floor division rounds down in the non-negative domain)
+    let period = |x: i32| x.div_euclid(10);
+    let r = t.rem_euclid(10);
+    let (first_toggle, initial) = if extra {
+        // spec: S-0411 claim 11 (initial lit iff ⌊t/10⌋ + 1 even; first toggle visible in tick t + 19 − r)
+        (t + 19 - r, (period(t) + 1) % 2 == 0)
+    } else {
+        // spec: S-0411 Edge cases (quirks.tab_flash_initial_extra_period off: initial lit iff ⌊t/10⌋ even; toggle in tick t + 9 − r)
+        (t + 9 - r, period(t) % 2 == 0)
+    };
+    if u < first_toggle {
+        initial
+    } else {
+        // spec: S-0411 claim 11 (after the first toggle, tick u is lit iff ⌊(u + 1)/10⌋ is even)
+        period(u + 1) % 2 == 0
+    }
 }
 
 /// What the sidebar shows.
@@ -79,6 +104,8 @@ pub struct HudModel {
     pub radar: bool,
     /// The tick number, for the tab flash (S-0411 claim 11).
     pub tick: i32,
+    /// `quirks.tab_flash_initial_extra_period` (S-0411 claim 11).
+    pub flash_extra: bool,
 }
 
 /// The tab to show (S-0411 claim 2): the current one while it has icons,
@@ -109,6 +136,7 @@ pub fn model(
         credits,
         shown: shown_tab(w, house, shown),
         tick: w.tick,
+        flash_extra: w.rules().quirks.tab_flash_initial_extra_period,
         ..HudModel::default()
     };
     let Some(h) = w.houses.get(usize::from(house.0)) else {
@@ -308,8 +336,11 @@ pub fn view(
     }
     for (i, r) in l.tabs.iter().enumerate() {
         let tv = m.tabs[i];
-        // spec: S-0411 claim 11 (the look changes at ticks that are multiples of 10)
-        let lit = tv.waiting && (m.tick.div_euclid(10) % 2 == 0);
+        // spec: S-0411 claim 11 (the flash state from the tick that started it; the lit look is implementer design)
+        let lit = tv.waiting
+            && tv
+                .flash_start
+                .is_some_and(|t| tab_lit(t, m.tick, m.flash_extra));
         let active = i == m.shown;
         widget::button(
             &mut d,
@@ -517,22 +548,40 @@ mod tests {
     }
 
     #[test]
-    fn tab_flash_changes_every_ten_ticks() {
-        // spec: S-0411 claim 11 (the look changes at multiples of 10)
+    fn tab_flash_follows_its_start_tick() {
+        // spec: S-0411 claim 11 (start at t = 23, r = 3: initial lit iff ⌊t/10⌋ + 1 even, so unlit; first toggle in tick t + 19 − r = 39)
+        assert!(!tab_lit(23, 23, true));
+        assert!(!tab_lit(23, 38, true));
+        assert!(tab_lit(23, 39, true));
+        // spec: S-0411 claim 11 (later toggles 10 ticks apart: u lit iff ⌊(u + 1)/10⌋ even)
+        assert!(tab_lit(23, 48, true));
+        assert!(!tab_lit(23, 49, true));
+        // An even ⌊t/10⌋ starts unlit for 20 − r updates.
+        assert!(!tab_lit(40, 40, true));
+        assert!(!tab_lit(40, 58, true));
+        assert!(tab_lit(40, 59, true));
+        // spec: S-0411 Edge cases (quirks.tab_flash_initial_extra_period off: initial lit iff ⌊t/10⌋ even, toggle in tick t + 9 − r)
+        assert!(tab_lit(23, 23, false));
+        assert!(tab_lit(23, 28, false));
+        assert!(!tab_lit(23, 29, false));
+        assert!(tab_lit(23, 39, false));
+        // The drawn tab follows the flash state.
         let mut m = HudModel::default();
+        m.flash_extra = true;
         m.tabs[0] = TabView {
             count: 1,
             waiting: true,
+            flash_start: Some(23),
         };
         m.shown = 1;
         let look = |m: &HudModel| view(m, (800, 600), None, None).0;
-        m.tick = 0;
+        m.tick = 23;
         let a = look(&m);
-        m.tick = 9;
+        m.tick = 38;
         assert_eq!(look(&m), a);
-        m.tick = 10;
+        m.tick = 39;
         assert_ne!(look(&m), a);
-        m.tick = 20;
+        m.tick = 49;
         assert_eq!(look(&m), a);
     }
 

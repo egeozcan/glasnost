@@ -99,6 +99,8 @@ pub struct Play {
     pub outcome: Option<Outcome>,
     radar_on: bool,
     waiting: bool,
+    /// The tick that started each tab's flash (S-0411 claim 11).
+    flash: [Option<i32>; hud::TABS],
 }
 
 fn icon_ready(w: &World, house: HouseId, t: TypeRef) -> bool {
@@ -139,6 +141,7 @@ impl Play {
             outcome: None,
             radar_on,
             waiting: false,
+            flash: [None; hud::TABS],
         }
     }
 
@@ -202,6 +205,17 @@ impl Play {
             self.cues.push(UiCue::ConstructionComplete);
         }
         self.waiting = waiting;
+        let tick = w.tick;
+        for (f, tv) in self.flash.iter_mut().zip(model.tabs.iter()) {
+            *f = match (*f, tv.waiting) {
+                // spec: S-0411 claim 11 (with no ready subject on the tab the flash stops and clears)
+                (_, false) => None,
+                // spec: S-0411 claim 11 (a ready item found again does not restart an existing flash)
+                (Some(s), true) => Some(s),
+                // spec: S-0411 claim 11 (the tick whose sidebar update starts a new flash)
+                (None, true) => Some(tick),
+            };
+        }
         if let Tool::Place(t) = self.tool
             && !icon_ready(w, house, t)
         {
@@ -390,6 +404,9 @@ impl Play {
             art,
         );
         m.scroll = self.scroll;
+        for (tv, f) in m.tabs.iter_mut().zip(self.flash) {
+            tv.flash_start = f;
+        }
         m.mode = match self.tool {
             Tool::Mode(x) => Some(x),
             _ => None,

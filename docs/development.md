@@ -454,12 +454,11 @@ Interim rules of the game client, each tied to a request:
 | `session::pointer_up`, `play::select_box` | a left drag of more than 4 px selects the local house's selectable mobile objects whose reference point is inside the box; Shift adds to the selection; an empty box clears it | Q-0278 |
 | `install::offered_countries`, `glasnost_ui::setup` | the setup offers the non-passive countries except the neutral and special houses', in registration order; at most 8 slots, the first always the person's; teams 1 to 4 or none | Q-0281 |
 | `play::say` | status messages are our own texts at the battlefield's top left, at most 4 at a time, each for 90 ticks | Q-0282 |
-| `glasnost_ui::hud` | a tab with a newly ready item flashes, lit while (tick / 10) is even | Q-0283 |
 | `play::click_map` (sell mode) | walls get no sell order | Q-0284 |
 | `play::end`, `glasnost_ui::end` | the end screen shows, per house, the result, objects built, kills, losses and the house's combat score; the time is the last tick × the paced period; there is no harvested figure | Q-0285 |
 | `client::key`, `window::GameApp::modifiers` | S stop, X scatter, G guard, D deploy, C cheer; Shift is force-select, Ctrl or Cmd force-fire, Alt force-move; attack-move mode has no key; Escape opens and closes the options menu; no route mode | Q-0286 |
 
-Answered requests of the game client: Q-0279 by S-0101 claims 12 to 15 (`game::scroll`: edge scrolling at the outermost client pixel with F9's direction, momentum and magnitude table scaled by the imported `ScrollMultiplier`, 21 px per held arrow, both once per unfrozen cycle; the scroll index is the default 3, since our engine has no settings file yet, and no order block or timed freeze is modelled), and Q-0280 by S-0103 claims 11 and 12 (`install::slot_swatches`: the fixed slot colours after the 16-bit step).
+Answered requests of the game client: Q-0283 by S-0411 claim 11 (`glasnost_ui::hud::tab_lit`: a tab flash keeps the tick that started it, with the initial extra period and `quirks.tab_flash_initial_extra_period`; the lit look is our own design), Q-0279 by S-0101 claims 12 to 15 (`game::scroll`: edge scrolling at the outermost client pixel with F9's direction, momentum and magnitude table scaled by the imported `ScrollMultiplier`, 21 px per held arrow, both once per unfrozen cycle; the scroll index is the default 3, since our engine has no settings file yet, and no order block or timed freeze is modelled), and Q-0280 by S-0103 claims 11 and 12 (`install::slot_swatches`: the fixed slot colours after the 16-bit step).
 
 Known limits:
 
