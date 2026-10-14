@@ -2,13 +2,13 @@
 id: S-0410
 title: Radar and minimap (when radar is available, what the radar map shows and how it is coloured)
 topic: ui
-revision: 13
+revision: 14
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0110, Q-0112, Q-0277, Q-0331]
+requests: [Q-0110, Q-0112, Q-0277, Q-0331, Q-0417]
 supersedes: []
 ---
 
@@ -311,10 +311,18 @@ house as S-0409 defines (Terms); a gap field that is not hostile to *H* is a *fr
    occupied cells differ. The zero-size foundation also has a nonempty set, from F8's minimum
    sizes. Each pixel still passes claim 7's draw-time tests separately. An object of *H* outside the radar image, other than a building, is drawn at the
    nearest pixel on the image's edge; other houses' objects outside the usable area are not shown
-   (claim 7). A shown object is drawn in its owner's house colour (the 8-bit triple of the house's colour
-   definition, S-0103, converted as Terms *radar colour* says), or in the colour of the house it is
+   (claim 7). A shown object is drawn using its owner's house display RGB (S-0103 claim 15),
+   converted as Terms *radar colour* says, or using the display RGB of the house it is
    disguised as when it is disguised against *H*; a radar object without an owner is drawn in a fixed
-   neutral colour. When several listed objects lie at one radar pixel, the colour is that of the
+   neutral colour. Buildings, infantry, vehicles and aircraft use the same house display RGB:
+   there is no building-versus-nonbuilding colour rule (Q-0417). Their radar shapes and visibility
+   can differ, and claim 10 can invert an own object's colour independently. The RGB input is
+   the setup-time sample of the brightest ramp entry, palette index 16 at shade row 26, not the
+   definition's stored hue, saturation and value interpreted as RGB. It has already undergone
+   shading and display-precision packing under S-0103 claim 15; radar packing only drops its
+   zero-filled low bits, with no further subtraction, palette lookup or lighting adjustment.
+   Thus later battlefield lighting changes do not change an unflashed object's radar colour.
+   When several listed objects lie at one radar pixel, the colour is that of the
    first of them in this order that is shown (passes the draw-time tests of claim 7): *H*'s own
    objects first, the one with the latest arrival (Terms) first among them, then the other objects,
    the one with the earliest arrival first. Because arrivals are ordered within a tick by the order of
@@ -336,7 +344,8 @@ house as S-0409 defines (Terms); a gap field that is not hostile to *H* is a *fr
    shown at its pixel (F3) is (*x* + 1, *y* + 1), so the draw-time shroud test of an object of
    another house is made on that cell, not on the cell it stands on (scenario R5 part F's setup
    makes it observable; R3 part A measures the pixel).
-   - Backing: `measurable` (scenarios R5 parts A to C and F, R10, R11); the following rules are
+   - Backing: `measurable` (scenarios R5 parts A to C and F, R10, R11; R14 for house RGB,
+     object-kind equality and lighting independence); the following rules are
      `unmeasured`. The neutral colour of an ownerless radar object: no skirmish setup is known that
      creates a radar object without a house. The disguise colour: disguising is an order of the
      object's owner, the other houses are computer players that no scenario can make
@@ -344,7 +353,8 @@ house as S-0409 defines (Terms); a gap field that is not hostile to *H* is a *fr
      skirmish setup under the scenarios' control creates it. The separate rejection of a
      non-owned object whose F4 pixel is outside the image while its position remains usable is
      also `unmeasured`: R11 tests leaving the usable area, not that boundary case
-   - Confidence: high for the arrival order and the single pixel of an object that is not a building; medium for the edge
+   - Confidence: high for the house RGB input, its equality across object kinds, lighting independence,
+     the arrival order and the single pixel of an object that is not a building; medium for the edge
      clamp and a building's set of pixels; low for the pixels outside the image, for the same-tick
      results, for the one-tick lag of the drawn pixel, for the neutral colour and for the disguise colour
      (including whether the disguise depends on the viewer, Open questions)
@@ -763,6 +773,8 @@ any intervening tick during a freeze.
 
 | User data | Feeds | Form | Absent |
 |---|---|---|---|
+| Rules, `[Colors]`, each definition entry | house display RGB consumed by claim 8, via S-0103 claims 4–6, 10 and 15 | up to three decimal integers, stored modulo 256 as hue, saturation and value; name lookup and lobby selection as S-0103 | missing components are 0; an empty entry creates no definition, not a separate radar fallback |
+| Selected house colour definition | common colour of buildings, infantry, vehicles and aircraft (claim 8) | S-0103 claim 15's setup-time display RGB, packed by Terms *radar colour*; no separate radar selector | no independent radar-colour default; use the house's selected definition |
 | Rules, building type section, `Radar` | radar flag (claim 1) | boolean | no |
 | Map, `[Basic]`, `FreeRadar` | free radar (claim 1) | boolean | no |
 | Rules, infantry, vehicle, aircraft or building type section, `RadarInvisible` | radar-invisible (claim 7) | boolean | no |
@@ -791,7 +803,10 @@ rules or art settings; no additional cursor data file or key is imported here.
 There is no imported radar-discovery flag. Claim 7 reads the per-house discovery mark produced
 by S-0409, separately from the object's owner, position and sight fields.
 
-Except for the three zoom fields tested by R13 B, the absent-key defaults in this table
+Colour-definition parsing and selection inherit S-0103 claims 4, 5 and 10's backing.
+there is no additional building or nonbuilding colour import. R14 tests their shared consumption.
+
+Except for the colour-definition rows delegated to S-0103 and the three zoom fields tested by R13 B, the absent-key defaults in this table
 are `unmeasured` here: the scenarios use supplied data
 rather than removing each key independently. Confidence: medium. The foundation vocabulary,
 parsing and its defaults inherit S-0108's backing rather than claiming a separate radar test.
@@ -1203,7 +1218,33 @@ cannot reach its distinguishing states is recorded as inconclusive, not as confi
   repeat during zoom, expiry measured from creation, or radar-dependent delay falsifies
   claims 14 or 15. Other suppression kinds retain S-0701's existing unmeasured backing.
 
+- **R14 (claim 8; Q-0417).** Common skirmish setup, test lighting as S-0103 defines it,
+  functioning radar and a 5-6-5 display path captured losslessly without scaling or filtering.
+  Build separated ordinary stock buildings, infantry, vehicles and a landed stock aircraft of
+  the human house in explored ground. Keep them stationary, undisguised and unharmed, with no
+  overlapping radar pixels. Named test data: two loose base-rules copies, used in separate games,
+  changing only the definition selected by the human's lobby colour to invented HSV
+  (0, 255, 255) and (170, 128, 200). Keep its name and position unchanged; remove these copies
+  afterwards. A test-map trigger starts a storm and another changes a map-tint channel.
+  forced radar prevents outages during the colour observations.
+  Procedure: after listing stabilises, sample interior shown building pixels and the isolated
+  pixels of each other kind, before and after each lighting change. Capture battlefield remap
+  pixels too, confirming that the intended definition loaded and that later lighting changed.
+  Observable: radar red, green and blue top bits, not screenshot low-bit expansion.
+  Expected: every unflashed subject of the house has (31, 14, 7) packed channel values in the
+  first game and (14, 29, 24) in the second, from S-0103 claim 15. They remain unchanged under
+  later lighting. There is no second shade subtraction. One valid run per definition suffices.
+  Falsified by any shown object's different channel tuple, a building/nonbuilding difference,
+  or a lighting-driven change. A hidden, flashing or overlapping subject is inconclusive:
+  do not infer its colour from the terrain or another object's pixel. S-0103 scenario PN
+  independently tests the definition-to-RGB conversion.
+
 ## Open questions
+
+Q-0417 is answered jointly: S-0103 claim 15 owns the RGB derivation; claim 8 here owns
+its radar consumption and equality between buildings and other radar-object kinds. Neither
+part was explicit in the earlier approved colour and radar claims. No part remains open
+within skirmish scope.
 
 - Radar-event repeat suppression is owned by S-0701 F7. Its unmeasured kinds and
   cross-creator cases retain that backing. Q-0331's zoom timing and advancement with or
