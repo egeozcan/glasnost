@@ -2,7 +2,7 @@
 id: S-0011
 title: Map triggers (multiplayer subset)
 topic: triggers
-revision: 14
+revision: 15
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -558,11 +558,14 @@ engine does instead (claims 26 and 36). The terms below are specific to this spe
     immune to radiation, psychic or poison damage takes no damage from a warhead of that kind,
     and a warhead that makes its target go berserk takes no health. General immunity to all damage
     does not stop this ignoring-defences hit, except for an immune bridge repair hut (S-0302 claim 8). A building that is eligible for a delayed kill remains alive at
-    1 health when the demolition warhead causes delayed kills. An airborne infantry unit hit by
-    a demolition warhead of infantry-death kind 9 has its delivered amount reset to 0 and the
-    hit is stopped by the zero-amount rule. These additional cases are the damage-resolution
-    rules of S-0302 claims 8, 9, 16 and 17; airborne has the meaning and the unsettled height
-    reference of S-0302 claim 17. The rules' demolition warhead (Import mapping) is named as the
+    1 health when the demolition warhead causes delayed kills. An infantry unit whose height
+    above the surface is strictly greater than 0 leptons, hit by a demolition warhead of
+    infantry-death kind 9, has its delivered amount reset to 0 and the hit is stopped by the
+    zero-amount rule. This is a height test, not an airborne-state test: standing infantry on
+    a high bridge deck have height 0 above the surface and do not qualify. These additional
+    cases are the damage-resolution rules of S-0302 claims 8, 9, 16 and 17. Confirm this
+    height test together with S-0302 claim 17 at sign-off. The rules' demolition warhead
+    (Import mapping) is named as the
     damage's warhead. Its kind matters for the protections above as well as for how the destruction
     looks and what it leaves (S-0312, a pointer only).
     If an object survives the damage, the action never completes in the original: from that tick
@@ -574,7 +577,8 @@ engine does instead (claims 26 and 36). The terms below are specific to this spe
     also acts on the cell, which is not established here (Open questions).
     - Backing: `measurable` (scenario T9, including the armour variant and variants C and D for
       radiation-kind and berserk survivors; S-0302 scenario D16 parts d2, d3 and d4 for the immune hut,
-      delayed-kill building and airborne infantry survivors and the resulting hangs). The cell
+      delayed-kill building and positive-height-above-the-surface infantry survivors and the
+      resulting hangs). The cell
       effect is `unmeasured`: T9 raises no tag from a cell and no expected cell outcome is known.
       Psychic-kind and poison-kind survivors and bypass of temporary invulnerability are
       `unmeasured` here: T9 varies radiation, berserk and armour, not those protections

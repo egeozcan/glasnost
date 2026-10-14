@@ -353,6 +353,19 @@ impl Client {
         }
     }
 
+    /// The modifiers held changed.
+    pub fn modifiers(&mut self, m: Modifiers) {
+        if let Some(s) = self.session.as_mut() {
+            s.mods = m;
+        }
+    }
+
+    /// Whether the game draws its own battlefield cursor this frame, so the
+    /// window hides the system pointer (S-0214 claims 21 and 22).
+    pub fn draws_cursor(&self) -> bool {
+        self.shell.screen == Screen::Game && self.session.as_ref().is_some_and(|s| s.draws_cursor())
+    }
+
     /// The pointer moved.
     pub fn pointer_moved(&mut self, p: Point) {
         self.pointer = Some(p);
@@ -440,6 +453,7 @@ impl Client {
         if down {
             self.gesture();
         }
+        // spec: S-0213 claim 23 (holding Left, Right, Up or Down scrolls the view that way; releasing an arrow ends its contribution)
         let arrow = match k {
             Key::Left => Some(0),
             Key::Right => Some(1),
@@ -457,14 +471,10 @@ impl Client {
         let Some(s) = self.session.as_mut() else {
             return;
         };
-        match k {
-            Key::Escape => s.toggle_pause(),
-            // spec: S-0213 table T2 (the key commands); the default keys are interim (Q-0286)
-            Key::Char('s') => s.key(KeyCommand::Stop),
-            Key::Char('x') => s.key(KeyCommand::Scatter),
-            Key::Char('g') => s.key(KeyCommand::Guard),
-            Key::Char('d') => s.key(KeyCommand::Deploy),
-            Key::Char('c') if !s.paused => s.play.cheer(),
+        match bound(k) {
+            Some(Bound::Options) => s.open_options(),
+            Some(Bound::Command(c)) => s.key(c),
+            Some(Bound::Cheer) if !s.paused => s.play.cheer(),
             _ => {}
         }
     }
@@ -488,6 +498,7 @@ impl Client {
         let Some(s) = self.session.as_mut() else {
             return;
         };
+        s.clock_ms = now_ms;
         // spec: S-0201 claims 8 and 9 (no cycle runs while the options menu is open or without focus)
         if !s.ticking() || !self.focused {
             self.pacer.reset();
@@ -565,6 +576,7 @@ impl Client {
             Screen::Game => match self.session.as_mut() {
                 Some(s) => {
                     s.update_marks();
+                    s.update_cursor(&mut self.painter);
                     if self.cpu_map {
                         let v = s.view();
                         changed.push((MAP_IMAGE, v.size.0, v.size.1, s.map_rgba()));
@@ -635,6 +647,33 @@ impl Default for Client {
 fn busy_veil(d: &mut DrawList, size: (i32, i32), status: &str) {
     d.fill(Rect::new(0, 0, size.0, size.1), colour::VEIL);
     d.text_centred(Rect::new(0, size.1 / 2 - 8, size.0, 16), status, colour::TEXT);
+}
+
+/// What a pressed key does in a running game.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Bound {
+    /// Opens the in-game options menu.
+    Options,
+    /// A key command of S-0213 table T2.
+    Command(KeyCommand),
+    /// The cheer command.
+    Cheer,
+}
+
+/// The key bindings of a fresh profile (S-0213 claims 22 and 23). The
+/// route-mode key Z is not bound: route mode does not exist yet.
+pub fn bound(k: Key) -> Option<Bound> {
+    match k {
+        // spec: S-0213 claim 23 (Escape opens the in-game options menu, reserved for it; closing keys are not specified, so the menu closes through its return control)
+        Key::Escape => Some(Bound::Options),
+        // spec: S-0213 claim 22 (fresh-profile bindings: S stop, X scatter, G guard, D deploy, C cheer, acting on key press)
+        Key::Char('s') => Some(Bound::Command(KeyCommand::Stop)),
+        Key::Char('x') => Some(Bound::Command(KeyCommand::Scatter)),
+        Key::Char('g') => Some(Bound::Command(KeyCommand::Guard)),
+        Key::Char('d') => Some(Bound::Command(KeyCommand::Deploy)),
+        Key::Char('c') => Some(Bound::Cheer),
+        _ => None,
+    }
 }
 
 #[cfg(test)]

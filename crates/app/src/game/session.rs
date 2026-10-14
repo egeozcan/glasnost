@@ -25,15 +25,18 @@ use glasnost_render::scene::{Filter, Group, Scene, View};
 use glasnost_render::shroud::ShroudQuirks;
 use glasnost_sim::econ::TypeRef;
 use glasnost_sim::rules::Kind as SimKind;
-use glasnost_sim::targeting::{KeyCommand, Modifiers};
+use glasnost_sim::targeting::{self, ClickOn, KeyCommand, Modifiers};
 use glasnost_sim::world::{GameSetup, ObjectId};
 use glasnost_ui::draw::{DrawList, colour};
 use glasnost_ui::font;
 use glasnost_ui::geom::{Point, Rect};
+use glasnost_ui::modes::{self, Mode};
 use glasnost_ui::hud::{self, HudHit, Layout, PauseHit};
 use glasnost_ui::widget::Targets;
 use glasnost_vfs::{FileRef, Vfs};
 
+use super::band;
+use super::cursor::{self, Offer};
 use super::paint::Painter;
 use super::play::{Button, Play, Tool, local_house};
 use super::scroll::{self, EdgeScroll};
@@ -47,11 +50,11 @@ use crate::mapview::radar::Radar;
 pub const MAP_IMAGE: u32 = 1;
 /// Image id of the radar map.
 pub const RADAR_IMAGE: u32 = 2;
+/// Sprite id of the battlefield cursor image's frames.
+// nocite: our own sprite id, below the icons'
+const CURSOR_SPRITE: u32 = 900;
 /// First sprite id of the sidebar icons.
 const ICON_SPRITES: u32 = 1000;
-/// A left-button drag longer than this (in either direction) is a box
-/// selection. Interim (Q-0278).
-pub const DRAG_START: i32 = 4;
 
 /// The 64-bit FNV-1a hash of a map file: the map's name in replays, so
 /// that no map is named by its title (our own identifier).
@@ -96,6 +99,21 @@ pub struct Session {
     /// Edge momentum and its retained direction (S-0101 F9).
     edge: EdgeScroll,
     press: Option<(Point, Button)>,
+    /// The armed band-box drag (S-0214 claim 18).
+    drag: Option<band::Drag>,
+    /// The imported cursor image (S-0214 claim 22), when the install has it.
+    cursor_art: Option<CursorArt>,
+    /// The cursor palette's painter row, once registered.
+    cursor_row: Option<u32>,
+    /// The cursor's animation (S-0214 claim 22).
+    animator: cursor::Animator,
+    /// The cursor frame drawn this frame and its hot spot.
+    cursor_shown: Option<(u16, (i32, i32))>,
+    /// The modifiers held, for the hovered action.
+    pub mods: Modifiers,
+    /// The interface's real-time clock, milliseconds (S-0214 claim 22: not
+    /// simulation ticks).
+    pub clock_ms: i64,
     /// The last drawn sidebar's targets.
     targets: Targets<HudHit>,
     pause_targets: Targets<PauseHit>,
@@ -142,6 +160,7 @@ impl Session {
         )
         .await;
         let icons = read_icons(vfs, &loaded).await;
+        let cursor_art = read_cursor(vfs).await;
         // spec: S-0103 claim 13 (the dedicated icon palette file, claim 1's conversion)
         let icon_file = loaded
             .assets
@@ -210,6 +229,13 @@ impl Session {
             pointer: None,
             edge: EdgeScroll::default(),
             press: None,
+            drag: None,
+            cursor_art,
+            cursor_row: None,
+            animator: cursor::Animator::default(),
+            cursor_shown: None,
+            mods: Modifiers::default(),
+            clock_ms: 0,
             targets: Targets::new(),
             pause_targets: Targets::new(),
             problems: Vec::new(),
@@ -434,23 +460,35 @@ impl Session {
     /// The pointer moved.
     pub fn pointer_moved(&mut self, p: Point) {
         self.pointer = Some(p);
+        let mode = self.play.game.world.rules().mode;
+        if let Some(d) = self.drag.as_mut() {
+            d.motion(p, mode);
+        }
     }
 
     /// The pointer left the window.
     pub fn pointer_left(&mut self) {
         self.pointer = None;
         self.press = None;
+        self.drag = None;
     }
 
     /// A button went down.
     pub fn pointer_down(&mut self, b: Button, p: Point) {
         self.pointer = Some(p);
         self.press = Some((p, b));
+        // spec: S-0214 claim 18 (a primary-button press in the battlefield can start a selection drag when sell, repair, power, building-placement and superweapon targeting modes are off)
+        self.drag = (b == Button::Left
+            && !self.paused
+            && self.play.tool == Tool::Select
+            && self.targets.hit(p) == Some(HudHit::Map))
+        .then(|| band::Drag::armed(p));
     }
 
     /// A button went up: a click or the end of a drag.
     pub fn pointer_up(&mut self, b: Button, p: Point, mods: Modifiers) -> SessionEvent {
         self.pointer = Some(p);
+        let drag = self.drag.take();
         let Some((start, pb)) = self.press.take() else {
             return SessionEvent::None;
         };
@@ -477,11 +515,16 @@ impl Session {
                 None => SessionEvent::None,
             };
         }
-        let dragged = (p.x - start.x).abs() > DRAG_START || (p.y - start.y).abs() > DRAG_START;
+        let dragged = drag.is_some_and(|d| d.active) && b == Button::Left;
         match self.targets.hit(start) {
-            Some(HudHit::Map) if dragged && b == Button::Left && self.play.tool == Tool::Select => {
-                let inside = self.objects_in(Rect::spanning(start, p));
-                self.play.select_box(&inside, mods.force_select);
+            Some(HudHit::Map) if dragged && self.play.tool == Tool::Select => {
+                let end = band::limit(p, self.map_rect());
+                let inside = self.box_candidates(start, end);
+                // spec: S-0214 claim 19 (an unmodified box without a live candidate continues as the ordinary release click at the final pixel)
+                if self.play.select_box(&inside, mods.force_select) {
+                    let (cell, object) = self.under(end);
+                    self.play.click_map(b, object, cell, mods);
+                }
             }
             Some(HudHit::Map) if !dragged => {
                 let (cell, object) = self.under(p);
@@ -509,19 +552,24 @@ impl Session {
         SessionEvent::None
     }
 
-    /// The local player's objects whose reference point projects inside
-    /// `r` (screen pixels of the battlefield).
-    fn objects_in(&self, r: Rect) -> Vec<ObjectId> {
+    /// The live box candidates whose box point is inside the box from
+    /// `press` to `end` (S-0214 claim 19, Terms *box point*): objects of
+    /// any owner in play on the map, at their position projected with
+    /// height lift, aircraft at their lifted origin. Terrain objects are not
+    /// candidates, and the 500-candidate frame limit of claim 20 is not
+    /// applied (interim, Q-0278).
+    fn box_candidates(&self, press: Point, end: Point) -> Vec<ObjectId> {
         let w = &self.play.game.world;
         let v = self.view();
         let m = self.map_rect();
         w.objects
             .values()
-            .filter(|o| o.owner == Some(self.play.local) && o.on_map)
+            .filter(|o| o.on_map && o.kind != SimKind::Terrain)
             .filter(|o| {
-                let p = w.reference_point(o.id);
-                let (qx, qy) = project_lifted(p.x, p.y, p.z);
-                r.contains(Point::new(qx - v.origin.0 + m.x, qy - v.origin.1 + m.y))
+                // spec: S-0214 Terms (box point: the drawing origin, the position projected with world-height lift; S-0101 F1)
+                let (qx, qy) = project_lifted(o.pos.x, o.pos.y, o.pos.z);
+                let q = Point::new(qx - v.origin.0 + m.x, qy - v.origin.1 + m.y);
+                band::inside(press, end, q)
             })
             .map(|o| o.id)
             .collect()
@@ -534,14 +582,108 @@ impl Session {
         }
     }
 
-    /// The options menu key: opens or closes the menu (S-0201 claim 8).
-    pub fn toggle_pause(&mut self) {
-        self.paused = !self.paused;
+    /// The options menu key opens the menu (S-0213 claim 23; S-0201
+    /// claim 8: no ticks run while it is open).
+    pub fn open_options(&mut self) {
+        self.paused = true;
     }
 
     /// Whether ticks may run now.
     pub fn ticking(&self) -> bool {
         !self.paused && self.play.running()
+    }
+
+    /// What the pointer offers at `p` for table C, and whether the target
+    /// is shrouded; `None` keeps the system pointer.
+    fn offer(&mut self, p: Point) -> Option<(Offer, bool)> {
+        let (cell, object) = self.under(p);
+        let on = self.play.target(object, cell);
+        let w = &self.play.game.world;
+        let local = self.play.local;
+        let tc = match on {
+            ClickOn::Object(id) => w.obj(id).map_or(cell, |o| o.pos.cell()),
+            ClickOn::Cell(c) => c,
+        };
+        // spec: S-0214 claim 21 (table C's shrouded column, for a shrouded target) and S-0409 Terms (shrouded: not explored by the house)
+        let shrouded = !glasnost_sim::econ::shroud::explored(w, local, tc);
+        let offer = match self.play.tool {
+            // Placement hover images belong to S-0406's placement display
+            // (S-0214 Open questions): the system pointer stays.
+            Tool::Place(_) => return None,
+            Tool::Mode(m) => {
+                // spec: S-0214 claims 13 and 21 (the sidebar modes' offers and their images in table C)
+                let ok = modes::order(w, local, m, on).is_some();
+                match (m, ok) {
+                    (Mode::Sell, true) => Offer::Sell,
+                    (Mode::Sell, false) => Offer::NoSell,
+                    (Mode::Repair, true) => Offer::RepairSwitch,
+                    (Mode::Repair, false) => Offer::NoRepair,
+                    (Mode::Power, _) => Offer::Power,
+                }
+            }
+            Tool::Select => {
+                let sel = &self.play.selection;
+                let mods = self.mods;
+                if targeting::shows_attack_move(w, local, sel, on, mods) {
+                    Offer::AttackMove
+                } else {
+                    Offer::Action {
+                        action: targeting::cursor(w, local, sel, on, mods),
+                        in_range: targeting::attack_cursor_in_range(w, sel, on),
+                        shroud_moves: targeting::first_may_move_into_shroud(w, sel),
+                    }
+                }
+            }
+        };
+        Some((offer, shrouded))
+    }
+
+    /// Chooses the battlefield cursor for this frame (S-0214 claims 21 and
+    /// 22) and registers its frames with the painter. Without the cursor
+    /// image, outside the battlefield, with the options menu open or while
+    /// placing a building, the system pointer shows.
+    pub fn update_cursor(&mut self, painter: &mut Painter) {
+        self.cursor_shown = None;
+        if self.cursor_art.is_none() || self.paused {
+            return;
+        }
+        let Some(p) = self.pointer.filter(|&p| self.map_rect().contains(p)) else {
+            return;
+        };
+        let Some((offer, shrouded)) = self.offer(p) else {
+            return;
+        };
+        let retain = self
+            .play
+            .game
+            .world
+            .rules()
+            .quirks
+            .damaging_entry_cursor_retained;
+        let choice = cursor::table_c(offer, shrouded, retain);
+        let (frames, frame) = self.animator.frame(choice, self.clock_ms);
+        let Some(art) = self.cursor_art.as_ref() else {
+            return;
+        };
+        let row = *self
+            .cursor_row
+            .get_or_insert_with(|| painter.add_palette(art.palette));
+        for f in frames.first..=frames.last {
+            if !painter.has_sprite(CURSOR_SPRITE, u32::from(f))
+                && let Some(img) = art.frame(f)
+            {
+                painter.add_sprite(CURSOR_SPRITE, u32::from(f), &img, row);
+            }
+        }
+        if painter.has_sprite(CURSOR_SPRITE, u32::from(frame)) {
+            self.cursor_shown = Some((frame, cursor::hot_spot(frames, art.size.0, art.size.1)));
+        }
+    }
+
+    /// Whether this frame draws its own battlefield cursor, so the system
+    /// pointer is hidden.
+    pub fn draws_cursor(&self) -> bool {
+        self.cursor_shown.is_some()
     }
 
     /// The selection and hover marks of the live drawing (S-0111 claim 3),
@@ -614,12 +756,10 @@ impl Session {
             };
             brackets(&mut d, cx, cy, hw, hh);
         }
-        if let (Some((start, Button::Left)), Some(p)) = (self.press, self.pointer)
-            && m.contains(start)
-            && self.play.tool == Tool::Select
-            && ((p.x - start.x).abs() > DRAG_START || (p.y - start.y).abs() > DRAG_START)
+        if let (Some(drag), Some(p)) = (self.drag, self.pointer)
+            && drag.active
         {
-            d.frame(Rect::spanning(start, p), colour::ACCENT);
+            d.frame(Rect::spanning(drag.press, band::limit(p, m)), colour::ACCENT);
         }
         let mut y = m.y + 4;
         for msg in &self.play.messages {
@@ -651,6 +791,11 @@ impl Session {
             d.extend(p);
             self.pause_targets = t;
         }
+        if let (Some((frame, (hx, hy))), Some(p)) = (self.cursor_shown, pointer) {
+            // spec: S-0214 claim 22 (the hot spot coincides with the pointer's input pixel)
+            let all = Rect::new(0, 0, size.0, size.1);
+            d.sprite(CURSOR_SPRITE, u32::from(frame), p.x - hx, p.y - hy, all);
+        }
         d
     }
 }
@@ -677,6 +822,48 @@ fn brackets(d: &mut DrawList, cx: i32, cy: i32, hw: i32, hh: i32) {
         d.line((x, y), (x - sx * arm, y), ink);
         d.line((x, y), (x, y - sy * arm), ink);
     }
+}
+
+/// The imported cursor image and palette (S-0214 claim 22, Import
+/// mapping).
+struct CursorArt {
+    bytes: Vec<u8>,
+    /// The full canvas, pixels.
+    size: (i32, i32),
+    palette: [u8; 1024],
+}
+
+impl CursorArt {
+    /// Frame `f` decoded on the full canvas.
+    fn frame(&self, f: u16) -> Option<IndexedImage> {
+        Shp::parse(&self.bytes)
+            .ok()?
+            .decode_on_canvas(usize::from(f))
+            .ok()
+    }
+}
+
+/// Reads the cursor image and its palette; `None` when either is missing
+/// (no replacement is specified, so the system pointer stays).
+async fn read_cursor(vfs: &Vfs) -> Option<CursorArt> {
+    // spec: S-0214 Import mapping (cursor image MOUSE.SHA, resolved by S-0005, a sprite image; cursor palette MOUSEPAL.PAL, S-0103)
+    let r = vfs.resolve("MOUSE.SHA")?;
+    let bytes = vfs.read_resolved(&r).await.ok()?;
+    let shp = Shp::parse(&bytes).ok()?;
+    let size = (i32::from(shp.width), i32::from(shp.height));
+    let pr = vfs.resolve("MOUSEPAL.PAL")?;
+    let pb = vfs.read_resolved(&pr).await.ok()?;
+    let p = glasnost_fmt::pal::Palette6::parse(&pb).ok()?;
+    // spec: S-0103 claim 2 (a palette file's components through the load rule)
+    let pal = glasnost_render::palette::palette_from_file(
+        &p,
+        &glasnost_render::palette::PaletteQuirks::default(),
+    );
+    Some(CursorArt {
+        bytes,
+        size,
+        palette: pal.to_rgba8(),
+    })
 }
 
 /// Reads and decodes frame 0 of every buildable type's sidebar icon

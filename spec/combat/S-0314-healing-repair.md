@@ -2,13 +2,13 @@
 id: S-0314
 title: Healing and repair in combat (healers, self-healing, house-wide healing, repair depot, hospital, building repair)
 topic: combat
-revision: 7
+revision: 8
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: []
+requests: [Q-0341]
 supersedes: []
 ---
 
@@ -20,9 +20,9 @@ How objects regain health: healers, self-healing (one object, or every infantry 
 of a house), repair steps at a repair depot and a hospital, and building repair. This spec owns the
 timings, the step sizes, the step cost and the house-wide healing. The arithmetic of a healing hit is
 S-0302's, and the orders that send a unit to be healed are S-0213's and S-0214's.
-Only skirmish is covered; network games and campaigns are out of scope. For automatic building
-repair and sale this revision specifies only the skill-level gate, not the remaining eligibility
-conditions or their outcomes when the gate passes.
+Only skirmish is covered; network games and campaigns are out of scope. Claims 12 to 15 specify
+automatic building repair and sale when the skill-level gate passes, including their random choices
+and the differences between player and non-player houses.
 
 ## Terms
 
@@ -70,6 +70,21 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
   repair order (S-0213, claim 13). It is separate from the repair steps of claims 3 to 7 (claim 8).
 - **Terms owned elsewhere.** *Radar event* (S-0011, claim 32), *rally point* (S-0213, claim 20),
   *rate delay* and *processing* (S-0215, F1) are used as those specs define them.
+- **Automatic-repair hold.** A house-wide block on starting another building's repair, initially
+  clear. An automatic start sets it; claim 15 gives its release. It does not stop repair already on.
+- **Repair reserve.** A game-wide integer number of credits (Import mapping), separate from the
+  cost of a repair step.
+- **Computer-repair flag.** The per-building map flag of S-0009 claim 40, not a type flag.
+- **Captured mark.** A building's persistent record of a successful ownership change, initially
+  clear. Capture or a map-trigger ownership transfer sets it; a later transfer does not clear it.
+- **Hostile-hit mark.** An object's persistent record of a surviving hit with a known attacker
+  whose house the object's owner does not count as allied, after S-0302 claim 8's hit-stopping
+  tests have allowed the ordinary damage response. Initially clear; a qualifying hit sets it,
+  and subsequent healing does not clear it. Claim 14 uses it for buildings.
+- **Sale skill.** The setup skill value used only for claim 14's additional sale test. It is
+  distinct from the current house skill level of claim 8: in skirmish it stays 0, including for
+  the original's computer players, whose current level instead receives the maximum.
+- **Turn.** An object's share of a tick, as in S-0203 claims 2 to 4, not a rotation.
 - **Periods and counts.** Three game-wide rates, each a decimal number of game minutes converted at 900
   ticks per game minute (glossary *game minute*): the *building repair rate* *r*<sub>b</sub>, the
   *vehicle repair rate* *r*<sub>u</sub>, the *infantry repair rate* *r*<sub>i</sub> (Import
@@ -287,38 +302,29 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
    repair is on at full health pays one step at the next multiple of *P*<sub>b</sub>, its health
    stays at the strength, and then repair turns off.
 
-   *Automatic repair and sale.* The original also turns a building's repair on, and sells
-   buildings, by itself. That rule is gated by the *house skill level* (glossary): it can apply
+   *Automatic repair and sale.* Claims 12 to 15 give the automatic-start rule. It is gated
+   by the *house skill level* (glossary): it can apply
    only to a house whose level is at least the game-wide repair-and-sell threshold (Import
    mapping; absent-key default 3). In a skirmish the levels are these:
    - every human-controlled house has level 0,
    - an *AI house* has level 0 in our engine (glossary), where the original gives its computer
      player the rules' maximum level (absent-key default 5), which passes the gate at the default
-     threshold. The computer player's automatic outcomes are `unmeasured` here: H9 controls
-     no computer-owned building's state, so cannot test the further conditions; this is an
-     original-only note, not an exemption for our AI (Edge cases), and
+     threshold. This is an original-only note, not an exemption for our AI (Edge cases), and
    - the *neutral house* and the *special house* keep level 0, since the original gives the
      maximum only to the houses of computer players when the houses are set up (S-0209, claim 11); they keep the original's rules in our engine, so their level is 0 here too.
 
    With a threshold above 0 the gate excludes every level-0 skirmish house. With a threshold of
    0 or below the gate passes for every level-0 house, including human-controlled houses, AI
    houses, the neutral house and the special house. Passing the gate is necessary, not sufficient:
-   it does not promise either a repair or a sale. The further conditions (available credits
-   against a reserve, random choices for selling and per-building states) remain an open
-   behavioural question, not a licence to disable the rule. This revision specifies no complete
-   automatic-start rule for the gate-passing case. The existing house policy remains unchanged:
+   it does not promise either a repair or a sale. Claims 12 to 15 give the further conditions.
    AI houses follow human-controlled unit rules, and the neutral and special houses retain the
-   original's non-human rules (S-0215, Houses in our engine). There is no threshold-specific
-   departure or importer warning. H9 distinguishes the gate's exclusion from exploratory
-   observations when it passes. S-0408 claim 1 must limit its assertion that non-player houses
-   never sell automatically to the positive-threshold exclusion; claim 13 must point here for
-   the gate only, not promise complete automatic outcomes.
+   original's non-human rules. There is no threshold-specific departure or importer warning.
+   S-0408 claim 13 must replace its gate-only limitation with a pointer to claims 12 to 15.
    - Backing: `measurable` for periodic repair (H5) and the exclusion at a positive threshold
      (H9 runs 1 and 3). House levels are `measurable` through S-0412 claim 3's K10 and S-0209 C7.
-     The exact absent threshold and the gate comparison in the gate-passing case are
-     `unmeasured` (H12 explains the default's limitation): without a specified
-     setup satisfying the further conditions, absence of repair or sale cannot distinguish a
-     failed gate from later ineligibility; H9 runs 2 and 4 are exploratory, not confirmation.
+     Gate passage at 0 and −1 is `measurable` in H13 and H14. The exact absent threshold is
+     `unmeasured` for H12's stated limitation: controlled level 0 distinguishes a positive
+     threshold from a non-positive one, but not one positive threshold from another.
    - Confidence: high (periodic repair and the skirmish house levels, S-0412 claim 3); medium
      (the automatic rule's skill-level comparison)
 
@@ -371,6 +377,88 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
     has no observable effect on the search radius either (Import mapping).
     - Backing: `measurable` (scenario H10 here; S-0311 scenario X11 for the ability)
     - Confidence: medium
+
+### Automatic building repair and sale
+
+12. **Common eligibility and credit split (Q-0341).** On each ordinary living building turn that
+    reaches repair work, automatic action is considered when claim 8's skill gate passes, the
+    current behaviour is neither *construction* nor *selling*, and the building is repairable
+    under S-0408 claim 14. In particular a full-health building is ineligible. Buildings being
+    erased or phasing in after a chrono jump do not reach this work. No damage event, repair
+    period or behaviour-processing countdown is needed to prompt the check.
+    Available credits at that turn choose the action: at least the repair reserve permits only
+    the repair-start rule (claim 13); below the reserve permits only the sale rule (claim 14).
+    Equality belongs to repair. The comparison is signed integer arithmetic, without rounding.
+    Passing neither branch's further tests does nothing; failing the sale tests does not try repair.
+    This split does not switch off an existing repair: claim 8 still controls its paid steps.
+    - Backing: `measurable` (H13 a to c; H14 a to d; H13 f for erasure). The phase-in exclusion
+      is `unmeasured`: no ordinary input here puts a building into chrono phase-in.
+    - Confidence: high
+
+13. **Starting repair automatically (Q-0341).** In claim 12's repair-credit case, a building
+    whose repair is off starts it if the owner's automatic-repair hold is clear and at least one
+    of these is true: the owner is human-controlled, the captured mark is set, or the building's
+    computer-repair flag is set. In our engine AI houses count as human-controlled here; neutral
+    and special houses do not. Thus a human or AI house needs neither building mark, while an
+    uncaptured building of a neutral or special house needs the map flag.
+    The start sets the house's hold. It takes no payment and changes no health by itself; the
+    next applicable claim-8 step pays and heals. At a global repair-period multiple, that step
+    can occur in the same turn as the start. No check here asks whether the house could pay a
+    step, beyond comparing its credits with the reserve. A reserve smaller than the step cost
+    can therefore allow a start that the next step immediately stops for lack of money.
+    Repair already on neither sets the hold nor takes a new start draw.
+    - Backing: `measurable` (H13 a to e; H15)
+    - Confidence: high
+
+14. **Trying a sale automatically (Q-0341).** In claim 12's below-reserve case, a building with
+    the hostile-hit mark takes one ranged draw R(0, 50) from the scenario random stream on each
+    eligible turn, provided its owner's sale skill is at least the game-wide sale threshold.
+    The skill comparison treats both integers as unsigned 32-bit values (a negative value
+    denotes that value plus 4294967296). Consequently, in skirmish with sale skill 0 a threshold
+    of 0 permits the draw, but a positive or negative threshold does not.
+    The draw succeeds when its result is strictly less than the owner's tech level, also read
+    as unsigned for this comparison. Even with tech level 0 the draw is taken. This is not a
+    percentage draw: for tech level *L* in 0 … 51 the success probability is *L*/51, and at
+    *L* ≥ 51 it is 1. These are exact rational probabilities, without rounding.
+    A successful draw initiates selling only when the building carries no tag, its type is not
+    a factory for buildings, and its floating-point health ratio is strictly below the
+    game-wide red-health threshold. Equality does not qualify. The draw is taken even when
+    any of these last three tests prevents a sale. Its raw-value consumption, including
+    rejections, is S-0202 claim 4's, not necessarily one raw value.
+    A sale attempt has the same effect as S-0408 claim 4, except that a pending delayed kill
+    prevents it. Refund, build-down and upgrades remain S-0408 claims 1 and 4 to 10's,
+    and packing up remains S-0415 claims 9 to 11's.
+    The ordinary input sellability test is not an additional condition. In skirmish the
+    per-building computer-sell flag plays no part. Neither the automatic-repair hold nor the
+    computer-repair or captured marks constrain this sale branch, and there is no human-only
+    or non-player-only exception to it.
+    - Backing: `measurable` (H14, including draw counts and rejection controls)
+    - Confidence: high (credit split, comparisons, range, draw position and last tests),
+      medium (hostile-hit mark and its persistence)
+
+15. **House-wide pacing and observable order (Q-0341).** The first eligible automatic repair
+    start in a house blocks later buildings of that house in the same tick. Checks and sale
+    draws follow S-0203 claims 3 and 4's object-turn order, within the turn pass, not the later
+    house update. A healing step paid by an earlier building changes the credits available to
+    a later building's credit split in that tick.
+    For a human-controlled house, and for an AI house in our engine, the hold is released by
+    that tick's later house update (S-0203 claim 8). No repair-start random choice is made for
+    such a house: at most one new automatic start per house per tick, but any number of repairs
+    already on may continue. Turning repair off by order can be undone on a subsequent eligible
+    turn; a paid step that stopped for lack of funds can likewise be started again.
+    The original gives a non-human owner a ranged choice of delay at each automatic start,
+    F4, and releases the hold in the first house update at or after that delay expires. The
+    next building can start no earlier than the following tick. Neutral and special houses
+    retain this rule in our engine. They have repair-start delay 0 in skirmish because no
+    difficulty row is applied to them (S-0412 claim 5): their range is R(0, 0), which consumes
+    no raw value, so their hold is also released in the start tick's house update. The original's
+    computer players use their difficulty row's delay; our AI instead follows the human rule.
+    - Backing: `measurable` (H15 for starts, credit ordering, hold release and draws; H13 d for
+      restarting). The nonzero computer-player delay is `unmeasured` here: the setup cannot
+      require that player to leave the chosen buildings and repair orders alone during the
+      cooldown. It is recorded for AI designers, not required of AI houses.
+    - Confidence: high (one start, hold release, the two draw sites),
+      medium (the nonzero computer-player delay)
 
 ## Formulas
 
@@ -429,6 +517,17 @@ amounts). For 0 < *H* < *S*:
 
 An object with *H* = 0 or *H* = *S* at the start of the tick gains nothing from either claim.
 
+**F4, original non-human repair-start delay** (claim 15). For the house's difficulty-row
+repair-start delay *d* (double, in game minutes), the duration is the single ranged choice
+R(trunc(RZ₅₃(225 × *d*)), trunc(RZ₅₃(1800 × *d*))) ticks, inclusive, from the scenario random
+stream (S-0202 claim 4, which also normalises reversed bounds). Products round in floating
+point under S-0205; each conversion truncates toward zero. The range operation is taken once
+at a start, not again while waiting. At start tick *t* and non-negative chosen duration *w*,
+the hold is released in the house update of tick *t* + *w*. Negative durations are already
+expired and release in tick *t*. Conversion overflow and exceptional spans follow S-0205
+claim 7 and S-0202 claim 5. For the neutral and special houses *d* = 0, hence *w* = 0.
+Backing and confidence are claim 15's.
+
 ## Constants
 
 | Name (ours) | Value | Unit | Notes |
@@ -449,6 +548,12 @@ An object with *H* = 0 or *H* = *S* at the start of the tick gains nothing from 
 | Infantry and vehicle self-heal amounts, absent-key default | 1 | health points per source | Claim 10 |
 | Infantry and vehicle self-heal counts of a building type, absent-key default | 0 | sources | Claim 10 |
 | Repair-and-sell threshold, absent-key default | 3 | house skill level | Claim 8 |
+| Repair reserve, absent-key default | 1000 | credits | Claim 12 |
+| Sale threshold, absent-key default | 2 | sale skill | Claim 14 |
+| Sale draw bounds | 0, 50 | ranged-choice values, inclusive | Claim 14 |
+| Red-health threshold, absent-key default | 0.5 | health ratio | Claim 14 |
+| Repair-start delay, difficulty-section absent-key default | 0.02 | game minutes | F4; only original computer players use a nonzero row delay here |
+| Repair-start delay range coefficients | 225, 1800 | ticks per game minute | F4 |
 
 ## State and ordering
 
@@ -468,6 +573,9 @@ An object with *H* = 0 or *H* = *S* at the start of the tick gains nothing from 
 | same | *done* or *not needed* | put out; announcements as claim 7 says |
 | building repair on | tick number a multiple of *P*<sub>b</sub> | step (claim 8's table) |
 | building repair on | health reaches strength, or money is short | repair off |
+| automatic-repair hold clear | eligible funded automatic start (claims 12 and 13) | building repair on; house hold set |
+| automatic-repair hold set | its delay has expired at the house update (claim 15) | hold clear; existing repairs unchanged |
+| eligible building below the reserve | eligible sale choice succeeds and late tests pass (claim 14) | sale attempt under S-0408 claim 4 |
 
 An object that claims 9 and 10 both heal in one tick ends it with the health that F3 gives: the two
 gains add, and the sum is capped at the strength. The place of healing among the other work of a tick is S-0203's.
@@ -532,13 +640,14 @@ alternatives are design rules, not claims of oracle measurements.
   gain: health falls, with no check for death, so health can reach 0 or below, outside the health
   domain (S-0302, Terms), and the result is undefined. Our engine treats a negative amount as 0 (F3)
   and the importer warns.
-- **Automatic repair and sale with a threshold of 0 or below.** The gate alone does not disable
-  the rule for any level-0 house (claim 8). No threshold-specific alternative, warning or new
-  quirk is specified. The remaining eligibility conditions are open; this spec must not be used
-  to infer that neutral or special houses never start repair or sell automatically.
+- **Automatic repair and sale with a threshold of 0 or below.** Claims 12 to 15 apply, with no
+  threshold-specific alternative, warning or new quirk. Neither the credit split, the once-per-tick
+  repair start nor the sale tests are treated as defects requiring switches. In particular, the
+  sale draw's use of tech level rather than a percentage is reproduced as a rule.
 - **The original's computer player** passes claim 8's gate at the absent-key default maximum
-  level and threshold. Its strategy for repair or sale, including difficulty-related pacing,
-  is not specified here. Our AI can use ordinary repair and sell orders. This does not remove
+  level and threshold. Its difficulty-related repair-start pacing is recorded in claim 15 and
+  F4; its separate strategy for repair or sale is not specified here. Our AI can use ordinary
+  repair and sell orders. This does not remove
   any skill-gated unit rule that also reaches human-controlled houses at a lower threshold,
   nor the retained original rules of neutral and special houses.
 
@@ -562,6 +671,14 @@ alternatives are design rules, not claims of oracle measurements.
 | Rules, building section, `UnitRepair` | repair depot (claim 6) | boolean | no |
 | Rules, building section, `Hospital` | hospital (claim 7) | boolean | no |
 | Rules, `[IQ]`, `RepairSell` | house skill level threshold for automatic building repair and sale (claim 8) | integer | 3; keeps |
+| Rules, `[AI]`, `CreditReserve` | repair reserve (claim 12) | signed integer credits | 1000; a missing or empty key keeps the value in force |
+| Rules, `[IQ]`, `SellBack` | additional sale threshold (claim 14) | integer; unsigned interpretation at the comparison | 2; keeps |
+| Rules, `[AudioVisual]`, `ConditionRed` | red-health threshold (claim 14) | decimal or percent, double, S-0003 claims 6 and 7 | 0.5; keeps |
+| Rules, difficulty sections, `RepairDelay` | original computer player's repair-start delay (F4); does not impose a delay on a human or AI house or supply a row to neutral or special houses | decimal game minutes, double | 0.02 when a present difficulty section omits the key; absent section keeps its row |
+| Map, `[Structures]`, computer-repair field | per-building repair permission for a non-human owner (claim 13) | positional integer, nonzero means set; S-0009 claims 36 and 40 | clear |
+| Rules, building section, `Repairable`, `ClickRepairable` | common automatic eligibility (claim 12) | booleans, S-0408 claim 14 | both yes |
+| Rules, building section, `Factory` | building-factory exclusion (claim 14) | named value, S-0003 claim 21 | no factory; missing or empty keeps |
+| House tech level | sale draw's success bound (claim 14) | setup value, S-0009 claim 45; not the building type's tech level | player houses receive the game's tech level; neutral and special houses start at 1 |
 | Rules, `[Repair]`, `Rate` (S-0215) | processing delay *D* (F1) | owned by S-0215 | S-0215 |
 | Rules, type section, `Cost`, `Strength` | *C*, *S* (F2) | integer | owned by the production and type specs |
 
@@ -810,19 +927,19 @@ and gives no repair or sell order. No map action heals, repairs or sells them. R
 credits, repair state and whether each building is sold over 3000 ticks.
 - *Run 1:* threshold at the absent-key default 3, then repeat with threshold 1.
   *Expected:* no automatic repair or sale. *Falsified if:* either occurs.
-- *Run 2 (exploratory):* repeat with threshold 0, then −1. Record whether repair or sale starts,
-  and the health and credits at each event. A start shows that a level-0 human house can reach
-  the rule; no start does not falsify the gate, since later conditions are still unknown.
-  This run does not back a promised automatic outcome.
+- *Run 2:* repeat with threshold 0, then −1, the reserve below the house's credits, and neither
+  building in construction or selling. *Expected:* one repair starts in the first eligible tick,
+  the other in the next, in object-turn order (H13 and H15). Either failing to start falsifies it.
 - *Run 3:* as run 1, also pre-place two damaged repairable buildings for each of the neutral
   and special houses (S-0009 claim 27). Their starting credits follow S-0412 claim 2; do not
   assume that the lobby gives them the human's money. *Expected:* none starts repair or is
   sold. *Falsified if:* either event occurs for any of the four buildings. Their skill level
   itself is independently tested by S-0412 K10 and S-0209 C7, not inferred from silence here.
-- *Run 4 (exploratory):* repeat run 3 with threshold 0, then −1. Record each non-player house's
-  available credits and any repair or sale. No outcome is promised while further conditions
-  remain open. Neither silence nor a start alone confirms those conditions. This run supplies
-  observations for that question, not a falsifier for a complete automatic rule.
+- *Run 4:* repeat run 3 with threshold 0, then −1, reserve 0 and the computer-repair map flag
+  set on the test buildings. *Expected:* each non-player house starts one repair per eligible
+  tick in its own object-turn order, even at its initial 0 credits. Choose a tick off the periodic
+  repair boundary to observe the start before an unaffordable paid step stops it. Failure to
+  start under these conditions falsifies claims 12 and 13; H13 and H15 isolate the conditions.
 
 **H10: healing on resources and the healer search radius key (claim 11).** S-0311 scenario X11
 covers the veterancy ability and, in the same run, the type flag; it does not set the game-wide
@@ -898,6 +1015,133 @@ absent value from Constants; any different gain, payment, period or count falsif
   default threshold 3 is `unmeasured` here, because the only controlled skill level is 0 and
   any positive threshold has the same observable consequence.
 
+For the newly mapped automatic-action fields, repeat H13 a with the reserve omitted from
+all layers: *expected:* the start boundary is 1000 credits (test 999, 1000 and 1001). Repeat
+H14 c with the red-health threshold omitted: *expected:* draws at ratios 0.49, 0.5 and 0.6,
+but a sale is possible only at 0.49. Any different boundary falsifies the respective absent
+value. The exact absent sale threshold 2 is `unmeasured` here: sale skill 0 distinguishes 0
+from a nonzero threshold, not 2 from other positive thresholds. The original computer player's
+absent row delay 0.02 inherits claim 15's unmeasured control limitation. Neither limitation
+leaves an unspecified engine action for human, AI, neutral or special houses.
+
+**H13: automatic repair eligibility (claims 12 and 13; Q-0341).** Use a tiny flat test map
+with a completed ordinary building of strength 1000 and cost 1000, repair step 10, percentage
+25 %, building repair rate 0.125 (period 112), and automatic repair-and-sell threshold 0.
+Disable self-healing. Give no repair or sell orders except the explicit stop test. Damage a
+full-health test building by one scripted force-fire shot from an own test unit, well between
+multiples of 112. Observe the first ordinary building turn after the hit, repair state, health,
+credits, behaviour and the scenario random stream. Use the read-only recorder and scripted
+input, not an engine modification; the common setup and three repeats apply.
+- *a, reserve:* human owner, repair reserve 100, credits 99, 100 and 101 in separate runs.
+  Set the sale threshold to 1 to exclude sale draws. *Expected:* no automatic start at 99,
+  at 100 and 101, repair starts on the first eligible turn without payment or a repair-start
+  draw. Health first rises by 10 at the next multiple of 112, costing 2. Repeat the equality
+  test with automatic threshold −1, with the same result. A different credit boundary, a
+  later start or a start draw falsifies the corresponding claim.
+- *b, common eligibility:* repeat the funded run with full health, each repairability flag off
+  separately, a vehicle-like building, and a building still in construction. *Expected:* none
+  starts automatically while its exclusion holds. Complete construction on a damaged control:
+  it starts on its first eligible turn, not at a special damage or 112-tick boundary. A start
+  in an excluded state, or failure after that state ends, falsifies the eligibility rule.
+- *c, house and map flag:* pre-place damaged buildings for neutral and special houses, reserve
+  0 so their initial 0 credits pass. Each house has an otherwise identical pair with the
+  computer-repair map flag clear and set. *Expected:* only the flagged one starts; the
+  unflagged one never does. Repair can turn off at a payment boundary for lack of money,
+  so record state between boundaries rather than treating lack of healing as lack of a start.
+  Repeat the pair for the human owner: both start, at most one per tick. A different result
+  falsifies the owner/flag distinction. The original cannot test our AI-house policy.
+- *d, reserve is not step affordability:* human credits 1, reserve 0, same step cost 2.
+  *Expected:* automatic start off the periodic boundary, repair off with no payment at the
+  next multiple of 112, then automatic restart on the next eligible turn. In a funded run,
+  turn repair off by order between boundaries: it restarts on the next eligible turn after
+  the order. A failure to start, payment without funds or permanent stop falsifies the claim.
+- *e, captured mark:* pre-place a full-health human-owned building whose map repair flag is
+  clear. A timed map trigger transfers it to the neutral house (S-0011 claim 24), then an own
+  test unit damages it. Use reserve 0. *Expected:* unlike the never-transferred control in
+  part c, it starts repair despite the clear map flag. Repeat with transfer to the special
+  house, and with successive transfers through both houses. A successful transfer followed
+  by persistent failure to start falsifies the mark rule. The tag does not prevent repair.
+- *f, skipped work:* in a funded run, damage the building, let a named hostile erasing unit
+  lock it, and use a repair-off order if repair is already on. Record that repair is off
+  while the erasure lock remains. Remove the attacker before erasure completes. *Expected:*
+  no automatic restart during erasure, start on the first eligible turn after release. Starting during the excluded
+  state or failing afterward falsifies the exclusion; record the state transitions, not merely
+  the drawn fading effect. Building phase-in remains unmeasured for claim 12's stated reason.
+
+**H14: automatic sale and its draw (claims 12 and 14; Q-0341).** Same map and recorder as H13,
+reserve 100, human credits 0, both automatic thresholds 0, red-health threshold 0.5. Use a
+completed repairable building with build-up art, no tag and no building-factory kind. Give it
+a surviving hit from a named hostile stationary turret placed for the bystander, then destroy
+that turret with an own unit. Keep the damaged building alive below half health. Those named
+attackers are part of the observation, not a violation of the bystander void rule. Record exact
+health, the attacking object and alliances, each building turn, selling behaviour, credits and
+random states before and after each turn. Decode ranged choices with S-0202 claim 4 rather
+than assuming one raw value per choice. Repeat each control three times and the baseline
+until 100 eligible sale turns or a sale, over at least 20 games.
+- *a, baseline and timing:* after the hostile hit, *expected:* one R(0, 50) on every eligible
+  building turn while below reserve; selling starts on the first such choice less than the
+  house tech level. A gap tied to the repair period, a different range or stream, extra choices,
+  or a different start predicate falsifies the claim. Use the recorder's actual random states,
+  not a requested seed. Other effects' draws are distinguished by recording within this turn.
+- *b, mark:* a map-damaged control never hit by a hostile object, and a control damaged only
+  by own force fire, take no sale choice. After one hostile hit the choice begins; after healing
+  it above half health, it keeps drawing but cannot sell. Damage it below half by own fire:
+  it can sell again, showing that healing did not clear the mark. Any choice before the mark,
+  or a lost mark after healing, falsifies it.
+- *c, late rejection:* keep the hostile-hit mark but in separate runs give the building a tag
+  whose trigger never fires, make it a building factory, or leave it at health ratios 0.5 and
+  0.6. *Expected:* still one ranged choice per eligible turn, but no sale even on a successful
+  choice. At ratio 0.49 the otherwise identical control can sell. Disable each repairability
+  flag separately: no choice. A stopped draw in a late-rejection case, sale at equality or
+  continued draws with a common eligibility failure falsifies the rule. Repeat with the
+  computer-sell map flag clear and set: no change in draws or sale eligibility.
+- *d, skill and credits:* repeat below reserve with sale threshold 1 and then −1:
+  *expected:* no sale draw at either threshold for the level-0 house, unlike threshold 0.
+  Repeat with automatic repair-and-sell threshold 1: no automatic draw or start. At credits
+  equal to reserve: no sale draw; repair may start instead. Any contrary choice or action
+  falsifies the respective comparison.
+- *e, tech bound:* named test base-rules files choose the game's tech level before a fresh
+  program start (S-0009 claim 45), using 0, 1 and 51 separately. *Expected:* one choice each
+  eligible turn at all three levels, but success only for a result below the chosen level,
+  level 0 never sells and level 51 sells on the first choice. Repeat with a negative tech
+  level: every choice passes its unsigned bound. A missing draw at 0 or another bound
+  falsifies the rule.
+- *f, non-player houses:* repeat with neutral and special test buildings hit by an own named
+  attacker not allied from the victim's side, a positive reserve, and their actual credit balance
+  below it. Their tech level starts at 1. *Expected:* one choice per eligible turn and a sale
+  attempt exactly when the choice is 0 and the late tests pass, with no computer-sell flag
+  requirement. A different draw count or bound falsifies the shared rule. If the chosen
+  alliances do not allow a hostile hit, the run is void rather than evidence about the mark.
+- *g, sale effect:* repeat a successful-choice run with the unsellable type flag set. *Expected:*
+  it still starts selling; the input sellability gate is not reapplied. A no-build-up ordinary
+  type still takes its choice but is not sold, as S-0408 claim 4 says. With a pending delayed
+  kill, a successful choice does not start selling. Record the attempted choice and outcome.
+  contradictory outcomes falsify these qualifications, not the range rule.
+
+**H15: one start per house per tick and credit ordering (claims 13 and 15; Q-0341).** H13's
+funded human setup, reserve 100, three otherwise identical damaged buildings. Arrange damage
+in the same tick off a multiple of 112, using three own attackers; record which buildings are
+eligible before the first one's turn. Keep that eligible set fixed and use S-0203 claims 3 and
+4's recorded order. *Expected:* the first eligible building starts, the second starts in the
+next tick, and the third in the next, with no repair-start draw. Repeat with their map order
+reversed: start order reverses, not a position-based or type-based order. Repair already on
+is not paused while another building starts. A second new start for one house in a tick,
+a skipped eligible turn, or a start draw falsifies the claim.
+Repeat for neutral and special houses with reserve 0 and all map repair flags set; start them
+off a periodic payment boundary. *Expected:* one start per house per tick, and no raw value
+consumed by the equal-bound delay choice. Different houses can each start a building in the
+same tick. Include a transferred, flag-clear building
+from H13 e in that house's ordering too. Extra raw consumption or an extra waiting tick falsifies the
+zero-delay and hold-release rule.
+Finally use two human buildings in turn order: A already repairing, B eligible for a sale
+choice, both sufficiently damaged. Credits and reserve are 100, A's step cost is 2 and the
+next tick is a multiple of 112. Set both automatic thresholds 0 and B's hostile-hit mark.
+*Expected:* A pays 2, then B sees 98 below reserve and takes a sale choice. Reverse their
+order: B sees 100 and starts repair without a sale choice, before A pays. Record state and
+draws within each turn and the later house update. Any opposite credit split falsifies the
+within-turn consequence. Void a run with another credit-changing event. Nonzero repair-start
+delays of the original computer player remain unmeasured for claim 15's stated control limit.
+
 ## Open questions
 
 - The exact phase of the second depot step and the first hospital step (±1 tick), and whether a
@@ -912,9 +1156,6 @@ absent value from Constants; any different gain, payment, period or count falsif
   passengers are in play and take turns (glossary, *in play*); no measurement has settled it for them.
 - How aircraft are repaired on their landing pads (the same repair step is believed to apply, at a
   timing not measured); a future aircraft spec.
-- The remaining eligibility conditions and outcomes of automatic building repair and sale when
-  the skill-level gate passes (claim 8, H9 runs 2 and 4). Their reproduction must follow the
-  existing house policy; no departure has been chosen.
 - The total repeat-suppression lifetime of the repair-complete announcement remains unresolved
   because the radar-event zoom-in duration is unresolved (S-0701 F7; claim 6, H4 part f).
   F7 owns the distance and post-zoom duration; its *unit repaired* row and cross-creator

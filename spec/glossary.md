@@ -2,7 +2,7 @@
 id: glossary
 title: Glossary of shared terms
 topic: rules-import        # cross-cutting; every topic uses these terms
-revision: 22
+revision: 23
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -429,8 +429,7 @@ thing as a *terrain animation*. S-0009 owns the ordinary placement and position 
 S-0202 gives its random draws and the low-bridge exclusions.
 
 **height level.** A cell's terrain elevation, an integer. A map file may give any level from −128 to
-127 (S-0009, claim 7); stock maps use 0 and above (S-0009, Terms). One height level is 104 leptons of world height. See
-S-0101.
+127 (S-0009, claim 7). One height level is 104 leptons of world height (S-0204, claim 1).
 
 **legal cell.** A cell that exists on a given map. Which cells are legal follows from the map size
 (S-0009, claim 1). See S-0009.
@@ -1734,7 +1733,7 @@ G3. **Game speed and timings counted in ticks (skirmish).** In a skirmish game t
     - animations whose type is marked as normalised (S-0109, claim 4),
     - the period of the repair wrench (S-0111, claim 19), which is drawn only.
 
-    G3 makes no claim about any other delay that may be converted the same way (Open questions).
+    G3 makes no claim about any other delay that may be converted the same way.
     When game speed changes during a game, which speed a converted delay uses is also owned by
     these specs (see *speed-normalised delay*).
 

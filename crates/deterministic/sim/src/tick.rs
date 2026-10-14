@@ -11,6 +11,14 @@ use crate::rules::{Kind, Locomotor};
 use crate::world::{ObjectId, World};
 use crate::{drive, infantry, occupancy, orders, process, turret, walk};
 
+/// The number of ticks that have run: the tick number, and one more once
+/// the final tick has run, since that tick adds nothing to the tick number
+/// (S-0201 claim 1).
+pub fn ticks_run(w: &World) -> i32 {
+    // spec: S-0201 claim 1 (the final tick runs but leaves the tick number at itself)
+    w.tick.wrapping_add(i32::from(w.econ.end.finished))
+}
+
 /// Runs one tick (S-0203 claim 1, the draw order of its rows).
 pub fn step(w: &mut World) {
     // spec: S-0203 claim 1 (draw order: row 1, 9, 2, 10, 11, 12, 3, 13, 14, then the turn pass, row 5)
@@ -35,8 +43,13 @@ pub fn step(w: &mut World) {
     orders::apply_pending(w);
     // spec: S-0011 claim 11 (a one-time tag that fired is deleted at the end of the tick)
     crate::triggers::end_tick(w);
-    // spec: S-0203 claim 1 (after the last part the tick number grows by 1)
-    w.tick = w.tick.wrapping_add(1);
+    if w.econ.end.over == Some(w.tick) || w.econ.end.finished {
+        // spec: S-0201 claim 1 and S-0203 State and ordering (the final tick runs in full but does not add 1: afterwards the tick number is the last tick's; no next tick runs, S-0414 claim 8)
+        w.econ.end.finished = true;
+    } else {
+        // spec: S-0203 claim 1 and S-0201 claim 1 (after the last part the tick number grows by 1, except in the final tick)
+        w.tick = w.tick.wrapping_add(1);
+    }
     // Derived data, not state: the regions are brought up to date between
     // ticks, so that input rules can read them (crate::targeting).
     crate::regions::ensure(w);

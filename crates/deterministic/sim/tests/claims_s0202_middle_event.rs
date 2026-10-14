@@ -245,6 +245,29 @@ fn claim_14_crater_only_takes_six_bales() {
     assert_eq!(stage(&w, at(0, 0)), Some(2));
 }
 
+/// spec: S-0202 claim 15 (the crater's 6 bales under S-0401 claim 3: stages 0 and 5 are emptied, stage 6 becomes stage 0 and keeps its resource, stage 7 becomes stage 1)
+#[test]
+fn claim_15_crater_take_by_stage() {
+    let mut r = ruleset();
+    anim(
+        &mut r,
+        "PIT",
+        AnimationType {
+            middle_frame: Some(0),
+            crater: Some(true),
+            ..Default::default()
+        },
+    );
+    let cells = [(at(0, 0), 0), (at(2, 0), 5), (at(4, 0), 6), (at(6, 0), 7)];
+    let ore: Vec<_> = cells.iter().map(|&(c, d)| (c, 0, d)).collect();
+    let mut w = game_with_ore(&r, &ore, 3);
+    for &(c, _) in &cells {
+        anim_created_at(&mut w, "PIT", Some(centre(c, 0)));
+    }
+    let after: Vec<Option<u8>> = cells.iter().map(|&(c, _)| stage(&w, c)).collect();
+    assert_eq!(after, vec![None, None, Some(0), Some(1)]);
+}
+
 /// spec: S-0010 Formulas (tile animation position: X = 256x + 128 + trunc₀(a(dx + 2dy)), Y = 256y + 128 + trunc₀(a(2dy − dx)), z = 104ℓ; a = 4473959 / 1048576, S-0101 F6)
 #[test]
 fn tile_animation_position() {

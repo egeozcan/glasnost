@@ -2,7 +2,7 @@
 id: S-0701
 title: Sound selection
 topic: ui
-revision: 6
+revision: 7
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -20,7 +20,9 @@ Sound data, selection and order responses, event sounds, announcements, mixing l
 placement and traced random choices in skirmish; network games and campaigns are out of scope.
 Playback is presentation, but claim 33's traced scenario-stream choices must retain their draws.
 Music belongs to planned S-0703; archive mounting to S-0005 claim 10. Which files hold the samples
-is claim 34; the byte formats of those files are outside this spec. Revision 6 records the
+is claim 34; the byte formats of those files are outside this spec. Revision 7 cites
+S-0410 claims 14–15 for radar-event zoom timing and S-0411 claim 18 for scroll dispatch,
+while retaining this spec's suppression tails and sound-feedback rules. Revision 6 records the
 persistent creation-derived report value, capture-entry selection and explicit unresolved
 limits for specialised superweapon bindings and complete delayed playback. Q-0325 and Q-0329
 are answered with those limits and settling scenarios, not with guessed replacements.
@@ -492,9 +494,13 @@ normalisation N of its Formulas F3. In addition:
       therefore gives feedback again, not silence for the rest of that game.
     - *sidebar scroll-button request at an end*: the game-wide refusal sound when the strip
       is already at the requested end. A page request with some room remaining is accepted
-      without this refusal even if its eventual movement is clamped. A dispatched button
-      request on a strip whose icons all fit is refused in either direction. Whether disabled
-      buttons, held-button repeat or the mouse wheel dispatch such requests belongs to S-0411.
+      without this refusal even if its eventual movement is clamped; it requests the
+      tab-scroll sound instead. A dispatched button request on a strip whose icons all fit
+      is refused in either direction. S-0411 claim 18 specifies dispatch: both page buttons
+      are disabled when all icons fit; on an overflowing tab they remain enabled at either
+      end, activate on release over the button without held repeat, and wheel events move
+      one row silently without dispatching a page-button request. Thus an ordinary click on
+      a disabled button requests neither sound.
     None of these depends on the local player's side. Some refused movement orders of vehicles and
     infantry also play the refusal sound; their conditions belong to the movement specs. Clicking
     an item already at its build limit gives no order (S-0411 claim 4) and plays no click sound and
@@ -507,8 +513,9 @@ normalisation N of its Formulas F3. In addition:
       Scroll-button boundary feedback is `measurable` in F10. Build-limit refusal at application
       is `measurable` in S-0404 P3(k), using its
       issue/application recorder and void rule to distinguish that refusal from an at-limit
-      click that issues no order. Scroll input dispatch, movement refusals and other button and
-      tab cues are `unmeasured`: F10 does not establish all input-source dispatch paths.
+      click that issues no order. Scroll input dispatch has S-0411 claim 18's
+      `measurable` backing (S13). Movement refusals and other button and tab cues are
+      `unmeasured`: F10 does not establish those conditions.
     - Confidence: high (sidebar click cues, busy line, refused placement, repeated route cues),
       medium (refusal as the request is applied); low (movement refusals)
 
@@ -883,7 +890,13 @@ vehicle and while unlinked, recording single-response identities and omissions.
 create a radar event of its kind at a cell (the building, unit or factory). The attempt fails, and the
 announcement is not raised, when a radar event of the same kind exists whose cell is at a distance
 ⌊√(Δ*x*² + Δ*y*²)⌋ < *r* cells (floating point, truncated), *r* from this table. The event lasts its
-zoom-in phase on the radar and then *t* ticks:
+zoom-in phase and then *t* ticks. S-0410 claims 14–15 specify the zoom duration and
+cadence, with their formula F9 and scenario R13: zoom advances once per drawn frame,
+even without radar or while the panel opens or closes. Completion starts the *t*-tick
+tail at that frame's tick number, not at event creation. A timed freeze advances zoom
+but not ticks; a stand-still with no drawn frames advances neither. Restoring radar
+does not restart an event. The duration must not be replaced by zero or by a fixed tick
+count. The suppression radii and post-zoom tails are:
 
 | Kind | *r* (cells) | *t* (ticks) | Suppresses |
 |---|---|---|---|
@@ -911,7 +924,9 @@ another request regardless of why the first event was created, including trigger
 event creators is not established here. F7 is high confidence and `measurable` in G3 for
 *unit produced*, *base attacked* and *harvester attacked*. The remaining table rows and
 cross-creator suppression are `unmeasured`: G3 has no isolated request sequence for those
-kinds or creators. The unresolved zoom timing is not a resolved tick duration.
+kinds or creators. Zoom timing retains S-0410 claims 14–15's backing and confidence,
+including their unresolved exact floating-point equality boundaries; it does not turn
+the unmeasured suppression rows into measured claims.
 
 ## Constants
 
@@ -1571,11 +1586,17 @@ Actions that S-0411 leaves unresolved are recorded, not assigned a prediction.
 entries distinct. On a tab with two extra rows, press each page-scroll button at its end and
 with exactly one row remaining; then repeat on a tab whose icons fit. Record dispatched input,
 scroll position and requested entry using a read-only recorder, not only audible playback.
-Expected for dispatched requests: refusal only when already at that end, no refusal on partial
-movement, refusal in either direction on a fitting strip. Repeat holding each button and using
-the wheel as exploratory dispatch controls; silence without a dispatched request does not
-falsify the request rule. Different feedback on an identical dispatched button request falsifies
-claim 24. Disabled-button and wheel dispatch rules remain with S-0411.
+Expected for dispatched page-button requests: refusal only when already at that end,
+tab-scroll sound on accepted partial movement, and no additional refusal when movement
+reaches the end. A fitting strip refuses a dispatched request conditionally, but S-0411
+claim 18 disables its buttons, so ordinary clicks there dispatch nothing and request neither
+sound. Repeat holding each button, releasing over it and releasing outside it: expect one
+request only on release over the pressed button, without held repeat. Use the wheel at
+both ends and with room remaining: expect no tab-scroll or refusal request. S-0411 claim 18
+and S13 own dispatch and row movement. Different feedback on an identical dispatched
+page-button request, sound from a disabled-button click or sound from a wheel event
+falsifies claim 24; silence without a dispatched request does not falsify the conditional
+refusal rule.
 
 **F11. Production announcement kinds (Q-0340).** G4's distinct test samples and a read-only
 request/order recorder. Start, hold, resume and queue infantry, vehicle, aircraft, naval-unit,
@@ -1662,9 +1683,12 @@ and compare the tick intervals with N, rather than real-time intervals.
 apart: one. Record the attack-warning sound too, then repeat with the attacked building off-screen:
 that sound remains centred at its screen-request level. Space requests so announcement queue
 suppression cannot masquerade as radar-event suppression.
-(d) Repeat (a) before the local player has a radar building: record whether it repeats and when.
-This resolves the open radar dependence; indefinite suppression is not itself a falsifier of
-an already-established zoom duration.
+(d) Repeat (a) before the local player has a radar building, using S-0410 claims 14–15
+and R13's read-only zoom/lifetime recorder. Expect the same drawn-frame zoom progression
+and post-completion 200-tick tail as with radar, not a restart when radar becomes available.
+Use R13's freeze and stand-still controls to distinguish drawn-frame zoom from tick-based
+tails. Suppression past the predicted zoom completion plus tail, or a restart on restoring
+radar, falsifies this prediction.
 (e) Sustain low power while owning a building of the first three imported construction types:
 expect one warning; restore power and lower it again, expect a second. Remove every qualifying
 building and repeat: expect none. (f) Damage two local harvesters at separations inside and
@@ -1782,10 +1806,6 @@ within one F4 step.
   the death handling exist; claim 20, low).
 - The type flag that exempts some types from the unit lost announcement and the one that exempts some
   buildings from base under attack (claim 28).
-- Q-0331, owned by S-0410: how long the zoom-in phase of a radar event lasts, whether it
-  advances with ticks or drawn frames,
-  and whether it advances at all while the local player has no radar (F7, scenario G3 d); it adds
-  to every suppression window.
 - Which copy of a sample the bank plays when its index lists the name twice (claim 34).
 - The sidebar event that raises the second "unable to comply" request following a build click
   (claim 24).
@@ -1801,8 +1821,6 @@ within one F4 step.
 - Unestablished superweapon activation entries and exhaustive superweapon/capture eligibility
   remain explicitly unmeasured under the Q-0325 answer (claims 36/39, G5/G6).
   The fixed-entry tables do not establish silence in their unestablished cells.
-- Q-0339: disabled-button, held-button-repeat and wheel dispatch belongs to S-0411; claim 24
-  establishes feedback only for dispatched scroll-button requests.
 - Full classification of special weapon report choices (claim 21).
 - The building deploy acknowledgement and the condition that suppresses one deploy response.
 - Exact fractional level smoothing and complete gain-chain truncation order (F3).
@@ -1812,16 +1830,16 @@ within one F4 step.
 Revision 5 additions:
 - S-0411: state the infantry-only training versus other-kind building split for start/resume,
   and no repeated start announcement when adding to an active queue (claim 28, F11).
-  Own Q-0339's disabled-button, held-button-repeat and wheel dispatch; claim 24/F10 specify
-  only feedback for a dispatched scroll-button request.
+  Q-0339's dispatch is already specified in S-0411 claim 18 and S13; claim 24/F10
+  here retain sound-feedback ownership. No additional dispatch change is requested.
 - S-0213: point keyboard-command feedback to claim 19/D4, including empty selection silence,
   nonempty-but-ineligible selection feedback and suppression on failed order issuance.
 - S-0206: distinguish tick rotation samples from audible instance lifetime; claim 23/F12 own
   the no-grace end-loop request and fresh-instance restart that can overlap a finishing one.
 - S-0302: point building threshold/death feedback to claim 37/F7 here rather than an unwritten
   structures rule; the fallback request is any-owner and occurs in the lethal reaction.
-- S-0410: own Q-0331's zoom-in progression and exact duration. F7's post-zoom ticks are not
-  the total lifetime; do not substitute zero zoom duration.
+- S-0410 claims 14–15 already specify Q-0331's zoom progression, duration and cadence,
+  with F9 and R13. F7 and G3 here now cite them; no further zoom change is requested.
 - S-0202 claim 10's current Q-0327 contract already agrees with claims 21/32 here:
   preserve, save, restore and hash the creation-derived report value, with presentation access
   for existing objects and no extra draw. Confirm both versions at joint sign-off.
@@ -1878,8 +1896,9 @@ Other existing hand-off checks:
   and its M25(b) backing. Claim 10 owns expansion audio archive preference. The public
   bank formats need no new spec.
 - S-0416: half-volume credit ticks are request level 8192 (claim 35).
-- S-0314 and S-0410: point repeat-suppression questions to F7, retaining the stated unmeasured
-  kinds and unresolved zoom duration rather than treating all lifetimes as measured.
+- S-0314 and S-0410: point repeat-suppression questions to F7, retaining its unmeasured
+  kinds. Zoom timing is owned by S-0410 claims 14–15, not an unresolved total tick duration.
+  R13 is a proposed measurement, not evidence that all lifetimes have been measured.
 - glossary: revision 20 already records claim 28's low-funds countdown as presentation
   timing, not a new game-state timing exception. No further glossary change is needed.
 

@@ -130,6 +130,9 @@ pub struct House {
     pub combat: crate::combat::state::HouseCombat,
     /// Economy state (M5a).
     pub econ: crate::econ::HouseEcon,
+    /// The base records (S-0215 claim 38).
+    #[serde(default)]
+    pub base: crate::base::BaseRecord,
 }
 
 /// A house's role (S-0009 claim 19, glossary *house*).

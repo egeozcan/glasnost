@@ -139,9 +139,9 @@ fn placed(owner: &str, ty: &str, c: glasnost_map::CellXY) -> Placed {
     }
 }
 
-// spec: S-0215 claims 1, 11, 32 and 33 (a map-placed armed turreted building starts with guard queued and, through its set-up ready mark, interim Q-0241, takes guard and fires on an enemy in range)
+// spec: S-0215 claim 1 (a map-placed armed turreted building starts with the idle body, guard queued, no current behaviour and the ready mark clear; not being ready, its queue stays pending under claim 11 for the bounded run, its weapon setting no mark)
 #[test]
-fn set_up_turreted_defence_fires() {
+fn claim_1_set_up_turreted_defence_is_queued_not_current() {
     let mut s = Scene::new();
     s.ruleset = glasnost_sim::testkit::combat_ruleset();
     s.map.objects.structures.push(Structure {
@@ -157,31 +157,26 @@ fn set_up_turreted_defence_fires() {
         .find(|o| o.kind == Kind::Building)
         .unwrap()
         .id;
-    let cart = w
-        .objects
-        .values()
-        .find(|o| o.kind == Kind::Vehicle)
-        .unwrap()
-        .id;
-    assert_eq!(w.obj(tower).unwrap().beh.queued, Some(Behaviour::Guard));
-    let full = w.obj(cart).unwrap().health;
+    let o = w.obj(tower).unwrap();
+    assert!(o.econ.idle_body.is_some());
+    assert_eq!(
+        (o.beh.queued, o.beh.current, o.beh.ready_mark),
+        (Some(Behaviour::Guard), None, false)
+    );
     for _ in 0..300 {
         glasnost_sim::tick::step(&mut w);
-        if w.obj(cart).is_none_or(|o| o.health < full) {
-            assert!(w.obj(tower).unwrap().beh.current.is_some());
-            return;
-        }
+        let o = w.obj(tower).unwrap();
+        assert_eq!((o.beh.queued, o.beh.current), (Some(Behaviour::Guard), None));
     }
-    panic!("the tower never hit the cart");
 }
 
-// spec: S-0215 claim 11 (a turreted building's idle body range sets no ready mark); interim Q-0241 (its set-up ready mark, so its queued guard becomes current)
+// spec: S-0215 claim 11 (a turreted building's idle body range sets no ready mark) and claim 1 (set-up leaves the mark clear, so its queued guard does not become current)
 #[test]
 fn claim_11_turreted_idle_range_sets_no_mark() {
     let (mut w, id) = hut([0, 3, 0], true);
-    assert!(w.obj(id).unwrap().beh.ready_mark, "Q-0241 interim");
+    assert!(!w.obj(id).unwrap().beh.ready_mark);
     let (mark, cur, _) = step(&mut w, id);
-    assert_eq!((mark, cur), (false, Some(Behaviour::Guard)));
+    assert_eq!((mark, cur), (false, None));
     for _ in 0..20 {
         let (mark, _, _) = step(&mut w, id);
         assert!(!mark);

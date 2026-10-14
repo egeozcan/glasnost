@@ -73,6 +73,10 @@ pub struct GameEnd {
     /// a result nor the tick in which the game is over.
     #[serde(default)]
     pub committed: bool,
+    /// The final tick has run (claim 8): the tick number stays at it
+    /// (S-0201 claim 1).
+    #[serde(default)]
+    pub finished: bool,
     /// Production objects deleted at once (S-0404 claim 6) during the
     /// current destruction hit (claim 15); `None` outside a hit.
     #[serde(skip)]
@@ -253,11 +257,12 @@ pub fn verdict(w: &World, house: HouseId) -> Option<Verdict> {
 }
 
 /// The outcome once the game is over (S-0414 claims 7, 8 and 16): after
-/// tick `over`, which runs in full, has run.
+/// tick `over`, which runs in full, has run. The tick number then stays at
+/// `over` (S-0201 claim 1).
 pub fn outcome(w: &World) -> Option<Outcome> {
     let e = &w.econ.end;
     let (ended, over) = (e.ended?, e.over?);
-    if w.tick <= over {
+    if !e.finished {
         return None;
     }
     let results = w
@@ -508,7 +513,7 @@ pub fn house_update(w: &mut World, h: HouseId) {
         return;
     }
     // spec: S-0414 claim 8 (no tick runs after the final one; a caller that runs on tests nothing)
-    if w.econ.end.over.is_some_and(|o| w.tick > o) {
+    if w.econ.end.finished {
         return;
     }
     // spec: S-0414 claim 1 (only contenders are tested; an observer's house never)

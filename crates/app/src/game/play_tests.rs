@@ -138,21 +138,67 @@ fn select_move_deploy_build_and_place_through_the_client_model() {
     assert!(p.end(60).is_none());
 }
 
-/// Interim (Q-0278): a box takes only the local house's mobile objects.
+fn start_with(rules: std::sync::Arc<glasnost_sim::rules::SimRules>) -> Play {
+    let players = [
+        Player {
+            name: "Person".into(),
+            country: "Alphaland".into(),
+            ..Default::default()
+        },
+        Player {
+            name: "Machine".into(),
+            country: "Betaland".into(),
+            ai: true,
+            ..Default::default()
+        },
+    ];
+    let s = setup::skirmish(&rules, &players, Settings::default(), 0, 7);
+    let local = local_house(&s).expect("one person's house");
+    let game = Game::new(
+        rules,
+        &fixture::map(),
+        "synthetic-skirmish",
+        testkit::catalogue(),
+        s,
+    )
+    .expect("the synthetic skirmish loads");
+    Play::new(game, local)
+}
+
+fn others(p: &Play) -> Vec<ObjectId> {
+    p.world()
+        .objects
+        .values()
+        .filter(|o| o.owner != Some(p.local) && o.on_map && o.kind != Kind::Terrain)
+        .map(|o| o.id)
+        .collect()
+}
+
+/// spec: S-0214 claim 19 (only own selectable mobile objects are taken; enemy objects and ordinary buildings are not); S-0701 claim 17 (only the first addition speaks)
 #[test]
-fn box_selection_takes_own_mobile_objects() {
+fn claim_19_box_takes_own_mobile_objects() {
     let mut p = start();
     let all: Vec<ObjectId> = p.world().objects.keys().copied().collect();
-    p.select_box(&all, false);
+    assert!(!p.select_box(&all, false));
     assert!(!p.selection.is_empty());
-    // spec: S-0701 claim 17 (one input selecting several objects: only the first speaks)
-    assert_eq!(p.selected, [p.selection[0]]);
+    assert_eq!(p.selected.len(), 1);
     for id in &p.selection {
         let o = p.world().obj(*id).unwrap();
         assert_eq!(o.owner, Some(p.local));
         assert!(o.kind.is_mobile());
     }
-    p.select_box(&[], false);
+}
+
+/// spec: S-0214 claim 19 (a box holding only an enemy or an ordinary building clears the old selection and adds nothing)
+#[test]
+fn claim_19_ineligible_candidates_still_clear() {
+    let mut p = start();
+    let mine = own(&p, Kind::Vehicle);
+    p.selection = mine.clone();
+    let mut theirs = others(&p);
+    theirs.extend(own(&p, Kind::Building));
+    assert!(!theirs.is_empty());
+    assert!(!p.select_box(&theirs, false));
     assert!(p.selection.is_empty());
 }
 
@@ -169,6 +215,52 @@ fn key_commands_sound_once_per_press_for_a_nonempty_selection() {
     p.key(KeyCommand::Stop);
     p.key(KeyCommand::Guard);
     assert_eq!(p.keys, [KeyCommand::Stop, KeyCommand::Guard]);
+}
+
+/// spec: S-0214 claim 19 (with force-select eligible objects are added, not toggled: a selected one inside stays selected, and ineligible candidates clear nothing)
+#[test]
+fn claim_19_force_select_adds() {
+    let mut p = start();
+    let units: Vec<ObjectId> = p
+        .world()
+        .objects
+        .values()
+        .filter(|o| o.owner == Some(p.local) && o.on_map && o.kind.is_mobile())
+        .map(|o| o.id)
+        .collect();
+    let mut inside = units.clone();
+    inside.extend(others(&p));
+    p.selection = units.clone();
+    assert!(!p.select_box(&inside, true));
+    assert_eq!(p.selection, units);
+    p.selection.clear();
+    assert!(!p.select_box(&inside, true));
+    assert_eq!(p.selection, units);
+}
+
+/// spec: S-0214 claim 19 and Edge cases (an unmodified empty box falls through to the release click under quirks.empty_box_release_click; with force-select it is inert)
+#[test]
+fn claim_19_empty_box_release_click() {
+    let mut p = start();
+    let mine = own(&p, Kind::Vehicle);
+    p.selection = mine.clone();
+    assert!(p.select_box(&[], false), "continues as a click");
+    assert_eq!(p.selection, mine);
+    assert!(!p.select_box(&[], true), "no fallback with force-select");
+    assert_eq!(p.selection, mine);
+}
+
+/// spec: S-0214 Edge cases (quirks.empty_box_release_click off: an unmodified empty box clears the selection and gives no order)
+#[test]
+fn claim_19_empty_box_switch_off() {
+    let mut rs = fixture::ruleset();
+    rs.globals.quirks.empty_box_release_click = false;
+    let rules = std::sync::Arc::new(glasnost_sim::rules::SimRules::new(&rs, "synthetic-skirmish"));
+    let mut p = start_with(rules);
+    p.selection = own(&p, Kind::Vehicle);
+    assert!(!p.select_box(&[], false));
+    assert!(p.selection.is_empty());
+    assert!(p.game.replay().orders.is_empty());
 }
 
 /// spec: S-0701 claim 24 (the strip scrolled past its end: the refusal sound); interim: Q-0339 (a click that cannot move the strip)

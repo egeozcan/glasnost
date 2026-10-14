@@ -34,7 +34,7 @@
 
 use glasnost_map::CellXY;
 use glasnost_sim::econ::TypeRef;
-use glasnost_sim::econ::{deploy, placement, production, shroud, tech};
+use glasnost_sim::econ::{deploy, placement, production, sell, shroud, tech};
 use glasnost_sim::orders::Order;
 use glasnost_sim::rules::{Behaviour, FactoryKind, Kind, Locomotor};
 use glasnost_sim::world::{HouseId, ObjectId, Target, World};
@@ -80,6 +80,14 @@ const WAVE_PATIENCE: i32 = 3000; // nocite: tuning of our own opponent
 /// Spacing of the search grid that waves sweep once every enemy start
 /// position has been visited.
 const SEARCH_STEP: i32 = 8; // nocite: tuning of our own opponent
+
+/// Ticks without income after which a house that cannot afford an army
+/// unit counts as broke and sells a building.
+const BROKE_PATIENCE: i32 = 1500; // nocite: tuning of our own opponent
+
+/// Ticks after a sale within which a rise of credits is taken as its refund,
+/// not as income.
+const SALE_WINDOW: i32 = 300; // nocite: tuning of our own opponent
 
 /// Free cells kept between the house's buildings.
 const GAP: i32 = 2; // nocite: tuning of our own opponent
@@ -247,6 +255,21 @@ pub struct Script {
     next_army: usize,
     /// The tick since which idle army units have been waiting for a wave.
     waiting_since: Option<i32>,
+    /// The economy watch: credits and the harvesters' summed loads at the
+    /// last think, the tick since which neither showed income, the last
+    /// sale's tick, and whether the house is selling out (it then builds no
+    /// more buildings or harvesters, only army units).
+    watch: Watch,
+}
+
+/// What [`Script`] remembers of the house's income between thinks.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+struct Watch {
+    credits: i32,
+    loads: i64,
+    stall_since: Option<i32>,
+    last_sale: Option<i32>,
+    selling: bool,
 }
 
 impl Script {
@@ -260,6 +283,7 @@ impl Script {
             next_target: 0,
             next_army: 0,
             waiting_since: None,
+            watch: Watch::default(),
         }
     }
 
@@ -347,11 +371,79 @@ impl Script {
         Some(t)
     }
 
+    /// Updates the economy watch and, when the house is broke (no income
+    /// for [`BROKE_PATIENCE`] ticks and too few credits for its cheapest army
+    /// unit), sells one building, as a person in its seat would, the
+    /// costliest first. It keeps one factory per kind while the house has
+    /// army units; a house with nothing left to fight with sells out, which
+    /// ends its part in the game.
+    fn sell_when_broke(&mut self, w: &World, out: &mut Vec<Order>) {
+        let t = w.tick;
+        let credits = w.houses[usize::from(self.house.0)].credits;
+        let loads: i64 = self
+            .of_role(w, Role::Harvester)
+            .iter()
+            .filter_map(|&id| w.obj(id)?.econ.harvest.as_ref())
+            .map(|h| h.load.iter().map(|&b| i64::from(b)).sum::<i64>())
+            .sum();
+        let refund = self.watch.last_sale.is_some_and(|s| t - s < SALE_WINDOW);
+        let income = loads != self.watch.loads || (credits > self.watch.credits && !refund);
+        self.watch.credits = credits;
+        self.watch.loads = loads;
+        if income {
+            self.watch.stall_since = None;
+            self.watch.selling = false;
+            return;
+        }
+        let since = *self.watch.stall_since.get_or_insert(t);
+        // Broke: too few credits for anything the house can build now.
+        let affordable = all_types(w)
+            .into_iter()
+            .filter(|&a| tech::buildable(w, self.house, a))
+            .any(|a| credits >= production::cost_field(w, a));
+        if t - since < BROKE_PATIENCE || affordable || refund {
+            return;
+        }
+        self.watch.selling = true;
+        let army = !self.of_role(w, Role::Army).is_empty();
+        let keep = |id: ObjectId| {
+            let Some(o) = w.obj(id) else { return true };
+            FACTORIES.iter().any(|&k| {
+                self.allowed(w, tech::type_of(o), Role::Factory(k))
+                    && self.of_role(w, Role::Factory(k)).first() == Some(&id)
+            }) && army
+        };
+        let sale = self
+            .own(w)
+            .into_iter()
+            .filter(|&id| w.obj(id).is_some_and(|o| o.econ.sale.is_none()) && sell::sellable(w, id))
+            .filter(|&id| !keep(id))
+            .max_by_key(|&id| {
+                let o = w.obj(id).expect("own object");
+                (
+                    production::cost_field(w, tech::type_of(o)),
+                    std::cmp::Reverse(id),
+                )
+            });
+        if let Some(actor) = sale {
+            out.push(Order::Sell { actor });
+            self.watch.last_sale = Some(t);
+            self.watch.stall_since = Some(t);
+        }
+    }
+
+    /// Whether the house is selling out (see [`Script::think`]).
+    pub(crate) fn selling(&self) -> bool {
+        self.watch.selling
+    }
+
     /// The orders of one think.
     pub fn think(&mut self, w: &World) -> Vec<Order> {
         let mut out = Vec::new();
         let house = self.house;
         let own = self.own(w);
+        self.sell_when_broke(w, &mut out);
+        let selling = self.watch.selling;
 
         // 1. Deploy the MCV.
         let has_yard = own
@@ -382,7 +474,7 @@ impl Script {
                     cell: Some(cell),
                 });
             }
-        } else {
+        } else if !selling {
             let p = &w.houses[usize::from(house.0)].econ.power;
             // The first missing role the house can build a type for now
             // (a role it cannot build yet, such as a refinery that needs a
@@ -433,7 +525,7 @@ impl Script {
                     });
                 }
             }
-            if harvesters.len() < self.plan.harvesters {
+            if harvesters.len() < self.plan.harvesters && !selling {
                 self.build(w, Role::Harvester, &mut out);
             }
         }
@@ -443,7 +535,8 @@ impl Script {
         // harvester type to build now, or a vehicle factory to build while
         // the house has none).
         let vehicle_factory = Role::Factory(FactoryKind::Vehicle);
-        let economy_first = harvesters.len() < self.plan.harvesters
+        let economy_first = !selling
+            && harvesters.len() < self.plan.harvesters
             && (!self.candidates(w, Role::Harvester).is_empty()
                 || (self.of_role(w, vehicle_factory).is_empty()
                     && !self.candidates(w, vehicle_factory).is_empty()));

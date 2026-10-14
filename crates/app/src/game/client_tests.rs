@@ -106,3 +106,18 @@ fn menu_setup_and_start_hand_out_jobs() {
     assert!(c.vfs.is_some());
     assert_eq!(c.status, "no map");
 }
+
+/// spec: S-0213 claim 22 (fresh-profile bindings: S stop, X scatter, G guard, D deploy, C cheer) and claim 23 (Escape opens the options menu; the arrows are view keys, not commands)
+#[test]
+fn claims_22_23_default_keys() {
+    use glasnost_sim::targeting::KeyCommand;
+    assert_eq!(bound(Key::Char('s')), Some(Bound::Command(KeyCommand::Stop)));
+    assert_eq!(bound(Key::Char('x')), Some(Bound::Command(KeyCommand::Scatter)));
+    assert_eq!(bound(Key::Char('g')), Some(Bound::Command(KeyCommand::Guard)));
+    assert_eq!(bound(Key::Char('d')), Some(Bound::Command(KeyCommand::Deploy)));
+    assert_eq!(bound(Key::Char('c')), Some(Bound::Cheer));
+    assert_eq!(bound(Key::Escape), Some(Bound::Options));
+    for k in [Key::Left, Key::Right, Key::Up, Key::Down] {
+        assert_eq!(bound(k), None);
+    }
+}

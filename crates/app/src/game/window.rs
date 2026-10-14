@@ -63,6 +63,7 @@ pub fn run_game(options: GameOptions) -> Result<(), winit::error::EventLoopError
         started: false,
         mods: ModifiersState::empty(),
         pointer: Point::new(0, 0),
+        cursor_hidden: false,
     };
     #[cfg(not(target_arch = "wasm32"))]
     {
@@ -120,6 +121,8 @@ struct GameApp {
     started: bool,
     mods: ModifiersState,
     pointer: Point,
+    /// The system pointer is hidden for the game's own cursor.
+    cursor_hidden: bool,
 }
 
 impl GameApp {
@@ -265,7 +268,11 @@ impl ApplicationHandler<GameEvent> for GameApp {
                 }
             }
             WindowEvent::Focused(on) => self.client.focus(on),
-            WindowEvent::ModifiersChanged(m) => self.mods = m.state(),
+            WindowEvent::ModifiersChanged(m) => {
+                self.mods = m.state();
+                let mods = self.modifiers();
+                self.client.modifiers(mods);
+            }
             WindowEvent::CursorMoved { position, .. } => {
                 self.pointer = Point::new(position.x as i32, position.y as i32);
                 self.client.pointer_moved(self.pointer);
@@ -315,6 +322,13 @@ impl ApplicationHandler<GameEvent> for GameApp {
                     Status::Error(e).publish();
                     event_loop.exit();
                     return;
+                }
+                let hide = self.client.draws_cursor();
+                if hide != self.cursor_hidden
+                    && let Some(w) = &self.window
+                {
+                    w.set_cursor_visible(!hide);
+                    self.cursor_hidden = hide;
                 }
                 if g.frames_presented == 1 {
                     Status::Presented {
