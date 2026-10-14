@@ -321,6 +321,15 @@ pub struct EconFields {
     /// (S-0415 claims 5 and 10); absent: 128.
     #[serde(default)]
     pub deploy_facing: Option<i32>,
+    /// Buildings: the art `AnimIdle`, the *idle* body range `start, count,
+    /// delay` (S-0108 claims 2 and 6, Import mapping; S-0215 claim 11's
+    /// body-range ready mark); absent: 0, 1, 0.
+    #[serde(default)]
+    pub anim_idle: Option<[i32; 3]>, // spec: S-0108 Import mapping (AnimIdle: three values, start, count, delay)
+    /// Buildings: the art `Normalized`, the game-speed normalisation mark
+    /// of the body ranges (S-0108 claim 6, Import mapping); absent: false.
+    #[serde(default)]
+    pub normalized: Option<bool>,
 }
 
 /// Economy fields of a country (written into `econ`).

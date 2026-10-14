@@ -160,25 +160,6 @@ fn tile_anim_due(
     Some(anim.clone())
 }
 
-/// The creation draws of an animation created in play with no loop delay
-/// (a warp or a combat animation): the creation draws of S-0202 claim 10
-/// (see [`anim_created_at`]). Its start event takes no draw: S-0202 claim
-/// 15 composes the immediate middle event's draws only for animations
-/// created during loading, and the particle and smudge specs give none for
-/// play, so a type whose start event has effects leaves a note.
-pub fn anim_creation_draws(w: &mut World, name: &str) {
-    let rules = w.rules_arc();
-    let Some(a) = rules.animation(name) else {
-        return;
-    };
-    creation_draws(w, a);
-    let middle =
-        a.mu == Some(0) && (a.particles.is_some_and(|(_, n)| n > 0) || a.scorch || a.crater);
-    if middle || a.chain_reaction {
-        w.note("S-0109 claim 13 (interim, request Q-0217): the start-event draws of an animation created in play (its immediate middle event's particles and smudges, S-0202 claim 15 covering loading only; a chain reaction on a resource cell, S-0401 claim 20) are not taken");
-    }
-}
-
 /// The creation draws of S-0202 claim 10 before the start event.
 fn creation_draws(w: &mut World, a: &crate::rules::AnimRules) {
     let q = w.rules().quirks;
@@ -199,11 +180,13 @@ fn creation_draws(w: &mut World, a: &crate::rules::AnimRules) {
     }
 }
 
-/// The creation draws of an animation created during loading with no loop
-/// delay at the world position `at` (S-0202 claim 10, *Animation creation
-/// draws*; `None` for a resource glint, S-0202 claim 14, whose position no
-/// spec gives, so its middle event takes its particle draws and notes the
-/// scorch-or-crater part): the
+/// The creation draws of an animation created with no loop delay at the
+/// world position `at`, during loading or during play alike (S-0202 claims
+/// 10 and 15: a weapon, teleport, death, debris, trigger or terrain creator
+/// does not change the rule; *Animation creation draws*; `None` for a
+/// resource glint, S-0202 claim 14, whose position no spec gives, so its
+/// middle event takes its particle draws and notes the scorch-or-crater
+/// part): the
 /// stage-delay draw of S-0109 claim 3 when its range holds more than one
 /// value, then a bouncing type's three raw values and three ranged draws
 /// over −65535 … 65535, then the start event (S-0109 claim 13): the
@@ -223,6 +206,8 @@ pub fn anim_created_at(w: &mut World, name: &str, at: Option<(i32, i32, i32)>) {
     match a.mu {
         // spec: S-0109 claim 13 (the start event produces the middle event at once when μ = 0)
         Some(0) => middle_event(w, a, at),
+        // spec: S-0202 claim 15 and S-0109 claim 14 (with μ > 0 the same composition comes at the middle event later in playback)
+        Some(_) if effects => w.note("S-0109 claim 14: an animation's middle event later in playback (μ > 0) is not modelled (animations have no playback clock in the simulation), so its particle, scorch-or-crater and crater draws are not taken"),
         None if effects => w.note("S-0109 claim 25: an animation type's μ is unknown (the import found no art for it), so its start event's middle-event draws are not taken"),
         _ => {}
     }

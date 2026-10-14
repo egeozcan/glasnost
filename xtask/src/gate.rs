@@ -52,7 +52,10 @@ pub fn run_gate() -> Result<(), String> {
         .join("release")
         .join("glasnost_sim_gate.wasm");
     // The scenario indices of `glasnost_sim_gate::Scenario::ALL`.
-    for (i, name) in ["scripted", "combat", "skirmish"].iter().enumerate() {
+    for (i, name) in ["scripted", "combat", "skirmish", "duel", "duel-diagonal"]
+        .iter()
+        .enumerate()
+    {
         run(Command::new("node")
             .current_dir(&root)
             .arg("xtask/gate.mjs")

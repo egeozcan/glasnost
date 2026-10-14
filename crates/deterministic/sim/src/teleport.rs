@@ -126,12 +126,14 @@ pub fn take_destination(w: &mut World, id: ObjectId) {
             // spec: S-0207 claim 20 (a) (the vehicle-present mark moves at once from the old point's cell to L's)
             let old = st.mark.unwrap_or(o.pos.cell());
             let old_layer = if st.mark.is_some() {
-                Layer::Ground
+                landing_layer(w, old)
             } else {
                 o.layer
             };
             w.cells.claim_vehicle(old, old_layer, false);
-            w.cells.claim_vehicle(l.cell(), Layer::Ground, true);
+            // The mark is held in the record of the layer the object is listed in after the jump (interim, request Q-0240).
+            w.cells
+                .claim_vehicle(l.cell(), landing_layer(w, l.cell()), true);
             st.mark = Some(l.cell());
             st.landing = Some(l);
             st.for_dest = Some(dest);
@@ -279,7 +281,7 @@ fn infantry_landing(w: &mut World, id: ObjectId, dest: Target) -> Option<(Pos, L
     };
     // spec: S-0208 claim 19 (occupants ignored in capture, sabotage, enter or eaten with a vehicle or aircraft in C, or the building occupying C, as destination)
     let ignore = matches!(
-        o.beh.current,
+        o.beh.seen(),
         Some(Behaviour::Capture | Behaviour::Sabotage | Behaviour::Enter | Behaviour::Eaten)
     ) && match dest {
         Target::Object(x) => w.obj(x).is_some_and(|m| match m.kind {
@@ -373,6 +375,16 @@ pub fn placement_destination(w: &mut World, id: ObjectId) {
     take_destination(w, id);
 }
 
+/// The cell layer an object lands in on cell `c` (S-0207 claim 20 e): the
+/// bridge deck on a high-bridge cell, the ground elsewhere.
+fn landing_layer(w: &World, c: CellXY) -> Layer {
+    if w.cells.idx(c).is_some_and(|i| w.cells.deck[i]) {
+        Layer::Deck
+    } else {
+        Layer::Ground
+    }
+}
+
 fn set_state(w: &mut World, id: ObjectId, st: TeleportState) {
     if let Some(ob) = w.obj_mut(id) {
         ob.teleport = Some(st);
@@ -458,23 +470,19 @@ fn jump(w: &mut World, id: ObjectId, l: Pos) {
             p.target = (!airborne).then_some(Target::Cell(o.pos.cell()));
         }
     }
-    // spec: S-0207 claim 20 (e) (a warp animation at the old point; its creation draws as S-0202 claim 10 gives them: interim, request Q-0232; the sounds take no draw)
+    // spec: S-0207 claim 20 (e) (a warp animation at the old point; its creation and start-event draws as S-0202 claims 10 and 15 give them for an animation created in play: interim, request Q-0232; the sounds take no draw)
     if let Some(warp) = r.warp_out.clone() {
-        crate::load::anim_creation_draws(w, &warp);
+        crate::load::anim_created_at(w, &warp, Some((o.pos.x, o.pos.y, o.pos.z)));
     }
     let old = o.pos.cell();
     let new = l.cell();
     let high = w.cells.idx(new).is_some_and(|i| w.cells.deck[i]);
-    // spec: S-0207 claim 20 (e) (on a high-bridge cell at H + 416, elsewhere at H; it stays in the ground layer and keeps its facing)
+    // spec: S-0207 claim 20 (e) (on a high-bridge cell at H + 416, elsewhere at H; it keeps its facing)
     let z = w
         .surface_at(l.x, l.y)
         .wrapping_add(if high { DECK_HEIGHT } else { 0 });
-    // An infantry unit is listed in the layer of the record its standing position was reserved in (interim, request Q-0235).
-    let layer = if o.kind == Kind::Infantry {
-        o.teleport.as_ref().map_or(Layer::Ground, |t| t.mark_layer)
-    } else {
-        Layer::Ground
-    };
+    // spec: S-0207 claim 20 (e) (its cell layer is the bridge deck on a high-bridge cell, ground elsewhere, for every kind)
+    let layer = landing_layer(w, new);
     w.cells.leave(old, o.layer, id);
     if let Some(ob) = w.obj_mut(id) {
         ob.pos = Pos::new(l.x, l.y, z);
@@ -484,12 +492,15 @@ fn jump(w: &mut World, id: ObjectId, l: Pos) {
         ob.path.steps.clear();
     }
     w.cells.enter(new, layer, id, false);
-    // spec: S-0207 claim 20 (e) and S-0211 claim 5 (entering L's cell as a vehicle reaching a track target in a new cell: the cells are recomputed, crushing)
+    // spec: S-0207 claim 20 (e) (entering L's cell has the arrival effects of the object's own kind) and S-0211 claim 5 (both cells are recomputed, for a walker as for a vehicle)
     crate::load::recalc_cells(w, &[old, new]);
-    crate::crush::entered_cell(w, id, new);
+    if o.kind == Kind::Vehicle {
+        // spec: S-0207 claim 20 (e) (a vehicle's: those of reaching a track target in a new cell, crushing among them, S-0210 claim 9)
+        crate::crush::entered_cell(w, id, new);
+    }
     // spec: S-0207 claim 20 (e) (a second warp animation at L; crates and parasites have no state in our engine)
     if let Some(warp) = r.warp_out.clone() {
-        crate::load::anim_creation_draws(w, &warp);
+        crate::load::anim_created_at(w, &warp, Some((l.x, l.y, z)));
     }
     let harvester = r.unit(o.kind, o.type_index).is_some_and(|u| u.harvester);
     // spec: S-0207 claim 20 (f) and F9 (a harvester-flag type does not phase in)

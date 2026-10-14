@@ -558,7 +558,7 @@ fn ground(w: &mut World, k: ObjectId, unit: ObjectId) -> Outcome {
         return Outcome::Failed;
     };
     let mut k = k;
-    if b.beh.current == Some(Behaviour::Unload) {
+    if b.beh.seen() == Some(Behaviour::Unload) {
         // spec: S-0404 claim 13 (K unloading: the first other building of the house, in acquisition order, of the same type whose current behaviour is guard; its power switch and claim 7's conditions are not judged)
         let Some(owner) = b.owner else {
             return Outcome::Busy;
@@ -575,7 +575,7 @@ fn ground(w: &mut World, k: ObjectId, unit: ObjectId) -> Outcome {
                             && o.on_map
                             && o.owner == Some(owner)
                             && o.type_index == b.type_index
-                            && o.beh.current == Some(Behaviour::Guard)
+                            && o.beh.seen() == Some(Behaviour::Guard)
                     })
             });
         // spec: S-0404 claim 13 (no such building: busy)
@@ -1323,7 +1323,7 @@ pub fn arrival(w: &mut World, id: ObjectId) {
         return;
     }
     let k = o.econ.exit.map(|e| e.factory);
-    let cur = o.beh.current;
+    let cur = o.beh.seen();
     // spec: S-0417 claim 7 (no report in unload, or in enter towards its contacted building)
     let enter_k =
         cur == Some(Behaviour::Enter) && k.is_some_and(|k| o.dest == Some(Target::Object(k)));

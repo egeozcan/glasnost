@@ -14,6 +14,9 @@
 //!   stock maps with two start positions (or the listed map indices), played
 //!   to the last side; writes counts and timings to the git-ignored
 //!   `local-lane/skirmish.txt`.
+//! - `GLASNOST_GAME_DIR=<install> glasnost-headless ai [ticks] [seed]
+//!   [index …]`: the same games played by our own AI (M5b,
+//!   `glasnost_ai::game::Game`); writes `local-lane/ai-duel.txt`.
 //! - `GLASNOST_GAME_DIR=<install> glasnost-headless triggers [index …]`: the
 //!   map trigger event and action codes every map of the install uses
 //!   (S-0011), with the listed map indices' own counts; codes and counts
@@ -94,10 +97,15 @@ fn main() -> ExitCode {
                 }
             }
         }
-        Some("skirmish") => {
+        Some(cmd @ ("skirmish" | "ai")) => {
             let Some(dir) = std::env::var_os(GAME_DIR_VAR) else {
-                eprintln!("glasnost-headless skirmish: set {GAME_DIR_VAR} to an install folder");
+                eprintln!("glasnost-headless {cmd}: set {GAME_DIR_VAR} to an install folder");
                 return ExitCode::from(2);
+            };
+            let (players, file) = if cmd == "ai" {
+                (skirmish_lane::Players::Ai, "ai-duel.txt")
+            } else {
+                (skirmish_lane::Players::Scripted, "skirmish.txt")
             };
             let only: Vec<usize> = args.iter().skip(3).filter_map(|a| a.parse().ok()).collect();
             match skirmish_lane::run(
@@ -106,14 +114,15 @@ fn main() -> ExitCode {
                 &only,
                 arg(&args, 1, 120_000),
                 arg(&args, 2, 7),
+                players,
             ) {
                 Ok(report) => {
                     print!("{report}");
                     let out = std::path::Path::new("local-lane");
                     if std::fs::create_dir_all(out).is_ok()
-                        && std::fs::write(out.join("skirmish.txt"), &report).is_ok()
+                        && std::fs::write(out.join(file), &report).is_ok()
                     {
-                        println!("wrote local-lane/skirmish.txt (git-ignored; never commit it)");
+                        println!("wrote local-lane/{file} (git-ignored; never commit it)");
                     }
                     ExitCode::SUCCESS
                 }
@@ -156,7 +165,7 @@ fn main() -> ExitCode {
         }
         _ => {
             eprintln!(
-                "usage: glasnost-headless synthetic [ticks] [seed] | replay <file> | smoke [ticks] [seed] [index] | skirmish [ticks] [seed] [index …] | triggers [index …]"
+                "usage: glasnost-headless synthetic [ticks] [seed] | replay <file> | smoke [ticks] [seed] [index] | skirmish [ticks] [seed] [index …] | ai [ticks] [seed] [index …] | triggers [index …]"
             );
             ExitCode::from(2)
         }

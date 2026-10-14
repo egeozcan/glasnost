@@ -346,3 +346,129 @@ fn temporary_drive_then_own_locomotor_back() {
     run(&mut w, 1);
     assert_eq!(w.obj(id).unwrap().pos, centre(&w, to));
 }
+
+/// The end tick of phasing in of an armed teleporting cart whose
+/// targeting timer stands `left` ticks ahead of each tick: the tick, the
+/// draw state before and after it, the timer after it and the targeting
+/// delay of its behaviour. `passive` is the type's passive-acquire flag (the
+/// search gate of S-0309 claim 2; claim 3's opportunity gate is open).
+fn armed_end_tick(
+    passive: bool,
+    left: i32,
+) -> (
+    i32,
+    glasnost_sim::rng::Rng,
+    glasnost_sim::rng::Rng,
+    i32,
+    i32,
+) {
+    use glasnost_sim::testkit;
+    let mut r = testkit::combat_ruleset();
+    let cart = r.sim.vehicles.get_mut("CART").unwrap();
+    cart.primary = Some("Gun".into());
+    cart.locomotor = Some(Locomotor::Teleport);
+    cart.harvester = Some(false);
+    cart.combat.can_passive_aquire = Some(passive);
+    // The opportunity gate of S-0309 claim 3 opens for a type that fires on the move.
+    cart.opportunity_fire = Some(true);
+    let mut w = testkit::game_with(&r, 24, 3);
+    let id = testkit::spawn(&mut w, Kind::Vehicle, "CART", 0, testkit::mid(24, 0, 0), 0);
+    open_orders(&mut w);
+    order_move(&mut w, id, testkit::mid(24, 0, -4));
+    run(&mut w, 2);
+    assert!(teleport::phasing_in(&w, id));
+    loop {
+        let t = w.tick;
+        w.obj_mut(id).unwrap().targeting_timer = t + left;
+        let before = w.rng.clone();
+        run(&mut w, 1);
+        if !teleport::phasing_in(&w, id) {
+            assert_eq!(w.obj(id).unwrap().target, None);
+            // spec: S-0309 claim 4 (the guard-area delay under area guard, the normal one otherwise); the jump left the cart at rest (claim 20 e)
+            let g = &w.rules().general;
+            let n = if w.obj(id).unwrap().beh.current
+                == Some(glasnost_sim::rules::Behaviour::AreaGuard)
+            {
+                g.guard_area_targeting_delay
+            } else {
+                g.normal_targeting_delay
+            };
+            return (
+                t,
+                before,
+                w.rng.clone(),
+                w.obj(id).unwrap().targeting_timer,
+                n,
+            );
+        }
+    }
+}
+
+// spec: S-0207 claim 20 (f) and (i) (only with no target: above 10 ticks left the conditional draw over 4 to 8 comes first; a search the gates allow then takes its normal timer draw, which replaces the temporary value; with the gates refusing, only the conditional draw; at 10 or fewer, only the search's draw); S-0309 claim 4 (the search's timer restart N + U(0, 2))
+#[test]
+fn claim_20_end_of_phasing_in_draws_with_the_search_gates() {
+    let half = glasnost_sim::testkit::combat_rules()
+        .quirks
+        .ranged_draw_half_span;
+    // Neither draw: the gates refuse and the timer is at 10.
+    let (end, before, none, timer, _) = armed_end_tick(false, 10);
+    assert_eq!(timer, end + 10);
+    let base = none.taken() - before.taken();
+    let replay = |b: &glasnost_sim::rng::Rng| {
+        let mut r = b.clone();
+        for _ in 0..base {
+            r.raw();
+        }
+        r
+    };
+    // Gates refusing, 11 ticks left: the conditional draw only.
+    let (e, b, after, timer, _) = armed_end_tick(false, 11);
+    assert_eq!((e, &b), (end, &before));
+    let mut r = replay(&b);
+    let v = r.ranged(4, 8, half);
+    assert_eq!(r, after);
+    assert_eq!(timer, end + v);
+    // Gates passing, 10 ticks left: the search's draw only.
+    let (e, b, after, timer, n) = armed_end_tick(true, 10);
+    assert_eq!((e, &b), (end, &before));
+    let mut r = replay(&b);
+    let u = r.ranged(0, 2, half);
+    assert_eq!(r, after);
+    assert_eq!(timer, end + n + u);
+    // Gates passing, 11 ticks left: the conditional draw, then the search's, whose value stands.
+    let (e, b, after, timer, n) = armed_end_tick(true, 11);
+    assert_eq!((e, &b), (end, &before));
+    let mut r = replay(&b);
+    let _ = r.ranged(4, 8, half);
+    let u = r.ranged(0, 2, half);
+    assert_eq!(r, after);
+    assert_eq!(timer, end + n + u);
+}
+
+// spec: S-0207 claim 20 (a) and (e) (on a high-bridge cell a vehicle lands at H + 416 and is listed in the deck layer; its vehicle-present mark is held in that layer's record, interim request Q-0240)
+#[test]
+fn claim_20_vehicle_landing_on_a_high_bridge() {
+    let s = scene(false);
+    let (mut w, id) = start(&s);
+    let dc = cell(0, -6);
+    let i = w.cells.idx(dc).expect("cell");
+    w.cells.deck[i] = true;
+    w.cells.deck_entry[i] = true;
+    w.cells.bridge_axis[i] = glasnost_sim::cells::Axis::Y;
+    order_move(&mut w, id, dc);
+    run(&mut w, 1);
+    let deck_mark = |w: &World| {
+        w.cells
+            .occ(dc, Layer::Deck)
+            .is_some_and(|o| o.vehicle_present())
+    };
+    assert!(deck_mark(&w) && !marked(&w, dc));
+    run(&mut w, 1);
+    let o = w.obj(id).unwrap();
+    let ground = centre(&w, dc);
+    assert_eq!(o.pos, Pos::new(ground.x, ground.y, ground.z + 416));
+    assert_eq!(o.layer, Layer::Deck);
+    assert!(w.cells.list(dc, Layer::Deck).contains(&id));
+    assert!(!w.cells.list(dc, Layer::Ground).contains(&id));
+    assert!(deck_mark(&w) && !marked(&w, dc));
+}

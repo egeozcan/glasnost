@@ -13,7 +13,8 @@
 //! - Resource: ORE (overlays 0 … 11, stages 0 … 11).
 //! - Map: a flat clear square of side [`SIZE`] (cell coordinates 0 … 2·SIZE
 //!   on both axes), start waypoints 0 and 1 on opposite sides of the
-//!   middle, and an ore field beside each.
+//!   middle, and an ore field beside each; [`map_diagonal`] puts the starts
+//!   on a diagonal with a third ore field between them.
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -193,6 +194,33 @@ pub fn map() -> Map {
             }
         }
     }
+    m.waypoints = waypoints;
+    m
+}
+
+/// The second skirmish map: the same flat ground with the start waypoints
+/// on a diagonal (0 north-west, 1 south-east), an ore field of 5 × 5 cells
+/// beside each start and a third one in the middle, contested.
+pub fn map_diagonal() -> Map {
+    let mut m = testkit::empty_map(SIZE);
+    let mut waypoints = BTreeMap::new();
+    let d = START_DX * 2 / 3;
+    let field = |m: &mut Map, cx: i32, cy: i32| {
+        for ox in 0..5 {
+            for oy in 0..5 {
+                if let Some(cell) = m.cells.get_mut(at(cx + ox - 2, cy + oy - 2)) {
+                    cell.overlay = ((ox * 3 + oy) % 12) as u8;
+                    cell.overlay_data = 6;
+                }
+            }
+        }
+    };
+    for (k, s) in [(0u16, -1), (1u16, 1)] {
+        let c = at(s * d, s * d);
+        waypoints.insert(k, (c.x as i16, c.y as i16));
+        field(&mut m, s * d - s * 8, s * d + s * 2);
+    }
+    field(&mut m, 0, 0);
     m.waypoints = waypoints;
     m
 }

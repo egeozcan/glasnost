@@ -611,6 +611,21 @@ pub(crate) fn choose_position(
     }
 }
 
+/// Whether claim 4's first case holds for cell `c`: the unit's mission
+/// target is a vehicle or aircraft positioned in it, or a building
+/// occupying it (S-0208 claim 4).
+pub(crate) fn mission_target_in(w: &World, id: ObjectId, c: CellXY) -> bool {
+    // spec: S-0208 claim 4 (a mission target that is a vehicle or aircraft positioned in the cell, or a building occupying it; not a cell or an infantry unit)
+    match occupancy::mission_target(w, id) {
+        Some(Target::Object(t)) => w.obj(t).is_some_and(|m| match m.kind {
+            Kind::Vehicle | Kind::Aircraft => m.pos.cell() == c,
+            Kind::Building => w.cells.list(c, Layer::Ground).contains(&t),
+            _ => false,
+        }),
+        _ => false,
+    }
+}
+
 /// Chooses the walking target in the next cell (S-0208 claims 3 and 4).
 /// Returns whether a target was chosen.
 fn choose_target(w: &mut World, id: ObjectId, d: u8, next: CellXY) -> bool {
@@ -622,15 +637,7 @@ fn choose_target(w: &mut World, id: ObjectId, d: u8, next: CellXY) -> bool {
     // spec: S-0208 claim 3 (the desired point: the current position moved by one cell step)
     let desired = (o.pos.x + 256 * dx, o.pos.y + 256 * dy);
     let class = position_class(desired.0.rem_euclid(256), desired.1.rem_euclid(256), true); // spec: S-0204 claim 2 (the position within the cell)
-    // spec: S-0208 claim 4 (a mission target that is a vehicle or aircraft positioned in the cell, or a building occupying it; not a cell or an infantry unit)
-    let mission = match occupancy::mission_target(w, id) {
-        Some(Target::Object(t)) => w.obj(t).is_some_and(|m| match m.kind {
-            Kind::Vehicle | Kind::Aircraft => m.pos.cell() == next,
-            Kind::Building => w.cells.list(next, Layer::Ground).contains(&t),
-            _ => false,
-        }),
-        _ => false,
-    };
+    let mission = mission_target_in(w, id, next);
     // The second case of claim 4 (an enslaved unit at its master's unloading cell) needs
     // enslaved units, which no topic of M3 creates.
     // spec: S-0208 claim 4 (the mission target's cell: occupants ignored, no draw)

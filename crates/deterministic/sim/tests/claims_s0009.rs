@@ -184,7 +184,12 @@ fn claim_40_building_initial_state_and_upgrades() {
     assert_eq!(names, ["HUT", "ADDON", "HUT", "ADDON"]);
     assert_eq!(b[1].pos, b[0].pos);
     assert_eq!(b[1].health, 50, "upgrades start at full health");
-    assert!(b.iter().all(|o| o.beh.current == Some(Behaviour::Guard)));
+    // spec: S-0215 claim 1 (at game set-up: guard queued, no current behaviour, the idle body)
+    assert!(
+        b.iter()
+            .all(|o| o.beh.current.is_none() && o.beh.queued == Some(Behaviour::Guard))
+    );
+    assert!(b.iter().all(|o| o.econ.idle_body.is_some()));
     // quirks.upgrade_fields_carry_over off: the second building gets no upgrade.
     s.ruleset.globals.quirks.upgrade_fields_carry_over = false;
     let w = s.build();

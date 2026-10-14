@@ -89,7 +89,7 @@ pub fn request(w: &mut World, id: ObjectId, req: ScatterRequest) -> bool {
         || !human
         || req.anywhere
         || crate::combat::veterancy::has_ability(w, id, crate::combat::data::Ability::Scatter);
-    let scatter_prop = o.beh.current.is_some_and(|b| r.behaviour(b).scatter);
+    let scatter_prop = o.beh.seen().is_some_and(|b| r.behaviour(b).scatter);
     // spec: S-0208 claim 11 (first case: a sequence that is not undeploy and not interruptible)
     let first = seq.is_some_and(|q| q != Seq::Undeploy && !q.table().0);
     // spec: S-0208 claim 11 (second case: deploying, human owner, not both forced and move-anywhere)
@@ -182,7 +182,7 @@ pub fn vehicle_request(w: &mut World, id: ObjectId, req: ScatterRequest) -> bool
     // spec: S-0207 claim 16 (b): the teleporting locomotor
     let b = u.type_locomotor() == glasnost_rules::sim::Locomotor::Teleport;
     // spec: S-0207 claim 16 (c): not forced and the current behaviour lacks the scatter property (S-0215 claim 19)
-    let c = !req.forced && !o.beh.current.is_some_and(|x| r.behaviour(x).scatter);
+    let c = !req.forced && !o.beh.seen().is_some_and(|x| r.behaviour(x).scatter);
     // spec: S-0207 claim 16 (d): its body is turning
     let d = o.body.turning(t);
     // spec: S-0207 claim 16 (e): a destination and a request that is not move-anywhere
@@ -218,7 +218,7 @@ pub fn vehicle_request(w: &mut World, id: ObjectId, req: ScatterRequest) -> bool
         return true;
     };
     // spec: S-0207 claim 16 (h): the current behaviour has the paralysed property (S-0215 claim 17)
-    let h = o.beh.current.is_some_and(|x| r.behaviour(x).paralysed);
+    let h = o.beh.seen().is_some_and(|x| r.behaviour(x).paralysed);
     // spec: S-0207 claim 16 (i): unloading passengers has no state in M3
     let i = false;
     // spec: S-0207 claim 16 (j): a destination and its turret turning

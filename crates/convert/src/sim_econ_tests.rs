@@ -42,7 +42,7 @@ const BASE: &str = "[Countries]\n0=Ruritania\n[Ruritania]\nCostUnitsMult=1.25\nI
 [CrateRules]\nCrateMaximum=4\n\
 [MultiplayerDialogSettings]\nBases=no\nShortGame=yes\nMoney=777\n";
 
-const ART: &str = "[MILLART]\nQueueingCell=2,3\nNumberOfDocks=2\nSpecialAnim=SPIN\nGateStages=4\n";
+const ART: &str = "[MILLART]\nQueueingCell=2,3\nNumberOfDocks=2\nSpecialAnim=SPIN\nGateStages=4\nAnimIdle=5\nNormalized=yes\n";
 
 // spec: S-0402 Import mapping, S-0404 Import mapping, S-0405 Import mapping, S-0406 Import mapping, S-0407 Import mapping
 #[test]
@@ -65,6 +65,11 @@ fn building_econ_fields_are_converted() {
     assert_eq!(mill.econ.art_number_of_docks, Some(2));
     // spec: S-0108 Import mapping (GateStages, an art integer; S-0406 claim 15)
     assert_eq!(mill.econ.gate_stages, Some(4));
+    // spec: S-0108 Import mapping (AnimIdle: start, count, delay; unread components keep the held 0, 1, 0, with a warning; Normalized a boolean)
+    assert_eq!(mill.econ.anim_idle, Some([5, 1, 0]));
+    assert_eq!(mill.econ.normalized, Some(true));
+    assert!(w.iter().any(|m| m.contains("AnimIdle")));
+    assert_eq!(s.buildings["PLANT"].econ.anim_idle, None);
     assert_eq!(mill.econ.special_anim.as_deref(), Some("SPIN"));
     assert_eq!(s.buildings["PLANT"].econ.extra_power, Some(7));
     // spec: S-0409 Import mapping (a building's Sight, cells)

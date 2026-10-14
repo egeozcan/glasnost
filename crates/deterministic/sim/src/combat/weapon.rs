@@ -260,7 +260,7 @@ pub fn choose_slot(w: &World, firer: ObjectId, target: Option<Target>) -> usize 
     }
     // spec: S-0308 table P row 9 (an area-fire secondary while the current behaviour is unload)
     if r.combat.weapon(sw).area_fire
-        && w.obj(firer).and_then(|o| o.beh.current) == Some(Behaviour::Unload)
+        && w.obj(firer).and_then(|o| o.beh.seen()) == Some(Behaviour::Unload)
     {
         return 1;
     }

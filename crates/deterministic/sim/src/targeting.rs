@@ -1268,7 +1268,7 @@ fn cell_action(
                     .is_some_and(|p| p.ag)
                     && !building(w, actor).is_some_and(|b| b.raw.emp_cannon.unwrap_or(false))
                     && w.obj(actor)
-                        .is_none_or(|o| o.beh.current != Some(Behaviour::Selling)),
+                        .is_none_or(|o| o.beh.seen() != Some(Behaviour::Selling)),
                 own_rally: own(w, house, actor) && rally_capable(w, actor),
             },
             w.rules().quirks.building_cell_attack_no_weapon,

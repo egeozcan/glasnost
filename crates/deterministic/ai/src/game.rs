@@ -103,7 +103,7 @@ impl Game {
             if victory::defeated(&self.world, h) || self.world.houses[usize::from(h.0)].removed {
                 continue;
             }
-            for o in b.think(&mut self.world) {
+            for o in b.think(&self.world) {
                 orders::issue(&mut self.world, h, o);
             }
         }
