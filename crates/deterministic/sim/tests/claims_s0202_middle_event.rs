@@ -307,6 +307,6 @@ fn in_play_creation_takes_no_middle_event_draw() {
     glasnost_sim::load::anim_creation_draws(&mut w, "A");
     assert_eq!(w.rng, before);
     assert!(w.notes.iter().any(|n| {
-        n.starts_with("S-0109 claim 13: the start-event draws of an animation created in play")
+        n.starts_with("S-0109 claim 13 (interim, request Q-0217): the start-event draws of an animation created in play")
     }));
 }
