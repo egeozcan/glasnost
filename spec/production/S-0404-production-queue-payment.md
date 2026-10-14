@@ -2,7 +2,7 @@
 id: S-0404
 title: Production queue and payment (production lines, price, pay-as-you-go steps, waiting for money, hold, cancel and refunds, queue limit, completion)
 topic: production
-revision: 9
+revision: 10
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -22,26 +22,31 @@ losing power affect the lines. Step length is S-0403, clicks are S-0411 and the 
 S-0416; factory unloading and qualified post-contact destinations are S-0417. Skirmish only,
 network games and campaigns are out of scope.
 
-**Paired revisions.** S-0407 revision 10 separates the issue of claim 9's cancellation orders
+**Paired revisions.** S-0407 revision 11 separates the issue of claim 9's cancellation orders
 at the recheck from their application at the tick's end, exempts held-item resume from the
 issue-time limit test and keeps claim 10's application-time limit test on queued starts
-(S-0407, claims 13 and 16). S-0411 revision 11 specifies cancellation with refund at the
+(S-0407, claims 13 and 16). S-0411 revision 12 specifies cancellation with refund at the
 place-order application boundary for a busy or failed unit release, without retry; no eligible
 factory leaves the item done (claims 7 and 13 below). Its claim 14 states the continued steps
 and payments while a factory is being sold or queued to be sold. The relevant factory-eligibility
 tests exclude such a building (Terms); claim 13's hand-off to an idle twin keeps its expressly
 stated exception. S-0402 claim 18 reads a produced building's recorded start price, and
 S-0414 claim 15 includes off-map production objects in destruction hits.
-S-0411 claim 15 owns full-tab suppression and later admission. S-0417 claim 14 owns
+S-0411 claim 15 owns full-tab suppression and later admission, including the capacity
+check before removals, no refill at that same recheck, and S-0407 claim 17's simultaneous
+admission order; S-0004 retains sidebar sorting and capacity ownership. S-0417 claim 14 owns
 contact-place count, infantry exit-candidate acceptance and edge-aircraft nearby destinations.
 Release queues unloading rather than starting it synchronously. Claim 10 already distinguishes
 upgrade placement from ordinary placement, as required by S-0406 claim 12.
-S-0202 revision 15 claim 10 and S-0203 revision 15 claim 8 now agree with claim 11's
+S-0202 revision 16 claim 10 and S-0203 revision 16 claim 8 now agree with claim 11's
 causing-action rule and P11 B/C. Payment priority alone does not determine that assignment.
 Their proposed assignment measurements are not measured results. S-0202 claim 15's
 middle-event creation draws do not change production-start precedence.
+S-0701 claim 24 distinguishes application-time queue refusal's game-wide refusal sound
+from refused building placement's announcement only; claims 3 and 7 below retain that distinction.
 Q-0193's killed-item production outcomes remain open (Open question 3); ordinary
-completion and refund rules do not settle that case.
+completion and refund rules do not settle that case. Its request metadata must be reopened
+at hand-off rather than treating S-0414's count-only answer as closure of all its parts.
 
 ## Terms
 
@@ -188,15 +193,21 @@ addition:
    | Idle: no item and empty queue | The item starts at once at progress 0, with balance owed *B* = *P* at that moment; the step period of S-0403 (claims 1 and 8) starts. No money is needed to start. A house with 0 credits can start an item and then wait for money at its first step (claim 4). |
    | Player hold, with an item of the ordered type | The order resumes the line (claim 5) and adds nothing. |
    | Done item of the ordered type | The item is left as it is, and nothing is added. |
-   | Any other line state | The type is added at the end of the queue unless the queue already holds the game-wide maximum number of queued types (Constants), in which case the order is refused and the local player hears a refusal sound. A type is also refused when its build limit forbids it at queue time; S-0407 (claim 16) owns that test, including how it counts the item in production, its rule for limits of 0 or below, and the different test for an aircraft type that must return to a dock. |
+   | Any other line state | The type is added at the end of the queue unless the queue already holds the game-wide maximum number of queued types (Constants), in which case the order is refused. A type is also refused when its build limit forbids it at queue time; S-0407 (claim 16) owns that test, including how it counts the item in production, its rule for limits of 0 or below, and the different test for an aircraft type that must return to a dock. |
+
+   A queue request refused at application by the queue limit or S-0407 claim 16's
+   queue-time build-limit test requests the game-wide refusal sound only for the local
+   player's house (S-0701 claim 24). This is not the busy-building-line click's
+   unable-to-comply announcement (S-0411 claim 12), nor feedback for an order ignored
+   by the earlier factory-eligibility test.
 
    An aircraft order also fails the factory-eligibility test while every switched-on aircraft factory building of the house has all its docking places taken; it is then ignored even as a request to queue. An automatic hold means there is no switched-on factory building that could make the held item's type. An order for that type is therefore ignored and cannot resume the line until such a building is switched on; claim 8 then lifts the automatic hold by itself. An order for another type of the same line is judged by that other type's factory eligibility and, if eligible, is queued under the table's rule. A line on the forced-start hold of claim 10 likewise cannot be resumed while every factory building that could make its type is switched off. The item's object exists from the start but is not on the map. Its price at the start is the initial balance owed and is retained for a produced building's free-unit condition (S-0402 claim 18; Edge cases, *Recorded price*), also when `quirks.refund_at_current_price` is on. Being off the map does not protect its object from defeat or surrender destruction hits: S-0414 claim 15 owns their eligibility and order. An item created before the remaining factory can receive its hit before that factory's loss cancels production; an item already deleted by factory-loss cancellation receives no later hit.
-   - Backing: `measurable` (scenario P3, parts a to j, P7 for the done item, S-0411 S4 b2
+   - Backing: `measurable` (scenario P3, parts a to k, P7 for the done item, S-0411 S4 b2
      for resume at and above the infantry limit, S-0402 H13 for the start-price condition and
      S-0414 V11 part c for off-map destruction hits)
    - Confidence: high (start, queue, limit, the free-dock condition for aircraft, and the
      build-limit-only application test and the retained start price); medium (the other factory
-     conditions and destruction before factory-loss cancellation)
+     conditions, application-time refusal sound and destruction before factory-loss cancellation)
 
 4. **Pay as you go.** Each progress step is paid when it is made. When the line's progress goes from *k* − 1 to *k* (*k* = 1 … 54), let *B*ₖ₋₁ be the balance owed before the step. For *k* = 1 … 53, the payment is
 
@@ -291,8 +302,10 @@ addition:
      house; its left click may cancel a done unit instead (S-0411, claim 4).
    - **Buildings and defences.** A done building waits until a place order with a cell puts it on the
      map. Placement rules are S-0406. When placement is refused by its cell tests, the item stays
-     done and the local player hears a refusal. An order ignored because no eligible factory
-     exists also leaves the item done, but plays no refusal sound (S-0406 claim 1 and S-0411
+     done and, for the local player's house, requests the cannot-deploy-here announcement,
+     without an interface sound or the game-wide refusal sound (S-0701 claim 24).
+     An order ignored because no eligible factory exists also leaves the item done,
+     but requests neither that announcement nor a refusal sound (S-0406 claim 1 and S-0411
      claim 10). When placement succeeds, the line ceases to exist (buildings never queue,
      claim 10).
    - Backing: `measurable` (scenario P7; S-0406 PL1 for ignored building placement and
@@ -420,9 +433,11 @@ addition:
     order starts an item on an idle line (claim 3), when a cancel or a release starts the first
     queued type (claims 6, 7 and 10) and when claim 8 does. A queued type that is only added to the
     queue, or dropped from it, creates nothing and takes no draw (claim 10). Nothing else of a
-    line's life takes a draw: no step, payment, refusal, retry, hold, resume, cancel, refund,
+    line's life takes a scenario-stream draw: no step, payment, refusal, retry, hold, resume, cancel, refund,
     completion or deletion of the item's object, and no line's own update. The order among lines in claim 1 determines payment priority, not a separate
-    batch of creation draws. Starts receive their creation draws at their causing action:
+    batch of creation draws. Presentation sounds and announcements can take
+    unsynchronised-stream draws under S-0701; those are not production creation draws.
+    Starts receive their creation draws at their causing action:
     for several production orders in one tick, successive starts receive successive values in
     order of application (S-0213 claim 3). In particular, two queued replacements caused by
     automatic cancellation orders receive values in S-0411 claim 13's tab/icon cancellation
@@ -925,6 +940,20 @@ disturbed, and the part is repeated; the three agreeing results are one observat
   clicks issue resume requests; the item alone resumes, but with the extra object it stays held
   and no copy queues. Falsified if: the second order resumes despite the allowance being refused,
   the first is refused, or either adds a copy. S-0407 claim 9 owns the infantry exactness.
+
+- (k) Application-time refusal cues. Use the stock full-queue run of (a) with audio
+  capture and a read-only order recorder: expect the game-wide refusal sound at each
+  refused queue request's application, as in S-0701 F5. For a named test map override,
+  give a unit type build limit 2 and a queue limit greater than 2. Start one slow item,
+  with no on-map copy, then issue two further build requests in the same tick while
+  both pass the issue-time test. Record their issue and application ticks, queue count
+  and requested sound entry. Expect the first request to queue one copy and the second
+  to fail S-0407 claim 16's queue-time test, requesting the game-wide refusal sound at
+  that boundary. Void if either request is refused before issue or another action
+  changes the counts. A queued second copy, a different refusal entry, or no refusal
+  request falsifies the application-time rule. Repeat as each side; cue identity does
+  not depend on side. This does not predict a refusal cue for part j's factory-eligibility
+  failure or for an at-limit click that issues no order.
 
 **P4. Payment and waiting for money.**
 - Setup: *P* = 1000 item with *R* = 200 at ample credits; then the same with credits 100 and a test
