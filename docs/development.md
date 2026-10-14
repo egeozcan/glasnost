@@ -287,13 +287,14 @@ Provisional rules of combat, each tied to a request:
 
 - **Building body range (S-0108 claim 6, S-0215 claims 1 and 11).** `econ::body` follows only the *idle* body range of a building (`AnimIdle` and `Normalized`, imported as `anim_idle` and `normalized`): a building placed at game set-up enters it at once (`set_up`, which also queues *guard* with no current behaviour), a construction handover enters it deferred, and entering construction or a sale leaves it. On each building turn, before the first per-tick start, the stage of a building without a turret advances and wraps, and the ready mark is set when it lands on the last stage, or on every turn of a zero-delay range (`quirks.building_wrap_normalisation`). The other body states (*active*, *aux-1*, *aux-2*, *full*) and what enters them are a seam: the range runs on as *idle* through them.
 
+Q-0500 is answered by S-0402 revision 18, claim 27a: a field-seeking building's successful search offers the shifted site cell (`econ::slaves::offer_site`). A building that is not currently *selling* and is a factory of infantry or vehicles, a cloning building, a repair depot or a construction yard takes it as its guard spot (`takes_site_offer`), the one remembered destination a later pack-up uses; any other building keeps its earlier guard spot or its absence, and no building is given a movement destination. *Move* is requested without an immediate start in every case (current *selling* refuses it under S-0215 claim 7), and a building's *move* processing does nothing for 450 ticks (`process`, S-0215 claim 4 and T1), so the group's return to rest leaves it current. Revision 18's other changes need no code change and are now tested: the exact non-wrapping refinery distance with `quirks.refinery_distance_wraps` off keeps the primary and tie rules, a dump rate of 0 or below pays one tiberium per processing, and refinery selection comes no earlier than the processing after the change to returning.
+
 Provisional rules of M5a, each tied to a request:
 
 | Where | Interim rule | Request |
 |---|---|---|
 | `econ::body::set_up` | no bootstrap: S-0215 claim 1 leaves a set-up building's ready mark clear and endorses no set-up mark, so a set-up turreted building's queued *guard* stays pending (claim 11) until a specified rule makes it ready; map-placed turreted defences therefore do not start *guard* on their own | Q-0241 |
 | `combat::death::kill`, `econ::production::release`, `econ::production::place` | a production item killed by a destruction hit (S-0414 claim 15) is only marked killed (no other death effect, no draws) and stays on its line with health 0 until a cancellation deletes it; a release order for it fails and cancels it with the refund, a place order does nothing | Q-0193 |
-| `econ::slaves::building_update` | a building whose group is in field seeking and finds a site (S-0402 claim 27) is given the site as its object destination with *move* queued, as a vehicle master is (`slaves::move_to`), not as its guard spot; selling refuses only the queued *move* (S-0215 claim 7), never the destination | Q-0500 |
 
 ## Own AI (M5b)
 

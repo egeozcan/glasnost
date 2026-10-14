@@ -552,6 +552,8 @@ fn process(w: &mut World, id: ObjectId) -> i32 {
         return d;
     }
     match (cur, o.kind) {
+        // spec: S-0215 claim 4 and table T1 (move has no processing rule for buildings: nothing, 450 ticks, no draw); S-0402 claim 27a (a field-seeking building's move does not move it, request packing or clear its guard spot)
+        (Some(Behaviour::Move), Kind::Building) => NO_RULE_DELAY,
         (Some(Behaviour::Move), _) => process_move(w, id),
         (Some(Behaviour::Attack), Kind::Infantry | Kind::Vehicle) => process_attack(w, id),
         // spec: S-0215 claim 5 (sticky is processed exactly as guard)

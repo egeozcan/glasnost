@@ -1301,7 +1301,8 @@ fn building_in_state(w: &mut World, state: GroupState) -> (ObjectId, i32) {
     (b, due)
 }
 
-// spec: S-0402 claim 27 (field seeking, building, with a field and site: the site offered as the building's destination, move queued without an immediate start, travelling; no emergence or field-check transition)
+// spec: S-0402 claim 27 (field seeking, building, with a field and site: the site offered, move requested without an immediate start, travelling; no emergence or field-check transition)
+// spec: S-0402 claim 27a (no separate movement destination; a building of none of the qualifying types keeps its absent guard spot)
 #[test]
 fn claim_27_seeking_building_with_a_site_travels() {
     let r = rules();
@@ -1309,7 +1310,8 @@ fn claim_27_seeking_building_with_a_site_travels() {
     let (b, _) = building_in_state(&mut w, GroupState::FieldSeeking);
     assert_eq!(group(&w, b).state, GroupState::Travelling);
     let o = w.obj(b).unwrap();
-    assert!(matches!(o.dest, Some(Target::Cell(_))));
+    assert_eq!(o.dest, None);
+    assert_eq!(o.guard_spot, None);
     assert_eq!(o.beh.queued, Some(Behaviour::Move));
     assert!(on_map(&w, b).is_empty());
     // spec: S-0402 claim 27 (the next update sees travelling and puts the group at rest)
@@ -1349,6 +1351,183 @@ fn claim_27_travelling_or_retrying_building_rests() {
         assert_eq!(w.obj(b).unwrap().dest, None, "{state:?}");
         assert!(on_map(&w, b).is_empty(), "{state:?}");
     }
+}
+
+/// The site-offer variants of S-0402 claim 27a: SMB (3 × 3, packing up
+/// into SMV) qualified through exactly one property at a time, and an
+/// aircraft-factory-only control. Returns the ruleset and the qualifying
+/// type names.
+fn offer_rules() -> (Ruleset, Vec<&'static str>) {
+    let mut r = rules();
+    let base = r.sim.buildings["SMB"].clone();
+    let variants: [(&str, fn(&mut glasnost_rules::sim::BuildingType)); 6] = [
+        ("SMQINF", |b| b.factory = Some("infantry".into())),
+        ("SMQVEH", |b| b.factory = Some("vehicle".into())),
+        ("SMQCLO", |b| b.cloning = Some(true)),
+        ("SMQREP", |b| b.unit_repair = Some(true)),
+        ("SMQYARD", |b| b.construction_yard = Some(true)),
+        ("SMQAIR", |b| b.factory = Some("aircraft".into())),
+    ];
+    for (n, f) in variants {
+        let mut b = base.clone();
+        f(&mut b);
+        r.registries.get_mut("buildings").unwrap().push(n.into());
+        r.sim.buildings.insert(n.into(), b);
+    }
+    (r, vec!["SMQINF", "SMQVEH", "SMQCLO", "SMQREP", "SMQYARD"])
+}
+
+/// One ORE cell east of the master placed by [`offer_at`], within its
+/// short scan, so that the group's later field check keeps it deployed.
+fn offer_field() -> CellXY {
+    at(4, 0)
+}
+
+/// A placed `name` whose group is in field seeking with `prior` as its
+/// guard spot, run through one group update directly (no tick passes).
+/// With `selling`, *selling* is current, with *guard* queued. Returns the
+/// world, the building and the shifted site of S-0402 claim 24 for the
+/// field.
+fn offer_at(
+    r: &Ruleset,
+    name: &str,
+    prior: Option<Target>,
+    selling: bool,
+) -> (World, ObjectId, CellXY) {
+    let mut w = game_on(r, &[(offer_field(), ORE, 5)], false);
+    let b = place_building(&mut w, name, 0, at(0, -1));
+    let t = w.tick;
+    let o = w.obj_mut(b).unwrap();
+    o.guard_spot = prior;
+    if selling {
+        o.beh.force(Behaviour::Selling, t, true);
+        o.beh.queued = Some(Behaviour::Guard);
+    }
+    let g = o.econ.group.as_mut().unwrap();
+    g.state = GroupState::FieldSeeking;
+    g.next_update = t;
+    let (tl, s) = slaves::site_search(&mut w, b, offer_field()).expect("a site");
+    // spec: S-0402 claim 24 (a 3 × 3 site is shifted by (1, 1) from its top-left cell)
+    assert_eq!((s.x - tl.x, s.y - tl.y), (1, 1));
+    slaves::group_turn(&mut w, b);
+    (w, b, s)
+}
+
+// spec: S-0402 claim 27a (not selling, a factory of infantry or vehicles, a cloning building, a repair depot or a construction yard: the shifted site cell replaces its guard spot, earlier or absent; no separate movement destination; move requested without an immediate start; travelling)
+#[test]
+fn claim_27a_qualifying_building_takes_the_site_as_guard_spot() {
+    let (r, qualifying) = offer_rules();
+    for name in qualifying {
+        for prior in [Some(Target::Cell(at(-6, -6))), None] {
+            let (w, b, s) = offer_at(&r, name, prior, false);
+            let o = w.obj(b).unwrap();
+            assert_eq!(o.guard_spot, Some(Target::Cell(s)), "{name} {prior:?}");
+            assert_eq!(o.dest, None, "{name}");
+            assert_eq!(o.beh.queued, Some(Behaviour::Move), "{name}");
+            assert_ne!(
+                o.beh.current,
+                Some(Behaviour::Move),
+                "{name}: no immediate start"
+            );
+            assert_eq!(group(&w, b).state, GroupState::Travelling, "{name}");
+        }
+    }
+}
+
+// spec: S-0402 claim 27a (any other building keeps its earlier guard spot, including an absent one; a slave group or an undeploys-into type alone does not qualify, nor does an aircraft factory; move is still requested and the group travels)
+#[test]
+fn claim_27a_other_building_keeps_its_guard_spot() {
+    let (r, _) = offer_rules();
+    for name in ["SMB", "SMQAIR"] {
+        for prior in [Some(Target::Cell(at(-6, -6))), None] {
+            let (w, b, _) = offer_at(&r, name, prior, false);
+            let o = w.obj(b).unwrap();
+            assert_eq!(o.guard_spot, prior, "{name}");
+            assert_eq!(o.dest, None, "{name}");
+            assert_eq!(o.beh.queued, Some(Behaviour::Move), "{name}");
+            assert_eq!(group(&w, b).state, GroupState::Travelling, "{name}");
+        }
+    }
+}
+
+// spec: S-0402 claim 27a (currently selling: a qualifying building keeps its earlier guard spot, the move request is refused and the earlier queued behaviour kept, S-0215 claim 7; the group still enters travelling)
+#[test]
+fn claim_27a_selling_building_refuses_the_offer() {
+    let (r, qualifying) = offer_rules();
+    for name in qualifying {
+        for prior in [Some(Target::Cell(at(-6, -6))), None] {
+            let (w, b, _) = offer_at(&r, name, prior, true);
+            let o = w.obj(b).unwrap();
+            assert_eq!(o.guard_spot, prior, "{name}");
+            assert_eq!(o.dest, None, "{name}");
+            assert_eq!(o.beh.current, Some(Behaviour::Selling), "{name}");
+            assert_eq!(o.beh.queued, Some(Behaviour::Guard), "{name}");
+            assert_eq!(group(&w, b).state, GroupState::Travelling, "{name}");
+        }
+    }
+}
+
+// spec: S-0402 claim 27a (construction state adds no exclusion: a qualifying building under construction still takes the site)
+#[test]
+fn claim_27a_construction_does_not_exclude() {
+    let (r, _) = offer_rules();
+    let mut w = game_on(&r, &[(offer_field(), ORE, 5)], false);
+    let b = place_building(&mut w, "SMQYARD", 0, at(0, -1));
+    let t = w.tick;
+    let o = w.obj_mut(b).unwrap();
+    o.beh.force(Behaviour::Construction, t, true);
+    let g = o.econ.group.as_mut().unwrap();
+    g.state = GroupState::FieldSeeking;
+    g.next_update = t;
+    let (_, s) = slaves::site_search(&mut w, b, offer_field()).expect("a site");
+    slaves::group_turn(&mut w, b);
+    let o = w.obj(b).unwrap();
+    assert_eq!(o.guard_spot, Some(Target::Cell(s)));
+    assert_eq!(o.beh.queued, Some(Behaviour::Move));
+    assert_eq!(group(&w, b).state, GroupState::Travelling);
+}
+
+// spec: S-0402 claim 27a (an accepted move that becomes current through a building start does nothing: no movement, no packing, the guard spot kept; each processing schedules the next 450 ticks later with no draw; the group's return to rest does not cancel it)
+// spec: S-0215 claim 4 and table T1 (move has no processing rule for buildings: nothing, 450 ticks, no draw)
+#[test]
+fn claim_27a_building_move_does_nothing() {
+    let (mut r, _) = offer_rules();
+    // Once the single ore cell is exhausted, the group stays deployed instead of packing up (S-0402 claim 25).
+    r.globals.quirks.slave_relocation_failed_search_origin = false;
+    let (mut w, b, s) = offer_at(&r, "SMQREP", None, false);
+    let cell = w.obj(b).unwrap().pos.cell();
+    until(&mut w, 100, |w| {
+        w.obj(b).unwrap().beh.current == Some(Behaviour::Move)
+    })
+    .expect("move becomes current");
+    // Its first processing, in the tick it started: nothing, 450 ticks.
+    let (first, delay) = w.obj(b).unwrap().beh.last.expect("a processing");
+    assert_eq!(delay, 450);
+    let next = group(&w, b).next_update;
+    while w.tick <= next.max(first + 450) {
+        testkit::run(&mut w, 1);
+    }
+    let o = w.obj(b).unwrap();
+    // The group update after travelling put the group at rest without cancelling move.
+    assert_ne!(group(&w, b).state, GroupState::Travelling);
+    assert_ne!(group(&w, b).state, GroupState::Packing);
+    assert_eq!(o.beh.current, Some(Behaviour::Move));
+    assert_eq!(o.beh.last, Some((first + 450, 450)));
+    assert_eq!(o.pos.cell(), cell);
+    assert_eq!(o.dest, None);
+    assert_eq!(o.guard_spot, Some(Target::Cell(s)));
+}
+
+// spec: S-0402 claims 27a and 28, S-0415 claim 10 (a later pack-up uses the replaced guard spot, the offered shifted site, not a hidden second copy)
+#[test]
+fn claim_27a_pack_up_heads_to_the_offered_site() {
+    let (r, _) = offer_rules();
+    let (mut w, b, s) = offer_at(&r, "SMQCLO", Some(Target::Cell(at(-6, -6))), false);
+    unblock(&mut w);
+    assert!(orders::issue(&mut w, HouseId(0), Order::Sell { actor: b }));
+    until(&mut w, 300, |w| w.obj(b).is_none()).expect("packed up");
+    let v = vehicle_master(&w);
+    assert_eq!(w.obj(v).unwrap().dest, Some(Target::Cell(s)));
 }
 
 // spec: S-0402 claim 28 (one remembered destination: automatic relocation replaces an earlier guard spot with the old top-left cell; a later order that changes the guard spot replaces that cell, and the pack-up heads there)
