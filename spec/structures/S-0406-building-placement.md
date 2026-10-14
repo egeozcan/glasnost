@@ -2,13 +2,13 @@
 id: S-0406
 title: Building placement (foundation cells, the cell test, adjacency, building off allies, shroud, walls and gates, upgrades)
 topic: structures
-revision: 7
+revision: 8
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0133, Q-0130, Q-0220]
+requests: [Q-0133, Q-0130, Q-0220, Q-0277, Q-0282]
 supersedes: []
 ---
 
@@ -24,13 +24,15 @@ deployed building's construction begins and ends. Skirmish only. Campaign
 behaviour and network games are out of scope. Deploying a vehicle into a building uses the cell test
 of this spec and is S-0415's.
 
-**Paired hand-off confirmations.** S-0404 revision 9 claim 10 already distinguishes upgrade
-orders from ordinary placement: upgrades bypass adjacency but retain explored-ground legality,
-as claim 12 here states. S-0215 revision 21 claim 11 retains claim 17's construction ready-mark
-and second-start contract. Its factory-release rule agrees with S-0417 revision 4 claim 2:
-release and unloading neither set nor clear that mark. Those factory rules do not change the
-construction timings here. Confirm these companion passages at sign-off; no behavioural change
-to either companion is requested.
+**Paired hand-off confirmations.** S-0404 claim 10 distinguishes upgrade orders from
+ordinary placement: upgrades bypass adjacency but retain explored-ground legality, as claim 12
+here states. S-0215 claim 11 retains claim 17's construction ready-mark and second-start
+contract. Its factory-release rule agrees with S-0417 claim 2: release and unloading neither
+set nor clear that mark. Those factory rules do not change the construction timings here.
+S-0214 claims 21–22 own the ordinary arrow used during placement; claim 19 here owns the
+separate placement display. S-0411 claims 10, 12 and 17 distinguish placement's announcement
+from the game-wide refusal sound and delegate placement's text/no-text answer to claim 20
+here. Confirm these matching companion passages at joint sign-off.
 
 ## Terms
 
@@ -48,9 +50,10 @@ Import mapping) as S-0408 defines them. S-0010's *tileset*, *morphable flag*, *t
 S-0215's *ready mark* (Terms) and per-tick starts (claim 11). A place order
 names the top-left cell of the foundation. In addition:
 
-- **Refusal sound.** The interface sound that tells the local player a placement or order was
-  refused. S-0411 (claims 10 and 12) owns when it plays and which sound it is; this spec only says
-  that it plays, and for which outcomes.
+- **Placement refusal announcement.** The cannot-deploy-here announcement requested for a
+  refused placement (S-0411 claims 10 and 12; S-0701). It is not the game-wide refusal sound.
+  A request does not guarantee audible playback: announcement eligibility and suppression
+  remain S-0701's.
 - **Cell test.** The test of claim 3 that a cell passes or fails for a building type being placed,
   together with the wall exceptions of claim 8. S-0415 (claim 3) uses it for deploying.
 - **Filling building.** A building that the wall fill of claim 11 creates in a gap cell.
@@ -118,8 +121,9 @@ names the top-left cell of the foundation. In addition:
    leptons (F4), by the rules of this spec:
    - if the placement succeeds, the building enters play in that tick, its construction state begins
      (S-0108) and the line ends (S-0404, claim 7),
-   - if it fails, nothing is placed, the local player hears the refusal sound when the house is the
-     local player's, and placement mode resumes with the same building (S-0411, claim 10).
+   - if it fails, nothing is placed, the placement refusal announcement is requested when the
+     house is the local player's, and placement mode resumes with the same building
+     (S-0411, claim 10). No game-wide refusal sound is requested.
    The placed building stands at height 0 above the terrain: its world height is the surface
    height of S-0106 (claim 2) at the centre of the named cell, which on a flat cell is 104 leptons
    times the cell's height level (glossary, *height level*). This is the same placement as a
@@ -290,7 +294,8 @@ names the top-left cell of the foundation. In addition:
    the place order (claim 1) does not check them again: a supporting building destroyed, or a cell
    shrouded again, between the issue of the order and its application does not stop the placement.
    - *Human input in the original.* When the player clicks to place, an order is issued only if both
-     hold; otherwise the refusal sound plays and no order is issued. Adjacency is judged at the
+     hold; otherwise the placement refusal announcement is requested and no order is issued.
+     No game-wide refusal sound is requested. Adjacency is judged at the
      click, with the building, the cell under the cursor and the buildings as they are then. The
      shroud condition is not: the click uses the cursor shroud result, which is recomputed only
      when the cell under the cursor changes while placement mode is active. If a foundation cell is
@@ -486,13 +491,17 @@ names the top-left cell of the foundation. In addition:
     holds, for human input and for an AI house alike; claim 5's shroud condition is still asked of
     the upgrade type's foundation rectangle at the named cell. This follows S-0404 claim 10's
     legality rule: an upgrade place order is exempt from adjacency but remains subject to explored
-    ground; ordinary building place orders retain both conditions. S-0408 (claim 5) owns which
+    ground; ordinary building place orders retain both conditions. The upgrade target's owner,
+    type and room must still satisfy this claim when the order is applied: unlike adjacency and
+    explored ground, those target conditions are checked again. A target lost, captured or filled
+    between issue and application can therefore refuse the upgrade. S-0408 (claim 5) owns which
     upgrade a sale removes.
     - Backing: `measurable` (scenario PL10: parts a and b for the room rule, part c for a type
       without room, part d for the position, the full repair and the power and prerequisite
       effects, part e for the adjacency replacement, part f for the shroud condition, part g for
       level values that refuse, part h for a count above 3 that records no power and no position,
-      part i for the uncapped count of the wall tower type); `unmeasured` for the original's other
+      part i for the uncapped count of the wall tower type, part j for the application-time
+      target recheck, unmeasured if its required event timing cannot be established); `unmeasured` for the original's other
       effects of a *c*′ of 0 or above 3 (no game concept is known that this other alteration of
       the building's state changes, so there is no observable to propose, the larger counts risk a fault, and
       our engine's departure does not depend on the answer), and for
@@ -647,6 +656,47 @@ names the top-left cell of the foundation. In addition:
     - Backing: `measurable` (PL11 e; S-0408 S10 for the selling effect)
     - Confidence: medium
 
+### Placement display and refusal messages
+
+19. **Placement hover is not an action cursor (Q-0277).** While building placement mode is
+    active and the pointer is inside the battlefield, the pointer uses S-0214's ordinary
+    arrow, even over a blocked cell or an eligible upgrade target. It does not become a
+    deploy, no-deploy, capture or universal refusal cursor. Its frame and top-left hot spot
+    are S-0214 claims 21–22's. The candidate foundation is a separate map-aligned display,
+    anchored by claim 7, not an image attached to the arrow's hot spot. Moving outside the
+    battlefield hides the active foundation display; sidebar and edge-scroll cursor rules
+    remain their owning specs'. No building sprite preview is drawn in ordinary skirmish
+    placement mode.
+
+    For an ordinary type without a to-tile field, each marked foundation cell uses the
+    placement image's frame 0 when that cell is currently explored, passes the cell test
+    without the place-anywhere exemption, and the adjacency result saved at the last
+    cursor-cell change is positive. Otherwise it uses frame 2 on a flat cell or frame 3 on
+    a sloped cell. These are integer image-frame indices, not colours supplied by this spec.
+    The display can therefore disagree with the eventual click: adjacency is checked again
+    at the click, while the click's shroud result can be stale under claim 6. A place-anywhere
+    type can also display a refused cell that its actual placement accepts.
+
+    An upgrade's eligible display instead needs explored ground in that cell and a building
+    satisfying claim 12's ownership, target-type and room conditions. Adjacency does not
+    decide that display. An eligible upgrade cell uses frame 0; an ineligible one uses
+    frame 2 or 3 as above. Neither the pointer nor the display grants permission to bypass
+    the issue-time shroud condition or the application-time target check.
+    - Backing: `measurable` (PL14)
+    - Confidence: high (ordinary arrow and separate display); medium (frame choice,
+      saved-adjacency versus live cell checks, upgrade display and no sprite preview)
+
+20. **Placement refusal adds no battlefield text (Q-0282).** A click refused by claim 6,
+    including an upgrade click that fails its issue-time conditions, and a place order
+    refused when applied under claim 1 add no transient text message to the battlefield
+    message list. Their feedback is the placement refusal announcement and the retained
+    done item/placement mode. An order ignored for lack of a qualifying factory adds no
+    text and requests no sound. No placement-refusal string, screen position, capacity or
+    expiry timer is therefore needed; pausing has no placement-message timer to stop.
+    Independently generated trigger or other messages are not suppressed by this rule.
+    - Backing: `measurable` (PL15)
+    - Confidence: high
+
 ## Formulas
 
 > **F1. Adjacency ring.** For a foundation rectangle with top-left cell (*x*₀, *y*₀) and size *W* ×
@@ -718,9 +768,9 @@ names the top-left cell of the foundation. In addition:
 
 | State | Event | Result |
 |---|---|---|
-| Item done, placement mode on (human input) | click | For ordinary placement, adjacency (claim 4) and the cursor shroud result (claims 5 and 6; with `quirks.placement_shroud_at_cursor` off, explored ground judged now) decide whether an order is issued. An upgrade uses claim 12's target condition instead of adjacency, retaining the shroud condition; on failure the refusal sound plays and no order is issued. Placement mode is offered only while the item is done (S-0411) |
+| Item done, placement mode on (human input) | click | For ordinary placement, adjacency (claim 4) and the cursor shroud result (claims 5 and 6; with `quirks.placement_shroud_at_cursor` off, explored ground judged now) decide whether an order is issued. An upgrade uses claim 12's target condition instead of adjacency, retaining the shroud condition; on failure the placement refusal announcement is requested and no order is issued. Placement mode is offered only while the item is done (S-0411) |
 | Item done (an AI house) | place order issued | Ordinary placement judges adjacency and explored ground at issue (claim 6). An upgrade uses claim 12's target condition instead of adjacency, retaining explored ground |
-| Place order issued | order applied (order application of S-0213) | The order is applied only when the item is done and a factory building could make the type; without such a factory building it does nothing and no sound plays (claim 1). When it is applied, the cell test (claims 3 and 8), or for an upgrade type the upgrade rule (claim 12), decides the outcome; claims 4 and 5 are not judged again. If that test fails, nothing is placed and, for a local player's house, the refusal sound plays |
+| Place order issued | order applied (order application of S-0213) | The order is applied only when the item is done and a factory building could make the type; without such a factory building it does nothing and no sound plays (claim 1). When it is applied, the cell test (claims 3 and 8), or for an upgrade type the upgrade rule (claim 12), decides the outcome; claims 4 and 5 are not judged again. If that test fails, nothing is placed and, for a local player's house, the placement refusal announcement is requested, without the game-wide refusal sound |
 | Placed under construction, *construction* queued, no current behaviour | building turn lands on the last build-up stage, or any turn of a zero-delay range | Ready mark set; *construction* becomes current at the second per-tick start of that tick; first construction processing on the next tick, restarting at stage 0 (claims 14 and 17) |
 | Deployed under construction, ready mark set at entry | the building's first turn | *construction* becomes current at its second per-tick start; first processing on the next tick (claim 17) |
 | Under construction, positive-delay range of 1 stage or fewer | any turn | No ready mark from the range; construction never completes (claim 18) |
@@ -821,6 +871,9 @@ Observable consequences:
 
 | Key (file, section) | Concept | Form | Absent |
 |---|---|---|---|
+| Placement display image `PLACE.SHP` | candidate-cell frames 0, 2 and 3 (claim 19) | sprite image, resolved by S-0005 | missing-image behaviour is not established |
+| Cursor image and palette | ordinary arrow during placement (claim 19) | owned by S-0214 Import mapping | S-0214 |
+| None | no transient placement-refusal text (claim 20) | no string-table entry or duration is imported for this event | not applicable |
 | `Adjacent` (rules, building type) | adjacency *A* (claim 4) | integer, cells | 3 |
 | `BaseNormal` (rules, building type) | base-normal flag (claim 4) | boolean | yes |
 | `EligibileForAllyBuilding` (rules, building type; the original's spelling) | ally-eligible flag (claim 4) | boolean | no |
@@ -890,9 +943,10 @@ Each scenario names its observed area, the cells in which the void rule applies.
   place-anywhere flag placed once on a sloped cell at height level ℓ whose surface height at the
   centre (S-0106, claim 2) differs from 104 × ℓ leptons, with the recorder reading the placed
   building's position in leptons, world height included, in the tick it first appears.
-- Observable: the building's top-left cell; the tick it first appears in the recorder and its construction state in that tick (run 1); the refusal sound; whether placement mode resumes; whether the item is still done; credits; in run 4 the building's position (*x*, *y*) in leptons and its world height.
+- Observable: the building's top-left cell; the tick it first appears in the recorder and its construction state in that tick (run 1); the placement refusal announcement request and playback separately; whether placement mode resumes; whether the item is still done; credits; in run 4 the building's position (*x*, *y*) in leptons and its world height.
 - Expected: the building appears in the tick its order is applied, in its construction state; top-left cells by F2 (the 2 × 2 building's top-left is the clicked cell); the blocked
-  click refuses with the refusal sound and resumes placement mode; in run 2 the click during the
+  click requests the placement refusal announcement without the game-wide refusal sound and
+  resumes placement mode; in run 2 the click during the
   sale does nothing (no factory building could make the type: S-0404, Terms, a building being sold
   is excluded), the item stays done and no sound plays, and in the tick that factory building leaves the map the
   item is cancelled with the refund of S-0404 claim 8 and the line is empty; run 3 places the done
@@ -903,8 +957,8 @@ Each scenario names its observed area, the cells in which the void rule applies.
 - Falsified if: in run 4 the position differs from F4, or the world height on the level-2 cell is
   not 208 leptons (for instance 0, which would put the building at world height 0 whatever the
   cell's height level), or the world height on the sloped cell is not S-0106's surface height at
-  the centre (for instance 104 × ℓ, the flat height of its level); another cell is used; the building appears in a later tick or is not in its construction state when it appears; a failed placement ends placement mode or plays no refusal
-  sound; in run 2 the click during the sale places the building or plays a sound, or the item is
+  the centre (for instance 104 × ℓ, the flat height of its level); another cell is used; the building appears in a later tick or is not in its construction state when it appears; a failed placement ends placement mode, requests no placement refusal announcement or
+  requests the game-wide refusal sound; in run 2 the click during the sale places the building or plays a sound, or the item is
   not cancelled and refunded when the factory building leaves the map; or run 3's placement is refused.
 
 **PL2. Adjacency distance.**
@@ -982,7 +1036,7 @@ Each scenario names its observed area, the cells in which the void rule applies.
   place-anywhere flag and a to-tile field placed on a cell of the tileset without the morphable
   flag holding ore, a cell on which the to-tile rule refuses twice over (tileset and overlay).
 - Observable: placement success (for parts t to x, whether the place order succeeds: the item is
-  spent and no refusal sound plays).
+  spent and no placement refusal announcement is requested).
 - Expected: (a) to (f), (h) to (k) and (r) refuse; (g) succeeds; (o) both refuse when S-0009's
   height-aware test says the cell is not usable, and succeed otherwise; (p) placement succeeds
   during ordinary flight but fails when the aircraft has landed (S-0209 claim 13); (q) is
@@ -1070,7 +1124,8 @@ Each scenario names its observed area, the cells in which the void rule applies.
   foundation word: only its missing cell (2, 1) is shrouded, all covered cells explored, with
   every other placement condition satisfied. Move the cursor onto the foundation before clicking.
   The original has no off state of the switch of claim 6 to run; a replay on our engine runs both states.
-- Observable: refusal sound, whether an order is issued and the building placed.
+- Observable: placement refusal announcement request and playback separately, whether an order
+  is issued and the building placed.
 - Expected: (a) the first click refuses, the second places; (b) the click refuses (the old result); (c) the click places (the old result); after moving the cursor one cell away and back, (b) places
   and (c) refuses. On our engine with the switch off, (b) places and (c) refuses at once.
   (d) for each of the two types, the outcome with the shrouded cell is the same as with every cell
@@ -1231,10 +1286,13 @@ Each scenario names its observed area, the cells in which the void rule applies.
   level-less test upgrade type with test power output P4 placed on it four times; (i) test rules
   that name a target test type with no upgrade-count key (count 0) as the wall tower type, the
   target damaged, and a level-1 test upgrade type with test power output P1 that is also the
-  prerequisite of a test building, placed on it twice.
+  prerequisite of a test building, placed on it twice. (j) An eligible target at the click,
+  destroyed by a test trigger after the click but before application, as PL7's event timing
+  requires. Record the issue and application boundaries separately; if that timing cannot
+  be established, do not run (j) and leave the timing subclaim unmeasured.
 - Observable: placement success, the building's health after each placement, the house's power
   output (S-0405) and whether the test building is offered (S-0407); in (e) and (f) whether the
-  upgrade is placed and the refusal sound.
+  upgrade is placed and the placement refusal announcement request and playback separately.
 - Expected: (a) two successes then a refusal, the building at full health after each success; (b)
   the first succeeds, the second refuses; (c) the placement succeeds, the building is healed, and
   the power output does not change and the prerequisite is not met; (d) U2 succeeds, the output
@@ -1245,13 +1303,16 @@ Each scenario names its observed area, the cells in which the void rule applies.
   health, the output rises by P4 with each of the first three and not with the fourth (*c*′ = 4 is
   not recorded, F5); (i) the first placement succeeds, restores full health, raises the output by
   P1 and makes the test building offered (the uncapped count 1 records the upgrade in position 1),
-  and the second refuses (the count is no longer 0).
+  and the second refuses (the count is no longer 0). (j) The order is issued but the upgrade
+  refuses at application, retaining the done item and requesting the placement refusal
+  announcement; it does not attach to a missing target.
 - Falsified if: the counts differ, the health stays at half, (c) refuses, changes the output or
   meets the test prerequisite, or (d) raises the output by twice P2, leaves the test building
   unoffered, accepts the second U3 or fails to add P3 for the first U3; (e) the upgrade is
   refused for adjacency; (f) the click on the shrouded cell places the upgrade, or the explored one
   refuses; (g) any of the three places an upgrade; (h) the fourth placement refuses or raises the
-  output; (i) the first placement leaves the output unchanged or the test building not offered
+  output; (j) the order succeeds after the eligible target is destroyed before application, or
+  (i) the first placement leaves the output unchanged or the test building not offered
   (the count was capped, as in part c), or the second placement succeeds.
 
 **PL11. Construction start, cadence and handover (Q-0130).**
@@ -1338,6 +1399,55 @@ Each scenario names its observed area, the cells in which the void rule applies.
   value changing the building's entry facing, or an invalid value producing a building.
   Later aiming alone is not a falsifier.
 
+**PL14. Placement pointer and separate foundation display.**
+- Setup: common skirmish setup, speed 2, 800 × 600, director and mods off except named
+  test map overrides. Observed area: an explored foundation beside the base, a blocked
+  foundation, a sloped cell, a shrouded cell and a lone upgrade target. Use a done ordinary
+  building, a place-anywhere copy and an upgrade with room on its target. A named test
+  placement image with distinguishable frames 0, 2 and 3 identifies frame choice without
+  relying on stock colours. Keep all other test files stock.
+- Procedure: hover without clicking in each area, then move outside the battlefield and
+  back. Record pointer-inclusive video. For the ordinary type, remove its sole adjacency
+  supporter by test trigger while the cursor stays still, then click. Separately reveal a
+  shrouded cell while the cursor stays still, then click. Test the upgrade on a lone eligible
+  target, a full target, an enemy target and empty ground. Repeat each case three times.
+- Observable: arrow frame and hot spot, foundation anchor, placement-image frames per
+  marked cell, absence of a building sprite preview, and click/order outcome.
+- Expected: the ordinary arrow in every battlefield case and a separate foundation display
+  anchored by F2. Explored, clear, adjacent ordinary cells show frame 0; blocked flat cells
+  show frame 2 and blocked sloped cells frame 3. Losing support without cursor motion keeps
+  the saved positive display condition but the click refuses for adjacency. Revealing a cell
+  without cursor motion can make its display eligible while the click retains the old shroud
+  refusal. The place-anywhere copy can display refusal yet place successfully. Only the own
+  compatible upgrade target with room displays frame 0, even without adjacency. The active
+  display disappears outside the battlefield.
+- Falsified by a battlefield deploy/refusal/capture cursor replacing the arrow, a sprite
+  preview, a differing anchor/frame, a live adjacency display refresh with no cursor-cell
+  change, or an upgrade display requiring adjacency. Record cursor and cell results
+  separately: a correct arrow alone does not confirm the foundation display.
+
+**PL15. Placement's Q-0282 text/no-text answer.**
+- Setup: common skirmish setup, speed 2, 800 × 600, director and mods off except named
+  test map overrides. Observed area: the candidate foundation, its only supporting building,
+  the upgrade target and the battlefield message area. Use a done building and, in separate
+  runs, a done upgrade. No independent messages may occur during the observation.
+- Procedure: refuse clicks for missing adjacency and unexplored ground; apply a place order
+  onto a cell blocked by a tree; refuse an upgrade on a full target; and ignore a placement
+  while the last qualifying factory is being sold, as PL1 run 2. Record from before each
+  click until 200 ticks afterward, opening and closing the pause/options menu midway.
+  Run each case three times with pointer-inclusive video, audio and a read-only recorder of
+  announcement requests. In a separate control, show a test trigger's message to verify that
+  the capture includes the message area; do not overlap it with a refusal.
+- Observable: announcement requests separately from audible playback, message-list entries
+  and the retained item/placement mode. Record whether any game-wide refusal sound is
+  requested.
+- Expected: refusals request only the placement refusal announcement, retain the item and
+  add no text entry. The factory-condition ignore requests no sound and adds no text.
+  The control message is visible. Pausing creates no placement text or expiry behaviour.
+- Falsified by a refusal-created text entry, a game-wide refusal sound request for placement,
+  or any sound/text request on the factory-condition ignore. Suppressed announcement playback
+  alone is not a falsifier of a request.
+
 ## Open questions
 
 1. The firestorm-wall fill rule (claim 11), the fate of an own laser-fence building under a placed
@@ -1359,3 +1469,12 @@ Each scenario names its observed area, the cells in which the void rule applies.
    and the building might then never complete. Whether any order or rule can reach a building in
    that window was not established. Sale removal and refund timing (Q-0130 question 4) are
    S-0408's.
+6. Placement display details for to-tile types, gate display extents, wall-fill preview
+   and a missing placement display image are not specified by claim 19. The ordinary arrow
+   relationship is established for placement mode independently of these display details.
+
+## Changes for other specs
+
+- S-0404 claim 10: its place-order row's no-recheck sentence refers only to adjacency and
+  explored ground. Upgrade target ownership, compatibility and room are checked again at
+  application under claim 12 here; make that distinction explicit at joint hand-off.
