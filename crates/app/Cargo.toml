@@ -19,6 +19,7 @@ glasnost-ai.workspace = true
 glasnost-fmt.workspace = true
 glasnost-render.workspace = true
 glasnost-vfs.workspace = true
+glasnost-ui.workspace = true
 # Development UI (PLAN.md 4.1). Default features off: egui's bundled fonts
 # carry licences outside our policy, so the viewer ships its own font.
 egui = { version = "0.36.2", default-features = false }

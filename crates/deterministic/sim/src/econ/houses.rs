@@ -30,4 +30,6 @@ fn house_update(w: &mut World, h: HouseId) {
     super::tech::house_update(w, h);
     // spec: S-0411 claim 9 (the automatic release order)
     super::sidebar::release_orders(w, h);
+    // spec: S-0011 claim 35 (the raise of the house's tags every eighth tick, near the end of its update; Q-0267 for its place)
+    crate::triggers::house_raise(w, h);
 }

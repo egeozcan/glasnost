@@ -776,6 +776,8 @@ pub struct SimRules {
     /// The rules of the M5a topics (economy, production, structures,
     /// visibility, setup).
     pub econ: crate::econ::EconRules,
+    /// Map triggers (S-0011).
+    pub triggers: crate::triggers::Rules,
 }
 
 fn dec(d: &Option<Decimal>, mode: Rounding) -> Option<F64> {
@@ -1160,6 +1162,7 @@ impl SimRules {
         let econ = crate::econ::EconRules::new(r, mode);
         Self {
             econ,
+            triggers: crate::triggers::Rules::new(r),
             combat,
             quirks,
             mode,

@@ -37,6 +37,30 @@ pub struct Quirks {
     // spec: S-0202 claim 5
     #[serde(default = "on")]
     pub ranged_draw_half_span: bool,
+    /// A latchable event of a repeating tag stays satisfied after its first satisfaction (only timer-position alias clearing undoes it); off: a trigger instance's latches are cleared each time it fires.
+    // spec: S-0011 claim 9 and Edge cases
+    #[serde(default = "on")]
+    pub persistent_event_latch: bool,
+    /// Event positions 33 and later share the latch of the position 32 lower, including clearing by aliased timer positions; off: every position has its own latch.
+    // spec: S-0011 claim 9 and Edge cases
+    #[serde(default = "on")]
+    pub event_latch_aliasing: bool,
+    /// An all-carriers tag with no carrier never fires; off: a carrier count of 0 counts like 1, so the tag fires once and is deleted.
+    // spec: S-0011 claim 10 and Edge cases
+    #[serde(default = "on")]
+    pub all_carriers_without_carrier: bool,
+    /// The entered-by value is read only as a country index, so player-position values never match; off: it is resolved like an action's house value.
+    // spec: S-0011 claim 18 and Edge cases
+    #[serde(default = "on")]
+    pub entered_by_country_only: bool,
+    /// A trigger owner written as <none> gives the first country of the country list; off: <none> names no owner country.
+    // spec: S-0011 claim 5 and Edge cases
+    #[serde(default = "on")]
+    pub none_owner_is_first_country: bool,
+    /// The type name of the type-exists and type-does-not-exist events is matched case-sensitively, with no no-type markers; off: S-0003 claim 14's case-insensitive matching and markers.
+    // spec: S-0011 claim 21 and Edge cases
+    #[serde(default = "on")]
+    pub exact_trigger_type_names: bool,
     /// The 'magnitude first' remainder keeps the negative sign of −2147483648.
     // spec: S-0202 Edge cases
     #[serde(default = "on")]
@@ -1052,6 +1076,12 @@ impl Default for Quirks {
             building_wrap_normalisation: true,
             chrono_flash_keeps_order_block: true,
             ranged_draw_half_span: true,
+            persistent_event_latch: true,
+            event_latch_aliasing: true,
+            all_carriers_without_carrier: true,
+            entered_by_country_only: true,
+            none_owner_is_first_country: true,
+            exact_trigger_type_names: true,
             random_magnitude_overflow: true,
             update_order_removal_skip: true,
             table_root_distance: true,
@@ -1318,6 +1348,18 @@ impl Quirks {
                 self.chrono_flash_keeps_order_block,
             ),
             ("ranged_draw_half_span", self.ranged_draw_half_span),
+            ("persistent_event_latch", self.persistent_event_latch),
+            ("event_latch_aliasing", self.event_latch_aliasing),
+            (
+                "all_carriers_without_carrier",
+                self.all_carriers_without_carrier,
+            ),
+            ("entered_by_country_only", self.entered_by_country_only),
+            (
+                "none_owner_is_first_country",
+                self.none_owner_is_first_country,
+            ),
+            ("exact_trigger_type_names", self.exact_trigger_type_names),
             ("random_magnitude_overflow", self.random_magnitude_overflow),
             ("update_order_removal_skip", self.update_order_removal_skip),
             ("table_root_distance", self.table_root_distance),
@@ -2079,6 +2121,7 @@ mod tests {
         // apart from two importer switches).
         for (dir, prefixes) in [
             ("formats", &["S-0009", "S-0010", "S-0012"][..]),
+            ("triggers", &["S-0011"][..]),
             ("rules-import", &["S-0006"][..]),
             ("rendering", &["S-0107"][..]),
         ] {

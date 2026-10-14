@@ -698,4 +698,12 @@ pub struct EconGeneral {
     /// absent: yes.
     #[serde(default)]
     pub ally_change_allowed: Option<bool>,
+    /// `[General] RevealTriggerRadius`, *R* of the reveal action in cells
+    /// (S-0011 claim 26); absent: 5.
+    #[serde(default)]
+    pub reveal_trigger_radius: Option<i32>,
+    /// `[MultiplayerDialogSettings] AIDifficulty`, the initial session
+    /// computer difficulty that gates map triggers (S-0011 claim 4); absent: 1.
+    #[serde(default)]
+    pub ai_difficulty: Option<i32>,
 }

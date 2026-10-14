@@ -17,6 +17,7 @@ pub mod bridges;
 pub mod geometry;
 pub mod objects;
 pub mod terrain;
+pub mod triggers;
 
 pub use geometry::{CellXY, Footprint};
 pub use objects::{
@@ -381,6 +382,10 @@ pub struct Map {
     pub objects: Objects,
     /// Cell tags: cell to tag id, the first tag a cell gets (claim 31).
     pub cell_tags: BTreeMap<(i16, i16), Vec<u8>>,
+    /// The map's triggers, tags, cell tags in entry order and trigger
+    /// variables (S-0011 Import mapping; S-0009 claims 31 and 32).
+    #[serde(default)]
+    pub triggers: triggers::Triggers,
     /// Number of draws the initial fill takes from the scenario random
     /// stream (claim 6). The stream itself belongs to the planned random-stream spec; the
     /// fill's random variants are not applied until it exists.
@@ -430,6 +435,7 @@ mod tests {
             objects: Objects::default(),
             cell_tags: BTreeMap::new(),
             fill_draws: 0,
+            triggers: Default::default(),
         };
         for (i, c) in [(0, (10, 10)), (1, (12, 10)), (3, (14, 10)), (5, (16, 10))] {
             map.waypoints.insert(i, c);

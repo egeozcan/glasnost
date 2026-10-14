@@ -244,6 +244,18 @@ impl Audio {
                 // a detonation's sounds are those of the animations it
                 // creates.
                 Effect::Shot { .. } | Effect::Killed { .. } | Effect::Detonation { .. } => None,
+                // spec: S-0011 claim 32 (play sound, and sound at a waypoint: the sound at the cell's centre; giving a building or terrain object on that cell the sound as its ambient sound is not done yet)
+                Effect::Trigger {
+                    code: 19 | 99,
+                    name,
+                    pos,
+                    ..
+                } => {
+                    let p = pos.map_or(Placement::Everywhere, at);
+                    self.play_sound(name, p, UNITY).ok()
+                }
+                // Text messages, speech and radar events are the interface's.
+                Effect::Trigger { .. } => None,
                 Effect::Sound {
                     sound,
                     of,

@@ -90,6 +90,9 @@ pub struct Options {
     pub human_slot: u8,
     /// Lobby colour slot of the computer placeholder house.
     pub computer_slot: u8,
+    /// Lobby colour slots by house name, ahead of the placeholder slots
+    /// (a skirmish of the game client: S-0103 claim 10, S-0412 claim 7).
+    pub slots: Vec<(Vec<u8>, u8)>,
     /// The game a loaded map starts.
     pub game: GameMode,
 }
@@ -114,6 +117,7 @@ impl Default for Options {
             skirmish: true,
             human_slot: 0,
             computer_slot: 1,
+            slots: Vec::new(),
             game: GameMode::Sandbox,
         }
     }
@@ -710,7 +714,16 @@ impl Builder<'_> {
                 .map(|c| c.hsv)
         };
         let grey = by_name(LIGHT_GREY).unwrap_or([0, 0, 200]);
-        if owner == NEUTRAL || owner == SPECIAL {
+        let named = self
+            .options
+            .slots
+            .iter()
+            .find(|(n, _)| n.as_slice() == owner)
+            .map(|(_, s)| *s);
+        if let Some(s) = named {
+            // spec: S-0103 claim 10 (a house's lobby colour slot picks its colour definition)
+            (by_slot(s).unwrap_or(grey), false)
+        } else if owner == NEUTRAL || owner == SPECIAL {
             (grey, false)
         } else if owner == HUMAN {
             (by_slot(self.options.human_slot).unwrap_or(grey), false)

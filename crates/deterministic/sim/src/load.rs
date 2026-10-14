@@ -432,6 +432,7 @@ pub fn new_game(
         orders_blocked_through: 3,
         projectiles: Default::default(),
         scaled_spawn_delay: Default::default(),
+        triggers: Default::default(),
         econ: crate::econ::WorldEcon {
             settings: setup.skirmish.clone(),
             ..Default::default()
@@ -447,6 +448,8 @@ pub fn new_game(
     };
     // spec: S-0409 claim 3 (the states at game start, before any object is placed)
     crate::econ::shroud::start(&mut w);
+    // spec: S-0011 claim 4 and S-0009 claim 32 (the trigger definitions, the difficulty position and the variables)
+    crate::triggers::begin(&mut w, map);
     for h in &mut w.houses {
         // spec: S-0410 claim 1 (the map's free-radar flag, fixed for the game)
         h.econ.radar.free = map.basic.free_radar;
@@ -521,10 +524,8 @@ pub fn new_game(
         }
     }
 
-    if !map.cell_tags.is_empty() {
-        // S-0011 claim 34 (the draws of the tags that cell tags create) belongs to the triggers.
-        w.note("S-0011 claim 34: tags are not created, so the cell tags' tag draws are not taken");
-    }
+    // spec: S-0011 claim 34 (the tags that cell tags create, in entry order, after the initial fill's draws)
+    crate::triggers::cell_tags(&mut w);
 
     // The overlay type stream with its placement effects, then the data
     // stream (S-0009 claims 12 and 13; S-0202 claim 10).
@@ -592,8 +593,11 @@ pub fn new_game(
         crate::econ::setup::start_game(&mut w);
     }
 
+    // spec: S-0011 claims 6, 34 and 35 (the end of loading: the remaining tags in registration order, polling, house assignment; after the secret labs, before the game-start pass)
+    crate::triggers::end_of_loading(&mut w);
+
     // spec: S-0010 claim 12 (the game-start pass: every legal cell once more, in the visiting order, after the starting units and before the first tick; its tile animations by claim 19)
-    // spec: S-0202 claim 14 (its tile-animation draws follow the starting units' final draw, the crate placement draws, the secret-lab choices and the end-of-loading tag draws, and precede the first tick; the tags are not implemented, S-0011)
+    // spec: S-0202 claim 14 (its tile-animation draws follow the starting units' final draw, the crate placement draws, the secret-lab choices and the end-of-loading tag draws, and precede the first tick)
     recalc_cells(&mut w, &order);
 
     // spec: S-0202 claim 14 and table *Load-time draw order* (resource-glint setup after the game-start recalculation and before tick 0)
@@ -666,12 +670,12 @@ pub fn cleanup(w: &mut World, setup: &GameSetup) {
         for id in ids {
             objects::remove(w, id);
         }
+        // spec: S-0009 claim 28 (its triggers: the existing instances whose definition's owner country is the house's)
+        let country = w.houses[h].country;
+        crate::triggers::remove_country(w, country);
         let house = &mut w.houses[h];
         house.removed = true;
         house.start = None;
-    }
-    if w.houses.iter().any(|h| h.removed) {
-        w.note("S-0009 claim 28: a removed house's triggers are not removed (map triggers are not implemented, S-0011)");
     }
 }
 

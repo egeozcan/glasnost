@@ -239,6 +239,8 @@ pub fn remove(w: &mut World, id: ObjectId) {
         return;
     };
     crate::econ::events::leaving_map(w, id, true);
+    // spec: S-0011 claim 2 (detaching a carrier removes one from its tag's count)
+    crate::triggers::detach_object(w, id);
     let skip = w.rules().quirks.update_order_removal_skip;
     w.update.leave(id, skip);
     let q = occ_quirks(w);
@@ -548,6 +550,8 @@ pub fn place_map_objects(w: &mut World, map: &Map, sandbox: bool) {
                 }
                 continue;
             }
+            // spec: S-0011 claim 34 (the object's tag after its creation draw, before the draws of placing it)
+            crate::triggers::object_tag(w, id, fields.tag.as_deref());
             set_starting_health(w, id, kind, p.health);
             // spec: S-0009 claim 39 (body facing 256 × (v mod 256); infantry: field 8, 0 when absent)
             let facing = facing_from_value(p.facing);

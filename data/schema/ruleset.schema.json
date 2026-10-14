@@ -2911,6 +2911,15 @@
       "description": "Game-wide economy values (written into `general.economy`), from the\nsections `[General]`, `[AI]`, `[AudioVisual]`, `[CombatDamage]`,\n`[CrateRules]` and `[MultiplayerDialogSettings]` of the rules.",
       "type": "object",
       "properties": {
+        "ai_difficulty": {
+          "description": "`[MultiplayerDialogSettings] AIDifficulty`, the initial session\ncomputer difficulty that gates map triggers (S-0011 claim 4); absent: 1.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
         "ai_hate_delays": {
           "description": "`[General] AIHateDelays`, the original's computer-player timer list\nby difficulty index (S-0412 claim 3, the original only; no effect in\nour engine); absent: no entries.",
           "type": [
@@ -3386,6 +3395,15 @@
             "boolean",
             "null"
           ],
+          "default": null
+        },
+        "reveal_trigger_radius": {
+          "description": "`[General] RevealTriggerRadius`, *R* of the reveal action in cells\n(S-0011 claim 26); absent: 5.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
           "default": null
         },
         "savour_delay": {
@@ -5756,6 +5774,11 @@
           "type": "boolean",
           "default": true
         },
+        "all_carriers_without_carrier": {
+          "description": "An all-carriers tag with no carrier never fires; off: a carrier count of 0 counts like 1, so the tag fires once and is deleted.",
+          "type": "boolean",
+          "default": true
+        },
         "alliance_message_slot_colour": {
           "description": "Alliance messages take the colour of the country's colour field rewritten by the lobby slot.",
           "type": "boolean",
@@ -6076,6 +6099,21 @@
           "type": "boolean",
           "default": true
         },
+        "entered_by_country_only": {
+          "description": "The entered-by value is read only as a country index, so player-position values never match; off: it is resolved like an action's house value.",
+          "type": "boolean",
+          "default": true
+        },
+        "event_latch_aliasing": {
+          "description": "Event positions 33 and later share the latch of the position 32 lower, including clearing by aliased timer positions; off: every position has its own latch.",
+          "type": "boolean",
+          "default": true
+        },
+        "exact_trigger_type_names": {
+          "description": "The type name of the type-exists and type-does-not-exist events is matched case-sensitively, with no no-type markers; off: S-0003 claim 14's case-insensitive matching and markers.",
+          "type": "boolean",
+          "default": true
+        },
         "expected_damage_firer_armour": {
           "description": "The expected damage divides by the armour factor for the firer's kind and the firer's armour multiplier.",
           "type": "boolean",
@@ -6316,6 +6354,11 @@
           "type": "boolean",
           "default": true
         },
+        "none_owner_is_first_country": {
+          "description": "A trigger owner written as <none> gives the first country of the country list; off: <none> names no owner country.",
+          "type": "boolean",
+          "default": true
+        },
         "observer_position_handoff": {
           "description": "An observer's drawn position is handed to the next player needing one.",
           "type": "boolean",
@@ -6433,6 +6476,11 @@
         },
         "permadisguise_attack_cursor": {
           "description": "A permanently disguised target passes the disguise rule.",
+          "type": "boolean",
+          "default": true
+        },
+        "persistent_event_latch": {
+          "description": "A latchable event of a repeating tag stays satisfied after its first satisfaction (only timer-position alias clearing undoes it); off: a trigger instance's latches are cleared each time it fires.",
           "type": "boolean",
           "default": true
         },

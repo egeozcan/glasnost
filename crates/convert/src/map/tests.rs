@@ -442,7 +442,118 @@ fn cell_tags() {
         "{BASE}[Tags]\nT1=a\nT2=b\n[CellTags]\n10001=T1\n010001=T2\n10002=NOPE\n"
     ));
     assert_eq!(d.map.cell_tags.get(&(1, 10)), Some(&b"T1".to_vec()));
-    assert_eq!(d.map.cell_tags.len(), 1);
+    // spec: S-0009 claim 31 (a value naming no defined tag attaches an empty tag of that name)
+    assert_eq!(d.map.cell_tags.get(&(2, 10)), Some(&b"NOPE".to_vec()));
+    assert_eq!(d.map.cell_tags.len(), 2);
+    let t = &d.map.triggers;
+    assert_eq!(t.cell_tags.len(), 2);
+    let nope = t.cell_tags[1].1 as usize;
+    assert_eq!(t.tags[nope].id, b"NOPE");
+    assert!(t.tags[nope].chain.is_empty());
+}
+
+/// spec: S-0009 claim 31 (the value <none> or none attaches nothing)
+#[test]
+fn cell_tag_none_markers() {
+    let d = decode_text(&format!("{BASE}[CellTags]\n10001=<None>\n10002=NONE\n"));
+    assert!(d.map.cell_tags.is_empty());
+    assert!(d.map.triggers.tags.is_empty());
+}
+
+/// spec: S-0011 I1, I2, claim 7 and Edge cases (the trigger list, events, actions and tags, resolved)
+#[test]
+fn triggers_import() {
+    let d = decode_text(&format!(
+        "{BASE}[Triggers]\n\
+         T1=Alphaland,T2,first,0,1,0,1,0\n\
+         T2=<none>,<none>,second,0,1,1,1,0\n\
+         T3=<random>,UNDEF,third\n\
+         [Events]\n\
+         T1=2,13,0,4,60,2,3,TANKNAMEISLONGERTHANTWENTYFOUR\n\
+         T2=1,51,0,10\n\
+         [Actions]\n\
+         T1=4,53,2,T3,0,0,0,0,A,99,7,BirdSound,0,0,0,0,AB,22,3,TGG,0,0,0,0,0,54,2,UNDEF,0,0,0,0\n\
+         T2=1,54,2,1,0,0,0,0\n\
+         [Tags]\n\
+         TA=2,Alpha tag,T1\n\
+         TGG=0,late,none\n\
+         TB=1,short\n"
+    ));
+    let t = &d.map.triggers;
+    // spec: S-0011 claim 7 (the trigger list's IDs, then the created definition UNDEF)
+    let ids: Vec<&[u8]> = t.triggers.iter().map(|x| x.id.as_slice()).collect();
+    assert_eq!(ids, [&b"T1"[..], b"T2", b"T3", b"UNDEF"]);
+    let t1 = &t.triggers[0];
+    assert_eq!(
+        t1.owner,
+        glasnost_map::triggers::Owner::Name(b"Alphaland".to_vec())
+    );
+    assert_eq!(t1.link, Some(1));
+    assert!(!t1.disabled);
+    assert_eq!(t1.difficulty, [true, false, true]);
+    assert_eq!(t1.events.len(), 2);
+    assert_eq!((t1.events[0].code, t1.events[0].value), (13, 4));
+    // spec: S-0011 Import mapping (kind 2: the fourth item is the type name, cut to 24 bytes)
+    assert_eq!(
+        t1.events[1].type_name.as_deref(),
+        Some(&b"TANKNAMEISLONGERTHANTWEN"[..])
+    );
+    // spec: S-0011 Edge cases (a reference shorter than 3 characters is a registration index: no digits, 0)
+    assert_eq!(t1.actions[0].trigger, Some(0));
+    // spec: S-0011 I2 (a trigger reference by ID, sound names kept, waypoint letters)
+    assert_eq!(t1.actions[3].trigger, Some(3));
+    assert_eq!(t1.actions[0].waypoint, 0);
+    assert_eq!(t1.actions[1].name, b"BirdSound");
+    assert_eq!(t1.actions[1].waypoint, 27);
+    assert_eq!(t1.actions[2].tag, Some(0));
+    let t2 = &t.triggers[1];
+    assert_eq!(t2.owner, glasnost_map::triggers::Owner::NoneMarker);
+    assert_eq!(t2.link, None);
+    // spec: S-0011 Edge cases (a short action reference is a registration index)
+    assert_eq!(t2.actions[0].trigger, Some(1));
+    // spec: S-0011 Edge cases (missing disabled field: disabled; missing difficulty fields: clear)
+    let t3 = &t.triggers[2];
+    assert_eq!(t3.owner, glasnost_map::triggers::Owner::None);
+    assert!(t3.disabled);
+    assert_eq!(t3.difficulty, [false; 3]);
+    assert_eq!(t3.link, Some(3));
+    // spec: S-0011 Edge cases (a created definition: not disabled, every difficulty flag set)
+    assert!(!t.triggers[3].disabled);
+    assert_eq!(t.triggers[3].difficulty, [true; 3]);
+    // spec: S-0011 claim 7 (the action's tag ID TGG registers first, then the tag list's rest; TB is skipped)
+    let tags: Vec<&[u8]> = t.tags.iter().map(|x| x.id.as_slice()).collect();
+    assert_eq!(tags, [&b"TGG"[..], b"TA"]);
+    let ta = &t.tags[1];
+    assert_eq!((ta.repeat, ta.name.as_slice()), (2, &b"Alpha tag"[..]));
+    // spec: S-0011 claim 1 (the chain: T1, then its link T2)
+    assert_eq!(ta.chain, [0, 1]);
+    assert!(t.tags[0].chain.is_empty());
+}
+
+/// spec: S-0011 claim 1 (our engine ends a chain that comes back before the repeated member)
+#[test]
+fn trigger_chain_cycle_is_cut() {
+    let d = decode_text(&format!(
+        "{BASE}[Triggers]\nA=<none>,B,a,0,1,1,1,0\nB=<none>,A,b,0,1,1,1,0\n[Tags]\nT=0,t,A\n"
+    ));
+    assert_eq!(d.map.triggers.tags[0].chain, [0, 1]);
+    assert!(
+        d.warnings
+            .iter()
+            .any(|w| w.text.contains("chain comes back"))
+    );
+}
+
+/// spec: S-0009 claim 32 (initial states: set when not 0, no second item leaves the state; numbers outside 0 … 99 have no effect)
+#[test]
+fn variable_names() {
+    let d = decode_text(&format!(
+        "{BASE}[VariableNames]\n0=zero,1\n1=one,0\n2=two\n05=five,1\n150=far,1\n"
+    ));
+    let v = &d.map.triggers.variables;
+    assert_eq!(v.len(), 100);
+    assert_eq!(&v[..3], &[Some(true), Some(false), None]);
+    assert_eq!(v[5], Some(true));
 }
 
 /// spec: S-0009 claim 35 (field layout by kind)

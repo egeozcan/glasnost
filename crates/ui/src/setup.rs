@@ -1,0 +1,848 @@
+//! The skirmish setup screen: its model, its mapping to a [`GameSetup`]
+//! (S-0412) and its layout.
+//!
+//! Which values the screen offers and their ranges are interface matters
+//! (S-0412 claim 1); the defaults and slider ranges come from the rules
+//! ([`SetupRules`], S-0412 Import mapping and Constants).
+
+use glasnost_sim::econ::setup::{self, HouseValues, LobbyChoice, Player, Settings};
+use glasnost_sim::rules::SimRules;
+use glasnost_sim::world::GameSetup;
+
+use crate::draw::{DrawList, Rgba, colour};
+use crate::geom::{Point, Rect};
+use crate::widget::{self, Targets};
+
+/// The most player slots the screen shows. Interim (Q-0281): the colour
+/// slots are 0 … 7 (S-0412 claim 7), so at most eight players can hold
+/// distinct colours.
+pub const MAX_SLOTS: usize = 8;
+/// Team numbers offered. Interim (Q-0281): S-0412 Terms says "a small set
+/// of team numbers" without a count; we offer teams 1 … 4.
+pub const TEAMS: u8 = 4;
+
+/// The values and ranges the screen offers, read from the rules by the
+/// client.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SetupRules {
+    /// The default credits setting offered (S-0412 Import mapping).
+    pub money: i32,
+    /// Credits slider minimum, maximum and step (S-0412 Import mapping).
+    pub money_range: (i32, i32, i32),
+    /// The default unit-count setting offered.
+    pub units: i32,
+    /// Unit-count minimum and maximum.
+    pub units_range: (i32, i32),
+    /// The bases setting (S-0412 claim 1: no lobby control).
+    pub bases: bool,
+    /// Defaults offered for short game, superweapons, crates, build off
+    /// ally and redeploy (S-0412 Import mapping).
+    pub flags: [bool; 5],
+    /// The game-speed index the control starts at (S-0201 claim 7).
+    pub game_speed: u8,
+    /// The countries offered (interim, Q-0281: the non-passive countries
+    /// other than the neutral and special houses, in registration order).
+    pub countries: Vec<String>,
+    /// The swatch of each colour slot 0 … 7 (S-0103 claim 10).
+    pub colours: Vec<Rgba>,
+}
+
+/// A map the screen offers.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MapEntry {
+    /// What the screen shows (never a stock map's name in tests or docs).
+    pub label: String,
+    /// The number of start positions (S-0009 claim 23).
+    pub starts: u32,
+}
+
+/// Who plays a slot.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SlotKind {
+    /// The person at this machine.
+    Human,
+    /// An AI house (S-0412 claim 12).
+    Ai,
+    /// Nobody.
+    Closed,
+}
+
+/// One row of the player list.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Slot {
+    /// Who plays it.
+    pub kind: SlotKind,
+    /// An index into [`SetupRules::countries`], `None` for random
+    /// (S-0412 claim 6).
+    pub country: Option<usize>,
+    /// A colour slot 0 … 7, `None` for random (S-0412 claim 7).
+    pub colour: Option<u8>,
+    /// Team 1 … [`TEAMS`], `None` for no team (S-0412 claim 8).
+    pub team: Option<u8>,
+    /// A start position (0-based entry of the start list, S-0009 claim
+    /// 17), `None` for random (S-0009 claim 19).
+    pub start: Option<u32>,
+}
+
+impl Slot {
+    const fn closed() -> Self {
+        Self {
+            kind: SlotKind::Closed,
+            country: None,
+            colour: None,
+            team: None,
+            start: None,
+        }
+    }
+}
+
+/// The yes/no settings of the screen.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Flag {
+    /// Short game (S-0414 claim 2).
+    ShortGame = 0,
+    /// Superweapons (S-0412 claim 9).
+    Superweapons = 1,
+    /// Crates (S-0412 claim 10).
+    Crates = 2,
+    /// Build off ally (S-0406 claim 4).
+    BuildOffAlly = 3,
+    /// Redeploy (S-0415 claim 9).
+    Redeploy = 4,
+}
+
+const FLAGS: [(Flag, &str); 5] = [
+    (Flag::ShortGame, "Short game"),
+    (Flag::Superweapons, "Superweapons"),
+    (Flag::Crates, "Crates"),
+    (Flag::BuildOffAlly, "Build off ally"),
+    (Flag::Redeploy, "Redeploy"),
+];
+
+/// The screen's state.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Setup {
+    /// The chosen map, an index into the maps offered.
+    pub map: usize,
+    /// The player rows.
+    pub slots: [Slot; MAX_SLOTS],
+    /// The credits setting.
+    pub credits: i32,
+    /// The unit-count setting.
+    pub units: i32,
+    /// The yes/no settings, by [`Flag`].
+    pub flags: [bool; 5],
+    /// The speed control's position 0 (slowest) … 6 (fastest).
+    pub speed: u8,
+}
+
+/// Why the setup cannot start yet.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Problem {
+    /// No map to play.
+    NoMap,
+    /// Fewer than two players.
+    TooFewPlayers,
+    /// More players than the map has start positions.
+    TooManyPlayers,
+    /// Two players chose the same start position.
+    SameStart,
+    /// Two players chose the same colour.
+    SameColour,
+    /// A country index outside the list.
+    NoCountry,
+}
+
+impl std::fmt::Display for Problem {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::NoMap => "No multiplayer map found",
+            Self::TooFewPlayers => "At least two players are needed",
+            Self::TooManyPlayers => "More players than start positions",
+            Self::SameStart => "Two players share a start position",
+            Self::SameColour => "Two players share a colour",
+            Self::NoCountry => "Unknown country",
+        })
+    }
+}
+
+/// The values the client turns into a game: the lobby side of
+/// [`setup::skirmish`] and [`setup::resolve_lobby`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Lobby {
+    /// The players in house order.
+    pub players: Vec<Player>,
+    /// Their random choices, in the same order.
+    pub choices: Vec<LobbyChoice>,
+    /// The game-wide settings.
+    pub settings: Settings,
+    /// The unit-count setting.
+    pub unit_count: i32,
+    /// The bases setting.
+    pub bases: bool,
+    /// The game-speed index.
+    pub game_speed: u8,
+    /// The map index.
+    pub map: usize,
+}
+
+/// The name of the house of the person (the client renames it as it
+/// likes).
+pub const HUMAN_NAME: &str = "Player";
+
+/// The name of the n-th AI house (0-based): "Computer", "Computer 2", …
+pub fn ai_name(n: usize) -> String {
+    if n == 0 {
+        "Computer".into()
+    } else {
+        format!("Computer {}", n + 1)
+    }
+}
+
+/// Steps `v` by `d` through `0 .. n` with an extra "random" state (`None`)
+/// before 0.
+fn cycle_opt(v: Option<usize>, d: i32, n: usize) -> Option<usize> {
+    let states = n as i32 + 1;
+    let i = v.map_or(0, |x| x as i32 + 1);
+    let j = (i + d).rem_euclid(states);
+    if j == 0 { None } else { Some(j as usize - 1) }
+}
+
+impl Setup {
+    /// The screen's first state: the person in slot 1, one AI in slot 2,
+    /// every value at the rules' default.
+    pub fn new(rules: &SetupRules) -> Self {
+        let mut slots = [Slot::closed(); MAX_SLOTS];
+        slots[0].kind = SlotKind::Human;
+        slots[1].kind = SlotKind::Ai;
+        Self {
+            map: 0,
+            slots,
+            credits: rules.money,
+            units: rules.units,
+            flags: rules.flags,
+            // spec: S-0201 claim 7 (position p sets index 6 − p)
+            speed: 6 - rules.game_speed.min(6),
+        }
+    }
+
+    /// The game-speed index of the speed control (S-0201 claim 7).
+    pub fn game_speed(&self) -> u8 {
+        // spec: S-0201 claim 7 (seven positions, slowest to fastest, set indices 6 … 0)
+        6 - self.speed.min(6)
+    }
+
+    /// The occupied slots.
+    pub fn players(&self) -> impl Iterator<Item = (usize, &Slot)> {
+        self.slots
+            .iter()
+            .enumerate()
+            .filter(|(_, s)| s.kind != SlotKind::Closed)
+    }
+
+    /// Why the setup cannot start, if it cannot.
+    pub fn problem(&self, rules: &SetupRules, maps: &[MapEntry]) -> Option<Problem> {
+        let Some(map) = maps.get(self.map) else {
+            return Some(Problem::NoMap);
+        };
+        let n = self.players().count();
+        if n < 2 {
+            return Some(Problem::TooFewPlayers);
+        }
+        if n as u32 > map.starts {
+            return Some(Problem::TooManyPlayers);
+        }
+        let ps: Vec<&Slot> = self.players().map(|(_, s)| s).collect();
+        for (i, a) in ps.iter().enumerate() {
+            if a.country.is_some_and(|c| c >= rules.countries.len()) {
+                return Some(Problem::NoCountry);
+            }
+            for b in &ps[i + 1..] {
+                if a.start.is_some() && a.start == b.start {
+                    return Some(Problem::SameStart);
+                }
+                // spec: S-0412 claim 7 (a slot fixed by one player is not free for another)
+                if a.colour.is_some() && a.colour == b.colour {
+                    return Some(Problem::SameColour);
+                }
+            }
+        }
+        None
+    }
+
+    /// The lobby values of this setup (S-0412 claim 1).
+    pub fn lobby(&self, rules: &SetupRules, maps: &[MapEntry]) -> Result<Lobby, Problem> {
+        if let Some(p) = self.problem(rules, maps) {
+            return Err(p);
+        }
+        let mut players = Vec::new();
+        let mut choices = Vec::new();
+        let mut ais = 0;
+        for (_, s) in self.players() {
+            let ai = s.kind == SlotKind::Ai;
+            let name = if ai {
+                ais += 1;
+                ai_name(ais - 1)
+            } else {
+                HUMAN_NAME.to_owned()
+            };
+            players.push(Player {
+                name,
+                // A random country is resolved by resolve_lobby; the
+                // placeholder is overwritten there (S-0412 claim 6).
+                country: s
+                    .country
+                    .and_then(|c| rules.countries.get(c))
+                    .or(rules.countries.first())
+                    .cloned()
+                    .unwrap_or_default(),
+                // spec: S-0009 claim 19 (no start position chosen: random)
+                start: s.start,
+                // spec: S-0412 claim 12 (AI houses take the computer slots)
+                ai,
+                values: HouseValues {
+                    // spec: S-0412 claim 8 (lobby team)
+                    team: s.team,
+                    handicap: None,
+                    colour: s.colour,
+                    observer: false,
+                },
+            });
+            choices.push(LobbyChoice {
+                // spec: S-0412 claims 6 and 7 (random country, random colour)
+                country: s.country.is_none(),
+                colour: s.colour.is_none(),
+            });
+        }
+        let f = |x: Flag| Some(self.flags[x as usize]);
+        Ok(Lobby {
+            players,
+            choices,
+            // spec: S-0412 claim 1 (the lobby's setup values)
+            settings: Settings {
+                credits: Some(self.credits),
+                short_game: f(Flag::ShortGame),
+                superweapons: f(Flag::Superweapons),
+                crates: f(Flag::Crates),
+                build_off_ally: f(Flag::BuildOffAlly),
+                redeploy: f(Flag::Redeploy),
+                all_base_units: false,
+                houses: Vec::new(),
+            },
+            unit_count: self.units,
+            // spec: S-0412 claim 1 (the bases setting has no lobby control)
+            bases: rules.bases,
+            game_speed: self.game_speed(),
+            map: self.map,
+        })
+    }
+
+    /// Applies one step of a control.
+    pub fn apply(&mut self, hit: &SetupHit, rules: &SetupRules, maps: &[MapEntry]) {
+        let step =
+            |v: i32, d: i32, lo: i32, hi: i32, s: i32| (v + d * s.max(1)).clamp(lo, hi.max(lo));
+        match *hit {
+            SetupHit::Map(d) if !maps.is_empty() => {
+                self.map = (self.map as i32 + d).rem_euclid(maps.len() as i32) as usize;
+                // Start positions past the new map's count become random.
+                let starts = maps[self.map].starts;
+                for s in &mut self.slots {
+                    if s.start.is_some_and(|x| x >= starts) {
+                        s.start = None;
+                    }
+                }
+            }
+            SetupHit::Kind(i, d) if i > 0 => {
+                // The first row is always the person's (interim UI rule).
+                let order = [SlotKind::Ai, SlotKind::Closed];
+                let k = order
+                    .iter()
+                    .position(|k| *k == self.slots[i].kind)
+                    .unwrap_or(0) as i32;
+                self.slots[i].kind = order[(k + d).rem_euclid(2) as usize];
+            }
+            SetupHit::Country(i, d) => {
+                let s = &mut self.slots[i];
+                s.country = cycle_opt(s.country, d, rules.countries.len());
+            }
+            SetupHit::Colour(i, d) => {
+                let s = &mut self.slots[i];
+                s.colour = cycle_opt(s.colour.map(usize::from), d, 8).map(|c| c as u8);
+            }
+            SetupHit::Team(i, d) => {
+                let s = &mut self.slots[i];
+                s.team = cycle_opt(s.team.map(|t| t as usize - 1), d, TEAMS as usize)
+                    .map(|t| t as u8 + 1);
+            }
+            SetupHit::Start(i, d) => {
+                let n = maps.get(self.map).map_or(0, |m| m.starts) as usize;
+                let s = &mut self.slots[i];
+                s.start = cycle_opt(s.start.map(|x| x as usize), d, n).map(|x| x as u32);
+            }
+            SetupHit::Credits(d) => {
+                let (lo, hi, st) = rules.money_range;
+                self.credits = step(self.credits, d, lo, hi, st);
+            }
+            SetupHit::Units(d) => {
+                let (lo, hi) = rules.units_range;
+                self.units = step(self.units, d, lo, hi, 1);
+            }
+            SetupHit::Toggle(f) => self.flags[f as usize] ^= true,
+            SetupHit::Speed(d) => self.speed = (self.speed as i32 + d).clamp(0, 6) as u8,
+            _ => {}
+        }
+    }
+
+    /// Draws the screen and lays out its targets.
+    pub fn view(
+        &self,
+        size: (i32, i32),
+        rules: &SetupRules,
+        maps: &[MapEntry],
+        hover: Option<Point>,
+    ) -> (DrawList, Targets<SetupHit>) {
+        let mut d = DrawList::new();
+        let mut t = Targets::new();
+        let (w, h) = size;
+        d.fill(Rect::new(0, 0, w, h), colour::BACKDROP);
+        let outer = Rect::new(
+            (w - 620).max(0) / 2,
+            (h - 440).max(0) / 2,
+            620.min(w),
+            440.min(h),
+        );
+        widget::panel(&mut d, outer, Some("SKIRMISH SETUP"));
+        let hot = |r: Rect| hover.is_some_and(|p| r.contains(p));
+        let choice = |d: &mut DrawList,
+                      t: &mut Targets<SetupHit>,
+                      r: Rect,
+                      label: &str,
+                      value: &str,
+                      mk: &dyn Fn(i32) -> SetupHit| {
+            let (a, b) = widget::choice(d, r, label, value, true);
+            t.push(a, mk(-1));
+            t.push(b, mk(1));
+        };
+        let x0 = outer.x + 10;
+        let mut y = outer.y + 24;
+        let map_label = maps.get(self.map).map_or("(none)".to_owned(), |m| {
+            format!("{} ({} starts)", m.label, m.starts)
+        });
+        choice(
+            &mut d,
+            &mut t,
+            Rect::new(x0, y, 600, 16),
+            "Map",
+            &map_label,
+            &SetupHit::Map,
+        );
+        y += 24;
+        // Player table header.
+        let cols = [
+            (0, 70, "Player"),
+            (74, 140, "Country"),
+            (218, 90, "Colour"),
+            (312, 70, "Team"),
+            (386, 90, "Start"),
+        ];
+        for (cx, cw, name) in cols {
+            d.text_left(Rect::new(x0 + cx, y, cw, 12), name, colour::DIM);
+        }
+        y += 14;
+        for (i, s) in self.slots.iter().enumerate() {
+            let row = Rect::new(x0, y, 600, 16);
+            d.fill(
+                row,
+                if i % 2 == 0 {
+                    colour::PANEL
+                } else {
+                    colour::RAISED
+                },
+            );
+            let kind = match s.kind {
+                SlotKind::Human => "You",
+                SlotKind::Ai => "AI",
+                SlotKind::Closed => "Closed",
+            };
+            let r = Rect::new(x0, y, 70, 16);
+            if i == 0 {
+                d.text_left(r, kind, colour::ACCENT);
+            } else {
+                let (a, b) = widget::choice(&mut d, r, "", kind, true);
+                t.push(a, SetupHit::Kind(i, -1));
+                t.push(b, SetupHit::Kind(i, 1));
+            }
+            if s.kind != SlotKind::Closed {
+                let country = s
+                    .country
+                    .and_then(|c| rules.countries.get(c))
+                    .map_or("Random", String::as_str);
+                let colour_name = s
+                    .colour
+                    .map_or("Random".to_owned(), |c| format!("Slot {}", c + 1));
+                let team = s.team.map_or("None".to_owned(), |c| format!("Team {c}"));
+                let start = s
+                    .start
+                    .map_or("Random".to_owned(), |c| format!("Start {}", c + 1));
+                let cells: [Cell; 4] = [
+                    (74, 140, country.to_owned(), SetupHit::Country),
+                    (218, 90, colour_name, SetupHit::Colour),
+                    (312, 70, team, SetupHit::Team),
+                    (386, 90, start, SetupHit::Start),
+                ];
+                for (cx, cw, value, mk) in cells {
+                    let r = Rect::new(x0 + cx, y, cw, 16);
+                    let (a, b) = widget::choice(&mut d, r, "", &value, true);
+                    t.push(a, mk(i, -1));
+                    t.push(b, mk(i, 1));
+                }
+                if let Some(c) = s.colour.and_then(|c| rules.colours.get(c as usize)) {
+                    d.fill(Rect::new(x0 + 480, y + 3, 10, 10), *c);
+                    d.frame(Rect::new(x0 + 480, y + 3, 10, 10), colour::EDGE);
+                }
+            }
+            y += 18;
+        }
+        y += 8;
+        let half = 295;
+        choice(
+            &mut d,
+            &mut t,
+            Rect::new(x0, y, half, 16),
+            "Credits",
+            &self.credits.to_string(),
+            &SetupHit::Credits,
+        );
+        choice(
+            &mut d,
+            &mut t,
+            Rect::new(x0 + 305, y, half, 16),
+            "Units",
+            &self.units.to_string(),
+            &SetupHit::Units,
+        );
+        y += 20;
+        let speed = format!("{} of 7", self.speed + 1);
+        choice(
+            &mut d,
+            &mut t,
+            Rect::new(x0, y, half, 16),
+            "Game speed",
+            &speed,
+            &SetupHit::Speed,
+        );
+        y += 24;
+        for (k, (f, name)) in FLAGS.iter().enumerate() {
+            let r = Rect::new(x0 + (k as i32 % 3) * 200, y + (k as i32 / 3) * 20, 190, 16);
+            let on = self.flags[*f as usize];
+            let box_r = Rect::new(r.x, r.y + 2, 12, 12);
+            d.fill(box_r, colour::RAISED);
+            d.frame(box_r, if hot(r) { colour::ACCENT } else { colour::EDGE });
+            if on {
+                d.fill(box_r.inset(3), colour::ACCENT);
+            }
+            d.text_left(Rect::new(r.x + 14, r.y, r.w - 14, 16), name, colour::TEXT);
+            t.push(r, SetupHit::Toggle(*f));
+        }
+        let problem = self.problem(rules, maps);
+        let by = outer.bottom() - 30;
+        if let Some(p) = &problem {
+            d.text_left(Rect::new(x0, by, 300, 20), &p.to_string(), colour::BAD);
+        }
+        let back = Rect::new(outer.right() - 230, by, 100, 20);
+        let go = Rect::new(outer.right() - 120, by, 110, 20);
+        widget::button(&mut d, back, "Back", hot(back), true);
+        widget::button(&mut d, go, "Start game", hot(go), problem.is_none());
+        t.push(back, SetupHit::Back);
+        if problem.is_none() {
+            t.push(go, SetupHit::Start_);
+        }
+        (d, t)
+    }
+}
+
+/// A column of a player row: offset, width, value and target maker.
+type Cell = (i32, i32, String, fn(usize, i32) -> SetupHit);
+
+/// A target of the setup screen; the `i32` is the step (−1 or +1).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SetupHit {
+    /// The map choice.
+    Map(i32),
+    /// Who plays slot `.0`.
+    Kind(usize, i32),
+    /// Slot `.0`'s country.
+    Country(usize, i32),
+    /// Slot `.0`'s colour.
+    Colour(usize, i32),
+    /// Slot `.0`'s team.
+    Team(usize, i32),
+    /// Slot `.0`'s start position.
+    Start(usize, i32),
+    /// The credits setting.
+    Credits(i32),
+    /// The unit-count setting.
+    Units(i32),
+    /// A yes/no setting.
+    Toggle(Flag),
+    /// The speed control.
+    Speed(i32),
+    /// Back to the main menu.
+    Back,
+    /// Start the game.
+    Start_,
+}
+
+/// Builds the game setup of a lobby (S-0412): [`setup::skirmish`], the
+/// lobby's bases and speed values, the random choices resolved from the
+/// lobby's own stream (claims 6 and 7) and the checks of claims 11 and 13.
+pub fn game_setup(
+    lobby: &Lobby,
+    rules: &SimRules,
+    offered: &[String],
+    seed: u32,
+    lobby_seed: u32,
+) -> Result<GameSetup, setup::SetupError> {
+    let mut g = setup::skirmish(
+        rules,
+        &lobby.players,
+        lobby.settings.clone(),
+        lobby.unit_count,
+        seed,
+    );
+    // spec: S-0412 claim 1 (the bases setting and game speed are setup values)
+    g.bases = lobby.bases;
+    // spec: S-0201 claim 7 (the lobby's index replaces the game speed at skirmish start)
+    g.game_speed = lobby.game_speed;
+    // spec: S-0412 claims 6 and 7 (random country and colour, from the lobby's own stream)
+    setup::resolve_lobby(&mut g, rules, &lobby.choices, offered, lobby_seed)?;
+    setup::check(&g, rules)?;
+    Ok(g)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn rules() -> SetupRules {
+        SetupRules {
+            money: 1200,
+            money_range: (1000, 3000, 100),
+            units: 3,
+            units_range: (1, 5),
+            bases: true,
+            flags: [false, true, true, true, true],
+            game_speed: 4,
+            countries: vec!["Alphaland".into(), "Betaland".into()],
+            colours: vec![[200, 0, 0, 255]; 8],
+        }
+    }
+
+    fn maps() -> Vec<MapEntry> {
+        vec![
+            MapEntry {
+                label: "map A".into(),
+                starts: 2,
+            },
+            MapEntry {
+                label: "map B".into(),
+                starts: 4,
+            },
+        ]
+    }
+
+    #[test]
+    fn first_state_takes_the_rules_defaults() {
+        // spec: S-0412 claim 1 (defaults offered come from the rules)
+        let s = Setup::new(&rules());
+        assert_eq!(s.credits, 1200);
+        assert_eq!(s.units, 3);
+        assert_eq!(s.flags, [false, true, true, true, true]);
+        // spec: S-0201 claim 7 (the control starts at the lobby default index)
+        assert_eq!(s.game_speed(), 4);
+        assert_eq!(s.speed, 2);
+        assert_eq!(s.players().count(), 2);
+        assert_eq!(s.problem(&rules(), &maps()), None);
+    }
+
+    #[test]
+    fn speed_positions_map_to_indices_six_to_zero() {
+        // spec: S-0201 claim 7 (positions slowest to fastest set indices 6, 5, …, 0)
+        let mut s = Setup::new(&rules());
+        for p in 0..=6u8 {
+            s.speed = p;
+            assert_eq!(s.game_speed(), 6 - p);
+        }
+        s.apply(&SetupHit::Speed(5), &rules(), &maps());
+        assert_eq!(s.speed, 6);
+    }
+
+    #[test]
+    fn sliders_step_and_clamp() {
+        let r = rules();
+        let mut s = Setup::new(&r);
+        s.apply(&SetupHit::Credits(1), &r, &maps());
+        assert_eq!(s.credits, 1300);
+        for _ in 0..100 {
+            s.apply(&SetupHit::Credits(1), &r, &maps());
+        }
+        assert_eq!(s.credits, 3000);
+        s.apply(&SetupHit::Units(-1), &r, &maps());
+        s.apply(&SetupHit::Units(-1), &r, &maps());
+        s.apply(&SetupHit::Units(-1), &r, &maps());
+        assert_eq!(s.units, 1);
+    }
+
+    #[test]
+    fn random_states_cycle_with_the_values() {
+        let r = rules();
+        let mut s = Setup::new(&r);
+        s.apply(&SetupHit::Country(1, 1), &r, &maps());
+        assert_eq!(s.slots[1].country, Some(0));
+        s.apply(&SetupHit::Country(1, 1), &r, &maps());
+        s.apply(&SetupHit::Country(1, 1), &r, &maps());
+        assert_eq!(s.slots[1].country, None);
+        s.apply(&SetupHit::Colour(0, -1), &r, &maps());
+        assert_eq!(s.slots[0].colour, Some(7));
+        s.apply(&SetupHit::Team(0, 1), &r, &maps());
+        assert_eq!(s.slots[0].team, Some(1));
+        s.apply(&SetupHit::Start(0, -1), &r, &maps());
+        assert_eq!(s.slots[0].start, Some(1));
+        // The first row stays the person's.
+        s.apply(&SetupHit::Kind(0, 1), &r, &maps());
+        assert_eq!(s.slots[0].kind, SlotKind::Human);
+        s.apply(&SetupHit::Kind(2, 1), &r, &maps());
+        assert_eq!(s.slots[2].kind, SlotKind::Ai);
+    }
+
+    #[test]
+    fn problems_block_the_start() {
+        let r = rules();
+        let mut s = Setup::new(&r);
+        s.slots[2].kind = SlotKind::Ai;
+        assert_eq!(s.problem(&r, &maps()), Some(Problem::TooManyPlayers));
+        s.apply(&SetupHit::Map(1), &r, &maps());
+        assert_eq!(s.problem(&r, &maps()), None);
+        s.slots[0].start = Some(3);
+        s.slots[1].start = Some(3);
+        assert_eq!(s.problem(&r, &maps()), Some(Problem::SameStart));
+        s.slots[1].start = None;
+        // spec: S-0412 claim 7 (a colour fixed by one player is not free for another)
+        s.slots[0].colour = Some(2);
+        s.slots[2].colour = Some(2);
+        assert_eq!(s.problem(&r, &maps()), Some(Problem::SameColour));
+        s.slots[2].colour = None;
+        // Changing to a map with fewer starts makes a far start random.
+        s.slots[2].kind = SlotKind::Closed;
+        s.apply(&SetupHit::Map(1), &r, &maps());
+        assert_eq!(s.slots[0].start, None);
+        s.slots[1].kind = SlotKind::Closed;
+        assert_eq!(s.problem(&r, &maps()), Some(Problem::TooFewPlayers));
+        assert_eq!(s.problem(&r, &[]), Some(Problem::NoMap));
+    }
+
+    #[test]
+    fn lobby_maps_every_value() {
+        let r = rules();
+        let mut s = Setup::new(&r);
+        s.slots[0].country = Some(1);
+        s.slots[0].colour = Some(5);
+        s.slots[0].team = Some(2);
+        s.slots[0].start = Some(1);
+        s.flags[Flag::ShortGame as usize] = true;
+        let l = s.lobby(&r, &maps()).unwrap();
+        assert_eq!(l.players.len(), 2);
+        let (p, a) = (&l.players[0], &l.players[1]);
+        assert_eq!(p.name, HUMAN_NAME);
+        assert!(!p.ai);
+        assert_eq!(p.country, "Betaland");
+        assert_eq!(p.values.colour, Some(5));
+        // spec: S-0412 claim 8 (lobby team)
+        assert_eq!(p.values.team, Some(2));
+        // spec: S-0009 claim 17 (start position i is the i-th start entry)
+        assert_eq!(p.start, Some(1));
+        // spec: S-0412 claim 12 (AI houses take the computer slots)
+        assert!(a.ai);
+        assert_eq!(a.name, "Computer");
+        // spec: S-0412 claims 6 and 7 (random choices are marked for resolve_lobby)
+        assert_eq!(
+            l.choices[0],
+            LobbyChoice {
+                country: false,
+                colour: false
+            }
+        );
+        assert_eq!(
+            l.choices[1],
+            LobbyChoice {
+                country: true,
+                colour: true
+            }
+        );
+        // spec: S-0412 claim 1 (the lobby's setup values)
+        assert_eq!(l.settings.credits, Some(1200));
+        assert_eq!(l.settings.short_game, Some(true));
+        assert_eq!(l.settings.superweapons, Some(true));
+        assert_eq!(l.unit_count, 3);
+        assert!(l.bases);
+        assert_eq!(l.game_speed, 4);
+    }
+
+    #[test]
+    fn game_setup_resolves_random_choices() {
+        let sim = glasnost_ai::fixture::rules();
+        let r = rules();
+        let s = Setup::new(&r);
+        let l = s.lobby(&r, &maps()).unwrap();
+        let g = game_setup(&l, &sim, &r.countries, 7, 99).unwrap();
+        let players: Vec<_> = g
+            .houses
+            .iter()
+            .filter(|h| h.role == glasnost_sim::world::HouseRole::Player)
+            .collect();
+        assert_eq!(players.len(), 2);
+        // spec: S-0412 claim 12
+        assert!(!players[0].ai && players[1].ai);
+        // spec: S-0412 claim 7 (random colours resolve to distinct slots 0 … 7)
+        let c0 = g.skirmish.houses[0].colour.unwrap();
+        let c1 = g.skirmish.houses[1].colour.unwrap();
+        assert!(c0 <= 7 && c1 <= 7 && c0 != c1);
+        // spec: S-0412 claim 6 (a random country is one the setup offers)
+        for p in &players {
+            assert!(r.countries.contains(&p.country), "{}", p.country);
+        }
+        assert_eq!(g.game_speed, 4);
+        assert_eq!(g.seed, 7);
+        // The same lobby seed resolves the same way.
+        assert_eq!(game_setup(&l, &sim, &r.countries, 7, 99).unwrap(), g);
+    }
+
+    #[test]
+    fn layout_offers_every_control() {
+        let r = rules();
+        let s = Setup::new(&r);
+        let (d, t) = s.view((800, 600), &r, &maps(), None);
+        assert!(d.texts().contains(&"SKIRMISH SETUP"));
+        for want in [
+            SetupHit::Map(1),
+            SetupHit::Kind(1, 1),
+            SetupHit::Country(0, -1),
+            SetupHit::Colour(1, 1),
+            SetupHit::Team(0, 1),
+            SetupHit::Start(1, 1),
+            SetupHit::Credits(1),
+            SetupHit::Units(-1),
+            SetupHit::Speed(1),
+            SetupHit::Toggle(Flag::Crates),
+            SetupHit::Back,
+            SetupHit::Start_,
+        ] {
+            let rect = t
+                .rect_of(&want)
+                .unwrap_or_else(|| panic!("{want:?} missing"));
+            assert_eq!(t.hit(rect.centre()), Some(want), "{want:?} not on top");
+        }
+        // A closed slot offers no country.
+        assert!(t.rect_of(&SetupHit::Country(3, 1)).is_none());
+    }
+}

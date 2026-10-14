@@ -52,8 +52,8 @@ pub struct MapQuirks {
     /// `quirks.header_pairs_as_start_marks` (claims 25 and 29): all N_h
     /// header pairs are read; off: at most 8.
     pub header_pairs_as_start_marks: bool,
-    /// `quirks.lobby_counts_zero_waypoint` (claim 23). Not consulted yet: our
-    /// engine has no lobby that counts start waypoints.
+    /// `quirks.lobby_counts_zero_waypoint` (claim 23), consulted by the game
+    /// client's map list (`glasnost_app::game::install::start_count`).
     pub lobby_counts_zero_waypoint: bool,
     /// `quirks.preview_markers_from_header` (claim 25). Not consulted yet:
     /// our engine draws no preview markers.
@@ -163,6 +163,9 @@ pub fn decode(doc: &Document, ctx: &DecodeContext<'_>) -> Decoded {
     }
 }
 
+/// Cell tags by cell, and the same in entry order.
+type CellTags = (BTreeMap<(i16, i16), Vec<u8>>, Vec<((i16, i16), Vec<u8>)>);
+
 struct Decoder<'a> {
     doc: &'a Document,
     ctx: &'a DecodeContext<'a>,
@@ -248,7 +251,8 @@ impl Decoder<'_> {
         let lighting = self.lighting();
         let basic = self.basic();
         let objects = self.objects(&footprint, format_version);
-        let cell_tags = self.cell_tags(&footprint, format_version);
+        let (cell_tags, cell_tag_order) = self.cell_tags(&footprint, format_version);
+        let triggers = self.triggers(&cell_tag_order);
         for legacy in [
             &b"IsoMapPack"[..],
             b"IsoMapPack2",
@@ -281,6 +285,7 @@ impl Decoder<'_> {
             basic,
             objects,
             cell_tags,
+            triggers,
             fill_draws,
         }
     }
@@ -1196,15 +1201,14 @@ impl Decoder<'_> {
         }
     }
 
-    /// Cell tags (S-0009 claim 31).
-    fn cell_tags(
-        &mut self,
-        footprint: &Footprint,
-        format_version: i32,
-    ) -> BTreeMap<(i16, i16), Vec<u8>> {
+    /// Cell tags (S-0009 claim 31): by cell, and in entry order (S-0011
+    /// claim 34). A value naming no defined tag attaches an empty tag; the
+    /// trigger import registers it (S-0011 claim 7) and warns.
+    fn cell_tags(&mut self, footprint: &Footprint, format_version: i32) -> CellTags {
         let mut out = BTreeMap::new();
+        let mut order = Vec::new();
         let Some(section) = self.doc.section(b"CellTags") else {
-            return out;
+            return (out, order);
         };
         // spec: S-0009 Formulas (1000-based from format version 4, 128-based below)
         let base = if format_version >= CELL_TAG_BASE_SWITCH_VERSION {
@@ -1218,8 +1222,8 @@ impl Decoder<'_> {
             let n = value::decimal_integer(&entry.key);
             let (x, y) = decode_cell_number(n, base);
             let tag = winner.value.clone();
-            // spec: S-0009 claim 31 (a value naming no defined tag is ignored)
-            if self.doc.get(b"Tags", &tag).is_none() {
+            // spec: S-0009 claim 31 and Import mapping (the value <none> or none attaches nothing)
+            if tag.eq_ignore_ascii_case(b"<none>") || tag.eq_ignore_ascii_case(b"none") {
                 continue;
             }
             if !(0..=MAX_STREAM_COORDINATE).contains(&x) {
@@ -1261,11 +1265,12 @@ impl Decoder<'_> {
                 Some(_) => {}
                 None => {
                     first_key.insert(c, entry.key.clone());
+                    order.push((c, tag.clone()));
                     out.insert(c, tag);
                 }
             }
         }
-        out
+        (out, order)
     }
 }
 
@@ -1366,3 +1371,4 @@ pub fn is_map(doc: &Document) -> bool {
 pub mod synth;
 #[cfg(test)]
 mod tests;
+mod triggers;

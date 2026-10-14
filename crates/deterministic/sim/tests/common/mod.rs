@@ -125,6 +125,7 @@ impl Scene {
             objects: Objects::default(),
             cell_tags: BTreeMap::new(),
             fill_draws: 0,
+            triggers: Default::default(),
         };
 
         let tile = |code: u8, slope: u8| TileInfo {
