@@ -2,7 +2,7 @@
 id: glossary
 title: Glossary of shared terms
 topic: rules-import        # cross-cutting; every topic uses these terms
-revision: 23
+revision: 25
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -345,9 +345,11 @@ ordered list, from lowest to highest: the base rules, the language rules file (i
 exists), the game-mode file (skirmish and network games only, and see *language rules file*) and
 the map layer (S-0006, claim 1). A layer changes only what it mentions, with two kinds of
 exception: the reset cases that S-0006 (claim 5) and S-0105 (claim 27) list (see *reset on
-override*), and the light values that S-0104 (claim 12) truncates to whole units when a higher
-layer reads their section again without giving them. Specs write "higher" and "lower" for places in this list; "later" and "earlier"
-mean the same. The list decides four observable things:
+override*), and the light values that S-0104 (claim 12) converts when a higher layer reads their
+section again without giving them. That conversion truncates toward zero to whole units, with
++1 thousandth added for building-light intensity and tint when the truncated whole-unit value
+is negative; extra light gets no such addition. Specs write "higher" and "lower" for places in
+this list; "later" and "earlier" mean the same. The list decides four observable things:
 - *Overrides.* Where two layers give the same key, the value of the higher one is normally in
   force, subject to the section-specific exceptions (S-0006, claims 1 to 5). Colour definitions
   are one exception: the first definition of a name wins, comparing names without regard to
@@ -1501,7 +1503,7 @@ and completed (claims 3 to 9). S-0406, S-0407, S-0411, S-0413 and S-0414 use it.
 
 **line kind.** Which of a house's production lines builds a type: infantry, ground vehicles, naval
 vehicles, aircraft, buildings or defences. S-0403 names the kinds (Terms) and S-0404 (claim 1) the
-lines a house has; S-0411 uses the term. S-0413 (Terms, *kind of an item*) groups items into five
+lines a house has; S-0411 uses the term. S-0413 (Terms, *Factor kind*) groups items into five
 kinds for the per-kind country factors, with ground and naval vehicles in one kind.
 
 **offered.** A type is *offered* to a house while it is in the house's taken-up set (S-0407,

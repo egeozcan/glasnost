@@ -2,7 +2,7 @@
 id: S-0415
 title: Deploying a vehicle into a building and packing it up again (construction yard vehicles and other deploying vehicles)
 topic: structures
-revision: 8
+revision: 9
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -340,21 +340,33 @@ vehicle's movement is heading to (S-0207). In addition:
     experience, control group, selection, trigger tag and slaves, and every object whose target was the
     building gets the vehicle as its target. When the building had a guard spot, the vehicle is given
     that spot as its destination and *move* is queued (S-0213, claim 20: the move click that led
-    to the pack-up). Automatic packing of a deployed slave miner instead remembers the building's
-    old top-left cell and gives the vehicle that cell as its immediate destination, with *move*
-    queued, in the conversion tick before its next group update. It does not give the distant
-    field or chosen deployment site as this destination (S-0402 claim 25). For a large foundation,
+    to the pack-up). Automatic packing of a deployed slave miner stores the building's old
+    top-left cell in that same guard spot, replacing any earlier destination; it is not a separate
+    automatic memory. Unless a later accepted order changes it, the vehicle receives that cell
+    as its immediate destination, with *move* queued, in the conversion tick before its next
+    group update. A later order that changes the guard spot replaces the automatic cell.
+    A sell order alone does not clear it (S-0402 claims 25 and 28). Without such a change,
+    the destination is not the distant field or chosen deployment site. For a large foundation,
     this destination differs from the return cell where the vehicle appears. Slave-group state
     transitions after automatic or manual packing follow S-0402 claims 22, 25 and 28; conversion
-    does not itself force every transferred group into field seeking. These take-overs require
-    successful placement; claim 11 covers refusal. For a deploy facing outside 0 … 255 the vehicle's facing is not established
+    does not itself force every transferred group into field seeking.
+
+    The return vehicle and any initial hidden slaves of its type are created before placement
+    is attempted, while the building's old group still exists (S-0402 claims 19 and 19a).
+    On successful placement, the new hidden slaves are destroyed and removed before the old
+    working group transfers. Their creation draws are not undone. Their removal has S-0312
+    claim 31's hidden-slave destruction notifications and losses, without attacker credit or
+    their own death effects. No old slave is recreated by transfer, and no second working
+    group remains. These take-overs require successful placement; claim 11 covers refusal. For a deploy facing outside 0 … 255 the vehicle's facing is not established
     (Open question 4; scenario D13).
     - Backing: `measurable` (scenarios D6, including its slave-master part, and D7; D13 for a
       deploy facing outside 0 … 255; D6's 2 × 2 variant and position recorder for the small
       foundation and cell-centre cases; S-0402 H19 for the automatic old-cell destination and
-      H23 for manual slave-group transitions)
+      H23 for manual slave-group transitions; D17 and S-0402 H24 for temporary-group
+      creation and disposal, H25 for the shared guard spot)
     - Confidence: high (position, facing, health, the manual move); medium (the take-overs,
-      automatic destination timing); low (the
+      automatic destination timing, shared guard spot and temporary-slave destruction
+      notifications); high (temporary-group creation before placement); low (the
       facing for a deploy facing outside 0 … 255)
 
 11. **A failed pack-up.** When the vehicle cannot be put on the map at its return cell (claim 12),
@@ -379,10 +391,12 @@ vehicle's movement is heading to (S-0207). In addition:
     its on-map slaves lose their master and follow that claim's attacker-less release, including
     the civilian-recipient and no-recipient alternatives. This is not a successful conversion
     or an automatic application of the true-sale rule. If the return vehicle's type creates a
-    slave group, the retained vehicle keeps its own newly created hidden group (S-0402 claim 19),
-    not the building's old slaves. Old-group release is unchanged when
-    `quirks.failed_packup_keeps_vehicle` is off; the refused vehicle and its new group then do
-    not remain.
+    slave group, the retained vehicle keeps its own newly created hidden group (S-0402 claims 19
+    and 19a), not the building's old slaves. The vehicle and these new slaves are created before
+    the placement attempt, so their creation draws precede the old group's destruction or release.
+    Old-group release is unchanged when `quirks.failed_packup_keeps_vehicle` is off; the refused
+    vehicle and its new group are then removed, but their creation and creation draws still occur.
+    Suppressing those creations in advance is not this switch's alternative.
     - Backing: `measurable` (scenario D8, including its variants for the short-game setting and
       for the two marks; D17 for the distinct old and new slave groups). No-recipient release
       retains S-0312 claim 31's `unmeasured` backing and setup limitation.
@@ -505,7 +519,8 @@ Claim 4 gives the original's *hunt* replacement for non-human-controlled owners.
   survivors (`unmeasured`, claim 9). Off: the release is skipped exactly when the building packs up.
 - `quirks.failed_packup_keeps_vehicle` (default on): claim 11. Off: the vehicle that cannot be put on
   the map does not remain (the refund is still paid, as in claim 11), and it does not count for build limits or for a house's
-  survival in the short-game test (S-0414 claim 2).
+  survival in the short-game test (S-0414 claim 2). Creation before placement and its draws
+  are preserved; removal of the refused vehicle and its new group does not undo those draws.
 - **A deploying vehicle on an unsuitable cell is never moved** by the deploy itself (claim 4); the original's
   computer player moves its own (a note for AI designers only). No switch.
 - `quirks.deploy_refuses_own_walls` (default on): claim 3. A deploying vehicle cannot deploy onto its
@@ -1007,19 +1022,30 @@ are repetitions that guard against void runs.
 - Runs/tool: 3 valid runs per refusal/control variant, scripted input and the read-only recorder.
   Observed area is the 15 × 15 cells around the building; keep outside slaves clear of the
   blocker and unrelated damage. Record credits, on-map status, identities, owners, master links,
-  health, targets, destinations and queued behaviours at removal.
+  health, targets, destinations and queued behaviours at removal. Also record every new slave
+  from creation, its creation draw in the scenario random stream, destruction notifications
+  and the house's infantry losses. Use the identity and draw-order controls of S-0402 H24.
 - Expected: refusal pays the refund and removes the building. Its old hidden slaves disappear,
   and its old on-map slaves retain identity, health and position, lose their master and transfer
   to the first civilian-side house in house-creation order, with target and destination cleared
   and *guard* queued (S-0312 claim 31). The retained off-map vehicle's two new hidden slaves
   have different identities and that vehicle as master. No old slave joins its group, and the
-  old group produces no later replacement. On clear ground the old group instead transfers to
-  the on-map vehicle as claim 10 says. The no-civilian-recipient alternative is not tested here.
+  old group produces no later replacement. In both refusal and control, the return vehicle's
+  two initial hidden slaves are created before the placement attempt, each taking its ordinary
+  creation draw, while the old group still exists. Refusal's old-group destruction or release
+  follows those creations. On clear ground the two new hidden slaves instead disappear with
+  destruction notifications and losses before the old group transfers to the on-map vehicle.
+  Their creation draws remain consumed, and no old slave is recreated. The no-civilian-recipient
+  alternative is not tested here.
   Replay refusal with the failed-pack-up quirk off on our engine: old-slave release is the same,
-  but neither the refused vehicle nor its new hidden group remains.
+  and the same vehicle/slave creations and draws occur, but neither the refused vehicle nor
+  its new hidden group remains.
 - Falsified if: any old slave acquires the refused vehicle as master, an old hidden slave survives,
   an outside slave's release differs from the stated recipient/reset outcome, the retained
-  vehicle lacks its own newly created hidden group, or the control fails to transfer the old group.
+  vehicle lacks its own newly created hidden group, old-group release precedes the new creations,
+  the control omits temporary-slave creation or its destruction notifications/losses, undoes
+  creation draws, recreates old slaves, or fails to transfer the old group. On our engine,
+  suppressing creation draws with the failed-pack-up quirk off also fails conformance.
 
 ## Open questions
 

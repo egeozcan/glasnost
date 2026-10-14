@@ -2,13 +2,13 @@
 id: S-0409
 title: Shroud and sight (explored and seen cells, sight radius and shape, height blocking, gap generators, re-covering, reveal on fire)
 topic: visibility
-revision: 9
+revision: 10
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0110, Q-0111]
+requests: [Q-0110, Q-0111, Q-0460]
 supersedes: []
 ---
 
@@ -32,7 +32,8 @@ height*, *height lift*, *lepton*, *tick*, *tick number*, *game minute*, *shroud*
 mode*, *measurement setup*, *recorder*, *scripted input*, *override section*, *game start*,
 *lobby*, *in play*, *on the map*, *turn* (in S-0203's sense: an object's share of one tick, as in
 "its own turn") and *turn pass*. S-0205's notation applies: trunc, ⌊ ⌋, RZ₅₃ and *double*. The
-height lift *L(z)* is S-0101's (Formulas F2). In addition:
+simulation lift *L(z)* is defined here in F2 for sight centres; it is not the drawing lift of
+S-0101 claim 3. In addition:
 
 - **Player house.** A house of a player, human or AI (glossary *AI house*). The neutral house and
   the special house are not player houses.
@@ -173,12 +174,17 @@ height lift *L(z)* is S-0101's (Formulas F2). In addition:
 5. **Sight centre.** A sight or area reveal from the world point (*X*, *Y*, *Z*) is centred on the
    cell (trunc(*X*′ / 256), trunc(*Y*′ / 256)) with *X*′ = *X* − 256·*k*, *Y*′ = *Y* − 256·*k* and
    *k* = trunc(*L*(*Z*) / 30) (Formulas F2). That is, for positive height the point is shifted towards map north-west onto the
-   height-0 grid, as S-0110 (claim 8) does for its point test, with the lift counted in whole steps
-   of 30 pixels. The point of an object is its position: for a building the centre of the
+   height-0 grid, with the simulation lift of F2 counted in whole steps of 30 pixels.
+   This retains the original's floating-point lift because the centre determines explored cells,
+   not just drawing. S-0101 claim 3's exact drawing lift does not change this game state.
+   For example at *Z* = 2080 leptons (level 20), *L* = 299 pixels and *k* = 9 cells,
+   not the 10 cells an exact 300-pixel drawing lift would give.
+   The point of an object is its position: for a building the centre of the
    top-left cell of its foundation, not the centre of its foundation (Edge cases,
    `quirks.building_sight_top_left`). When the sight centre is not a legal cell, the sight or
    reveal reveals nothing at all (Edge cases, `quirks.sight_centre_off_map`).
-   - Backing: `measurable` (scenario V5; part D for the off-map case)
+   - Backing: `measurable` (scenario V5; part D for the off-map case, part E for the
+     simulation lift remaining distinct from the exact drawing lift)
    - Confidence: high for the formula; medium for the off-map case. Truncation, not floor,
      applies in both coordinates: −256 < *X*′ < 0 gives coordinate 0; such a centre is not legal
 
@@ -661,12 +667,30 @@ not 13. (Under the cap of 10 both draw the radius-10 shape, so this example cann
 measurable case is *S* = 5 and *b*′ = 20: 5 × 1.19999999999999995… = 5.9999999999999991, so *r*₀ = 5
 under F1 where exact arithmetic gives 6, scenario V4.)
 
-**F2. Sight centre** (claim 5). Integers, leptons; *L* is S-0101 F2.
+**F2. Sight centre and simulation lift** (claim 5). *X*, *Y*, *Z* are signed integer leptons,
+*L* is an integer pixel lift and *k* an integer number of cells. Let *a* be the
+binary64 constant nearest to 0.14350360082660085 pixels per lepton, and let *c(Z)* be 1 pixel
+when *Z* ≥ 728 leptons, otherwise 0 pixels.
 
-> *k* = trunc(*L*(*Z*) / 30); centre = ( trunc((*X* − 256*k*) / 256), trunc((*Y* − 256*k*) / 256) ).
+> *L(Z)* = trunc( RZ₅₃( RZ₅₃( RZ₅₃(*Z* · *a*) + *c(Z)* ) + 0.5 ) )
+>
+> *k* = trunc(*L(Z)* / 30)
+>
+> centre = ( trunc((*X* − 256*k*) / 256), trunc((*Y* − 256*k*) / 256) )
 
-For whole height levels on flat ground *L*(104*h*) = 15*h* up to level 19 (S-0101 claim 4), so
-*k* = trunc(*h* / 2) there.
+The lift product and both sums use floating point with a 53-bit significand, rounded toward zero
+under S-0205's round-toward-zero mode. The grouping above matters: the correction is added to the
+rounded product before the half pixel is added. The final conversion and both integer divisions
+truncate toward zero, including for negative heights and coordinates. With
+`quirks.chop_rounding` off, the three floating-point operations follow S-0205's alternative mode,
+while the final truncation remains. No drawing-lift switch changes this formula.
+
+Check values in pixels: *L*(0) = 0, *L*(104) = 15, *L*(727) = 104, *L*(728) = 105,
+*L*(1976) = 285, *L*(2080) = 299 and *L*(−104) = −14.
+For whole non-negative height levels on flat ground, *L*(104*h*) = 15*h* for 0 ≤ *h* ≤ 19,
+so *k* = trunc(*h* / 2) there. This is a property of this simulation lift only:
+at level 20, *k* = 9 instead of 10; the shortcut must not replace F2 at higher or negative levels.
+S-0101 claim 3 defines the distinct exact lift used for drawing.
 
 **F3. Height block** (claim 7). All integers. *T* = (*cx* + *dx*, *cy* + *dy*); *s* from table T2,
 *u* = trunc(*Z* / 104).
@@ -694,7 +718,10 @@ root toward zero to an integer. F6 ignores world height.
 | Largest sight radius | 10 | cells | claims 4 and 6 |
 | Height bonus step | 10 | per cent per whole *P* leptons | claim 4, F1 |
 | Height-bonus range (wraps) | −128 … 127 | per cent | F1, `quirks.sight_bonus_wrap` |
-| Centre shift step | 30 | pixels of height lift per cell | claim 5, F2 |
+| Centre shift step | 30 | pixels of simulation lift per cell | claim 5, F2 |
+| Simulation lift scale *a* | 0.14350360082660085 | pixels per lepton | Binary64 constant, F2 |
+| Simulation lift correction threshold | 728 | leptons | F2 adds 1 pixel at or above this height |
+| Simulation lift rounding addition | 0.5 | pixels | Before final truncation, F2 |
 | Height-block threshold | 3 | height levels above the observer level | claim 7 |
 | Height-block displacement | (2, 2) | cells | claim 7 |
 | Moving sight refresh | 15 | ticks | claim 8 |
@@ -753,7 +780,7 @@ does not mention it keeps its seen state.
 | 3 | A gap field hostile to *H* starts over the cell | *k*′ = *k* + 1 if *k* = 0 or *k* ≥ 2, otherwise *k*′ = *k*; *G*′ = *G* + 1 | If now *k*′ ≥ 1: unexplored at once; the seen state is unchanged |
 | 4 | Re-cover sweep, cell has *m* | none | unexplored and unseen; *m* cleared |
 | 5 | A gap field hostile to *H* stops over the cell | *G*′ = *G* − 1; *k*′ = *k* − 1 if *H*'s spy satellite is active and *G*′ ≤ 0, otherwise *k*′ = *k* | If that made *k*′ ≤ 0: explored and marked surrounded; the seen state is unchanged |
-| 6 | Plain reveal or area reveal | area reveal: as row 1 followed by row 2; plain reveal: none | area reveal: explored, seen and marked surrounded; plain reveal: explored and marked surrounded but not made seen, and with *k* > 0: *m* set |
+| 6 | Plain reveal or area reveal | Plain reveal: *k*′ = *k*, *G*′ = *G*. Area reveal: *k*₁ = −1 when *k* = 1, and *k* − 1 otherwise; *k*₂ = 1 when *k*₁ = −1, and *k*₁ + 1 otherwise; *k*′ = min(*k*₂, *G*), *G*′ = *G* | Area reveal: explored, seen and marked surrounded; plain reveal: explored and marked surrounded but not made seen, and with *k* > 0: *m* set |
 | 7 | Whole-map re-cover of *H* (claim 15) | afterwards *k*′ = −*n* when *n* ≥ 1 re-applied sights of *H* cover the cell, otherwise *k*′ = 1; *G*′ = the number of gap fields hostile to *H* that cover it | explored and seen when *n* ≥ 1, otherwise unexplored and unseen; *m* kept, and set where claim 15 creates a mark; the first sight over the cell does not clear *m* (the cell is unexplored when it arrives) and a second one does, so *m* survives only where *n* ≤ 1 |
 | 8 | Spy satellite's whole-map reveal of *H* (claim 15) | as row 7, except that a cell that no re-applied sight covers has *k*′ = 1 when *G*′ ≥ 1 and *k*′ = 0 when *G*′ = 0 | explored, seen and marked surrounded, except a cell with *k*′ = 1, which is unexplored but still seen (row 3 leaves the seen state unchanged); a pre-existing *m* survives with *n* = 0 and is cleared with *n* ≥ 2; survival with *n* = 1 and creation of new marks during a reveal are not established (claim 15) |
 | 9 | Uncounted sight of *H* over the cell (Edge cases) | only when the cell is not yet explored, seen and surrounded with all neighbours seen: as row 1 | as row 1 |
@@ -916,6 +943,8 @@ Entries labelled fixed rules below are not optional corrections. Only entries na
 | Rules, type section, `GapGenerator` | gap-generator flag (claim 11) | boolean | no |
 | Rules, type section, `GapRadiusInCells` | gap radius *R* (claim 11) | integer, cells, wrapped into −128 … 127 by `quirks.gap_radius_wrap` | 0 |
 | Rules, building type section, `SuperGapRadiusInCells` | super-gap radius (S-0405 claim 16 owns the import) | integer, cells | 0 |
+| No user key | simulation lift scale, correction and rounding for the sight centre (claim 5, F2) | engine constants and arithmetic, not rules data | always F2, independent of drawing lift |
+| Map, cell data | terrain height contributing to world height *Z* (claim 5) | signed integer height levels, converted to leptons by S-0204 claim 1 | level 0, as in S-0009 claim 7 |
 | No user key | discovery on cell placement and reveal-selection priority (claim 20) | engine rule, not configurable through data | always applies in a skirmish |
 | No user key | shared-state participation and satellite-state timing (claim 21) | engine rule under `quirks.offmap_cells_shared` | original behaviour |
 | Rules, building type section, `SpySat` | spy-satellite flag (claim 15) | boolean | no |
@@ -1015,6 +1044,18 @@ mean an allied and an enemy bystander computer player.
   field 5. Expected: nothing is explored around it, though part of its shape would lie on legal
   cells. Falsified if: centred on the unit's own cell (or on the foundation centre), or shifted by
   another amount, or (part D) any cell is explored.
+  Part E (Q-0460, simulation lift): two fresh runs on purpose-made maps with a broad flat plateau,
+  at level 19 and level 20 respectively. One map-placed human infantry unit stands on the same
+  cell (*u*, *v*) in each run, far enough from all legal and usable boundaries that both candidate
+  centres and their radius-1 shapes are legal. Other human objects and allied sights are far away.
+  Named test-map overrides set its sight field to 1, leptons per sight increase to 100000,
+  veteran sight factor to 1 and reveal-by-height off, isolating the centre from radius bonuses
+  and terrain blocking. Keep the unit stationary and record the explored-cell set in the first
+  drawn frame, at any game speed, 800×600. Expected in both runs: the radius-1 shape of T1 centred
+  on (*u* − 9, *v* − 9), since the lifts are 285 and 299 pixels. At level 20 the exact drawing
+  lift would instead centre it on (*u* − 10, *v* − 10). Any other explored set falsifies F2,
+  particularly that latter centre at level 20. One valid run per height; if the original rejects
+  these map heights, record that and leave this discriminating part unconfirmed.
 - **V6 (claim 7).** Flat level-0 ground with one tall column of single cells at level 8 (a
   one-cell-wide wall of high ground) placed so that it is the blocking cell under F3 for some cells
   of an observer's shape but not the cell one step towards the centre, and a second layout in which
@@ -1365,7 +1406,7 @@ with the whole-map-revealed exception tested per house for the waypoint reveal o
 S-0003 claim 14's trigger-name exceptions agree with S-0011 claims 5 and 21 and do not
 restrict reveal recipients. At joint sign-off, confirm these exceptions and reveal scope
 against the S-0003, S-0011 and S-0409 versions being handed off together. In particular,
-S-0011 revision 13 claims 26 and 36 and S-0409 revision 8 claim 17 agree on all player
+S-0011 claims 26 and 36 and S-0409 claim 17 agree on all player
 houses, observers included, and the waypoint-only per-house mark exception. Confirm these
 paired revisions at hand-off. Animation start effects and random-draw composition remain
 owned by the companion specs; they add no restriction on reveal recipients. S-0110's current

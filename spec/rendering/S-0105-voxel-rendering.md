@@ -2,13 +2,13 @@
 id: S-0105
 title: Rendering of voxel models
 topic: rendering
-revision: 12
+revision: 13
 sources-class: [decomp, format-doc, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0014, Q-0056, Q-0210, Q-0211, Q-0213, Q-0216]
+requests: [Q-0014, Q-0056, Q-0210, Q-0211, Q-0213, Q-0216, Q-0470]
 supersedes: []
 ---
 
@@ -16,8 +16,11 @@ supersedes: []
 
 ## Summary
 
-**Revision scope.** Fifteen lead-classified presentation glitches are fixed outright,
-with no switches. Q-0215 questions 1–6 are already answered by F8.
+**Revision scope.** Q-0470 adds a 4096-pixel largest side for part and shadow images,
+centred copy-rectangle clipping, suppression of non-finite placement and one importer
+warning per oversized model. These are lead-confirmed engine rules, tested against
+this spec rather than the original. Fifteen lead-classified presentation glitches remain
+fixed outright, with no switches. Q-0215 questions 1–6 are already answered by F8.
 Question 7's arbitrary-section characterization is explicitly `unmeasured`, not an
 implied extrapolation from that table. MS-28 proposes larger mixed-tie discriminators
 and states what is still required to close that question.
@@ -59,8 +62,9 @@ turn per unit), to tell it apart from the coarser facings derived from it.
   (screen rows are *−y*), *z* toward the viewer (larger *z* is nearer).
 - **voxel image** (also called the *voxel buffer* below). The palette-index image produced for
   a part before placement on screen. Palette index 0 is transparent. Its signed integer
-  coordinates do not wrap. Its extent contains every rendered voxel and adjacent pixel
-  (claims 22 and 24), without prescribing a storage size or layout.
+  coordinates do not wrap. Its logical extent accounts for every rendered voxel and adjacent
+  pixel (claims 22 and 24), without prescribing a storage size or layout. Only claim 22's
+  bounded window can reach the screen.
 - **Shade index.** A lighting level 0–31 chosen per voxel normal; it selects one 256-entry row
   of the VPL.
 - **VPL.** The voxel lighting table file: for each shade index and each voxel colour index, the palette index to draw. Claim 38 gives how its content is used; its byte layout is given by S-0013. A *row* is the 256 entries of one shade index.
@@ -414,12 +418,29 @@ turn per unit), to tell it apart from the coarser facings derived from it.
 
 22. **One pixel per voxel; no image-coordinate wrap.** Outside depth mode, each
     voxel writes exactly one pixel at F5's position. Magnification shows gaps
-    (`quirks.voxel_single_pixel`). Enlarge the image extent to contain every rendered
+    (`quirks.voxel_single_pixel`). The logical image accounts for every rendered
     voxel and right-hand pixel, including out-of-box voxels from claims 35 and 36.
-    No coordinate wraps or clips at an artificial 256-pixel edge. Claim 25's copy
-    rectangle still determines which pixels reach the screen.
+    No coordinate wraps or clips at an artificial 256-pixel edge.
+    - **Bounded images (Q-0470).** Our engine's largest image side is 4096 pixels,
+      for part images and shadow images alike. When either side of claim 25's copy
+      rectangle exceeds that limit, keep its intersection with a 4096 × 4096-pixel
+      window centred on the copy rectangle, as F6 defines. Pixels outside the window
+      are not drawn. There is no rescaling or change in the retained pixels' screen
+      positions. Coverage inside the window still follows claims 21–24, including a
+      right-hand write from a voxel whose left pixel is outside it. A copy rectangle
+      with both sides at most 4096 pixels is unchanged. Well-formed stock models never
+      reach the limit.
+    - **Non-finite placement.** A part whose placement inputs are not finite is not
+      drawn: this includes its section bounds, applicable transforms and derived
+      projection or copy-rectangle values containing infinity or a value that is not
+      a number. Apply the same rule to a shadow image's placement inputs. Suppression
+      affects only that image, not the other finite parts of the object.
+    - **Warning.** The importer warns once per model whose part or shadow images
+      would exceed the limit (Import mapping). The limit and suppression are
+      unconditional lead-confirmed departures, with no quirk switch.
     - Backing: `measurable` (MS-5/MS-13 for pixel size; MS-24 engine conformance for
-      the lead-confirmed no-wrap departure)
+      the lead-confirmed no-wrap departure; MS-29 engine conformance for the
+      lead-confirmed limit, placement suppression and warning, not oracle measurements)
     - Confidence: high
 
 23. **Section overlap priority.** Outside depth-buffered mode, the sections of one part have
@@ -461,7 +482,8 @@ turn per unit), to tell it apart from the coarser facings derived from it.
       depth into its own pixel and into the pixel immediately to its right. Only the left pixel's
       stored depth is tested: the right pixel is overwritten even if it held a greater depth. At
       every image column, including 255, the right-hand pixel is *(x + 1, y)*,
-      contained by the enlarged image, never column 0 of another row.
+      never column 0 of another row. Claim 22's retained window limits which pixels
+      reach the screen, not their coverage or comparison-depth result inside it.
     - **Independent coordinates.** Horizontal arithmetic never carries into vertical
       position in either mode (F5).
     - Backing: `measurable` (MS-5/MS-12/MS-25 for coverage; MS-12/MS-18/MS-24
@@ -470,10 +492,12 @@ turn per unit), to tell it apart from the coarser facings derived from it.
 
 25. **Copy to the screen.** After all sections are drawn, the bounding box of the transformed
     section boxes (in view-space pixels, *y* flipped) is enlarged by a 4-pixel margin on every
-    side and copied to the screen around the object's draw point (formula F6). The draw point
+    side to give the copy rectangle. Its retained window under claim 22 is copied to
+    the screen around the object's draw point (formula F6). The draw point
     comes from the object position (S-0101) plus any shift its locomotor applies. Palette index 0 in
     the voxel buffer is transparent.
-    - Backing: `measurable` (MS-1)
+    - Backing: `measurable` (MS-1 for ordinary placement; MS-29 engine conformance
+      for claim 22's retained-window limit)
     - Confidence: high
 
 26. **Image reuse.** Finished part images are kept in the image cache of the object's type and
@@ -1000,12 +1024,25 @@ remains unchanged. MS-5/MS-12/MS-24 test them against this spec.
 **F6. Screen placement.** A model point at view-space *(x, y)* (*y* flipped, F5) lands on the
 screen at the draw point *+ trunc(c) + ⌊128 + (x, y) − c⌋ − 128*, i.e. within one pixel of
 *⌊(x, y)⌋*. Floors apply to signed logical image coordinates. No point wraps at an
-image edge (claim 22). The area that
-reaches the screen, the part's *copy rectangle*, is a *w × h* rectangle. With the overall bounding box
+image edge (claim 22). The nominal area to copy before claim 22's limit,
+the part's *copy rectangle*, is a *w × h* rectangle. With the overall bounding box
 *[x_min, x_max] × [y_min, y_max]*, *w₀ = trunc(x_max − x_min)*, *h₀ = trunc(y_max − y_min)*,
 *w = w₀ + 8* and *h = h₀ + 8*. The rectangle's corner is voxel-buffer pixel
 *(128 − ⌊w₀/2⌋ − 4, 128 − ⌊h₀/2⌋ − 4)*, and it lands at the draw point plus
 *(trunc(c_x) − ⌊w/2⌋, trunc(c_y) − ⌊h/2⌋)*.
+
+**Retained window (claim 22, Q-0470).** Let the copy rectangle's logical corner be
+*(a, b)* as above. Its retained width and height are *u = min(w, 4096)* and
+*v = min(h, 4096)* pixels. The retained corner is
+*(a + ⌊(w − u)/2⌋, b + ⌊(h − v)/2⌋)*. Keep exactly the integer pixel columns and
+rows from that corner through *u − 1* and *v − 1* pixels beyond it, inclusively.
+All window arithmetic is exact integer arithmetic in pixels; floors are toward
+negative infinity. If centring leaves an odd pixel to discard, the right or bottom
+side discards the extra pixel. The retained screen corner is the original copy
+rectangle's screen corner plus the same two shifts. Thus clipping neither changes
+*c* nor recentres or rescales the remaining picture. These rules also apply to
+F10's shadow copy rectangle. Non-finite placement is suppressed under claim 22
+rather than converted to an integer rectangle.
 
 **F7. Recoil cycle.** Imported signed integer travel *ℓ* is in model units; signed
 integer durations *t_c, t_h, t_r* are in ticks. Zero travel starts no cycle; negative
@@ -1118,8 +1155,9 @@ shadow's draw point. Write *Q₀₀, Q₁₀, Q₀₁* for the corners (min x, m
 all per component. The column *(i, j)* lands at *p = o + i Δ_i + j Δ_j* = *(px, py)*, with each component
 formed independently with exact signed integer arithmetic, no wrapping or carry.
 For a present column, mark *(⌊px / 256⌋, ⌊py / 256⌋)* and
-*(⌊px / 256⌋ + 1, ⌊py / 256⌋)*, floors toward negative infinity. The image contains
-both, with no next-row wrap (lead-confirmed departure, MS-24 engine conformance). Every marked pixel takes one value, which the shadow treatment
+*(⌊px / 256⌋ + 1, ⌊py / 256⌋)*, floors toward negative infinity. Both belong to the
+logical image, with no next-row wrap (lead-confirmed departure, MS-24 engine
+conformance); claim 22 and F6 bound the retained shadow window. Every marked pixel takes one value, which the shadow treatment
 darkens.
 
 ## Constants
@@ -1140,6 +1178,7 @@ darkens.
 | voxel-image coordinate origin shift | 128, 128 | pixels | F5, F6 |
 | Rows kept from a lighting table file | 128 | rows | Our engine's limit; a departure for files with more rows (claim 38) |
 | Copy margin | 4 | pixels | Each side |
+| Largest retained image side | 4096 | pixels | Part and shadow images; lead-confirmed engine rule, claim 22 |
 | Sub-pixel precision | 1/256 | pixel | F5 |
 | Depth-level spacing | 1 | model unit per level | Signed unwrapped depth; empty sentinel below every numeric depth (claim 24) |
 | Shadow shift | +3 (2.9999964) | pixels, screen x | Claim 31 |
@@ -1756,6 +1795,7 @@ depend on the state of any quirk switch.
 | Input | Warns | Claim |
 |---|---|---|
 | A vehicle type with the alternative-body option whose rules give it no spawned aircraft | the type | 12 |
+| A model whose part or shadow images would have a copy-rectangle side greater than 4096 pixels, from its imported bounds and applicable poses | once per model, naming the model file and an exceeding pose, whether part, shadow or both exceed the limit | 22 |
 | A voxel model section of normal mode 0 | the model file and the section | 35 |
 | A mode-0 section in which a column's reading reaches past its own column data, in which an empty count is *255 − Nz* or more outside depth mode or *Nz* or more in depth mode, or whose *Nz* is 255 outside depth mode | the model file, the section and, for the first two, the column | 35 |
 | A section with a column whose runs do not add up to exactly *Nz* cells (the total of all its empty and voxel counts, whatever the stop rule of claim 36 does with it) | the model file, the section and the column | 36 |
@@ -1765,8 +1805,10 @@ depend on the state of any quirk switch.
 | A lighting table file with data after its last row | the file | 38 |
 
 The importer finds model cases by reading columns as claims 35 and 36 describe.
-No old buffer-edge, oversized-copy or failed-clear-fit condition gives an extra warning:
-claims 22 and 34 enlarge images and fully initialise fresh draws.
+Crossing the old 256-pixel edge alone or an old failed-clear-fit condition gives no
+extra warning: claims 22 and 34 enlarge logical images and fully initialise fresh draws.
+Exceeding the new 4096-pixel limit gives the single model warning above. Repeated poses,
+appearances and part/shadow exceedances of the same model do not duplicate it.
 
 No additional INI keys select section ties, mode-0 spans or the own-image exclusion.
 The following model-file concepts supplement the key mapping; absence is governed by
@@ -1778,6 +1820,7 @@ S-0007's model-file lookup, not an INI default.
 | Section normal mode and grid height | VXL model | integers in 0 … 255 | none; required model data | mode 0 selection and Nz (claim 35) |
 | Column value sequence and its start/end | VXL model | ordered values in 0 … 255, or an empty-column marker | none; required model data | colour-height relation, with top-down empty counts following each span's colours (Q-0216), and bounded-data warning (claims 35, 36) |
 | Per-section pose | HVA companion | frame-indexed transforms | file lookup and failure treatment in S-0007 | transformed bounds for F8 and own-image overlap in claim 39 |
+| Section bounds, scale and grid dimensions; applicable per-section pose | VXL model and HVA companion | single-precision bounds, scale and transform values; integer grid dimensions | required model data; no new INI key or absent-key default | F5/F6 part placement and F10 shadow placement, 4096-pixel retained window and oversized-model warning; non-finite placement suppresses the affected image (claim 22) |
 
 The voxel lighting table is the archive file `voxels.vpl`, looked up like other game files (S-0005). Claim 38 gives how its content is used. Its byte layout is given by S-0013. The VXL and HVA byte layouts are public; this spec only fixes their interpretation.
 
@@ -2732,7 +2775,7 @@ Colour/no-wrap checks are engine conformance for lead-confirmed departures; the
   to 1 × 1 × 4 model units; A with an empty section enlarging its copy width to
   246, 247 and 300 pixels. Also use a well-formed sparse model whose bounds and
   occupied markers extend beyond 256 image pixels on both axes, with a copy rectangle
-  containing all markers. Repeat with the depth option and with an enlarged shadow
+  containing all markers and both sides below 4096 pixels (claim 22). Repeat with the depth option and with an enlarged shadow
   footprint. Isolate markers at image column 255 to probe right-pixel adjacency.
 - *Procedure:* At speed 6 capture both objects over successive drawn frames, once per
   variant. Remove B and draw A alone, then start a new game in the same session with
@@ -2882,6 +2925,50 @@ settles every section count.
   not alone prove an arbitrary-count rule. No such general relation is asserted in this
   revision, and no untested stable priority is substituted for the original default.
 
+**MS-29 Bounded part and shadow images (claim 22, F6; Q-0470).** Engine
+conformance for lead-confirmed departures, not an oracle experiment.
+- *Setup:* Use an engine rendering fixture with named sparse VXL/HVA models on a
+  stock turreted vehicle type, neutral lighting and fixed flat-ground poses. Render
+  part images and unmasked shadows separately, then together. Use the common skirmish
+  houses, speed 6, director off and all other mods off; a direct rendering fixture
+  supplies the poses without advancing simulation. Place enough isolated, distinct
+  nontransparent markers to identify each retained edge. Choose bounds and poses whose
+  F6 copy widths and heights independently equal 4095, 4096, 4097, 4098 and one million
+  pixels. Include odd and even sides, a long narrow rectangle, negative logical pixel
+  coordinates and a displaced HVA section. These are invented test dimensions.
+- *Procedure:* Import each model, request every test pose twice with caching enabled,
+  and repeat with caching disabled. Compare retained pixel positions and colours
+  losslessly with F5/F6 or F10 predictions, and record image extents and importer
+  warnings. One replay per variant is sufficient. For the limit test use an output
+  surface large enough to distinguish window clipping from ordinary screen clipping.
+  For depth mode, include a voxel with its left pixel immediately outside the retained
+  left edge and its right pixel inside, plus an overlapping in-window voxel: the
+  expected winner is calculated by claim 24 with both voxels contributing. Repeat
+  the left-edge adjacency probe for a shadow column.
+- *Non-finite variants:* In separate fixtures put positive infinity, negative infinity
+  and a value that is not a number in an applicable section bound or HVA transform.
+  Also use finite inputs whose projection under F0 becomes non-finite. Leave another
+  part finite and visibly distinct. Supply an invalid shadow placement separately
+  from valid part placements. Repeat after a valid cached appearance.
+- *Observable:* retained dimensions, edge-marker positions and colours, absence of
+  invalid images, unaffected valid parts, and the count and model identity of warnings.
+- *Expected:* both sides at most 4096 pixels are unchanged; exceeding sides retain
+  exactly F6's central window, with the extra discarded pixel on the right or bottom
+  for odd differences. Million-pixel rectangles retain at most 4096 × 4096 pixels,
+  without wrapping, rescaling or moving retained markers. The off-window adjacency
+  probes retain their right pixels with the predicted coverage. Non-finite placement
+  produces no pixels of the affected part or shadow, including after earlier valid
+  reuse; other finite parts still render. Importing a model with any oversized part
+  or shadow pose warns once, not once per pose, appearance or image role. Models
+  with all copy sides at most 4096 pixels give no size-limit warning. Also replay
+  representative stock models at all body facings: clipping changes none of them.
+- *Falsified if:* any retained side exceeds 4096 pixels, a verified retained marker
+  moves or changes colour, odd centring selects the opposite extra pixel, a qualifying
+  right-hand contribution is lost because its left pixel was outside the window,
+  an invalid image draws pixels, another finite part disappears, or an oversized
+  model gives zero or multiple size-limit warnings. An ordinary screen clip or an
+  incorrectly constructed copy size makes that variant inconclusive rather than a pass.
+
 ## Open questions
 
 - **Turretless vehicle with a barrel part.** A vehicle with a barrel part but no turret is drawn
@@ -2925,5 +3012,6 @@ settles every section count.
 - **Image invalidation.** Claim 26 keeps reuse for a whole game in our engine, while the
   original can invalidate earlier images together at an event not specified here. Is that
   departure, with no switch, acceptable?
-Image enlargement and turret-origin pitching are now settled by the lead as
-unconditional presentation fixes, with no extra pivot import or oversized-image warning.
+Image enlargement and turret-origin pitching are settled as unconditional presentation
+fixes, with no extra pivot import. Claim 22 settles Q-0470's bounded-image policy and
+requires one importer warning per oversized model.
