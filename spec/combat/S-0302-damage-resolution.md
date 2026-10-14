@@ -2,7 +2,7 @@
 id: S-0302
 title: Damage resolution (shot damage, defences, versus values, rounding, healing, health thresholds)
 topic: combat
-revision: 17
+revision: 18
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -505,7 +505,9 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
    building that the demolition warhead puts into a delayed kill (claim 16), if that warhead
    causes delayed kills, and from an airborne infantry unit hit by a demolition warhead of
    infantry-death kind 9 (claim 17). S-0011's departure for the survivor (damage it once per
-   firing and go on) and its importer warning cover all these survivor cases. The zero-amount
+   firing and go on) and its importer warning cover all these survivor cases. At hand-off,
+   confirm this survivor coverage together with S-0011 claim 27, including the distinction
+   between general immunity and an immune bridge repair hut. The zero-amount
    row stops a trigger kill only in the airborne case just named: every other
    target has health at the trigger kill, so the amount is above 0. The self-damage
    row cannot stop a trigger kill (it needs an attacker), and the two no-health rows do not apply to
