@@ -2,13 +2,13 @@
 id: S-0213
 title: Human orders (the order set, when orders apply, and what each order changes)
 topic: simulation
-revision: 15
+revision: 16
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0072, Q-0087]
+requests: [Q-0072, Q-0087, Q-0286]
 supersedes: []
 ---
 
@@ -572,11 +572,20 @@ Terms).
     S-0215 claim 13 specifies when the order for the next route point takes effect. Issuing that
     action is not an immediate destination assignment within the fall-back.
     A house may have at most 128 route holders at once. A
-    route-mode click is refused, with a message and a sound, when the house's route holders plus
+    route-mode click is refused when the house's route holders plus
     the selected units and buildings that are not yet route holders would number more than 128, or when a
     selected object cannot take part in a route. A refused click adds no route point.
-    - Backing: `measurable` (Scenario O8)
-    - Confidence: low. What a committed route does, and how a route point's action is carried out,
+    The refusal gives a message and the game-wide refusal sound. Multiple route-mode refusal
+    notices before the next tick completes share one message-and-sound cue, but completing a
+    tick permits a new cue: a refused click made seconds later in the same running game is not
+    silent because of an earlier refusal. This corrects S-0701 claim 24's once-per-game
+    assertion (joint change listed below).
+    - Backing: `measurable` (Scenario O8, including its repeated-refusal test)
+    The same-tick duplicate-notice limit is `unmeasured`: no setup here creates multiple
+    independent route refusals before one tick completes. The reset's observable consequence
+    on later clicks is tested by O8.
+    - Confidence: high for repeated cues after completed ticks; low for route execution.
+      What a committed route does, and how a route point's action is carried out,
       have not been studied in detail (Open questions); medium for the limit of 128 route holders.
 
 17. **Every order to an actor ends its route.** Any order that names an actor, apart from the
@@ -710,6 +719,34 @@ Terms).
     - Confidence: high for destination equality and the assignments of table T3; medium for
       their observable timing through input and for route following, as in claims 1 and 16
 
+22. **Fresh-profile keyboard bindings (Q-0286).** With the original's default keyboard
+    preferences, table T2's commands are bound to S for stop, X for scatter, G for guard,
+    D for deploy, C for cheer and Z for route mode. The first five act on key press, not
+    key release. Route mode uses Z held down, with release committing the route (claim 16).
+    These are keyboard-preference defaults, not unit-rule values: a player's saved bindings
+    replace them. A fresh profile means no user override of the supplied keyboard preferences,
+    not a preferences file from which individual command entries have been removed. A command
+    entry removed from a successfully loaded preferences file has no binding, rather than
+    automatically regaining its supplied default. This applies to the six commands of table T2,
+    not to the reserved Escape key of claim 23.
+    The three force gestures and entry into attack-move mode are owned by S-0214, not by
+    this table.
+    - Backing: `measurable` (Scenario O19, part a)
+    - Confidence: high
+
+23. **Options and view keys (Q-0286).** In ordinary running skirmish play, Escape opens the
+    in-game options menu. Once open, the stand-still and resumption rules are S-0201 claim 8's,
+    not an order to a selected unit. Escape is reserved
+    for the options command even when the saved keyboard preferences omit or reassign it.
+    With no modifier held and no conflicting saved command binding, holding Left, Right, Up
+    or Down scrolls the battlefield view in that screen direction; releasing an arrow ends
+    that arrow's contribution when the release input is accepted. These four keys are the
+    original's fallback view controls, rather than four entries in table T2. S-0101 claims
+    14 and 15 own displacement, simultaneous directions, scrolling limits and freeze behaviour.
+    This claim does not specify options-dialog closing keys or modifier-assisted scrolling.
+    - Backing: `measurable` (Scenario O19, parts b and c; S-0101 Scenario M7 for scrolling)
+    - Confidence: high
+
 ## Formulas
 
 > cheer passes the rate limit ⇔ *t* > *L* + *R*. *t* is the current tick, *L* the last accepted
@@ -782,7 +819,8 @@ from claim 17. Every row that carries an actor also ends the actor's planned rou
 | Cheer | none | none | All of the issuer's infantry cheer |
 | Route point add, commit, delete | route data | (claim 16) | Route mode (claim 16) |
 
-**Table T2: key commands.** The command keys are the player's own key bindings. "Selected object"
+**Table T2: key commands.** The command keys are the player's own key bindings, initially those
+of claim 22. "Selected object"
 means each object in S-0214's selection order (Terms). *Movable*, *able to fire*, the *deploy check* and
 *deploy readiness* are the input-side conditions of S-0214 (Terms). An object that fails a row's
 condition gets no order.
@@ -858,6 +896,9 @@ only when they actually assign a destination.
   still let the player click it in power mode. The behaviour follows the imported flag, so a mod
   controls it through its data; no switch is proposed.
 - **Session-wide cheer memory** (claim 19): `quirks.cheer_memory_spans_session`.
+- **Repeated route refusal cues** (claim 16). Earlier refusals on completed ticks do not
+  suppress a later click's cue. The same-tick duplicate-notice limit is ordinary feedback
+  coalescing, not a once-per-game quirk.
 - **Stop keeps the behaviour** (claim 8). A stop order leaves the behaviour as it was (apart from
   harvesters) and only removes the target and destination. This is deliberate behaviour and
   needs no switch.
@@ -882,6 +923,9 @@ only when they actually assign a destination.
 
 | User data | Feeds | Form | Absent |
 |---|---|---|---|
+| Player's keyboard preferences, set through the key-binding screen | command keys of table T2 (claim 22) | assigned keyboard key or key combination; preferences, not rules-layer fields | no user override: stop S, scatter X, guard G, deploy D, cheer C, route mode Z; a removed entry in a successfully loaded preferences file: unbound |
+| No rules, art or map key | reserved options-menu key (claim 23) | fixed Escape binding | Escape remains available regardless of saved command preferences |
+| No rules, art or map key | ordinary view scrolling keys (claim 23) | held Left, Right, Up and Down; fallback when not bound to another command | arrow keys; displacement and scroll preferences are S-0101's |
 | Rules `[General]` `MaximumCheerRate` | *R* of claim 19 | integer, ticks (value form of S-0003) | 1 tick |
 | Vehicle type sections, `Harvester` | harvester in claim 8 and table T2 | boolean (S-0003) | no |
 | Building type sections, `WeaponsFactory` | vehicle-factory cell of claim 10 | boolean (S-0003) | no |
@@ -898,7 +942,12 @@ only when they actually assign a destination.
 | Infantry type section, `Sequence`; its art sequence section, `Up` | sequence table and get-up entry used by claim 21 | section name; sequence entry as S-0107 Import mapping defines | no table; a missing entry has zero image frames and refuses a direct get-up request |
 | No data key | order-to-destination assignments of claim 21, and the distinction between attack-order application and later approach | fixed behaviour, not a parsed list of movement orders | no imported order whitelist or chase destination |
 
-The defaults in the Absent column are the values the original gives a field when the type (or the rules data) is created. They are engine constants (absent-key defaults), not values from stock data (confidence: medium). Each rules layer that omits a key keeps the value already in force (S-0006).
+For the rules and type rows, the defaults in the Absent column are the values the original gives
+a field when the type or rules data is created. They are engine constants (absent-key defaults),
+not values from stock rules (confidence: medium). Each rules layer that omits a key keeps the
+value already in force (S-0006). Keyboard preferences are separate player settings, not a rules
+layer: claim 22 distinguishes the supplied fresh profile from an omitted command entry. The
+full keyboard-preferences file encoding is outside this spec.
 
 ## Measurement scenarios
 
@@ -1100,13 +1149,15 @@ game's normal input only, as a player would, and never writes into the game.
   (2) While it follows the route, select it and give a plain move click. (4) After the vehicle has
   arrived, select the 128 infantry, hold the route-mode key and click one cell. Game B: (3) select
   128 infantry, hold the route-mode key, click one cell, keep holding, add 2 more infantry to the
-  selection and click again. Game C: (5) as step 1, then, while the vehicle follows the route and
+  selection and click again. Wait several completed ticks, then repeat the refused click twice,
+  several seconds apart, without changing the selection. Game C: (5) as step 1, then, while the vehicle follows the route and
   before it reaches the first cell, select it and press the stop key.
 - *Runs:* 3 of each game. Route mode involves no random draw.
 - *Observable:* whether the vehicle moves before the key is released; the order in which it
   visits the cells; whether it continues the route after (2) and after (5); whether the clicks of (3) and (4)
-  are refused (message and sound).
-- *Expected:* no movement before release, then the cells in click order; after (2) it goes to the
+  are refused (message and sound), including video and audio of each repeated refusal in game B.
+- *Expected:* each game-B refusal separated by completed ticks gives a message and refusal
+  sound, with no new route point. No once-per-game silence is expected. No movement before release, then the cells in click order; after (2) it goes to the
   new cell and never returns to the route; after (5) it comes to rest and does not go on to any
   cell of the route; in game B the first click of (3) is accepted and the
   second is refused, because 128 route holders plus 2 new ones exceed 128. Step 4 has no expected
@@ -1114,7 +1165,10 @@ game's normal input only, as a player would, and never writes into the game.
   was removed still counts as a route holder (1 + 128 > 128); if it is accepted, it no longer
   counts.
 - *Falsified if:* the vehicle moves before release, it resumes the route after (2) or after (5), or in game B
-  the refusal comes at another count.
+  the refusal comes at another count, or a repeated refusal after completed ticks loses its
+  message or sound solely because an earlier refusal was shown. The repeated-click test
+  distinguishes the claim from a once-per-game limit; it does not isolate same-tick duplicate
+  notices, for which normal input supplies at most one event per cycle (claim 1).
 
 **Scenario O9: one input event per cycle (claims 1 and 3).**
 - *Setup:* one vehicle of the player's, selected, moving towards a far cell *A*. Game speed 6
@@ -1411,7 +1465,54 @@ game's normal input only, as a player would, and never writes into the game.
   inconclusive. Factory release does not by itself test untethered contact break, deploy's
   separate tether gate or aircraft tether timing.
 
+**Scenario O19: default command, options and view keys (claims 22 and 23).**
+- *Setup:* a fresh keyboard profile, a small purpose-made flat skirmish map with an open test
+  area and the bystander isolated as in the preamble. Stock data, director and mods off,
+  speed 2, 800 × 600. Pre-place a selected armed vehicle, an infantry unit and a deploy-capable
+  unit of stock types. For scrolling use a map large enough to keep the view away from its
+  limits. Record the key-binding screen and a video, with the tick and order recorder of
+  the preamble. Do not assume the workaround bindings in Q-0286.
+- *Procedure, part a:* inspect the six command bindings before changing any. With appropriate
+  objects selected, test S during movement, X at rest, G at rest and D on the deploy-capable
+  unit; press C after the cheer interval permits it. Hold Z, click three empty cells and
+  release Z. Observe each key-down and key-up separately. Repeat with stop assigned to an
+  otherwise unused letter through the binding screen. Then restart with a named test copy
+  of the keyboard preferences that removes only the stop-command entry, and test S again
+  during movement. Restore the profile afterwards.
+- *Observable and expected, part a:* the screen shows S, X, G, D, C and Z for the six roles.
+  Their effects match table T2 and Scenarios O5, O6, O7 and O8. The first five issue on press,
+  without a second issue on release; Z defers route following until release. After reassignment,
+  the new stop key issues stop instead of S. With the stop entry removed, S does not stop
+  the vehicle. A different fresh binding, an order issued only on release, movement along
+  the route before releasing Z, or automatic restoration of the removed binding falsifies
+  the corresponding claim.
+- *Procedure, part b:* with the menu closed and no input block, press Escape. Close the menu
+  using its return control. In a named test copy of the keyboard preferences, remove the
+  options-command entry; in a second copy assign it to an unused letter. Restart before
+  each test, and press Escape again.
+- *Observable and expected, part b:* Escape opens the menu in all three unblocked tests,
+  regardless of the saved options entry. Ticks stand still while it is open, as S-0201
+  claim 8 specifies. Failure to open in an ordinary running test, or loss of Escape after
+  changing the preferences, falsifies the corresponding assertion.
+- *Procedure, part c:* pointer in the interior, hold and release each unmodified arrow in
+  turn. Record view displacement by screen captures. Use S-0101 Scenario M7 for exact
+  distances and combined directions rather than giving selected units movement orders.
+- *Observable and expected, part c:* each arrow moves the view in its screen direction,
+  and that contribution stops after release is accepted. A wrong axis or direction, no
+  scrolling in an unblocked interior test, or continuing contribution after accepted release
+  falsifies this claim. No unit receives an order from these default arrow inputs.
+- *Runs and tool:* three runs per part and keyboard-preference variant; manual input or
+  scripted normal input with a read-only recorder. These are proposals, not recorded measurements.
+
 ## Open questions
+
+- Q-0286: claims 22 and 23 answer this spec's default command bindings and options/view-key
+  identities (questions 1 and 3). The current S-0101 draft already answers ordinary arrow
+  scrolling in claims 14 and 15, Scenario M7, since the request was filed. S-0214 already
+  defines the force-fire plus force-select attack-move gesture and command-bar mode in
+  Terms and claim 5, but its physical modifier keys remain its question-2 contribution to
+  complete in the same hand-off. No owned part of Q-0286 remains open here. The keyboard
+  preferences file's full encoding and options-dialog closing shortcuts are outside this request.
 
 - Q-0072: claim 21 answers the order-application contribution in full. S-0215 claim 37
   supplies the approach trigger, gating, renewal and building/deployed-infantry rules
@@ -1466,11 +1567,10 @@ table T1 defer to S-0414 (claims 11 to 14) and S-0405 (claim 10); the game-end d
 2026-10-11 (play to the last side) is S-0414's. Items to confirm against the versions handed
 off together at sign-off:
 
-- **Selection-order correction, joint hand-off:** S-0214 must replace its chronological
-  selection definition and earliest-selected representative tie-break with the selection
-  order used here and in S-0701 claim 18: positive-primary-damage types first, most recently
-  selected first, then other types, earliest selected first. Confirm its definition and
-  tied-representative scenario at sign-off. Claims 1, 2, 7 and 18 here, table T2 and Scenarios
+- **Selection order already agrees:** current S-0214 claim 12 and claim 1's representative
+  tie-break use the order here and in S-0701 claim 18: positive-primary-damage types first,
+  most recently selected first, then other types, earliest selected first. Confirm these
+  matching passages and the tied-representative scenario at sign-off. Claims 1, 2, 7 and 18 here, table T2 and Scenarios
   O2 and O10 use that order; the pending-order limit and leader tie-break themselves are unchanged.
 - **Route timing confirmed:** S-0215 claim 13 already issues the next route point through
   the ordinary order boundary, as claim 16 here states; no immediate destination assignment
@@ -1483,5 +1583,15 @@ off together at sign-off:
   owns pacing. No additional S-0201 change is required. Confirm these passages and the
   glossary's compatible cycle definition against the versions handed off together, not an
   earlier revision list.
+- **Tick boundary already agrees:** S-0203 claims 7 and 8 retain orders after the turn pass,
+  production lines and house updates. Its preserved row labels remain compatible with S-0201's
+  cited timing rules. No change to the order boundary or precedence here is needed.
+- **Route-cue correction needed in S-0701:** claim 24 and Scenario F8 must allow another
+  message-and-sound cue after a completed tick, rather than only after game start. Remove
+  `quirks.route_refusal_notice_once` and its once-per-game description, which are not the
+  original behaviour. Claim 16 and O8 here state the corrected repeated-click consequence.
+- **Q-0286 joint answer:** S-0214 must supply question 2's physical force-gesture keys and
+  attack-move entry explanation, with backing, scenarios and import mapping. Existing role
+  definitions alone do not answer the physical-key question.
 - **Check at sign-off:** S-0208, Terms and claim 11, define the scatter request's threat point, *forced*,
   *move anywhere* and *effectively forced* that claim 9 uses.
