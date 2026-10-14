@@ -2,7 +2,7 @@
 id: S-0214
 title: Order targeting rules (what a click means for each kind of object, and group orders)
 topic: ui
-revision: 15
+revision: 16
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -104,7 +104,12 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
 - **Disabled.** For these input rules: paralysed, or, for a vehicle, playing its death sequence.
 - **Being erased, phasing in.** An object that an erasing weapon (a temporal weapon) has locked
   onto is *being erased* (glossary), from the first lock until the last lets go or the object is
-  removed. An object that is materialising after a chrono jump is *phasing in*.
+  removed. An object that is materialising after a chrono jump is *phasing in*. For an
+  object's own jump with the teleporting locomotor, its delay is *D* ticks from S-0207 F9,
+  and its end tick and harvester exception are S-0207 claim 20 (f)'s. This does not give the
+  duration of a superweapon teleport's after-effect. A destination given to the teleporting
+  locomotor while phasing in is dropped, not saved for the end (S-0207 claim 20 (a), (f)).
+  This is separate from the click refusal of row GC1.
 - **Parasite.** An object that has latched onto a mobile unit and harms it from there (for
   example a unit that climbs inside a vehicle, or one that grabs a ship). Its rules belong to the
   special-abilities specs. A unit with a parasite on it may be held still by a paralysis timer
@@ -283,7 +288,8 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
    - Backing: `measurable` (Scenario T3, including row G3, and Scenarios T2 and T6 for rows G4,
      G5 and G10; Scenario T6 also for an armed garrisoned building). Row G2, and the being-erased
      and phasing-in part of row GC1, by Scenario T9 parts A and B, which click at a tick timed to
-     the state with scripted input.
+     the state with scripted input. The own-jump duration and dropped-destination rule cited
+     in Terms are backed by S-0207 claim 20 and Scenario D22 runs 5 and 6.
    - Confidence: medium
 
 5. **The attack-move gesture.** If the attack-move gesture is held (or attack-move mode is on)
@@ -693,7 +699,7 @@ So a building that is both an armory and a hospital is judged by the hospital ro
 armory rows give no verdict (the actor is below elite rank, and is a deployed
 in-place deployer or gets a docking answer that is neither).
 
-*g*₁ = *e* where *e* is defined, and *g* otherwise.
+**Derived result g₁.** If the entry-verdict table assigns a value to *e*, *g₁* is that value. If that table assigns no value, *g₁* is *g*.
 
 *Deploy value v.*
 
@@ -717,7 +723,7 @@ undefined.
 | x3 | Docking answer *accepts* | enter |
 | x4 | Docking answer *refuses* | no-enter |
 
-*g*₂ = *x* where *x* is defined, and *v* otherwise.
+**Derived result g₂.** If the transport-verdict table assigns a value to *x*, *g₂* is that value. If that table assigns no value, *g₂* is *v*.
 
 *Final action.* The first matching row gives it.
 
@@ -1562,13 +1568,22 @@ on the same objects before the state starts (or, in part C, with the flag named 
   the enemy click that is not the enemy tank (which would put the fallback of claim 3 in doubt for
   an erased actor), by a selection after the own click that is not the own tank, or by a changed
   selection after the cell click.
-- *Part B, phasing in (row GC1).* An own armed tank is teleported by the teleport superweapon (a
-  named test file may grant it at once), with an enemy tank in range of its weapon. On the first
-  ticks the recorder logs it as phasing in: a click on an empty cell (expected no order), and a
-  click on the enemy tank (expected an attack order: row G2 names only being erased). *Falsified
-  by* any order from the first click or no attack order from the second. If the state ends
-  before the script can click, the record says how many ticks it lasted, and this part stays open
-  (Open questions).
+- *Part B, phasing in (row GC1).* On a flat, revealed test map, a named test map override
+  gives an own armed tank the teleporting locomotor of S-0207 Import mapping, without the
+  harvester flag. An enemy tank is in weapon range of its landing cell. At game speed 2,
+  with director and mods off except this named test data, order an own jump far enough that
+  S-0207 F9 gives *D* ≥ 4 ticks. In separate runs, scripted input clicks an empty cell or
+  the enemy tank on the first tick after the jump. Record the jump tick, phasing-in state,
+  selection, orders and destination on every tick through the end of phasing in. Repeat
+  each click case three times. *Expected:* the empty-cell click gives no order (row GC1).
+  The enemy click gives an attack order (row G2 names only being erased). Phasing in ends
+  at S-0207 claim 20 (f)'s tick for *D*. A fresh empty-cell click after that end gives a
+  move order; the earlier refused click is not replayed. S-0207 D22 run 6 separately tests
+  that a destination reaching the locomotor during phasing in is dropped rather than
+  deferred. *Falsified by:* an order from the first cell click, no attack order from the
+  enemy click, a different end tick, or movement towards the refused cell without a fresh
+  order. A run whose recorder shows phasing in already ended at the click is inconclusive
+  and is repeated with a longer jump.
 - *Part C, melee link (rows G1, GC1, claim 15).* A named test file gives an own infantry type a
   weapon whose warhead carries the link flag, and no keep-acting flag; it fires at an enemy vehicle
   with many hit points. Once the recorder logs the infantry unit's target unchanged for several ticks
@@ -1803,7 +1818,6 @@ Rows with no step, `unmeasured`, each for a reason.
   deploying into one).
 - Whether a skirmish with stock data can produce an active ion storm, which the zone rule of
   claim 11 depends on.
-- How many ticks phasing in lasts, and so whether a scripted click reaches it (Scenario T9 part B).
 - The step of an underground unit's height from tick to tick, which decides how closely
   Scenario T4 part B fixes the limit of claim 6 (b).
 - What creates the melee link (Terms, *melee-linked*) beyond the link flag of a warhead, and
