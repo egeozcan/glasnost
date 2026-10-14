@@ -2,7 +2,7 @@
 id: S-0405
 title: Power (output and drain, damaged power plants, low power, blackouts, which buildings stop)
 topic: economy
-revision: 4
+revision: 5
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -73,9 +73,15 @@ house's own update in a tick, which comes after the turn pass and before orders 
   upgrade count and what happens to a wall tower's count past three (*wall tower* and the game-wide
   wall tower type are S-0406's terms). In this spec the upgrades a
   building *holds* are the upgrade types recorded in its three positions, and only they count in its
-  output and drain (claims 1 and 2); an upgrade of a wall tower that S-0406 does not record in one
-  of the three positions adds no output and no drain. While the host remains in play, an upgrade is lost only by being sold or
-  stripped (S-0408, claim 5, which removes the most recently added one first).
+  output and drain (claims 1 and 2) while the building's upgrade count is positive; when that count
+  is 0, none of the recorded upgrades contributes output or drain. An upgrade of a wall tower that
+  S-0406 does not record in one of the three positions adds no output and no drain. While the host
+  remains in play, an upgrade is lost only by being sold or stripped. S-0408 (claim 5) owns the
+  count-based selection: a sale selects the position numbered by the current count, not the
+  highest occupied position. For contiguous upgrades this is the most recently added one.
+  Selling a turret upgrade resets the count to 0 but clears only the sold position; lower recorded
+  upgrades remain, contribute no power, and do not prevent the next sale from selling the host
+  (S-0408 claim 5; *turret upgrade* here means an upgrade whose type has that claim's turret flag).
 - **Needs-power flag, special-power flag, needs-engineer flag.** Boolean fields of a building type
   (Import mapping). The needs-power flag marks a building that stops working under low power
   (claim 8); the special-power flag marks one that stops working during a blackout; the
@@ -113,8 +119,9 @@ house's own update in a tick, which comes after the turn pass and before orders 
 1. **Building output.** A building's output is 0 when it is switched off or being erased.
    Otherwise its output is formed from its *raw output*: the type's base output, plus, for an
    absorbing building whose type's extra output is above 0, the extra output times
-   *n*<sub>a</sub>, plus the base output of each upgrade it holds (Terms, *upgrade positions*). The building
-   makes trunc(raw output × health ratio) (Formulas F1), so a raw output of 0 gives 0. A
+   *n*<sub>a</sub>, plus the base output of each upgrade it holds when its upgrade count is positive
+   (Terms, *upgrade positions*). When its upgrade count is 0, no recorded upgrade adds output. The
+   building makes trunc(raw output × health ratio) (Formulas F1), so a raw output of 0 gives 0. A
    damaged power plant therefore makes less power in proportion to its health, rounded down, and a
    power plant at 0 health makes none. The extra output of a building that is not absorbing adds
    nothing; nothing in the original adds it. A pulse does not change the output: a power plant
@@ -126,9 +133,10 @@ house's own update in a tick, which comes after the turn pass and before orders 
      passengers, the extra output of other buildings, being erased)
 
 2. **Building drain.** A building's drain is 0 when it is switched off or being erased. Otherwise
-   it is the type's base drain, plus the base drain of each upgrade it holds (Terms, *upgrade
-   positions*), plus the type's extra drain while the building's super-gap is active (claim 16). Health does not change the
-   drain: a damaged building needs as much power as an undamaged one. A pulse does not change it
+   it is the type's base drain, plus the base drain of each upgrade it holds when its upgrade count
+   is positive (Terms, *upgrade positions*), plus the type's extra drain while the building's
+   super-gap is active (claim 16). When its upgrade count is 0, no recorded upgrade adds drain.
+   Health does not change the drain: a damaged building needs as much power as an undamaged one. A pulse does not change it
    either.
    - Backing: `measurable` (scenario W1, parts e, f and g; W7 for switching; W12 for upgrades).
      The super-gap extra drain is `unmeasured` for claim 16's reason.
@@ -423,7 +431,7 @@ house's own update in a tick, which comes after the turn pass and before orders 
     of 0. Unlike power orders, this initial-state rule does not exclude the firestorm-wall
     flag: a firestorm-wall type meeting either condition starts switched off with a map flag
     of 0, and one meeting neither starts switched on. The power-mode flag does not decide
-    this initial state.
+    this initial state. This rule differs from approved S-0009 claim 37, which currently says a zero flag starts every building switched off exactly as an in-play switch-off; S-0009 claim 37 must be revised in the same handoff to defer to this claim's conditional rule.
 
     Later power orders follow claim 10 without an exception for map placement. A non-firestorm
     building that started switched off can be switched on by an applicable power-on order
@@ -450,11 +458,11 @@ The health ratio is formed as one double division and the product as one double 
 in floating point in the original. Example (invented values): *P* = 120, *H* = 333, *S* = 500:
 *H* / *S* = 0.666 (RZ₅₃ of it is just below 0.666), times 120 is just below 79.92, so the output is 79.
 
-> *P* = base output + passenger contribution + Σ base output of the upgrades recorded in the building's three upgrade positions (Terms, *upgrade positions*). Integer arithmetic, exact. The passenger contribution is extra output × *n*<sub>a</sub> when the building is absorbing and its extra output is above 0; otherwise it is 0.
+> *P* = base output + passenger contribution + Σ base output of the upgrades recorded in the building's three upgrade positions when its upgrade count is positive (Terms, *upgrade positions*). When its upgrade count is 0, the upgrade sum is 0. Integer arithmetic, exact. The passenger contribution is extra output × *n*<sub>a</sub> when the building is absorbing and its extra output is above 0; otherwise it is 0.
 
 **F2, building drain** (claim 2):
 
-> When the building is switched on and not being erased, drain = base drain + Σ base drain of the upgrades in the three upgrade positions + super-gap contribution; otherwise drain = 0. Integer arithmetic, exact. The super-gap contribution is extra drain while the super-gap is active; otherwise it is 0.
+> When the building is switched on and not being erased, drain = base drain + upgrade contribution + super-gap contribution; otherwise drain = 0. The upgrade contribution is Σ base drain of the upgrades in the three upgrade positions when the upgrade count is positive; it is 0 when the count is 0. Integer arithmetic, exact. The super-gap contribution is extra drain while the super-gap is active; otherwise it is 0.
 
 **F3, power fraction** (claim 4):
 
@@ -844,20 +852,33 @@ switched off the house has full power (W3's second pair).
 - *Setup:* a named test file defines these types. A test plant P of base output 100, strength 500,
   upgrade count 3; upgrade types for P with output 10, output 20 and drain 5; a wall tower test type
   WT (named as the game-wide wall tower type in the test file) of base output 50, upgrade count 4,
-  four upgrade types for WT with outputs 10, 20, 30 and 40.
+  four upgrade types for WT with outputs 10, 20, 30 and 40. Part (f) uses full-health P with two
+  level-less upgrades: a lower upgrade of output 10 and an upper upgrade of output 20 whose type
+  has the turret flag of S-0408 claim 5. A second variant gives the lower upgrade drain 5 instead
+  of output 10. No other building contributes output or drain in either variant.
 - *Procedure:* (a) add the three upgrade types to P one at a time (S-0406 claim 12 gives how),
   reading *O* and *D* after each. (b) Add the four upgrade types to WT one at a time, reading *O*
   after each. (c) In a fresh run, give P all three upgrades and damage it to health 333.
   (d) In a fresh full-health run, give P all three upgrades and sell its upgrades one at a time,
   reading the settled totals after each sale. (e) In a fresh run, give the output-10 upgrade
   a level field of 3 and add it to unupgraded P; the lower positions stay empty (S-0406).
-- *Runs:* three per part.
-- *Observable:* *O* and *D* after each addition, damage or upgrade sale.
+  (f) In each turret variant, read totals with both upgrades attached, sell the upper upgrade,
+  then read settled totals, the upgrade count and the recorded positions. Give another sell
+  order and observe whether the host begins its ordinary sale rather than selling the lower upgrade.
+- *Runs:* three per part and per variant.
+- *Observable:* *O* and *D* after each addition, damage or upgrade sale; in (f), also the count,
+  recorded upgrades and the host's ordinary sale, using the read-only recorder and scripted input.
 - *Expected:* (a) *O* 110, then 130; *D* 5 after the third, *O* still 130. (b) *O* 60, 80, 110 and
   110 again after the fourth. (c) *O* 86 and *D* 5: health scales all raw output, not drain.
   (d) *D* 0 with *O* 130 after the first sale, then *O* 110 and 100 after the next two.
   (e) *O* 110 and *D* 0 despite the empty lower positions.
-- *Falsified if:* any sum differs from the expected value in its part.
+  (f) Before the upgrade sale, the output variant has *O* 130 and *D* 0; the drain variant has
+  *O* 120 and *D* 5. After it, both have *O* 100 and *D* 0, count 0, the lower position still
+  recorded and the upper position empty. The next sale begins the host's ordinary sale in both
+  variants (S-0408 claim 6).
+- *Falsified if:* any sum differs from the expected value in its part, or in (f) the lower
+  position is cleared, the count stays positive, its upgrade still contributes power, or the next
+  sale sells the lower upgrade instead of the host.
 
 **W13: map-requested power state (claim 18, Q-0180).**
 - *Setup:* a named test map defines full-health test building types: P with base output 100,
