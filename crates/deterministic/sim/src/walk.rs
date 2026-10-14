@@ -184,6 +184,8 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
             // spec: S-0208 State and ordering (on the arrival tick, after the placement: claim 17's in-range stop, then claim 16's end-of-walk test)
             approach_stop(w, id);
             end_of_walk(w, id);
+            // spec: S-0417 claim 10 (a tethered infantry unit reports clear on its next cell-arrival update; request Q-0223: the arrival tick)
+            crate::econ::release::arrival(w, id);
             return true;
         }
         let s = walking_speed(w, id);

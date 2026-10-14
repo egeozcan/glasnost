@@ -992,8 +992,6 @@ pub fn part(w: &mut World) {
         }
         pay(w, house, x);
     }
-    // Q-0120 (interim: the way out of a released unit ends in the production part)
-    super::release::leaving_part(w);
 }
 
 /// Applies a build order (S-0404 claim 3).

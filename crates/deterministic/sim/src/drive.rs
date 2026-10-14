@@ -37,6 +37,22 @@ pub struct Track {
     pub cells: Vec<CellXY>,
     /// Crush mode (S-0207 claim 7).
     pub crush: bool,
+    /// The exit track of a factory (S-0417 table T1) instead of a track
+    /// of S-0207.
+    #[serde(default)]
+    pub exit: bool,
+}
+
+impl Track {
+    /// The points before the target, in driven order.
+    fn points(&self) -> Vec<Point> {
+        if self.exit {
+            // spec: S-0417 Terms (the exit track: table T1, distinct from the ordinary movement tracks)
+            crate::econ::release::exit_track_points()
+        } else {
+            tracks::track(self.d, self.e).0
+        }
+    }
 }
 
 /// A driving vehicle's locomotor state.
@@ -234,7 +250,11 @@ fn update_rho(w: &mut World, id: ObjectId, u: &UnitRules) {
     let Some(d) = o.drive.clone() else { return };
     let one = F64::from_i64(1, mode);
     let clamp = |x: F64| x.max(F64::ZERO).min(one);
-    let (rho, rho_t) = if !u.accelerates {
+    let exit = d.track.as_ref().is_some_and(|t| t.exit);
+    let (rho, rho_t) = if exit && u.accelerates {
+        // spec: S-0417 claim 6 (a type marked to accelerate gets no ordinary acceleration on the exit track)
+        (d.rho, d.rho_t)
+    } else if !u.accelerates {
         // spec: S-0207 claim 10 (acceleration flag off: ρ = clamp(ρₜ, 0, 1))
         (clamp(d.rho_t), d.rho_t)
     } else if u.passive {
@@ -650,6 +670,7 @@ fn step_check(w: &mut World, id: ObjectId, u: &UnitRules, repeated: bool, no_cur
                 last: (ob.pos.x, ob.pos.y),
                 cells: cells.clone(),
                 crush,
+                exit: false,
             });
             dd.rho_t = rho_t;
         }
@@ -1045,7 +1066,44 @@ fn spend_and_stop(w: &mut World, id: ObjectId) -> bool {
         ob.dest = None;
         ob.path.steps.clear();
     }
+    if ended {
+        // spec: S-0417 claims 7 and 8 (a tethered vehicle's cell-arrival update; request Q-0223: reaching a track target)
+        crate::econ::release::arrival(w, id);
+    }
     ended
+}
+
+/// Puts a released vehicle on the exit track towards cell `e`'s centre
+/// (S-0417 claims 5 and 6), without a path search.
+pub fn begin_exit_track(w: &mut World, id: ObjectId, e: CellXY) {
+    let mode = w.rules().mode;
+    let Some(o) = w.obj(id) else { return };
+    let (x, y) = (o.pos.x, o.pos.y);
+    // spec: S-0417 F3 (E's centre: (256 Ex + 128, 256 Ey + 128) leptons)
+    let target = (256 * e.x + 128, 256 * e.y + 128);
+    if let Some(ob) = w.obj_mut(id) {
+        ob.path.steps.clear();
+        if let Some(dd) = ob.drive.as_mut() {
+            dd.track = Some(Track {
+                // spec: S-0417 Constants (exit track facing 64: map east, step direction 2)
+                d: 2,
+                e: None,
+                target,
+                target_cell: e,
+                next: 0,
+                last: (x, y),
+                cells: vec![e],
+                crush: false,
+                exit: true,
+            });
+            dd.turning_in_place = false;
+            dd.turn = None;
+            // spec: S-0417 claim 6 and Constants (the exit-track instruction sets the target fraction to 1.0)
+            dd.rho_t = F64::from_i64(1, mode);
+        }
+    }
+    // spec: S-0209 claim 1 (a step sets the flag of the cell it enters at once)
+    claim(w, id, e);
 }
 
 /// Spends the budget on the current track (S-0207 claims 3 to 5). Returns
@@ -1062,7 +1120,7 @@ fn spend(w: &mut World, id: ObjectId) -> bool {
     let Some(tr) = dd.track.clone() else {
         return false;
     };
-    let (pts, _) = tracks::track(tr.d, tr.e);
+    let pts = tr.points();
     let remaining = pts.len() - tr.next + 1; // the target included
     let mut a = dd.budget;
     // spec: S-0207 claim 3 (k = 0 when A ≤ 7, else the largest k with A − 7k ≥ 1, at most the points left)

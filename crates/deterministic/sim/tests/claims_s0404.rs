@@ -1473,7 +1473,7 @@ fn claim_14_cloning() {
     assert_eq!(w.objects.len(), before + 1);
 }
 
-// spec: S-0404 claim 13 (the unit keeps K's rally point as its later destination) and Q-0120 (interim: once on its exit cell it breaks contact and moves on to it)
+// spec: S-0404 claim 13 (the unit keeps K's rally point as its later destination), S-0417 claim 10 (saved as guard spot; the clear report ends contact; the guard-spot row of S-0215 claim 13 gives the rally) and Q-0120 (interim: it walks to its exit cell first)
 #[test]
 fn claim_13_way_out() {
     let mut w = game(&ruleset());
@@ -1483,14 +1483,15 @@ fn claim_13_way_out() {
     w.obj_mut(k).unwrap().guard_spot = Some(rally);
     let grunt = new_unit(&mut w, Kind::Infantry, "GRUNT");
     assert_eq!(release::release(&mut w, k, grunt), Outcome::Released);
-    for _ in 0..200 {
+    assert_eq!(w.obj(grunt).unwrap().guard_spot, Some(rally));
+    for _ in 0..300 {
         step(&mut w);
-        if w.obj(grunt).unwrap().econ.leaving.is_none() {
+        if w.obj(grunt).unwrap().dest == Some(rally) {
             break;
         }
     }
     let o = w.obj(grunt).unwrap();
-    assert!(o.econ.leaving.is_none());
+    assert!(o.econ.exit.is_none());
     assert_eq!(o.contact, None);
     assert_eq!(o.dest, Some(rally));
     // A ground factory's unloading ends once its vehicle is out.

@@ -586,7 +586,7 @@ pub fn docking_cell(w: &World, refinery: ObjectId) -> Option<CellXY> {
 
 /// Whether a harvester is tethered to the refinery it holds contact with
 /// (S-0402 claim 10).
-fn tethered(w: &World, id: ObjectId) -> bool {
+pub(crate) fn tethered(w: &World, id: ObjectId) -> bool {
     w.obj(id).is_some_and(|o| o.contact.is_some()) && st(w, id).tethered
 }
 

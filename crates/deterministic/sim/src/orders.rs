@@ -235,8 +235,8 @@ fn apply_other(w: &mut World, house: HouseId, o: &Order) {
     let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
     match *o {
         Order::Stop { actor } => {
-            // spec: S-0213 claim 8 (live and on the map; tethering, construction and tunnels do not arise yet)
-            if !live_on_map(w, actor) {
+            // spec: S-0213 claim 8 (live, on the map and not tethered; construction and tunnels do not arise yet)
+            if !live_on_map(w, actor) || crate::econ::tethered(w, actor) {
                 return;
             }
             let t = w.tick;
@@ -275,8 +275,11 @@ fn apply_other(w: &mut World, house: HouseId, o: &Order) {
             }
         }
         Order::Scatter { actor } => {
-            // spec: S-0213 claim 9 (a mobile actor, live and on the map: no threat point, forced, not move-anywhere)
-            if !live_on_map(w, actor) || !w.obj(actor).is_some_and(|ob| ob.kind.is_mobile()) {
+            // spec: S-0213 claim 9 (a mobile actor, live, on the map and not tethered: no threat point, forced, not move-anywhere)
+            if !live_on_map(w, actor)
+                || !w.obj(actor).is_some_and(|ob| ob.kind.is_mobile())
+                || crate::econ::tethered(w, actor)
+            {
                 return;
             }
             scatter::request(
@@ -290,8 +293,11 @@ fn apply_other(w: &mut World, house: HouseId, o: &Order) {
             );
         }
         Order::Deploy { actor } => {
-            // spec: S-0213 claim 10 (live, on the map, not an aircraft)
-            if !live_on_map(w, actor) || w.obj(actor).is_some_and(|ob| ob.kind == Kind::Aircraft) {
+            // spec: S-0213 claim 10 (live, on the map, not tethered, not an aircraft)
+            if !live_on_map(w, actor)
+                || crate::econ::tethered(w, actor)
+                || w.obj(actor).is_some_and(|ob| ob.kind == Kind::Aircraft)
+            {
                 return;
             }
             if on_vehicle_factory(w, actor) {
@@ -471,9 +477,20 @@ fn apply_behaviour(w: &mut World, o: &Order, dest_override: Option<Target>) {
     {
         return;
     }
+    // spec: S-0213 table T3 (b) (a tethered actor keeps its link, unless it is in contact with a building of the unloading kind)
+    let keeps = crate::econ::tethered(w, actor)
+        && !w
+            .obj(actor)
+            .and_then(|m| m.contact)
+            .and_then(|c| w.obj(c))
+            .filter(|c| c.kind == Kind::Building)
+            .and_then(|c| w.rules().buildings.get(c.type_index as usize))
+            .is_some_and(|b| b.raw.econ.dock_unload.unwrap_or(false));
     let Some(m) = w.obj_mut(actor) else { return };
-    // spec: S-0213 table T3 (b) (it breaks off any contact)
-    m.contact = None;
+    if !keeps {
+        // spec: S-0213 table T3 (b) (otherwise it breaks off any contact)
+        m.contact = None;
+    }
     // spec: S-0213 table T3 (d) (the resulting behaviour is queued, S-0215 claim 12)
     m.beh.queue(Some(b));
     // spec: S-0215 claim 12 (every such order forgets what an override put aside)
