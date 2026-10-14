@@ -93,6 +93,13 @@ doc = false
 bench = false
 
 [[bin]]
+name = "wav"
+path = "fuzz_targets/wav.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
 name = "lzo"
 path = "fuzz_targets/lzo.rs"
 test = false
