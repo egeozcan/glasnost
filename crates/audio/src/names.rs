@@ -46,6 +46,9 @@ pub struct TypeSounds {
     pub voice_attack: Vec<String>,
     /// `VoiceSpecialAttack` (S-0701 F6).
     pub voice_special_attack: Vec<String>,
+    /// `VoiceSecondaryWeaponAttack`, the normal secondary-weapon response
+    /// (S-0701 F6).
+    pub voice_secondary_attack: Option<String>,
     /// `VoiceEnter` (S-0701 F6).
     pub voice_enter: Option<String>,
     /// `VoiceCapture` (S-0701 F6).
@@ -66,8 +69,8 @@ pub struct TypeSounds {
     pub turret_rotate: Option<String>,
     /// `CreateSound` (S-0701 claim 23).
     pub create: Option<String>,
-    /// The type is the repair-response vehicle (S-0701 F6). Its type-name
-    /// binding is withheld (Q-0338), so no imported type is one yet.
+    /// The type is the repair-response vehicle, `FV` (S-0701 F6, Import
+    /// mapping).
     pub repair_vehicle: bool,
     /// `ChronoInSound`, falling back to the game-wide one (S-0207 Import
     /// mapping).
@@ -114,6 +117,33 @@ pub enum Announcement {
     Defeat,
     /// A unit promoted, to either rank (S-0701 claim 36).
     Promoted,
+}
+
+impl Announcement {
+    /// The fixed announcement entry the event requests (S-0701 claim 36 and
+    /// Import mapping, announcement requests).
+    pub fn entry(self) -> &'static str {
+        // spec: S-0701 Import mapping (announcement requests: fixed section names, looked up ignoring case)
+        match self {
+            Self::CannotDeploy => "EVA_CannotDeployHere",
+            Self::UnitSold => "EVA_UnitSold",
+            Self::ConstructionComplete => "EVA_ConstructionComplete",
+            Self::BaseUnderAttack => "EVA_OurBaseIsUnderAttack",
+            Self::AllyUnderAttack => "EVA_OurAllyIsUnderAttack",
+            Self::HarvesterUnderAttack => "EVA_OreMinerUnderAttack",
+            Self::LowFunds => "EVA_InsufficientFunds",
+            Self::LowPower => "EVA_LowPower",
+            Self::UnitReady => "EVA_UnitReady",
+            Self::UnitLost => "EVA_UnitLost",
+            Self::Building => "EVA_Building",
+            Self::OnHold => "EVA_OnHold",
+            Self::Cancelled => "EVA_Canceled",
+            Self::UnableToComply => "EVA_UnableToComply",
+            Self::RepairComplete => "EVA_UnitRepaired",
+            Self::Defeat => "EVA_YouHaveLost",
+            Self::Promoted => "EVA_UnitPromoted",
+        }
+    }
 }
 
 /// The rules data's sound names, by role.
@@ -376,6 +406,7 @@ impl SoundNames {
                     voice_move: l("VoiceMove"),
                     voice_attack: l("VoiceAttack"),
                     voice_special_attack: l("VoiceSpecialAttack"),
+                    voice_secondary_attack: f("VoiceSecondaryWeaponAttack"),
                     voice_enter: f("VoiceEnter"),
                     voice_capture: f("VoiceCapture"),
                     voice_harvest: f("VoiceHarvest"),
@@ -387,9 +418,8 @@ impl SoundNames {
                     move_sound: l("MoveSound"),
                     turret_rotate: f("TurretRotateSound"),
                     create: f("CreateSound"),
-                    // spec: S-0701 Import mapping (the repair-response exception depends on one vehicle's type name, not an imported field)
-                    // interim: Q-0338 (the type-name binding is withheld: no type is the repair-response vehicle)
-                    repair_vehicle: false,
+                    // spec: S-0701 Import mapping (the repair-response vehicle is the vehicle type named `FV`, its type name compared ignoring case)
+                    repair_vehicle: kind == Kind::Vehicle && name.eq_ignore_ascii_case("FV"),
                     // spec: S-0207 Import mapping (the type's chrono sounds, else the game-wide ones)
                     chrono_in: unit.and_then(|u| {
                         u.chrono_in_sound
@@ -494,19 +524,10 @@ impl SoundNames {
         self.announcements.insert(a, entry.to_owned());
     }
 
-    /// The announcement data entry of a role, where an Import mapping names
-    /// one; `None` otherwise (interim, Q-0325: S-0701 claim 36 withholds the
-    /// names).
+    /// The announcement data entry of a role ([`Announcement::entry`]),
+    /// unless a test or tool set another with [`Self::set_announcement`].
     pub fn announcement(&self, a: Announcement) -> Option<&str> {
-        if let Some(n) = self.announcements.get(&a) {
-            return Some(n);
-        }
-        match a {
-            // spec: S-0415 Import mapping (`EVA_CannotDeployHere`, the refusal announcement's entry)
-            Announcement::CannotDeploy => Some("EVA_CannotDeployHere"),
-            // interim: Q-0325 (no Import mapping gives these entries)
-            _ => None,
-        }
+        Some(self.announcements.get(&a).map_or(a.entry(), String::as_str))
     }
 }
 
@@ -588,7 +609,19 @@ mod tests {
             n.announcement(Announcement::CannotDeploy),
             Some("EVA_CannotDeployHere")
         );
-        assert_eq!(n.announcement(Announcement::UnitSold), None);
+        // spec: S-0701 Import mapping (announcement requests: the fixed entry of each event)
+        assert_eq!(n.announcement(Announcement::UnitSold), Some("EVA_UnitSold"));
+        assert_eq!(
+            n.announcement(Announcement::LowFunds),
+            Some("EVA_InsufficientFunds")
+        );
+        assert_eq!(
+            n.announcement(Announcement::Promoted),
+            Some("EVA_UnitPromoted")
+        );
+        let mut m = n.clone();
+        m.set_announcement(Announcement::UnitSold, "Other");
+        assert_eq!(m.announcement(Announcement::UnitSold), Some("Other"));
     }
 
     // spec: S-0701 Import mapping (the response, event and game-wide keys; `[AI] BuildConst` first three; weapon `Report`; animation `StartSound`, `StopSound`)
@@ -596,7 +629,7 @@ mod tests {
     fn s0701_keys_come_from_the_import_mapping() {
         let mut r = ruleset(None);
         r.registries
-            .insert("vehicles".into(), vec!["Tank".into(), "Medic".into()]);
+            .insert("vehicles".into(), vec!["Tank".into(), "fv".into()]);
         r.registries
             .insert("animations".into(), vec!["Puff".into(), "Flash".into()]);
         let mut tank = ImportedType::default();
@@ -619,9 +652,9 @@ mod tests {
         }
         let vehicles = r.types.entry("vehicles".into()).or_default();
         vehicles.insert("Tank".into(), tank);
-        let mut medic = ImportedType::default();
-        medic.ini.insert("VoiceAttack".into(), "Zap".into());
-        vehicles.insert("Medic".into(), medic);
+        let mut fv = ImportedType::default();
+        fv.ini.insert("VoiceAttack".into(), "Zap".into());
+        vehicles.insert("fv".into(), fv);
         let mut gun = ImportedType::default();
         gun.ini.insert("Report".into(), "Bang1,Bang2".into());
         r.types
@@ -671,9 +704,8 @@ mod tests {
         assert_eq!(t.move_sound, ["Rumble"]);
         assert_eq!(t.turret_rotate.as_deref(), Some("Whirr"));
         assert_eq!(t.create.as_deref(), Some("Ready"));
-        // interim: Q-0338 (no type is the repair-response vehicle until its binding is given)
         assert!(!t.repair_vehicle);
-        assert!(!n.of_type(Kind::Vehicle, 1).unwrap().repair_vehicle);
+        assert!(n.of_type(Kind::Vehicle, 1).unwrap().repair_vehicle);
         assert_eq!(n.report("GUN"), ["Bang1", "Bang2"]);
         assert!(n.report("Other").is_empty());
         assert_eq!(n.anim_report("Flash"), Some("Pop"));

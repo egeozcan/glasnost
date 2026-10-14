@@ -4,10 +4,9 @@
 //!
 //! Sound never feeds back into the simulation (S-0701 claim 29): [`Audio`]
 //! reads effects and the world. The game-side choices of claims 17, 18, 20
-//! and 23 draw from the *unsynchronised* stream (S-0202 claim 11), which the
-//! caller owns and passes in; per-instance draws use the mixer's own
-//! presentation generator (interim, Q-0333); the scenario random stream is
-//! never touched.
+//! and 23 and the per-instance draws of claims 13 and 14 all take the one
+//! *unsynchronised* stream (S-0202 claim 11, S-0701 claim 30), which the
+//! caller owns and passes in; the scenario random stream is never touched.
 
 use std::collections::BTreeMap;
 
@@ -270,11 +269,9 @@ impl Audio {
         &self.mixer
     }
 
-    /// Starts a game: the local player's house, its voice set and the
-    /// presentation generator's seed (interim, Q-0333: the game's seed).
-    pub fn start(&mut self, w: &World, local: Option<HouseId>, seed: u32) {
+    /// Starts a game: the local player's house and its voice set.
+    pub fn start(&mut self, w: &World, local: Option<HouseId>) {
         self.mixer.clear();
-        self.mixer.reseed(seed);
         self.announcer.reset();
         self.local = local;
         self.voice = local_voice_set(w, local);
@@ -306,13 +303,25 @@ impl Audio {
     /// Services the audio at host time `now_ms` (the audio clock): an audio
     /// pass when one is due (claim 12), the next announcement (claim 27),
     /// then the output. Call once per drawn frame, after the frame's events.
-    pub fn frame(&mut self, now_ms: i64) {
-        self.service(now_ms);
+    /// The per-instance draws of the pass and of the rendered samples take
+    /// `unsync`, the client's unsynchronised stream.
+    pub fn frame(&mut self, now_ms: i64, unsync: &mut Rng) {
+        // spec: S-0701 claim 30 (per-instance choices on the shared unsynchronised stream; no separate presentation generator)
+        std::mem::swap(self.mixer.rng_mut(), unsync);
+        self.serve(now_ms);
         self.output.pump(&mut self.mixer);
+        std::mem::swap(self.mixer.rng_mut(), unsync);
     }
 
     /// [`Audio::frame`] without feeding the output (offline rendering).
-    pub fn service(&mut self, now_ms: i64) {
+    pub fn service(&mut self, now_ms: i64, unsync: &mut Rng) {
+        // spec: S-0701 claim 30 (per-instance choices on the shared unsynchronised stream)
+        std::mem::swap(self.mixer.rng_mut(), unsync);
+        self.serve(now_ms);
+        std::mem::swap(self.mixer.rng_mut(), unsync);
+    }
+
+    fn serve(&mut self, now_ms: i64) {
         self.now_ms = now_ms;
         self.mixer.service(now_ms);
         if let Some(id) = self.announcer.next(now_ms, self.mixer.speaking()) {
@@ -1048,13 +1057,21 @@ impl Audio {
                     && weapon::would_use(w, id, *target)
                         .1
                         .is_some_and(|x| w.rules().combat.weapon(x).damage < 0);
-                // The four weapon responses' keys are unnamed (Q-0326): the attack list.
-                let ifv = if heal {
+                let single = if heal {
                     self.single(self.names.voice_ifv_repair.as_ref())
                 } else {
-                    None
+                    // spec: S-0701 F6 (the single response of the weapon chosen against the target: weapon 0 primary, any other secondary; elite or not)
+                    let slot = weapon::would_use(w, id, *target).0;
+                    let elite = veterancy::rank(w, id) == Rank::Elite;
+                    match (slot, elite) {
+                        // spec: S-0701 Import mapping (`VoiceSecondaryWeaponAttack`, the normal secondary-weapon response)
+                        (1.., false) => self.single(ts.voice_secondary_attack.as_ref()),
+                        // interim: Q-0326 (the primary and elite weapon responses' keys are unnamed: the attack list)
+                        _ => None,
+                    }
                 };
-                ifv.or_else(|| self.choose(&ts.voice_attack, unsync))
+                // spec: S-0701 F6 (then the attack list)
+                single.or_else(|| self.choose(&ts.voice_attack, unsync))
             }
             // spec: S-0701 F6 (enter: enter response, then the move list)
             Order::Behaviour {
@@ -1138,6 +1155,7 @@ impl Audio {
             }
             // spec: S-0701 claim 24 (the production-feedback clicks play the game-wide build click; their announcements, claim 28)
             UiCue::BuildStarted | UiCue::BuildResumed => {
+                // interim: Q-0340 (every start, queue and resume click requests the building entry; training is never requested)
                 self.announce(Announcement::Building);
                 screen(self, self.names.gui_build.clone())
             }

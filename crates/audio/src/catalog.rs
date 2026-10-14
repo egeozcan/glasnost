@@ -176,14 +176,9 @@ fn as_f64(b: Binary) -> f64 {
 
 /// The entry level of F1 for a volume percentage as read.
 pub fn entry_level(v: Binary, full_volume_16383: bool) -> i32 {
-    if !full_volume_16383 {
-        // spec: S-0701 Edge cases (quirks.full_volume_16383 off: 100 % gives 16384)
-        let x = (as_f64(v) / 100.0).clamp(0.0, 1.0);
-        return if x.is_nan() {
-            0
-        } else {
-            (x * f64::from(FULL)) as i32
-        };
+    // spec: S-0701 F1 and Edge cases (quirks.full_volume_16383 off: 100 or more gives exactly 16384; below 100 the formula is unchanged)
+    if !full_volume_16383 && as_f64(v) >= 100.0 {
+        return FULL;
     }
     // spec: S-0701 F1 (e = ⌊clamp(v × 0.01, 0, 1) × 16384⌋, truncated toward zero)
     (scaled(v) * f64::from(FULL)) as i32
@@ -271,12 +266,17 @@ fn placement(stored: &[u8]) -> Option<Placement> {
     let mut any = false;
     for w in words(stored) {
         any = true;
-        // spec: S-0701 claim 2 and Import mapping (GLOBAL, LOCAL and SHROUD act; SCREEN and LOCAL exclude each other, the last given wins; the other words do nothing)
-        match value::named(w, w.len(), &["GLOBAL", "LOCAL", "SHROUD", "SCREEN"]) {
+        // spec: S-0701 claim 2 and Import mapping (GLOBAL, LOCAL and SHROUD act; the last of SCREEN and LOCAL, and of UNSHROUD and SHROUD, applies; the other words have no established effect)
+        match value::named(
+            w,
+            w.len(),
+            &["GLOBAL", "LOCAL", "SHROUD", "SCREEN", "UNSHROUD"],
+        ) {
             Some(0) => p.global = true,
             Some(1) => p.local = true,
             Some(2) => p.shroud = true,
             Some(3) => p.local = false,
+            Some(4) => p.shroud = false,
             _ => {}
         }
     }
@@ -652,5 +652,22 @@ mod tests {
         assert_eq!(entry_level(percent(-20), true), 0);
         assert_eq!(entry_level(percent(250), true), 16384);
         assert_eq!(entry_level(percent(50), true), 8191);
+        // spec: S-0701 F1 (quirk off: 100 or more is exactly 16384; below 100 the formula is unchanged)
+        assert_eq!(entry_level(percent(250), false), 16384);
+        assert_eq!(entry_level(percent(50), false), 8191);
+        assert_eq!(entry_level(percent(0), false), 0);
+    }
+
+    // spec: S-0701 claim 2 and scenario B2 (e) (the last of SCREEN and LOCAL, and of UNSHROUD and SHROUD, applies)
+    #[test]
+    fn placement_words_last_one_applies() {
+        let c = cat("[SoundList]\n0=A\n1=B\n2=C\n3=D\n\n\
+             [A]\nType=local screen\n\n[B]\nType=screen local\n\n\
+             [C]\nType=shroud unshroud\n\n[D]\nType=unshroud shroud\n");
+        let p = |n: &str| c.entry(c.resolve(n).unwrap()).placement;
+        assert!(!p("A").local);
+        assert!(p("B").local);
+        assert!(!p("C").shroud);
+        assert!(p("D").shroud);
     }
 }

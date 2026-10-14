@@ -299,8 +299,7 @@ impl Client {
         audio.set_bank(install.bank.clone());
         audio.set_voices(voices);
         audio.set_names(install.names.clone());
-        // interim: Q-0333 (the presentation generator takes the game's seed)
-        audio.start(w, Some(s.play.local), s.play.game.replay().setup.seed);
+        audio.start(w, Some(s.play.local));
     }
 
     /// A user gesture happened: the browser lets sound start now.
@@ -529,7 +528,7 @@ impl Client {
                 // spec: S-0701 F2 (the position's place on screen: S-0101's projection with its height)
                 project: glasnost_render::projection::project_lifted,
             });
-            a.frame(now_ms);
+            a.frame(now_ms, &mut self.unsync);
         }
         if let Some(end) = s.play.end(period_ms(s.speed)) {
             self.shell.game_over(end);

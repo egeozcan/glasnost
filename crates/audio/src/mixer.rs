@@ -10,8 +10,8 @@
 //! which is formed exactly, so it renders offline and the tests check exact
 //! samples. Sound never feeds back into the simulation (claim 29): the mixer
 //! only reads the clips and positions it is given, and its draws come from
-//! its own presentation generator (interim, Q-0333), never the scenario
-//! random stream.
+//! the stream it holds, which [`crate::Audio`] makes the client's
+//! unsynchronised stream (claim 30), never the scenario random stream.
 
 use std::collections::VecDeque;
 use std::sync::Arc;
@@ -408,8 +408,9 @@ pub struct Mixer {
 
 impl Mixer {
     /// A mixer rendering stereo at `output_rate` frames per second, drawing
-    /// its per-instance choices from a presentation generator seeded with
-    /// `seed` (interim, Q-0333: the S-0202 generator with the game's seed).
+    /// its per-instance choices from an S-0202 stream seeded with `seed`.
+    /// [`crate::Audio`] lends it the client's unsynchronised stream instead
+    /// while it services (claim 30).
     pub fn new(output_rate: u32, seed: u32, quirks: MixQuirks) -> Self {
         Self {
             rate: output_rate.max(1),
@@ -418,7 +419,7 @@ impl Mixer {
             instances: Vec::new(),
             channels: [None; CHANNELS],
             next: 0,
-            // interim: Q-0333 (per-instance draws on a separate presentation generator)
+            // spec: S-0701 claim 30 (per-instance draws on the unsynchronised stream, lent by the caller)
             rng: Rng::new(seed),
             now: 0,
             last_pass: None,
@@ -440,9 +441,15 @@ impl Mixer {
         self.rng = Rng::new(seed);
     }
 
-    /// The presentation generator (tests).
+    /// The stream the per-instance draws take (tests).
     pub fn rng(&self) -> &Rng {
         &self.rng
+    }
+
+    /// The stream the per-instance draws take, to lend it the shared
+    /// unsynchronised stream (claim 30).
+    pub fn rng_mut(&mut self) -> &mut Rng {
+        &mut self.rng
     }
 
     /// Sets the battlefield view (call every frame).
@@ -674,8 +681,7 @@ impl Mixer {
     pub fn service(&mut self, now_ms: i64) -> bool {
         self.now = now_ms;
         self.start_waiting();
-        // spec: S-0701 claim 12 (a pass is eligible only when more than 33 ms have elapsed since the preceding one)
-        // interim: Q-0333 (a pass at the first service more than 33 ms after the last pass)
+        // spec: S-0701 claim 12 and 30 (a pass is eligible only when more than 33 ms of the audio clock have elapsed since the preceding one; the interval is a lower bound)
         if self.last_pass.is_some_and(|t| now_ms - t <= PASS_MS) {
             return false;
         }
@@ -1076,7 +1082,7 @@ impl Mixer {
             }
         }
         if let Some(s) = self.speech.as_mut() {
-            // interim: Q-0325 (announcements at full level, centred, whatever the volume option)
+            // spec: S-0701 claim 35 (announcements skip the master level and the sound volume option; the voice option is at full, centred)
             let unity = 1 << 16;
             mix(&mut s.voice, &mut self.acc, 0, frames, unity, unity);
             if (s.voice.pos >> 32) as usize >= s.voice.clip.frames() {

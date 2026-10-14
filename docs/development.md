@@ -355,11 +355,11 @@ Interim rules and gaps:
 
 ## Audio (M5b)
 
-`glasnost-audio` turns what the game reports into sound, following S-0701 (sound selection, revision 2). It never feeds back into the simulation, and nothing in it is simulation state. The claim 29 test checks that a game's state hash is the same with and without audio.
+`glasnost-audio` turns what the game reports into sound, following S-0701 (sound selection, revision 3). It never feeds back into the simulation, and nothing in it is simulation state. The claim 29 test checks that a game's state hash is the same with and without audio.
 
 - **Samples (`bank`).** `SoundBank` maps names (case-insensitive) to samples and decodes each one on first use (`clip`), caching the result. A name that does not decode is remembered as a failure. Sources: IDX/BAG banks (`add_idx`), AUD and plain PCM WAVE files (`add_file`, with WAVE read by `glasnost_fmt::pcm::Pcm::from_wav`), and decoded PCM (`add_pcm`). `bank::discover(&Vfs)` builds the one sample bank of S-0701 claim 34 from `AUDIO.IDX` and `AUDIO.BAG`, each found through the game's file lookup (S-0005), so either may be an archive member or a loose file. It returns a `DiscoverReport` (index found, index without a readable data file, sample count). Sound entries play only bank samples.
-- **Sound entries (`catalog`).** `SoundCatalog::from_ini` reads the sound database (S-0701 claims 1 to 3): samples, control and placement words, levels (F1), priority, limit, range, delay, pitch shift and attack/decay. The install reads the sound and speech databases (S-0005 Import mapping) into `Install::sounds` and `Install::speech`. The client builds the catalogs at each game start, under that game's quirk switches.
-- **Announcement entries (`speech`).** `SpeechCatalog::from_ini` reads the speech database (claim 26). `Announcer` keeps one line playing at a time and queues the others by priority (claim 27). The sample is chosen by the local house's voice set. Announcement samples are separate files, the eight-character name plus `.wav` (`speech::file_name`, claim 34), never bank samples. The client's start job reads the local voice set's files (`SpeechCatalog::files`) through the file lookup and hands them to `Audio::set_voices`. Announcements skip the master level and the sound volume option (claim 35); our engine has no options screen, so the voice option stays at full.
+- **Sound entries (`catalog`).** `SoundCatalog::from_ini` reads the sound database (S-0701 claims 1 to 3): samples, control and placement words (the last of `shroud` and `unshroud` applies), levels (F1, and with `quirks.full_volume_16383` off an entry of 100 or more is at full), priority, limit, range, delay, pitch shift and attack/decay. The install reads the sound and speech databases (S-0005 Import mapping) into `Install::sounds` and `Install::speech`. The client builds the catalogs at each game start, under that game's quirk switches.
+- **Announcement entries (`speech`).** `SpeechCatalog::from_ini` reads the speech database (claim 26). `Announcer` keeps one line playing at a time and queues the others by priority (claim 27). Each announcement requests a fixed entry (`Announcement::entry`, S-0701 Import mapping), and the sample is chosen by the local house's voice set. Announcement samples are separate files, the eight-character name plus `.wav` (`speech::file_name`, claim 34), never bank samples. The client's start job reads the local voice set's files (`SpeechCatalog::files`) through the file lookup and hands them to `Audio::set_voices`. Announcements skip the master level and the sound volume option (claim 35); our engine has no options screen, so the voice option stays at full.
 - **Names by role (`names`).** `SoundNames::from_ruleset` reads the sound keys the specs name from the imported rules: the per-type keys (S-0701 Import mapping, S-0415, S-0107, S-0210, S-0207, S-0214), the weapon reports, the animations' start sounds (S-0109 claim 13) and the game-wide keys (S-0408, S-0410 claim 3, S-0416 claim 4, S-0701). Lists follow S-0003 claim 12 and `quirks.list_items_untrimmed`.
 - **Mixer (`mixer`).** `Mixer` is integer only and mixes interleaved stereo at the output rate. It provides:
   - placement on screen in half-pixels (F2), levels and truncation (F3), and attenuation and balance (F4);
@@ -372,7 +372,7 @@ Interim rules and gaps:
   - **wasm32:** `web::WebOutput` schedules 1024-frame AudioBuffers on an AudioContext. The context starts suspended and is resumed by the first pointer, key or touch gesture. `Audio::resume` can also be called from an input handler.
   - **Native:** the `native-output` feature (off by default) pipes 16-bit stereo to `pw-cat`, `pacat` or `aplay`. This is a stopgap: an in-process device crate (cpal) could not be fetched offline when M5b was written, and the default build needs no system audio headers.
   - **Otherwise:** `NullOutput`, which discards voices, is used and its state names the reason.
-- **Events (`Audio`).** The game client owns one `Audio` (`Audio::platform()` picks the output). At each game start it calls `set_quirks`, `set_catalog`, `set_speech`, `set_bank`, `set_voices`, `set_names` and `start(world, local_house, seed)`. Then it calls:
+- **Events (`Audio`).** The game client owns one `Audio` (`Audio::platform()` picks the output). At each game start it calls `set_quirks`, `set_catalog`, `set_speech`, `set_bank`, `set_voices`, `set_names` and `start(world, local_house)`. Then it calls:
   - after each tick, `tick(world, effects, unsync)`. This plays:
     - the hit, shot, death and animation effects (claims 20 to 22), and the game-wide building damage and death sounds for building types with none of their own (claim 37);
     - the response slots (claim 16);
@@ -380,20 +380,20 @@ Interim rules and gaps:
     - the low-funds, low-power, base-attack and unit-lost announcements (claim 28, F7).
   - after input:
     - `selected` for the first object each input selects (claim 17);
-    - `ordered` for a click that gave orders (claim 18, F6);
+    - `ordered` for a click that gave orders (claim 18, F6). The repair vehicle (`FV`) repairing plays the repair response; an attack with a secondary weapon by a non-elite object plays its secondary-weapon response;
     - `key` for the guard, stop and scatter commands (claim 19);
-    - `cue(UiCue)` for the interface sounds (claim 24, S-0410 claim 3, S-0416 claim 4) and the building placement sound. Under claim 24 the start, queue, resume, hold and cancel clicks play the build click with their announcement. A busy production line gives only the unable-to-comply announcement, and a refused placement click only the cannot-deploy-here announcement. A scroll click past the strip's end plays the refusal sound.
-  - every frame, `set_view` (the view's origin and size, with S-0101's projection) and `frame(now_ms)`, which runs the audio passes and pumps the output.
+    - `cue(UiCue)` for the interface sounds (claim 24, S-0410 claim 3, S-0416 claim 4) and the building placement sound. Under claim 24 the start, queue, resume, hold and cancel clicks play the build click with their announcement (start, queue and resume all request the building entry, Q-0340). A busy production line gives only the unable-to-comply announcement, and a refused placement click only the cannot-deploy-here announcement. A scroll click past the strip's end plays the refusal sound.
+  - every frame, `set_view` (the view's origin and size, with S-0101's projection) and `frame(now_ms, unsync)`, which runs the audio passes and pumps the output.
 
-  Game-side choices take raw values from the client's unsynchronised stream (S-0202 claim 11).
+  Game-side choices and the mixer's per-instance draws all take raw values from the client's one unsynchronised stream (S-0202 claim 11, S-0701 claim 30). `frame` and `service` lend that stream to the mixer for the pass and take it back.
 - **Not modelled yet.**
   - Claim 22's animation stop sound: the simulation reports no animation end.
   - Claim 25's lightning sounds: there is no weather storm.
   - Enslaved and deactivated objects do not exist yet, so the normal response lists always apply (claim 17).
   - Sounds the simulation does not report yet: crushing (S-0210), chrono departure and arrival (S-0207), entering and leaving water, idle comments and undeploying (S-0107).
-  - Claim 24's refusals that need a signal from the simulation: a production request refused as it is applied (full queue or build limit, S-0404), and a place order that fails as it is applied. The route-mode refusal (S-0213 claim 16, `quirks.route_refusal_notice_once`) is absent too, because the client has no route mode yet.
+  - Claim 24's refusals that need a signal from the simulation: a production request refused as it is applied (full queue or build limit, S-0404), and a place order that fails as it is applied. The route-mode refusal (S-0213 claim 16) is absent too, because the client has no route mode yet.
   - Claim 35's voice volume option: there is no options screen, so it is at full.
-  - Claim 36's defeat, victory, player-defeated and alliance announcements, and the play-speech trigger action as an interrupt. Their entry names are withheld anyway (Q-0325).
+  - Claim 36's defeat, victory, player-defeated and alliance announcements, and the play-speech trigger action as an interrupt. Structure-sold announcements are not raised either.
 - **Viewer.** The asset viewer's `Player` (`preview.rs`) is unchanged and still plays previews natively through a command-line player.
 
 S-0701 answers these earlier interim rules:
@@ -403,30 +403,30 @@ S-0701 answers these earlier interim rules:
 - Q-0264, the weapon report, death and damage sounds;
 - Q-0265, the responses of their own kind;
 - Q-0266, the sidebar sounds;
-- Q-0261, which announcement plays for which event, except for the data entries, which Q-0325 carries;
+- Q-0261, which announcement plays for which event;
 - Q-0263, which files hold the samples (claim 34), except for which copy of a name listed twice wins;
 - Q-0332, the building damage and death sounds (claim 37);
-- the part of Q-0325 about announcement files and their level (claims 34 and 35).
+- Q-0325, the announcement entries, files and level (claim 36, Import mapping, claims 34 and 35);
+- Q-0338, the repair-response vehicle (Import mapping, revision 3).
 
 Provisional rules of the audio, each tied to a request:
 
 | Where | Interim rule | Request |
 |---|---|---|
 | `bank::SoundBank::add_idx` | when the index lists a name twice, the first copy wins | Q-0263 |
-| `names::SoundNames::announcement`, `speech`, `Audio::announce` | only the cannot-deploy announcement resolves to an entry (S-0415). Claim 36 withholds the other entry names, so the other roles are raised, throttled and queued, but silent | Q-0325 |
-| `Audio::tick`, `Audio::ordered` | the weapon response, undeploy response and death response keys are not read. An attack order uses the attack list, deployed infantry's unload or deploy order plays nothing, and a death plays only the death sound list | Q-0326 |
+| `Audio::tick`, `Audio::ordered` | the primary and elite weapon response, undeploy response and death response keys are not read. Such an attack order uses the attack list, deployed infantry's unload or deploy order plays nothing, and a death plays only the death sound list | Q-0326 |
 | `Audio::tick` | a weapon report plays entry 0 of the weapon's list, with no draw | Q-0327 |
 | `Audio::ordered`, `play` | the selection is kept in selection order. The responder is the most recently selected object of a positive-primary-damage type, else the earliest selected. It responds when the click gave it an order | Q-0328 |
 | `mixer` | a delayed instance plays the immediate mode's partition, keeps one body sample across loops, takes no startup draw and has no waits | Q-0329 |
 | `Audio::tick`, `names` | an absent game-wide sound key plays nothing. With no speak delay, the low-funds announcement is raised once | Q-0330 |
 | `Audio::tick` (F7) | the radar event's zoom-in phase lasts 0 ticks. The events are kept for announcements only | Q-0331 |
-| `mixer`, client | per-instance draws use a separate S-0202 generator seeded with the game's seed. A pass runs at the first frame more than 33 ms after the last. The crowded master level reaches its target at once | Q-0333 |
+| `mixer` | the crowded master level reaches its target at once | Q-0333 |
 | `catalog::pair` | the two numbers of delay and pitch shift are split on spaces, tabs and commas. A missing or unreadable second number repeats the first | Q-0334 |
 | `Audio::selected` | selecting any other house's object takes the selection draw and stays silent | Q-0335 |
 | `play` | a guard, stop or scatter key sounds once per press, and only when it issued orders | Q-0336 |
 | `Audio::tick` | the turret rotation sound starts while the turret turns and finishes its loop pass once it stops, with no grace counter | Q-0337 |
-| `names::SoundNames::from_ruleset` | no type is the repair-response vehicle of F6, whose type-name binding is withheld, so its repair response never plays | Q-0338 |
 | `play::Play::scroll_icons` | a scroll click plays the refusal sound only when it cannot move the strip at all | Q-0339 |
+| `Audio::cue` | every start, queue and resume click requests the building entry; the training entry is never requested | Q-0340 |
 
 ## Game client (M5b)
 

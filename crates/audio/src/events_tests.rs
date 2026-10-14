@@ -106,7 +106,7 @@ fn audio_with(w: &World, names: &[&str], q: Quirks) -> Audio {
     }
     a.set_bank(bank);
     a.set_catalog(cat);
-    a.start(w, Some(ME), 1);
+    a.start(w, Some(ME));
     a.set_view(view());
     a
 }
@@ -117,7 +117,7 @@ fn audio(w: &World, names: &[&str]) -> Audio {
 
 /// The entries of every live instance after a pass, in channel order.
 fn heard(a: &mut Audio, now: i64) -> Vec<String> {
-    a.service(now);
+    a.service(now, &mut Rng::new(1));
     let on: Vec<EntryId> = a.mixer().channel_entries().into_iter().flatten().collect();
     on.iter()
         .map(|e| a.catalog().entry(*e).name.clone())
@@ -230,6 +230,7 @@ fn speaker(t: TypeSounds) -> (World, ObjectId, Audio) {
         &w,
         &[
             "Yes0", "Yes1", "Yes2", "Go", "Hit", "Special", "In", "Take", "Dig", "Up", "Mend",
+            "Second",
         ],
     );
     let mut n = SoundNames::default();
@@ -360,6 +361,7 @@ fn order_response_table() {
         voice_capture: Some("Take".into()),
         voice_harvest: Some("Dig".into()),
         voice_deploy: Some("Up".into()),
+        voice_secondary_attack: Some("Second".into()),
         ..TypeSounds::default()
     };
     let (mut w, tank, mut a) = speaker(full.clone());
@@ -382,6 +384,7 @@ fn order_response_table() {
     };
     assert_eq!(say(&mut a, &w, b(Behaviour::Move, false), &mut u), ["Go"]);
     assert_eq!(say(&mut a, &w, b(Behaviour::Attack, true), &mut u), ["Go"]);
+    // spec: S-0701 F6 (weapon 0 chosen: not the secondary-weapon response); interim: Q-0326 (the primary response key is unnamed: the attack list)
     assert_eq!(
         say(&mut a, &w, b(Behaviour::Attack, false), &mut u),
         ["Hit"]
@@ -962,14 +965,14 @@ fn announcement_files_are_apart_from_the_bank() {
     a.set_speech(s);
     a.set_names(names);
     a.announce(Announcement::Building);
-    a.service(1000);
+    a.service(1000, &mut Rng::new(1));
     assert!(
         !a.mixer().speaking(),
         "a bank sample is not an announcement file"
     );
     add_voices(&mut a, &strings(&["Bld0", "Bld1", "Bld2"]));
     a.announce(Announcement::Building);
-    a.service(2000);
+    a.service(2000, &mut Rng::new(1));
     assert!(a.mixer().speaking());
     assert_eq!(crate::speech::file_name("Bld0"), "Bld0.wav");
 }
@@ -1014,17 +1017,17 @@ fn announcements_one_at_a_time() {
     let set = a.voice_set();
     assert!(set < 3);
     a.cue(UiCue::BuildStarted);
-    a.service(1000);
+    a.service(1000, &mut Rng::new(1));
     assert!(a.mixer().speaking());
     // A standard request while one plays and the place is empty waits.
     a.cue(UiCue::BuildHeld);
     render(&mut a, 100);
     assert!(!a.mixer().speaking());
-    a.service(1400);
+    a.service(1400, &mut Rng::new(1));
     assert!(!a.mixer().speaking());
-    a.service(1500);
+    a.service(1500, &mut Rng::new(1));
     assert!(!a.mixer().speaking());
-    a.service(1501);
+    a.service(1501, &mut Rng::new(1));
     assert!(a.mixer().speaking());
 }
 
@@ -1057,7 +1060,7 @@ fn speech_of(roles: &[&str]) -> SpeechCatalog {
 
 /// Whether an announcement started at `now` after an earlier one ended.
 fn announced(a: &mut Audio, now: i64) -> bool {
-    a.service(now);
+    a.service(now, &mut Rng::new(1));
     let s = a.mixer().speaking();
     render(a, 100);
     s
@@ -1236,11 +1239,31 @@ fn state_hash_without_audio() {
             let fx = std::mem::take(&mut w.effects);
             if let Some(a) = a.as_mut() {
                 a.tick(&w, &fx, &mut u);
-                a.service(i64::from(t) * 67);
+                a.service(i64::from(t) * 67, &mut u);
                 render(a, 64);
             }
         }
         glasnost_sim::save::state_hash(&w)
     };
     assert_eq!(run(true), run(false));
+}
+
+// spec: S-0701 claim 30 (the per-instance draws take the caller's unsynchronised stream; no separate presentation generator)
+#[test]
+fn instance_draws_take_the_shared_stream() {
+    let w = world();
+    let mut a = audio(&w, &["Wobble"]);
+    let mut e = SoundEntry::new("Wobble", &["Wobble"]);
+    e.fshift = (-5, 7);
+    let mut cat = SoundCatalog::new();
+    cat.insert(e);
+    a.set_catalog(cat);
+    let own = a.mixer().rng().clone();
+    a.play_named(Some("Wobble"), Where::Screen)
+        .expect("requested");
+    let mut u = Rng::new(5);
+    let before = u.taken();
+    a.service(100, &mut u);
+    assert!(u.taken() > before, "the pass drew from the shared stream");
+    assert_eq!(a.mixer().rng(), &own, "the mixer's own stream is untouched");
 }
