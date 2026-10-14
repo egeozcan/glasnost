@@ -2,7 +2,7 @@
 id: S-0407
 title: Tech tree (what a house may build: prerequisites and generic groups, tech level, country lists, stolen tech, build limits, captured buildings, secret labs)
 topic: production
-revision: 7
+revision: 8
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -429,7 +429,7 @@ stream*, *game start*, *absent-key default*, *importer warning*, *quirk switch*,
     | *n* = 0, *N* = 0 or *n* > *N* | none | its fixed secret type if it has one; none from the lists |
     | 1 ≤ *n* ≤ *N* | one ranged draw *r*ₖ over 0 … *N* − 1 − *k* for every lab, a lab with a fixed secret type included (F4) | its fixed secret type if it has one; otherwise entry *r*ₖ of the concatenated list, counted from 0 |
 
-    On the random-state recorder the labs' draws come after the draws taken while the starting units are placed. After the secret-lab choices, the game-start recalculation takes tile-animation creation draws in visiting order, before tick 0 (S-0202 claim 14). S-0412 claim 14 owns the broader game-start draw order; its current correction agrees that secret-lab choices are not an exhaustive last-draw boundary. Because the range shrinks but the entry is taken by position, two labs can get the same type and the last entries can never be drawn by later labs (`quirks.secret_lab_pick_by_position`). The range of the last draw is 0 … 0 when *N* − *k* = 1, and a ranged draw over a single value consumes no raw value (S-0202 claim 4), so that draw leaves the stream state unchanged.
+    On the random-state recorder the labs' draws come after the draws taken while the starting units are placed. After the secret-lab choices, the game-start recalculation takes tile-animation creation draws in visiting order, before tick 0 (S-0202 claim 14). S-0412 claim 14 owns the broader game-start draw order and already states that secret-lab choices precede end-of-loading tags and game-start tile-animation draws, without asserting that they are the last draws before tick 0. Because the range shrinks but the entry is taken by position, two labs can get the same type and the last entries can never be drawn by later labs (`quirks.secret_lab_pick_by_position`). The range of the last draw is 0 … 0 when *N* − *k* = 1, and a ranged draw over a single value consumes no raw value (S-0202 claim 4), so that draw leaves the stream state unchanged.
     - Backing: `measurable` (scenario T9, with the random-state recorder of the measurement setup)
     - Confidence: medium
 
@@ -553,6 +553,8 @@ Observable ordering: a type unlocked by a placed building appears in the house u
 after the placement order is applied, while the building is still in its construction state.
 
 ## Edge cases and quirks
+
+- **Sidebar tie order** (`quirks.sidebar_tie_newest_first`, default on = the original): when fully tied newly admitted icons are ordered, the higher registration index comes first. With the switch off, the lower registration index comes first. Existing icons keep their earlier positions when another factory makes them available.
 
 - `quirks.unscored_vehicle_stays_counted` (default original; owned by S-0414, claim 4). It is the
   single switch for the present count of vehicle types as well: claim 8 (b) reads the count it
