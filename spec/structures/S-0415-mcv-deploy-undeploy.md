@@ -2,7 +2,7 @@
 id: S-0415
 title: Deploying a vehicle into a building and packing it up again (construction yard vehicles and other deploying vehicles)
 topic: structures
-revision: 9
+revision: 10
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -363,7 +363,10 @@ vehicle's movement is heading to (S-0207). In addition:
       deploy facing outside 0 … 255; D6's 2 × 2 variant and position recorder for the small
       foundation and cell-centre cases; S-0402 H19 for the automatic old-cell destination and
       H23 for manual slave-group transitions; D17 and S-0402 H24 for temporary-group
-      creation and disposal, H25 for the shared guard spot)
+      creation, disposal and losses, H25 for the shared guard spot). Temporary-hidden-slave
+      tag notifications are `unmeasured`: no established data-only setup attaches a tag to
+      a generated slave. S-0011 claim 19 and its conditional T25 B retain that boundary.
+      Disappearance and losses alone do not test tag evaluation
     - Confidence: high (position, facing, health, the manual move); medium (the take-overs,
       automatic destination timing, shared guard spot and temporary-slave destruction
       notifications); high (temporary-group creation before placement); low (the
@@ -399,7 +402,9 @@ vehicle's movement is heading to (S-0207). In addition:
     Suppressing those creations in advance is not this switch's alternative.
     - Backing: `measurable` (scenario D8, including its variants for the short-game setting and
       for the two marks; D17 for the distinct old and new slave groups). No-recipient release
-      retains S-0312 claim 31's `unmeasured` backing and setup limitation.
+      retains S-0312 claim 31's `unmeasured` backing and setup limitation. Hidden-slave
+      tag notifications are `unmeasured` for the tag-attachment limitation in claim 10.
+      D17 tests creation, disposal, losses and release, not tag evaluation.
     - Confidence: medium (the refund, observable slave fate); high (no old-group transfer on
       refusal); low (the vehicle that goes on existing)
 
@@ -1023,8 +1028,11 @@ are repetitions that guard against void runs.
   Observed area is the 15 × 15 cells around the building; keep outside slaves clear of the
   blocker and unrelated damage. Record credits, on-map status, identities, owners, master links,
   health, targets, destinations and queued behaviours at removal. Also record every new slave
-  from creation, its creation draw in the scenario random stream, destruction notifications
-  and the house's infantry losses. Use the identity and draw-order controls of S-0402 H24.
+  from creation, its creation draw in the scenario random stream and the house's infantry
+  losses. Use the identity and draw-order controls of S-0402 H24. Tag notifications remain
+  `unmeasured`: this fixture establishes no tag attachment to a generated slave. S-0011
+  claim 19 and conditional scenario T25 B cover that separate test if a data-only fixture
+  becomes available; disappearance and losses are not evidence of tag evaluation.
 - Expected: refusal pays the refund and removes the building. Its old hidden slaves disappear,
   and its old on-map slaves retain identity, health and position, lose their master and transfer
   to the first civilian-side house in house-creation order, with target and destination cleared
@@ -1034,7 +1042,7 @@ are repetitions that guard against void runs.
   two initial hidden slaves are created before the placement attempt, each taking its ordinary
   creation draw, while the old group still exists. Refusal's old-group destruction or release
   follows those creations. On clear ground the two new hidden slaves instead disappear with
-  destruction notifications and losses before the old group transfers to the on-map vehicle.
+  losses before the old group transfers to the on-map vehicle.
   Their creation draws remain consumed, and no old slave is recreated. The no-civilian-recipient
   alternative is not tested here.
   Replay refusal with the failed-pack-up quirk off on our engine: old-slave release is the same,
@@ -1043,7 +1051,7 @@ are repetitions that guard against void runs.
 - Falsified if: any old slave acquires the refused vehicle as master, an old hidden slave survives,
   an outside slave's release differs from the stated recipient/reset outcome, the retained
   vehicle lacks its own newly created hidden group, old-group release precedes the new creations,
-  the control omits temporary-slave creation or its destruction notifications/losses, undoes
+  the control omits temporary-slave creation, disposal or losses, undoes
   creation draws, recreates old slaves, or fails to transfer the old group. On our engine,
   suppressing creation draws with the failed-pack-up quirk off also fails conformance.
 
