@@ -2,7 +2,7 @@
 id: S-0209
 title: Cell occupancy and crowding (capacity, entry outcomes, waiting, re-routing, scatter requests)
 topic: movement
-revision: 17
+revision: 18
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -105,10 +105,29 @@ house's *firestorm*, the passability categories (*wall-like* among them) and the
     its cell's height level plus 4 on its deck search layer, with the start-pair adjustment for
     trains as S-0212 claim 7 gives it. The step starts from that pair's cell, not necessarily the
     cell the mover currently stands in. S-0212 claims 7 and 10 own the search and its height rule,
+  - for the first landing-point entry check of teleporting infantry (S-0208 claim 19): initially
+    −1 height levels, with no connecting-step direction. This is not an ordinary walking ask.
+    The check has no connecting-step height restriction. Unless the negative-level exception
+    below applies, a high-bridge destination uses its terrain height level plus 4 as the
+    reference for its occupancy record; both objects and record then come from the deck.
+    A destination without a high bridge uses ground objects and record. These choices are
+    independent of the standing-position deck mode used to choose the landing point.
+    S-0208 claim 19 owns this use, with `measurable` backing (its scenario W11) and medium
+    confidence for the bridge consequences,
   - in order targeting (S-0213, S-0214) and other situations not listed above: not established
     (Open questions).
 
-  For an asked cell that carries a high bridge:
+  **Landing-only negative-level exception.** For that teleporting-infantry entry check, a
+  destination at terrain height level −6 or lower gives *clear* without testing terrain or
+  occupants: the initial reference −1 is more than 4 height levels above it. These are integer
+  comparisons with no rounding. This does not bypass a refusal of the preceding standing-position
+  choice. S-0208 claim 19 owns the exception, its scenario W11(g) and
+  `quirks.teleport_infantry_negative_level_entry` (default original; off, omit this early bypass
+  and apply the ordinary landing entry check). It does not change ordinary walking entry rules.
+  This pointer inherits that claim's `measurable` backing and high confidence for the comparison.
+
+  For the walking asks, vehicle step checks and path searches above, an asked cell that carries
+  a high bridge uses these rules:
   - the objects listed are those of the deck layer when the reference height level differs from
     the asked cell's height level by more than 1, and those of the ground layer otherwise,
   - the occupancy record read is the deck layer's when the reference height level is exactly 4
@@ -961,14 +980,16 @@ rank* and *elite weapon*), *n*
     - A driving vehicle whose next cell gives *stationary friendly* sends one: move-anywhere,
       forced, no threat point (S-0207 claim 15). Whether a vehicle that receives a request moves,
       and where, is S-0207 claim 16.
-    - A ground vehicle factory clearing its exit apron sends forced, move-anywhere requests to
-      the apron cell and, while that cell is blocked, its occupied neighbours (S-0417 claim 4).
+    - A vehicle factory clearing its exit apron sends forced, move-anywhere requests on a blocked
+      apron test: to the apron cell, then its occupied neighbours (S-0417 claim 4). This happens
+      during ground-vehicle unloading and during idle apron clearing, including an idle naval
+      vehicle factory, under S-0417 claim 13's behaviour and eligibility conditions.
       These requests explicitly select the ground cell layer defined in Terms, not the bridge-deck
       layer or the layer chosen by an entry-outcome reference height. The apron request has no
       threat point; neighbour requests use the apron's centre. Claim 11's move-anywhere condition
       admits every listed object, with acceptance still governed by its movement spec. Within
       each cell, draw assignments follow claim 13's listing order; S-0417 owns the ordering
-      between the apron, neighbours and unloading delay.
+      between the apron, neighbours and the unloading or idle-behaviour delay.
     - Other senders belong to the specs of those events.
     - Backing: `measurable` (scenarios C4 and C7) for the walker's and the crushing vehicle's
       requests. The driving vehicle's request and the other senders are pointers: S-0207 and the
@@ -2659,12 +2680,11 @@ That moment is called the *window*. Common setup:
   game-wide setting that turns it off, and the situations in which it applies belong to the specs
   of underground travel. Stock data gives no unit type that locomotor.
 - Which reference height level order targeting (S-0213, S-0214) and other situations outside the
-  walking ask, vehicle step check and path search use, and so which cell layer of a high-bridge
-  cell counts for them (Terms, *cell layer*), is not established. Path-search queries use the
-  expanded pair's height level and cell, as S-0212 claims 7 and 10 give them.
-- Whether any situation asks for an entry outcome without a reference height level is not
-  established. If one does, the original appears to list the objects of the deck layer of a
-  high-bridge cell and to read the record of its ground layer (low confidence).
+  walking ask, vehicle step check, path search and teleporting-infantry landing check use, and
+  so which cell layer of a high-bridge cell counts for them (Terms, *cell layer*), is not
+  established. Path-search queries use the expanded pair's height level and cell, as S-0212
+  claims 7 and 10 give them. S-0208 claim 19 establishes the landing check's initial −1 reference
+  and its effective deck reference; it does not establish those choices for other callers.
 - On a high bridge whose deck spans ground that changes by 1 height level, the objects come from the
   deck layer and the occupancy record from the ground layer (Terms, *cell layer*). Whether such a
   bridge can exist belongs to the bridge specs. Whether this case deserves a switch is a question
