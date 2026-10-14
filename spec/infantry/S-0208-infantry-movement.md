@@ -2,7 +2,7 @@
 id: S-0208
 title: Infantry movement (standing positions, walking step and speed, crawling, scatter destinations)
 topic: infantry
-revision: 21
+revision: 22
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -72,6 +72,15 @@ post-jump infantry record lifecycle; it must be handed off with the matching S-0
 occupancy pointer. Claim 22 answers Q-0268's ordinary walking arrival timing. Its
 teleport timing was already answered by S-0207 claim 22 in this round; destruction
 and death-sequence tag retention remain S-0312's answers, not movement rules.
+At sign-off, confirm claims 19 and 22 against the final paired texts of S-0207,
+S-0209, S-0212 and S-0215. Retain the fixation-tick fallback selection, not a
+selection at the later jump. Retain the distinction between infantry's discarded
+remembered point and absent new deck standing-position mark, and vehicles'
+remembered-point clearing and additional deck placement mark (S-0207 claim 20 a/e,
+S-0209 claim 1). The shared `quirks.teleport_vehicle_ground_reservation` governs
+vehicles, not infantry. Jump-time target loss and override reversion, including
+the live erasing-lock exception and preservation of a different restored target,
+remain S-0215 claim 10's rules for the jump, not new infantry landing-choice rules.
 
 ## Terms
 
@@ -983,8 +992,10 @@ used by this spec:
 
     Infantry using their own teleporting locomotor instead follow S-0207 claim 22:
     landing raises the tag in the jump tick after position, height and listing have
-    changed, not at reservation or at the end of phasing in. This does not change
-    claim 19's post-jump standing-position record rule.
+    changed, not at reservation or at the end of phasing in. Only the landing cell
+    receives this arrival update; cells between departure and landing do not.
+    S-0011's tag eligibility still applies. This does not change claim 19's
+    post-jump standing-position record rule.
     - Backing: `measurable` (scenario W14; teleport timing also S-0207 scenario D24)
     - Confidence: high for walking-target arrival versus reservation or boundary
       crossing; medium for the combined observable ordering and same-cell case
