@@ -2,7 +2,7 @@
 id: S-0312
 title: Death and destruction (death weapons, debris, passengers, crews, survivors, sinking, crashing and building remains)
 topic: combat
-revision: 13
+revision: 14
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -692,6 +692,47 @@ claim 19) and *curtain protection* are used as defined there. In addition:
       timing and absence of a final infantry-removal raise; medium for retained infantry
       carrier status and the hijacker/tag-carries-over combination
 
+### Slaves of a destroyed master
+
+30. **A killing hit ends the slave group before the master's debris.** For an on-map slave
+    miner, whether a vehicle or its deployed building, an actual killing hit releases or removes
+    its existing slaves in the same damage resolution, before claims 4 to 7. A delayed-death
+    reprieve does not end the group at the initial hit: this rule applies when the master actually
+    takes its death effects. Initial slave ownership and existence are S-0402 claim 19, and
+    deploying or packing up preserves the working group under S-0415 claims 6 and 10 and is
+    not this destruction rule.
+
+    - A slave inside the master is destroyed and removed immediately, credited to the killing
+      hit's known attacker, if any. It does not emerge, play a death sequence or take its own
+      debris, death-weapon or attached-bomb effects. Its destruction notifications follow
+      claim 29's common group; removal is not a separate killing hit.
+    - A slave already on the map loses its master and stays at its existing position. With a
+      known attacker, it changes owner to that attacker's current house, even if that house
+      is allied with the master's house. Without a known attacker, its new owner is the first
+      existing house in house-creation order whose country belongs to the civilian side
+      (Import mapping). An attacking-house attribution supplied without an attacker object
+      does not substitute for that object in this ownership choice.
+    - A transferred slave is not recreated or healed by this release. Its attack target and
+      movement destination are cleared and it is queued to *guard*, for every owner; claim 25's
+      crew and passenger orders do not apply to it. Normal later behaviour processing remains
+      S-0215's. If no fallback house exists in the no-attacker case, the slave instead receives
+      damage equal to its current health with the demolition warhead, no attacker, and neither
+      the ignore-defences nor the no-escape marker. S-0302 resolves that hit; survival is not
+      excluded when defences stop it.
+
+    No slave in the group remains enslaved to this master, and this group can no longer
+    regenerate lost slaves or release replacements. An on-map slave freed before the master's
+    death weapon can still be hit by that detonation under S-0303's normal rules: freeing is
+    not protection from the rest of the death effects. Sale, capture, mind-control and erasure
+    without a killing hit are not established by this claim. Never-placed production masters
+    retain Q-0193's boundary.
+    - Backing: `measurable` (scenario D21) for hidden removal, attacker and normal civilian
+      transfer, guard queueing, no regeneration and before-debris timing; `unmeasured` for
+      absent fallback houses and separately supplied attacking-house attribution, since no
+      isolated skirmish fixture for those paths is established here
+    - Confidence: high for hidden removal, ownership choice and no regeneration; medium for
+      notifications, retained health and release ordering
+
 ### Backing boundaries
 
 These qualifications narrow the numbered claims' backing; a scenario for a neighbouring case
@@ -841,6 +882,7 @@ Each RZ₅₃ operation is a separate rounding at the indicated stage. Thus *T* 
 | 0 | infantry | cyborg crippling replaces death (claim 2) | none |
 | 0 | building | delayed death replaces death (claim 3) | none |
 | before 1 | tagged infantry, vehicle, aircraft, building | destruction raises and all actions they fire (claim 29); the initial lethal hit of a delayed-death building has these raises before its reprieve | only the actions' and their effects' draws |
+| before 1 | slave master | hidden slaves removed, on-map slaves freed or hit when no new owner exists (claim 30); after the master's killing-hit destruction raises | resulting slave notifications and damage effects; release-draw details remain open |
 | 1 | all | debris (claim 4, F1); skipped for a bomb-marked vehicle low over water (claim 11) | F1 |
 | 2 | all, exploding | passengers die (claim 5), then death weapon (claim 6); both skipped for a bomb-marked vehicle low over water (claim 11) | the detonation's |
 | 3 | all | attached bomb (claim 7) | the bomb's |
@@ -948,6 +990,8 @@ Each RZ₅₃ operation is a separate rounding at the indicated stage. Thus *T* 
 
 | User data | Feeds | Form | Absent |
 |---|---|---|---|
+| rules, type section, `Enslaves`, `SlavesNumber`, `SlaveRegenRate`, `SlaveReloadRate` | slave group whose destruction claim 30 ends | S-0402 claim 19 and Import mapping | S-0402's defaults |
+| the side named `Civilian`, a name built into the original | no-attacker fallback ownership in claim 30 | first matching side name, compared ignoring letter case; then first existing house whose country's side index matches | missing side gives index −1, so a country without a side can match; with no matching house, claim 30's damage applies |
 | map object tag field, map `[Tags]`, `[Triggers]`, `[Events]`, `[Actions]` | attached tag and its evaluations in claim 29 | S-0011 Import mapping, including its object tag reference matching | no matching tag: no destruction raises |
 | map `[Events]`, event code 48 | destroyed-by-anything raise (claim 29) | integer event code; unused event value, as S-0011 claim 19 | no such event: no destroyed-by-anything condition, but other events and latches still evaluate |
 | destruction raise codes (engine constants, not a configurable list) | common group and extra vehicle group (claim 29) | common group with known attacker: 6, 4, 7, 48, 29; without: 48, 29. Extra vehicle group with known attacker: 7, 48, 29; without: 48, 29. Each requires the tag still attached and, for the common group, the object not removed by a preceding action | not applicable |
@@ -1491,8 +1535,42 @@ death or an extra removal-time destruction raise falsifies the claim. S-0011 own
 the tag must not make change-owner act on dying infantry. Perform five runs of each carrier
 variant. Q-0268 part 1 is owned by the movement specs, not by this death scenario.
 
+**D21. Slaves after master destruction (claim 30; Q-0270 part 3).** Use the common
+measurement setup, speed 6, director and mods off, with stock slave miners on a tiny flat
+resource-field map and the bystander kept outside the observed area (within 10 cells of the
+master and its slaves). Use ordinary harvesting to obtain a mixture of slaves outside and
+inside; log that state before the kill rather than assuming every slave has emerged. Destroy
+30 vehicle masters and 30 deployed building masters with an ordinary enemy attack. Separately
+use a polled explosion-at-a-waypoint action lethal to the master to obtain a no-attacker hit, and
+confirm the source object is absent. Keep outside slaves beyond the lethal incoming area where
+possible and record any collateral hits separately.
+
+Record slave identities, positions, health, owners, master links, queued behaviours, deaths
+and removal from immediately before the hit through its death effects. Expected: hidden slaves
+are removed with attacker credit when there is an attacker and without credit otherwise.
+outside slaves retain identity, position and health at release, lose their master, clear target
+and destination and queue guard. Their new owner is the attacker object's house, or the first
+civilian-side house in creation order for the no-attacker run. Repeat with an allied attacker
+using a named test-map weapon that damages allies: alliance does not suppress transfer. Give
+one hidden slave a repeating destruction tag through named test-map data to confirm the common
+raise group before the master's debris, and named positive debris and a death weapon to
+confirm their absence for hidden removal. Distinguish destruction-trigger effects from the
+slave's own suppressed effects. Repeat with an exploding master and a death weapon whose area
+can hit an outside slave: transfer must precede that detonation's damage; later death of that
+slave is not a failed release. Continue recording for longer than the imported regeneration
+delay plus 20 ticks: this dead master produces no replacements. Missing hidden removal,
+wrong owner or release state, a recreation or healing, a reversed death-weapon precedence,
+or a replacement from the dead group falsifies the corresponding result. A trace that cannot
+separate incoming collateral damage from release and death-weapon damage is inconclusive.
+No draw-count prediction for the freed-slave presentation sequence is asserted in this scenario.
+
 ## Open questions
 
+- Q-0270 part 3: slave-group destruction paths without an ordinary killing hit, including
+  erasure and environmental sinking with remembered attacker or forced owner, remain to be
+  integrated. Claim 30 answers ordinary killing hits only; sale belongs to S-0408 and capture
+  or mind-control propagation remains S-0402's open question. The release presentation's
+  random draws and within-group notification order are not yet specified.
 - Q-0193: which death effects, scoring or notifications and random draws a never-placed
   production item takes when a defeat or surrender hit kills it, and whether its own death
   immediately deletes it. These remain unestablished, not a draw-free-death rule. S-0414 claim
