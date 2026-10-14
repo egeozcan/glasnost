@@ -54,6 +54,51 @@ fn scene() -> Scene {
     s
 }
 
+/// spec: S-0405 claim 18 (a switched-on field of 0 starts a building off only with a base drain above 0 or the needs-power flag; the firestorm-wall flag does not decide it; field 1 or absent: on)
+#[test]
+fn s0405_claim_18_map_switched_off() {
+    // (name, power, needs power, firestorm wall, starts off with field 0)
+    let rows = [
+        ("PP", 100, false, false, false),
+        ("CC", -40, false, false, true),
+        ("NN", 10, true, false, true),
+        ("FF", -40, false, true, true),
+        ("GG", 100, false, true, false),
+    ];
+    for field in [Some(false), Some(true), None] {
+        let mut s = scene();
+        for (i, &(name, power, needs, fire, _)) in rows.iter().enumerate() {
+            s.register("buildings", name);
+            let mut b = BuildingType {
+                strength: Some(100),
+                foundation: Some([1, 1]),
+                powered: Some(needs),
+                firestorm_wall: Some(fire),
+                ..Default::default()
+            };
+            b.econ.power = Some(power);
+            s.ruleset.sim.buildings.insert(name.into(), b);
+            s.map.objects.structures.push(Structure {
+                placed: placed("Alpha", name, cell(2 * i as i32, 0), 256, 0),
+            });
+            s.map.objects.structure_fields.push(EntryFields {
+                switched_on: field,
+                ..Default::default()
+            });
+        }
+        let w = s.build();
+        for &(name, _, _, _, off) in &rows {
+            let o = w
+                .objects
+                .values()
+                .find(|o| w.rules().buildings[o.type_index as usize].name == name)
+                .unwrap();
+            let want = off && field == Some(false);
+            assert_eq!(o.econ.building.switched_off, want, "{name} {field:?}");
+        }
+    }
+}
+
 fn only(w: &World, kind: Kind) -> &glasnost_sim::world::Object {
     let v: Vec<_> = w.objects.values().filter(|o| o.kind == kind).collect();
     assert_eq!(v.len(), 1, "{kind:?}");

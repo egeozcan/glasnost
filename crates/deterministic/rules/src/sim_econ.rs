@@ -312,6 +312,11 @@ pub struct EconFields {
     /// sprite's frames yet).
     #[serde(default)]
     pub buildup_frames: Option<i32>,
+    /// Buildings: the art `GateStages`, the gate-stage count *G* (S-0108
+    /// claim 5 and Import mapping: a gate's build-up has *n* = *G* + 1
+    /// frames; S-0406 claim 15); absent: 9.
+    #[serde(default)]
+    pub gate_stages: Option<i32>,
     /// Buildings: `DeployFacing`, the deploy facing *D* in 1/256 turn
     /// (S-0415 claims 5 and 10); absent: 128.
     #[serde(default)]

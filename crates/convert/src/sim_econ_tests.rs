@@ -42,7 +42,7 @@ const BASE: &str = "[Countries]\n0=Ruritania\n[Ruritania]\nCostUnitsMult=1.25\nI
 [CrateRules]\nCrateMaximum=4\n\
 [MultiplayerDialogSettings]\nBases=no\nShortGame=yes\nMoney=777\n";
 
-const ART: &str = "[MILLART]\nQueueingCell=2,3\nNumberOfDocks=2\nSpecialAnim=SPIN\n";
+const ART: &str = "[MILLART]\nQueueingCell=2,3\nNumberOfDocks=2\nSpecialAnim=SPIN\nGateStages=4\n";
 
 // spec: S-0402 Import mapping, S-0404 Import mapping, S-0405 Import mapping, S-0406 Import mapping, S-0407 Import mapping
 #[test]
@@ -63,6 +63,8 @@ fn building_econ_fields_are_converted() {
     );
     assert_eq!(mill.econ.queueing_cell, Some([2, 3]));
     assert_eq!(mill.econ.art_number_of_docks, Some(2));
+    // spec: S-0108 Import mapping (GateStages, an art integer; S-0406 claim 15)
+    assert_eq!(mill.econ.gate_stages, Some(4));
     assert_eq!(mill.econ.special_anim.as_deref(), Some("SPIN"));
     assert_eq!(s.buildings["PLANT"].econ.extra_power, Some(7));
     // spec: S-0409 Import mapping (a building's Sight, cells)
@@ -269,6 +271,20 @@ fn weeder_and_the_dock_unload_warning() {
         dock[0].contains("CART") && dock[0].contains("BINB"),
         "{dock:?}"
     );
+}
+
+// spec: S-0408 Edge cases (warnings for a non-turret upgrade with PowersUpToLevel 2 or 3 and for Upgrades above 3)
+#[test]
+fn upgrade_sale_warnings() {
+    let base = "[BuildingTypes]\n0=TOPA\n1=TOPB\n2=TOPC\n3=BASE\n[TOPA]\nPowersUpToLevel=3\n\
+[TOPB]\nPowersUpToLevel=2\nTurret=yes\n[TOPC]\nPowersUpToLevel=1\n[BASE]\nUpgrades=4\n";
+    let (_, w) = import(base, "");
+    let lv: Vec<&String> = w.iter().filter(|m| m.contains("PowersUpToLevel")).collect();
+    assert_eq!(lv.len(), 1, "{w:?}");
+    assert!(lv[0].contains("TOPA"), "{lv:?}");
+    let up: Vec<&String> = w.iter().filter(|m| m.contains("Upgrades=")).collect();
+    assert_eq!(up.len(), 1, "{w:?}");
+    assert!(up[0].contains("BASE"), "{up:?}");
 }
 
 // spec: S-0404 Import mapping (ExitCoord an integer triple in leptons; GDIBarracks, NODBarracks, YuriBarracks and Cloning booleans; [AudioVisual] PoseDir an integer)

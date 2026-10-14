@@ -1,6 +1,6 @@
 //! Deploying a vehicle into a building and packing it up again (S-0415),
 //! and the construction behaviour of a building that builds up (S-0108
-//! claim 5; request Q-0130).
+//! claim 5, S-0406 claims 14 and 15; request Q-0130 for what stays open).
 
 use glasnost_map::CellXY;
 use glasnost_num::F64;
@@ -337,7 +337,7 @@ fn complete(w: &mut World, id: ObjectId, b: u32, at: CellXY) -> bool {
     // Leave the vehicle's cell before the building enters it.
     crate::objects::remove(w, id);
     // spec: S-0415 claim 6 (the centre of the anchor at the surface height; construction begins; not a place order, S-0415 claim 7)
-    // The building's facing is not stated (request Q-0133): the deploy facing D × 256.
+    // The building's facing is S-0415's and not stated there (S-0406 claim 16, request Q-0220): interim, the deploy facing D × 256.
     let d = deploy_facing(w, b);
     crate::econ::placement::put_on_map_facing(w, bid, at, false, facing_of(d));
     let yard = w.rules().buildings[b as usize]
@@ -385,9 +385,9 @@ fn retarget(w: &mut World, old: ObjectId, new: ObjectId, yard: bool) {
     }
 }
 
-/// The end of a pack-up (S-0415 claims 10 and 11): the vehicle appears at
+/// The end of a pack-up (S-0415 claims 10 to 12): the vehicle appears at
 /// the return cell and the building is removed, or the house receives the
-/// sale refund when the vehicle cannot be put on the map.
+/// sale refund when the return cell refuses the vehicle.
 pub fn pack_up(w: &mut World, id: ObjectId) {
     let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
     let Some(o) = w.obj(id).cloned() else { return };
@@ -403,10 +403,14 @@ pub fn pack_up(w: &mut World, id: ObjectId) {
     if let Some(ob) = w.obj_mut(vid) {
         // spec: S-0415 claim 10 and F2 (health max(1, trunc(r × S)); the building's experience)
         ob.health = health;
-        ob.combat.experience = o.combat.experience;
     }
     crate::objects::remove(w, id);
-    if can_stand(w, c) {
+    // spec: S-0415 claim 12 (the test is made before the vehicle inherits the building's experience or the guard spot)
+    let accepted = can_stand(w, vid, c);
+    if let Some(ob) = w.obj_mut(vid) {
+        ob.combat.experience = o.combat.experience;
+    }
+    if accepted {
         let z = w.surface_at(256 * c.x + 128, 256 * c.y + 128); // spec: S-0204 claim 3 (the cell centre)
         let tick = w.tick;
         if let Some(ob) = w.obj_mut(vid) {
@@ -441,41 +445,53 @@ pub fn pack_up(w: &mut World, id: ObjectId) {
     }
 }
 
-/// Whether a vehicle can be put on the map in `c` at the end of a pack-up
-/// (S-0415 claim 11: for example, not where a building now stands). What
-/// else refuses is not stated (request Q-0132); our engine asks for a
-/// usable cell with no building and no vehicle claim.
-fn can_stand(w: &World, c: CellXY) -> bool {
-    w.cells.usable(c)
-        && w.cells
-            .occ(c, crate::world::Layer::Ground)
-            .is_some_and(|r| r.buildings == 0 && r.vehicles == 0)
+/// Whether the new vehicle `v` can be put on the map at the return cell
+/// `c` at the end of a pack-up (S-0415 claim 12). The packing building has
+/// been removed already, so it does not occupy the map for this test.
+fn can_stand(w: &World, v: ObjectId, c: CellXY) -> bool {
+    if !w.cells.usable(c) {
+        return false;
+    }
+    // spec: S-0415 claim 12 (ordinary ground-layer placement: no source height, no bridge-deck request)
+    let reference = w.cells.cell(c).map_or(0, |x| i32::from(x.level));
+    // spec: S-0415 claim 12 (accepted exactly when the entry outcome of S-0209 claim 5 is clear, with no movement-step substitutions; any other outcome refuses)
+    crate::occupancy::vehicle_outcome(w, v, c, reference) == crate::occupancy::Outcome::Clear
 }
 
-/// The construction behaviour's processing delay (request Q-0130).
-// spec: S-0108 claim 5 (construction is processed every tick until the build-up ends; request Q-0130)
+/// The construction behaviour's processing delay (S-0406 claim 14).
+// spec: S-0406 claim 14 and Constants (construction processing delay: 1 tick, no timing draw, whatever the behaviour's rate)
 pub const CONSTRUCTION_DELAY: i32 = 1;
 
-/// The construction behaviour of a building (S-0108 claim 5; request
-/// Q-0130): the construction completes at the first processing on or after
-/// the tick its build-up is reported finished, and the building goes to
-/// *guard*. Returns the delay.
+/// The construction behaviour of a building (S-0406 claims 14 and 15,
+/// F6): the first processing restarts the build-up at stage 0 and is the
+/// tick *C*; a later processing that finds the build-up reported finished
+/// hands over: the building's opening effects, then *guard* queued, current
+/// at the building's second per-tick start of the same tick. Returns the
+/// delay.
 pub fn process_construction(w: &mut World, id: ObjectId) -> i32 {
-    let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
     let Some(o) = w.obj(id) else {
         return CONSTRUCTION_DELAY;
     };
     let tick = w.tick;
-    let since = o.beh.start_tick;
-    // spec: S-0108 claim 5 (the build-up is finished (n − 1) × d_b ticks after the state began; request Q-0130)
-    if tick.wrapping_sub(since) < crate::econ::sell::buildup_ticks(w, o.type_index) {
+    let Some(c) = o.econ.construction.first else {
+        // spec: S-0406 claim 14 (the first processing starts the construction range again at stage 0: C is this tick)
+        if let Some(ob) = w.obj_mut(id) {
+            ob.econ.construction.first = Some(tick);
+        }
+        return CONSTRUCTION_DELAY;
+    };
+    // spec: S-0406 claim 15 and F6 (H = C + (n − 1) × d_b; a zero-delay range reports at the next processing, H = C + 1); a one-stage positive-delay range is open (S-0406 open question 6, request Q-0130): C + 1 as well
+    if tick.wrapping_sub(c) < crate::econ::sell::buildup_ticks(w, o.type_index).max(1) {
         return CONSTRUCTION_DELAY;
     }
     if let Some(ob) = w.obj_mut(id) {
         ob.econ.construction.building_up = false;
-        // Request Q-0130: the behaviour that follows the construction is not stated; guard, as a pre-placed building's (S-0009 claim 40).
-        ob.beh.force(Behaviour::Guard, tick, stale);
+        ob.econ.construction.first = None;
+        // spec: S-0406 claim 15 (guard queued, current at the second per-tick start of this tick, S-0215 claim 11; the target is kept)
+        ob.beh.queue(Some(Behaviour::Guard));
+        ob.beh.ready_mark = true;
     }
+    w.note("S-0406 claim 15: the idle body animation state is requested at the handover (a seam: no animation state in the simulation)");
     // spec: S-0402 claim 18 (the grand opening, at the end of the build-up in the building's own turn: its free unit)
     crate::econ::harvest::grand_opening(w, id);
     CONSTRUCTION_DELAY

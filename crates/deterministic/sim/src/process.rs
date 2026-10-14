@@ -71,6 +71,10 @@ pub fn ready(w: &World, id: ObjectId) -> bool {
             if crate::econ::harvest::in_unloading_state(w, id) {
                 return false;
             }
+            // spec: S-0215 claim 11 (the two vehicle-factory conditions)
+            if crate::econ::release::holds_back(w, id) {
+                return false;
+            }
             !(moving(w, id) && !below && !excused)
         }
         Kind::Building => o.beh.ready_mark,
@@ -151,8 +155,11 @@ pub fn fall_back(w: &mut World, id: ObjectId, placement: bool) {
         if let Some(ob) = w.obj_mut(id) {
             ob.beh.last_common_effects = Some(t);
         }
-        // spec: S-0215 claim 13 (an infantry unit whose guard spot is on another cell: it becomes the destination)
+        // spec: S-0215 claim 13 row 1 (a temporarily replaced locomotor is given back; S-0417 claim 5)
+        let restored = crate::econ::release::restore_locomotor(w, id);
+        // spec: S-0215 claim 13 (an infantry unit whose guard spot is on another cell, not given its locomotor back: it becomes the destination)
         if o.kind == Kind::Infantry
+            && !restored
             && let Some(gs) = o.guard_spot
         {
             let gc = match gs {
@@ -552,11 +559,11 @@ fn process(w: &mut World, id: ObjectId) -> i32 {
         {
             standard_delay(w, id)
         }
-        // Q-0120 (interim: a factory building's unloading has no processing rule of its own, S-0215 claim 4's delay; the production part ends it)
-        (Some(Behaviour::Unload), Kind::Building) => NO_RULE_DELAY,
+        // spec: S-0417 claims 2 and 9 (a factory building's unloading)
+        (Some(Behaviour::Unload), Kind::Building) => crate::econ::release::process_unload(w, id),
         // spec: S-0408 claim 16 (selling: a processing delay of 1, no draw)
         (Some(Behaviour::Selling), Kind::Building) => crate::econ::sell::process_selling(w, id),
-        // spec: S-0108 claim 5 (construction ends when the build-up does; request Q-0130)
+        // spec: S-0406 claims 14 and 15 (construction: processed every tick, handed over when the build-up reports completion)
         (Some(Behaviour::Construction), Kind::Building) => {
             crate::econ::deploy::process_construction(w, id)
         }

@@ -160,7 +160,8 @@ fn claim_1_extra_output_only_for_absorbing() {
     assert_eq!(power::building_output(&w, a), 0);
 }
 
-// spec: S-0405 claims 1 and 2, Terms (upgrades in the three positions count; a fourth adds nothing; W12)
+// spec: S-0405 claims 1 and 2, Terms (upgrades in the three positions count; W12)
+// spec: S-0408 claim 5 (no recorded upgrade counts at count 0; request Q-0224: interim, S-0408's gate)
 #[test]
 fn claims_1_2_upgrades() {
     let r = rules();
@@ -168,13 +169,23 @@ fn claims_1_2_upgrades() {
     let p = put(&mut w, "PLANT", 0, 0, 0);
     let idx = |n: &str| w.rules().index_of(Kind::Building, n).unwrap();
     let (u10, u20, ud5) = (idx("UP10"), idx("UP20"), idx("UPD5"));
-    w.obj_mut(p).unwrap().econ.building.upgrades = vec![u10];
+    let set = |w: &mut World, ups: [Option<u32>; 3], count: i32| {
+        let b = &mut w.obj_mut(p).unwrap().econ.building;
+        b.upgrades = ups;
+        b.upgrade_count = count;
+    };
+    set(&mut w, [Some(u10), None, None], 1);
     assert_eq!(power::building_output(&w, p), 130);
-    w.obj_mut(p).unwrap().econ.building.upgrades = vec![u10, u20, ud5];
+    set(&mut w, [Some(u10), Some(u20), Some(ud5)], 3);
     assert_eq!(power::building_output(&w, p), 150);
     assert_eq!(power::building_drain(&w, p), 5);
-    w.obj_mut(p).unwrap().econ.building.upgrades = vec![u10, u20, ud5, u20];
-    assert_eq!(power::building_output(&w, p), 150);
+    // A gap in the positions: the recorded ones count.
+    set(&mut w, [Some(u10), None, Some(ud5)], 2);
+    assert_eq!(power::building_output(&w, p), 130);
+    assert_eq!(power::building_drain(&w, p), 5);
+    // Count 0 with recorded positions: none counts.
+    set(&mut w, [Some(u10), Some(u20), None], 0);
+    assert_eq!(power::building_output(&w, p), 120);
 }
 
 // spec: S-0405 claim 2 (health does not change the drain; the super-gap adds the extra drain, claim 16)

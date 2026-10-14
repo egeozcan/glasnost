@@ -191,9 +191,10 @@ pub struct BuildingSwitches {
     pub switched_off: bool,
     /// The primary factory of its kind (S-0213 claim 13).
     pub primary: bool,
-    /// Upgrade types recorded on the building, in the order they were
-    /// added (S-0406 claim 12: positions 1 to 3).
-    pub upgrades: Vec<u32>,
+    /// The building's three upgrade positions, 1 to 3 at indices 0 to 2
+    /// (S-0405 Terms, S-0406 F5, S-0408 claim 5): the upgrade type recorded
+    /// in each, or none.
+    pub upgrades: [Option<u32>; 3], // spec: S-0405 Constants (three upgrade positions), S-0406 Terms (upgrade positions 1 to 3)
     /// The building's upgrade count: the room it has used (S-0406 claim 12,
     /// F5).
     #[serde(default)]
@@ -274,8 +275,12 @@ fn bp(w: &World, type_index: u32) -> Option<&BuildingPower> {
 /// positions (Terms, *upgrade positions*).
 fn held_upgrades(w: &World, id: ObjectId) -> Vec<u32> {
     w.obj(id).map_or_else(Vec::new, |o| {
+        // spec: S-0408 claim 5 (recorded upgrades do not count in power at count 0; S-0405 states no such gate, request Q-0224: interim, S-0408's gate)
+        if o.econ.building.upgrade_count == 0 {
+            return Vec::new();
+        }
         // spec: S-0405 Constants (3 upgrade positions count in power)
-        o.econ.building.upgrades.iter().take(3).copied().collect()
+        o.econ.building.held().collect()
     })
 }
 
@@ -556,6 +561,21 @@ pub fn firing_answer(w: &World, id: ObjectId) -> Option<Answer> {
         return Some(Answer::Impossible);
     }
     None
+}
+
+impl BuildingSwitches {
+    /// The upgrade types recorded in the building's positions, position 1
+    /// first (S-0405 Terms).
+    pub fn held(&self) -> impl Iterator<Item = u32> + '_ {
+        self.upgrades.iter().flatten().copied()
+    }
+}
+
+/// Whether a map's switched-on field of 0 starts a pre-placed building of
+/// type `type_index` switched off (S-0405 claim 18).
+pub fn map_off_applies(w: &World, type_index: u32) -> bool {
+    // spec: S-0405 claim 18 (only with a base drain above 0 or the needs-power flag; the firestorm-wall and power-mode flags do not decide it)
+    bp(w, type_index).is_some_and(|t| t.drain > 0 || t.needs_power)
 }
 
 /// Applies a power-off or power-on order (S-0213 claim 13, S-0405 claim 10).

@@ -48,9 +48,11 @@ pub struct TeleportState {
 
 /// Whether the object moves with the teleporting locomotor in our engine.
 pub fn is_teleporter(w: &World, id: ObjectId) -> bool {
-    w.obj(id)
-        .and_then(|o| w.rules().unit(o.kind, o.type_index))
-        .is_some_and(|u| u.locomotor == Locomotor::Teleport)
+    // spec: S-0417 claim 5 (a teleporting vehicle drives temporarily for its factory exit)
+    !crate::econ::release::temporary_drive(w, id)
+        && w.obj(id)
+            .and_then(|o| w.rules().unit(o.kind, o.type_index))
+            .is_some_and(|u| u.locomotor == Locomotor::Teleport)
 }
 
 /// Whether the object is phasing in (S-0214 Terms, S-0207 claim 20 f).

@@ -677,6 +677,47 @@ fn claim_13_icon_order_counts_as_aircraft() {
     assert_eq!(vehicles, vec![tank, jeep, boat]);
 }
 
+// spec: S-0407 claim 17 (new offers of several kinds at one recheck: the kind whose earliest qualifying factory the house acquired later is admitted later, so a full tie puts it first under quirks.sidebar_tie_newest_first; no fixed precedence of kinds)
+#[test]
+fn s0407_claim_17_kinds_by_factory_acquisition() {
+    for vehicles_first in [true, false] {
+        let mut r = ruleset();
+        r.registries
+            .get_mut("vehicles")
+            .unwrap()
+            .push("VAIR".into());
+        let mut vair = r.sim.vehicles["TANK"].clone();
+        vair.econ.considered_aircraft = Some(true);
+        r.sim.vehicles.insert("VAIR".into(), vair);
+        r.sim
+            .aircraft
+            .get_mut("PLANE")
+            .unwrap()
+            .econ
+            .considered_aircraft = Some(true);
+        let mut w = game(&r);
+        let order = if vehicles_first {
+            ["WARFACT", "AIRPAD"]
+        } else {
+            ["AIRPAD", "WARFACT"]
+        };
+        building(&mut w, order[0], 0, 0, 0);
+        building(&mut w, order[1], 0, 6, 0);
+        ready(&mut w);
+        let vair = t(&w, Kind::Vehicle, "VAIR");
+        let plane = t(&w, Kind::Aircraft, "PLANE");
+        let tied: Vec<TypeRef> = sidebar::icons(&w, H)
+            .into_iter()
+            .filter(|x| *x == vair || *x == plane)
+            .collect();
+        if vehicles_first {
+            assert_eq!(tied, vec![plane, vair]);
+        } else {
+            assert_eq!(tied, vec![vair, plane]);
+        }
+    }
+}
+
 fn two_tab_rules() -> Ruleset {
     let mut r = preq_rules();
     r.sim.infantry.get_mut("GRUNT").unwrap().econ.prerequisite = Some(vec!["PREQ".into()]);

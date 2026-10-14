@@ -30,6 +30,13 @@ pub mod sidebar;
 pub mod tech;
 pub mod victory;
 
+/// Whether a unit is tethered (S-0213 Terms, the glossary's *tether
+/// link*): a harvester docked at a refinery (S-0402 claim 10) or a unit
+/// released by a factory (S-0417 claims 2 and 10).
+pub fn tethered(w: &crate::world::World, id: crate::world::ObjectId) -> bool {
+    release::tethered(w, id) || harvest::tethered(w, id)
+}
+
 /// A type of a production kind: infantry, vehicle, aircraft or building,
 /// with its registration index (what production orders name, S-0404 Terms).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -92,10 +99,13 @@ pub struct ObjectEcon {
     pub counted: victory::Counted,
     /// A secret lab's secret type (S-0407 claims 4 and 14).
     pub secret: Option<TypeRef>,
-    /// A released unit on its way out of its factory building (S-0404
-    /// claim 13).
+    /// A released unit's contact and tether with its factory building
+    /// (S-0417 claims 2, 7 and 10).
     #[serde(default)]
-    pub leaving: Option<release::Leaving>,
+    pub exit: Option<release::Exit>,
+    /// Driving temporarily for a factory exit (S-0417 claim 5).
+    #[serde(default)]
+    pub temporary_drive: bool,
 }
 
 /// The world's economy state (M5a), one field per topic.

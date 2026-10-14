@@ -615,8 +615,8 @@ pub fn place_map_objects(w: &mut World, map: &Map, sandbox: bool) {
                 }
             }
             if kind == Kind::Building {
-                if !fields.switched_on() {
-                    // spec: S-0009 claim 40, S-0405 Terms and claim 10 (switched-on field 0: the building starts switched off; whether claim 10's type conditions apply is interim, request Q-0180)
+                if !fields.switched_on() && crate::econ::power::map_off_applies(w, ti) {
+                    // spec: S-0009 claim 40, S-0405 claim 18 (switched-on field 0: switched off only for a type with a base drain above 0 or the needs-power flag)
                     if let Some(o) = w.obj_mut(id) {
                         o.econ.building.switched_off = true;
                     }
