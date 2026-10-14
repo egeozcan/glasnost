@@ -344,18 +344,19 @@ fn apply_other(w: &mut World, house: HouseId, o: &Order) {
     }
 }
 
-/// The primary order (S-0213 claim 13): a live factory building, on the map
-/// or not, toggles its primary mark; becoming primary takes the mark from
-/// every other building of its house on the map that is a factory of the
-/// same kind and of the same naval or land kind. No owner check (claim 15).
+/// The primary order (S-0213 claim 13): a live building with a factory
+/// category (producing or not), on the map or not, toggles its primary
+/// mark; becoming primary takes the mark from every other building of its
+/// house on the map with exactly the same category and of the same naval
+/// or land kind. No owner check (claim 15).
 fn primary(w: &mut World, actor: ObjectId) {
     let Some(o) = w.obj(actor) else { return };
     if o.kind != Kind::Building || o.health <= 0 {
         return;
     }
     let r = w.rules_arc();
-    let Some(factory) = r.buildings[o.type_index as usize].factory else {
-        // spec: S-0213 claim 13 (a building whose type is not a factory is not changed)
+    // spec: S-0213 claim 13 (the imported factory category, the four producing kinds and the other recognised categories; the no-factory value is not changed)
+    let Some(factory) = r.buildings[o.type_index as usize].factory_category else {
         return;
     };
     let naval = r.buildings[o.type_index as usize].naval;
@@ -367,7 +368,7 @@ fn primary(w: &mut World, actor: ObjectId) {
         }
         return;
     }
-    // spec: S-0213 claim 13 (every other on-map factory of the same kind and naval kind of the house stops being primary)
+    // spec: S-0213 claim 13 (every other on-map building of the house with exactly the same category and naval kind stops being primary)
     let others: Vec<ObjectId> = w
         .objects
         .values()
@@ -376,7 +377,7 @@ fn primary(w: &mut World, actor: ObjectId) {
                 && b.kind == Kind::Building
                 && b.on_map
                 && b.owner == owner
-                && r.buildings[b.type_index as usize].factory == Some(factory)
+                && r.buildings[b.type_index as usize].factory_category == Some(factory)
                 && r.buildings[b.type_index as usize].naval == naval
         })
         .map(|b| b.id)

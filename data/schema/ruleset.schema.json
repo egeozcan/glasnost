@@ -632,7 +632,7 @@
           "default": null
         },
         "factory": {
-          "description": "`Factory`, the kind it builds in our words (`infantry`, `vehicle`,\n`aircraft`, `building`; the importer maps the original's words by\nS-0003 claim 21).",
+          "description": "`Factory`, the imported factory category in our words: the kind it\nbuilds (`infantry`, `vehicle`, `aircraft`, `building`) or a\nrecognised category that builds nothing (`terrain`,\n`infantry_object`, `vehicle_object`, `aircraft_object`,\n`building_object`); the importer maps the original's words by\nS-0003 claim 21.",
           "type": [
             "string",
             "null"
