@@ -1358,9 +1358,10 @@ fn claim_27_travelling_or_retrying_building_rests() {
 /// aircraft-factory-only control. Returns the ruleset and the qualifying
 /// type names.
 fn offer_rules() -> (Ruleset, Vec<&'static str>) {
+    type Qualify = fn(&mut glasnost_rules::sim::BuildingType);
     let mut r = rules();
     let base = r.sim.buildings["SMB"].clone();
-    let variants: [(&str, fn(&mut glasnost_rules::sim::BuildingType)); 6] = [
+    let variants: [(&str, Qualify); 6] = [
         ("SMQINF", |b| b.factory = Some("infantry".into())),
         ("SMQVEH", |b| b.factory = Some("vehicle".into())),
         ("SMQCLO", |b| b.cloning = Some(true)),
