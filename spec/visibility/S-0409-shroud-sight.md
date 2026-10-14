@@ -2,7 +2,7 @@
 id: S-0409
 title: Shroud and sight (explored and seen cells, sight radius and shape, height blocking, gap generators, re-covering, reveal on fire)
 topic: visibility
-revision: 6
+revision: 7
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -1305,3 +1305,11 @@ against the S-0003, S-0011 and S-0409 versions being handed off together. S-0110
 draft carries the non-legal-cell exception and its claim-21 persistence qualification.
 Confirm that agreement too. No human-only trigger reveal in our engine or ownership-only
 discovery rule is intended.
+
+For the S-0414 joint hand-off, claim 15's defeat reveal is the immediate exploration effect,
+not a promise of permanent whole-map exploration. Pending re-cover marks may hide cells at
+the next sweep, and later satellite loss may re-cover the map (V9 F2 and F3). S-0414 claim 5's
+summary must retain these exceptions when describing the defeated person's continuing view.
+Its play-to-last-side departure changes how long the person can watch, not these visibility
+rules. This confirmation concerns visibility only; the other owners confirm the remaining
+S-0414 hand-off dependencies.
