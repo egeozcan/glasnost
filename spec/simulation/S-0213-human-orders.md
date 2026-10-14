@@ -2,7 +2,7 @@
 id: S-0213
 title: Human orders (the order set, when orders apply, and what each order changes)
 topic: simulation
-revision: 12
+revision: 13
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -82,7 +82,9 @@ Terms).
   loading or unloading manoeuvre, clearance to unload, or a request to dock at a refinery, and
   lose when that manoeuvre ends or the link is broken off. S-0417 identifies ground vehicle
   factory release and successful infantry factory or cloning-building release exchanges
-  (claims 1, 7 and 10); aircraft release timing and other exchanges remain open.
+  (claims 1, 7 and 10). A docked aircraft is tethered at release unless its type must return
+  to a dock (S-0417 revision 2, claim 11); landing and take-off timing remains provisional,
+  and other exchanges remain open.
   While tethered, the unit ignores stop, scatter and deploy
   orders (table T1), and a behaviour order keeps the link, except at a building of the unloading kind (table T3, part b).
 - **Inside a tunnel.** The state of a mobile actor that is travelling through a tunnel, a map
@@ -558,7 +560,10 @@ Terms).
     directly. Each click adds a route point, with the action it stands for, to the planned route of
     each selected object. When the key is released, the routes are committed and the objects start
     to follow them. Route points are created, committed and deleted by their own order kinds, which
-    apply at the tick boundary of claim 1. A house may have at most 128 route holders at once. A
+    apply at the tick boundary of claim 1. When a unit falls back to rest while following a route,
+    S-0215 claim 13 specifies when the order for the next route point takes effect. Issuing that
+    action is not an immediate destination assignment within the fall-back.
+    A house may have at most 128 route holders at once. A
     route-mode click is refused, with a message and a sound, when the house's route holders plus
     the selected units and buildings that are not yet route holders would number more than 128, or when a
     selected object cannot take part in a route. A refused click adds no route point.
@@ -1422,10 +1427,12 @@ game's normal input only, as a player would, and never writes into the game.
   triggers a further effect on that object, probably a brief highlight on screen. It has not been
   studied; nothing suggests that it changes game state.
 - Other tether exchanges beyond the ground vehicle factory release and successful infantry
-  factory or cloning-building release exchanges of S-0417 (claims 1, 7 and 10). Aircraft
-  release-to-landing tether timing remains untraced (S-0417 claim 11), and the refinery case
-  remains exploratory (Scenario O4 iv). Factory release does not yet identify an order-time
-  untethered-contact interval or isolate deploy's tether refusal (claims 5 and 10).
+  factory or cloning-building release exchanges of S-0417 (claims 1, 7 and 10), and docked
+  aircraft release (S-0417 revision 2, claim 11). A docked aircraft is tethered at release
+  unless its type must return to a dock; landing and take-off timing remains provisional.
+  The refinery case remains exploratory (Scenario O4 iv). Factory release does not yet
+  identify an order-time untethered-contact interval or isolate deploy's tether refusal
+  (claims 5 and 10).
 - Claim 7: how many steps a member's look takes (the limit of the look line in Formulas), whether
   that limit applies to each member's look separately or to the run as a whole, what a member gets
   after a spoiled look, which direction the look of a member standing in the leader's own cell
