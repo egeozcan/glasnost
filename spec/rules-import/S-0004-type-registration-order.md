@@ -2,7 +2,7 @@
 id: S-0004
 title: Type registration order
 topic: rules-import
-revision: 11
+revision: 12
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -204,7 +204,7 @@ Registration indices are non-negative integers. Indices are dense: the *n*-th ty
     - Backing: `measurable` for the empty row (D2), the 0 ≤ *k* < *n* row (D1), the non-negative key parse including wrap (D3), and section-reading eligibility (D2 and D4's control). `measurable` for the *k* ≥ *n* row (D4) and the 23-byte cut (D5). S-0401, Terms, and S-0112, Terms, specify the resource-cell selection used by D4 and D5: the first registered tiberium whose image run contains the overlay index, or the first tiberium if none does. `unmeasured` for failure on negative keys: no safe, defined original result exists to compare; ignoring and warning is our engine's design rule.
     - Confidence: medium (high for the key parse)
 
-11. **The sidebar order does not depend on registration index.** Each buildable item goes to a fixed sidebar tab:
+11. **Sidebar sorting does not use registration index as a key.** S-0407 claim 17 owns admission order when several types become offered at the same recheck. That order can affect the final positions of tied icons under the newest-first rule below, even though registration index is not a sorting key. Each buildable item goes to a fixed sidebar tab:
 
     | Item | Tab |
     |---|---|
