@@ -102,3 +102,4 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0504](movement/S-0504-naval-units.md) | Naval units (ship locomotion, wakes, sinking, underwater vessels, docking at yards) | movement | 1 | approved | — |
 | [S-0506](combat/S-0506-missiles.md) | Missiles (spawned missiles, launch cycle and rocket flight) | combat | 1 | approved | — |
 | [S-0614](combat/S-0614-parasites.md) | Parasites | combat | 1 | approved | — |
+| [S-0501](movement/S-0501-aircraft.md) | Aircraft flight, attack runs and pads | movement | 1 | approved | — |
