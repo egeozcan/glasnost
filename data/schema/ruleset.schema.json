@@ -5868,6 +5868,16 @@
           "type": "boolean",
           "default": true
         },
+        "factory_apron_short_list": {
+          "description": "A ground factory whose exit list has fewer than eleven entries takes\nthe original's special apron pairs; off: the list's last pair\n(interim, request Q-0221).",
+          "type": "boolean",
+          "default": true
+        },
+        "factory_fixed_hover_exit": {
+          "description": "A released vehicle that neither drives nor drives temporarily heads\nfor the fixed cell (x₀ + 4, y₀ + 1); off: the exit apron.",
+          "type": "boolean",
+          "default": true
+        },
         "failed_packup_keeps_vehicle": {
           "description": "The vehicle of a failed pack-up remains.",
           "type": "boolean",

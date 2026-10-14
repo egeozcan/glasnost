@@ -963,6 +963,17 @@ pub struct Quirks {
     // spec: S-0415 claim 9
     #[serde(default = "on")]
     pub packup_sound_on_sale: bool,
+    /// A ground factory whose exit list has fewer than eleven entries takes
+    /// the original's special apron pairs; off: the list's last pair
+    /// (interim, request Q-0221).
+    // spec: S-0417 Edge cases
+    #[serde(default = "on")]
+    pub factory_apron_short_list: bool,
+    /// A released vehicle that neither drives nor drives temporarily heads
+    /// for the fixed cell (x₀ + 4, y₀ + 1); off: the exit apron.
+    // spec: S-0417 Edge cases; S-0417 claim 5
+    #[serde(default = "on")]
+    pub factory_fixed_hover_exit: bool,
     /// A sidebar item tied with existing items on every key goes before
     /// them (the newest first); off: after them.
     // spec: S-0004 claim 11
@@ -1230,6 +1241,8 @@ impl Default for Quirks {
             deploy_refuses_own_walls: true,
             failed_packup_keeps_vehicle: true,
             packup_sound_on_sale: true,
+            factory_apron_short_list: true,
+            factory_fixed_hover_exit: true,
             sidebar_tie_newest_first: true,
             sidebar_both_flags_rank: true,
             initial_ammo_above_capacity: true,
@@ -1794,6 +1807,8 @@ impl Quirks {
                 self.failed_packup_keeps_vehicle,
             ),
             ("packup_sound_on_sale", self.packup_sound_on_sale),
+            ("factory_apron_short_list", self.factory_apron_short_list),
+            ("factory_fixed_hover_exit", self.factory_fixed_hover_exit),
             ("sidebar_tie_newest_first", self.sidebar_tie_newest_first),
             ("sidebar_both_flags_rank", self.sidebar_both_flags_rank),
             (
