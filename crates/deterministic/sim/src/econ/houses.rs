@@ -26,10 +26,10 @@ fn house_update(w: &mut World, h: HouseId) {
     crate::econ::radar::house_update(w, h);
     // spec: S-0414 claim 16 (a pending surrender's destruction and the defeat test after power and the ordinary radar recheck, which do not see that destruction, and before the tech-tree recheck, which does)
     crate::econ::victory::house_update(w, h);
+    // spec: S-0414 claim 18 (the owner-house raise of S-0011 claim 35 sees this update's surrender destruction and defeat test, after power and radar, before the tech-tree recheck; defeated houses keep raising)
+    crate::triggers::house_raise(w, h);
     // spec: S-0407 claim 12 (a recheck in the first house update after an event; S-0404 claim 9 and S-0411 claim 2: the removal orders in that house update)
     super::tech::house_update(w, h);
     // spec: S-0411 claim 9 (the automatic release order)
     super::sidebar::release_orders(w, h);
-    // spec: S-0011 claim 35 (the raise of the house's tags every eighth tick, near the end of its update; Q-0267 for its place)
-    crate::triggers::house_raise(w, h);
 }

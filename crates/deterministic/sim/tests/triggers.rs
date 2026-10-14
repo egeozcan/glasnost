@@ -618,3 +618,117 @@ fn save_load_mid_timer() {
     assert_eq!(save::state_hash(&v), save::state_hash(&w));
     assert!(w.triggers.fired >= 2);
 }
+
+/// A repeating tag whose only trigger is destroyed-by-anything with no
+/// action, carried by a vehicle; the firings of `destruction_raises`.
+fn destruction_firings(r: glasnost_rules::schema::Ruleset, repeat: i32, attacker: bool) -> u64 {
+    let extra = r.globals.quirks.vehicle_destruction_extra_raises;
+    let rules = Arc::new(SimRules::new(&r, "synthetic-test"));
+    let mut w = game_rules(
+        triggers(
+            vec![trig(vec![ev(48, 0)], vec![])],
+            vec![tag(repeat, vec![0])],
+        ),
+        rules,
+    );
+    let v = testkit::spawn(
+        &mut w,
+        glasnost_sim::rules::Kind::Vehicle,
+        "CART",
+        0,
+        glasnost_map::CellXY::new(3, 3),
+        0,
+    );
+    triggers::object_tag(&mut w, v, Some(b"TAG"));
+    let f0 = w.triggers.fired;
+    triggers::destruction_raises(&mut w, v, attacker, extra);
+    w.triggers.fired - f0
+}
+
+// spec: S-0011 claim 19 and scenario T7 (a fresh repeating destroyed-by-anything trigger fires seven times for a normal vehicle death with an attacker and four without; S-0312 claim 29's groups)
+#[test]
+fn vehicle_destruction_firings() {
+    assert_eq!(destruction_firings(testkit::ruleset(), 2, true), 7);
+    assert_eq!(destruction_firings(testkit::ruleset(), 2, false), 4);
+}
+
+// spec: S-0011 claim 19 (a common-group-only death fires twice; quirks.vehicle_destruction_extra_raises off omits the extra vehicle group)
+#[test]
+fn common_group_only_firings() {
+    let mut r = testkit::ruleset();
+    r.globals.quirks.vehicle_destruction_extra_raises = false;
+    assert_eq!(destruction_firings(r.clone(), 2, true), 2);
+    assert_eq!(destruction_firings(r, 2, false), 2);
+}
+
+// spec: S-0011 claim 19 (persistent latching off: twice with the extra group, once without; repeat type 0: one firing)
+#[test]
+fn destruction_firings_without_the_latch() {
+    let mut r = testkit::ruleset();
+    r.globals.quirks.persistent_event_latch = false;
+    assert_eq!(destruction_firings(r.clone(), 2, true), 2);
+    r.globals.quirks.vehicle_destruction_extra_raises = false;
+    assert_eq!(destruction_firings(r, 2, true), 1);
+    assert_eq!(destruction_firings(testkit::ruleset(), 0, true), 1);
+}
+
+// spec: S-0011 claim 18 (a unit's arrival raises the cell's tag with the entered-by code and the unit as causing object; any house)
+#[test]
+fn cell_entered_raises_the_cell_tag() {
+    let mut t = triggers(
+        vec![trig(vec![ev(1, -1)], vec![set(0)])],
+        vec![tag(0, vec![0])],
+    );
+    t.cell_tags = vec![((4, 4), 0)];
+    let mut w = game(t);
+    let v = testkit::spawn(
+        &mut w,
+        glasnost_sim::rules::Kind::Vehicle,
+        "CART",
+        0,
+        glasnost_map::CellXY::new(4, 4),
+        0,
+    );
+    triggers::cell_entered(&mut w, v, (5, 4));
+    assert!(!var(&w, 0), "an untagged cell raises nothing");
+    triggers::cell_entered(&mut w, v, (4, 4));
+    assert!(var(&w, 0));
+    assert!(
+        !w.triggers.cells.contains_key(&(4, 4)),
+        "the one-time tag's raising cell loses it"
+    );
+}
+
+// spec: S-0011 claim 15 (Q-0269: an effective self-enable action arms the instance again, with its own draws, and its length replaces the satisfaction-caused one; both armings have the firing tick as arming tick)
+#[test]
+fn self_enable_rearms_again() {
+    // A repeating random-delay trigger (value 10); the self-enabling case
+    // takes one more arming draw at each firing than the plain case.
+    let run = |self_enable: bool| {
+        let mut en = act(53, 0);
+        en.trigger = Some(0);
+        let actions = if self_enable {
+            vec![en, set(0)]
+        } else {
+            vec![set(0)]
+        };
+        let mut w = game(triggers(
+            vec![trig(vec![ev(51, 10)], actions)],
+            vec![tag(2, vec![0])],
+        ));
+        let before = w.rng.clone();
+        let t = tick_set(&mut w, 0, 400).expect("fires");
+        let inst = w.triggers.tags[&0].instances[0].clone();
+        (before, w.rng.clone(), t, inst.start)
+    };
+    let (b0, a0, t0, s0) = run(false);
+    let (b1, a1, t1, s1) = run(true);
+    assert_eq!(format!("{b0:?}"), format!("{b1:?}"));
+    assert_eq!(t0, t1, "the first delay is the same draw");
+    assert_eq!((s0, s1), (t0, t1));
+    assert_ne!(
+        format!("{a0:?}"),
+        format!("{a1:?}"),
+        "the self-enable arming takes its own draws"
+    );
+}
