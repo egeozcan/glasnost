@@ -325,6 +325,38 @@ What it knows is what a person in its seat knows: its own objects, its productio
 
 Tests: `crates/deterministic/ai/tests/ai.rs` on the synthetic skirmish (`fixture`): the build-up, a rebuilt power plant, base defence, and shroud honesty (two worlds that differ only by an enemy unit on a cell the house has not explored give identical orders over a think period) in debug; the rebuilt harvesters, the rebuilt construction yard and two whole games played to one winner with each house's loop checked in release (`cargo test --release -p glasnost-ai -- --include-ignored`). The determinism gate adds two AI duels (`duel`, `duel-diagonal`: the AI against itself on `fixture::map` and `fixture::map_diagonal`, hashed with `Game::state_hash`, saved and loaded halfway; the loaded game must hash alike and the run goes on from it).
 
+## Map triggers (M5b)
+
+`glasnost_sim::triggers` runs the map triggers of S-0011 in a skirmish; the converter
+(`crates/convert/src/map/triggers.rs`) resolves the map's `[Triggers]`, `[Events]`, `[Actions]`,
+`[Tags]`, `[CellTags]` and `[VariableNames]` into registration-indexed definitions
+(`glasnost_map::triggers`), which the world keeps, so a save carries them. Tags are created at the
+cell tags, at pre-placed objects and at the end of loading (with their draws, claim 34), polled in
+row 1 of the tick, raised by their owner house every eighth tick, and deleted at the end of the
+tick when a one-time tag fired. Covered events: any event, elapsed time, random delay, game time,
+variable set and clear, type exists and does not exist, and the code-matched evaluation with its
+latches for raises with a code. Covered actions: enable and disable, set and clear variable, the
+mission timer (`TriggerState::mission`), reveal around a waypoint, and the presentation-only
+actions as `Effect::Trigger` (the audio crate plays sound and sound-at-waypoint by name).
+Interim rules and gaps:
+
+- The owner-house raise comes last in the house's own update (Q-0267).
+- No carrier raises yet: entered-by, destroyed-by-anything and bridge destroyed wait for their
+  moments (Q-0268). `triggers::raise` takes them once specified.
+- A satisfied instance is re-armed before its actions fire (Q-0269).
+- Sound at a waypoint plays the sound once at the cell's centre; giving a building or terrain object
+  on the cell the sound as its ambient sound (claim 32) waits for ambient sounds in the audio crate.
+  Text messages, speech and radar events reach the presentation as effects but are not shown yet.
+- An owner country is matched against the countries' type names only; our rules data has no country
+  name field yet.
+- Type exists and does not exist look through buildings, vehicles, infantry and aircraft in that
+  order and take the last exact match (claim 21 leaves the order open).
+- Not implemented yet (recognised, no effect, a note): change owner, destroy attached objects,
+  explosion at a waypoint, make a house cheer, play an animation and the drop-zone animation
+  (claims 24, 27 to 29 and 36), and the hand-over actions of claim 30 (teams, crates, the
+  lightning storm, preferred targets). The stock skirmish maps in use need only elapsed time and
+  sound at a waypoint.
+
 ## Audio (M5b)
 
 `glasnost-audio` turns what the game reports into sound. It never feeds back into the simulation, and nothing in it is simulation state.

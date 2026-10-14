@@ -305,6 +305,8 @@ pub struct World {
     pub notes: Vec<String>,
     /// Economy, production, structures and visibility (M5a).
     pub econ: crate::econ::WorldEcon,
+    /// Map triggers (S-0011).
+    pub triggers: crate::triggers::TriggerState,
     /// The map's theater.
     pub theater: Theater,
     /// The pathfinder in use (S-0212, behind a swappable interface).

@@ -51,6 +51,22 @@ pub enum Effect {
         /// Where, for a sound played at a position.
         pos: Option<Pos>,
     },
+    /// A presentation-only trigger action (S-0011 claim 32): text message
+    /// (11), play sound (19), play speech (21), radar event at a waypoint
+    /// (55) or sound at a waypoint (99). How it is shown or heard is the
+    /// presentation's.
+    Trigger {
+        /// The action code.
+        code: i32,
+        /// The sound or speech name (action parameter kinds 6 and 7).
+        name: String,
+        /// The text label (kind 4).
+        text: String,
+        /// The number slot (the radar event kind for 55).
+        number: i32,
+        /// The waypoint cell's centre, for 55 and 99.
+        pos: Option<Pos>,
+    },
 }
 
 /// The sounds of [`Effect::Sound`].

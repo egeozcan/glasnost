@@ -591,7 +591,7 @@ impl Live {
                     self.counts.kills += 1;
                     continue;
                 }
-                Effect::Sound { .. } => continue,
+                Effect::Sound { .. } | Effect::Trigger { .. } => continue,
             };
             self.transients.push(Transient {
                 kind,

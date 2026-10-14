@@ -1,6 +1,6 @@
 //! The tick pipeline (S-0203): the parts of a tick in their fixed places.
 //!
-//! The parts that have no topic yet (map triggers, planted bombs, the
+//! The parts that have no topic yet (planted bombs, the
 //! weather storm, chrono flashes, diving aircraft, teams, disc lasers,
 //! radiation, pulses, blast rings and crates) are empty seams in their places
 //! of S-0203 claim 1, so that their draws land where the original takes them
@@ -14,7 +14,8 @@ use crate::{drive, infantry, occupancy, orders, process, turret, walk};
 /// Runs one tick (S-0203 claim 1, the draw order of its rows).
 pub fn step(w: &mut World) {
     // spec: S-0203 claim 1 (draw order: row 1, 9, 2, 10, 11, 12, 3, 13, 14, then the turn pass, row 5)
-    // Row 1 (map triggers) has no topic yet: an empty seam.
+    // spec: S-0203 row 1 and S-0011 claim 6 (the poll of every polled tag, at the start of the tick)
+    crate::triggers::poll(w);
     // spec: S-0203 row 9 (growth and spread of resources, S-0401)
     crate::econ::resource::part(w);
     // Rows 2, 10, 11, 12, 3, 13 and 14 (and row 4) have no topic yet: empty seams.
@@ -31,6 +32,8 @@ pub fn step(w: &mut World) {
     crate::econ::houses::part(w);
     // spec: S-0203 claim 7 and S-0213 claim 1 (orders take effect after the turn pass)
     orders::apply_pending(w);
+    // spec: S-0011 claim 11 (a one-time tag that fired is deleted at the end of the tick)
+    crate::triggers::end_tick(w);
     // spec: S-0203 claim 1 (after the last part the tick number grows by 1)
     w.tick = w.tick.wrapping_add(1);
     // Derived data, not state: the regions are brought up to date between
