@@ -957,8 +957,7 @@ fn put_on_hold(w: &mut World, li: usize, hold: Hold) {
 
 /// Row 6 of S-0203: every production line, in creation order (S-0404
 /// claim 1), makes its step when one is due (S-0403 claim 1, S-0404
-/// claim 4). Then the released units on their way out of their factory
-/// buildings (S-0404 claim 13, interim of request Q-0120).
+/// claim 4).
 pub fn part(w: &mut World) {
     let tick = w.tick;
     // spec: S-0404 claim 1 (all lines of all houses in creation order)

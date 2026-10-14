@@ -194,7 +194,7 @@ pub struct BuildingSwitches {
     /// The building's three upgrade positions, 1 to 3 at indices 0 to 2
     /// (S-0405 Terms, S-0406 F5, S-0408 claim 5): the upgrade type recorded
     /// in each, or none.
-    pub upgrades: [Option<u32>; 3],
+    pub upgrades: [Option<u32>; 3], // spec: S-0405 Constants (three upgrade positions), S-0406 Terms (upgrade positions 1 to 3)
     /// The building's upgrade count: the room it has used (S-0406 claim 12,
     /// F5).
     #[serde(default)]

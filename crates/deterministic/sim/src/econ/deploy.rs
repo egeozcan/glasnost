@@ -1,6 +1,6 @@
 //! Deploying a vehicle into a building and packing it up again (S-0415),
 //! and the construction behaviour of a building that builds up (S-0108
-//! claim 5; request Q-0130).
+//! claim 5, S-0406 claims 14 and 15; request Q-0130 for what stays open).
 
 use glasnost_map::CellXY;
 use glasnost_num::F64;

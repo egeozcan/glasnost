@@ -563,7 +563,7 @@ fn process(w: &mut World, id: ObjectId) -> i32 {
         (Some(Behaviour::Unload), Kind::Building) => crate::econ::release::process_unload(w, id),
         // spec: S-0408 claim 16 (selling: a processing delay of 1, no draw)
         (Some(Behaviour::Selling), Kind::Building) => crate::econ::sell::process_selling(w, id),
-        // spec: S-0108 claim 5 (construction ends when the build-up does; request Q-0130)
+        // spec: S-0406 claims 14 and 15 (construction: processed every tick, handed over when the build-up reports completion)
         (Some(Behaviour::Construction), Kind::Building) => {
             crate::econ::deploy::process_construction(w, id)
         }
