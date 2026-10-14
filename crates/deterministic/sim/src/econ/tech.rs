@@ -787,20 +787,42 @@ fn factory_condition(w: &World, house: HouseId, t: TypeRef) -> bool {
 /// the type's kind, on the map, switched on, alive, not being sold and not
 /// queued to be sold.
 fn qualifying_factory(w: &World, house: HouseId, t: TypeRef) -> bool {
-    let r = w.rules();
-    w.objects.values().any(|b| {
-        b.kind == Kind::Building
-            && b.owner == Some(house)
-            && b.on_map
-            && b.health > 0
-            && !b.econ.building.switched_off
-            && !being_sold(b)
-            && !queued_to_be_sold(b)
-            && r.buildings
-                .get(b.type_index as usize)
-                .and_then(|x| x.factory)
-                .is_some_and(|f| f.kind() == t.kind)
-    })
+    w.objects
+        .values()
+        .any(|b| b.owner == Some(house) && qualifies(w, b, t.kind))
+}
+
+/// Whether building `b` is a qualifying factory for types of `kind`
+/// (S-0407 Terms), whoever owns it.
+fn qualifies(w: &World, b: &Object, kind: Kind) -> bool {
+    b.kind == Kind::Building
+        && b.on_map
+        && b.health > 0
+        && !b.econ.building.switched_off
+        && !being_sold(b)
+        && !queued_to_be_sold(b)
+        && w.rules()
+            .buildings
+            .get(b.type_index as usize)
+            .and_then(|x| x.factory)
+            .is_some_and(|f| f.kind() == kind)
+}
+
+/// The admission rank of a kind at a recheck (S-0407 claim 17): the place
+/// in the house's acquisition order of its earliest still-owned qualifying
+/// factory of that kind; none gives the last rank.
+fn admission_rank(w: &World, house: HouseId, kind: Kind) -> usize {
+    let Some(h) = w.houses.get(usize::from(house.0)) else {
+        return usize::MAX;
+    };
+    h.econ
+        .acquired
+        .iter()
+        .position(|&id| {
+            w.obj(id)
+                .is_some_and(|b| b.owner == Some(house) && qualifies(w, b, kind))
+        })
+        .unwrap_or(usize::MAX)
 }
 
 /// Marks a recheck due for a house (S-0407 claim 12): every event of the
@@ -867,9 +889,11 @@ pub fn recheck(w: &mut World, house: HouseId) -> Vec<TypeRef> {
         .get(h.country as usize)
         .copied()
         .flatten();
-    // Q-0191 (interim: several types offered at one recheck are added in set order, kind then registration index)
-    let added: Vec<(Icon, IconKey)> = after
-        .difference(&before)
+    // spec: S-0407 claim 17 (new offers of one recheck: kinds in the acquisition order of their earliest still-owned qualifying factory, then increasing registration index)
+    let mut fresh: Vec<TypeRef> = after.difference(&before).copied().collect();
+    fresh.sort_by_cached_key(|t| (admission_rank(w, house, t.kind), t.kind, t.index));
+    let added: Vec<(Icon, IconKey)> = fresh
+        .iter()
         .map(|&t| {
             let cost = super::production::price(w, house, t);
             (Icon { t, cost }, icon_key(w, t, side))
