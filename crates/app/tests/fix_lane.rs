@@ -89,6 +89,35 @@ impl Shots {
         std::fs::write(&path, png::png(w as u32, h as u32, &rgba)).unwrap();
         println!("wrote {name}.png");
     }
+
+    /// Writes 600-pixel-wide crops at the left and right ends of the drawn
+    /// (not black) part of the battlefield, `name-l.png` and `name-r.png`.
+    fn edges(&self, c: &mut Client, name: &str) {
+        let rgba = c.frame_rgba();
+        let (w, h) = c.size;
+        let m = c.session.as_ref().unwrap().map_rect();
+        let lit = |x: i32| {
+            (0..h).step_by(4).any(|y| {
+                let i = ((y * w + x) * 4) as usize;
+                rgba[i] | rgba[i + 1] | rgba[i + 2] != 0
+            })
+        };
+        let cols: Vec<i32> = (m.x..m.x + m.w).filter(|&x| lit(x)).collect();
+        let (Some(&l), Some(&r)) = (cols.first(), cols.last()) else {
+            return;
+        };
+        println!("{name}: drawn columns {l} … {r} of {}", m.w);
+        for (tag, x0) in [("l", (l - 100).max(0)), ("r", (r - 500).max(0))] {
+            let cw = 600.min(w - x0);
+            let mut out = Vec::with_capacity((cw * h * 4) as usize);
+            for y in 0..h {
+                let i = ((y * w + x0) * 4) as usize;
+                out.extend_from_slice(&rgba[i..i + (cw * 4) as usize]);
+            }
+            let path = self.dir.join(format!("{name}-{tag}.png"));
+            std::fs::write(&path, png::png(cw as u32, h as u32, &out)).unwrap();
+        }
+    }
 }
 
 fn ticks(c: &mut Client, clock: &mut i64, n: usize) {
@@ -133,6 +162,14 @@ fn start(size: (i32, i32)) -> Option<(Client, Shots)> {
         c.status
     );
     Some((c, Shots { dir: out }))
+}
+
+/// Reveals the whole map to the local house, as its defeat would
+/// (S-0409 claim 15), so that the edges are drawn.
+fn reveal(c: &mut Client) {
+    let s = c.session.as_mut().unwrap();
+    let local = s.play.local;
+    glasnost_sim::econ::shroud::defeat_reveal(&mut s.play.game.world, local);
 }
 
 /// Centres the view on `cell`.
@@ -289,4 +326,42 @@ fn own_vehicles(c: &Client) -> Vec<ObjectId> {
         .filter(|o| o.owner == Some(local) && o.kind == Kind::Vehicle)
         .map(|o| o.id)
         .collect()
+}
+
+/// Item 8: on a window wider than the map's local area the view stands
+/// still on that axis while scrolling (S-0101 claim 8, r10's centring),
+/// at both map edges; and the map's right edge at an ordinary width.
+#[test]
+#[ignore = "local lane: needs GLASNOST_GAME_DIR"]
+fn wide_view_and_the_right_edge() {
+    let wide = env_num("GLASNOST_WIDE", 6000) as i32;
+    let Some((mut c, shots)) = start((wide, 1080)) else {
+        eprintln!("GLASNOST_GAME_DIR not set: skipped");
+        return;
+    };
+    let mut clock = 0i64;
+    reveal(&mut c);
+    ticks(&mut c, &mut clock, 5);
+    let s = c.session.as_mut().unwrap();
+    let m = s.map_rect();
+    println!("view {}x{}", m.w, m.h);
+    for (name, x) in [("wide-left", -1_000_000), ("wide-right", 1_000_000)] {
+        let s = c.session.as_mut().unwrap();
+        let y = s.view().origin.1 + m.h / 2;
+        s.set_centre((x, y));
+        let before = s.view().origin;
+        let mut seen = vec![before];
+        for d in [32, 32, -32, -64, 32, 32, 32] {
+            s.scroll((d, 0));
+            seen.push(s.view().origin);
+        }
+        println!("{name}: view origins while scrolling {seen:?}");
+        shots.save(&mut c, name);
+        shots.edges(&mut c, name);
+    }
+    c.resize((1280, 800));
+    let s = c.session.as_mut().unwrap();
+    let y = s.view().origin.1 + s.map_rect().h / 2;
+    s.set_centre((1_000_000, y));
+    shots.save(&mut c, "right-edge");
 }

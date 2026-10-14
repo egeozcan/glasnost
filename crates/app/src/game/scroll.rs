@@ -1,6 +1,6 @@
 //! Edge and arrow-key scrolling of the battlefield view (S-0101 claims 12
 //! to 15, F9), and the displacement of right-drag scrolling (claim 16,
-//! F10), which is not wired to input until S-0214 claim 27's gesture is.
+//! F10), driven by S-0214 claim 27's gesture in the session.
 //!
 //! Scrolling is presentation state: it moves the view centre only, once per
 //! unfrozen game cycle, and never reaches the simulation.
@@ -245,7 +245,7 @@ pub struct DragRequest {
 /// The right-drag request of one unfrozen cycle (S-0101 claim 16, F10):
 /// `anchor` and `pointer` are view pixels, `client` the full client size
 /// (*B*, *C*), `r` the scroll index 0 … 6. Activation, the anchor and the
-/// release are S-0214 claim 27's; this is not wired to input yet.
+/// release are S-0214 claim 27's (`session::scroll_cycle`).
 pub fn drag_request(
     anchor: (i32, i32),
     pointer: (i32, i32),

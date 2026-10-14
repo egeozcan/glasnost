@@ -160,6 +160,21 @@ pub fn limit_centre(
     )
 }
 
+/// The local area's rectangle in world pixels, (x, y, width, height):
+/// the part of the battlefield that F5's limits let a view show, for a
+/// map of width `map_width` (M_w) and local area `local` (V_x, V_y, V_w,
+/// V_h). A view that is not oversized lies inside it.
+pub fn local_area_rect(map_width: i32, local: [i32; 4]) -> (i32, i32, i32, i32) {
+    let [vx, vy, vw, vh] = local;
+    // spec: S-0101 F5 (x_min − w/2 = 30·(2·V_x − M_w), x_max + w/2 − (x_min − w/2) = 60·V_w; y_min − h/2 = 15·(M_w − 5 + 2·V_y), y_max + h/2 − (y_min − h/2) = 30·V_h + 135)
+    (
+        30 * (2 * vx - map_width),
+        15 * (map_width - 5 + 2 * vy),
+        60 * vw,
+        30 * vh + 135,
+    )
+}
+
 /// F6: the ground position (X, Y) in leptons under world pixel
 /// (q_x, q_y), in exact integer arithmetic (equal to the original's value
 /// with the round-toward-zero mode on).
@@ -322,6 +337,29 @@ mod tests {
         let right = left + 60 * 26;
         let ox = view_origin((cx, cy), wide).0;
         assert_eq!(left - ox, ox + wide.0 - right);
+    }
+
+    // spec: S-0101 F5 (every limited view that is not oversized lies inside the local area's pixel rectangle, touching its edges at the limits) and claim 8 (an oversized axis is centred on it)
+    #[test]
+    fn limited_views_lie_inside_the_local_area() {
+        let (mw, local) = (30, [2, 4, 26, 22]);
+        let (lx, ly, lw, lh) = local_area_rect(mw, local);
+        assert_eq!((lx, ly, lw, lh), (-780, 495, 1560, 795));
+        for size in [(640, 400), (1560, 795), (800, 600)] {
+            for r in [(-99999, -99999), (0, 900), (99999, 99999), (-99999, 99999)] {
+                let o = view_origin(limit_centre(r, size, mw, local), size);
+                assert!(o.0 >= lx && o.0 + size.0 <= lx + lw, "{size:?} {r:?}");
+                assert!(o.1 >= ly && o.1 + size.1 <= ly + lh, "{size:?} {r:?}");
+            }
+        }
+        let o = view_origin(limit_centre((-99999, 0), (640, 400), mw, local), (640, 400));
+        assert_eq!(o.0, lx);
+        let size = (3000, 1000);
+        let o = view_origin(limit_centre((0, 0), size, mw, local), size);
+        assert_eq!(lx - o.0, o.0 + size.0 - (lx + lw));
+        // Vertically F5's centre 15·(M_w + 2·V_y + V_h) lies 7.5 pixels above the rectangle's middle.
+        assert_eq!(o.1 + size.1 / 2, 15 * (mw + 2 * 4 + 22));
+        assert!(o.1 < ly && o.1 + size.1 > ly + lh);
     }
 
     /// spec: S-0101 F6 (exact rational arithmetic, truncation toward zero)

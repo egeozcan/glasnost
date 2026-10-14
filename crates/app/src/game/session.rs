@@ -18,8 +18,8 @@ use glasnost_fmt::shp::Shp;
 use glasnost_map::CellXY;
 use glasnost_render::compose::{ComposeQuirks, DEPTH_REFERENCE};
 use glasnost_render::projection::{
-    ProjectionQuirks, TERRAIN_LIFT, cell_top, cursor_cell, limit_centre, project_lifted,
-    view_origin,
+    ProjectionQuirks, TERRAIN_LIFT, cell_top, cursor_cell, limit_centre, local_area_rect,
+    project_lifted, view_origin,
 };
 use glasnost_render::scene::{Filter, Group, Scene, View};
 use glasnost_render::shroud::ShroudQuirks;
@@ -887,6 +887,10 @@ impl Session {
         let mut d = DrawList::new();
         d.image(MAP_IMAGE, m);
         let view = self.view();
+        let f = self.loaded.map.footprint;
+        for r in outside_local_area(m, view.origin, local_area_rect(f.width, f.local)) {
+            d.fill(r, [0, 0, 0, 255]);
+        }
         let world_to_screen = |x: i32, y: i32| (x - view.origin.0 + m.x, y - view.origin.1 + m.y);
         // Placement preview (S-0411 claim 10, S-0406): green where the
         // building would be placed, red elsewhere.
@@ -1118,4 +1122,48 @@ async fn read_icons(vfs: &Vfs, loaded: &Loaded) -> BTreeMap<TypeRef, IndexedImag
         }
     }
     out
+}
+
+/// The parts of the battlefield rectangle `m`, showing world pixels from
+/// `origin`, that lie outside the local area's world-pixel rectangle
+/// `local` (x, y, width, height). Only an oversized view (S-0101 claim 8's
+/// centring) has any: F5 keeps every other view inside the local area. The
+/// original never shows them; our engine draws them black (interim, Q-0570,
+/// docs/development.md), as it draws the world past the map.
+fn outside_local_area(m: Rect, origin: (i32, i32), local: (i32, i32, i32, i32)) -> Vec<Rect> {
+    let (lx, ly, lw, lh) = local;
+    // The local area on the screen, cut to the battlefield.
+    let x0 = (lx - origin.0 + m.x).clamp(m.x, m.right());
+    let x1 = (lx + lw - origin.0 + m.x).clamp(m.x, m.right());
+    let y0 = (ly - origin.1 + m.y).clamp(m.y, m.bottom());
+    let y1 = (ly + lh - origin.1 + m.y).clamp(m.y, m.bottom());
+    [
+        Rect::new(m.x, m.y, x0 - m.x, m.h),
+        Rect::new(x1, m.y, m.right() - x1, m.h),
+        Rect::new(x0, m.y, x1 - x0, y0 - m.y),
+        Rect::new(x0, y1, x1 - x0, m.bottom() - y1),
+    ]
+    .into_iter()
+    .filter(|r| r.w > 0 && r.h > 0)
+    .collect()
+}
+
+#[cfg(test)]
+mod local_area_tests {
+    use super::*;
+
+    // spec: S-0101 F5 (a limited view that is not oversized lies inside the local area: nothing is masked) and claim 8 (an oversized view centred on it: the margins on both sides are masked)
+    #[test]
+    fn only_an_oversized_view_has_margins() {
+        let m = Rect::new(0, 0, 640, 400);
+        let local = (-780, 495, 1560, 795);
+        assert!(outside_local_area(m, (-780, 495), local).is_empty());
+        assert!(outside_local_area(m, (140, 890), local).is_empty());
+        let wide = Rect::new(0, 0, 2000, 400);
+        let margins = outside_local_area(wide, (-1000, 600), local);
+        assert_eq!(
+            margins,
+            vec![Rect::new(0, 0, 220, 400), Rect::new(1780, 0, 220, 400)]
+        );
+    }
 }
