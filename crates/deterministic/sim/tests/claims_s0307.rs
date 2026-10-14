@@ -1484,3 +1484,94 @@ fn claim_22_shortcut_applied_by_the_approach_step() {
             .is_some_and(|x| x.taken(position::BOTTOM))
     );
 }
+
+// spec: S-0208 claim 21 (on ground the second position choice keeps P and takes no draw; the walker walks to P in its own cell without a path step, and the arrival is a cell-arrival update that keeps the different destination cell)
+#[test]
+fn s0208_claim_21_walk_to_p_on_the_ground() {
+    let mut r = base("0.5");
+    let (mut w, a) = close_walker(&mut r);
+    let t = walker_target(&mut w, a, 1, 0, position::BOTTOM);
+    w.obj_mut(a).unwrap().beh.current = Some(glasnost_sim::rules::Behaviour::Attack);
+    let mut probe = w.clone();
+    let before = w.rng.clone();
+    let reach = firer_weapon_range(&probe, a, 0);
+    approach_search(&mut probe, a, reach);
+    let search_draws = probe.rng.taken() - before.taken();
+    glasnost_sim::approach::step(&mut w, a);
+    assert_eq!(w.rng.taken() - before.taken(), search_draws, "no second position-choice draw");
+    let own = cell_of(0, 0);
+    let (u, v) = glasnost_sim::walk::standing_point(position::BOTTOM);
+    let p = Pos::new(256 * own.x + u, 256 * own.y + v, 0);
+    assert!(w.obj(a).unwrap().path.steps.is_empty());
+    for _ in 0..200 {
+        testkit::run(&mut w, 1);
+        let o = w.obj(a).unwrap();
+        if o.walk.as_ref().and_then(|s| s.arrived) == Some(w.tick - 1) {
+            assert_eq!(o.pos, p);
+            assert_eq!(o.pos.cell(), own);
+            // Claim 16 does not end the walk for a different destination cell alone; the target stays out of range (claim 17).
+            assert_eq!(o.dest, Some(Target::Cell(cell_of(1, 0))));
+            assert_eq!(o.target, Some(Target::Object(t)));
+            return;
+        }
+        assert_eq!(o.walk.as_ref().and_then(|s| s.target), Some(p), "tick {}", w.tick);
+    }
+    panic!("the walker never reached P");
+}
+
+/// The close walker of `close_walker` moved onto a high bridge's deck over
+/// its own cell, with the deck record's positions `taken` held by another
+/// object.
+fn deck_walker(taken: &[u8]) -> (World, ObjectId, ObjectId) {
+    let mut r = base("0.5");
+    let (mut w, a) = close_walker(&mut r);
+    let own = cell_of(0, 0);
+    let i = w.cells.idx(own).unwrap();
+    w.cells.deck[i] = true;
+    w.cells.deck_entry[i] = true;
+    w.cells.bridge_axis[i] = glasnost_sim::cells::Axis::X;
+    let oq = glasnost_sim::objects::occ_quirks(&w);
+    w.cells.leave(own, Layer::Ground, a);
+    w.cells.clear_infantry(own, Layer::Ground, a, oq);
+    w.cells.enter(own, Layer::Deck, a, false);
+    {
+        let o = w.obj_mut(a).unwrap();
+        o.layer = Layer::Deck;
+        o.pos.z += 416;
+    }
+    for &p in taken {
+        w.cells.mark_infantry(own, Layer::Deck, p, ObjectId(9999), HouseId(1));
+    }
+    let t = walker_target(&mut w, a, 1, 0, position::BOTTOM);
+    w.obj_mut(a).unwrap().beh.current = Some(glasnost_sim::rules::Behaviour::Attack);
+    (w, a, t)
+}
+
+// spec: S-0208 claim 21 (above the deck the second choice reads deck occupancy: P's position taken there gives another side position at the deck standing height, reserved in the deck record)
+#[test]
+fn s0208_claim_21_deck_choice_moves_to_another_side_position() {
+    let (mut w, a, _) = deck_walker(&[position::BOTTOM]);
+    glasnost_sim::approach::step(&mut w, a);
+    let own = cell_of(0, 0);
+    let o = w.obj(a).unwrap();
+    assert_eq!(o.dest, Some(Target::Cell(cell_of(1, 0))));
+    let s = o.walk.as_ref().unwrap();
+    let wt = s.target.expect("a walking target");
+    assert!(matches!(s.standing, position::LEFT | position::RIGHT), "{}", s.standing);
+    let (u, v) = glasnost_sim::walk::standing_point(s.standing);
+    assert_eq!(wt, Pos::new(256 * own.x + u, 256 * own.y + v, 416));
+    assert!(w.cells.occ(own, Layer::Deck).unwrap().taken(s.standing));
+    assert!(!w.cells.occ(own, Layer::Ground).is_some_and(|x| x.taken(s.standing)));
+}
+
+// spec: S-0208 claim 21 (no deck position: no immediate walking target, not a transfer to the ground; the destination still becomes the target's cell)
+#[test]
+fn s0208_claim_21_no_deck_position_no_walking_target() {
+    let (mut w, a, t) = deck_walker(&[position::BOTTOM, position::LEFT, position::RIGHT]);
+    glasnost_sim::approach::step(&mut w, a);
+    let o = w.obj(a).unwrap();
+    assert_eq!(o.dest, Some(Target::Cell(cell_of(1, 0))));
+    assert_eq!(o.target, Some(Target::Object(t)));
+    assert_eq!(o.walk.as_ref().unwrap().target, None);
+    assert_eq!(o.layer, Layer::Deck);
+}
