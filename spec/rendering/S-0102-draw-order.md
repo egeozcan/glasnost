@@ -2,7 +2,7 @@
 id: S-0102
 title: Draw order, render layers, depth compositing, sprite placement and shadow pixels
 topic: rendering
-revision: 8
+revision: 9
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -24,6 +24,12 @@ drawn as sprites, terrain objects, overlays and smudges), which image frame a ve
 sprite shows, and what a shadow does to the pixels under it. Positions, world pixels and the height
 lift *L(z)* are those of S-0101. This spec covers skirmish; network games and campaigns are out
 of scope.
+
+**Cross-spec correction required at hand-off.** S-0108 claim 23 still says this spec's door-sprite
+term excludes the closed state and requests a Terms correction. That statement is obsolete:
+revision 8 already included closed, and this revision retains it. Remove that stale requirement
+and the matching S-0108 cross-spec change entry; retain its door-visibility rule and depth pointer
+here. No door-depth change is required.
 
 ## Terms
 
@@ -217,9 +223,13 @@ screen rows.
    - Backing: `measurable` (scenario D3)
    - Confidence: high for the insertion and swap rules; medium for the exact one-tick lag
 7. **Other layers are never sorted.** Objects entering the underground, surface, air or top layer
-   are appended at the end of the list and never reordered. Among aircraft, for instance, the one that
-   most recently took off is drawn over the others regardless of screen position.
-   - Backing: `measurable` (scenario D5)
+   are appended at the end of the list and never sorted. Among aircraft, for instance, the one that
+   most recently entered or re-entered the layer is drawn over the others regardless of screen
+   position. Take-off is one such event, not necessarily the last one during flight (claim 4).
+   - Backing: `unmeasured` for absence of sorting in every non-ground layer: D5 is exploratory
+     for air/top order, but flight re-entry events are unresolved (claim 4), so an order change
+     cannot yet be distinguished from re-entry. No scenario here isolates underground or surface
+     insertion order either.
    - Confidence: high
 
 ### Depth compositing
@@ -377,7 +387,7 @@ screen rows.
       and D31 (e), on ordinary terrain only; voxel units
       D7, D9, D10 (relative tests only); voxel shadow D23 (profile; its bias only relative to the
       body's); voxel turret D22 (d), including the absent-key default 0 of the turret slot depth
-      adjustment; building body, both unloading bodies, gate body, shadow, bib,
+      adjustment; gate body, building shadow, bib,
       under-door sprites, non-animated terrain object and its shadow D15; projectile sprite,
       projectile shadow,
       ordinary, flat and tiled animations and animation shadow D15; overlays, wall, rock, ore and gems
@@ -388,6 +398,9 @@ screen rows.
       - the generic infantry shadow above a high-bridge cell at or above the deck: S-0107 claim 19
         leaves the neighbouring-cell condition unresolved, so its point and depth cannot be
         predicted for a controlled setup here.
+      - normal and unloading building-body biases: D15 does not isolate their values from the
+        unresolved companion depth image and the different unloading sprite rectangles. Image
+        selection is covered by S-0108 B10, not an absolute depth-bias test here.
       - building parts drawn as sprites and the door sprite: the only writer they overlap is their
         own body, whose companion depth image has reference points that are not yet settled (F5,
         Open questions).
@@ -593,8 +606,8 @@ screen rows.
     (*x*<sub>p</sub>, *y*<sub>p</sub>), the image frame's top-left pixel lands at
     (*x*<sub>p</sub> − ⌊*W*/2⌋ + *c*, *y*<sub>p</sub> − ⌊*H*/2⌋ + *r*) (F6). The image frame's own
     width and height play no part, and every image frame of the file shares the same canvas, so
-    image frames of different sizes stay aligned. An odd canvas size puts the draw point on the pixel just left of
-    (or just above) the canvas's true centre: a canvas 61 pixels wide has its draw point on column 30.
+    image frames of different sizes stay aligned. For an odd canvas size the integer half is rounded
+    down, not up: a canvas 61 pixels wide has its draw point on column 30, not 31.
     This is the meaning of "drawn centred" in S-0108 claim 8. It applies to building images (body,
     build-up, bib, shadow, unloading, under-door and door sprites), infantry, vehicles drawn as
     sprites, terrain objects, overlays, smudges, every shadow image frame, and also to projectile and
@@ -757,8 +770,11 @@ screen rows.
       1 through the override section, which pre-placed objects already follow, S-0009), the
       strength of a terrain type and its quirk (D27 (iv) and (v)), and the image frames of animated
       terrain objects (D27 (vi)); animated terrain objects by the type's flag D33 (c). `unmeasured`
-      for the destruction frames and for the object pass of an object whose destruction has begun,
-      because the destruction sequence is not settled (Open questions), so no expected image frame can be stated, and for a
+      for destruction-frame selection and timing, because the destruction sequence is not settled
+      (Open questions), so no expected image-frame sequence can be stated. D36 (c) tests the
+      body/shadow ordering during visible destruction independently of that timing (claim 30),
+      not the exact transition tick from cell pass to object pass; that transition remains
+      `unmeasured` because no scenario here isolates it. Also `unmeasured` for a
       terrain type whose section no layer holds: the original's type lists name only types that
       have sections in stock data, and whether a test map can add one without a section is not
       known.
@@ -1184,7 +1200,7 @@ building's key. Between two units, the one later in the list is drawn on top whe
 - **`quirks.ground_layer_single_pass_sort`** (default: on). For every switch in this section with a stated default, that default is the original YR behaviour; an alternative explicitly identified as our engine's alternative is not behaviour of the original. The ground layer gets one adjacent-swap pass per tick (claim 6). Alternative: fully sort the ground layer every tick (stable, by key). With the quirk on, fast units moving up the screen can be drawn over units they have already passed behind for a few ticks.
 - **`quirks.unsorted_upper_layers`** (default: on). Underground, surface, air and top layers keep
   insertion order (claim 7). Alternative: sort them like the ground layer. With the quirk on,
-  overlapping aircraft are ordered by take-off time, not by screen position.
+  overlapping aircraft are ordered by their latest layer entry or re-entry, not by screen position.
 - **`quirks.layer_change_on_events_only`** (default: on). Layer membership is updated only at the
   moments of claim 4. Alternative: re-evaluate every tick. Affects, for example, objects whose
   height crosses the cruise height without one of those moments.
@@ -1391,10 +1407,12 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
   it, (b) is not measurable.
 - **D5, air/top insertion order (claim 7).** Setup: two aircraft of the same type take off one
   after the other and fly crossing paths. Observable: which aircraft is on top where they overlap, and
-  which is lower on screen. Expected: the one that took off later is on top, whichever is lower on
-  screen. Falsified if the one that took off earlier is drawn on top in any overlap. If the order
-  changes during straight flight with no take-off or landing, flight moves re-place aircraft (Open
-  questions, layer re-evaluation in flight).
+  which is lower on screen. Expected between layer re-entries: the aircraft that entered
+  later stays on top, even when the screen-position order reverses. An order reversal without
+  re-entry would falsify claim 7. However, flight re-entry events remain unresolved (claim 4),
+  so an order change during straight flight is inconclusive, not itself a falsifier: record it
+  to help settle that question. Take-off order alone does not predict all later overlaps.
+  This is an exploratory scenario until those events can be identified independently.
 - **D6, tile depth (claims 9, 10).** Setup: a test map with a cliff more than 4 levels high
   facing the camera. (a) A vehicle driving along the low ground behind (map north-west of, up the screen from) the high ground's
   cliff top. (b) A vehicle driving along the cliff top. Observable: which of the vehicle's pixels are
@@ -1524,12 +1542,10 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
     body while opening (−2, for a type whose normal depth adjustment is absent) −7 to −6 rows, that
     is, the probe shows over them while its last row is still 6 or 7 rows above theirs; a terrain
     object that is not animated (−12) 0 to 2 rows; a non-flat overlay that is neither wall nor rock
-    (−17) 3 or 4 rows (D11). Building body with a companion depth image: only the relative result
-    is predicted, for a type whose normal depth adjustment is absent. While it unloads a unit of an
-    ordinary type, the body drawn as its deploying sprite (−22) switches about 15 rows farther toward
-    the viewer than the same body in its normal state (−2). While it unloads a unit of a jumpjet
-    type, the body drawn as its roof-deploying sprite (−42) switches about 29 rows farther (each
-    only for a building whose art names that image).
+    (−17) 3 or 4 rows (D11). Normal and unloading building bodies are excluded from this numerical
+    comparison: F2's comparison without a companion depth image cannot predict their cutoffs,
+    and different body sprites can have different rectangle bottoms. Their biases remain
+    `unmeasured` here for those reasons (claim 13).
   - Upright readers behind a wall overlay (−2), observable: the smallest distance
     *b*<sub>reader</sub> − *b*<sub>wall</sub> at which the reader shows over the wall. Expected: an
     ordinary animation (−2) shows from 1 to 3 rows; a tiled animation (−50) shows already from −35
@@ -1597,7 +1613,8 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
   on it, confirm in a control run that the health bar is drawn at the lifted position: it must move
   up when the unit lifts off. If the hover moves up and down, record the mean over at least 100
   drawn frames. Expected (lifts from S-0101 F2): A hovers at 208 leptons, a lift of *L*(208) = 30
-  rows; C at 300 leptons, 43 rows; B at 500 leptons, 72 rows; each within ±2 rows. Falsified if A's
+  rows; C at 300 leptons, 43 rows; B at 500 leptons, 72 rows; each within ±2 rows. Falsified if any run
+  differs from its expected lift by more than 2 rows; in particular, if A's
   lift is near *L*(100) = 14 rows (no minimum), or if B's lift is near *L*(400) = 57 rows (the
   global cruise height used instead of the type's default), or more than 2 rows from 72. That the
   same value is also the air/top threshold is tested by D12.
@@ -1707,7 +1724,13 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
     the wall's image are visible. Expected (Comparing two drawings, upright over upright): with
     −60 the animation is shown in the overlap and with +60 hidden; the run with the key absent is
     identical to the run with 0. Falsified if −60 and +60 give the same result, or if the absent
-    run differs from the run with 0.
+    run differs from the run with 0. Repeat the explicit-zero-slot run with a named loose copy
+    of the art file changing only this animation type's depth adjustment to +60 depth units.
+    For this repeat, choose a qualifying pixel visible in the zero-slot control that would be
+    hidden by an added +60 depth units under F2; otherwise reposition the wall and repeat both
+    controls. Expected: identical qualifying pixels to the unchanged-art zero-slot run, because the slot
+    replaces the type's value. Any changed depth acceptance falsifies replacement. Keep the
+    animation's vertical draw shift, image and slot displacement unchanged in this comparison.
   - (d) Turret drawn as a voxel model. A wall segment placed so that its image overlaps part of the voxel turret's
     image outside the building's body. Runs: the turret slot's depth adjustment left absent, set to
     0, set to −60 and set to +60. Observable: which of the turret's pixels inside the wall's image
@@ -1773,7 +1796,8 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
   bridge whose deck cells carry overlay data values inside and outside 9 to 17. Observable: the
   screen row and column of a chosen pixel of each overlay's image frame and, where it has one, of
   its shadow frame. Expected: claim 24 with F6. Falsified if any shift differs from the claim by one
-  row or more, or if any horizontal shift appears.
+  row or more, or if the horizontal displacement differs from claim 24 (0 normally; 15 columns
+  left for the specified deck-cell shadow).
 - **D27, terrain objects (claim 23).** Setup: a stock tree type on a flat level-0 cell, the same
   type on a flat level-2 cell and on a sloped cell, and a stock terrain type that spawns ore on a
   flat level-0 cell. Observable: (i) the screen position of a chosen pixel of each object's image
@@ -2078,8 +2102,9 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
   mapped; the construction state's build-up sprite is not yet placed. The special overlay image named in a building's art is read, but no drawing of it
   was found; medium confidence.
 - **Building parts drawn as sprites in the object pass, and the door sprite:** the −2 is inferred
-  from how other building and unit sprites are drawn, and when exactly the door sprite shows (which
-  door stages) is not fully mapped. Low confidence.
+  from how other building and unit sprites are drawn. Their depth rules remain low confidence
+  (claim 13). Door-sprite visibility is settled by S-0108 claim 23: it is drawn throughout
+  unloading, including the closed state.
 - **Terrain objects:** the image frames of the destruction sequence (claim 23) are not mapped,
   nor whether an object whose destruction has begun takes turns. The image frames of animated
   terrain objects, the strength of a terrain type and the 16-row raise of ore-spawning objects
