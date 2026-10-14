@@ -155,9 +155,47 @@ pub enum Paint {
     Lit(Shade),
     /// A tile diamond shaded as `Lit`.
     LitDiamond(Shade),
+    /// As `Lit`, but each pixel blends with the pixel already painted by a
+    /// translucency code of 1 to 3 (S-0102 claim 32, F8). Code 0 is `Lit`.
+    Translucent(Shade, Translucency),
     /// Each non-zero pixel darkens the pixel beneath: every hi-colour
     /// channel halved, rounded down (S-0102 claim 26, F7).
     Shadow,
+}
+
+/// A blending translucency code of S-0102 claim 32 and F8 (S-0109 claims
+/// 20 and 21 choose it). Code 0 replaces the destination and is not one.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Translucency {
+    /// Code 1, 25 % translucent.
+    Quarter,
+    /// Code 2, 50 % translucent.
+    Half,
+    /// Code 3, 75 % translucent.
+    ThreeQuarter,
+}
+
+impl Translucency {
+    /// The blend of code `code`; `None` for code 0 (opaque, it replaces
+    /// the destination) and for any other value.
+    pub fn from_code(code: i32) -> Option<Self> {
+        // spec: S-0102 claim 32, F8 (code 0 replaces the destination; codes 1, 2 and 3 blend)
+        match code {
+            1 => Some(Self::Quarter),
+            2 => Some(Self::Half),
+            3 => Some(Self::ThreeQuarter),
+            _ => None,
+        }
+    }
+
+    /// The code, 1 to 3.
+    pub fn code(self) -> u32 {
+        match self {
+            Self::Quarter => 1,
+            Self::Half => 2,
+            Self::ThreeQuarter => 3,
+        }
+    }
 }
 
 /// Width of a tile diamond in pixels (S-0010 claim 22).
@@ -302,7 +340,9 @@ impl Frame {
         let (r0, r1) = (d.y, d.y + h - 1);
         let first_row = match d.paint {
             Paint::Row(i) | Paint::Diamond(i) => rows.get(i),
-            Paint::Lit(s) | Paint::LitDiamond(s) => rows.get(s.base as usize),
+            Paint::Lit(s) | Paint::LitDiamond(s) | Paint::Translucent(s, _) => {
+                rows.get(s.base as usize)
+            }
             Paint::Shadow => None,
         };
         if !matches!(d.paint, Paint::Shadow) && first_row.is_none() {
@@ -413,6 +453,19 @@ impl Frame {
             Paint::Row(r) | Paint::Diamond(r) => rows.get(r),
             // spec: S-0104 claim 15, S-0110 claim 5 (the pixel's light-alpha value picks the row)
             Paint::Lit(s) | Paint::LitDiamond(s) => rows.get(s.row(self.alpha[i])),
+            Paint::Translucent(s, t) => {
+                // spec: S-0102 claim 32 (the selected, lit hi-colour source pixel blends with the
+                // already-painted destination by F8)
+                if let Some(row) = rows.get(s.row(self.alpha[i])) {
+                    self.color[i] = blend(
+                        row[usize::from(index)],
+                        self.color[i],
+                        t,
+                        PixelLayout::Rgb565,
+                    );
+                }
+                return;
+            }
             Paint::Shadow => {
                 self.color[i] = darken565(self.color[i]);
                 return;
@@ -445,6 +498,48 @@ pub fn darken565(c: u16) -> u16 {
     let g = ((c >> 5) & 0x3F) >> 1;
     let b = (c & 0x1F) >> 1;
     (r << 11) | (g << 5) | b
+}
+
+/// The hi-colour pixel layouts of S-0103 claim 9.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PixelLayout {
+    /// 5 bits red, 6 green, 5 blue (the layout our frames use).
+    Rgb565,
+    /// 5 bits for each channel.
+    Rgb555,
+}
+
+/// One channel of F8 (S-0102): `s` the source channel after palette
+/// selection and lighting, `d` the destination channel, both packed.
+pub fn blend_channel(s: u16, d: u16, t: Translucency) -> u16 {
+    // spec: S-0102 F8 (each division rounds down separately before the multiplication or addition)
+    match t {
+        // spec: S-0102 F8 (code 1, 25 %: 3·⌊s/4⌋ + ⌊d/4⌋)
+        Translucency::Quarter => 3 * (s / 4) + d / 4,
+        // spec: S-0102 F8 (code 2, 50 %: ⌊s/2⌋ + ⌊d/2⌋)
+        Translucency::Half => s / 2 + d / 2,
+        // spec: S-0102 F8 (code 3, 75 %: ⌊s/4⌋ + 3·⌊d/4⌋)
+        Translucency::ThreeQuarter => s / 4 + 3 * (d / 4),
+    }
+}
+
+/// Blends a packed source pixel over a packed destination pixel of the
+/// same layout (S-0102 claim 32, F8): every channel by itself, with no
+/// carry between channels, then repacked in that layout.
+pub fn blend(s: u16, d: u16, t: Translucency, layout: PixelLayout) -> u16 {
+    // spec: S-0102 F8 (5-6-5: red/blue 0…31, green 0…63; 5-5-5: every channel 0…31)
+    let (green_bits, red_shift) = match layout {
+        PixelLayout::Rgb565 => (6, 11),
+        PixelLayout::Rgb555 => (5, 10),
+    };
+    let field = |c: u16, shift: u16, bits: u16| (c >> shift) & ((1 << bits) - 1);
+    let mix =
+        |shift: u16, bits: u16| blend_channel(field(s, shift, bits), field(d, shift, bits), t);
+    let r = mix(red_shift, 5);
+    let g = mix(5, green_bits);
+    let b = mix(0, 5);
+    // spec: S-0102 F8 (repack the three results in the same layout)
+    (r << red_shift) | (g << 5) | b
 }
 
 /// A 5-6-5 pixel as 8-bit channels, top bits repeated into the low bits.
@@ -811,5 +906,142 @@ mod tests {
         f.draw(&d, &rows(), &q);
         assert_eq!(f.color[0], rows()[1][3]);
         assert_eq!(f.depth[0], 0);
+    }
+
+    fn pack(r: u16, g: u16, b: u16, layout: PixelLayout) -> u16 {
+        match layout {
+            PixelLayout::Rgb565 => (r << 11) | (g << 5) | b,
+            PixelLayout::Rgb555 => (r << 10) | (g << 5) | b,
+        }
+    }
+
+    /// spec: S-0102 F8 and D41 (per-channel truncation before the weighted sum: s = 31, d = 15
+    /// gives 24, 22 and 16 for codes 1 to 3, not 27, 23 and 19; green s = 63, d = 31 gives 52,
+    /// 46 and 36; code 0 replaces)
+    #[test]
+    fn f8_channel_blend() {
+        let codes = [
+            Translucency::Quarter,
+            Translucency::Half,
+            Translucency::ThreeQuarter,
+        ];
+        let out: Vec<u16> = codes.iter().map(|&t| blend_channel(31, 15, t)).collect();
+        assert_eq!(out, [24, 22, 16]);
+        let out: Vec<u16> = codes.iter().map(|&t| blend_channel(63, 31, t)).collect();
+        assert_eq!(out, [52, 46, 36]);
+        assert_eq!(Translucency::from_code(0), None);
+        assert_eq!(
+            codes.map(|t| Translucency::from_code(t.code() as i32)),
+            codes.map(Some)
+        );
+        // Whole pixels in both layouts: red and blue s = 31, d = 15, green s = 63, d = 31 in
+        // 5-6-5 and s = 31, d = 15 in 5-5-5; no carry between channels.
+        let s = pack(31, 63, 31, PixelLayout::Rgb565);
+        let d = pack(15, 31, 15, PixelLayout::Rgb565);
+        assert_eq!(
+            codes.map(|t| blend(s, d, t, PixelLayout::Rgb565)),
+            [
+                pack(24, 52, 24, PixelLayout::Rgb565),
+                pack(22, 46, 22, PixelLayout::Rgb565),
+                pack(16, 36, 16, PixelLayout::Rgb565),
+            ]
+        );
+        let s = pack(31, 31, 31, PixelLayout::Rgb555);
+        let d = pack(15, 15, 15, PixelLayout::Rgb555);
+        assert_eq!(
+            codes.map(|t| blend(s, d, t, PixelLayout::Rgb555)),
+            [
+                pack(24, 24, 24, PixelLayout::Rgb555),
+                pack(22, 22, 22, PixelLayout::Rgb555),
+                pack(16, 16, 16, PixelLayout::Rgb555),
+            ]
+        );
+        // Every channel value of both layouts stays in range.
+        for t in codes {
+            for s in 0..64 {
+                for d in 0..64 {
+                    assert!(blend_channel(s, d, t) <= s.max(d));
+                }
+            }
+        }
+    }
+
+    /// spec: S-0102 claim 32 and D41 (a translucent reader blends with the colour already
+    /// present, also over another translucent image; index 0 leaves colour and depth alone; a
+    /// rejected pixel does not blend; translucency does not make the image a writer)
+    #[test]
+    fn translucent_readers_blend() {
+        let q = ComposeQuirks::default();
+        let background = pack(15, 31, 15, PixelLayout::Rgb565);
+        let source = pack(31, 63, 31, PixelLayout::Rgb565);
+        let rows: Vec<Row565> = vec![[background; 256], [source; 256]];
+        let shade = Shade {
+            base: 1,
+            rows: 1,
+            rho: 0,
+        };
+        let mut f = Frame::new(3, 1, 0, DEPTH_REFERENCE);
+        let ground = img(3, 1, 1);
+        f.draw(
+            &Drawing {
+                image: &ground,
+                x: 0,
+                y: 0,
+                test: DepthTest::Writer,
+                depth: profile(Profile::Flat, 0),
+                paint: Paint::Row(0),
+            },
+            &rows,
+            &q,
+        );
+        let depth_before = f.depth.clone();
+        // Pixel 0 opaque index, pixel 1 index 0, pixel 2 behind the ground (rejected).
+        let marker = IndexedImage::new(2, 1, vec![5, 0]).unwrap();
+        let reader = |x, bias, t| Drawing {
+            image: &marker,
+            x,
+            y: 0,
+            test: DepthTest::Reader,
+            depth: profile(Profile::Flat, bias),
+            paint: Paint::Translucent(shade, t),
+        };
+        f.draw(&reader(0, -1, Translucency::Half), &rows, &q);
+        assert_eq!(f.color[0], pack(22, 46, 22, PixelLayout::Rgb565));
+        assert_eq!(f.color[1], background, "index 0 is transparent");
+        assert_eq!(
+            f.depth, depth_before,
+            "a translucent reader stores no depth"
+        );
+        // A second translucent image blends with the colour now present.
+        f.draw(&reader(0, -1, Translucency::Quarter), &rows, &q);
+        assert_eq!(
+            f.color[0],
+            pack(
+                3 * (31 / 4) + 22 / 4,
+                3 * (63 / 4) + 46 / 4,
+                3 * (31 / 4) + 22 / 4,
+                PixelLayout::Rgb565
+            )
+        );
+        // A rejected pixel does not blend.
+        f.draw(&reader(2, 1, Translucency::ThreeQuarter), &rows, &q);
+        assert_eq!(f.color[2], background);
+        // The shadow keeps plain halving (claim 26), whatever the image's code.
+        let mut g = Frame::new(1, 1, 0, DEPTH_REFERENCE);
+        g.color[0] = background;
+        let dot = img(1, 1, 1);
+        g.draw(
+            &Drawing {
+                image: &dot,
+                x: 0,
+                y: 0,
+                test: DepthTest::Reader,
+                depth: profile(Profile::Flat, 0),
+                paint: Paint::Shadow,
+            },
+            &rows,
+            &q,
+        );
+        assert_eq!(g.color[0], darken565(background));
     }
 }

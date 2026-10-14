@@ -149,11 +149,48 @@ enum Role {
     Ignore,
     /// A shadow that stores its depth where it darkens (S-0102 claim 27).
     ShadowWriter,
+    /// Translucent drawings (S-0102 claim 32, F8) with the depth tests of
+    /// a tile, a writer, a reader and a drawing that ignores depth: the
+    /// shader blends with a copy of the target.
+    BlendTile,
+    BlendWriter,
+    BlendReader,
+    BlendIgnore,
+}
+
+/// Every role, in pipeline order.
+const ROLES: [Role; 10] = [
+    Role::Tile,
+    Role::Writer,
+    Role::Reader,
+    Role::Shadow,
+    Role::Ignore,
+    Role::ShadowWriter,
+    Role::BlendTile,
+    Role::BlendWriter,
+    Role::BlendReader,
+    Role::BlendIgnore,
+];
+
+impl Role {
+    /// The role's pipeline.
+    fn index(self) -> usize {
+        ROLES.iter().position(|&r| r == self).unwrap_or(0)
+    }
+
+    /// Whether the role blends with the target's earlier pixels in the
+    /// shader, so that it needs a copy of them.
+    fn translucent(self) -> bool {
+        matches!(
+            self,
+            Role::BlendTile | Role::BlendWriter | Role::BlendReader | Role::BlendIgnore
+        )
+    }
 }
 
 /// GPU resources for one scene.
 pub struct MapRenderer {
-    pipelines: [wgpu::RenderPipeline; 6],
+    pipelines: [wgpu::RenderPipeline; 10],
     bind_group: wgpu::BindGroup,
     layout: wgpu::BindGroupLayout,
     view_buffer: wgpu::Buffer,
@@ -171,6 +208,9 @@ pub struct MapRenderer {
     alpha: (wgpu::Texture, (u32, u32)),
     /// Whether the light-alpha texture holds 127 everywhere.
     alpha_default: bool,
+    /// The copy of the target's pixels that a translucent drawing blends
+    /// with (S-0102 claim 32), of the light-alpha texture's size.
+    backdrop: wgpu::Texture,
 }
 
 /// Why the scene could not be uploaded.
@@ -297,9 +337,20 @@ impl MapRenderer {
                     },
                     count: None,
                 },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 4,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
             ],
         });
         let alpha = alpha_texture(device, queue, (1, 1));
+        let backdrop = backdrop_texture(device, (1, 1));
         let bind_group = bind_group(
             device,
             &layout,
@@ -307,6 +358,7 @@ impl MapRenderer {
             &atlas_texture,
             &rows_texture,
             &alpha,
+            &backdrop,
         );
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("map"),
@@ -327,6 +379,10 @@ impl MapRenderer {
                 Role::Reader | Role::Shadow => (wgpu::CompareFunction::Less, false),
                 Role::Ignore => (wgpu::CompareFunction::Always, false),
                 Role::ShadowWriter => (wgpu::CompareFunction::Less, true),
+                Role::BlendTile => (wgpu::CompareFunction::LessEqual, true),
+                Role::BlendWriter => (wgpu::CompareFunction::Less, true),
+                Role::BlendReader => (wgpu::CompareFunction::Less, false),
+                Role::BlendIgnore => (wgpu::CompareFunction::Always, false),
             };
             let blend =
                 matches!(role, Role::Shadow | Role::ShadowWriter).then_some(wgpu::BlendState {
@@ -373,14 +429,7 @@ impl MapRenderer {
                 cache: None,
             })
         };
-        let pipelines = [
-            make(Role::Tile),
-            make(Role::Writer),
-            make(Role::Reader),
-            make(Role::Shadow),
-            make(Role::Ignore),
-            make(Role::ShadowWriter),
-        ];
+        let pipelines = ROLES.map(make);
         let instance_capacity = 1024;
         let instances = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("map instances"),
@@ -405,6 +454,7 @@ impl MapRenderer {
             rows: rows_texture,
             alpha: (alpha, (1, 1)),
             alpha_default: true,
+            backdrop,
         })
     }
 
@@ -466,6 +516,7 @@ impl MapRenderer {
                 &self.atlas,
                 &rows,
                 &self.alpha.0,
+                &self.backdrop,
             );
             self.rows = rows;
             self.rows_per_column = per_column;
@@ -475,16 +526,16 @@ impl MapRenderer {
     }
 
     /// Records the scene for `view` into `encoder`, rendering into `target`
-    /// (a [`COLOR_FORMAT`] view of the view's size) with `depth` (a
-    /// [`DEPTH_FORMAT`] view of the same size). Returns the number of items
-    /// drawn.
+    /// (a [`COLOR_FORMAT`] texture of the view's size that can be copied
+    /// from, as [`targets`] makes it) with `depth` (a [`DEPTH_FORMAT`] view
+    /// of the same size). Returns the number of items drawn.
     #[allow(clippy::too_many_arguments)]
     pub fn render(
         &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         encoder: &mut wgpu::CommandEncoder,
-        target: &wgpu::TextureView,
+        target: &wgpu::Texture,
         depth: &wgpu::TextureView,
         scene: &Scene,
         view: &View,
@@ -498,13 +549,19 @@ impl MapRenderer {
 
     /// [`Self::render`] with the light-alpha values `alpha` of the view's
     /// pixels, row by row (S-0110 claims 5 and 6; `None`: 127 everywhere).
+    ///
+    /// A translucent item (S-0102 claim 32) blends with the pixels drawn
+    /// before it: the pass ends before it, the target's pixels under it
+    /// are copied to the backdrop texture, and the pass resumes, so the
+    /// shader applies F8 to the packed channels exactly, as the CPU
+    /// reference does. This needs a target of [`COLOR_FORMAT`].
     #[allow(clippy::too_many_arguments)]
     pub fn render_lit(
         &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         encoder: &mut wgpu::CommandEncoder,
-        target: &wgpu::TextureView,
+        target: &wgpu::Texture,
         depth: &wgpu::TextureView,
         scene: &Scene,
         view: &View,
@@ -524,7 +581,9 @@ impl MapRenderer {
         let (ox, oy) = view.origin;
         let (w, h) = (view.size.0 as i32, view.size.1 as i32);
         let mut list: Vec<Instance> = Vec::new();
-        let mut batches: Vec<(Role, std::ops::Range<u32>)> = Vec::new();
+        // Runs of instances that share a pipeline; a translucent item is a
+        // run of its own, with the view rectangle it covers.
+        let mut batches: Vec<(Role, std::ops::Range<u32>, Option<[u32; 4]>)> = Vec::new();
         // spec: S-0109 claim 27 (a stack's copies, lowest first, as many as the view's top row allows)
         let copies = scene
             .items
@@ -563,6 +622,10 @@ impl MapRenderer {
                             Role::ShadowWriter
                         }
                         (Paint::Shadow, _) => Role::Shadow,
+                        (Paint::Translucent(..), DepthTest::Reader) => Role::BlendReader,
+                        (Paint::Translucent(..), DepthTest::Tile) => Role::BlendTile,
+                        (Paint::Translucent(..), DepthTest::Writer) => Role::BlendWriter,
+                        (Paint::Translucent(..), DepthTest::Ignore) => Role::BlendIgnore,
                         (_, DepthTest::Reader) => Role::Reader,
                         (_, DepthTest::Tile) => Role::Tile,
                         (_, DepthTest::Writer) => Role::Writer,
@@ -571,12 +634,18 @@ impl MapRenderer {
                     (role, kind, bias, 0, None)
                 }
             };
+            // `diamond` holds the diamond flag in bit 0 and the translucency
+            // code in bits 1 and 2.
             let (row, diamond, shade_rows, rho) = match item.paint {
                 Paint::Row(r) => (r as u32, 0, 0, 0),
                 // spec: S-0010 claim 22 (a diamond has no transparent index)
                 Paint::Diamond(r) => (r as u32, 1, 0, 0),
                 Paint::Lit(s) => (s.base, 0, u32::from(s.rows), u32::from(s.rho)),
                 Paint::LitDiamond(s) => (s.base, 1, u32::from(s.rows), u32::from(s.rho)),
+                // spec: S-0102 claim 32 (codes 1 to 3 blend by F8)
+                Paint::Translucent(s, t) => {
+                    (s.base, t.code() << 1, u32::from(s.rows), u32::from(s.rho))
+                }
                 Paint::Shadow => (0, 0, 0, 0),
             };
             let ds = depth_slot.unwrap_or(Slot {
@@ -596,9 +665,18 @@ impl MapRenderer {
                 paint: [row, diamond, shade_rows, rho],
             });
             let n = list.len() as u32;
+            if role.translucent() {
+                // The view pixels the item covers, which it blends with.
+                let x0 = (l - ox).max(0) as u32;
+                let y0 = (t - oy).max(0) as u32;
+                let x1 = (r - ox).min(w) as u32;
+                let y1 = (b - oy).min(h) as u32;
+                batches.push((role, n - 1..n, Some([x0, y0, x1 - x0, y1 - y0])));
+                continue;
+            }
             match batches.last_mut() {
-                Some((r, range)) if *r == role => range.end = n,
-                _ => batches.push((role, n - 1..n)),
+                Some((r, range, None)) if *r == role => range.end = n,
+                _ => batches.push((role, n - 1..n, None)),
             }
         }
         if list.len() > self.instance_capacity {
@@ -613,48 +691,83 @@ impl MapRenderer {
         if !list.is_empty() {
             queue.write_buffer(&self.instances, 0, bytemuck::cast_slice(&list));
         }
-        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("map"),
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: target,
-                depth_slice: None,
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                    store: wgpu::StoreOp::Store,
-                },
-            })],
-            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                view: depth,
-                // spec: S-0102 claim 8 (the depth buffer is filled with 65535 on a full redraw)
-                depth_ops: Some(wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(f32::from(crate::compose::DEPTH_CLEAR) / 65536.0),
-                    store: wgpu::StoreOp::Store,
-                }),
-                stencil_ops: None,
-            }),
-            ..Default::default()
-        });
-        pass.set_bind_group(0, &self.bind_group, &[]);
-        pass.set_vertex_buffer(0, self.instances.slice(..));
-        pass.set_blend_constant(wgpu::Color {
-            r: 0.5,
-            g: 0.5,
-            b: 0.5,
-            a: 1.0,
-        });
-        for (role, range) in batches {
-            let i = match role {
-                Role::Tile => 0,
-                Role::Writer => 1,
-                Role::Reader => 2,
-                Role::Shadow => 3,
-                Role::Ignore => 4,
-                Role::ShadowWriter => 5,
-            };
-            pass.set_pipeline(&self.pipelines[i]);
+        let target_view = target.create_view(&Default::default());
+        let begin = |encoder: &mut wgpu::CommandEncoder, first: bool| {
+            let mut pass = encoder
+                .begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("map"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: &target_view,
+                        depth_slice: None,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: if first {
+                                wgpu::LoadOp::Clear(wgpu::Color::BLACK)
+                            } else {
+                                wgpu::LoadOp::Load
+                            },
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                        view: depth,
+                        // spec: S-0102 claim 8 (the depth buffer is filled with 65535 on a full redraw)
+                        depth_ops: Some(wgpu::Operations {
+                            load: if first {
+                                wgpu::LoadOp::Clear(
+                                    f32::from(crate::compose::DEPTH_CLEAR) / 65536.0,
+                                )
+                            } else {
+                                wgpu::LoadOp::Load
+                            },
+                            store: wgpu::StoreOp::Store,
+                        }),
+                        stencil_ops: None,
+                    }),
+                    ..Default::default()
+                })
+                .forget_lifetime();
+            pass.set_bind_group(0, &self.bind_group, &[]);
+            pass.set_vertex_buffer(0, self.instances.slice(..));
+            pass.set_blend_constant(wgpu::Color {
+                r: 0.5,
+                g: 0.5,
+                b: 0.5,
+                a: 1.0,
+            });
+            pass
+        };
+        let mut pass = begin(encoder, true);
+        for (role, range, cover) in batches {
+            if let Some([x, y, cw, ch]) = cover {
+                // spec: S-0102 claim 32 (a translucent pixel blends with the already-painted
+                // destination: the pixels drawn so far are copied before the item is drawn)
+                drop(pass);
+                encoder.copy_texture_to_texture(
+                    wgpu::TexelCopyTextureInfo {
+                        texture: target,
+                        mip_level: 0,
+                        origin: wgpu::Origin3d { x, y, z: 0 },
+                        aspect: wgpu::TextureAspect::All,
+                    },
+                    wgpu::TexelCopyTextureInfo {
+                        texture: &self.backdrop,
+                        mip_level: 0,
+                        origin: wgpu::Origin3d { x, y, z: 0 },
+                        aspect: wgpu::TextureAspect::All,
+                    },
+                    wgpu::Extent3d {
+                        width: cw,
+                        height: ch,
+                        depth_or_array_layers: 1,
+                    },
+                );
+                pass = begin(encoder, false);
+            }
+            pass.set_pipeline(&self.pipelines[role.index()]);
             pass.draw(0..6, range);
         }
+        drop(pass);
         list.len()
     }
 }
@@ -674,6 +787,7 @@ impl MapRenderer {
         let alpha = alpha.filter(|a| a.len() == n);
         if self.alpha.1 != size {
             let t = alpha_texture(device, queue, size);
+            let backdrop = backdrop_texture(device, size);
             self.bind_group = bind_group(
                 device,
                 &self.layout,
@@ -681,8 +795,10 @@ impl MapRenderer {
                 &self.atlas,
                 &self.rows,
                 &t,
+                &backdrop,
             );
             self.alpha = (t, size);
+            self.backdrop = backdrop;
             self.alpha_default = true;
         }
         let bytes = match alpha {
@@ -741,6 +857,25 @@ fn alpha_texture(device: &wgpu::Device, queue: &wgpu::Queue, size: (u32, u32)) -
     )
 }
 
+/// The backdrop texture of a view of `size`: a copy of the target's pixels
+/// under a translucent item (S-0102 claim 32).
+fn backdrop_texture(device: &wgpu::Device, size: (u32, u32)) -> wgpu::Texture {
+    device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("map backdrop"),
+        size: wgpu::Extent3d {
+            width: size.0,
+            height: size.1,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: COLOR_FORMAT,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        view_formats: &[],
+    })
+}
+
 /// The palette-row texture of `scene` and its rows per column.
 fn rows_texture(
     device: &wgpu::Device,
@@ -797,6 +932,7 @@ fn bind_group(
     atlas: &wgpu::Texture,
     rows: &wgpu::Texture,
     alpha: &wgpu::Texture,
+    backdrop: &wgpu::Texture,
 ) -> wgpu::BindGroup {
     device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: Some("map"),
@@ -825,6 +961,12 @@ fn bind_group(
                 binding: 3,
                 resource: wgpu::BindingResource::TextureView(
                     &alpha.create_view(&wgpu::TextureViewDescriptor::default()),
+                ),
+            },
+            wgpu::BindGroupEntry {
+                binding: 4,
+                resource: wgpu::BindingResource::TextureView(
+                    &backdrop.create_view(&wgpu::TextureViewDescriptor::default()),
                 ),
             },
         ],

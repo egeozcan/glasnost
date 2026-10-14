@@ -1065,13 +1065,18 @@ fn animated_terrain_object_in_the_object_pass() {
 /// The slot-animation test context: HUTX's art starts five slot animations
 /// (S-0108 claim 11) and names a special slot that the set-up never starts.
 fn slot_context() -> (glasnost_convert::Import, Catalogue, Assets) {
+    slot_context_with("")
+}
+
+/// The slot-animation test context with `extra` added to SLOTA's art section.
+fn slot_context_with(extra: &str) -> (glasnost_convert::Import, Catalogue, Assets) {
     let rules =
         format!("{RULES}[Animations]\n0=SLOTA\n1=SLOTB\n2=SLOTC\n3=SLOTD\n4=SLOTE\n5=SLOTF\n");
     let art = format!(
         "{ART}[HUTX]\nActiveAnim=SLOTA\nActiveAnimX=30\nActiveAnimY=15\nActiveAnimZAdjust=-5\n\
          ActiveAnimYSort=40\nIdleAnim=SLOTB\nActiveAnimTwo=SLOTC\nActiveAnimThree=SLOTD\n\
          ActiveAnimFour=SLOTE\nSpecialAnim=SLOTF\n\
-         [SLOTA]\nLayer=ground\nShadow=yes\nStart=1\nYDrawOffset=3\nZAdjust=99\n\
+         [SLOTA]\nLayer=ground\nShadow=yes\nStart=1\nYDrawOffset=3\nZAdjust=99\n{extra}\
          [SLOTB]\nFlat=yes\nShadow=yes\n\
          [SLOTC]\nLayer=ground\nDetailLevel=1\n\
          [SLOTD]\nLayer=top\nAltPalette=yes\nShouldUseCellDrawer=no\n\
@@ -1152,6 +1157,38 @@ fn slot_animations_of_a_placed_building() {
     assert_eq!(px(&flat), 1);
     // No request is open for these: none is translucent or tiled.
     assert!(slots.iter().all(|i| !i.provisional && i.stack.is_none()));
+}
+
+/// spec: S-0109 claim 20 (a translucency field of 25, 50 or 75 gives code 1, 2 or 3, any other
+/// positive value 0); S-0102 claim 32 and F8 (a nonzero code draws the image with the blend, the
+/// shadow keeps the plain halving)
+#[test]
+fn translucent_slot_animation_blends() {
+    use glasnost_render::compose::Translucency;
+    for (field, code) in [
+        (25, Some(Translucency::Quarter)),
+        (50, Some(Translucency::Half)),
+        (75, Some(Translucency::ThreeQuarter)),
+        (40, None),
+    ] {
+        let b = build_in(
+            slot_context_with(&format!("Translucency={field}\n")),
+            b"[Basic]\nNewINIFormat=4\n[Map]\nSize=0,0,10,10\nLocalSize=0,0,10,10\n\
+              [Structures]\n0=Neutral,HUTX,256,6,10,0\n",
+            &low_detail(),
+        )
+        .0;
+        let slots: Vec<Item> = b.scene.items[b.scene.cell_pass_len..].to_vec();
+        let (a, a_shadow) = (slots[0], slots[1]);
+        match (a.paint, code) {
+            (Paint::Translucent(_, t), Some(c)) => assert_eq!(t, c, "field {field}"),
+            (Paint::Lit(_), None) => {}
+            (p, c) => panic!("field {field}: paint {p:?}, expected code {c:?}"),
+        }
+        assert_eq!(a_shadow.paint, Paint::Shadow);
+        assert!(!a.provisional && !a_shadow.provisional);
+        assert!(!b.notes.iter().any(|n| n.contains("drawn opaque")));
+    }
 }
 
 /// spec: S-0102 claims 5 and 17 (the sort key is X + Y of the position plus the slot's y-sort;

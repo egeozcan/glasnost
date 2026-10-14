@@ -483,7 +483,7 @@ impl GpuDraw {
             device,
             queue,
             encoder,
-            &color.create_view(&Default::default()),
+            color,
             &depth.create_view(&Default::default()),
             &s.scene,
             &v,

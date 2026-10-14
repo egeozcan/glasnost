@@ -167,7 +167,7 @@ fn gpu_matches_cpu_reference() {
             &device,
             &queue,
             &mut encoder,
-            &color.create_view(&Default::default()),
+            &color,
             &depth.create_view(&Default::default()),
             &s,
             &view,
@@ -278,7 +278,7 @@ fn sync_uploads_added_images_and_rows() {
         &device,
         &queue,
         &mut encoder,
-        &color.create_view(&Default::default()),
+        &color,
         &depth.create_view(&Default::default()),
         &full,
         &view,
@@ -351,7 +351,7 @@ fn overlapping_writer_shadows() {
             &device,
             &queue,
             &mut encoder,
-            &color.create_view(&Default::default()),
+            &color,
             &depth.create_view(&Default::default()),
             &s,
             &view,
@@ -374,6 +374,89 @@ fn overlapping_writer_shadows() {
                 assert!(a[k].abs_diff(b[k]) <= 8, "switch {on}: cpu {a:?} gpu {b:?}");
             }
         }
+    }
+}
+
+/// spec: S-0102 claim 32, F8 (translucent drawings blend each packed channel
+/// with the colour already drawn, write no depth, and stack)
+///
+/// Overlapping translucent readers of all three codes over the synthetic
+/// scene, one partly hidden behind a writer, draw the same on the GPU as on
+/// the CPU, exactly.
+#[test]
+fn gpu_translucency_matches_cpu() {
+    use glasnost_render::compose::{Shade, Translucency};
+    let Some((device, queue)) = device() else {
+        return;
+    };
+    let mut s = scene();
+    let tall = s.items[12].image;
+    for (k, (code, x, y, bias)) in [
+        (1, 25, 15, 40),
+        (2, 35, 20, 40),
+        (3, 45, 10, 40),
+        (2, 15, 5, -60),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        s.items.push(Item {
+            image: tall,
+            x,
+            y,
+            test: DepthTest::Reader,
+            depth: ItemDepth::Profile {
+                profile: Profile::Upright,
+                bias,
+                companion: None,
+            },
+            paint: Paint::Translucent(
+                Shade::new(k % 3, 1, 1000),
+                Translucency::from_code(code).unwrap(),
+            ),
+            group: Group::Buildings,
+            provisional: false,
+            object: None,
+            stack: None,
+        });
+    }
+    let mut r = MapRenderer::new(&device, &queue, &s, glasnost_render::map_gpu::COLOR_FORMAT)
+        .expect("scene uploads");
+    for (origin, size) in [((0, 0), (128, 72)), ((10, 4), (60, 50))] {
+        let view = View {
+            origin,
+            size,
+            reference: DEPTH_REFERENCE,
+        };
+        let filter = Filter::default();
+        let q = ComposeQuirks::default();
+        let cpu = s.compose(&view, &filter, &q).to_rgba();
+        assert_ne!(
+            cpu,
+            scene().compose(&view, &filter, &q).to_rgba(),
+            "the translucent drawings show"
+        );
+        let (color, depth) = targets(&device, size, glasnost_render::map_gpu::COLOR_FORMAT);
+        let mut encoder = device.create_command_encoder(&Default::default());
+        r.render(
+            &device,
+            &queue,
+            &mut encoder,
+            &color,
+            &depth.create_view(&Default::default()),
+            &s,
+            &view,
+            &filter,
+            &q,
+        );
+        queue.submit([encoder.finish()]);
+        let gpu = read_texture(&device, &queue, &color, size.0, size.1);
+        let differing = cpu
+            .chunks(4)
+            .zip(gpu.chunks(4))
+            .filter(|(a, b)| a[..3] != b[..3])
+            .count();
+        assert_eq!(differing, 0, "view at {origin:?}");
     }
 }
 
@@ -421,7 +504,7 @@ fn gpu_light_alpha_matches_cpu() {
             &device,
             &queue,
             &mut encoder,
-            &color.create_view(&Default::default()),
+            &color,
             &depth.create_view(&Default::default()),
             &s,
             &view,

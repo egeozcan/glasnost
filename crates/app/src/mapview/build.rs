@@ -27,7 +27,9 @@ use glasnost_map::objects::{HealthKind, ListKind, facing_from_value, starting_he
 use glasnost_map::{CellGrid, CellXY, Map, NO_OVERLAY};
 use glasnost_num::F64;
 use glasnost_num::geom::n_step;
-use glasnost_render::compose::{DIAMOND_WIDTH, DepthTest, Paint, Profile, Shade, row565};
+use glasnost_render::compose::{
+    DIAMOND_WIDTH, DepthTest, Paint, Profile, Shade, Translucency, row565,
+};
 
 use glasnost_render::light::{self, DetailLevel, LightQuirks, LightSource, TileTable};
 use glasnost_render::overlay::{
@@ -212,7 +214,6 @@ mod notes {
     pub const ORE_MINE_STAGE: &str = "an ore mine's animation (S-0401 claim 15) is not played: it shows image frame 0, its stage at placement (S-0102 claim 23)";
     pub const VOXEL_SHADOW_POINT: &str = "voxel shadows are placed at the object's ground point (the locomotor's shadow point has no spec)";
     pub const SLOT_ANIMS_STILL: &str = "building slot animations (S-0108 claim 11) are drawn at their first image frame: animation playback (S-0109) is not implemented, so they do not advance and power (S-0108 claim 13) does not change them";
-    pub const SLOT_ANIM_TRANSLUCENT: &str = "translucent slot animations are drawn opaque: the blend of a translucency code (S-0109 claim 20; S-0102 claim 32 and F8) is not implemented in the map viewer";
     pub const NO_COMPANION: &str =
         "building depth images (S-0102 F5): the shared file is not named by a spec: not used";
     pub const NO_RULES_HEALTH: &str = "the rules did not resolve: buildings are drawn undamaged (S-0009 claim 37 needs their strengths)";
@@ -2221,10 +2222,16 @@ impl Builder<'_> {
             // spec: S-0109 claim 26 (the image is moved down by the type's vertical draw shift v)
             let point = (p.0, p.1 + v);
             let row = self.anim_row(&t, hsv, u, CellXY::new(pos.0 >> 8, pos.1 >> 8));
-            let translucent = slots::first_translucency(&t, self.options.detail.number(), n) > 0;
-            if translucent {
-                self.note(notes::SLOT_ANIM_TRANSLUCENT);
-            }
+            // spec: S-0109 claim 20, S-0102 claim 32 and F8 (a nonzero translucency code blends the
+            // image's pixels with the colour already drawn; code 0 draws opaque)
+            let paint = match Translucency::from_code(i32::from(slots::first_translucency(
+                &t,
+                self.options.detail.number(),
+                n,
+            ))) {
+                Some(code) => Paint::Translucent(row, code),
+                None => Paint::Lit(row),
+            };
             let frame = slots::first_frame(&t, n);
             let frame_of = |x: i32| {
                 usize::try_from(x)
@@ -2258,9 +2265,9 @@ impl Builder<'_> {
                         bias,
                         companion: None,
                     },
-                    Paint::Lit(row),
+                    paint,
                     Group::Buildings,
-                    translucent,
+                    false,
                     Some(object),
                 )
             {
@@ -2284,9 +2291,11 @@ impl Builder<'_> {
                         bias: -2 - lz,
                         companion: None,
                     },
+                    // spec: S-0102 claim 32 (the shadow is never blended: plain halving, even
+                    // under a translucent image)
                     Paint::Shadow,
                     Group::Buildings,
-                    translucent,
+                    false,
                     Some(object),
                 )
             {
