@@ -2,7 +2,7 @@
 id: S-0009
 title: Map file semantics (geometry, terrain streams, waypoint markers, start positions, preview)
 topic: formats
-revision: 17
+revision: 18
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -48,9 +48,12 @@ necessarily the last draws before tick 0. S-0407 claim 14 already agrees with th
 no longer requests a correction to S-0412. Joint sign-off confirms these current passages,
 S-0414's end-test and end-delay rules used by S-0412 claim 11, and the standard versus
 all-base-units scope and shared placement-search reuse described above. No further
-S-0009 scope change is required. Downstream particle and smudge draw counts remain
-unresolved (S-0202 claims 10 and 14); neither these checks nor the loading-order table
-treats them as zero.
+S-0009 scope change is required. S-0202 revision 11 left downstream particle and smudge
+creation-draw counts unresolved; current revision 12 claim 15 supplies their rules for
+joint review, with R14 proposed rather than measured. Joint sign-off checks that extension.
+Neither these checks nor the loading-order table treats those effects as taking zero draws.
+Claim 40 already follows S-0405 claim 18's conditional initial power-switch rule; the map
+flag's encoding remains here, and S-0108 claim 13 owns the slot-animation consequences.
 
 ## Terms
 
@@ -539,8 +542,19 @@ Terms used as defined in the shared glossary: *cell*, *lepton*, *height level*, 
     decoded stream is shorter than a position, the value is 0, and the importer warns. When the map has no overlay data
     stream at all, every cell keeps the data value it had after overlay creation (0 unless
     placement set one).
+
+    An immediate crater request from a cell animation or a tile animation started by overlay
+    placement acts on the resource levels then present, before this data overwrite (S-0202
+    claim 15). The overwrite replaces the data value even if the request emptied that cell,
+    but cannot restore an overlay type that the request removed. A tile animation first
+    created by the first whole-map terrain recalculation instead acts on the imported data.
+    The second and game-start recalculation passes act later still. Thus the animation's
+    creation group determines which resource state its immediate crater request sees, not
+    merely the fact that it starts during loading. Its particle and smudge creation draws
+    follow S-0202 claim 15, not an assumed zero-draw rule.
     - Backing: `measurable` (scenario M6, including its short-stream save, for the stream; scenario
-      M6c variant A for the absent stream)
+      M6c variant A for the absent stream; S-0202 R14 C for crater timing, retained data and
+      removed overlay types)
     - Confidence: high
 
 14. **Veins are rebuilt from their seeds.** After the overlay streams have been read and the first
