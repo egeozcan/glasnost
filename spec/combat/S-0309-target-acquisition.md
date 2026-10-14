@@ -2,7 +2,7 @@
 id: S-0309
 title: Target acquisition (automatic searches, candidate tests, threat score, retaliation, target switching)
 topic: combat
-revision: 5
+revision: 6
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -116,8 +116,8 @@ this spec:
 - **Spawner type.** A type that keeps spawned aircraft (S-0301, Terms). An object of such a type
   *controls spawned aircraft*, whether or not any of them is launching or alive.
 - **Teleporting move.** A move that ends in a chrono move by the object's own teleporting
-  locomotor (S-0215, Terms, *chrono move*). It "has just ended" when the object reappears at its
-  new place.
+  locomotor (S-0207, claim 20). The jump and the end of *phasing in* are distinct events:
+  the search of claim 1 runs at the latter, not when the object reappears at its new place.
 - **Planned route.** A route through several points that the person laid out for a unit in
   advance, in the original's waypoint-planning mode. The orders specs own it (S-0213's order set
   does not include it yet). A unit *follows no planned route* when it has no such route or none
@@ -147,7 +147,7 @@ this spec:
 
 1. **Search contexts.** An infantry unit, vehicle or building runs an automatic search in these
    situations. S-0215 says when the first, third and fourth happen (claims 33, 26 and 27); claim
-   23 here owns the second, and this claim the last:
+   23 here owns the second, and S-0207 claim 20 f owns the phasing-in end that triggers the last:
 
    | Situation | Kind | Centre |
    |---|---|---|
@@ -155,12 +155,20 @@ this spec:
    | its targeting timer has run out while it carries an attack-move memory, whatever its current behaviour, in the cases of claim 23 that run a search (in the others no search runs and the timer is not restarted) | range | its position |
    | the processing of *area guard* (S-0215, claim 26) | area | the guard spot |
    | the processing of *hunt* (S-0215, claim 27) | map-wide | its position |
-   | a teleporting move (Terms) has just ended, it has no target, and claim 2 and the opportunity gate of claim 3 allow it (low confidence); a target it sets is an opportunity target as claim 24 gives | range | its position |
+   | phasing in after its own teleporting move ends (S-0207, claim 20 f), it has no target, and claim 2 and the opportunity gate of claim 3 allow it; never for a harvester-flag type, which does not phase in; a target it sets is an opportunity target as claim 24 gives | range | its position |
 
    An actor that carries an attack-move memory never runs the search of the first row, in any
    behaviour: it runs the search of the second row instead, which claim 23 describes. That search
    is not limited by claims 2 and 3, and the targets it sets are not opportunity targets (claim
    24). S-0215 (claim 33) points here for it.
+
+   At the phasing-in end, with no target and more than 10 integer ticks left on the targeting
+   timer, one ranged draw from the scenario random stream over 4 to 8 ticks, both included,
+   resets that timer (S-0207, claim 20 f). This draw does not require claims 2 and 3 to allow a
+   search. With a target or at most 10 ticks left, it is not taken. A search that is allowed
+   still takes its own normal timer draw (claim 4) after this conditional draw, replacing that
+   temporary timer value. Thus the end tick can take both draws, only the normal search draw,
+   only the conditional draw, or neither, depending on these conditions.
 
    Other behaviours run searches with the same rules (claims 5 to 17) but their own kinds and
    centres: *patrol* (an area search with the patrol limits of F1), *rescue*, the behaviours of
@@ -168,10 +176,12 @@ this spec:
    specs and (for team scripts) the original's AI, which is out of scope.
    - Backing: `measurable` (the per-tick row by scenario A1, parts b and m; the attack-move row by
      scenario A6, parts d and g; the area-guard row by scenario A1, part g, and A11, part d; the
-     hunt row by scenario A11, part a; the teleport case by scenario A1, part f). The paragraph on
+     hunt row by scenario A11, part a; the teleport case and its draw ordering by scenario A1,
+     part f, with S-0207 scenario D22 runs 1, 2 and 7 for the phasing-in and conditional-draw
+     conditions). The paragraph on
      other behaviours is a pointer to the specs that own those searches, not a claim of this spec,
      and carries no backing or confidence (Open questions).
-   - Confidence: high (the first four); low (the teleport case)
+   - Confidence: high (the first four); medium (the teleport case)
 
 2. **Passive acquisition.** An object may pick a target in the range searches of the first and last
    rows of claim 1, and in the area search, only when all of these hold (the map-wide search of
@@ -205,7 +215,7 @@ this spec:
      applies).
 
    So without the opportunity-fire flag the per-tick search never runs in *harvest*, nor in *move*
-   before the object has arrived. Which behaviour an object is in when its teleporting move ends is
+   before the object has arrived. Which behaviour an object is in when its phasing in ends is
    not established here (S-0215 owns it), so for the teleport search only a type with the
    opportunity-fire flag is known to pass the gate.
    - Backing: `measurable` (scenario A1: part c for the area-fire exception in *guard* and for the
@@ -222,7 +232,8 @@ this spec:
 4. **A search keeps a target unless it was an opportunity target that has become unusable (claim
    23 gives the attack-move exceptions).** Every
    search restarts the targeting timer (S-0215, F6), and that ranged draw is the search's first
-   draw from the scenario random stream. An opportunity target for which the firing check of the
+   draw from the scenario random stream. In the teleport case this is separate from the
+   conditional 4-to-8-tick draw before the search (claim 1). An opportunity target for which the firing check of the
    weapon the searcher would use against it answers *illegal*, *out of range* or *impossible* is
    dropped, and the same search may pick a new target. One exception: a searcher that controls
    spawned aircraft (a spawner type) and gets *impossible* keeps the target, and its spawned
@@ -1161,7 +1172,8 @@ between the wall target *W*, the best candidate and no target.
 **Observable ordering.**
 - The search's targeting-timer draw is its first draw. A search takes no other draw, except the
   disguise draws of a searcher of the neutral or special house (claims 12 and 25), which follow
-  it. Each part of this is `measurable`:
+  it. The teleport case can additionally take claim 1's conditional draw before the search's
+  timer draw (scenario A1, part f). Each part of the search itself is `measurable`:
   - that a search takes no fixed further draw besides the timer draw: scenario A15, part h, case
     i, where a search tick on which nothing else draws advances the stream by exactly the raw
     values of the timer draw, and the targeting-timer restart shows which value it took,
@@ -1397,15 +1409,25 @@ set in the test map's override sections.
   recorder. *Expected:* the recorder never shows a target picked by itself. Control: the same
   type with the engineer flag removed in the test map picks the building. *Falsified if:* the
   engineer picks the building by itself, or the control does not.
-- *Part f (teleport case, claims 1 and 3):* a unit of a stock type with a teleporting locomotor,
-  given the opportunity-fire flag in the test map (so that the opportunity gate of claim 3 holds
-  whatever behaviour it is in when the jump ends), with no target, ordered to move to a cell next
-  to an enemy target, with the random-state recorder and the target recorder. *Expected:* a
-  targeting-timer draw falls on the tick its teleporting move ends, before its targeting timer
-  would have run out, and the target recorder shows the enemy as its target from that tick.
-  *Falsified if:* no draw falls on that tick and the first target appears only when the timer runs
-  out. A second run without the flag is recorded only: whether it searches on that tick depends on
-  the behaviour it is in then (claim 3), which this spec does not fix.
+- *Part f (teleport case, claims 1, 3 and 4):* an armed non-harvester unit with a teleporting
+  locomotor, given the opportunity-fire flag in the test map (so that claim 3 holds whatever
+  behaviour it is in when phasing in ends), with no target, ordered to move next to an enemy
+  candidate. Use the random-state and target recorders, also recording phasing in and the
+  targeting timer. Follow S-0207 scenario D22 for the jump and the phasing-in end. Across 30
+  runs, classify end ticks by the timer's remaining ticks immediately before the end event,
+  repeating until at least five have more than 10 left and five have at most 10 left, and use
+  only those where the unit still has no target. *Expected:* on that end tick the enemy becomes
+  its opportunity target. With more than 10 ticks left, a draw over 4 to 8 precedes the normal
+  search-timer draw of S-0215 F6; with at most 10 left, only the normal search-timer draw occurs.
+  The final timer holds the latter draw's delay in both groups. No teleport-triggered search
+  occurs on the jump tick. Control: remove the passive-acquire flag, which prevents the search
+  without preventing the conditional draw; more than 10 ticks left gives only the 4-to-8 draw,
+  and at most 10 gives neither. Further control: add the vehicle harvester flag; there is no
+  phasing-in end and no teleport-triggered search or draw, though ordinary timer-expiry searches
+  remain possible. *Falsified if:* the search occurs at the jump instead of the phasing-in end,
+  any qualifying end tick has the wrong draws or their order, or either control differs. A run
+  without the opportunity-fire flag is recorded only: whether it searches depends on its
+  behaviour at the end (claim 3).
 - *Part g (area cap, claim 8):* a firer placed with the *area guard* behaviour (S-0215, claim 26),
   guard range 0 and a weapon of range 10 cells, so that *R* would be 20 cells without the cap and is
   16 cells with it; one target at 15 cells from the firer and another, alone in another run, at 17
@@ -2372,8 +2394,8 @@ different health ratios; for distance use different distances.
 - Whether a target that one search drops and then picks again counts as an opportunity target
   (claim 24 gives that it does not, because the object is the same as before the search); scenario
   A6, part f, decides it if a disabled firer still searches.
-- The teleport case of claim 1 and the locomotor give-up of claim 22 rest on one reading each.
-  Which behaviour a unit is in when its teleporting move ends, and so whether the opportunity
+- The locomotor give-up of claim 22 rests on one reading.
+  Which behaviour a unit is in when its phasing in ends, and so whether the opportunity
   gate of claim 3 passes for a type without the opportunity-fire flag, is not established
   (scenario A1, part f, records it).
 - The vehicle-thief take-over of claim 5 rests on one reading and has no scenario (claim 5,
@@ -2381,9 +2403,8 @@ different health ratios; for distance use different distances.
   parts c, g and i, test them.
 - Which other behaviours run searches (claim 1, last paragraph), with which kinds and centres.
 - S-0307 claims 4 and 13 now own the garrison range replacement and open-topped shortest range
-  used here. Claim 13 currently says passengers' primary weapons, whereas F1 here uses their
-  current weapons (Terms), including a multi-weapon passenger's weapon-number slot. S-0307
-  needs that clarification in the same hand-off.
+  used here. Claim 13 specifies passengers' current weapons, including a multi-weapon passenger's
+  weapon-number slot, as F1 here does. No clarification to S-0307 is outstanding.
 - The order of the ground-layer objects among themselves in the map-wide search (claim 7): which
   of them it considers first. Claim 17 breaks equal scores of a map-wide search by this order,
   which is an internal order of the original that this spec does not establish.
