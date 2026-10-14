@@ -2,7 +2,7 @@
 id: S-0212
 title: Pathfinding (observable behaviour)
 topic: movement
-revision: 21
+revision: 22
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -28,6 +28,7 @@ of them describe the original only.
 **Cross-spec confirmation at hand-off.** Retain the coordinated immediate fresh search of
 claim 22 and S-0207 claim 15, its state table and D17 part d3. S-0207's current draft
 has removed the former delayed-search Open question; hand off these revisions together.
+At hand-off, update S-0212's index entry from approved revision 21 to this revision 22.
 
 ## Terms
 
@@ -52,6 +53,8 @@ claim, and S-0104 (lighting) for the *ion storm*, a global effect (table T5). Th
   significand under the round-toward-zero mode (its claims 4 and 5). This spec defines no rounding
   switch of its own.
 - From S-0206 (turn rates): the *body facing* of a unit.
+- From S-0106 (terrain surface height): the **surface height** *H* at a point, in integer
+  leptons, excluding a bridge deck (its Terms and claim 2).
 - From S-0207 (ground vehicle movement) and S-0208 (infantry movement): the **type speed** *V* of
   a vehicle type (S-0207 claim 1, in progress units per tick) and the **base speed** *b* of an
   infantry type (S-0208 F4, in leptons per tick). Both are the integer 0 to 255 that the type's
@@ -206,7 +209,7 @@ Terms specific to this spec:
   (claim 25).
 - **Loaner:** a unit only lent to its house for a while, which leaves the map again afterwards
   (claim 14).
-- **Terms defined where they are used:** *generation order* (claim 7); *blocker chain* and a unit
+- **Terms defined where they are used:** *candidate precedence* (claim 7); *blocker chain* and a unit
   *heading into* a cell (claim 8); *recorded-pair margin* (claim 11); *progress* and *progress
   cell* (claim 13); *free part*, *borders*, *probe cell*, *whole* and *split* (claim 13a); *lane
   cells* (claim 13b); *run*, *V* and *final* step (claim 17); *stretch*, *diagonal-first* and
@@ -384,13 +387,16 @@ Terms specific to this spec:
 ### The search
 
 7. **Search shape.** The path is found by a best-first search over (cell, search layer) pairs,
-   from the unit's cell to the destination cell. The candidates of an expansion are the eight
-   neighbours, in step directions 0 to 7, followed by the tunnel step when the cell is a tunnel
-   entrance. This *generation order* decides which candidate of an expansion is recorded first,
-   which decides the progress cell of claim 13. A candidate is considered only if the unit's entry
-   outcome for it is not *blocked*, and, when a corridor is in use and the candidate is on the
-   ground layer, only if the candidate cell's level-0 sector is on the corridor or the cell has the
-   corridor exemption (claim 13). Bridge-deck candidates are not restricted.
+   from the unit's cell to the destination cell. **Candidate eligibility and route selection.**
+   Eligible adjacent-cell candidates have step directions 0 through 7 and an entry outcome other
+   than *blocked*. With a corridor, a ground-layer candidate is eligible only when its level-0
+   sector is on the corridor or it has the corridor exemption (claim 13); bridge-deck candidates
+   are not restricted by the corridor. At a tunnel entrance the tunnel step is also a candidate,
+   subject to the same outcome and corridor eligibility conditions.
+   Among candidates associated with one expanded pair, route-selection precedence is direction
+   order 0 through 7, followed by the tunnel step. This **candidate precedence** determines which
+   route reaches a pair first (claim 11), equal-score route choices (claim 12a) and the progress
+   cell (claim 13), without prescribing how candidates are stored or enumerated.
    For each considered candidate the search records a cost *g* (F1) and an estimate *f* = *g* + *h*
    (F2). The pair with the smallest *f* is expanded next (ordering and ties: claim 12). The search
    ends with a path when the destination pair is about to be expanded. The start pair is the unit's
@@ -416,10 +422,10 @@ Terms specific to this spec:
 
    The estimate *h* is the table square root (S-0204) of the squared straight-line distance in
    cells (F2), while a straight and a diagonal step cost about the same (F1). *h* therefore
-   overestimates the remaining cost on any route with diagonal steps, and the search is not
-   guaranteed to find the cheapest path: it favours the candidate that closes the straight-line
-   distance fastest, which is a diagonal one whenever the destination does not lie in a straight
-   direction. Two consequences:
+   can overestimate remaining route cost: a clear diagonal step covers √2 cells of straight-line
+   distance for about 1 cost unit. The search is therefore not guaranteed to find the cheapest
+   path. On the open-ground routes described below it favours closing straight-line distance
+   with diagonal steps before straight ones. Two consequences:
    - On open ground searched without a corridor (claim 14), the path found takes all its diagonal
      steps first and then all its straight steps, and its number of steps is the Chebyshev
      distance from start to destination. This holds for destinations up to at least 14 cells
@@ -430,7 +436,13 @@ Terms specific to this spec:
    - Around obstacles the search can return a path with more steps than the shortest one. The
      straightening passes (claims 17 and 18) can remove some of the extra steps before the path
      is stored.
-   - Backing: `measurable` for the open-ground shape (scenario P17). `unmeasured` for the extra
+   - Backing: `measurable` for the open-ground shape (P17), ground/deck step choices
+     (P4 map K2), and eligible blocked outcomes through route choice (P13). `unmeasured` for the
+     train start-height adjustment: no scenario places a train at deck height without its deck
+     state, so its adjustment cannot be isolated. Candidate precedence and the destination's
+     selection at minimum *f* have aggregate backing only (P1's secondary check); their
+     individual effects are `unmeasured`, because the driven path also depends on corridor
+     choice and straightening. `unmeasured` for the extra
      steps around obstacles on their own: what the unit drives is the path after claims 17 and 18,
      which can remove them, so the search's own extra steps show only together with the
      straightening passes (scenario P9, train run 4, and the secondary check of P1)
@@ -478,6 +490,11 @@ Terms specific to this spec:
      on an object that is not a unit: a unit heads into a building's or a terrain object's cell
      only for moments (for example while it slows down in front of one), which cannot be timed
      against another unit's search
+     `unmeasured` for the closed-friendly-gate base cost and trains' uniform base cost: P13
+     has neither a gate nor a train cost comparison, and P9's train routes use clear or blocked
+     cells only. `unmeasured` for the blocker's bridge-layer selection: no P13 run places its
+     chain on a bridge. The search-mode costs are tested in aggregate by P6 and P14, not by
+     independent cost-threshold tests.
    - Confidence: high for the table. Medium for the blocker chain
 
 9. **Congestion marks and tunnel steps.** A step onto a cell that carries the congestion mark costs four
@@ -486,8 +503,10 @@ Terms specific to this spec:
    and in particular a tunnel's entrance carries no mark. A tunnel step costs the Chebyshev distance
    between the entrance and the exit cell, with no direction term and no factor. Stock data is not
    known to contain tunnels.
-   - Backing: `measurable` with a test map containing a tunnel (scenario P9) for the tunnel step and
-     for the unmarked entrance, and the fourfold cost through claim 19 (scenario P14)
+   - Backing: `measurable` with a test map containing a tunnel (P9) for the tunnel step
+     and unmarked entrance, and the fourfold cost through claim 19 (P14). `unmeasured`
+     for the absence of permanent marks: these runs test their own searches, not every possible
+     event that could set a mark
    - Confidence: medium for the costs. Low that no rule sets the mark permanently
 
 10. **Height rule for a step.** A step from a pair at cell *F* (claim 7) to a neighbouring cell *T*
@@ -529,16 +548,18 @@ Terms specific to this spec:
     the slope condition holds for the ground levels: it lands on that cell's ground and so drops 3
     levels (Δ = +1) or 5 levels (Δ = −1) in one step (`quirks.deck_side_step_ground_level`, Edge
     cases).
-    - Backing: `measurable` (scenario P4, maps A, C, C2, C3, I, F3 and K; map K2 for the deck rows)
+    - Backing: `measurable` (P4 maps A, C, C2, C3, I, F3 and K; K2 for level-ground deck rows).
+      `unmeasured` for deck-side steps with ground-level difference ±1 and deck-to-deck steps
+      over sloping ground: K2 has no such slope beside or under the deck, and no scenario here
+      distinguishes these rows from ordinary deck-height steps
     - Confidence: high for the table and for the cells that carry the deck-entry mark. Medium that
       no other condition of the original enters a step's height test in the search
 
-11. **A pair is recorded once.** The first time a search considers a (cell, search layer) pair as a
-    candidate, it records the pair with that candidate's cost *g*, and the pair becomes *pending*. For
-    the rest of that search the pair never becomes pending again and its cost is never changed, even
-    when a later expansion reaches it more cheaply (`quirks.path_no_reopen`). So a cell's cost, and
-    its predecessor on the path the search finds, are those of the first expansion that reached it, which
-    with the expansion order of claim 12 is usually but not always the cheapest.
+11. **Recorded route for a cell and layer.** During one search, each (cell, search layer) pair
+    has the cost and predecessor of the first route to reach it, with precedence given by claims
+    7 and 12. A later route does not replace them, even if cheaper (`quirks.path_no_reopen`, on
+    by default). Once expanded, the pair is not eligible for another expansion in that search.
+    Consequently, the resulting path need not be the cheapest path.
     **Recorded-pair margin.** One further rule applies to an already recorded pair, and it shows
     only in one corner of claim 15: when the destination pair has already been recorded and a later
     neighbour finds its outcome *blocked*, the rule of claim 15 applies only if the destination's
@@ -562,24 +583,30 @@ Terms specific to this spec:
       would record more fails (departure D2).
     - A found path must contain at least one step. When the destination cell is the unit's own cell
       on the same search layer, no path results.
-    - Backing: `measurable` for the ordering key, through route choice (scenario P13). `unmeasured` for
-      the 10000 rule and the limits (the expansion count is internal and cannot be observed without
-      changing the original)
+    - Backing: `measurable` for the ordering key through route choice (P13). The one-step minimum
+      shows through P7 run 5's failed search beside a blocked destination. `unmeasured` for the
+      same-cell, same-layer failure: no scenario forces a path computation rather than an
+      arrival response to an order onto the unit's own cell. `unmeasured` for the 10000 rule and
+      limits: their counts are internal and no scenario here isolates a threshold from other
+      search failures
     - Confidence: high for the ordering key, the limits and the 10000 rule
 
     12a. **Order among equal entries.** Entries of different cost keep the ordering of claims 12
     and 13. Among pending entries of exactly the same cost, our engine takes the one recorded first:
-    - *Cell search.* The cost compared is *f*, the stored single-precision values compared exactly
-      (F1, F2). The start pair is recorded first. After it, pairs are recorded in the order of the
-      expansions that record them (claim 11), and the candidates of one expansion in generation
-      order (claim 7).
-    - *Coarse search.* The cost compared is the route cost, the stored single-precision values
-      compared exactly (F9). The route to the start's sector is recorded first. Continuing from a
-      route records its new routes (claim 13) in the order of the sectors they enter, by each
-      sector's *first cell*: its cell that comes first when cells are taken row by row (increasing
-      y, and within a row increasing x). Two sectors of one level never share a cell, so this order
-      is strict. A route that undercuts a recorded cost (claim 13) is recorded when it is found,
-      like any other route.
+    - *Cell search.* The compared cost is *f*, using exact comparison of the stored
+      single-precision values (F1, F2). At equal *f*, the route associated with the entry recorded
+      earliest wins. The start entry precedes every other entry. Entries reached from an earlier
+      expansion precede those first reached from a later expansion; among candidates associated
+      with one expanded entry, claim 7's candidate precedence applies. This specifies which route
+      is selected, not how entries are stored or enumerated.
+    - *Coarse search.* The compared cost is the stored single-precision route cost, compared
+      exactly (F9). At equal cost the earliest-recorded route wins. The start-sector route
+      precedes every other route. Routes first reached from an earlier expansion precede those
+      first reached from a later expansion. Among routes associated with one expansion,
+      precedence is by the entered sector's **first cell**: its least cell in increasing y,
+      then increasing x order. Two sectors of one level never share a cell, so this preference is
+      strict. A cheaper replacement route (claim 13) has its own precedence at the expansion
+      that reaches it, not the precedence of the route it undercuts.
 
     This order is a rule of our engine, not the original's (departure D7). The original breaks the
     same ties by an order of its own, which this spec does not reproduce. That order depends on
@@ -747,7 +774,10 @@ Terms specific to this spec:
     coarse search. The category part, and the switch, can change a retry only for an infantry type
     with the jumpjet flag whose own movement zone cannot use a category that movement zone
     *infantry* can.
-    - Backing: `measurable` only in aggregate, through scenario P12. `unmeasured` for the effect of
+    - Backing: `measurable` only for aggregate retry success/failure through P12. The free-part
+      predicate, probe coordinates, whole/split classification and individual closure choices
+      are `unmeasured` separately: P12 observes routes and failures, not these judgements, and
+      its outcomes also depend on corridor ties. `unmeasured` for the effect of
       `quirks.corridor_free_part_unusable_cells`, which shows only for a jumpjet infantry type as
       described above whose corridor search fails, a case no scenario of this spec sets up
     - Confidence: high for the outcome-or-category condition as stated and for the movement zone it
@@ -832,8 +862,10 @@ Terms specific to this spec:
       edge, but it changes only the extra cost of 0.001. On ground whose neighbouring cells differ
       by at most 1 level, the original's sectors and connections are those of the rule. Our engine
       follows the rule (departure D4, accepted).
-    - Backing: `measurable` only in aggregate, through the routes of scenarios P1 and P12 and their
-      secondary checks. `unmeasured` for the coarse end cells on a bridge: a corridor that starts
+    - Backing: `measurable` only for aggregate route results through P1 and P12 and their
+      secondary checks. Individual sector membership and connection classification are
+      `unmeasured`: no scenario isolates them from coarse ties, retries and straightening.
+      The reference checks assess them together. `unmeasured` for the coarse end cells on a bridge: a corridor that starts
       in the wrong sector changes only which corridor is chosen, and a coarse search that fails
       falls back on a search without a corridor that still finds a path, so no route isolates them.
       `unmeasured` for the bridge side connections (Q-0088): they affect only corridor choice,
@@ -858,8 +890,10 @@ Terms specific to this spec:
     claim 24) differ, read as in claim 6, the path computation fails at once. That failure counts as a failed
     search with the gate passed, so the search-failure rows of claim 23 apply. Without the corridor,
     the cell search runs over the whole map even when the reach regions differ.
-    - Backing: `measurable` (scenario P11: run 1 for a unit that has not yet entered the usable
-      area, run 2 for the team condition, P12 with the train type for trains). `unmeasured`
+    - Backing: `measurable` (P11 run 1 for a unit that has not yet entered the usable area,
+      run 2 for the team condition; P12 with the train type for trains). `unmeasured` for the
+      post-substitution reach-region comparison: no scenario changes a passed gate to different
+      reach regions while preserving corridor eligibility. `unmeasured`
       for the loaner and *retreat* conditions: no order or map setting of the measurement setup is
       known to make a unit a loaner or to put it on *retreat* at a chosen moment
     - Confidence: medium. Low for the loaner and team conditions, and for what the team's moving
@@ -917,10 +951,11 @@ Terms specific to this spec:
     *j* qualifies, the V is *not flattened* and stays as it is. For two diagonal runs the new steps
     end on the same cell as the steps they replace, so the rest of the path is unchanged.
 
-    *Which V's are flattened.* For the path left by the preceding judgement, the following state
-    table gives the resulting final steps and the path portion eligible for later judgements. When
-    more than one V is eligible, the V whose first run begins earliest among the steps that are not
-    final determines the result.
+    *Which V's are flattened.* For the path after the preceding judgement, the table gives the
+    resulting final steps and the portion eligible for later transformations. When multiple V's
+    are eligible, the resulting path is the one obtained by transforming the V whose first run
+    begins earliest among the non-final steps. This precedence applies whether or not the V's
+    overlap. The table describes path results, not an implementation's scan procedure.
 
     | Judgement result | Steps made final | Remaining path considered by later judgements |
     |---|---|---|
@@ -937,14 +972,14 @@ Terms specific to this spec:
       one is not final. Thus new straight steps of a flattened V do not join equal straight steps
       before them, which are final (example (c)), but do join equal straight steps directly after
       them (example (d)).
-    - After a flattened V, the *n* − *j* retained steps are final and are not read again; judgement
-      resumes at the first new step. The 2*j* new steps, together with any equal steps directly
-      after them, form the run judged next. Whether that run can open a V depends on its direction
+    - After a flattened V, the *n* − *j* retained steps are final and belong to no later
+      transformation. The eligible suffix begins with the 2*j* new steps; these and any equal
+      steps directly after them form its first run. Whether that run can open a V depends on its direction
       and how it arose: a run of diagonal steps always can, while a run of straight steps can only
       in the cases listed under *V's of straight runs*. After a flattened V of diagonal runs, the
       new steps are straight; the remaining *m* − *j* diagonal steps of the second run form their
-      own run after them and can open a further V. After an unflattened V, judgement resumes at the
-      start of its second run, which can be the first run of a further V. After a flattened V of
+      own run after them and can open a further V. After an unflattened V, the eligible suffix
+      starts with its second run, which can open a further V. After a flattened V of
       straight runs, the rules under *V's of straight runs* apply.
     - Where two V's would share a run, the one nearer the path's start is judged first; the later
       V sees only what the earlier judgement left of the shared run (examples (a) and (c)).
@@ -963,9 +998,8 @@ Terms specific to this spec:
     path is shifted by the same amount, and the stored path no longer ends on the cell the search
     reached.
 
-    Where judging resumes after a V of straight runs is replaced follows the rule above: at the
-    first new step, with the *n* − *j* kept steps final. What the new steps can do then depends on
-    the pair:
+    After a V of straight runs is replaced, the eligible suffix likewise begins at the first new
+    step, with the *n* − *j* kept steps final. Its possible V shapes depend on the pair:
     - Pairs 0 and 2, 2 and 4, 4 and 6 (new steps diagonal). The 2*j* new steps are a run of
       diagonal steps, which can open a V, but its only possible partner is the step after the
       second run, so only when *j* = *m* and that step is at a right angle to the new steps. When
@@ -1038,8 +1072,9 @@ Terms specific to this spec:
     the order of its steps. The new steps take the first places of the stretch, and its remaining
     places become *removed steps*, which are dropped from the path when the pass ends.
 
-    *What the pass judges on.* The first 20 places of the path are examined, removed steps included
-    once they arise. The legs, the reference distances and the triggers below are judged on the path
+    *What the pass judges on.* Places are the original step positions in the path received from
+    claim 17, counted from its start. Only the first 20 places are eligible, including places
+    whose steps a replacement removes. The legs, the reference distances and the triggers below are judged on the path
     as this pass received it; the choice of each stretch and the acceptance test see the path as
     the earlier replacements of this pass have left it. A replacement keeps both ends of its
     stretch, so every later step still starts and ends on the cells it did.
@@ -1050,18 +1085,19 @@ Terms specific to this spec:
     new leg at the cell it starts from, and is then the first step of that new leg; the first step
     of a leg never turns back.
 
-    *Reference distance, record and triggers.* Each examined step has a *reference distance* and a
-    *record*. A step whose reference distance is not larger than its record *triggers* a
-    replacement of the stretch that ends on the cell the step ends on:
-    - In the first and second legs, the reference distance of a step is the Chebyshev distance from
-      the start cell to the cell the step ends on. Its record is the largest of 0 and the reference
-      distances of the earlier examined steps of these two legs.
-    - In the third and every later leg, let *p* be the leg's first cell and *q* the first cell of
-      the leg before it. The reference distance of a step ending on cell *e* is the Chebyshev
-      distance from *q* to the cell 2*p* − *e*, the end cell mirrored through *p*
-      (`quirks.detour_mirrored_reference`; with the switch off, the distance from *q* to *e*
-      itself). Its record is the largest of the Chebyshev distance between *q* and *p* and the
-      reference distances of the earlier examined steps of the same leg.
+    *Reference distances and trigger predicate.* Each examined step has a **reference distance**
+    and a **record**. A step **triggers** exactly when its reference distance is less than or
+    equal to its record; its trigger corresponds to the stretch ending on that step's end cell,
+    defined below.
+    - In the first two legs, the reference distance is the Chebyshev distance from the path's start
+      cell to the step's end cell. The record is the maximum of zero and the reference distances
+      of all earlier examined steps in those two legs.
+    - In the third and later legs, let *p* be the current leg's first cell, *q* the preceding leg's
+      first cell and *e* the step's end cell. With `quirks.detour_mirrored_reference` on, the
+      reference distance is the Chebyshev distance from *q* to 2*p* − *e*; with it off, it is the
+      distance from *q* to *e*. The record is the maximum of the Chebyshev distance from *q* to
+      *p* and the reference distances of earlier examined steps in the current leg. Coordinates
+      and distances here use exact integer arithmetic, in cells.
 
     *The stretch of a trigger.* A stretch is a run of consecutive places of the path. The stretch
     of a trigger ends with the trigger step's place, on its end cell *e*. Its *earliest place* is,
@@ -1087,49 +1123,59 @@ Terms specific to this spec:
     earliest place being the place of the last leg's first step, its last place the last examined
     place, and its threat limit 3.
 
-    *Tunnel steps.* A tunnel step ends every leg, and with it the reference distances and records:
-    the pass starts afresh after it,
-    with the next step's place as the earliest place, as on a new path that begins at the cell to the north
-    of the tunnel entrance instead of the tunnel exit (`quirks.detour_after_tunnel_position`; with
+    *Tunnel steps.* No leg or reference-distance record spans a tunnel step. The eligible
+    suffix after it has the next step's place as its earliest place and the same transformation
+    rules as a new path. Its assumed start is the cell north of the tunnel entrance, rather than
+    the tunnel exit (`quirks.detour_after_tunnel_position`; with
     the switch off, at the tunnel exit). A tunnel step is never part of a stretch.
 
     *Worked examples* (directions as in Terms, steps counted from 1, every cell entered by a shape
     clear, no congestion mark, no threat, switches at their defaults):
-    - (a) The path 1, 3, 4, 5, 4, 4 from (*x*, *y*), ending at (*x* + 1, *y* + 4), with the cell
-      (*x* + 1, *y*) not clear, so that claim 17 leaves it as it is (the path of scenario P9, train
-      run 4). The first step ends at distance 1 from the start, above its record
-      0. The second step (3) turns back, since the y component of the leg shrinks from 1 to 0, so
-      the second leg begins at (*x* + 1, *y* − 1); its end cell (*x* + 2, *y*) lies at distance 2,
-      above its record 1. The third step ends on (*x* + 2, *y* + 1), also at distance 2, not above
-      its record 2: it triggers. From that cell
-      the distances *d* to the cells where the three steps start are 2, 2 and 1 in path order, so
-      *σ*₁ is the only step that is not a new maximum, no step comes before it, and the stretch
-      begins at the earliest place, the path's first: the stretch 1, 3, 4 becomes the diagonal-first shape 3, 2 with one removed step. The fourth step
-      (5) turns back, since x shrinks, so the third leg begins at *p* = (*x* + 2, *y* + 1) with
-      *q* = (*x* + 1, *y* − 1), and the fourth step's record is 2, the distance between *q* and *p*.
-      The fourth step ends on (*x* + 1, *y* + 2), whose mirror through *p* is (*x* + 3, *y*), at
-      distance 2 from *q*: it triggers, and its earliest place is the
-      second. The steps from there are the 2 at the second place and the 5 at the fourth, with
-      *d* = 1 and 1, so the stretch begins at the earliest place, and the stretch (2, a removed
-      step, 5) becomes the single step 4. The fifth and sixth steps trigger in the same way and keep the stretch straight. The stored
-      path is 3, 4, 4, 4. The closing stretch has *m* = 3 and distance 3, so it is left alone. With
-      `quirks.detour_mirrored_reference` off, the third leg's steps reach distances 3, 4 and 5 from
-      *q*, nothing more triggers, and the stored path is 3, 2, 5, 4, 4.
-    - (b) The path 2, 4, 4, 5, 4, 4, 4 from (*x*, *y*) (scenario P9, train run 2, after claim 17).
-      The first step ends at distance 1, above its record 0. The second step ends on
-      (*x* + 1, *y* + 1), also at distance 1, not above its record 1: it triggers, the distances
-      *d* are 1 and 1, so the stretch begins at the earliest place, and the stretch 2, 4 becomes
-      the single step 3. The third step ends at distance 2, above its record 1. The fourth step
-      (5) turns back, since
-      x shrinks, so the second leg begins at (*x* + 1, *y* + 2); its steps end at distances 3, 4, 5
-      and 6 from the start and trigger nothing. The closing stretch has *m* = 4 and distance 4, so it
-      is left alone. The stored path is 3, 4, 5, 4, 4, 4.
+    **Example (a).** Input directions 1, 3, 4, 5, 4, 4 from (*x*, *y*) end at
+    (*x* + 1, *y* + 4). Cell (*x* + 1, *y*) is not clear, so claim 17 leaves this input
+    unchanged (P9 train run 4). Its leg boundaries and trigger predicates are:
+
+    | Original place | Leg | End-cell reference distance | Record | Trigger |
+    |---|---|---|---|---|
+    | 1 | first | 1 | 0 | no |
+    | 2 | second, starting at (*x* + 1, *y* − 1), where y displacement turns back from 1 to 0 | 2 | 1 | no |
+    | 3 | second | 2 | 2 | yes |
+    | 4 | third, starting at *p* = (*x* + 2, *y* + 1), where x displacement turns back; *q* = (*x* + 1, *y* − 1) | 2, to the mirrored end (*x* + 3, *y*) | 2, the distance from *q* to *p* | yes |
+    | 5 and 6 | third | no larger than the record | 2 | yes |
+
+    Distances and coordinates are integers in cells. The resulting stretches are:
+
+    | Trigger place | Stretch selection | Replacement result |
+    |---|---|---|
+    | 3 | *d* values 2, 2, 1; only *σ*₁ is not a new maximum, with no earlier step, so the earliest place is 1 | 1, 3, 4 becomes diagonal-first 3, 2 and one removed place |
+    | 4 | earliest place 2; its non-removed steps are 2 at place 2 and 5 at place 4, with *d* values 1, 1 | 2, removed place, 5 becomes 4 |
+    | 5 and 6 | the same trigger predicate | the stretch stays straight |
+
+    Output: 3, 4, 4, 4. The closing stretch has *m* = 3 places and distance 3 cells, so
+    remains unchanged. With `quirks.detour_mirrored_reference` off, the third leg's distances
+    from *q* are 3, 4, 5 cells, there are no further triggers, and output is 3, 2, 5, 4, 4.
+
+    **Example (b).** Input directions 2, 4, 4, 5, 4, 4, 4 from (*x*, *y*) are P9 train
+    run 2's path after claim 17. Their predicates and result are:
+
+    | Original place | Reference distance, in cells | Record, in cells | Stretch result |
+    |---|---|---|---|
+    | 1 | 1 | 0 | no trigger |
+    | 2, ending at (*x* + 1, *y* + 1) | 1 | 1 | trigger; *d* values 1, 1 select earliest place 1; directions 2, 4 become 3 |
+    | 3 | 2 | 1 | no trigger |
+    | 4 to 7 | 3, 4, 5, 6 | each below its reference distance | no trigger |
+
+    Place 4 turns back along x, so the second leg begins at (*x* + 1, *y* + 2). Its
+    closing stretch has *m* = 4 places and distance 4 cells, so remains unchanged.
+    Output: 3, 4, 5, 4, 4, 4.
 
     - Backing: `measurable` with test data (scenario P9, train runs 2 to 4, whose expected paths
       follow from claims 7 to 18 with no exact tie), for the stretch selection, the mirrored
       reference and the shortening at the start of a path. The secondary check of P1 compares whole
-      paths with claims 7 to 18 taken together. `unmeasured` for the threat limits and for tunnel
-      steps (stock data has no tunnels)
+      paths with claims 7 to 18 taken together. `unmeasured` for the threat limits and closing
+      stretch: the train runs contain no threatening cells and their closing stretches are left
+      unchanged. `unmeasured` for transformations after tunnel steps: P9 uses a tunnel but does
+      not isolate a post-exit detour, and no scenario here distinguishes the assumed start cells
     - Confidence: medium for the selection and the acceptance rule, and for the order of the two
       shapes
 
@@ -1163,8 +1209,10 @@ Terms specific to this spec:
     occupied (that is why the unit is blocked), is counted once in (ii) and once in (iii). It
     therefore ends up *not* made costly, unless the stored path of a qualifying unit counts it a
     third time.
-    - Backing: `measurable` (scenario P14 for the marking of the qualifying unit's stored path and
-      for the parity rule, P6 for the timing)
+    - Backing: `measurable` (P14 for mode-1 stored-path marks and parity, P6 for timing).
+      `unmeasured` for mode-2 qualification and the exact path-length cutoffs: P14 keeps mode 1,
+      and no run varies path length at those boundaries. `unmeasured` for restoration of an
+      independently pre-existing mark: no scenario establishes one before the search
     - Confidence: medium for the rule. Low for the exact unit test of mode 1 and the path-length
       conditions
 
@@ -1278,15 +1326,18 @@ Terms specific to this spec:
     | Case | Result |
     |---|---|
     | The gate of claim 6 fails | The path computation ends at once with no path. The unit does not leave its team, no behaviour is queued and its house gives it no new destination. A unit with the drive locomotor has its destination cleared, so it stops where it is. The retry delay runs after a fresh search, and after a re-path only for the walk locomotor (claim 21). What its *move* behaviour does without a destination belongs to S-0215 (it falls back to rest). No other row of this claim applies. |
-    | The search fails (including the immediate failure of claim 14), and the unit is more than 1 cell (Chebyshev) from the destination, or is not on a bridge deck while the destination is a bridge cell | The unit stops (its current motion ends) and the retry delay *R* starts. It gives up: it leaves its team, its destination is cleared, and it queues *guard* if it has a human-controlled owner or *area guard* if it has a computer-controlled owner. A unit with a computer-controlled owner in a skirmish or multiplayer game is then given a new destination chosen by its house (a house cell whose choice belongs to the AI-visible-rules specs), provided that choice yields a cell; otherwise it gets none. These two computer-controlled rules (*area guard*, the new destination) describe the original only. In our engine the rule for a human-controlled owner holds for every unit, those of an *AI house* included (glossary *AI house*): such a unit queues *guard* and its house gives it no destination. This is Departure D5, with no switch. Our AI may give the same unit a destination as an ordinary order. |
+    | The search fails (including the immediate failure of claim 14), and the unit is more than 1 cell (Chebyshev) from the destination, or is not on a bridge deck while the destination is a bridge cell | The unit stops (its current motion ends) and the retry delay *R* starts. It gives up: it leaves its team, its destination is cleared, and it queues *guard* if it has a human-controlled owner or *area guard* if it has a computer-controlled owner. A unit with a computer-controlled owner in a skirmish or multiplayer game is then given a new destination chosen by its house (a house cell whose choice belongs to the AI-visible-rules specs), provided that choice yields a cell; otherwise it gets none. These two computer-controlled rules (*area guard*, the new destination) describe the original only. In our engine the rule for a human-controlled owner holds for every player-house unit, those of an *AI house* included (glossary *AI house*): such a unit queues *guard* and its house gives it no destination. Units of the neutral and special houses keep the original's non-human-owner rule; those houses are not AI houses. This is Departure D5, with no switch. Our AI may give the same unit a destination as an ordinary order. |
     | The search fails in any other case (within 1 cell) | The unit stops and the retry delay *R* starts. It does not give up: it stays in its team and no behaviour is queued. A unit with the drive locomotor also has its destination cleared, so it ends up standing where it is without a destination. For locomotors other than driving, ship and hovering, the destination is kept, and the unit tries again once its behaviour starts it moving towards it (S-0215), which the retry delay holds back. A unit with the ship or hovering locomotor also has its destination cleared, like a unit with the driving locomotor. |
 
     The same clearing ends every failed search of a unit with the driving, ship or hovering
     locomotor, so in rows 2 and 3 such a unit is left without a destination, unless its house has
     just given it a new one (row 2, in the original only). Being within the close-enough distance
     of the destination makes no difference to any row.
-    - Backing: `measurable` (scenarios P3, P4, P7 runs 5, 5b and 6, P8, P11; P19 for ship and
-      hovering units in row 3)
+    - Backing: `measurable` (P3, P4, P7 runs 5, 5b and 6, P8, P11; P19 for ship and hovering
+      units in row 3). `unmeasured` for destination retention and restart with locomotors other
+      than driving, ship and hovering: no scenario tests those locomotors after this failure,
+      and the rule remains a low-confidence assumption (Open questions). The neutral/special
+      distinction is our engine's scope rule from the glossary, not an additional oracle claim
     - Confidence: medium for driving, ship and hovering. Low for the remaining locomotors in row 3
 
 ### Destination substitution
@@ -1333,7 +1384,9 @@ Terms specific to this spec:
       walls, except by a unit of locomotion class *winged*, for which claim 25 skips the class rule.
     - Backing: `measurable` (scenario P7, run 3b for the height rule, run 10 for the destination's
       level on a bridge and so for `quirks.substitution_centre_ground_level`, run 9 for wall cells,
-      runs 8 and 8b for the estimate test). `unmeasured` for the movement zone of the estimate *E*
+      runs 8 and 8b for the estimate test). `unmeasured` for the subterranean destination's
+      further-test gating and resulting estimate zone: P16 (t) tests the no-move caller instead,
+      not this substitution caller. `unmeasured` for the movement zone of the estimate *E*
       of a jumpjet infantry type, which no scenario sets up, and for the legs of F8, which apply only
       when the found cell or the destination is a bridge cell and change *E* by a few cells, an
       effect no scenario of this spec isolates
@@ -1371,7 +1424,8 @@ Terms specific to this spec:
     | User | Centre | Locomotion class | Movement zone | Reach region | In deck mode when | Height condition | Further test | Reference cell |
     |---|---|---|---|---|---|---|---|---|
     | Destination substitution (claim 24) | the destination | the unit's | the simplified movement zone | that of the unit's cell, read for its deck when the unit is on a bridge deck (claim 4), for the simplified zone | the unit is on a bridge deck | yes | for a unit of movement zone *subterranean*, as below | the unit's cell |
-    | Failed approach with empty radii (S-0307 claim 17), ordinary ground infantry or vehicle on terrain without bridges | the cell of the target's reference point | the actor's | own zone | that of the actor's ground cell for its own zone | never | yes | no | none |
+    | Failed ordinary non-close-range approach (S-0307 claim 17), ground infantry or vehicle on terrain without bridges, excluding jumpjet and special crushing, deploying or balloon-hover searches | the failure centre of S-0307 claim 17, including after candidate trials | the actor's | own zone | that of the actor's ground cell for its own zone | never | yes | no | none |
+    | Teleporting landing of a non-infantry object (S-0207 claim 20 b) | the destination cell | the object's | own zone, not simplified | that of the destination cell for its own zone, read for its deck in deck mode (claim 4) | the destination is a bridge cell and the object's world height is more than 312 leptons above surface height *H* there (exact integer comparison) | no | no | none |
     | Scatter (S-0208 claim 13) | as S-0208 claim 13 says | the unit's | *normal* | none | the unit is on a bridge deck | yes | no | none |
     | Move order onto a cell (S-0214 claim 11), when that claim uses the search, except the next row | the clicked cell | the unit's | own zone, *subterranean* counted as *normal*, and *fly* counted as *infantry* while an ion storm (a global effect, S-0104) is active | that of the unit's cell, read for its deck when the unit is on a bridge deck (claim 4), for that zone | the centre is a bridge cell | yes | no | none |
     | No-move order onto a cell (S-0214 claim 11) by a free mover (S-0214 Terms: a unit that is in the air, is of movement zone *subterranean* whatever its state, is of a jumpjet infantry type with no ion storm active, or is an aircraft) | the clicked cell | the unit's | as in the row above | none | the centre is a bridge cell | yes | for a unit of movement zone *subterranean* that is below the ground surface when the search is made (below) | none |
@@ -1383,7 +1437,8 @@ Terms specific to this spec:
     | Free unit, first search (S-0402 claim 18) | the building's top-left cell | *wheel* | the free unit type's own | that of the centre cell's ground for that zone | never | yes | no | the building's top-left cell |
     | Free unit, second search (S-0402 claim 18) | as in the preceding row | *wheel* | as in the preceding row | as in the preceding row | never | yes | no | the building's top-left cell |
 
-    Both free-unit searches exclude bridge cells. Only the first free-unit search requires
+    The failed-approach row and both free-unit searches exclude bridge cells. The teleporting
+    landing row allows them and asks for no no-overlay condition. Only the first free-unit search requires
     the **no-overlay condition**: the cell must hold no overlay of any kind, resources included.
     No other row of T5 asks for that condition.
 
@@ -1405,7 +1460,7 @@ Terms specific to this spec:
       bridge cell. The centre's level is its height level, plus 4 only when the centre is a bridge
       cell and the use is in deck mode (in claim 24's use, `quirks.substitution_centre_ground_level`
       off changes this to plus 4 whenever the centre is a bridge cell; no other use is changed).
-      Bridge cells may qualify except in the empty-radius approach-failure and both free-unit
+      Bridge cells may qualify except in the ordinary approach-failure and both free-unit
       rows of T5, which exclude them independently of locomotion class,
     - when the user asks for it, it passes the *further test* of a cell, which is the burrowing test
       of S-0010 claim 17: the test of whether a tunnelling unit may dig in or come up on the cell.
@@ -1431,44 +1486,50 @@ Terms specific to this spec:
     so it normally does not qualify, and the double entry of the centre matters only where the
     centre can be empty.
 
-    The **collected cells** are the qualifying cells of rings 0, 1, 2, … up to the largest radius,
-    taken ring by ring and, within a ring, in scan order. The collection is cut off at whichever
-    comes first: the 24th collected cell, even in the middle of a ring; or the end of the first ring
-    that contains a collected cell passing the *visibility test* (in deck mode: the
-    first ring that contains any collected cell). Short of the 24-cell cut, that ring contributes all
-    of its qualifying cells, and no later ring contributes any. The *visibility test* is the
-    screen-cover check of S-0208 (its Terms), which owns its arithmetic, applied to the candidate
-    cell at its own height level: a bridge cell is judged at its ground height level, also in deck
-    mode, and the high-bridge raise of the cells in front of it applies as S-0208 states it. A cell
-    passes when it passes that check, that is, when no higher terrain in front of it hides its
-    centre on the screen. Among
-    the collected cells, those passing the visibility test are preferred when there are any. The
-    result is the preferred cell nearest to the reference cell: the one with the smallest table
-    square root of (Δx² + Δy²) in cells (S-0204), which for the distances of this search orders the
-    cells exactly as the true distance does. On equal distance the first collected wins. When the
-    user gives no reference cell (as listed in T5), the result is instead the preferred cell
-    at position (*N* mod *n*) in collection order, counting from 0, where *n* is the number of
-    preferred cells, a centre collected twice counting twice, and *N* is the tick number (S-0201)
-    in force when the search is made: for a scatter, that of the tick of the scatter request; for a
-    move order or a rally point, the one in force when the click is handled, since the search is
-    made then (S-0213 claim 20, S-0214 claim 11); for the empty-radius approach failure,
-    the tick of that failure; for an idle harvester's step-off, the tick of that processing
-    (S-0402 claim 13). S-0307 claim 16 owns qualification of obstructed approach
-    positions before failure, including its two alternative coarse-estimate tests. These are
-    not nearby-cell-search qualification and do not change the failure row's parameters.
-    When no cell qualifies, there is no result. No draw from
-    any random stream is taken.
+    **Collected sequence and result.** The ordered candidate sequence consists of qualifying
+    cells in rings of increasing Chebyshev radius up to the largest radius, in the scan order
+    defined above within each ring. The **collected cells** form the prefix ending at the earlier
+    of its 24th cell, if reached, or the end of the first ring containing a qualifying cell that
+    passes the **visibility test**. In deck mode that stopping ring is instead the first ring
+    containing any qualifying cell. If the 24-cell limit falls within a ring, only its prefix is
+    included; otherwise the entire stopping ring is included and no later ring contributes.
+
+    The visibility test is S-0208's screen-cover check (its Terms), including its arithmetic and
+    the high-bridge raise of cells in front. It judges the candidate at its own ground height
+    level, including for a bridge cell in deck mode: a passing cell's centre is not hidden on
+    screen by higher terrain in front. If any collected cells pass visibility, only those cells
+    are preferred; otherwise all collected cells are preferred, retaining sequence order.
+
+    With a reference cell, the result is the preferred cell with minimum table-square-root
+    distance *r*(Δx² + Δy²) in cells (S-0204), using exact integer cell differences and sum of
+    squares. At these distances the table root orders cells exactly as true distance does.
+    Ties go to the earliest position in the collected sequence. Without a reference cell, the
+    result is the preferred cell at zero-based position *N* mod *n*, in exact integer arithmetic,
+    where *n* is the preferred-sequence length. A centre collected twice occupies two positions.
+    *N* is the tick number (S-0201) applicable to that search: the scatter-request tick for
+    scatter, click-handling tick for move orders and rally points (S-0213 claim 20 and S-0214
+    claim 11), failure tick for ordinary approach failure, landing-point fixation tick for
+    teleporting landing (S-0207 claim 20 b), and processing tick for idle harvester step-off
+    (S-0402 claim 13).
+
+    S-0307 claim 16 owns qualification of obstructed approach positions before failure, including
+    its two alternative coarse-estimate tests; these are not nearby-cell-search qualification
+    and do not change the failure row's parameters. If no cell qualifies, there is no result.
+    The search takes no random-stream draw.
     - Backing: `measurable` for the ring rule, the scan order and the distance choice (scenario P7,
       runs 1, 2, 4, 8 and 8b), for the occupancy condition (P7 runs 1, 2, 8 and 8b, P16), for the
       class rule with walls (P7 run 9, P16), for the harvester queueing and idle step-off
       parameters (S-0402 scenario H11), and for both free-unit searches and the no-overlay
-      condition (S-0402 scenario H13 parts b and c), for the empty-radius approach-failure parameters
-      (S-0307 scenario RG12), and for the choice without a reference cell (P16, runs
+      condition (S-0402 scenario H13 parts b and c), for the ordinary approach-failure parameters
+      and centre after candidate trials (S-0307 scenarios RG12 and RG17), for the teleporting
+      landing parameters on flat ground (S-0207 scenario D22 run 3), and for the choice without a reference cell (P16, runs
       (s), (u) and (r), which also test the parameters of table T5 for a scatter, a move order onto
       an unreachable cell and a rally point), and for the further test of the no-move row for a
       cell, with the state that decides it (P16 run (t), test data). `unmeasured` for the other
       parameters of the no-move rows and for the rows of orders onto an object: they differ from the
       move-order row only in parameters that need a flying or jumpjet unit next to occupied cells.
+      `unmeasured` for the teleporting landing's deck-mode threshold in isolation: D22 run 3
+      uses flat ground and does not distinguish the threshold at a high bridge.
       `unmeasured` for the 24-cell limit and the stop rule in deck mode. Both differ from the plain
       ring rule only when every qualifying cell of the inner rings fails the visibility test, which
       needs terrain built to hide whole rings (S-0208's scenario W7, part f, tests the check itself
@@ -1484,8 +1545,11 @@ Terms specific to this spec:
       isolates it on raised terrain. The free-unit searches' bridge exclusion is also
       `unmeasured` in isolation: S-0402 H13 uses level ground, where the height condition
       already rejects neighbouring decks 4 levels higher.
-      `unmeasured` for the winged class, which no unit of this spec's scenarios has (S-0213's
-      scenario O14, step 5, covers the rally point of an aircraft factory)
+      `unmeasured` for the winged class's omitted checks, which no discriminating scenario here
+      isolates (S-0213 O14 step 5 covers an aircraft-factory rally point only). `unmeasured` for
+      the largest-radius boundary, the visibility preference across rings and the no-result
+      case: no scenario here places enough hidden or refused cells to isolate those outcomes.
+      The no-random-draw rule is `measurable` through P16 run (u)'s random-state check
     - Confidence: high for the occupancy condition and the class rule. Medium for the ring rule, the
       scan order, the 24-cell limit, the distance choice, the choice without a reference cell and
       the parameters of table T5. Medium that the visibility test is S-0208's screen-cover check
@@ -1775,8 +1839,9 @@ south and west.
 | any | destination changes | stored path cleared, fresh search, which waits for a running retry delay like any fresh search (claims 20 and 21; whether a new order also clears the delay is S-0213's and S-0209's) |
 
 Ordering consequences:
-- A search made after a bridge is destroyed, even later in the same tick, already sees the bridge as
-  a separation (claim 5).
+- A search made after the only enabled bridge connection is destroyed, even later in the same
+  tick, already sees the banks as separated (claim 5). An intact alternative connection can
+  still join them.
 - The gate uses the destination as ordered, so an ordered destination in another reach region is
   dropped even when a cell near it would be reachable (claims 6 and 24).
 - Straightening (claims 17 and 18) uses the entry outcomes at the moment of the search, including
@@ -1921,8 +1986,8 @@ Ordering consequences:
   warning is needed, because the cause is the map situation.
 - **Departure D5: rules for computer-controlled owners only.** This is a design choice of scope,
   the kind of departure the glossary entry *departure* allows, and it follows the project lead's
-  decision recorded under the glossary entry *AI house*. Three rules of the original apply to
-  units of its computer player only:
+  decision recorded under the glossary entry *AI house*. The following original rules are not
+  reproduced for AI player houses (the neutral and special houses are outside that departure):
   - after giving up (claim 23 row 2) the unit queues *area guard*, where a human-controlled
     owner's unit queues *guard*,
   - after giving up in a skirmish or multiplayer game, its house gives it a new destination, and
@@ -1931,8 +1996,9 @@ Ordering consequences:
 
   Our engine reproduces none of them for an *AI house*, which has the unit rules of a
   human-controlled house and no teams (glossary *AI house*, *team member*). A unit of an *AI house*
-  queues *guard*, gets no destination from its house and always uses its own coefficient. There is
-  no switch. Our AI may reproduce the original's result through ordinary orders. The measurement
+  queues *guard*, gets no destination from its house and always uses its own coefficient. The neutral and special
+  houses are not AI houses and keep the original's non-human-owner rules (glossary *AI house*).
+  There is no switch. Our AI may reproduce the original's result through ordinary orders. The measurement
   scenarios that use a computer-controlled house measure the original.
 - **Departure D7 (accepted): order among exactly equal entries.** Claim 12a gives our engine's
   order among pending entries of exactly the same cost: the entry recorded first goes first, and in
@@ -2004,18 +2070,24 @@ S-0209's Import mapping says.
 
 ## Measurement scenarios
 
-**Common setup.** The glossary's *measurement setup*: unmodified install, stock data, no engine
-add-ons, a purpose-made test map unless stated, skirmish, game speed free (results are in ticks and
-cells). One human-controlled house with the test units. A computer-controlled house of the original only where a
-scenario says so, otherwise no opponent. Such a house shows the original's rules for a computer-controlled owner, which our engine's *AI houses* do not have (Edge cases and quirks). Record, for each tick, each test unit's cell and destination,
+**Common setup.** The glossary's *measurement setup*: unmodified install, stock data, director
+and mods off except named test data, no engine add-ons, a purpose-made test map unless stated,
+skirmish, game speed 2 unless stated otherwise (results are in ticks and cells). One
+human-controlled house with the test units and one bystander computer player isolated from the
+scenario's observed area. The observed area comprises the test routes, objects and search
+candidates. Void and repeat a run if an unnamed bystander object enters that area or acts on a
+test object, or if the bystander is defeated before observation ends. Where a scenario names
+computer-controlled test units or teams, those are additional named test objects; their rules
+are the original's, not those of our engine's *AI houses* (Edge cases and quirks).
+Record, for each tick, each test unit's cell and destination,
 its current behaviour, whether it is a team member, and the tick count. Also record each test
 unit's stored path. Where a scenario changes a rules value it does so
 through the test map's override section (a named test file), named in the scenario and removed after
 the run. A land-type override gives every multiplier key the scenario needs, because the rest of that
 row resets (S-0006 claim 5). No stock value is assumed: expected numbers are computed from the fields'
 values at measurement time. A computer-controlled team member gets its order through its team's
-script, the team being made by a trigger action that creates a team. Pathfinding takes no random
-draws (claim 25), so one run per variant is enough unless stated.
+script, the team being made by a trigger action that creates a team. Use one run per variant unless stated. Claim 25's nearby-cell search takes no random draws.
+P16 run (u) checks this separately from other activity in the tick.
 
 - **P1 (claims 13 and 17; secondary check: claims 7 to 18): path shape on open ground.**
   - Setup: a flat map of clear land at one height level, no overlays or objects, 40 × 40 cells. One
@@ -2669,6 +2741,12 @@ draws (claim 25), so one run per variant is enough unless stated.
     (*N* mod 8) of that list. Falsified if: the destination differs from that cell, or it is
     (*x* − 1, *y*), the cell nearest to the vehicle, in every run whatever *N* (which would mean the
     unit's cell serves as reference cell).
+    Random-state check: additionally bracket the click-handling nearby-cell search with the
+    read-only random-state recorder, recording every stream state before and after it. Expected:
+    no stream advances during that search; any advance falsifies the no-draw claim. Obtain one
+    qualifying bracket among these ten runs. If the recorder cannot separate the search from
+    other activity in the tick, report that check inconclusive; a whole-tick state difference
+    alone is not a falsifier of the search's draw count.
   - Run (r), a rally point (table T5, rally-point row). Setup: open flat clear ground with a
     barracks (a building that produces infantry) of the human house whose nearest cell is at least 3 cells from (*x*, *y*). An unarmed
     vehicle of the human house stands still with no destination on (*x*, *y*), wall sections of the
@@ -2743,7 +2821,8 @@ only if the refused first check occurs with the retry timer still running and th
 still stored. Obtain one qualifying run; otherwise report inconclusive. Expected: a mode-0
 search occurs on the refusal tick despite the timer. A found path is checked again that tick.
 A failed search follows claim 23. Falsifier: no search on the refusal tick and a later search
-only after the timer expires. Use the stated setup and record the stated observables. Void the run if the bystander enters the corridor or acts on either test unit.
+only after the timer expires, or a found path receives no repeated check on that tick although
+the mover faces its new first step. Use the stated setup and record the stated observables. Void the run if the bystander enters the corridor or acts on either test unit.
 
 **P19. Failed search beside the destination: ship and hovering (claims 21 and 23).**
 Use a tiny level map with an isolated bystander computer player, game speed 2, director and
@@ -2765,10 +2844,15 @@ a substitution, or no qualifying search is void or inconclusive, not a falsifier
 setup and record the stated observables. A separate hovering run
 orders the mover to a cell on an isolated island in another reach region while its timer is
 expired. Expected: no step, a gate failure, destination cleared, and *R* starting on that tick.
-A different timer value falsifies the failed-gate delay rule of claim 21.
+Any step towards the island, a retained destination, or a different timer value falsifies
+this expected gate-failure result. The failed-gate timer specifically tests claim 21.
 
 ## Open questions
 
+- Measurement coverage remains incomplete for the deck-side slope rows of claim 10, mode-2
+  qualification and path-length cutoffs of claim 19, the closing stretch and threat limits of
+  claim 18, and hidden-ring selection boundaries of claim 25. Their backings explicitly remain
+  unmeasured; existing aggregate route checks do not establish them independently.
 - Sectors and connections (claim 13b): which further cells a tunnel's link joins, and how often the
   labelling-order cases of claim 13b occur on stock maps, are not established. The secondary checks
   of scenarios P1 and P12 are the practical check.
