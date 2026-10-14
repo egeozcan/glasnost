@@ -295,9 +295,8 @@ impl Play {
                         }
                     }
                     None => {
-                        // spec: S-0411 claim 10 (placement mode resumes); S-0701 claim 24 (a refused placement: the cannot-deploy-here announcement only)
+                        // spec: S-0411 claim 10 (placement mode resumes); S-0701 claim 24 (a refused placement: the cannot-deploy-here announcement only); S-0406 claim 20 (no battlefield text)
                         self.cues.push(UiCue::PlacementRefused);
-                        self.say("Cannot place there.");
                     }
                 }
             }

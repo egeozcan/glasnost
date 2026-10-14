@@ -614,6 +614,18 @@ fn item_object(w: &mut World, house: HouseId, t: TypeRef) -> ObjectId {
         .unwrap_or_else(|| crate::objects::create(w, Kind::Building, t.index, Some(house)))
 }
 
+/// The cue of a placement refused as it is applied: the placement refusal
+/// announcement for the house's own player, no game-wide refusal sound.
+fn refused_cue(w: &mut World, house: HouseId, t: TypeRef) {
+    // spec: S-0404 claim 7; S-0406 claims 1 and 12; S-0701 claim 24 (placement refused as it is applied: the cannot-deploy-here announcement for the house's own player; a missing factory is silent)
+    w.effects.push(crate::combat::effects::Effect::Sound {
+        sound: crate::combat::effects::Sound::CannotDeploy,
+        of: Some(t),
+        house: Some(house),
+        pos: None,
+    });
+}
+
 /// Applies the placement of a done building (S-0406 claims 1, 3, 8 to
 /// 12): the item's object is put on the map at `cell`, or added as an
 /// upgrade to the building there. Returns whether it was placed; on
@@ -631,20 +643,16 @@ pub fn place_building(w: &mut World, house: HouseId, t: TypeRef, cell: CellXY) -
     let p = place_type(w, t.index);
     if p.upgrade_of.is_some() {
         // spec: S-0406 claim 12 (an upgrade type is not placed by the cell test)
+        // spec: S-0406 claim 12 (the target's owner, type and room are checked again when the order is applied)
         let Some(target) = upgrade_target(w, house, t.index, cell) else {
+            refused_cue(w, house, t);
             return false;
         };
         add_upgrade(w, target, t.index);
         return true;
     }
     if !cell_test(w, t.index, cell, &Test::order(house)) {
-        // spec: S-0404 claim 7; S-0701 claim 24 (placement refused by its cell tests as it is applied: the cannot-deploy-here announcement for the house's own player; a missing factory above is silent)
-        w.effects.push(crate::combat::effects::Effect::Sound {
-            sound: crate::combat::effects::Sound::CannotDeploy,
-            of: Some(t),
-            house: Some(house),
-            pos: None,
-        });
+        refused_cue(w, house, t);
         return false;
     }
     let id = item_object(w, house, t);
@@ -680,7 +688,7 @@ pub fn put_on_map_facing(
     if p.wall {
         // spec: S-0406 claim 10 (a wall type: its wall overlay in the cell, the placing house its owner; no building remains)
         w.objects.remove(&id);
-        // spec: S-0406 claim 10 (a damaged wall that claim 9 could not remove stays: the spec's working hypothesis)
+        // spec: S-0406 claim 10 (pending resolution our engine retains a damaged wall that claim 9 could not remove, with its owner and damage state unchanged)
         let kept = w.cells.cell(cell).is_some_and(|x| x.overlay != NO_OVERLAY);
         if let Some(ov) = p.wall_overlay
             && !kept

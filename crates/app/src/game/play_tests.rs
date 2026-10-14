@@ -118,6 +118,16 @@ fn select_move_deploy_build_and_place_through_the_client_model() {
         .flat_map(|dy| (-8..=8).map(move |dx| CellXY::new(yard.x + dx, yard.y + dy)))
         .find(|&c| p.preview(c).is_some_and(|(_, ok)| ok))
         .expect("a legal cell near the base");
+    // spec: S-0406 claims 6 and 20; S-0701 claim 24 (a refused click: the announcement cue, placement mode kept, no battlefield text)
+    let messages = p.messages.len();
+    let far = (-40..=40)
+        .flat_map(|dy| (-40..=40).map(move |dx| CellXY::new(yard.x + dx, yard.y + dy)))
+        .find(|&c| p.preview(c).is_some_and(|(_, ok)| !ok))
+        .expect("a refused cell");
+    p.click_map(Button::Left, None, far, Modifiers::default());
+    assert!(p.cues.contains(&UiCue::PlacementRefused));
+    assert_eq!(p.tool, Tool::Place(t));
+    assert_eq!(p.messages.len(), messages);
     p.click_map(Button::Left, None, spot, Modifiers::default());
     assert_eq!(p.tool, Tool::Select, "placement mode ends");
     // spec: S-0701 claim 23 (the placement sound)
