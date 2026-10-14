@@ -2,13 +2,13 @@
 id: S-0414
 title: Victory and defeat (the defeat tests of the normal and short game, what defeat does, when the game ends, the end delay, surrender and alliance orders)
 topic: simulation
-revision: 7
+revision: 8
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0150, Q-0151, Q-0193, Q-0267]
+requests: [Q-0150, Q-0151, Q-0193, Q-0267, Q-0285]
 supersedes: []
 ---
 
@@ -21,7 +21,8 @@ for each house: the defeat test of the normal game and of the short game, the de
 defeated house's objects, the end test with allied victory, the delay between the end and the
 result, the order of events when several houses fall in one tick, and what the surrender and
 alliance orders of S-0213 do. Campaign missions (whose results come from map triggers) and network
-games are outside this spec.
+games are outside this spec. Claims 19–23 give the skirmish result screen's statistics,
+score and duration; its layout and visual design belong to the implementer.
 
 **Joint hand-off confirmation.** S-0412 claim 11 agrees with claims 2, 6, 9 and 10 and the
 bases-off edge case here: qualifying objects still prevent defeat; otherwise the first defeat
@@ -232,10 +233,12 @@ the *base-unit list*), S-0412's terms *alliance*, *allied*, *mutually allied*, *
      and F3).
    - **Presentation.** A message names the defeated house and an announcement plays. Neither
      happens for an observer's house, which only the original defeats (claim 1; scenario V10).
-     After the local player's house is defeated, some later superweapon launch
-     announcements no longer play; which ones (the house's own launches, or those announced to the
-     local player) is not established (Open questions). These are presentation only and
-     reach no game state.
+     S-0701 claim 36 owns the defeat, player-defeated and victory announcement roles.
+     After the local player's house is defeated, the alliance-formed and enemy-alliance-formed
+     announcements and the superweapon launch and detection announcements of S-0701 claim 28
+     are muted. This does not mute every announcement: alliance requests and alliance breaks
+     retain S-0701 claim 36's conditions. The muting also applies while our defeated local player
+     watches the remaining sides. These are presentation only and reach no game state.
    - **The end test** of claim 6 belongs to the same defeat. It counts the house as already
      defeated, and every house later in house order as it stands before its own house update in
      that tick, so a house that fails later in the same tick is still a contender at this
@@ -253,8 +256,8 @@ the *base-unit list*), S-0412's terms *alliance*, *allied*, *mutually allied*, *
      (taken over for good, no controlling unit) is `unmeasured` (no way to arrange such an object
      is identified). Stopping an erasure is `unmeasured`: V4 does not arrange an object under
      an erasing weapon at surrender. The defeat message and announcement are `measurable`
-     through V7's message capture and audio recording; suppression of later superweapon
-     announcements is `unmeasured` because the affected launches have not been identified.
+     through V7's message capture and audio recording; post-defeat announcement suppression
+     is `measurable` through V20, using a lengthened end delay in the original.
      The computer-player alliance reaction is `unmeasured`: no scenario isolates its optional
      AI response, and it is outside our engine's rules. Reveal and radar are backed by the
      scenarios of S-0409 and S-0410 cited above
@@ -409,7 +412,8 @@ the *base-unit list*), S-0412's terms *alliance*, *allied*, *mutually allied*, *
     Otherwise the order does nothing. When A allies B, A's objects on the map whose current target
     belongs to a house that A now allies (B, an earlier ally, or A itself) drop that target. When A
     is person-played and B is not passive, a message reports the new alliance, and an announcement
-    plays when A or B is the local player's house (presentation). The original's computer player
+    follows S-0701 claim 36's request-versus-mutual-alliance conditions and post-defeat muting
+    (presentation). The original's computer player
     reacts to some alliances made by human houses (an option of its computer player makes its
     houses ally each other); our AI houses act only through orders.
     - Backing: `measurable` (scenario V9, part a: the one-way effect, the refusal at the last enemy
@@ -552,7 +556,139 @@ the *base-unit list*), S-0412's terms *alliance*, *allied*, *mutually allied*, *
     - Confidence: high for the relative places and continued raises after defeat; medium for
       arranging the same-update tech-tree probe
 
+### Result-screen statistics (Q-0285)
+
+19. **Statistics shown and their cutoff.** The skirmish result screen lists each surviving
+    non-passive house other than the observer's house, including defeated houses, with its
+    player name, kills, losses, built total and score. Cleanup-removed houses have no row.
+    These totals are read after play stops, not frozen at the first successful end test:
+    events during the end delay and its final tick still contribute. There is no separate
+    harvested-credits figure. Harvesting contributes to score as claim 22 says; neither the
+    credit balance nor credits spent is itself the score. Screen layout is not specified.
+    Results in our engine remain the committed results of claims 7–16, even if the house
+    is defeated later in the final tick. Neither the statistics nor the score are a second
+    result test. In particular, the winner-score bonus of claim 23 can be absent for a
+    house that kept a committed win through the final tick's defeat.
+    - Backing: `measurable` (V16 and V12 part c) for the original's statistics and local
+      result; our per-house results remain the design extension of claim 7
+    - Confidence: high
+
+20. **Built total.** The total is the sum of the four kinds' ever-built counts, not the
+    number of objects ever owned or created and not the surviving-object count. Factory
+    release raises it by one for infantry, vehicles and aircraft, provided the released type
+    is not marked not scored. The insignificant mark alone does not exclude a release.
+    Starting units, map objects, free refinery vehicles, clones, crates, survivors, trigger
+    creations, captures, mind-control ownership changes, deploys and pack-ups do not raise it.
+    An item merely started, completed but awaiting release, or cancelled before release raises
+    nothing. Ordinary building placement raises nothing under
+    `quirks.placed_buildings_not_ever_built` (S-0407 claim 10); with that shared switch off,
+    eligible placed buildings also raise the total. Counts never decrease on death, sale,
+    conversion or ownership loss. These are signed 32-bit integer counts with S-0205's
+    wrap and no rounding.
+    - Backing: `measurable` (V16; S-0407 T10 and S-0404 release scenarios)
+    - Confidence: high for the total and not-scored exclusion; medium for the listed creation
+      sources, checked by V16's separate controls
+
+21. **Kills and losses.** Kills sum credited destructions of infantry, vehicles, aircraft and
+    buildings of every victim house, including allies, the same house and non-player houses.
+    A not-scored victim contributes neither a kill nor a loss. An insignificant building
+    contributes neither; an insignificant infantry unit, vehicle or aircraft still contributes.
+    A destruction without an attacking object gives no house a kill, but still gives the victim's
+    house a loss when it qualifies. This includes defeat and surrender hits. Passenger deaths
+    are counted individually when their death rules credit them to an attacker (S-0312).
+    Selling, cancellation, map exit, boarding and deployment conversion are not destructions
+    for these totals merely because an object leaves the map or ceases to exist.
+
+    Every change of owner to a different house, including capture and mind control, additionally
+    gives the gaining house one kill for a not-scored-unmarked object, without giving the
+    losing house a loss. The insignificant mark does not exclude this ownership-gain kill,
+    even on a building. A return to an earlier owner is another ownership gain. The counts
+    are integers with S-0205's signed 32-bit wrap and no rounding. A building whose initial
+    owner's country registration index is −1 contributes no destruction loss; ordinary
+    registered player countries do not have that index. This initial-country exception does
+    not exclude its credited kill.
+
+    **Quirk `quirks.ownership_gain_counts_as_kill`**, default original: ownership gains add
+    kills. Off: only qualifying destructions add kills. This switch does not change ownership
+    gain's score contribution in claim 22.
+    - Backing: `measurable` (V17) for destructions, ownership gains, flags and passenger totals.
+      The initial-country-index exception is `unmeasured`: no skirmish input creating a
+      building for a country outside the registered list is identified
+    - Confidence: high for the event counters and flags; medium for isolating the passenger
+      and ownership-return cases; low for the exceptional initial-country setup
+
+22. **Running score.** Each house starts with 0 score points. The score is not a function of
+    its displayed kill, loss or built totals. Its contributions are:
+
+    | Event | Contribution to the house's running score |
+    |---|---|
+    | A qualifying victim is destroyed by an attacking object | To the attacker's current house: the victim type's current price for the victim's house, multiplied by 1 for rookie, 2 for veteran or 3 for elite victims; 0 instead when the attacker's house allies the victim's house |
+    | An object changes owner to a different house | To the gaining house: the object's type's current price for the old owner, with no allied or rank multiplier and no not-scored or insignificant exclusion |
+    | A resource amount is credited by unloading or conversion to credits | To the receiving house: 5 score points per credited resource unit, with the rounding below; purifier bonus amounts count too |
+
+    The destruction row excludes not-scored victims. An insignificant building can still
+    contribute destruction score even though claim 21 excludes its kill. A destruction without
+    an attacking object gives no destruction score. The rank is the victim's rank, not the
+    attacker's. Current price is the owner-adjusted type price of S-0404 claim 2, evaluated
+    at this event; it is not the amount previously paid or the type's separate point-value
+    field (Import mapping). Losing objects, spending money, starting credits, refunds,
+    cash crates and passive cash income do not by themselves change this score. Stored-resource
+    conversion on sale also counts when such storage exists (S-0408); ordinary skirmish storage
+    is empty. This score never subtracts the price of one's losses.
+
+    Resource score uses the incoming single-precision resource amount *a*, not its credit
+    value or the country's income factor. Update the integer running score *p* to
+    trunc(*p* + 5 × *a*), using double-precision floating-point multiplication and addition
+    under S-0205's original rounding mode, followed by its integer conversion toward zero
+    and overflow rules. A purifier bonus is a separate update, so
+    fractional contributions are not accumulated between updates. Resource removed through
+    the building-loss conversion also adds 5 times the removed amount truncated to an
+    integer, per resource type; this storage-only path is not ordinary skirmish harvesting.
+    Other additions and integer multipliers wrap as signed 32-bit integers (S-0205).
+    - Backing: `measurable` (V17 and V18) for destruction, ownership gains and normal
+      resource income; storage-only conversions are `unmeasured`, since no skirmish setup
+      filling that storage is known (S-0312 claim 22)
+    - Confidence: high for the ordinary event contributions and rank/alliance conditions,
+      medium for the storage-only path
+
+23. **Displayed score and duration.** Let *b* = max(*p*, 0), in integer score points, for the
+    running score at the screen's cutoff. A defeated house displays *b*. An undefeated house
+    displays *b* + ⌊*b* / 2⌋ + *r*, where *r* is an inclusive ranged draw from
+    ⌊*b* / 2⌋ through *b* on the scenario random stream (S-0202). There is one ranged
+    request per undefeated listed house, in house order, after simulation has stopped.
+    Defeated and omitted houses request none. Equal bounds consume no raw value and other
+    ranges consume the values S-0202 claim 4 specifies. Integer sums use signed 32-bit wrap.
+    The original bases this bonus on the house's defeat state at screen preparation, not
+    on the local player's committed result. Our engine retains that score rule independently
+    of its committed verdict display (claim 19). The bonus changes no simulation outcome.
+
+    The duration is active wall-clock time, not ticks multiplied by the game's current paced
+    period and not game minutes. The original accumulates elapsed 16-ms clock units while
+    play is active, pauses that clock when the game is paused for the options menu or lost
+    focus, and stops it on leaving play for the result screen. Frozen cycles and the end delay
+    are included. It converts 60 such units to one displayed second, truncating toward zero:
+    thus 960 ms of accumulated active time yields one displayed second, rather than 1000 ms.
+    Display hours, minutes and seconds from that whole-second total, capped at 99 hours,
+    59 minutes and 59 seconds. Hours, minutes and seconds are integer quantities with no
+    further rounding. The result-announcement wait after play is included if it happens
+    before the active clock is stopped; time subsequently spent on the result screen is not.
+    This is a presentation clock only and reaches no simulation rule. Our engine may read
+    active elapsed wall time for this display without changing S-0201's deterministic pacing
+    or its prohibition on wall time reaching game state.
+    - Backing: `measurable` (V18 for the score and draws; V19 for duration)
+    - Confidence: high for the bonus formula, stream, clock units and time conversion,
+      medium for paused intervals and the announcement-wait boundary
+
 ## Formulas
+
+**Result duration** (claim 23). For each active interval with endpoints *u* and *v* in
+wall-clock milliseconds, its contribution in clock units is ⌊*v* / 16⌋ − ⌊*u* / 16⌋.
+Sum these contributions as integers to obtain *E*. The displayed whole-second total is
+*T* = min(⌊*E* / 60⌋, 359999). Hours are ⌊*T* / 3600⌋, minutes are
+⌊(*T* mod 3600) / 60⌋ and seconds are *T* mod 60. These formulas cover non-negative
+elapsed time before the host clock wraps; they use integer arithmetic with the indicated
+flooring, no floating-point operation. Host-clock wrap during an exceptionally long game
+is not established (Open questions).
 
 **End delay** (claim 8). With *d* the end-delay field in game minutes (a double, Import mapping), let *x* be the product *d* × 900, rounded toward zero to double precision according to S-0205 and `quirks.chop_rounding`. The integer delay *D*, in ticks, is *x* truncated toward zero to a whole number. The factor 900 is the glossary's conversion from game minutes to ticks. The conversion to a whole number follows S-0205, claim 7: a product of 2³¹ or more wraps (from a field of about 2.39 million game minutes up, *D* no longer follows the field, and whenever the wrapped *D* is 0 or negative the delay is the shortest one of the next formula), and a product of 2⁶³ or more gives 0. Example: at the absent-key default *d* = 0.03 the exact product of the stored double and 900 lies just below 27, so *D* = 26 with the switch on (the original) and 27 with it off.
 
@@ -713,6 +849,9 @@ included), is empty (claim 6, departure); our engine does not.
 | `[MultiplayerDialogSettings]` `AllyChangeAllowed` | ally-change-allowed flag (claim 14) | boolean | yes |
 | building type, `Foundation` | one-cell foundation (Terms; S-0108) | foundation name | as S-0108 |
 | country section, `MultiplayPassive` | passive house (claim 1; S-0009) | boolean | as S-0009 |
+| object type, `Cost`; house/country cost factors | current owner-adjusted type price used for score (claim 22) | integer credits and multipliers, per S-0404 Import mapping | exactly S-0404's defaults and price formula; no score-specific price default |
+| object type, `Points` | separate point-value field, not used by the skirmish score of claim 22 | integer | 0 |
+| resource values, country income factor and refinery bonus inputs | credited resource amounts used by claim 22 | exactly S-0402 Import mapping | S-0402's defaults; resource credit value and country income factor do not multiply score |
 | Map `[Tags]`, `[Triggers]`, `[Events]`, `[Actions]` entries | assigned tags, their owner countries, conditions and actions (claim 18) | comma-separated records with integer, ID and type-name items, exactly as S-0011 Import mapping | absent entries create no definitions; omitted record fields and unresolved references follow S-0011 Import mapping |
 
 Claim 17 uses the existing type-exclusion and base-unit-list rows above; zero health and
@@ -728,6 +867,11 @@ Tag assignment, type-count tests and variables retain S-0011's import rules.
 
 The civilian side of claim 12 is the side named Civilian; the original finds it by that fixed
 name, so the name is an engine constant, not stock data.
+
+Claims 19–23 use the existing not-scored, insignificant and owner-country mappings and
+S-0404's cost mapping. Built, kill and loss counts start at zero and have no imported
+initial-total field. The score bonus and the presentation clock have no INI setting.
+S-0701 owns the announcement-entry bindings and audio imports used by claim 5.
 
 ## Measurement scenarios
 
@@ -1078,7 +1222,105 @@ Run each deterministic part once; void unplanned bystander actions.
   consequence. V13 supplies the cleanup-removed-house control: a removed house has no raise
   at all, not merely a raise after the remaining houses.
 
+**V16: result rows and built totals (claims 19–20).** Use the common setup, a remote
+opponent and a counted building to keep the human alive. Record event ticks, ever-built
+counts with a read-only recorder, and the final screen. Run separate controls: starting
+objects only; one released infantry, vehicle and aircraft; one started-and-cancelled item,
+one completed but held item; one placed building; a free refinery vehicle; a clone; a crate
+unit; a deploy/pack-up pair; capture; a trigger-created object. Expected built deltas:
+1 per eligible factory release, 0 for the other listed sources. Repeat one release with
+named test type flags: not scored gives 0, insignificant alone gives 1. A death or sale
+never decreases built. Record the final screen in a run where a qualifying event occurs
+in a lengthened end delay: it is included. Expected rows omit passive, observer and removed
+houses, retain defeated player houses, and show kills, losses, built and score but no
+harvested-credits figure. Any different delta, extra total or excluded defeated player
+falsifies the corresponding claim. V12 part c also compares the local committed win with
+the original's absence of a winner-score bonus after that final-tick defeat. Run each realizable control once; void unplanned
+bystander events. A clone or crate control without that creation is inconclusive.
+
+**V17: kills, losses and event score (claims 21–22).** Use the common setup and named test
+map placing isolated victims, with every death effect and survivor disabled. Keep a remote
+enemy alive. Tool: scripted input, screen capture and read-only score/count recorder.
+Record baseline and delta for destruction of one infantry, vehicle, aircraft and building,
+then for capture and a mind-control/return pair. Expected: each eligible destruction adds
+1 kill to the attacking object's current house and 1 loss to the victim's current house.
+No-attacker surrender gives losses only; capture/control/return each gives the gaining
+house 1 kill and the old owner no loss. Test a not-scored victim (neither death counter)
+and insignificant victims (building excluded, other kinds included), then an insignificant
+building capture (gain kill included). Compare normal sale, boarding and deploy/pack-up
+controls: no death counter merely from removal. For passenger deaths compare S-0312's
+carrier outcomes with the individual passenger death records, not carrier disappearance alone.
+
+For score, use an invented type price whose owner-adjusted value is recorded before each
+event, and rookie/veteran/elite victims. Expected destruction deltas: 1, 2 and 3 times that
+price respectively, independent of attacker's rank; an allied kill gives 0 score but still
+a kill. Not-scored destruction gives 0, insignificant-building destruction gives its price.
+Ownership gain gives the old owner's current price regardless of rank, alliance or those
+flags. Repeat with a different separate point-value field: no score difference. Sample the
+running score before the winner bonus; comparing final scores alone is insufficient. Any
+different delta falsifies the applicable row. Run each deterministic variant once. Void
+unplanned attacks, ownership gains, income or passenger escape masking the named death.
+
+**V18: resource score and winner bonus (claims 22–23).** Common setup, one refinery and
+harvester, a remote enemy, no combat or other income while recording each unload. Named
+map overrides supply a known credited resource amount; repeat with a different resource
+credit value and country income factor, then with a purifier bonus. Expected score update:
+trunc(previous score + 5 × credited amount), independently of credit value and income
+factor; a purifier bonus contributes a separate update. Use a fractional bonus to distinguish
+separate truncation from accumulated fractions. Cash-crate, refund and initial-credit
+controls give no score merely from credits. For final score, lose in one run and win in
+another with a recorded running score. Expected loss score: max(running score, 0).
+Expected win score: the exact formula in claim 23, not a constant victory multiplier.
+Record the scenario stream immediately before and during score preparation. With multiple
+undefeated listed houses, ranged requests follow house order; a zero-score winner consumes
+no raw draw. Run ten recorded seeds and compare the exact drawn values, not just their range.
+A mismatching contribution, out-of-formula displayed score or other stream/order falsifies
+the rule. Named negative-score data checks clamping; ordinary score growth need not become
+negative. Storage-only conversions are conditional diagnostics until a way to fill storage
+in a skirmish is found, not a promised confirming run.
+
+**V19: duration (claim 23).** Common setup, fixed-tick defeat trigger, recorder of tick
+numbers, active wall-clock intervals and the final duration string, with screen capture.
+Run at speed indices 2 and 6, then run with a 30-second options-menu pause, with a 30-second
+loss of focus, and with a named timed-freeze trigger. Include a named lengthened end delay.
+Expected whole-second total is accumulated active 16-ms clock units divided by 60 and
+truncated, expressed as hours/minutes/seconds. The same tick count at slower speed has a
+longer duration; menu and focus pauses add none, freezes and the end delay add active time.
+Record the clock's stopping point relative to the last tick and the result announcement:
+any announcement wait before leaving play is included, later result-screen waiting is not.
+An active run near 60 seconds distinguishes the 960-ms displayed second from a true wall
+second. Compare values allowing only clock-boundary sampling uncertainty, not a 4-percent
+scale change. A tick-derived total, counted menu pause or different scale falsifies the rule.
+The 99-hour cap is checked by a read-only trace of a naturally long run if practicable.
+Short runs do not confirm that cap. No clock is altered by the recorder.
+
+**V20: announcements after local defeat (claim 5).** Common setup with two hostile
+bystanders and named test map end-delay long enough for a later enemy superweapon launch
+and detection request. Capture audio and record each request and tick; a matched pre-defeat
+control verifies that its entry is present and audible. Expected: the launch and detection
+announcements muted after local defeat. For alliance-formed and enemy-alliance-formed
+requests, use a recorded computer alliance during that same delay, voiding a run without
+such a request; it too is muted, while an otherwise legal alliance-break request is not
+muted merely by defeat. These conditional alliance controls require observing the original
+computer player's orders, not issuing human input on its behalf. Any audible muted-role
+entry after defeat falsifies the rule. Muting throughout our longer observation period is
+our presentation requirement and cannot itself be measured in the original.
+
+## Changes for other specs
+
+- S-0202: add the post-game winner-score ranged requests of claim 23, on the scenario
+  stream in listed-house order, with no raw draw for equal bounds; simulation has stopped.
+- S-0407: claim 10's ever-built count excludes not-scored released types, but not a type
+  marked only insignificant; this same total feeds claim 20's end-screen built statistic.
+- S-0701: claim 36 currently gives announcement roles, not the literal entry-name bindings
+  described in the supplied report. Restore those bindings in Import mapping under the
+  lead's 2026-10-14 convention. Its post-defeat muting agrees with claim 5 here; V20 adds
+  an end-delay diagnostic without claiming an already measured result.
+
 ## Open questions
+
+- The duration clock's outcome across host-clock wrap in an exceptionally long game is
+  not established. Claim 23 and its duration formula cover elapsed intervals before wrap.
 
 - Q-0193 questions 1, 2, the progress/completion/release/placement parts of question 3, and
   question 4 remain for S-0312 and S-0404. Claim 17 answers only this spec's defeat-count part
@@ -1088,8 +1330,5 @@ Run each deterministic part once; void unplanned bystander actions.
 - Whether the original's skirmish lobby can start a game with an observer, and whether the game
   then ends in tick 1 as Edge cases, *Observers* reads it (scenario V10; our engine's rule does not
   depend on the answer).
-- Which superweapon launch announcements stop after the local player's house is defeated: the
-  house's own launches, or every launch announced to the local player (claim 5,
-  *Presentation*, which is presentation only).
 - Which buildings mark their survivors as nominal survivors (claim 4; a condition set when the
   building is created, not identified).

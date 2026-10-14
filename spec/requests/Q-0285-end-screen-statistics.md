@@ -1,9 +1,9 @@
 ---
 id: Q-0285
 title: Which statistics does the end-of-game screen show?
-status: open
+status: answered
 related: [S-0414, S-0201]
-answered-by: []
+answered-by: [S-0414]
 ---
 
 ## Need
