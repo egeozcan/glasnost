@@ -1,9 +1,9 @@
 ---
 id: Q-0520
 title: Shared building depth image whose image frame 0 has a rectangle but no pixel data
-status: open
+status: answered
 related: [S-0102]
-answered-by: []
+answered-by: [S-0102]
 ---
 
 ## Need
