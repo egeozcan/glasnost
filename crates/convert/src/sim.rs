@@ -312,17 +312,16 @@ enum Form {
     /// A list of type names (S-0003 claims 12 and 14), each item as
     /// [`Form::Ref`] gives it; `none` and `<none>` items are left out.
     Refs(Kind),
-    /// A list of integers (S-0003 claims 3 and 12).
-    Ints,
-    /// A decimal-integer list (S-0003 claims 20 and 22: the debris maxima
-    /// and the auto-deploy delays): decimal integer prefixes, 511 bytes.
+    /// A decimal-integer list (S-0003 claims 20, 22 and 23: the debris
+    /// maxima, the auto-deploy delays and the economy and computer-timer
+    /// lists): decimal integer prefixes, 511 bytes.
     Maxima,
     /// A list of names that are not type names (S-0003 claims 1 and 12),
     /// each item as [`Form::Text`] gives it, kept in order with none left
     /// out.
     Texts,
 }
-use Form::{Bool, Dec, Int, Ints, Maxima, Ref, Refs, Text, Texts};
+use Form::{Bool, Dec, Int, Maxima, Ref, Refs, Text, Texts};
 
 /// Rules fields shared by infantry, vehicle and aircraft types: our field
 /// name, the INI key (the field docs of `glasnost_rules::sim::UnitType`).
@@ -941,26 +940,33 @@ impl Builder<'_> {
                 }
                 list.map(jsonc::array)
             }
-            // spec: S-0003 claims 3 and 12 (a list of integers; an item the integer form cannot read is 0 and keeps its place: interim for the lists S-0003 does not name, request Q-0234; Q-0171 is answered for the auto-deploy list only, claim 22)
-            Ints => fold(state, None, |v, _| {
-                Some(
-                    value::list(v, value::COMMON_TEXT_LIMIT)
-                        .into_iter()
-                        .map(|item| int_node(value::integer(item).unwrap_or(0)))
-                        .collect::<Vec<_>>(),
-                )
-            })
-            .map(jsonc::array),
-            // spec: S-0003 claims 20 and 22 (debris maxima and auto-deploy delays: decimal prefixes, 511-byte limit, an unreadable item 0 in its place, empty items none; a given list replaces the held one)
-            Maxima => fold(state, None, |v, _| {
-                Some(
-                    value::decimal_prefix_list(v)
-                        .into_iter()
-                        .map(int_node)
-                        .collect::<Vec<_>>(),
-                )
-            })
-            .map(jsonc::array),
+            // spec: S-0003 claims 20, 22 and 23 (debris maxima, auto-deploy delays and the economy and computer-timer lists: decimal prefixes, 511-byte limit, an unreadable item 0 in its place, empty items none; a given list replaces the held one)
+            Maxima => {
+                let mut notes = Vec::new();
+                let list = fold(state, None, |v, e| {
+                    let n = value::decimal_prefix_list_notes(v);
+                    if n.any() {
+                        notes.push((e.layer, e.line, n));
+                    }
+                    Some(
+                        value::decimal_prefix_list(v)
+                            .into_iter()
+                            .map(int_node)
+                            .collect::<Vec<_>>(),
+                    )
+                });
+                // spec: S-0003 claim 23 (claim 3's no-digit, trailing-text and overflow warnings item by item, with no hexadecimal suffix exception; claim 1's text-cut warning)
+                for (layer, line, n) in notes {
+                    self.warn(layer, line, format!(
+                        "{what}: {} item(s) with no digit (0 in its place), {} with text after the number, {} wrapping to 32 bits{} (S-0003 claims 1, 3, 4 and 23)",
+                        n.no_digit,
+                        n.trailing,
+                        n.overflow,
+                        if n.cut { "; text beyond 511 bytes cut" } else { "" },
+                    ));
+                }
+                list.map(jsonc::array)
+            }
             // spec: S-0003 claim 12 and S-0214 Import mapping (a list of names: every item kept in the listed order, none dropped or reordered)
             Texts => fold(state, None, |v, _| {
                 Some(

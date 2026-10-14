@@ -505,7 +505,7 @@ pub struct EconGeneral {
     #[serde(default)]
     pub purifier_bonus: Option<Decimal>,
     /// `[General] AIVirtualPurifiers`, per difficulty (S-0402 claim 12, the
-    /// original only); absent: empty.
+    /// original only; decimal-prefix items, S-0003 claim 23); absent: empty.
     #[serde(default)]
     pub ai_virtual_purifiers: Option<Vec<i32>>,
     /// `[General] BuildSpeed`, *S* in game minutes per 1000 credits, a double
@@ -596,12 +596,14 @@ pub struct EconGeneral {
     #[serde(default)]
     pub radar_combat_flash_time: Option<i32>,
     /// `[General] MultiplayerAICM`, the original's extra-credit percentages
-    /// by difficulty index (S-0412 claim 3); absent: no entries.
+    /// by difficulty index (S-0412 claim 3; decimal-prefix items, S-0003
+    /// claim 23); absent: no entries.
     #[serde(default)]
     pub multiplayer_aicm: Option<Vec<i32>>,
     /// `[General] AIHateDelays`, the original's computer-player timer list
     /// by difficulty index (S-0412 claim 3, the original only; no effect in
-    /// our engine); absent: no entries.
+    /// our engine; decimal-prefix items, S-0003 claim 23); absent: no
+    /// entries.
     #[serde(default)]
     pub ai_hate_delays: Option<Vec<i32>>,
     /// `[AI] BuildTech`, the tech-lab list, building type keys (S-0407
