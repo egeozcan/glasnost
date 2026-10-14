@@ -108,6 +108,10 @@ pub struct Session {
     /// The right-button press in the battlefield and its scroll-drag
     /// classification (S-0214 claims 26 to 28, F8).
     right: Option<band::RightDrag>,
+    /// The screen directions (up, right, down, left) F5 refused before the
+    /// last permitted right-drag update, while a scroll drag is active
+    /// (S-0101 claim 17).
+    drag_refused: Option<[bool; 4]>,
     /// The imported cursor image (S-0214 claim 22), when the install has it.
     cursor_art: Option<CursorArt>,
     /// The cursor palette's painter row, once registered.
@@ -250,6 +254,7 @@ impl Session {
             press: None,
             drag: None,
             right: None,
+            drag_refused: None,
             cursor_art,
             cursor_row: None,
             animator: cursor::Animator::default(),
@@ -365,7 +370,11 @@ impl Session {
     pub fn scroll_cycle(&mut self, now_ms: u64, held: [bool; 4], edge: bool) {
         let w = &self.play.game.world;
         // spec: S-0201 claim 14 (edge scrolling is suppressed during an order block; held arrows continue)
-        let edge = scroll::edge_enabled(edge, w.tick, w.orders_blocked_through);
+        // spec: S-0101 claims 15 and 16 (order blocks and stand-stills suppress drag updates as they
+        // do edge updates)
+        let permitted = scroll::edge_enabled(edge, w.tick, w.orders_blocked_through);
+        // spec: S-0101 claim 12 (no edge scrolling while a mouse button is held)
+        let edge = permitted && self.press.is_none();
         self.edge_live = edge;
         let pointer = self.pointer.filter(|_| edge).map(|p| (p.x, p.y));
         let blocked = self.scroll_blocked();
@@ -375,11 +384,40 @@ impl Session {
             scroll::DEFAULT_SCROLL_INDEX,
             self.loaded.scroll_multiplier,
             now_ms,
-            blocked,
+            &blocked,
         );
+        let d = self.drag_cycle(permitted, &blocked);
         let a = scroll::arrows(held);
         // spec: S-0101 claim 14 (mouse and arrow requests add before the next view position, subject to F5)
-        self.scroll((e.0 + a.0, e.1 + a.1));
+        self.scroll((e.0 + d.0 + a.0, e.1 + d.1 + a.1));
+    }
+
+    /// The right-drag request of one unfrozen cycle (S-0101 claims 16 and
+    /// 17, F10): while S-0214 claim 27's gesture is a scroll drag and
+    /// scrolling is `permitted`, the pointer sampled once for this cycle
+    /// requests F10's displacement, and the directions F5 refuses before
+    /// it is applied pick the drag cursor.
+    fn drag_cycle(&mut self, permitted: bool, blocked: &dyn Fn((i32, i32)) -> bool) -> (i32, i32) {
+        self.drag_refused = None;
+        let Some(anchor) = self.right.filter(|r| r.scrolling).map(|r| r.press) else {
+            return (0, 0);
+        };
+        let Some(p) = self.pointer.filter(|_| permitted) else {
+            return (0, 0);
+        };
+        let o = self.map_rect();
+        let cycle = scroll::drag_cycle(
+            (anchor.x, anchor.y),
+            (p.x, p.y),
+            (o.x, o.y),
+            self.screen,
+            scroll::DEFAULT_SCROLL_INDEX,
+            scroll::DEFAULT_DRAG_METHOD,
+            blocked,
+        );
+        self.drag_refused = Some(cycle.refused);
+        // Method 0 never recentres (S-0101 claim 16), so the pointer is not moved.
+        cycle.request.displacement
     }
 
     /// Whether F5 blocks a one-pixel scroll in a screen direction from the
@@ -752,16 +790,23 @@ impl Session {
             return;
         };
         let size = art.size;
+        // spec: S-0101 claim 17 (each permitted active drag update shows the static drag-scroll
+        // image, not an edge-scroll image)
+        let drag = self
+            .drag_refused
+            .filter(|_| self.right.is_some_and(|r| r.scrolling))
+            .map(|refused| cursor::drag(refused, size.0, size.1));
         // spec: S-0213 claim 24 (during edge scrolling the cursor shows the requested screen direction; the whole outer edge, sidebar included, selects it)
-        let edge = self
-            .edge
-            .shown_direction(
-                self.pointer.map(|p| (p.x, p.y)),
-                self.screen,
-                scroll::DEFAULT_SCROLL_INDEX,
-            )
-            .filter(|_| self.edge_live)
-            .and_then(|d| cursor::edge(d, self.scroll_blocked()(d), size.0, size.1));
+        let edge = drag.or_else(|| {
+            self.edge
+                .shown_direction(
+                    self.pointer.map(|p| (p.x, p.y)),
+                    self.screen,
+                    scroll::DEFAULT_SCROLL_INDEX,
+                )
+                .filter(|_| self.edge_live)
+                .and_then(|d| cursor::edge(d, self.scroll_blocked()(d), size.0, size.1))
+        });
         let (frames, frame, hot) = if let Some((frames, hot)) = edge {
             (frames, frames.first, hot)
         } else {

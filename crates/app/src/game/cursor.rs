@@ -220,6 +220,30 @@ pub fn edge(dir: (i32, i32), blocked: bool, w: i32, h: i32) -> Option<(Frames, (
     Some((Frames::one(f), (place(hx, w), place(hy, h))))
 }
 
+/// The right-drag scroll image (S-0101 claim 17): its frame, chosen by the
+/// screen directions in which a one-pixel view-centre request is refused
+/// (up, right, down, left), and its hot spot, the centre of the `w` × `h`
+/// canvas.
+pub fn drag(refused: [bool; 4], w: i32, h: i32) -> (Frames, (i32, i32)) {
+    let [up, right, down, left] = refused;
+    // spec: S-0101 claim 17 (none 385, Up 386, Up and Right 387, Right 388, Right and Down 389,
+    // Down 390, Down and Left 391, Left 392, Left and Up 393, any other combination 385)
+    let frame = match (up, right, down, left) {
+        (false, false, false, false) => 385,
+        (true, false, false, false) => 386,
+        (true, true, false, false) => 387,
+        (false, true, false, false) => 388,
+        (false, true, true, false) => 389,
+        (false, false, true, false) => 390,
+        (false, false, true, true) => 391,
+        (false, false, false, true) => 392,
+        (true, false, false, true) => 393,
+        _ => 385,
+    };
+    // spec: S-0101 claim 17 (the hot spot is the full canvas centre (⌊w/2⌋, ⌊h/2⌋))
+    (Frames::one(frame), (w.div_euclid(2), h.div_euclid(2)))
+}
+
 /// Milliseconds per unit of the presentation clock.
 // spec: S-0214 claim 22 (the 16-millisecond presentation clock)
 const CLOCK_MS: i64 = 16;
@@ -384,6 +408,40 @@ mod tests {
             assert_eq!(edge(d, true, w, h), Some((Frames::one(b), hot)), "{d:?}");
         }
         assert_eq!(edge((0, 0), false, w, h), None);
+    }
+
+    // spec: S-0101 claim 17 (the refused directions pick frames 385 to 393, any other combination
+    // 385; the hot spot is the full canvas centre)
+    #[test]
+    fn s0101_claim_17_drag_cursor() {
+        let (w, h) = (55, 44);
+        // Every one of the 16 combinations of refused up, right, down and left.
+        for bits in 0..16u8 {
+            let refused = [bits & 1 != 0, bits & 2 != 0, bits & 4 != 0, bits & 8 != 0];
+            let expected = match refused {
+                [false, false, false, false] => 385,
+                [true, false, false, false] => 386,
+                [true, true, false, false] => 387,
+                [false, true, false, false] => 388,
+                [false, true, true, false] => 389,
+                [false, false, true, false] => 390,
+                [false, false, true, true] => 391,
+                [false, false, false, true] => 392,
+                [true, false, false, true] => 393,
+                // Opposed refusals (an oversized view) and three or four refusals.
+                _ => 385,
+            };
+            assert_eq!(
+                drag(refused, w, h),
+                (Frames::one(expected), (27, 22)),
+                "{refused:?}"
+            );
+        }
+        // An oversized view refusing up and down, or all four directions, shows 385.
+        assert_eq!(drag([true, false, true, false], w, h).0, Frames::one(385));
+        assert_eq!(drag([true; 4], w, h).0, Frames::one(385));
+        // Odd canvas sizes use the floor halves.
+        assert_eq!(drag([false; 4], 7, 9).1, (3, 4));
     }
 
     // spec: S-0214 claim 22 (centre hot spot of the full canvas, floor halves; the arrow at (0, 0))
