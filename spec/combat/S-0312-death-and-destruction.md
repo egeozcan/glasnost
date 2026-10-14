@@ -2,13 +2,13 @@
 id: S-0312
 title: Death and destruction (death weapons, debris, passengers, crews, survivors, sinking, crashing and building remains)
 topic: combat
-revision: 14
+revision: 15
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0060, Q-0061, Q-0070, Q-0081, Q-0236, Q-0268]
+requests: [Q-0060, Q-0061, Q-0070, Q-0081, Q-0236, Q-0268, Q-0413]
 supersedes: []
 ---
 
@@ -718,7 +718,10 @@ claim 19) and *curtain protection* are used as defined there. In addition:
       S-0215's. If no fallback house exists in the no-attacker case, the slave instead receives
       damage equal to its current health with the demolition warhead, no attacker, and neither
       the ignore-defences nor the no-escape marker. S-0302 resolves that hit; survival is not
-      excluded when defences stop it.
+      excluded when defences stop it. This no-recipient path does not clear its attack target
+      or movement destination, queue *guard* or request the *cheer* sequence. The damage
+      itself and normal later processing can still change those states. A successful transfer,
+      in contrast, requests *cheer* (S-0107 claim 21) after the target and destination reset.
 
     No slave in the group remains enslaved to this master, and this group can no longer
     regenerate lost slaves or release replacements. An on-map slave freed before the master's
@@ -732,6 +735,33 @@ claim 19) and *curtain protection* are used as defined there. In addition:
       isolated skirmish fixture for those paths is established here
     - Confidence: high for hidden removal, ownership choice and no regeneration; medium for
       notifications, retained health and release ordering
+
+31. **Removal without a killing hit ends an untransferred slave group.** When a slave
+    master is removed without a killing hit, and its existing group has neither already ended
+    nor been transferred to a replacement master, removal ends that group. Successful deploying
+    or packing up is not this case (S-0415 claims 6 and 10). No killing hit is implied by removal.
+    Never-placed production masters remain outside this claim under Q-0193.
+
+    Hidden slaves are destroyed and removed without attacker credit, with the suppressed
+    death effects and common destruction notifications of claim 30. On-map slaves lose their
+    master and keep their identity and position. They transfer to the first existing civilian-side
+    house in house-creation order, using claim 30's no-attacker choice and its transferred-slave
+    target reset, destination reset, *guard* queue and *cheer* request. If no such house exists,
+    they instead receive claim 30's health-sized demolition hit, with no recipient transfer,
+    target or destination reset, *guard* queue or *cheer* request. The group cannot regenerate
+    or release further slaves.
+
+    This specifies the remaining group's fate at removal, not when a sale, failed conversion
+    or erasure reaches that removal. S-0408 claim 10a owns true-sale fate and its timing boundary.
+    S-0415 owns whether a failed packing attempt transfers the old group. An earlier group-ending
+    event with a remembered attacker or forced new owner is not replaced by this attacker-less
+    rule. In particular, erasure and environmental sinking's earlier group-ending events remain
+    open below.
+    - Backing: `measurable` (scenario D22) for hidden removal, civilian transfer and no
+      regeneration; `unmeasured` for absent recipient houses, since no isolated skirmish
+      fixture is established here
+    - Confidence: high for removal ending an untransferred group and the no-recipient
+      exception; medium for the notification and presentation outcomes
 
 ### Backing boundaries
 
@@ -1535,7 +1565,7 @@ death or an extra removal-time destruction raise falsifies the claim. S-0011 own
 the tag must not make change-owner act on dying infantry. Perform five runs of each carrier
 variant. Q-0268 part 1 is owned by the movement specs, not by this death scenario.
 
-**D21. Slaves after master destruction (claim 30; Q-0270 part 3).** Use the common
+**D21. Slaves after master destruction (claim 30; Q-0270 part 3, Q-0413 part 4).** Use the common
 measurement setup, speed 6, director and mods off, with stock slave miners on a tiny flat
 resource-field map and the bystander kept outside the observed area (within 10 cells of the
 master and its slaves). Use ordinary harvesting to obtain a mixture of slaves outside and
@@ -1549,7 +1579,8 @@ Record slave identities, positions, health, owners, master links, queued behavio
 and removal from immediately before the hit through its death effects. Expected: hidden slaves
 are removed with attacker credit when there is an attacker and without credit otherwise.
 outside slaves retain identity, position and health at release, lose their master, clear target
-and destination and queue guard. Their new owner is the attacker object's house, or the first
+and destination, queue guard and receive a cheer request. Record the sequence request
+separately from later animation completion or interruption. Their new owner is the attacker object's house, or the first
 civilian-side house in creation order for the no-attacker run. Repeat with an allied attacker
 using a named test-map weapon that damages allies: alliance does not suppress transfer. Give
 one hidden slave a repeating destruction tag through named test-map data to confirm the common
@@ -1564,12 +1595,31 @@ or a replacement from the dead group falsifies the corresponding result. A trace
 separate incoming collateral damage from release and death-weapon damage is inconclusive.
 No draw-count prediction for the freed-slave presentation sequence is asserted in this scenario.
 
+**D22. Master removal without a killing hit (claim 31; Q-0413 parts 2 and 4).** Use D21's
+map, speed, houses and observation area. In 30 runs, let a vehicle master send slaves out and
+reload some, then remove the master with a purpose-made map trigger rather than damage or
+sale. Record the trigger event, master removal, each slave's identity, health, position, owner,
+master link, target, destination, queued behaviour and sequence, and continue for the imported
+regeneration delay plus 20 ticks. Confirm that no killing hit, earlier group-ending event or
+replacement-master transfer occurred; otherwise the run does not test claim 31.
+Expected: hidden slaves are removed without attacker credit or their own death effects.
+on-map slaves transfer to the first civilian-side house, retain health and position, clear
+target and destination, queue *guard* and receive a *cheer* request. No replacements appear.
+A retained slave-master link, different recipient, recreated or healed slave, retained target
+or destination after transfer, missing guard queue or cheer request, or later replacement
+falsifies the corresponding prediction. If the trigger cannot remove a master independently
+of a killing hit, the attempted setup is inconclusive. No absent-recipient prediction is tested
+by this civilian-recipient setup; that path remains unmeasured, rather than being inferred
+from successful transfers. No release draw-count prediction is asserted.
+
 ## Open questions
 
 - Q-0270 part 3: slave-group destruction paths without an ordinary killing hit, including
   erasure and environmental sinking with remembered attacker or forced owner, remain to be
-  integrated. Claim 30 answers ordinary killing hits only; sale belongs to S-0408 and capture
-  or mind-control propagation remains S-0402's open question. The release presentation's
+  integrated. Claim 30 answers ordinary killing hits and claim 31 the remaining group's
+  attacker-less removal fate; neither establishes earlier erasure or sinking group endings.
+  Sale belongs to S-0408 claim 10a; surviving-master capture and mind-control ownership
+  are S-0402 claim 23. The release presentation's
   random draws and within-group notification order are not yet specified.
 - Q-0193: which death effects, scoring or notifications and random draws a never-placed
   production item takes when a defeat or surrender hit kills it, and whether its own death
