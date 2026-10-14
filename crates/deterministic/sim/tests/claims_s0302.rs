@@ -1981,3 +1981,59 @@ fn claim_16_firer_in_a_countdown() {
     }
     panic!("no shot during the countdown");
 }
+
+// spec: S-0302 claim 16 (expiry-turn actions, Q-0170: a shot due in the building's expiry turn is launched before the lethal expiry hit, and that hit cuts its attacker and attacking house; scenario D13 part i)
+#[test]
+fn claim_16_expiry_turn_shot_launches_then_loses_its_owner() {
+    let mut r = testkit::combat_ruleset();
+    warhead(&mut r, "PLAIN", |h| h.verses = every("1"));
+    warhead(&mut r, "DEMO", |h| h.verses = every("1"));
+    r.sim.general.c4_warhead = Some("DEMO".into());
+    warhead(&mut r, "SLOW", |h| {
+        h.verses = every("1");
+        h.causes_delay_kill = Some(true);
+        h.delay_kill_frames = Some(1000);
+        h.delay_kill_at_max = Some(dec("1"));
+        h.cell_spread = Some(dec("1"));
+    });
+    building(&mut r, "TOWER", |b| {
+        b.eligible_for_delay_kill = Some(true);
+        b.primary = Some("Gun".into());
+    });
+    vehicle(&mut r, "BOX", |t| t.strength = Some(30000));
+    let mut w = testkit::game_with(&r, SIZE, 1);
+    let tower = put(&mut w, Kind::Building, "TOWER", ALPHA, -1);
+    put(&mut w, Kind::Vehicle, "BOX", BETA, 2);
+    let slow = wh(&w, "SLOW");
+    assert_eq!(apply!(w, tower, hit(5000, slow)), HitResult::PostMortem);
+    // The control: the tick of the tower's next launch, with the countdown still running.
+    let ids = |w: &World| w.projectiles.keys().copied().collect::<Vec<_>>();
+    let mut c = w.clone();
+    let launch = loop {
+        let before = ids(&c);
+        let t = c.tick;
+        glasnost_sim::tick::step(&mut c);
+        if c.projectiles
+            .iter()
+            .any(|(id, p)| !before.contains(id) && p.attacker == Some(tower))
+        {
+            break t;
+        }
+        assert!(c.tick < 2000, "no shot in the control");
+    };
+    // The run: the countdown ends in that very turn.
+    w.obj_mut(tower).unwrap().combat.delay_kill_until = Some(launch);
+    while w.tick < launch {
+        glasnost_sim::tick::step(&mut w);
+    }
+    let before = ids(&w);
+    glasnost_sim::tick::step(&mut w);
+    assert!(w.obj(tower).is_none_or(|o| o.health == 0), "expired");
+    let new: Vec<_> = w
+        .projectiles
+        .iter()
+        .filter(|(id, _)| !before.contains(id))
+        .map(|(_, p)| (p.attacker, p.house))
+        .collect();
+    assert_eq!(new, vec![(None, None)]);
+}

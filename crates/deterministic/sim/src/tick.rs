@@ -88,8 +88,7 @@ fn object_turn(w: &mut World, id: ObjectId) {
         crate::combat::behave::delayed_shot_turn(w, id);
         // spec: S-0405 claims 7 and 9, S-0409 claim 8 (the building's own turn)
         crate::econ::events::turn(w, id, false);
-        // The expiry's place within the building's turn is not stated (request Q-0170): after the general part, as claim 21's removal.
-        // spec: S-0302 claim 16 (the countdown's expiry hit, in the building's own turn)
+        // spec: S-0302 claim 16 (the countdown's expiry hit, in the building's own turn, after the actions due earlier in that turn: self-healing, behaviour, ordinary and animation-delayed shots; Q-0170)
         crate::combat::damage::delay_kill_expiry_turn(w, id);
         return;
     }
