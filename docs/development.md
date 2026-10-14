@@ -152,7 +152,6 @@ Every quirk switch of the implemented specs has a field in `ini::Quirks` (includ
 
 | Switch | Spec | Why it has no field |
 |---|---|---|
-| `height_lift_float_scale` | S-0101 claim 3 | retired by S-0101 revision 8 (the exact lift of F2 is a departure without a switch); S-0102's entry for `overlay_lift_exact_levels` still names it (Q-0460) |
 | `screen_to_ground_not_exact_inverse` | S-0101 claim 9 | the on state's F6 converts building slot displacements (S-0108 claim 10, `render::projection::screen_to_ground`); the off state's exact inverse is not implemented; the cell under a pixel is F7's pixel formula, the same in both settings |
 | `unsorted_upper_layers` | S-0102 claim 7 | every mobile object is drawn in the ground layer; only the slot animations of buildings use the other layers, drawn unsorted in entering order as with the switch on |
 | `layer_change_on_events_only` | S-0102 claim 4 | render layer membership is not modelled (the moments of claim 4 may be simulation state) |
@@ -190,7 +189,6 @@ Every quirk switch of the implemented specs has a field in `ini::Quirks` (includ
 | `anim_reverse_raw_loop_end` | S-0109 | animation playback is not implemented |
 | `anim_translucency_levels` | S-0109 | animation playback is not implemented |
 | `building_resource_pips_hidden` | S-0111 | claim 11: the pip scale is not drawn (health bars, unit brackets and insignia are; they have no switch) |
-| `pip_colour_default_shift` | S-0111 | Edge cases: the passenger and occupant pip colours are not imported; the pip scale is not drawn |
 
 **Coverage.** `convert::coverage` gives every (category, key) of the rules and art files an outcome: `field` and `render` for keys interpreted per an approved spec, `folded` for type lists and similar, `unsupported` for keys kept as INI text because no approved spec maps them yet (the `spec` column names the specs whose import mapping mentions a key that is not converted yet).
 
@@ -293,7 +291,6 @@ Provisional rules of M5a, each tied to a request:
 | `combat::death::kill`, `econ::production::release`, `econ::production::place` | a production item killed by a destruction hit (S-0414 claim 15) is only marked killed (no other death effect, no draws) and stays on its line with health 0 until a cancellation deletes it; a release order for it fails and cancels it with the refund, a place order does nothing | Q-0193 |
 | `econ::slaves::end_group` (`End::Sold`) | a true sale (S-0408 claim 10a): hidden slaves are removed with no loss and no destruction notifications, and on-map slaves given to the civilian-side house get no *cheer* request (S-0312 claims 30 and 31 give both for destruction and other removal) | Q-0440 |
 | `convert::sim_econ` (`name_affixes`) | an empty country `Prefix=` line creates no entry (S-0001 claim 11) and keeps the prefix in force; S-0413 claims 1 and 4 say it gives an empty prefix | Q-0478 |
-| `app::mapview::quirks` | `pip_colour_default_shift` stays in the list of unimplemented S-0111 switches although S-0006 claim 5 and S-0003 claim 16 fix the pip-colour omission with no switch; neither field is imported yet | Q-0471 |
 | `econ::deploy::pack_up` | a successful conversion creates no new slave group; on a refused pack-up with `quirks.failed_packup_keeps_vehicle` the old group ends first (S-0312 claim 31) and the retained vehicle then creates its new group with its creation draws; with the quirk off no new group is created | Q-0441 |
 | `econ::slaves::building_update`, `remembered_destination` | a building whose group is in field seeking or retrying (its vehicle deployed by another way) puts the group at rest at its next update, as for travelling (S-0402 claim 22); an automatic pack-up's remembered cell is kept apart from the guard spot: claim 28's remembered destination is that cell, else the guard spot, and S-0415 claim 9 and S-0408 claim 17 read only the guard spot | Q-0442 |
 

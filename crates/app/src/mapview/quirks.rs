@@ -157,10 +157,6 @@ pub fn drawn_body_frame(f: i32, n: i32) -> i32 {
 pub const NOT_IMPLEMENTED: &[(&str, &str)] = &[
     // S-0101
     (
-        "height_lift_float_scale",
-        "S-0101 claim 3 retired this switch (the exact lift is a departure without a switch); S-0102's overlay_lift_exact_levels text still names it (Q-0460)",
-    ),
-    (
         "screen_to_ground_not_exact_inverse",
         "S-0101 claim 9: no F6 lepton position is used; the cell under a pixel is F7's pixel formula, the same in both settings",
     ),
@@ -315,10 +311,6 @@ pub const NOT_IMPLEMENTED: &[(&str, &str)] = &[
     (
         "building_resource_pips_hidden",
         "S-0111 claim 11: the pip scale is not drawn (health bars, unit brackets and insignia are; they have no switch)",
-    ),
-    (
-        "pip_colour_default_shift",
-        "S-0111 Edge cases: the passenger and occupant pip colours are not imported; the pip scale is not drawn",
     ),
 ];
 
