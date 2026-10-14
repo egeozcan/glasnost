@@ -2,7 +2,7 @@
 id: S-0110
 title: Shroud and fog rendering
 topic: rendering
-revision: 8
+revision: 9
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -53,7 +53,7 @@ S-0111 (claim 19).
 | candidate cells | The one cell for even *u*, or the two cells for odd *u*, whose explored states claim 8 tests. *u* is the point's count of whole height levels, not a radar column. |
 | gap generator | A gap-generating object as defined by S-0409; SH1 uses a stock building of that kind. |
 | cell's diamond | The 60 × 30 pixel diamond inscribed in a cell's canvas, with its top corner at the middle of the canvas's top edge: the screen area of the cell's ground at height 0. |
-| test shroud sprite | The diamond-only named test file of the Measurement scenarios that replaces the shroud sprite in SH1's capture sub-test B, SH5, SH6 and SH8, and supplies SH7's state-reading reference. Other scenarios explicitly define their own variants. |
+| test shroud sprite | The diamond-only named test file of the Measurement scenarios that replaces the shroud sprite in SH1's capture sub-test B, SH5, SH6, SH8 and SH10, and supplies SH7's state-reading reference. Other scenarios explicitly define their own variants. |
 
 ## Behaviour
 
@@ -159,15 +159,25 @@ S-0111 (claim 19).
    - Backing: `measurable` (scenario SH5)
    - Confidence: high
 
-8. **Shrouded points.** Consistent with claim 7, the original decides whether a world point (*X*,
-   *Y*, *Z*), integers in leptons with *Z* ≥ 0, lies under the shroud for the local player by
-   projecting it down the screen onto the height-0 grid. With *u* = ⌊*Z* / 104⌋, the number of whole
-   height levels, and (*c*<sub>x</sub>, *c*<sub>y</sub>) = (trunc(*X* / 256), trunc(*Y* / 256)),
-   divisions on integers, truncated toward zero:
-   - for even *u*, the point is shrouded when cell (*c*<sub>x</sub> − *u*/2, *c*<sub>y</sub> − *u*/2)
-     is not explored,
-   - for odd *u*, it is shrouded when neither cell (*c*<sub>x</sub> − (*u* + 1)/2, *c*<sub>y</sub> −
-     (*u* + 1)/2) nor cell (*c*<sub>x</sub> − (*u* − 1)/2, *c*<sub>y</sub> − (*u* − 1)/2) is explored.
+8. **Shrouded points.** The original decides whether a world point (*X*, *Y*, *Z*), integers in
+   leptons including heights below 0, lies under the shroud for the local player. The test follows
+   the height-0 grid of claim 7, with the odd-negative exception below. Let *u* = trunc(*Z* / 104),
+   the signed count of whole height levels, and (*c*<sub>x</sub>, *c*<sub>y</sub>) =
+   (trunc(*X* / 256), trunc(*Y* / 256)); these integer quotients are truncated toward zero.
+   For *Z* ≥ 0, trunc(*Z* / 104) equals ⌊*Z* / 104⌋.
+   - For even *u*, the point is shrouded when cell (*c*<sub>x</sub> − *u*/2, *c*<sub>y</sub> − *u*/2)
+     is not explored. The division by 2 is exact, including for negative *u*.
+   - For odd *u*, the point is shrouded when neither cell (*c*<sub>x</sub> − *k*,
+     *c*<sub>y</sub> − *k*) nor cell (*c*<sub>x</sub> − *k* + 1, *c*<sub>y</sub> − *k* + 1) is
+     explored, where *k* = (*u* + 1)/2 for *u* > 0 and *k* = (*u* + 3)/2 for *u* < 0.
+     Both divisions are exact integer arithmetic. The negative pair lies one cell toward map
+     north-west on both axes from the pair that extending the positive rule unchanged would give
+     (`quirks.shroud_negative_odd_pair`, Edge cases).
+
+   For example, a flat cell at level −1 has centre height −103 leptons (S-0106 claim 3), so
+   *u* = 0 and the test reads that cell itself. At level −2 its centre height is −207 leptons,
+   *u* = −1, and the original reads that cell and its map north-west neighbour. At level −3,
+   *u* = −2 and the test reads its map south-east neighbour.
 
    A candidate cell whose coordinates both lie in 0 … 511 and that is not a legal cell counts as
    not explored unless the shared explored state of non-legal cells is explored for the local
@@ -183,13 +193,13 @@ S-0111 (claim 19).
    cell from F3, and *u* comes from that centre's height in leptons, not necessarily its terrain
    height level. S-0410 calls this count *z* and uses *u* for a radar column. Its radar scenarios
    R3 and R4 own the pixel mapping and its shroud consequence.
-   - Backing: `measurable` for cell-centre heights used by SH6 and SH8 (including SH8 Q2),
-     `unmeasured` for arbitrary off-centre points and fractional height levels, since these
-     wrench scenarios test only cell centres at flat whole-level heights and no controllable
-     observable for the remaining inputs is identified.
-   - Confidence: high for the formula; medium for non-legal candidate cells and coordinate wrap,
-     low for the shared-state exception. Heights below 0 are not covered by this claim; S-0111 claim 19 states the
-     test for the centre heights below 0 that its wrench uses.
+   - Backing: `measurable` for cell-centre heights used by SH6, SH8 (including SH8 Q2) and SH10,
+     `unmeasured` for arbitrary off-centre points and other fractional height levels, since these
+     wrench scenarios test only the named cell-centre heights and no controllable observable for
+     the remaining inputs is identified. The non-default pair is an engine requirement tested
+     against this spec in SH10, not an observation of the original.
+   - Confidence: high for the formula; medium for its negative-height screen consequence,
+     non-legal candidate cells and coordinate wrap; low for the shared-state exception.
 
 9. **When pieces change.** Every drawn frame shows the pieces for the states at the time of that
    drawn frame. When the explored or seen state of a cell changes, the pieces of that cell and of
@@ -331,6 +341,16 @@ piece of the same cell; a lower cell's shroud piece can replace an upper cell's 
   it belongs to. `quirks.shroud_on_flat_grid` (default: on, the original). Off: each canvas is
   placed at the top corner of its cell at the cell's own terrain height, and the point test of
   claim 8 uses the cell under the point (*c*<sub>x</sub>, *c*<sub>y</sub>) directly.
+- **Odd negative height counts in the point test** (claim 8).
+  `quirks.shroud_negative_odd_pair` (default: on, the original) uses *k* = (*u* + 3)/2 for odd
+  *u* < 0. Off: use *k* = (*u* + 1)/2 for every odd *u*, so the two candidate cells extend the
+  positive-height rule unchanged. The height quotient still truncates toward zero; even counts
+  and all non-negative heights are unchanged. This switch applies wherever the point test is
+  used, not only to the wrench: shroud can affect click targeting, so the exception is not a
+  display-only bug. With `quirks.shroud_on_flat_grid` off, its direct-cell test takes precedence
+  and this pair switch has no effect. Candidate legality, coordinate wrap and the shared off-map
+  state are evaluated under their existing rules after either pair is chosen. Backing and
+  confidence are those of claim 8; SH10 distinguishes the pairs.
 - **Fog of war changes the shroud sprite** (claim 3). This is intended behaviour, not a quirk: the
   fog sprite is the cover set designed for games with fog of war, and it serves both covers there.
   Our engine does the same and has no switch.
@@ -658,6 +678,42 @@ appears several times; that is harmless, since each check below is made within o
   - Falsified if: a missing file or unavailable frame instead draws cover or prevents the game
     from reaching the battlefield view. Fog data absence is not tested in skirmish.
 
+- **SH10 (claim 8, negative heights).** Common setup, fog off, with the test shroud sprite and
+  named test maps giving flat test ground levels −1, −2 and −3. No bridge. A damaged stock
+  building of the computer player is under repair, with ample credits. Let *c* be its top-left
+  foundation cell, and *c* + *j* mean (*c*<sub>x</sub> + *j*, *c*<sub>y</sub> + *j*). Use a
+  one-cell foundation for the controls and a 3 × 3 foundation for the pair discrimination,
+  so the building's middle can be explored while *c* is not, as in S-0111 scenario OV14.
+  The human player's scouts approach from opposite sides, stopping at the first reveal of each
+  desired cell. Capture stationary states during repair, recording the explored states of
+  *c* − 1, *c* and *c* + 1 from their diamonds. A read-only recorder logs the tested cell's
+  centre height and the building's increasing health to confirm active repair.
+  - One valid run per row below. The expected result follows the states actually recorded,
+    not the intended scout positions. Void a case if its states cannot be reached, repair
+    ends, the building body is not drawn, the wrench location is outside the view, or a wrench
+    image frame without visible pixels makes presence inconclusive. Apply the common five-attempt
+    limit; an unreached row remains unmeasured. No patch or state-writing recorder is allowed.
+  - Observable: those explored states, centre height in leptons, and wrench presence in a
+    whole-drawn-frame capture. The transparent/dim test cover keeps shading from hiding the wrench.
+  - Expected under the original and both point-test switches on:
+
+    | Level and centre height | *c* − 1 | *c* | *c* + 1 | Wrench |
+    |---|---|---|---|---|
+    | −1, −103 leptons | any | explored | any | shown |
+    | −2, −207 leptons | not explored | not explored | explored | not shown |
+    | −2, −207 leptons | explored | not explored | explored | shown |
+    | −2, −207 leptons | any | explored | any | shown |
+    | −3, −311 leptons | any | explored | not explored | not shown |
+    | −3, −311 leptons | any | explored | explored | shown |
+
+  - Falsified if a valid row differs. The first −2 row distinguishes the original pair from
+    extending the positive rule unchanged: that extension would show the wrench because
+    *c* + 1 is explored. The −1 and −3 rows distinguish truncation toward zero from floor
+    and check the even-negative rule. Replay the first −2 row in our engine with
+    `quirks.shroud_on_flat_grid` on and `quirks.shroud_negative_odd_pair` off: expected wrench
+    shown. That replay tests the specified alternative, not the original. This scenario does
+    not confirm every negative quotient or arbitrary off-centre input.
+
 ## Open questions
 
 - Multiple-glow order is not specified. Creation order is a low-confidence hypothesis,
@@ -681,8 +737,11 @@ appears several times; that is harmless, since each check below is made within o
   Its sight reveal
   tests legality before acting, so the point-test wrap does not imply wrapped sight reveals.
 - S-0101 owns projection and the 15-pixel terrain lift; S-0106 owns centre surface height.
-  SH6 and SH8 use flat cells so their centre heights really are whole levels. S-0111 claim 19
-  supplies the wrench observable and retains the negative-height extension outside claim 8.
+  SH6 and SH8 use flat non-negative cells so their centre heights really are whole levels.
+  SH10 uses S-0106 claim 3's negative centre heights. Claim 8 here owns the point test for
+  both signs and the odd-negative pair switch. S-0111 claim 19 supplies the wrench observable:
+  its companion revision must replace its duplicate negative-height extension with a pointer to
+  claim 8 here and remove its ownership-transfer open question. Hand off these revisions together.
   S-0410 claim 6 and F3 supply radar's initial cell, not the candidate cells of this spec.
 - Claims 5 and 6 here own battlefield cover and glow updates; S-0104's Terms and claim 15
   agree and own the shade-row formula, including its final cap. This is not an additional
