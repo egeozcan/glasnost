@@ -230,16 +230,8 @@ pub const NOT_IMPLEMENTED: &[(&str, &str)] = &[
     ),
     // S-0106
     (
-        "slope_tilt_angles",
-        "S-0106 claim 4: voxel bodies are not tilted on slopes",
-    ),
-    (
         "tilter_flag_ignored",
         "S-0106 claim 10: voxel bodies are not tilted on slopes",
-    ),
-    (
-        "tilt_transition_restart_jump",
-        "S-0106 claim 6: no tilt state (it may belong to the simulation's locomotors)",
     ),
     // S-0108
     (
