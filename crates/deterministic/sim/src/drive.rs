@@ -1172,6 +1172,8 @@ fn spend(w: &mut World, id: ObjectId) -> bool {
             // spec: S-0402 claim 10 (second route: the arrival report at the track target, after the position and the cleared track, before cell-centre crushing and any next track)
             crate::econ::harvest::track_arrival(w, id);
             crate::crush::at_cell_centre(w, id);
+            // spec: S-0207 claim 22 (reaching a track target raises the cell's entered-by tag, after the arrival report and cell-centre crushing; the cell it actually occupies)
+            crate::objects::arrival_raise(w, id);
             return true;
         }
         let p: Point = pts[next - 1];

@@ -625,9 +625,6 @@ fn jump(w: &mut World, id: ObjectId, l: Pos) {
     if let Some(ob) = w.obj_mut(id) {
         ob.pos = Pos::new(l.x, l.y, z);
         ob.layer = layer;
-        // spec: S-0207 claim 20 (e) (it stops moving and its destination is removed; its behaviour falls back to rest, S-0215 claim 13)
-        ob.dest = None;
-        ob.path.steps.clear();
     }
     w.cells.enter(new, layer, id, false);
     // The reservation the object holds after the jump: the remembered landing point's.
@@ -664,6 +661,13 @@ fn jump(w: &mut World, id: ObjectId, l: Pos) {
     if o.kind == Kind::Vehicle {
         // spec: S-0207 claim 20 (e) (a vehicle's: those of reaching a track target in a new cell, crushing among them, S-0210 claim 9)
         crate::crush::entered_cell(w, id, new);
+    }
+    // spec: S-0207 claim 22 and S-0208 claim 22 (the arrival update in the jump tick raises the landing cell's entered-by tag, after position, height, listing and a vehicle's arrival effects, before crate collection, destination removal and the landing warp animation; no raise for the cells between)
+    crate::objects::arrival_raise(w, id);
+    if let Some(ob) = w.obj_mut(id) {
+        // spec: S-0207 claim 20 (e) (it stops moving and its destination is removed; its behaviour falls back to rest, S-0215 claim 13)
+        ob.dest = None;
+        ob.path.steps.clear();
     }
     // spec: S-0207 claim 20 (e) and (i) (a second warp animation at L, with its creation draws after the old point's in the jump tick; crates and parasites have no state in our engine)
     if let Some(warp) = r.warp_out.clone() {

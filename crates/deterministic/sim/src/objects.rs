@@ -18,6 +18,26 @@ use crate::turning::Turning;
 use crate::walk::{self, WalkState};
 use crate::world::{HouseId, Layer, Object, ObjectId, Pos, World};
 
+/// The entered-by raise of an object's arrival update in the cell it now
+/// occupies (S-0207 and S-0208 claim 22): none when the arrival's earlier
+/// effects removed it, and in a high-bridge cell only for an object on the
+/// deck (S-0011 claim 18).
+pub(crate) fn arrival_raise(w: &mut World, id: ObjectId) {
+    let Some(o) = w.obj(id) else {
+        // spec: S-0207 claim 22 (no arrival raise is promised when the arrival's effects removed the object)
+        return;
+    };
+    if !o.on_map {
+        return;
+    }
+    let c = o.pos.cell();
+    // spec: S-0011 claim 18 (in a cell that carries a high bridge only units on the deck raise it) and S-0207 claim 22 (ground passage under a high bridge is no arrival)
+    if w.cells.is_bridge(c) && o.layer != Layer::Deck {
+        return;
+    }
+    crate::triggers::cell_entered(w, id, (c.x as i16, c.y as i16));
+}
+
 /// The occupancy switches.
 pub fn occ_quirks(w: &World) -> OccupancyQuirks {
     let q = w.rules().quirks;
