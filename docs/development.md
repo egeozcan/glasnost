@@ -212,7 +212,7 @@ Every quirk switch of the implemented specs has a field in `ini::Quirks` (includ
 |---|---|---|
 | `convert::sim` (`Form::Ints`: the economy lists `AIVirtualPurifiers`, `MultiplayerAICM`, `AIHateDelays`) | the items of a general integer list are read with S-0003 claim 3's integer form within 127 bytes; an empty item takes no place; an unreadable item gives 0 and keeps its place (Q-0171 is answered by S-0003 claim 22 for the auto-deploy list only, which now reads decimal-prefix items within 511 bytes; these lists keep its former workaround) | Q-0171 |
 | `render::voxel::section_order` | mixed-depth ties outside F8's six rows and all-equal parts keep the previous revision's exchange order; the depth-buffered mode draws its reverse (S-0105 claims 23 and 24) | Q-0215 |
-| `render::voxel::column_steps` | normal-mode-0 columns outside claim 35's three cases are read with the previous revision's grouping (S-0105 claim 35) | Q-0211 |
+| `render::voxel::column_steps` | a top-down normal-mode-0 span applies its empty count after its colours, as claim 35's table has it; claim 35's colour-height relation applies it before them, and MS-26's two-span row follows the relation (S-0105 claim 35) | Q-0216 |
 
 ## Map viewer (M2)
 

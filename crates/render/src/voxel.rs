@@ -111,7 +111,8 @@ pub struct VoxelQuirks {
     pub voxel_mode0_misread: bool,
     /// `quirks.voxel_topdown_column_origin` (claim 36): top-down columns are
     /// positioned from the grid's top and every column stops at the first
-    /// pair boundary congruent to *Nz* modulo 256. Off: every voxel at the
+    /// pair boundary congruent to *Nz* modulo 256 (modulo 2³² in the
+    /// depth-buffered mode). Off: every voxel at the
     /// cell its runs give, cells 0 … *Nz* − 1 only.
     pub voxel_topdown_column_origin: bool,
     /// `quirks.shadow_double_width` (claim 30, F10): each shadow column
@@ -1550,23 +1551,33 @@ enum Step {
 
 /// The steps of one column, in drawing order (S-0105 claims 21, 35, 36).
 ///
-/// Normal mode 0 binds only claim 35's three cases; for other mode-0
-/// columns the grouping below is an interim rule (Q-0211).
+/// In normal mode 0 this grouping is claim 35's colour-height relation,
+/// except that top-down each group's empty count is applied after its
+/// colours, which claim 35's table (MS-19 (b)) requires and its relation
+/// contradicts for a later span (MS-26): interim (Q-0216).
 ///
 /// With `quirks.voxel_topdown_column_origin` on, a column is read in groups
 /// from its first value (bottom-up) or its last value backward (top-down):
 /// bottom-up *e, n,* the *n* voxels, one unused value; top-down *n,* the
 /// *n* voxels, one unused value, *e*. The column ends at the first group
 /// boundary, its start included, where the cells counted so far are
-/// congruent to *Nz* modulo 256, or where its own column data ends (our
-/// engine's choice for the part the spec leaves unspecified). A voxel whose
-/// values are cut off by the end of the column data is not drawn.
+/// congruent to *Nz* modulo 256 (modulo 2³² in the depth-buffered mode),
+/// or where its own column data ends (our engine's choice for the part the
+/// spec leaves unspecified). A voxel whose values are cut off by the end of
+/// the column data is not drawn.
 ///
 /// A voxel holds two values (colour, normal) except in normal mode 0 with
 /// `quirks.voxel_mode0_misread` on, where it holds one value drawn unlit
 /// (claim 35). Top-down, a voxel's values are taken in file order from
 /// just before the current reading position.
-fn column_steps(data: &[u8], nz: u8, top_down: bool, mode: u8, quirks: &VoxelQuirks) -> Vec<Step> {
+fn column_steps(
+    data: &[u8],
+    nz: u8,
+    top_down: bool,
+    mode: u8,
+    depth_buffered: bool,
+    quirks: &VoxelQuirks,
+) -> Vec<Step> {
     // spec: S-0105 claim 35 (mode 0: one value per voxel, unlit)
     let per = if mode == 0 && quirks.voxel_mode0_misread {
         1
@@ -1590,13 +1601,17 @@ fn column_steps(data: &[u8], nz: u8, top_down: bool, mode: u8, quirks: &VoxelQui
     if !quirks.voxel_topdown_column_origin {
         return fixed_column_steps(data, nz, top_down, per, voxel);
     }
+    // spec: S-0105 claims 35, 36, Edge cases (quirks.voxel_topdown_column_origin: the
+    // boundary is taken modulo 256, or modulo 4294967296 in the depth-buffered mode)
+    let mask = if depth_buffered { u32::MAX } else { 0xFF };
+    let at_boundary = |count: u32| count & mask == u32::from(nz);
     let mut steps = Vec::new();
-    let mut count = 0u8;
+    let mut count = 0u32;
     if !top_down {
         let mut pos = 0usize;
         loop {
-            // spec: S-0105 claim 36 (ends at a pair boundary ≡ Nz mod 256)
-            if count == nz {
+            // spec: S-0105 claim 36 (ends at a pair boundary ≡ Nz)
+            if at_boundary(count) {
                 break;
             }
             let (Some(&e), Some(&n)) = (data.get(pos), data.get(pos + 1)) else {
@@ -1611,16 +1626,16 @@ fn column_steps(data: &[u8], nz: u8, top_down: bool, mode: u8, quirks: &VoxelQui
                 steps.push(voxel(v));
                 pos += per;
             }
-            // the span's closing count (VXL layout, glasnost_fmt::vxl) is skipped; mode 0 beyond
-            // claim 35's cases: interim (Q-0211)
+            // the span's closing count (VXL layout, glasnost_fmt::vxl) is skipped; in mode 0
+            // the relation's ignored value b (claim 35: e, n, a₀ … aₙ₋₁, b)
             pos += 1;
-            count = count.wrapping_add(e).wrapping_add(n);
+            count = count.wrapping_add(u32::from(e)).wrapping_add(u32::from(n));
         }
     } else {
         let mut end = data.len();
         loop {
-            // spec: S-0105 claim 36 (ends at a pair boundary ≡ Nz mod 256)
-            if count == nz {
+            // spec: S-0105 claim 36 (ends at a pair boundary ≡ Nz)
+            if at_boundary(count) {
                 break;
             }
             let Some(at) = end.checked_sub(1) else {
@@ -1635,15 +1650,16 @@ fn column_steps(data: &[u8], nz: u8, top_down: bool, mode: u8, quirks: &VoxelQui
                 steps.push(voxel(&data[start..end]));
                 end = start;
             }
-            // the span's opening count, then the empty count (VXL layout, glasnost_fmt::vxl); mode 0
-            // beyond claim 35's cases: interim (Q-0211)
+            // the span's opening count, then the empty count (VXL layout, glasnost_fmt::vxl); in
+            // mode 0 claim 35's (e, b, aₙ₋₁ … a₀, n), the empty count applied after the colours as
+            // claim 35's table has it: interim (Q-0216)
             let Some(at) = end.checked_sub(2) else {
                 break;
             };
             let e = data[at];
             end = at;
             steps.push(Step::Empty(u32::from(e)));
-            count = count.wrapping_add(n).wrapping_add(e);
+            count = count.wrapping_add(u32::from(n)).wrapping_add(u32::from(e));
         }
     }
     steps
@@ -1652,7 +1668,10 @@ fn column_steps(data: &[u8], nz: u8, top_down: bool, mode: u8, quirks: &VoxelQui
 /// Column steps with `quirks.voxel_topdown_column_origin` off (S-0105 Edge
 /// cases): the column's own runs read bottom-up to the end of its data,
 /// each voxel at the cell its runs give, cells 0 … *Nz* − 1 only, then
-/// drawn in the section's direction with the gaps as empty runs.
+/// drawn in the section's direction with the gaps as empty runs. A top-down
+/// column of one value per voxel (normal mode 0, claim 35) is read from its
+/// end with the grouping of [`column_steps`] and anchored to the decoded
+/// column's total height.
 fn fixed_column_steps(
     data: &[u8],
     nz: u8,
@@ -1661,8 +1680,37 @@ fn fixed_column_steps(
     voxel: impl Fn(&[u8]) -> Step,
 ) -> Vec<Step> {
     let mut cells = Vec::new();
+    if top_down && per == 1 {
+        // spec: S-0105 claim 35 (switch off: positions anchored to the decoded column's total
+        // height; only cells 0 … Nz − 1 contribute)
+        // Only whole groups are decoded: a group cut off by the start of the
+        // column data has no empty count to anchor it (our engine's choice).
+        let (mut end, mut d) = (data.len(), 0u32);
+        let mut placed = Vec::new();
+        while let Some(at) = end.checked_sub(1) {
+            let n = usize::from(data[at]);
+            let Some(e_at) = at.checked_sub(n + 2) else {
+                break;
+            };
+            for l in 0..n {
+                placed.push((d, voxel(&data[at - 1 - l..at - l])));
+                d += 1;
+            }
+            d += u32::from(data[e_at]);
+            end = e_at;
+        }
+        let total = d;
+        for (d, v) in placed.into_iter().rev() {
+            let cell = total - 1 - d;
+            if cell < u32::from(nz) {
+                cells.push((cell, v));
+            }
+        }
+    }
     let (mut pos, mut cell) = (0usize, 0u32);
-    while let (Some(&e), Some(&n)) = (data.get(pos), data.get(pos + 1)) {
+    while !(top_down && per == 1)
+        && let (Some(&e), Some(&n)) = (data.get(pos), data.get(pos + 1))
+    {
         pos += 2;
         cell += u32::from(e);
         for _ in 0..n {
@@ -2098,7 +2146,7 @@ fn raster_section(
                 .saturating_add((n_y as i64).saturating_mul(dy[2]))
                 .saturating_add((n_x as i64).saturating_mul(dx[2]));
             let mut col = [0u64; 3];
-            for st in column_steps(data, sz, top_down, sec.normal_mode, quirks) {
+            for st in column_steps(data, sz, top_down, sec.normal_mode, depth_buffered, quirks) {
                 match st {
                     Step::Empty(e) => {
                         // spec: S-0105 Formulas F5 (e·Δ_z as one addend,
@@ -3902,7 +3950,8 @@ mod tests {
         assert_eq!(got, [x, x]);
     }
 
-    /// spec: S-0105 claim 35 (MS-19 (b): bottom-up and top-down groups)
+    /// spec: S-0105 claim 35 (MS-19 (b): bottom-up and top-down groups; the top-down row is
+    /// the one request Q-0216 sets against the colour-height relation)
     #[test]
     fn mode0_groups_both_directions() {
         let (x, yv, z) = (90, 9, 7);
@@ -3915,6 +3964,111 @@ mod tests {
         // Top-down: cell 41 shows Y and cell 40 shows X.
         let down = column_pixels(s, true, &q());
         assert_eq!(down.iter().map(|p| p.1).collect::<Vec<_>>(), [x, yv]);
+    }
+
+    /// A mode-0 column's steps as (grid cell, value): counted up from the
+    /// bottom face bottom-up, down from cell Nz − 1 top-down.
+    fn mode0_cells(
+        data: &[u8],
+        nz: u8,
+        top_down: bool,
+        depth: bool,
+        q: &VoxelQuirks,
+    ) -> Vec<(i64, u8)> {
+        let mut d = 0i64;
+        let mut out = Vec::new();
+        for st in column_steps(data, nz, top_down, 0, depth, q) {
+            match st {
+                Step::Empty(e) => d += i64::from(e),
+                Step::Voxel { value, .. } => {
+                    out.push((if top_down { i64::from(nz) - 1 - d } else { d }, value));
+                    d += 1;
+                }
+            }
+        }
+        out
+    }
+
+    /// spec: S-0105 claim 35 (MS-26's general mode-0 columns, invented values: spans, the
+    /// prefix boundary and the bounded-data stop in both drawing directions)
+    #[test]
+    fn mode0_general_columns() {
+        let q = q();
+        let up = |d: &[u8], nz| mode0_cells(d, nz, false, false, &q);
+        let down = |d: &[u8], nz| mode0_cells(d, nz, true, false, &q);
+        assert_eq!(
+            up(&[0, 2, 10, 11, 90, 1, 2, 20, 21, 91], 5),
+            [(0, 10), (1, 11), (3, 20), (4, 21)]
+        );
+        // MS-26's top-down two-span row: its first span agrees with every reading; where the
+        // second span lands is the contradiction of request Q-0216.
+        let two = down(&[1, 91, 21, 20, 2, 0, 90, 11, 10, 2], 5);
+        assert_eq!(two[..2], [(4, 10), (3, 11)]);
+        assert_eq!(up(&[0, 2, 10, 11, 90, 0, 1, 20, 91], 2), [(0, 10), (1, 11)]);
+        assert_eq!(
+            down(&[0, 91, 20, 1, 0, 90, 11, 10, 2], 2),
+            [(1, 10), (0, 11)]
+        );
+        assert_eq!(up(&[0, 3, 10, 11, 12, 90], 2), [(0, 10), (1, 11), (2, 12)]);
+        assert_eq!(
+            down(&[0, 90, 12, 11, 10, 3], 2),
+            [(1, 10), (0, 11), (-1, 12)]
+        );
+        assert_eq!(up(&[0, 1, 10, 90], 3), [(0, 10)]);
+        assert_eq!(down(&[0, 90, 10, 1], 3), [(2, 10)]);
+    }
+
+    /// spec: S-0105 claims 35, 36 and Edge cases (quirks.voxel_topdown_column_origin: the
+    /// boundary is ≡ Nz modulo 256, modulo 4294967296 in the depth-buffered mode; MS-26's
+    /// 260-colour column in a four-cell grid with a span appended)
+    #[test]
+    fn prefix_boundary_modulus() {
+        let mut data = vec![0, 255];
+        data.extend(std::iter::repeat_n(10, 255));
+        data.extend([90, 0, 5]);
+        data.extend(std::iter::repeat_n(11, 5));
+        data.extend([90, 0, 1, 77, 90]);
+        let q = q();
+        let normal = mode0_cells(&data, 4, false, false, &q);
+        assert_eq!(normal.len(), 260);
+        assert!(normal.iter().all(|c| c.1 != 77));
+        let depth = mode0_cells(&data, 4, false, true, &q);
+        assert_eq!(depth.len(), 261);
+        assert_eq!(depth[260], (260, 77));
+        // The modulus is the same for every normal mode: two-value voxels here.
+        let mut pairs = vec![0, 255];
+        pairs.extend(std::iter::repeat_n([10, 0], 255).flatten());
+        pairs.extend([255, 0, 5]);
+        pairs.extend(std::iter::repeat_n([11, 0], 5).flatten());
+        pairs.extend([5, 0, 1, 77, 0, 1]);
+        let voxels = |depth| {
+            column_steps(&pairs, 4, false, 1, depth, &q)
+                .iter()
+                .filter(|s| matches!(s, Step::Voxel { .. }))
+                .count()
+        };
+        assert_eq!((voxels(false), voxels(true)), (260, 261));
+    }
+
+    /// spec: S-0105 claim 35 (with quirks.voxel_topdown_column_origin off a top-down mode-0
+    /// column is anchored to its decoded total height: MS-19 (b), a well-formed column, is
+    /// drawn as with the switch on)
+    #[test]
+    fn mode0_top_down_fixed_origin() {
+        let (x, yv, z) = (90, 9, 7);
+        let data = [40, 2, 40, z, x, yv, 2];
+        let fixed = VoxelQuirks {
+            voxel_topdown_column_origin: false,
+            ..q()
+        };
+        let on = mode0_cells(&data, 42, true, false, &q());
+        assert_eq!(on, [(41, yv), (40, x)]);
+        assert_eq!(mode0_cells(&data, 42, true, false, &fixed), on);
+        // Bottom-up both states give 40 and Z.
+        assert_eq!(
+            mode0_cells(&data, 42, false, false, &fixed),
+            [(40, 40), (41, z)]
+        );
     }
 
     /// spec: S-0105 claim 36 (MS-20: a column ends at the first pair
