@@ -595,6 +595,11 @@ impl Audio {
             Sound::CannotDeploy if mine => self.announce(Announcement::CannotDeploy),
             // spec: S-0408 claim 11; S-0701 claim 28 (unit sold)
             Sound::UnitSold if mine => self.announce(Announcement::UnitSold),
+            // spec: S-0701 claim 24; S-0404 claim 3 (a request refused at application: the game-wide refusal sound, the local player's house only)
+            Sound::QueueRefused if house.is_some() && house == self.local => {
+                let s = self.names.scold.clone();
+                self.play_in(w, s.as_deref(), Where::Screen);
+            }
             Sound::UnitReady => {
                 let Some(t) = of else { return };
                 // spec: S-0701 claim 23 (the type's creation sound, else the game-wide one of its kind; any owner)

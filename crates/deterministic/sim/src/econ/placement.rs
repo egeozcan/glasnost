@@ -617,7 +617,8 @@ fn item_object(w: &mut World, house: HouseId, t: TypeRef) -> ObjectId {
 /// Applies the placement of a done building (S-0406 claims 1, 3, 8 to
 /// 12): the item's object is put on the map at `cell`, or added as an
 /// upgrade to the building there. Returns whether it was placed; on
-/// failure nothing is placed (the refusal sound and placement mode are the
+/// failure nothing is placed (a cell-test refusal requests the cannot-deploy
+/// announcement, S-0404 claim 7; placement mode is the
 /// input's, S-0411). The factory condition of claim 1 is asked first.
 pub fn place_building(w: &mut World, house: HouseId, t: TypeRef, cell: CellXY) -> bool {
     if t.kind != Kind::Building {
@@ -637,6 +638,13 @@ pub fn place_building(w: &mut World, house: HouseId, t: TypeRef, cell: CellXY) -
         return true;
     }
     if !cell_test(w, t.index, cell, &Test::order(house)) {
+        // spec: S-0404 claim 7; S-0701 claim 24 (placement refused by its cell tests as it is applied: the cannot-deploy-here announcement for the house's own player; a missing factory above is silent)
+        w.effects.push(crate::combat::effects::Effect::Sound {
+            sound: crate::combat::effects::Sound::CannotDeploy,
+            of: Some(t),
+            house: Some(house),
+            pos: None,
+        });
         return false;
     }
     let id = item_object(w, house, t);

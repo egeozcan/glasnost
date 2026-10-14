@@ -966,6 +966,27 @@ fn interface_sounds() {
     assert_eq!(CREDIT_TICK_LEVEL, 8192);
 }
 
+// spec: S-0701 claim 24 and S-0404 claim 3 (a production request refused as it is applied: the game-wide refusal sound, the local player's house only)
+#[test]
+fn queue_refusal_at_application() {
+    let w = world();
+    let mut a = audio(&w, &["Nope"]);
+    let mut n = SoundNames::default();
+    n.scold = Some("Nope".into());
+    a.set_names(n);
+    let mut u = Rng::new(1);
+    let refused = |h: u8| Effect::Sound {
+        sound: Sound::QueueRefused,
+        of: None,
+        house: Some(HouseId(h)),
+        pos: None,
+    };
+    a.tick(&w, &[refused(1)], &mut u);
+    assert!(heard(&mut a, 100).is_empty());
+    a.tick(&w, &[refused(0)], &mut u);
+    assert_eq!(heard(&mut a, 200), ["Nope"]);
+}
+
 // spec: S-0701 claim 24 (a busy line: only unable to comply; a refused placement: only cannot deploy here; no interface sound)
 #[test]
 fn refusal_cues_are_announcements_only() {

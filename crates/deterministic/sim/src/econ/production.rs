@@ -1033,13 +1033,28 @@ pub fn build(w: &mut World, house: HouseId, t: TypeRef) {
     let max = w.rules().econ.production.max_queued;
     // spec: S-0404 claim 3 (the queue limit counts queued types; 0 or below refuses every queued type)
     if line.queue.len() as i32 >= max {
+        queue_refused_cue(w, house, t);
         return;
     }
     // spec: S-0404 claim 3 and S-0407 claim 16 (the queue-time limit)
     if tech::queue_refused(w, house, t, copies_in_line(w, house, t)) {
+        queue_refused_cue(w, house, t);
         return;
     }
     w.econ.lines.lines[li].queue.push(t);
+}
+
+/// The cue of a queue request refused as it is applied (S-0404 claim 3):
+/// the presentation plays the game-wide refusal sound for the house's own
+/// player only.
+fn queue_refused_cue(w: &mut World, house: HouseId, t: TypeRef) {
+    // spec: S-0404 claim 3; S-0701 claim 24 (a production request refused at application by the queue limit or the build limit: the game-wide refusal sound, the local player's house only)
+    w.effects.push(crate::combat::effects::Effect::Sound {
+        sound: crate::combat::effects::Sound::QueueRefused,
+        of: Some(t),
+        house: Some(house),
+        pos: None,
+    });
 }
 
 /// Applies a hold order (S-0404 claim 5).

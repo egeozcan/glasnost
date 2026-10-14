@@ -849,8 +849,17 @@ fn claim_1_place_order_through_production() {
             cell: Some(testkit::mid(e::SIZE, -6, 0)),
         },
     );
+    w.effects.clear();
     e::step(&mut w);
     assert!(e::item(&w, 0, plant).is_some_and(|i| i.done_tick.is_some()));
+    // spec: S-0404 claim 7 (placement refused by its cell tests as it is applied: the cannot-deploy-here announcement for its house)
+    {
+        use glasnost_sim::combat::effects::{Effect, Sound};
+        assert!(w.effects.iter().any(|x| matches!(
+            x,
+            Effect::Sound { sound: Sound::CannotDeploy, house: Some(h), .. } if *h == A
+        )));
+    }
     let at = testkit::mid(e::SIZE, -3, 0);
     assert!(placement::place_legal(&w, A, plant, at));
     let objects = w.objects.len();
