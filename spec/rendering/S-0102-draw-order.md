@@ -2,7 +2,7 @@
 id: S-0102
 title: Draw order, render layers, depth compositing, sprite placement and shadow pixels
 topic: rendering
-revision: 11
+revision: 12
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -23,7 +23,9 @@ a sprite's image frame lands on the screen relative to the object that draws it 
 drawn as sprites, terrain objects, overlays and smudges), which image frame a vehicle drawn as a
 sprite shows, and what a shadow does to the pixels under it. Positions, world pixels and the height
 lift *L(z)* are those of S-0101. This spec covers skirmish; network games and campaigns are out
-of scope.
+of scope. Fog of war is off in skirmish (S-0110 claim 4); conditional remembered-image rules
+are retained as rendering definitions, tested with engine scene fixtures rather than reachable
+original-game skirmish setups.
 
 ## Terms
 
@@ -58,7 +60,7 @@ screen rows.
 | cell pass | The part of the drawing that paints the persistent terrain picture: terrain tiles, overlays, non-animated terrain objects, the buildings' bodies with their shadows, bibs and under-door sprites (claim 16) and, with fog of war on, the remembered images of fogged buildings. It is not repeated in every drawn frame; it repaints only areas marked for redraw and newly scrolled-in strips. |
 | terrain picture | The persistent image (with its depth buffer) produced by the cell pass, copied as the background of every drawn frame. |
 | object pass | The part of a drawn frame that paints the five layer lists, after the cell pass. |
-| remembered image | What a player sees of a building that is hidden under fog of war: a still copy of how it looked when last seen (body, shadow, bib and animations), painted in the cell pass. Only buildings have remembered images (claim 16). |
+| remembered image | What a player sees of a building that is hidden under fog of war: a still copy of how it looked when last seen (body, shadow, bib and animations). Its writers are painted in the cell pass; its animations are drawn after that pass. Only buildings have remembered images (claim 16). |
 | status extras | The markers drawn for a vehicle, infantry, aircraft or building on top of its image: health bar, pips, selection marker and similar. |
 | information tip | Text or markers a building shows next to its image (for example while the pointer rests on it). |
 | depth buffer | One integer in 0…65535 per screen pixel of the battlefield view. **Smaller means nearer to the viewer.** |
@@ -72,7 +74,7 @@ screen rows.
 | world pixel row | The row coordinate of a world pixel (S-0101). Increasing downward on screen. |
 | ground reference row | For a point, the world pixel row it would have at world height 0 (S-0101 F1 without *L*). |
 | *L(z)* | Height lift of S-0101 F2, in pixels. S-0101 computes it in floating point and rounds it to an integer; this spec uses only that integer result, which is not the same as 15/104 × *z* rounded (for example *L*(400) = 57). |
-| depth reference *C* | The integer that ties depth values to world pixel rows (F1). It is reset at the events listed in F1 and otherwise stays fixed. |
+| depth reference *C* | The view-independent integer 32768 depth units that ties depth values to world pixel rows throughout a game (F1). |
 | view jump | A change of the battlefield view's position between two drawn frames by more than the view's width across or more than its height up or down, for example after a click on a distant point of the radar map. Smaller changes are *scrolls*. Both sizes are in screen pixels. |
 | global cruise height | A game-wide height above the terrain, in leptons, that separates the air layer from the top layer for objects whose layer is not decided by their own movement type (Import mapping). |
 | jumpjet cruise height | A per-type height above the terrain, in leptons, that separates the air layer from the top layer for units with jumpjet movement (Import mapping, *State and ordering*). |
@@ -195,40 +197,18 @@ screen rows.
      to a building with a voxel turret through the override section; the animation sort adjustment
      D21)
    - Confidence: high
-6. **Ground-layer drawing order.** A newcomer appears immediately before the first object in
-   the existing drawing order whose sort key is strictly greater than its own, or after all objects
-   if there is none. In an already sorted order it follows every equal-key object. In an unsorted
-   order it need not reach its fully sorted place: existing keys 5, 10, 3 leptons and a newcomer
-   with key 4 leptons give 4, 5, 10, 3 leptons, not 3, 4, 5, 10 leptons.
-
-   The drawing order has one ordering transition per tick, with the following exact result.
-   Number the objects in the order before that transition from 1 to *N*, and let *k*ᵢ be object
-   *i*'s key in leptons. Its resulting drawing position is the integer given by this table.
-   Every position and every comparison refers to that same pre-transition order, not to an order
-   partly changed during the transition. This specifies which object covers which in an overlap,
-   not how an implementation stores or rearranges objects.
-
-   | Condition for object *i* | Resulting drawing position (1 is drawn earliest) |
-   |---|---|
-   | some earlier object has a key strictly greater than *k*ᵢ | *i* − 1 |
-   | no earlier key is strictly greater, and *j* is the first later position with *k*ⱼ ≥ *k*ᵢ | *j* − 1 |
-   | no earlier key is strictly greater, and no later key is at least *k*ᵢ | *N* |
-
-   Arithmetic on positions is exact integer arithmetic, without rounding. For example, keys
-   10, 5, 3 leptons become 5, 3, 10 leptons, not the fully sorted 3, 5, 10 leptons.
-   Equal-key objects retain their relative order through this transition.
-
-   An increase of a key can therefore move an object any number of drawing positions later in
-   one tick, while a decrease moves it at most one position earlier per tick. For a mover passing
-   behind several stationary objects in an otherwise sorted order, it can remain drawn over some
-   of them for several ticks, crossing one drawing position per transition. If each key change
-   crosses at most one stationary object's key, that multi-tick settling is not visible.
-   A movement-caused key change in tick *n* first affects drawing order in the picture after tick
-   *n* + 1: the transition uses the keys before the current tick's movement, not after it.
-   - Backing: `measurable` (D3 (a), (b) for movement ordering and lag; D3 (c) for equal-key
-     stability). Entry placement is `unmeasured`: D3 observes already-placed objects, and no
-     scenario here controls a newcomer's appearance while the existing order still has inversions.
-   - Confidence: high for entry placement and the ordering result; medium for the exact one-tick lag
+6. **Ground-layer drawing order.** In every drawn frame, ground-layer objects are fully
+   ordered by increasing sort key (claim 5), using the positions and adjustments shown in that
+   frame, including movement already completed. Equal-key objects retain their previous relative
+   order; a newcomer follows existing equal-key objects. Thus a mover whose key crosses several
+   stationary objects' keys appears on the correct side of all of them in the first frame showing
+   its new position, with no settling over later ticks or extra one-tick ordering lag.
+   The original's limited per-tick sorting could leave overlaps misordered for several ticks and
+   used keys from before movement; fixing this drawing-only defect is a departure confirmed by
+   the project lead.
+   - Backing: `measurable` (D3 (a), (b), (c), engine tests of the departure, not measurements
+     of the original's sorting)
+   - Confidence: high for the defined departure
 7. **Other layers are never sorted.** Objects entering the underground, surface, air or top layer
    are appended at the end of the list and never sorted. Among aircraft, for instance, the one that
    most recently entered or re-entered the layer is drawn over the others regardless of screen
@@ -253,15 +233,13 @@ screen rows.
    leave no trace in the depth buffer. Because cell-pass writers store a value only where they pass
    the depth test, a pixel keeps the nearest depth that any writer has given it since its area was
    last cleared.
-   A view jump also resets the depth reference *C* of F1. Its visible effect: the rows that a
-   rounding-sensitive overlap loses (for example an infantry unit standing on a building shadow) can
-   change after a view jump, while scrolls never change them.
+   View jumps and redraws do not change the depth reference *C* of F1: a stationary overlap
+   keeps the same rounding and depth acceptance at every view position.
    - Backing: `unmeasured` for the buffer itself (internal state; its effects are covered by D6–D8,
-     D11 and D15); `measurable` for the reset of *C* at view jumps and its visible effect (scenario
-     D20)
-   - Confidence: high for the mechanism and for the reset at view jumps; medium for the full list of
-     events that mark areas, and for the reset when the depth buffer is created (whether the move
-     to the starting position at the start of a game is itself a view jump depends on the map)
+     D11 and D15); `measurable` for view-independent acceptance (D20, engine test of the
+     departure, not a measurement of the original's reference resets)
+   - Confidence: high for the mechanism and defined reference; medium for the full list of
+     events that mark areas
 9. **Terrain tiles write depth.** Each pixel of a terrain tile gets the depth of F3. A tile pixel is
    drawn, and its depth stored, only when its depth is **less than or equal to** the stored depth.
    Tiles without tile depth data are drawn without touching the depth buffer. Tile depth does not
@@ -390,7 +368,7 @@ screen rows.
     The animation's vertical draw shift appears in the bias because shifting an image down by *n*
     rows would otherwise make it *n* depth units nearer; the bias keeps its depth tied to its position.
     - Backing: `measurable`. Coverage by row: infantry body with *h* = 0 and the own shadow of
-      infantry D8, D15, D20, D31; generic shadow of infantry with *h* > 0 D25 (b) (placement only)
+      infantry D8, D15, D31; generic shadow of infantry with *h* > 0 D25 (b) (placement only)
       and D31 (e), on ordinary terrain only; voxel units
       D7, D9, D10 (relative tests only); voxel shadow D23 (profile; its bias only relative to the
       body's); voxel turret D22 (d), including the absent-key default 0 of the turret slot depth
@@ -424,10 +402,9 @@ screen rows.
         (claim 3).
       - the two remembered-building rows: a probe unit of the local player standing close enough
         to overlap a fogged building would normally bring it back in sight, so no probe can be
-        compared with the remembered body; and the remembered animation is
-        tested only against drawings ranked before it, mainly its own body, whose companion depth
-        image has reference points that are not yet settled (F5). D17 tests where these drawings rank (claim 16), not their
-        biases.
+        compared with the remembered body; the remembered animation's absolute bias is not
+        isolated by D17, which tests compositing against the finished depth buffer (claim 16),
+        not its bias independently of F5's unresolved body depth.
     - Confidence: high for projectile sprites, overlays, overlay shadows, animations, building bodies, infantry
       bodies, the own shadows of sprite units, the smudge row, non-animated terrain objects and their
       shadows, and the −*L(z)* term; medium for the rows with *h* not 0, the generic infantry shadow,
@@ -490,7 +467,7 @@ screen rows.
     | Rank | Drawings |
     |---|---|
     | 1 | terrain tiles, each followed at once by the pieces of the smudges on its cell (claim 25), which take no part in the depth test |
-    | 2 | with fog of war on, the remembered images of fogged buildings, one building after another, nearest first (measure below); each building's group ranks its body, shadow and bib before its remembered animations |
+    | 2 | with fog of war on, the remembered bodies, shadows and bibs of fogged buildings, one building after another, nearest first (measure below); each building's group ranks its body, shadow and bib in that order |
     | 3 | overlays, then overlay shadows: every overlay of the repainted area ranks before every overlay shadow of that area, so no overlay's shadow ranks before a neighbouring overlay |
     | 4 | terrain objects that are not animated (trees and the like), with their shadows |
     | 5 | the ground layer's buildings that are not hidden under fog, one building after another; each building's group ranks its body (or the image drawn in its place: a deploying sprite, a roof-deploying sprite or a gate image, claim 13), then its shadow, then its bib, then its under-door sprites |
@@ -515,24 +492,21 @@ screen rows.
       shadow falls on an ore, gem or other flat overlay at the same height level, both have the
       same depth (claim 13) and the overlay pixel shows undarkened, whichever of the two cells comes
       first.
-    - The remembered image of a fogged building's animation is a reader. It is tested against the
-      depth left by the tiles, by the remembered images ranked before it (its own building's body
-      among them) and by nothing else. Any cell-pass writer ranked after it whose pixel passes the
-      depth test paints over it, even a writer that stands farther from the viewer than the
-      animation. So, where they overlap outside the building's body:
-      - a tree standing behind a fogged building appears over the building's remembered animation,
-      - the remembered body of a second fogged building that stands farther back (smaller *N*)
-        appears over the nearer building's remembered animation, and
-      - a live building body (rank 5) standing behind appears over it.
-
-      When the building is not fogged, its animation is an object of the object pass, and it appears
-      over all three of these wherever it passes the depth test (quirk
-      `quirks.remembered_animation_in_cell_pass`).
-    - Apart from ties and these remembered animations, the result does not depend on the ranking,
-      because every other cell-pass drawing is a writer that keeps the nearest depth.
-    - Backing: `measurable` (scenario D17: trees in (a), a second remembered building in (b); the
-      overlay shadows ranking after every overlay, through the tie with a neighbouring flat overlay,
-      D35 (b)); the live-body case is `unmeasured` (D17 (c) gives the reason). The other tie rules,
+    - Remembered building animations are drawn after the entire cell pass of their area and
+      before the live object layers, as readers against the finished depth buffer, retaining
+      their remembered image and the depth biases of claim 13. A farther tree, overlay,
+      remembered building body or live building body cannot cover a qualifying remembered
+      animation pixel; a nearer writer hides it, and equal depth rejects it under claim 10.
+      Remembered animations retain their relative drawing order from rank 2's building groups.
+      The original painted these readers before later cell-pass writers, allowing farther
+      drawings to cover them; fixing this fog-image compositing defect is a departure confirmed
+      by the project lead.
+    - Apart from ties, the result among cell-pass writers does not depend on the ranking,
+      because every writer keeps the nearest depth.
+    - Backing: `measurable` (D17 (a), (b), engine tests of remembered-animation compositing as
+      a departure, not measurements of the original's buggy order; the overlay shadows ranking
+      after every overlay, through the tie with a neighbouring flat overlay, D35 (b)); the
+      live-body case is `unmeasured` (D17 (c) gives the reason). The other tie rules,
       and with them the order inside a live building's group, are `unmeasured`, because exact depth
       ties between those writers cannot be set up on purpose. That terrain objects, overlays and smudges are never remembered is
       `unmeasured`: it would show when one of them changes inside a fogged area, but whether such a
@@ -558,18 +532,14 @@ screen rows.
 
     An absent slot key counts as 0, so a slot animation whose slot sets neither value draws and
     sorts as if its type had no depth adjustment and no sort adjustment, whatever its type says
-    (`quirks.slot_values_replace_animation_adjustments`). The slot's values take effect only once the
-    animation is in its layer. So a slot animation that enters the ground layer is placed in the
-    list (claim 6) by a key with its type's own sort adjustment, and the slot's y-sort counts from
-    the next ordering transition on. The turret slot's depth adjustment is also the depth adjustment of a
+    (`quirks.slot_values_replace_animation_adjustments`). The slot's values count in the first
+    drawn frame containing the animation: a ground-layer slot animation is ordered using its
+    slot's y-sort under claim 6. The turret slot's depth adjustment is also the depth adjustment of a
     voxel turret (claim 13), and the turret slot's keys come from the building's rules section
     (Import mapping).
-    - Backing: `measurable` (scenario D22 (a) to (c)). The insertion with the type's own value is
-      `unmeasured`: it shows only in the first tick after a slot animation is created, and the
-      tick at which a building starts a slot animation is set by the building behaviours of S-0108,
-      not by a setup this spec can fix.
-    - Confidence: high for the layer rule and for the replacement of both values; medium for the
-      insertion with the type's value
+    - Backing: `measurable` (scenario D22 (a) to (c)); first-frame full ordering follows
+      claim 6's departure, tested by D3.
+    - Confidence: high for the layer rule, replacement of both values and defined first-frame order
 18. **Shadows of voxel models.** The voxel shadow of a vehicle or aircraft is drawn as part of that object's
     own drawing in the object pass, so it is drawn in the object's own layer at the object's place
     in that layer's list. It is not drawn in a pass of its own, and an aircraft's shadow is not
@@ -941,23 +911,18 @@ screen rows.
 > *d* = (*C* − *w*) mod 65536, where *w* is the world pixel row shown on screen row *r* and *C* is the
 > depth reference. All values are integers.
 
-*C* changes only at a **reset**. A reset happens when the depth buffer is created for a game, and at
-every view jump (Terms). At a reset, *C* = 32768 + *w*<sub>top</sub>, where *w*<sub>top</sub> is the
-world pixel row of the view's top row in the first drawn frame after the reset; that row then has
-depth 32768. Scrolls do not change *C*, so a fixed world pixel row keeps its depth while the view
-scrolls. A full redraw without a view move (claim 8) does not change *C* either.
+*C* = 32768 depth units throughout the game, independent of the starting view, scrolls, view
+jumps and full redraws. The rounding Q of F2 acts on absolute depth values, so its removed amount
+still depends on the world row and bias, but never on camera position. This fixed reference is a
+departure, tested against this spec by D20. The original reset *C* to 32768 plus the view's top
+world row at creation and view jumps, changing stationary overlap rounding; fixing this drawing
+artefact is confirmed by the project lead. Confidence: high for the defined departure.
 
-*C* matters beyond differences of depth. The rounding Q of F2 acts on absolute depth values, so the
-amount it removes depends on *C* mod 3. Results that depend on that amount (the ranges with "*q* in
-0…2" below) can therefore change after a view jump, even though nothing on the map has moved. A
-reimplementation reproduces this with `quirks.depth_reference_reset_on_jump` on (Edge cases and
-quirks).
-
-How long *C* − *w* stays inside 0…65535: it starts at 32768 for the top row after a reset, and the
-world pixel rows of a map differ by far less than 32768, so no visible row leaves the range in play.
+The modulo formula applies to every world row; in the ordinary map range *C* − *w* stays inside
+0…65535.
 
 **F2. Row depth of an object drawing** (integers). Let the drawing occupy screen rows *r*₀ (first)
-to *r*₁ (last) of its drawing rectangle, both after clipping to the view, with depth bias *β*. The
+to *r*₁ (last) of its own drawing rectangle before clipping to the view, with depth bias *β*. The
 drawing rectangle may include transparent rows:
 - for a sprite, it is the rectangle stored for that image frame in its file, placed as the sprite
   specs say.
@@ -995,12 +960,13 @@ storing has no visible effect.
 No stock drawing has been confirmed to use the slope profile; it is listed because the original
 supports it.
 
-Note: clipping at the view's bottom edge moves *r*₁, so an upright image partly below the view is
-depth-anchored at the view's last row instead of at its own base (quirk
-`quirks.upright_depth_anchor_after_clip`). Backing: `measurable` (D38) for the clipping
-consequence on sprite readers; confidence: high. Its persistence on cell-pass writers is
-`unmeasured`: no controlled writer-repaint test is given here; confidence: medium. The slope
-profile is `unmeasured`: no stock drawing using it is identified; confidence: high for the formula.
+Clipping removes pixels only: it never changes *r*₀, *r*₁ or the depth of surviving pixels,
+including companion-image drawings, cell-pass writers and fresh or reused voxel images.
+The original anchored upright profiles at the last visible row, making clipped stationary
+images' depth camera-dependent; fixing this drawing artefact is a departure confirmed by the
+project lead. Backing: `measurable` (D38, engine test of the departure, not a measurement of
+the original's clipping); confidence: high for the defined departure. The slope profile is
+`unmeasured`: no stock drawing using it is identified; confidence: high for the formula.
 
 **Comparing two drawings** (consequences of F2, used by the measurement scenarios; *b* is the last
 row *r*₁ of a drawing, *β* its bias, all in integers, ±1 for the rounding Q and the floors; valid only
@@ -1082,7 +1048,7 @@ red or blue *C*, and likewise with 4 for green.
 | Name (ours) | Value | Unit | Notes |
 |---|---|---|---|
 | depth clear value | 65535 | depth units | Fill after a full redraw, after a view jump, and for exposed strips and areas marked for redraw |
-| depth reference start | 32768 | depth units | Depth of the view's top row in the first drawn frame after a reset of *C* (F1) |
+| fixed depth reference | 32768 | depth units | View-independent *C* throughout the game (F1, departure) |
 | depth value range | 0…65535 | depth units | Values wrap modulo 65536 |
 | projectile depth bias | −30 | depth units | Plus −*L(z)*; final |
 | animation depth bias | −2 (ordinary), −3 (flat), −50 (tiled) | depth units | Plus type and instance adjustments and −*L(z)*; final |
@@ -1113,7 +1079,7 @@ red or blue *C*, and likewise with 4 for green.
 | jumpjet cruise height default | 500 | leptons | Absent-key default of a type's jumpjet cruise height |
 | jumpjet cruise height minimum | 208 | leptons | 2 height levels; a smaller configured value is raised to this |
 | bridge deck height | 416 | leptons | 4 height levels |
-| ground-layer ordering transitions | 1 per tick | transitions | Drawing-position result of claim 6 |
+| ground-layer full ordering | every drawn frame | frames | Stable increasing current keys, claim 6 (departure) |
 | centring | ⌊*W*/2⌋, ⌊*H*/2⌋ | pixels | Canvas point placed on the draw point (F6) |
 | ore-spawning terrain object raise | 16 | screen rows | Draw point moved up (claim 23) |
 | terrain object damaged frame threshold | 2 | hit points | Image frame 1 below it (claim 23) |
@@ -1173,8 +1139,8 @@ So above a deck its layer follows its height above the deck.
 
 | State | Event | Result |
 |---|---|---|
-| any | object enters the ground layer | placed just before the first object, counting from the front, whose key is strictly greater than its own; at the end if there is none |
-| any | tick | drawing positions change by claim 6's result, using the keys before that tick's movement |
+| any | object enters the ground layer | first appearance uses current key order; newcomer follows existing equal-key objects |
+| any | drawn frame | fully ordered by current keys, stably, under claim 6 |
 | any | object leaves the layer | removed; the order of the rest is unchanged |
 
 **Observable ordering of a drawn frame.** The terrain picture appears behind the object layers, and
@@ -1199,7 +1165,10 @@ building's key. Between two units, the one later in the list is drawn on top whe
 
 ## Edge cases and quirks
 
-- **`quirks.ground_layer_single_pass_sort`** (default: on). For every switch in this section with a stated default, that default is the original YR behaviour; an alternative explicitly identified as our engine's alternative is not behaviour of the original. The ground layer has the limited settling of claim 6's drawing-position result. Alternative: fully sort the ground layer every tick (stable, by key), using the same pre-movement keys and visibility lag. With the quirk on, fast units moving up the screen can be drawn over units they have already passed behind for a few ticks.
+For every switch below, the stated default is the original YR behaviour; an alternative
+identified as our engine's alternative is not behaviour of the original. Claims 6 and 16 and
+formulas F1 and F2 instead define unconditional drawing-only departures, with no switches.
+
 - **`quirks.unsorted_upper_layers`** (default: on). Underground, surface, air and top layers keep
   insertion order (claim 7). Alternative: sort them like the ground layer. With the quirk on,
   overlapping aircraft are ordered by their latest layer entry or re-entry, not by screen position.
@@ -1209,24 +1178,6 @@ building's key. Between two units, the one later in the list is drawn on top whe
 - **`quirks.cliff_fudge_far_cliff_weaker`** (default: on). A high cell two steps in front gives the
   cliff fudge factor 1 and overrides a high cell one step in front, which alone gives factor 2.
   Alternative: factor 2 whenever either cell qualifies.
-- **`quirks.upright_depth_anchor_after_clip`** (default: on). The upright profile is anchored at the
-  last *visible* row (F2). Alternative: anchor at the image's own last row. With the quirk on, the depth
-  of tall images cut by the bottom of the view shifts as the view scrolls. For a cell-pass writer the
-  depth it was painted with stays in the depth buffer until its area is repainted (claim 8), so a
-  reimplementation that rebuilds the terrain picture from scratch in every drawn frame does not
-  reproduce the quirk-on result.
-- **`quirks.depth_reference_reset_on_jump`** (default: on). The depth reference *C* is reset at every
-  view jump and at the creation of the depth buffer (F1), so the amount that the rounding Q removes,
-  and with it the rows lost in rounding-sensitive overlaps, can change after a view jump.
-  Alternative: one *C* for the whole game that does not depend on the view, for example
-  *C* = 32768, so that those overlaps depend only on world positions. D20 tells the two apart.
-- **`quirks.remembered_animation_in_cell_pass`** (default: on). A fogged building's remembered
-  animations are painted inside the cell pass, ranked as in claim 16, so later cell-pass writers
-  (trees, overlays, the remembered bodies of buildings farther back, live building bodies) paint over
-  them even when they stand farther from the viewer. Alternative: paint each remembered animation
-  after the whole cell pass of its area, as a reader against the finished depth buffer, so that
-  under fog it is covered only by drawings nearer than it, as when the building is visible. D17 tells
-  the two apart.
 - **`quirks.slot_values_replace_animation_adjustments`** (default: on). A building's slot
   animation takes the slot's depth adjustment and y-sort in place of its type's depth adjustment
   and sort adjustment, an absent slot key counting as 0 (claim 17). Alternative: add the slot's
@@ -1344,9 +1295,13 @@ read from its cell and the ticks it has moved at a known speed. Where a scenario
 picture is matched to its tick by capturing at a game speed at which the number of pictures over a
 long interval equals the number of ticks (see the glossary's *drawn frame* and *display path*, and
 S-0201, claim 6).
+D3, D17, D20 and D38 test the defined drawing departures against this spec on our engine,
+not against the original; their original-game counterparts are not backing for the fixed results.
+Sorting-dependent parts of D4, D21, D22 and D33 likewise use claim 6's current-frame ordering
+on our engine; original captures may still test their keys and biases, but not the removed lag.
 Every scenario is deterministic: one run per variant is enough unless stated. Within a run, after
 the view has been brought to the test area, the view moves only by scrolls (Terms), never by a view
-jump, so that the depth reference *C* (F1) stays fixed; D20 is the only scenario that jumps on
+jump, to simplify screenshot alignment; *C* (F1) stays fixed even at jumps. D20 jumps on
 purpose. Rows and row distances are screen pixel rows; *b* is the
 last row of a drawing's rectangle as in F2 (for a sprite, read from the image's stored rectangle in its file).
 
@@ -1376,17 +1331,13 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
   movement rules cannot reach that speed); a second run uses an ordinary speed. Observable: per
   picture, which vehicle is on top in each overlap, and per tick the mover's key (X + Y) computed from
   its position. Expected: (a) the mover is drawn under the other until its key exceeds the other's,
-  then on top, the change being visible one tick after the tick in which its key passes (claim 6).
-  (b) Fast run: after a tick in which the mover's key drops past the keys of *m* ≥ 2 standing
-  vehicles, the mover goes under them one at a time, one per tick, so for *m* − 1 ticks it is still
-  drawn over some of them. Ordinary run: the mover goes under each standing vehicle one tick after its
-  key drops below that vehicle's key. Falsified if in the fast run the mover is under all *m* vehicles
-  in the second picture after that tick (the outcome of a full sort), or if in (a) the first picture
-  showing the mover on top is not the picture after tick *n* + 1, where tick *n* is the first tick
-  whose movement makes its key exceed the other's. A fast-run picture whose mover order differs
-  from claim 6's drawing-position table also falsifies it. If the movement rules never permit a
-  drop past two keys in one tick, (b)'s multi-position settling is `unmeasured` because this setup
-  cannot distinguish it from a full sort.
+  then on top in the first picture showing that position (claim 6). (b) In both runs, the mover
+  goes under every stationary vehicle whose key it has dropped below in the first picture of
+  its new position, even after crossing *m* ≥ 2 keys in one tick. Any overlap contrary to current
+  key order falsifies the departure, including one-tick lag or multi-tick settling. If stock
+  movement cannot cross multiple keys in one tick, supplement (b) with an engine rendering test
+  presenting a formerly later mover behind several stationary objects in one frame; all must
+  cover it immediately. These are tests of the departure, not the original's buggy sorting.
   (c) Equal-key stability. Use two map-placed sprite vehicles at (x, y) and (x + 1, y − 1),
   whose cell-centre keys are equal. Named test files replace their sprites with two distinct,
   opaque test squares on 129 × 129-pixel canvases and set their art to sprite drawing with one
@@ -1396,7 +1347,9 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
   for twenty more ticks, then drive a third vehicle past both in each direction without touching
   their cells. Expected: the two equal-key colours keep the recorded overlap priority whenever
   not covered by the third vehicle. Any reversal falsifies equal-key stability. Initial priority
-  is recorded, not predicted; this does not test entry placement.
+  is recorded, not predicted. In an engine scene fixture, add a third equal-key sprite after
+  these two and capture its first appearance: it must cover both at qualifying overlap pixels.
+  An earlier equal-key position falsifies newcomer placement.
 - **D4, building keys (claim 5).** Setup: a flat map; a building with a voxel turret whose turret
   image overlaps the route below, and a vehicle driving straight down the column of cells just west of
   the foundation (cells with x one less than the foundation's first column), from north of the
@@ -1405,7 +1358,7 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
   not a gate). Observable: the vehicle's key (X + Y, from its position) at the tick from which it is drawn over the building's
   voxel turret. Expected: the switch happens at the first tick at which the vehicle's key is strictly
   greater than the building's key of F4, i.e. 256·(*c<sub>x</sub>* + *c<sub>y</sub>*) + 32, and
-  becomes visible one tick later (claim 6).
+  becomes visible in the first picture showing that key (claim 6's departure).
 
   A vehicle with key *K* where 256·(*c<sub>x</sub>* + *c<sub>y</sub>*) ≤ *K* < 256·(*c<sub>x</sub>* +
   *c<sub>y</sub>*) + 32 is drawn under the voxel turret. Falsified if the switch happens near the
@@ -1416,7 +1369,7 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
   test house, and the vehicle's route stays off the foundation, so it never passes through the
   building. Observable and procedure as in (a). Expected: the switch happens at the first tick at
   which the vehicle's key is strictly greater than 256·(*c<sub>x</sub>* + *c<sub>y</sub>*) + 16
-  (F4 with *t* = 32 and *g* = 16), visible one tick later, so a vehicle with key *K* where
+  (F4 with *t* = 32 and *g* = 16), visible in the first picture showing that key, so a vehicle with key *K* where
   256·(*c<sub>x</sub>* + *c<sub>y</sub>*) + 16 < *K* ≤ 256·(*c<sub>x</sub>* + *c<sub>y</sub>*) + 32
   is drawn over the voxel turret here and under it in (a). Choose a vehicle speed at which some
   tick's key falls in that range. Falsified if the switch happens at the key of (a), + 32. A run in
@@ -1590,27 +1543,35 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
   (x, y + 1) and (x + 1, y) hides the same as one with only one of them. Falsified if 40 makes no
   difference, if the absent run differs from the explicit-default run by more than one row, or if
   in (a) the two-tile layout hides more than the one-tile layout.
-- **D17, remembered animations inside the cell pass (claim 16).** Setup: fog of war on. The
+- **D17, remembered animations against finished depth (claim 16, departure engine test).** Setup:
+  an engine scene fixture with fogged remembered buildings; this is not reachable skirmish
+  fog in the original. Retain the common map, house, speed and image controls. The
   buildings below belong to a second house and have an animation that shows above their body
   silhouette. A unit of the test house first sees them and then moves away, so that fog of war
   covers them; their remembered images are then viewed. Each part is viewed once while visible and
   once under fog. Observable: in the shared pixels, which is visible.
   - (a) A tree standing behind such a building (map north-west of it, up the screen), its image
-    overlapping the animation above the body. Expected: under fog, the tree is drawn over the
-    animation wherever they overlap. While visible, the result follows *Comparing two drawings*
+    overlapping the animation above the body. Expected: under fog, the animation is tested
+    against the finished tree depth, rather than covered merely because the tree was painted
+    later. While visible, the result follows *Comparing two drawings*
     (upright over upright) with the animation's bias from claim 13 and the tree's −12: for an
     animation with no vertical draw shift and no depth adjustment (−2), the animation shows over the
     tree when its last row is 8 to 10 rows lower on screen than the tree's or more, so choose a
-    layout with a margin of at least 15 rows. Falsified if under fog the animation shows over the
-    tree, or if in that layout the visible animation is hidden by the tree.
+    layout with a margin of at least 15 rows. With the remembered bias of claim 13, compute
+    acceptance by F2 as well: choose a pixel accepted both while visible and remembered.
+    Falsified if that pixel is hidden by the farther tree under fog or while visible. Repeat
+    with a nearer tree at a position where F2 rejects the same remembered pixel; it must be
+    hidden. Acceptance there also falsifies the departure.
   - (b) Two such buildings: a near one, and a far one whose top-left foundation cell is smaller in
     both *x* and *y* (so it ranks later, claim 16), with the far body's image overlapping the
     near building's animation above the near body. Choose a layout in which, while both are
-    visible, the animation shows over the far body in the shared pixels. Expected: under fog, the far
-    building's remembered body is drawn over the near building's remembered animation there.
-    Falsified if under fog the animation still shows over the far body. That outcome would also fit
-    a far-first ranking of remembered buildings, or the alternative of
-    `quirks.remembered_animation_in_cell_pass`.
+    visible, the animation shows over the far body in the shared pixels. On our engine, record
+    the finished writer depth and the remembered animation's pixel depth (F2, claim 13), choosing
+    a shared pixel whose remembered depth is strictly less. Expected: the remembered animation
+    shows over the far remembered body under fog too. Hiding that qualifying pixel falsifies
+    the departure. A visible-state comparison alone is insufficient because the live and
+    remembered body use different companion-image placements (F5). This tests compositing,
+    not the unresolved absolute body bias.
   - (c) A live building body behind a fogged building's animation is not tested: no layout is known
     in which a building that the local player sees stands that close behind a building it does not
     see.
@@ -1668,30 +1629,19 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
     measurable if no beam is drawn with the test lighting of S-0104 (then repeat with a darker
     ambient light).
 
-- **D20, depth reference reset at view jumps (claim 8, F1).** Setup: a flat map at level 0; a wall
-  segment (upright writer, −2), and an infantry unit of the test house standing still beside it so
-  that its own shadow (flat reader, −4) covers the wall's last three rows over part of their width.
-  Record only drawn frames in which the probe shows the same image frame. Let *s* be the screen row
-  of the wall image's last rectangle row, counted from the battlefield view's top row (0), in the
-  first drawn frame after a view jump. Procedure: (i) scroll the view by single small steps (scrolls
-  only) through at least six positions while the wall stays in view; (ii) twelve times, make a view
-  jump to a distant part of the map, then a view jump back that brings the wall into view. The jump
-  back must land at varying pixel positions: a jump to a cell (for example a click on the radar map)
-  may always land with the same top row mod 3, so use a jump whose landing follows a unit's exact
-  position, such as centring the view on a selected vehicle that drives slowly to and fro near the
-  wall, and record *s* after each landing. Observable: the number *k* of the wall's bottom rows,
-  counted up from its last row, whose pixels inside the shadow's outline are darkened, after each
-  scroll step and after each jump back, with *s* for each jump back. Expected (F1, F2 with *C* =
-  32768 + the world pixel row of the view's top row after the jump; the shadow's rows at distance
-  *j* above the wall's last row show iff *j* + ⌊*j*/3⌋ < 2 − *q*, with *q* = (−*s*) mod 3 the amount
-  the rounding Q removes from the wall's anchor): in (i), *k* never changes; in (ii), *k* = 2 − ((−*s*)
-  mod 3), so *k* is 2 when *s* mod 3 = 0, 0 when it is 1 and 1 when it is 2, the same for every jump
-  with the same *s* mod 3. Falsified if *k* is the same after every jump although *s* mod 3 took all
-  three values (the alternative of `quirks.depth_reference_reset_on_jump`), if *k* changes during the
-  scrolls of (i), or if two jumps with the same *s* mod 3 give different *k*. Inconclusive, not
-  falsified, if fewer than three values of *s* mod 3 occur in the twelve jumps (then repeat with
-  another way of jumping), or if the wall's last rectangle row is transparent where the shadow
-  covers it (then choose another place along the wall).
+- **D20, view-independent depth reference (claim 8, F1, departure engine test).** Setup:
+  a flat level-0 map with a wall (upright writer, −2) and stationary infantry whose own shadow
+  (flat reader, −4) overlaps its last three rectangle rows. Keep the same infantry frame and
+  avoid clipping either image. Let *B* be the world pixel row of the wall rectangle's last row.
+  Procedure: scroll through six positions, then jump to a distant area and back twelve times,
+  varying the landing's top world row through all three residues modulo 3. Record the number
+  *k* of darkened bottom wall rows at qualifying opaque pixels, and each landing's view origin.
+  Expected: *q* = ((32768 − *B*) mod 65536 − 2) mod 3, and *k* = 2 − *q*, independent of
+  every scroll, jump and full repaint (F2: shadow shows iff *j* + ⌊*j*/3⌋ < 2 − *q*).
+  All arithmetic is exact integer arithmetic; *j* counts rows above *B*. Any changed *k* or
+  disagreement with this value falsifies the departure, not a claim about the original.
+  Restart the same map with a different starting view; *k* must still agree. Transparent
+  wall pixels or missing shadow overlap make the run inconclusive; choose another pixel.
 - **D21, animation sort adjustment (claim 5).** Setup: a flat map; a waypoint *W*; two stock
   animation types that the stock art puts in the ground layer: type 1 with a nonzero sort adjustment
   *A* whose magnitude is at least 64 and less than 256 leptons, so that the switch below happens
@@ -1701,7 +1651,7 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
   repeat. In each run a vehicle of the same type drives the same straight route across *W*'s cell
   in the direction of increasing X + Y, its image overlapping the animation's. Observable: per tick,
   the vehicle's key (X + Y from its position), and the key *K*<sub>0</sub> or *K*<sub>1</sub> at the
-  first tick from whose following picture on the vehicle is drawn over the animation. Expected:
+  first tick whose displayed position puts the vehicle over the animation. Expected:
   *K*<sub>1</sub> − *K*<sub>0</sub> = *A*, within one tick's movement of the vehicle (claims 5 and
   6; the animation's own position cancels). Falsified if *K*<sub>1</sub> and *K*<sub>0</sub> are equal
   within one tick's movement, or differ by more than one tick's movement from *A*. Not measurable if
@@ -1719,7 +1669,7 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
     that its image passes over the turret animation's image. Runs: the turret slot's y-sort set to
     0, and set to *Y* with 64 ≤ *Y* < 256 leptons. Observable: per tick the vehicle's key (X + Y
     from its position), and the key *K*<sub>0</sub> or *K*<sub>*Y*</sub> at the first tick from
-    whose following picture on the vehicle is drawn over the turret animation. Expected:
+    whose displayed position puts the vehicle over the turret animation. Expected:
     *K*<sub>*Y*</sub> − *K*<sub>0</sub> = *Y*, within one tick's movement of the vehicle.
     Falsified if the two keys are equal within one tick's movement, or differ from *Y* by more.
   - (b) Replacement, not addition. Only if the turret animation's type has a nonzero sort
@@ -1729,7 +1679,7 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
     top-left foundation cell (*c<sub>x</sub>*, *c<sub>y</sub>*). The vehicle drives as in (a), on a
     route on which its image overlaps the animation's. Expected: the vehicle is drawn over the
     animation from the first tick at which its key is strictly greater than
-    256·(*c<sub>x</sub>* + *c<sub>y</sub>*), visible one tick later. Falsified if the switch
+    256·(*c<sub>x</sub>* + *c<sub>y</sub>*), visible in that position's first picture. Falsified if the switch
     happens near 256·(*c<sub>x</sub>* + *c<sub>y</sub>*) + *A* instead (the alternative of
     `quirks.slot_values_replace_animation_adjustments`).
   - (c) Slot depth adjustment. A wall segment placed so that its image overlaps part of the turret
@@ -1998,7 +1948,7 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
     around the switch, one map per distance). Expected: the probe and the object, both readers in
     the ground list, never hide each other through depth: the probe is drawn under the object while
     its key is smaller than the object's and over it once its key is greater, the change visible
-    one tick after the key passes (claim 6), whatever their rows. Against the wall the object
+    in the first picture showing that key (claim 6's departure), whatever their rows. Against the wall the object
     (−12) shows from a switch distance of −6 rows (one row either way allowed for transparency).
     Falsified if the probe's order against the object follows the rows instead of the keys (the
     result of a writer, as for a non-animated tree in D15), or if the wall switch distance differs
@@ -2088,7 +2038,7 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
   count, modulo the count. Repeat disguised and with unsupported counts; expected part 0.
   Any different part falsifies the alternative's implementation, not a claim about the original.
 
-- **D38, upright reader clipped at the bottom (F2).** Use the common setup and a sprite vehicle
+- **D38, view-independent upright anchor (F2, departure engine test).** Use the common setup and a sprite vehicle
   with all terrain fudges 0, on ordinary level-0 terrain. Put an upright overlay that is neither
   wall nor rock in front of it (set its flat flag off through the map override if needed), with
   bias −17 and no companion depth image. The vehicle has bias −3. Choose a placement whose
@@ -2096,13 +2046,15 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
   overlap. First capture both rectangles fully inside the view: the vehicle must show throughout
   the overlap by F2. Scroll, without a view jump, until the overlay's last row lies 5 rows above
   the view's bottom and the vehicle's last row lies below the view. Record a qualifying shared
-  pixel still inside the view and the rectangle rows in both captures. Expected: in the second
-  capture, the reader's anchor is the view's bottom, only 5 rows below the writer's anchor, so
-  its pixels in the overlap are hidden. The alternative using the unclipped anchor leaves them
-  visible. Falsified if a qualifying pixel stays visible in the second capture. Inconclusive if
-  no non-transparent shared pixel survives clipping; choose a different stock sprite or placement.
-  This tests a reader, not the still-unconfirmed repaint persistence of a clipped writer or the
-  clipping of a reused voxel image.
+  pixel still inside the view and the unclipped rectangle rows in both captures. Expected:
+  the reader keeps its own last-row anchor, so the qualifying pixel remains visible.
+  Hiding it after clipping falsifies the departure. Inconclusive if no non-transparent shared
+  pixel survives clipping; choose a different stock sprite or placement. Repeat after forcing
+  a full terrain repaint while the writer is clipped: surviving pixels must match their
+  world-aligned unclipped acceptance. Repeat with fresh and reused voxel reader images, and
+  a building using a companion depth image, calculating acceptance with F2 in each case.
+  Any clipping-dependent change at a surviving pixel falsifies the departure. These repeats
+  check writers, companion images and reused images, not unresolved original-game bugs.
 
 ## Open questions
 
@@ -2181,10 +2133,6 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
   at least once during flight; whether this happens at every move in flight (which would move it to
   the end of its list each time) is not settled. D5 and D12
   answer it. Low confidence.
-- **Reused voxel images:** the original can show a voxel model with the image it made in an earlier
-  drawn frame instead of rendering it again. The depth of such a reused image was checked to have
-  the anchor, rounding and profile of F2, but whether it clips at the view's bottom edge in the same
-  way (`quirks.upright_depth_anchor_after_clip`) was not confirmed. Medium confidence.
 - **Cell pass:** the cell pass has two further parts that have not been identified, one ranked
   before the terrain tiles and one between the terrain objects and the building bodies (claim 16). The order among terrain tiles
   themselves (which matters only where two tile pixels tie) is not known.
