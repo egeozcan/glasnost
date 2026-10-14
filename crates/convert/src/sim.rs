@@ -675,12 +675,7 @@ const GENERAL_FIELDS: &[(&str, &[u8], &str, Form)] = &[
         Dec,
     ),
     // spec: S-0101 Import mapping (ScrollMultiplier, a decimal or percent as S-0003; later layers retain the value in force)
-    (
-        "scroll_multiplier",
-        b"AudioVisual",
-        "ScrollMultiplier",
-        Dec,
-    ),
+    ("scroll_multiplier", b"AudioVisual", "ScrollMultiplier", Dec),
 ];
 
 /// Percentage fields among the game-wide fields (S-0003 Import mapping row
@@ -794,6 +789,11 @@ pub struct SimQuirks {
     /// section is read, and keeps it; off, the tree strength in force after
     /// the last layer.
     pub tree_strength_fixed_at_first_section: bool,
+    /// `quirks.chop_rounding` as the importer applies it (S-0003 claims 7
+    /// and 13, Formulas Q₅₃ and Q₂₄; S-0205 claim 5): the products of
+    /// percentages written into the ruleset as exact doubles round toward
+    /// zero; off, to nearest, ties to even. Set it as the ruleset's switch.
+    pub chop_rounding: bool,
 }
 
 impl Default for SimQuirks {
@@ -804,13 +804,15 @@ impl Default for SimQuirks {
             coefficient_zero_replaced: true,
             // spec: S-0102 Edge cases (quirks.tree_strength_fixed_at_first_section on by default: the original)
             tree_strength_fixed_at_first_section: true,
+            // spec: S-0205 claim 5 (quirks.chop_rounding on by default: the original)
+            chop_rounding: true,
         }
     }
 }
 
 impl SimQuirks {
     /// The switches by name, for the import record.
-    pub fn named(&self) -> [(&'static str, bool); 3] {
+    pub fn named(&self) -> [(&'static str, bool); 4] {
         [
             (
                 "clear_weapons_any_turret_count",
@@ -821,6 +823,7 @@ impl SimQuirks {
                 "tree_strength_fixed_at_first_section",
                 self.tree_strength_fixed_at_first_section,
             ),
+            ("chop_rounding", self.chop_rounding),
         ]
     }
 }

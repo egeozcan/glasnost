@@ -196,22 +196,30 @@ pub enum Decimal {
     NoNumber,
 }
 
-/// A decimal or percentage field (S-0003 claims 6 to 8).
+/// A decimal or percentage field (S-0003 claims 6 to 8), with the original
+/// rounding mode (`quirks.chop_rounding` on).
 pub fn decimal(stored: &[u8], field: DecimalField) -> Decimal {
+    decimal_rounded(stored, field, true)
+}
+
+/// A decimal or percentage field (S-0003 claims 6 to 8); `chop` is
+/// `quirks.chop_rounding`, which rounds a percentage's product and its
+/// narrowing (S-0003 Formulas, Q₅₃ and Q₂₄).
+pub fn decimal_rounded(stored: &[u8], field: DecimalField, chop: bool) -> Decimal {
     let Some(text) = decimal_prefix(stored) else {
         // spec: S-0003 claim 8 (our engine: keep the value in force)
         return Decimal::NoNumber;
     };
     // spec: S-0003 claim 6 (single precision)
     let Conversion { value, uncovered } = binfloat::decimal_to_binary(&text, Format::Single);
-    // spec: S-0003 claim 7 (a `%` anywhere multiplies by c, RZ53)
+    // spec: S-0003 claim 7 and Formulas (a `%` anywhere multiplies by c: Q₅₃, RZ₅₃ with quirks.chop_rounding on, RN₅₃ off)
     let percent = stored.contains(&b'%');
     let value = if percent {
-        let product = value.mul_rz(&binfloat::percent_factor(), Format::Double);
+        let product = value.mul_rounded(&binfloat::percent_factor(), Format::Double, chop);
         match field {
             DecimalField::Double => product,
-            // spec: S-0003 claim 7 (single-precision fields narrow toward zero)
-            DecimalField::Single => product.convert_rz(Format::Single),
+            // spec: S-0003 claim 7 and Formulas (single-precision fields narrow by Q₂₄)
+            DecimalField::Single => product.convert_rounded(Format::Single, chop),
         }
     } else {
         value
@@ -407,11 +415,7 @@ pub fn decimal_prefix_list_notes(stored: &[u8]) -> DecimalListNotes {
         let magnitude = rest[..n].iter().fold(0u64, |v, &d| {
             v.saturating_mul(10).saturating_add(u64::from(d - b'0'))
         });
-        let bound = if neg {
-            1u64 << 31
-        } else {
-            (1u64 << 31) - 1
-        };
+        let bound = if neg { 1u64 << 31 } else { (1u64 << 31) - 1 };
         if magnitude > bound {
             notes.overflow += 1;
         }
@@ -428,11 +432,14 @@ pub fn decimal_prefix_list_notes(stored: &[u8]) -> DecimalListNotes {
 ///
 /// `integer_prefix` is `quirks.percent_list_integer_prefix`: on, an item
 /// containing `%` gives its integer decimal prefix times *c*; off, its
-/// decimal at 53 bits times *c*.
+/// decimal at 53 bits times *c*. `chop` is `quirks.chop_rounding`: the
+/// product is rounded toward zero when it is on, to nearest (ties to even)
+/// when it is off (Q₅₃ of S-0003 Formulas).
 pub fn percent_list(
     stored: &[u8],
     k: usize,
     integer_prefix: bool,
+    chop: bool,
 ) -> (Vec<Binary>, PercentListNotes) {
     let c = binfloat::percent_factor();
     let items = list(stored, COMMON_TEXT_LIMIT);
@@ -467,12 +474,13 @@ pub fn percent_list(
                     // spec: S-0003 claim 13, Formulas (the integer-prefix warning: d ≠ i, exactly)
                     notes.prefix_differs += usize::from(integer_prefix);
                 }
+                // spec: S-0003 Formulas (the product rounded by Q₅₃: quirks.chop_rounding)
                 if integer_prefix {
-                    i.mul_rz(&c, Format::Double)
+                    i.mul_rounded(&c, Format::Double, chop)
                 } else {
-                    // spec: S-0003 Edge cases (switch off: the item's decimal at 53 bits × c, RZ53)
+                    // spec: S-0003 Edge cases (switch off: the item's decimal at 53 bits × c, Q₅₃)
                     full.unwrap_or(Binary::zero(Format::Double, false))
-                        .mul_rz(&c, Format::Double)
+                        .mul_rounded(&c, Format::Double, chop)
                 }
             } else {
                 // spec: S-0003 claim 13 (without `%`: claim 6's rule at 53 bits; no number gives +0.0)
@@ -676,6 +684,47 @@ mod tests {
         assert_eq!(value.to_exact_decimal(), "0.0999999940395355224609375");
     }
 
+    /// spec: S-0003 claim 7 and Formulas (with quirks.chop_rounding off the product is RN₅₃ and a single field narrows by RN₂₄)
+    #[test]
+    fn percent_rounding_follows_chop() {
+        let bits = |s: &[u8], f, chop| match decimal_rounded(s, f, chop) {
+            Decimal::Value { value, .. } => value.bits,
+            Decimal::NoNumber => panic!(),
+        };
+        assert_eq!(
+            bits(b"10%", DecimalField::Double, true),
+            0x3FB9_9999_9999_9999
+        );
+        assert_eq!(
+            bits(b"10%", DecimalField::Double, false),
+            0x3FB9_9999_9999_999A
+        );
+        assert_eq!(bits(b"10%", DecimalField::Single, true), 0x3DCC_CCCC);
+        assert_eq!(bits(b"10%", DecimalField::Single, false), 0x3DCC_CCCD);
+        // Exact products do not depend on the switch.
+        assert_eq!(
+            bits(b"50%", DecimalField::Double, false),
+            bits(b"50%", DecimalField::Double, true)
+        );
+        // Without `%` the switch plays no part.
+        assert_eq!(
+            bits(b"0.1", DecimalField::Double, false),
+            bits(b"0.1", DecimalField::Double, true)
+        );
+    }
+
+    /// spec: S-0003 claim 13 and Formulas (a `%` item's product is Q₅₃: RZ₅₃ with quirks.chop_rounding on, RN₅₃ off, under either integer-prefix setting)
+    #[test]
+    fn percent_list_rounding_follows_chop() {
+        for prefix in [true, false] {
+            let (on, _) = percent_list(b"10%,0.1", 2, prefix, true);
+            let (off, _) = percent_list(b"10%,0.1", 2, prefix, false);
+            assert_eq!(on[0].bits, 0x3FB9_9999_9999_9999);
+            assert_eq!(off[0].bits, 0x3FB9_9999_9999_999A);
+            assert_eq!(on[1], off[1], "an item without `%` is unaffected");
+        }
+    }
+
     /// spec: S-0003 claim 9 (scenario V5)
     #[test]
     fn tuples() {
@@ -716,7 +765,12 @@ mod tests {
     /// spec: S-0003 claim 13 (scenario V8)
     #[test]
     fn percent_lists() {
-        let (v, notes) = percent_list(b"12.5%,0.125,abc,-abc,inf,50%", ARMOUR_CLASS_COUNT, true);
+        let (v, notes) = percent_list(
+            b"12.5%,0.125,abc,-abc,inf,50%",
+            ARMOUR_CLASS_COUNT,
+            true,
+            true,
+        );
         let s: Vec<String> = v.iter().map(Binary::to_exact_decimal).collect();
         assert!(
             s[0].starts_with("0.11999999") || s[0].starts_with("0.12"),
@@ -748,20 +802,25 @@ mod tests {
                 .value
                 .mul_rz(&c, Format::Double)
         };
-        let (v, notes) = percent_list(b"12.5%,1e2%,12%,12.0%,2,-3.5", ARMOUR_CLASS_COUNT, false);
+        let (v, notes) = percent_list(
+            b"12.5%,1e2%,12%,12.0%,2,-3.5",
+            ARMOUR_CLASS_COUNT,
+            false,
+            true,
+        );
         assert_eq!(v[0], full("12.5"));
         assert_eq!(v[0].to_exact_decimal(), "0.125");
         assert_eq!(v[1].to_exact_decimal(), "1");
         // Switch off: no integer-prefix warning.
         assert_eq!(notes.prefix_differs, 0);
         assert_eq!(notes.above_one, 2);
-        let (v, notes) = percent_list(b"12.5%,1e2%,12%,12.0%", ARMOUR_CLASS_COUNT, true);
+        let (v, notes) = percent_list(b"12.5%,1e2%,12%,12.0%", ARMOUR_CLASS_COUNT, true, true);
         // 1e2% reads its integer prefix 1: 0.01.
         assert_eq!(v[1], Binary::one(Format::Double).mul_rz(&c, Format::Double));
         assert_eq!(v[2], v[3]);
         assert_eq!(notes.prefix_differs, 2);
         let twelve = "1,1,1,1,1,1,1,1,1,1,1,1";
-        let (_, notes) = percent_list(twelve.as_bytes(), ARMOUR_CLASS_COUNT, true);
+        let (_, notes) = percent_list(twelve.as_bytes(), ARMOUR_CLASS_COUNT, true, true);
         assert_eq!((notes.extra, notes.missing), (1, 0));
     }
 

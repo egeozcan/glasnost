@@ -1960,9 +1960,11 @@ impl Builder<'_> {
     /// the section but not the key resets it (S-0006 claim 5).
     fn verses(&mut self, t: &TypeRec) -> Option<Node> {
         let integer_prefix = self.i.ini_quirks.percent_list_integer_prefix;
+        // spec: S-0003 Formulas (Q₅₃ follows quirks.chop_rounding)
+        let chop = self.i.sim_quirks.chop_rounding;
         let mut notes = Vec::new();
         let list = fold(key(t, "Verses"), None, |v, e| {
-            let (vals, n) = value::percent_list(v, VERSES, integer_prefix);
+            let (vals, n) = value::percent_list(v, VERSES, integer_prefix, chop);
             notes.push((e.layer, e.line, show(v), n));
             Some(vals)
         })?;

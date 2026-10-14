@@ -173,6 +173,87 @@ impl Binary {
         Self::encode_sign(format, neg, (biased << (p - 1)) | frac)
     }
 
+    /// `(-1)^neg × m × 2^e` rounded to nearest, ties to even, to `format`
+    /// (RN of S-0205): subnormals round to the nearest multiple of the
+    /// smallest subnormal, and magnitudes beyond the largest finite value
+    /// become infinity.
+    pub fn round_nearest_even(format: Format, neg: bool, m: u128, e: i64) -> Self {
+        if m == 0 {
+            return Self::zero(format, neg);
+        }
+        let p = i64::from(format.precision());
+        let bitlen = i64::from(128 - m.leading_zeros());
+        let top = e + bitlen - 1;
+        if top > format.emax() {
+            return Self::infinity(format, neg);
+        }
+        let sub_unit = format.emin() - (p - 1);
+        // Bits dropped by the toward-zero result.
+        let shift = if top < format.emin() {
+            sub_unit - e
+        } else {
+            bitlen - p
+        };
+        let down = Self::round_toward_zero(format, neg, m, e);
+        if shift <= 0 || shift > 128 {
+            // Exact, or far below half the smallest subnormal.
+            return down;
+        }
+        let rem = if shift == 128 {
+            m
+        } else {
+            m & ((1u128 << shift) - 1)
+        };
+        let half = 1u128 << (shift - 1);
+        let odd = down.bits & 1 == 1;
+        if rem > half || (rem == half && odd) {
+            // The next magnitude up: one more in the bit pattern (a carry
+            // into the exponent, or into infinity, is the IEEE successor).
+            Self {
+                format,
+                bits: down.bits + 1,
+            }
+        } else {
+            down
+        }
+    }
+
+    /// The product of `self` and `other`, rounded toward zero when `chop`
+    /// is set and to nearest, ties to even, otherwise (S-0205,
+    /// `quirks.chop_rounding`).
+    pub fn mul_rounded(&self, other: &Binary, out: Format, chop: bool) -> Self {
+        if chop {
+            return self.mul_rz(other, out);
+        }
+        match (self.decode(), other.decode()) {
+            (
+                Decoded::Finite {
+                    neg: na,
+                    m: ma,
+                    e: ea,
+                },
+                Decoded::Finite {
+                    neg: nb,
+                    m: mb,
+                    e: eb,
+                },
+            ) => Self::round_nearest_even(out, na != nb, u128::from(ma) * u128::from(mb), ea + eb),
+            // Infinities and NaN do not depend on the rounding.
+            _ => self.mul_rz(other, out),
+        }
+    }
+
+    /// `self` converted to `out`, rounded toward zero when `chop` is set
+    /// and to nearest, ties to even, otherwise.
+    pub fn convert_rounded(&self, out: Format, chop: bool) -> Self {
+        match self.decode() {
+            Decoded::Finite { neg, m, e } if !chop => {
+                Self::round_nearest_even(out, neg, u128::from(m), e)
+            }
+            _ => self.convert_rz(out),
+        }
+    }
+
     /// The product of `self` and `other`, rounded toward zero to `out`
     /// (exact product, one rounding). Infinity times a non-zero finite
     /// value is infinity.
@@ -583,6 +664,47 @@ mod tests {
             decimal_to_binary(&dec("0.1"), Format::Single).value.bits,
             0x3DCC_CCCD
         );
+    }
+
+    // spec: S-0205 claim 5 (round to nearest, ties to even, when quirks.chop_rounding is off)
+    #[test]
+    fn nearest_even_rounding() {
+        let rn = |m: u128, e: i64| Binary::round_nearest_even(Format::Single, false, m, e).bits;
+        // 2^24 + 1 is a tie between 2^24 (even) and 2^24 + 2.
+        assert_eq!(
+            rn((1 << 24) + 1, 0),
+            Binary::from_i64(Format::Single, 1 << 24).bits
+        );
+        // 2^24 + 3 ties to the even 2^24 + 4.
+        assert_eq!(
+            rn((1 << 24) + 3, 0),
+            Binary::from_i64(Format::Single, (1 << 24) + 4).bits
+        );
+        // Above half rounds up; below half rounds down.
+        assert_eq!(
+            rn((1 << 26) + 3, 0),
+            Binary::from_i64(Format::Single, (1 << 26) + 4).bits
+        );
+        assert_eq!(
+            rn((1 << 26) + 1, 0),
+            Binary::from_i64(Format::Single, 1 << 26).bits
+        );
+        // A carry into the exponent: 2^25 − 1 rounds to 2^25.
+        assert_eq!(
+            rn((1 << 25) - 1, 0),
+            Binary::from_i64(Format::Single, 1 << 25).bits
+        );
+        // Beyond the largest finite value: infinity.
+        assert_eq!(rn(1, 128), Binary::infinity(Format::Single, false).bits);
+        assert_eq!(rn((1 << 24) - 1, 104), 0x7F7F_FFFF);
+        assert_eq!(
+            rn((1 << 25) - 1, 103),
+            Binary::infinity(Format::Single, false).bits
+        );
+        // Subnormals: half the smallest subnormal ties to 0, three halves to 2.
+        assert_eq!(rn(1, -150), 0);
+        assert_eq!(rn(3, -150), 2);
+        assert_eq!(rn(1, -300), 0);
     }
 
     /// spec: S-0003 claim 13 (double precision, 0.125 exact)
