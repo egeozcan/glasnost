@@ -5,8 +5,8 @@
 //!
 //! The switches of the render crate live with the code they govern
 //! (`render::projection::ProjectionQuirks`, `render::compose::ComposeQuirks`,
-//! `render::light::LightQuirks`, `render::voxel::VoxelQuirks` and
-//! `RecoilQuirks`, `render::overlay::OverlayQuirks`,
+//! `render::light::LightQuirks`, `render::voxel::VoxelQuirks`,
+//! `render::overlay::OverlayQuirks`,
 //! `render::palette::PaletteQuirks`). [`NOT_IMPLEMENTED`] lists the named
 //! switches of the rendering specs that have no field, with the reason;
 //! the test at the end of this file checks that every switch the rendering
@@ -230,10 +230,6 @@ pub const NOT_IMPLEMENTED: &[(&str, &str)] = &[
     ),
     // S-0105
     (
-        "turret_recoil_leaves_barrel",
-        "S-0105 claim 27: recoil placement in a pose is not applied (no firing yet)",
-    ),
-    (
         "vehicle_no_recoil",
         "S-0105 claim 28: recoil placement is not applied; vehicles never recoil, as with the switch on",
     ),
@@ -242,24 +238,12 @@ pub const NOT_IMPLEMENTED: &[(&str, &str)] = &[
         "S-0105 claim 37: recoil placement is not applied; a barrel without a turret never recoils, as with the switch on",
     ),
     (
-        "alt_body_turret_model",
-        "S-0105 claim 12: the alternative body and spawned-aircraft docking are not drawn; the main body always is",
-    ),
-    (
         "voxel_single_pixel",
         "S-0105 claim 22: the on state is drawn; the off state (no gaps in magnified sections) is not implemented",
     ),
     (
         "voxel_no_intersection_depth",
         "S-0105 claim 23: the on state is drawn; the off state (a depth test between sections) is not implemented",
-    ),
-    (
-        "voxel_buffer_wrap",
-        "S-0105 claim 22: the on state is drawn; which off state the switch selects is a question for the lead in S-0105",
-    ),
-    (
-        "barrel_pivot_frame_mixup",
-        "S-0105 claim 10: the on state is drawn; which off state the switch selects is a question for the lead in S-0105",
     ),
     (
         "no_turret_shadow",
@@ -525,7 +509,7 @@ mod tests {
         use glasnost_render::overlay::OverlayQuirks;
         use glasnost_render::palette::PaletteQuirks;
         use glasnost_render::shroud::ShroudQuirks;
-        use glasnost_render::voxel::{RecoilQuirks, VoxelQuirks};
+        use glasnost_render::voxel::VoxelQuirks;
 
         // The switches of the renderer and the map viewer.
         let ours: Vec<(&str, bool)> = [
@@ -534,7 +518,6 @@ mod tests {
             ComposeQuirks::default().named().to_vec(),
             LightQuirks::default().named().to_vec(),
             VoxelQuirks::default().named().to_vec(),
-            RecoilQuirks::default().named().to_vec(),
             OverlayQuirks::default().named().to_vec(),
             PaletteQuirks::default().named().to_vec(),
             ShroudQuirks::default().named().to_vec(),

@@ -648,11 +648,12 @@ pub struct Painter {
     /// claims 26, 31), as scene images with their offsets.
     voxels: BTreeMap<(Kind, usize), voxel::ImageCache<Option<PlacedPart>>>,
     /// Vehicle shadows with the current part image excluded, by unmasked
-    /// shadow image and part images, for `quirks.voxel_shadow_cached_cutouts`
-    /// off (S-0105 claim 39): bounded by the cached images it combines.
+    /// shadow image and part images (S-0105 claim 39): a memo of the
+    /// per-appearance exclusion, bounded by the cached images it combines.
     cutouts: BTreeMap<(u32, Vec<u32>), Option<PlacedPart>>,
-    /// The voxel buffer kept between fresh voxel draws, with the
-    /// depth-buffered mode (S-0105 claims 32, 34).
+    /// Where fresh voxel draws are made (S-0105 claims 32, 34): each starts
+    /// transparent, and the depth-buffered mode is on only during a fresh
+    /// depth-option part draw.
     canvas: voxel::VoxelCanvas,
     /// Parsed voxel models by file.
     models: BTreeMap<Vec<u8>, Option<std::rc::Rc<voxel::VoxelModel>>>,
@@ -750,11 +751,10 @@ pub fn build_parts(inputs: &Inputs, live: bool) -> (Built, Painter) {
     build_parts_with(inputs, live, voxel::VoxelCanvas::new())
 }
 
-/// [`build_parts`] with the voxel buffer `canvas` that earlier fresh voxel
-/// draws of the program left, with its depth-buffered mode: S-0105 claim 34
-/// and S2 keep both across games (only the start of the program resets
-/// them). The image caches start empty, as S-0105 claim 26 has our engine
-/// empty them when a game starts.
+/// [`build_parts`] with the voxel canvas `canvas` carried over from earlier
+/// games. Its depth-buffered mode is off between games and no earlier draw
+/// affects a fresh one (S-0105 claims 32, 34, S2). The image caches start
+/// empty, as S-0105 claim 26 has our engine empty them when a game starts.
 pub fn build_parts_with(
     inputs: &Inputs,
     live: bool,
@@ -2301,9 +2301,9 @@ impl Builder<'_> {
                 let turret_frame = voxel::building_turret_frame(counter, t.frame_count() as u32);
                 // spec: S-0105 claim 16 (quirks.barrel_frame_zero)
                 let barrel_frame = voxel::barrel_frame_with_turret(turret_frame, &q);
-                // spec: S-0105 claim 26 (building turret key; the barrel's is the turret's,
-                // quirks.barrel_cache_ignores_elevation)
-                let turret_key = voxel::building_turret_key(facing, turret_frame, &q);
+                // spec: S-0105 claim 26 (building turret key; the barrel's is the turret's
+                // plus the current 32-step elevation)
+                let turret_key = voxel::building_turret_key(facing, turret_frame);
                 let mut v = vec![
                     (
                         Some(t),
@@ -2315,7 +2315,7 @@ impl Builder<'_> {
                         barrel,
                         pose.barrel,
                         barrel_frame,
-                        voxel::barrel_key(turret_key, elevation, &q),
+                        voxel::barrel_key(turret_key, elevation),
                     ),
                 ];
                 // spec: S-0105 claim 11 (turret first when its 4-step facing is 1 or 2)
@@ -2325,7 +2325,7 @@ impl Builder<'_> {
                 v
             }
             // spec: S-0105 claim 37 (a barrel without a turret: V · Rz(θ) · Ry(φ), frame from the counter;
-            // kept with the barrel images under its facing and frame)
+            // kept with the barrel images under its facing, frame and elevation)
             None => {
                 let frame = barrel.as_ref().map_or(0, |b| {
                     voxel::barrel_only_frame(counter, b.frame_count() as u32)
@@ -2334,7 +2334,7 @@ impl Builder<'_> {
                     barrel,
                     voxel::building_barrel_only(facing, elevation, &q),
                     frame,
-                    voxel::barrel_only_key(facing, frame, elevation, &q),
+                    voxel::barrel_only_key(facing, frame, elevation),
                 )]
             }
         };
@@ -2955,17 +2955,9 @@ impl Builder<'_> {
         let shadow_file = body_file.clone();
         let draw_shadow = move |b: &mut Self, (section, aircraft_like): (usize, bool)| {
             let body = b.voxel_model(&shadow_file)?;
-            // spec: S-0105 claim 32 (quirks.depth_mode_leak: a depth-option type's fresh shadow
-            // switches the mode on; off, it never does)
-            b.p.canvas.draw_shadow(
-                &body,
-                section,
-                &pose().shadow,
-                0,
-                aircraft_like,
-                depth_buffered,
-                &q,
-            )
+            // spec: S-0105 claim 32 (a shadow never enables depth mode, whatever the type's option)
+            b.p.canvas
+                .draw_shadow(&body, section, &pose().shadow, 0, aircraft_like, &q)
         };
         // An aircraft's shadow comes before the body, which covers it.
         if kind != Kind::Vehicles
@@ -2987,8 +2979,9 @@ impl Builder<'_> {
         let mut placed = Vec::new();
         // spec: S-0105 claim 16 (walk counter 0: body frame 0; the simulation keeps no walk counter yet)
         let body_frame = 0;
-        // spec: S-0105 claim 26 (body key; flat ground, the alternative-model state off: claim 12 is not drawn)
-        let key = voxel::body_key(voxel::RAMP_FLAT, body_raw, false, body_frame, &q);
+        // spec: S-0105 claim 26 (body key; flat ground, the alternative-model state off: claim 12's
+        // alternative body is not drawn, the main body always is)
+        let key = voxel::body_key(voxel::RAMP_FLAT, body_raw, false, body_frame);
         if let Some(part) = self.cached_part(kind, idx, key, |b| {
             let body = b.voxel_model(&body_file)?;
             let vpl = b.vpl();
@@ -3027,12 +3020,11 @@ impl Builder<'_> {
                 None,
                 false,
                 turret_frame,
-                &q,
             );
             let mut parts = vec![
                 (false, "turret", voxel::ImageKey::Turret(turret_key)),
-                // spec: S-0105 claim 26 (barrel key: the turret's key, quirks.barrel_cache_ignores_elevation)
-                (true, "barrel", voxel::barrel_key(turret_key, elevation, &q)),
+                // spec: S-0105 claim 26 (barrel key: the turret's key plus the current 32-step elevation)
+                (true, "barrel", voxel::barrel_key(turret_key, elevation)),
             ];
             // spec: S-0105 claim 11 (turret first when its 4-step facing is 1 or 2)
             if !voxel::turret_drawn_first(m.turret) {
@@ -3083,7 +3075,6 @@ impl Builder<'_> {
                 &mut self.p.cutouts,
                 shadow_key,
                 &placed,
-                q.voxel_shadow_cached_cutouts,
                 fresh,
             );
             if let Some(part) = part {
@@ -3131,53 +3122,36 @@ fn placed_image(scene: &Scene, (id, offset): PlacedPart) -> voxel::PartImage {
 /// cache holds `key`); `parts` are this draw's completed body, turret and
 /// barrel images.
 ///
-/// With `cached_cutouts` (`quirks.voxel_shadow_cached_cutouts`) a fresh
-/// shadow excludes `parts` and is cached so, and a reused one keeps the
-/// exclusions it was made with, whatever the current parts. Without it the
-/// cache keeps the unmasked footprint and every appearance excludes the
-/// current parts.
+/// The cache keeps the unmasked footprint, and every appearance, fresh or
+/// reused, excludes the current parts (claim 39).
 fn vehicle_shadow(
     scene: &mut Scene,
     cache: &mut voxel::ImageCache<Option<PlacedPart>>,
     cutouts: &mut BTreeMap<(u32, Vec<u32>), Option<PlacedPart>>,
     key: voxel::ImageKey,
     parts: &[PlacedPart],
-    cached_cutouts: bool,
     fresh: Option<Option<voxel::PartImage>>,
 ) -> Option<PlacedPart> {
-    let exclude = |scene: &Scene, mut img: voxel::PartImage| {
-        let images: Vec<voxel::PartImage> = parts.iter().map(|&p| placed_image(scene, p)).collect();
-        let refs: Vec<&voxel::PartImage> = images.iter().collect();
-        voxel::exclude_own_image(&mut img, &refs);
-        img
-    };
-    let made = match fresh {
+    let unmasked = match fresh {
         Some(img) => {
-            // spec: S-0105 claim 39 (quirks.voxel_shadow_cached_cutouts: the exclusions become
-            // part of the cached image; off, the cache keeps the unmasked footprint)
-            let img = if cached_cutouts {
-                img.map(|i| exclude(scene, i))
-            } else {
-                img
-            };
+            // spec: S-0105 claims 31, 39 (cache only the unmasked footprint)
             let part = img.and_then(|i| add_part_image(scene, &i));
             cache.insert(key, part);
             part
         }
-        // spec: S-0105 claims 31, 39 (a reused shadow is not recomputed)
+        // spec: S-0105 claims 31, 39 (a reused footprint is not redrawn)
         None => cache.get(&key).copied().flatten(),
-    };
-    if cached_cutouts {
-        return made;
-    }
-    let unmasked = made?;
-    // spec: S-0105 Edge cases and quirks (quirks.voxel_shadow_cached_cutouts off: exclude the
-    // current completed part image on every appearance)
+    }?;
+    // spec: S-0105 claim 39 (exclude this object's current completed part image on every
+    // appearance, fresh or reused; no old-pose cutouts persist)
     let ids = (unmasked.0, parts.iter().map(|p| p.0).collect());
     if let Some(p) = cutouts.get(&ids) {
         return *p;
     }
-    let img = exclude(scene, placed_image(scene, unmasked));
+    let mut img = placed_image(scene, unmasked);
+    let images: Vec<voxel::PartImage> = parts.iter().map(|&p| placed_image(scene, p)).collect();
+    let refs: Vec<&voxel::PartImage> = images.iter().collect();
+    voxel::exclude_own_image(&mut img, &refs);
     let part = add_part_image(scene, &img);
     cutouts.insert(ids, part);
     part
@@ -3531,37 +3505,11 @@ mod shadow_tests {
         scene.images[p.unwrap().0 as usize].pixels().to_vec()
     }
 
-    /// spec: S-0105 claim 39 (a fresh vehicle shadow excludes its own completed part image;
-    /// reuse keeps the exclusions, quirks.voxel_shadow_cached_cutouts on)
+    /// spec: S-0105 claims 31, 39 (the cache keeps the unmasked footprint; the current
+    /// completed part image is excluded on every appearance, fresh or reused, so no old-pose
+    /// cutout persists; lead-confirmed departure)
     #[test]
-    fn cached_cutouts_are_kept_on_reuse() {
-        let mut scene = Scene::default();
-        let mut cache = voxel::ImageCache::default();
-        let mut cutouts = BTreeMap::new();
-        let key = voxel::shadow_key(voxel::RAMP_FLAT, 0);
-        // Part image A covers screen x = 1; B covers x = 2 instead.
-        let a = add_part_image(&mut scene, &img(1, 1, [1, 0], &[9])).unwrap();
-        let b = add_part_image(&mut scene, &img(1, 1, [2, 0], &[9])).unwrap();
-        let m = voxel::SHADOW_MARK;
-        let first = vehicle_shadow(
-            &mut scene,
-            &mut cache,
-            &mut cutouts,
-            key,
-            &[a],
-            true,
-            Some(Some(footprint())),
-        );
-        assert_eq!(pixels(&scene, first), [m, 0, m, m]);
-        // Same key, part B: the cached shadow is reused with A's cutout.
-        let again = vehicle_shadow(&mut scene, &mut cache, &mut cutouts, key, &[b], true, None);
-        assert_eq!(again, first);
-    }
-
-    /// spec: S-0105 claim 39 and Edge cases and quirks (quirks.voxel_shadow_cached_cutouts
-    /// off: the current completed part image is excluded on every appearance)
-    #[test]
-    fn uncached_cutouts_follow_the_current_parts() {
+    fn cutouts_follow_the_current_parts() {
         let mut scene = Scene::default();
         let mut cache = voxel::ImageCache::default();
         let mut cutouts = BTreeMap::new();
@@ -3575,18 +3523,20 @@ mod shadow_tests {
             &mut cutouts,
             key,
             &[a],
-            false,
             Some(Some(footprint())),
         );
         assert_eq!(pixels(&scene, first), [m, 0, m, m]);
         // The cache holds the unmasked footprint.
         assert_eq!(pixels(&scene, *cache.get(&key).unwrap()), [m; 4]);
-        let second = vehicle_shadow(&mut scene, &mut cache, &mut cutouts, key, &[b], false, None);
+        let second = vehicle_shadow(&mut scene, &mut cache, &mut cutouts, key, &[b], None);
         // B's transparent pixel at x = 2 excludes nothing; its pixel at x = 3 does.
         assert_eq!(pixels(&scene, second), [m, m, m, 0]);
         // The same parts again reuse the masked image: the scene does not grow.
         let n = scene.images.len();
-        let third = vehicle_shadow(&mut scene, &mut cache, &mut cutouts, key, &[b], false, None);
+        let third = vehicle_shadow(&mut scene, &mut cache, &mut cutouts, key, &[b], None);
+        // Back to A's pose: A's cutout again, not B's.
+        let fourth = vehicle_shadow(&mut scene, &mut cache, &mut cutouts, key, &[a], None);
+        assert_eq!(fourth, first);
         assert_eq!((third, scene.images.len()), (second, n));
     }
 }

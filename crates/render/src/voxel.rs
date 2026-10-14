@@ -1,6 +1,6 @@
 //! Voxel rendering (S-0105): CPU draws of a voxel model part (body, turret
-//! or barrel) or of a voxel shadow in a given pose, the voxel buffer kept
-//! between draws, and the image cache's keys.
+//! or barrel) or of a voxel shadow in a given pose, the depth-buffered
+//! mode of fresh draws, and the image cache's keys.
 //!
 //! What is here:
 //!
@@ -16,12 +16,13 @@
 //!   claim 6, F9) and the HVA frames each part uses (claim 16);
 //! - lighting: the light in the model frame and the shade of each normal
 //!   index (claims 17, 18, 20, F4), and the VPL lookup (claim 19);
-//! - rasterisation of one part into a fresh voxel buffer ([`draw_model`],
-//!   claims 13–15, 21–25, 35, 36, F5, F6, F8) and of a shadow footprint
-//!   ([`draw_shadow`], claims 29–31, F10);
-//! - the voxel buffer and depth plane kept between fresh draws, with their
-//!   clear area and the depth-buffered mode and its leak ([`VoxelCanvas`],
-//!   claims 24, 32, 34, S2);
+//! - rasterisation of one part into a fresh, fully transparent image with
+//!   unwrapped signed coordinates ([`draw_model`], claims 13–15, 21–25, 34,
+//!   35, 36, F5, F6, F8) and of a shadow footprint ([`draw_shadow`],
+//!   claims 29–31, F10), and a vehicle shadow's own-image exclusion
+//!   ([`exclude_own_image`], claim 39);
+//! - the depth-buffered mode, on only during a fresh depth-option part draw
+//!   ([`VoxelCanvas`], claims 24, 32, 33, 34, S2);
 //! - the image cache's keys and reuse ([`ImageKey`], [`ImageCache`],
 //!   claims 26, 31, 37);
 //! - the recoil slide of a building turret or barrel as a pure state
@@ -37,13 +38,22 @@
 //!
 //! - stale shades of normal indices outside the part's table (claim 20):
 //!   such indices get shade 0, the value at program start;
-//! - recoil placement in a pose (claim 27): [`RecoilCycle`] gives the slide,
-//!   but where the shift enters the turret and barrel transforms is not
-//!   applied here;
+//! - recoil placement in a pose (claims 10, 27): [`RecoilCycle`] gives the
+//!   slide, but the shift (*−λ_turret* for the turret and
+//!   *−(λ_turret + λ_barrel)* for the barrel, along the turret's forward
+//!   axis, not tilted by elevation) is not applied to the poses here;
 //! - ramp tilt and locomotor shifts (claims 7, 25, 30): left to the planned
 //!   voxel tilt spec; poses here are on flat ground;
 //! - alternative and multiple models (claim 12): the caller picks the
-//!   model.
+//!   model (with the alternative-body option and no alternative body, the
+//!   main body, and the turret drawn as a turret);
+//! - images larger than [`IMAGE_LIMIT`] keep only a window of their copy
+//!   rectangle (interim, Q-0470).
+//!
+//! S-0105's lead-confirmed presentation departures (wrap, carry, partial
+//! clears, depth-mode leak, reduced frame keys, barrel keys without
+//! elevation, pivot mixup, recoil hold and refire, cached shadow cutouts)
+//! are fixed here with no switch.
 
 use std::collections::BTreeMap;
 use std::f64::consts::PI;
@@ -62,10 +72,11 @@ use crate::rz::{add_rz, div_rz, dot3_rz, mul_f32_rz, mul_rz, sub_rz, to_f32_rz, 
 /// original's behaviour (S-0105 Edge cases and quirks).
 ///
 /// Switches of S-0105 not here: `voxel_single_pixel` and
-/// `voxel_no_intersection_depth` (fixed behaviour not implemented),
-/// `voxel_buffer_wrap` and `barrel_pivot_frame_mixup` (fixed behaviour is
-/// an open question for the lead), and the switches of claims 12, 27, 28 and 37 that concern model choice and
-/// recoil placement. `voxel_stale_normal_shades` is here only for its fixed
+/// `voxel_no_intersection_depth` (fixed behaviour not implemented), and
+/// the switches of claims 28 and 37 that concern recoil placement
+/// (`vehicle_no_recoil`, `barrel_only_no_recoil`). The bugs S-0105 lists
+/// as lead-confirmed presentation departures have no switch: their
+/// corrected rule is the only behaviour here. `voxel_stale_normal_shades` is here only for its fixed
 /// value. The round-toward-zero switch belongs to the planned number
 /// domains spec, not to S-0105.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -91,9 +102,6 @@ pub struct VoxelQuirks {
     /// the table and below 253 show a stale shade (here always shade 0, the
     /// program-start value; stale state is not modelled). Off: shade 16.
     pub voxel_stale_normal_shades: bool,
-    /// `quirks.voxel_x_carry_into_y` (F5): outside the depth-buffered mode,
-    /// x carries add 1/256 pixel to y. Off: independent components.
-    pub voxel_x_carry_into_y: bool,
     /// `quirks.voxel_section_sort_ties` (claim 23, F8): sections with equal
     /// nearest depth need not keep file order; F8 fixes six tie rows and
     /// every all-equal part, and other mixed ties follow an interim
@@ -102,10 +110,6 @@ pub struct VoxelQuirks {
     /// `quirks.voxel_depth_double_width` (claim 24): depth-buffered voxels
     /// are two pixels wide. Off: one pixel.
     pub voxel_depth_double_width: bool,
-    /// `quirks.voxel_depth_zero_hidden` (claim 24): depths wrap modulo 256
-    /// and the plane starts at 0, so depth 0 is never drawn. Off: the plane
-    /// starts below every depth and depths are compared unwrapped.
-    pub voxel_depth_zero_hidden: bool,
     /// `quirks.voxel_mode0_misread` (claim 35): normal mode 0 reads one
     /// value per voxel. Off: colour and normal per voxel, colour unlit.
     pub voxel_mode0_misread: bool,
@@ -135,45 +139,6 @@ pub struct VoxelQuirks {
     /// file does not supply read as zero and a missing or truncated file
     /// does not stop the game. Off: the importer rejects such a file.
     pub vpl_unloaded_rows_blank: bool,
-    /// `quirks.voxel_cache_frame_mod32` (claim 26): body image keys hold
-    /// the HVA frame modulo 32 and turret image keys the turret frame
-    /// modulo 256, so frames *f* and *f* + 32 of a body (*f* + 256 of a
-    /// turret) share an image. Off: keys hold the full frame.
-    pub voxel_cache_frame_mod32: bool,
-    /// `quirks.voxel_cache_alt_turret_frame` (claim 26): a vehicle turret's
-    /// key holds *v = f mod 256* with the alternative-model state off and
-    /// *2⌊(f mod 256) / 2⌋ + 1* with it on. Off: the key holds the state and
-    /// the frame apart.
-    pub voxel_cache_alt_turret_frame: bool,
-    /// `quirks.barrel_cache_ignores_elevation` (claims 26, 37): a barrel
-    /// image's key is the turret's key (claim 37's key for a barrel without
-    /// a turret), without the elevation. Off: the 32-step elevation is part
-    /// of the barrel key.
-    pub barrel_cache_ignores_elevation: bool,
-    /// `quirks.voxel_depth_plane_partial_clear` (claims 24, 34): the depth
-    /// plane is cleared only over the clear area, and only by draws made in
-    /// the depth-buffered mode. Off: the whole depth plane is cleared before
-    /// every draw made in that mode.
-    pub voxel_depth_plane_partial_clear: bool,
-    /// `quirks.voxel_colour_partial_clear` (claim 34): before a fresh draw
-    /// the colour plane is cleared over the clear area only (or as a whole
-    /// when that area does not fit in the buffer), so pixels written outside
-    /// it survive into later images. Off: every fresh draw starts on a fully
-    /// transparent colour plane.
-    pub voxel_colour_partial_clear: bool,
-    /// `quirks.depth_mode_leak` (claims 32 and 34, S2): a depth-option
-    /// type's fresh shadow switches the depth-buffered mode on, is itself
-    /// made in it, and leaves it on for every later fresh draw until a
-    /// depth-option part's fresh draw ends. Off (Q-0056): a shadow never
-    /// switches the mode on and is always made with it off; the mode is on
-    /// only during a fresh depth-option part draw.
-    pub depth_mode_leak: bool,
-    /// `quirks.voxel_shadow_cached_cutouts` (claim 39): a vehicle shadow
-    /// keeps the own-image exclusions of the draw that made its cached
-    /// image, shared by every object of the type with the same shadow key.
-    /// Off: the cached shadow is the unmasked footprint, and every
-    /// appearance excludes the current completed part image.
-    pub voxel_shadow_cached_cutouts: bool,
 }
 
 impl Default for VoxelQuirks {
@@ -186,10 +151,8 @@ impl Default for VoxelQuirks {
             voxel_eye_in_model_frame: true,
             voxel_light_first_section_mode: true,
             voxel_stale_normal_shades: true,
-            voxel_x_carry_into_y: true,
             voxel_section_sort_ties: true,
             voxel_depth_double_width: true,
-            voxel_depth_zero_hidden: true,
             voxel_mode0_misread: true,
             voxel_topdown_column_origin: true,
             shadow_double_width: true,
@@ -198,20 +161,13 @@ impl Default for VoxelQuirks {
             barrel_elevation_quantised: true,
             barrel_frame_zero: true,
             vpl_unloaded_rows_blank: true,
-            voxel_cache_frame_mod32: true,
-            voxel_cache_alt_turret_frame: true,
-            barrel_cache_ignores_elevation: true,
-            voxel_depth_plane_partial_clear: true,
-            voxel_colour_partial_clear: true,
-            depth_mode_leak: true,
-            voxel_shadow_cached_cutouts: true,
         }
     }
 }
 
 impl VoxelQuirks {
     /// The switches by name.
-    pub fn named(&self) -> [(&'static str, bool); 25] {
+    pub fn named(&self) -> [(&'static str, bool); 16] {
         [
             ("table_trig_negative_bias", self.table_trig_negative_bias),
             ("hva_scale_first_section", self.hva_scale_first_section),
@@ -222,10 +178,8 @@ impl VoxelQuirks {
                 self.voxel_light_first_section_mode,
             ),
             ("voxel_stale_normal_shades", self.voxel_stale_normal_shades),
-            ("voxel_x_carry_into_y", self.voxel_x_carry_into_y),
             ("voxel_section_sort_ties", self.voxel_section_sort_ties),
             ("voxel_depth_double_width", self.voxel_depth_double_width),
-            ("voxel_depth_zero_hidden", self.voxel_depth_zero_hidden),
             ("voxel_mode0_misread", self.voxel_mode0_misread),
             (
                 "voxel_topdown_column_origin",
@@ -243,28 +197,6 @@ impl VoxelQuirks {
             ),
             ("barrel_frame_zero", self.barrel_frame_zero),
             ("vpl_unloaded_rows_blank", self.vpl_unloaded_rows_blank),
-            ("voxel_cache_frame_mod32", self.voxel_cache_frame_mod32),
-            (
-                "voxel_cache_alt_turret_frame",
-                self.voxel_cache_alt_turret_frame,
-            ),
-            (
-                "barrel_cache_ignores_elevation",
-                self.barrel_cache_ignores_elevation,
-            ),
-            (
-                "voxel_depth_plane_partial_clear",
-                self.voxel_depth_plane_partial_clear,
-            ),
-            ("depth_mode_leak", self.depth_mode_leak),
-            (
-                "voxel_colour_partial_clear",
-                self.voxel_colour_partial_clear,
-            ),
-            (
-                "voxel_shadow_cached_cutouts",
-                self.voxel_shadow_cached_cutouts,
-            ),
         ]
     }
 }
@@ -613,8 +545,7 @@ pub struct VehiclePose {
 /// - *D = Rz(θ_body)* (claims 3, 7; the ramp tilt of the planned voxel tilt
 ///   spec is not applied),
 /// - *T = D · X(d) · Rz(θ_rel)* with *d = δ × ρ* (claims 4, 8, F3),
-/// - *B = T · Tr(−t) · Ry(φ) · Tr(t)* with *t* the translation of *T*
-///   (claims 6, 10),
+/// - *B = T · Ry(φ)*, pitched about the turret's origin (claims 6, 10),
 ///
 /// each drawn with *V* in front. `elevation_raw` is the barrel-elevation
 /// facing (16384 = level; see [`barrel_elevation_after`]).
@@ -662,13 +593,11 @@ pub fn vehicle_local_transforms(
     [d, t, b]
 }
 
-/// *B = T · Tr(−t) · Ry(φ) · Tr(t)* (S-0105 claim 10).
+/// *B = T · Ry(φ)*: the barrel pitches about the lateral axis through the
+/// turret's origin (S-0105 claim 10).
 fn barrel_from_turret(t: &Mat34, elevation_raw: u16, quirks: &VoxelQuirks) -> Mat34 {
-    let tr = t.translation();
-    // spec: S-0105 claim 10 (quirks.barrel_pivot_frame_mixup: pivot at −t)
-    t.translate(tr.map(|c| -c))
-        .rotate_y(barrel_pitch(elevation_raw, quirks), quirks)
-        .translate(tr)
+    // spec: S-0105 claim 10 (B = T · Ry(φ); lead-confirmed pivot departure)
+    t.rotate_y(barrel_pitch(elevation_raw, quirks), quirks)
 }
 
 /// Draw transforms (view included) of a building's voxel turret and barrel.
@@ -683,7 +612,7 @@ pub struct BuildingPose {
 }
 
 /// Poses a building's voxel turret and barrel (S-0105 claims 5, 9, 10,
-/// 11): *T = Rz(θ) · X(d_b)*, *B = T · Tr(−t) · Ry(φ) · Tr(t)*. Both images
+/// 11): *T = Rz(θ) · X(d_b)*, *B = T · Ry(φ)*. Both images
 /// are placed around the turret anchor (the building's draw point moved by
 /// its turret-animation x and y displacements, Terms), which the caller
 /// adds to the draw point.
@@ -1749,16 +1678,20 @@ fn fixed_column_steps(
 // Rasterisation (claims 21–25, F5, F6, F8)
 // ---------------------------------------------------------------------------
 
-/// Side of the voxel buffer (S-0105 Constants).
-pub const BUFFER_SIZE: usize = 256; // spec: S-0105 Terms (the voxel buffer), Constants
-/// Buffer centre, pixels (S-0105 F5, F6).
-const BUFFER_CENTRE: f64 = 128.0; // spec: S-0105 Constants (buffer centre), Formulas F5, F6
+/// Voxel-image coordinate origin shift, pixels (S-0105 F5, F6).
+const IMAGE_ORIGIN: f64 = 128.0; // spec: S-0105 Constants (voxel-image coordinate origin shift), Formulas F5, F6
 /// Copy margin on every side, pixels (S-0105 claim 25).
 const COPY_MARGIN: i64 = 4; // spec: S-0105 claim 25, Constants (copy margin)
 /// Sub-pixel units per pixel (S-0105 F5).
 const SUBPIXEL: f64 = 256.0; // spec: S-0105 Formulas F5, Constants (sub-pixel precision)
-/// Positions wrap modulo this many sub-pixel units (S-0105 F5).
-const POSITION_WRAP: u64 = 65536; // spec: S-0105 Formulas F5
+/// Largest side of the window of a copy rectangle an image keeps, pixels,
+/// centred on the voxel-image origin shift. S-0105 claim 22 enlarges images
+/// without a limit; this bound is an interim engine rule for malformed
+/// models (request Q-0470). No copy rectangle that fits is affected.
+pub const IMAGE_LIMIT: i64 = 4096; // interim: Q-0470 (no spec value yet)
+/// The empty depth sentinel, logically −∞: below every numeric depth
+/// (S-0105 claim 24).
+const EMPTY_DEPTH: i64 = i64::MIN; // spec: S-0105 claims 24, 34 (empty sentinel below all numeric depths)
 
 /// Box corners in the farthest-corner tie order of S-0105 claim 21: the
 /// bottom face (max x, max y), (max x, min y), (min x, min y), (min x,
@@ -1766,8 +1699,9 @@ const POSITION_WRAP: u64 = 65536; // spec: S-0105 Formulas F5
 /// 2: max z.
 const FAR_CORNER_ORDER: [usize; 8] = [3, 1, 0, 2, 7, 5, 4, 6]; // spec: S-0105 claim 21
 
-/// A finished part or shadow image: the part of its copy rectangle (F6)
-/// that lies inside the voxel buffer (claim 22), and where it lands.
+/// A finished part or shadow image: its copy rectangle (F6; claim 22, no
+/// wrap), and where it lands. Only a copy rectangle larger than
+/// [`IMAGE_LIMIT`] is cut to a window (interim, Q-0470).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PartImage {
     /// Width of `pixels`.
@@ -1779,9 +1713,9 @@ pub struct PartImage {
     pub pixels: Vec<u8>,
     /// Screen position of `pixels`' top-left corner relative to the draw
     /// point (claim 25, F6): *(trunc(c_x) − ⌊w/2⌋, trunc(c_y) − ⌊h/2⌋)*,
-    /// moved by any clipping to the buffer.
+    /// moved by any cut to the [`IMAGE_LIMIT`] window.
     pub offset: [i64; 2],
-    /// The copy rectangle's size *w × h* (F6), before clipping.
+    /// The copy rectangle's size *w × h* (F6), before any cut.
     pub copy_size: [i64; 2],
 }
 
@@ -1857,14 +1791,15 @@ impl Bounds {
     }
 }
 
-/// `trunc(256 × ((p + 128) − c))` (F5, F10), as a position in 0 … 65535.
-fn origin_units(p: f32, c: f32) -> u64 {
-    // spec: S-0105 Formulas F5 (o = trunc(256 × (P₀ + 128 − c)))
+/// `trunc(256 × ((p + 128) − c))` (F5, F10), a signed unwrapped position in
+/// 1/256 pixel.
+fn origin_units(p: f32, c: f32) -> i64 {
+    // spec: S-0105 Formulas F5 (o = trunc(256 × (P₀ + 128 − c)), unwrapped)
     let v = mul_rz(
         SUBPIXEL,
-        sub_rz(add_rz(f64::from(p), BUFFER_CENTRE), f64::from(c)),
+        sub_rz(add_rz(f64::from(p), IMAGE_ORIGIN), f64::from(c)),
     );
-    wrap(trunc_i64(v))
+    trunc_i64(v)
 }
 
 /// `trunc(256 × (to − from) / n)` (F5, F10), unreduced; 0 when `n` is 0.
@@ -1879,9 +1814,20 @@ fn step_units(to: f32, from: f32, n: u8) -> i64 {
     ))
 }
 
-/// A position in 0 … 65535 (F5: components taken modulo 65536).
-fn wrap(v: i64) -> u64 {
-    v.rem_euclid(POSITION_WRAP as i64) as u64
+/// `o + Σ nᵢ · Δᵢ` in exact signed integer arithmetic (F5, F10), saturating
+/// only where a malformed model leaves the 64-bit range.
+fn position(o: i64, terms: &[(i64, i64)]) -> i64 {
+    // spec: S-0105 Formulas F5 (exact signed integer arithmetic, no wrap, no carry)
+    terms
+        .iter()
+        .fold(o, |acc, &(n, d)| acc.saturating_add(n.saturating_mul(d)))
+}
+
+/// The image pixel or depth level of a position in 1/256 pixel:
+/// *⌊p / 256⌋*, toward negative infinity (F5, F10).
+fn pixel_of(p: i64) -> i64 {
+    // spec: S-0105 Formulas F5 (floors toward negative infinity, negative coordinates included)
+    p.div_euclid(256)
 }
 
 /// The sections of a part from lowest to highest overlap priority (claim
@@ -1922,43 +1868,138 @@ pub fn section_order(depths: &[f32], quirks: &VoxelQuirks) -> Vec<usize> {
     pi
 }
 
-/// The voxel buffer: colour plane and depth plane.
-#[derive(Clone, Debug)]
-struct Buffer {
-    colour: Vec<u8>,
-    depth: Vec<i64>,
+/// A copy rectangle in logical image pixels (F6): corner *(x₀, y₀)* and
+/// size *w × h*.
+type CopyRect = [i64; 4];
+
+/// The copy rectangle of F6 for the overall bounding box `bounds`.
+fn copy_rect(bounds: &Bounds) -> CopyRect {
+    // spec: S-0105 Formulas F6 (w₀ = trunc(x_max − x_min), h₀ = trunc(y_max − y_min))
+    let w0 = trunc_i64(sub_rz(f64::from(bounds.max[0]), f64::from(bounds.min[0])));
+    let h0 = trunc_i64(sub_rz(f64::from(bounds.max[1]), f64::from(bounds.min[1])));
+    // spec: S-0105 claim 25, Formulas F6 (w = w₀ + 8, h = h₀ + 8)
+    let w = w0.saturating_add(2 * COPY_MARGIN);
+    let h = h0.saturating_add(2 * COPY_MARGIN);
+    // spec: S-0105 Formulas F6 (corner (128 − ⌊w₀/2⌋ − 4, 128 − ⌊h₀/2⌋ − 4))
+    let origin = IMAGE_ORIGIN as i64;
+    let x0 = origin
+        .saturating_sub(w0.div_euclid(2))
+        .saturating_sub(COPY_MARGIN);
+    let y0 = origin
+        .saturating_sub(h0.div_euclid(2))
+        .saturating_sub(COPY_MARGIN);
+    [x0, y0, w, h]
 }
 
-impl Buffer {
-    /// A buffer cleared completely, as the first fresh draw after the
-    /// program starts leaves it (claim 34).
-    fn new(quirks: &VoxelQuirks) -> Self {
+/// One fresh image being drawn (S-0105 claims 22, 24, 34). Logical image
+/// coordinates are signed and unbounded (claim 22, F5); the colour of the
+/// copy rectangle (F6), the only part that reaches the screen, is stored,
+/// cut to the [`IMAGE_LIMIT`] window (interim, Q-0470). Every coordinate
+/// starts transparent and, in depth mode, with the empty depth (claim 34).
+///
+/// In depth mode the comparison depth is kept for every coordinate whose
+/// depth can still change a stored pixel: rows of the stored region, left
+/// of its right edge. A right-hand write reaches one column to the right
+/// (claim 24), so depths left of the region can decide what a later voxel
+/// writes into its first column.
+#[derive(Clone, Debug)]
+struct Raster {
+    /// The F6 copy rectangle, before any cut.
+    copy: CopyRect,
+    /// The stored region: columns `x0 .. x1`, rows `y0 .. y1`.
+    x0: i64,
+    y0: i64,
+    x1: i64,
+    y1: i64,
+    /// Colour of the stored region, row-major; 0 is transparent.
+    colour: Vec<u8>,
+    /// Comparison depths written in depth mode, by `(y, x)`; a missing entry
+    /// is empty (claim 24).
+    depth: BTreeMap<(i64, i64), i64>,
+}
+
+impl Raster {
+    /// A fresh image for the overall bounding box `bounds` (claim 34: fully
+    /// transparent, every depth empty).
+    fn new(bounds: &Bounds) -> Self {
+        let copy = copy_rect(bounds);
+        let [x0, y0, w, h] = copy;
+        // interim: Q-0470 (at most an IMAGE_LIMIT window, centred on the origin shift)
+        let origin = IMAGE_ORIGIN as i64;
+        let (lo, hi) = (origin - IMAGE_LIMIT / 2, origin + IMAGE_LIMIT / 2);
+        let (sx0, sy0) = (x0.clamp(lo, hi), y0.clamp(lo, hi));
+        let (sx1, sy1) = (
+            x0.saturating_add(w).clamp(sx0, hi),
+            y0.saturating_add(h).clamp(sy0, hi),
+        );
+        let len = ((sx1 - sx0) * (sy1 - sy0)) as usize;
         Self {
-            colour: vec![0; BUFFER_SIZE * BUFFER_SIZE],
-            depth: vec![depth_floor(quirks); BUFFER_SIZE * BUFFER_SIZE],
+            copy,
+            x0: sx0,
+            y0: sy0,
+            x1: sx1,
+            y1: sy1,
+            // spec: S-0105 claim 34 (every fresh draw starts completely transparent)
+            colour: vec![0; len],
+            // spec: S-0105 claims 24, 34 (every coordinate starts empty)
+            depth: BTreeMap::new(),
+        }
+    }
+
+    /// The colour index of a stored pixel.
+    fn index(&self, x: i64, y: i64) -> Option<usize> {
+        ((self.x0..self.x1).contains(&x) && (self.y0..self.y1).contains(&y))
+            .then(|| ((y - self.y0) * (self.x1 - self.x0) + (x - self.x0)) as usize)
+    }
+
+    /// Writes `value` at `(x, y)`; pixels outside the stored region never
+    /// reach the screen (claims 22, 25).
+    fn put(&mut self, x: i64, y: i64, value: u8) {
+        if let Some(i) = self.index(x, y) {
+            self.colour[i] = value;
+        }
+    }
+
+    /// Whether the depth at `(x, y)` can matter to a stored pixel.
+    fn depth_kept(&self, x: i64, y: i64) -> bool {
+        (self.y0..self.y1).contains(&y) && x < self.x1
+    }
+
+    /// The comparison depth at `(x, y)`, [`EMPTY_DEPTH`] if none was written.
+    fn depth_at(&self, x: i64, y: i64) -> i64 {
+        self.depth.get(&(y, x)).copied().unwrap_or(EMPTY_DEPTH)
+    }
+
+    /// A depth-mode write of `value` and `depth` at `(x, y)`.
+    fn put_depth(&mut self, x: i64, y: i64, value: u8, depth: i64) {
+        self.put(x, y, value);
+        if self.depth_kept(x, y) {
+            self.depth.insert((y, x), depth);
+        }
+    }
+
+    /// The finished image: the stored region of the copy rectangle, placed
+    /// around the draw point by F6.
+    fn finish(self, centre: [f32; 3]) -> PartImage {
+        let [x0, y0, w, h] = self.copy;
+        // spec: S-0105 claim 25, Formulas F6 (lands at (trunc(c_x) − ⌊w/2⌋, trunc(c_y) − ⌊h/2⌋))
+        let ox = trunc_i64(f64::from(centre[0])).saturating_sub(w.div_euclid(2));
+        let oy = trunc_i64(f64::from(centre[1])).saturating_sub(h.div_euclid(2));
+        PartImage {
+            width: (self.x1 - self.x0) as u32,
+            height: (self.y1 - self.y0) as u32,
+            pixels: self.colour,
+            offset: [
+                ox.saturating_add(self.x0.saturating_sub(x0)),
+                oy.saturating_add(self.y0.saturating_sub(y0)),
+            ],
+            copy_size: [w, h],
         }
     }
 }
 
-/// The value the depth plane is cleared to: 0, or with
-/// `quirks.voxel_depth_zero_hidden` off a value below every depth (S-0105
-/// claims 24, 34).
-fn depth_floor(quirks: &VoxelQuirks) -> i64 {
-    // spec: S-0105 claims 24, 34 (cleared to 0; switch voxel_depth_zero_hidden
-    // off: below every depth)
-    if quirks.voxel_depth_zero_hidden {
-        0
-    } else {
-        i64::MIN
-    }
-}
-
-/// A copy rectangle in voxel-buffer pixels before clipping (F6): corner
-/// *(x₀, y₀)* and size *w × h*.
-type CopyRect = [i64; 4];
-
-/// Draws one part into a fresh voxel buffer and returns its image (S-0105
-/// claims 13–15, 18–25, 35, 36, F4–F6, F8).
+/// Draws one part as a fresh image and returns it (S-0105 claims 13–15,
+/// 18–25, 34, 35, 36, F4–F6, F8).
 ///
 /// - `frame`: the part's HVA frame (claim 16), taken modulo the frame
 ///   count (claim 13).
@@ -1968,11 +2009,10 @@ type CopyRect = [i64; 4];
 /// - `vpl`: the voxel lighting table; without it lit voxels write their
 ///   raw colour index.
 /// - `depth_buffered`: whether this draw is made in the depth-buffered mode
-///   (claim 24; for a depth-option type, or inside a claim 32 window).
+///   (claim 24): exactly when its type has the depth option (claim 32).
 ///
-/// The buffer is a fresh one, as for the first draw after the program
-/// starts; [`VoxelCanvas::draw_part`] draws into the buffer that earlier
-/// draws left and tracks the depth-buffered mode itself.
+/// Every draw starts fully transparent with every depth empty (claim 34),
+/// so no earlier draw affects it.
 ///
 /// Returns `None` for a model without sections.
 pub fn draw_model(
@@ -1983,21 +2023,6 @@ pub fn draw_model(
     depth_buffered: bool,
     quirks: &VoxelQuirks,
 ) -> Option<PartImage> {
-    let mut buf = Buffer::new(quirks);
-    draw_model_into(&mut buf, model, frame, draw, vpl, depth_buffered, quirks).map(|(img, _)| img)
-}
-
-/// [`draw_model`] into `buf` as it stands (no clearing), returning the
-/// image and its unclipped copy rectangle.
-fn draw_model_into(
-    buf: &mut Buffer,
-    model: &VoxelModel,
-    frame: u32,
-    draw: &Mat34,
-    vpl: Option<&Vpl>,
-    depth_buffered: bool,
-    quirks: &VoxelQuirks,
-) -> Option<(PartImage, CopyRect)> {
     let sections = &model.sections;
     // spec: S-0105 claim 13 (each section drawn with M · H(f, i))
     let transforms: Vec<Mat34> = (0..sections.len())
@@ -2052,6 +2077,7 @@ fn draw_model_into(
         // of the painter priority)
         order.reverse();
     }
+    let mut img = Raster::new(&bounds);
     for s in order {
         let table = &shades[if shared { 0 } else { s }];
         raster_section(
@@ -2062,10 +2088,10 @@ fn draw_model_into(
             vpl,
             depth_buffered,
             quirks,
-            buf,
+            &mut img,
         );
     }
-    Some(copy_out(&buf.colour, &bounds, centre))
+    Some(img.finish(centre))
 }
 
 /// [`draw_model`] from a parsed VXL and HVA (lossy for claims 30 and 35,
@@ -2099,7 +2125,7 @@ fn raster_section(
     vpl: Option<&Vpl>,
     depth_buffered: bool,
     quirks: &VoxelQuirks,
-    buf: &mut Buffer,
+    img: &mut Raster,
 ) {
     let [sx, sy, sz] = sec.size;
     let (nx, ny) = (usize::from(sx), usize::from(sy));
@@ -2112,26 +2138,15 @@ fn raster_section(
     }
     let p0 = corners[far];
     // spec: S-0105 Formulas F5 (o and the per-axis steps Δ_x, Δ_y, Δ_z)
-    let o: [u64; 3] = [0, 1, 2].map(|a| origin_units(p0[a], centre[a]));
+    let o: [i64; 3] = [0, 1, 2].map(|a| origin_units(p0[a], centre[a]));
     let step = |axis_bit: usize, n: u8| -> [i64; 3] {
         let p = corners[far ^ axis_bit];
         [0, 1, 2].map(|a| step_units(p[a], p0[a], n))
     };
     let (dx, dy, dz) = (step(1, sx), step(2, sy), step(4, sz));
-    let (dxr, dyr, dzr) = (dx.map(wrap), dy.map(wrap), dz.map(wrap));
-    // Unwrapped z, only for voxel_depth_zero_hidden off.
-    let o_z_raw = trunc_i64(mul_rz(
-        SUBPIXEL,
-        sub_rz(
-            add_rz(f64::from(p0[2]), BUFFER_CENTRE),
-            f64::from(centre[2]),
-        ),
-    ));
     // spec: S-0105 claim 21 (bottom-up when the farthest corner is on the
     // bottom face, top-down when it is on the top face)
     let top_down = far & 4 != 0;
-    let carry = quirks.voxel_x_carry_into_y && !depth_buffered;
-    let total = BUFFER_SIZE * BUFFER_SIZE;
     // spec: S-0105 claim 21 (ascending (n_y, n_x, n_z))
     for n_y in 0..ny {
         let j = if far & 2 != 0 { ny - 1 - n_y } else { n_y };
@@ -2140,106 +2155,53 @@ fn raster_section(
             let Some(data) = sec.columns.get(j * nx + i).and_then(Option::as_deref) else {
                 continue;
             };
-            // spec: S-0105 Formulas F5 (Δ_y per row before, Δ_x per column
-            // before, empty columns included)
-            let base: [u64; 3] =
-                [0, 1, 2].map(|a| o[a] + n_y as u64 * dyr[a] + n_x as u64 * dxr[a]);
-            let mut z_raw = o_z_raw
-                .saturating_add((n_y as i64).saturating_mul(dy[2]))
-                .saturating_add((n_x as i64).saturating_mul(dx[2]));
-            let mut col = [0u64; 3];
+            let mut n_z: i64 = 0;
             for st in column_steps(data, sz, top_down, sec.normal_mode, depth_buffered, quirks) {
                 match st {
                     Step::Empty(e) => {
-                        // spec: S-0105 Formulas F5 (e·Δ_z as one addend,
-                        // each component reduced modulo 65536)
-                        for a in 0..3 {
-                            col[a] += (u64::from(e) * dzr[a]) % POSITION_WRAP;
-                        }
-                        z_raw = z_raw.saturating_add(i64::from(e).saturating_mul(dz[2]));
+                        // spec: S-0105 Formulas F5 (empty cells advance n_z)
+                        n_z = n_z.saturating_add(i64::from(e));
                     }
                     Step::Voxel { value, normal } => {
-                        let u = base[0] + col[0];
-                        let px = u % POSITION_WRAP;
-                        // spec: S-0105 Formulas F5 (quirks.voxel_x_carry_into_y)
-                        let carried = if carry { u / POSITION_WRAP } else { 0 };
-                        let py = (base[1] + col[1] + carried) % POSITION_WRAP;
-                        // spec: S-0105 claim 22, Formulas F5 (pixel ⌊p / 256⌋ mod 256)
-                        let idx = (py as usize >> 8) * BUFFER_SIZE + (px as usize >> 8);
+                        // spec: S-0105 Formulas F5 (p = o + n_x Δ_x + n_y Δ_y + n_z Δ_z per
+                        // component, exact, no wrap, no carry into y)
+                        let p: [i64; 3] = [0, 1, 2].map(|a| {
+                            position(
+                                o[a],
+                                &[(n_y as i64, dy[a]), (n_x as i64, dx[a]), (n_z, dz[a])],
+                            )
+                        });
+                        // spec: S-0105 claim 22, Formulas F5 (pixel (⌊px / 256⌋, ⌊py / 256⌋))
+                        let (x, y) = (pixel_of(p[0]), pixel_of(p[1]));
                         let colour = match normal {
                             // spec: S-0105 claims 18, 19
                             Some(n) => lit_colour(vpl, shades[usize::from(n)], value),
                             None => value,
                         };
                         if depth_buffered {
-                            let depth = if quirks.voxel_depth_zero_hidden {
-                                // spec: S-0105 claim 24 (depth ⌊pz / 256⌋ mod 256)
-                                (((base[2] + col[2]) % POSITION_WRAP) >> 8) as i64
-                            } else {
-                                z_raw.div_euclid(256)
-                            };
-                            // spec: S-0105 claim 24 (drawn only if strictly greater)
-                            if depth > buf.depth[idx] {
-                                buf.colour[idx] = colour;
-                                buf.depth[idx] = depth;
+                            // spec: S-0105 claim 24 (comparison depth ⌊pz / 256⌋, unwrapped)
+                            let depth = pixel_of(p[2]);
+                            // spec: S-0105 claim 24 (passes an empty coordinate or a strictly
+                            // smaller stored depth; only the left pixel is tested)
+                            if depth > img.depth_at(x, y) {
+                                img.put_depth(x, y, colour, depth);
                                 // spec: S-0105 claim 24 (quirks.voxel_depth_double_width;
-                                // past the last row the pixel is dropped)
-                                if quirks.voxel_depth_double_width && idx + 1 < total {
-                                    buf.colour[idx + 1] = colour;
-                                    buf.depth[idx + 1] = depth;
+                                // the right-hand pixel is (x + 1, y), never another row)
+                                if quirks.voxel_depth_double_width {
+                                    img.put_depth(x.saturating_add(1), y, colour, depth);
                                 }
                             }
                         } else {
                             // spec: S-0105 claims 21, 22 (one pixel; later voxels overwrite)
-                            buf.colour[idx] = colour;
+                            img.put(x, y, colour);
                         }
                         // spec: S-0105 Formulas F5 (Δ_z per voxel drawn before)
-                        for a in 0..3 {
-                            col[a] += dzr[a];
-                        }
-                        z_raw = z_raw.saturating_add(dz[2]);
+                        n_z = n_z.saturating_add(1);
                     }
                 }
             }
         }
     }
-}
-
-/// Copies the copy rectangle of F6 out of the buffer, clipped to the
-/// buffer (claims 22, 25).
-fn copy_out(colour: &[u8], bounds: &Bounds, centre: [f32; 3]) -> (PartImage, CopyRect) {
-    // spec: S-0105 Formulas F6
-    let w0 = trunc_i64(sub_rz(f64::from(bounds.max[0]), f64::from(bounds.min[0])));
-    let h0 = trunc_i64(sub_rz(f64::from(bounds.max[1]), f64::from(bounds.min[1])));
-    let w = w0.saturating_add(2 * COPY_MARGIN);
-    let h = h0.saturating_add(2 * COPY_MARGIN);
-    let centre_px = BUFFER_CENTRE as i64;
-    let x0 = centre_px - w0.div_euclid(2) - COPY_MARGIN;
-    let y0 = centre_px - h0.div_euclid(2) - COPY_MARGIN;
-    let ox = trunc_i64(f64::from(centre[0])).saturating_sub(w.div_euclid(2));
-    let oy = trunc_i64(f64::from(centre[1])).saturating_sub(h.div_euclid(2));
-    // spec: S-0105 claim 22 (our engine copies only the part inside the buffer)
-    let size = BUFFER_SIZE as i64;
-    let (cx0, cy0) = (x0.clamp(0, size), y0.clamp(0, size));
-    let (cx1, cy1) = (
-        x0.saturating_add(w).clamp(cx0, size),
-        y0.saturating_add(h).clamp(cy0, size),
-    );
-    let (cw, ch) = ((cx1 - cx0) as usize, (cy1 - cy0) as usize);
-    let mut pixels = Vec::with_capacity(cw * ch);
-    for y in cy0 as usize..cy1 as usize {
-        pixels.extend_from_slice(
-            &colour[y * BUFFER_SIZE + cx0 as usize..y * BUFFER_SIZE + cx1 as usize],
-        );
-    }
-    let img = PartImage {
-        width: cw as u32,
-        height: ch as u32,
-        pixels,
-        offset: [ox.saturating_add(cx0 - x0), oy.saturating_add(cy0 - y0)],
-        copy_size: [w, h],
-    };
-    (img, [x0, y0, w, h])
 }
 
 // ---------------------------------------------------------------------------
@@ -2256,15 +2218,18 @@ pub const AIRCRAFT_SHADOW_SCALE: f64 = 0.5; // spec: S-0105 claim 31, Constants
 /// that it is one value; 1 is our choice).
 pub const SHADOW_MARK: u8 = 1;
 
-/// Draws the shadow footprint of section `shadow_section` (S-0105 claims
-/// 29–31, F10): every column the file lists as present marks two pixels at
-/// its lower corner on the section's bottom face, shifted 3 pixels right,
-/// half size for aircraft-like types. `shadow_draw` is *V · S* (for a
-/// vehicle on flat ground, [`VehiclePose::shadow`]); the shadow section's
-/// HVA transform of frame 0 is applied here (`body_frame` is used only with
-/// `quirks.shadow_frame_zero` off). The image lands around the shadow draw
-/// point. Cloak state and the no-shadow option (claim 31) are the caller's
-/// to check. Returns `None` if the section does not exist.
+/// Draws the shadow footprint of section `shadow_section` as a fresh image
+/// (S-0105 claims 29–31, 34, F10): every column the file lists as present
+/// marks two pixels at its lower corner on the section's bottom face,
+/// shifted 3 pixels right, half size for aircraft-like types. `shadow_draw`
+/// is *V · S* (for a vehicle on flat ground, [`VehiclePose::shadow`]); the
+/// shadow section's HVA transform of frame 0 is applied here (`body_frame`
+/// is used only with `quirks.shadow_frame_zero` off). The image lands
+/// around the shadow draw point. It is the unmasked footprint; claim 39's
+/// own-image exclusion is [`exclude_own_image`]. Cloak state and the
+/// no-shadow option (claim 31) are the caller's to check. A shadow is never
+/// drawn in the depth-buffered mode (claim 32). Returns `None` if the
+/// section does not exist.
 pub fn draw_shadow(
     model: &VoxelModel,
     shadow_section: usize,
@@ -2273,53 +2238,6 @@ pub fn draw_shadow(
     aircraft_like: bool,
     quirks: &VoxelQuirks,
 ) -> Option<PartImage> {
-    let mut colour = vec![0u8; BUFFER_SIZE * BUFFER_SIZE];
-    draw_shadow_into(
-        &mut colour,
-        model,
-        shadow_section,
-        shadow_draw,
-        body_frame,
-        aircraft_like,
-        quirks,
-    )
-    .map(|(img, _)| img)
-}
-
-/// Excludes a vehicle's own image from its shadow (S-0105 claim 39): every
-/// shadow pixel at a screen position (relative to the shared draw point)
-/// where any of `parts`, the completed body, turret and barrel images, is
-/// non-transparent becomes transparent. Each of a column's two pixels is
-/// tested on its own; the scene's depth test plays no part.
-pub fn exclude_own_image(shadow: &mut PartImage, parts: &[&PartImage]) {
-    let w = shadow.width as usize;
-    for (i, px) in shadow.pixels.iter_mut().enumerate() {
-        if *px == 0 {
-            continue;
-        }
-        let x = shadow.offset[0] + (i % w) as i64;
-        let y = shadow.offset[1] + (i / w) as i64;
-        // spec: S-0105 claim 39 (a non-transparent part pixel at the same screen position excludes the shadow pixel)
-        if parts
-            .iter()
-            .any(|p| p.at_screen(x, y).is_some_and(|v| v != 0))
-        {
-            *px = 0;
-        }
-    }
-}
-
-/// [`draw_shadow`] into the colour plane `colour` as it stands (no
-/// clearing), returning the image and its unclipped copy rectangle.
-fn draw_shadow_into(
-    colour: &mut [u8],
-    model: &VoxelModel,
-    shadow_section: usize,
-    shadow_draw: &Mat34,
-    body_frame: u32,
-    aircraft_like: bool,
-    quirks: &VoxelQuirks,
-) -> Option<(PartImage, CopyRect)> {
     let sec = model.sections.get(shadow_section)?;
     // spec: S-0105 claim 29 (quirks.shadow_frame_zero)
     let frame = if quirks.shadow_frame_zero {
@@ -2361,10 +2279,12 @@ fn draw_shadow_into(
     let bounds = Bounds::of([&q00, &q10, &q01, &q11])?;
     let centre = bounds.centre();
     let [sx, sy, _] = sec.size;
+    // spec: S-0105 Formulas F10 (o, Δ_i, Δ_j)
     let o = [0, 1].map(|a| origin_units(q00[a], centre[a]));
-    let di = [0, 1].map(|a| wrap(step_units(q10[a], q00[a], sx)));
-    let dj = [0, 1].map(|a| wrap(step_units(q01[a], q00[a], sy)));
-    let total = colour.len();
+    let di = [0, 1].map(|a| step_units(q10[a], q00[a], sx));
+    let dj = [0, 1].map(|a| step_units(q01[a], q00[a], sy));
+    // spec: S-0105 claim 34 (a fresh shadow starts completely transparent)
+    let mut img = Raster::new(&bounds);
     let (nx, ny) = (usize::from(sx), usize::from(sy));
     for j in 0..ny {
         for i in 0..nx {
@@ -2372,123 +2292,90 @@ fn draw_shadow_into(
             if sec.columns.get(j * nx + i).is_none_or(Option::is_none) {
                 continue;
             }
-            // spec: S-0105 Formulas F10 (p = o + iΔ_i + jΔ_j, no carry)
-            let [px, py] =
-                [0, 1].map(|a| (o[a] + i as u64 * di[a] + j as u64 * dj[a]) % POSITION_WRAP);
-            let idx = (py as usize >> 8) * BUFFER_SIZE + (px as usize >> 8);
-            colour[idx] = SHADOW_MARK;
-            // spec: S-0105 claim 30 (quirks.shadow_double_width; dropped past the last row)
-            if quirks.shadow_double_width && idx + 1 < total {
-                colour[idx + 1] = SHADOW_MARK;
+            // spec: S-0105 Formulas F10 (p = o + iΔ_i + jΔ_j per component, exact, no wrap
+            // or carry; pixel ⌊p / 256⌋)
+            let [x, y] =
+                [0, 1].map(|a| pixel_of(position(o[a], &[(i as i64, di[a]), (j as i64, dj[a])])));
+            img.put(x, y, SHADOW_MARK);
+            // spec: S-0105 claim 30, Formulas F10 (quirks.shadow_double_width; the second
+            // pixel is (x + 1, y), never another row)
+            if quirks.shadow_double_width {
+                img.put(x.saturating_add(1), y, SHADOW_MARK);
             }
         }
     }
-    Some(copy_out(colour, &bounds, centre))
+    Some(img.finish(centre))
+}
+
+/// Excludes a vehicle's own image from its shadow (S-0105 claim 39): every
+/// shadow pixel at a screen position (relative to the shared draw point)
+/// where any of `parts`, the completed body, turret and barrel images, is
+/// non-transparent becomes transparent. Each of a column's two pixels is
+/// tested on its own; the scene's depth test plays no part. Applied on
+/// every appearance to the unmasked footprint, fresh or reused.
+pub fn exclude_own_image(shadow: &mut PartImage, parts: &[&PartImage]) {
+    let w = shadow.width as usize;
+    for (i, px) in shadow.pixels.iter_mut().enumerate() {
+        if *px == 0 {
+            continue;
+        }
+        let x = shadow.offset[0] + (i % w) as i64;
+        let y = shadow.offset[1] + (i / w) as i64;
+        // spec: S-0105 claim 39 (a non-transparent part pixel at the same screen position excludes the shadow pixel)
+        if parts
+            .iter()
+            .any(|p| p.at_screen(x, y).is_some_and(|v| v != 0))
+        {
+            *px = 0;
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
-// The voxel buffer between fresh draws (claims 24, 32, 34, S2)
+// Fresh draws and the depth-buffered mode (claims 24, 32, 33, 34, S2)
 // ---------------------------------------------------------------------------
 
-/// The voxel buffer and depth plane kept from one fresh draw to the next,
-/// with the depth-buffered mode (S-0105 claims 24, 32, 34, state table S2).
+/// The place every fresh voxel draw goes through (S-0105 claims 24, 32,
+/// 33, 34, state table S2).
 ///
 /// Every draw through a canvas is a *fresh* draw: the caller decides,
 /// through the image cache (claim 26, [`ImageCache`]), whether a draw is
-/// needed at all. A fresh draw starts by clearing the clear area of the
-/// previous fresh draw (claim 34), is made in the depth-buffered mode when
-/// its type has the depth option or the mode is on (claim 32), and leaves
-/// the mode as S2 gives.
+/// needed at all. Each fresh draw starts completely transparent (claim 34).
+/// The depth-buffered mode is on exactly during a fresh part draw of a type
+/// with the depth option, which starts with every depth empty; it is off
+/// between draws, drawn frames and games, and shadows never turn it on
+/// (claims 32, 33, S2).
 ///
-/// With `quirks.depth_mode_leak` on, a depth-option type's shadow switches
-/// the mode on and leaves it on; off, the mode is on only during a fresh
-/// depth-option part draw (claim 32). The quirks are passed per draw while
-/// the canvas lives across maps, so with the switch off a mode left on by
-/// earlier draws is ignored.
+/// Claim 34 lets non-depth draws preserve the retained depths, but the
+/// only reads of depth happen inside a depth-mode draw, which first empties
+/// every depth. Retained depths are therefore never observable, and the
+/// canvas keeps no state between draws: a draw's result never depends on
+/// earlier draws. The canvas stays a value so that it can still be carried
+/// from one game to the next.
 #[derive(Clone, Debug, Default)]
 pub struct VoxelCanvas {
-    /// The planes; `None` until the first fresh draw, which clears both
-    /// completely (claim 34).
-    buf: Option<Buffer>,
-    /// The previous fresh draw's copy rectangle (F6), before clipping.
-    last_copy: Option<CopyRect>,
-    /// The depth-buffered mode of S2: off at program start.
-    depth_mode: bool,
+    _private: (),
 }
 
 impl VoxelCanvas {
-    /// A canvas as at program start: nothing drawn yet, the mode off
-    /// (claim 34, S2).
+    /// A canvas as at program start, the mode off (claim 34, S2).
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// Whether the depth-buffered mode is on (S2).
+    /// Whether the depth-buffered mode is on. Between draws it is always
+    /// off (claim 32, S2).
     pub fn depth_mode(&self) -> bool {
-        self.depth_mode
-    }
-
-    /// Starts a fresh draw: the first one clears everything, later ones the
-    /// clear area, and the depth plane only for a draw made in the
-    /// depth-buffered mode (claim 34).
-    fn begin(&mut self, depth_buffered: bool, quirks: &VoxelQuirks) -> &mut Buffer {
-        let floor = depth_floor(quirks);
-        let last = self.last_copy;
-        if self.buf.is_none() {
-            // spec: S-0105 claim 34 (the first fresh draw after the program starts clears both completely)
-            return self.buf.insert(Buffer::new(quirks));
-        }
-        let buf = self.buf.as_mut().expect("allocated above");
-        let size = BUFFER_SIZE as i64;
-        if let Some([x0, y0, w, h]) = last {
-            // spec: S-0105 claim 34 (clear area: columns x₀ … x₀ + w, rows y₀ … y₀ + h)
-            let (x1, y1) = (x0.saturating_add(w), y0.saturating_add(h));
-            // spec: S-0105 claim 34 (colour: the whole buffer when the clear area does not fit)
-            let fits = x0 >= 0 && y0 >= 0 && x1 < size && y1 < size;
-            let (cx0, cy0) = (x0.clamp(0, size), y0.clamp(0, size));
-            let (cx1, cy1) = (
-                x1.saturating_add(1).clamp(cx0, size),
-                y1.saturating_add(1).clamp(cy0, size),
-            );
-            if !quirks.voxel_colour_partial_clear {
-                // spec: S-0105 Edge cases (voxel_colour_partial_clear off: every fresh draw starts on a
-                // fully transparent colour plane)
-                buf.colour.fill(0);
-            } else if fits {
-                // spec: S-0105 claim 34 (quirks.voxel_colour_partial_clear: the colour plane is cleared
-                // over the clear area only)
-                for y in cy0..cy1 {
-                    let row = (y * size) as usize;
-                    buf.colour[row + cx0 as usize..row + cx1 as usize].fill(0);
-                }
-            } else {
-                buf.colour.fill(0);
-            }
-            if depth_buffered && quirks.voxel_depth_plane_partial_clear {
-                // spec: S-0105 claims 24, 34 (quirks.voxel_depth_plane_partial_clear:
-                // the depth plane is cleared over the clear area only; our engine
-                // clears the part inside the buffer)
-                for y in cy0..cy1 {
-                    let row = (y * size) as usize;
-                    buf.depth[row + cx0 as usize..row + cx1 as usize].fill(floor);
-                }
-            }
-        }
-        if depth_buffered && !quirks.voxel_depth_plane_partial_clear {
-            // spec: S-0105 Edge cases (voxel_depth_plane_partial_clear off: the
-            // whole area the coming draw can write is cleared before every
-            // depth-buffered draw; the whole plane covers it)
-            buf.depth.fill(floor);
-        }
-        buf
+        // spec: S-0105 claim 32, S2 (off between draws, drawn frames and games)
+        false
     }
 
     /// A fresh draw of a part (body, turret or barrel) of a type with the
     /// depth option `depth_option` (S-0105 claims 13–25, 32, 34, S2); the
-    /// other arguments as for [`draw_model`]. Returns `None`, and changes
-    /// nothing, for a model without sections.
+    /// other arguments as for [`draw_model`]. Returns `None` for a model
+    /// without sections.
     pub fn draw_part(
-        &mut self,
+        &self,
         model: &VoxelModel,
         frame: u32,
         draw: &Mat34,
@@ -2496,71 +2383,39 @@ impl VoxelCanvas {
         depth_option: bool,
         quirks: &VoxelQuirks,
     ) -> Option<PartImage> {
-        if model.sections.is_empty() {
-            return None;
-        }
-        // spec: S-0105 claim 32, S2 (a depth-option part is drawn with the
-        // mode on; any other part with the mode as it stands; quirks.depth_mode_leak
-        // off: the mode is off between draws)
-        let depth_buffered = depth_option || (quirks.depth_mode_leak && self.depth_mode);
-        let buf = self.begin(depth_buffered, quirks);
-        let (img, rect) = draw_model_into(buf, model, frame, draw, vpl, depth_buffered, quirks)?;
-        self.last_copy = Some(rect);
-        if depth_option {
-            // spec: S-0105 claim 32, S2 (off once a depth-option part is finished)
-            self.depth_mode = false;
-        }
-        Some(img)
+        // spec: S-0105 claims 32, 33, S2 (the mode is on only during a fresh
+        // depth-option part draw, selected by the part's own type option)
+        draw_model(model, frame, draw, vpl, depth_option, quirks)
     }
 
-    /// A fresh draw of a shadow of a type with the depth option
-    /// `depth_option` (S-0105 claims 29–32, 34, S2); the other arguments as
-    /// for [`draw_shadow`]. Returns `None`, and changes nothing, if the
-    /// section does not exist.
-    #[allow(clippy::too_many_arguments)]
+    /// A fresh draw of a shadow (S-0105 claims 29–32, 34, S2); the
+    /// arguments as for [`draw_shadow`]. A shadow never turns the
+    /// depth-buffered mode on, whatever its type's depth option (claim 32).
+    /// Returns `None` if the section does not exist.
     pub fn draw_shadow(
-        &mut self,
+        &self,
         model: &VoxelModel,
         shadow_section: usize,
         shadow_draw: &Mat34,
         body_frame: u32,
         aircraft_like: bool,
-        depth_option: bool,
         quirks: &VoxelQuirks,
     ) -> Option<PartImage> {
-        model.sections.get(shadow_section)?;
-        // spec: S-0105 claim 34, S2 (a depth-option type's shadow is made with
-        // the mode on, any other with the mode as it stands); claim 32
-        // (quirks.depth_mode_leak off: every shadow is made with the mode off)
-        let depth_buffered = quirks.depth_mode_leak && (depth_option || self.depth_mode);
-        let buf = self.begin(depth_buffered, quirks);
-        let (img, rect) = draw_shadow_into(
-            &mut buf.colour,
+        // spec: S-0105 claim 32, S2 (shadows never enable depth mode)
+        draw_shadow(
             model,
             shadow_section,
             shadow_draw,
             body_frame,
             aircraft_like,
             quirks,
-        )?;
-        self.last_copy = Some(rect);
-        if depth_option && quirks.depth_mode_leak {
-            // spec: S-0105 claim 32, S2 (quirks.depth_mode_leak on: a depth-option
-            // type's shadow switches the mode on and leaves it on)
-            self.depth_mode = true;
-        }
-        Some(img)
+        )
     }
 }
 
 // ---------------------------------------------------------------------------
 // Image reuse (claims 26, 31, 37)
 // ---------------------------------------------------------------------------
-
-/// Body frames are kept in image keys modulo this (S-0105 claim 26).
-pub const BODY_FRAME_KEY_MODULUS: u32 = 32; // spec: S-0105 claim 26 (quirks.voxel_cache_frame_mod32)
-/// Turret frames are kept in image keys modulo this (S-0105 claims 26, 37).
-pub const TURRET_FRAME_KEY_MODULUS: u32 = 256; // spec: S-0105 claims 26, 37 (quirks.voxel_cache_frame_mod32)
 
 /// The ramp state in an image key: which settled tilt the body has
 /// (S-0105 claim 26; the tilts are S-0106's). Bodies are drawn on flat
@@ -2570,7 +2425,8 @@ pub type RampState = u8;
 pub const RAMP_FLAT: RampState = 0;
 
 /// The key of a turret image, which is also the base of a barrel image's
-/// key (S-0105 claims 26, 37).
+/// key (S-0105 claims 26, 37). Frames are complete applicable frame
+/// numbers, never reduced (lead-confirmed departure).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum TurretKey {
     /// A vehicle turret (claim 26).
@@ -2583,10 +2439,9 @@ pub enum TurretKey {
         turret: u8,
         /// The selected turret index of a multi-turret type.
         index: Option<u8>,
-        /// The alternative-model state, kept apart only with
-        /// `quirks.voxel_cache_alt_turret_frame` off.
-        alt: Option<bool>,
-        /// The frame value *v* (with the switch off, the frame).
+        /// The alternative-model state, a component of its own.
+        alt: bool,
+        /// The complete applicable turret frame.
         frame: u32,
     },
     /// A building turret, or a building's barrel drawn without a turret
@@ -2594,7 +2449,7 @@ pub enum TurretKey {
     Building {
         /// The 32-step facing.
         facing: u8,
-        /// The frame, modulo 256 with `quirks.voxel_cache_frame_mod32` on.
+        /// The complete applicable frame.
         frame: u32,
     },
 }
@@ -2611,7 +2466,7 @@ pub enum ImageKey {
         body: u8,
         /// The alternative-model state.
         alt: bool,
-        /// The HVA frame, modulo 32 with `quirks.voxel_cache_frame_mod32` on.
+        /// The complete applicable HVA frame.
         frame: u32,
     },
     /// A turret (claim 26).
@@ -2620,9 +2475,8 @@ pub enum ImageKey {
     Barrel {
         /// The turret's key (claim 37's key for a barrel without a turret).
         turret: TurretKey,
-        /// The 32-step elevation, only with
-        /// `quirks.barrel_cache_ignores_elevation` off.
-        elevation: Option<u8>,
+        /// The current 32-step elevation *e₃₂*.
+        elevation: u8,
     },
     /// A shadow (claim 31).
     Shadow {
@@ -2633,42 +2487,23 @@ pub enum ImageKey {
     },
 }
 
-/// A body frame or turret frame as an image key holds it (claim 26).
-fn frame_in_key(frame: u32, modulus: u32, quirks: &VoxelQuirks) -> u32 {
-    if quirks.voxel_cache_frame_mod32 {
-        // spec: S-0105 claim 26 (quirks.voxel_cache_frame_mod32: body frames modulo 32, turret frames modulo 256)
-        frame % modulus
-    } else {
-        // spec: S-0105 Edge cases (voxel_cache_frame_mod32 off: the full frame)
-        frame
-    }
-}
-
 /// A vehicle body's image key: ramp state, 32-step body facing,
-/// alternative-model state and HVA frame (S-0105 claim 26).
-pub fn body_key(
-    ramp: RampState,
-    body_facing: u16,
-    alt: bool,
-    frame: u32,
-    quirks: &VoxelQuirks,
-) -> ImageKey {
-    // spec: S-0105 claim 26 (body key)
+/// alternative-model state and complete HVA frame (S-0105 claim 26).
+pub fn body_key(ramp: RampState, body_facing: u16, alt: bool, frame: u32) -> ImageKey {
+    // spec: S-0105 claim 26 (body key: ramp, 32-step facing, alternative state, complete frame)
     ImageKey::Body {
         ramp,
         body: facing32(body_facing),
         alt,
-        frame: frame_in_key(frame, BODY_FRAME_KEY_MODULUS, quirks),
+        frame,
     }
 }
 
 /// A vehicle turret's key (S-0105 claim 26): ramp state, 32-step body
 /// facing (left out when `turret_offset`, the turret displacement, is 0),
-/// 32-step turret facing, selected turret index of a multi-turret type, and
-/// the frame value *v* of turret frame `frame` (claim 16's turret frame,
-/// not reduced by the HVA's frame count) under the alternative-model state
-/// `alt`.
-#[allow(clippy::too_many_arguments)]
+/// 32-step turret facing, selected turret index of a multi-turret type,
+/// the alternative-model state `alt` and the complete turret frame `frame`
+/// (claim 16's turret frame) as separate components.
 pub fn vehicle_turret_key(
     ramp: RampState,
     body_facing: u16,
@@ -2677,17 +2512,8 @@ pub fn vehicle_turret_key(
     index: Option<u8>,
     alt: bool,
     frame: u32,
-    quirks: &VoxelQuirks,
 ) -> TurretKey {
-    let f = frame_in_key(frame, TURRET_FRAME_KEY_MODULUS, quirks);
-    let (alt, frame) = if quirks.voxel_cache_alt_turret_frame {
-        // spec: S-0105 claim 26 (quirks.voxel_cache_alt_turret_frame:
-        // v = f mod 256 with the state off, 2⌊(f mod 256) / 2⌋ + 1 with it on)
-        (None, if alt { f / 2 * 2 + 1 } else { f })
-    } else {
-        // spec: S-0105 Edge cases (voxel_cache_alt_turret_frame off: the state and the frame apart)
-        (Some(alt), f)
-    };
+    // spec: S-0105 claim 26 (vehicle turret key; state and complete frame apart)
     TurretKey::Vehicle {
         ramp,
         // spec: S-0105 claim 26 (at turret displacement 0 the body facing is left out)
@@ -2699,46 +2525,32 @@ pub fn vehicle_turret_key(
     }
 }
 
-/// A building turret's key: its 32-step facing and its frame modulo 256
-/// (S-0105 claim 26).
-pub fn building_turret_key(turret_facing: u16, frame: u32, quirks: &VoxelQuirks) -> TurretKey {
-    // spec: S-0105 claim 26 (building turret key)
+/// A building turret's key: its 32-step facing and its complete frame
+/// (S-0105 claim 26). No elevation.
+pub fn building_turret_key(turret_facing: u16, frame: u32) -> TurretKey {
+    // spec: S-0105 claim 26 (building turret key: 32-step facing, complete frame)
     TurretKey::Building {
         facing: facing32(turret_facing),
-        frame: frame_in_key(frame, TURRET_FRAME_KEY_MODULUS, quirks),
+        frame,
     }
 }
 
-/// A barrel's key: the turret's key, with the 32-step elevation only when
-/// `quirks.barrel_cache_ignores_elevation` is off (S-0105 claim 26).
-pub fn barrel_key(turret: TurretKey, elevation_raw: u16, quirks: &VoxelQuirks) -> ImageKey {
+/// A barrel's key: the turret's key plus the current 32-step elevation
+/// (S-0105 claims 6, 26).
+pub fn barrel_key(turret: TurretKey, elevation_raw: u16) -> ImageKey {
+    // spec: S-0105 claims 6, 26 (barrel key: turret key plus current 32-step elevation)
     ImageKey::Barrel {
         turret,
-        elevation: if quirks.barrel_cache_ignores_elevation {
-            // spec: S-0105 claim 26 (quirks.barrel_cache_ignores_elevation: elevation not in the key)
-            None
-        } else {
-            // spec: S-0105 Edge cases (barrel_cache_ignores_elevation off: the 32-step elevation in the key)
-            Some(facing32(elevation_raw))
-        },
+        elevation: facing32(elevation_raw),
     }
 }
 
 /// The key of a building's barrel drawn without a turret: the 32-step
-/// facing of claim 5 and its frame modulo 256, kept with the barrel images
-/// (S-0105 claim 37), with the elevation as for [`barrel_key`].
-pub fn barrel_only_key(
-    facing: u16,
-    frame: u32,
-    elevation_raw: u16,
-    quirks: &VoxelQuirks,
-) -> ImageKey {
-    // spec: S-0105 claim 37 (image reuse: facing and frame modulo 256, with the barrel images)
-    barrel_key(
-        building_turret_key(facing, frame, quirks),
-        elevation_raw,
-        quirks,
-    )
+/// facing of claim 5, its complete frame and its current 32-step
+/// elevation, kept with the barrel images (S-0105 claim 37).
+pub fn barrel_only_key(facing: u16, frame: u32, elevation_raw: u16) -> ImageKey {
+    // spec: S-0105 claim 37 (image reuse: facing, complete frame, current elevation)
+    barrel_key(building_turret_key(facing, frame), elevation_raw)
 }
 
 /// A shadow's key: ramp state and 32-step body facing (S-0105 claim 31).
@@ -2823,38 +2635,6 @@ impl Default for RecoilParams {
     }
 }
 
-/// Recoil quirk switches (S-0105 Edge cases), defaulting to the original.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct RecoilQuirks {
-    /// `quirks.recoil_hold_one_skipped`: a hold of 1 holds for no tick.
-    /// Off: a hold of *t_h* ≥ 1 holds *t_h* ticks.
-    pub recoil_hold_one_skipped: bool,
-    /// `quirks.recoil_refire_accumulates`: a shot during a cycle adds a
-    /// full travel to the current slide. Off: it compresses from the
-    /// current slide up to the travel in *t_c′* ticks.
-    pub recoil_refire_accumulates: bool,
-}
-
-impl Default for RecoilQuirks {
-    fn default() -> Self {
-        // spec: S-0105 Edge cases (every switch defaults to the original)
-        Self {
-            recoil_hold_one_skipped: true,
-            recoil_refire_accumulates: true,
-        }
-    }
-}
-
-impl RecoilQuirks {
-    /// The switches by name.
-    pub fn named(&self) -> [(&'static str, bool); 2] {
-        [
-            ("recoil_hold_one_skipped", self.recoil_hold_one_skipped),
-            ("recoil_refire_accumulates", self.recoil_refire_accumulates),
-        ]
-    }
-}
-
 /// Phase of a recoil cycle with the ticks left in it (S-0105 S1).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum RecoilPhase {
@@ -2867,12 +2647,11 @@ enum RecoilPhase {
 /// A building turret's or barrel's recoil cycle (S-0105 claim 27, F7, S1):
 /// call [`RecoilCycle::fire`] on each shot and [`RecoilCycle::tick`] once
 /// per tick of the cycle. Where the slide enters the pose is not applied by
-/// this module (F7 says the part is shifted by *−λ* along the turret's
-/// forward axis).
+/// this module (claim 27: the turret moves by *−λ_turret* and the barrel by
+/// *−(λ_turret + λ_barrel)* along the turret's forward axis).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct RecoilCycle {
     params: RecoilParams,
-    quirks: RecoilQuirks,
     phase: RecoilPhase,
     slide: f32,
     compress_step: f32,
@@ -2880,10 +2659,9 @@ pub struct RecoilCycle {
 
 impl RecoilCycle {
     /// A cycle at rest.
-    pub fn new(params: RecoilParams, quirks: RecoilQuirks) -> Self {
+    pub fn new(params: RecoilParams) -> Self {
         Self {
             params,
-            quirks,
             phase: RecoilPhase::Idle,
             slide: 0.0,
             compress_step: 0.0,
@@ -2911,30 +2689,29 @@ impl RecoilCycle {
     }
 
     fn hold_ticks(&self) -> i32 {
-        let h = self.params.hold;
-        if self.quirks.recoil_hold_one_skipped {
-            // spec: S-0105 Formulas F7, Constants (shortest hold that holds: 2)
-            if h >= 2 { h } else { 0 }
-        } else {
-            h.max(0)
-        }
+        // spec: S-0105 claim 27, Formulas F7 (t_h′ = max(0, t_h): every positive hold holds that many ticks)
+        self.params.hold.max(0)
     }
 
-    /// A shot: starts the cycle anew, keeping the current slide (S-0105
-    /// claim 27, S1). A travel of 0 starts no cycle.
+    /// `v` clamped to the closed interval between 0 and the travel *ℓ*
+    /// (F7).
+    fn clamp(&self, v: f32) -> f32 {
+        let travel = self.params.travel as f32;
+        // spec: S-0105 Formulas F7 (clamped to the closed interval between 0 and ℓ)
+        v.clamp(travel.min(0.0), travel.max(0.0))
+    }
+
+    /// A shot: restarts the cycle from the current slide (S-0105 claim 27,
+    /// F7, S1). A travel of 0 starts no cycle.
     pub fn fire(&mut self) {
-        let travel = f64::from(self.params.travel);
         if self.params.travel == 0 {
+            // spec: S-0105 Formulas F7 (zero travel starts no cycle)
             return;
         }
+        let travel = f64::from(self.params.travel);
         let tc = f64::from(self.compress_ticks());
-        self.compress_step = if self.quirks.recoil_refire_accumulates || !self.is_running() {
-            // spec: S-0105 Formulas F7 (s_c = ℓ / t_c′, real division, stored truncated)
-            to_f32_rz(div_rz(travel, tc))
-        } else {
-            // spec: S-0105 Edge cases (recoil_refire_accumulates off)
-            to_f32_rz(div_rz(sub_rz(travel, f64::from(self.slide)), tc))
-        };
+        // spec: S-0105 Formulas F7 (s_c = (ℓ − λ_r) / t_c′, 53-bit, stored truncated)
+        self.compress_step = to_f32_rz(div_rz(sub_rz(travel, f64::from(self.slide)), tc));
         self.phase = RecoilPhase::Compress(self.compress_ticks());
     }
 
@@ -2944,18 +2721,28 @@ impl RecoilCycle {
         match self.phase {
             RecoilPhase::Idle => {}
             RecoilPhase::Compress(k) => {
-                // spec: S-0105 Formulas F7 (λ + step, stored truncated)
-                self.slide =
-                    to_f32_rz(add_rz(f64::from(self.slide), f64::from(self.compress_step)));
+                self.slide = if k > 1 {
+                    // spec: S-0105 Formulas F7 (λ + s_c, stored truncated, clamped)
+                    self.clamp(to_f32_rz(add_rz(
+                        f64::from(self.slide),
+                        f64::from(self.compress_step),
+                    )))
+                } else {
+                    // spec: S-0105 Formulas F7 (the last compress tick reaches exactly ℓ)
+                    self.params.travel as f32
+                };
                 self.phase = if k > 1 {
                     RecoilPhase::Compress(k - 1)
                 } else if self.hold_ticks() > 0 {
+                    // spec: S-0105 S1 (compressing, t_h ≥ 1: holding from the next tick)
                     RecoilPhase::Hold(self.hold_ticks())
                 } else {
+                    // spec: S-0105 S1 (compressing, t_h ≤ 0: recovering with no hold)
                     RecoilPhase::Recover(self.recover_ticks())
                 };
             }
             RecoilPhase::Hold(k) => {
+                // spec: S-0105 S1 (holding: λ unchanged for t_h′ ticks)
                 self.phase = if k > 1 {
                     RecoilPhase::Hold(k - 1)
                 } else {
@@ -2964,15 +2751,17 @@ impl RecoilCycle {
             }
             RecoilPhase::Recover(k) => {
                 if k > 1 {
-                    // spec: S-0105 Formulas F7 (s_r = −(ℓ / t_r′))
-                    let s_r = -to_f32_rz(div_rz(
-                        f64::from(self.params.travel),
+                    // spec: S-0105 Formulas F7 (s_r = −ℓ / t_r′, 53-bit, stored truncated)
+                    let s_r = to_f32_rz(div_rz(
+                        -f64::from(self.params.travel),
                         f64::from(self.recover_ticks()),
                     ));
-                    self.slide = to_f32_rz(add_rz(f64::from(self.slide), f64::from(s_r)));
+                    // spec: S-0105 Formulas F7 (λ + s_r, stored truncated, clamped)
+                    self.slide =
+                        self.clamp(to_f32_rz(add_rz(f64::from(self.slide), f64::from(s_r))));
                     self.phase = RecoilPhase::Recover(k - 1);
                 } else {
-                    // spec: S-0105 Formulas F7 (the last recover tick sets λ to 0)
+                    // spec: S-0105 Formulas F7, S1 (the last recover tick sets λ to exactly 0)
                     self.slide = 0.0;
                     self.phase = RecoilPhase::Idle;
                 }
@@ -3285,23 +3074,25 @@ mod tests {
         assert!(barrel_pitch(15360, &cont) < 0.0);
     }
 
-    /// spec: S-0105 claim 10 (the barrel pitches about the turret-frame
-    /// point −t; at t = 0 about the turret origin)
+    /// spec: S-0105 claim 10 (B = T · Ry(φ): the barrel pitches about the
+    /// lateral axis through the turret origin, also at a non-zero
+    /// displacement; lead-confirmed pivot departure)
     #[test]
     fn barrel_pivot() {
-        let [_, t, b] = vehicle_local_transforms(raw32(8), raw32(11), 120, 12288, &q());
-        let tr = t.translation();
-        let pivot = tr.map(|c| -c);
-        let (pb, pt) = (b.apply(pivot), t.apply(pivot));
-        for a in 0..3 {
-            assert!((pb[a] - pt[a]).abs() < 1e-4, "{pb:?} {pt:?}");
+        for offset in [0, 120, -80] {
+            let [_, t, b] = vehicle_local_transforms(raw32(8), raw32(11), offset, 12288, &q());
+            assert_eq!(b, t.rotate_y(barrel_pitch(12288, &q()), &q()));
+            // The turret origin stays put under the pitch.
+            assert_eq!(b.apply([0.0; 3]), t.apply([0.0; 3]));
+            assert_eq!(b.translation(), t.translation());
+            // A point on the barrel's forward axis is pitched.
+            assert!((b.apply([10.0, 0.0, 0.0])[2] - t.apply([10.0, 0.0, 0.0])[2]).abs() > 1.0);
         }
-        // The turret origin moves under the pitch when t ≠ 0.
-        let (ob, ot) = (b.apply([0.0; 3]), t.apply([0.0; 3]));
-        assert!((ob[2] - ot[2]).abs() > 1.0);
-        // t = 0: B = T · Ry(φ).
-        let [_, t0, b0] = vehicle_local_transforms(raw32(8), raw32(11), 0, 12288, &q());
-        assert_eq!(b0, t0.rotate_y(barrel_pitch(12288, &q()), &q()));
+        // Buildings: the same pivot through the shifted turret origin.
+        let [t, b] = building_local_transforms(raw32(5), 40, 12288, &q());
+        assert_eq!(b, t.rotate_y(barrel_pitch(12288, &q()), &q()));
+        assert_eq!(b.translation(), t.translation());
+        assert_ne!(t.translation(), [0.0; 3]);
     }
 
     /// spec: S-0105 claims 5, 9 (building turret: absolute facing, shift
@@ -3808,10 +3599,11 @@ mod tests {
         assert_eq!(img.opaque().iter().map(|p| p.1).collect::<Vec<_>>(), [30]);
     }
 
-    /// spec: S-0105 Formulas F5 (quirks.voxel_x_carry_into_y: a negative x
-    /// step carries 1/256 pixel into y)
+    /// spec: S-0105 claim 24, Formulas F5 (independent coordinates: a
+    /// negative x step never carries into y, in either mode;
+    /// lead-confirmed carry departure)
     #[test]
-    fn x_carry_into_y() {
+    fn no_x_carry_into_y() {
         // y bounds 0 … 2/256 put the row at 255/256 of a pixel.
         let c = |colour| Some(encode_column(&[(0, colour, 0)], 1));
         let s = section(
@@ -3822,22 +3614,13 @@ mod tests {
             vec![c(40), c(41)],
         );
         let m = model(vec![s]);
-        let img = draw_model(&m, 0, &Mat34::IDENTITY, None, false, &q()).unwrap();
-        let mut got = img.opaque();
-        got.sort();
-        // Voxel i = 0 (one negative x step from the farthest corner) moves
-        // down a row; voxel i = 1 (no step) stays.
-        assert_eq!(got, vec![([1, 0], 40), ([2, -1], 41)]);
-        let off = VoxelQuirks {
-            voxel_x_carry_into_y: false,
-            ..q()
-        };
-        let mut got = draw_model(&m, 0, &Mat34::IDENTITY, None, false, &off)
+        let mut got = draw_model(&m, 0, &Mat34::IDENTITY, None, false, &q())
             .unwrap()
             .opaque();
         got.sort();
+        // Voxel i = 0 (one negative x step from the farthest corner) stays
+        // in the row of voxel i = 1 (no step).
         assert_eq!(got, vec![([1, -1], 40), ([2, -1], 41)]);
-        // No carry in the depth-buffered mode.
         let depth = draw_model(&m, 0, &Mat34::IDENTITY, None, true, &q()).unwrap();
         assert!(depth.opaque().iter().all(|p| p.0[1] == -1));
     }
@@ -3907,12 +3690,13 @@ mod tests {
         assert_eq!(got, vec![(1, 81), (2, 81), (3, 80)]);
     }
 
-    /// spec: S-0105 claim 24 (quirks.voxel_depth_zero_hidden: a voxel of
-    /// depth 0 is never drawn)
+    /// spec: S-0105 claims 22, 24, Formulas F5 (unwrapped signed depths:
+    /// depth 0 and negative depths pass empty coordinates; a part wider
+    /// than 256 pixels keeps every voxel; lead-confirmed depth departure)
     #[test]
-    fn depth_zero_hidden() {
+    fn depth_zero_and_negative_depths_drawn() {
         // Model z maps to view x and view z; cell k sits at x = z = 2k,
-        // c = 150, so cell 11 has depth 0 and cell 12 depth 2.
+        // c = 150, so cell 11 has depth 0, cells 0 … 10 negative depths.
         let col: Vec<(u8, u8, u8)> = (0..150).map(|z| (z, 70, 0)).collect();
         let s = section(
             [1, 1, 150],
@@ -3928,16 +3712,54 @@ mod tests {
             [0.0, 0.0, 1.0, 0.0],
         ]);
         let img = draw_model(&m, 0, &tilt, None, true, &q()).unwrap();
-        let xs: Vec<i64> = img.opaque().iter().map(|p| p.0[0]).collect();
-        // Screen x = 150 + buffer x − 128; cell 11 → buffer 0, cell 12 → 2.
-        assert!(!xs.contains(&22) && !xs.contains(&23), "{xs:?}");
-        assert!(xs.contains(&24) && xs.contains(&25));
-        let unhidden = VoxelQuirks {
-            voxel_depth_zero_hidden: false,
-            ..q()
-        };
-        let img = draw_model(&m, 0, &tilt, None, true, &unhidden).unwrap();
-        assert!(img.opaque().iter().any(|p| p.0[0] == 22));
+        assert_eq!(img.copy_size[0], 308);
+        let mut xs: Vec<i64> = img.opaque().iter().map(|p| p.0[0]).collect();
+        xs.sort();
+        // Screen x = 2k for cell k and its right-hand pixel 2k + 1: every
+        // cell, from depth −22 to 276, with nothing wrapped.
+        assert_eq!(xs, (0..300).collect::<Vec<_>>());
+    }
+
+    /// spec: S-0105 claim 24 (depths are compared unwrapped: depth 300
+    /// stays in front of depth 44 in either drawing order)
+    #[test]
+    fn depth_order_never_wraps() {
+        let near = filled([1, 1, 1], [0.0, 0.0, 300.0], [1.0, 1.0, 301.0], 1, 90, 0);
+        let far = filled([1, 1, 1], [0.0, 0.0, 44.0], [1.0, 1.0, 45.0], 1, 91, 0);
+        for m in [
+            model(vec![near.clone(), far.clone()]),
+            model(vec![far.clone(), near.clone()]),
+        ] {
+            let img = draw_model(&m, 0, &Mat34::IDENTITY, None, true, &q()).unwrap();
+            let values: Vec<u8> = img.opaque().iter().map(|p| p.1).collect();
+            assert_eq!(values, [90, 90]);
+        }
+    }
+
+    /// spec: S-0105 claim 24 (the right-hand pixel of a depth-mode voxel is
+    /// (x + 1, y) at every column, including 255, never the next row)
+    #[test]
+    fn depth_right_pixel_never_wraps_to_the_next_row() {
+        // A row of 300 one-voxel columns: image columns well past 255.
+        let n = 150u8;
+        let col = Some(encode_column(&[(0, 77, 0)], 1));
+        let s = section(
+            [n, 1, 1],
+            [0.0; 3],
+            [300.0, 1.0, 1.0],
+            1,
+            vec![col; usize::from(n)],
+        );
+        let img = draw_model(&model(vec![s]), 0, &Mat34::IDENTITY, None, true, &q()).unwrap();
+        let px = img.opaque();
+        let row = px[0].0[1];
+        assert!(px.iter().all(|p| p.0[1] == row), "{px:?}");
+        let mut xs: Vec<i64> = px.iter().map(|p| p.0[0]).collect();
+        xs.sort();
+        xs.dedup();
+        // Voxel i at 2i: pixels 2i and 2i + 1, 300 in one row.
+        assert_eq!(xs.len(), 300);
+        assert_eq!(xs[299] - xs[0], 299);
     }
 
     // --- Normal mode 0 and malformed columns ---
@@ -4245,7 +4067,7 @@ mod tests {
         // By F10 with truncating stores: Q₀₀ = (2.9999964, −0), Q₁₀ =
         // (4.99999619, −0) (2 + 2.9999964 truncated), Q₀₁ = (2.9999964, −2).
         // w₀ = trunc(1.99999976) = 1, h₀ = 2: copy rectangle 9 × 10, corner
-        // (124, 123), c ≈ (3.9999963, −1), so screen = buffer + (−125, −129).
+        // (124, 123), c ≈ (3.9999963, −1), so screen = image + (−125, −129).
         assert_eq!(img.copy_size, [9, 10]);
         // o = (32512, 33024) → pixel (127, 129); Δ_i = (trunc(255.99997),
         // 0) = (255, 0), so column (1, 0) lands on the same pixel as (0, 0);
@@ -4288,11 +4110,11 @@ mod tests {
             (*xs.iter().min().unwrap(), *xs.iter().max().unwrap())
         };
         // Full: Q x = x + 2.9999964 truncated, Δ_i = trunc(511.99997) =
-        // 511, columns at buffer x 124 + ⌊511 i / 256⌋ = 124, 125, 127, 129,
-        // screen = buffer − 122: 2, 3, 5, 7 (+1 for the second pixel).
+        // 511, columns at image x 124 + ⌊511 i / 256⌋ = 124, 125, 127, 129,
+        // screen = image − 122: 2, 3, 5, 7 (+1 for the second pixel).
         assert_eq!(span(&full), (2, 8));
-        // Half: Q x = x / 2 + 2.9999964, Δ_i = 255, buffer x 126, 126, 127,
-        // 128, screen = buffer − 124: 2, 2, 3, 4 (+1). The shift is not
+        // Half: Q x = x / 2 + 2.9999964, Δ_i = 255, image x 126, 126, 127,
+        // 128, screen = image − 124: 2, 2, 3, 4 (+1). The shift is not
         // halved: both start at the same x.
         assert_eq!(span(&half), (2, 5));
         assert_eq!(full.copy_size, [15, 16]);
@@ -4328,8 +4150,8 @@ mod tests {
 
     // --- Recoil ---
 
-    fn run(params: RecoilParams, quirks: RecoilQuirks, shots: &[usize], ticks: usize) -> Vec<f32> {
-        let mut c = RecoilCycle::new(params, quirks);
+    fn run(params: RecoilParams, shots: &[usize], ticks: usize) -> Vec<f32> {
+        let mut c = RecoilCycle::new(params);
         (0..ticks)
             .map(|t| {
                 if shots.contains(&t) {
@@ -4349,63 +4171,83 @@ mod tests {
         }
     }
 
-    /// spec: S-0105 claim 27, Formulas F7, S1 (worked examples)
+    /// spec: S-0105 claim 27, Formulas F7, S1 (worked examples; every
+    /// positive hold holds that many ticks; lead-confirmed hold departure)
     #[test]
     fn recoil_examples() {
-        let rq = RecoilQuirks::default();
         assert_eq!(
-            run(p(3, 2, 3, 4), rq, &[0], 10),
+            run(p(3, 2, 3, 4), &[0], 10),
             [1.5, 3.0, 3.0, 3.0, 3.0, 2.25, 1.5, 0.75, 0.0, 0.0]
         );
         assert_eq!(
-            run(p(3, 2, 1, 4), rq, &[0], 6),
+            run(p(3, 2, 1, 4), &[0], 7),
+            [1.5, 3.0, 3.0, 2.25, 1.5, 0.75, 0.0]
+        );
+        assert_eq!(
+            run(p(3, 2, 2, 4), &[0], 8),
+            [1.5, 3.0, 3.0, 3.0, 2.25, 1.5, 0.75, 0.0]
+        );
+        // Absent-key defaults: 2, 2, 0.
+        assert_eq!(run(RecoilParams::default(), &[0], 4), [2.0, 2.0, 0.0, 0.0]);
+        // A hold of 0 or less holds no tick.
+        assert_eq!(
+            run(p(3, 2, 0, 4), &[0], 6),
             [1.5, 3.0, 2.25, 1.5, 0.75, 0.0]
         );
         assert_eq!(
-            run(p(3, 2, 2, 4), rq, &[0], 8),
-            [1.5, 3.0, 3.0, 3.0, 2.25, 1.5, 0.75, 0.0]
+            run(p(3, 2, -5, 4), &[0], 6),
+            [1.5, 3.0, 2.25, 1.5, 0.75, 0.0]
         );
-        assert_eq!(run(RecoilParams::default(), rq, &[0], 3), [2.0, 0.0, 0.0]);
-        // Second shot during the hold (λ = 3).
-        assert_eq!(
-            run(p(3, 2, 3, 4), rq, &[0, 3], 12),
-            [1.5, 3.0, 3.0, 4.5, 6.0, 6.0, 6.0, 6.0, 5.25, 4.5, 3.75, 0.0]
-        );
-        // Second shot 3 ticks after the first, during compress.
-        let mut want: Vec<f32> = (1..=11).map(|v| v as f32).collect();
-        want.extend([11.0, 11.0, 7.0, 0.0]);
-        assert_eq!(run(p(8, 8, 2, 2), rq, &[0, 3], 15), want);
         // Negative travel slides forward, same magnitudes.
         assert_eq!(
-            run(p(-3, 2, 3, 4), rq, &[0], 9),
+            run(p(-3, 2, 3, 4), &[0], 9),
             [-1.5, -3.0, -3.0, -3.0, -3.0, -2.25, -1.5, -0.75, 0.0]
         );
         // Travel 0 starts no cycle.
-        assert_eq!(run(p(0, 2, 3, 4), rq, &[0], 3), [0.0; 3]);
+        assert_eq!(run(p(0, 2, 3, 4), &[0], 3), [0.0; 3]);
     }
 
-    /// spec: S-0105 Formulas F7 (steps stored truncated: ℓ = 1, t_c = 3)
+    /// spec: S-0105 claim 27, Formulas F7, S1 (a shot during a cycle
+    /// restarts from the current slide toward the travel, never adding
+    /// another travel; lead-confirmed refire departure)
+    #[test]
+    fn recoil_refire_is_bounded() {
+        // Refire at travel 3 (during the hold): compress ticks stay at 3,
+        // then the new hold and recovery follow.
+        assert_eq!(
+            run(p(3, 2, 3, 4), &[0, 3], 12),
+            [1.5, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 2.25, 1.5, 0.75, 0.0]
+        );
+        // Travel 8, compress 8, hold 2, recover 2, refire at slide 3.
+        let mut want: Vec<f32> = vec![1.0, 2.0, 3.0];
+        want.extend([3.625, 4.25, 4.875, 5.5, 6.125, 6.75, 7.375, 8.0]);
+        want.extend([8.0, 8.0, 4.0, 0.0]);
+        assert_eq!(run(p(8, 8, 2, 2), &[0, 3], 15), want);
+        // Repeated shots never exceed the travel, either sign.
+        for travel in [5, -5] {
+            let shots: Vec<usize> = (0..40).step_by(2).collect();
+            let got = run(p(travel, 3, 1, 3), &shots, 50);
+            assert!(got.iter().all(|v| v.abs() <= 5.0), "{got:?}");
+            assert_eq!(got[49], 0.0);
+        }
+    }
+
+    /// spec: S-0105 Formulas F7 (steps stored truncated; the last compress
+    /// tick reaches exactly ℓ: ℓ = 1, t_c = 3)
     #[test]
     fn recoil_step_truncated() {
-        let got = run(p(1, 3, 0, 1), RecoilQuirks::default(), &[0], 1);
-        assert_eq!(got[0], to_f32_rz(1.0 / 3.0));
+        let got = run(p(1, 3, 0, 3), &[0], 6);
+        let step = to_f32_rz(1.0 / 3.0);
+        assert_eq!(got[0], step);
         assert!(f64::from(got[0]) < 1.0 / 3.0);
         assert_ne!(got[0], (1.0f64 / 3.0) as f32);
-    }
-
-    /// spec: S-0105 Edge cases (recoil_hold_one_skipped and
-    /// recoil_refire_accumulates off)
-    #[test]
-    fn recoil_switches_off() {
-        let off = RecoilQuirks {
-            recoil_hold_one_skipped: false,
-            recoil_refire_accumulates: false,
-        };
-        assert_eq!(run(p(3, 2, 1, 4), off, &[0], 4), [1.5, 3.0, 3.0, 2.25]);
-        let peak = run(p(3, 2, 3, 4), off, &[0, 3], 12)
-            .into_iter()
-            .fold(0.0f32, f32::max);
-        assert_eq!(peak, 3.0);
+        assert_eq!(got[1], to_f32_rz(f64::from(step) + f64::from(step)));
+        assert!(got[1] < 2.0 / 3.0);
+        // The third compress tick is exactly the travel.
+        assert_eq!(got[2], 1.0);
+        // Recovery: −1/3 truncated toward zero per tick, then exactly 0.
+        assert_eq!(got[3], to_f32_rz(1.0 - f64::from(step)));
+        assert_eq!(got[5], 0.0);
     }
 
     // --- Whole draws ---
@@ -4474,7 +4316,7 @@ mod tests {
         assert!(draw_model(&model(vec![]), 0, &Mat34::IDENTITY, None, false, &q()).is_none());
     }
 
-    // --- Image reuse (claims 26, 31, 37) and the buffer between draws (claims 32, 34) ---
+    // --- Image reuse (claims 26, 31, 37) and fresh draws (claims 22, 32, 34) ---
 
     /// A one-voxel model whose HVA frame *f* moves it *f* units along x, for
     /// `frames` frames.
@@ -4494,70 +4336,56 @@ mod tests {
         )
     }
 
-    /// spec: S-0105 claim 26 (quirks.voxel_cache_frame_mod32: body frames
-    /// modulo 32 and turret frames modulo 256 in the keys; the cache-disable
-    /// option draws fresh)
+    /// spec: S-0105 claim 26 (complete applicable frames in body, vehicle
+    /// turret and building turret keys; adjacent frames never collide; the
+    /// cache-disable option draws fresh; MS-3b's frame 33 shows frame 33;
+    /// lead-confirmed frame-key departure)
     #[test]
-    fn frame_keys_modulo_32_and_256() {
-        let on = q();
-        let off = VoxelQuirks {
-            voxel_cache_frame_mod32: false,
-            ..q()
-        };
-        let body = |f, quirks: &VoxelQuirks| body_key(RAMP_FLAT, 0, false, f, quirks);
-        assert_eq!(body(1, &on), body(33, &on));
-        assert_ne!(body(1, &on), body(2, &on));
-        assert_ne!(body(1, &off), body(33, &off));
-        let turret = |f, quirks: &VoxelQuirks| {
-            vehicle_turret_key(RAMP_FLAT, 0, 0, 0, None, false, f, quirks)
-        };
-        assert_eq!(turret(5, &on), turret(261, &on));
-        assert_ne!(turret(5, &on), turret(37, &on));
-        assert_ne!(turret(5, &off), turret(261, &off));
-        assert_eq!(
-            building_turret_key(0, 5, &on),
-            building_turret_key(0, 261, &on)
-        );
-        assert_ne!(
-            building_turret_key(0, 5, &off),
-            building_turret_key(0, 261, &off)
-        );
+    fn frame_keys_hold_complete_frames() {
+        let body = |f| body_key(RAMP_FLAT, 0, false, f);
+        assert_ne!(body(1), body(33));
+        assert_ne!(body(1), body(2));
+        assert_eq!(body(33), body(33));
+        let turret = |f| vehicle_turret_key(RAMP_FLAT, 0, 0, 0, None, false, f);
+        assert_ne!(turret(5), turret(261));
+        assert_ne!(turret(5), turret(6));
+        assert_ne!(building_turret_key(0, 5), building_turret_key(0, 261));
+        assert_ne!(building_turret_key(0, 255), building_turret_key(0, 256));
 
-        // MS-3b: once frame 1 is cached, frame 33 shows frame 1's image.
         let m = walking_marker(40);
         let draw = |f: u32| draw_model(&m, f, &Mat34::IDENTITY, None, false, &q()).unwrap();
         assert_ne!(draw(1), draw(33), "the frames look different");
-        for (quirks, disabled, expect) in [(&on, false, 1), (&off, false, 33), (&on, true, 33)] {
+        for disabled in [false, true] {
             let mut cache = ImageCache::default();
-            cache.reuse_or(body(1, quirks), disabled, || draw(1));
-            let got = cache.reuse_or(body(33, quirks), disabled, || draw(33));
-            assert_eq!(got, draw(expect));
+            cache.reuse_or(body(1), disabled, || draw(1));
+            let got = cache.reuse_or(body(33), disabled, || draw(33));
+            assert_eq!(got, draw(33));
         }
     }
 
-    /// spec: S-0105 claim 26 (quirks.voxel_cache_alt_turret_frame: with the
-    /// alternative-model state on, an even turret frame and the odd frame
-    /// after it share a key with that odd frame drawn with the state off)
+    /// spec: S-0105 claims 12, 26 (the alternative-model state and the
+    /// complete turret frame are separate key components: distinct states
+    /// and adjacent frames never collide; lead-confirmed departure)
     #[test]
-    fn alternative_turret_frame_key() {
-        let key = |alt, f, quirks: &VoxelQuirks| {
-            vehicle_turret_key(RAMP_FLAT, 0, 0, 0, None, alt, f, quirks)
-        };
-        let on = q();
-        assert_eq!(key(true, 2, &on), key(true, 3, &on));
-        assert_eq!(key(true, 3, &on), key(false, 3, &on));
-        assert_ne!(key(false, 2, &on), key(false, 3, &on));
-        assert_ne!(key(true, 4, &on), key(true, 3, &on));
-        // v = 2⌊(f mod 256) / 2⌋ + 1: frame 256 + 2 is frame 2's.
-        assert_eq!(key(true, 258, &on), key(false, 3, &on));
-        let off = VoxelQuirks {
-            voxel_cache_alt_turret_frame: false,
-            ..q()
-        };
-        let keys = [key(true, 2, &off), key(true, 3, &off), key(false, 3, &off)];
-        assert_ne!(keys[0], keys[1]);
-        assert_ne!(keys[1], keys[2]);
-        assert_ne!(keys[0], keys[2]);
+    fn alternative_state_is_its_own_key_component() {
+        let key = |alt, f| vehicle_turret_key(RAMP_FLAT, 0, 0, 0, None, alt, f);
+        let keys = [
+            key(true, 2),
+            key(true, 3),
+            key(false, 2),
+            key(false, 3),
+            key(true, 258),
+            key(false, 258),
+        ];
+        for (i, a) in keys.iter().enumerate() {
+            for b in &keys[i + 1..] {
+                assert_ne!(a, b);
+            }
+        }
+        assert_ne!(
+            body_key(RAMP_FLAT, 0, true, 3),
+            body_key(RAMP_FLAT, 0, false, 3)
+        );
     }
 
     /// spec: S-0105 claim 26 (vehicle turret key: the body facing is left
@@ -4574,7 +4402,6 @@ mod tests {
                 None,
                 false,
                 0,
-                &q(),
             )
         };
         assert_eq!(key(0, 4, 0), key(9, 4, 0));
@@ -4590,10 +4417,9 @@ mod tests {
                 None,
                 false,
                 0,
-                &q(),
             )
         });
-        let indexed = |i| vehicle_turret_key(RAMP_FLAT, 0, 0, 0, i, false, 0, &q());
+        let indexed = |i| vehicle_turret_key(RAMP_FLAT, 0, 0, 0, i, false, 0);
         assert_ne!(indexed(Some(0)), indexed(Some(1)));
         assert_eq!(
             shadow_key(RAMP_FLAT, raw32(7)),
@@ -4606,15 +4432,16 @@ mod tests {
         // Barrel images are kept apart from turret images.
         assert_ne!(
             ImageKey::Turret(indexed(None)),
-            barrel_key(indexed(None), ELEVATION_LEVEL, &q())
+            barrel_key(indexed(None), ELEVATION_LEVEL)
         );
     }
 
-    /// spec: S-0105 claims 6, 26 (quirks.barrel_cache_ignores_elevation: a
-    /// barrel cached level stays level after the elevation rises; off, the
-    /// 32-step elevation is part of the key)
+    /// spec: S-0105 claims 6, 26 (the barrel key holds the current 32-step
+    /// elevation: a barrel cached level shows the raised pitch once the
+    /// elevation rises; the turret key has no elevation; lead-confirmed
+    /// departure)
     #[test]
-    fn barrel_key_ignores_elevation() {
+    fn barrel_key_holds_the_elevation() {
         let barrel = model(vec![filled([8, 1, 1], [0.0; 3], [8.0, 1.0, 1.0], 1, 30, 0)]);
         let level = ELEVATION_LEVEL;
         let raised = barrel_elevation_after(DEFAULT_FIRE_ANGLE, 2);
@@ -4624,145 +4451,229 @@ mod tests {
             draw_model(&barrel, 0, &pose.barrel, None, false, &q()).unwrap()
         };
         assert_ne!(draw(level), draw(raised), "the pitch shows");
-        let turret = vehicle_turret_key(RAMP_FLAT, 0, 0, 20, None, false, 0, &q());
-        let on = q();
-        let off = VoxelQuirks {
-            barrel_cache_ignores_elevation: false,
-            ..q()
-        };
-        assert_eq!(
-            barrel_key(turret, level, &on),
-            barrel_key(turret, raised, &on)
-        );
-        assert_ne!(
-            barrel_key(turret, level, &off),
-            barrel_key(turret, raised, &off)
-        );
-        // Raw elevations within one 32-step value share a key even off.
-        assert_eq!(
-            barrel_key(turret, level, &off),
-            barrel_key(turret, level - 500, &off)
-        );
-        for (quirks, expect) in [(&on, level), (&off, raised)] {
-            let mut cache = ImageCache::default();
-            cache.reuse_or(barrel_key(turret, level, quirks), false, || draw(level));
-            let got = cache.reuse_or(barrel_key(turret, raised, quirks), false, || draw(raised));
-            assert_eq!(got, draw(expect));
-        }
+        let turret = vehicle_turret_key(RAMP_FLAT, 0, 0, 20, None, false, 0);
+        assert_ne!(barrel_key(turret, level), barrel_key(turret, raised));
+        // Raw elevations within one 32-step value share a key.
+        assert_eq!(barrel_key(turret, level), barrel_key(turret, level - 500));
+        let mut cache = ImageCache::default();
+        cache.reuse_or(barrel_key(turret, level), false, || draw(level));
+        let got = cache.reuse_or(barrel_key(turret, raised), false, || draw(raised));
+        assert_eq!(got, draw(raised));
+        // Back at level, the level image is reused.
+        let back = cache.reuse_or(barrel_key(turret, level), false, || draw(raised));
+        assert_eq!(back, draw(level));
     }
 
     /// spec: S-0105 claim 37 (a barrel without a turret: kept with the barrel
-    /// images under its 32-step facing and frame modulo 256; the elevation is
-    /// not part of the key, quirks.barrel_cache_ignores_elevation)
+    /// images under its 32-step facing, complete frame and current 32-step
+    /// elevation; lead-confirmed departure)
     #[test]
     fn barrel_only_key() {
-        let on = q();
         let raised = barrel_elevation_after(DEFAULT_FIRE_ANGLE, 2);
-        let key = |facing: i32, frame, e, quirks: &VoxelQuirks| {
-            super::barrel_only_key(raw32(facing), frame, e, quirks)
-        };
-        assert_eq!(key(4, 3, ELEVATION_LEVEL, &on), key(4, 259, raised, &on));
-        assert_ne!(
-            key(4, 3, ELEVATION_LEVEL, &on),
-            key(5, 3, ELEVATION_LEVEL, &on)
-        );
-        assert_ne!(
-            key(4, 3, ELEVATION_LEVEL, &on),
-            key(4, 4, ELEVATION_LEVEL, &on)
-        );
+        let key = |facing: i32, frame, e| super::barrel_only_key(raw32(facing), frame, e);
+        assert_ne!(key(4, 3, ELEVATION_LEVEL), key(4, 259, ELEVATION_LEVEL));
+        assert_ne!(key(4, 3, ELEVATION_LEVEL), key(4, 3, raised));
+        assert_ne!(key(4, 3, ELEVATION_LEVEL), key(5, 3, ELEVATION_LEVEL));
+        assert_ne!(key(4, 3, ELEVATION_LEVEL), key(4, 4, ELEVATION_LEVEL));
+        assert_eq!(key(4, 3, ELEVATION_LEVEL), key(4, 3, ELEVATION_LEVEL - 500));
         assert!(matches!(
-            key(4, 3, ELEVATION_LEVEL, &on),
+            key(4, 3, ELEVATION_LEVEL),
             ImageKey::Barrel { .. }
         ));
-        let off = VoxelQuirks {
-            barrel_cache_ignores_elevation: false,
-            ..q()
-        };
-        assert_ne!(key(4, 3, ELEVATION_LEVEL, &off), key(4, 3, raised, &off));
     }
 
-    /// spec: S-0105 claim 34 (quirks.voxel_depth_plane_partial_clear: a
-    /// draw made with the mode off between two depth-buffered draws leaves
-    /// the first one's depths outside its own clear area, MS-18)
-    #[test]
-    fn depth_plane_kept_between_draws() {
-        // The probe: one flat layer of isolated voxels, 3 pixels apart, over
-        // 60 × 60 pixels, none of depth 0 (identity view: depth ≈ 128).
-        let n = 20usize;
-        let probe = model(vec![filled(
-            [n as u8, n as u8, 1],
+    /// The probe of the history tests: one flat layer of isolated voxels,
+    /// 3 pixels apart, over 60 × 60 pixels.
+    fn probe() -> VoxelModel {
+        model(vec![filled(
+            [20, 20, 1],
             [0.0; 3],
             [60.0, 60.0, 1.0],
             1,
             90,
             0,
-        )]);
-        // The spoiler: a single voxel, a copy rectangle of 9 × 9 pixels.
-        let spoiler = model(vec![filled([1, 1, 1], [0.0; 3], [1.0; 3], 1, 91, 0)]);
-        let id = Mat34::IDENTITY;
-        let run = |quirks: &VoxelQuirks, spoiler_depth: bool| {
-            let mut c = VoxelCanvas::new();
-            let first = c.draw_part(&probe, 0, &id, None, true, quirks).unwrap();
-            c.draw_part(&spoiler, 0, &id, None, spoiler_depth, quirks)
-                .unwrap();
-            let second = c.draw_part(&probe, 0, &id, None, true, quirks).unwrap();
-            (first, second)
-        };
-        let (first, second) = run(&q(), false);
-        assert_eq!(
-            first.opaque().len(),
-            2 * n * n,
-            "every voxel, two pixels each"
-        );
-        let kept = second.opaque().len();
-        // Only voxels inside the spoiler's clear area (10 × 10 pixels) show.
-        assert!(kept > 0 && kept <= 100, "{kept}");
-        // Control: a spoiler drawn in the mode clears the depths over the
-        // probe's clear area, so the probe shows whole again.
-        let (_, control) = run(&q(), true);
-        assert_eq!(control, first);
-        // Off: the whole plane is cleared before every depth-buffered draw.
-        let off = VoxelQuirks {
-            voxel_depth_plane_partial_clear: false,
-            ..q()
-        };
-        let (first_off, second_off) = run(&off, false);
-        assert_eq!(first_off, first);
-        assert_eq!(second_off, first);
+        )])
     }
 
-    /// spec: S-0105 claim 34 (quirks.voxel_colour_partial_clear: a pixel
-    /// written outside the previous fresh draw's widened copy rectangle
-    /// survives the next clear; off, every fresh draw starts transparent)
+    /// spec: S-0105 claims 24, 34, S2 (every fresh depth-mode draw starts
+    /// with empty depth everywhere: no draw in between, with or without
+    /// the mode, suppresses a fresh depth-option part, MS-18;
+    /// lead-confirmed clearing departure)
     #[test]
-    fn colour_residue_outside_the_clear_area() {
-        let single = model(vec![filled([1, 1, 1], [0.0; 3], [1.0; 3], 1, 50, 0)]);
+    fn depth_cleared_for_every_depth_draw() {
+        let probe = probe();
+        let spoiler = model(vec![filled([1, 1, 1], [0.0; 3], [1.0; 3], 1, 91, 0)]);
         let id = Mat34::IDENTITY;
-        for (quirks, survives) in [
-            (q(), true),
-            (
-                VoxelQuirks {
-                    voxel_colour_partial_clear: false,
-                    ..q()
-                },
-                false,
-            ),
-        ] {
-            let mut c = VoxelCanvas::new();
-            c.draw_part(&single, 0, &id, None, false, &quirks).unwrap();
-            let [x0, y0, w, h] = c.last_copy.unwrap();
-            // A stray pixel two columns right of the clear area (columns x₀ … x₀ + w), and one
-            // inside it.
-            let size = BUFFER_SIZE as i64;
-            let outside = (y0 * size + x0 + w + 2) as usize;
-            let inside = ((y0 + h) * size + x0 + w) as usize;
-            let buf = c.buf.as_mut().unwrap();
-            buf.colour[outside] = 77;
-            buf.colour[inside] = 78;
-            let buf = c.begin(false, &quirks);
-            assert_eq!(buf.colour[outside] == 77, survives);
-            assert_eq!(buf.colour[inside], 0);
+        for spoiler_depth in [false, true] {
+            let c = VoxelCanvas::new();
+            let first = c.draw_part(&probe, 0, &id, None, true, &q()).unwrap();
+            assert_eq!(
+                first.opaque().len(),
+                2 * 20 * 20,
+                "every voxel, two pixels each"
+            );
+            c.draw_part(&spoiler, 0, &id, None, spoiler_depth, &q())
+                .unwrap();
+            c.draw_shadow(&probe, 0, &id, 0, false, &q()).unwrap();
+            let second = c.draw_part(&probe, 0, &id, None, true, &q()).unwrap();
+            assert_eq!(second, first);
         }
+    }
+
+    /// spec: S-0105 claims 22, 34 (every fresh draw starts completely
+    /// transparent: an earlier, larger image never contaminates a later
+    /// one; lead-confirmed clearing departure)
+    #[test]
+    fn fresh_draws_start_transparent() {
+        let single = model(vec![filled([1, 1, 1], [0.0; 3], [1.0; 3], 1, 50, 0)]);
+        // A wide model spanning more than 256 pixels, then a small one.
+        let wide = model(vec![filled(
+            [150, 1, 1],
+            [0.0; 3],
+            [300.0, 1.0, 1.0],
+            1,
+            60,
+            0,
+        )]);
+        let id = Mat34::IDENTITY;
+        let v = view(&q());
+        let alone = VoxelCanvas::new()
+            .draw_part(&single, 0, &v, None, false, &q())
+            .unwrap();
+        let c = VoxelCanvas::new();
+        for depth in [false, true] {
+            c.draw_part(&wide, 0, &id, None, depth, &q()).unwrap();
+            c.draw_shadow(&wide, 0, &id, 0, false, &q()).unwrap();
+            let after = c.draw_part(&single, 0, &v, None, false, &q()).unwrap();
+            assert_eq!(after, alone);
+            assert_eq!(after.opaque().len(), 1);
+            assert!(after.opaque().iter().all(|p| p.1 == 50));
+        }
+    }
+
+    /// spec: S-0105 claims 22, 25, Formulas F6 (no wrap: a part wider than
+    /// 256 pixels shows every voxel at its own place, and a voxel beyond
+    /// the copy rectangle never reappears inside it; lead-confirmed wrap
+    /// departure)
+    #[test]
+    fn wide_part_never_wraps() {
+        let id = Mat34::IDENTITY;
+        let wide = model(vec![filled(
+            [150, 1, 1],
+            [0.0; 3],
+            [300.0, 1.0, 1.0],
+            1,
+            60,
+            0,
+        )]);
+        let img = draw_model(&wide, 0, &id, None, false, &q()).unwrap();
+        assert_eq!(img.copy_size, [308, 9]);
+        assert_eq!([img.width, img.height], [308, 9]);
+        let mut xs: Vec<i64> = img.opaque().iter().map(|p| p.0[0]).collect();
+        xs.sort();
+        // Counted from the farthest corner (max x, max y; claim 21), the
+        // voxel n_x steps away lands at screen x = 300 − 2 n_x: 150 distinct
+        // pixels in one row, 2 … 300.
+        assert_eq!(xs, (1..=150).map(|i| 2 * i).collect::<Vec<_>>());
+        // A malformed column (claim 36) whose second voxel lies 256 cells,
+        // 256 pixels, beyond its first: it falls outside the copy rectangle
+        // and is not drawn, rather than wrapping onto the first one's pixel.
+        let data = vec![0, 1, 62, 0, 1, 255, 0, 0, 0, 1, 63, 0, 1, 1, 0, 0];
+        let s = section([1, 1, 2], [0.0; 3], [1.0, 1.0, 2.0], 1, vec![Some(data)]);
+        let along_x = mat([
+            [0.0, 0.0, 1.0, 0.0],
+            [0.0, 1.0, 0.0, 0.0],
+            [0.0, 0.0, 1.0, 0.0],
+        ]);
+        let img = draw_model(&model(vec![s]), 0, &along_x, None, false, &q()).unwrap();
+        assert_eq!(img.copy_size, [10, 9]);
+        let px = img.opaque();
+        assert_eq!(px.len(), 1, "{px:?}");
+        assert_eq!(px[0].1, 62);
+    }
+
+    /// interim: Q-0470 (an image keeps at most an IMAGE_LIMIT window of a
+    /// larger copy rectangle, centred on the origin shift; the copy size
+    /// stays unclipped)
+    #[test]
+    fn oversized_copy_rectangle_is_cut_to_the_window() {
+        let huge = model(vec![filled(
+            [3, 1, 1],
+            [0.0; 3],
+            [12000.0, 1.0, 1.0],
+            1,
+            64,
+            0,
+        )]);
+        for depth in [false, true] {
+            let img = draw_model(&huge, 0, &Mat34::IDENTITY, None, depth, &q()).unwrap();
+            assert_eq!(img.copy_size, [12008, 9]);
+            assert_eq!([img.width, img.height], [IMAGE_LIMIT as u32, 9]);
+            // The copy rectangle starts at image x 128 − 6000 − 4 and lands
+            // at screen x 6000 − 6004; the window's image columns
+            // −1920 … 2175 land at screen x 3952 … 8047. The voxels lie at
+            // screen x 4000, 8000 and 12000; the last is cut.
+            assert_eq!(img.offset[0], 3952);
+            let xs: Vec<i64> = img.opaque().iter().map(|p| p.0[0]).collect();
+            assert!(xs.contains(&4000) && xs.contains(&8000), "{xs:?}");
+            assert!(xs.iter().all(|&x| x < 8048), "{xs:?}");
+        }
+    }
+
+    /// spec: S-0105 claims 32, 33, S2 (the depth-buffered mode is on only
+    /// during a fresh depth-option part draw: shadows never enable it, it
+    /// is off between draws, and a part's depth look follows only its own
+    /// type's option, fresh or reused; Q-0056, lead-confirmed departure)
+    #[test]
+    fn depth_mode_belongs_to_depth_option_parts() {
+        let single = model(vec![filled([1, 1, 1], [0.0; 3], [1.0; 3], 1, 50, 0)]);
+        let plate = model(vec![filled([2, 2, 1], [0.0; 3], [2.0, 2.0, 1.0], 1, 51, 0)]);
+        let v = view(&q());
+        let c = VoxelCanvas::new();
+        let width = |img: PartImage| img.opaque().len();
+        assert!(!c.depth_mode());
+        assert_eq!(
+            width(c.draw_part(&single, 0, &v, None, false, &q()).unwrap()),
+            1
+        );
+        // A shadow (of any type) leaves the mode off and is drawn without
+        // it: one mark pair per present column, as without the mode.
+        let shadow = c
+            .draw_shadow(&plate, 0, &Mat34::IDENTITY, 0, false, &q())
+            .unwrap();
+        assert_eq!(
+            shadow,
+            draw_shadow(&plate, 0, &Mat34::IDENTITY, 0, false, &q()).unwrap()
+        );
+        assert!(!c.depth_mode());
+        assert_eq!(
+            width(c.draw_part(&single, 0, &v, None, false, &q()).unwrap()),
+            1,
+            "no depth look after a shadow"
+        );
+        // A depth-option part has the depth look, and the mode is off again
+        // afterwards.
+        assert_eq!(
+            width(c.draw_part(&single, 0, &v, None, true, &q()).unwrap()),
+            2
+        );
+        assert!(!c.depth_mode());
+        assert_eq!(
+            width(c.draw_part(&single, 0, &v, None, false, &q()).unwrap()),
+            1
+        );
+        // Reused images keep their own type's look.
+        let mut cache = ImageCache::default();
+        let key = body_key(RAMP_FLAT, 0, false, 0);
+        let plain = cache.reuse_or(key, false, || {
+            c.draw_part(&single, 0, &v, None, false, &q()).unwrap()
+        });
+        c.draw_part(&single, 0, &v, None, true, &q()).unwrap();
+        let reused = cache.reuse_or(key, false, || {
+            c.draw_part(&single, 0, &v, None, true, &q()).unwrap()
+        });
+        assert_eq!(reused, plain);
+        assert!(!c.depth_mode());
     }
 
     /// spec: S-0105 claims 19, 21 (a later voxel whose lighting-table entry is
@@ -4788,120 +4699,5 @@ mod tests {
         // and the farther voxel then fails the test.
         let img = draw_model(&m, 0, &id, Some(&vpl), true, &q()).unwrap();
         assert!(img.opaque().is_empty());
-    }
-
-    /// spec: S-0105 claim 32, S2 (quirks.depth_mode_leak on: a depth-option
-    /// type's fresh shadow switches the depth-buffered mode on for every
-    /// later fresh draw until a depth-option part is drawn fresh; reused
-    /// images switch nothing and keep their look)
-    #[test]
-    fn depth_mode_leaks_after_a_depth_option_shadow() {
-        let single = model(vec![filled([1, 1, 1], [0.0; 3], [1.0; 3], 1, 50, 0)]);
-        let plate = model(vec![filled([2, 2, 1], [0.0; 3], [2.0, 2.0, 1.0], 1, 51, 0)]);
-        let v = view(&q());
-        let mut c = VoxelCanvas::new();
-        let width = |img: PartImage| img.opaque().len();
-        // Off at program start: one pixel.
-        assert!(!c.depth_mode());
-        assert_eq!(
-            width(c.draw_part(&single, 0, &v, None, false, &q()).unwrap()),
-            1
-        );
-        // A shadow of a type without the option switches nothing.
-        c.draw_shadow(&plate, 0, &Mat34::IDENTITY, 0, false, false, &q())
-            .unwrap();
-        assert!(!c.depth_mode());
-        // A depth-option type's shadow opens the window.
-        c.draw_shadow(&plate, 0, &Mat34::IDENTITY, 0, false, true, &q())
-            .unwrap();
-        assert!(c.depth_mode());
-        let mut cache = ImageCache::default();
-        let key = body_key(RAMP_FLAT, 0, false, 0, &q());
-        let leaked = cache.reuse_or(key, false, || {
-            c.draw_part(&single, 0, &v, None, false, &q()).unwrap()
-        });
-        assert_eq!(width(leaked.clone()), 2, "the depth look");
-        assert!(c.depth_mode(), "other types' draws leave it on");
-        // A reused depth-option image switches nothing.
-        let mut opt_cache = ImageCache::default();
-        opt_cache.insert(key, leaked.clone());
-        opt_cache.reuse_or(key, false, || {
-            c.draw_part(&single, 0, &v, None, true, &q()).unwrap()
-        });
-        assert!(c.depth_mode());
-        // A fresh draw of a depth-option part closes it.
-        c.draw_part(&single, 0, &v, None, true, &q()).unwrap();
-        assert!(!c.depth_mode());
-        assert_eq!(
-            width(c.draw_part(&single, 0, &v, None, false, &q()).unwrap()),
-            1
-        );
-        // The image made in the window keeps the look when reused.
-        let reused = cache.reuse_or(key, false, || {
-            c.draw_part(&single, 0, &v, None, false, &q()).unwrap()
-        });
-        assert_eq!(reused, leaked);
-    }
-
-    /// spec: S-0105 claim 32, Edge cases (quirks.depth_mode_leak off, Q-0056: a shadow never
-    /// switches the mode on, so a later part of a type without the option is drawn without it)
-    #[test]
-    fn depth_mode_leak_off_keeps_the_mode_to_depth_option_parts() {
-        let single = model(vec![filled([1, 1, 1], [0.0; 3], [1.0; 3], 1, 50, 0)]);
-        let plate = model(vec![filled([2, 2, 1], [0.0; 3], [2.0, 2.0, 1.0], 1, 51, 0)]);
-        let v = view(&q());
-        let off = VoxelQuirks {
-            depth_mode_leak: false,
-            ..q()
-        };
-        let mut c = VoxelCanvas::new();
-        c.draw_shadow(&plate, 0, &Mat34::IDENTITY, 0, false, true, &off)
-            .unwrap();
-        assert!(!c.depth_mode());
-        let img = c.draw_part(&single, 0, &v, None, false, &off).unwrap();
-        assert_eq!(img.opaque().len(), 1, "the look without the mode");
-        // A mode left on by draws with the switch on is not used with it off.
-        c.draw_shadow(&plate, 0, &Mat34::IDENTITY, 0, false, true, &q())
-            .unwrap();
-        assert!(c.depth_mode());
-        let img = c.draw_part(&single, 0, &v, None, false, &off).unwrap();
-        assert_eq!(img.opaque().len(), 1);
-    }
-
-    /// spec: S-0105 claims 32 and 34, S2 (quirks.depth_mode_leak on: a depth-option shadow is made
-    /// in the mode, so its clear resets the depth plane over the previous draw's clear area; off:
-    /// its clear leaves the depth plane as it is, and later depth-tested parts see the old depths)
-    #[test]
-    fn depth_option_shadow_clears_depth_only_with_the_leak() {
-        let n = 20usize;
-        let probe = model(vec![filled(
-            [n as u8, n as u8, 1],
-            [0.0; 3],
-            [60.0, 60.0, 1.0],
-            1,
-            90,
-            0,
-        )]);
-        let spoiler = model(vec![filled([1, 1, 1], [0.0; 3], [1.0; 3], 1, 91, 0)]);
-        let id = Mat34::IDENTITY;
-        let run = |quirks: &VoxelQuirks| {
-            let mut c = VoxelCanvas::new();
-            let first = c.draw_part(&probe, 0, &id, None, true, quirks).unwrap();
-            c.draw_shadow(&probe, 0, &id, 0, false, true, quirks)
-                .unwrap();
-            c.draw_part(&spoiler, 0, &id, None, false, quirks).unwrap();
-            let second = c.draw_part(&probe, 0, &id, None, true, quirks).unwrap();
-            (first, second)
-        };
-        let (first, second) = run(&q());
-        assert_eq!(second, first, "the shadow cleared the probe's depths");
-        let off = VoxelQuirks {
-            depth_mode_leak: false,
-            ..q()
-        };
-        let (first_off, second_off) = run(&off);
-        assert_eq!(first_off, first);
-        let kept = second_off.opaque().len();
-        assert!(kept > 0 && kept <= 100, "{kept}");
     }
 }

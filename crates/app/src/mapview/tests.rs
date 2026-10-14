@@ -953,20 +953,24 @@ fn hostile_maps_build() {
     }
 }
 
-/// spec: S-0105 claim 34 and S2 (the voxel buffer and the depth-buffered mode are kept across
-/// games: only the start of the program resets them), claim 26 (our engine empties the image
-/// caches when a game starts)
+/// spec: S-0105 claims 32, 34 and S2 (the depth-buffered mode is off between draws, drawn
+/// frames and games: shadows never turn it on and a depth-option part's draw ends with it off;
+/// lead-confirmed departure), claim 26 (our engine empties the image caches when a game starts)
 #[test]
 fn voxel_canvas_carries_over_between_games() {
     use glasnost_render::voxel::{Mat34, VoxelCanvas, VoxelModel, VoxelQuirks};
     let q = VoxelQuirks::default();
     let model = VoxelModel::new(&glasnost_fmt::vxl::synthetic_model(), None, &q);
-    let mut canvas = VoxelCanvas::new();
-    // A depth-option type's fresh shadow opens a claim 32 window.
+    let canvas = VoxelCanvas::new();
+    // A shadow (of any type) and a depth-option part leave the mode off.
     canvas
-        .draw_shadow(&model, 0, &Mat34::IDENTITY, 0, false, true, &q)
+        .draw_shadow(&model, 0, &Mat34::IDENTITY, 0, false, &q)
         .unwrap();
-    assert!(canvas.depth_mode());
+    assert!(!canvas.depth_mode());
+    canvas
+        .draw_part(&model, 0, &Mat34::IDENTITY, None, true, &q)
+        .unwrap();
+    assert!(!canvas.depth_mode());
     let (import, catalogue, assets) = context();
     let text = scene_map_text();
     let doc = Document::parse(&text, Quirks::default(), &mut Vec::new());
@@ -983,10 +987,10 @@ fn voxel_canvas_carries_over_between_games() {
         rules: None,
         cells: None,
     };
-    // The next game's scene continues with that canvas: the window is still open.
+    // The next game's scene continues with that canvas: the mode is still off.
     let (_, painter) = super::build::build_parts_with(&inputs, false, canvas);
-    assert!(painter.canvas().depth_mode());
-    // A program start has it off.
+    assert!(!painter.canvas().depth_mode());
+    // A program start has it off too.
     let (_, fresh) = super::build::build_parts(&inputs, false);
     assert!(!fresh.canvas().depth_mode());
 }
