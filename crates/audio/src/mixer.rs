@@ -17,9 +17,9 @@ use glasnost_fmt::pcm::Pcm;
 /// Unity gain in the mixer's fixed point (16 fractional bits).
 pub const UNITY: u32 = 1 << 16;
 
-/// Leptons per cell (S-0205's lepton unit: 256 to a cell side), used only to
-/// state the interim distances in cells.
-const CELL: i32 = 256;
+/// Leptons per cell side, used only to state the interim distances in
+/// cells.
+const CELL: i32 = 256; // spec: S-0204 claim 2 (position to cell: 256 leptons to a cell side)
 
 /// A decoded sound, ready to mix: interleaved signed 16-bit samples, one or
 /// two channels.
