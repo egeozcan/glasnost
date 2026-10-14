@@ -2,7 +2,7 @@
 id: S-0302
 title: Damage resolution (shot damage, defences, versus values, rounding, healing, health thresholds)
 topic: combat
-revision: 15
+revision: 16
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -65,7 +65,9 @@ Shared terms used here are defined in the glossary: *armour class*, *warhead*, *
   glossary's *difficulty skill block* entry and applied in claim 3: in a skirmish every player house
   uses the normal row unless the player's optional handicap setting picks another (claim 3), and a
   row that a map sets for a house is ignored. The neutral and special
-  houses have no row at all (claim 3).
+  houses have no row at all (claim 3). The original's computer-easy-bonus shift uses the
+  glossary's *human participant*, which includes observers (S-0412 claim 4); it never occurs
+  in a skirmish, which has at most one human participant.
 - **Versus value *v*.** The glossary's *versus value* (a double), written *v* in the formulas.
 - **Hit.** One delivery of an amount of damage, with a warhead, to one object, carrying the two
   markers of claim 1. A projectile's detonation delivers one hit to every object it reaches
@@ -192,7 +194,8 @@ Shared terms used here are defined in the glossary: *armour class*, *warhead*, *
      not established, so no isolated test of those values is specified; the wave's
      attacking house column: a wave kill credits the attacker whether the wave carries its
      firer's house or none (claim 14), so a wave that carries its firer's house is not told apart
-     from one that carries none)
+     from one that carries none; the other believed scripted sources mentioned outside the table:
+     no precise source setup and expected metadata are established here)
    - Confidence: high (detonations and waves never ignore defences and never carry no-escape; a
      detonation of a firer that has not been killed, removed or started to cloak carries it and its
      owner); medium (a
@@ -205,7 +208,8 @@ Shared terms used here are defined in the glossary: *armour class*, *warhead*, *
      claim 20 having no source object and house; the damaging-animation row, which is
      not traced; the bridge row, which its owning spec must confirm; that the detonations of a
      firer that starts to cloak carry neither attacker nor house; that those of a firer loaded into
-     a closed transport still carry it)
+     a closed transport still carry it; the other believed scripted sources without established
+     setups)
 
 ### Firing side
 
@@ -272,8 +276,9 @@ Shared terms used here are defined in the glossary: *armour class*, *warhead*, *
      selects, as the table says. S-0412 (claim 4) owns this pairing. The row depends only on the
      entry, not on the order in which the setup screen lists the entries. The shift moves a
      computer player whose row is not the easy row one row towards easy (difficult to normal,
-     normal to easy), and applies when more than one human player is in the game and the rules'
-     computer-easy-bonus flag is on.
+     normal to easy), and applies when more than one human participant is in the game and the
+     rules' computer-easy-bonus flag is on (S-0412 claim 4). Human participants include observers.
+     A skirmish has at most one, so this original-only shift never occurs in a skirmish.
 
      | Lobby entry | Index | Row without the shift | Row with the shift |
      |---|---|---|---|
@@ -288,8 +293,10 @@ Shared terms used here are defined in the glossary: *armour class*, *warhead*, *
      product; D19, parts a and b, for the normal row's firepower factor in the product and for the absence of
      any effect of the row's armour factor and the country's general armour factor; part c for the
      rows of computer houses; S-0412 scenario K5 part d for the factor of exactly 1.0 of the neutral
-     and special houses); `unmeasured` (the one-row shift: it needs a game with more than one
-     person, a network game that is out of scope here, and it does not affect our engine)
+     and special houses); `unmeasured` (the one-row shift, including its observer-inclusive
+     count: it needs more than one human participant, which a skirmish never has; network
+     games are out of scope, and it does not affect our engine. The normal-row default,
+     optional handicap and ignored map row are design rules, not observations of the original)
    - Confidence: high (the product for a human-controlled house, the unused armour factors, the
      exact 1.0 of the two non-player houses, the row of a computer house in a skirmish with one
      person, which the lobby entry selects); low (the shift and its conditions, which are
@@ -465,7 +472,10 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
      object; the − entry of the self-damage row: no known setup makes a building deliver a healing
      hit to itself; other table entries not exercised by D6, D8, D16, D17, D26 or S-0011 T9:
      those scenarios do not cover every combination of source markers and target protections,
-     in particular an ignoring-defences hit with an allied attacker)
+     in particular an ignoring-defences hit with an allied attacker; the invulnerability
+     effect's size of twice the defended amount: D6 checks health only and supplies no
+     size-sensitive visual comparison; the direction of the one-way alliance test:
+     D8 and D17 use mutually allied houses only)
    - Confidence: high for the + column except the no-health rows and for the − and I entries that D6, D8, D16,
      D17 and D26 test; medium for the stages of the rows that only D16 and D17 test, and for the
      vehicle-factory, laser-fence and bridge-repair-hut rows (the conditions are clear; D16 is
@@ -546,7 +556,10 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
       special-abilities specs own being berserk, and no observable of it is known for a state that
       ends at once; and *T* for a hit that ignores defences: a trigger kill with a berserk demolition warhead
       can deliver one, but the original then hangs on its survivor, preventing observation of
-      when the berserk state ends)
+      when the berserk state ends; the absence of trigger reactions to a berserk hit: D23 f
+      observes disguise only and no tag-event test is supplied here; the direction of the
+      one-way alliance exception: D17 uses mutual alliances; readiness loss at strength 0:
+      D10 uses positive strength and no setup keeps a strength-0 target alive to receive a hit)
     - Confidence: medium (readiness loss, including that it uses the amount before the versus value
       and happens even when a later row stops the hit); medium (berserk duration, its reset, and
       the stages); medium (a detonation of a firer that has been killed carries no attacking
@@ -796,7 +809,8 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
       and the resulting health amount and ownerless shot; part j for healing and nonlethal
       follow-up hits; D24 for the credit); `unmeasured`
       (the *post-mortem* result of the hits: it has no known observable, claim 12, so
-      no scenario tests it; the expiry hit's no-escape marker: this marker affects vehicle crew,
+      no scenario tests it; postponement while being erased: D13 h tests electromagnetic-pulse
+      blocking, not an erasing lock across expiry; the expiry hit's no-escape marker: this marker affects vehicle crew,
       not the building target, so D13 cannot distinguish its values; credit to a separately
       recorded charge planter: D13 uses no planted charge and no charge-planting scenario is
       supplied here; removal other than sale before expiry: D13 f tests sale only, and no other
@@ -820,7 +834,9 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
     a versus value from 0 % up to but not including 100 %, 1 at 100 %. A hit that ignores defences then does nothing.
     Quirk `quirks.airborne_mutation_hit_raised` (Edge cases).
     - Backing: `measurable` (scenario D14 for ordinary hits; D16 part d4 for unchanged health
-      and the resulting hang when the trigger kill ignores defences)
+      and the resulting hang when the trigger kill ignores defences); `unmeasured` (which
+      surface the height is relative to: neither scenario places the infantry on a bridge
+      deck, the only case that distinguishes the two height definitions)
     - Confidence: medium (the reset to 0 and the later raise are both clear; the intent is not)
 
 18. **Expected damage for targeting.** When an object fires at another, the original also computes
@@ -877,8 +893,13 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
 
     S-0303 delivers hits to terrain objects like any other object of a scanned cell, and a sonic
     wave does too (claim 1).
-    - Backing: `measurable` (scenario D28); `unmeasured` (the crumbling and the moment the terrain
-      object leaves play: no scenario of this spec observes it, and no terrain spec owns it yet)
+    - Backing: `measurable` (scenario D28 for its named ordinary-hit cases, absence of credit,
+      sonic-wave reach and ore burst); `unmeasured` (the terrain rules for hits that ignore
+      defences: D28 supplies only detonations and waves, neither of which carries that marker,
+      and no scenario delivers an ignoring-defences hit to a terrain object; the exclusion of
+      every other target-side protection: D28 does not test each such property on terrain. The
+      crumbling and the moment the terrain object leaves play are also unmeasured: no scenario of this spec
+      observes it, and no terrain spec owns it yet)
     - Confidence: medium (the two stopping tests, the armour class and versus, the absence of
       credit, and the ore-spawning detonation); low (that claims 6, 11 and 12 are all there is
       between the two tests and the destruction; the crumbling)
@@ -1007,7 +1028,7 @@ its delay-at-edge factor (single); *s*: its spread (single, cells); *r*: the dis
 > *R*′ = 256 × trunc(*s*) (the spread's whole cells, not trunc(256 *s*) as in F3).
 > *K* = trunc(RZ₅₃(*F* + RZ₅₃(RZ₅₃(RZ₅₃(RZ₅₃(*α* × *F*) − *F*) / *R*′) × *r*))). Unit: ticks.
 >
-> For a spread below one cell, *R*′ = 0 and the quotient is infinite or not a number, which the
+> For a non-negative spread below one cell, *R*′ = 0 and the quotient is infinite or not a number, which the
 > conversion of S-0205 (claim 7) maps to 0, so *K* = 0.
 
 **F8, expected damage** (claim 18).
@@ -1120,7 +1141,7 @@ Observable consequences within one hit:
   later rule stops the hit. Off: it uses the final amount *m* of the hit (after claim 7) and does
   not happen when claim 8 stops the hit.
 - **`quirks.delay_kill_whole_cell_spread`** (claim 16; default on, the original). On: the countdown
-  uses the spread's whole cells (F7), so a spread below one cell gives a countdown of 0. Off: it uses
+  uses the spread's whole cells (F7), so a non-negative spread below one cell gives a countdown of 0. Off: it uses
   *R* of F3.
 - **`quirks.delay_kill_credited_again`** (claim 16; default on, the original). On: every hit that
   takes the last health of a building in a delayed-kill countdown credits its destruction again (the
@@ -1178,7 +1199,7 @@ Observable consequences within one hit:
   for a weapon damage field whose magnitude exceeds 2²⁴, where F3's narrowing to single precision
   starts to change the value.
 - **Rounding mode.** The formulas that depend on `quirks.chop_rounding` are listed under Formulas.
-  S-0205's table of effects should gain rows for F1, F2, F3, F5, F6 and F7 of this spec.
+  S-0205 revision 6 already indexes F1, F2, F3, F5, F6 and F7 of this spec in its effects table.
 
 ## Import mapping
 
@@ -1479,7 +1500,8 @@ stated per destroyed vehicle, and the runs need not give equal values.
 - **D14 (claim 17).** A test map gives a stock flying infantry type (a jumpjet type) strength 1000, and
   a test warhead of infantry-death kind 9 with versus 250 % against its class and damage 50. Hit in
   the air: loss 2 (trunc(1 × 2.5)); standing at height 0: loss 125. With versus 100 %: loss 1 in the air.
-  *Falsified if* the airborne loss is 0 or 125, or is not 1 with versus 100 %.
+  *Falsified if* the airborne loss is not 2 with versus 250 % or not 1 with versus 100 %,
+  or the standing unit's loss is not 125 with versus 250 %.
 
 - **D15 (claim 4: no stacking).** A test rules file leaves only a firepower crate and an armour
   crate possible (firepower factor 1.5, armour factor 2.0; the keys are in Import mapping), with
@@ -1851,10 +1873,6 @@ stated per destroyed vehicle, and the runs need not give equal values.
 
 ## Open questions
 
-- The exact condition under which the original moves a computer house's difficulty row one step
-  towards easy (claim 3) is "more than one human player in the game, the computer-easy-bonus flag on
-  and a row other than the easy row"; whether the count in it covers every kind of human player (for example an
-  observer) is not traced. It does not affect our engine.
 - What a berserk duration of 0 or less does in the original (claim 10) is not traced; the
   special-abilities specs should say.
 - From which side the alliance tests are made is not settled. Alliance is one-way (glossary,
