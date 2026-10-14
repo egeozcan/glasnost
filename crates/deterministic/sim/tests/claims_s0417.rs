@@ -73,7 +73,7 @@ fn claim_3_apron() {
     assert_eq!(release::apron(&w, k), Some(CellXY::new(tl.x, tl.y - 1)));
 }
 
-// spec: S-0417 Edge cases (quirks.factory_apron_short_list: (32767, 32767) for 2 × 1 and 1 × 2, wrapped; (0, 0) for 1 × 1, giving (x0 − 1, y0)) and Q-0221 (interim: switch off, the last pair)
+// spec: S-0417 Edge cases (quirks.factory_apron_short_list: (32767, 32767) for 2 × 1 and 1 × 2, wrapped; (0, 0) for 1 × 1, giving (x0 − 1, y0)) and the fixed alternative (switch off: the last pair)
 #[test]
 fn edge_short_list_pairs() {
     let wrap = |v: i32| i32::from(v as i16);
@@ -688,3 +688,33 @@ fn claim_2_guard_waits_ready_mark() {
     }
 }
 
+
+// spec: S-0417 Edge cases (an apron that is not a legal map cell, here the 2 × 1 word's (32767, 32767) pair: the apron counts as free, the exit instruction is refused, u stays where it appeared and reports clear at once, so K closes; under both states of quirks.factory_apron_short_list)
+#[test]
+fn edge_illegal_apron() {
+    for short in [true, false] {
+        let mut r = ruleset_with([2, 1]);
+        r.globals.quirks.factory_apron_short_list = short;
+        let mut w = game(&r);
+        let k = building(&mut w, "VF", 0, 0, 0);
+        let illegal = !w.cells.footprint().is_legal(release::apron(&w, k).unwrap());
+        assert_eq!(illegal, short, "the last pair of the 2 x 1 list is a legal cell");
+        if !illegal {
+            continue;
+        }
+        let tank = new_unit(&mut w, Kind::Vehicle, "TANK");
+        assert_eq!(release::release(&mut w, k, tank), Outcome::Released);
+        let at = w.obj(tank).unwrap().pos;
+        let mut cleared = false;
+        for _ in 0..200 {
+            step(&mut w);
+            if w.obj(tank).unwrap().contact.is_none() {
+                cleared = true;
+                break;
+            }
+        }
+        assert!(cleared, "the clear report");
+        assert_eq!(w.obj(tank).unwrap().pos.cell(), at.cell(), "u stays where it appeared");
+        assert!(!release::tethered(&w, tank));
+    }
+}

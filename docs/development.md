@@ -299,7 +299,6 @@ Provisional rules of M5a, each tied to a request:
 
 | Where | Interim rule | Request |
 |---|---|---|
-| `econ::release::apron`, `econ::release` (sending out) | with `quirks.factory_apron_short_list` off a short exit list gives its last pair, (0, 0) for an empty list; an apron that is not a legal map cell refuses the exit instruction and the unit reports clear where it stands; with `quirks.foundation_exit_lists` off the apron keeps the original list's cell | Q-0221 |
 | `econ::body::set_up` | a turreted building placed at game set-up also gets its ready mark, so its queued *guard* (S-0215 claim 1) becomes current at its first per-tick start; no rule of the specs is known to set it otherwise | Q-0241 |
 | `econ::release::arrival`, `walk` | a walking unit's cell-arrival update (S-0417 claims 7 and 10) is the arrival tick of S-0208 claim 6; S-0417 revision 3 defines it for driving vehicles only | Q-0295 |
 | `combat::death::kill`, `econ::production::release`, `econ::production::place` | a production item killed by a destruction hit (S-0414 claim 15) is only marked killed (no other death effect, no draws) and stays on its line with health 0 until a cancellation deletes it; a release order for it fails and cancels it with the refund, a place order does nothing | Q-0193 |

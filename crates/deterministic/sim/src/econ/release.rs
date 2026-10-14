@@ -10,8 +10,9 @@
 //! What stays open (S-0417 Open questions): the later walk-out of an
 //! infantry unit released without a rally destination (none is given),
 //! and the draws of putting a released unit on the map (none are taken).
-//! The interim rules of requests Q-0221 and Q-0295 are marked below and
-//! listed in the interim table of `docs/development.md`.
+//! The interim rule of request Q-0295 (an infantry unit's cell-arrival
+//! update) is in `walk` and listed in the interim table of
+//! `docs/development.md`.
 //! The production and idle animations of a factory are not modelled
 //! (building animations are a seam), so they take no draws.
 
@@ -1082,8 +1083,7 @@ pub fn apron(w: &World, k: ObjectId) -> Option<CellXY> {
     let bt = building_rules(w, k)?;
     let (fw, fh) = b.foundation;
     let refinery = bt.raw.foundation_refinery == Some(true);
-    // spec: S-0417 claim 3 (selection always uses the original lists)
-    // Q-0221 (interim: with quirks.foundation_exit_lists off the apron keeps the original list's E, S-0417 Open question 6)
+    // spec: S-0417 claim 3 and Edge cases (apron selection uses the original lists under either state of quirks.foundation_exit_lists)
     let list = exit_list(fw, fh, refinery, true);
     let short = w.rules().quirks.factory_apron_short_list; // spec: S-0417 Edge cases (quirks.factory_apron_short_list)
     // spec: S-0417 Constants (apron list position 11, counted from 1)
@@ -1097,7 +1097,7 @@ pub fn apron(w: &World, k: ObjectId) -> Option<CellXY> {
                 (0, 0)
             }
         }
-        // Q-0221 (interim: switch off, the short list's last pair; (0, 0) for an empty list)
+        // spec: S-0417 Edge cases (the fixed alternative, switch off: the original short list's last pair, (0, 0) for an empty list)
         None => list.last().copied().unwrap_or((0, 0)),
     };
     let c = b.pos.cell();
@@ -1342,8 +1342,7 @@ fn send_out(w: &mut World, k: ObjectId, u: ObjectId) {
         .map_or(L::Teleport, |x| x.type_locomotor());
     let Some(e) = apron(w, k) else { return };
     if !w.cells.footprint().is_legal(e) {
-        // Q-0221 (interim: an apron that is not a legal map cell refuses the exit instruction, and u reports clear at once, S-0417 Open questions 4 and 5)
-        w.note("Q-0221: a factory's exit apron is not a legal map cell; the released unit reports clear where it stands");
+        // spec: S-0417 Edge cases (an apron that is not a legal map cell: free; the exit instruction is refused, u stays where it appeared and reports clear at once, so K can close; claim 8's reply then applies; under both states of quirks.factory_apron_short_list)
         report(w, u);
         return;
     }

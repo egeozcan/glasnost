@@ -989,8 +989,8 @@ pub struct Quirks {
     #[serde(default = "on")]
     pub packup_sound_on_sale: bool,
     /// A ground factory whose exit list has fewer than eleven entries takes
-    /// the original's special apron pairs; off: the list's last pair
-    /// (interim, request Q-0221).
+    /// the original's special apron pairs; off: the list's last pair, (0, 0)
+    /// for an empty list.
     // spec: S-0417 Edge cases
     #[serde(default = "on")]
     pub factory_apron_short_list: bool,
