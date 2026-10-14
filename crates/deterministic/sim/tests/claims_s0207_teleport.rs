@@ -683,7 +683,7 @@ fn claim_20_aircraft_ground_reservation_switch_off() {
     assert_eq!(present_flags(&w, dc), (false, false));
 }
 
-// spec: S-0207 claim 20 (a) (an aircraft removed before its jump clears the reservation on its landing cell, not its own cell's)
+// spec: S-0207 claim 20 (k) (an aircraft removed after fixation, before its jump: its actual cell's flag is clear and the pending ground reservation stays; another aircraft's mark is untouched)
 #[test]
 fn claim_20_aircraft_removed_before_the_jump() {
     let mut s = Scene::new();
@@ -700,8 +700,101 @@ fn claim_20_aircraft_removed_before_the_jump() {
     run(&mut w, 1);
     assert!(present(&w, dc, Layer::Ground));
     glasnost_sim::objects::remove(&mut w, id);
-    assert!(!present(&w, dc, Layer::Ground));
+    assert!(present(&w, dc, Layer::Ground), "pending reservation retained");
+    assert!(!present(&w, cell(0, 0), Layer::Ground));
     assert!(present(&w, cell(0, 1), Layer::Ground));
+}
+
+// spec: S-0207 claim 20 (k) and table (a vehicle's removal clears only its actual cell's mark at its actual height: on a deck after landing the ground reservation stays; on a deck with a replacement accepted the new ground reservation stays; off a bridge both marks coincide and clear; fixed elsewhere before the jump the pending reservation stays)
+#[test]
+fn claim_20k_vehicle_removal_rows() {
+    let dc = cell(0, -6);
+    let next = cell(6, 0);
+    // Row 1: on the deck after landing, no replacement destination.
+    let (mut w, id) = start(&scene(false));
+    bridge(&mut w, dc);
+    order_move(&mut w, id, dc);
+    run(&mut w, 2);
+    settle(&mut w, id);
+    assert_eq!(vehicle_flags(&w, dc), (true, true));
+    glasnost_sim::objects::remove(&mut w, id);
+    assert_eq!(vehicle_flags(&w, dc), (true, false), "row 1");
+    // Row 2: on the deck, a replacement accepted but not jumped to.
+    let (mut w, id) = start(&scene(false));
+    bridge(&mut w, dc);
+    order_move(&mut w, id, dc);
+    run(&mut w, 2);
+    settle(&mut w, id);
+    order_move(&mut w, id, next);
+    run(&mut w, 1);
+    assert_eq!(w.obj(id).unwrap().pos.cell(), dc);
+    assert_eq!(vehicle_flags(&w, dc), (false, true));
+    glasnost_sim::objects::remove(&mut w, id);
+    assert_eq!(vehicle_flags(&w, dc), (false, false), "row 2, old cell");
+    assert_eq!(vehicle_flags(&w, next), (true, false), "row 2, new ground");
+    // Row 3: landed off a bridge.
+    let (mut w, id) = start(&scene(false));
+    order_move(&mut w, id, dc);
+    run(&mut w, 2);
+    settle(&mut w, id);
+    assert_eq!(vehicle_flags(&w, dc), (true, false));
+    glasnost_sim::objects::remove(&mut w, id);
+    assert_eq!(vehicle_flags(&w, dc), (false, false), "row 3");
+    // Row 4: landing point fixed elsewhere, not yet jumped to.
+    let (mut w, id) = start(&scene(false));
+    let here = w.obj(id).unwrap().pos.cell();
+    order_move(&mut w, id, dc);
+    run(&mut w, 1);
+    assert_eq!(w.obj(id).unwrap().pos.cell(), here);
+    glasnost_sim::objects::remove(&mut w, id);
+    assert_eq!(vehicle_flags(&w, here), (false, false), "row 4, actual");
+    assert_eq!(vehicle_flags(&w, dc), (true, false), "row 4, pending");
+}
+
+// spec: S-0207 claim 21 (a previous deck landing: installing temporary driving clears neither record of it; driving away clears the actual deck mark only; after leaving and at restoration the former landing cell keeps ground marked with deck clear, and restoration relocates no mark)
+#[test]
+fn claim_21_previous_deck_landing() {
+    let dc = cell(0, -6);
+    let (mut w, id) = start(&scene(false));
+    for k in 4..=12 {
+        bridge(&mut w, cell(0, -k));
+    }
+    order_move(&mut w, id, dc);
+    run(&mut w, 2);
+    settle(&mut w, id);
+    assert_eq!(vehicle_flags(&w, dc), (true, true));
+    // As the factory exit gives it (S-0417 claim 5).
+    glasnost_sim::econ::release::install_temporary_drive(&mut w, id);
+    assert_eq!(vehicle_flags(&w, dc), (true, true), "installation clears neither");
+    let away = cell(0, -10);
+    order_move(&mut w, id, away);
+    run_until(&mut w, 800, |w| w.obj(id).unwrap().pos.cell() == away);
+    assert_eq!(vehicle_flags(&w, dc), (true, false), "after leaving");
+    {
+        let o = w.obj_mut(id).unwrap();
+        o.dest = None;
+        o.path.steps.clear();
+    }
+    assert!(glasnost_sim::econ::release::restore_locomotor(&mut w, id));
+    assert_eq!(vehicle_flags(&w, dc), (true, false), "at restoration");
+    // Driving marked its current cell at its actual height: the deck.
+    let o = w.obj(id).unwrap();
+    assert_eq!(o.layer, Layer::Deck);
+    assert_eq!(vehicle_flags(&w, o.pos.cell()), (false, true), "the current cell's mark");
+}
+
+// spec: S-0207 Edge cases (quirks.teleport_vehicle_ground_reservation off: removal clears both a pending reservation and actual occupancy, leaving no orphan)
+#[test]
+fn claim_20k_switch_off_clears_the_pending_reservation() {
+    let mut s = scene(false);
+    s.ruleset.globals.quirks.teleport_vehicle_ground_reservation = false;
+    let (mut w, id) = start(&s);
+    let dc = cell(0, -6);
+    order_move(&mut w, id, dc);
+    run(&mut w, 1);
+    assert_eq!(vehicle_flags(&w, dc), (true, false));
+    glasnost_sim::objects::remove(&mut w, id);
+    assert_eq!(vehicle_flags(&w, dc), (false, false));
 }
 
 // spec: S-0207 claim 20 (b) (on a high-bridge destination a vehicle asks the entry test at the cell's level plus 4, whatever its own height: an occupied deck refuses and the search lands it elsewhere; an empty deck over an occupied ground record accepts)

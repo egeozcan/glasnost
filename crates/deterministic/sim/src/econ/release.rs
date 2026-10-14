@@ -1368,21 +1368,7 @@ fn send_out(w: &mut World, k: ObjectId, u: ObjectId) {
         L::Drive => crate::drive::begin_exit_track(w, u, e),
         // spec: S-0417 claim 5 (tunnelling and teleporting vehicles temporarily receive driving locomotion and use the same track)
         L::Tunnel | L::Teleport => {
-            if w.obj(u).is_some_and(|o| o.drive.is_none()) {
-                // Its own cell claim is handed to the driving state's claims.
-                // spec: S-0207 claim 21 (the suspended teleporting state keeps its reservation; while driving, destinations do not move it)
-                let pending = w
-                    .obj(u)
-                    .and_then(|o| o.teleport.as_ref())
-                    .is_some_and(|t| t.mark.is_some());
-                if !pending {
-                    crate::drive::release_claims(w, u);
-                }
-                if let Some(ob) = w.obj_mut(u) {
-                    ob.drive = Some(crate::drive::DriveState::new());
-                    ob.econ.temporary_drive = true;
-                }
-            }
+            install_temporary_drive(w, u);
             crate::drive::begin_exit_track(w, u, e);
         }
         _ => {
@@ -1403,6 +1389,47 @@ fn send_out(w: &mut World, k: ObjectId, u: ObjectId) {
     if let Some(d) = w.obj_mut(u).and_then(|o| o.drive.as_mut()) {
         // spec: S-0417 claims 5 and 6 and Constants (after the exit instruction K sets the speed fraction to 0.5)
         d.rho = crate::consts::HALF;
+    }
+}
+
+/// Gives a tunnelling or teleporting vehicle driving locomotion for its
+/// factory exit (S-0417 claim 5, S-0207 claim 21); nothing when it already
+/// drives. The mark of its actual cell passes to the driving state, which
+/// clears it on departure; a pending reservation and, under the ground
+/// reservation quirk, a separate remembered reservation stay marked.
+pub fn install_temporary_drive(w: &mut World, u: ObjectId) {
+    if w.obj(u).is_none_or(|o| o.drive.is_some()) {
+        return;
+    }
+    // Its own cell claim is handed to the driving state's claims.
+    // spec: S-0207 claim 21 (the suspended teleporting state keeps its reservation; while driving, destinations do not move it)
+    let pending = w
+        .obj(u)
+        .and_then(|o| o.teleport.as_ref())
+        .is_some_and(|t| t.mark.is_some());
+    let mut handed = Vec::new();
+    if !pending && let Some(o) = w.obj(u) {
+        let actual = (o.pos.cell(), o.layer);
+        // spec: S-0207 claim 21 (installing temporary driving clears neither the remembered ground reservation nor the actual mark: the actual cell's mark passes to driving, which clears it on departure)
+        for m in crate::teleport::removal_marks(w, u) {
+            if m == actual {
+                handed.push(m.0);
+            } else {
+                // spec: S-0207 Edge cases (a ground-reservation quirk off keeps no separate reservation)
+                w.cells.claim_vehicle(m.0, m.1, false);
+            }
+        }
+        if let Some(t) = w.obj_mut(u).and_then(|o| o.teleport.as_mut()) {
+            // A separate remembered reservation is left behind, no longer held (claim 21).
+            t.held = None;
+            t.deck_mark = None;
+        }
+    }
+    if let Some(ob) = w.obj_mut(u) {
+        let mut d = crate::drive::DriveState::new();
+        d.claims = handed;
+        ob.drive = Some(d);
+        ob.econ.temporary_drive = true;
     }
 }
 

@@ -109,30 +109,33 @@ fn ground_reservation(w: &World, kind: Kind) -> bool {
 }
 
 /// The records a teleporting vehicle or aircraft clears when it is taken
-/// off the map (S-0207 claim 20, S-0209 claim 1): its pending or held
-/// reservation and its deck mark. An aircraft standing on the deck with no
-/// replacement destination clears only the deck, leaving the remembered
-/// ground reservation (`quirks.teleport_aircraft_ground_reservation`). A
-/// vehicle's removal is not described: it clears both (interim, request
-/// Q-0356), as does an aircraft with a replacement reservation pending.
+/// off the map, or when a vehicle is handed driving locomotion for its
+/// factory exit (S-0207 claims 20 k and 21, S-0209 claim 1). It holds its
+/// pending or remembered reservation, any deck mark and, with neither, the
+/// mark of its actual cell. Under the respective ground-reservation quirk
+/// only the record of its actual cell at its actual layer is cleared; a
+/// separate remembered or pending reservation stays marked. With the quirk
+/// off every record it holds is cleared.
 pub fn removal_marks(w: &World, id: ObjectId) -> Vec<(CellXY, Layer)> {
     let Some(o) = w.obj(id) else {
         return Vec::new();
     };
+    let actual = (o.pos.cell(), o.layer);
     let Some(t) = o.teleport.as_ref() else {
-        return vec![(o.pos.cell(), o.layer)];
+        return vec![actual];
     };
-    let own = t
-        .mark
-        .map(|c| (c, t.mark_layer))
-        .or(t.held)
-        .unwrap_or((o.pos.cell(), o.layer));
-    match t.deck_mark {
-        // spec: S-0207 claim 20 (e) (an aircraft destroyed and removed while still on the deck clears the deck flag but not the remembered ground reservation)
-        Some(d) if o.kind == Kind::Aircraft && t.mark.is_none() => vec![(d, Layer::Deck)],
-        Some(d) => vec![own, (d, Layer::Deck)],
-        None => vec![own],
+    let own = t.mark.map(|c| (c, t.mark_layer)).or(t.held).unwrap_or(actual);
+    let mut held = vec![own];
+    if let Some(d) = t.deck_mark {
+        held.push((d, Layer::Deck));
     }
+    if ground_reservation(w, o.kind) {
+        // spec: S-0207 claim 20 (k) (removal clears the actual cell's occupancy mark at its actual height, not a separate remembered or pending landing reservation)
+        // spec: S-0207 claim 21 (installing temporary driving clears neither record; driving departure clears only the actual mark)
+        held.retain(|&m| m == actual);
+    }
+    // spec: S-0207 Edge cases (quirk off: removal clears both the pending reservation and actual occupancy, leaving no orphan reservation)
+    held
 }
 
 /// Whether the object moves with the teleporting locomotor in our engine.

@@ -1046,6 +1046,27 @@ fn stationary_friend_gets_a_scatter_request() {
     assert_eq!(vo.beh.current, beh, "its behaviour is unchanged");
 }
 
+// spec: S-0207 Edge cases (quirks.drive_duplicate_scatter_request: on, no record is kept; off, a vehicle's requests to one cell layer in a tick are recorded once, the request still reaching the friend)
+#[test]
+fn duplicate_scatter_request_switch() {
+    for on in [true, false] {
+        let mut s = corridor();
+        s.ruleset.globals.quirks.drive_duplicate_scatter_request = on;
+        let (mut w, m, v) = blocked_scene(&mut s, "MOVER", "IDLER", 0, cell(0, -10));
+        until_blocked(&mut w, m, v);
+        assert!(w.obj(v).expect("v").dest.is_some(), "on {on}: the friend got the request");
+        let sent = w.obj(m).expect("m").drive.as_ref().expect("d").requests.clone();
+        if on {
+            assert_eq!(sent, None);
+        } else {
+            let (tick, cells) = sent.expect("recorded");
+            assert!(tick <= w.tick);
+            assert_eq!(cells.len(), 1, "one request to the cell layer");
+            assert_eq!(cells[0].0, cell(0, -1));
+        }
+    }
+}
+
 // spec: S-0207 claim 15 table T4 and F7 (within the close-enough distance the repeated check gives up the move; no request)
 #[test]
 fn stationary_friend_near_the_destination_gives_up() {

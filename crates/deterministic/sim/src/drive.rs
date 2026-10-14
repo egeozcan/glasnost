@@ -76,6 +76,10 @@ pub struct DriveState {
     pub between_steps: bool,
     /// Tick of the last movement.
     pub moved_tick: Option<i32>,
+    /// The scatter requests sent this tick, cell and layer, kept only with
+    /// `quirks.drive_duplicate_scatter_request` off (S-0207 Edge cases).
+    #[serde(default)]
+    pub requests: Option<(i32, Vec<(CellXY, Layer)>)>,
 }
 
 impl DriveState {
@@ -93,6 +97,7 @@ impl DriveState {
             // spec: S-0209 Terms (a vehicle that has not advanced since it was created is between steps)
             between_steps: true,
             moved_tick: None,
+            requests: None,
         }
     }
 }
@@ -919,6 +924,21 @@ fn request_scatter(w: &mut World, id: ObjectId, c: CellXY) {
     } else {
         Layer::Ground
     };
+    if !w.rules().quirks.drive_duplicate_scatter_request {
+        // spec: S-0207 Edge cases (quirks.drive_duplicate_scatter_request off: of one vehicle's requests to the same cell and layer in a tick only the earliest is sent)
+        let tick = w.tick;
+        let Some(d) = w.obj_mut(id).and_then(|o| o.drive.as_mut()) else {
+            return;
+        };
+        let sent = d.requests.get_or_insert_with(|| (tick, Vec::new()));
+        if sent.0 != tick {
+            *sent = (tick, Vec::new());
+        }
+        if sent.1.contains(&(c, layer)) {
+            return;
+        }
+        sent.1.push((c, layer));
+    }
     crate::scatter::cell_request(
         w,
         c,

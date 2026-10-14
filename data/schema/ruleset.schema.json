@@ -6123,6 +6123,11 @@
           "type": "boolean",
           "default": true
         },
+        "drive_duplicate_scatter_request": {
+          "description": "A blocked driving vehicle can send its scatter request to the same cell layer twice in one tick; off: only the earliest.",
+          "type": "boolean",
+          "default": true
+        },
         "drive_giveup_ignores_contact": {
           "description": "A driving vehicle's give-up test at a step check ignores contact.",
           "type": "boolean",
