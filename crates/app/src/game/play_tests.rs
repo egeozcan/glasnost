@@ -156,6 +156,19 @@ fn box_selection_takes_own_mobile_objects() {
     assert!(p.selection.is_empty());
 }
 
+/// spec: S-0701 claim 24 (the strip scrolled past its end: the refusal sound); interim: Q-0339 (a click that cannot move the strip)
+#[test]
+fn scrolling_past_the_strip_end_cues_the_refusal_sound() {
+    let mut p = start();
+    p.cues.clear();
+    p.scroll_icons(-1, 4);
+    assert_eq!(p.scroll, 0);
+    assert_eq!(p.cues, [UiCue::StripEnd]);
+    p.cues.clear();
+    p.scroll_icons(0, 4);
+    assert!(p.cues.is_empty());
+}
+
 /// spec: S-0414 claim 11 (surrender), S-0414 (the outcome ends the game)
 #[test]
 fn surrender_ends_the_game_with_an_end_screen() {

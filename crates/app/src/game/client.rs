@@ -11,7 +11,8 @@
 use std::collections::BTreeMap;
 
 use glasnost_audio::catalog::SoundCatalog;
-use glasnost_audio::events::Audio;
+use glasnost_audio::bank::SoundBank;
+use glasnost_audio::events::{Audio, local_voice_set};
 use glasnost_audio::mixer::View as SoundView;
 use glasnost_audio::speech::SpeechCatalog;
 use glasnost_render::batch2d::CpuImage;
@@ -50,6 +51,9 @@ pub enum Job {
         offered: Vec<String>,
         /// The game's seed.
         seed: u32,
+        /// The announcement data, for loading the local voice set's files
+        /// (S-0701 claim 34).
+        speech: SpeechCatalog,
     },
 }
 
@@ -59,8 +63,9 @@ pub enum Done {
     Mounted(Result<Vfs, String>),
     /// The menus' data, with the file system back.
     Prepared(Vfs, Result<Box<Install>, String>),
-    /// The game started, or why not, with the file system back.
-    Started(Vfs, Box<Result<Session, String>>),
+    /// The game started, or why not, with the file system back and the
+    /// local voice set's announcement files (S-0701 claim 34).
+    Started(Vfs, Box<Result<Session, String>>, SoundBank),
 }
 
 /// Runs a job.
@@ -84,6 +89,7 @@ pub async fn run_job(job: Job) -> Done {
             lobby,
             offered,
             seed,
+            speech,
         } => {
             let make = |rules: &glasnost_sim::rules::SimRules| {
                 // spec: S-0202 claim 8 (both streams take the game's seed); the lobby's own stream
@@ -91,7 +97,17 @@ pub async fn run_job(job: Job) -> Done {
                 ui_setup::game_setup(&lobby, rules, &offered, seed, seed).map_err(|e| e.to_string())
             };
             let r = Session::start(&mut vfs, &file, &make).await;
-            Done::Started(vfs, Box::new(r))
+            let mut voices = SoundBank::new();
+            if let Ok(s) = &r {
+                let set = local_voice_set(&s.play.game.world, Some(s.play.local));
+                // spec: S-0701 claim 34 (each announcement a separate file, opened through the file lookup, never from the bank)
+                for name in speech.files(set) {
+                    if let Some(f) = glasnost_convert::inputs::read(&vfs, &name).await {
+                        voices.add_file(&name, std::rc::Rc::from(f.bytes));
+                    }
+                }
+            }
+            Done::Started(vfs, Box::new(r), voices)
         }
     }
 }
@@ -233,7 +249,7 @@ impl Client {
                     Err(e) => self.status = e,
                 }
             }
-            Done::Started(vfs, r) => {
+            Done::Started(vfs, r, voices) => {
                 self.vfs = Some(vfs);
                 match *r {
                     Ok(mut s) => {
@@ -250,7 +266,7 @@ impl Client {
                         self.radar_tick = -1;
                         self.game_serial += 1;
                         self.session = Some(s);
-                        self.start_audio();
+                        self.start_audio(voices);
                         self.shell.screen = Screen::Game;
                     }
                     Err(e) => {
@@ -263,7 +279,7 @@ impl Client {
         }
     }
 
-    fn start_audio(&mut self) {
+    fn start_audio(&mut self, voices: SoundBank) {
         let Some(install) = self.install.as_ref() else {
             return;
         };
@@ -281,6 +297,7 @@ impl Client {
         let speech = install.speech.as_ref().map(SpeechCatalog::from_ini);
         audio.set_speech(speech.unwrap_or_default());
         audio.set_bank(install.bank.clone());
+        audio.set_voices(voices);
         audio.set_names(install.names.clone());
         // interim: Q-0333 (the presentation generator takes the game's seed)
         audio.start(w, Some(s.play.local), s.play.game.replay().setup.seed);
@@ -321,6 +338,11 @@ impl Client {
             lobby,
             offered: install.setup.countries.clone(),
             seed: self.next_seed,
+            speech: install
+                .speech
+                .as_ref()
+                .map(SpeechCatalog::from_ini)
+                .unwrap_or_default(),
         });
     }
 

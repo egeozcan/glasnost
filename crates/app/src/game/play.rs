@@ -255,7 +255,7 @@ impl Play {
                         }
                     }
                     None => {
-                        // spec: S-0411 claim 10 (a refused placement plays a sound; placement mode resumes)
+                        // spec: S-0411 claim 10 (placement mode resumes); S-0701 claim 24 (a refused placement: the cannot-deploy-here announcement only)
                         self.cues.push(UiCue::PlacementRefused);
                         self.say("Cannot place there.");
                     }
@@ -406,7 +406,13 @@ impl Play {
             .and_then(|h| h.econ.tech.icons.get(self.shown_tab()))
             .map_or(0, Vec::len);
         let max = hud::max_scroll(n, rows) as i32;
+        let before = self.scroll;
         self.scroll = (self.scroll as i32 + d).clamp(0, max) as usize;
+        // spec: S-0701 claim 24 (the sidebar strip scrolled past its end: the game-wide refusal sound)
+        // interim: Q-0339 (past its end: a scroll click that cannot move the strip at all)
+        if d != 0 && self.scroll == before {
+            self.cues.push(UiCue::StripEnd);
+        }
     }
 
     /// A click on a mode button: the mode, or back to selecting when it is
@@ -453,7 +459,7 @@ impl Play {
             }
             Action::Place(t) => self.tool = Tool::Place(t),
             Action::Refused => {
-                // spec: S-0411 claims 4 and 12 (a refused build click plays a refusal sound)
+                // spec: S-0411 claims 4 and 12; S-0701 claim 24 (a busy production line: the unable-to-comply announcement only)
                 self.cues.push(UiCue::BuildRefused);
                 self.say("Cannot build that now.");
             }

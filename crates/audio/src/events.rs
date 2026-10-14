@@ -39,7 +39,7 @@ const LOW_FUNDS: i32 = 100; // spec: S-0701 claim 28 and Constants (below 100 cr
 /// Ticks per minute of the speak delay: N(⌊k × 900⌋) (S-0701 Constants).
 const SPEAK_DELAY_TICKS: i64 = 900; // spec: S-0701 claim 28 and Constants (N(⌊k × 900⌋) ticks)
 /// The level of a credit tick's request: one half (S-0416 Constants).
-const CREDIT_TICK_LEVEL: i32 = FULL / 2; // spec: S-0416 claim 4 and Constants (tick sound volume one half)
+const CREDIT_TICK_LEVEL: i32 = FULL / 2; // spec: S-0416 claim 4; S-0701 claim 35 (half volume: request level 8192)
 /// Anchors of turret sounds are offset from those of movement sounds.
 const TURRET_ANCHOR: u64 = 1 << 40;
 
@@ -63,11 +63,12 @@ pub enum UiCue {
     BuildHeld,
     /// A sidebar click cancelled an item (S-0411 claim 12).
     BuildCancelled,
-    /// A build click refused for a busy line or a full queue (S-0411
-    /// claims 4 and 12, S-0404 claim 3).
+    /// A build click refused for a busy line (S-0411 claims 4 and 12).
     BuildRefused,
-    /// A placement refused by its tests (S-0411 claim 10, S-0406).
+    /// A placement click refused by its tests (S-0411 claim 10, S-0406).
     PlacementRefused,
+    /// The sidebar strip asked to scroll past its end (S-0701 claim 24).
+    StripEnd,
     /// A building item became done (S-0411 claims 9 and 12).
     ConstructionComplete,
     /// The local player's house placed a building (S-0701 claim 23).
@@ -125,6 +126,7 @@ pub struct Audio {
     mixer: Mixer,
     output: Box<dyn Output>,
     bank: SoundBank,
+    voices: SoundBank,
     catalog: SoundCatalog,
     speech: SpeechCatalog,
     names: SoundNames,
@@ -141,6 +143,24 @@ pub struct Audio {
     low_funds_spoken: bool,
     low_power: bool,
     now_ms: i64,
+}
+
+/// The voice set of the local player's house (0 Allied, 1 Soviet, 2 Yuri;
+/// S-0701 claim 26), for choosing which announcement files to load.
+pub fn local_voice_set(w: &World, local: Option<HouseId>) -> usize {
+    // spec: S-0701 claim 26 (the voice set follows the local player's side: first, second, any other)
+    local
+        .and_then(|h| w.houses.get(usize::from(h.0)))
+        .and_then(|h| {
+            w.rules()
+                .econ
+                .tech
+                .country_side
+                .get(h.country as usize)
+                .copied()
+                .flatten()
+        })
+        .map_or(2, |s| voice_set(s.max(0) as usize))
 }
 
 fn mix_quirks(q: &Quirks) -> MixQuirks {
@@ -160,6 +180,7 @@ impl Audio {
             mixer,
             output,
             bank: SoundBank::new(),
+            voices: SoundBank::new(),
             catalog: SoundCatalog::new(),
             speech: SpeechCatalog::default(),
             names: SoundNames::default(),
@@ -193,6 +214,18 @@ impl Audio {
     /// The sample bank.
     pub fn bank_mut(&mut self) -> &mut SoundBank {
         &mut self.bank
+    }
+
+    /// Sets the announcement files, each under its file name
+    /// ([`crate::speech::file_name`]). Announcements are never taken from
+    /// the sample bank, nor sound entries from these (S-0701 claim 34).
+    pub fn set_voices(&mut self, voices: SoundBank) {
+        self.voices = voices;
+    }
+
+    /// The announcement files.
+    pub fn voices_mut(&mut self) -> &mut SoundBank {
+        &mut self.voices
     }
 
     /// Sets the sound entries (S-0701 claims 1 to 4).
@@ -244,19 +277,7 @@ impl Audio {
         self.mixer.reseed(seed);
         self.announcer.reset();
         self.local = local;
-        // spec: S-0701 claim 26 (the voice set follows the local player's side: first, second, any other)
-        self.voice = local
-            .and_then(|h| w.houses.get(usize::from(h.0)))
-            .and_then(|h| {
-                w.rules()
-                    .econ
-                    .tech
-                    .country_side
-                    .get(h.country as usize)
-                    .copied()
-                    .flatten()
-            })
-            .map_or(2, |s| voice_set(s.max(0) as usize));
+        self.voice = local_voice_set(w, local);
         self.slots.clear();
         self.motion.clear();
         self.turrets.clear();
@@ -295,10 +316,12 @@ impl Audio {
         self.now_ms = now_ms;
         self.mixer.service(now_ms);
         if let Some(id) = self.announcer.next(now_ms, self.mixer.speaking()) {
-            let sample = self.speech.line(id).samples[self.voice].clone();
+            let sample = &self.speech.line(id).samples[self.voice];
+            // spec: S-0701 claim 34 (a separate file, the eight-character name plus `.wav`, never from the bank)
+            let file = crate::speech::file_name(sample);
             // spec: S-0701 claim 26 (quirks.announcement_volume_ignored: the volume key has no effect)
-            // interim: Q-0325 (announcements at full level; the volume key is not applied with the quirk off either)
-            if let Some(clip) = self.bank.clip(&sample).filter(|c| c.frames() > 0) {
+            // spec: S-0701 claim 35 (neither the master level nor the sound volume option applies; the voice option is at full: our engine has no options screen)
+            if let Some(clip) = self.voices.clip(&file).filter(|c| c.frames() > 0) {
                 self.mixer.speak(clip);
             }
         }
@@ -583,7 +606,7 @@ impl Audio {
     fn hit(
         &mut self,
         w: &World,
-        _id: ObjectId,
+        id: ObjectId,
         of: TypeRef,
         owner: Option<HouseId>,
         pos: Pos,
@@ -632,8 +655,57 @@ impl Audio {
             // spec: S-0701 claim 20 (unaffected or now red: nothing)
             HitResult::Unaffected | HitResult::NowRed => {}
         }
-        // Building damage and death sounds: when they play is Q-0332.
+        if of.kind == Kind::Building {
+            self.building_fallback(w, id, of, &ts, pos, result);
+        }
         self.attack_announcements(w, of, owner, pos, result, attacker);
+    }
+
+    /// The game-wide building damage and death sounds of a building type
+    /// with none of its own (claim 37).
+    fn building_fallback(
+        &mut self,
+        w: &World,
+        id: ObjectId,
+        of: TypeRef,
+        ts: &TypeSounds,
+        pos: Pos,
+        result: HitResult,
+    ) {
+        let name = match result {
+            // spec: S-0701 claim 37 (now yellow or now red, and the type names no damage sound of its own)
+            HitResult::NowYellow | HitResult::NowRed
+                if self.single(ts.damage_sound.as_ref()).is_none() =>
+            {
+                self.names.building_damage.clone()
+            }
+            // spec: S-0701 claim 37 (destroyed, and the type's death-sound list is empty; lists drop unknown names)
+            HitResult::NowDead
+                if ts
+                    .die_sound
+                    .iter()
+                    .all(|n| self.catalog.resolve(n).is_none()) =>
+            {
+                self.names.building_die.clone()
+            }
+            _ => None,
+        };
+        let Some(e) = name.as_deref().and_then(|n| self.catalog.resolve(n)) else {
+            return;
+        };
+        // spec: S-0701 claim 37 (at the building's centre); S-0204 claim 4 (its reference point: position plus 128 × (W − 1, H − 1))
+        let centre = if w.obj(id).is_some() {
+            w.reference_point(id)
+        } else {
+            let (fw, fh) = w
+                .rules()
+                .buildings
+                .get(of.index as usize)
+                .map_or((1, 1), |b| b.foundation);
+            Pos::new(pos.x + 128 * (fw - 1), pos.y + 128 * (fh - 1), pos.z)
+        };
+        // spec: S-0701 claim 37 and claim 7 (the attached form that keeps its map position and follows scrolling)
+        self.request(Some(w), e, Where::Follow(centre), FULL);
     }
 
     /// Claim 28's attack and loss announcements of one hit.
@@ -835,6 +907,8 @@ impl Audio {
                         _ => self.names.upgrade_veteran.clone(),
                     };
                     self.play_in(w, s.as_deref(), Where::Fixed(o.pos));
+                    // spec: S-0701 claim 36 (a promotion to either rank requests the one unit-promoted entry)
+                    self.announce(Announcement::Promoted);
                 }
             }
         }
@@ -1075,12 +1149,18 @@ impl Audio {
                 self.announce(Announcement::Cancelled);
                 screen(self, self.names.gui_build.clone())
             }
-            // spec: S-0701 claim 24 (the refusal of a click: the game-wide refusal sound)
+            // spec: S-0701 claim 24 (a busy production line: only the unable-to-comply announcement, no interface sound)
             UiCue::BuildRefused => {
                 self.announce(Announcement::UnableToComply);
-                screen(self, self.names.scold.clone())
+                None
             }
-            UiCue::PlacementRefused => screen(self, self.names.scold.clone()),
+            // spec: S-0701 claim 24 (a refused placement: only the cannot-deploy-here announcement, no interface sound)
+            UiCue::PlacementRefused => {
+                self.announce(Announcement::CannotDeploy);
+                None
+            }
+            // spec: S-0701 claim 24 (the sidebar strip scrolled past its end: the game-wide refusal sound)
+            UiCue::StripEnd => screen(self, self.names.scold.clone()),
             // spec: S-0701 claim 23 (the game-wide building placement sound, a screen sound)
             UiCue::BuildingPlaced => screen(self, self.names.building_slam.clone()),
         }

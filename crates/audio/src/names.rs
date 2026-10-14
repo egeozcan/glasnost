@@ -66,8 +66,8 @@ pub struct TypeSounds {
     pub turret_rotate: Option<String>,
     /// `CreateSound` (S-0701 claim 23).
     pub create: Option<String>,
-    /// The type is the repair-response vehicle, `FV` (S-0701 F6, Import
-    /// mapping).
+    /// The type is the repair-response vehicle (S-0701 F6). Its type-name
+    /// binding is withheld (Q-0338), so no imported type is one yet.
     pub repair_vehicle: bool,
     /// `ChronoInSound`, falling back to the game-wide one (S-0207 Import
     /// mapping).
@@ -112,6 +112,8 @@ pub enum Announcement {
     RepairComplete,
     /// A house defeated (S-0414 claim 5).
     Defeat,
+    /// A unit promoted, to either rank (S-0701 claim 36).
+    Promoted,
 }
 
 /// The rules data's sound names, by role.
@@ -139,9 +141,9 @@ pub struct SoundNames {
     pub create_aircraft: Option<String>,
     /// `BuildingSlam` (S-0701 claim 23).
     pub building_slam: Option<String>,
-    /// `BuildingDamageSound` (S-0701 claim 23; when it plays: Q-0332).
+    /// `BuildingDamageSound` (S-0701 claims 23 and 37).
     pub building_damage: Option<String>,
-    /// `BuildingDieSound` (S-0701 claim 23; when it plays: Q-0332).
+    /// `BuildingDieSound` (S-0701 claims 23 and 37).
     pub building_die: Option<String>,
     /// `UpgradeVeteranSound` (S-0701 claim 23).
     pub upgrade_veteran: Option<String>,
@@ -385,8 +387,9 @@ impl SoundNames {
                     move_sound: l("MoveSound"),
                     turret_rotate: f("TurretRotateSound"),
                     create: f("CreateSound"),
-                    // spec: S-0701 Import mapping (the repair-response vehicle is the type named `FV`; S-0003 claim 14 type names without regard to case)
-                    repair_vehicle: kind == Kind::Vehicle && name.eq_ignore_ascii_case("FV"),
+                    // spec: S-0701 Import mapping (the repair-response exception depends on one vehicle's type name, not an imported field)
+                    // interim: Q-0338 (the type-name binding is withheld: no type is the repair-response vehicle)
+                    repair_vehicle: false,
                     // spec: S-0207 Import mapping (the type's chrono sounds, else the game-wide ones)
                     chrono_in: unit.and_then(|u| {
                         u.chrono_in_sound
@@ -492,7 +495,8 @@ impl SoundNames {
     }
 
     /// The announcement data entry of a role, where an Import mapping names
-    /// one; `None` otherwise (interim, Q-0325).
+    /// one; `None` otherwise (interim, Q-0325: S-0701 claim 36 withholds the
+    /// names).
     pub fn announcement(&self, a: Announcement) -> Option<&str> {
         if let Some(n) = self.announcements.get(&a) {
             return Some(n);
@@ -592,7 +596,7 @@ mod tests {
     fn s0701_keys_come_from_the_import_mapping() {
         let mut r = ruleset(None);
         r.registries
-            .insert("vehicles".into(), vec!["Tank".into(), "fv".into()]);
+            .insert("vehicles".into(), vec!["Tank".into(), "Medic".into()]);
         r.registries
             .insert("animations".into(), vec!["Puff".into(), "Flash".into()]);
         let mut tank = ImportedType::default();
@@ -615,9 +619,9 @@ mod tests {
         }
         let vehicles = r.types.entry("vehicles".into()).or_default();
         vehicles.insert("Tank".into(), tank);
-        let mut fv = ImportedType::default();
-        fv.ini.insert("VoiceAttack".into(), "Zap".into());
-        vehicles.insert("fv".into(), fv);
+        let mut medic = ImportedType::default();
+        medic.ini.insert("VoiceAttack".into(), "Zap".into());
+        vehicles.insert("Medic".into(), medic);
         let mut gun = ImportedType::default();
         gun.ini.insert("Report".into(), "Bang1,Bang2".into());
         r.types
@@ -667,8 +671,9 @@ mod tests {
         assert_eq!(t.move_sound, ["Rumble"]);
         assert_eq!(t.turret_rotate.as_deref(), Some("Whirr"));
         assert_eq!(t.create.as_deref(), Some("Ready"));
+        // interim: Q-0338 (no type is the repair-response vehicle until its binding is given)
         assert!(!t.repair_vehicle);
-        assert!(n.of_type(Kind::Vehicle, 1).unwrap().repair_vehicle);
+        assert!(!n.of_type(Kind::Vehicle, 1).unwrap().repair_vehicle);
         assert_eq!(n.report("GUN"), ["Bang1", "Bang2"]);
         assert!(n.report("Other").is_empty());
         assert_eq!(n.anim_report("Flash"), Some("Pop"));

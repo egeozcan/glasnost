@@ -556,6 +556,7 @@ mod tests {
         let t = c.entry(c.resolve(&long[..31]).unwrap());
         assert_eq!(t.name.len(), 31);
         assert_eq!(t.samples, ["x", "y"]);
+        // spec: S-0701 claim 1 and scenario A1 (g) (a reference is compared in full: 32 or more characters never match a cut name)
         assert!(c.resolve(long).is_none());
     }
 

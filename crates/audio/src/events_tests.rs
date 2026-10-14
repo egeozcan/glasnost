@@ -613,6 +613,58 @@ fn death_sound() {
     assert_eq!(heard(&mut a, 0), [format!("Boom{}", x % 2)]);
 }
 
+// spec: S-0701 claim 37 (a building without its own damage sound: the game-wide one at now yellow and now red; with an empty death list: the game-wide death sound)
+#[test]
+fn building_fallback_sounds() {
+    let w = world();
+    let t = tref(&w, Kind::Building, "TOWER");
+    let mut a = audio(&w, &["BDamage", "BDie", "Own", "OwnDie"]);
+    let mut n = SoundNames::default();
+    n.building_damage = Some("BDamage".into());
+    n.building_die = Some("BDie".into());
+    a.set_names(n.clone());
+    let mut u = Rng::new(1);
+    let mut now = 0;
+    for (r, want) in [
+        (HitResult::NowYellow, vec!["BDamage"]),
+        (HitResult::NowRed, vec!["BDamage"]),
+        (HitResult::NowDead, vec!["BDie"]),
+        (HitResult::Unchanged, vec![]),
+        (HitResult::Unaffected, vec![]),
+    ] {
+        a.mixer_mut().clear();
+        a.tick(&w, &[hit(&w, t, 1, r, None)], &mut u);
+        now += 100;
+        assert_eq!(heard(&mut a, now), want, "{r:?}");
+    }
+    // With its own damage sound and death list, neither fallback plays.
+    n.set_type(
+        Kind::Building,
+        t.index,
+        TypeSounds {
+            damage_sound: Some("Own".into()),
+            die_sound: strings(&["OwnDie"]),
+            ..TypeSounds::default()
+        },
+    );
+    a.set_names(n);
+    for (r, want) in [
+        (HitResult::NowYellow, vec![]),
+        (HitResult::NowRed, vec![]),
+        (HitResult::NowDead, vec!["OwnDie"]),
+    ] {
+        a.mixer_mut().clear();
+        a.tick(&w, &[hit(&w, t, 1, r, None)], &mut u);
+        now += 100;
+        assert_eq!(heard(&mut a, now), want, "{r:?}");
+    }
+    // A vehicle never takes the building fallbacks.
+    let v = tref(&w, Kind::Vehicle, "CRUSHER");
+    a.mixer_mut().clear();
+    a.tick(&w, &[hit(&w, v, 1, HitResult::NowRed, None)], &mut u);
+    assert!(heard(&mut a, now + 100).is_empty());
+}
+
 // spec: S-0701 claim 21 (the report at the firing position, any owner, no draw); interim: Q-0327 (entry 0)
 #[test]
 fn weapon_report() {
@@ -811,7 +863,7 @@ fn building_and_promotion_sounds() {
     assert_eq!(heard(&mut a, 300), ["Elite"]);
 }
 
-// spec: S-0701 claim 24 (production-feedback clicks: the build click; refusals: the refusal sound); S-0416 claim 4 (credit ticks at one half)
+// spec: S-0701 claim 24 (production-feedback clicks: the build click; the strip past its end: the refusal sound); S-0416 claim 4 and S-0701 claim 35 (credit ticks at request level 8192)
 #[test]
 fn interface_sounds() {
     let w = world();
@@ -827,8 +879,7 @@ fn interface_sounds() {
         (UiCue::BuildResumed, "Click"),
         (UiCue::BuildHeld, "Click"),
         (UiCue::BuildCancelled, "Click"),
-        (UiCue::BuildRefused, "Nope"),
-        (UiCue::PlacementRefused, "Nope"),
+        (UiCue::StripEnd, "Nope"),
         (UiCue::CreditTick { rising: true }, "Up"),
         (UiCue::CreditTick { rising: false }, "Down"),
     ] {
@@ -843,6 +894,84 @@ fn interface_sounds() {
         };
         assert_eq!(a.mixer().placement(i), Some((level, crate::mixer::CENTRE)));
     }
+    assert_eq!(CREDIT_TICK_LEVEL, 8192);
+}
+
+// spec: S-0701 claim 24 (a busy line: only unable to comply; a refused placement: only cannot deploy here; no interface sound)
+#[test]
+fn refusal_cues_are_announcements_only() {
+    let w = world();
+    let mut a = announcing(
+        &w,
+        &[
+            (Announcement::UnableToComply, "Nope"),
+            (Announcement::CannotDeploy, "NoDep"),
+        ],
+    );
+    let mut n = a.names().clone();
+    n.scold = Some("Scold".into());
+    n.gui_build = Some("Click".into());
+    a.set_names(n);
+    a.bank_mut().add_pcm(
+        "Scold",
+        Pcm {
+            sample_rate: RATE,
+            channels: 1,
+            samples: vec![1000; 4],
+        },
+    );
+    let mut now = 1000;
+    for c in [UiCue::BuildRefused, UiCue::PlacementRefused] {
+        a.mixer_mut().clear();
+        assert_eq!(a.cue(c), None);
+        assert!(heard(&mut a, now).is_empty());
+        assert!(a.mixer().speaking());
+        render(&mut a, 100);
+        now += 1000;
+    }
+}
+
+/// Adds announcement files of four frames for `samples` (S-0701 claim 34:
+/// the eight-character name plus `.wav`, apart from the sample bank).
+fn add_voices(a: &mut Audio, samples: &[String]) {
+    for n in samples {
+        a.voices_mut().add_pcm(
+            &crate::speech::file_name(n),
+            Pcm {
+                sample_rate: RATE,
+                channels: 1,
+                samples: vec![1000; 4],
+            },
+        );
+    }
+}
+
+// spec: S-0701 claim 34 (announcements are separate `.wav` files, never bank samples; sound entries never play those files)
+#[test]
+fn announcement_files_are_apart_from_the_bank() {
+    let w = world();
+    let mut a = audio(&w, &["Bld0", "Bld1", "Bld2"]);
+    let mut s = SpeechCatalog::default();
+    s.insert(Line {
+        name: "Bld".into(),
+        samples: ["Bld0".into(), "Bld1".into(), "Bld2".into()],
+        ..Line::default()
+    });
+    let mut names = SoundNames::default();
+    names.set_announcement(Announcement::Building, "Bld");
+    a.set_speech(s);
+    a.set_names(names);
+    a.announce(Announcement::Building);
+    a.service(1000);
+    assert!(
+        !a.mixer().speaking(),
+        "a bank sample is not an announcement file"
+    );
+    add_voices(&mut a, &strings(&["Bld0", "Bld1", "Bld2"]));
+    a.announce(Announcement::Building);
+    a.service(2000);
+    assert!(a.mixer().speaking());
+    assert_eq!(crate::speech::file_name("Bld0"), "Bld0.wav");
 }
 
 /// Audio whose announcements are entries named after their role, each with
@@ -854,8 +983,8 @@ fn announcing(w: &World, roles: &[(Announcement, &str)]) -> Audio {
             samples.push(format!("{n}{v}"));
         }
     }
-    let refs: Vec<&str> = samples.iter().map(String::as_str).collect();
-    let mut a = audio(w, &refs);
+    let mut a = audio(w, &[]);
+    add_voices(&mut a, &samples);
     let mut s = SpeechCatalog::default();
     let mut names = SoundNames::default();
     for (role, n) in roles {
@@ -937,14 +1066,14 @@ fn announced(a: &mut Audio, now: i64) -> bool {
 const ROLES: [&str; 5] = ["Base", "Lost", "Harv", "Funds", "Power"];
 
 fn base_audio(w: &World) -> Audio {
-    let mut samples = vec!["Siren".to_owned()];
+    let mut samples = Vec::new();
     for n in ROLES {
         for v in 0..3 {
             samples.push(format!("{n}{v}"));
         }
     }
-    let refs: Vec<&str> = samples.iter().map(String::as_str).collect();
-    let mut a = audio(w, &refs);
+    let mut a = audio(w, &["Siren"]);
+    add_voices(&mut a, &samples);
     a.set_speech(speech_of(&ROLES));
     base_names(&mut a);
     a

@@ -117,8 +117,7 @@ impl SpeechCatalog {
                     _ => {}
                 }
             }
-            // spec: S-0701 claim 26 (one sample per voice set, cut to 8 characters)
-            // interim: Q-0325 (looked up without an extension: the bank's names carry none)
+            // spec: S-0701 claim 26 (one sample per voice set, cut to 8 characters; the extension is added, see file_name)
             for (i, k) in [&b"Allied"[..], b"Russian", b"Yuri"].iter().enumerate() {
                 if let Some(v) = s.value(k) {
                     let t = value::text(v, SAMPLE_NAME);
@@ -157,6 +156,35 @@ impl SpeechCatalog {
     pub fn line(&self, id: LineId) -> &Line {
         &self.lines[id.0 as usize]
     }
+
+    /// Every announcement, in list order.
+    pub fn lines(&self) -> &[Line] {
+        &self.lines
+    }
+
+    /// The files of one voice set's samples ([`file_name`]), each once, in
+    /// list order. Empty samples are left out.
+    pub fn files(&self, set: usize) -> Vec<String> {
+        let mut out: Vec<String> = Vec::new();
+        for l in &self.lines {
+            let s = &l.samples[set.min(2)];
+            if s.is_empty() {
+                continue;
+            }
+            let f = file_name(s);
+            if !out.iter().any(|o| o.eq_ignore_ascii_case(&f)) {
+                out.push(f);
+            }
+        }
+        out
+    }
+}
+
+/// The file an announcement sample is read from: its eight-character name
+/// plus `.wav` (S-0701 claim 34 and Import mapping).
+pub fn file_name(sample: &str) -> String {
+    // spec: S-0701 claim 34 (the eight-character name plus the extension `.wav`)
+    format!("{sample}.wav")
 }
 
 /// The voice set of a side index (S-0701 claim 26): the first side's set,
