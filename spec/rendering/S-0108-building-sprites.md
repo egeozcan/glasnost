@@ -2,7 +2,7 @@
 id: S-0108
 title: Building sprites
 topic: rendering
-revision: 7
+revision: 8
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -524,10 +524,6 @@ are out of scope.
     undamaged building requests frame 0. With *D* = 0 both request frame 0. The door image is drawn at the image
     anchor of claim 8 with the depth bias of S-0102. Outside unloading, and for a building without
     a door sprite, no door image is drawn.
-    **Joint hand-off confirmation.** S-0102's current Terms already define the door sprite as
-    drawn throughout unloading, including the closed state, and its claim 13 describes the
-    object-pass door image while unloading. Hand off mutually consistent revisions together,
-    without changing the depth rule.
     - Backing: `measurable` (B10 for presence throughout unloading and absence outside it).
       The positive-stage frame rule and damaged-door variant are `measurable` (B10).
       Non-positive stage counts and negative or high out-of-range door frames are `measurable`
@@ -1181,12 +1177,6 @@ S-0408 scenario S10, with its setup, observables and falsification criteria.
 The free-unit effect of claim 11 is measured by S-0402 scenario H13, parts a to f, with that
 scenario's setup, observables and falsification criteria; no separate unit-placement rule is
 specified here.
-
-## Joint hand-off consistency
-
-- **S-0102, Terms, door sprite:** the current definition agrees with claim 23: visibility
-  throughout unloading, including closed. Hand off consistent revisions of both specs together.
-  No Terms correction or depth-rule change is needed.
 
 ## Open questions
 
