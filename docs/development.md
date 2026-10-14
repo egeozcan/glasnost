@@ -397,7 +397,7 @@ A person plays a skirmish against our AI from the main menu to the end screen, n
   - `game::play` tests: select, move, deploy, build and place, box selection, and surrender to an end screen, all on the synthetic skirmish.
   - `game::client` tests: menu, setup and the start job on a synthetic install.
   - `game::paint` tests and `crates/render/tests/offscreen_batch2d.rs`: the batch's pixels against the CPU reference, image views included.
-  - The local lane: `GLASNOST_GAME_DIR=<install> cargo test -p glasnost-app --test ui_lane -- --ignored --nocapture` drives the client from the menu through a game (deploy, a few hundred ticks, a building ready for placement, surrender) to the end screen. It writes `menu.png`, `setup.png`, `game.png`, `placement.png` and `end.png` to `local-lane/ui/` (git-ignored; never commit them). `GLASNOST_UI_MAP=n` picks the n-th offered map and `GLASNOST_UI_TICKS=n` sets the ticks before `game.png`.
+  - The local lane: `GLASNOST_GAME_DIR=<install> cargo test -p glasnost-app --test ui_lane -- --ignored --nocapture` drives the client from the menu through a game (deploy, a few hundred ticks, a building ready for placement, surrender) to the end screen. It writes `menu.png`, `setup.png`, `game.png`, `placement.png` and `end.png` to `local-lane/ui/` (git-ignored; never commit them). With a GPU adapter it also draws the game frame through the window's path (`game::GpuDraw`) offscreen, to `game-gpu.png`, and compares it with the CPU frame. It writes the first icon's palette indices as grey levels to `icon-indices.png`, which separates the icon palette (Q-0275) from the decoding. `GLASNOST_UI_MAP=n` picks the n-th offered map and `GLASNOST_UI_TICKS=n` sets the ticks before `game.png`.
 
 Interim rules of the game client, each tied to a request:
 
@@ -418,7 +418,7 @@ Interim rules of the game client, each tied to a request:
 
 Known limits:
 
-- Icons are drawn through the interim palette and may show the wrong colours until Q-0275 is answered.
+- Icons are drawn through the interim palette. Their indices decode to the right picture (`icon-indices.png`), but through that palette the colours come out as noise until Q-0275 is answered.
 - With no radar building, the radar box says "No radar" (S-0410).
 - The seed of a game comes from the host clock when Start is clicked.
 - Natively, the install is read when the window opens and the game is loaded synchronously after the frame that shows "Loading". The window does not respond while it loads (a few seconds in a debug build).
