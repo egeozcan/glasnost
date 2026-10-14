@@ -1,9 +1,9 @@
 ---
 id: Q-0171
 title: How the items of the auto-deploy delay list are read
-status: open
+status: answered
 related: [S-0003, S-0215]
-answered-by: []
+answered-by: [S-0003]
 ---
 
 ## Need
