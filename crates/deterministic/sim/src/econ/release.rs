@@ -451,11 +451,11 @@ const THREE_BY_THREE: &[(i32, i32)] = &[
 /// cases, `quirks.foundation_exit_lists` off): the row below from left to
 /// right, corners included; the cells beside it from the bottom row
 /// upwards, left before right; the row above from left to right, corners
-/// included. A foundation without cells has an empty ring (interim,
-/// request Q-0195).
+/// included. A foundation without cells has an empty ring (S-0404 Edge
+/// cases, Q-0195).
 pub fn ring(fw: i32, fh: i32) -> Vec<(i32, i32)> {
     if fw <= 0 || fh <= 0 {
-        // Q-0195 (interim: a foundation without cells keeps its empty list with the switch off too)
+        // spec: S-0404 Edge cases (Q-0195: for the 0 × 0 word the exit list is empty with the switch off as well as on; no ring is inferred)
         return Vec::new();
     }
     let mut v = Vec::new();
@@ -776,11 +776,7 @@ fn infantry(w: &mut World, k: ObjectId, unit: ObjectId, copies: bool) -> Outcome
     if copies && e.cloning != Some(true) {
         clone_copies(w, &b, unit);
     }
-    // spec: S-0404 claim 13 (the foundation cell next to the exit cell: each coordinate outside the foundation moved one cell back into it)
-    let inside = CellXY::new(
-        exit.x.clamp(x0, x0 + fw.max(1) - 1),
-        exit.y.clamp(y0, y0 + fh.max(1) - 1),
-    );
+    let inside = CellXY::new(toward(exit.x, x0, fw), toward(exit.y, y0, fh));
     let mut p = Pos::centre(inside, 0);
     let mut dz = 0;
     if i < door_count {
@@ -836,6 +832,19 @@ fn infantry(w: &mut World, k: ObjectId, unit: ObjectId, copies: bool) -> Outcome
         });
     }
     Outcome::Released
+}
+
+/// One exit-cell coordinate adjusted one cell toward the foundation
+/// rectangle from `lo` of extent `n` (S-0404 claim 13).
+fn toward(v: i32, lo: i32, n: i32) -> i32 {
+    // spec: S-0404 claim 13 (at or above lo + n: reduced by 1; below lo: raised by 1; otherwise unchanged; integer cell operations, also for the 0 × 0 word)
+    if v >= lo + n {
+        v - 1
+    } else if v < lo {
+        v + 1
+    } else {
+        v
+    }
 }
 
 /// Claim 14: each cloning building of the house, in acquisition order,

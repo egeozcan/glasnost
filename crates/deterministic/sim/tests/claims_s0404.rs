@@ -1424,6 +1424,39 @@ fn claim_13_door_cells() {
     }
 }
 
+// spec: S-0404 claim 13 (the appearance cell: each exit-cell coordinate adjusted one cell toward the foundation rectangle, at or above x0 + W reduced by 1, below x0 raised by 1, also for the 0 × 0 word) and Edge cases (Q-0195: the 0 × 0 word's exit list is empty with quirks.foundation_exit_lists off as well as on, so only door candidates are tried)
+#[test]
+fn claim_13_door_release_without_foundation_cells() {
+    for exact in [true, false] {
+        assert!(release::ring(0, 0).is_empty());
+        for (door, cell, at) in [(0, (1, 2), (0, 1)), (1, (2, 2), (1, 1)), (2, (2, 1), (1, 0))] {
+            let mut r = ruleset();
+            r.globals.quirks.foundation_exit_lists = exact;
+            let b = r.sim.buildings.get_mut("BARRACKS").unwrap();
+            b.foundation = Some([0, 0]);
+            match door {
+                0 => b.econ.door_first = Some(true),
+                1 => b.econ.door_second = Some(true),
+                _ => b.econ.door_third = Some(true),
+            }
+            let mut w = game(&r);
+            let k = building(&mut w, "BARRACKS", 0, 0, 0);
+            let tl = top_left(&w, k);
+            let grunt = new_unit(&mut w, Kind::Infantry, "GRUNT");
+            assert_eq!(release::release(&mut w, k, grunt), Outcome::Released, "door {door}");
+            let p = Pos::centre(CellXY::new(tl.x + at.0, tl.y + at.1), 0);
+            let o = w.obj(grunt).unwrap();
+            assert_eq!((o.pos.x, o.pos.y), (p.x, p.y), "door {door} exact {exact}");
+            // The door cell blocked: no list cell to fall back on.
+            let mut w = game(&r);
+            let k = building(&mut w, "BARRACKS", 0, 0, 0);
+            spawn_at(&mut w, Kind::Building, "HUT", CellXY::new(tl.x + cell.0, tl.y + cell.1));
+            let grunt = new_unit(&mut w, Kind::Infantry, "GRUNT");
+            assert_eq!(release::release(&mut w, k, grunt), Outcome::Failed, "door {door} exact {exact}");
+        }
+    }
+}
+
 // spec: S-0404 Edge cases (quirks.foundation_exit_lists: the 4 × 3 list never tries the cells beside the right edge; off, the full ring does)
 #[test]
 fn claim_13_quirk_foundation_exit_lists() {
