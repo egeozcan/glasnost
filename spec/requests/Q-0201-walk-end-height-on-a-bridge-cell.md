@@ -1,9 +1,9 @@
 ---
 id: Q-0201
 title: The height of a walker's locomotor destination for a cell destination with a bridge deck (S-0208 claim 16)
-status: open
+status: answered
 related: [S-0208, S-0209, S-0212]
-answered-by: []
+answered-by: [S-0208]
 ---
 
 ## Need

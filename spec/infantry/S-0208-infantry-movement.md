@@ -2,13 +2,13 @@
 id: S-0208
 title: Infantry movement (standing positions, walking step and speed, crawling, scatter destinations)
 topic: infantry
-revision: 15
+revision: 16
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0017, Q-0072]
+requests: [Q-0017, Q-0072, Q-0201]
 supersedes: []
 ---
 
@@ -35,7 +35,12 @@ answers Q-0072 question 3 for ordinary walking infantry: when the walker stops a
 to its destination (claims 16 and 17, scenario W10). The approach step keeping a destination
 does not exempt it from these arrival rules. Infantry of a
 jumpjet type move by the jumpjet locomotor, which belongs to other movement specs; claims 16 and
-17 do not cover them.
+17 do not cover them. Q-0201's arrival test was already given by approved revision 15,
+claim 16; claim 18 below supplies the previously missing cell-destination point and height,
+and the consequence of arriving underneath its deck. S-0212 claim 7 already specifies that
+a successful path to a high-bridge cell ends on its deck; claim 23 already owns later search
+failure. Neither supplied the locomotor destination's numeric height. Skirmish only; network games and
+campaigns are out of scope.
 
 Every spec cited here is approved, and the claim, formula, table and scenario numbers cited are
 those of the approved revisions in the spec index: S-0003 (INI value forms), S-0006 (rules
@@ -142,7 +147,7 @@ used by this spec:
   the sense of S-0107 Terms. It does not mean S-0107's narrower *is moving now*.
 - **Locomotor destination.** The point the unit's locomotor is currently taking it to as the end of
   its walk: while a unit walks under a move, the point that its destination gives (for a cell
-  destination, a point in that cell). A unit with no movement in progress has none. It differs from the
+  destination, the centre and height defined by claim 18). A unit with no movement in progress has none. It differs from the
   *destination* above, which is the cell or object the unit's orders and behaviour give it. Claim
   16 tests the locomotor destination, not the destination. It is not the walking target (Terms below), which is only the next standing
   position on the way.
@@ -675,13 +680,13 @@ used by this spec:
     The test is made only for a unit that is alive, on the map and not falling. When the walk ends,
     the unit loses its destination, its speed fraction (S-0310 Terms *infantry speed fraction*)
     becomes 0 and it stands at the standing position it arrived on, with no movement in progress
-    from then on (Terms *locomotor moving*). Otherwise the walk continues by claim 6. This claim
+    from then on (Terms *locomotor moving*). Otherwise the destination is kept: the walk
+    continues by claim 6 while path steps remain, and path exhaustion is handled by claim 18. This claim
     never ends a walk between two arrival ticks; a rule that stops the unit there (claim 17's
     exception) does so itself.
-    - Backing: `measurable` (scenario W10, parts a and d)
-    - Confidence: high that the walk ends on the arrival tick in the destination cell; medium for the
-      height condition, which matters only where the locomotor destination and the arrived position
-      differ in height in one cell (a bridge deck over its ground cell, Edge cases)
+    - Backing: `measurable` (scenario W10, parts a, d and e)
+    - Confidence: high for the arrival and strict height tests; medium for subsequent path
+      exhaustion, specified in claim 18
 
 17. **An approaching walker's stop and destination outcome (Q-0072, question 3).** On each
     arrival tick, before claim 16's test, an infantry unit loses its destination when all of these hold:
@@ -729,6 +734,40 @@ used by this spec:
     - Confidence: medium for the rule and its four behaviours; medium for the measured point being
       the target cell's centre; low for the exception, which was found by reading and not traced
       through a whole approach (Open questions)
+
+18. **Cell-destination height and arrival under a high bridge (Q-0201).** When an ordinary
+    walking infantry unit receives a cell destination *C*, its locomotor destination has the
+    map position of *C*'s centre, not one of the standing positions. Its height is the terrain
+    surface height at that centre, plus **414 leptons when C carries a high bridge**, and no
+    addition otherwise (F9). The addition is independent of the unit's current layer and of the
+    layer its path will enter. It is fixed when the destination is assigned, not recomputed
+    from the walker's layer on arrival. Low bridges get no addition.
+
+    On a flat high-bridge cell with centre terrain height *H*, an arrival on the deck has height
+    *H* + 416 leptons, so its difference from the locomotor destination is 2 leptons and claim
+    16 ends the walk. An arrival on the ground under the same deck has height *H*, giving a
+    difference of 414 leptons: claim 16 does **not** complete that destination. This does not
+    teleport the unit onto the deck or force an extra physical step. The unit keeps its
+    destination on that arrival tick. If no path steps remain, its speed fraction is already 0
+    on that tick, but the destination is still present. A remaining path continues normally.
+    An exhausted path needs another path computation under S-0212, with next-cell reactions
+    owned by S-0209. In particular, if that computation fails while the walker is on the ground
+    and its destination cell still carries a high bridge, S-0212 claim 23's give-up row clears
+    the destination, even though the unit is already in its destination cell. Completion on
+    arrival and later give-up are distinct outcomes.
+
+    S-0212 claim 7 makes a successful path to that cell end on its deck. A route from the
+    ground can visit the destination cell underneath the deck before it reaches a bridge
+    approach; that visit does not end the walk, and it follows the remaining route to the
+    deck. Thus a cell destination is not a request to stand on the same layer as the unit already
+    occupies. The unconditional deck-height target is `quirks.walker_bridge_destination_deck`
+    (Edge cases); no ground-height cell destination is produced merely by ordering from the
+    ground. The reverse height mismatch requires some other source of a destination point,
+    not an ordinary cell destination while that cell carries its deck.
+    - Backing: `measurable` (scenario W10, part e; the subsequent failed-search outcome also
+      has S-0212 claim 23's backing)
+    - Confidence: high for the destination point, height and layer independence; medium for
+      the path-exhaustion consequences, which depend on the subsequent search
 
 ## Formulas
 
@@ -800,6 +839,17 @@ on, for integer arguments *V* ≥ 0: trunc(√̃(*V*)) never exceeds ⌊√*V*�
 16641 on it can fall short of ⌊√*V*⌋ (for example trunc(√̃(129²)) = 128). Every distance in S-0208,
 S-0209 and S-0210 is taken with √̃.
 
+**F9. Cell locomotor destination.** For cell coordinates (*c*ₓ, *c*ᵧ),
+
+> *x*ᴅ = 256*c*ₓ + 128, *y*ᴅ = 256*c*ᵧ + 128
+> *z*ᴅ = *H*(*c*ₓ, *c*ᵧ, 128, 128) + *a*
+
+*a* is 414 leptons when the cell carries a high bridge at destination assignment, and 0
+otherwise. Coordinates and addition are exact integers, with no additional rounding.
+*H* and its floating-point calculation and truncation are S-0106 claim 2 and F1's.
+The 414-lepton addition is an engine constant, distinct from the deck's 416-lepton height.
+Units: leptons.
+
 ## Constants
 
 **Table P: standing positions** (engine constants; positions within the cell in leptons).
@@ -840,6 +890,7 @@ positions are never taken, as claim 3 says).
 | Screen-cover high-bridge raise | 4 | height levels | Terms, *screen-cover check* (applied whenever *C*ᵢ is a high-bridge cell) |
 | Level of a cell outside the map, for the screen-cover check | 0 | height level | Terms, *screen-cover check* |
 | Height tolerance for the end of a walk | 2 height levels (208 leptons, strict) | leptons | claim 16 |
+| High-bridge addition to a cell locomotor destination | 414 | leptons | claim 18; independent of the walker's layer |
 
 ## State and ordering
 
@@ -854,7 +905,8 @@ positions are never taken, as claim 3 says).
 | Any | scatter request accepted, no destination found | does not move; the draw has been taken |
 | Walking, arrival tick | target is a mobile actor in range at its cell centre, behaviour attack, area guard, hunt or rescue (claim 17) | loses its destination, keeps its target; the walk ends on this tick (claim 16) |
 | Walking, arrival tick | no locomotor destination, or arrived in the locomotor destination's cell within two height levels (claim 16) | walk ends: no destination, speed fraction 0, stands at the position reached |
-| Walking, arrival tick | neither of the above | continues; asks for its next walking target on the next tick (claim 6) |
+| Walking, arrival tick | neither of the above; path steps remain | destination kept; asks for its next walking target on the next tick (claim 6) |
+| Walking, arrival tick | destination height test fails; no path steps remain | destination kept, speed fraction 0; subsequent path computation and give-up follow S-0212 (claim 18) |
 | Walking, destination is its target object | firing check answers *can fire* (claim 17, exception) | loses its destination and stops as its firing sequence starts |
 
 Ordering stated as consequences (the draw counts and order are checked with the read-only recorder
@@ -979,6 +1031,14 @@ W10).
   standing position short and then be moved again by S-0215 claim 37. It is the original's
   behaviour, not a defect we fix, and has no switch; a variant measuring to the target's own
   position would differ only within half a cell of the boundary (scenario W10, part b2).
+- **A cell destination under a deck still aims at deck height**
+  (`quirks.walker_bridge_destination_deck`, default: original). Claim 18 sets its height to
+  the centre's terrain height plus 414 leptons, even for a walker travelling under the deck.
+  Arrival there can leave a destination present despite a speed fraction of 0, until a later
+  search or behaviour clears it (W10 e). With the switch off, the cell destination's height
+  for the arrival test is the terrain height at the cell centre on the walker's arrival layer:
+  that height plus 416 leptons on the deck, or without an addition on the ground. Its map
+  position stays the centre, and pathfinding and object destinations are unchanged.
 - **No early stop against non-mobile targets** (claim 17). A walker approaching a building or a
   cell always walks to its approach cell, even when it came into range earlier. It has no switch.
 
@@ -995,6 +1055,7 @@ W10).
 | Rules, the combat-damage section, `PlayerScatter` | the player-scatter rule (claims 11 and 15) | boolean | no |
 | Rules, land-type sections, `Foot` | the walker speed percentage; only zero matters (claim 9) | percent | owned by S-0211 |
 | Map, `[Infantry]` entries, the sub-cell value | standing position number (claim 5) | integer, 0 to 4 | values outside 0 to 4: centre, importer warning |
+| Map terrain and overlay blocks, `[IsoMapPack5]`, `[OverlayPack]`, `[OverlayDataPack]`, with theater tile and overlay definitions | destination cell's centre terrain height and whether it carries a high bridge (claim 18, F9) | block encodings and terrain import owned by S-0012, S-0009 and S-0010; high-bridge recognition owned by S-0211 | the cited specs' empty-cell and absent-overlay rules; the 414-lepton addition and 208-lepton tolerance are engine constants, not imported settings |
 
 The scatter property of each behaviour (claim 11) is imported by S-0215.
 
@@ -1698,7 +1759,7 @@ cases).**
   request that finds no destination takes no draw), or the civilian moves on the tick of the hit. (e) two draws besides the hit's own draws (which would
   mean that request A was sent to a walking unit and accepted), or none.
 
-**Scenario W10: end of a walk and the approaching walker's stop (claims 16, 17).**
+**Scenario W10: end of a walk and the approaching walker's stop (claims 16 to 18).**
 - *Setup:* a tiny flat map at level 0, clear terrain, game speed index 2. A named test file (a loose
   copy of the rules file, removed after the runs) gives one ordinary ground infantry type of the
   human player a weapon with range 5 cells, zero minimum range and no close-range, elevation,
@@ -1723,8 +1784,26 @@ cases).**
     separate the exception from the main rule, which can clear the destination first on an arrival
     tick in range (Open questions); it checks only the state once firing has begun.
   - (d) No target: a move order to an empty cell eight cells away.
+  - (e) Separate stock-data runs, no weapon overrides, director and mods off, game speed
+    index 2. A tiny map has a straight high bridge over flat enterable clear ground, with
+    approaches at deck level and a ground route beneath it. For e2, shape the access route
+    so that the only route from the ground start to a bridge approach passes through *C*
+    underneath the deck, then leaves *C*, reaches the approach and returns to *C* on the deck.
+    An ordinary infantry unit of the
+    human player starts at least three cells from an empty interior deck cell *C*: (e1) on
+    the deck route, (e2) on the ground route under it. Give a move order whose applied cell
+    destination is *C*, recording that cell to exclude click-height ambiguity. Record both
+    the unit's world height and its locomotor destination point from assignment through
+    every arrival and subsequent path computation, with its layer, remaining path steps,
+    behaviour and speed fraction. If the ordinary click does not produce *C* in e2, a
+    purpose-made map trigger may assign that same cell destination to the human unit.
+    Record the assignment and do not substitute another cell silently.
 - *Procedure:* (a) to (c): issue an attack order on the target; (b3) and (d): the move order. Record
   until the attacker has stood still for 30 ticks. One run per part, repeated on four map axes.
+  In (e), record for 300 ticks after the first arrival in *C*, or until the destination is
+  cleared; one run per layer from each bridge end. An e2 run tests arrival only when the
+  recorded path actually reaches *C* on the ground without substituting the destination.
+  A run whose search refuses it earlier records that separate outcome, not a false arrival.
 - *Observable:* the tick and the standing position at which the walk ends (the first tick after
   which the position stays the same), whether the destination is empty from that tick on, the speed
   fraction on that tick, the in-range result of every arrival tick, and the first tick of a firing
@@ -1743,6 +1822,14 @@ cases).**
     first firing sequence starts, its destination is empty and it does not move.
   - (d) the walk ends on the arrival tick on the standing position in the ordered cell: destination
     empty and speed fraction 0 from that tick on.
+  - (e) Let *H* be *C*'s centre terrain height. At assignment the locomotor destination
+    is the centre at *H* + 414 leptons in both layers. In e1 the arrival height is *H* + 416,
+    the destination clears on that arrival tick and the speed fraction is 0. In a qualifying
+    e2 arrival the height is *H*, and the destination remains present on that arrival tick.
+    With remaining steps it follows the access route and finally stops on the deck in *C*.
+    If the path is exhausted the speed fraction is 0 nonetheless. It is not transferred
+    onto the deck. If a later search fails with the unit still under the deck, the destination
+    clears on that failed-search tick, by S-0212 claim 23, not by claim 16's completion test.
 - *Falsified if:* (a) the walker stops before the recorded approach cell, or fires before arriving
   there. (b) the walker walks on past an arrival tick that is in range at the cell centre, stops on
   an arrival tick that is not, stops between two arrival ticks, loses its target, or fires while
@@ -1750,7 +1837,10 @@ cases).**
   (b3) it stops early. (c) it keeps a destination, or moves, after its first firing sequence starts. (d) it keeps a
   destination or a non-zero speed fraction after the arrival tick in the ordered cell, or the walk
   ends on another tick. A run in which S-0215 claim 37 renews the destination during the approach
-  still counts; the parts test only when the walker stops.
+  still counts; the parts test only when the walker stops. (e) either assigned height differs
+  from *H* + 414, e1 retains the destination after arrival, a qualifying e2 arrival clears it
+  by the completion test despite the 414-lepton mismatch, the unit is moved vertically to
+  satisfy that test, or the specified later failed search keeps the destination.
 
 ## Open questions
 
@@ -1775,10 +1865,6 @@ cases).**
 - The exception of claim 17 (the target is the destination) was found by reading only. When it
   triggers before the main rule does, and whether a standing walker with that destination ever
   reaches it, were not traced; scenario W10 part c checks only the end state.
-- The height condition of claim 16 (two height levels) has no scenario: it matters only where an
-  arrived position and the locomotor destination share a cell at different heights (a high-bridge
-  deck over its ground cell), and how a walker's locomotor destination is placed there was not
-  traced.
 - No other factor (for example a game-wide speed bias of the movement specs) is known to scale a
   walking infantry unit's speed during a step, and F5 has none; that none exists is not confirmed.
 - The height of a walker between standing positions, while it steps across a slope or onto a bridge
