@@ -2,11 +2,11 @@
 id: S-0209
 title: Cell occupancy and crowding (capacity, entry outcomes, waiting, re-routing, scatter requests)
 topic: movement
-revision: 16
+revision: 17
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-13
+approved-on: 2026-10-14
 measurements: []
 requests: [Q-0019, Q-0020]
 supersedes: []
@@ -20,7 +20,9 @@ What a cell records about the objects in it, how many infantry fit, which *entry
 unit (infantry, ground vehicle or aircraft) gets for a neighbouring cell, what a walking unit does
 with each outcome, when a cell's units obey a request to make room, and in which order a cell lists
 its objects. Path costs built on these outcomes belong to S-0212, standing positions within a cell
-and scatter destinations to S-0208, and crushing to S-0210.
+and scatter destinations to S-0208, and crushing to S-0210. Skirmish only; network games and
+campaigns are out of scope. References to their original rules are context, not implementation
+requirements.
 
 ## Terms
 
@@ -618,8 +620,13 @@ rank* and *elite weapon*), *n*
      standing there.
 
    *Reasons for the `unmeasured` backings of claims 4 and 5.*
-   - U1 (tether link): no situation is known that gives an infantry unit a tether link (S-0208 Open
-     questions), and a tether link is not a field of the imported data that a test file could set.
+   - U1 (tether link): the successful infantry factory or cloning-building release exchange gives
+     an infantry unit a tether link (S-0417 claim 10). That identifies a tether situation, but not
+     a setup isolating the zero walker speed exception or row WP15's entering override. The
+     released unit is leaving its factory, not established to be entering its destination under
+     the tether. No setup is established that retains the tether while testing either effect,
+     and a tether link is not an imported field that a test file could set. Both effects remain
+     `unmeasured`.
    - U2 (parasite): no stock infantry type is a parasite, and an attached parasite rides inside its
      victim instead of walking or driving, so no setup, with or without a test file, has a moving
      parasite with a victim.
@@ -914,7 +921,8 @@ rank* and *elite weapon*), *n*
     - the object is a unit with the scatter veterancy ability,
     - the object belongs to a house whose skill level is at least the game-wide scatter threshold.
 
-    Whether a unit that receives the request then moves, and where, is S-0208 (claims 11 to 13).
+    Whether a unit that receives the request then moves, and where, is S-0208 (claims 11 to 13)
+    for infantry and S-0207 claim 16 for vehicles.
 
     Skill levels:
     - A human-controlled house has skill level 0. So for units of a human player the last condition
@@ -953,7 +961,15 @@ rank* and *elite weapon*), *n*
     - A driving vehicle whose next cell gives *stationary friendly* sends one: move-anywhere,
       forced, no threat point (S-0207 claim 15). Whether a vehicle that receives a request moves,
       and where, is S-0207 claim 16.
-    - Other senders belong to the specs of those events, for example a factory clearing its exit.
+    - A ground vehicle factory clearing its exit apron sends forced, move-anywhere requests to
+      the apron cell and, while that cell is blocked, its occupied neighbours (S-0417 claim 4).
+      These requests explicitly select the ground cell layer defined in Terms, not the bridge-deck
+      layer or the layer chosen by an entry-outcome reference height. The apron request has no
+      threat point; neighbour requests use the apron's centre. Claim 11's move-anywhere condition
+      admits every listed object, with acceptance still governed by its movement spec. Within
+      each cell, draw assignments follow claim 13's listing order; S-0417 owns the ordering
+      between the apron, neighbours and unloading delay.
+    - Other senders belong to the specs of those events.
     - Backing: `measurable` (scenarios C4 and C7) for the walker's and the crushing vehicle's
       requests. The driving vehicle's request and the other senders are pointers: S-0207 and the
       specs of those events own them and their backing.
@@ -2620,6 +2636,11 @@ That moment is called the *window*. Common setup:
 
 ## Open questions
 
+- Factory release establishes an infantry tether situation (S-0417 claim 10), but whether it
+  can expose claim 4's zero walker speed exception or tethered-entering override remains open
+  (U1). Its contact alone also does not establish a factory-release setup reaching claim 8's
+  stationary-friendly give-up comparison while that contact persists. Scenario C4 (f) remains
+  the contact-condition proposal; ordinary factory release is not additional backing for it.
 - The exact list of behaviours that have a mission target in claim 4 belongs to the behaviour specs.
   In the original they include entering, capturing, being taken in, and sabotage by a unit that
   carries explosives. They also include guarding, area guarding and patrolling by an engineer-like
