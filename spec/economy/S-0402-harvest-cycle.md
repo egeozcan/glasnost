@@ -2,7 +2,7 @@
 id: S-0402
 title: Harvest cycle (loading, field and refinery choice, docking, unloading, income, slave and chrono miners)
 topic: economy
-revision: 18
+revision: 19
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -790,7 +790,11 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     are removed on refusal: their creation draws still occur, rather than being
     suppressed in advance. This alternative is our engine's rule, not another
     outcome observable in the original.
-    - Backing: `measurable` (H24 for original creation and removal ordering)
+    - Backing: `measurable` (H24 for original creation and removal ordering).
+      Temporary-hidden-slave tag notifications are `unmeasured`: no established
+      data-only setup attaches a tag to a generated slave. S-0011 claim 19 and
+      conditional scenario T25 B cover that separate test if a fixture is found.
+      Disappearance and losses alone do not test tag evaluation
     - Confidence: high for creation before placement and old-group removal,
       medium for temporary-slave destruction notifications
 
@@ -2192,17 +2196,19 @@ is wrong). *Runs:* 3.
   a second run with that cell blocked. Include old slaves both inside and outside.
 - *Procedure:* pack up once per run; repeat three times per case. Use a read-only
   state and random-stream recorder across the conversion tick, recording new
-  infantry creation, their on-map status, old slave ownership, losses and
-  destruction notifications through the read-only recorder. Compare end-screen
-  losses with a control that performs no pack-up.
+  infantry creation, their on-map status, old slave ownership and losses.
+  Compare end-screen losses with a control that performs no pack-up.
 - *Expected:* the return vehicle creates its type's initial count of hidden slaves
   before placement in both cases, each with its creation draw. On success these
   temporary slaves are destroyed before old-group transfer; on refusal they remain
   with the hidden vehicle, and their creations precede old-group release. No old
   slave is recreated on successful transfer. The discarded temporary slaves count
-  as losses and receive common destruction notifications. Missing temporary
-  creations, absent losses or notifications, undone draws or old-group release
-  preceding those creations falsifies the claim.
+  as losses. Missing temporary creations, absent losses, undone draws or old-group
+  release preceding those creations falsifies the claim.
+  Tag notifications remain `unmeasured`: this setup establishes no tag attachment
+  to a generated slave. S-0011 claim 19 and conditional scenario T25 B propose
+  the notification test if a data-only fixture is found; disappearance and losses
+  alone neither confirm nor falsify tag evaluation.
   The quirk-off result is an engine conformance test, not an oracle measurement.
 
 **H25. Deployment-state boundaries and shared guard spot (claims 27, 28).**
