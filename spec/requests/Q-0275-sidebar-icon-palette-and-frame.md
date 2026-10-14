@@ -31,6 +31,6 @@ theater and for each side, with screenshots compared against the candidate palet
 ## Current workaround
 
 Interim rule: frame 0 of the icon file through the palette file `PALETTE.PAL` (the file S-0111's
-Import mapping names for the overlay sprites), index 0 transparent, drawn at the slot's top-left
-corner and clipped to the slot. A darkened icon gets a translucent black veil of our own. Recorded
+Import mapping names for the overlay sprites), index 0 transparent, the file's whole canvas centred
+in the slot and clipped to it. A darkened icon gets a translucent black veil of our own. Recorded
 in docs/development.md, "Game client (M5b)".

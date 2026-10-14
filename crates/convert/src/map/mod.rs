@@ -52,8 +52,8 @@ pub struct MapQuirks {
     /// `quirks.header_pairs_as_start_marks` (claims 25 and 29): all N_h
     /// header pairs are read; off: at most 8.
     pub header_pairs_as_start_marks: bool,
-    /// `quirks.lobby_counts_zero_waypoint` (claim 23). Not consulted yet: our
-    /// engine has no lobby that counts start waypoints.
+    /// `quirks.lobby_counts_zero_waypoint` (claim 23), consulted by the game
+    /// client's map list (`glasnost_app::game::install::start_count`).
     pub lobby_counts_zero_waypoint: bool,
     /// `quirks.preview_markers_from_header` (claim 25). Not consulted yet:
     /// our engine draws no preview markers.

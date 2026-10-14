@@ -22,7 +22,7 @@ mod input;
 mod map_pane;
 pub mod preview;
 mod rules;
-mod tasks;
+pub(crate) mod tasks;
 #[cfg(target_arch = "wasm32")]
 mod web;
 

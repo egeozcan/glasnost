@@ -1,0 +1,193 @@
+//! What the client reads from a mounted install before the menus: the
+//! base rules (for the setup screen's values and the sound names), the
+//! multiplayer maps with their start positions, and the sound bank.
+
+use std::sync::Arc;
+
+use glasnost_audio::bank::{self, SoundBank};
+use glasnost_audio::names::SoundNames;
+use glasnost_convert::find::Listing;
+use glasnost_ini::Document;
+use glasnost_rules::schema::Ruleset;
+use glasnost_sim::rules::SimRules;
+use glasnost_ui::draw::Rgba;
+use glasnost_ui::setup::{MapEntry, SetupRules};
+use glasnost_vfs::Vfs;
+
+/// The install's data the menus need.
+pub struct Install {
+    /// The setup screen's values and ranges.
+    pub setup: SetupRules,
+    /// The multiplayer maps offered, with their entries.
+    pub maps: Vec<(Listing, MapEntry)>,
+    /// The sound names of the base rules.
+    pub names: SoundNames,
+    /// The samples found.
+    pub bank: SoundBank,
+    /// What was found, for the menu's status line.
+    pub summary: String,
+}
+
+/// The countries the setup screen offers (interim, Q-0281): those that are
+/// not passive and not the neutral or special house's, in registration
+/// order.
+pub fn offered_countries(rules: &SimRules) -> Vec<String> {
+    rules
+        .country_names
+        .iter()
+        .zip(&rules.countries)
+        .filter(|(n, c)| {
+            !c.passive
+                && n.as_str() != glasnost_sim::load::NEUTRAL
+                && n.as_str() != glasnost_sim::load::SPECIAL
+        })
+        .map(|(n, _)| n.clone())
+        .collect()
+}
+
+/// The swatch of each lobby colour slot 0 … 7: the colour definition at
+/// the slot's position (S-0103 claim 10), through S-0103's HSV formula
+/// (interim, Q-0280); grey when the definition is missing.
+pub fn slot_swatches(r: &Ruleset) -> Vec<Rgba> {
+    (0..8u8)
+        .map(|s| {
+            glasnost_render::palette::slot_position(s)
+                .and_then(|p| r.colours.get(p))
+                .map_or([128, 128, 128, 255], |c| {
+                    let [h, sat, v] = c.hsv;
+                    let rgb = glasnost_render::palette::hsv_to_rgb(h, sat, v);
+                    [rgb.r, rgb.g, rgb.b, 255]
+                })
+        })
+        .collect()
+}
+
+/// The setup screen's values from the base rules (S-0412 claim 1 and
+/// Import mapping).
+pub fn setup_rules(r: &Ruleset, sim: &SimRules) -> SetupRules {
+    let g = &r.sim.general.economy;
+    SetupRules {
+        // spec: S-0412 Import mapping (Money absent: 10000)
+        money: g.money.unwrap_or(10000),
+        money_range: (
+            // spec: S-0412 Import mapping (MinMoney absent: 2500)
+            g.min_money.unwrap_or(2500),
+            // spec: S-0412 Import mapping (MaxMoney absent: 10000)
+            g.max_money.unwrap_or(10000),
+            // spec: S-0412 Import mapping (MoneyIncrement absent: 100)
+            g.money_increment.unwrap_or(100).max(1),
+        ),
+        // spec: S-0412 Import mapping (UnitCount absent: 10)
+        units: g.unit_count.unwrap_or(10),
+        units_range: (
+            // spec: S-0412 Import mapping (MinUnitCount absent: 1)
+            g.min_unit_count.unwrap_or(1),
+            // spec: S-0412 Import mapping (MaxUnitCount absent: 20)
+            g.max_unit_count.unwrap_or(20),
+        ),
+        // spec: S-0412 claim 1 (the bases setting's default: the base rules' Bases, or yes)
+        bases: g.bases.unwrap_or(true),
+        flags: [
+            // spec: S-0412 Import mapping (ShortGame absent: no)
+            g.short_game.unwrap_or(false),
+            // spec: S-0412 Import mapping (SuperWeaponsAllowed absent: yes)
+            g.super_weapons_allowed.unwrap_or(true),
+            // spec: S-0412 Import mapping (Crates absent: yes)
+            g.crates.unwrap_or(true),
+            // spec: S-0412 Import mapping (BuildOffAlly absent: yes)
+            g.build_off_ally.unwrap_or(true),
+            // spec: S-0412 Import mapping (MCVRedeploys absent: yes)
+            g.mcv_redeploys.unwrap_or(true),
+        ],
+        // spec: S-0201 claim 7 (the lobby's game-speed index from the rules)
+        game_speed: sim.general.lobby_game_speed,
+        countries: offered_countries(sim),
+        colours: slot_swatches(r),
+    }
+}
+
+/// The lobby's player limit of a map file: its start waypoints among 0 …
+/// 7 (S-0009 claim 23).
+pub fn start_count(bytes: &[u8]) -> u32 {
+    let doc = Document::parse(bytes, Default::default(), &mut Vec::new());
+    let zero_counts = glasnost_convert::map::MapQuirks::default().lobby_counts_zero_waypoint;
+    (0..8u8)
+        .filter(|k| {
+            let key = k.to_string();
+            doc.value(b"Waypoints", key.as_bytes()).is_some_and(|v| {
+                let v = v.trim_ascii();
+                // spec: S-0009 claim 23 (an entry counts when present with a value other than −1; quirks.lobby_counts_zero_waypoint)
+                v != b"-1" && (zero_counts || v != b"0")
+            })
+        })
+        .count() as u32
+}
+
+/// Reads the install's menus data: the base rules resolved, the
+/// multiplayer maps with at least two start positions, and the samples.
+pub async fn prepare(vfs: &mut Vfs) -> Result<Install, String> {
+    let import = glasnost_convert::import(vfs, &glasnost_convert::ImportOptions::default()).await;
+    let resolved = glasnost_rules::resolve_ruleset(
+        Some((import.tree.clone(), import.provenance.clone())),
+        &[],
+    )
+    .map_err(|e| format!("the rules did not resolve: {e}"))?;
+    let sim = Arc::new(SimRules::new(&resolved.ruleset, &resolved.sim_rules_hash));
+    let setup = setup_rules(&resolved.ruleset, &sim);
+    if setup.countries.len() < 2 {
+        return Err("the rules offer fewer than two countries".into());
+    }
+    let mut maps = Vec::new();
+    for l in glasnost_convert::find::find_maps(vfs).await {
+        if !l.multiplayer {
+            continue;
+        }
+        let Ok(bytes) = vfs.read(&l.file).await else {
+            continue;
+        };
+        let starts = start_count(&bytes);
+        if starts >= 2 {
+            let label = format!("{} ({starts})", l.name);
+            maps.push((l, MapEntry { label, starts }));
+        }
+    }
+    if maps.is_empty() {
+        return Err("no multiplayer map with two start positions was found".into());
+    }
+    let names = SoundNames::from_ruleset(&resolved.ruleset);
+    let (bank, report) = bank::discover(vfs).await;
+    let summary = format!(
+        "{} maps, {} countries, {} samples",
+        maps.len(),
+        setup.countries.len(),
+        report.samples
+    );
+    Ok(Install {
+        setup,
+        maps,
+        names,
+        bank,
+        summary,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// spec: S-0009 claim 23 (start waypoints among 0 … 7; −1 does not count)
+    #[test]
+    fn start_positions_are_counted_from_the_waypoints() {
+        let text = b"[Waypoints]\n0=1000\n1=2000\n2=-1\n5=3000\n8=4000\n";
+        assert_eq!(start_count(text), 3);
+        assert_eq!(start_count(b"[Basic]\nName=x\n"), 0);
+    }
+
+    #[test]
+    fn content_hash_names_maps_by_content() {
+        let a = super::super::session::content_hash(b"abc");
+        assert_eq!(a, super::super::session::content_hash(b"abc"));
+        assert_ne!(a, super::super::session::content_hash(b"abd"));
+        assert!(a.starts_with("map-"));
+    }
+}

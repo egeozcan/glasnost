@@ -926,6 +926,7 @@ dependencies = [
  "glasnost-render",
  "glasnost-rules",
  "glasnost-sim",
+ "glasnost-ui",
  "glasnost-vfs",
  "js-sys",
  "log",
