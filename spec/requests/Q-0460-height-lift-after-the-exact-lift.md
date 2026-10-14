@@ -3,7 +3,7 @@ id: Q-0460
 title: Which height lift the sight centre uses now that S-0101's lift is exact, and stale lift references in S-0102 and S-0409
 status: answered
 related: [S-0101, S-0102, S-0409]
-answered-by: [S-0409]
+answered-by: [S-0409, S-0101]
 ---
 
 ## Need
