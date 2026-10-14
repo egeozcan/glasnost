@@ -2,13 +2,13 @@
 id: S-0103
 title: Palettes and house colour
 topic: rendering
-revision: 8
+revision: 9
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0214, Q-0280]
+requests: [Q-0214, Q-0280, Q-0275]
 supersedes: []
 ---
 
@@ -27,6 +27,7 @@ Glossary terms used here include *palette*, *theater*, *house*, *house colour*, 
 - **Tile palette.** The theater's palette for terrain tiles.
 - **Theater palette.** The theater's general-purpose palette. The temperate theater palette read at program start supplies the start-up resource table (S-0112, Terms and claims 1 and 2); later theater loads do not change that table.
 - **Anim palette.** The palette for animations that use neither the tile palette nor a house-colour palette. It is the same in every theater (claim 1).
+- **Icon palette.** The dedicated palette for sidebar build icons, loaded at program start and unchanged during the session (claim 13).
 - **Colour definition.** A named colour given as three bytes (H, S, V): hue, saturation, value. The hue runs 0–255 over the full circle, so 0 and 255 are both red.
 - **Definition position.** Colour definitions are numbered from 0 in the order the game creates them in each game: the entries of the base rules' colour section in their order, then each new name that a later rules layer adds, in order. A later layer's entry whose name already exists creates nothing (claim 5). A line with an empty value is no entry at all (S-0001, claim 11), so it creates no definition and takes no position: the definitions after it each move one position lower. The **first colour definition** is the one at position 0.
 - **Remap range.** Palette indices 16–31. A house-colour palette replaces exactly these entries.
@@ -46,8 +47,8 @@ Glossary terms used here include *palette*, *theater*, *house*, *house colour*, 
 
 ## Behaviour
 
-1. **Palette files are multiplied by 4 in 8-bit arithmetic.** Each palette loaded from a palette file (the unit, tile and theater palettes of a theater, and the anim palette) turns a file component *c* into the palette component (4·*c*) mod 256. Well-formed files (*c* ≤ 63) therefore give components 0, 4, …, 252: every component loaded from a file is a multiple of 4 and at most 252. A component above 63 wraps (64 → 0). The anim palette is read once, when the program starts, from its own file (Constants), and is not reloaded when the theater changes.
-   - Backing: `measurable` (PA for the ×4, PB for the anim palette, PG for the wrap)
+1. **Palette files are multiplied by 4 in 8-bit arithmetic.** Each palette loaded from a palette file (the unit, tile and theater palettes of a theater, the anim palette, and the icon palette) turns a file component *c* into the palette component (4·*c*) mod 256. Well-formed files (*c* ≤ 63) therefore give components 0, 4, …, 252: every component loaded from a file is a multiple of 4 and at most 252. A component above 63 wraps (64 → 0). The anim palette is read once, when the program starts, from its own file (Constants), and is not reloaded when the theater changes.
+   - Backing: `measurable` (PA for the ×4, PB for the anim palette, PG for the wrap, PL for the icon palette)
    - Confidence: high
 
 2. **Palette files per theater, and missing files.** For a theater with palette base name *B* and suffix *X* (Constants), the palette files are named as follows:
@@ -155,6 +156,12 @@ Glossary terms used here include *palette*, *theater*, *house*, *house colour*, 
     - Backing: `measurable` (PK)
     - Confidence: high
 
+13. **Sidebar icon palette conversion and missing file (Q-0275).** The icon palette is read once at program start from the fixed file named in Import mapping, resolved by S-0005. Its components receive claim 1's multiplication and byte wrap. Every sidebar icon uses this palette, with no house-colour replacement even at indices 16–31. It is independent of the map's theater, battlefield light, global-effect tint and selected house colour. The palette in force at program start remains in force in every game of that session, even if a different side's archives subsequently provide a different copy of the same palette file.
+    - An ordinary nonzero icon index shows its converted palette colour packed by claim 9's 16-bit step, without the neutral-light subtraction of 1. Index 0 is transparent. The icon's untinted shade table has 53 rows, with the middle row (26) reproducing the converted colour exactly. S-0411 claim 16 owns image-frame selection, placement and the separate darkening mask; that mask halves the already-packed destination channels, rather than selecting a darker palette row.
+    - If the icon palette file cannot be resolved at program start, the original crashes before a skirmish can begin. It does not substitute the unit, anim or general overlay palette. **Our engine's departure:** use an all-black icon palette, keeping index 0 transparent, and issue an importer warning naming the missing file. There is no switch to reproduce the crash.
+    - Backing: `measurable` (PL for conversion, transparency, independence, session lifetime and missing-file failure; S-0411 S11 for the mask). The existence of every unused shade row is `unmeasured`: sidebar states covered here show the middle row and a separate mask, not those rows.
+    - Confidence: high
+
 ## Formulas
 
 All arithmetic is on integers unless stated otherwise. "÷" is integer division truncating toward zero; every dividend below is non-negative, so it is also the floor. "mod" gives a non-negative remainder.
@@ -205,6 +212,8 @@ The hue scale is 255 per full circle, divided into six sectors of 42.5. H = 255 
 
 **16-bit step** (claim 9): in the 5-6-5 layout, red₅ = ⌊R / 8⌋, green₆ = ⌊G / 4⌋, blue₅ = ⌊B / 8⌋ for the 8-bit shaded components R, G, B. In the 5-5-5 layout green₅ = ⌊G / 8⌋ instead. Exact integer arithmetic.
 
+**Icon shade table** (claim 13). For converted 8-bit component *u* and row *j* = 0 … 52, the component before packing is min(255, ⌊*u* · *F_j* / 65536⌋), where *F_j* = ⌊131072 · *j* / 52⌋. Exact integer arithmetic, no floating-point operations. At *j* = 26, *F_j* = 65536 and the component is exactly *u*. Pack with the 16-bit step above. Index 0 is not painted.
+
 ## Constants
 
 | Name (ours) | Value | Unit | Notes |
@@ -214,6 +223,7 @@ The hue scale is 255 per full circle, divided into six sectors of 42.5. H = 255 
 | shade counts per colour definition | 1 and 53 | rows | S-0104 |
 | palette file size | 768 | bytes | 256 × 3, components meant 0–63 |
 | anim palette file | `ANIM.PAL` | file name | read once per session |
+| icon shade count | 53 | rows | middle row 26 reproduces converted file colour, claim 13 |
 | lobby slot → definition position | 1, 5, 10, 14, 6, 12, 8, 7 | definition position | for slots 0 … 7, claim 10 |
 | σ_0 … σ_15 | 0.7661539316177368, 0.7949070930480957, 0.8224136829376221, 0.8481203317642212, 0.8719707727432251, 0.8935688734054565, 0.9135870337486267, 0.9316057562828064, 0.9473402500152588, 0.9612804651260376, 0.9731168746948242, 0.9826816916465759, 0.9902727603912354, 0.9956966042518616, 0.9989056587219238, 1.0 | dimensionless | single-precision values, written exactly |
 | γ_0 … γ_15 | 0.9807852506637573, 0.9088482856750488, 0.8719707727432251, 0.8289040923118591, 0.7807372212409973, 0.7274125814437866, 0.6692825555801392, 0.606731116771698, 0.5395258069038391, 0.469366192817688, 0.3961058259010315, 0.3202287256717682, 0.24223609268665314, 0.16188637912273407, 0.08121144026517868, 1.2246063538223773e-16 | dimensionless | γ_15 is not exactly 0, but ⌊γ_15 · V⌋ = 0 for every byte V |
@@ -251,6 +261,8 @@ Theaters. These names are engine constants of the original, not stock data. Each
 | palettes for theater A in force (or none loaded yet, as after program start, even when B is snow) | a game in theater B starts | the palettes for theater B are loaded under claim 2, including its missing-file rules; house-colour palettes are built from that game's colour definitions and the unit palette then in force |
 | rules layers read | each new colour name | a single-shade and a 53-shade house-colour palette exist under that name, at the next definition position |
 | rules layers read | a colour name that already exists | nothing changes |
+| program starts with an icon palette file available | file is resolved | icon colours are fixed for the session by claim 13 |
+| icon colours fixed for the session | another game, theater or side is selected | the icon palette does not change |
 
 ## Edge cases and quirks
 
@@ -270,6 +282,7 @@ The lobby swatch's RGB and flat fill (claims 11 and 12) have no data-file select
 
 | Source | Key | Parse | Feeds | Absent |
 |---|---|---|---|---|
+| fixed asset `CAMEO.PAL` | no INI selector | 768-byte palette file, components as in claim 1; resolution by S-0005 at program start | dedicated sidebar icon palette (claim 13), not the general overlay palette | original crashes at program start; our engine uses an all-black palette with transparent index 0 and an importer warning |
 | rules `[Colors]` | each key | name = key, compared ignoring case; value as in claim 4 | one colour definition at the next definition position, if the name is new (claims 4–6 and 10); never the setup swatch RGB or fill (claims 11 and 12) | missing integers = 0; a line with an empty value creates no definition (S-0001, claim 11) |
 | rules `[Colors]` | `LightGrey` | name, ignoring case | the definition both non-player houses of a skirmish show (claim 10) | engine constant name |
 | art, building entry | `TerrainPalette` | boolean | building uses the tile palette (claim 8) | no |
@@ -484,7 +497,18 @@ Every scenario that reads pixels shares these rules:
 - *Expected:* every interior pixel for a slot matches that slot's Constants RGB after the 16-bit step; its open-list and selected-control colours match. There is no interior image pattern or gradient. The modified definition changes the battlefield ramp as in PC but leaves all swatch pixels unchanged. For comparison, compute the definition's own HSV-derived RGB and all 16 ramp entries from the data read at measurement time: no equality caused by pixel quantisation establishes that the swatch was derived from that entry.
 - *Falsified if:* any unobscured interior pixel differs from the packed constant, the interior has an image-dependent pattern, the open and selected fills differ, or the changed definition changes the swatch. A failure to obtain the changed battlefield ramp invalidates the independence sub-test rather than confirming it.
 
+**PL: sidebar icon palette conversion, lifetime and missing file (claim 13).**
+- *Setup:* the common skirmish setup, using six tiny flat maps, one per theater, and a retained buildable sidebar entry. Named test files: a loose icon sprite whose image frame 0 has labelled stripes of indices 0 … 255, and a loose copy of the dedicated icon palette. Set selected palette entries to invented triples (1, 2, 3), (63, 32, 16) and (64, 65, 100), including an entry in the remap range. Leave other data unchanged. Use S-0007's icon-file selector only to attach that sprite to the test entry. Director and unrelated mods remain off. Sample unobscured ordinary icon pixels, not the mask, labels, clocks or mouse-over styling.
+- *Procedure:* in one program session start the six maps successively, varying the local player's side and lobby colour between games. Include neutral lighting, a strongly coloured map tint and a trigger-started ion storm, and capture the icon before and during the storm. After the first game replace the loose palette with a second named version giving the sampled entries different invented triples; start another game without restarting the program, then restart and repeat. Remove the named test files afterwards.
+- *Observable:* top bits of identified icon pixels, and unchanged background beneath stripe index 0. Record image index and state for each sample.
+- *Expected:* each nonzero index shows the packed value of (4·*c*) mod 256 from the palette version present at program start, with no −1 subtraction, remap or battlefield tint. In 5-6-5 the three invented triples above yield channel tuples (0, 2, 1), (31, 32, 8) and (0, 1, 18). Index 0 leaves the background untouched. Theater, side, house colour and storm do not change these results. The replacement palette has no effect within the session but supplies the colours after restart. S-0411 S11 separately checks the mask's channel halving.
+- *Missing-file run:* in a fresh program session, use named loose copies of the stock containing archives with every copy of the dedicated icon palette omitted, as in PH. Remove the loose test palette too, verifying that no loose or mounted copy can resolve. Keep other members unchanged. Record whether the program reaches skirmish setup and can begin a game. Expected: the original crashes during startup, before a skirmish begins. On our engine the importer warns and nontransparent icon pixels are black instead.
+- *Runs:* one six-theater session plus its palette-replacement game, one restarted replacement-palette game, and one missing-file startup.
+- *Falsified if:* any sampled pixel disagrees with the formula, index 0 paints, a battlefield or owner change changes colours, the palette changes within a session, a restart fails to use the replacement, or the original successfully begins a skirmish with the palette genuinely absent. Failure to expose the named test entry or remove every resolving copy makes that part inconclusive.
+
 ## Open questions
+
+Q-0275's palette conversion and missing-palette behaviour are resolved by claim 13. S-0411 claim 16 owns its image-frame, darkening-mask and placement answers; together the two specs answer the request.
 
 Q-0280 is resolved by claims 11 and 12: the setup swatch is a flat fill of a fixed RGB constant, not the definition's own colour or a ramp entry. S-0412 claims 1 and 7 continue to own slot selection and random-colour resolution; neither determines a swatch shade.
 
