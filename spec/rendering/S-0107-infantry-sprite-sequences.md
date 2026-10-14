@@ -2,7 +2,7 @@
 id: S-0107
 title: Infantry sprite sequences
 topic: rendering
-revision: 8
+revision: 9
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
