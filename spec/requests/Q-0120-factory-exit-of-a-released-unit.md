@@ -1,9 +1,9 @@
 ---
 id: Q-0120
 title: Where a factory building puts a released unit, and when it retries a blocked exit
-status: open
+status: answered
 related: [S-0404, S-0411, S-0212, S-0213]
-answered-by: []
+answered-by: [S-0404]
 ---
 
 ## Need
