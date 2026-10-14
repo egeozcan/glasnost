@@ -1,9 +1,9 @@
 ---
 id: Q-0276
 title: Where are the sidebar's parts, and how do the clock, labels and power bar look?
-status: open
+status: answered
 related: [S-0411, S-0405, S-0410, S-0416]
-answered-by: []
+answered-by: [S-0411]
 ---
 
 ## Need

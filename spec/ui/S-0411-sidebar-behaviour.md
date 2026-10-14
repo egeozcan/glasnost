@@ -2,13 +2,13 @@
 id: S-0411
 title: Sidebar behaviour (build icons, clicks and the orders they give, icon states, queue counts, ready and placement)
 topic: ui
-revision: 12
+revision: 13
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0121, Q-0123, Q-0196]
+requests: [Q-0121, Q-0123, Q-0196, Q-0275, Q-0276, Q-0282, Q-0283]
 supersedes: []
 ---
 
@@ -25,7 +25,15 @@ is S-0407's; tab assignment and icon order are S-0004's (claim 11),
 production rules S-0404's, build times S-0403's and the credits display S-0416's.
 Network games and campaigns are out of scope.
 
-**Paired revisions.** S-0404 revision 9 supplies the application and cancellation-timing
+**Out of scope — lead decision of 2026-10-14, Interface looks.** Sidebar and shell
+positions, sizes, side-dependent layout, clock artwork, label and count fonts and positions,
+and the lit tab's artwork are the implementer's design (Q-0276 and Q-0283). Message
+positions and fonts are also design choices (Q-0282). This spec fixes their values,
+states and timing, not a reproduction of the original shell. Power values and meaningful
+meter scaling belong to S-0405, radar state to S-0410 and credit values to S-0416.
+The icon-file content rules of claim 16 answer Q-0275 separately from shell layout.
+
+**Paired revisions.** S-0404 revision 10 supplies the application and cancellation-timing
 rules, excludes factories being sold or queued to be sold, and cancels a busy or failed unit
 release with a refund at the place order's application boundary (claims 7 and 13).
 S-0407 revision 11 distinguishes cancellation orders issued
@@ -175,7 +183,7 @@ last recheck). In addition:
    | icon's item done, building, and no factory building of the house could make the type without the tech-tree rule, switched on or not | cancel order | |
    | icon's item done, building, in any other case | none: placement mode starts | |
    | icon's item on a player hold or automatic hold | build order | requests resume, subject to S-0404 claim 3's application tests |
-   | building or defence whose line has an item (any type, not covered by the rows above) | none | a refusal sound plays (claim 12) |
+   | building or defence whose line has an item (any type, not covered by the rows above) | none | only the unable-to-comply announcement is requested (claim 12) |
    | type at its build limit (S-0407), not covered by the rows above | none | no sound is claimed (claim 12) |
    | any other state, including a type no switched-on factory building could make (darkened, claim 3) | build order | starts or queues (S-0404, claim 3) |
 
@@ -275,22 +283,20 @@ last recheck). In addition:
    - Confidence: medium
 
 8. **State display of the icon with the line's item.**
-   - A clock overlay is drawn on the icon while its item is not done; its stage is the item's progress
-     (0 to 54) plus 1, so it advances by one stage at every progress step (S-0403, claim 1). When the
-     item is done the stage is the last one (55) and the *ready* label shows, in place of the running display.
-     Whether stage 55 still covers part of the icon is not settled (low confidence; scenario S6). The
-     display around the new-build click may differ from progress + 1, but no early-stage or
-     smoothing rule is asserted here. Scenario S6 records those drawn frames for a later revision.
-     They are presentation only and do not change progress. After the item exists, the claimed
-     stage is progress + 1, which S6 tests against recorded progress.
+   - The clock's production value is progress + 1, an integer from 1 to 55 (S-0403,
+     claim 1). For an unfinished item at settled display stages, this is the shown stage.
+     At done the clock overlay is absent and the *ready* label replaces it: stage 55
+     is the completed value, not an image that must still cover the icon. The original
+     can cosmetically anticipate progress around a new-build click; that animation and
+     how a clock value is drawn are outside the look requirements under the lead's
+     Interface looks decision. They change neither production progress nor label state.
    - A *ready* label is shown while the item is done (for buildings until placed; for units before a place order releases or cancels the item, or while no factory building
      could release it, S-0404 claim 7).
    - An *on hold* label is shown while the line is on a player or automatic hold and the item is not
      done.
    - A line waiting for money shows neither label; its clock simply stops.
    - Backing: `measurable` (scenario S6)
-   - Confidence: medium (labels, clock stage); low (the stage at done). Early-stage timing and
-     smoothing remain open, not predicted claims.
+   - Confidence: high (no clock overlay at done); medium (labels and settled clock value)
 
 9. **Automatic release of finished units.** When a unit item of the local player becomes done in
    tick *n*, the sidebar gives a place order without a cell for it (S-0404, claim 7) in tick *n* + 1,
@@ -319,7 +325,8 @@ last recheck). In addition:
     cell (S-0404, claim 7), subject to the order-legality checks of S-0406 claim 6. Placement mode
     keeps S-0406's cursor shroud result, refreshed when the cell under the cursor changes; that
     spec owns its use and the unknown value at mode start. A placement refused by its placement
-    tests plays a refusal sound and placement mode resumes with the same building. A place order
+    tests requests only the cannot-deploy-here announcement and placement mode resumes
+    with the same building. A place order
     ignored because its factory condition fails instead follows S-0406 claim 1: the item stays
     done and no sound plays. Refused placement requests the cannot-deploy-here announcement,
     not the game-wide refusal sound (claim 12; S-0701 claim 28). When it succeeds, placement mode ends.
@@ -329,17 +336,24 @@ last recheck). In addition:
       S-0406 PL1 for ignored placement with no factory, and its claim 6's scenarios for legality)
     - Confidence: medium
 
-11. **Tab flashing.** While the local player has a done building or defence waiting for placement,
-    or a ready superweapon, the tab button that holds it flashes. The flash phase is a function of
-    the tick number *t*: the look changes at the ticks whose number is a multiple of 10, so every 10
-    ticks (every 10 drawn frames in a single-player game outside frozen cycles), also when the flash
-    started in the middle of a period. The first period of a flash that starts at tick *t* lasts
-    10 − (*t* mod 10) ticks, which is 10 when *t* is a multiple of 10. Which look (lit or dark)
-    belongs to which periods is not established; scenario S8 records it without a prediction.
-    Presentation only.
-    - Backing: `measurable` (scenario S8, with its second run for the superweapon)
-    - Confidence: medium (done building, the multiples of 10 and the first period); low (ready
-      superweapon). The look of each period remains open.
+11. **Tab flashing (Q-0283).** While the local player has a done building or defence
+    waiting for placement, or a ready superweapon, its tab flashes. Let *t* be the tick
+    whose sidebar update starts a new flash, and *r* = *t* mod 10. The initial state is
+    lit exactly when ⌊*t*/10⌋ + 1 is even. It lasts for 20 − *r* sidebar updates,
+    including the starting update; the first toggle is visible in tick *t* + 19 − *r*.
+    Later toggles are separated by 10 ticks. After the first toggle, a tick *u* shows
+    lit exactly when ⌊(*u* + 1)/10⌋ is even. Thus the first state spans an extra
+    period; it is not simply the parity of the period containing the completion tick.
+    This corrects the earlier claim of a first toggle at the next multiple of 10.
+
+    Repeatedly finding a ready item does not restart an existing flash. With no ready
+    subject on the tab, flashing stops and its lit flash state clears. These updates
+    do not run during frozen cycles or while the game stands still, so pausing does
+    not consume the flash period. Lit means the flash state, independent of selection
+    or mouse-over styling; its artwork is the implementer's design. Presentation only.
+    - Backing: `measurable` (scenario S8, including restart and pause controls)
+    - Confidence: high (initial parity and update counts); medium (visible tick boundary
+      and ready-superweapon trigger)
 
 12. **Sounds.** The production clicks identified below that start, queue, resume, hold or cancel
     use the game-wide build-click sound (S-0701 claim 24). Announcements follow S-0701 claims
@@ -348,8 +362,7 @@ last recheck). In addition:
     The busy-building-line refusal requests the unable-to-comply announcement, without a
     build-click or game-wide refusal sound. Refused building placement instead requests the
     cannot-deploy-here announcement, without the game-wide refusal sound. These two refusal
-    cues are not the same entry. S-0701 claim 24 and F5 must be corrected at joint hand-off:
-    their shared game-wide refusal-entry assertion does not apply to these two actions.
+    cues are not the same entry. S-0701 claim 24 and F5 now agree with these two actions.
     This spec fixes a cue only for:
     - a left click whose order starts or queues an item, resumes one or cancels one (claim 4, rows 1,
       3 and 5 and the last row, each only when its order takes effect: not a build order that is
@@ -364,8 +377,7 @@ last recheck). In addition:
     4); the build-limit row; and a click whose build order is ignored when it is applied (the
     darkened icon, the lit aircraft icon with every dock taken). Scenarios S3 and S4 record these
     without a prediction.
-    - Backing: `measurable` (scenarios S3, S4, S5, S7 and S8; S-0701 F5 with the refusal
-      expectations corrected as above)
+    - Backing: `measurable` (scenarios S3, S4, S5, S7 and S8; S-0701 F5)
     - Confidence: medium
 
 13. **Several offers removed at one recheck (Q-0123).** For types with shown icons, the
@@ -465,6 +477,52 @@ last recheck). In addition:
     - Confidence: high (capacity check and no suppressed-type removal orders); medium
       (retry timing and its interaction with admission order); high (project-rule extension)
 
+16. **Icon content, frame and darkening (Q-0275).** S-0007 claims 22 and 25 already
+    choose the main or alternate icon file. Whichever file is chosen, the sidebar draws
+    image frame 0. Building, unavailable, held and ready states do not select another
+    frame of that icon file; clocks and labels are separate displays. The palette source
+    is the dedicated icon palette named in Import mapping, not a theater unit palette
+    or a house-colour ramp. Selection of the same icon file is therefore independent
+    of theater and house colour; side archive precedence can supply different file
+    contents (S-0005). Palette loading and colour conversion belong to S-0103.
+
+    Darkening draws frame 0 of the separate darkening-mask file over the already-drawn
+    icon. At each nonzero mask index, each destination hi-colour channel becomes
+    ⌊*v*/2⌋, with *v* the integer channel value before the mask; zero mask indices
+    leave it unchanged. It does not select a darker icon frame, recolour the icon's
+    palette, or paint the mask's palette colours. This operation precedes the label
+    and clock displays, so those are not halved with the icon.
+
+    In the original, the icon's whole canvas origin is the slot's top-left, with no
+    centring or scaling. The image frame's own displacement within that canvas is
+    preserved. The reference content region is 60 × 48 pixels. A smaller canvas does
+    not expand to fill it. Pixels at or beyond the region's right or bottom edge are
+    clipped, as are pixels outside the sidebar surface. The clipping region begins
+    at the surface origin, not at each slot's top-left: a frame with negative
+    displacement can spill toward an earlier slot. This describes file-content
+    placement, not a required screen position or shell layout.
+    - Backing: `measurable` (scenario S11)
+    - Confidence: high (frame, mask operation and palette selection); medium (canvas
+      anchoring and non-slot-local clipping)
+
+17. **Sidebar labels are not transient status messages (Q-0282).** Starting, queuing,
+    resuming, holding and cancelling production do not add a text message to the
+    battlefield message list. Neither the busy-building-line refusal nor a
+    build-limit click adds one. Their established feedback is claim 12's audio and
+    the icon/line state. Waiting for money stops the clock without a text notice
+    from the sidebar. Construction completion changes the icon to ready and requests
+    its announcement; it adds no battlefield text notice. The ready and on-hold
+    labels use the two string-table entries in Import mapping and stay only as long
+    as claim 8's states hold: no separate expiry duration or message-list place is
+    consumed. Queue counts are decimal integers, not string-table messages.
+
+    Placement failure, sell/repair refusal and route-mode notices are respectively
+    S-0406's, S-0408's and S-0213's ownership. This claim does not remove a message
+    independently generated by those rules, a trigger or a superweapon. In particular
+    no generic timed “refused build” text is to be inferred from an announcement.
+    - Backing: `measurable` (scenario S12)
+    - Confidence: high (listed sidebar events and label entries)
+
 ## Formulas
 
 - **Clock stage** = progress + 1 (claim 8). Integers: progress is S-0403's integer from 0 to 54, so
@@ -472,15 +530,17 @@ last recheck). In addition:
 - **Shown count** = *q* + *i* (claim 7), where *q* is the number of queued copies of the icon's type
   in its line and *i* = 1 when the line's item is of the icon's type, otherwise 0. Integers, exact,
   no rounding. The count is shown exactly when *q* ≥ 1.
-- **First flash period** = 10 − (*t* mod 10) ticks (claim 11), where *t* is the tick number in which
-  the flash starts. Integers, exact, no rounding: *t* mod 10 is the remainder of *t* divided by 10,
-  from 0 to 9, so the first period lasts 1 to 10 ticks.
+- **Initial flash duration** = 20 − (*t* mod 10) sidebar updates, including the starting
+  update (claim 11). First visible toggle tick = *t* + 19 − (*t* mod 10). Integers,
+  exact, no rounding; the remainder lies from 0 to 9. Subsequent toggle spacing is 10 ticks.
+  Initial lit state: ⌊*t*/10⌋ + 1 even. After the first toggle: ⌊(*u* + 1)/10⌋ even
+  at tick *u*. Each floor division rounds down in the non-negative integer domain.
 
 ## Constants
 
 | Name (ours) | Value | Unit | Notes |
 |---|---|---|---|
-| Tab flash period | 10 | ticks | claim 11: the length of each period in which the look stays the same; the look changes at the ticks whose number is a multiple of 10 |
+| Tab flash period | 10 | ticks | claim 11: spacing after the first toggle |
 | Clock stages | 55 | stages | progress 0 … 54 plus 1 |
 
 ## State and ordering
@@ -492,7 +552,7 @@ Icon display states (for the icon with the line's item):
 | running | stage = progress + 1, advancing | none |
 | waiting for money | stage frozen | none |
 | player or automatic hold | stage frozen | on hold |
-| done (building, or unit not yet released) | last stage (55) | ready |
+| done (building, or unit not yet released) | completed value 55, no overlay | ready |
 
 Ordering consequences:
 - A click is an input event of S-0213 (claim 1); the order it gives is applied at the end of the tick
@@ -501,6 +561,21 @@ Ordering consequences:
 - The automatic place order of a unit done in tick *n* is applied at the end of tick *n* + 1 (claim 9).
 
 ## Edge cases and quirks
+
+- **Extended initial tab-flash state** (`quirks.tab_flash_initial_extra_period`, default
+  on = original). Claim 11 uses an extra 10 updates before the first toggle and the
+  parity of the next period for its initial lit state. With the switch off, initial
+  lit means ⌊*t*/10⌋ even and the first countdown is 10 − (*t* mod 10) updates,
+  including the start update, with its toggle in tick *t* + 9 − (*t* mod 10).
+  Thereafter both settings use claim 11's 10-tick spacing and subsequent parity.
+  This is presentation only, and S8 tests the original setting.
+
+- **Surface-origin icon clipping** (`quirks.sidebar_icon_surface_clip`, default on =
+  original). Claim 16 clips right and bottom against the content region but permits
+  negative displaced frame content up to the sidebar surface's top and left edges.
+  With the switch off, all four edges clip to the icon's own content region, so it
+  cannot spill into an earlier slot. Neither setting centres or scales the canvas.
+  S11's negative-displacement variant tests the original setting.
 
 - **No retry of the automatic release** (`quirks.release_order_once`, default on = original). The
   sidebar sends its automatic place order once, in tick *n* + 1 for an item done in tick *n*
@@ -531,7 +606,19 @@ Ordering consequences:
 
 ## Import mapping
 
-The sidebar reads no keys of its own. These delegated inputs matter to claims 13 and 14:
+The sidebar reads no rules keys of its own. Its fixed asset and text inputs are:
+
+| Input | Concept | Form and absent behaviour |
+|---|---|---|
+| `Cameo`, `AltCameo` (art, type's art section) | icon file choice before frame 0 is drawn | text cut to 24 bytes; main empty/missing uses `XXICON.SHP`, alternate empty/missing has no alternate; first-read retention and use conditions are S-0007 claims 22 and 25 |
+| `CAMEO.PAL` | dedicated icon palette | fixed file name, no rules selector; file resolution follows S-0005, colour conversion is S-0103's ownership; missing-file behaviour is not established here |
+| `DARKEN.SHP` | unavailable-icon mask | fixed file name, frame 0, zero index transparent, nonzero indices halve destination channels; no rules selector; a missing mask adds no darkening |
+| `TXT_READY` (string table) | ready label | fixed entry identifier, not literal game text; missing entry displays a diagnostic containing the requested identifier; string-table file resolution follows S-0005 |
+| `TXT_HOLD` (string table) | on-hold label | fixed entry identifier, not literal game text; missing entry displays a diagnostic containing the requested identifier; string-table file resolution follows S-0005 |
+| No data key | queue count format and label lifetime | decimal integer count; labels are state-bound, not timed messages; claims 7, 8 and 17 |
+| No data key | tab flash | initial parity/countdown and later 10-tick periods are engine constants, claim 11 |
+
+These delegated inputs matter to claims 13 and 14:
 
 | Key (file, section) | Concept | Form and absent default |
 |---|---|---|
@@ -689,7 +776,8 @@ the time the script sent a button event, dates a click.
   (claim 4, Legality). With the extra object the at-limit held infantry icon still gives a build
   order requesting resume, but the application-time limit allowance does not permit it, so the
   item stays held and nothing queues (S-0404 claim 3; S-0407 claim 9); (c) no item
-  starts or queues in any of the three states, and each click plays a refusal sound; (d) placement
+  starts or queues in any of the three states, and each click requests only the
+  unable-to-comply announcement; (d) placement
   mode; (e) and (e2) the item ends refunded, and no click after the start of the sale gives a place
   order or starts placement mode (rows 1 and 3, or the removal of claim 2); which path gave the
   refund is recorded. In a no-click control of parts e and e2, the icon remains until the removal's
@@ -741,14 +829,13 @@ the time the script sent a button event, dates a click.
 - Observable: the numbers on every icon, including the icon of a type with no queued copy while its item runs (claim 7), and the labels; the clock stage in every drawn frame, from the
   click tick on; the icon of the done item compared with an idle icon.
 - Expected: A shows 3, B shows 1 (only queued); once A's last copy is the item and B is queued, A shows no number; the held line shows the on-hold label; the
-  money-starved line shows no label and a frozen clock; once an item exists the clock stage equals
-  recorded progress + 1; the done item shows the *ready* label and the last stage. The automatic
+  money-starved line shows no label and a frozen clock; settled clock stages equal
+  recorded progress + 1; the done item shows the *ready* label with no clock overlay. The automatic
   hold also shows the on-hold label and a frozen clock, and those end after switch-on.
-- Falsified if: any number or label differs, no *ready* label shows at done, the stage shown from
-  the first drawn frame in which the item exists differs from recorded progress + 1, or the
-  stage shown at done is not 55 (low confidence, claim 8), or the automatic hold lacks its label
-  or keeps advancing the clock. The frames before the item exists are recorded
-  for a later revision (claim 8).
+- Falsified if: any number or label differs, no *ready* label shows at done, a settled
+  stage differs from recorded progress + 1, a clock overlay remains at done, or the
+  automatic hold lacks its label or keeps advancing the clock. Record early cosmetic
+  anticipation separately; it is not a prediction of required clock artwork (claim 8).
 
 **S7. Automatic release.**
 - Setup: a vehicle type whose build time gives a step period *R* of 1 (S-0403, claim 1; for example a
@@ -799,17 +886,26 @@ the time the script sent a button event, dates a click.
   whether placement mode continues after the invalid click; in the third run whether placement mode
   ends and the credits.
 - Expected: the construction-complete announcement plays and the button starts flashing when the item is done (claims 9 and 11; the exact tick is recorded for a later
-  revision), with its look changing only at ticks whose number is a multiple of 10 (so
-  every 10 ticks, 10 drawn frames outside frozen cycles) and a first period of
-  10 − (*t* mod 10) ticks, where *t* is the recorded flash-start tick, not an assumed done tick
-  (claim 11); which look belongs to which period is recorded; the
+  revision). With *t* the recorded flash-start tick, not an assumed done tick, the
+  initial lit state is ⌊*t*/10⌋ + 1 even. Its first toggle is in tick
+  *t* + 19 − (*t* mod 10); subsequent toggles are 10 ticks apart, and the lit state
+  follows claim 11's subsequent parity. The
   invalid click requests the cannot-deploy-here announcement, without the game-wide refusal
   sound, and placement mode continues; record the requested entry separately from playback.
   The valid click places the
   building and ends the mode. Second run: the superweapon's tab button flashes the same way. Third
   run: placement mode ends, the item is cancelled and refunded.
-- Falsified if: the look changes at a tick that is not a multiple of 10, the first period differs
-  from 10 − (*t* mod 10) ticks, the announcement is missing, placement mode ends after the
+- Pause/restart controls: open the options menu during the initial state, then resume.
+  Expected: neither countdown nor lit state advances while the game stands still.
+  Keep a ready subject on the tab for at least 50 ticks: repeated readiness must not
+  restart the countdown. Place the last ready building, then complete another with
+  a different start remainder. Expected: the old flash clears and the new flash
+  uses its new start tick. Repeat once for each start remainder from 0 through 9,
+  and with adjacent even/odd period numbers. The recorder dates the sidebar update
+  and its drawn frame; record any differing one-tick visible phase separately.
+- Falsified if: initial parity, the first toggle tick or subsequent 10-tick spacing
+  differs, the countdown advances during pause or restarts while readiness persists,
+  the flash stays after its last subject is removed, the announcement is missing, placement mode ends after the
   invalid click, that click requests a different announcement or the game-wide refusal sound,
   valid placement fails to place or end the mode, the superweapon tab does not
   flash, or the right click leaves placement mode on or fails to cancel and refund the item.
@@ -885,19 +981,75 @@ the time the script sent a button event, dates a click.
   type for the other. These check the project rule, not oracle behavior. No trigger or
   recorder is assumed able to inject a production order into the original.
 
+**S11. Icon frame, mask and canvas (claim 16).**
+- Setup: the common sidebar probe skirmish, with named loose icon test files and a
+  test art copy selecting them under S-0007's first-read rules. Give each file two
+  visibly distinct frames, a known nonzero-index grid and transparent holes. Use
+  canvases smaller than, equal to and larger than 60 × 48 pixels, including an
+  asymmetric frame displacement and one negative displacement. Also name a test
+  darkening-mask copy with alternating zero and nonzero indices. Remove test files
+  after each run. Start a fresh program session for each changed file configuration
+  so retained art cannot hide it. Director and mods other than these named files remain off.
+- Procedure: show each icon idle, unavailable, running, held and done; repeat for
+  each theater and side and two house colours. In a separate run make the mask
+  unavailable through a named test archive omitting its member, with no other copy
+  resolvable. Capture the sidebar, without mouse-over styling, at settled stages.
+- Observable: identified image-frame marks, canvas placement relative to the slot,
+  clipped pixels, mask coverage and destination hi-colour channel values.
+- Expected: always frame 0 of the chosen main/alternate file; its origin stays at
+  the slot top-left without scaling. Right/bottom excess clips; negative displaced
+  content can extend toward earlier slots. Nonzero mask coverage halves each
+  pre-mask integer channel, rounding down; holes leave it unchanged. Missing mask
+  leaves unavailable icons without that darkening. Clocks/labels are independent.
+  The same resolved palette and icon bytes do not change with house colour/theater.
+- Falsified if: a state uses frame 1, the canvas is centred or stretched, clipping
+  differs, or the mask paints colours rather than halving destination channels.
+  Palette-file loading/conversion tests are delegated to S-0103; this does not
+  predict a missing palette's result. One run per variant, screen capture plus
+  read-only image/palette inspection by the measurer.
+
+**S12. Sidebar text versus audio (claim 17).**
+- Setup: the common skirmish map, enough credits to start slow building and infantry
+  items, a limited type already at its limit and a blocked placement cell. Use a
+  screen/audio recorder and a read-only recorder of message additions and label
+  string-entry requests. Exclude triggers that print text and unrelated message events.
+- Procedure: start, queue, hold, resume, cancel, click another icon on a busy building
+  line, click the limited type, then exhaust credits with a running item and let
+  a building complete after restoring them. Keep a second building on hold for
+  300 ticks and a done building unplaced for 300 ticks, pausing midway. One run.
+- Observable: battlefield-message additions, the ready/hold string identifiers,
+  label presence per tick and announcement requests separately from playback.
+- Expected: none of these sidebar actions adds a battlefield text message. The
+  two labels resolve the entries of Import mapping and remain for the entire
+  corresponding state, including across pause, ending at state change rather
+  than at 90 or 300 ticks. Decimal counts follow claim 7. Busy-line refusal is
+  announcement-only. A placement-failure control uses S-0406's separately owned
+  feedback, not a generic client-invented “refused build” notice.
+- String-entry controls: in fresh program sessions use a named loose “sidebar-label
+  probe string table”, retaining all other entries but replacing the two label
+  entries with distinct test markers. Repeat with either entry removed in turn.
+  Expected: ready and held states show their respective markers; a missing entry
+  shows a missing-text diagnostic containing that identifier, not the other label
+  or an empty default. Remove the test file after the controls.
+- Falsified if: a listed sidebar event adds a text notice, a label expires while
+  its state remains, a different string-table entry supplies either label, or the
+  missing-entry result lacks its identifier.
+
 ## Open questions
 
 1. Whether a right click on the battlefield, or a key, also leaves placement mode without cancelling
    is not established.
-2. Early clock stages and smoothing around a new-build click are not established (claim 8).
-3. Whether the last clock stage (55) of a done item still covers part of the icon (claim 8, S6).
+2. Cosmetic early clock anticipation is outside the look requirements under the lead's
+   Interface looks decision of 2026-10-14; claim 8 fixes the production value.
+3. Resolved by claim 8: a done item's clock overlay is absent.
 4. Resolved by claim 12: busy-building refusal and refused placement request different
    announcements, not a shared game-wide refusal sound.
 5. Whether a right click in the same cycle as a queueing or resuming left click gives an extra hold
    order (claim 5). S-0213 claim 1 makes these cases unreachable through permitted skirmish input.
 6. Which sound, if any, the build-limit click, the darkened-icon click and the click on a lit
    aircraft icon with every dock taken play (claims 4 and 12, S3).
-7. Which look (lit or dark) the tab flash shows in each period (claim 11, S8).
+7. Q-0283 is resolved by claim 11: initial and subsequent lit periods are specified.
+   The lit artwork is the implementer's design.
 8. Q-0120 is partly resolved by S-0404 claims 7, 13 and 15: busy or failed release
    cancels with a refund without retry, and claim 15 gives ordinary aircraft pad positions.
    The remaining unloading and post-exit movement, take-off, nearby destination,
@@ -905,6 +1057,19 @@ the time the script sent a button event, dates a click.
    belong to S-0417's follow-up. Specialised docking combinations remain outside the
    verified pad-position rule. This spec adds no rules for those outcomes and does not
    claim to answer the whole request. Q-0196's four questions are answered by claim 15.
+
+## Changes for other specs
+
+- S-0406 claim 1 still calls placement failure a refusal sound. It must agree with
+  claim 10 and S-0701 claim 24: cannot-deploy-here announcement only, no interface
+  refusal sound. Its Q-0282 message answer is separate from sidebar labels.
+- S-0007 should point from icon choice to claim 16 for frame and content placement.
+  S-0103 should supply Q-0275's dedicated icon-palette loading/conversion and
+  missing-file behaviour; this spec fixes the draw's palette selection, not that
+  missing-palette outcome.
+- S-0408 and S-0213 own the remaining Q-0282 sell/repair and route-mode notices,
+  including their string identifiers and shared message-list capacity, duration
+  and pause behaviour where applicable. Those are not sidebar expiry rules.
 
 ## Questions for the project lead
 
