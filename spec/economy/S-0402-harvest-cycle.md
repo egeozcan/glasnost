@@ -2,7 +2,7 @@
 id: S-0402
 title: Harvest cycle (loading, field and refinery choice, docking, unloading, income, slave and chrono miners)
 topic: economy
-revision: 10
+revision: 11
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -117,6 +117,10 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
   group of infantry *slaves* of the type its enslaves field names (S-0215 calls them the slave
   master and its harvesting slaves). It can deploy into a building that keeps controlling them.
 - **Chrono miner.** A harvester whose type has the teleporter flag: it moves by teleporting.
+- **Group update.** The slave group's periodic opportunity to regenerate, restore or release
+  slaves and to reconsider the master's movement (claim 21). Its group states are *at rest*,
+  *field seeking*, *travelling*, *retrying deployment* and *working* (claim 22). *Working*
+  permits ready slaves to emerge; it is not the master's current behaviour.
 
 ## Behaviour
 
@@ -549,8 +553,8 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
       *s*<sub>g</sub> is the group's last-rest tick, and *t* is the tick number. “Group at rest”
       means no slave has been sent out since the group last came together. The original's
       computer-controlled condition does not apply to player houses in our engine; it may apply
-      to the neutral and special houses. The initial value of *s*<sub>g</sub>, before any slave has
-      gone out, is undetermined (Open questions). The short-scan test is the ring search from the
+      to the neutral and special houses. The initial value of *s*<sub>g</sub> is 0 ticks,
+      not the miner's creation tick (claim 21). The short-scan test is the ring search from the
       miner with the slave-miner short scan range.
 
       The sums are signed 32-bit integers that wrap around (Formulas F5): with a very large kick
@@ -574,12 +578,15 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
       walks back with what it has.
     - **Delivery.** A slave that reaches the miner is paid as in claim 12, to the miner's owner, for
       each tiberium it carries in turn (lowest index first, main payment then bonus), goes inside
-      the miner, and stays there for the slave reload field's number of ticks, after which its
-      health is restored to its strength and it is ready to be woken again.
-    - **Lost slaves.** A slave that is killed or lost is replaced, inside the miner, after the slave
-      regeneration field's number of ticks.
-    - Where the miner deploys, when it undeploys and moves on, and its own scan fields (the long
-      scan and the scan correction) are not specified here (Open questions).
+      the miner, and starts the slave reload field's delay in ticks. At the first group update
+      after that delay has elapsed, its health is restored to its strength and it is ready to
+      leave again (claim 21).
+    - **Lost slaves.** A slave that is killed or lost starts the slave regeneration field's
+      delay in ticks; a replacement is created inside the miner at the first group update after
+      that delay has elapsed (claims 19 and 21).
+    - The miner's initial slaves and their emergence are claims 19 to 21. Claim 22 gives the
+      supported harvest-order and automatic-deploy outcomes. Exact deployment-site selection
+      and relocation failure handling remain open (Q-0270).
     - Backing: `measurable` (scenario H7; its variant b for the kick wrap and its switch, variant e
       for the group's rest tick, variant f for the deployed miner and the slaves' health, and
       S-0215 scenario B31 for the separate area-guard effect)
@@ -687,6 +694,99 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     - Confidence: high for the timing at the grand opening, for no unit after a capture and for the
       first place and its facing; medium for the two searches, the refund, the start of *harvest*
       and the start-price condition; medium for the pre-placed building (S-0009's)
+
+### Creating and directing a slave group
+
+19. **Existing slaves from creation (Q-0270 part 1).** A newly created object whose type
+    names a slave infantry type creates its group as part of its own creation, using its type's
+    slave count and regeneration and reload delays. For a positive count *N*, it creates *N*
+    infantry of the named type, owned by the miner's house. A count of 0 or less creates none.
+    They start ready, inside and off the map, with that miner as master. They initially occupy
+    no cells. No payment is deducted for initial or replacement slaves. Creation is not
+    postponed until harvesting, deployment or a player's order.
+
+    A produced miner therefore gets its slaves at production start, when its object is created
+    (S-0404 claim 11), not on factory release. Starting units, map objects and a refinery's
+    free unit get them when those sources create the miner. A newly created deployed building
+    with a slave type also gets a hidden group. Conversion preserves the previous working
+    group: deploying and packing up already transfer its slaves (S-0415 claims 6 and 10).
+    The transferred slaves are not replaced by a second working group.
+
+    Each initial or replacement infantry creation takes the ordinary object-creation draw
+    (S-0202 claim 10). Keeping it inside takes no placement search or placement draw.
+    - Backing: `measurable` (scenario H15)
+    - Confidence: high for creation, count, ownership, hidden state and no payment,
+      medium for the creation-source and draw controls
+
+20. **Created is not factory-built (Q-0270 part 2).** Initial slaves, their emergence and
+    replacement slaves do not raise their type's ever-built count or the end-screen built total.
+    They are not factory releases (S-0407 claim 10 and S-0414 claim 20 already distinguish
+    creations from releases). Ordinary ownership counts follow S-0407 claim 9 with its type-flag
+    exclusions; being inside does not make an existing slave an uncreated object. Later kills
+    and losses follow S-0414 claim 21, not a special slave-built statistic.
+    - Backing: `measurable` (scenario H15)
+    - Confidence: high for no ever-built increment; medium for ownership counts
+
+21. **Group updates and emergence.** A new group is at rest, with last-rest tick 0. Its first
+    group update becomes due 10 ticks after creation. Subsequent uninterrupted group updates
+    are 10 ticks apart during the master's turns, separate from the slaves' own harvesting
+    processings. A failed automatic deployment starts a 30-tick wait before the next group
+    update (claim 22). Regeneration and reload timers can expire between updates: their effects
+    wait for an update. For a non-negative delay *r* started in tick *a*, completion is observed
+    at the first eligible later group update in tick *t* with *t* − *a* ≥ *r*. These are exact
+    integer ticks, without rounding. Normal suspension or loss of a master's turns can postpone
+    the update further.
+
+    A working group offers each ready hidden slave a place at each group update. A vehicle
+    master offers its own cell; a building offers the foundation cell (*W* − 1, ⌊*H*/2⌋)
+    counted from its top-left cell, for positive integer width *W* and height *H* in cells.
+    It seeks a free infantry standing position there. If none exists, or placement fails, the
+    slave stays ready inside until a later update, not on a neighbouring cell. On successful
+    emergence its target is the master and it starts the resource-search part of claim 14.
+    Ready slaves are offered places in reverse initial creation order: when only one fits,
+    the last-created ready slave emerges first. Emergence takes no new object-creation draw.
+    The precise standing-position tie rule is still open (Q-0270).
+    - Backing: `measurable` (scenarios H15 and H16)
+    - Confidence: high for initial rest tick, periods, emergence cell and reverse slave order,
+      medium for placement refusal and timer boundaries
+
+22. **Harvest directs the miner (Q-0270 parts 4 and 5).** A miner with both resource-gatherer
+    and resource-destination fields and a slave group processes *harvest* through its group rule,
+    not the ordinary refinery-dependent cycle of claims 3 to 10. Its order still supplies a
+    destination and queues *harvest*, recalling the slaves to guard it as already specified by
+    S-0213 claim 5 and table T3 part (h). The miner does not itself load a bale there.
+
+    An explicitly directed vehicle searches for a deployment site near the destination, moves
+    to a found site with *move* queued, and puts the group into travelling. If the site search
+    fails, it queues *guard*, puts the group at rest and records the current tick as last-rest.
+    A travelling vehicle with no destination attempts deployment at its next group update,
+    under S-0415 claims 2 to 6. Success puts the group into working. Failure enters a retry state and
+    starts the 30-tick wait of claim 21. The next update retries deployment; another failure
+    puts the group into field seeking. A travelling master that has become a building instead
+    puts the group at rest.
+
+    Waking under claim 14 starts field seeking, not immediate emergence of all hidden slaves.
+    A seeking vehicle already with a destination enters travelling without replacing it.
+    Otherwise it seeks a field with the miner's long scan range and searches for a site near
+    the result. No field or no site puts it at rest with the current tick as last-rest.
+    With a site, it moves there and enters travelling. A working vehicle that is no longer
+    deploying and is in *guard* re-enters travelling, permitting another deployment attempt.
+
+    A deployed master becomes eligible for relocation checks after construction, excluding
+    current *construction* and *selling*. A short-scan field keeps it where it is and permits
+    release of ready slaves. With no short-scan field, the long scan seeks another field.
+    The scan correction is an improvement margin in whole cells: a prospective site must
+    improve the truncated cell-distance to the selected field by more than that margin before
+    this rule requests automatic packing-up. These checks apply to human-controlled owners
+    too; AI houses have the same rules. The original's computer-only waking shortcut remains
+    claim 14's. Actual conversion and slave transfer are S-0415 claims 6 and 10.
+
+    Exact site selection, the complete relocation distance calculation, failed long-scan or
+    site-search outcomes during relocation, and the destination after automatic packing-up
+    remain open. This claim does not authorise an arbitrary nearby site or an invented fallback.
+    - Backing: `measurable` (scenario H16; S-0213 scenario O4 for recalling the slaves)
+    - Confidence: high for the harvest override and deployment retry,
+      medium for field-seeking and relocation gates
 
 ## Formulas
 
@@ -910,7 +1010,9 @@ select which harvester takes the earlier turn.
 | Rules, type section, `Dock` | dock types (Terms, claim 8) | list of building type names | empty |
 | Rules, type section, `Teleporter` | chrono miner (claim 17) | boolean | no |
 | Rules, type section, `ResourceGatherer`, `ResourceDestination` | together with an enslaves field, a slave miner (claim 14) | boolean | no |
-| Rules, type section, `Enslaves`, `SlavesNumber`, `SlaveRegenRate`, `SlaveReloadRate` | slave type, number of slaves, regeneration and reload delays in ticks (claim 14) | type name, integers | none, 0 |
+| Rules, type section, `Enslaves`, `SlavesNumber`, `SlaveRegenRate`, `SlaveReloadRate` | slave infantry type, initial count, regeneration and reload delays in ticks (claims 14, 19, 21) | infantry type name, signed integers | none for the type name; 0 for each integer |
+| Rules, vehicle type section, `DeploysInto`; building type section, `UndeploysInto` | conversion types for claim 22's deploy and packing-up attempts | type names, S-0415 | none, S-0415 |
+| No data key | initial last-rest tick 0, hidden initial state, 10-tick group period and 30-tick failed-deploy wait (claims 19, 21, 22) | engine constants | fixed |
 | Rules, infantry type section, `HarvestRate` | a slave's interval between bales *h* (claim 14) | integer, ticks | 1 |
 | Rules, `[General]`, `HarvesterLoadRate` | load step period *L* (claim 5) | integer, ticks | 2 |
 | Rules, `[General]`, `HarvesterDumpRate` | dump rate *D* (claim 11) | decimal (S-0003), game minutes | the double nearest 0.016 |
@@ -918,7 +1020,7 @@ select which harvester takes the earlier turn.
 | Rules, `[General]`, `HarvesterTooFarDistance` | too-far distance of ordinary harvesters (claim 9) | integer, cells | 5 |
 | Rules, `[General]`, `ChronoHarvTooFarDistance` | too-far distance of chrono miners (claims 9, 17) | integer, cells | 50 |
 | Rules, `[General]`, `SlaveMinerShortScan`, `SlaveMinerSlaveScan` | slave-miner short scan and slave scan ranges (claim 14) | lepton form | 1280 and 4096 leptons (5 and 16 cells) |
-| Rules, `[General]`, `SlaveMinerLongScan`, `SlaveMinerScanCorrection` | the miner's own movement (not specified, claim 14) | lepton form | 20480 and 768 leptons |
+| Rules, `[General]`, `SlaveMinerLongScan`, `SlaveMinerScanCorrection` | field seeking and relocation improvement margin (claim 22); divide by 256 and truncate toward zero to whole cells | lepton form | 20480 and 768 leptons |
 | Rules, `[General]`, `SlaveMinerKickFrameDelay` | kick delay *k* of the wake-up rule (claim 14) | integer, ticks | 2147483647, which wraps (claim 14, F5) |
 | Rules, `[General]`, `PurifierBonus` | purifier bonus *b* (claim 12) | decimal, single | the single nearest 0.25 |
 | Rules, `[General]`, `AIVirtualPurifiers` | virtual purifiers per difficulty index, original only, and for the neutral and special houses (entry 2, claim 12) | decimal-prefix signed 32-bit integer list of purifier counts (S-0003 claim 23, row C21), 511-byte text limit; no scalar hexadecimal forms; unreadable non-empty items retain a place with 0, empty items are skipped; missing or empty keeps the whole list in force, present non-empty replaces it; item conversion, wrapping and importer warnings are S-0003's | initially empty list (original: undefined result; engine: 0 virtual purifiers, departure, importer warning; claim 12) |
@@ -1216,24 +1318,27 @@ and spread fractions 0).
 - *Observable:* the tick at which each slave leaves, *T*₁ for the first; the ticks between a
   slave's bales; the payments to the house on delivery; the time slaves spend inside before leaving
   again; a damaged slave's health after its reload; the replacement time of a killed slave.
-- *Expected:* the slaves first leave at a processing of *guard* with *t* > *k* + *s*<sub>m</sub>
-  and *t* > *k* + *s*<sub>g</sub>, so *T*₁ ≥ *k* + *s*<sub>m</sub> + 1 = 401 and, when the group's
-  rest tick before any slave has gone out is at most *s*<sub>m</sub>, within one standard delay of
-  the first processing after tick 400, and 40 ticks between a slave's bales, one payment per
-  delivery, reload and regeneration times equal to their fields; a damaged slave's health at its full
-  strength after reload.
-- *Falsified if:* the slaves leave at or before tick 400, or the intervals differ. Not leaving
-  within 3000 ticks does not falsify claim 14: it says the group's rest tick before any slave has
-  gone out is large, and *T*₁ − *k* − 1 then gives its value (Open questions).
+- *Expected:* the group's wake transition occurs at a processing of *guard* with
+  *t* > *k* + *s*<sub>m</sub> and *t* > *k* + *s*<sub>g</sub>. After the stop order,
+  *s*<sub>g</sub> is the stop tick (the group reset), so it cannot wake before tick 401.
+  Record that transition separately from emergence: movement, deployment and claim 21's
+  group updates can postpone *T*₁. Once a slave is harvesting, expect 40 ticks between its
+  bales, payments under claim 12, timer completions at group updates (claim 21), and full
+  health after reload.
+- *Falsified if:* the group wakes or slaves emerge at or before tick 400, bale intervals
+  differ, or timer completion occurs between group updates. A failure to emerge must be
+  separated from a failure to wake; it no longer implies an unknown initial last-rest tick.
 - *Variants:* (b) the wrap: the miner stands on an ore cell (so the group's rest tick plays no
   part) and the kick key is absent (the default 2147483647); the stop order is given at tick 100
-  as above. Expected: the slaves leave within 10 standard delays of *s*<sub>m</sub>, because the
-  kick sum wraps negative for *s*<sub>m</sub> ≥ 1; falsified if they have not left by then. If
+  as above. Expected: the group wakes within 10 standard delays of *s*<sub>m</sub>, because the
+  kick sum wraps negative for *s*<sub>m</sub> ≥ 1; falsified if it has not woken by then.
+  Emergence is recorded separately under claim 21. If
   the recorder shows *s*<sub>m</sub> = 0 for a miner that stands in *guard* from the start of the
   map, that run expects the slaves never to leave, since 2147483647 + 0 does not wrap. On our engine with
   `quirks.slave_kick_delay_wraps` off, the slaves of the *s*<sub>m</sub> = 100 run never leave
   (no oracle part). (c) The miner standing on an ore cell, with no field within the short scan,
-  kick delay 300: the slaves still leave once *t* > *k* + *s*<sub>m</sub>; falsified if they stay.
+  kick delay 300: the group still wakes once *t* > *k* + *s*<sub>m</sub>; falsified if it
+  stays at rest despite a qualifying processing.
   (d) The miner on a non-ore cell with the field 9 cells away (beyond the short scan): the slaves
   do not leave in 3000 ticks; falsified if they do. (e) The group's rest tick: after the slaves
   of the main run have all returned at tick *r* and the group is at rest again, with the miner
@@ -1436,12 +1541,71 @@ is wrong). *Runs:* 3.
   runs, separating destination-present and destination-absent cases when reachable. Use a
   read-only recorder and scripted input; no harness modification is authorised here.
 
+**H15. Initial hidden slaves, ownership, credits and built counts (claims 19 to 21).**
+- *Setup:* speed index 2, one human house and the remote bystander of the common setup. Named
+  map override sections give a stock slave miner 3 slaves and give the slaves scoring and
+  ownership-count flags suitable for observing both counts. Provide a factory and an isolated
+  clear test area. Keep the miner stopped without any working-group transition during the
+  initial observation. Director and mods are off apart from these named test overrides.
+- *Procedure:* produce a miner and record from production start, before release. Repeat with a
+  map-created miner, a starting miner, and a grand-opening free unit whose type is the miner.
+  Separately create a deployed building of the slave-miner type. Record creation counts,
+  owners, inside/on-map state, last-rest tick, credits, per-type owned and ever-built counts,
+  built total and creation draws. Controls use counts 0 and 1 and a miner without a slave type.
+- *Expected:* 3 hidden ready infantry exist at the master's creation, owned by its house,
+  with no occupied infantry cells and no additional credit debit. Last-rest initially reads
+  0 even for a miner created later in the game. Each slave takes one creation draw. Their
+  creations increment eligible owned counts but never the infantry ever-built count or built
+  total, before or after release of the master. Counts 0 and 1 produce 0 and 1 initial slaves.
+  A deploy/pack-up pair retains the existing working slaves under S-0415 claims 6 and 10.
+- *Falsified if:* initial creation waits for release or wake-up, uses another owner, places the
+  initial slaves on cells, deducts a slave price, records creation tick as initial last-rest,
+  or raises an infantry ever-built count.
+- *Runs and tool:* 3 per creation source and 1 per count control, using scripted input and a
+  read-only recorder. No harness modification is authorised.
+
+**H16. Group emergence, timer boundaries and deployment (claims 21 and 22).**
+- *Setup:* speed index 2, common bystander kept away, a human slave miner, a clear resource
+  field and named map overrides giving 3 slaves, reload delay 13 ticks and regeneration delay
+  17 ticks. Test both a vehicle and a deployed master. Arrange the emergence cell once free,
+  once with room for only one slave, and once full of stationary friendly infantry.
+- *Procedure:* issue harvest on the field; log the master's destination, behaviour, deploy
+  attempts, group state and update ticks, slave creation/emergence ticks and occupied cells.
+  Repeat with its deployment footprint obstructed just before arrival, then cleared. Damage
+  a delivering slave and kill an emerged slave; log timer start and effect ticks. In another
+  run empty the local field while leaving a distant field within the long scan.
+- *Expected:* a harvest order recalls the slaves and directs the miner through travelling,
+  rather than loading a bale itself or requiring an ordinary dock-type refinery. With a
+  clear site it attempts deployment at a group update after its destination clears. A failed
+  attempt postpones the next group update by 30 ticks; a second failure resumes field seeking.
+  Regular updates are 10 ticks apart, first due 10 ticks after group creation. A ready slave
+  emerges only at an update, in the offered cell of claim 21; blocked slaves remain inside.
+  With room for one, the last-created ready slave emerges first. Reload and regeneration
+  effects occur at the first later group update at which their timers have expired, not
+  necessarily exactly 13 or 17 ticks after their start. A found short-scan field prevents
+  automatic relocation. Without one, the master can seek a long-scan field and request
+  packing-up, even for the human owner; log the chosen sites and distance comparison for
+  the still-open exact relocation rule.
+- *Falsified if:* emergence itself creates another object, an emerged slave occupies a
+  neighbouring rather than offered cell, the first ready slave wins the single-place test,
+  timer effects occur between group updates, deployment retry ignores the 30-tick wait, or
+  relocation occurs despite a short-scan field. Site-selection observations do not yet
+  falsify an exact rule: that rule is left open rather than guessed.
+- *Runs and tool:* 3 per placement/obstruction variant and 3 timer runs, scripted input with
+  a read-only recorder. Treat interruptions of the master's turns as separate controls.
+
 ## Open questions
 
 - Whether *return* is ever given to a harvester in a skirmish (claim 2); scenario H9 logs it.
-- The slave miner's own movement: when and where it deploys and undeploys (claim 14), and the value
-  of the group's rest tick before any slave has gone out (claim 14; scenario H7's main run gives it
-  through *T*₁).
+- Q-0270 parts 1 and 4: exact standing-position ties on emergence, deployment-site qualification
+  and ties, the complete relocation distance calculation, failed relocation field/site searches,
+  and the vehicle destination after automatic packing-up (claims 21 and 22). Initial last-rest
+  tick 0 is now specified, closing that earlier question.
+- Q-0270 part 3: capture or mind-control propagation to existing slaves, and complete freeing or
+  removal rules after master destruction or sale. Deployment and packing-up already transfer the
+  existing group (S-0415 claims 6 and 10); initial ownership is claim 19. Destruction integration
+  belongs to S-0312 and sale integration to S-0408. Q-0270 is only partially answered and is not
+  added to the answered requests list.
 - The exact tick of the first bale (19 ticks) and the "+ 1" of the load period depend on the order of
   the counter increase and the processing within a turn (claim 5); scenario H1 settles both.
 - Further refusals in a refinery's answer to a contact request for harvesters, and whether a
