@@ -2,7 +2,7 @@
 id: S-0009
 title: Map file semantics (geometry, terrain streams, waypoint markers, start positions, preview)
 topic: formats
-revision: 21
+revision: 22
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -65,6 +65,10 @@ treats creation-time particle or smudge effects as taking zero draws. Production
 draw assignment belongs to S-0404 claim 11, not this loading-order table.
 Claim 40 already follows S-0405 claim 18's conditional initial power-switch rule; the map
 flag's encoding remains here, and S-0108 claim 13 owns the slot-animation consequences.
+Claim 40 also agrees with S-0215 claim 1 and B36: set-up queues *guard*, without
+promising it is current. Retain that distinction at joint hand-off. Q-0241's first
+automatic start and armed, unarmed and upgraded comparisons remain open; no
+first-tick bootstrap or permanently pending queue is inferred.
 
 ## Terms
 
@@ -1367,10 +1371,11 @@ read, in the placement order of claim 43, while the game's set-up at game start 
       queued/current distinction). The effects of the three
       computer flags are `unmeasured` here: the repair flag's effect is S-0314's (its scenario
       H9 measures the gate), and the sell and rebuild flags act only through the computer
-      players' base logic, which no scenario of this spec observes. The *guard* start is
-      `unmeasured` here: the observable of *guard* for a building (an armed building firing at an
-      enemy that comes into range, S-0215 claim 33) does not separate *guard* from the other
-      behaviours a building could start in, so no scenario of this spec can tell them apart
+      players' base logic, which no scenario of this spec observes. The first automatic
+      start of queued *guard* remains unresolved (Q-0241). S-0215 B36 is the proposed
+      investigation, not evidence for a bootstrap tick or perpetual inactivity. Firing alone
+      does not separate *guard* from other firing behaviours; the recorder must distinguish
+      current from queued behaviour.
     - Confidence: high for the complete start in the idle state; medium for the slots not started,
       the switched-on flag and the upgrades; low for the carried-over upgrade field; medium for the account of the three computer flags (the repair
       flag read by S-0314's rule, no known effect of the others on the two non-player houses)
