@@ -1336,3 +1336,114 @@ fn claim_18_cell_destination_under_a_deck() {
         }
     }
 }
+
+/// Plateau at height level 4 everywhere but a pit at level 0 under
+/// x = 3 … 5, y = −1 … 1, whose middle row carries a high-bridge deck with
+/// the deck-entry mark; a soldier stands on the plateau at cell(1, 0).
+fn high_bridge() -> (World, ObjectId) {
+    let mut s = scene();
+    let cells: Vec<CellXY> = s.map.cells.iter().map(|(c, _)| c).collect();
+    for c in cells {
+        let pit = (cell(3, 0).x..=cell(5, 0).x).contains(&c.x) && (c.y - cell(0, 0).y).abs() <= 1;
+        s.set_cell(c, 0, if pit { 0 } else { 4 });
+    }
+    s.place_infantry(0, "TESTMAN", cell(1, 0), 0);
+    let mut w = s.build();
+    for x in 3..=5 {
+        let i = w.cells.idx(cell(x, 0)).expect("cell");
+        w.cells.deck[i] = true;
+        w.cells.deck_entry[i] = true;
+        w.cells.bridge_axis[i] = glasnost_sim::cells::Axis::X;
+    }
+    w.regions.dirty = true;
+    glasnost_sim::regions::ensure(&mut w);
+    let id = men(&w)[0];
+    (w, id)
+}
+
+// spec: S-0208 claim 1 (scenario W2 e: a walking target on a bridge deck lies 416 leptons above H, and the arriving walker stands at that height)
+// spec: S-0209 Terms (cell layer: an object on a bridge deck belongs to the deck layer; a walker's ask reads the deck record of a cell exactly 4 levels below its reference level) and claim 13 (it enters the layer when its position moves into the cell)
+// spec: S-0212 claim 10 (Δ = −4 onto a marked deck enters T's deck; Δ = 0 along the deck stays on it; Δ = +4 off the deck enters T's ground)
+#[test]
+fn a_walker_crosses_a_high_bridge_on_its_deck() {
+    use glasnost_sim::world::Layer;
+    let (mut w, id) = high_bridge();
+    open_orders(&mut w);
+    order_move(&mut w, id, cell(7, 0));
+    let mut seen = Vec::new();
+    let n = common::run_until(&mut w, 2000, |w| {
+        let o = w.obj(id).unwrap();
+        let c = o.pos.cell();
+        if (3..=5).contains(&(c.x - cell(0, 0).x)) {
+            let h = w.surface_at(o.pos.x, o.pos.y);
+            seen.push((
+                c,
+                o.layer,
+                o.pos.z - h,
+                w.cells.list(c, Layer::Deck).contains(&id),
+            ));
+        }
+        o.pos.cell() == cell(7, 0) && o.walk.as_ref().is_some_and(|s| s.target.is_none())
+    });
+    assert!(n < 2000, "the walker never crossed");
+    assert!(!seen.is_empty(), "the walker crossed the pit");
+    for (c, layer, above, listed) in &seen {
+        assert_eq!(*layer, Layer::Deck, "on the deck in {c:?}");
+        assert!(*listed, "listed in the deck layer of {c:?}");
+        // The plateau and the deck both lie 416 leptons above the pit's ground.
+        assert_eq!(*above, 416, "height above H in {c:?}");
+    }
+    let o = w.obj(id).unwrap();
+    assert_eq!(o.layer, Layer::Ground, "off the deck again");
+    assert_eq!(o.pos.z, w.surface_at(o.pos.x, o.pos.y));
+}
+
+// spec: S-0208 claim 3 (the position is chosen and reserved in the record for the deck) and S-0209 claim 1 (the reservation marks the deck record, not the ground's under it)
+#[test]
+fn a_walker_reserves_its_deck_position_in_the_deck_record() {
+    use glasnost_sim::world::Layer;
+    let (mut w, id) = high_bridge();
+    open_orders(&mut w);
+    order_move(&mut w, id, cell(7, 0));
+    let c = cell(4, 0);
+    common::run_until(&mut w, 2000, |w| {
+        walk_target(w, id).is_some_and(|t| t.cell() == c)
+    });
+    let p = walk_target(&w, id).expect("a target on the deck");
+    assert_eq!(p.z, w.surface_at(p.x, p.y) + 416);
+    let (u, v) = (p.x.rem_euclid(256), p.y.rem_euclid(256));
+    let class = walk::position_class(u, v, w.rules().quirks.top_position_counts_as_centre);
+    assert!(w.cells.occ(c, Layer::Deck).is_some_and(|r| r.taken(class)));
+    assert!(
+        !w.cells
+            .occ(c, Layer::Ground)
+            .is_some_and(|r| r.taken(class))
+    );
+}
+
+// spec: S-0208 claim 1 and S-0209 Terms (a walker on the deck is game state: the state hash survives a save and load round trip, and both copies walk on alike)
+#[test]
+fn a_walker_on_a_deck_survives_save_and_load() {
+    use glasnost_sim::world::Layer;
+    let (mut w, id) = high_bridge();
+    open_orders(&mut w);
+    order_move(&mut w, id, cell(7, 0));
+    common::run_until(&mut w, 2000, |w| {
+        w.obj(id)
+            .is_some_and(|o| o.layer == Layer::Deck && o.pos.cell() == cell(4, 0))
+    });
+    let bytes = glasnost_sim::save::save(&w);
+    let mut back =
+        glasnost_sim::save::load(&bytes, w.rules_arc(), w.catalogue_arc()).expect("load");
+    assert_eq!(
+        glasnost_sim::save::state_hash(&back),
+        glasnost_sim::save::state_hash(&w)
+    );
+    assert_eq!(back.obj(id).unwrap().layer, Layer::Deck);
+    common::run(&mut w, 200);
+    common::run(&mut back, 200);
+    assert_eq!(
+        glasnost_sim::save::state_hash(&back),
+        glasnost_sim::save::state_hash(&w)
+    );
+}
