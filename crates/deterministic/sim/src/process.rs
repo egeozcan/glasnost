@@ -155,34 +155,38 @@ pub fn fall_back(w: &mut World, id: ObjectId, placement: bool) {
         if let Some(ob) = w.obj_mut(id) {
             ob.beh.last_common_effects = Some(t);
         }
+        // spec: S-0309 claim 23 (b) (the attack-move refresh is among the common effects, at most once per tick)
+        // spec: S-0215 claim 13 (attack-move memory is refreshed before the table's effects; the rows judge the state it leaves)
+        refresh_attack_move(w, id);
         // spec: S-0215 claim 13 row 1 (a temporarily replaced locomotor is given back; S-0417 claim 5)
         let restored = crate::econ::release::restore_locomotor(w, id);
-        // spec: S-0215 claim 13 (an infantry unit whose guard spot is on another cell, not given its locomotor back: it becomes the destination)
-        if o.kind == Kind::Infantry
+        // The approach row and the route row are seams: our engine keeps no approach
+        // destinations list and no routes.
+        // spec: S-0215 claim 13 (an infantry unit that is not a harvesting slave, guard spot on another cell, not given its locomotor back: it becomes the destination)
+        let Some(o2) = w.obj(id).cloned() else { return };
+        if o2.kind == Kind::Infantry
             && !restored
-            && let Some(gs) = o.guard_spot
+            && !crate::seams::is_harvesting_slave(w, id)
+            && let Some(gs) = o2.guard_spot
         {
             let gc = match gs {
                 Target::Cell(c) => Some(c),
                 Target::Object(x) => w.obj(x).map(|g| g.pos.cell()),
             };
-            if gc.is_some_and(|c| c != o.pos.cell())
+            if gc.is_some_and(|c| c != o2.pos.cell())
                 && let Some(ob) = w.obj_mut(id)
             {
+                // spec: S-0215 claim 13 (Q-0202: the guard spot replaces a resumed attack-move destination)
                 ob.dest = Some(gs);
                 if ob.beh.current != Some(Behaviour::AreaGuard) {
-                    // spec: S-0215 claim 13 (unless in area guard, it also queues move and forgets the guard spot)
+                    // spec: S-0215 claim 13 (unless area guard is current, it queues move without an immediate start, claim 7, and forgets the guard spot)
                     ob.beh.queue(Some(Behaviour::Move));
                     ob.guard_spot = None;
                 }
                 // spec: S-0107 claim 15 (a destination assigned: the destination-driven get-up)
-                crate::infantry::destination_assigned(w, id, o.dest);
+                crate::infantry::destination_assigned(w, id, o2.dest);
             }
         }
-        // spec: S-0309 claim 23 (b) (the attack-move refresh is among the common effects, at most once per tick; the rest table judges the state after it)
-        // spec: S-0215 claim 13 (an actor with attack-move memory may resume its attack move)
-        // It runs before the rest table (S-0215 r17); its place after the other common effects is interim, request Q-0202.
-        refresh_attack_move(w, id);
     }
     match o.kind {
         Kind::Infantry => fall_back_infantry(w, id),
