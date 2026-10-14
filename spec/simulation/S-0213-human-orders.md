@@ -2,7 +2,7 @@
 id: S-0213
 title: Human orders (the order set, when orders apply, and what each order changes)
 topic: simulation
-revision: 11
+revision: 12
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -80,8 +80,10 @@ Terms).
 - **Tether link, tethered.** As S-0208 (Terms) defines the tether link: a firm link
   that both objects in contact take when one of them gets notice from the other that it begins a
   loading or unloading manoeuvre, clearance to unload, or a request to dock at a refinery, and
-  lose when that manoeuvre ends or the link is broken off. Which situations of play send these
-  notices is open (Open questions). While tethered, the unit ignores stop, scatter and deploy
+  lose when that manoeuvre ends or the link is broken off. S-0417 identifies ground vehicle
+  factory release and successful infantry factory or cloning-building release exchanges
+  (claims 1, 7 and 10); aircraft release timing and other exchanges remain open.
+  While tethered, the unit ignores stop, scatter and deploy
   orders (table T1), and a behaviour order keeps the link, except at a building of the unloading kind (table T3, part b).
 - **Inside a tunnel.** The state of a mobile actor that is travelling through a tunnel, a map
   feature whose movement belongs to the movement specs.
@@ -223,13 +225,14 @@ Terms).
    - Backing: `measurable` (Scenario O3) for parts d, e, f (step 7 for its passenger clause) and
      the guard-spot part of g, and `measurable` (Scenario O4) for parts a and h and for the
      contact break of part b at a building of the unloading kind (Scenario O4, part iii, with a
-     named test rules file). The rest of part b is `unmeasured` for now. Its two plain branches,
-     that an actor that is not tethered breaks off contact and that a tethered actor keeps its
-     link at a building of another kind, can only be told apart with an exchange known to tether
-     or known not to, and none is identified (Open questions; Scenario O4, part iv, records the
-     refinery case for that question only); and forgetting the building the actor was
-     waiting in line to enter changes nothing that the recorder reads until a later docking
-     request, whose rules belong to the exchange specs. Part c is `unmeasured`: it needs a team of
+     named test rules file). Keeping a tethered actor's link at a building that is not of the
+     unloading kind, and breaking that link when the building is of that kind, are
+     `measurable` (Scenario O18 a, factory release). The untethered-contact branch remains
+     `unmeasured`: factory release establishes a tether, not a separate interval of untethered
+     contact in which an order can apply. Scenario O4 iv still explores the refinery case.
+     Forgetting the building the actor was waiting in line to enter is `unmeasured`: it changes
+     nothing that the recorder reads until a later docking request, whose rules belong to the
+     exchange specs. Part c is `unmeasured`: it needs a team of
      the original's computer player, which the measurement setup cannot form by input, and it never
      applies to an AI house. What parts e and g do to the queued destinations is `unmeasured`: no
      input rule studied gives an object queued destinations (S-0215 owns how they arise), so the
@@ -381,16 +384,16 @@ Terms).
      behaviour (step 1), the harvester row (step 2), the passengers of an open-topped
      transport (step 6), the spawned aircraft (step 7) and the slaves of a slave miner whose
      behaviour is *harvest* (step 8); and `measurable` (Scenario O8, game C) for the end of a planned
-     route. The following are `unmeasured`: (i) the tethered exception, because a scenario needs a
-     unit that is known to be tethered, and the exchanges that tether a unit are not identified
-     (Open questions); once one is identified (Scenario O4, part iv, may identify docking at a
-     refinery), a stop order given during it can be observed. (ii) The slave rule "whatever its
+     route. The tethered exception is `measurable` (Scenario O18 b): factory release supplies
+     a tethered vehicle, and an attack target distinguishes an ignored stop from a stop that
+     clears references. The following are `unmeasured`: (i) The slave rule "whatever its
      behaviour", because to have the slaves out mining while the miner's behaviour is neither
      *harvest* nor *return*, the miner must first get a behaviour order, which already calls the
-     slaves back (table T3, part h). (iii) "No queued destinations left", as in claim 5. (iv) "Breaks
+     slaves back (table T3, part h). (ii) "No queued destinations left", as in claim 5. (iii) "Breaks
      off any contact", because the exchanges that a stop order may find an actor in are either
-     tethered or not identified as untethered (the same gap as in table T3, part b), so no setup
-     separates it from the actor's own end of an exchange. (v) The checks "not under construction"
+     tethered, including the identified factory-release exchange, or not identified as
+     untethered (the remaining gap in table T3, part b), so no setup
+     separates it from the actor's own end of an exchange. (iv) The checks "not under construction"
      and "not being sold": the actor would have to change into that state between the click and the
      application, and the scenarios cannot hold an object in that state steady.
    - Confidence: medium (high for the clearing of target and destination)
@@ -407,7 +410,7 @@ Terms).
    claim 11's conditions for accepting such a request (among them, a flag of its type that S-0208,
    claim 11, names).
    Buildings ignore the order.
-   - Backing: `measurable` (Scenario O5, step 4)
+   - Backing: `measurable` (Scenario O5, step 4; Scenario O18 c for the tethered refusal)
    - Confidence: medium
 
 10. **Deploy order.** The actor must be live, on the map, not tethered, not an aircraft, not
@@ -424,8 +427,12 @@ Terms).
       identified here does. The refusals for an aircraft, a paralysed actor, an actor under
       construction or being sold, and a tethered actor are `unmeasured`: input may already refuse
       the order for such an actor (S-0214), or the actor would have to enter that state between
-      the click and the application, which the scenarios cannot hold steady, and the tethered
-      state is open (claim 8).
+      the click and the application, which the scenarios cannot hold steady. The tethered
+      factory-release setup does not isolate the tether refusal: a vehicle still on its factory's
+      cell also fails the vehicle-factory-cell check. Infantry release ends its tether at the
+      next cell arrival (S-0417 claim 10), and no setup here establishes an input-legal deploy
+      order applying during that interval. The identified tether alone does not upgrade this
+      backing.
     - Confidence: medium
 
 11. **Detonate order.** If the actor exists and carries a planted bomb, the bomb goes off at once.
@@ -696,10 +703,7 @@ Terms).
 > ticks; the sum and the comparison are exact integer operations. (Claim 19. Open questions name
 > one further cause for which a cheer is refused.)
 
-> route-mode click refused by the route-holder limit ⇔ *H* + *S* > 128, where *H* is the number of
-> the house's route holders and *S* the number of selected units and buildings that are not route
-> holders. Integers, exact. (Claim 16, which also refuses a click when a selected object cannot
-> take part in a route.)
+> A route-mode click is refused by the route-holder limit exactly when \(H+S>128\), where \(H\) is the number of the house's route holders and \(S\) is the number of selected units and buildings that are not route holders. These are exact integer counts. (Claim 16, which also refuses a click when a selected object cannot take part in a route.)
 
 > Group destinations (claim 7). For the *n* members with positions *p*ᵢ = (*x*ᵢ, *y*ᵢ, *z*ᵢ) in
 > leptons: centre *c* = (trunc(Σ*x*ᵢ / *n*), trunc(Σ*y*ᵢ / *n*), trunc(Σ*z*ᵢ / *n*)), integer sums
@@ -888,7 +892,7 @@ All scenarios run under the measurement setup: a skirmish on a small purpose-mad
 human player and one bystander computer player (glossary) whose start position is far away, with
 the bystander's units out of reach unless a scenario places some of them (Scenarios O3, O5, O11 and
 O13 do) or hands objects to it (Scenario O16 does). A recorder reads the tick counter and, where
-named, an object's behaviour, target, destination, guard spot, contact, position and owner, and
+named, an object's behaviour, target, destination, guard spot, contact, tether, position and owner, and
 whether it is being sold, or the house's production, each tick. The recorder samples once per
 tick, at the moment the tick counter advances, so a sample shows the state after all of that
 tick's work, the applied orders included. The orders are given by hand, or by scripted input
@@ -1345,6 +1349,47 @@ game's normal input only, as a player would, and never writes into the game.
   attack order assigning a chase destination at its own boundary falsifies the distinction
   from later approach; this test records no expected approach radius or stopping rule.
 
+**Scenario O18: orders during factory release (claims 5, 8 and 9).**
+- *Setup:* the preamble's flat skirmish map, game speed 6, director and mods off. Produce
+  an ordinary armed drive vehicle at a human-owned ground vehicle factory K. Use a named
+  test map override setting K's door time to 1 game minute solely to extend the pre-exit
+  observation window; this is test data, not a stock value. Separate runs set K's
+  unloading-kind flag off and on (Import mapping). Keep the apron and its neighbours free
+  of other objects. For part b, place a durable enemy target within the produced vehicle's
+  weapon range, unable to damage it during observation. Use scripted input and the read-only
+  recorder, recording contact and tether on both objects, target, destination, current and
+  queued behaviour, position, body turning and factory stage. These are proposed recorder
+  observables, not a claim that the recorder already exposes them.
+- *Procedure:* select the newly released vehicle by drag selection after K's starting
+  processing, while the door is opening and before the exit instruction. In separate fresh
+  releases: (a) give a plain move click to an open distant cell, once with K's unloading-kind
+  flag off and once with it on; (b) with the flag off, attack the enemy target, wait for the
+  target assignment, then press stop while still tethered; (c) with the flag off, press
+  scatter while the vehicle is stationary in guard with no destination and no body turn.
+  Run matching untethered controls: an ordinary stationary vehicle of the same type on open
+  ground attacks the same target and receives stop, or receives scatter from guard with no
+  destination and no body turn. Verify the same input actions are available and the
+  movement receiver's other refusal gates do not hold (S-0207 claim 16).
+- *Runs:* three valid attempts per part and flag setting. Void an attempt if selection or
+  input legality prevents the order, if contact or tether ends before application, or if a
+  factory exit instruction, cell arrival, target death or another object's action overlaps
+  the tested boundary. A series with no valid attempts is inconclusive, not confirmation.
+- *Observable:* the boundary sample with the new move destination or attack target; after
+  each tested key, target, destination, contact and tether compared with the preceding
+  sample and with a no-key release control. Record the normal input acknowledgement where
+  offered; no acknowledgement or no selected actor is not an ignored applied order.
+- *Expected:* (a) the new destination appears while contact and tether remain with the flag
+  off; with it on, that same boundary has no contact and no tether. This tests table T3 b,
+  not how the subsequent exit proceeds. (b) the tethered vehicle retains its attack target
+  and link after stop, whereas the untethered control loses target and destination.
+  (c) the tethered vehicle gains no scatter destination; the untethered control gets the
+  movement spec's nearby destination. No claim is made that stop halts an existing track.
+- *Falsified if:* a valid move order breaks the tether with the flag off or keeps it with
+  the flag on; a valid tethered stop clears the established target; or a valid tethered
+  scatter assigns a destination. Control failure makes the corresponding key test
+  inconclusive. Factory release does not by itself test untethered contact break, deploy's
+  separate tether gate or aircraft tether timing.
+
 ## Open questions
 
 - Q-0072: claim 21 answers the order-application contribution in full. S-0215 claim 37
@@ -1376,9 +1421,11 @@ game's normal input only, as a player would, and never writes into the game.
 - When a behaviour order names an object of a house allied with the actor's, the original also
   triggers a further effect on that object, probably a brief highlight on screen. It has not been
   studied; nothing suggests that it changes game state.
-- Which situations of play send the notices that tether a unit (Terms, *tethered*). Probably an
-  aircraft that has landed on its pad; others, such as a vehicle leaving a factory or a harvester
-  docking at a refinery, have not been checked (Scenario O4, part iv, records the refinery case).
+- Other tether exchanges beyond the ground vehicle factory release and successful infantry
+  factory or cloning-building release exchanges of S-0417 (claims 1, 7 and 10). Aircraft
+  release-to-landing tether timing remains untraced (S-0417 claim 11), and the refinery case
+  remains exploratory (Scenario O4 iv). Factory release does not yet identify an order-time
+  untethered-contact interval or isolate deploy's tether refusal (claims 5 and 10).
 - Claim 7: how many steps a member's look takes (the limit of the look line in Formulas), whether
   that limit applies to each member's look separately or to the run as a whole, what a member gets
   after a spoiled look, which direction the look of a member standing in the leader's own cell
