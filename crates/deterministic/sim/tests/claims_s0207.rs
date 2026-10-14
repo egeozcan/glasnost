@@ -873,6 +873,7 @@ fn accelerating_vehicle_gains_twice_at_track_boundary() {
 // Which locomotor a type has
 
 // spec: S-0207 claim 14 (absent: the teleporting locomotor whatever the kind; the driving locomotor drives a vehicle)
+// spec: S-0207 claim 20 (a vehicle with the teleporting locomotor jumps; an infantry unit's landing point is open, Q-0181)
 #[test]
 fn locomotor_field_selects_how_a_type_moves() {
     use glasnost_rules::sim::Locomotor as L;
@@ -897,7 +898,7 @@ fn locomotor_field_selects_how_a_type_moves() {
     let unit = |kind: Kind, i: u32| r.unit(kind, i).expect("type").clone();
     assert_eq!(unit(Kind::Vehicle, 0).type_locomotor(), L::Teleport);
     assert_eq!(unit(Kind::Infantry, 0).type_locomotor(), L::Teleport);
-    assert_eq!(unit(Kind::Vehicle, 0).locomotor, Locomotor::None);
+    assert_eq!(unit(Kind::Vehicle, 0).locomotor, Locomotor::Teleport);
     assert_eq!(unit(Kind::Infantry, 0).locomotor, Locomotor::None);
     assert_eq!(unit(Kind::Vehicle, 1).locomotor, Locomotor::Drive);
     // A vehicle type may name the walking locomotor; how it moves has no spec (Open questions).
@@ -914,14 +915,16 @@ fn locomotor_field_selects_how_a_type_moves() {
     open_orders(&mut w);
     order_move(&mut w, teleporter, cell(0, -6));
     order_move(&mut w, driver, cell(4, -6));
-    let p0 = w.obj(teleporter).expect("v").pos;
+    let f0 = w.obj(teleporter).expect("v").body.value(w.tick);
     let d0 = w.obj(driver).expect("v").pos;
     run(&mut w, 40);
+    let t = w.obj(teleporter).expect("v");
     assert_eq!(
-        w.obj(teleporter).expect("v").pos,
-        p0,
-        "a teleporting vehicle does not drive"
+        t.pos.cell(),
+        cell(0, -6),
+        "a teleporting vehicle jumps to its destination"
     );
+    assert_eq!(t.body.value(w.tick), f0, "a jump keeps the facing");
     assert_ne!(
         w.obj(driver).expect("v").pos,
         d0,

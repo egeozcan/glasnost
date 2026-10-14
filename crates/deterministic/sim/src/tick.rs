@@ -99,6 +99,8 @@ fn object_turn(w: &mut World, id: ObjectId) {
     let moved = match loco {
         Some(Locomotor::Drive) => drive::tick(w, id),
         Some(Locomotor::Walk) => walk::tick(w, id),
+        // spec: S-0207 claim 20 (d) (the jump on the first movement update after L is fixed; the behaviour is processed before it)
+        Some(Locomotor::Teleport) => crate::teleport::tick(w, id),
         _ => false,
     };
     // spec: S-0405 claim 13, S-0409 claim 8 (the unit's own turn, after its movement of the tick)

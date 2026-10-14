@@ -311,6 +311,8 @@ pub enum SearchContext {
     Area,
     /// The map-wide search of hunt.
     Hunt,
+    /// The search at the end of a teleporting move (claim 1's last row).
+    Teleport,
 }
 
 /// The search classes (S-0309 claim 5): infantry, vehicles, aircraft,
@@ -1132,8 +1134,10 @@ fn set_target_from_search(
     };
     if let Some(ob) = w.obj_mut(a) {
         ob.target = t;
-        // spec: S-0309 claim 24 (a different target set by the per-tick search is an opportunity target)
-        ob.combat.opportunity = ctx == SearchContext::PerTick && t.is_some() && t != before;
+        // spec: S-0309 claim 24 (a different target set by the per-tick search is an opportunity target); claim 1 (so is one set by the teleport search)
+        ob.combat.opportunity = matches!(ctx, SearchContext::PerTick | SearchContext::Teleport)
+            && t.is_some()
+            && t != before;
     }
     // spec: S-0309 claim 4 (a pick lowers the target's expected remaining health by the expected damage, unless the projectile is inaccurate)
     if let Some((y, e)) = expected
@@ -1253,6 +1257,18 @@ pub fn per_tick(w: &mut World, a: ObjectId) {
         return;
     }
     search(w, a, SearchKind::Range, SearchContext::PerTick);
+}
+
+/// The search at the end of a teleporting move (S-0309 claim 1, last row;
+/// S-0207 claim 20 f): a range search when the object has no target and
+/// claim 2 and the opportunity gate of claim 3 allow it.
+pub fn teleport_search(w: &mut World, a: ObjectId) {
+    let Some(o) = w.obj(a) else { return };
+    // spec: S-0309 claim 1 (a teleporting move has just ended, no target, claims 2 and 3 allow it)
+    if o.target.is_some() || !may_search_passively(w, a) || !opportunity_gate(w, a) {
+        return;
+    }
+    search(w, a, SearchKind::Range, SearchContext::Teleport);
 }
 
 /// The attack-move searches of S-0309 claim 23 (a).

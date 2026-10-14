@@ -120,7 +120,13 @@ pub fn at_chain_point(w: &World, id: ObjectId) -> bool {
 pub fn release_claims(w: &mut World, id: ObjectId) {
     let (claims, layer) = match w.obj(id) {
         // spec: S-0209 claim 1 (a vehicle taken out of a cell's list while between steps clears that cell's flag; one without the driving locomotor never advanced)
-        Some(o) if o.drive.is_none() && o.kind == Kind::Vehicle => (vec![o.pos.cell()], o.layer),
+        Some(o) if o.drive.is_none() && o.kind == Kind::Vehicle => {
+            // spec: S-0207 claim 20 (a) (a teleporting vehicle's mark is on the cell of its landing point until the jump)
+            match o.teleport.as_ref().and_then(|t| t.mark) {
+                Some(c) => (vec![c], Layer::Ground),
+                None => (vec![o.pos.cell()], o.layer),
+            }
+        }
         Some(o) => (
             o.drive
                 .as_ref()

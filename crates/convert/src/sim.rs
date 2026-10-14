@@ -383,6 +383,9 @@ const UNIT_FIELDS: &[(&str, &str, Form)] = &[
         Dec,
     ),
     ("deploys_into", "DeploysInto", Text),
+    // spec: S-0207 Import mapping (ChronoOutSound, ChronoInSound of vehicle, infantry and aircraft types: sound names)
+    ("chrono_out_sound", "ChronoOutSound", Text),
+    ("chrono_in_sound", "ChronoInSound", Text),
     // `Primary`, `Secondary` and the elite keys: the weapon slots (S-0308 claim 1).
     ("turret_count", "TurretCount", Int),
     ("weapon_count", "WeaponCount", Int),
@@ -589,6 +592,29 @@ const GENERAL_FIELDS: &[(&str, &[u8], &str, Form)] = &[
         "OreTwinkleChance",
         Int,
     ),
+    // spec: S-0207 Import mapping (the teleporting locomotor's [General] keys; ChronoOutSound and ChronoInSound in [AudioVisual])
+    (
+        "chrono_distance_factor",
+        b"General",
+        "ChronoDistanceFactor",
+        Int,
+    ),
+    ("chrono_trigger", b"General", "ChronoTrigger", Bool),
+    (
+        "chrono_minimum_delay",
+        b"General",
+        "ChronoMinimumDelay",
+        Int,
+    ),
+    (
+        "chrono_range_minimum",
+        b"General",
+        "ChronoRangeMinimum",
+        Int,
+    ),
+    ("warp_out", b"General", "WarpOut", Ref(Kind::Animations)),
+    ("chrono_out_sound", b"AudioVisual", "ChronoOutSound", Text),
+    ("chrono_in_sound", b"AudioVisual", "ChronoInSound", Text),
     // spec: S-0213 Import mapping
     ("maximum_cheer_rate", b"General", "MaximumCheerRate", Int),
     // spec: S-0209, S-0215, S-0210 Import mapping ([IQ])
@@ -1063,6 +1089,17 @@ impl Builder<'_> {
                     ));
                 }
             }
+        }
+        let general_key = |k: &[u8]| globals.get(&b"General"[..]).and_then(|s| s.get(k));
+        let factor = fold(general_key(b"ChronoDistanceFactor"), None, |v, _| {
+            value::integer(v)
+        });
+        let trigger = fold(general_key(b"ChronoTrigger"), None, |v, _| {
+            value::boolean(v)
+        });
+        // spec: S-0207 Constants and Edge cases (k absent: 32, trigger absent: on; k = 0 with the trigger on: the importer warns, our engine takes the trigger as off)
+        if factor == Some(0) && trigger.unwrap_or(true) {
+            self.warn(0, 0, "[General] ChronoDistanceFactor is 0 with ChronoTrigger on: the original divides by zero at the first teleporting jump; our engine takes the trigger as off (S-0207 F9, a departure)".to_owned());
         }
         // spec: S-0009 Import mapping ([General] BaseUnit: a list of vehicle type names)
         let base_unit = globals

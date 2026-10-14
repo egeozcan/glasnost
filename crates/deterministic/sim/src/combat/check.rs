@@ -277,6 +277,10 @@ pub fn check(
         // spec: S-0301 claim 9 rank 4 (most target tests give illegal)
         return Answer::Illegal;
     }
+    // spec: S-0301 claim 9 rank 4 (the firer is materialising: rearming) and S-0207 claim 20 (f) (phasing in)
+    if crate::teleport::phasing_in(w, firer) {
+        return Answer::Rearming;
+    }
     // spec: S-0301 claim 9 rank 4 (a spawner weapon none of whose spawned aircraft is alive: rearming; no spawned aircraft exist in our engine)
     if wr.spawner {
         return Answer::Rearming;

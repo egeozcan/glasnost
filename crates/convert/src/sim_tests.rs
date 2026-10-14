@@ -163,6 +163,38 @@ fn resource_glint_fields() {
     );
 }
 
+/// spec: S-0207 Import mapping (the teleporting locomotor's [General] keys, WarpOut, the [AudioVisual] and per-type chrono sounds) and F9 Edge cases (k = 0 with the trigger on: a warning)
+#[test]
+fn teleport_fields() {
+    let base = "[Animations]\n1=Flash\n[VehicleTypes]\n1=Cart\n\
+                [General]\nChronoDistanceFactor=-7\nChronoTrigger=no\nChronoMinimumDelay=-2\n\
+                ChronoRangeMinimum=9\nWarpOut=Flash\n\
+                [AudioVisual]\nChronoOutSound=Away\nChronoInSound=Back\n\
+                [Cart]\nChronoOutSound=Off\nChronoInSound=On\n";
+    let (s, w) = sim(base, "", "");
+    let g = &s.general;
+    assert_eq!(g.chrono_distance_factor, Some(-7));
+    assert_eq!(g.chrono_trigger, Some(false));
+    assert_eq!(g.chrono_minimum_delay, Some(-2));
+    assert_eq!(g.chrono_range_minimum, Some(9));
+    assert_eq!(g.warp_out.as_deref(), Some("Flash"));
+    assert_eq!(g.chrono_out_sound.as_deref(), Some("Away"));
+    assert_eq!(g.chrono_in_sound.as_deref(), Some("Back"));
+    let cart = &s.vehicles["Cart"];
+    assert_eq!(cart.chrono_out_sound.as_deref(), Some("Off"));
+    assert_eq!(cart.chrono_in_sound.as_deref(), Some("On"));
+    assert!(!warned(&w, "ChronoDistanceFactor"));
+    // k = 0 with the trigger on (also when the trigger is not given): a warning.
+    let (_, w) = sim("[General]\nChronoDistanceFactor=0\n", "", "");
+    assert!(warned(&w, "ChronoDistanceFactor is 0"));
+    let (_, w) = sim(
+        "[General]\nChronoDistanceFactor=0\nChronoTrigger=no\n",
+        "",
+        "",
+    );
+    assert!(!warned(&w, "ChronoDistanceFactor"));
+}
+
 /// spec: S-0207 claim 1, S-0208 Import mapping (Speed −1 keeps; warnings), S-0215 Import mapping (GuardRange −1)
 #[test]
 fn speed_and_guard_range() {

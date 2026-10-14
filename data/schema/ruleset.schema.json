@@ -3710,6 +3710,57 @@
           ],
           "default": null
         },
+        "chrono_distance_factor": {
+          "description": "`ChronoDistanceFactor`, the teleport distance factor k, leptons per\ntick (S-0207 F9).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "chrono_in_sound": {
+          "description": "`[AudioVisual] ChronoInSound`, the game-wide arrival sound of a\nteleporting jump (S-0207 claim 20 e).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "chrono_minimum_delay": {
+          "description": "`ChronoMinimumDelay`, the teleport minimum delay m, ticks (S-0207\nF9).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "chrono_out_sound": {
+          "description": "`[AudioVisual] ChronoOutSound`, the game-wide departure sound of a\nteleporting jump (S-0207 claim 20 e).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "chrono_range_minimum": {
+          "description": "`ChronoRangeMinimum`, the teleport range minimum g, leptons (S-0207\nF9).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "chrono_trigger": {
+          "description": "`ChronoTrigger`, the teleport trigger flag (S-0207 F9).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
         "cliff_back_impassability": {
           "description": "`CliffBackImpassability` (S-0211 claim 8).",
           "type": [
@@ -4497,6 +4548,14 @@
         },
         "wall_tower": {
           "description": "`WallTower`: the wall tower type (S-0112).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "warp_out": {
+          "description": "`WarpOut`, the warp animation of a teleporting jump (S-0207 claim 20\ne).",
           "type": [
             "string",
             "null"
@@ -7288,6 +7347,22 @@
           "description": "`Carryall`.",
           "type": [
             "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "chrono_in_sound": {
+          "description": "`ChronoInSound`, the type's arrival sound of a teleporting jump\n(S-0207 claim 20 e).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "chrono_out_sound": {
+          "description": "`ChronoOutSound`, the type's departure sound of a teleporting jump\n(S-0207 claim 20 e).",
+          "type": [
+            "string",
             "null"
           ],
           "default": null

@@ -432,8 +432,8 @@ pub fn cell_destination_height(w: &World, id: ObjectId, c: CellXY) -> i32 {
         // spec: S-0208 claim 18 and F9 (a = 414 leptons on a high-bridge cell, independent of the layer)
         h + if w.high_bridge(c) { 414 } else { 0 }
     } else {
-        // spec: S-0208 Edge cases (switch off: the centre's height on the arrival layer, 416 leptons up on the deck)
         let deck = w.obj(id).is_some_and(|o| o.layer == Layer::Deck);
+        // spec: S-0208 Edge cases (switch off: the centre's height on the arrival layer, 416 leptons up on the deck)
         h + if deck { 416 } else { 0 }
     }
 }

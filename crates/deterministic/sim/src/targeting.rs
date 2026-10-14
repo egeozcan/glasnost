@@ -394,9 +394,9 @@ fn being_erased(_w: &World, _id: ObjectId) -> bool {
     false
 }
 
-/// Phasing in after a chrono jump (S-0214 Terms): no chrono jumps yet.
-fn phasing_in(_w: &World, _id: ObjectId) -> bool {
-    false
+/// Phasing in after a teleporting jump (S-0214 Terms, S-0207 claim 20 f).
+fn phasing_in(w: &World, id: ObjectId) -> bool {
+    crate::teleport::phasing_in(w, id)
 }
 
 /// Carries an active planted bomb (S-0213 Terms): no bombs before M4.
