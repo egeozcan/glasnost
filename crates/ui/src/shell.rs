@@ -150,7 +150,7 @@ mod tests {
         assert_eq!(s.screen, Screen::Game);
         s.game_over(End {
             ticks: 1,
-            millis: 1,
+            units: 1,
             rows: Vec::new(),
         });
         assert!(matches!(s.screen, Screen::End(_)));

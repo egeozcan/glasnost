@@ -135,7 +135,7 @@ fn select_move_deploy_build_and_place_through_the_client_model() {
             .any(|o| matches!(o, Order::Place { cell: Some(_), .. }))
     );
     // The end screen is not there while the game runs.
-    assert!(p.end(60).is_none());
+    assert!(p.end().is_none());
 }
 
 fn start_with(rules: std::sync::Arc<glasnost_sim::rules::SimRules>) -> Play {
@@ -283,7 +283,29 @@ fn surrender_ends_the_game_with_an_end_screen() {
     step_until(&mut p, 10, |p| p.world().tick >= 4);
     p.surrender();
     step_until(&mut p, 2000, |p| p.outcome.is_some());
-    let end = p.end(60).expect("an end screen");
+    let end = p.end().expect("an end screen");
     assert_eq!(end.headline(), "DEFEAT");
     assert!(!p.running());
+    // spec: S-0414 claims 19 and 23 (the displayed scores are fixed once play has stopped)
+    let local = p.local;
+    assert!(glasnost_sim::econ::stats::of(p.world(), local).shown.is_some());
+}
+
+/// spec: S-0414 claim 23 and Formulas (the active clock counts ⌊v/16⌋ − ⌊u/16⌋ per active interval; paused or unfocused time and time after play stops are not counted)
+#[test]
+fn result_duration_counts_active_clock_units() {
+    let mut p = start();
+    p.clock(0, true);
+    p.clock(959, true);
+    assert_eq!(p.clock_units, 59);
+    p.clock(2000, false);
+    p.clock(5000, true);
+    p.clock(5016, true);
+    assert_eq!(p.clock_units, 60);
+    step_until(&mut p, 10, |p| p.world().tick >= 4);
+    p.surrender();
+    step_until(&mut p, 2000, |p| p.outcome.is_some());
+    p.clock(9000, true);
+    assert_eq!(p.clock_units, 60);
+    assert_eq!(p.end().unwrap().duration(), (0, 0, 1));
 }

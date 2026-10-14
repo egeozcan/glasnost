@@ -31,7 +31,7 @@ use super::install::{self, Install};
 use super::paint::Painter;
 use super::play::Button;
 use super::session::{MAP_IMAGE, RADAR_IMAGE, Session, SessionEvent};
-use crate::mapview::live::{Pacer, period_ms};
+use crate::mapview::live::Pacer;
 
 /// Asynchronous work the client asks for.
 pub enum Job {
@@ -499,6 +499,9 @@ impl Client {
             return;
         };
         s.clock_ms = now_ms;
+        // spec: S-0414 claim 23 (the active clock pauses for the options menu and lost focus)
+        let active = !s.paused && self.focused;
+        s.play.clock(now_ms, active);
         // spec: S-0201 claims 8 and 9 (no cycle runs while the options menu is open or without focus)
         if !s.ticking() || !self.focused {
             self.pacer.reset();
@@ -539,7 +542,7 @@ impl Client {
             });
             a.frame(now_ms, &mut self.unsync);
         }
-        if let Some(end) = s.play.end(period_ms(s.speed)) {
+        if let Some(end) = s.play.end() {
             self.shell.game_over(end);
         }
     }

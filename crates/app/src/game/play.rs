@@ -101,6 +101,10 @@ pub struct Play {
     waiting: bool,
     /// The tick that started each tab's flash (S-0411 claim 11).
     flash: [Option<i32>; hud::TABS],
+    /// Active play time in 16-ms clock units, *E* of S-0414's result
+    /// duration, and the host time of the active interval's last frame.
+    pub clock_units: i64,
+    clock_last: Option<i64>,
 }
 
 fn icon_ready(w: &World, house: HouseId, t: TypeRef) -> bool {
@@ -142,7 +146,24 @@ impl Play {
             radar_on,
             waiting: false,
             flash: [None; hud::TABS],
+            clock_units: 0,
+            clock_last: None,
         }
+    }
+
+    /// Advances the result duration's active clock to host time `now_ms`
+    /// (S-0414 claim 23): `active` is false while the game is paused for the
+    /// options menu or has lost focus. The clock stops when play stops.
+    pub fn clock(&mut self, now_ms: i64, active: bool) {
+        if !active || !self.running() {
+            self.clock_last = None;
+            return;
+        }
+        if let Some(u) = self.clock_last {
+            // spec: S-0414 Formulas, result duration (an interval's contribution ⌊v/16⌋ − ⌊u/16⌋ clock units)
+            self.clock_units += now_ms.div_euclid(16) - u.div_euclid(16);
+        }
+        self.clock_last = Some(now_ms);
     }
 
     /// The world.
@@ -226,6 +247,11 @@ impl Play {
         let tick = self.game.world.tick;
         self.messages.retain(|m| m.until > tick);
         self.outcome = self.game.outcome();
+        if let Some(o) = &self.outcome {
+            let listed: Vec<HouseId> = o.results.iter().map(|r| r.0).collect();
+            // spec: S-0414 claims 19 and 23, S-0202 claim 16 (the displayed scores, once, after the simulation has stopped)
+            glasnost_sim::econ::stats::finish(&mut self.game.world, &listed);
+        }
     }
 
     /// Issues orders in the local house's name; returns how many the
@@ -516,12 +542,12 @@ impl Play {
         }
     }
 
-    /// The end screen, once the game is over (S-0414). `period_ms` is the
-    /// paced period of a tick (S-0201 claim 4).
-    pub fn end(&self, period_ms: i64) -> Option<End> {
+    /// The end screen, once the game is over (S-0414), with the active
+    /// clock's duration (claim 23).
+    pub fn end(&self) -> Option<End> {
         self.outcome
             .as_ref()
-            .map(|o| End::from_world(&self.game.world, o, Some(self.local), period_ms))
+            .map(|o| End::from_world(&self.game.world, o, Some(self.local), self.clock_units))
     }
 }
 
