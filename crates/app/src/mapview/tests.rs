@@ -965,7 +965,8 @@ fn hostile_maps_build() {
 
 /// spec: S-0105 claims 32, 34 and S2 (the depth-buffered mode is off between draws, drawn
 /// frames and games: shadows never turn it on and a depth-option part's draw ends with it off;
-/// lead-confirmed departure), claim 26 (our engine empties the image caches when a game starts)
+/// lead-confirmed departure), claim 26 (our engine empties the image caches when a game starts);
+/// S-0106 claim 12 (no shadow enables depth mode)
 #[test]
 fn voxel_canvas_carries_over_between_games() {
     use glasnost_render::voxel::{Mat34, VoxelCanvas, VoxelModel, VoxelQuirks};

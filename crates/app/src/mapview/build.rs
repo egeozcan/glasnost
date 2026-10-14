@@ -3631,7 +3631,8 @@ mod shadow_tests {
 
     /// spec: S-0105 claims 31, 39 (the cache keeps the unmasked footprint; the current
     /// completed part image is excluded on every appearance, fresh or reused, so no old-pose
-    /// cutout persists; lead-confirmed departure)
+    /// cutout persists; lead-confirmed departure), S-0106 claim 11 (every vehicle shadow excludes
+    /// the current own-part image)
     #[test]
     fn cutouts_follow_the_current_parts() {
         let mut scene = Scene::default();
