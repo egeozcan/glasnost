@@ -2,11 +2,11 @@
 id: S-0210
 title: Crushing (who crushes whom, when, the outcome, walls, warnings, slowdown and automatic crushing)
 topic: movement
-revision: 16
+revision: 17
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-13
+approved-on: 2026-10-14
 measurements: []
 requests: [Q-0020, Q-0036]
 supersedes: []
@@ -134,10 +134,17 @@ S-0107: *crushable* (the flag), *deploying*. Terms used by this spec:
    two deep is never crushed, because its reference point is about 181 leptons from the centre of
    each of its cells. A crusher on a bridge deck crushes in the bridge-deck layer, one under the deck
    crushes in the ground layer.
+
+   When a driving harvester gives the track-completion arrival report of S-0402 claim 10,
+   that report's result is visible before the cell-centre crushing of this claim and claim 8
+   on the same tick. In particular, an accepted report can have queued *unload* before a
+   crushable overlay at the arrival cell is crushed. This is separate from claim 9's
+   cell-boundary crush-slowdown effects, which can already have occurred while the track
+   was still running.
    - Backing: `measurable` (scenario K2 parts a and c; K1 part i for buildings; K10 part d, runs d2 and d3, for the
-     bridge-deck layer)
+     bridge-deck layer; S-0402 scenario H14 for the arrival-report ordering)
    - Confidence: high for the 128-lepton rule and the cell layer, medium for "only at cell centres"
-     and for the reference point of a building
+     and for the reference point of a building; high for the arrival-report ordering
 
 4. **The outcome.** A crushed object is removed from the game on the same tick. It takes no damage,
    no warhead is applied, it shows no death sequence and leaves no corpse or death animation. The
@@ -531,6 +538,9 @@ applies. Unit: fraction of full speed.
 | crush-slowdown state, crusher | crushes an overlay or wall | state off |
 
 Ordering stated as consequences:
+- A driving harvester's track-completion arrival report has its result before cell-centre
+  crushing on that tick (claim 3; S-0402 claim 10 and scenario H14). Boundary-triggered
+  crush slowdown (claim 9) is a separate event that can have happened earlier on the track.
 - On a tick on which a crusher reaches a cell centre that holds both a crushable overlay and
   crushable units, the overlay and the units are all crushed on that tick. The body tilt that claim 6 requires to be level includes the overlay's change of claim 8, so a crusher that is level just before and crushes a vehicle there pitches back, not forward (scenario K8 part c). The draws of F3 for the neighbouring walls are taken from the scenario random stream on that
   same tick, in the direction order of F3; the random-state recorder shows them (K4 part c). This
@@ -769,6 +779,15 @@ type of index 0" means the overlay type with registration index 0 in the data in
   at 128 leptons or more disappears, one inside *X* at less than 128 survives that tick, or one in *W*
   disappears. (d) a unit that is still falling disappears when the crusher reaches the centre, or
   the landed control survives.
+
+**Arrival-report ordering (claim 3).** Use S-0402 scenario H14's driving-harvester setup,
+procedure, recorder and runs, including its crushable-overlay arrival-cell variant. The
+observable is the queued behaviour relative to the overlay's crush sound and body-tilt change
+on the arrival tick. Expected: the arrival report's result, including queued *unload* for an
+accepted report, is already present when the overlay is crushed. Crushing before that report's
+result falsifies the ordering. A run that cannot establish the relative order decides nothing.
+Boundary-triggered slowdown, if present, may begin before arrival and does not count as
+cell-centre crushing.
 
 **Scenario K3: the vehicle thief (claim 5, listing order).**
 - *Setup:* a straight corridor one cell wide, closed at one end. Counting from the closed end, the
