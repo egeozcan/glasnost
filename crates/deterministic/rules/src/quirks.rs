@@ -812,6 +812,17 @@ pub struct Quirks {
     // spec: S-0402 claim 14
     #[serde(default = "on")]
     pub slave_kick_delay_wraps: bool,
+    /// A deployed slave miner whose long scan finds no field, or whose site
+    /// search finds no site, still makes the F7 comparison with cell (0, 0)
+    /// for the missing result; off: either failure leaves it deployed.
+    // spec: S-0402 claim 25
+    #[serde(default = "on")]
+    pub slave_relocation_failed_search_origin: bool,
+    /// A slave of negative storage stays in *harvest* on its resource cell
+    /// without loading; off: it is treated as a slave of storage 0.
+    // spec: S-0402 claim 26
+    #[serde(default = "on")]
+    pub slave_negative_capacity_stalls: bool,
     /// Every factory building of the kind counts for the several-factories factor, also those that cannot make the item.
     // spec: S-0403 claim 6
     #[serde(default = "on")]
@@ -1371,6 +1382,8 @@ impl Default for Quirks {
             zero_load_period_stalls: true,
             unload_without_contact_stalls: true,
             slave_kick_delay_wraps: true,
+            slave_relocation_failed_search_origin: true,
+            slave_negative_capacity_stalls: true,
             multiple_factory_counts_all: true,
             build_step_period_cap: true,
             resume_restarts_step: true,
@@ -1935,6 +1948,14 @@ impl Quirks {
                 self.unload_without_contact_stalls,
             ),
             ("slave_kick_delay_wraps", self.slave_kick_delay_wraps),
+            (
+                "slave_relocation_failed_search_origin",
+                self.slave_relocation_failed_search_origin,
+            ),
+            (
+                "slave_negative_capacity_stalls",
+                self.slave_negative_capacity_stalls,
+            ),
             (
                 "multiple_factory_counts_all",
                 self.multiple_factory_counts_all,

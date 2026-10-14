@@ -2,8 +2,8 @@
 id: S-0101
 title: Isometric projection, height lift, view position and scroll limits
 topic: rendering
-revision: 7
-sources-class: [decomp]
+revision: 8
+sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
@@ -19,9 +19,16 @@ supersedes: []
 How a world position (leptons, with height) becomes a pixel position in the battlefield view, how
 terrain, overlays and objects are lifted by height, how the view position is chosen and limited by the map's
 local area, and how a screen pixel is turned back into a ground position or a cell for the cursor.
-Projection and picking calculations state their number domains and rounding. Edge and keyboard
+Projection and picking calculations state their number domains and rounding. Edge, right-drag and keyboard
 scrolling specify their displacement, acceleration and relation to game speed and freezes.
 This spec covers skirmish; network games and campaigns are out of scope.
+
+**Cross-spec correction required at hand-off.** S-0102's height-lift term still describes
+floating-point lift and gives *L*(400) = 57 pixels. It must instead use claim 3's exact lift,
+which gives 58 pixels. S-0102 claims 11 and 13 must use that same integer in their depth biases.
+Its height examples and scenarios must follow it. Its overlay-lift quirk's rationale that
+whole-level object and overlay lifts differ is obsolete under claims 3–4 and 11 here.
+Hand off the reconciled texts together; the exact lift is the rule, not an unresolved choice.
 
 ## Terms
 
@@ -33,7 +40,7 @@ Terms used as defined in the shared glossary: *cell*, *lepton*, *height level*, 
 | Term | Meaning |
 |---|---|
 | trunc₀ | Truncation toward zero: trunc₀(2.7) = 2, trunc₀(−2.7) = −2. |
-| rz<sub>d</sub>(*v*) | *v* rounded toward zero to a double-precision value (F2, F6). |
+| rz<sub>d</sub>(*v*) | *v* rounded toward zero to a double-precision value (F6, F9, F10). |
 | rz<sub>s</sub>(*v*) | *v* rounded toward zero to a single-precision value (F6). |
 | world pixel (*q<sub>x</sub>*, *q<sub>y</sub>*) | Integer pixel position in an unbounded plane that contains the whole map, *q<sub>x</sub>* growing to the right and *q<sub>y</sub>* downwards. The battlefield view shows a window of it. |
 | battlefield view | The part of the game screen that shows the map, without the sidebar and the strip above it. |
@@ -42,17 +49,16 @@ Terms used as defined in the shared glossary: *cell*, *lepton*, *height level*, 
 | view centre | The world pixel the battlefield view is centred on. It is the view's only position state. |
 | view origin *O* | The world pixel shown at view pixel (0, 0). World pixel = view pixel + *O*. |
 | height lift *L(z)* | Number of pixels a point at world height *z* is drawn above its ground projection. |
-| exact scale | 15 pixels per 104 leptons of height, rounded half up: ⌊15·*z*/104 + ½⌋ pixels for a world height of *z* leptons. Used only as a comparison for *L(z)*. |
+| drawn extent | The set of view pixels covered by an object's current image and shadow before view clipping, including image placement and height lift; selection and status markers are not included. |
 | flat-ground cell under a pixel | The cell that F7 gives for a view pixel or world pixel: the cell whose ground would be drawn there if it were at height level 0, whatever its actual height. |
 | probe rows | For a cursor at view pixel (*x*, *y*), the 180 view pixels (*x*, *y* + 1) … (*x*, *y* + 180) directly below it in its column (claim 10, F8). |
 | ground box | The box in world leptons, given by F4a, that claim 6 tests an object's ground position against. |
-| screen band | The band of view pixels, given by F4b, that claim 6 tests the view pixel of an object's position against. |
+| extent test | The view-intersection test of F4b for an object's drawn extent. |
 | animated terrain object, terrain object that is not animated | The two groups of terrain objects distinguished by S-0102. Terrain objects that are not animated are painted in the cell pass; animated terrain objects are drawn as objects. S-0102 claim 23 specifies which terrain objects belong to each group. The on-screen tests for animated terrain objects are given in claim 6. |
 | cell pass, object pass | The two drawing passes that S-0102 distinguishes, in S-0102's wording. Which images each pass draws is S-0102's to say. Claim 6 names the ones this spec relies on. |
 | bib (of a building) | A part of a building's image, in S-0102's wording. S-0102 defines it. This spec says only that the cell pass paints it (claim 6). |
 | *M<sub>w</sub>* | The map width of the map size (S-0009 writes it *W*; here *W* is the view width). |
 | (*V<sub>x</sub>*, *V<sub>y</sub>*, *V<sub>w</sub>*, *V<sub>h</sub>*) | The four numbers of the local area: left, top, width, height. As for the map size, horizontal numbers count cell widths (60 world pixels each) and vertical numbers count cell heights (30 world pixels each). |
-
 | scroll index *r* | The player's scroll-speed setting, 0 fastest to 6 slowest. Distinct from game speed. |
 | edge momentum *a* | Non-negative integer controlling edge-scroll acceleration and run-on (F9), initially 0 at game start. Not a world velocity. |
 | client pixel | Pixel measured from the game window's client top-left, including the sidebar and the strip above the battlefield. Client width and height are *B*, *C*. |
@@ -72,37 +78,16 @@ Terms used as defined in the shared glossary: *cell*, *lepton*, *height level*, 
    translation-symmetric across the diagonal. See quirk `quirks.projection_truncates_toward_zero`.
    - Backing: `measurable` (scenario M1b)
    - Confidence: high
-3. **Object height lift.** An object at world height *z* (leptons) is drawn *L(z)* pixels higher than
-   its ground projection, with *L* given by F2. *L* is not exactly 15 pixels per 104 leptons: it is
-   computed in floating point with a slightly-too-small scale, a +1 correction from 728 leptons
-   upwards, and truncation toward zero. For heights that are whole multiples of 104 leptons it equals
-   15 × level for levels 0 to 19. From level 20 (2080 leptons) upwards it falls below that: 299
-   instead of 300 at level 20, 503 instead of 505 at 3500 leptons. Compared with the exact scale
-   (Terms), as follows from F2 and checked for every integer height in each range:
-   - from 0 to 2079 leptons, *L(z)* differs from it by at most one pixel, in either direction, and
-     only at heights that are not whole multiples of 104 leptons.
-   - from 2080 leptons upwards, *L(z)* is never above it and is often below it: one pixel below at
-     2080 leptons, equal at 2081 leptons, at most two pixels below anywhere up to 3500 leptons, and
-     the largest shortfall over a range of heights grows with the height.
-   - below 0 leptons, *L(z)* is never below it and is often above it, that is closer to zero,
-     because the final step truncates toward zero: at most 4 pixels above from −3000 to −1 leptons,
-     and up to 11 pixels above at −13 312 leptons (level −128).
-
-   See quirk `quirks.height_lift_float_scale`.
-   - Backing: `measurable` (scenario M2, at the sample heights it uses; the range bounds above
-     follow from F2 and hold whenever it does)
+3. **Object height lift.** An object at integer world height *z* leptons is drawn *L(z)* pixels
+   above its ground projection, using the exact rational scale and rounding in F2.
+   This is a departure confirmed by the project lead: the original's floating-point scale,
+   height-dependent correction and truncation visibly misalign objects with whole-level terrain.
+   - Backing: `measurable` (M2; departure portions tested against this spec, not the original)
    - Confidence: high
-4. **Terrain height lift.** Terrain tiles are lifted by exactly 15 pixels per height level (integer,
-   no rounding). Objects use *L(z)* instead. For whole levels the two agree up to level 19. An object
-   standing on a cell at level 20 or above is drawn one or more pixels lower than the tile's surface:
-   one pixel at level 20, two at level 34. An object standing on a cell below level 0 is drawn
-   higher than the tile's surface: one pixel at levels −1 to −6, two at levels −7 to −19, and up to
-   11 pixels at level −128. Between whole levels (objects on slopes, climbing or falling) the
-   comparison with the exact scale in claim 3 applies: at most one pixel either way from 0 to
-   2079 leptons. From 2080 leptons of world height upwards, flying objects are never drawn higher
-   than the exact scale would put them, and at many heights they are drawn lower: one pixel lower
-   at 2080 leptons, while at 2081 leptons the two agree.
-   - Backing: `measurable` (scenario M2; levels below 0 by M2d)
+4. **Terrain height lift.** Terrain tiles are lifted by exactly 15 pixels per height level
+   (integer, no rounding). Objects at whole-level heights use exactly the same lift, including
+   negative levels. Between levels, objects on slopes, climbing, falling or flying use F2.
+   - Backing: `measurable` (M2; object alignment is a departure tested against this spec)
    - Confidence: high
 5. **Screen position of a point.** The view pixel of a world point is its world pixel (F1) minus the
    view origin. All quantities are integers.
@@ -119,38 +104,42 @@ Terms used as defined in the shared glossary: *cell*, *lepton*, *height level*, 
      lie about *H* − *W*/4 pixels above the view. Its lower edges lie at least about *H* + 1.25·*W* pixels
      below the view's bottom edge, and its side corners lie more than 3·*H* pixels beyond each side
      edge.
-   - **Screen band (vehicles, infantry, aircraft, projectiles, and every kind not listed below).**
-     The view pixel of the object's position, including its height lift, must lie within 360 pixels
-     left or right of the view and 180 pixels above or below it, bounds inclusive (F4b). Animations,
-     animated terrain objects and the parts of a building drawn as objects skip this test: for them
-     the ground box is the only on-screen test. Whether the band decides the markers drawn with a
-     selected building is an open question.
+   - **Drawn extent (vehicles, infantry, aircraft, projectiles, and every kind not listed below).**
+     The object's drawn extent must intersect the view (F4b), regardless of where its projected
+     position lies. Thus an image or shadow enters and leaves smoothly as its pixels cross a view
+     edge. This tests drawing only for objects already in the player's visible area; it never
+     bypasses shroud or fog. Animations, animated terrain objects and the parts of a building drawn
+     as objects skip this additional test: for them the ground box is the only on-screen test.
+     Selection and status markers remain outside this extent rule.
    - **Not decided by these tests.** A building's body, shadow and bib, and terrain objects that are
      not animated, are painted in the cell pass (S-0102), so they are drawn whenever any part of
      them is inside the view, wherever the building's position lies relative to the band or the box.
      The parts of a building drawn as objects are those S-0102 places in the object pass, such as
      voxel turrets.
 
-   An object that fails a test is not drawn at all, together with everything drawn as part of it,
-   its shadow included. For a building this applies only to its parts drawn as objects, not to what
-   the cell pass paints. An image whose position is outside the band is therefore not drawn even if
-   part of it, or its shadow, would be visible. See quirk `quirks.screen_band_tests_position_only`.
+   An object that fails a test is not drawn at all, together with its shadow. For a building this
+   applies only to its parts drawn as objects, not to what the cell pass paints.
+   This is a departure confirmed by the project lead: the original tests the position against a
+   band extending 360 pixels horizontally and 180 vertically beyond the view, causing visible
+   images and shadows to pop when their object's position crosses that band.
    - Backing, by part of the claim:
 
      | Part | Backing |
      |---|---|
-     | The band's bounds, and that aircraft use it | `measurable` (scenario M4a) |
-     | Infantry use it | `measurable` (scenario M4c, if its precondition holds; otherwise unconfirmed) |
-     | Vehicles use it | `measurable` (scenario M4d, if its precondition holds; otherwise unconfirmed) |
-     | Projectiles use it | `measurable` (scenario M4e) |
+     | Extent intersection for aircraft | `measurable` (M4a, departure test against this spec) |
+     | Extent intersection for infantry | `measurable` (M4c, departure test if its precondition holds) |
+     | Extent intersection for vehicles | `measurable` (M4d, departure test if its precondition holds) |
+     | Extent intersection for projectiles | `measurable` (M4e, departure test against this spec) |
      | A building's body is drawn whatever its position relative to the band | `measurable` (scenario M4b, if its precondition holds; otherwise unconfirmed) |
      | Cell-pass building shadows, bibs and non-animated terrain objects are not culled by the band or ground box | `unmeasured`: M4b observes the body only; no scenario here makes these other images reach into the view from beyond either bound |
-     | The parts of a building drawn as objects skip it | `measurable` (scenario M4b, only if the chosen building has such a part inside the view in run 1; otherwise unconfirmed) |
-     | Animations and animated terrain objects skip it | `unmeasured` (reason below) |
-     | Every other kind uses it | `unmeasured` (reason below) |
+     | Building parts drawn as objects are not culled by the original position band | `measurable` (scenario M4b, only if the chosen building has such a part inside the view in run 1; otherwise unconfirmed) |
+     | Building object parts, animations and animated terrain objects skip the extent test | `unmeasured`: M4b distinguishes band culling, not an extent test; no scenario here observes drawing work for a wholly off-screen extent |
+     | Other object kinds use the extent test | `unmeasured` (reason below) |
      | The ground box | `unmeasured` (reason below) |
 
-     Reasons. The band makes a visible difference only for an image, or a shadow, that reaches more
+     The extent-test rows above specify our engine's departure. The unchanged kind exemptions and
+     ground box describe the original. Reasons for their unmeasured parts: the old band makes a
+     visible difference only for an image, or a shadow, that reaches more
      than 180 pixels above or below its position, or more than 360 pixels to one side. The
      measurement setup cannot place an animation at a chosen position, and no stock terrain object
      or animation is known to have an image that large. The other kinds (particles, voxel
@@ -158,20 +147,19 @@ Terms used as defined in the shared glossary: *cell*, *lepton*, *height level*, 
      drawn close to their position. The ground box's edges lie hundreds of pixels outside the view at
      any common view size, so no stock image positioned outside the box can reach into the view. An
      unmodified install cannot report culling decisions directly.
-   - Confidence: high for the band, its bounds, which kinds use it and which skip it. High that a
-     shadow is drawn as part of its object and shares its band test (scenarios M4a and M4c to M4e
-     rely on it). Low that a hovering jumpjet's shadow is drawn on the ground below it; the
+   - Confidence: high for extent intersection and the kind exemptions. High that a shadow is
+     drawn as part of its object (M4a and M4c to M4e rely on it). Low that a hovering jumpjet's shadow is drawn on the ground below it; the
      preconditions of M4c and M4d check this, and it decides only whether those scenarios can test
-     the band. Medium for the exact box (F4a).
+     the extent rule. Medium for the exact box (F4a).
 7. **View origin from view centre.** The game positions the view by its centre. The view origin is
    the view centre minus half the view size, each half truncated (F3). Centring the view on an object
    uses the world pixel of the object's position including its height lift (F1), so an object on high
    ground or in the air appears at the view's centre, not the ground point below it.
-   - Backing: `measurable` (scenario M3c)
+   - Backing: `measurable` (M3c; our engine's airborne lift uses claim 3's departure)
    - Confidence: high
 8. **Scroll limits.** Every time the view centre is set, by scrolling, by centring on an object or at
    the start of the game, each component of the requested centre is limited by F5, independently of
-   the other component. On each axis, with the minimum and maximum of F5, the result is:
+   the other component. On an axis whose maximum is at least its minimum, F5 gives:
 
    | Requested value | Result |
    |---|---|
@@ -185,14 +173,12 @@ Terms used as defined in the shared glossary: *cell*, *lepton*, *height level*, 
    local area's rows, and its bottom edge 60 pixels below their bottom, so the vertical scroll range
    is the local area's height plus 135 pixels. Both margins are fixed. A scroll that would leave this
    range stops at its edge.
-   When the view is larger than the local area on that axis (maximum < minimum), a request below the
-   minimum gives the minimum and **every other request gives the maximum**. Horizontally that means:
-   centring on a point left of the minimum aligns the view's left edge with the local area's left
-   edge, and centring on any other point aligns the view's right edge with the local area's right
-   edge. See quirk `quirks.oversized_view_clamp`.
-   - Backing: `measurable` (scenario M3a, M3b). The vertical oversized case uses M3b's
-     vertical variant; if no accepted map permits its two centre requests, that part is
-     `unmeasured` for the setup limitation stated there.
+   When the view is oversized on an axis (maximum < minimum), the local area is centred on that
+   axis independently of the requested position, using F5's fixed centre; the other axis retains
+   its ordinary limits if it is not oversized.
+   This is a departure confirmed by the project lead: the original chooses contradictory minimum
+   or maximum bounds according to the request, making an oversized view jump.
+   - Backing: `measurable` (M3a for normal limits; M3b is a departure test against this spec)
    - Confidence: high for the formulas and the oversized-view result. Medium for the mapping of the
      map file's numbers onto the rectangle roles, which follows S-0009 and is not yet measured (M3a
      would confirm it).
@@ -240,7 +226,7 @@ Terms used as defined in the shared glossary: *cell*, *lepton*, *height level*, 
       the low cell in front of the cliff. The low cell is selected only by its own flat rows.
     - Scope: this rule holds when none of the probed cells is part of a bridge. Near bridge cells the
       result can differ, and this spec does not specify it (see Open questions).
-    - Backing: `measurable` (scenario M6; the level-0 case by M5)
+    - Backing: `measurable` (scenario M6; the level-0 case by M5, negative levels by M6c)
     - Confidence: high
 11. **Overlay height lift outside bridge-deck cells.** Overlays (walls, fences, ore and gem
     fields, crates and the like) and their shadows are lifted on the screen like terrain tiles:
@@ -249,8 +235,8 @@ Terms used as defined in the shared glossary: *cell*, *lepton*, *height level*, 
       claims 15 and 24. This spec supplies no separate bridge-deck screen-lift formula. Their
       depth and the world height of objects on them remain as specified by S-0102.
     - Consequence outside bridge-deck cells: an overlay stays aligned with its cell's tile at
-      every level. On a cell at level 20 or above, an object standing on the same cell is drawn
-      one or more pixels lower than both (claim 4).
+      every level. Under claims 3–4, an object standing at that cell's whole-level height also
+      stays aligned with both.
     - This claim fixes only how the lift depends on the cell's height level, not the image's
       fixed placement on its cell. The lift is added to the placement specified by S-0102 claim 24.
     - Backing: `measurable` for wall and ore images and any shadows they draw (scenario M2e).
@@ -289,7 +275,8 @@ Terms used as defined in the shared glossary: *cell*, *lepton*, *height level*, 
     opposed arrows cancel on their axis. Mouse and arrow requests add before the next displayed
     view position, subject to F5. Key down/up events take effect when accepted as input, not
     necessarily in the cycle in which the player physically presses/releases them (S-0213
-    claim 1). S-0213 claim 23 owns acceptance of arrow presses and releases during an
+    claim 1). As specified by S-0213 claim 23, these are fallback controls only when no saved
+    command binding conflicts. S-0213 claim 23 owns acceptance of arrow presses and releases during an
     order block, including `quirks.blocked_arrow_events`. A modifier-assisted scroll is
     outside this claim.
     - Backing: `measurable` (M7d, M7e; S-0213 claim 23, scenario O22 for blocked input)
@@ -311,6 +298,23 @@ Terms used as defined in the shared glossary: *cell*, *lepton*, *height level*, 
     - Backing: `measurable` (M7f; S-0213 claim 23, scenario O22 for blocked input)
     - Confidence: high for scrolling suppression and retained state; medium for its visible
       resumption, which depends on accepted input and the pointer's position
+16. **Right-drag scrolling.** S-0214 claim 27 owns activation, the anchor at the accepted press,
+    and release classification. Once that gesture is active and scrolling is permitted, each
+    unfrozen input cycle requests F10's displacement. It has no edge momentum or elapsed-time
+    multiplier and ignores the imported edge-scroll multiplier. Method 0 keeps the pointer at its
+    displaced location and continuously scrolls towards that displacement from the anchor.
+    Method 1 scrolls in the same direction but returns the pointer to the anchor whenever either
+    computed component is nonzero. Method 2 reverses both directions and returns the pointer
+    likewise, so dragging right moves the viewed map imagery right rather than moving the view
+    centre right. Recentring occurs even when F5 prevents actual motion. Near the client edges,
+    outward components receive F10's minimum and fourfold boost. Diagonals retain their separate
+    full components. Order blocks, frozen cycles and stand-stills suppress drag updates as they do
+    edge updates; the gesture's release classification remains S-0214 claim 27's.
+    - Backing: `measurable` (M8) for reachable cases. Full-client edge substitutions and
+      boosts whose anchors cannot be reached are `unmeasured`: M8 records reachability,
+      but normal input cannot place an anchor outside the battlefield view.
+    - Confidence: high for displacement, method direction and recentering; medium for edge
+      boosts in reachable boundary cases
 
 ## Formulas
 
@@ -326,44 +330,15 @@ its top corner (the corner topmost on the screen), world position (256x, 256y), 
 (30(x − y), 15(x + y)). Cell corners and cell centres give numerators that are whole multiples of
 256, so their projections have no fractional part to truncate.
 
-**F2. Object height lift** (*z* in leptons, a signed integer. The original evaluates this in double
-precision):
+**F2. Object height lift** (*z* in leptons, a signed integer; output in pixels):
 
-> *L(z)* = trunc₀( ( *z* · *k* + [*z* ≥ 728] ) + 0.5 )
+> *L(z)* = ⌊15·*z*/104 + ½⌋ = ⌊(30·*z* + 104)/208⌋
 
-- *k* = 0.14350360082660085 pixels per lepton, a double-precision engine constant (see Constants).
-- [*z* ≥ 728] is 1 when *z* ≥ 728, else 0.
-- Number domain and rounding: IEEE double precision, with a 53-bit significand. Write
-  rz<sub>d</sub>(*v*) for *v* rounded **toward zero** to a double-precision value, as the original
-  rounds throughout play (glossary *round-toward-zero mode*). In full, F2 is
-
-  > *L(z)* = trunc₀( rz<sub>d</sub>( rz<sub>d</sub>( rz<sub>d</sub>(*z* · *k*) + [*z* ≥ 728] ) + 0.5 ) )
-
-  The product and each of the two sums is rounded, and the grouping shown is part of the rule:
-  0.5 is added to the rounded sum of the product and [*z* ≥ 728]. The final conversion truncates
-  toward zero, so negative heights move toward 0: *L*(−104) = −14, not −15.
-- The rounding mode of the three double-precision steps does not change *L(z)* at any height a map
-  can produce: rounding to nearest (ties to even) at the product and at both sums, followed by the
-  same final truncation, gives the same *L(z)* as rounding toward zero for every integer *z* from
-  −300 000 to 300 000 leptons, checked with exact arithmetic for each step. Cell heights lie
-  within levels −128 to 127 (S-0009), that is −13 312 to 13 208 leptons. An implementation may
-  therefore use either mode at those three steps. The final conversion must truncate toward zero.
-  The program-wide mode and its switch `quirks.chop_rounding` belong to S-0205 (number domains). This spec defines no switch for it, and at every height a map can produce *L(z)* is
-  the same whichever way that switch is set.
-- *k* is (60 / *D*) × *s*, each step rounded to double precision, with 60 in pixels. Here
-  *D* = 362.0386657714844 leptons is the single-precision value nearest to 256·√2 (exact:
-  362.0386719675…), and *s* = 0.865897536277771 (dimensionless) is the slightly inexact single-precision value the original uses for sin 60° (exact: 0.8660254…).
-  Both roundings give the same *k*. *k* is slightly below 15/104 mainly because of the formula
-  itself: with the exact 256·√2 and sin 60°, (60 / (256·√2)) × sin 60° = 30·√(3/2) / 256 ≈
-  0.1435248 pixels per lepton, already below 15/104 ≈ 0.1442308. Together, the single-precision *D*
-  and *s* lower it only slightly further, to *k*.
-
-Check values: *L*(0) = 0, *L*(3) = 0, *L*(4) = 1, *L*(103) = 15, *L*(104) = 15, *L*(727) = 104,
-*L*(728) = 105, *L*(1456) = 210, *L*(1500) = 216, *L*(2000) = 288, *L*(2080) = 299 (not 300),
-*L*(3000) = 432, *L*(3500) = 503, *L*(−1) = *L*(−3) = *L*(−4) = 0.
-
-An implementation may tabulate *L* over the height range it supports, or evaluate F2 in double
-precision with *k* as given, rounding either toward zero or to nearest at the three inner steps.
+Exact rational arithmetic, rounded to the nearest integer with ties towards positive infinity,
+including negative heights. There is no floating-point rounding site in this departure.
+For every integer level *h*, *L*(104·*h*) = 15·*h*.
+Check values: *L*(−104) = −15, *L*(−4) = −1, *L*(0) = 0, *L*(400) = 58,
+*L*(416) = 60, *L*(1000) = 144, *L*(2080) = 300, *L*(3500) = 505.
 
 **F3. View origin** (integers. Centre and origin in world pixels, *W* and *H* in screen pixels):
 
@@ -381,10 +356,16 @@ screen pixels. X, Y and the X and Y components of *G* are in leptons):
 
 The box follows the current origin in every drawn frame.
 
-**F4b. Screen band** (integers. (*s<sub>x</sub>*, *s<sub>y</sub>*) is the view pixel of the
-object's position: F1 including *L(z)*, minus *O*):
+**F4b. Drawn extent intersection** (integer view-pixel coordinates, departure).
+Let *E* be the object's drawn extent and *R* the view's pixel set:
 
-> −360 ≤ *s<sub>x</sub>* ≤ *W* + 360  and  −180 ≤ *s<sub>y</sub>* ≤ *H* + 180
+> *R* = pixels (*x*, *y*) with 0 ≤ *x* < *W* and 0 ≤ *y* < *H*
+>
+> passes ⇔ *E* ∩ *R* is not empty
+
+A shadow belongs to *E* even if the object's body lies wholly outside *R*. The ground box of
+F4a and the visibility rules remain separate prerequisites. This criterion does not prescribe
+how an implementation calculates the extent.
 
 **F5. Scroll limits for the view centre** (integers, all in world pixels):
 
@@ -396,13 +377,23 @@ object's position: F1 including *L(z)*, minus *O*):
 >
 > y<sub>max</sub> = y<sub>min</sub> + 30·*V<sub>h</sub>* + 135 − *H*
 
-For one axis, with requested value *c*, minimum *m* and maximum *M*, the result is
+For a non-oversized axis (*M* ≥ *m*), with requested value *c*, minimum *m* and maximum *M*,
+the result is
 
 > limit(*c*) = *m* for *c* < *m*,  limit(*c*) = min(*c*, *M*) for *c* ≥ *m*.
 
 The result is (limit(centre<sub>x</sub>) with x<sub>min</sub>, x<sub>max</sub>; limit(centre<sub>y</sub>)
-with y<sub>min</sub>, y<sub>max</sub>). The two axes do not affect each other. When *M* ≥ *m*, limit
-is the ordinary clamp. When *M* < *m*, limit(*c*) = *m* for *c* < *m* and *M* for every *c* ≥ *m*.
+with y<sub>min</sub>, y<sub>max</sub>) on non-oversized axes. The two axes do not affect each
+other; each oversized axis independently uses the replacement below.
+When *M* < *m*, the result instead ignores *c* and uses the local area's geometric centre:
+
+> horizontal centre = 30·(2·*V<sub>x</sub>* − *M<sub>w</sub>* + *V<sub>w</sub>*)
+>
+> vertical centre = 15·(*M<sub>w</sub>* + 2·*V<sub>y</sub>* + *V<sub>h</sub>*)
+
+These are exact integers. The vertical centre is the midpoint of the local area's rows,
+not the midpoint of the asymmetric scroll margins. The oversized condition on the vertical
+axis remains 30·*V<sub>h</sub>* + 135 < *H*, consistent with its ordinary scroll range.
 
 With the centre at x<sub>min</sub>, the view's left edge is at world column 60·*V<sub>x</sub>* −
 30·*M<sub>w</sub>* (the local area's left edge). At x<sub>max</sub>, the view's right edge is 60·*V<sub>w</sub>*
@@ -513,6 +504,34 @@ A fresh, uninterrupted edge hold at paced speeds therefore uses table indices
 trunc₀(rz<sub>d</sub>(*T(r + 1)* × μ)) pixels per cycle. The original's clock is
 ⌊host milliseconds / 16⌋, as in S-0201; this clock affects local camera acceleration only.
 
+**F10. Right-drag displacement** (claim 16). The anchor (*bₓ*, *bᵧ*) and sampled pointer
+(*pₓ*, *pᵧ*) are integer view pixels; their raw difference is (*δₓ*, *δᵧ*).
+For a zero horizontal difference, substitute −1 at *bₓ* = 0 or +1 at *bₓ* ≥ *B* − 1.
+For a zero vertical difference, substitute −1 at *bᵧ* = 0 or +1 at *bᵧ* ≥ *C*.
+Otherwise keep the difference. The use of full-client dimensions with view-relative anchors
+is intentional and describes the original's reachable edge boosts.
+
+For either axis let *b* be that anchor component, *δ* its substituted difference, and *N*
+its full-client dimension (*B* or *C*). Its boosted difference is
+
+> *e* = −4·max(5, |*δ*|) when *b* < 10 and *δ* < 0
+>
+> *e* = 4·max(5, *δ*) when *b* > *N* − 10 and *δ* > 0
+>
+> *e* = *δ* otherwise.
+
+All these operations are exact integers. With scroll index *r* from 0 to 6, define
+
+> *g* = rz<sub>d</sub>(*K*/(*r* + 1))
+>
+> magnitude on an axis = |trunc₀(rz<sub>d</sub>(*e*·*g*))| pixels per cycle.
+
+*K* = 1 for method 0 and 12 for methods 1 and 2. The direction is the sign of *e* for
+methods 0 and 1, and its opposite for method 2. A zero component requests zero. The original
+uses double precision, rounding each division and multiplication towards zero before the
+final truncation (S-0205 claim 1); methods 1 and 2 recenter when the sum of the two magnitudes
+is positive, before clipping the view request by F5. There is no diagonal normalisation.
+
 ## Constants
 
 | Name (ours) | Value | Unit | Notes |
@@ -522,9 +541,10 @@ trunc₀(rz<sub>d</sub>(*T(r + 1)* × μ)) pixels per cycle. The original's cloc
 | leptons per height level | 104 | leptons | Fixed |
 | cell diamond | 60 × 30 | pixels | Width × height of one cell's footprint |
 | terrain lift per level | 15 | pixels | Exact integer, terrain tiles only |
-| object lift scale *k* | 0.14350360082660085 | pixels per lepton | Double precision. 15/104 would be 0.1442307… |
-| lift correction threshold | 728 | leptons | 7 levels. Adds 1 before truncation |
-| on-screen band | 360 horizontal, 180 vertical | pixels | Margins beyond the view on each side (F4b) |
+| object lift scale | 15/104 | pixels per lepton | Exact rational, departure (F2) |
+| drag edge region | 10 | pixels | Strict comparisons in F10 |
+| drag minimum outward displacement | 5 | pixels | Before the fourfold boost |
+| drag edge boost | 4 | multiplier | Applied before method scaling |
 | ground box anchor points | (trunc₀(*W*/2), −*H*), (2*W*, trunc₀(*H*/2)), (−*W*, trunc₀(*H*/2)) | pixels from the view origin | F4a. The box spans twice the distance from the first point to the other two |
 | scroll top margin | 75 | pixels | The "− 5" term of y<sub>min</sub> (5 × 15) |
 | scroll bottom extra | 135 | pixels | Added to the vertical range |
@@ -553,26 +573,17 @@ part of the request that was cut off.
   off, an object at a position with X < Y moves one pixel left wherever 30·(X − Y)/256 is not a
   whole number. Terrain tiles do not move, because cell corners and centres project without a
   fractional part (F1).
-- **`quirks.height_lift_float_scale`** (default: on). Object height lift uses F2. Alternative: exact
-  *L(z)* = ⌊15·*z*/104 + ½⌋ (the exact scale), which keeps objects standing on whole levels aligned
-  with the terrain at every level. With the quirk on, flying units and units on very high terrain
-  sit up to a few pixels lower than the exact scale would put them (for example 299 instead of 300
-  pixels at 20 levels), and units below level 0 sit higher than it (claims 3 and 4).
 - **`quirks.screen_to_ground_not_exact_inverse`** (default: on). F6 with the constant *a* and
   truncation. Alternative: an exact inverse that returns a point whose projection is the input pixel.
   With the quirk off, the cell under a pixel is still given by F7's pixel formula, so only the
   lepton position returned changes. No observable difference in play is known
   (claim 9).
-- **Rounding mode.** F2, F6 and the scroll calculations in F9 use floating point during play (the
-  derivation of *k* in F2 gives the same *k* in either mode). They rely on the
+- **Rounding mode.** F6 and the scroll calculations in F9 and F10 use floating point during play.
+  They rely on the
   program-wide *round-toward-zero mode* (glossary), whose single switch `quirks.chop_rounding`
   belongs to S-0205 (number domains). This spec defines no switch of its own for it. The
-  mode does not change *L(z)* at any height a map can produce (F2). With the mode on, F6 equals its exact formula; rounding to
+  height lift F2 is exact and independent of this mode. With the mode on, F6 equals its exact formula; rounding to
   nearest would move about 0.14 % of its lepton results by one lepton and no cell (F6).
-- **`quirks.oversized_view_clamp`** (default: on). When the view is larger than the local area on
-  one axis, F5 gives the minimum for requests below it and the maximum for every other request
-  (claim 8). Alternative: centre the local area in the view on that axis, so that every request
-  gives the same position.
 - **`quirks.cursor_probe_depth_180`** (default: on). The cell under the cursor is found from at most
   180 probe rows below the cursor (claim 10), so for a cell at height level 13 or above the pick
   no longer follows its drawn lifted diamond. Alternative: probe at least 15 × (the highest height
@@ -580,19 +591,8 @@ part of the request that was cut off.
   and the pick follows every drawn lifted diamond. On a map whose cells are all at level 12 or
   below, both settings give the same cell for every cursor pixel. Scenario M6b tests the default.
   The result its falsifier names (a lift of 210 px at level 14) is the result with the quirk off.
-- **`quirks.screen_band_tests_position_only`** (default: on). The screen band (F4b) tests only the
-  view pixel of the object's position, so an object of a band-tested kind, and its shadow, pop into
-  view when that position enters the band, even if part of the image or shadow would have been
-  visible earlier (scenarios M4a, M4c to M4e). Alternative: draw an object of a band-tested kind
-  whenever any part of its image or its shadow would lie inside the view. The ground box still
-  applies. With the quirk off, a high-flying object's shadow slides in from the view's edge instead
-  of appearing suddenly.
-- **Negative heights.** F2 truncates toward zero. A world height is negative wherever an object is
-  below height level 0, for example on a cell that a map sets below level 0 (a map may use levels
-  down to −128). From −4 leptons downwards, *L(z)* is one pixel smaller in magnitude than rounding the same
-  bracketed value of F2 down would give (*L*(−104) = −14, not −15). From −1 to −3 leptons both give
-  0. Compared with the exact scale, objects below level 0 are drawn higher than their terrain
-  (claim 4). Covered by `quirks.height_lift_float_scale`.
+- **Drawing and camera departures.** Claims 3, 6 and 8 fix presentation-only defects outright,
+  with no quirk switch. Negative whole-level heights align with terrain just as positive ones do.
 - **Negative ground positions.** F7 truncates toward zero, so world positions from −255 to −1 leptons
   on an axis are reported in cell 0 of that axis, not cell −1. Such positions lie outside every map.
 
@@ -605,6 +605,7 @@ part of the request that was cut off.
 | map file, cell data | cell height | height level of each cell (terrain lift, cursor probe) | integer per cell | 0 |
 | settings file, options section | scroll-speed control | scroll index *r* | integer, ordinary control range 0 … 6, fastest … slowest | 3 |
 | rules, `[AudioVisual]` | `ScrollMultiplier` | edge-scroll multiplier μ | floating-point number or percent, as S-0003 | 1.0; later layers retain the value in force |
+| settings file, options section | scrolling-method preference | right-drag method (claim 16, F10) | integer: 0 continuous, 1 same-direction recentered, 2 reverse-direction recentered | 0 |
 
 The scroll-speed control's positions *p* = 0 … 6 (slowest … fastest) set *r* = 6 − *p*.
 There is no rules key for the one-pixel edge, the magnitude table or the unmodified arrow speed.
@@ -622,9 +623,11 @@ game speed, 800×600 unless stated. Each skirmish has the local human-controlled
 bystander computer player, kept outside the observed map area under the glossary's void rule.
 The director and mods are off. Keep the test objects visible and unshrouded throughout each
 observation; fog and shroud are not culling outcomes of claim 6. The observable is a screenshot or a recording of the battlefield
-view. "Pixel position" is read relative to the view's top-left pixel. Rendering and the cursor pick
-are deterministic, so **one run of each scenario is enough**. A second run is useful only to rule out
-a reading mistake.
+view. Departure portions explicitly run on our engine and are tested against this spec rather
+than the original; all other portions measure the original. "Pixel position" is read relative to
+the view's top-left pixel. Rendering and the cursor pick
+are deterministic, so **one run of each condition is enough unless its scenario specifies repeats**.
+A second run otherwise serves to rule out a reading mistake.
 
 - **M1a — ground projection** (claims 1, 5). Setup: a flat purpose-made map, all level 0, clear
   terrain. Place a building with a 1×1 foundation, or another object drawn at its cell centre, in
@@ -657,10 +660,10 @@ a reading mistake.
     building displacement that differs from its level-0 displacement.
   - (b) Setup: a purpose-made map with plateaus at levels 20 and 34, if the game accepts a map with
     such heights. Observable: the building's image position relative to its own cell's tile, compared
-    with the same building on level 0. Expected: 1 px lower at level 20, 2 px lower at level 34.
-    Falsified if either displacement differs from that, for example if the image sits at the same place
-    relative to the tile at both levels (the likeliest failure). If the game rejects the map, record
-    that; (c) remains.
+    with the same building on level 0. Departure test on our engine: expect unchanged
+    image-to-tile placement at levels 20 and 34 compared with level 0. Any pixel difference
+    falsifies F2. This tests this spec, not the original. Record an original fixture rejection
+    separately; (c) remains.
   - (c) Setup: flat map, level 0. A jumpjet hovering in place over the same cell with the same facing
     in five runs. Its jumpjet type's jumpjet cruise height (the height above the terrain at which it
     flies and hovers, so on this map also its world height while hovering) is set, through a test-map
@@ -669,24 +672,29 @@ a reading mistake.
     up-and-down motion. Observable: the vertical distance between its hovering images in the 416 run
     and in each of the other four runs, matched by image pixels. Hovering images are compared only
     with hovering images, because a jumpjet type's unit is drawn differently while it stands on the
-    ground. Expected, with *L*(416) = 60: the 400 run 3 px lower (*L*(400) = 57), the 1000 run 85 px
-    higher (*L*(1000) = 145), the 2080 run 239 px higher and the 3500 run 443 px higher. The exact
-    scale would give 2, 84, 240 and 445. Falsified if any distance differs from 3, 85, 239 or 443.
+    ground. Departure test on our engine, with *L*(416) = 60: expect the 400 run 2 px lower,
+    and the 1000, 2080 and 3500 runs 84, 240 and 445 px higher. Any other distance falsifies F2.
+    This tests this spec, not the original.
   - (d) Levels below 0 (claim 4). The same as (b), with plateaus sunk to levels −1 and −7, if
-    the game accepts a map with such heights. Expected: the building's image is 1 px higher relative
-    to its cell's tile at level −1 and 2 px higher at level −7, compared with level 0. Falsified if
-    either displacement differs from that. If the game rejects the map, record that, and the claim
-    for levels below 0 stays unconfirmed.
+    the game accepts a map with such heights. Departure test on our engine: expect unchanged
+    image-to-tile placement at levels −1 and −7 compared with level 0. Any difference falsifies
+    F2. This tests this spec, not the original. Record an original fixture rejection separately.
   - (e) Overlays (claim 11). Setup: the map of (b), plateaus at levels 0, 20 and 34, with a wall
     segment and a cell of ore placed on a plateau-top cell of each level, next to the building of
     (b). Observable: for each overlay, the vertical distance between its image and its own cell's
     tile, matched by image pixels, compared with the same distance at level 0. The same is read
     for each overlay's shadow, if the chosen types draw one. Expected: no
-    difference at level 20 or 34 (the overlay lifts by exactly 15 pixels per level), while the
-    building of (b) is 1 px lower at level 20 and 2 px lower at level 34. Falsified if either
-    overlay or shadow sits 1 px lower at level 20 or 2 px lower at level 34 (a lift by *L(z)*), or differs
-    from its level-0 distance in any other way. No bridge-deck screen-lift expectation is proposed
+    difference at level 20 or 34 (the overlay lifts by exactly 15 pixels per level). Any
+    overlay or shadow displacement relative to its tile falsifies claim 11. On our engine also
+    require unchanged building placement; this part tests the departure against this spec. No bridge-deck screen-lift expectation is proposed
     here: that behaviour is owned by S-0102 claim 15, not claim 11.
+  - (f) Exact rounding, engine conformance only (claim 3). Use a revealed scene fixture on
+    our engine with identical stationary point images at known integer world heights, a fixed
+    origin and ground projection, and no bobbing or placement shift. Test heights −53, −52,
+    −51, −4, 0, 51, 52 and 53 leptons. Read vertical displacement from the height-0 image.
+    Expected lifts are respectively −8, −7, −7, −1, 0, 7, 8 and 8 pixels. A different
+    displacement falsifies F2, including its negative rounding and positive-infinity tie rule.
+    One run; this is a design-rule test, not an original-game measurement.
 - **M3 — view position and scroll limits** (claims 7, 8).
   - (a) Normal case. Setup: a purpose-made map whose local area is smaller than the map size on all
     sides and larger than the view. Scroll hard to each of the four edges and take a screenshot.
@@ -707,16 +715,15 @@ a reading mistake.
     so the vertical axis is limited normally. Place unit P in the left quarter of the local area and
     unit Q at its right edge, both on level 0 and well inside it vertically. Centre the view on P, take a screenshot, then centre it
     on Q and take another. Observable: the world column of the view's left and right edges in each
-    screenshot. Expected: centred on P, the view's left edge is at the local area's left edge.
-    Centred on Q, the view's right edge is at the local area's right edge, so the view moves left,
-    away from Q. Falsified if centring on P does not put the view's left edge at the local area's
-    left edge, or if centring on Q leaves the view's left edge at the local area's left edge.
+    screenshot. Departure test on our engine: expect the same horizontal origin in both,
+    F5's geometric local-area centre minus trunc₀(*W*/2). Request-dependent movement or another
+    origin falsifies claim 8. Vertical requests retain normal limits.
     Repeat with an area wider than the view but with 0 < 30·*V<sub>h</sub>* + 135 < *H*.
-    Place level-0 units so their requested centre rows are respectively less than y<sub>min</sub>
-    and at or above it, and centre on each. Expected: the first origin row is
-    y<sub>min</sub> − trunc₀(*H*/2), the second y<sub>max</sub> − trunc₀(*H*/2).
-    Falsified if either measured origin differs. If no accepted map permits both requests,
-    this vertical oversized case is `unmeasured`: no setup here then exposes both outcomes.
+    Centre on units in different rows: expect a fixed vertical origin, F5's local-area centre
+    minus trunc₀(*H*/2), while horizontal requests retain normal limits. Also test a view
+    oversized on both axes: every request leaves both origins fixed. One run per shape.
+    Any axis coupling, jump or different fixed centre falsifies claim 8. Oversized outcomes
+    test this spec, not the original.
   - (c) Centring with height. Setup: a large map. A unit standing on a 4-level plateau in the middle
     of the local area, far from every scroll limit, and a unit standing at level 0 likewise.
     Use the same unit type and facing in both places. Centre the view on each in turn. Observable:
@@ -727,19 +734,18 @@ a reading mistake.
     Airborne variant: on flat ground, use the same jumpjet type, facing and cell in two runs,
     hovering without bobbing at 416 and 2080 leptons, set by a named test-map override section as
     in M2c. Centre on it once it is stationary. Expected: the same image feature lands at the
-    same view pixel in both runs. Falsified if it differs, notably by the 239-pixel lift difference
+    same view pixel in both runs. Falsified if it differs, notably by the 240-pixel lift difference on our engine (claim 3's departure)
     that ground-only centring would leave. The cell is far from all scroll limits.
-- **M4 — on-screen band** (claim 6).
+- **M4 — drawn extent** (claim 6). Parts a and c–e test the departure against this spec,
+  not the original; part b retains the original's independently needed building exemption.
   - (a) Setup: flat map. An aircraft flying with a world height *z* of at least 1700 leptons, so that
     *L(z)* ≥ 245 px, set through a test-map override section if needed. It flies straight down the
     screen (map south-east) into the view from above the top edge, with the view fixed. Record every
     drawn frame. Observable: the drawn frame in which its shadow first appears and the shadow's row in
-    that drawn frame. Expected: the shadow appears suddenly, about *L(z)* − 180 px below the top edge,
-    in the drawn frame in which the aircraft's lifted position reaches row −180. It does not slide in from the top
-    edge. Falsified if the shadow's first row differs from *L(z)* − 180 by more than the number of
-    rows the aircraft moves in one drawn frame. The likeliest failure is a shadow that first appears
-    at the top edge and slides in. The aircraft's shadow is drawn as part of the aircraft, so it
-    shares the aircraft's band test.
+    that drawn frame. Expected on our engine: the shadow's first pixels slide in at the top
+    edge as soon as its extent intersects the view, allowing one cycle's movement. It is not
+    withheld until the body's position reaches row −180. Delayed appearance or a missing
+    shadow with any of its pixels inside the view falsifies F4b.
   - (b) Buildings. Setup: a flat purpose-made map, level 0, view fixed. One building, not selected,
     of the tallest building type available, placed in the middle of the local area, far from every
     scroll limit. Its tested position is the centre of its foundation's top-left cell, 15 px below
@@ -767,15 +773,14 @@ a reading mistake.
     the band decides those is an open question.
   - (c) Infantry. Setup: flat map, level 0, view fixed. A unit of a jumpjet infantry type whose
     jumpjet cruise height is set, through a test-map override section, to 2080 leptons, so that
-    *L(z)* = 299 px while it flies. Precondition: with the unit hovering inside the view, its shadow
-    is drawn on the ground about 299 px below its image. If it is not, record that: the scenario
-    then cannot show the band for infantry, and that part of claim 6 stays unconfirmed. Order the
+    *L(z)* = 300 px on our engine while it flies. Precondition: with the unit hovering inside
+    the view, its shadow is drawn on the ground below its image. If it is not, record that: the scenario
+    then cannot test the infantry shadow departure, and that part of claim 6 stays unconfirmed. Order the
     unit to fly straight down the screen into the view from above the top edge, and record every
     drawn frame. Observable: the drawn frame in which its shadow first appears and the shadow's row
-    in it. Expected: the shadow appears suddenly about 119 px (*L(z)* − 180) below the top edge, in
-    the drawn frame in which the unit's lifted position reaches row −180. Falsified if the shadow's
-    first row differs from row 119 by more than the number of rows the unit moves in one drawn frame,
-    in particular if the shadow first appears at the top edge and slides in.
+    in it. Expected on our engine: the shadow slides in as soon as its extent intersects the
+    top edge, allowing one cycle's movement. A shadow withheld until the body's position
+    reaches row −180, or missing with pixels inside the view, falsifies F4b.
   - (d) Vehicles. The same as (c), with a vehicle type made a jumpjet type through the same override
     section: its imported jumpjet flag set, its imported locomotor field set to the jumpjet
     locomotor (the flag alone does not change the locomotor), and its jumpjet cruise height set to
@@ -784,19 +789,17 @@ a reading mistake.
   - (e) Projectiles. Setup: flat map, level 0. An aircraft type that attacks by dropping
     projectiles that fall to the ground, flying at a world height from 2080 to 3300 leptons (set
     through a test-map override section if needed), so that each projectile starts its fall with
-    299 ≤ *L(z)* ≤ 475 px. The projectile's image is a sprite, not a voxel model, and its art leaves
+    300 ≤ *L(z)* ≤ 476 px on our engine. The projectile's image is a sprite, not a voxel model, and its art leaves
     its shadow on (the absent-key default). Two runs with the same map, target, orders and timing.
     Only the fixed view differs. In run 1 the view is placed so that the target's cell is drawn about
     20 px below the view's top edge, in run 2 about 300 px below it. Record every drawn frame.
     Observable: the number of drawn frames from the first drawn frame that shows the falling
     projectile's shadow to the first drawn frame that shows its impact (the impact animation is on
-    the ground, and animations skip the band, so it is visible in both runs). Expected: in run 2 the
-    shadow is drawn for the whole fall, because the projectile's lifted position is at row
-    300 − *L(z)* ≥ −180 for every *z* ≤ 3340 leptons. In run 1 it appears only once 20 − *L(z)* ≥
-    −180, that is once *L(z)* ≤ 200 px (*z* ≤ 1390 leptons), so the run 1 count is clearly smaller.
-    The aircraft and its own shadow are also missing in run 1 while they are above row −180.
-    Falsified if the run 1 count is within one drawn frame of the run 2 count. If run 2 shows no
-    shadow at all, the scenario says nothing about projectiles.
+    the ground, so it is visible in both runs). Expected on our engine, with the shadow's
+    whole ground placement inside both views: equal counts within one drawn frame, including
+    the early fall when the projectile's body is above row −180 in run 1. A shorter run-1
+    count due to the body's position falsifies F4b. If run 2 shows no shadow, the test is
+    inconclusive.
 - **M5 — screen to ground** (claim 9, its cell partition; F7). Setup: flat map, level 0. Scroll to the top-left
   scroll limit so that the view origin is known from F3 and F5 (which M3a checks), or read the origin
   from the cells visible in a screenshot. Put the cursor on exact view pixels,
@@ -840,6 +843,13 @@ a reading mistake.
     drawn diamond of (*n*, *n*) starts 30 rows higher, at 30*n* − 210, so its top 30 rows select
     (*n* − 1, *n* − 1). Falsified if any pixel's cell differs, in particular if the pick follows the
     drawn diamonds (a lift of 210 px).
+  - (c) Non-positive levels. Use a bridge-free flat test map at level −1, then at level −7,
+    with legal, usable cells and a fixed origin read from tile pixels as in M5. If the original
+    rejects either fixture, that level's outcome is `unmeasured` because the setup cannot be
+    reached. Probe a 7×7 pixel square around a cell's drawn top corner and around its unlifted
+    top corner. Expected: every pixel selects F7's flat-ground cell, ignoring the negative
+    height, not the cell whose raised-downward tile covers that pixel. Any different selected
+    cell falsifies claim 10's non-positive-level rule. One run per accepted level.
 
 - **M7 — edge and keyboard scrolling** (claims 12 to 15). Setup: a large flat purpose-made
   skirmish map with a revealed, distinctive tile grid throughout the observation area; begin
@@ -853,6 +863,9 @@ a reading mistake.
     Expected: only the outermost full-client edge starts movement; corners give both components,
     midpoint edges only one. Any motion starting one pixel inward after momentum has expired,
     activation at the internal seam, or a missing corner component falsifies claim 12.
+    Repeat an outermost-edge hold with each mouse button held, without activating a right drag,
+    and during a planning interaction. Exhaust momentum before each run. Expected: no ordinary
+    edge request; motion attributable to edge scrolling falsifies claim 12's exclusions.
   - (b) For each scroll index 0 … 6, hold an edge midpoint and record the first 16 displacements.
     Expected: F9's table sequence, scaled by μ, ending at its stated steady value. Repeat with
     a named test-map override setting μ to 0.1 (invented test value), then μ to 1.0; the
@@ -906,6 +919,29 @@ a reading mistake.
     layer: expect μ = 1.0. Restore all test files afterwards. Another default falsifies
     the import row. This tests defaults, not a stock-data value.
 
+- **M8 — right-drag displacement and preferences** (claim 16). Use M7's large revealed flat
+  map, view away from limits, 800×600, game speed 2, scripted input and frame capture. Choose
+  an interior anchor and begin a drag with a sampled crossing under S-0214 claim 27.
+  For each method 0, 1 and 2 and scroll index 0 … 6, record pointer and view origin every
+  unfrozen cycle. Use unequal raw components such as (17, 11) pixels. Expect F10: method 0
+  repeats displacement while the pointer stays away from the anchor; methods 1 and 2 return
+  it to the anchor on a nonzero request, method 2 reversing both directions. Feed a fresh
+  identical displacement on each later sample to test recentered repetition. Repeat with
+  M7's μ fixtures and speeds 1 and 6: per-cycle amounts are unchanged. One run per condition.
+  Start anchors at view columns 0, 9 and 10 and test outward displacement after activation, then
+  test corresponding reachable vertical edges and client right/bottom regions, recording
+  full-client dimensions and view-relative coordinates rather than assuming all regions are
+  reachable. Expect F10's strict regions, minimum 5 and fourfold boost. Once latched, a zero
+  raw displacement at anchor column 0 gives the substituted outward component.
+  Repeat at a view limit: centre stays bounded but methods 1 and 2 still recenter on a nonzero
+  computed request and release retains selection under S-0214 claim 27. Repeat a drag through
+  M7f's freeze, order block and stand-stills: no updates while suppressed. A different magnitude,
+  diagonal normalisation, multiplier dependence, reversed method 0/1, failure to reverse method 2,
+  recentering on a zero request or suppression failure falsifies the respective rule. Finally
+  remove the saved method at fresh start: expect method 0; any other method falsifies the
+  import default. Unreachable client-edge substitutions and boosts are `unmeasured`:
+  view-relative anchors may not reach the full-client thresholds in the chosen layout.
+
 ## Open questions
 
 - The cell under the cursor when probed cells are part of a bridge (claim 10, scope) is not
@@ -921,7 +957,7 @@ a reading mistake.
   the building's position is in the band, but no scenario checks it yet. The building's body is
   drawn regardless (claim 6).
 - Scroll indices outside 0 … 6, negative or overflowing edge multipliers, modifier-assisted
-  arrow speeds and right-button drag scrolling are not specified by claims 12 to 15. Q-0279's
-  ordinary edge and unmodified-arrow cases are answered; these additional modes remain outside
-  that answer. The oversized-view clamp in claim 8 still applies, but no dedicated measurement
-  here exercises edge momentum with its inverted limits.
+  arrow speeds and right-drag method indices outside 0 … 2 are not specified here. Q-0279's
+  ordinary edge and unmodified-arrow cases are answered; claim 16 adds ordinary right-drag
+  methods. No dedicated measurement exercises edge momentum on an oversized axis, which
+  cannot change its fixed centre under claim 8.

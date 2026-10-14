@@ -2,7 +2,7 @@
 id: S-0203
 title: Tick order
 topic: simulation
-revision: 18
+revision: 19
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -1303,9 +1303,12 @@ rule; V15 specifies controls separating the ordinary poll from the owner-house r
 ## Open questions
 
 - Q-0412 question 1 is answered by claim 12 together with S-0402 claims 21 and 26.
-  Questions 2 to 7 belong to S-0402: claims 21 and 26 already cover them except
-  negative slave capacity in question 4, whose resource and load consequences
-  remain open there. The request must not be closed until that remaining part is answered.
+  Questions 2 to 7 are answered by S-0402 claims 21 and 26. In particular,
+  claim 26 resolves question 4: empty zero-capacity slaves alternate guard and
+  group-driven searches without loading; empty negative-capacity slaves can remain
+  harvesting resource land without changing its resources or their loads. Neither
+  returns merely because its capacity is non-positive. S-0402 claim 26 owns these
+  rules, their quirk alternative, backing and measurement scenario.
 - Network games are out of scope here, as in S-0201 (claim 13) and S-0202 (claim 12). They run the
   same parts of a tick plus some of their own, and take the orders of every player. A future
   multiplayer spec owns them, including their extra draws from the scenario random stream.
