@@ -216,7 +216,9 @@ impl Play {
         let clock = self.status_clock;
         if !self.clock_started {
             // Lines said before the first update (the game's start) are
-            // added at that update's clock count.
+            // added at that update's clock count: the host clock is not
+            // read before it, so this only fixes the count's time base.
+            // spec: S-0213 claim 25 (deadline = clock count when added + 480)
             self.clock_started = true;
             for m in &mut self.messages {
                 m.until += clock;
