@@ -1,9 +1,9 @@
 ---
 id: Q-0270
 title: How a slave miner gets its slaves, and where and when it deploys and moves on
-status: open
+status: answered
 related: [S-0402, S-0215, S-0415, S-0404]
-answered-by: []
+answered-by: [S-0402]
 ---
 
 ## Need
