@@ -12,7 +12,12 @@
 //! - **the reactions**, every tick (no reaction delay): place a finished
 //!   building at once, defend the base against seen enemies near its
 //!   buildings, and rebuild a lost construction yard (build a unit that
-//!   deploys into one, then deploy it).
+//!   deploys into one, then deploy it);
+//! - **selling out**: a house with no income for a long while and too few
+//!   credits for an army unit sells its buildings one by one for their
+//!   refunds and builds army units with them, and builds no more buildings;
+//!   a house with nothing left to fight with sells out, so a game between
+//!   two broke houses still ends.
 //!
 //! It sees only what its own house sees: its own objects and enemy objects
 //! on cells its house has explored (fog of war is off in a skirmish, S-0409
@@ -151,7 +156,7 @@ impl Brain {
                         && deploy::deploys_into(w, o.kind, o.type_index).is_some())
             })
         });
-        if has_yard_or_unit {
+        if has_yard_or_unit || self.script.selling() {
             return;
         }
         // Queued behind what the line holds, once.
