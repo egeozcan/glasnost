@@ -905,6 +905,9 @@ dependencies = [
  "glasnost-map",
  "glasnost-rules",
  "glasnost-sim",
+ "postcard",
+ "serde",
+ "sha2",
 ]
 
 [[package]]
