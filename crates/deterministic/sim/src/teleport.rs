@@ -240,7 +240,7 @@ fn within(p: Pos) -> (i32, i32) {
 
 /// The cell of an object's heading point for S-0208 claim 19's search: its
 /// next movement point, or its own position when it has none.
-fn heading_cell(w: &World, x: ObjectId) -> Option<CellXY> {
+pub(crate) fn heading_cell(w: &World, x: ObjectId) -> Option<CellXY> {
     let o = w.obj(x)?;
     // spec: S-0207 Terms (a drive vehicle's heading point: its track's target; a teleporting object has none, S-0208 claim 19 its own position)
     let track = o

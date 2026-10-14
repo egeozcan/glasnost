@@ -281,7 +281,8 @@ Provisional rules of combat, each tied to a request:
 
 | Where | Interim rule | Request |
 |---|---|---|
-| `combat::range::approach_search`, `approach::search` | the ordinary search of S-0307 claims 15 to 21 is applied unchanged to the cases those claims leave open: close-range types, jumpjet actors (their failure centre included) and destroyable-cliff cell targets; an alternative off the legal cells never passes the clear-cell test | Q-0172 |
+| `combat::range::approach_search` | the two edges S-0307 leaves open: a vehicle alternative off the map's legal cells never passes the clear-cell test; claim 22 (e) withdraws a close-range attacker's own entry on a copy of the cell's record for the clear-cell test, so the order of the cell's occupants never changes | Q-0172 |
+| `approach::shortcut` | after S-0307 claim 22 (b)'s shortcut an infantry unit takes the standing position as its walking target at once: the entries for its old walking target and its own cell are cleared and the position is reserved; its destination is the target's cell. Any other actor only gets the destination | Q-0237 |
 | `combat::range::approach_search` | an alternative outside the usable area fails the clear-cell test's reach-region condition (S-0211's off-map category, S-0212 claims 2 to 4), so `quirks.approach_alternative_outside_area` has no effect | Q-0230 |
 | `process` (area guard) | the processing that takes the actor's own cell as its first guard spot runs none of S-0215 claim 26's leash and search table (no search, no idle action); the table applies from the next processing | Q-0231 |
 

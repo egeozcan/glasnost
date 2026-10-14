@@ -2,9 +2,8 @@
 //! vehicle with a target out of range keeps it, keeps or renews its
 //! destination, or looks for an approach position.
 //!
-//! The approach-position search is S-0307's (claims 15 to 17 and 19 to 21,
-//! `combat::range::approach_search`, request Q-0172 for the cases its
-//! revision leaves open), and so is part h's balloon-hover approach (claim
+//! The approach-position search is S-0307's (claims 15 to 17 and 19 to 24,
+//! `combat::range::approach_search`), and so is part h's balloon-hover approach (claim
 //! 18, `combat::range::balloon_hover_approach`). Part h's crushing
 //! approaches are S-0210 claim 11's.
 //!
@@ -63,7 +62,7 @@ fn deploy_to_fire_refused(w: &World, id: ObjectId) -> bool {
     false
 }
 
-/// The approach-position search of S-0307 claims 15 to 17, started with the
+/// The approach-position search of S-0307 claims 15 to 24, started with the
 /// radius r′ of F10, and its outcome applied (S-0215 claim 37 f, last row).
 fn search(w: &mut World, id: ObjectId, r_prime: i32) {
     use crate::combat::range::Approach;
@@ -74,8 +73,15 @@ fn search(w: &mut World, id: ObjectId, r_prime: i32) {
     };
     let Some(o) = w.obj(id) else { return };
     let (before, t) = (o.dest, o.target);
+    if let Approach::Shortcut(p, c) = outcome {
+        shortcut(w, id, p, c);
+        // spec: S-0107 claim 15 (a destination assigned: the destination-driven get-up)
+        infantry::destination_assigned(w, id, before);
+        return;
+    }
     let Some(ob) = w.obj_mut(id) else { return };
     match outcome {
+        Approach::Shortcut(..) => {}
         // spec: S-0307 claims 15 and 16 (a position found: it becomes the destination and the target is kept)
         Approach::Cell(c) => ob.dest = Some(Target::Cell(c)),
         // spec: S-0307 claim 17 (a hunter-seeker or vehicle thief takes the target object as destination and keeps the target)
@@ -89,6 +95,37 @@ fn search(w: &mut World, id: ObjectId, r_prime: i32) {
     }
     // spec: S-0107 claim 15 (a destination assigned: the destination-driven get-up)
     infantry::destination_assigned(w, id, before);
+}
+
+/// The close-range shortcut's outcome (S-0307 claim 22 b): the movement is
+/// sent to the standing position `p` in the attacker's own cell, its
+/// destination becomes cell `c` and the target is kept. A walker takes `p`
+/// as its walking target and reserves it; any other actor only gets the
+/// destination (interim, request Q-0237).
+fn shortcut(w: &mut World, id: ObjectId, p: Pos, c: glasnost_map::CellXY) {
+    let Some(o) = w.obj(id).cloned() else { return };
+    if let Some(ob) = w.obj_mut(id) {
+        // spec: S-0307 claim 22 (b) (the destination becomes the cell of T; the target is kept)
+        ob.dest = Some(Target::Cell(c));
+    }
+    let Some(walk) = o.walk.as_ref() else { return };
+    let q = w.rules().quirks;
+    let oq = crate::objects::occ_quirks(w);
+    // spec: S-0307 claim 22 (b) (the movement is sent directly to P) and S-0209 claim 1 (the old entry cleared, the new one marked at once)
+    if let Some(old) = walk.target {
+        w.cells.clear_infantry(old.cell(), o.layer, id, oq);
+    }
+    w.cells.clear_infantry(o.pos.cell(), o.layer, id, oq);
+    let (u, v) = (p.x.rem_euclid(256), p.y.rem_euclid(256)); // spec: S-0204 claim 2 (the position within the cell)
+    let mark = crate::walk::position_class(u, v, q.top_position_counts_as_centre);
+    if let Some(h) = o.owner {
+        w.cells.mark_infantry(p.cell(), o.layer, mark, id, h);
+    }
+    let standing = crate::walk::position_class(u, v, false);
+    if let Some(s) = w.obj_mut(id).and_then(|ob| ob.walk.as_mut()) {
+        s.target = Some(p);
+        s.standing = standing;
+    }
 }
 
 /// Whether a vehicle's approach step is replaced by a crushing approach of

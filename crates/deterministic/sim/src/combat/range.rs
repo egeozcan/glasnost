@@ -246,6 +246,10 @@ pub enum Approach {
     /// A position was found: the destination becomes this cell and the
     /// target is kept (claims 15 and 16).
     Cell(CellXY),
+    /// The close-range shortcut (claim 22 b): the movement is sent to this
+    /// standing position in the attacker's own cell, the destination becomes
+    /// this cell and the target is kept.
+    Shortcut(Pos, CellXY),
     /// No position was found by a hunter-seeker or a vehicle thief: the
     /// destination becomes the target object itself and the target is kept
     /// (claim 17).
@@ -276,9 +280,19 @@ const ALTERNATIVES: [(i32, i32); 8] = [
     (0, 0),
 ];
 
-/// The radii of S-0307 F4 for the adjusted reach `r_prime` (ρ′), the
+/// The single radius of a close-range infantry search, leptons.
+// spec: S-0307 claim 22 (a) (332 leptons; u′ compared with 332.8, the same as u′ ≤ 332)
+const CLOSE_RADIUS: i32 = 332;
+/// The largest d₀ of the close-range shortcut, leptons.
+// spec: S-0307 claim 22 (b) (d₀ ≤ 384 leptons)
+const SHORTCUT_REACH: i64 = 384;
+/// The range bypass of a close-range search, leptons.
+// spec: S-0307 claim 22 (d) (at most 307 leptons; compared with 307.2)
+const BYPASS_REACH: i64 = 307;
+
+/// F4's first radius u′ for the adjusted reach `r_prime` (ρ′), the
 /// building lengthening `beta` and whether the actor is infantry.
-pub fn approach_radii(w: &World, r_prime: i32, beta: i32, infantry: bool) -> Vec<i32> {
+fn approach_u_prime(w: &World, r_prime: i32, beta: i32, infantry: bool) -> i32 {
     let mode = w.rules().mode;
     // spec: S-0307 F4 and Constants (margin a: 281.6 leptons for infantry, 179.2 for vehicles, the nearest doubles)
     let margin = if infantry {
@@ -293,7 +307,14 @@ pub fn approach_radii(w: &World, r_prime: i32, beta: i32, infantry: bool) -> Vec
         .to_i32_common()
         .max(0);
     // spec: S-0307 F4 (u′ = 256 when 0 < u ≤ 256, else u)
-    let first = if u > 0 && u <= 256 { 256 } else { u };
+    if u > 0 && u <= 256 { 256 } else { u }
+}
+
+/// The radii of S-0307 F4 for the adjusted reach `r_prime` (ρ′), the
+/// building lengthening `beta` and whether the actor is infantry.
+pub fn approach_radii(w: &World, r_prime: i32, beta: i32, infantry: bool) -> Vec<i32> {
+    let mode = w.rules().mode;
+    let first = approach_u_prime(w, r_prime, beta, infantry);
     // spec: S-0307 F4 and Constants (radii u′, u′ − 256, …, strictly greater than 204.8 leptons)
     let cut = crate::rules::nearest_double("204.8");
     (0..)
@@ -302,32 +323,45 @@ pub fn approach_radii(w: &World, r_prime: i32, beta: i32, infantry: bool) -> Vec
         .collect()
 }
 
-/// The approach-position search of S-0307 claims 15 to 17, for the actor's
-/// current target, started with the adjusted reach `r_prime` (ρ′ of F4,
-/// which is S-0215 F10's r′, so the caller passes the r′ it has worked
-/// out, including that spec's deploy-to-fire replacement).
+/// The approach-position search of S-0307 claims 15 to 17 and 19 to 24,
+/// for the actor's current target, started with the adjusted reach
+/// `r_prime` (ρ′ of F4, which is S-0215 F10's r′, so the caller passes the
+/// r′ it has worked out, including that spec's deploy-to-fire replacement).
 ///
 /// It is meant to be called by S-0215 claim 37's approach step when that
 /// step asks for a search, and only for an infantry unit or vehicle that
-/// has a target. It changes nothing; the caller applies the outcome:
-/// `Cell(c)` sets the destination to `c` and keeps the target,
-/// `TargetItself` sets the destination to the target object and keeps it,
-/// and `Drop(n)` clears the target and sets the destination to `n` (none
-/// clears it). `None`: the actor has no target or no type.
+/// has a target. It takes the position-choice draws of claim 22 (f) and
+/// replaces a destroyable-cliff cell target (claim 23); the caller applies
+/// the outcome: `Cell(c)` sets the destination to `c` and keeps the target,
+/// `Shortcut(p, c)` sends the movement to `p`, sets the destination to `c`
+/// and keeps the target, `TargetItself` sets the destination to the target
+/// object and keeps it, and `Drop(n)` clears the target and sets the
+/// destination to `n` (none clears it). `None`: the actor has no target or
+/// no type.
 ///
-/// Claims 15, 16 and 19 to 21 cover ordinary ground units on any terrain
-/// and near high bridges, object and cell targets, and alternatives
-/// outside the usable area; the same rules are applied meanwhile to
-/// close-range types, jumpjet actors and destroyable-cliff cell targets
-/// (request Q-0172). A failed search centres claim 17's nearby-cell search
-/// on the failure anchor. The regions must be up to date
-/// ([`crate::regions::ensure`]).
-pub fn approach_search(w: &World, id: ObjectId, r_prime: i32) -> Option<Approach> {
-    let r = w.rules();
+/// Every search in our engine may change the actor (S-0307 claim 17): no
+/// rule of ours asks for one that may not. A jumpjet's detour exemption
+/// (claim 24) is a seam, since no jumpjet locomotor moves an object yet.
+/// The regions must be up to date ([`crate::regions::ensure`]).
+pub fn approach_search(w: &mut World, id: ObjectId, r_prime: i32) -> Option<Approach> {
+    let rules = w.rules_arc();
+    let r = &*rules;
     let mode = r.mode;
-    let o = w.obj(id)?;
-    let t = o.target?;
+    let o = w.obj(id)?.clone();
+    let mut t = o.target?;
     let u = r.unit(o.kind, o.type_index)?;
+    if let Target::Cell(c) = t
+        && destroyable_cliff(w, c)
+    {
+        // spec: S-0307 claim 23 (a destroyable-cliff cell target is first replaced by one cell of its tile)
+        t = Target::Cell(cliff_replacement(w, id, c));
+        if let Some(ob) = w.obj_mut(id) {
+            ob.target = Some(t);
+        }
+    }
+    // spec: S-0307 claim 22 (the close-range property)
+    let close = u.raw.close_range.unwrap_or(false);
+    let infantry = o.kind == Kind::Infantry;
     let (_, weapon) = super::weapon::would_use(w, id, Some(t));
     // spec: S-0307 F4 (T: the target's reference point; the attacker's reference point)
     let tp = target_point(w, t);
@@ -339,7 +373,60 @@ pub fn approach_search(w: &World, id: ObjectId, r_prime: i32) -> Option<Approach
             .map_or(0, |x| 64 * (x.foundation.0 + x.foundation.1)), // spec: S-0307 F4 and Constants (β: the building lengthening of claim 9, 64 leptons per foundation cell of width plus height)
         Target::Cell(_) => 0,
     };
-    let radii = approach_radii(w, r_prime, beta, o.kind == Kind::Infantry);
+    let radii = if close && infantry && approach_u_prime(w, r_prime, beta, true) <= CLOSE_RADIUS {
+        // spec: S-0307 claim 22 (a) (close-range infantry with u′ ≤ 332: the single radius 332)
+        vec![CLOSE_RADIUS]
+    } else {
+        approach_radii(w, r_prime, beta, infantry)
+    };
+    // spec: S-0307 claim 22 (f) (the class of T is the desired class of every position choice)
+    let t_class = crate::walk::position_class(
+        tp.x.rem_euclid(256), // spec: S-0204 claim 2 (the position within the cell)
+        tp.y.rem_euclid(256), // spec: S-0204 claim 2 (the position within the cell)
+        true,
+    );
+    let planar = |w: &World, a: Pos, b: Pos| -> i64 {
+        let (dx, dy) = (i64::from(a.x - b.x), i64::from(a.y - b.y));
+        // spec: S-0204 claim 6 (the planar distance: ⌊r(Δx² + Δy²)⌋, the table square root)
+        root_floor(
+            (dx * dx + dy * dy) as u64,
+            w.rules().quirks.table_root_distance,
+            w.rules().mode,
+        ) as i64
+    };
+    if close {
+        // spec: S-0307 claim 22 (b) (q: the centre of the target's cell for a vehicle, infantry unit, aircraft or building, else T)
+        let q = match t {
+            Target::Object(x) => w
+                .obj(x)
+                .filter(|x| {
+                    matches!(
+                        x.kind,
+                        Kind::Vehicle | Kind::Infantry | Kind::Aircraft | Kind::Building
+                    )
+                })
+                .map_or(tp, |x| Pos::centre(x.pos.cell(), 0)),
+            Target::Cell(_) => tp,
+        };
+        let qc = Pos::centre(q.cell(), 0);
+        let own = o.pos.cell();
+        // spec: S-0307 claim 22 (b) (d₀: from the centre of the attacker's cell to the centre of the cell holding q)
+        let d0 = planar(w, Pos::centre(own, 0), qc);
+        if d0 <= SHORTCUT_REACH {
+            // spec: S-0307 claim 22 (b) (P: the position choice in the attacker's own cell, desired point T, its ground record whatever its surface; its own entry counts as taken)
+            if let Some(p) = crate::walk::choose_position(w, own, Layer::Ground, t_class, false) {
+                let (su, sv) = crate::walk::standing_point(p);
+                let (x, y) = (256 * own.x + su, 256 * own.y + sv); // spec: S-0208 table P (a standing position within the cell)
+                // spec: S-0208 claim 1 (the surface height there, 416 above on a bridge deck)
+                let z = w.surface_at(x, y) + if o.layer == Layer::Deck { 416 } else { 0 };
+                let pt = Pos::new(x, y, z);
+                // spec: S-0307 claim 22 (b) (d₁ < d₀: the search ends at once, sent to P with the cell of T as destination; the target is kept)
+                if planar(w, pt, qc) < d0 {
+                    return Some(Approach::Shortcut(pt, tp.cell()));
+                }
+            }
+        }
+    }
     // spec: S-0307 F4 (b: S-0204's 256-step facing of the direction from T to the attacker's reference point)
     let f = glasnost_num::geom::direction(
         i64::from(ap.x - tp.x),
@@ -352,19 +439,42 @@ pub fn approach_search(w: &World, id: ObjectId, r_prime: i32) -> Option<Approach
     let a_cell = ap.cell();
     let t_cell = tp.cell();
     let q = &r.quirks;
-    let clear = |cell: CellXY| -> bool {
+    // spec: S-0307 claim 22 (e) (an attacker in the ground layer has its own occupancy entry withdrawn during each clear-cell test)
+    let withdraw = close && o.layer == Layer::Ground;
+    let own_vehicle_cells: Vec<CellXY> = match o.drive.as_ref() {
+        Some(d) if o.kind == Kind::Vehicle => d.claims.clone(),
+        _ => crate::teleport::mark_cell(w, id).into_iter().collect(),
+    };
+    let clear = |w: &World, cell: CellXY| -> bool {
         // spec: S-0307 claim 19 (a high-bridge cell reads its deck occupancy, the deck bypassing the land multiplier; other cells the ground)
         let deck = w.high_bridge(cell);
         let layer = if deck { Layer::Deck } else { Layer::Ground };
+        let mut rec = w.cells.occ(cell, layer).copied().unwrap_or_default();
+        if withdraw {
+            // The withdrawal is a test on a copy of the record, not a change of the
+            // cell's occupants and their order (open in S-0307, interim, request Q-0172).
+            for m in rec.marks.iter_mut() {
+                if matches!(m, Some(crate::cells::Mark { by: crate::cells::Marker::Infantry(who, _), .. }) if *who == id)
+                {
+                    *m = None;
+                }
+            }
+            if o.kind == Kind::Vehicle
+                && layer == Layer::Ground
+                && own_vehicle_cells.contains(&cell)
+            {
+                rec.vehicles = rec.vehicles.saturating_sub(1);
+            }
+        }
         // spec: S-0307 claims 15 and 19 (a clear cell: enterable by class for its class and zone, an occupancy record empty as a whole, the actor's reach region from its own cell and layer, the candidate's ground-layer region)
         crate::passability::enterable_by_class(r, w, cell, u.class, u.zone, deck)
-            && w.cells.occ(cell, layer).is_none_or(|x| x.empty())
+            && rec.empty()
             && crate::regions::same_region(w, u.zone, o.pos.cell(), o.layer, cell, Layer::Ground)
     };
     // The candidate's height (claim 19): a primary at the terrain height of
     // its centre, 416 leptons up on a high bridge; a vehicle's alternative
     // at world height 0 under `approach_alternative_zero_height`.
-    let height = |cell: CellXY, alternative: bool| -> i32 {
+    let height = |w: &World, cell: CellXY, alternative: bool| -> i32 {
         if alternative && q.approach_alternative_zero_height {
             // spec: S-0307 claim 19 (a vehicle's alternatives keep world height 0; quirks.approach_alternative_zero_height)
             return 0;
@@ -373,17 +483,13 @@ pub fn approach_search(w: &World, id: ObjectId, r_prime: i32) -> Option<Approach
         // spec: S-0307 claim 19 and Edge cases (the terrain height at the cell centre, plus 416 leptons on a high bridge)
         w.surface_at(c.x, c.y) + if w.high_bridge(cell) { 416 } else { 0 }
     };
-    let ranged = |cell: CellXY, alternative: bool| -> bool {
-        // spec: S-0307 claims 15 and 19 (the range test from the candidate's centre with the weapon chosen for the target; the elevation bonus still reads the firer's own cell)
-        in_range(
-            w,
-            id,
-            weapon,
-            Some(t),
-            Some(Pos::centre(cell, height(cell, alternative))),
-        )
+    let ranged = |w: &World, point: Pos| -> bool {
+        // spec: S-0307 claims 15 and 19 (the range test from the candidate's point with the weapon chosen for the target; the elevation bonus still reads the firer's own cell)
+        in_range(w, id, weapon, Some(t), Some(point))
+            // spec: S-0307 claim 22 (d) (a close-range attacker's point within 307 leptons of T passes)
+            || (close && planar(w, point, tp) <= BYPASS_REACH)
     };
-    let usable = |cell: CellXY, alternative: bool| -> bool {
+    let usable = |w: &World, cell: CellXY, alternative: bool| -> bool {
         // spec: S-0307 claim 21 (the usable-area test rejects primaries, not a vehicle's alternatives; quirks.approach_alternative_outside_area)
         (alternative && q.approach_alternative_outside_area) || w.cells.usable(cell)
     };
@@ -395,7 +501,7 @@ pub fn approach_search(w: &World, id: ObjectId, r_prime: i32) -> Option<Approach
     };
     // spec: S-0307 claim 19 and S-0212 claim 7 (the attacker end on its movement layer)
     let a_deck = o.layer == Layer::Deck;
-    let detour = |cell: CellXY| -> bool {
+    let detour = |w: &World, cell: CellXY| -> bool {
         // spec: S-0307 claim 19 (the candidate end on the deck when its cell carries a high bridge)
         let c_deck = w.high_bridge(cell);
         let e = |p: CellXY, pd: bool, q: CellXY, qd: bool| {
@@ -428,31 +534,54 @@ pub fn approach_search(w: &World, id: ObjectId, r_prime: i32) -> Option<Approach
                 .sub(sin_t(theta, mode).mul(rd, mode), mode)
                 .to_i32_common();
             // spec: S-0307 F4 (candidate cell (trunc(x / 256), trunc(y / 256)))
-            let cell = CellXY::new(x / 256, y / 256);
-            if !ranged(cell, false) {
+            let mut cell = CellXY::new(x / 256, y / 256);
+            let point = if close && infantry {
+                // spec: S-0307 claim 22 (c) and (f) (an infantry primary's point: the position choice in the primary cell, desired point T, its ground record; its draw comes before the range test)
+                match crate::walk::choose_position(w, cell, Layer::Ground, t_class, false) {
+                    Some(sp) => {
+                        let (su, sv) = crate::walk::standing_point(sp);
+                        let (px, py) = (256 * cell.x + su, 256 * cell.y + sv); // spec: S-0208 table P (a standing position within the cell)
+                        // spec: S-0307 claim 22 (c) (the surface height at the point, plus 416 leptons on a high bridge)
+                        let z = w.surface_at(px, py) + if w.high_bridge(cell) { 416 } else { 0 };
+                        Pos::new(px, py, z)
+                    }
+                    None => {
+                        // spec: S-0307 claim 22 (c) (no position: the map origin at the surface height there, its cell the cell at (0, 0))
+                        cell = CellXY::new(0, 0);
+                        Pos::new(0, 0, w.surface_at(0, 0))
+                    }
+                }
+            } else {
+                Pos::centre(cell, height(w, cell, false))
+            };
+            if !ranged(w, point) {
                 continue;
             }
             // spec: S-0307 claim 17 (a primary passing the range test is the failure anchor, whether or not it is usable or clear)
             anchor = Some(cell);
             // spec: S-0307 claim 15 (a primary outside the usable area never qualifies)
-            if !usable(cell, false) {
+            if !usable(w, cell, false) {
                 continue;
             }
-            let chosen = if clear(cell) {
+            let chosen = if clear(w, cell) {
                 Some(cell)
             } else if o.kind == Kind::Vehicle {
                 // spec: S-0307 claim 16 (a vehicle: the first alternative that passes the range and clear-cell tests)
                 alternatives
                     .iter()
                     .map(|&(dx, dy)| CellXY::new(cell.x + dx, cell.y + dy))
-                    .find(|&a| usable(a, true) && ranged(a, true) && clear(a))
+                    .find(|&a| {
+                        usable(w, a, true)
+                            && ranged(w, Pos::centre(a, height(w, a, true)))
+                            && clear(w, a)
+                    })
             } else {
                 // spec: S-0307 claim 16 (an infantry unit skips a primary cell that is not clear)
                 None
             };
             // spec: S-0307 claim 16 (only the first qualifying alternative meets the detour limit; when it fails the next primary has preference)
             if let Some(ch) = chosen {
-                if detour(ch) {
+                if detour(w, ch) {
                     return Some(Approach::Cell(ch));
                 }
                 // spec: S-0307 claim 17 (an alternative that failed only the detour limit is the centre; a clear primary that failed it leaves the primary's cell)
@@ -462,13 +591,78 @@ pub fn approach_search(w: &World, id: ObjectId, r_prime: i32) -> Option<Approach
     }
     // spec: S-0307 claim 17 (no position: a hunter-seeker or a vehicle thief takes the target object as its destination and keeps the target)
     let hunter = u.raw.hunter_seeker.unwrap_or(false);
-    if hunter || (o.kind == Kind::Infantry && u.vehicle_thief) {
+    if hunter || (infantry && u.vehicle_thief) {
         return Some(Approach::TargetItself);
     }
     // spec: S-0307 claim 17 (any other actor drops the target; the nearby-cell search is centred on the failure anchor's cell, else on the target's reference cell, with the empty-radius parameters)
     let centre = anchor.unwrap_or(t_cell);
     let nearby = crate::path::nearby(w, centre, crate::path::NearbyUse::Approach { unit: id });
     Some(Approach::Drop(nearby))
+}
+
+/// Whether cell `c` is a destroyable-cliff cell (S-0214 Terms).
+fn destroyable_cliff(w: &World, c: CellXY) -> bool {
+    let Some(cell) = w.cells.cell(c) else {
+        return false;
+    };
+    let cat = w.catalogue.as_deref();
+    let (s, n) = cat.map_or((0, 0), |k| (k.roles.destroyable_cliff, k.tile_count()));
+    // spec: S-0214 Terms (destroyable-cliff cell: s ≤ t ≤ s + 1 and 0 ≤ t < N)
+    cell.tile >= s && cell.tile <= s + 1 && cell.tile >= 0 && cell.tile < n
+}
+
+/// The cell of a destroyable-cliff target's tile that replaces it (S-0307
+/// claim 23): the qualifying tile cell nearest the cell of the attacker's
+/// scatter reference point, ties to the earliest in row-major order, or
+/// the cell at map coordinates (0, 0) when none qualifies.
+fn cliff_replacement(w: &World, id: ObjectId, c: CellXY) -> CellXY {
+    let r = w.rules();
+    // spec: S-0307 claim 23 (no qualifying cell: the cell at map coordinates (0, 0))
+    let origin = CellXY::new(0, 0);
+    let Some(cell) = w.cells.cell(c) else {
+        return origin;
+    };
+    let Some(info) = w
+        .catalogue
+        .as_deref()
+        .and_then(|k| k.tiles.get(usize::try_from(cell.tile).ok()?))
+    else {
+        return origin;
+    };
+    let (width, h) = (i32::from(info.width), i32::from(info.height));
+    if width == 0 {
+        return origin;
+    }
+    let s = i32::from(cell.sub_tile);
+    // spec: S-0307 claim 23 (x₀ = x − (s mod W), y₀ = y − ⌊s / W⌋)
+    let (x0, y0) = (c.x - s % width, c.y - s / width);
+    // spec: S-0307 claim 23 (c: the cell of the attacker's scatter reference point; S-0208 and S-0207 Terms)
+    let from = crate::teleport::heading_cell(w, id).unwrap_or(c);
+    let mut best: Option<(i64, CellXY)> = None;
+    // spec: S-0307 claim 23 (row-major order: increasing j, then increasing i)
+    for j in 0..h {
+        for i in 0..width {
+            let k = usize::try_from(j * width + i).unwrap_or(usize::MAX);
+            let tile_cell = info.has_image && info.cells.get(k).copied().flatten().is_some();
+            let at = CellXY::new(x0 + i, y0 + j);
+            // spec: S-0307 claim 23 (a tile cell inside the usable area qualifies; the map cell is not checked)
+            if !tile_cell || !w.cells.usable(at) {
+                continue;
+            }
+            let (dx, dy) = (i64::from(at.x - from.x), i64::from(at.y - from.y));
+            // spec: S-0307 claim 23 (r((Δx)² + (Δy)²), the table square root of S-0204, in cells)
+            let d = root_floor(
+                (dx * dx + dy * dy) as u64,
+                r.quirks.table_root_distance,
+                r.mode,
+            ) as i64;
+            // spec: S-0307 claim 23 (ties: the earliest in row-major order)
+            if best.is_none_or(|(b, _)| d < b) {
+                best = Some((d, at));
+            }
+        }
+    }
+    best.map_or(origin, |(_, at)| at)
 }
 
 /// Whether a balloon-hover vehicle's approach step takes the target object

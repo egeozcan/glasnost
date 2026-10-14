@@ -7,12 +7,13 @@ use glasnost_num::Rounding;
 use glasnost_num::geom::root_floor;
 use glasnost_rules::schema::Ruleset;
 use glasnost_rules::sim::{Decimal, OverlayType, ProjectileType, WarheadType, WeaponType};
+use glasnost_sim::cells::position;
 use glasnost_sim::combat::ballistics;
 use glasnost_sim::combat::data::leptons;
 use glasnost_sim::combat::range::{firer_weapon_range, in_range, measured_point, source_point};
 use glasnost_sim::rules::Kind;
 use glasnost_sim::testkit;
-use glasnost_sim::world::{Layer, ObjectId, Pos, Target, World};
+use glasnost_sim::world::{HouseId, Layer, ObjectId, Pos, Target, World};
 
 const N: i32 = 40;
 const RZ: Rounding = Rounding::TowardZero;
@@ -991,9 +992,9 @@ fn block(s: &mut S, dx: i32, dy: i32) {
 #[test]
 fn claim_15_open_ground_choice() {
     let r = base("5");
-    let s = approach_setup(&r);
+    let mut s = approach_setup(&r);
     assert_eq!(
-        approach_search(&s.w, s.a, 1152),
+        approach_search(&mut s.w, s.a, 1152),
         Some(Approach::Cell(cell_of(6, 0)))
     );
 }
@@ -1005,12 +1006,12 @@ fn quirk_approach_alternative_walk_on() {
     let mut s = approach_setup(&r);
     block(&mut s, 6, 0);
     assert_eq!(
-        approach_search(&s.w, s.a, 1152),
+        approach_search(&mut s.w, s.a, 1152),
         Some(Approach::Cell(cell_of(6, -1)))
     );
     block(&mut s, 6, -1);
     assert_eq!(
-        approach_search(&s.w, s.a, 1152),
+        approach_search(&mut s.w, s.a, 1152),
         Some(Approach::Cell(cell_of(7, -2)))
     );
 }
@@ -1024,7 +1025,7 @@ fn quirk_approach_alternative_walk_off() {
     block(&mut s, 6, 0);
     block(&mut s, 6, -1);
     assert_eq!(
-        approach_search(&s.w, s.a, 1152),
+        approach_search(&mut s.w, s.a, 1152),
         Some(Approach::Cell(cell_of(7, -1)))
     );
 }
@@ -1041,21 +1042,21 @@ fn claim_16_infantry_skips_an_obstructed_primary() {
     glasnost_sim::regions::ensure(&mut w);
     // Infantry: radius 870 west of the target's centre is cell (7, 0).
     assert_eq!(
-        approach_search(&w, a, 1152),
+        approach_search(&mut w, a, 1152),
         Some(Approach::Cell(cell_of(7, 0)))
     );
     // Blocked: δ = ±1 … ±6 stay in that cell; δ = +8 (170 leptons north) is the next primary, (7, −1).
     testkit::spawn(&mut w, Kind::Vehicle, "BUGGY", 0, cell_of(7, 0), 0);
     glasnost_sim::regions::ensure(&mut w);
     assert_eq!(
-        approach_search(&w, a, 1152),
+        approach_search(&mut w, a, 1152),
         Some(Approach::Cell(cell_of(7, -1)))
     );
     // Both blocked: δ = −8 gives (7, 1), where a vehicle would have taken the alternative (1, −2).
     testkit::spawn(&mut w, Kind::Vehicle, "BUGGY", 0, cell_of(7, -1), 0);
     glasnost_sim::regions::ensure(&mut w);
     assert_eq!(
-        approach_search(&w, a, 1152),
+        approach_search(&mut w, a, 1152),
         Some(Approach::Cell(cell_of(7, 1)))
     );
 }
@@ -1064,8 +1065,8 @@ fn claim_16_infantry_skips_an_obstructed_primary() {
 #[test]
 fn claim_17_failed_search_drops_the_target() {
     let r = base("5");
-    let s = approach_setup(&r);
-    let got = approach_search(&s.w, s.a, 100);
+    let mut s = approach_setup(&r);
+    let got = approach_search(&mut s.w, s.a, 100);
     let Some(Approach::Drop(Some(c))) = got else {
         panic!("{got:?}")
     };
@@ -1079,9 +1080,9 @@ fn claim_17_failed_search_drops_the_target() {
 fn claim_17_hunter_seeker_keeps_the_target() {
     let mut r = base("5");
     r.sim.vehicles.get_mut("CART").unwrap().hunter_seeker = Some(true);
-    let s = approach_setup(&r);
+    let mut s = approach_setup(&r);
     assert_eq!(
-        approach_search(&s.w, s.a, 100),
+        approach_search(&mut s.w, s.a, 100),
         Some(Approach::TargetItself)
     );
 }
@@ -1152,10 +1153,13 @@ fn claim_18_cell_target() {
 fn claim_17_failure_without_an_anchor_centres_on_the_target() {
     use glasnost_sim::path::{NearbyUse, nearby};
     let r = base("0.1");
-    let s = approach_setup(&r);
+    let mut s = approach_setup(&r);
     let want = nearby(&s.w, cell_of(10, 0), NearbyUse::Approach { unit: s.a });
     assert!(want.is_some());
-    assert_eq!(approach_search(&s.w, s.a, 1152), Some(Approach::Drop(want)));
+    assert_eq!(
+        approach_search(&mut s.w, s.a, 1152),
+        Some(Approach::Drop(want))
+    );
 }
 
 /// Turns the cells within `r` (Chebyshev) of `c` into rock.
@@ -1181,7 +1185,7 @@ fn claim_17_failure_anchor_is_the_last_ranged_primary() {
     // test at radius 256 but none is enterable.
     rock(&mut s.w, t, 4);
     assert_eq!(approach_radii(&s.w, 400, 0, false), vec![256]);
-    let got = approach_search(&s.w, s.a, 400);
+    let got = approach_search(&mut s.w, s.a, 400);
     let around = |c: CellXY| nearby(&s.w, c, NearbyUse::Approach { unit: s.a });
     // F4's last primary at radius 256 is a quarter turn off the attacker's
     // bearing: the cell beside the target across the line of approach.
@@ -1201,12 +1205,12 @@ fn claim_19_primary_measured_on_the_deck() {
     let r = base("4.2");
     let mut s = approach_setup(&r);
     assert_eq!(
-        approach_search(&s.w, s.a, 1152),
+        approach_search(&mut s.w, s.a, 1152),
         Some(Approach::Cell(cell_of(6, 0)))
     );
     set_deck(&mut s.w, cell_of(6, 0));
     glasnost_sim::regions::ensure(&mut s.w);
-    let got = approach_search(&s.w, s.a, 1152);
+    let got = approach_search(&mut s.w, s.a, 1152);
     assert!(
         matches!(got, Some(Approach::Cell(c)) if c != cell_of(6, 0)),
         "{got:?}"
@@ -1222,14 +1226,14 @@ fn claim_19_deck_occupancy() {
     set_deck(&mut s.w, c);
     block(&mut s, 6, 0);
     assert_eq!(
-        approach_search(&s.w, s.a, 1152),
+        approach_search(&mut s.w, s.a, 1152),
         Some(Approach::Cell(c)),
         "the ground is occupied, the deck is empty"
     );
     // A vehicle-present claim on the deck.
     s.w.cells.claim_vehicle(c, Layer::Deck, true);
     glasnost_sim::regions::ensure(&mut s.w);
-    let got = approach_search(&s.w, s.a, 1152);
+    let got = approach_search(&mut s.w, s.a, 1152);
     assert!(
         matches!(got, Some(Approach::Cell(x)) if x != c),
         "the deck is occupied: {got:?}"
@@ -1247,7 +1251,7 @@ fn quirk_approach_alternative_zero_height() {
         set_deck(&mut s.w, cell_of(6, -1));
         glasnost_sim::regions::ensure(&mut s.w);
         assert_eq!(
-            approach_search(&s.w, s.a, 1152),
+            approach_search(&mut s.w, s.a, 1152),
             Some(Approach::Cell(want)),
             "quirk {quirk}"
         );
@@ -1264,11 +1268,219 @@ fn claim_20_cell_target() {
     o.target = Some(t);
     o.beh.current = Some(glasnost_sim::rules::Behaviour::Attack);
     assert_eq!(
-        approach_search(&s.w, s.a, 1152),
+        approach_search(&mut s.w, s.a, 1152),
         Some(Approach::Cell(cell_of(6, 0)))
     );
     glasnost_sim::approach::step(&mut s.w, s.a);
     let o = s.w.obj(s.a).unwrap();
     assert_eq!(o.dest, Some(Target::Cell(cell_of(6, 0))));
     assert_eq!(o.target, Some(t));
+}
+
+// ---------------------------------------------------------------------------
+// Claims 22 and 23: close-range searches and destroyable-cliff cell targets.
+// ---------------------------------------------------------------------------
+
+/// The close-range walker (house 0) at the middle cell, armed with `Probe`.
+fn close_walker(r: &mut Ruleset) -> (World, ObjectId) {
+    let t = r.sim.infantry.get_mut("WALKER").unwrap();
+    t.primary = Some("Probe".into());
+    t.close_range = Some(true);
+    let mut w = testkit::game_with(r, N, 1);
+    let a = testkit::spawn(&mut w, Kind::Infantry, "WALKER", 0, cell_of(0, 0), 0);
+    (w, a)
+}
+
+/// A walker of house 1 standing at standing position `p` of cell (dx, dy),
+/// made the target of `a`.
+fn walker_target(w: &mut World, a: ObjectId, dx: i32, dy: i32, p: u8) -> ObjectId {
+    let ty = w.rules().index_of(Kind::Infantry, "WALKER").unwrap();
+    let t = glasnost_sim::objects::create(w, Kind::Infantry, ty, Some(HouseId(1)));
+    let c = cell_of(dx, dy);
+    let (u, v) = glasnost_sim::walk::standing_point(p);
+    glasnost_sim::objects::place(w, t, Pos::new(256 * c.x + u, 256 * c.y + v, 0), 0);
+    w.obj_mut(a).unwrap().target = Some(Target::Object(t));
+    glasnost_sim::regions::ensure(w);
+    t
+}
+
+// spec: S-0307 claim 22 (a) (close-range infantry with u′ ≤ 332 search the single radius 332: ρ′ = 200 gives no F4 radius at all, yet the 332 radius finds the cell west of the target)
+#[test]
+fn claim_22_single_close_radius() {
+    let mut r = base("5");
+    let (mut w, a) = close_walker(&mut r);
+    let t = testkit::spawn(&mut w, Kind::Vehicle, "BUGGY", 1, cell_of(10, 0), 0);
+    w.obj_mut(a).unwrap().target = Some(Target::Object(t));
+    glasnost_sim::regions::ensure(&mut w);
+    assert_eq!(approach_radii(&w, 200, 0, true), Vec::<i32>::new());
+    let before = w.rng.clone();
+    assert_eq!(
+        approach_search(&mut w, a, 200),
+        Some(Approach::Cell(cell_of(9, 0)))
+    );
+    // spec: S-0307 claim 22 (c) and (f) (the primary's point is a position choice with the target's centre class: one draw)
+    let mut probe = before;
+    let half = w.rules().quirks.ranged_draw_half_span;
+    probe.ranged(0, 3, half);
+    assert_eq!(w.rng, probe, "one position-choice draw");
+}
+
+// spec: S-0307 claim 22 (b) (d₀ ≤ 384: the position choice in the attacker's own cell for the target's class, here the bottom, is nearer the target's cell centre, so the search ends with that point and the target's cell, without a draw)
+#[test]
+fn claim_22_shortcut_in_the_own_cell() {
+    let mut r = base("5");
+    let (mut w, a) = close_walker(&mut r);
+    walker_target(&mut w, a, 1, 0, position::BOTTOM);
+    let before = w.rng.clone();
+    let own = cell_of(0, 0);
+    let (u, v) = glasnost_sim::walk::standing_point(position::BOTTOM);
+    assert_eq!(
+        approach_search(&mut w, a, 1152),
+        Some(Approach::Shortcut(
+            Pos::new(256 * own.x + u, 256 * own.y + v, 0),
+            cell_of(1, 0)
+        ))
+    );
+    assert_eq!(w.rng, before, "no draw for a side class");
+}
+
+// spec: S-0307 claim 22 (b) (the shortcut is not taken when the own cell's position is no nearer: d₁ ≥ d₀)
+#[test]
+fn claim_22_no_shortcut_when_not_nearer() {
+    let mut r = base("5");
+    let (mut w, a) = close_walker(&mut r);
+    // The target's cell is east: the left position (64, 192) is 326 leptons from its centre, d₀ = 256.
+    walker_target(&mut w, a, 1, 0, position::LEFT);
+    let got = approach_search(&mut w, a, 1152);
+    assert!(!matches!(got, Some(Approach::Shortcut(..))), "{got:?}");
+}
+
+// spec: S-0307 claim 22 (b) (a vehicle's own cell has no standing position: the position choice fails and the shortcut is not taken)
+#[test]
+fn claim_22_vehicle_takes_no_shortcut() {
+    let mut r = base("5");
+    r.sim.vehicles.get_mut("CART").unwrap().close_range = Some(true);
+    let mut s = setup(&r, 1, 0);
+    s.w.obj_mut(s.a).unwrap().target = Some(Target::Object(s.t));
+    glasnost_sim::regions::ensure(&mut s.w);
+    let got = approach_search(&mut s.w, s.a, 1152);
+    assert!(!matches!(got, Some(Approach::Shortcut(..))), "{got:?}");
+}
+
+// spec: S-0307 claim 22 (d) (a close-range attacker's candidate point within 307 leptons of T passes the range test: a 0.5-cell weapon still finds the cell west of the target, its right position 256 leptons from T)
+#[test]
+fn claim_22_range_bypass() {
+    let mut r = base("0.5");
+    let (mut w, a) = close_walker(&mut r);
+    walker_target(&mut w, a, 10, 0, position::RIGHT);
+    assert_eq!(
+        approach_search(&mut w, a, 200),
+        Some(Approach::Cell(cell_of(9, 0)))
+    );
+}
+
+// spec: S-0307 claim 22 (e) (a close-range attacker in the ground layer has its own occupancy entry withdrawn for the clear-cell test: a cart standing on its primary cell takes it, where an ordinary cart takes an alternative)
+#[test]
+fn claim_22_own_entry_withdrawn() {
+    for (close, want) in [(true, cell_of(6, 0)), (false, cell_of(6, -1))] {
+        let mut r = base("5");
+        r.sim.vehicles.get_mut("CART").unwrap().close_range = Some(close);
+        let mut w = testkit::game_with(&r, N, 1);
+        let a = testkit::spawn(&mut w, Kind::Vehicle, "CART", 0, cell_of(6, 0), 0);
+        let t = testkit::spawn(&mut w, Kind::Vehicle, "BUGGY", 1, cell_of(10, 0), 0);
+        w.obj_mut(a).unwrap().target = Some(Target::Object(t));
+        glasnost_sim::regions::ensure(&mut w);
+        assert_eq!(
+            approach_search(&mut w, a, 1152),
+            Some(Approach::Cell(want)),
+            "close range {close}"
+        );
+    }
+}
+
+/// Adds a 2 × 2 tile with every cell present (or without its image) as the
+/// destroyable-cliff role's first tile, and lays it with its top-left cell
+/// at (10, 0).
+fn lay_cliff(w: &mut World, has_image: bool) {
+    use glasnost_map::terrain::{TileCell, TileInfo};
+    let mut cat = (*testkit::catalogue()).clone();
+    let n = cat.tiles.len() as i32;
+    cat.tiles.push(TileInfo {
+        width: 2,
+        height: 2,
+        has_image,
+        cells: vec![
+            Some(TileCell {
+                terrain_code: 0,
+                slope: 0,
+            });
+            4
+        ],
+        variants: 0,
+        anim: None,
+        no_burrowing: false,
+    });
+    cat.roles.destroyable_cliff = n;
+    w.catalogue = Some(std::sync::Arc::new(cat));
+    for (s, (dx, dy)) in [(10, 0), (11, 0), (10, 1), (11, 1)].into_iter().enumerate() {
+        let c = w.cells.grid.get_mut(cell_of(dx, dy)).unwrap();
+        c.tile = n;
+        c.sub_tile = s as u8;
+    }
+}
+
+// spec: S-0307 claim 23 (a destroyable-cliff cell target is replaced by the tile cell nearest the attacker's scatter reference cell, ties to the earliest in row-major order; the search then runs for the new cell)
+#[test]
+fn claim_23_cliff_target_replaced() {
+    let r = base("5");
+    let mut s = approach_setup(&r);
+    lay_cliff(&mut s.w, true);
+    s.w.obj_mut(s.a).unwrap().target = Some(Target::Cell(cell_of(11, 1)));
+    // (10, 0) and (10, 1) are both 10 cells away by the table root: the earlier row wins.
+    assert_eq!(
+        approach_search(&mut s.w, s.a, 1152),
+        Some(Approach::Cell(cell_of(6, 0)))
+    );
+    assert_eq!(
+        s.w.obj(s.a).unwrap().target,
+        Some(Target::Cell(cell_of(10, 0)))
+    );
+}
+
+// spec: S-0307 claim 23 (a tile without its image has no tile cells: the replacement is the cell at map coordinates (0, 0))
+#[test]
+fn claim_23_no_tile_cell_gives_the_origin() {
+    let r = base("5");
+    let mut s = approach_setup(&r);
+    lay_cliff(&mut s.w, false);
+    s.w.obj_mut(s.a).unwrap().target = Some(Target::Cell(cell_of(11, 1)));
+    approach_search(&mut s.w, s.a, 1152);
+    assert_eq!(
+        s.w.obj(s.a).unwrap().target,
+        Some(Target::Cell(CellXY::new(0, 0)))
+    );
+}
+
+// spec: S-0307 claim 22 (b) (the shortcut's outcome: the walker is sent to P, its destination is the target's cell and the target is kept)
+#[test]
+fn claim_22_shortcut_applied_by_the_approach_step() {
+    let mut r = base("0.5");
+    let (mut w, a) = close_walker(&mut r);
+    let t = walker_target(&mut w, a, 1, 0, position::BOTTOM);
+    w.obj_mut(a).unwrap().beh.current = Some(glasnost_sim::rules::Behaviour::Attack);
+    glasnost_sim::approach::step(&mut w, a);
+    let own = cell_of(0, 0);
+    let (u, v) = glasnost_sim::walk::standing_point(position::BOTTOM);
+    let o = w.obj(a).unwrap();
+    assert_eq!(o.dest, Some(Target::Cell(cell_of(1, 0))));
+    assert_eq!(o.target, Some(Target::Object(t)));
+    assert_eq!(
+        o.walk.as_ref().and_then(|s| s.target),
+        Some(Pos::new(256 * own.x + u, 256 * own.y + v, 0))
+    );
+    assert!(
+        w.cells
+            .occ(own, Layer::Ground)
+            .is_some_and(|x| x.taken(position::BOTTOM))
+    );
 }
