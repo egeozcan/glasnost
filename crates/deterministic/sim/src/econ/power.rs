@@ -275,7 +275,7 @@ fn bp(w: &World, type_index: u32) -> Option<&BuildingPower> {
 /// positions (Terms, *upgrade positions*).
 fn held_upgrades(w: &World, id: ObjectId) -> Vec<u32> {
     w.obj(id).map_or_else(Vec::new, |o| {
-        // spec: S-0408 claim 5 (recorded upgrades do not count in power at count 0; S-0405 states no such gate, request Q-0224: interim, S-0408's gate)
+        // spec: S-0405 claims 1 and 2, F1 and F2 (recorded upgrades count only while the upgrade count is positive)
         if o.econ.building.upgrade_count == 0 {
             return Vec::new();
         }
